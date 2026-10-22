@@ -19,6 +19,12 @@ severity has its enforcement point in code, tested, and not only in prose.
   changed, missing, unreadable or unnamed file. (B1 keeps a flow WITHOUT zones references runnable
   without a provider; the live executor (B4) passes one always, so that a file the node does not
   name is caught.)
+- A flow that hunts with the MELEE RING (the hunt block's engage_source `melee_ring`, Batt
+  2026-10-22; lint/hunt.py) is refused unless the run's ATTESTED environment (`server`: the
+  interlock's attested server id, which only the run knows) is the lab's own server
+  (`lint.hunt.LAB_SERVERS`) and the flow's target, and unless the static data the species check
+  read is that server's. Never allowed by default: no attested server is a refusal. The linter
+  already refuses the design on another target server, an IGNORE list or a non-target species.
 - Simulation is design time and is NOT gated: `runtime.Sim` and `trace.simulate` run a flow that
   has readiness items (that is how a flow is designed before its bindings land).
 """
@@ -28,7 +34,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from poring_flow import ir
+from poring_flow.catalogue import catalogue
 from poring_flow.lint import Detector, Finding, Resolver, lint
+from poring_flow.lint.hunt import LAB_SERVERS, MELEE_RING, melee_ring_paths
 from poring_flow.sheet import World
 from poring_flow.zones import ZonesProvider
 
@@ -68,12 +76,17 @@ def verdict(
     runtime_max_s: int | None,
     approved_hash: str | None = None,
     zones_loaded: bool = False,
+    server: str | None = None,
+    world_server: str | None = None,
 ) -> Verdict:
     """The gate's verdict from findings already computed (the editor shows it beside the lint).
     `runtime_max_s` is the CONFIGURED maximum run time (#17): None refuses (fail closed).
-    `zones_loaded`: the findings were computed with a zones provider."""
+    `zones_loaded`: the findings were computed with a zones provider. `server`: the run's ATTESTED
+    environment (None: not known here); `world_server`: the server of the static data linted
+    against. Both matter only to a melee-ring hunt."""
     h = ir.flow_hash(flow)
     reasons = []
+    reasons += _melee_ring(flow, server, world_server)
     if not world_loaded:
         reasons.append("no static data: references and routes are unchecked")
     if not resolver_given:
@@ -103,9 +116,11 @@ def check(
     approved_hash: str | None = None,
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
+    server: str | None = None,
 ) -> Verdict:
     """Re-lint NOW and return the verdict (no exception). `runtime_max_s`: the configured
-    maximum run time (#17); without one the run is refused. `zones_provider`: the map zones."""
+    maximum run time (#17); without one the run is refused. `zones_provider`: the map zones.
+    `server`: the ATTESTED environment the run would act on (a melee-ring hunt needs the lab's)."""
     findings = lint(
         flow,
         world=world,
@@ -122,6 +137,8 @@ def check(
         runtime_max_s=runtime_max_s,
         approved_hash=approved_hash,
         zones_loaded=zones_provider is not None,
+        server=server,
+        world_server=world.server if world is not None else None,
     )
 
 
@@ -134,9 +151,11 @@ def require(
     approved_hash: str | None = None,
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
+    server: str | None = None,
 ) -> Verdict:
     """The call a live run makes before its first input: returns the verdict, or raises
-    `RunRefused` (with every reason) when the run may not start."""
+    `RunRefused` (with every reason) when the run may not start. `server`: the ATTESTED
+    environment (the interlock's attested server id)."""
     v = check(
         flow,
         world=world,
@@ -145,7 +164,29 @@ def require(
         approved_hash=approved_hash,
         runtime_max_s=runtime_max_s,
         zones_provider=zones_provider,
+        server=server,
     )
     if not v.allowed:
         raise RunRefused(v)
     return v
+
+
+def _melee_ring(flow: ir.Flow, server: str | None, world_server: str | None) -> list[str]:
+    """A melee-ring hunt starts only on the lab's own server, attested (never by default)."""
+    paths = melee_ring_paths(flow, {n: b.spec for n, b in catalogue().blocks.items()})
+    if not paths:
+        return []
+    lab = ", ".join(sorted(LAB_SERVERS))
+    what = f"{len(paths)} hunt{'s' * (len(paths) != 1)} with engage_source {MELEE_RING}"
+    out = []
+    if server is None:
+        out.append(f"{what}: no attested environment (a melee-ring hunt starts only on {lab})")
+    elif server not in LAB_SERVERS:
+        out.append(f"{what}: the attested environment {server} is not the lab's ({lab})")
+    elif server != flow.target.server:
+        out.append(f"{what}: the attested environment {server} is not the flow's target "
+                   f"{flow.target.server}")  # fmt: skip
+    if world_server is not None and world_server != flow.target.server:
+        out.append(f"{what}: the species were checked on {world_server}'s static data, not on "
+                   f"{flow.target.server}'s")  # fmt: skip
+    return out

@@ -7,6 +7,8 @@
    "params": [
     {
      "name": "strike",
+     "kind": "rule",
+     "required": true,
      "choices": [
       {
        "id": "arm_c@32",
@@ -65,6 +67,8 @@
     },
     {
      "name": "engage_on_the_way",
+     "kind": "rule",
+     "required": true,
      "choices": [
       {
        "id": "on_the_way@19",
@@ -133,6 +137,35 @@
       }
      ],
      "default": "on_the_way@19"
+    },
+    {
+     "name": "engage_source",
+     "kind": "option",
+     "required": false,
+     "default": "detector",
+     "note": "detector: the detector's boxes pick the target (the default). melee_ring: the cursor picks it -- every SWORD in the 8 cells around the character, struck at once, the next queued; NPCs read TALK and are never struck. Lint refuses melee_ring on a map with an IGNORE list or any non-TARGET species, and on any server but the lab's",
+     "choices": [
+      {
+       "id": "detector",
+       "known": true,
+       "values": {},
+       "versions": [],
+       "adopted": false,
+       "evidence": [],
+       "option": true,
+       "is_default": true
+      },
+      {
+       "id": "melee_ring",
+       "known": true,
+       "values": {},
+       "versions": [],
+       "adopted": false,
+       "evidence": [],
+       "option": true,
+       "is_default": false
+      }
+     ]
     }
    ]
   },
@@ -141,6 +174,8 @@
    "params": [
     {
      "name": "dead",
+     "kind": "rule",
+     "required": true,
      "choices": [
       {
        "id": "exp_line@48",
@@ -188,6 +223,8 @@
     },
     {
      "name": "loot",
+     "kind": "rule",
+     "required": true,
      "choices": [
       {
        "id": "gm_fast_scan@54",
@@ -333,6 +370,8 @@
    "params": [
     {
      "name": "search",
+     "kind": "rule",
+     "required": true,
      "choices": [
       {
        "id": "heading_coverage@22",

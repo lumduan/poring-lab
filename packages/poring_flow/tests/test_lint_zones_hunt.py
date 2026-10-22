@@ -89,6 +89,18 @@ class Case:
 
 
 NO_TARGETS = ("    targets=[mob(9101), mob(9102)],\n", "")
+# The melee ring (Batt 2026-10-22): the base flow hunts with it and passes (both species spawning
+# on field_9 are TARGETS, no IGNORE list, the lab's server); each refusal changes ONE thing.
+# (the Python view prints it in the registry's order: after engage_on_the_way, in the engage group)
+EOW = 'engage_on_the_way="on_the_way@19",'
+MELEE = (EOW, f'{EOW} engage_source="melee_ring",')
+ONE_TARGET = ("    targets=[mob(9101), mob(9102)],\n", "    targets=[mob(9101)],\n")
+WITH_IGNORE = (
+    "    targets=[mob(9101), mob(9102)],\n",
+    "    targets=[mob(9101)],\n    ignore=[mob(9102)],\n",
+)
+SHARED = ('server="lab-rathena"', 'server="community-bot-testing"')
+RING = "hunt's engage_source melee_ring strikes EVERY monster in melee range"
 CASES = [
     Case(
         "rule_version",
@@ -105,6 +117,43 @@ CASES = [
         lambda: flow(NO_TARGETS),
         zones(),
         [f"{HUNT}: hunt attacks only the TARGET species, and field lists none (13.3)"],
+    ),
+    Case(
+        "param_option",
+        lambda: flow((EOW, f'{EOW} engage_source="cursor",')),
+        zones(),
+        [
+            f"{HUNT}: hunt's engage_source takes one of (detector, melee_ring; absent = detector), "
+            "not 'cursor'"
+        ],
+        ok=lambda: flow((EOW, f'{EOW} engage_source="detector",')),
+    ),
+    Case(
+        "melee_ring_server",
+        lambda: flow(MELEE, SHARED),
+        zones(),
+        [
+            f"{HUNT}: {RING}: it runs only on the lab's own server (lab-rathena), not on "
+            "community-bot-testing (no kill-stealing on a shared server)"
+        ],
+        ok=lambda: flow(MELEE),
+    ),
+    Case(
+        "melee_ring_ignore",
+        lambda: flow(MELEE, WITH_IGNORE),
+        zones(),
+        [f"{HUNT}: {RING}, and field has an IGNORE list (mob 9102): refused on a map with one"],
+        ok=lambda: flow(MELEE),
+    ),
+    Case(
+        "melee_ring_species",
+        lambda: flow(MELEE, ONE_TARGET),
+        zones(),
+        [
+            f"{HUNT}: {RING}, and mob 9102 can be on field_9 without being a TARGET of field: "
+            "refused on a map with a non-target species"
+        ],
+        ok=lambda: flow(MELEE),
     ),
     Case(
         "zones_map",
@@ -263,3 +312,109 @@ def test_choices_are_rule_versions_of_a_str_parameter() -> None:
         ParamSpec(name="loot", type="int", choices=["gm_scan@50"])
     with pytest.raises(ValidationError, match="distinct"):
         ParamSpec(name="loot", type="str", choices=["gm_scan@50", "gm_scan@50"])
+
+
+# --- the melee ring (Batt 2026-10-22): the default, the fail-closed species data, the run start ---
+def test_engage_source_absent_means_detector_and_keeps_the_flows_json() -> None:
+    """Not required: a hunt written before the option is a detector hunt, with its JSON and hash."""
+    from poring_flow.catalogue import catalogue
+    from poring_flow.lint.hunt import engage_source, melee_ring_paths
+
+    spec = catalogue().blocks["hunt"].spec
+    base, ring = flow(), flow(MELEE)
+    assert '"engage_source"' not in ir.to_json(base)
+    assert melee_ring_paths(base, {"hunt": spec}) == []
+    assert melee_ring_paths(ring, {"hunt": spec}) == ["field.0.body.0"]  # node ids (HUNT shown)
+    hunt_of = next(
+        a for s in ir.sites(base) if s.path == "field.0.body.0" for a in ir.actions_in(s.stmt)
+    )
+    assert engage_source(hunt_of, spec) == "detector"
+    found = lint(ring, world=world(), resolver=resolve_all, zones_provider=zones())
+    assert [x.message for x in found if x.severity == "error"] == []
+    assert pyview.print_flow(ring) == SRC.replace(*MELEE)  # the Python view round-trips it
+    assert ir.from_json(ir.to_json(ring)) == ring
+
+
+def test_melee_ring_counts_what_the_targets_turn_into() -> None:
+    """A TARGET that turns into a non-target (Pupa -> Creamy's shape, synthetic ids) is a
+    non-target on the map: Mob.turns_into, transitively, as prep.py's training scope reads it."""
+    w = world()
+    mobs = {**w.mobs, 9102: Mob(id=9102, level=6, turns_into=[9103]), 9103: Mob(id=9103, level=7)}
+    w2 = w.model_copy(update={"mobs": mobs})
+    found = lint(flow(MELEE), world=w2, resolver=resolve_all, zones_provider=zones())
+    assert [x.message for x in found if x.rule == "melee_ring_species"] == [
+        f"{HUNT}: {RING}, and mob 9103 can be on field_9 without being a TARGET of field: "
+        "refused on a map with a non-target species"
+    ]
+
+
+@pytest.mark.parametrize("missing", ["no world", "no sheet"])
+def test_melee_ring_without_the_maps_species_list_is_refused(missing: str) -> None:
+    """Fail closed: with no spawn list for the map nothing proves every species is a TARGET."""
+    w = None if missing == "no world" else world().model_copy(update={"sheets": {}})
+    found = lint(flow(MELEE), world=w, resolver=resolve_all, zones_provider=zones())
+    assert [x.message for x in found if x.rule == "melee_ring_species"] == [
+        f"{HUNT}: {RING}: no map sheet for field_9 is loaded, so nothing proves every species "
+        "there is a TARGET (refused, fail closed)"
+    ]
+
+
+def test_a_detector_hunt_meets_no_melee_ring_rule() -> None:
+    """The refusals are the melee ring's only: the same map, ignore list and server are fine for
+    the default (the detector's own target / ignore handling is unchanged)."""
+    for f in (flow(ONE_TARGET), flow(WITH_IGNORE), flow(SHARED)):
+        found = lint(f, world=world(), resolver=resolve_all, zones_provider=zones())
+        assert not [x for x in found if x.rule.startswith("melee_ring")]
+
+
+def test_the_run_start_check_refuses_a_melee_ring_hunt_off_the_attested_lab() -> None:
+    """The attested environment is known only at run time: no attested server, another server,
+    or static data of another server each refuse; never allowed by default."""
+    common = {"world": world(), "resolver": resolve_all, "runtime_max_s": 14_400,
+              "zones_provider": zones()}  # fmt: skip
+    ring = flow(MELEE)
+    ok = runstart.check(ring, server="lab-rathena", **common)  # type: ignore[arg-type]
+    assert ok.allowed, ok.summary()
+    none = runstart.check(ring, **common)  # type: ignore[arg-type]
+    assert not none.allowed and none.reasons == (
+        "1 hunt with engage_source melee_ring: no attested environment (a melee-ring hunt starts "
+        "only on lab-rathena)",
+    )
+    other = runstart.check(ring, server="community-bot-testing", **common)  # type: ignore[arg-type]
+    assert other.reasons == (
+        "1 hunt with engage_source melee_ring: the attested environment community-bot-testing is "
+        "not the lab's (lab-rathena)",
+    )
+    sample = runstart.check(
+        ring,
+        server="lab-rathena",
+        **{**common, "world": world().model_copy(update={"server": "sample"})},  # type: ignore[arg-type]
+    )
+    assert sample.reasons == (
+        "1 hunt with engage_source melee_ring: the species were checked on sample's static data, "
+        "not on lab-rathena's",
+    )
+    # a detector hunt needs no attested server here (unchanged)
+    assert runstart.check(flow(), **common).allowed  # type: ignore[arg-type]
+    with pytest.raises(runstart.RunRefused, match="no attested environment"):
+        runstart.require(ring, **common)  # type: ignore[arg-type]
+
+
+def test_options_are_plain_values_with_a_default_that_is_not_required() -> None:
+    from pydantic import ValidationError
+
+    from poring_flow.catalogue import ParamSpec
+
+    ok = ParamSpec(name="engage_source", type="str", options=["detector", "melee_ring"],
+                   default="detector")  # fmt: skip
+    assert not ok.required and ok.default == "detector"
+    with pytest.raises(ValidationError, match="plain names"):
+        ParamSpec(name="x", type="str", options=["melee_ring@1"])
+    with pytest.raises(ValidationError, match="not both"):
+        ParamSpec(name="x", type="str", options=["a"], choices=["a@1"])
+    with pytest.raises(ValidationError, match="one of its options"):
+        ParamSpec(name="x", type="str", options=["a"], default="b")
+    with pytest.raises(ValidationError, match="not required"):
+        ParamSpec(name="x", type="str", required=True, options=["a"], default="a")
+    with pytest.raises(ValidationError, match="str parameter"):
+        ParamSpec(name="x", type="int", options=["a"])

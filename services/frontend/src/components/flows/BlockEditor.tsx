@@ -16,7 +16,7 @@ import type { CatalogueDoc, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT } from "@/lib/flow/api";
 import { BLOCK_DEFS, COLOURS, toolbox } from "@/lib/flow/blockdefs";
 import { type Defaults, fromWorkspace, type Scope, toWorkspace, type Workspace } from "@/lib/flow/blocks";
-import { badgeText, defaultFields, GROUP_TITLE, HUNT_TYPE, huntDef, type HuntRules, huntTooltip } from "@/lib/flow/hunt";
+import { badgeText, defaultFields, GROUP_TITLE, HUNT_TYPE, huntDef, type HuntRules, huntTooltip, omitted } from "@/lib/flow/hunt";
 import type { Flow } from "@/lib/flow/ir";
 import { findingsByPath, runLine } from "@/lib/flow/status";
 
@@ -239,7 +239,11 @@ function HuntRulesPanel({ rules, l1 }: { rules: HuntRules; l1: keyof typeof BADG
           {g.note && <div className="text-neutral-400">{g.note}</div>}
           {g.params.map((p) => (
             <div key={p.name}>
-              <div className="text-neutral-300">{p.name} (default {p.default})</div>
+              <div className="text-neutral-300">
+                {p.name} (default {p.default}
+                {p.kind === "option" ? "; an option, not a rule version" : ""})
+              </div>
+              {p.note && <div className="text-neutral-400">{p.note}</div>}
               <ul className="pl-2">
                 {p.choices.map((c) => (
                   <li key={c.id}>
@@ -251,7 +255,7 @@ function HuntRulesPanel({ rules, l1 }: { rules: HuntRules; l1: keyof typeof BADG
                         {Object.entries(c.values).map(([k, v]) => (
                           <li key={k}>{k} = {JSON.stringify(v)}</li>
                         ))}
-                        {!Object.keys(c.values).length && <li>(no numbers: the rule is off)</li>}
+                        {!Object.keys(c.values).length && <li>{c.option ? "(an option: no numbers)" : "(no numbers: the rule is off)"}</li>}
                       </ul>
                     </details>
                   </li>
@@ -272,7 +276,7 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: Scope): BlocklyT.utils
       .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
   );
   const rules = catalogue?.hunt_rules ?? null;
-  return toolbox(cat, scope.kind, rules && huntKey ? defaultFields(rules) : null) as unknown as BlocklyT.utils.toolbox.ToolboxDefinition;
+  return toolbox(cat, scope.kind, rules && huntKey ? defaultFields(rules) : null, rules && huntKey ? omitted(rules) : {}) as unknown as BlocklyT.utils.toolbox.ToolboxDefinition;
 }
 
 /** Badges (L1 verification), lint warnings and the last run on each block, after loading. */

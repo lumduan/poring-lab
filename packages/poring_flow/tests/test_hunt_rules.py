@@ -42,13 +42,35 @@ def test_groups_are_the_registrys_with_the_adopted_rule_as_default() -> None:
     spec = catalogue().blocks["hunt"].spec
     assert [g["name"] for g in doc["groups"]] == ["engage", "dead_loot", "search", "stop"]
     shown = {p["name"]: [c["id"] for c in p["choices"]] for g in doc["groups"] for p in g["params"]}
-    assert shown == {p.name: p.choices for p in spec.params}  # every choice, only the choices
+    # every choice and option, only those
+    assert shown == {p.name: p.choices or p.options for p in spec.params}
     defaults = {p["name"]: p["default"] for g in doc["groups"] for p in g["params"]}
     assert defaults == {
         "strike": "arm_c@32", "engage_on_the_way": "on_the_way@19", "dead": "exp_line@48",
         "loot": "gm_fast_scan@54", "search": "heading_coverage@22",
+        "engage_source": "detector",  # an OPTION: the registry's default (absent = detector)
     }  # fmt: skip
     assert doc["adopted"] == 55 and doc["groups"][-1]["params"] == []  # 52 until 3.97 (10-22 04:32)
+
+
+def test_engage_source_is_an_option_in_the_engage_group_with_no_version_or_badge() -> None:
+    """Batt 2026-10-22: the melee ring is a selectable option, default OFF (detector). A plain
+    value, not a rule version: no PARAMS version holds it, so no numbers and no D8 evidence."""
+    doc = rules_doc(index(), evidence())
+    engage = next(g for g in doc["groups"] if g["name"] == "engage")
+    assert [p["name"] for p in engage["params"]] == ["strike", "engage_on_the_way", "engage_source"]
+    es = engage["params"][-1]
+    assert es["kind"] == "option" and es["required"] is False and es["default"] == "detector"
+    assert "melee_ring" in es["note"] and "IGNORE" in es["note"]
+    assert [(c["id"], c["is_default"]) for c in es["choices"]] == [
+        ("detector", True),
+        ("melee_ring", False),
+    ]
+    for c in es["choices"]:
+        assert c["option"] and c["known"] and not c["adopted"]
+        assert c["values"] == {} and c["versions"] == [] and c["evidence"] == []
+    assert {p["kind"] for p in engage["params"][:2]} == {"rule"}
+    assert all(p["required"] for p in engage["params"][:2])
 
 
 def test_each_rule_version_carries_its_numbers_and_the_versions_that_hold_it() -> None:

@@ -326,11 +326,13 @@ const exprBlock = (t: string) => ({ block: { type: "pl_expr", fields: { TEXT: t 
 
 /** The toolbox for a scope: the palette, the other catalogue blocks, control, exits, events.
  * `huntFields`: the hunt block's dropdown defaults when its type is registered (hunt.ts), else the
- * hunt block is offered as a generic block with its parameters by name. */
+ * hunt block is offered as a generic block with its parameters by name. `huntOmit`: its optional
+ * parameters' defaults (hunt.ts `omitted`), left out of the IR at that value. */
 export function toolbox(
   blocks: Record<string, CatBlock>,
   scope: "block" | "global" | "main",
   huntFields: Record<string, string> | null = null,
+  huntOmit: Record<string, string> = {},
 ): Toolbox {
   const palette: ToolboxItem[] = [];
   for (const [name, type] of Object.entries(PALETTE_TYPES)) {
@@ -342,7 +344,12 @@ export function toolbox(
     .sort()
     .map((n) =>
       n === "hunt" && huntFields
-        ? { kind: "block" as const, type: "pl_hunt", fields: huntFields, extraState: rest(blocks[n]) }
+        ? {
+            kind: "block" as const,
+            type: "pl_hunt",
+            fields: huntFields,
+            extraState: Object.keys(huntOmit).length ? { ...rest(blocks[n]), omit: huntOmit } : rest(blocks[n]),
+          }
         : { kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) },
     );
   const control: ToolboxItem[] = [

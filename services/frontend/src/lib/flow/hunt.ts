@@ -10,6 +10,11 @@
 //   poring_flow.hunt_rules): ★ the adopted base's rule, ◆ hunting evidence under Batt's D8 rule
 //   (a pre-registered verdict, hard bars 0, >= 4 h; one path, one map, an immune GM), and the
 //   PARAMS versions that hold it. The L1 badge (verified / unverified) stays beside them.
+// - OPTION parameters (Batt 2026-10-22: `engage_source`, detector | melee_ring) sit in their group
+//   as a dropdown of plain values: no version, no numbers, no badge; the registry's `default` is
+//   what an ABSENT parameter means, and the editor writes the parameter only when it differs from
+//   it (an explicit default stays a generic block, exactly). The linter refuses melee_ring on a map
+//   with an IGNORE list or a non-TARGET species and on any server but the lab's (lint/hunt.py).
 import type { BlockDef } from "./blockdefs.ts";
 
 export type HuntEvidence = { entry: string; version: number; map: string; path: string; hours: number; verdict: string; gm: string };
@@ -20,8 +25,10 @@ export type HuntChoice = {
   versions: number[];
   adopted: boolean;
   evidence: HuntEvidence[];
+  option?: boolean; // an OPTION's value, not a rule version
+  is_default?: boolean; // the option's default (what an absent parameter means)
 };
-export type HuntParam = { name: string; choices: HuntChoice[]; default: string };
+export type HuntParam = { name: string; choices: HuntChoice[]; default: string; kind?: "rule" | "option"; required?: boolean; note?: string };
 export type HuntGroup = { name: string; params: HuntParam[]; note?: string };
 export type HuntRules = {
   block: string;
@@ -47,8 +54,15 @@ export function params(rules: HuntRules): HuntParam[] {
   return rules.groups.flatMap((g) => g.params);
 }
 
+/** The optional parameters and their defaults: the editor leaves one out of the IR at its default
+ * (absent = the default), so a flow written before the option keeps its JSON and its hash. */
+export function omitted(rules: HuntRules): Record<string, string> {
+  return Object.fromEntries(params(rules).filter((p) => p.required === false).map((p) => [p.name, p.default]));
+}
+
 /** A rule version's badges as text (the dropdown and the panel). */
 export function badgeText(c: HuntChoice, adopted: number): string {
+  if (c.option) return `option${c.is_default ? " · the default (absent = this)" : ""}`;
   const out: string[] = [];
   if (c.adopted) out.push(`★ adopted base v${adopted}`);
   if (c.evidence.length) {
@@ -60,7 +74,8 @@ export function badgeText(c: HuntChoice, adopted: number): string {
   return out.join(" · ");
 }
 
-const optionText = (c: HuntChoice) => `${c.id}${c.adopted ? " ★" : ""}${c.evidence.length ? " ◆" : ""}`;
+const optionText = (c: HuntChoice) =>
+  c.option ? `${c.id}${c.is_default ? " (default)" : ""}` : `${c.id}${c.adopted ? " ★" : ""}${c.evidence.length ? " ◆" : ""}`;
 
 /** The pl_hunt block type, built from the catalogue (its lists change only with blocks.yaml). */
 export function huntDef(rules: HuntRules, colour: string): BlockDef {
@@ -99,6 +114,7 @@ export function huntDef(rules: HuntRules, colour: string): BlockDef {
 export function huntTooltip(rules: HuntRules, l1: string): string {
   const lines = [`hunt · L1: ${l1}${rules.evidence.badges.length ? ` · hunting evidence (D8): ${rules.evidence.badges.join(", ")}` : ""}`];
   for (const p of params(rules)) {
+    if (p.kind === "option" && p.note) lines.push(`${p.name}: ${p.note}`);
     for (const c of p.choices) {
       const nums = Object.entries(c.values).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
       lines.push(`${p.name} ${c.id}: ${badgeText(c, rules.adopted)}${nums ? ` · ${nums}` : ""}`);

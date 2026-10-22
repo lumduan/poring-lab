@@ -122,8 +122,18 @@ export interface CatalogueBlockDoc {
     concept: string;
     kind: string;
     timeout_s: number;
-    // group / choices: a parameter that picks a RULE VERSION (the hunt block, Amendment A 1)
-    params: { name: string; type: string; required: boolean; group?: string | null; choices?: string[] }[];
+    // group / choices: a parameter that picks a RULE VERSION (the hunt block, Amendment A 1);
+    // options / default / note: an OPTION parameter, plain values, absent = default (engage_source)
+    params: {
+      name: string;
+      type: string;
+      required: boolean;
+      group?: string | null;
+      choices?: string[];
+      options?: string[];
+      default?: string | null;
+      note?: string | null;
+    }[];
     note?: string | null;
   };
   status: string;
