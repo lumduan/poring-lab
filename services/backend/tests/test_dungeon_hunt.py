@@ -200,3 +200,51 @@ def test_the_melee_ring_check_tells_kept_from_stopped_and_retargeted() -> None:
     assert rq["verdict"] == "retargeted" and rq["requests"] == 1
     acts2 = [(0, 7), (int(0.8 * s), 9)]
     assert mc.scan_verdict(int(0.5 * s), int(1.0 * s), acts2, {}, [])["verdict"] == "retargeted"
+
+
+H = dh.STRATEGIES["H"]
+
+
+def test_h_heals_in_a_fight_under_50_and_between_fights_like_batt() -> None:
+    # in a fight (not calm): no Heal at 70 %; under 50 % while SP pays
+    assert dh.sustain(dh.Sustain(), 0.0, 0.70, 1.0, H) == []
+    assert [w for w, _ in dh.sustain(dh.Sustain(), 0.0, 0.45, 0.5, H)] == ["heal"]
+    # between fights (calm): Batt's rhythm -- under 93 % with SP >= 85 %
+    assert [w for w, _ in dh.sustain(dh.Sustain(), 0.0, 0.92, 0.90, H, calm=True)] == ["heal"]
+    assert dh.sustain(dh.Sustain(), 0.0, 0.92, 0.80, H, calm=True) == []  # SP short of 85 %
+    assert dh.sustain(dh.Sustain(), 0.0, 0.95, 1.0, H, calm=True) == []  # HP not down enough
+    st = dh.Sustain()
+    dh.sustain(st, 0.0, 0.90, 1.0, H, calm=True)
+    assert dh.sustain(st, 0.5, 0.90, 1.0, H, calm=True) == []  # the after-cast delay (1.1 s)
+    # potions only in an emergency, and the escape as B
+    assert [w for w, _ in dh.sustain(dh.Sustain(), 0.0, 0.29, 0.05, H)] == ["potion"]
+    assert [w for w, _ in dh.sustain(dh.Sustain(), 0.0, 0.19, 1.0, H)] == ["fly"]
+
+
+def test_h_rests_under_80_hp_or_30_sp_and_stands_when_full_with_sp_back() -> None:
+    assert dh.rest_wanted(H, 0.79, 1.0) and dh.rest_wanted(H, 1.0, 0.29)
+    assert not dh.rest_wanted(H, 0.81, 0.31)
+    assert not dh.rest_done(H, 100, 35) and dh.rest_done(H, 99, 40)
+    assert dh.rest_done(B, 100, None) and not dh.rest_done(B, 99, None)
+
+
+def test_back_into_the_area_takes_the_nearest_area_cell() -> None:
+    import numpy as np
+
+    m = np.zeros((10, 10), bool)
+    m[2:4, 7:9] = True
+    assert dh.nearest_in(m, (2, 2)) == (7, 2)
+    assert dh.nearest_in(m, (8, 3)) == (8, 3)
+    assert dh.nearest_in(np.zeros((5, 5), bool), (1, 1)) is None
+
+
+def test_the_plant_sweep_covers_the_area_on_a_lattice_nearest_first() -> None:
+    import numpy as np
+
+    walk = np.ones((40, 40), bool)
+    walk[20, 22] = False
+    cells = dh.plant_cells((20, 20, 4, 4), (30, 20), walk, n=50)
+    assert all((x - 20) % 2 == 0 and (y - 20) % 2 == 0 for x, y in cells)
+    assert (22, 20) not in cells  # not walkable
+    assert dh.cheb2(cells[0], (30, 20)) == 6 and cells[0][0] == 24  # the nearest column first
+    assert len(dh.plant_cells((20, 20, 4, 4), (30, 20), walk)) == dh.PLANT_HOVERS

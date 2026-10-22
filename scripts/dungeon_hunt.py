@@ -33,7 +33,25 @@ that stays), an unknown UI state (farm0.client_state, every UI_EVERY_S), an NPC 
 offline; orcsdun01 has no script NPC). A DEATH is a RESULT: the run stops, the cause is recorded,
 the dialog closes by its known step (its second button), then @alive + @heal.
 
-    dungeon_hunt.py run --strategy A|B|C --minutes 45 --seed S [--label L]
+dungeon@4 (Batt's overnight brief 2026-10-22, docs/demonstrations.md 4.00; pre-registered before its
+runs) changes the BASE for every search, and adds the PATROL search:
+- H, B + HEAL (Batt decision 1 + his demo's rhythm): in a fight, Heal below 50 % while SP allows;
+  between fights (no hit for CALM_S), Heal below 93 % with SP >= 85 % (his 5 Heals: HP 75-98 %, SP
+  89-100 %, 4 of 5 with no hit in the 3 s before); potions only in an emergency (below 30 %); the
+  Fly Wing escape as B. REST after a fight when HP < 80 % or SP < 30 % (decision 1b), until HP is
+  full and SP >= 40 %; then back INTO the search area (or onto the patrol route);
+- the burst of a strike ENDS on our first damage line in the Battle Log (decision 5);
+- a walk target the cursor reads NO-ENTRY is carved off the route grid at once (decision 5);
+- WHITE PLANTS (Batt: killed on purpose for the White Herb): passing a White Plant spawn area
+  (rAthena's spawn lines, static map knowledge), the cursor sweeps its nearest cells (a 2-cell
+  lattice, <= PLANT_HOVERS, each area at most every PLANT_EVERY_S); a SWORD there is struck. (v1
+  sees plants 0-2 %; the sprite finder, plant_finder.py, did not separate them: not used.)
+- --search patrol: Batt's PATROL LOOP (config/routes/orcsdun01.yaml, his demo's circuit, one
+  direction): walk its waypoints in order; a fight / loot step / rest interrupts it; afterwards
+  resume at the NEXT waypoint AHEAD (map_routes.resume_index), never a passed one. --search heading
+  (the default) keeps the heading walk.
+
+    dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
 """
 
 from __future__ import annotations
@@ -59,7 +77,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
+VERSION = "dungeon@4"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -70,6 +88,11 @@ STRATEGIES: dict[str, dict[str, Any]] = {
           "rest_below": 0.60, "heal_below": None},
     "C": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.60, "heal_below": 0.60, "heal_until": 0.80, "heal_sp_min": 0.11},
+    # dungeon@4 (Batt 2026-10-22: decision 1 + 1b, and his demo's Heal rhythm)
+    "H": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
+          "rest_below": 0.80, "rest_sp_below": 0.30, "rest_until_sp": 0.40,
+          "heal_below": 0.50, "heal_until": 0.80, "heal_sp_min": 0.11,
+          "heal_calm_below": 0.93, "heal_calm_sp_min": 0.85},
 }  # fmt: skip
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "heal": "F5", "sit": "Insert",
         "stand": "Insert"}  # fmt: skip
@@ -116,6 +139,10 @@ STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
 SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
+CALM_S = 2.0  # dungeon@4: no hit on us for this long = between fights (H's calm Heal)
+PLANT_UP = 12  # px above a White Plant's cell point: its body (a small sprite)
+PLANT_NEAR, PLANT_HOVERS, PLANT_EVERY_S = 7, 16, 120.0  # the White Plant sweep (dungeon@4)
+WP_TOL = 2  # a patrol waypoint counts as reached within this many cells (map_routes.reached)
 
 
 # --- pure decisions ----------------------------------------------------------------------------
@@ -140,10 +167,11 @@ def rate_hp_s(hist: Sequence[tuple[float, float]], now: float, win: float = 2.0)
     return (f0 - f1) * MAX_HP / (t1 - t0)
 
 
-def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping[str, Any]
-            ) -> list[tuple[str, str]]:  # fmt: skip
+def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping[str, Any],
+            calm: bool = False) -> list[tuple[str, str]]:  # fmt: skip
     """PURE: the sustain keys to press now with why: the escape first (alone), then a potion,
-    then Heal. ``hp`` / ``sp`` are shares (0..1); ``st`` is updated for what is returned."""
+    then Heal. ``hp`` / ``sp`` are shares (0..1); ``st`` is updated for what is returned.
+    ``calm`` (no hit on us for CALM_S, not fighting): H's between-fights Heal may fire."""
     st.hist.append((now, hp))
     rate = rate_hp_s(st.hist, now)
     if now - st.fly >= 3.0:
@@ -175,17 +203,58 @@ def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping
             out.append(("heal", f"hp {hp:.2f} sp {sp:.2f}"))
     elif hb is not None:
         st.healing = False
+    cb_ = strat.get("heal_calm_below")
+    if (not out and calm and cb_ is not None and sp is not None and hp < cb_
+            and sp >= strat["heal_calm_sp_min"] and now - st.heal >= HEAL_GAP_S):  # fmt: skip
+        st.heal = now
+        out.append(("heal", f"calm hp {hp:.2f} sp {sp:.2f}"))
     return out
 
 
 def rest_wanted(strat: Mapping[str, Any], hp: float, sp: float | None) -> bool:
     """PURE: after a fight, go and sit? B: HP under rest_below. C: the same, only when SP cannot
-    pay for a Heal (Heal covers it otherwise). A never rests."""
+    pay for a Heal (Heal covers it otherwise). A never rests. H (decision 1b): HP under 80 % OR
+    SP under 30 %."""
     rb = strat.get("rest_below")
+    if "rest_sp_below" in strat:
+        return (rb is not None and hp < rb) or (sp is not None and sp < strat["rest_sp_below"])
     if rb is None or hp >= rb:
         return False
     return not (strat.get("heal_below") is not None and sp is not None
                 and sp >= strat["heal_sp_min"])  # fmt: skip
+
+
+def rest_done(strat: Mapping[str, Any], pct: float | None, sp_pct: float | None) -> bool:
+    """PURE: stand up? HP full (H: >= 99 %, as read) and, for H, SP back to rest_until_sp."""
+    if "rest_until_sp" not in strat:
+        return pct is not None and pct >= 100
+    return (pct is not None and pct >= 99 and sp_pct is not None
+            and sp_pct >= 100 * strat["rest_until_sp"])  # fmt: skip
+
+
+def nearest_in(mask: Any, here: Cell, max_r: int = 40) -> Cell | None:
+    """PURE: the nearest cell of ``mask`` (Chebyshev rings outward), ties by (x, y); None if none
+    within ``max_r``. dungeon@4: back INTO the search area after a rest outside it."""
+    h, w = mask.shape
+    for r_ in range(0, max_r + 1):
+        ring_ = [(here[0] + dx, here[1] + dy) for dx in range(-r_, r_ + 1)
+                 for dy in range(-r_, r_ + 1) if max(abs(dx), abs(dy)) == r_]  # fmt: skip
+        hits = sorted(c for c in ring_ if 0 <= c[0] < w and 0 <= c[1] < h and mask[c[1], c[0]])
+        if hits:
+            return hits[0]
+    return None
+
+
+def plant_cells(area_: tuple[int, int, int, int], here: Cell, walkable: Any,
+                n: int = PLANT_HOVERS) -> list[Cell]:  # fmt: skip
+    """PURE: a White Plant spawn area's walkable cells on a 2-cell lattice, nearest to us first,
+    at most ``n`` (a plant sprite is ~1-1.5 cells wide: the lattice covers the area)."""
+    x, y, xs, ys = area_
+    h, w = walkable.shape
+    cells = [(cx, cy) for cx in range(max(0, x - xs), min(w, x + xs + 1))
+             for cy in range(max(0, y - ys), min(h, y + ys + 1))
+             if (cx - x) % 2 == 0 and (cy - y) % 2 == 0 and walkable[cy, cx]]  # fmt: skip
+    return sorted(cells, key=lambda c: (cheb2(c, here), c))[:n]
 
 
 def route(base: Any, carved: Any, here: Cell, goal: Cell) -> list[Cell] | None:
@@ -502,6 +571,26 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     for s_ in spots:
         if not okr[s_[1], s_[0]]:
             raise SystemExit(f"dungeon@1 refused: rest spot {s_} is not on the route grid")
+    import plant_finder as pfm
+
+    plant_areas = pfm.spawn_areas(MAP)  # White Plant spawn lines (static map knowledge)
+    patrol = a.search == "patrol"
+    rt: Any = None
+    wps: list[Cell] = []
+    if patrol:
+        import map_routes as mroutes
+
+        try:
+            routes_ = mroutes.load(MAP, shape=ok.shape)
+        except Exception as e:  # noqa: BLE001 -- fail closed: no input before this
+            raise SystemExit(f"dungeon@4 refused: the patrol route: {e}") from None
+        if routes_ is None or not routes_.routes:
+            raise SystemExit(f"dungeon@4 refused: --search patrol with no config/routes/{MAP}.yaml")
+        rt = routes_.routes[0]
+        wps = [(int(c[0]), int(c[1])) for c in rt.waypoints]
+        for c_ in wps:
+            if not okr[c_[1], c_[0]]:
+                raise SystemExit(f"dungeon@4 refused: waypoint {c_} is not on the route grid")
     start = hunt.start_cell(area, a.seed, near=hf.area_centre(area))
     cj = json.loads((ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
@@ -519,7 +608,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         return camera.project(rel_, alt)
 
     mr_tag = "-mr" if a.engage == "melee_ring" else ""
-    sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-dungeon{mr_tag}-{a.strategy}-{a.label}"
+    pt_tag = "-patrol" if a.search == "patrol" else ""
+    sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-dungeon{mr_tag}{pt_tag}-{a.strategy}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True, exist_ok=False)
     evf = (out / "events.jsonl").open("a")
@@ -575,6 +665,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         share = gm_state.weight_share(w_)
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
+            "search": a.search, "route": None if rt is None else rt.id,
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
             "params": strat, "rest_spots": spots})  # fmt: skip
@@ -655,6 +746,38 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return a_[max(0, int(v) - ARROW_UP): max(0, int(v) - 10),
                       max(0, int(u) - 50): max(0, int(u) + 50), :3]  # fmt: skip
 
+        wp_st: dict[str, Any] = {"i": None, "last": None, "resume": False, "laps": 0, "fly": -1e9}
+
+        def patrol_goal(h: Cell) -> Cell:
+            """--search patrol: the waypoint to walk to (joins the loop at the nearest waypoint
+            ahead; after a fight / loot / rest resumes at the NEXT one AHEAD; never turns back)."""
+            if wp_st["i"] is None or wp_st["fly"] != fly_at:
+                wp_st["i"], wp_st["last"], wp_st["fly"] = mroutes.entry_index(rt, h), None, fly_at
+                wp_st["resume"] = False
+                ev({"kind": "patrol", "event": "join", "i": wp_st["i"], "at": list(h)})
+            elif wp_st["resume"]:
+                wp_st["resume"] = False
+                i0 = wp_st["i"]
+                wp_st["i"] = (mroutes.entry_index(rt, h) if wp_st["last"] is None
+                              else mroutes.resume_index(rt, h, wp_st["last"]))  # fmt: skip
+                ev({"kind": "patrol", "event": "resume", "from": i0, "i": wp_st["i"],
+                    "last": wp_st["last"], "at": list(h)})  # fmt: skip
+            for _ in range(len(wps)):
+                if not mroutes.reached(h, wps[wp_st["i"]], WP_TOL):
+                    break
+                wp_st["last"], wp_st["i"] = wp_st["i"], mroutes.next_index(rt, wp_st["i"])
+                if wp_st["i"] == 0:
+                    wp_st["laps"] += 1
+                ev({"kind": "patrol", "event": "reached", "i": wp_st["last"], "next": wp_st["i"],
+                    "laps": wp_st["laps"]})  # fmt: skip
+            return wps[wp_st["i"]]
+
+        def skip_waypoint(h: Cell) -> None:
+            ev({"kind": "patrol", "event": "skip", "i": wp_st["i"], "at": list(h)})
+            wp_st["last"], wp_st["i"] = wp_st["i"], mroutes.next_index(rt, wp_st["i"])
+
+        plant_last: dict[int, float] = {}
+
         escaped = [False]
         last_quick = [0.0]
 
@@ -686,19 +809,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         n_shots = [0]
 
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
-            """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow;
-            the HP is read between the clicks (guard_tick)."""
+            """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow --
+            dungeon@4 (decision 5): or until OUR first damage line in the Battle Log; the HP is
+            read between the clicks (guard_tick)."""
             ref = frame()
             t_click = r.ns()
+            with blt.lock:
+                n_lines0 = len(blt.lines)
             click_at(u, v, "strike")
             t_c = time.monotonic()
-            n, arrow = 1, None
+            n, arrow, dmg = 1, None, None
             cur = ref
             while time.monotonic() - t_c < BURST_MAX_S:
                 time.sleep(0.06)
                 cur = frame()
                 if hf.arrow_new(above(ref, u, v), above(cur, u, v)):
                     arrow = round(time.monotonic() - t_c, 2)
+                    break
+                with blt.lock:
+                    hit_ = any(ln.get("type") == "damage" for ln in blt.lines[n_lines0:])
+                if hit_:
+                    dmg = round(time.monotonic() - t_c, 2)
                     break
                 if guard_tick():
                     break
@@ -715,7 +846,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             # time beside it (pilot 11:42: the end stamp put the attack before the window)
             ev({"t_ns": t_click, "t_end_ns": r.ns(), "kind": "strike", "u": round(u, 1),
                 "v": round(v, 1), "rel": list(rel),
-                "clicks": n, "arrow_s": arrow, "end": "arrow" if arrow is not None else
+                "clicks": n, "arrow_s": arrow, "damage_s": dmg,
+                "end": "arrow" if arrow is not None else "damage" if dmg is not None else
                 ("escape" if escaped[0] else "bound"), "by": by,
                 "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
             return True
@@ -729,7 +861,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             uv = project(here, cells)
             found = None
             for c, (u, v) in zip(cells, uv, strict=True):
-                v_ = v - (BODY_UP if purpose == "defend" else 0)
+                v_ = v - (BODY_UP if purpose == "defend" else PLANT_UP if purpose == "plant" else 0)
                 if not in_view(u, v_):
                     verdicts["off"] += 1
                     continue
@@ -741,7 +873,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if vd == stop_on or (stop_on == "pickup" and vd == "sword"):
                     found = (c, (u, v_), res)
                     break
-                if purpose == "loot" and time.monotonic() - last_taken < 1.0:
+                if purpose in ("loot", "plant") and time.monotonic() - last_taken < 1.0:
                     break
             ev({"kind": "scan", "purpose": purpose, "cells": sum(verdicts.values()),
                 "verdicts": dict(verdicts), "found": None if found is None else
@@ -934,8 +1066,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 frac = None if pct is None else pct / 100.0
                 spf = None if spp is None else spp / 100.0
                 # sustain first (every strategy), then Auto Guard (S4b2)
+                calm = (tick - last_taken > CALM_S and mode != "fight" and not sitting
+                        and not hp_dropped(st.hist, tick))  # fmt: skip
                 if frac is not None:
-                    for what, why in sustain(st, tick, frac, spf, strat):
+                    for what, why in sustain(st, tick, frac, spf, strat, calm):
                         if what == "fly":
                             if sitting:
                                 press("stand", "escape")
@@ -1004,6 +1138,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
                 if mode != "search":
                     idle_since = tick
+                    if patrol:
+                        wp_st["resume"] = True
                 # --- FIGHT: locked, or scan for the attacker
                 if mode == "fight":
                     if lock is not None:
@@ -1097,7 +1233,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         continue
                     loot_list, fight_ref = [], None
                 if mode in ("after", "search") and frac is not None and not sitting \
-                        and rest_wanted(strat, frac, spf):  # fmt: skip
+                        and tick - st.heal > 2.0 and rest_wanted(strat, frac, spf):  # fmt: skip
                     mode, goal_path = "rest", None
                     rest_since = tick
                     ev({"kind": "rest_go", "pct": pct, "sp_pct": spp})
@@ -1106,13 +1242,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # --- REST (B / C): to the nearest spot, sit until HP 100 %
                 if mode == "rest":
                     if sitting:
-                        full = pct is not None and pct >= 100
+                        full = rest_done(strat, pct, spp)
                         if full or tick - rest_since > REST_MAX_S:
                             press("stand", "full" if full else "rest max")
                             sitting = False
                             ev({"kind": "rest_end", "why": "full" if full else "max",
                                 "pct": pct, "sp_pct": spp})  # fmt: skip
-                            mode = "search"
+                            mode, goal_path = "search", None  # dungeon@4: back into the area
                         time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
                         continue
                     if here is not None:
@@ -1152,16 +1288,44 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     here, last_taken = None, -1e9  # Amendment F
                     time.sleep(1.0)
                     continue
-                # --- SEARCH: the heading walk
+                # --- dungeon@4: the WHITE PLANT sweep when passing a spawn area (both searches)
+                if mode == "search" and here is not None and lock is None and plant_areas \
+                        and (frac is None or frac >= 0.6):  # fmt: skip
+                    i_p = pfm.near_area(plant_areas, here, PLANT_NEAR)
+                    if i_p is not None and tick - plant_last.get(i_p, -1e9) >= PLANT_EVERY_S:
+                        plant_last[i_p] = tick
+                        cells_p = plant_cells(plant_areas[i_p], here, ok)
+                        found_p = scan("plant", [(c_[0] - here[0], c_[1] - here[1])
+                                                 for c_ in cells_p], "sword")  # fmt: skip
+                        if found_p is not None:
+                            c_p, (u_p, v_p), _rp = found_p
+                            ev({"kind": "engage", "by": "plant", "name": None,
+                                "rel": list(c_p), "area": i_p})  # fmt: skip
+                            if fight_ref is None:
+                                fight_ref = {"img": img, "here": here, "t": tick}
+                            strike(u_p, v_p, c_p, "plant")
+                            lock = {"t": time.monotonic(), "rel": c_p,
+                                    "cell": [here[0] + c_p[0], here[1] + c_p[1]]}  # fmt: skip
+                            mode, goal_path = "fight", None
+                        continue
+                # --- SEARCH: the heading walk (or dungeon@4's patrol route)
                 if mode == "search" and here is not None and (
                         goal_path is None or len(goal_path) < 2
                         or max(abs(goal_path[-1][0] - here[0]),
                                abs(goal_path[-1][1] - here[1])) <= 2):  # fmt: skip
-                    goal = hf.heading_goal(area & ~carved, here, walk_st, rng)
+                    if patrol:
+                        goal = patrol_goal(here)
+                    elif not area[here[1], here[0]]:  # dungeon@4: a rest spot outside the area
+                        goal = nearest_in(area & ~carved, here)
+                    else:
+                        goal = hf.heading_goal(area & ~carved, here, walk_st, rng)
                     goal_path = None if goal is None else route(okr, carved, here, goal)
+                    if patrol and goal is not None and goal_path is None:
+                        skip_waypoint(here)  # carved off: the next waypoint ahead
                     ev({"kind": "goal", "to": None if goal is None else list(goal),
                         "len": None if goal_path is None else len(goal_path),
-                        "turn": walk_st.get("turn")})  # fmt: skip
+                        "turn": walk_st.get("turn"),
+                        "wp": None if not patrol else wp_st["i"]})  # fmt: skip
                 if mode in ("search", "rest") and here is not None and goal_path \
                         and tick - last_walk >= WALK_EVERY_S:  # fmt: skip
                     last_walk = tick
@@ -1232,10 +1396,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     "clicked": False, "why": f"cursor {res['verdict']}",
                                     "red": res.get("red")})  # fmt: skip
                                 if res["verdict"] == "noentry":
+                                    # dungeon@4 (decision 5): the client calls it a wall -- the
+                                    # target leaves the route grid at once and the walk re-plans
                                     noentry_n += 1
-                                    if noentry_n >= 2:  # the client calls it a wall: turn
+                                    carve(carved, c, CARVE_R)
+                                    ev({"kind": "noentry_carve", "at": list(here),
+                                        "to": list(c)})  # fmt: skip
+                                    if not patrol:
                                         turn_heading(walk_st)
-                                        goal_path, noentry_n = None, 0
+                                    goal_path = None
                 elif (mr and mode == "search" and here is not None and goal_path
                         and len(goal_path) >= 2 and lock is None):  # fmt: skip
                     # MELEE-RING 1 (between walk clicks): the pointer rests on a ring cell AHEAD of
@@ -1308,7 +1477,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     except Exception as exc:  # noqa: BLE001 -- the run is still recorded; the judge says so
         print(f"packets not written: {exc!r}")
     man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
-           "engage": a.engage, "strategy": a.strategy, "seed": a.seed,
+           "engage": a.engage, "search": a.search, "strategy": a.strategy, "seed": a.seed,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
@@ -1331,6 +1500,12 @@ def main() -> int:
         choices=["defend_scan", "melee_ring"],
         default="defend_scan",
         help="the engagement source (Batt 13:4x): defend_scan (3.98) or melee_ring",
+    )
+    t.add_argument(
+        "--search",
+        choices=["heading", "patrol"],
+        default="heading",
+        help="dungeon@4: the heading walk (default) or Batt's patrol loop (config/routes/MAP.yaml)",
     )
     t.add_argument(
         "--boxes",
