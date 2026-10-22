@@ -14785,6 +14785,17 @@ Reported, not deciding:
     walking 0.
   - The loot list's reach covered all 15 unpicked items (dungeon_loot_list): the loot steps (29;
     13 ended in a new fight, 6 hit their 25-s cap with 25-47 cells planned) were too slow.
+- **r4** (C, seed 22004, `20261022T151124-demo-dungeon-C-r4`, 15:12-15:49, 38.0 of 40 min: a FALSE
+  jump bar after a correct Fly Wing, Amendment H; the judge's window 36.4 min):
+  - 51 kills (84.1 /h), 42.8 s / kill; HP min 29.0 %; deaths 0; hard bars 0 (1 same-map change =
+    the Fly Wing).
+  - **HEAL, live: 9 casts, all 9 confirmed in the packets (sp -34 with hp +544)**; the runner
+    pressed F5 11 times; SP used 486, SP min 16 (5 %). 1 potion (an emergency under 30 %), 1 Fly
+    Wing (HP 32 % falling 460 HP/s). 6 Auto Guard casts. Rests 0 (SP short only inside fights).
+  - Loot 70.0 % / 73.7 % net; gross 2,877 / cost 2,079 / NET 798 z/h; cost ratio 0.72;
+    Sharpe-like 1.82. Strikes 69, landed 60 (87.0 %).
+  - Engagements: loot_sword 23, box 16, battle_log 10, walk_sword 7. Chain: 55 % within 15 s,
+    median 1.11 s.
 
 ### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
 
