@@ -213,3 +213,55 @@ def test_an_adjusting_battle_config_leaves_the_effective_rate_unknown() -> None:
         assert kb.rate_adjustment_reason(server) == reason
         row = kb.parse_drops(MOB_WITH_DROPS, items, server)[9001][0]
         assert row["rate_effective"] is None and row["rate_note"] == reason and row["rate"] == 7000
+
+
+def test_pupa_turns_into_creamy_on_prt_fild08_and_the_species_lint_sees_it(tmp_path: Path) -> None:
+    """Batt 2026-10-22 (decision 6: "Add metamorphosis (turns_into) to the KB so the species lint
+    sees it"). The chain end to end, on this file's inline fixtures (rAthena's formats, no rAthena
+    data): kb_build's parsers -> the KB files as kb_build writes them -> poring_flow.kbsheet's
+    world (Mob.turns_into) -> lint/hunt.py's melee_ring_species. A melee-ring hunt on prt_fild08
+    whose only TARGET is Pupa (1008) is refused for Creamy (1018), which is spawned nowhere: it
+    reaches the lint only through the metamorphosis. Without mob_skills.json (the KB before this
+    fix read it) the lint saw the spawn lines only and passed."""
+    import json
+
+    from poring_flow import kbsheet, pyview
+    from poring_flow.lint import lint
+
+    assert kbsheet.METAMORPHOSIS == kb.METAMORPHOSIS  # one skill id on both sides
+    root = tmp_path / "kb"
+    (root / "bindings").mkdir(parents=True)
+    (root / "bindings" / "lab-rathena.json").write_text("{}")
+    spawns = {m: rows for m, rows in kb.parse_spawns(SPAWNS).items() if m == "prt_fild08"}
+    outputs = {
+        "spawns.json": spawns,
+        "mobs.json": {str(k): v for k, v in kb.parse_mob_db(MOB_DB).items()},
+        "mob_skills.json": {str(k): v for k, v in kb.parse_mob_skills(SKILLS).items()},
+    }
+    for name, doc in outputs.items():
+        (root / name).write_text(json.dumps(doc))
+    world, labels = kbsheet.load_local_world("lab-rathena", ["prt_fild08"], root)
+    assert world.sheets["prt_fild08"].spawned() == [1008]  # Creamy has no spawn line here
+    assert world.mobs[1008].turns_into == [1018] and 1018 in world.mobs
+    flow = pyview.parse(
+        'flow(ir=2, name="t", max_runtime_s=600, start=entry("field", "south"), '
+        'target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", '
+        "path=RDP))\n\n\n"
+        '@map_block(map_id("prt_fild08"), entries=[entry_at("south", cell("prt_fild08", 20, 20))],'
+        " targets=[mob(1008)])\n"
+        "def field():\n"
+        '    hunt(strike="arm_c@32", engage_on_the_way="on_the_way@19", '
+        'engage_source="melee_ring", dead="exp_line@48", loot="gm_fast_scan@54", '
+        'search="heading_coverage@22")\n'
+    )
+    found = [f.message for f in lint(flow, world=world) if f.rule == "melee_ring_species"]
+    assert found == [
+        "maps.field.0: hunt's engage_source melee_ring strikes EVERY monster in melee range, and "
+        "mob 1018 can be on prt_fild08 without being a TARGET of field: refused on a map with a "
+        "non-target species"
+    ]
+    (root / "mob_skills.json").unlink()  # the KB as kbsheet read it before: spawn lines only
+    world, labels = kbsheet.load_local_world("lab-rathena", ["prt_fild08"], root)
+    assert world.mobs[1008].turns_into == [] and 1018 not in world.mobs
+    assert [f for f in lint(flow, world=world) if f.rule == "melee_ring_species"] == []
+    assert any("spawn lines only" in n for n in labels.notes)

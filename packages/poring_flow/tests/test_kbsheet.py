@@ -8,7 +8,7 @@ import struct
 from pathlib import Path
 
 from poring_flow import editor
-from poring_flow.kbsheet import load_local_world, npc_key, option_key, read_gat
+from poring_flow.kbsheet import load_local_world, metamorphoses, npc_key, option_key, read_gat
 from poring_flow.lint import lint
 from poring_flow.trace import Scenario, simulate
 
@@ -136,3 +136,39 @@ def test_ids_that_could_leave_the_kb_directory_are_refused(tmp_path: Path) -> No
     (root / "maps" / "srv" / "m_town.json").write_text('{"map": 1}')
     world, labels = load_local_world("srv", ["m_town"], root)
     assert any("invalid" in n for n in labels.notes)
+
+
+def skill(mob: int, skill_id: int, *vals: str) -> dict[str, object]:
+    """One mob-skill line as kb_build writes mob_skills.json (val1..val5 as strings)."""
+    return {"skill": skill_id, "state": "idle", "vals": [*vals, *[""] * (5 - len(vals))]}
+
+
+def test_metamorphosis_reaches_the_mobs_turns_into(tmp_path: Path) -> None:
+    """Batt 2026-10-22 (decision 6): the KB's NPC_METAMORPHOSIS lines fill Mob.turns_into, every
+    value of a line, transitively: the made-up 9301 turns into 9302, which turns into 9303 or 9304;
+    each gets its Mob (it is not spawned anywhere) and the chain is complete."""
+    root = kb(tmp_path, None)
+    mobs = {str(i): {"name": f"made-up {i}", "level": i - 9290} for i in (9301, 9302, 9303, 9304)}
+    (root / "mobs.json").write_text(json.dumps(mobs))
+    skills = {
+        "9301": [skill(9301, 197, "19"), skill(9301, 193, "9302")],  # an emotion, then the change
+        "9302": [skill(9302, 193, "9303", "9304", "0")],  # two candidates; a 0 is no mob
+        "9303": [skill(9303, 193)],  # a metamorphosis line naming nothing
+    }
+    (root / "mob_skills.json").write_text(json.dumps(skills))
+    world, labels = load_local_world("srv", ["m_field"], root)
+    assert sorted(world.mobs) == [9301, 9302, 9303, 9304]
+    assert world.mobs[9301].turns_into == [9302]
+    assert world.mobs[9302].turns_into == [9303, 9304]
+    assert world.mobs[9303].turns_into == [] and world.mobs[9304].turns_into == []
+    assert world.mobs[9302].level == 12 and not any("mob_skills" in n for n in labels.notes)
+    assert metamorphoses(skills) == {9301: (9302,), 9302: (9303, 9304)}
+    assert metamorphoses({"x": [], "9": "no", "8": [3, {"skill": 193, "vals": None}]}) == {}
+
+
+def test_without_the_skill_file_the_species_are_the_spawn_lines_and_a_note_says_so(
+    tmp_path: Path,
+) -> None:
+    world, labels = load_local_world("srv", ["m_field"], kb(tmp_path, None))
+    assert sorted(world.mobs) == [9301] and world.mobs[9301].turns_into == []
+    assert any("mob_skills.json" in n and "spawn lines only" in n for n in labels.notes)

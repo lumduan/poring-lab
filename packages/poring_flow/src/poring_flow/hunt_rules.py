@@ -24,9 +24,10 @@ index only describes it. A choice the index does not know is shown with ``known`
 linter and the engine refuse nothing more or less because of it).
 
 OPTION parameters (blocks.yaml ``options``; Batt 2026-10-22, the hunt block's ``engage_source``:
-``detector`` or ``melee_ring``) sit in their group beside the rule versions, with ``kind``
-"option": plain values, no PARAMS version, no numbers and no D8 evidence (the index never holds
-them), the registry's ``default`` (what an absent parameter means) and its ``note``. Every
+``detector`` or ``melee_ring``, and its ``search_route``: ``heading`` or ``patrol_route``) sit in
+their group beside the rule versions, with ``kind`` "option": plain values, no PARAMS version, no
+numbers and no D8 evidence (the index never holds them), the registry's ``default`` (what an
+absent parameter means) and its ``note``. Every
 parameter carries ``kind`` ("rule" | "option") and ``required``: the editor writes an optional
 parameter only when it differs from its default.
 """

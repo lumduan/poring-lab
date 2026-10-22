@@ -11,6 +11,7 @@ from typing import Any, Literal
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue
 from poring_flow.effective import Merged, global_set, merge
+from poring_flow.patrol import RoutesProvider
 from poring_flow.pyview import expr_src
 from poring_flow.sheet import MapSheet, World
 from poring_flow.zones import ZonesProvider
@@ -57,6 +58,7 @@ class Ctx:
     resolver: Resolver | None
     detector: Detector
     zones: ZonesProvider | None = None  # Amendment A 4: None = not loaded (file checks skipped)
+    routes: RoutesProvider | None = None  # patrol routes (7d): None = not loaded (checks skipped)
     findings: list[Finding] = field(default_factory=list)
     _seen: set[tuple[str, str, str]] = field(default_factory=set)
     _merged: dict[str, Merged] = field(default_factory=dict)

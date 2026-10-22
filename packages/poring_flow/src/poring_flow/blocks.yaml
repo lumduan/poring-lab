@@ -147,6 +147,13 @@ blocks:
     # monster in melee range, so lint/hunt.py refuses it on a map with an IGNORE list or a
     # non-TARGET species and on any server but the lab's; runstart.py refuses it unless the
     # attested environment is the lab's. The NPC sprite guard and every gate stay underneath.
+    # ➡️ search_route (Batt 2026-10-22, the Crusader's orcsdun01 demo): HOW the hunt searches
+    # between fights -- the heading search (the default; absent = heading: the `search` rule's
+    # numbers) or the map's reviewed PATROL ROUTE (config/routes/<map>.yaml, its first route,
+    # scripts/map_routes.py), walked in its listed direction; after a fight or a loot step the walk
+    # resumes at the NEXT waypoint AHEAD, never a passed one. An OPTION, not a rule version: no
+    # hunt_flow PARAMS rule holds it. lint/hunt.py refuses patrol_route on a map with no routes
+    # file or one the loader refuses; runstart.py refuses it without the routes provider.
     concept: combat.hunt
     params:
       - {name: strike, type: str, required: true, group: engage, choices: [arm_c@32]}
@@ -160,6 +167,12 @@ blocks:
       - {name: dead, type: str, required: true, group: dead_loot, choices: [exp_line@48]}
       - {name: loot, type: str, required: true, group: dead_loot, choices: [gm_fast_scan@54, gm_scan_one_pass@51, gm_scan@50]}
       - {name: search, type: str, required: true, group: search, choices: [heading_coverage@22]}
+      - name: search_route
+        type: str
+        group: search
+        options: [heading, patrol_route]
+        default: heading
+        note: "heading: the heading search with the search rule's numbers (the default). patrol_route: walk the map's reviewed patrol route (config/routes/<map>.yaml, its first route) continuously in its listed direction; a fight or a loot step interrupts it, then the walk resumes at the NEXT waypoint AHEAD, never a passed one. Lint refuses patrol_route on a map with no routes file, or one its loader refuses"
     timeout_s: 600
     long: true
     moves: near

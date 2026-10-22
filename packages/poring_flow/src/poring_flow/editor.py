@@ -25,6 +25,7 @@ from poring_flow import always_on, ir, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
+from poring_flow.patrol import RoutesProvider
 from poring_flow.runstart import verdict
 from poring_flow.sheet import World, load_world
 from poring_flow.zones import ZonesProvider
@@ -150,6 +151,7 @@ def lint_doc(
     detector: Detector | None = None,
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
+    routes_provider: RoutesProvider | None = None,
 ) -> dict[str, Any]:
     findings = lint(
         flow,
@@ -158,6 +160,7 @@ def lint_doc(
         detector=detector,
         runtime_max_s=runtime_max_s,
         zones_provider=zones_provider,
+        routes_provider=routes_provider,
     )
     roots = owners(flow)
     zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
@@ -188,6 +191,7 @@ def lint_doc(
         runtime_max_s=runtime_max_s,
         zones_loaded=zones_provider is not None,
         world_server=world.server if world is not None else None,
+        routes_loaded=routes_provider is not None,
     )
     return {
         "flow_hash": ir.flow_hash(flow),

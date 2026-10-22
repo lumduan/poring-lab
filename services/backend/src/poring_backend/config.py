@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     # map zones files (config/map_zones; Batt D6 2026-10-21: the editor EXPORTS, a person commits).
     flows_config_dir: Path = Path("/lab-config/flows")
     zones_dir: Path = Path("/lab-config/map_zones")
+    # the patrol routes (config/routes, Batt 2026-10-22: the hunt block's search_route option),
+    # read by the runner's loader (scripts/map_routes.py via flow_routes.py, ZONES_CODE_DIR below)
+    routes_dir: Path = Path("/lab-config/routes")
     # ZONES_CODE_DIR: where the runner's zones loader lives (scripts/map_zones.py + flow_zones.py),
     # mounted read-only in dev mode (compose.dev.yaml). Unset and not importable: the zones routes
     # answer 503 zones_engine_unavailable and lint names zones references unchecked (fail closed).

@@ -488,6 +488,35 @@
       }
      ],
      "default": "heading_coverage@22"
+    },
+    {
+     "name": "search_route",
+     "kind": "option",
+     "required": false,
+     "default": "heading",
+     "note": "heading: the heading search with the search rule's numbers (the default). patrol_route: walk the map's reviewed patrol route (config/routes/<map>.yaml, its first route) continuously in its listed direction; a fight or a loot step interrupts it, then the walk resumes at the NEXT waypoint AHEAD, never a passed one. Lint refuses patrol_route on a map with no routes file, or one its loader refuses",
+     "choices": [
+      {
+       "id": "heading",
+       "known": true,
+       "values": {},
+       "versions": [],
+       "adopted": false,
+       "evidence": [],
+       "option": true,
+       "is_default": true
+      },
+      {
+       "id": "patrol_route",
+       "known": true,
+       "values": {},
+       "versions": [],
+       "adopted": false,
+       "evidence": [],
+       "option": true,
+       "is_default": false
+      }
+     ]
     }
    ]
   },

@@ -226,15 +226,18 @@ def test_the_hunt_blocks_choices_are_exported_rule_versions() -> None:
     spec = registry().blocks["hunt"]
     params = {p.name: p for p in spec.params if p.choices}  # the RULE-VERSION parameters
     assert set(params) == set(hcfg.HUNT_PARAMS)
-    # the OPTION parameters (Batt 2026-10-22: engage_source) are no PARAMS rule: not exported, not
-    # a PARAMS key of any class, never required (absent = the default), in a hunt-block group
+    # the OPTION parameters (Batt 2026-10-22: engage_source, search_route) are no PARAMS rule: not
+    # exported, not a PARAMS key of any class, never required (absent = the default), in a group
     options = {p.name: p for p in spec.params if not p.choices}
-    assert set(options) == {"engage_source"}
+    assert set(options) == {"engage_source", "search_route"}
     for name, p in options.items():
         assert p.options and p.default in p.options and not p.required, name
         assert hcfg.classify(name) is None and p.group in hcfg.GROUPS, name
     assert options["engage_source"].options == ["detector", "melee_ring"]
     assert options["engage_source"].default == "detector"
+    sr = options["search_route"]
+    assert sr.options == ["heading", "patrol_route"] and sr.default == "heading"
+    assert sr.group == "search"
     index = hcfg.load(hcfg.CONFIG_DIR / pe.INDEX)
     adopted = hcfg.rule_ids(P, hcfg.ADOPTED_VERSION)
     for name, p in params.items():

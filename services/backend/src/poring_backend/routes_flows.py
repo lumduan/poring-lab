@@ -193,6 +193,22 @@ def _zones_provider(state: AppState, world: Any) -> tuple[Any, list[str]]:
     return flows_zones.provider(eng, state.settings.zones_dir, shapes), []
 
 
+def _routes_provider(state: AppState, world: Any) -> tuple[Any, list[str]]:
+    """The linter's patrol routes provider over config/routes (flow_routes, the runner's own
+    loader), bounded by each sheet's walk grid; None + a note when the loader is not here (the
+    run-start check then refuses a patrol hunt: fail closed)."""
+    eng = flows_zones.engine(state.settings.zones_code_dir)
+    shapes = {}
+    for m, sheet in world.sheets.items() if world is not None else []:
+        if sheet.walk is not None:
+            shapes[m] = (sheet.walk.height, sheet.walk.width)
+    rp = flows_zones.routes_provider(eng, state.settings.routes_dir, shapes) if eng else None
+    if rp is None:
+        return None, ["routes: the runner's routes loader is not available here (ZONES_CODE_DIR): "
+                      "patrol routes are unchecked"]  # fmt: skip
+    return rp, []
+
+
 def _zones_engine(request: Request, state: AppState) -> flows_zones.Engine:
     eng = flows_zones.engine(state.settings.zones_code_dir)
     if eng is None:
@@ -338,11 +354,12 @@ async def post_lint(request: Request, state: AppState = Depends(compute_gate)) -
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
         zp, znotes = _zones_provider(state, world)
+        rp, rnotes = _routes_provider(state, world)
         doc = editor.lint_doc(
             flow, world=world, resolver=_resolver(state, flow), runtime_max_s=max_s,
-            zones_provider=zp,
+            zones_provider=zp, routes_provider=rp,
         )  # fmt: skip
-        return {**doc, "world_notes": notes + znotes}
+        return {**doc, "world_notes": notes + znotes + rnotes}
 
     return dict(await _compute(request, state, run))
 
@@ -366,9 +383,10 @@ async def post_simulate(
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
         zp, znotes = _zones_provider(state, world)
+        rp, rnotes = _routes_provider(state, world)
         lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow),
-                                  runtime_max_s=max_s, zones_provider=zp),
-                "world_notes": notes + znotes}  # fmt: skip
+                                  runtime_max_s=max_s, zones_provider=zp, routes_provider=rp),
+                "world_notes": notes + znotes + rnotes}  # fmt: skip
         result = trace.simulate(flow, world, scenario)
         return {"flow_hash": ir.flow_hash(flow), "trace": result, "lint": lint}
 

@@ -49,6 +49,7 @@ def test_groups_are_the_registrys_with_the_adopted_rule_as_default() -> None:
         "strike": "arm_c@32", "engage_on_the_way": "on_the_way@19", "dead": "exp_line@48",
         "loot": "gm_fast_scan@54", "search": "heading_coverage@22",
         "engage_source": "detector",  # an OPTION: the registry's default (absent = detector)
+        "search_route": "heading",  # an OPTION too (absent = heading: today's heading search)
     }  # fmt: skip
     assert doc["adopted"] == 55 and doc["groups"][-1]["params"] == []  # 52 until 3.97 (10-22 04:32)
 
@@ -71,6 +72,26 @@ def test_engage_source_is_an_option_in_the_engage_group_with_no_version_or_badge
         assert c["values"] == {} and c["versions"] == [] and c["evidence"] == []
     assert {p["kind"] for p in engage["params"][:2]} == {"rule"}
     assert all(p["required"] for p in engage["params"][:2])
+
+
+def test_search_route_is_an_option_in_the_search_group_with_no_version_or_badge() -> None:
+    """Batt 2026-10-22 (the Crusader's orcsdun01 demo): walk the map's reviewed patrol route, an
+    option beside the heading search's rule version; absent = heading, so old flows keep their
+    hash. A plain value: no PARAMS version holds it, no numbers, no D8 evidence."""
+    doc = rules_doc(index(), evidence())
+    search = next(g for g in doc["groups"] if g["name"] == "search")
+    assert [p["name"] for p in search["params"]] == ["search", "search_route"]
+    sr = search["params"][-1]
+    assert sr["kind"] == "option" and sr["required"] is False and sr["default"] == "heading"
+    assert "config/routes/<map>.yaml" in sr["note"] and "AHEAD" in sr["note"]
+    assert [(c["id"], c["is_default"]) for c in sr["choices"]] == [
+        ("heading", True),
+        ("patrol_route", False),
+    ]
+    for c in sr["choices"]:
+        assert c["option"] and c["known"] and not c["adopted"]
+        assert c["values"] == {} and c["versions"] == [] and c["evidence"] == []
+    assert search["params"][0]["kind"] == "rule" and search["params"][0]["required"]
 
 
 def test_each_rule_version_carries_its_numbers_and_the_versions_that_hold_it() -> None:

@@ -2188,12 +2188,12 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 > one `hunt` block with groups; PARAMS open until B4; configs under `config/flows/`; a live A/A first;
 > zones export-only; D8 yes; D9 yes for the MW3-hunt slice only. B1-B3 (offline) started. The amendment's
 > TEXT is still a draft until Batt accepts it.
-> ➡️ **2026-10-21 18:2x: B1 and B3 BUILT offline** (branch feat/blocks-b1b3, not merged; the plan's
+> ➡️ **2026-10-21 18:2x: B1 and B3 BUILT offline** (branch feat/blocks-b1b3, ~~not merged~~ ➡️ merged in 0919ce7; the plan's
 > section 7a): the key classes and the exported configs (`config/flows/hunt/`), the `hunt` block,
 > `MapBlock.zones` and lint with zones, and hunt_flow's decision code on the resolved config
 > (bytecode-proven). "Nothing in it is built" below is superseded for those steps; B2, B4 and B5
 > are not built. ➡️ B1 and B3 merged (0919ce7).
-> ➡️ **2026-10-21 22:1x: B2 BUILT offline** (branch feat/blocks-b2, not merged; the plan's section 7b):
+> ➡️ **2026-10-21 22:1x: B2 BUILT offline** (branch feat/blocks-b2, ~~not merged~~ ➡️ merged in cea0c4c; the plan's section 7b):
 > the hunt block's dropdowns of rule versions with badges (★ adopted, ◆ D8 hunting evidence), the
 > map node's Zones layer (drawn, checked by the runner's own loader through POST /flows/zones/check,
 > exported only), and /flows lint with the zones provider. B4 and B5 are not built; the amendment's
@@ -2206,7 +2206,15 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 > and on any server but the lab's; the run-start check refuses it unless the attested environment is
 > the lab's. The NPC sprite guard, every gate and the hard bars are unchanged. Its runtime is
 > `scripts/dungeon_hunt.py`, not the block engine. The plan's section 7c; built offline on branch
-> feat/melee-ring-block (not merged).
+> feat/melee-ring-block (~~not merged~~ ➡️ merged in 8c592d9).
+> ➡️ **2026-10-22 night (Batt's overnight brief): a second OPTION, `search_route`** (`heading`, the
+> default and what an absent parameter means, or `patrol_route`: walk the map's reviewed PATROL
+> ROUTE, `config/routes/<map>.yaml`, in its listed direction, resuming at the next waypoint ahead
+> after a fight or a loot step). The route files are reviewed static map data under the zones'
+> own review rules (`scripts/map_routes.py`). The linter refuses `patrol_route` on a map with no
+> routes file or one its loader refuses; the run-start check refuses it without the routes
+> provider. Not hash-bound in the flow yet, and no editor layer yet (later, like the Zones layer).
+> The plan's section 7d; built offline on branch feat/patrol-routes (not merged).
 
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
 > (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).

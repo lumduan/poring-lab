@@ -8,7 +8,11 @@ Per map, in this order:
 2. else a sheet built from what `kb_build` / `kb_route` / `kb_bindings` already extracted:
    - warps: L3 `warp.cells` (bindings/<server>.json);
    - NPCs: L3 `npc.positions` and `npc.kafra` on that map, with their menu options (`npc.menus`);
-   - spawns: `spawns.json`; mobs (level, boss, the Aggressive mode flag): `mobs.json`;
+   - spawns: `spawns.json`; mobs (level, boss, the Aggressive mode flag): `mobs.json`, for every
+     species spawned there AND what it turns into (`Mob.turns_into`, transitively), read from the
+     NPC_METAMORPHOSIS lines of `mob_skills.json` (Batt 2026-10-22, decision 6: "Add
+     metamorphosis (turns_into) to the KB so the species lint sees it": prt_fild08's Pupa ->
+     Creamy reaches lint/hunt.py's species check and prep.py's training scope);
    - walkability: the map's GAT in the bindings' `map.walkability.gat_dir` (client data in /dev/shm
      on the host), when it is readable; otherwise none (routes are then estimates, and the linter
      says so).
@@ -56,6 +60,9 @@ MAX_GAT_BYTES = 64 << 20
 MAX_SIDE = 1024
 # A server or map id names a FILE here: no path separators, no leading dot (no "..").
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_@][A-Za-z0-9_@.\-]{0,63}$")
+# NPC_METAMORPHOSIS, a mob-skill line whose val1..val5 name the mob(s) it turns into: rAthena picks
+# one of the non-zero values. Equal to scripts/kb_build.METAMORPHOSIS (test_kb_build pins it).
+METAMORPHOSIS = 193
 
 
 def npc_key(map_id: str, name: str) -> str:
@@ -100,6 +107,44 @@ def _read_gat(path: str, _size: int, _mtime: int) -> Walk | None:
             row.append("#" if t in NOT_WALKABLE else ".")
         rows.append("".join(row))
     return Walk(width=w, height=h, rows=rows)
+
+
+def metamorphoses(skills: Any) -> dict[int, tuple[int, ...]]:
+    """PURE: mob id -> the mobs it can turn into, from `mob_skills.json` (kb_build: mob id -> its
+    mob-skill lines, each with `skill` and `vals`): every NPC_METAMORPHOSIS line's positive values,
+    ALL of them, in order, once each. (kb_build's classes.json keeps val1 only; the species checks
+    read every value: a superset can only refuse more.)"""
+    out: dict[int, tuple[int, ...]] = {}
+    for k, rows in skills.items() if isinstance(skills, dict) else []:
+        if not (isinstance(k, str) and k.isdigit() and isinstance(rows, list)):
+            continue
+        into: list[int] = []
+        for r in rows:
+            if not isinstance(r, dict) or r.get("skill") != METAMORPHOSIS:
+                continue
+            for v in r.get("vals") or []:
+                s = str(v).strip()
+                if s.isdigit() and int(s) > 0 and int(s) not in into:
+                    into.append(int(s))
+        if into:
+            out[int(k)] = tuple(into)
+    return out
+
+
+def read_metamorphoses(path: Path) -> dict[int, tuple[int, ...]] | None:
+    """`metamorphoses` of a `mob_skills.json`; None when it cannot be read. Cached by the file's
+    size and modification time (the file is ~1.6 MB, read on every lint)."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return _read_metamorphoses(str(path), st.st_size, st.st_mtime_ns)
+
+
+@lru_cache(maxsize=4)
+def _read_metamorphoses(path: str, _size: int, _mtime: int) -> dict[int, tuple[int, ...]] | None:
+    raw = _json(Path(path))
+    return metamorphoses(raw) if isinstance(raw, dict) else None
 
 
 @dataclass
@@ -225,6 +270,19 @@ def load_local_world(
     if not mobs:
         raw = _json(kb_root / "mobs.json")
         wanted = {sp.mob for s in sheets.values() for sp in s.spawns}
+        turns = read_metamorphoses(kb_root / "mob_skills.json")
+        if turns is None and wanted:
+            turns = {}
+            labels.notes.append(
+                "no readable data/kb/mob_skills.json: what a species turns into (metamorphosis) "
+                "is unknown, so the species lists are the spawn lines only"
+            )
+        todo = list(wanted)
+        while todo:  # what they turn into, transitively (Mob.turns_into: lint/hunt.py, prep.py)
+            for t in (turns or {}).get(todo.pop(), ()):
+                if t not in wanted:
+                    wanted.add(t)
+                    todo.append(t)
         for k, v in (raw or {}).items() if isinstance(raw, dict) else []:
             if k.isdigit() and int(k) in wanted and isinstance(v, dict):
                 mobs[int(k)] = Mob(
@@ -233,6 +291,7 @@ def load_local_world(
                     level=max(1, min(999, int(v.get("level") or 1))),
                     aggressive="Aggressive" in (v.get("modes") or []),
                     boss=v.get("class") == "Boss",
+                    turns_into=list((turns or {}).get(int(k), ())),
                 )
         if wanted:
             labels.notes.append(

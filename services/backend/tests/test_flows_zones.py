@@ -257,6 +257,17 @@ def test_the_engine_import_restores_the_import_path(tmp_path: Path) -> None:
     flows_zones._CACHE.clear()
 
 
+def test_the_routes_provider_comes_with_the_engine(tmp_path: Path) -> None:
+    """flow_routes rides along with the zones engine (the same code directory); an engine without
+    it gives no routes provider (a patrol hunt is then refused at run start), the zones kept."""
+    flows_zones._CACHE.clear()
+    eng = flows_zones.engine(REPO / "scripts")
+    assert eng is not None and eng.fr is not None
+    assert flows_zones.routes_provider(eng, tmp_path, {})("field_1") is None  # no file
+    assert flows_zones.routes_provider(flows_zones.Engine(eng.mz, eng.fz), tmp_path, {}) is None
+    flows_zones._CACHE.clear()
+
+
 def test_without_the_loader_there_is_no_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     flows_zones._CACHE.clear()
 
@@ -282,13 +293,16 @@ def zclient(tmp_path: Path) -> Iterator[Any]:
 
     zd = tmp_path / "zones"
     zd.mkdir()
+    rd = tmp_path / "routes"
+    rd.mkdir()
     s = Settings(data_dir=tmp_path / "data", public_port=80, frontend_origins=ORIGIN,
                  status_hz=20.0, settings_dir=tmp_path / "settings", zones_dir=zd,
-                 flows_config_dir=REPO / "config" / "flows")  # fmt: skip
+                 routes_dir=rd, flows_config_dir=REPO / "config" / "flows")  # fmt: skip
     app = create_app(s, capture_factory=NoCapture, input_factory=NoInput)
     c = TestClient(app, client=LAN)
     c.__enter__()
     c.zones_dir = zd  # type: ignore[attr-defined]
+    c.routes_dir = rd  # type: ignore[attr-defined]
     yield c
     c.__exit__(None, None, None)
 
@@ -382,6 +396,44 @@ def test_lint_reads_the_zones_files_through_the_provider(zclient: Any) -> None:
         "zones_unreadable",
     }
     assert not any("zones" in r for r in doc["run"]["reasons"])
+
+
+def test_lint_reads_the_patrol_routes_through_the_provider(zclient: Any) -> None:
+    """The hunt block's search_route patrol_route (Batt 2026-10-22, plan section 7d): /flows/lint
+    passes the routes provider (scripts/flow_routes.py over the runner's loader), so a map without
+    a routes file is refused, a file the loader refuses is refused, and a good one passes."""
+    flow = json.loads((REPO / "packages/poring_flow/src/poring_flow/examples/town_warp_farm.json")
+                      .read_text())  # fmt: skip
+    rules = {"strike": "arm_c@32", "engage_on_the_way": "on_the_way@19", "dead": "exp_line@48",
+             "loot": "gm_fast_scan@54", "search": "heading_coverage@22",
+             "search_route": "patrol_route"}  # fmt: skip
+    hunt = {"block": "hunt", "concept": "combat.hunt", "kind": "action", "note": None,
+            "on_fail": "stop", "outcome_to": None, "timeout_s": 600.0,
+            "params": {k: {"kind": "lit", "value": v} for k, v in rules.items()}}  # fmt: skip
+    farm = next(b for b in flow["workflow"]["blocks"] if b["map"]["map"] == "field_1")
+    farm["main"].insert(0, hunt)
+
+    def patrol(text: str | None) -> tuple[set[str], dict[str, Any]]:
+        path = zclient.routes_dir / "field_1.yaml"
+        path.unlink(missing_ok=True)
+        if text is not None:
+            path.write_text(text, encoding="utf-8")
+        r = zclient.post("/flows/lint", json={"flow": flow, "world": "sample"},
+                         headers=_hdr(zclient))  # fmt: skip
+        assert r.status_code == 200, r.text
+        doc = dict(r.json())
+        return {f["rule"] for f in doc["findings"] if f["rule"].startswith("patrol_")}, doc
+
+    good = ("map: field_1\nreviewed_by: batt\nreviewed: 2026-10-22\nsource: synthetic\n"
+            "routes:\n  - id: ring\n    kind: loop\n    note: round\n"
+            "    waypoints: [[5, 5], [10, 5], [10, 10]]\n")  # fmt: skip
+    found, doc = patrol(None)
+    assert found == {"patrol_route_missing"}
+    assert not any("routes" in n and "unchecked" in n for n in doc["world_notes"])
+    found, _ = patrol(good.replace("kind: loop", "kind: circle"))
+    assert found == {"patrol_route_unreadable"}
+    found, doc = patrol(good)
+    assert found == set() and not any("routes" in r for r in doc["run"]["reasons"])
 
 
 def test_the_catalogue_carries_the_hunt_blocks_rule_versions(zclient: Any) -> None:

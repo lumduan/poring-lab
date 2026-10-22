@@ -112,18 +112,20 @@ class Zones:
 # --- the file -------------------------------------------------------------------------------------
 
 
-def _bad(source: str, msg: str) -> ZoneError:
-    return ZoneError(f"{source}: {msg}")
+def _bad(source: str, msg: str, error: type[ValueError] = ZoneError) -> ValueError:
+    return error(f"{source}: {msg}")
 
 
-def _cell(v: Any, where: str, source: str, shape: tuple[int, int] | None) -> Cell:
+def _cell(v: Any, where: str, source: str, shape: tuple[int, int] | None,
+          error: type[ValueError] = ZoneError) -> Cell:  # fmt: skip
     ok_ = (isinstance(v, (list, tuple)) and len(v) == 2
            and all(isinstance(c, int) and not isinstance(c, bool) for c in v))  # fmt: skip
     if not ok_:
-        raise _bad(source, f"{where}: {v!r} is not a cell [x, y] of two integers")
+        raise _bad(source, f"{where}: {v!r} is not a cell [x, y] of two integers", error)
     x, y = int(v[0]), int(v[1])
     if shape is not None and not (0 <= x < shape[1] and 0 <= y < shape[0]):
-        raise _bad(source, f"{where}: ({x}, {y}) is off the map ({shape[1]} x {shape[0]} cells)")
+        raise _bad(source, f"{where}: ({x}, {y}) is off the map ({shape[1]} x {shape[0]} cells)",
+                   error)  # fmt: skip
     return (x, y)
 
 
@@ -230,30 +232,50 @@ def parse(data: Any, map_name: str, shape: tuple[int, int] | None = None,
         raise _bad(source, f"unknown key(s) {extra} (allowed: {sorted(TOP_KEYS)})")
     if data.get("map") != map_name:
         raise _bad(source, f"map {data.get('map')!r} is not {map_name!r} (the file's name)")
+    rb, reviewed, deleg = review(data, source)
+    ids: set[str] = set()
+    nc = _items(data, "no_cross", "points", 2, source, shape, ids)
+    ne = _items(data, "no_enter", "polygon", 3, source, shape, ids)
+    return Zones(map=map_name, reviewed_by=rb, reviewed=reviewed,
+                 no_cross=tuple(NoCross(i, n, tuple(p)) for i, n, p in nc),
+                 no_enter=tuple(NoEnter(i, n, tuple(p)) for i, n, p in ne),
+                 delegation=deleg)  # fmt: skip
+
+
+def review(data: dict[str, Any], source: str, what: str = "zones",
+           error: type[ValueError] = ZoneError) -> tuple[str, str, str]:  # fmt: skip
+    """PURE: a reviewed map-data file's review -- (reviewed_by, reviewed as ISO YYYY-MM-DD, the
+    delegation note or "") -- from its ``reviewed_by``, ``reviewed`` and ``delegation`` keys:
+    a PERSON reviews; the agent only under a person's RECORDED delegation (``DELEGATED`` + a
+    ``delegation`` note citing the decision). ``error`` (ZoneError) on anything wrong, the message
+    naming the file's kind (``what``). Shared with scripts/map_routes.py (Batt 2026-10-22: the
+    patrol routes are reviewed static map data under the same rules)."""
     rb = data.get("reviewed_by")
     if not isinstance(rb, str) or not rb.strip():
-        raise _bad(source, "no reviewed_by: a zones file names the PERSON who reviewed it (the "
-                           "agent never approves zones)")  # fmt: skip
+        raise _bad(source, f"no reviewed_by: a {what} file names the PERSON who reviewed it (the "
+                           f"agent never approves {what})", error)  # fmt: skip
     deleg = data.get("delegation")
     if _agent_like(rb):
         m = DELEGATED.fullmatch(rb.strip())
         if m is None or _agent_like(m.group(1)):
             raise _bad(
                 source,
-                f"reviewed_by {rb!r}: the agent never approves zones (a person "
+                f"reviewed_by {rb!r}: the agent never approves {what} (a person "
                 "does), except under a person's recorded delegation: 'agent "
                 "(delegated by <person>, YYYY-MM-DD)' + a `delegation` note",
+                error,
             )
         try:
             date.fromisoformat(m.group(2))
         except ValueError:
-            raise _bad(source, f"reviewed_by {rb!r}: the delegation's date is not a date") from None
+            raise _bad(source, f"reviewed_by {rb!r}: the delegation's date is not a date",
+                       error) from None  # fmt: skip
         if not isinstance(deleg, str) or not deleg.strip():
             raise _bad(source, f"reviewed_by {rb!r}: a delegated review needs a `delegation` note "
-                               "citing the person's decision")  # fmt: skip
+                               "citing the person's decision", error)  # fmt: skip
     elif deleg is not None:
         raise _bad(source, "delegation: only a delegated reviewer ('agent (delegated by <person>, "
-                           "YYYY-MM-DD)') carries one")  # fmt: skip
+                           "YYYY-MM-DD)') carries one", error)  # fmt: skip
     rv = data.get("reviewed")
     if isinstance(rv, date):  # YAML reads 2026-10-21 as a date (a datetime is one too)
         reviewed = date(rv.year, rv.month, rv.day).isoformat()
@@ -261,16 +283,11 @@ def parse(data: Any, map_name: str, shape: tuple[int, int] | None = None,
         try:
             reviewed = date.fromisoformat(rv.strip()).isoformat()
         except ValueError:
-            raise _bad(source, f"reviewed {rv!r} is not a date") from None
+            raise _bad(source, f"reviewed {rv!r} is not a date", error) from None
     else:
-        raise _bad(source, f"reviewed {rv!r}: the review date, ISO (YYYY-MM-DD), is required")
-    ids: set[str] = set()
-    nc = _items(data, "no_cross", "points", 2, source, shape, ids)
-    ne = _items(data, "no_enter", "polygon", 3, source, shape, ids)
-    return Zones(map=map_name, reviewed_by=rb.strip(), reviewed=reviewed,
-                 no_cross=tuple(NoCross(i, n, tuple(p)) for i, n, p in nc),
-                 no_enter=tuple(NoEnter(i, n, tuple(p)) for i, n, p in ne),
-                 delegation=deleg.strip() if isinstance(deleg, str) else "")  # fmt: skip
+        raise _bad(source, f"reviewed {rv!r}: the review date, ISO (YYYY-MM-DD), is required",
+                   error)  # fmt: skip
+    return rb.strip(), reviewed, deleg.strip() if isinstance(deleg, str) else ""
 
 
 def _agent_like(name: str) -> bool:

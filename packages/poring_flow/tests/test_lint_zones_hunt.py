@@ -4,7 +4,8 @@ failing one with its exact message, and the coverage test that names a new rule 
 
 The base flow (fixtures/hunt_field.flow) hunts on a SYNTHETIC field map behind its zones and walks
 out to a synthetic town. Every map, cell, id and sha256 here is made up; the zones provider is a
-synthetic stand-in for scripts/flow_zones.py (its own test runs the real loader).
+synthetic stand-in for scripts/flow_zones.py (its own test runs the real loader), the routes
+provider one for scripts/flow_routes.py (test_map_routes.py runs it on a real file).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import pytest
 
 from poring_flow import ir, pyview, runstart
 from poring_flow.lint import Finding, lint
+from poring_flow.patrol import RouteInfo, RoutesProvider, RoutesUnreadable
 from poring_flow.sheet import Mob, Spawn, Warp, World
 from poring_flow.zones import ZoneInfo, ZonesProvider, ZonesUnreadable
 
@@ -70,6 +72,21 @@ def zones(
     return get
 
 
+LOOP = ((30, 30), (60, 30), (60, 60), (30, 60))
+UNREADABLE = "config/routes/field_9.yaml: route 'ring': kind 'circle' is loop or path"
+
+
+def routes(files: tuple[str, ...] = ("field_9",), broken: bool = False) -> RoutesProvider:
+    def get(map_id: str) -> RouteInfo | None:
+        if map_id not in files:
+            return None
+        if broken:
+            raise RoutesUnreadable(UNREADABLE)
+        return RouteInfo(map=map_id, sha256=SHA, route="ring", kind="loop", waypoints=LOOP)
+
+    return get
+
+
 def flow(*subs: tuple[str, str]) -> ir.Flow:
     src = SRC
     for old, new in subs:
@@ -86,6 +103,8 @@ class Case:
     expected: list[str]  # [] = the passing fixture
     ok: Callable[[], ir.Flow] = field(default=lambda: flow())  # the passing twin
     ok_provider: ZonesProvider | None = field(default_factory=zones)
+    routes: RoutesProvider | None = None  # the patrol routes provider (7d) of each fixture
+    ok_routes: RoutesProvider | None = None
 
 
 NO_TARGETS = ("    targets=[mob(9101), mob(9102)],\n", "")
@@ -101,6 +120,10 @@ WITH_IGNORE = (
 )
 SHARED = ('server="lab-rathena"', 'server="community-bot-testing"')
 RING = "hunt's engage_source melee_ring strikes EVERY monster in melee range"
+# The patrol route (Batt 2026-10-22): the search group's option, after the search rule version
+SEARCH = 'search="heading_coverage@22")'
+PATROL = (SEARCH, 'search="heading_coverage@22", search_route="patrol_route")')
+WALK = "hunt's search_route patrol_route walks field_9's reviewed patrol route"
 CASES = [
     Case(
         "rule_version",
@@ -154,6 +177,35 @@ CASES = [
             "refused on a map with a non-target species"
         ],
         ok=lambda: flow(MELEE),
+    ),
+    Case(
+        "param_option",
+        lambda: flow((SEARCH, 'search="heading_coverage@22", search_route="spiral")')),
+        zones(),
+        [
+            f"{HUNT}: hunt's search_route takes one of (heading, patrol_route; absent = heading), "
+            "not 'spiral'"
+        ],
+        ok=lambda: flow(PATROL),
+        ok_routes=routes(),
+    ),
+    Case(
+        "patrol_route_missing",
+        lambda: flow(PATROL),
+        zones(),
+        [f"{HUNT}: {WALK}, and field_9 has no routes file (config/routes/field_9.yaml): refused"],
+        ok=lambda: flow(PATROL),
+        routes=routes(files=()),
+        ok_routes=routes(),
+    ),
+    Case(
+        "patrol_route_unreadable",
+        lambda: flow(PATROL),
+        zones(),
+        [f"{HUNT}: {WALK}, and the routes file of field_9 is refused by its loader: {UNREADABLE}"],
+        ok=lambda: flow(PATROL),
+        routes=routes(broken=True),
+        ok_routes=routes(),
     ),
     Case(
         "zones_map",
@@ -230,19 +282,23 @@ CASES = [
 ]
 
 
-def messages(f: ir.Flow, provider: ZonesProvider | None, rule: str) -> list[str]:
-    found: list[Finding] = lint(f, world=world(), resolver=resolve_all, zones_provider=provider)
+def messages(
+    f: ir.Flow, provider: ZonesProvider | None, rule: str, rp: RoutesProvider | None = None
+) -> list[str]:
+    found: list[Finding] = lint(
+        f, world=world(), resolver=resolve_all, zones_provider=provider, routes_provider=rp
+    )
     return sorted(x.message for x in found if x.rule == rule)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[f"{c.rule}-{i}" for i, c in enumerate(CASES)])
 def test_each_new_rule_fails_its_fixture_with_the_exact_message(case: Case) -> None:
-    assert messages(case.source(), case.provider, case.rule) == sorted(case.expected)
+    assert messages(case.source(), case.provider, case.rule, case.routes) == sorted(case.expected)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[f"{c.rule}-{i}" for i, c in enumerate(CASES)])
 def test_each_new_rule_passes_its_twin(case: Case) -> None:
-    assert messages(case.ok(), case.ok_provider, case.rule) == []
+    assert messages(case.ok(), case.ok_provider, case.rule, case.ok_routes) == []
 
 
 def test_every_new_rule_has_a_fixture() -> None:
@@ -418,3 +474,71 @@ def test_options_are_plain_values_with_a_default_that_is_not_required() -> None:
         ParamSpec(name="x", type="str", required=True, options=["a"], default="a")
     with pytest.raises(ValidationError, match="str parameter"):
         ParamSpec(name="x", type="int", options=["a"])
+
+
+# --- the patrol route (Batt 2026-10-22): the default, the fail-closed file, the run start ---------
+def test_search_route_absent_means_heading_and_keeps_the_flows_json() -> None:
+    """Not required: a hunt written before the option searches by heading, with its JSON and
+    hash; patrol_route round-trips through the Python view and the JSON."""
+    from poring_flow.catalogue import catalogue
+    from poring_flow.lint.hunt import patrol_route_paths, search_route
+
+    spec = catalogue().blocks["hunt"].spec
+    base, patrol = flow(), flow(PATROL)
+    assert '"search_route"' not in ir.to_json(base)
+    assert patrol_route_paths(base, {"hunt": spec}) == []
+    assert patrol_route_paths(patrol, {"hunt": spec}) == ["field.0.body.0"]
+    hunt_of = next(
+        a for s in ir.sites(base) if s.path == "field.0.body.0" for a in ir.actions_in(s.stmt)
+    )
+    assert search_route(hunt_of, spec) == "heading"
+    found = lint(patrol, world=world(), resolver=resolve_all, zones_provider=zones(),
+                 routes_provider=routes())  # fmt: skip
+    assert [x.message for x in found if x.severity == "error"] == []
+    assert pyview.print_flow(patrol) == SRC.replace(*PATROL)
+    assert ir.from_json(ir.to_json(patrol)) == patrol
+
+
+def test_a_patrol_hunt_without_a_routes_provider_is_checked_at_run_start_only() -> None:
+    """As the zones: without a provider the linter skips the file checks; the run-start check
+    then refuses (fail closed). With one, a missing or refused file refuses the run (re-lint)."""
+    patrol = flow(PATROL)
+    assert messages(patrol, zones(), "patrol_route_missing") == []  # no provider: skipped
+    common = {"world": world(), "resolver": resolve_all, "runtime_max_s": 14_400,
+              "zones_provider": zones()}  # fmt: skip
+    none = runstart.check(patrol, **common)  # type: ignore[arg-type]
+    assert not none.allowed and none.reasons == (
+        "1 hunt with search_route patrol_route: no routes data: the maps' routes files are "
+        "unchecked",
+    )
+    ok = runstart.check(patrol, routes_provider=routes(), **common)  # type: ignore[arg-type]
+    assert ok.allowed, ok.summary()
+    gone = runstart.check(patrol, routes_provider=routes(files=()), **common)  # type: ignore[arg-type]
+    assert not gone.allowed and gone.reasons == ()
+    assert gone.errors == (
+        f"{HUNT}: {WALK}, and field_9 has no routes file (config/routes/field_9.yaml): refused",
+    )
+    broken = runstart.check(patrol, routes_provider=routes(broken=True), **common)  # type: ignore[arg-type]
+    assert not broken.allowed and UNREADABLE in broken.errors[0]
+    with pytest.raises(runstart.RunRefused, match="no routes data"):
+        runstart.require(patrol, **common)  # type: ignore[arg-type]
+    # a heading hunt needs no routes provider (unchanged)
+    assert runstart.check(flow(), **common).allowed  # type: ignore[arg-type]
+
+
+def test_the_editors_run_line_says_the_same() -> None:
+    """lint_doc's run verdict (the editor's run line) carries the routes refusal and its lint."""
+    from poring_flow import editor
+
+    doc = editor.lint_doc(flow(PATROL), world=world(), resolver=resolve_all, runtime_max_s=14_400,
+                          zones_provider=zones())  # fmt: skip
+    assert doc["run"]["reasons"] == [
+        "1 hunt with search_route patrol_route: no routes data: the maps' routes files are "
+        "unchecked"
+    ]
+    doc = editor.lint_doc(flow(PATROL), world=world(), resolver=resolve_all, runtime_max_s=14_400,
+                          zones_provider=zones(), routes_provider=routes(files=()))  # fmt: skip
+    assert doc["run"]["reasons"] == [] and not doc["run"]["allowed"]
+    assert [f["rule"] for f in doc["findings"] if f["severity"] == "error"] == [
+        "patrol_route_missing"
+    ]
