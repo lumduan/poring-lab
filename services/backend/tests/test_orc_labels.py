@@ -356,7 +356,10 @@ def test_plain_v2_still_needs_the_visibility_table(
     argv = [x for x in species_argv(tmp_path, species_setup) if x not in ("--classes", "species")]
     with pytest.raises(SystemExit, match="warp-visibility"):
         bfc.main(argv)
-    with pytest.raises(SystemExit, match="builds on --labels v2"):
+    with pytest.raises(SystemExit, match="builds on --labels v1"):
+        bfc.main(["--labels", "v0", "--classes", "species", "--train", SID])
+    # v1 + the species split exists since 3f (Batt 3b item 2: v1's rules, the species split only)
+    with pytest.raises(SystemExit, match="needs --kb"):
         bfc.main(["--labels", "v1", "--classes", "species", "--train", SID])
 
 

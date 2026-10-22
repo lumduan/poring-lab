@@ -344,3 +344,102 @@ def test_resume_keeps_v1_builds_and_refuses_other_v2_inputs(
     bfc.write_json(tmp_path, "progress.json", {"args": v2, "sessions": {}, "shards": {}})
     with pytest.raises(SystemExit, match="v2"):
         bfc.resume_state(tmp_path, {**v2, "v2": {"warp_visibility_sha256": "b"}})
+
+
+# --- v1 + the species split (Batt, orcsdun01-detector.md 3b item 2 / 3f) ------------------------
+
+
+class SpeciesLabeler(FakeLabeler):
+    """v1 boxes on prt_fild08: a player, an NPC, a Poring (1002) -- and at t 1003 a monster of a
+    species outside the list (1234), at t 1004 a listed one without its sprite (v0's box)."""
+
+    def __init__(self, path: Path, labels: str = "v1", **kw: Any) -> None:
+        super().__init__(path, labels, **kw)
+        ents = (SimpleNamespace(gid=1, job=1002), SimpleNamespace(gid=2, job=1234),
+                SimpleNamespace(gid=3, job=1063), SimpleNamespace(gid=9, job=92))  # fmt: skip
+        self.timeline = SimpleNamespace(frame_world=lambda t: SimpleNamespace(
+            map="prt_fild08.gat", entities=ents))  # fmt: skip
+
+    def boxes(self, t: int) -> list[dict[str, Any]] | None:
+        if t == 1001:
+            return None  # a GM-command window
+        out = [{"x1": 4.0, "y1": 4.0, "x2": 20.0, "y2": 20.0, "cls": "player", "gid": 5,
+                "kind": "v0"},
+               {"x1": 30.0, "y1": 4.0, "x2": 40.0, "y2": 20.0, "cls": "npc", "gid": 9,
+                "kind": "v0"},
+               {"x1": 40.0, "y1": 10.0, "x2": 60.0, "y2": 30.0, "cls": "monster", "gid": 1,
+                "kind": "opaque"}]  # fmt: skip
+        if t == 1003:
+            out.append({"x1": 1.0, "y1": 1.0, "x2": 9.0, "y2": 9.0, "cls": "monster", "gid": 2,
+                        "kind": "opaque"})  # fmt: skip
+        if t == 1004:
+            out.append({"x1": 1.0, "y1": 1.0, "x2": 9.0, "y2": 9.0, "cls": "monster", "gid": 3,
+                        "kind": "v0"})  # fmt: skip
+        return out
+
+
+def species_kb(root: Path, bfc: ModuleType) -> Path:
+    d = root / "kb"
+    d.mkdir()
+    listed = bfc.SpeciesClasses.load(bfc.SPECIES_LIST).monsters
+    rows = {str(m): {"aegis": f"MOB_{m}"} for m in listed}
+    (d / "classes.json").write_text(json.dumps({"somewhere": rows}))
+    return d
+
+
+def test_v1_rules_with_the_species_split_only(
+    bfc: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--labels v1 --classes species``: v1's frames and boxes (GM windows and off-scene frames
+    skipped as v1; NO labels-v2 exclusion), the class ids of the committed species list; a frame
+    with a monster the scheme cannot name (unlisted, or no sprite) is excluded, fail closed."""
+    sid = "20990101T000000-console-synthetic"
+    w = ShardWriter(tmp_path / "nas" / sid)
+    for i in range(5):
+        w.add(i, 1000 + i, np.zeros((36, 64, 3), np.uint8))
+    w.close()
+    (tmp_path / "nas" / sid / "manifest.json").write_text(
+        json.dumps({"format": "png", "shards": w.shards})
+    )
+    monkeypatch.setattr(bfc.qa_export, "Labeler", SpeciesLabeler)
+    monkeypatch.setattr(bfc, "make_v2_session", lambda *a: pytest.fail("v2 path in a v1 build"))
+    k = species_kb(tmp_path, bfc)
+    base = ["--labels", "v1", "--classes", "species", "--kb", str(k), "--train", sid,
+            "--datasets", str(tmp_path / "nas"), "--out", str(tmp_path / "out"),
+            "--image", "png"]  # fmt: skip
+    with pytest.raises(SystemExit, match="--kb"):
+        bfc.main([a for a in base if a not in ("--kb", str(k))] + ["--cache-id", "x"])
+    with pytest.raises(SystemExit, match="v1"):
+        bfc.main(["--labels", "v0", "--classes", "species", "--train", sid])
+    assert bfc.main([*base, "--cache-id", "c"]) == 0
+    cache = tmp_path / "out" / "c"
+    manifest = json.loads((cache / "manifest.json").read_text())
+    assert manifest["names"]["0"] == "player" and manifest["names"]["1"] == "npc"
+    assert manifest["names"]["3"] == "mob_1002" and len(manifest["names"]) == 15
+    row = manifest["sessions"][sid]
+    assert (row["kept"], row["gm_window"], row["off_scene"]) == (2, 1, 0)
+    assert row["excluded_species"] == {"species_unlisted:1234": 1, "monster_unsized:1063": 1}
+    assert row["boxes_by_class_id"] == {"0": 2, "1": 2, "3": 2}
+    args = json.loads((cache / "progress.json").read_text())["args"]
+    assert args["classes"]["mode"] == "species" and args["k"] == 0.14
+    got = members(cache / "shard-000000.tar")
+    lines = got[f"{sid}.000000000.txt"].decode().splitlines()
+    assert [ln.split()[0] for ln in lines] == ["0", "1", "3"]  # player, npc, Poring
+    assert json.loads(got[f"{sid}.000000000.json"])["classes"] == "species"
+    # the dry run: the same counts, no image read, nothing written
+    monkeypatch.setattr(bfc, "session_frames", lambda *a, **kw: pytest.fail("decoded a frame"))
+    monkeypatch.setattr(bfc, "recorded_times", lambda *a, **kw: iter(
+        [(i, 1000 + i) for i in range(5)]))  # fmt: skip
+    assert bfc.main([*base, "--dry-run"]) == 0
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["c"]
+
+
+def test_yolo_lines_take_one_class_id_per_box(bfc: ModuleType) -> None:
+    boxes = [{"x1": 0.0, "y1": 0.0, "x2": 10.0, "y2": 10.0, "cls": "monster"},
+             {"x1": -5.0, "y1": 0.0, "x2": -1.0, "y2": 10.0, "cls": "monster"}]  # fmt: skip
+    assert bfc.yolo_lines(boxes, 20, 20).split()[0] == str(CLASSES["monster"])
+    assert bfc.yolo_lines(boxes, 20, 20, [7, 8]).splitlines() == [
+        "7 0.250000 0.250000 0.500000 0.500000"
+    ]  # the off-frame box is dropped, ids stay paired
+    with pytest.raises(ValueError):
+        bfc.yolo_lines(boxes, 20, 20, [7])
