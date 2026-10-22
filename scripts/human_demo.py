@@ -12,6 +12,9 @@ source).
 ``--tag`` names the session and its rule (Batt 2026-10-19: "human-ui-setup", his own chat-window
 arrangement, recorded so the procedure is learnt). ``--end-quiet S`` also ends the recording S s
 after his last input (once he has started), besides the stop file and the time box.
+THE STANDING STEP AFTER IT (Batt 2026-10-22, decision 8): the character is taken out of any
+dangerous map at once -- `scripts/demo_aftercare.py run <these args>` arms this recorder and, the
+moment it returns, warps the character to its safe stand, sends @heal and saves a frame to judge.
 ``--map`` / ``--character gm|crusader`` label the session (Batt 2026-10-22: his Crusader demo in
 orcsdun01; the GM's test state is recorded only for the GM). ``--battle-log`` also runs
 battle_log.py's LIVE reader in its own process (pixels of the chat window, no input) into the
