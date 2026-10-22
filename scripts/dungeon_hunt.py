@@ -129,6 +129,7 @@ CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand
 ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike point
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
+AG_DIAG_MAX, AG_DIAG_GAP_S = 30, 5.0  # the Auto Guard icon diagnostic (Batt 2026-10-22, decision 7)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
 MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
@@ -807,6 +808,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return escaped[0]
 
         n_shots = [0]
+        n_ag_diag, ag_diag_t = [0], [-1e9]
 
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
             """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow --
@@ -1089,6 +1091,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             heal_self(why)
                         else:
                             press(what, why)
+                diag_due = n_ag_diag[0] < AG_DIAG_MAX and tick - ag_diag_t[0] >= AG_DIAG_GAP_S
+                if ag_on is False and ag_last >= 0 and tick - ag_last < sv.AG_RECAST_S and diag_due:
+                    # the DIAGNOSTIC CAPTURE (Batt decision 7; 3.96's S4b2 open point): the icon
+                    # reads ABSENT while our cast is remembered -- keep the frame, find the cause
+                    n_ag_diag[0] += 1
+                    ag_diag_t[0] = tick
+                    from PIL import Image
+
+                    Image.fromarray(np.asarray(img)[..., ::-1]).save(
+                        out / f"ag-absent-{n_ag_diag[0]:03d}.jpg", quality=90)  # fmt: skip
+                    ev({"kind": "ag_absent_capture", "n": n_ag_diag[0],
+                        "since_cast_s": round(tick - ag_last, 1)})  # fmt: skip
                 if ag_on is not None:
                     if ag_on:
                         ag_absent = None
