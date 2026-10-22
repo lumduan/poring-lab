@@ -14743,6 +14743,61 @@ Reported, not deciding:
 
 **Run log:** (filled as the runs end)
 
+### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
+
+**Batt's behaviour, as built (`scripts/dungeon_hunt.py --engage melee_ring`, code c25f4c7):**
+1. Searching, the walk legs are SHORT (3 cells ahead, not 7: "moving slowly"), and between the
+   walk clicks the pointer rests on a ring-1 cell AHEAD of the walk (the step toward the next path
+   cell and its two 45-degree neighbours, in turn; two-motion reads at the body point 26 px up).
+   The moment the cursor reads SWORD there: strike (arm C: the click, re-clicks every 0.6 s until
+   the lock arrow, <= 4 / 3 s). `engage` by `cursor`.
+2. While LOCKED (swinging), ring 1 (the 8 cells around the drawn character, the locked one
+   skipped) is re-read every 2 s by hovers only; every SWORD cell joins a QUEUE (once, by its
+   absolute cell). On the kill (a Base EXP line) the next queued cell still beside us is re-read
+   and, on SWORD, struck at once: no walking between them (`handoff`, with the ms from the kill).
+   No queued SWORD left -> 3.98's ring scan, then the fight ends.
+3. One loot step per fight: 3.98's loot LIST (the union of the 5 x 5 at every death of the
+   fight) and its sweep over the cells changed since the fight began; PICKUP-hand clicks.
+4. Then the search resumes (short legs + the forward watch) until the next pack.
+- The Battle Log hit and the HP drop still START a fight (being hit while walking); the v1 box
+  watcher is OFF (the detector is not the engagement source here).
+- Everything else is 3.98's dungeon@2 at the same code: sustain B (potion / Fly Wing emergencies,
+  the rest at a rest spot), Auto Guard, zones, the no-entry veto, the stall / idle / Fly Wing
+  fixes (Amendments C-F), FrameGuard. NPCs read TALK, never SWORD (orcsdun01 has none anyway).
+
+**Verify first (Batt):** "moving the pointer to scan while a melee attack is in progress does NOT
+cancel or retarget the attack; if it does, scan only between swings or after the lock".
+- An UNSCORED pilot (MR, sustain B, ~4 min) before run 1; `scripts/melee_ring_check.py` judges
+  every hover window while locked from the packets: `kept` (our next act is on the same target),
+  `stopped` (no act of ours for 1.5 s while it lives), `retargeted`, and our attack requests
+  inside the windows (must be 0: hovers never click).
+- **Rule:** if `stopped + retargeted` > 10 % of the windows with a living target, the queue scans
+  move to "only right after an act of ours" (between swings) -- a pre-run amendment, said so; else
+  the design stands. Either way the pilot's numbers are reported.
+
+**Runs (45 min each, the Crusader, orcsdun01, sustain B, a judged screenshot before each), inside
+3.98's rotation, alternating the engagement with B fixed:**
+- 14:2x MR-B (3.99 run 1), then 3.98 C, then 3.98 defend-B, then 3.98 A, then MR-B (3.99 run 2).
+- The defend-B comparison runs are 3.98's B runs at the same code (run 3 13:35 and the next).
+- Seeds: MR runs 22101, 22102; 3.98 runs continue 22004...
+
+**Measures (per run, `dungeon_judge.py` + `melee_ring_check.py`; MR vs defend-B):** kills/h,
+s per kill (run minutes / kills), walking share (packets), engagements by cursor vs box vs
+Battle Log (events), landing (strikes followed by our request + act), queue hand-offs (count, ms
+from the kill, packets: death -> the next target's first act), loot completeness (gross, net) and
+items lost to looters (the loot block's fates), deaths/h, net zeny/h, Fly Wings/h.
+
+**Decision rule:** none today (a comparison for Batt; at most 2 MR runs fit). The report shows
+both engagements side by side with the run counts, and the hover-window verdicts.
+
+**Safety (Batt):** the option strikes EVERY monster in melee range. On orcsdun01 all 7 species
+are targets and there is no script NPC; this is the lab server. The hunt block option
+`engage_source: detector | melee_ring` (default detector) and its lint / readiness refusals (an
+ignore list, non-target species, any server but the lab) are built separately (a subagent, today);
+the NPC sprite guard and all gates stay underneath. Hard bars unchanged.
+
+**Run log (3.99):** (filled as the runs end)
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
