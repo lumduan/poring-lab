@@ -160,6 +160,7 @@ def facing_for(st: ActorState, ent_heading: int | None,
 RULES = ("1a", "fix2")  # 1a: 3b's frozen walk rule (3c); fix2: 3f, orc_facing_study.fix2_heading
 NEXT_MOVE_NS = 150_000_000  # 2b: the 150 ms (timeline time) before a unit's next move packet
 NEXT_MOVE, AMBIGUOUS = "next_move", "ambiguous_view"  # 2b / 2c's exclusion reasons (as unfit)
+SELF_MOTION_NS = 200_000_000  # the check's report: our camera moved in the 200 ms before a label
 
 
 def _fs() -> Any:
@@ -491,32 +492,43 @@ def _speed_up() -> None:
 
 @dataclass
 class Session:
-    """One warp_watch block's packets, frames and dwells (orc_camera_check's reading)."""
+    """One warp_watch block's packets, frames and dwells (orc_camera_check's reading), or a HUMAN
+    DEMO's (3f: its frame files; one span over the whole recording, no dwells; its frames usable
+    only where ``layout_ok`` reads the hunting layout from pixels)."""
 
     path: Path
     lab: qa_export.Labeler
     refs: list[qa_export.JpegRef]
     dwells: list[tuple[int, int]]
     sid: str
+    layout: Any = None  # None (a recorded layout) or BGR -> bool (qa_export.layout_check)
 
     @classmethod
-    def open(cls, path: Path, kb: Path) -> Session:
+    def open(cls, path: Path, kb: Path, layout_templates: Path | None = None) -> Session:
         refuse_test_block(path)
         qa_export.KB_CLASSES = kb / "classes.json"
         qa_export.KB_SPRITE_NAMES = kb / "monster_sprite_names.json"
         manifest = json.loads((path / "manifest.json").read_text())
-        if not qa_export.is_warp_watch(manifest):
-            raise SystemExit(f"{path}: not a warp_watch session")
+        demo = qa_export.is_human_demo(manifest)
+        if not (qa_export.is_warp_watch(manifest) or demo):
+            raise SystemExit(f"{path}: neither a warp_watch session nor a human demo")
         lab = qa_export.Labeler(path, str(OLD_OFFSET_MS), labels="v1", k=K)
         tl = lab.timeline  # the same events, snapshots 8x denser (the replays dominate the sweeps)
         lab.timeline = Timeline(tl.events, tl.maps, snapshot_every=32, die_ms=tl.die_ms,
                                 default_die_ms=tl.default_die_ms)  # fmt: skip
         occ.cache_compose()
         _speed_up()
-        timeline = path / "events.jsonl"
-        dwells = occ.dwell_spans(json.loads(x) for x in timeline.read_text().splitlines() if x)
-        return cls(path, lab, qa_export.jpeg_index(path, manifest), dwells,
-                   qa_export.session_id(manifest))  # fmt: skip
+        refs = qa_export.frame_refs(path, manifest)
+        if demo:
+            dwells = [(refs[0].t_mono_ns, refs[-1].t_mono_ns)] if refs else []
+        else:
+            timeline = path / "events.jsonl"
+            dwells = occ.dwell_spans(json.loads(x) for x in timeline.read_text().splitlines() if x)
+        return cls(path, lab, refs, dwells, qa_export.session_id(manifest),
+                   qa_export.layout_check(manifest, layout_templates))  # fmt: skip
+
+    def layout_ok(self, bgr: npt.NDArray[np.uint8]) -> bool:
+        return True if self.layout is None else bool(self.layout(bgr))
 
     def candidates(self, every: int) -> Iterator[qa_export.JpegRef]:
         """Every ``every``-th recorded frame inside a dwell, outside the GM-command windows."""
@@ -926,8 +938,13 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
             seen[e.job] += 1
     if not cands:
         return [], dropped, seen
-    dropped["frame_with_standing"] += 1
     bgr = qa_export.read_jpeg(ref)
+    if not sess.layout_ok(bgr):  # a human demo's frame in another UI layout (3f)
+        dropped["frame_ui_layout_mismatch"] += 1
+        return [], dropped, seen
+    dropped["frame_with_standing"] += 1
+    before = sess.lab.timeline.frame_world(tw - SELF_MOTION_NS).self_pos
+    self_moving = world.self_pos != before  # our own character (the camera) moved: REPORTED
     rows = []
     for e, st, sheet, pred, facing in cands:
         c1 = label_check.score(bgr, sheet, pred)
@@ -942,7 +959,7 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
                                "mob": e.job, "cell": [e.x, e.y],
                                "box": [round(v, 1) for v in pred.box], "c1": round(c1, 4),
                                "why_low": why, "heading": facing[0],
-                               "facing_from": facing[1]}  # fmt: skip
+                               "facing_from": facing[1], "self_moving": self_moving}  # fmt: skip
         bo = occ.best_offset(bgr, sheet, pred, SEARCH_PX)
         if bo is not None:
             row.update({"best": round(bo[0], 4), "dx": bo[1], "dy": bo[2], "motion": bo[3]})
@@ -969,7 +986,7 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
 
 def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     params = load_params(a.params)
-    sess = Session.open(a.session, a.kb)
+    sess = Session.open(a.session, a.kb, a.layout_templates)
     if sess.sid == params["measured_on"]:
         raise SystemExit("the check runs on another block than the parameters' (col3)")
     off_ms = float(params["offset_ms"])
@@ -988,6 +1005,18 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         seen.update(sn)
     rows.sort(key=lambda r: (r["frame_id"], r["gid"]))
     result = occ.summarize(rows, TAU)
+    motion: dict[str, Any] = {"note": "REPORTED, not deciding: C1's bad_label share split by "
+                              "whether our own character (the camera) moved in the 200 ms before "
+                              "the label's timeline time"}  # fmt: skip
+    for key, flag in (("self_moving", True), ("self_still", False)):
+        sub = [r for r in rows if r.get("self_moving") is flag]
+        bad = sum(1 for r in sub if r.get("why_low") == "bad_label")
+        motion[key] = {"scored": len(sub), "bad_label": bad,
+                       "bad_label_share": round(bad / len(sub), 4) if sub else None,
+                       "c2_median_abs_dx": statistics.median(abs(r["dx"]) for r in sub if "dx" in r)
+                       if any("dx" in r for r in sub) else None,
+                       "c2_median_abs_dy": statistics.median(abs(r["dy"]) for r in sub if "dy" in r)
+                       if any("dy" in r for r in sub) else None}  # fmt: skip
     by: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for r in rows:
         by[int(r["mob"])].append(r)
@@ -1015,6 +1044,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "offset_ms": off_ms, "anchors_px": params["anchors_px"], "k": K, "tau": TAU,
         "every": a.every, "dwells": len(sess.dwells), "frames_read": len(refs),
         "frames_recorded": len(sess.refs),
+        "layout_checked_per_frame": sess.layout is not None,
         "standing_rule": {"idle_s": occ.STANDING_NS / 1e9, "isolation_px": occ.ISOLATION_PX,
                           "ui_and_edge_margin_px": SEARCH_PX},
         "dropped": {k: v for k, v in sorted(dropped.items()) if ":" not in k},
@@ -1025,6 +1055,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "standing_scored_by_species": {str(m): len(rs) for m, rs in sorted(by.items())},
         **result,
         "facing_agreement": agreement(rows),
+        "c1_by_self_motion": motion,
         "positive_cases": positives, "bad_label_examples": low,
         "caveats": ["frames are JPEG q80 (warp_watch); M4 fixed tau on H.264 frames",
                     "label_check's grey weights are applied to BGR frames, as in M4"],
@@ -1227,6 +1258,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--anchor", type=Path, required=True)
     p = sub.add_parser("check")
     common(p)
+    p.add_argument(
+        "--layout-templates",
+        type=Path,
+        default=None,
+        help="a human demo: client_layout's templates (default its TEMPLATES)",
+    )
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--rule", choices=RULES, default="1a",
                    help="the facing: 1a (3b, as 3c ran) or fix2 (3f, with 2b / 2c)")  # fmt: skip

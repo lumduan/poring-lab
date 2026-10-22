@@ -279,11 +279,15 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     )  # fmt: skip
     v2 = bfc.V2Inputs.from_args(ns)
     assert v2.classes is not None
-    sess = bfc.make_v2_session(session, v2)
     manifest = json.loads((session / "manifest.json").read_text())
-    if not qa_export.is_warp_watch(manifest):
-        raise SystemExit(f"{session}: not a warp_watch session")
-    refs = qa_export.jpeg_index(session, manifest)[:: a.every]
+    if not (qa_export.is_warp_watch(manifest) or qa_export.is_human_demo(manifest)):
+        raise SystemExit(f"{session}: neither a warp_watch session nor a human demo")
+    layout = qa_export.layout_check(manifest, getattr(a, "layout_templates", None))
+    if layout is not None and fix_params is None:
+        raise SystemExit(f"{session}: a human demo is labelled with --fix only (its frames' UI "
+                         "layout is checked on the pixels the fit reads)")  # fmt: skip
+    sess = bfc.make_v2_session(session, v2)
+    refs = qa_export.frame_refs(session, manifest)[:: a.every]
     outcomes: Counter[str] = Counter()
     excluded: Counter[str] = Counter()
     excluded_detail: Counter[str] = Counter()
@@ -298,7 +302,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     fix_other_map = 0
     _FIX.clear()
     rule = getattr(a, "rule", "1a")
-    _FIX.update(sess=sess, v2=v2, fixer=None if fix_params is None else
+    _FIX.update(sess=sess, v2=v2, layout=layout, fixer=None if fix_params is None else
                 olf.FixLabeler(sess.labeler, fix_params, rule=rule))  # fmt: skip
     if fix_params is not None:
         results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
@@ -395,7 +399,11 @@ def _frame_fate(ref: qa_export.JpegRef) -> tuple[Any, ...]:
         _text, out = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
         written = [(b.cls, b.job, b.gid, b.box, b.kind) for b in out]
         if fixer is not None:
-            got = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
+            bgr = qa_export.read_jpeg(ref)
+            layout = _FIX.get("layout")
+            if layout is not None and not layout(bgr):  # a human demo in another UI layout (3f)
+                return ref, "excluded", ["ui_layout_mismatch"], written, None
+            got = fixer.frame(ref.t_mono_ns, bgr)
             if got is None:
                 outcome, reasons = "excluded", ["fix_no_world"]
             else:
@@ -493,6 +501,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--npc-extents", type=Path, default=None)
     ap.add_argument("--npc-checked", type=Path, default=None)
     ap.add_argument("--workers", type=int, default=1, help="--fix: forked worker processes")
+    ap.add_argument(
+        "--layout-templates",
+        type=Path,
+        default=None,
+        help="a human demo: client_layout's templates (default its TEMPLATES)",
+    )
     ap.add_argument(
         "--blind-from", choices=("kept_labels", "complete_frames"), default="kept_labels",
         help="--fix: the blind pack and the sheets sample every KEPT fitted label (default), or "

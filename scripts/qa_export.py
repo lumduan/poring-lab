@@ -30,6 +30,12 @@
   frozen standard set: the hunting layout uncovers rows the standard one hides), and, with no
   recording config, the packet->frame offset labels_v2's demo sessions use for their backend
   (rdp: xfreerdp's newest benchmark run). An unknown or missing layout fails closed.
+* HUMAN DEMONSTRATIONS (scripts/human_demo.py, 2026-10-16; orcsdun01-detector.md 3f): the frames
+  are JPEG FILES ``<k>-<t_mono_ns>.jpg`` (the capture time; the same ro_agent.Screen grab as
+  warp_watch, 5 Hz q80) in the manifest's ``frames_dir`` (the NAS's human-demos/<sid>/frames), the
+  packets beside the manifest. A demo records no UI layout: it is labelled in
+  ``HUMAN_DEMO_LAYOUT``'s rectangles, and a frame is usable only where the pixels say it shows
+  that layout (``layout_check``: client_layout.read). Its game-region size is its first frame's.
 """
 
 import argparse
@@ -146,14 +152,73 @@ def is_warp_watch(manifest: dict[str, Any]) -> bool:
     return all(k in manifest for k in WARP_WATCH_KEYS)
 
 
+# --- human demonstrations (scripts/human_demo.py) -------------------------------------------------
+
+HUMAN_DEMO_LAYOUT = "hunt"  # the layout Batt plays in (verified per frame: layout_check)
+
+
+def is_human_demo(manifest: dict[str, Any]) -> bool:
+    """A human_demo.py session's manifest: its frames are JPEG files in ``frames_dir``."""
+    return (manifest.get("kind") == "demo" and bool(manifest.get("frames_dir"))
+            and str(manifest.get("actor") or "").startswith("human:"))  # fmt: skip
+
+
+def file_refs(frames_dir: Path) -> list["JpegRef"]:
+    """Every ``<k>-<t_mono_ns>.jpg`` of ONE frames directory (a listing, never a walk) as a JpegRef
+    over the whole file (offset 0), in recording order."""
+    out = []
+    for p in frames_dir.glob("*.jpg"):
+        k, sep, t = p.stem.partition("-")
+        if not sep or not k.isdigit() or not t.isdigit():
+            raise SystemExit(f"{p}: not a <k>-<t_mono_ns>.jpg frame")
+        out.append(JpegRef(int(k), int(t), p, 0, p.stat().st_size))
+    return sorted(out, key=lambda r: r.frame_id)
+
+
+def frame_refs(session: Path, manifest: dict[str, Any]) -> list["JpegRef"]:
+    """A JPEG session's frames, either kind: warp_watch's tar shards or a human demo's files."""
+    if is_warp_watch(manifest):
+        return jpeg_index(session, manifest)
+    if is_human_demo(manifest):
+        return file_refs(Path(manifest["frames_dir"]))
+    raise SystemExit(f"{session_id(manifest)}: neither a warp_watch session nor a human demo")
+
+
+def layout_check(manifest: dict[str, Any], templates: Path | None = None) -> Any:
+    """None when the session records its layout (nothing to check per frame); for a human demo, a
+    function BGR frame -> True when client_layout.read (pixels) says it shows HUMAN_DEMO_LAYOUT.
+    Fail closed: no templates, no check -> SystemExit."""
+    if not is_human_demo(manifest):
+        return None
+    import client_layout
+
+    root = templates if templates is not None else client_layout.TEMPLATES
+    if not root.exists():
+        raise SystemExit(f"{root}: the layout templates are not here (a human demo's frames are "
+                         "usable only where their layout is read from pixels)")  # fmt: skip
+    tm = client_layout.load_templates(root)
+
+    def check(bgr: np.ndarray) -> bool:
+        state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm)
+        return bool(client_layout.matches(state, HUMAN_DEMO_LAYOUT))
+
+    return check
+
+
 def session_id(manifest: dict[str, Any]) -> str:
     return str(manifest.get("session_id") or manifest.get("sid"))
 
 
 def ui_rects_for(manifest: dict[str, Any]) -> UiRects:
     """The client's static UI windows of the session, (x, y, w, h): a warp_watch session's RECORDED
-    layout (client_layout.RECTS, x0 y0 x1 y1 there); any other session the frozen standard set
-    (ui_layout.UI_RECTS, unchanged). FAIL CLOSED: a warp_watch manifest without a known layout."""
+    layout (client_layout.RECTS, x0 y0 x1 y1 there); a human demo's HUMAN_DEMO_LAYOUT (checked per
+    frame: layout_check); any other session the frozen standard set (ui_layout.UI_RECTS,
+    unchanged). FAIL CLOSED: a warp_watch manifest without a known layout."""
+    if is_human_demo(manifest):
+        import client_layout
+
+        return tuple((x0, y0, x1 - x0, y1 - y0)
+                     for x0, y0, x1, y1 in client_layout.RECTS[HUMAN_DEMO_LAYOUT])  # fmt: skip
     if not is_warp_watch(manifest):
         return UI_RECTS
     import client_layout
@@ -318,6 +383,14 @@ class Labeler:
         self.windows = gm_windows(events)
         if is_warp_watch(self.manifest):
             self.size = (int(self.manifest["size"][0]), int(self.manifest["size"][1]))
+        elif is_human_demo(self.manifest):
+            from PIL import Image
+
+            first = file_refs(Path(self.manifest["frames_dir"]))
+            if not first:
+                raise SystemExit(f"{session.name}: no frame in {self.manifest['frames_dir']}")
+            with Image.open(first[0].shard) as im:  # the header only
+                self.size = (int(im.width), int(im.height))
         else:
             region = self.manifest["game_region"]
             self.size = (region[2], region[3])

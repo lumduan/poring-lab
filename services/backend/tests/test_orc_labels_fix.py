@@ -534,3 +534,92 @@ def test_real_fix2_draws_the_back_of_an_orc_after_an_east_move() -> None:
     s2, s1 = label_check.score(bgr, sheet, p2), label_check.score(bgr, sheet, p1)
     assert s2 is not None and s1 is not None
     assert s2 > 0.5 and s1 < olf.TAU  # measured 0.629 vs 0.060 (2026-10-22)
+
+
+# --- a HUMAN DEMO as extra training data (3f): frame files, the hunting layout per frame ---------
+
+
+def human_demo(tmp: Path, n: int = 4, size: tuple[int, int] = (64, 36)) -> Path:
+    """A human_demo.py session: manifest + packets beside it, the JPEG files elsewhere."""
+    from PIL import Image
+
+    frames = tmp / "human-demos" / "S" / "frames"
+    frames.mkdir(parents=True)
+    for k in range(n):
+        img = Image.new("RGB", size, (60, 100, 200))
+        img.save(frames / f"{k:05d}-{1_000_000_000 + k * 200_000_000}.jpg", quality=80)
+    s = tmp / "S"
+    s.mkdir()
+    (s / "manifest.json").write_text(json.dumps({
+        "kind": "demo", "actor": "human:batt", "backend": "rdp", "map": "orcsdun01",
+        "frames_dir": str(frames), "rec_hz": 5.0, "session_id": "S"}))  # fmt: skip
+    return s
+
+
+def test_a_human_demo_is_read_from_its_frame_files(tmp_path: Path) -> None:
+    import qa_export
+
+    s = human_demo(tmp_path)
+    man = json.loads((s / "manifest.json").read_text())
+    assert qa_export.is_human_demo(man) and not qa_export.is_warp_watch(man)
+    assert not qa_export.is_human_demo({**man, "actor": "bot"})
+    refs = qa_export.frame_refs(s, man)
+    assert [(r.frame_id, r.t_mono_ns) for r in refs] == [
+        (k, 1_000_000_000 + k * 200_000_000) for k in range(4)
+    ]
+    assert all(r.offset == 0 and r.size == r.shard.stat().st_size for r in refs)
+    b, g, r = (int(v) for v in qa_export.read_jpeg(refs[2])[18, 32])  # BGR, the whole file
+    assert abs(r - 60) <= 6 and abs(g - 100) <= 6 and abs(b - 200) <= 6
+    rects = qa_export.ui_rects_for(man)
+    assert rects[0] == (0, 0, 220, 143)  # the HUNTING layout's Basic Information (not standard's)
+    (refs[0].shard.parent / "x.jpg").write_bytes(b"")
+    with pytest.raises(SystemExit, match="not a <k>-<t_mono_ns>.jpg"):
+        qa_export.frame_refs(s, man)
+
+
+def test_a_human_demos_layout_is_checked_on_pixels(tmp_path: Path) -> None:
+    import qa_export
+
+    s = human_demo(tmp_path)
+    man = json.loads((s / "manifest.json").read_text())
+    assert qa_export.layout_check({"sid": "x"}) is None  # a recorded layout: nothing to check
+    with pytest.raises(SystemExit, match="templates"):
+        qa_export.layout_check(man, tmp_path / "none")  # fail closed
+    tm = tmp_path / "tm"
+    tm.mkdir()
+    for name, shape in (("arrow_collapsed", (11, 12)), ("arrow_expanded", (11, 12)),
+                        ("row1", (19, 16)), ("row2", (20, 14)), ("row4", (20, 14))):  # fmt: skip
+        np.save(tm / f"{name}.npy", np.full(shape, 200.0 if name == "arrow_collapsed" else 0.0))
+    check = qa_export.layout_check(man, tm)
+    black = np.zeros((720, 1280, 3), np.uint8)
+    assert not check(black)  # nothing readable: not the hunting layout
+
+
+# the demo recorded with Batt's Crusader, 2026-10-22 (local / NAS data only: skipped elsewhere)
+DEMO = Path("/mnt/poring-lab-datasets/20261022T184536-demo-human-demo-orcsdun01-crusader")
+LAYOUT_TM = Path(os.environ.get("PORING_LAYOUT_TEMPLATES",
+                                str(ROOT / "data" / "ui_anchors" / "layout")))  # fmt: skip
+
+
+def test_real_human_demo_frames_place_the_camera_and_read_the_hunt_layout() -> None:
+    """Batt's 2026-10-22 demo: 4,880 frame files in the hunting layout (frame 1000, seen by eye
+    2026-10-22 19:4x). Frame 990: the Crusader STANDS and the minimap reads "84 119" (by eye), the
+    cell the Timeline gives at the frame's time minus 1d's 120 ms. Then it walks (frame 1000 is 5
+    cells on). NOT asserted, an open observation: during that walk the readout ("88 123" at frame
+    1000) matches the Timeline at ~376 ms, not 120 ms -- the demo's C1 is split by our own motion
+    to measure what that does to the labels."""
+    if not (DEMO / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("the demo or the local KB is not here")
+    if not LAYOUT_TM.exists():
+        pytest.skip("the layout templates are not here")
+    import qa_export
+
+    sess = olf.Session.open(DEMO, KB, LAYOUT_TM)
+    assert len(sess.refs) == 4880 and sess.lab.size == (1280, 720)
+    ref = {r.frame_id: r for r in sess.refs}
+    assert sess.layout_ok(qa_export.read_jpeg(ref[1000]))
+    assert not sess.layout_ok(np.zeros((720, 1280, 3), np.uint8))
+    w = sess.lab.timeline.frame_world(ref[990].t_mono_ns - 120 * MS)
+    assert w.map == "orcsdun01.gat" and w.self_pos == (84.0, 119.0)
+    w2 = sess.lab.timeline.frame_world(ref[1000].t_mono_ns - 120 * MS)
+    assert w2.self_pos is not None and w2.self_pos[0] - 84.0 > 4 and w2.self_pos[1] - 119.0 > 4

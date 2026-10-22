@@ -214,6 +214,8 @@ def banked_frames(session: Path, every: int = 15) -> list[tuple[int, Path | None
         if qa_export.is_warp_watch(manifest):  # JPEG shards: times only, no image path
             refs = qa_export.jpeg_index(session, manifest)[::every]
             return [(r.t_mono_ns, None) for r in refs]
+        if qa_export.is_human_demo(manifest):  # JPEG files beside the session (3f): every one
+            return [(r.t_mono_ns, r.shard) for r in qa_export.frame_refs(session, manifest)]
     frames = session / "frames"
     if frames.is_dir():
         for p in sorted(frames.glob("*.png")):
@@ -312,7 +314,9 @@ class Session:
         # region) has its own recording manifest; until 2026-10-10 a PNG one fell to the demo
         # branch below, whose console offset lookup has no client name and failed. A warp_watch
         # session too (its size, layout and backend; --offset-ms overrides the benchmark's)
-        if qa_export.is_warp_watch(manifest):
+        if qa_export.is_warp_watch(manifest) or qa_export.is_human_demo(manifest):
+            # a human demo (3f): its frames' size, the hunting layout's rectangles (checked per
+            # frame by the caller: qa_export.layout_check), packets beside the manifest
             offset = "auto" if a.offset_ms is None else str(a.offset_ms)
             self.labeler = qa_export.Labeler(path, offset, labels="v1")
         elif (path / "stream.idx.csv").exists() or "game_region" in manifest:
