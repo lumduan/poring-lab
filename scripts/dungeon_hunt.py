@@ -1138,6 +1138,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         except r.Stop as exc:
             reason = f"stop: {exc}"
             raise
+        except KeyboardInterrupt:  # the parent's SIGINT (a run stopped by hand): say so
+            reason = "stopped_by_parent"
+            raise
         finally:
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts)})
             blt.stop()
