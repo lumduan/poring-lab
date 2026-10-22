@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, ../../config/routes/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it. 2026-10-22: the hunt block's melee-ring engage OPTION + lint / run-start refusals built offline (section 7c, feat/melee-ring-block, merged 8c592d9). 2026-10-22 night: the PATROL ROUTE search option (search_route heading | patrol_route) + config/routes + its lint / run-start refusals built offline (section 7d, feat/patrol-routes, not merged); KB metamorphosis now reaches the species lint (7c open point 2 closed); the editor's routes drawing layer is later."
+next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it. 2026-10-22: the hunt block's melee-ring engage OPTION + lint / run-start refusals built offline (section 7c, feat/melee-ring-block, merged 8c592d9). 2026-10-22 night: the PATROL ROUTE search option (search_route heading | patrol_route) + config/routes + its lint / run-start refusals built offline (section 7d, feat/patrol-routes, ➡️ MERGED ~20:0x, live after the 20:05 guarded recreate:backend, which also bound B2's zones routes); KB metamorphosis now reaches the species lint (7c open point 2 closed); the editor's routes drawing layer is later."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -30,7 +30,7 @@ and its lint / run-start refusals are BUILT offline (section 7c, branch feat/mel
 merged~~ ➡️ merged in 8c592d9); its runtime is `scripts/dungeon_hunt.py`, not the block engine.
 ➡️ **2026-10-22 night: the hunt block's PATROL ROUTE search option** (`search_route`, default
 heading) with the reviewed route files `config/routes/<map>.yaml` and its lint / run-start
-refusals is BUILT offline (section 7d, branch feat/patrol-routes, not merged).
+refusals is BUILT offline (section 7d, branch feat/patrol-routes) ➡️ MERGED 2026-10-22 ~20:0x.
 The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
@@ -514,7 +514,7 @@ the detector's own TARGET / IGNORE handling. The option only chooses who propose
    Pupa's metamorphosis), so until the fix a melee-ring hunt on prt_fild08 whose targets were the
    four spawned species PASSED the lint; it is refused now unless Creamy is a target too.
 
-### 7d. The PATROL ROUTE search option (Batt 2026-10-22 overnight brief, items A and D-6; built offline 2026-10-22 night, branch feat/patrol-routes, NOT merged)
+### 7d. The PATROL ROUTE search option (Batt 2026-10-22 overnight brief, items A and D-6; built offline 2026-10-22 night, branch feat/patrol-routes -- ➡️ MERGED 2026-10-22 ~20:0x ICT (ca70238); config/routes/orcsdun01.yaml (07edce9) proves; the routes provider live after the 20:05 guarded recreate:backend)
 
 **Batt (2026-10-22, the Crusader's demo in orcsdun01):** the map is a LOOP around a central block.
 Batt walks a fixed circuit of waypoints in ONE direction, never back and forth, so they keep
@@ -621,7 +621,9 @@ so the species lint sees it."
 2. A waypoint counts as reached within 2 cells (`REACH_TOL`), and a tie between the two legs keeps
    the nearer waypoint (k+1). Both are the brief's rule, not measured: tune them on the first
    patrol runs?
-3. `kb_build.py` (committed) cannot rebuild today's local KB:
+3. ~~`kb_build.py` (committed) cannot rebuild today's local KB:~~ ➡️ FIXED 2026-10-22 ~20:2x ICT
+   (99a3309): its SPAWNS / WARPS lists now read `npc/pre-re/mobs/dungeons/orcsdun.txt` and
+   `npc/warps/dungeons/orcsdun.txt`, so a rebuild keeps orcsdun01 (not rebuilt yet). As found:
    - Its SPAWNS and WARPS lists have no orcsdun file, while the local `spawns.json`, `warps.json`
      and `classes.json` carry orcsdun01 (written 10-21 10:18, outside the committed builder).
    - Re-running it would drop orcsdun01's spawns and warps, which `dungeon_hunt.py` and the
