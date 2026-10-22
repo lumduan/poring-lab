@@ -14465,6 +14465,219 @@ Reported, not deciding:
 - Not added: a D8 evidence row for 3.97 (`config/flows/hunt/evidence.yaml` rows are hand-written
   by a person). Listed for Batt.
 
+### 3.98 dungeon@2: the CRUSADER hunts Orc Dungeon F1 (orcsdun01) for real -- three SUSTAIN strategies A / B / C compared in whole runs (pre-registered 2026-10-22 12:08 ICT, the commit time of 3.98's first commit, BEFORE its scored runs; Batt 2026-10-22 day run: "the CRUSADER hunts ORC DUNGEON F1 for real, three sustain strategies compared ... each pre-registered; whole runs, ALTERNATED A/B/C so density and time of day spread evenly")
+
+**Batt's brief (abridged):**
+- ENGAGEMENT WITHOUT A TRAINED DETECTOR: measure v1's zero-shot boxes on col1-col3 first. Then
+  "DEFEND-SCAN": when the Battle Log shows "[X] inflicts ... on you", or HP drops, or a v1 box is
+  near, hover the cells around the drawn GM (two motions) and on SWORD burst-click (arm C) until the
+  lock arrow. The damage line's [name] gives the species. Search between fights with the heading
+  walk. Warps: zones, delegated, proved.
+- A REST SPOT: monster-free cells from col1-col3 packets; rest = sit until HP is full; if hit
+  while sitting, stand and fight or escape.
+- Verify from the pinned rAthena: Heal at Lv 8 (amount, SP), Heal on undead, sitting regen,
+  potion and Fly Wing behaviour.
+- A. POTIONS; B. REST; C. HEAL BUILD (Batt's skill tree). Runs ~45-60 min, alternated, as many
+  as fit before ~18:30.
+- Measures: kills/h, deaths/h, HP min, potions/h, Fly Wings/h, Heals/h and SP used, resting %,
+  loot completeness, gross and NET zeny/h, cost ratio, Sharpe-like, Moving HP Recovery ticks while
+  walking. Hard bars: map change, unknown UI state, NPC contact. A DEATH is a result.
+
+**What was done before this pre-registration (each with its evidence):**
+1. **v1 zero-shot on orcsdun01** (`scripts/orc_v1_zeroshot.py`, results in
+   [planning/orcsdun01-dungeon-prep.md](planning/orcsdun01-dungeon-prep.md) section 1):
+   - recall pooled 16.7 / 20.0 / 21.2 % (col1 / col2 TEST / col3); within 3 cells of the GM only
+     8.2 / 10.2 / 14.1 % (Orc Zombie 2.9-4.7 %, Orc Skeleton 46-62 %);
+   - precision 84-87 % overall, 96-100 % within 3 cells; 0-1 false box within 100 px of the GM;
+   - ~270 ms per frame (8 threads, 1.7 CPU-s).
+   - So a v1 box near us is BELIEVED (a trigger), and "no box" means nothing: the Battle Log and
+     the HP are the primary triggers.
+2. **Rest spots** (`scripts/orc_dungeon_prep.py rest-spots`, the same doc, section 2): monster
+   presence per cell from col1-col3 packets (6,633 s of dwells). The five used, in
+   `config/dungeon/orcsdun01.json`: 58,101 (the quietest: 33.7 aggressive unit-s/min within 9
+   cells, 0.0 within 5), 28,69, 187,28, 87,172, and 28,165 near the entrance. The map's median is
+   176.1. Each passes the three stand-cell checks and lies outside the zones. CAVEAT: 2-5 dwells
+   per cell ("probably quiet").
+3. **Zones** (`config/map_zones/orcsdun01.yaml`, delegated by Batt today, sha256 84b4b34e...):
+   NO-ENTER around both warp spans, each span grown by 4 cells. `map_zones.py prove`: 0 pieces cut
+   off, 0 cells newly unreachable, 143 walkable cells closed. 400 / 400 sampled clicks INTO each
+   area and onto each span refused.
+4. **The pinned rAthena (e985006), verified in the source:**
+   - Heal (pre-renewal `skill_calc_heal`): (BaseLv + INT) / 8 x (4 + 8 x Lv) = (60 + 7) / 8 =
+     8 x 68 = **544 HP** at Lv 8 (Batt's ~470 is the same formula with INT 1: 61 / 8 = 7 x 68 =
+     476; the Crusader's Job-50 bonus makes INT 7). **34 SP** (skill_db AL_HEAL), no cast time,
+     1 s after-cast delay, range 9. MaxSP 312 = 9 Heals from full.
+   - Heal on UNDEAD (battle.cpp `AL_HEAL`): `skill_calc_heal(..., heal=false)` = half, **272**,
+     then the Holy-vs-Undead element table (Undead 1 = 150 %) and MDEF. Not used in these runs
+     (Batt: "separate, not in the first C runs").
+   - SITTING (status.cpp `status_natural_heal`): the natural HP and SP intervals are HALVED
+     (`multi += 1`): 6 s -> 3 s for HP, 8 s -> 4 s for SP. Increase HP Recovery's 10-s tick is
+     unchanged. So HP regen 1,250 -> ~1,570 HP/min (+26 %) and SP 37.5 -> 75 /min. No sitting skill
+     regen for a Crusader (only Spirits Recovery / the Taekwon skills).
+   - Being hit does NOT make a player stand; only a hit blocked by Auto Guard does (battle.cpp
+     1536, `pc_setstand`). So "hit while sitting -> stand" is the runner's own press.
+   - The skill reset (`pc_resetskill`) keeps Basic Skill and the quest skills
+     (`quest_skill_reset: no`); `player_skillup_limit: yes` needs 9 + 49 points spent before any
+     Crusader skill.
+   - White Potion and Fly Wing: 3.96's (no per-item delay, `item_use_interval` 100 ms; a Fly Wing
+     teleports to a random cell of the same map, which the client sees as a same-map map change).
+5. **LIVE checks (2026-10-22 11:32, prt_fild08, session `20261022T113202-demo-crusader-live-sit-heal`):**
+   - Heal on self = F5, then a click on the drawn character: the packets show sp 312 -> 278 and
+     hp 3260 -> 3804 at the same tick (**+544, -34: the source's numbers**);
+   - the SP percent read (`hp_percent`, the SP line 14 px below the HP's): 100 -> 89, as the
+     packets;
+   - Insert = sit / stand: decoded as `act` sit / stand; sitting, the natural ticks came every 3 s
+     (+32) and SP +5 every 4 s.
+6. **The skill tree (Batt's, screenshot 10:56) -- built 11:21-11:31:**
+   - `@resetskill`, then the first-job tab: Sword Mastery 10, Increase HP Recovery 10, Bash 10,
+     Provoke 5, **Magnum Break 4**, Endure 10; the Crusader tab: Faith 10, Cure 1, Divine
+     Protection 10, Demon Bane 10, Heal 8, Auto Guard 10. Quest skills kept. 0 points left.
+   - **DEVIATION, Magnum Break 4 instead of 3:** Batt's Swordman list is 48 points, and the server
+     refuses every Crusader skill until 9 + 49 are spent (`player_skillup_limit`). The 107th point
+     went to Magnum Break, which the bot never casts.
+   - **A and B run on this same tree.** The only skill differences from the 2b build are Riding 1
+     and Cavalier Mastery 5 (no effect unmounted), Magnum Break 5 -> 4 (never cast) and Heal 8
+     (never pressed by A or B). So the three strategies differ ONLY in their rules, and the tree
+     is switched once, not between rounds.
+   - **The switch cost, measured:** 4 min 18 s of clicks when nothing goes wrong (part 1, the
+     first-job tab: 94 s; part 2, the Crusader tab: 164 s; Heal's level + its hotkey: ~20 s). Today
+     it took 11:21-11:31, with two stops (the client re-opens the skill window on the Crusader tab
+     after each skill: the first-job tab must be re-selected inside learn_skill's own open).
+     - The reset also cleared the F3 / F4 skill hotkeys, which came back by themselves once the
+       skills were re-learned. Heal was put on F5 at cast level 8.
+     - Two of part 1's tab clicks landed in the field while the window was closed and walked the
+       Crusader 36 cells west on prt_fild08 (5 walk requests, no NPC near, no attack). The tab click
+       now happens only after the window is read open.
+7. **The Battle Log reads hits on us** (`battle_log.py`, the "taken" type): `[<name>] inflicts
+   '<N>' damage points on you.`, read on 3.96's trial screenshot (3 / 3 lines, 49 / 70 / 33, the
+   species Orc Zombie / Orc Skeleton / Drainliar). The English glyph set has no 'l' / 'y' / 'f' yet,
+   so names read with 'i' for 'l'; the species match allows that.
+
+8. **Pilot 1 (dungeon@1, UNSCORED, 11:41:58-11:45:58, strategy A, seed 101,
+   `20261022T114129-demo-dungeon-A-pilot1`; judged by `dungeon_judge.py row`):**
+   - 18 kills in 4 min (270 /h; the runner's 18 = the packets' 18); HP min 92.7 %; 0 potions;
+     1 Auto Guard; hard bars 0 (no other-map change, no NPC contact, no attack on a non-monster);
+   - gross 12,611 z/h at NPC prices (prt_fild08's best hours: ~800-1,300);
+   - triggers: the Battle Log 1 (Orc Skeleton, 62 damage), a SWORD on the walk path 1, a v1 box
+     2; 19 strikes (only 2 saw the lock arrow: hunt_flow's 80..15 px band sits below an orc's
+     head, so the band is now 150..10 px);
+   - loot completeness 70.6 % (loot_complete: 17 items, 12 picked, 3 out of sight, 2 expired);
+   - walking 10 % of the time, 0 natural ticks while walking (MHR not seen yet).
+9. **Batt's 11:44 clip (the pilot, a mob fight): "the bot SCANNED but LEFT AN ITEM".** dungeon@1
+   hovered only the LAST kill's 3 x 3, relative to where we stood at that kill (not v55's fast
+   scan: this runner does not use it). Offline on the pilot's packets
+   (`scripts/dungeon_loot_list.py`, drops_of_kill attribution): 15 items, 11 picked, **4 left, all
+   4 in fights of 2+ kills; all 4 within reach of Batt's loot list, and all 4 of the final sweep**
+   (an upper bound: a pickup still needs the PICKUP read and the walk).
+   - **The fix (Batt's points 2 and 3; point 1, the change reference, is the sweep's):** a LOOT
+     LIST kept across the fight (our cell at EVERY kill; the loot step covers the union of the
+     5 x 5 around each, walkable and outside the zones, nearest first, <= 55 s old); then ONE
+     last sweep over every in-view cell whose image changed since the FIGHT BEGAN (24 x 20 px
+     grey patch, mean |diff| >= 15, re-projected from our cell then; <= 10 hovers). Both are
+     bounded (<= 30 hovers, <= 10 pickups, <= 25 s a step) and stop on a new hit.
+
+10. **Pilot 2 (dungeon@2, 11:52, strategy B): stopped in its setup, before the dungeon.** The
+    Etc clear on prt_fild08 refused at "slot 0 did not drop twice" (nothing unsafe: the drags
+    stayed in the open field). The debug that followed showed the inventory chord is a TOGGLE: on
+    an already-open inventory it CLOSES it, and the tab click and the drag then go to the field.
+    Pilot 2's own trigger is not proven (the likeliest: the chord pressed during the warp's loading
+    screen). Fixed (1cd3345): `ensure_clear` first, and the inventory is READ open (ui_gate's
+    window registry) before the tab click and before every drag, else a stop. Re-run live: 4 / 4
+    stacks dropped, each checked by the tab's change.
+11. **Pilot 3 (dungeon@2, 11:57-12:02, strategy B, seed 103): crashed at its end** (an
+    OverflowError in the frame grab). The v1 box watcher's thread and the main loop shared ONE
+    `ro_agent.Screen` pipe, and two interleaved grabs broke its framing. Fixed (dc85d4c): the
+    watcher has its own grab helper. Its packets (written afterwards by hand) showed two more
+    things, both fixed in dc85d4c:
+    - 4 walk clicks onto a cliff sent NO walk request: the client drew its NO-ENTRY cursor (an
+      arrow in a red ring), and cursor_sword read it "clear". Now the ring's red (>= 25 red pixels
+      in the 64 x 64 crop; the live ring has 183, game-area crops 0) vetoes a walk click, and two
+      no-entry reads turn the heading;
+    - three orcs attacked for 13 s with MISSES only (damage 0): no Battle Log line and no HP drop,
+      so no trigger until a SWORD showed on the walk path. Now 2 walk clicks that do not move us
+      turn the heading, re-plan, and scan ring 1 (`stall_scan`).
+
+12. **Pilot 4 (dungeon@2, 12:03-12:08, strategy C, seed 104):** `20261022T120309-demo-dungeon-C-pilot4`, judged by `dungeon_judge.py row`:
+    - 7 kills (104 /h: fewer monsters met than pilot 1's 270 /h), the runner's 7 = the packets' 7;
+      HP min 96.5 %; 0 potions, 0 Heals (HP never under 60 %); hard bars 0;
+    - **loot completeness 100 % (6 of 6 picked): Batt's loot list live**;
+    - strikes 9, landed 7 (77.8 %) now that the event carries the first click's time;
+    - triggers: `walk_sword` 2, `stall_scan` 1; a quiet kill still ran rings 1 + 2 for 8.6 s
+      (fixed in 129c459: it ends the fight at once);
+    - **the first Moving HP Recovery evidence: 1 natural tick WHILE walking** (walking 10 % of the
+      time); IRP ticks while walking 0.
+
+**The runner, `scripts/dungeon_hunt.py` (dungeon@2, code 129c459):**
+- **Triggers** (each logged as `engage` with `by`): a Battle Log hit on us; the HP percent falling
+  >= 2 points within 1.5 s; a v1 box whose foot is within 110 px of our cell's point (the detector
+  at 1 Hz in its own thread, its own grab helper). And three more: a SWORD where a walk click was
+  about to go (`walk_sword`), a SWORD in the loot hover (`loot_sword`), and the ring-1 scan after a
+  walk stall (`stall_scan`). ONE `engage` event per fight, by what started it.
+- **DEFEND-SCAN:** hover ring 1 (orthogonal first), then ring 2 (only while hits still come), at
+  each cell's projected point 26 px up (the body); a kill with no hit for 2.5 s ends the fight at
+  once (pilot 4); a SWORD -> strike there: click, re-click every 0.6 s until the client's
+  lock arrow (searched 150..10 px above the point), at most 4 clicks / 3 s. Then wait for the kill
+  (a Base EXP line); no hit of ours for 3.5 s -> scan again.
+- **Sustain inside long actions:** the HP / SP are read between the hovers and between the burst
+  clicks (`guard_tick`, at most every 0.25 s), with the strategy's keys.
+- **LOOT (after the FIGHT, Batt's list):** the 5 x 5 around our cell at every kill of the fight,
+  then the changed-cell sweep (item 9); click only on a PICKUP hand; a SWORD there is engaged.
+- **SEARCH:** `hunt_flow.heading_goal` on the zone-free search area, A* on the zone-free route
+  grid, a walk click every 1.2 s on the farthest path cell <= 7 ahead that is in view, off the UI
+  and crosses no zone, only where the cursor reads clear and shows no red no-entry ring; two
+  no-entry reads, or two clicks that do not move us, turn the heading (the stall also scans
+  ring 1).
+- **REST (B, C):** the nearest rest spot (Chebyshev), walked there by the same rule; Insert to
+  sit; stand on HP 100 %, after 300 s, or on a hit (then fight).
+- **Auto Guard:** 3.96's S4b2 in every strategy (F3 only when its icon is off).
+- **Setup per run (the experimenter's restore):** at >= 40 % weight, `@warp` to the Crusader's
+  prt_fild08 stand and drop the inventory's Etc tab (loot only; gm_state.clear_loot's known path);
+  `@heal`; White Potions to 40 and Fly Wings to 15 by `@item` (counted from the DB's last save);
+  the weight must read under 48 % (natural regen stops at 50 %, which would bias B and C);
+  `@warp orcsdun01` to the seed's start cell.
+
+**The strategies (the ONE thing that differs between A, B and C; `STRATEGIES` in the code):**
+
+| | potion (F1) | Fly Wing (F2) | rest (sit until 100 %) | Heal (F5 + self) |
+|---|---|---|---|---|
+| A POTIONS | HP < 60 % (3.96's S2 pacing) | HP < 25 %, or > 200 HP/s while HP < 60 % | never | never |
+| B REST | HP < 30 % (emergency) | HP < 20 %, or > 200 HP/s while HP < 40 % | after a fight with HP < 60 % | never |
+| C HEAL | as B | as B | as B, only when SP < 11 % (34 SP) | HP < 60 % and SP >= 11 %, then every 1.1 s until 80 % |
+
+**Runs:**
+- 45 min each, orcsdun01, immunity OFF, a judged screenshot before each.
+- Order: rounds of three, rotated so each strategy meets each slot of the afternoon:
+  A B C, then B C A, then C A B, ... as many as fit before ~18:30 (the chain queues only 3.98's
+  runs).
+- Seeds: 22001, 22002, 22003, ... in run order (the start cell).
+- A run stops early only on a hard bar or a death (a result, recorded with its cause); the next
+  run follows.
+
+**Measures (per run; pooled per strategy by `scripts/dungeon_judge.py table`):**
+- From PACKETS: kills/h, deaths/h, HP min, potions/h, Fly Wings/h, Heals/h (an SP fall of exactly
+  34, confirmed by +544 HP), SP used, Auto Guard casts, loot completeness (gross, net), gross and
+  NET zeny/h at NPC prices (White Potion 1,200 z, Fly Wing 60 z, a Heal 0), cost ratio,
+  Sharpe-like over 10-min windows, sitting %, Moving HP Recovery (natural ticks WHILE walking; IRP
+  ticks while walking must be 0), hard bars.
+- From EVENTS: resting %, engagements by trigger, strikes and their landing (a strike followed
+  within 1.5 s by our attack request AND our act on a monster), escapes, the end reason.
+- **Hard bars (stop the run):** a map change to ANOTHER map (a Fly Wing is a same-map teleport,
+  counted apart), an NPC contact, an unknown UI state, an attack request on a non-monster.
+
+**Predictions (written before the runs, for the record):**
+- A: the most kills/h and the fewest deaths, at the highest cost (potions ~1,200 z each).
+- B: the lowest cost and the highest resting %, fewer kills/h; deaths possible (emergency only).
+- C: between them; Heals/h capped by SP regen (~37.5 SP/min standing = ~1.1 Heals/min, 75 sitting).
+- Moving HP Recovery: natural ticks while walking at the doubled interval (~12 s), seen at last
+  because the heading walk keeps moving for > 12 s at a time.
+
+**Decision rule:** none; this is a COMPARISON for Batt (risk vs return), not an adoption.
+- Fewer than 2 runs of a strategy: its numbers are single-run numbers, said so.
+- A strategy with a death: its deaths/h is reported with the cause of each death (HP trace,
+  attackers from the Battle Log and the packets).
+
+**Run log:** (filled as the runs end)
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
