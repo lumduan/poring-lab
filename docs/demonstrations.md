@@ -15070,6 +15070,37 @@ min) -- **reported APART (before Amendment I):**
 - **The pairs restart** with the amended code as pi1 / ci1, ci2 / pi2, ... (the same order rule and
   seeds from 22201); p1 is reported apart, c1 is a stopped attempt.
 
+### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
+
+**Why:** Batt's demo vs the bot (crusader-orcsdun01.md 9a): the bot's largest gap is STANDING
+between fights, 24.8 s / kill (3.98 defend), of which its loot step ~10.7 s / kill (each step up
+to 25 s and 30 hovers); 83 of Batt's 88 pickups came within 10 s after a fight.
+
+**The change (`--loot v2`, code 271ece3 on feat/loot-v2, rebased on Amendment I; merged into main
+only after 4.00's chain ends, so 4.00's runs keep their code):**
+1. **Changed cells first:** at the step's start, every in-view cell whose image changed since the
+   fight began (3.98's sweep rule: a 24 x 20 grey patch, mean |diff| >= 15) is hovered first,
+   nearest first; then the plain loot-list cells (the 5 x 5 around each kill of the fight), nearest
+   first, once each.
+2. **One time budget per FIGHT: 10 s,** shared by every loot step after the same fight (a step
+   interrupted by a new fight resumes with what is left).
+3. **No re-hover of an empty cell:** a cell hovered with no PICKUP hand is skipped for the rest of
+   the fight series, unless a kill came within 2 cells of it AFTER that hover.
+4. Bounds: <= 10 picks, <= 40 hovers a step. PICKUP -> click, SWORD -> fight, as today.
+
+**Arms (paired, alternating; everything else 4.00's base after Amendment I):** L2 = `--loot v2`,
+L1 = dungeon@4's loot (v1). The SEARCH both use is the one 4.00 favours at the time of the first
+4.01 run (patrol if 4.00's pairs favour it, else heading), said in the run log before run 1.
+**An unscored pilot (L2, ~5 min) first;** a bug = an amendment before run 1.
+
+**Measures (per run, pooled per arm):** the loot step's seconds per kill (events) and standing
+outside fights per kill (`dungeon_style.py`); loot completeness gross / net and the fates
+(`loot_complete`: picked, looters, expired, out of sight); items per pick hover; kills / h; net
+zeny / h; HP min; deaths.
+
+**Expectation (stated before any run), no adoption rule tonight:** L2 spends less loot time per
+kill than L1 and loses at most 5 points of gross completeness. The decision is Batt's.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
