@@ -93,6 +93,24 @@ def test_the_sp_at_the_start_is_assumed_maxsp_only_when_no_packet_precedes_it() 
     assert r["sp_start"] == dj.MAX_SP and "ASSUMED" in r["why"]["sp_start"]
 
 
+def test_sp_falls_with_a_maxsp_change_are_not_casts_gm_flagged_ones_still_count() -> None:
+    """v55 run 0017 (REAL): the runner's state rebuild moved SP 110 -> 80 WITH MaxSP, read as an
+    "Auto Guard" before this rule. T-S2 F f1c (REAL): a real Auto Guard's SP packet came 1.9 s
+    after a GM spawn, inside the gm_command flag's 2 s: the flag cannot decide, so it counts."""
+    packets = [
+        sp(0, 312), pk(0, type="stat_change", name="max_hp", value=5260), hp(0, 5000),
+        pk(5, type="stat_change", name="sp", value=282, gm_command=True),  # AG after a GM line
+        pk(10, type="stat_change", name="max_sp", value=248), sp(10, 248),  # -34 with MaxSP
+        pk(20, type="stat_change", name="max_hp", value=400), hp(20, 300),  # 75 % of 400
+        sp(30, 214),  # a real Heal's -34 (no HP rise: unconfirmed)
+    ]  # fmt: skip
+    r = judge(run(1, 60), packets)
+    assert r["autoguard"] == 1 and r["heals"] == 1 and r["sp_used"] == 30 + 34
+    assert "1 SP fall(s) with a MaxSP change" in r["why"]["sp_falls_skipped"]
+    assert "1 SP fall(s) within 2 s of a GM command" in r["why"]["sp_falls_gm_window"]
+    assert r["hp_min"] == 300 and r["hp_min_pct"] == 0.75  # the MaxHP in force at the min
+
+
 # --- events: strikes and their landing, rest spans, the sit cross-check --------------------------
 
 

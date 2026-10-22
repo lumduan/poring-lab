@@ -19,16 +19,18 @@ PER RUN -- from PACKETS (ours = the GM account's block id 2000002, the Crusader'
 - kills / h: arm_judge.kills_of (a monster's death vanish <= 1.5 s after OUR damaging act);
 - deaths / h: our own id's vanish with reason "died" (survive_judge.deaths_of; the hp packet at a
   death can read 1, so hp 0 is not the cue -- hp_zero_packets is reported beside it);
-- HP min: the absolute hp packets in the window (and the value in force at its start), and its
-  share of MaxHP (the max_hp packet in force, else 5,260);
+- HP min: the absolute hp packets in the window (and the value in force at its start), and the
+  lowest share of MaxHP (the max_hp packet in force at each, else 5,260);
 - potions / Fly Wings and per hour: OUR use_item_result successes of 504 / 601 (aid filter);
 - Heals cast and per hour: NO skill-use packet is decoded (poring_packets has skill_list /
   skill_update only), so a Heal = our SP falling by EXACTLY 34 (AL_HEAL Lv 8); "confirmed" = an
   HP rise of 544 (+-1), or one that ends exactly at MaxHP, within 1 s of it (an absolute hp
   packet, or a decoded `recovery` amount);
 - SP used (the sum of SP falls) and SP min; Auto Guard casts = SP falls of exactly 30 (a toggle:
-  on or off, survive_judge's rule), Endure = 10. When no SP packet precedes the window, the SP at
-  its start is ASSUMED MaxSP 312 (said in "why");
+  on or off, survive_judge's rule), Endure = 10. A fall that comes with a MaxSP change (a level /
+  stat / character change) is not a cast and not SP used; one within a GM command's 2-s flag is
+  counted and reported. When no SP packet precedes the window, the SP at its start is ASSUMED
+  MaxSP 312 (said in "why");
 - loot completeness: the hunt's definition (loot_complete: items PICKED / items DROPPED by ALL our
   kills, and net of a looter's re-drop of our own item), with the fates;
 - gross / net zeny per hour, costs, cost ratio, Sharpe-like: econ_row.measure on the same kill
@@ -59,7 +61,7 @@ import gzip
 import json
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Container, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -130,10 +132,32 @@ def clip(ser: Sequence[tuple[int, int]], t0: int, t1: int,
     return head + [(t, v) for t, v in ser if t0 < t <= t1]
 
 
-def falls(ser: Sequence[tuple[int, int]], cost: int | None = None) -> list[tuple[int, int]]:
-    """PURE: [(t, drop)] of the series' falls (all of them, or exactly ``cost``)."""
+def falls(ser: Sequence[tuple[int, int]], cost: int | None = None,
+          skip: Container[int] = ()) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE: [(t, drop)] of the series' falls (all of them, or exactly ``cost``), leaving out a
+    fall whose packet time is in ``skip`` (not_casts: a GM command's or a MaxSP change's)."""
     return [(t, v0 - v) for (_t0, v0), (t, v) in zip(ser, ser[1:], strict=False)
-            if v < v0 and (cost is None or v0 - v == cost)]  # fmt: skip
+            if v < v0 and (cost is None or v0 - v == cost) and t not in skip]  # fmt: skip
+
+
+def not_casts(packets: Sequence[Mapping[str, Any]], name: str = "sp", near_ms: int = 1
+              ) -> set[int]:  # fmt: skip
+    """PURE: the times of our ``name`` packets that are NOT a skill's cost: within ``near_ms`` of
+    a change of its maximum (a level / stat / job / character change moves both: v55 run 0017's
+    state rebuild by GM commands read as a 301-SP "cast" and an "Auto Guard" before this).
+    NOT the gm_command flag: it marks a GM command AND the 2 s after it, which covers real casts
+    (T-S2 F f1c's Auto Guard, 1.9 s after a GM spawn: survive_judge's S4 counts it)."""
+    mx = [_t(e) for e in packets
+          if e.get("type") == "stat_change" and e.get("name") == f"max_{name}"]  # fmt: skip
+    return {_t(e) for e in packets
+            if e.get("type") == "stat_change" and e.get("name") == name
+            and any(abs(_t(e) - m) <= near_ms * 1_000_000 for m in mx)}  # fmt: skip
+
+
+def gm_flagged(packets: Sequence[Mapping[str, Any]], name: str = "sp") -> set[int]:
+    """PURE: the times of our ``name`` packets flagged gm_command (reported, still counted)."""
+    return {_t(e) for e in packets if e.get("type") == "stat_change" and e.get("name") == name
+            and e.get("gm_command")}  # fmt: skip
 
 
 def overlap(spans: Iterable[tuple[int, int]], t0: int, t1: int) -> int:
@@ -148,7 +172,7 @@ def overlap2(a: Sequence[tuple[int, int]], b: Sequence[tuple[int, int]]) -> int:
 
 def heal_casts(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, sp_start: int | None,
                max_hp: int = MAX_HP, heal_hp: int = HEAL_HP, heal_sp: int = HEAL_SP,
-               win_s: float = HEAL_WIN_S) -> dict[str, Any]:  # fmt: skip
+               win_s: float = HEAL_WIN_S, skip: Container[int] = ()) -> dict[str, Any]:  # fmt: skip
     """PURE: our Heals. There is NO decoded skill-use packet, so a cast = our SP falling by
     exactly ``heal_sp``; it is CONFIRMED by an HP rise of ``heal_hp`` (+-1), or one ending exactly
     at MaxHP (a capped heal), within ``win_s`` of the fall -- on the HP series with the decoded
@@ -156,7 +180,7 @@ def heal_casts(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, sp_start:
     import survive_judge as sj
 
     sp = clip(series(packets, "sp"), t0, t1, sp_start)
-    casts = [t for t, _d in falls(sp, heal_sp)]
+    casts = [t for t, _d in falls(sp, heal_sp, skip)]
     hp = sj.hp_with_recovery(packets, max_hp)
     rises = [(t, v - v0, v) for (_a, v0), (t, v) in zip(hp, hp[1:], strict=False) if v > v0]
     ok = []
@@ -356,17 +380,29 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         return round(n / h, 2) if n is not None and h > 0 else None
 
     # HP / SP
-    mx = in_force(series(packets, "max_hp"), w0) or MAX_HP
+    mxs = series(packets, "max_hp")
+    mx = in_force(mxs, w0) or MAX_HP
     hp = clip(series(packets, "hp"), w0, w1)
     hp_min = min((v for _t, v in hp), default=None)
+    hp_pct = [v / (in_force(mxs, t) or mx) for t, v in hp]  # against the MaxHP in force then
     sp_raw = series(packets, "sp")
     sp_start = in_force(sp_raw, w0)
     if sp_start is None:
         sp_start = MAX_SP
         why["sp_start"] = f"no sp packet before the window: its start ASSUMED MaxSP {MAX_SP}"
     sp = clip(sp_raw, w0, w1, sp_start)
-    sp_falls = falls(sp)
-    heals = heal_casts(packets, w0, w1, sp_start, max_hp=mx)
+    skip = not_casts(packets, "sp")
+    sp_falls = falls(sp, skip=skip)
+    n_skip = len(falls(sp)) - len(sp_falls)
+    if n_skip:
+        why["sp_falls_skipped"] = (f"{n_skip} SP fall(s) with a MaxSP change (a level / stat / "
+                                   "character change): not casts, not SP used")  # fmt: skip
+    gmf = gm_flagged(packets, "sp")
+    n_gm = sum(1 for t, _d in sp_falls if t in gmf)
+    if n_gm:
+        why["sp_falls_gm_window"] = (f"{n_gm} SP fall(s) within 2 s of a GM command (gm_command "
+                                     "flag) COUNTED: the flag also covers real casts")  # fmt: skip
+    heals = heal_casts(packets, w0, w1, sp_start, max_hp=mx, skip=skip)
     deaths = [t for t in sj.deaths_of(packets, aid) if w0 <= t <= w1]
     pots = [t for t in sj.items_used(packets, POTION, aid) if w0 <= t <= w1]
     flys = [t for t in sj.items_used(packets, FLY, aid) if w0 <= t <= w1]
@@ -401,15 +437,16 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "deaths": len(deaths), "deaths_h": per_h(len(deaths)),
         "hp_zero_packets": sum(1 for t, v in hp if v == 0 and t > w0),
         "hp_min": hp_min, "max_hp": mx,
-        "hp_min_pct": round(hp_min / mx, 4) if hp_min is not None and mx else None,
+        "hp_min_pct": round(min(hp_pct), 4) if hp_pct else None,
         "potions": len(pots), "potions_h": per_h(len(pots)),
         "fly_wings": len(flys), "fly_wings_h": per_h(len(flys)),
         "heals": heals["casts"], "heals_confirmed": heals["confirmed"],
         "heals_h": per_h(heals["casts"]), "heal_detail": heals,
         "sp_used": sum(d for _t, d in sp_falls), "sp_used_h": per_h(sum(d for _t, d in sp_falls)),
         "sp_min": min((v for _t, v in sp), default=None), "sp_start": sp_start,
-        "autoguard": len(falls(sp, AG_SP)), "autoguard_h": per_h(len(falls(sp, AG_SP))),
-        "endure": len(falls(sp, ENDURE_SP)),
+        "autoguard": len(falls(sp, AG_SP, skip)),
+        "autoguard_h": per_h(len(falls(sp, AG_SP, skip))),
+        "endure": len(falls(sp, ENDURE_SP, skip)),
         "loot": {"definition": "loot_complete: picked / dropped by ALL our kills (packets); net "
                  "leaves a looter's re-drop of our own item out of the dropped",
                  **{k: ls[k] for k in ("kills", "items", "picked", "out_of_sight", "looter",
@@ -446,8 +483,8 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
             "fly": [presses.get("fly", 0), len(flys)],
             "escape_events_vs_fly": [sum(1 for e in ev if e.get("kind") == "escape"), len(flys)],
             "heal": [presses.get("heal", 0), heals["casts"]],
-            "autoguard": [presses.get("autoguard", 0), len(falls(sp, AG_SP))],
-            "endure": [presses.get("endure", 0), len(falls(sp, ENDURE_SP))],
+            "autoguard": [presses.get("autoguard", 0), len(falls(sp, AG_SP, skip))],
+            "endure": [presses.get("endure", 0), len(falls(sp, ENDURE_SP, skip))],
             "sit": [presses.get("sit", 0), len(sits)],
             "deaths": [sum(1 for e in ev if e.get("kind") == "death"), len(deaths)],
         },
