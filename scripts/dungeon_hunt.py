@@ -92,7 +92,10 @@ STRATEGIES: dict[str, dict[str, Any]] = {
     "H": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.80, "rest_sp_below": 0.30, "rest_until_sp": 0.40,
           "heal_below": 0.50, "heal_until": 0.80, "heal_sp_min": 0.11,
-          "heal_calm_below": 0.93, "heal_calm_sp_min": 0.85},
+          "heal_calm_below": 0.93, "heal_calm_sp_min": 0.85,
+          # 4.00 Amendment I (p1, 2026-10-22 20:59): 50 White Potions weigh 750 of 4,150 and the
+          # loot crossed 50 % (no natural regen) at 14.7 min; H drinks potions only below 30 %
+          "potions_to": 10},
 }  # fmt: skip
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "heal": "F5", "sit": "Insert",
         "stand": "Insert"}  # fmt: skip
@@ -141,6 +144,7 @@ BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a bo
 SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 CALM_S = 2.0  # dungeon@4: no hit on us for this long = between fights (H's calm Heal)
+REGEN_STOP = 0.50  # Amendment I: at this weight share the server gives NO natural HP / SP regen
 PLANT_UP = 12  # px above a White Plant's cell point: its body (a small sprite)
 PLANT_NEAR, PLANT_HOVERS, PLANT_EVERY_S = 7, 16, 120.0  # the White Plant sweep (dungeon@4)
 WP_TOL = 2  # a patrol waypoint counts as reached within this many cells (map_routes.reached)
@@ -637,8 +641,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
             "AND nameid IN (504, 601);")}  # fmt: skip
         setup = ["@heal"]
-        if inv.get(504, 0) < POTIONS_TO:
-            setup.append(f"@item 504 {POTIONS_TO - inv.get(504, 0)}")
+        p_to = int(strat.get("potions_to", POTIONS_TO))
+        if inv.get(504, 0) < p_to:
+            setup.append(f"@item 504 {p_to - inv.get(504, 0)}")
         if inv.get(601, 0) < WINGS_TO:
             setup.append(f"@item 601 {WINGS_TO - inv.get(601, 0)}")
         import gm_state
@@ -651,6 +656,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             time.sleep(3.0)
             bench.close_chat(agent_raw, screen)
             cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
+        # Amendment I: the potions over the strategy's stock are DRUNK at the stand (its hotkey,
+        # paced; outside the measured window): carried weight is loot room before 50 %
+        drunk = 0
+        excess = inv.get(504, 0) - p_to
+        if excess > 0:
+            ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
+            r.activate_client(agent_raw, screen)
+            for _ in range(excess):
+                agent_raw.keys(KEYS["potion"])
+                drunk += 1
+                time.sleep(0.35)
+            time.sleep(1.0)
         setup.append(f"@warp {MAP} {start[0]} {start[1]}")
         for cmd in setup:
             cr.gm_line(agent_raw, screen, cmd, "crusader")
@@ -669,6 +686,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "search": a.search, "route": None if rt is None else rt.id,
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
+            "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
@@ -692,6 +710,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         lock: dict[str, Any] | None = None
         sitting = False
         rest_since = 0.0
+        w_share: float | None = share  # Amendment I: the weight share, re-read every UI_EVERY_S
+        rest_skip_t = -1e9
         last_ui = time.monotonic()
         last_walk = 0.0
         walk_st: dict[str, Any] = {"ang": float(rng.uniform(0, 2 * math.pi))}
@@ -1148,6 +1168,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         r.to_png(cs["frame"], out / "stop-ui.png")
                         reason = f"hard_bar: unknown UI state {cs['decision']}"
                         break
+                    # Amendment I: the weight, read with the UI watch (no regen at >= 50 %)
+                    w_now = gm_state.weight_share(gm_state._weight(gm_state._frames(screen)))
+                    if w_now is not None and (w_share is None or abs(w_now - w_share) >= 0.005):
+                        ev({"kind": "weight", "share": round(w_now, 4)})
+                    w_share = w_now if w_now is not None else w_share
+                overweight = w_share is not None and w_share >= REGEN_STOP
                 # Amendment E: a fight, a loot step or a rest is activity, never idle (run 3: a
                 # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
                 if mode != "search":
@@ -1246,7 +1272,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if got_ == "fight":
                         continue
                     loot_list, fight_ref = [], None
+                if sitting and overweight:  # Amendment I: sitting regenerates nothing
+                    press("stand", "overweight")
+                    sitting = False
+                    ev({"kind": "rest_end", "why": "overweight", "pct": pct, "sp_pct": spp})
+                    mode, goal_path = "search", None
                 if mode in ("after", "search") and frac is not None and not sitting \
+                        and tick - st.heal > 2.0 and rest_wanted(strat, frac, spf) \
+                        and overweight and tick - rest_skip_t > 30.0:  # fmt: skip
+                    rest_skip_t = tick
+                    ev({"kind": "rest_skip", "why": "overweight", "share": round(w_share or 0, 4),
+                        "pct": pct, "sp_pct": spp})  # fmt: skip
+                if mode in ("after", "search") and frac is not None and not sitting \
+                        and not overweight \
                         and tick - st.heal > 2.0 and rest_wanted(strat, frac, spf):  # fmt: skip
                     mode, goal_path = "rest", None
                     rest_since = tick

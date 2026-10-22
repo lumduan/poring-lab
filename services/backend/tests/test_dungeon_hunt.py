@@ -248,3 +248,12 @@ def test_the_plant_sweep_covers_the_area_on_a_lattice_nearest_first() -> None:
     assert (22, 20) not in cells  # not walkable
     assert dh.cheb2(cells[0], (30, 20)) == 6 and cells[0][0] == 24  # the nearest column first
     assert len(dh.plant_cells((20, 20, 4, 4), (30, 20), walk)) == dh.PLANT_HOVERS
+
+
+def test_amendment_i_h_carries_ten_potions_and_never_rests_overweight() -> None:
+    """4.00 Amendment I (p1): 50 White Potions (750 of 4,150) left loot room for ~15 min before
+    50 % weight, where the server stops natural regen and four 5-min rests gave 0 HP."""
+    assert H["potions_to"] == 10 and dh.POTIONS_TO == 40  # the other strategies unchanged
+    assert dh.REGEN_STOP == 0.50
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert "and not overweight" in src and '"why": "overweight"' in src

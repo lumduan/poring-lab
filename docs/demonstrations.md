@@ -15042,6 +15042,29 @@ amendment.**
   Plant stood (83,45; packets), sent NO attack request in 4 clicks (a passing monster or a stale
   cursor): ~3.7 s lost, recorded, not changed.
 
+**Run p1** (`20261022T201740-demo-dungeon-patrol-H-p1`, P, seed 22201, 20:17-20:59, TIME BOX, 40.0
+min) -- **reported APART (before Amendment I):**
+- 85 kills (127.5 / h), deaths 0, HP min 49.7 %, 0 potions / 0 Fly Wings, 8 Heals (8 confirmed),
+  hard bars 0, landing 80.2 % (the burst ended on our damage line 68 times, the arrow 18, the bound
+  10); loot 65.5 / 86.8 %; gross 31,597 z / h -- one rare drop (item 1358, 17,000 z) is most of it.
+- **THE FLAW:** the weight crossed 50 % (2,075 / 4,150) at 14.7 min. At 50 % the server gives NO
+  natural HP / SP regen. H's rest rule (HP < 80 % or SP < 30 %) then sat the Crusader at the spot
+  87,172 four times for the 300-s cap, at HP 72 % / SP 33 %: 983 s sitting (41 % of the run),
+  0 regen ticks (packets). The Crusader carried ~43 % before any loot: its gear plus 50 White
+  Potions (750).
+- **Run c1** (`20261022T205948-demo-dungeon-H-c1`, C, seed 22202): STOPPED by the parent at 21:01
+  (~1.5 min in), the same flaw ahead; a stopped attempt, not scored.
+
+**Amendment I (2026-10-22 ~21:0x ICT, BEFORE the next run; the parent):**
+- H's setup keeps **10** White Potions (`potions_to`), not 40-50: the excess is DRUNK at the field
+  stand by its hotkey (paced 0.35 s; outside the measured window). H drinks only below 30 % HP (p1:
+  0 potions). That frees ~600 weight of loot room before 50 %.
+- The weight share is read every 10 s with the UI watch (outside fights). At >= 50 % there is **no
+  rest** (`rest_skip`, rate-limited), and a sitting Crusader **stands** (`rest_end` overweight):
+  sitting there regenerates nothing.
+- **The pairs restart** with the amended code as pi1 / ci1, ci2 / pi2, ... (the same order rule and
+  seeds from 22201); p1 is reported apart, c1 is a stopped attempt.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
