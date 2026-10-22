@@ -104,6 +104,7 @@ MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
+SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 
 
@@ -182,6 +183,13 @@ def turn_heading(st: dict[str, Any]) -> None:
     st["ang"] = float(st.get("ang", 0.0)) + math.pi / 2
 
 
+def self_box(cx: float, cy: float) -> bool:
+    """PURE: a box centred on OUR drawn Crusader (the camera centres it: foot (641, 362), head ~280)
+    -- v1 never saw a Crusader in training and boxes it as a monster (3.98 run 1, 12:11)."""
+    x0, y0, x1, y1 = SELF_BOX
+    return x0 <= cx <= x1 and y0 <= cy <= y1
+
+
 def red_px(crop: Any) -> int:
     """PURE: the no-entry ring's red pixels in a cursor crop (BGR): R high, G and B low."""
     a = np.asarray(crop)[..., :3].astype(np.int16)
@@ -251,6 +259,7 @@ class BoxWatch:
         self.last: tuple[float, list[Any]] = (0.0, [])
         self.halt = threading.Event()
         self.n = 0
+        self.n_self = 0
         self.th = threading.Thread(target=self._loop, name="box-watch", daemon=True)
         self.th.start()
 
@@ -274,6 +283,9 @@ class BoxWatch:
             return None
         best = None
         for b in got:
+            if self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2):
+                self.n_self += 1  # 3.98 run 1 (12:11): v1 boxes our OWN Crusader as a monster
+                continue
             d = math.hypot((b.x0 + b.x1) / 2 - px[0], b.y1 - px[1])
             if d <= max_px and (best is None or d < best[0]):
                 best = (d, b.x0, b.y0, b.x1, b.y1)
@@ -1059,6 +1071,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             blt.stop()
             if boxes is not None:
                 boxes.stop()
+                ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self})
             if sitting:
                 agent_raw.keys(KEYS["stand"])
             if reason == "death":

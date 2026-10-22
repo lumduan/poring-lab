@@ -141,3 +141,9 @@ def test_the_no_entry_ring_is_counted_by_its_red() -> None:
     st: dict[str, float] = {"ang": 0.0}
     dh.turn_heading(st)
     assert abs(st["ang"] - 1.5707963) < 1e-6
+
+
+def test_a_box_on_our_own_crusader_is_not_a_monster() -> None:
+    assert dh.self_box(641, 300)  # 3.98 run 1's false trigger: (628,277)-(661,312)
+    assert not dh.self_box(606, 325)  # a monster on the west neighbour cell
+    assert not dh.self_box(900, 300)
