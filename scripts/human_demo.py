@@ -12,6 +12,10 @@ source).
 ``--tag`` names the session and its rule (Batt 2026-10-19: "human-ui-setup", his own chat-window
 arrangement, recorded so the procedure is learnt). ``--end-quiet S`` also ends the recording S s
 after his last input (once he has started), besides the stop file and the time box.
+``--map`` / ``--character gm|crusader`` label the session (Batt 2026-10-22: his Crusader demo in
+orcsdun01; the GM's test state is recorded only for the GM). ``--battle-log`` also runs
+battle_log.py's LIVE reader in its own process (pixels of the chat window, no input) into the
+session's battle_log_live.jsonl, stopped with the recording.
 
 What it records (all on the host's CLOCK_MONOTONIC):
 - the game region as JPEGs at 5 Hz, q80, on the NAS (route_demo._record; it stops itself under
@@ -48,6 +52,19 @@ REC_HZ = 5.0
 REC_QUALITY = 80
 POLL_S = 0.5
 QUIET_S = 60.0  # Batt: no client action until 60 s without human input
+GM_TEST_STATE = {
+    "base_level": 70,
+    "str": 99,
+    "atk": 197,
+    "hit": 71,
+    "immune": "confirmed for this login",
+    "weight": [130, 4970],
+}
+CRUSADER_TEST_STATE = {
+    "job": "crusader",
+    "immune": "off (never made immune)",
+    "autoguard": "off at arming (Batt casts it)",
+}
 NO_INPUT_CAP_S = 45 * 60.0  # armed but never played: give up, nothing recorded is analysed
 
 
@@ -100,8 +117,17 @@ def _detect(path: str, region: tuple[int, int, int, int], stop: Any) -> None:
 
 
 def arm(
-    minutes: float, margin_s: float, tag: str = "human-demo", end_quiet_s: float | None = None
+    minutes: float,
+    margin_s: float,
+    tag: str = "human-demo",
+    end_quiet_s: float | None = None,
+    map_: str = "prt_fild08",
+    character: str = "gm",
+    battle_log: bool = False,
 ) -> int:
+    import os
+    import subprocess
+
     import record_session
     import ro_agent as r
     import route_demo
@@ -124,11 +150,11 @@ def arm(
     region = r.game_region()
     t_armed = r.ns()
     log.start(type=tag, rule=f"{tag}@1", scored=False, actor="human:batt",
-              map="prt_fild08", account="gm", minutes=minutes, margin_s=margin_s,
+              map=map_, account="gm", character=character, minutes=minutes, margin_s=margin_s,
               backend=str(lock.backend), lock_seq=lock.seq, t_armed_ns=t_armed,
               frames_dir=str(frames_dir), rec_hz=REC_HZ, rec_quality=REC_QUALITY,
-              test_state={"base_level": 70, "str": 99, "atk": 197, "hit": 71,
-                          "immune": "confirmed for this login", "weight": [130, 4970]})  # fmt: skip
+              battle_log=battle_log,
+              test_state=GM_TEST_STATE if character == "gm" else CRUSADER_TEST_STATE)  # fmt: skip
     ctx = mp.get_context("spawn")
     stop_rec, stop_det = ctx.Event(), ctx.Event()
     rec = ctx.Process(target=route_demo._record, args=(str(frames_dir), region, stop_rec, REC_HZ,
@@ -137,6 +163,14 @@ def arm(
                       daemon=True)  # fmt: skip
     rec.start()
     det.start()
+    blog = None
+    if battle_log:  # pixels only: the chat window from frames, its own process (nice 10)
+        blog = subprocess.Popen(["nice", "-n", "10", sys.executable,
+                                 str(Path(__file__).with_name("battle_log.py")), "live",
+                                 "--out", str(log.dir / "battle_log_live.jsonl"), "--hz", "10",
+                                 "--until-pid", str(os.getpid())],
+                                stdout=(log.dir / "battle_log_live.out").open("a"),
+                                stderr=subprocess.STDOUT)  # fmt: skip
     print(json.dumps({"session": sid, "armed": time.strftime("%H:%M:%S"),
                       "frames": str(frames_dir)}), flush=True)  # fmt: skip
     interrupted = {"v": False}
@@ -171,6 +205,12 @@ def arm(
     stop_det.set()
     rec.join(timeout=10)
     det.join(timeout=10)
+    if blog is not None:
+        blog.terminate()
+        try:
+            blog.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            blog.kill()
     print(json.dumps({"recording_ended": ended, "at": time.strftime("%H:%M:%S")}), flush=True)
     waited = time.monotonic()
     while True:  # no client action of ours until Batt has stopped (QUIET_S without his input)
@@ -212,8 +252,16 @@ def main() -> int:
     a.add_argument("--tag", default="human-demo", help="the session's name and rule")
     a.add_argument("--end-quiet", type=float, default=None,
                    help="also end S s after the last human input (once started)")  # fmt: skip
+    a.add_argument("--map", default="prt_fild08", help="the map played (the session's label)")
+    a.add_argument("--character", choices=("gm", "crusader"), default="gm")
+    a.add_argument(
+        "--battle-log",
+        action="store_true",
+        help="also run battle_log.py's live reader (pixels only) into the session",
+    )
     args = ap.parse_args()
-    return arm(args.minutes, args.margin, args.tag, args.end_quiet)
+    return arm(args.minutes, args.margin, args.tag, args.end_quiet, args.map, args.character,
+               args.battle_log)  # fmt: skip
 
 
 if __name__ == "__main__":
