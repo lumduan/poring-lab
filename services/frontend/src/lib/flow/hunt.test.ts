@@ -44,7 +44,7 @@ test("the hunt block's groups are Batt's, each a list of the registry's rule ver
   const loot = (def.args2 ?? []).find((a) => "name" in a && a.name === "P_LOOT");
   assert.ok(loot && "options" in loot);
   assert.deepEqual(loot.options?.map(([, v]) => v), ["gm_fast_scan@54", "gm_scan_one_pass@51", "gm_scan@50"]);
-  assert.deepEqual(loot.options?.map(([t]) => t), ["gm_fast_scan@54 ★", "gm_scan_one_pass@51 ◆", "gm_scan@50 ◆"]);
+  assert.deepEqual(loot.options?.map(([t]) => t), ["gm_fast_scan@54 ★ ◆", "gm_scan_one_pass@51 ◆", "gm_scan@50 ◆"]);
   assert.equal(def.message4, "stop: %1"); // the stop group: the enclosing loop, no parameter
 });
 
@@ -115,8 +115,8 @@ test("dragged from the toolbox: the adopted base's rules, the catalogue's concep
 test("badges: the adopted base, the D8 hunting evidence, the versions that hold the rule", () => {
   const loot = params(RULES).find((p) => p.name === "loot")!;
   const [fast, one, v50] = loot.choices;
-  // no D8 row for 3.97 yet (evidence.yaml rows are a person's): the adopted rule shows no ◆
-  assert.equal(badgeText(fast, RULES.adopted), "★ adopted base v55 · in v54..v55 (2)");
+  // 3.97's D8 row (2026-10-22, written by the agent on Batt's delegation, decision 7): ◆ too
+  assert.equal(badgeText(fast, RULES.adopted), "★ adopted base v55 · ◆ RDP prt_fild08 (3.97) · in v54..v55 (2)");
   assert.equal(badgeText(one, RULES.adopted), "◆ RDP prt_fild08 (3.92) · in v51..v52 (2)");
   assert.equal(badgeText(v50, RULES.adopted), "◆ RDP prt_fild08 (3.91) · in v50");
   assert.deepEqual(RULES.evidence.badges, ["one path (RDP), prt_fild08"]);
