@@ -1,0 +1,25 @@
+# orcsdun01's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
+# the server's numbers). The format and what each kind does: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt delegated the authoring of this file to the agent on 2026-10-22 (the
+# day-run brief): "author config/map_zones/orcsdun01.yaml (no-enter around both warp spans,
+# delegated as before) and prove it".
+# The spans are data/kb/warps.json's (rAthena npc/warps/dungeons/orcsdun.txt, touch area = centre
+# +- span). Each area is the span grown by 4 cells on every side: the >= 3 the brief asks for, + 1
+# because a click made while the GM moves can land up to ~3 cells further along its walk than the
+# cell aimed at (frames lag the server ~0.5 s), so a destination just outside the area still stops
+# >= 1 cell short of the span. Neither area seals anything off (nothing walkable lies beyond
+# either span). The offline proof: `python3 scripts/map_zones.py prove orcsdun01`
+# (docs/planning/orcsdun01-dungeon-prep.md section 3).
+map: orcsdun01
+reviewed_by: "agent (delegated by batt, 2026-10-22)"
+reviewed: 2026-10-22
+delegation: "Batt 2026-10-22 day-run brief: author config/map_zones/orcsdun01.yaml (no-enter around both warp spans, delegated as before) and prove it"
+no_cross: []
+no_enter:
+  - id: warp-in_orcs01
+    note: "the exit warp orc01-1 to in_orcs01 (32,172), span 3,1 = x 29-35 y 171-173, grown by 4: x 25-39 y 167-177; the arrival from in_orcs01 (32,170) is inside, the runner's entrance cell (32,166) one cell outside"
+    polygon: [[25, 167], [39, 167], [39, 177], [25, 177]]
+  - id: warp-orcsdun02
+    note: "the warp orc03 down to orcsdun02 (183,8), span 4,2 = x 179-187 y 6-10, grown by 4: x 175-191 y 2-14; never walk onto it (it leads deeper); the arrival from F2 (183,11) is inside"
+    polygon: [[175, 2], [191, 2], [191, 14], [175, 14]]
