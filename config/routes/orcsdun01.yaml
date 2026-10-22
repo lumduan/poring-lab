@@ -1,0 +1,64 @@
+# orcsdun01's PATROL ROUTE (map cells: x east, y north -- the minimap readout's, /where's and the
+# server's numbers). The format and the walking rules: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt delegated the authoring of this file to the agent on 2026-10-22 (the
+# overnight brief, item A: "extract my PATROL LOOP (ordered waypoints, one direction) ... Store the
+# loop as config/routes/orcsdun01.yaml (delegated review)").
+#
+# SOURCE: Batt's own 15-min demo, 20261022T184536-demo-human-demo-orcsdun01-crusader (his first input
+# 18:45:55 ICT; the packets to the recording's end, 961 s). His walked cells (flow_judge.gm_track over
+# the server's self_move packets) simplified by `scripts/dungeon_style.py circuit SID --live 961`
+# (Ramer-Douglas-Peucker, eps 3 cells; waypoints closer than 6 cells merged): 27 waypoints, CLOCKWISE
+# with x east and y north (shoelace). Edits by the agent, each recorded here:
+# - his first two waypoints, the entrance cell 32,166 (the in_orcs01 arrival) and 60,144, are the
+#   ENTRANCE PATH, walked once at the start: the loop starts at the junction 66,124 and closes from
+#   55,114 back to it. Kept, 60,144 would be a 20-cell dead end walked up and back every lap;
+# - "I always turn LEFT around the loop" (Batt): coming down from the entrance (heading south), the
+#   LEFT turn at the junction 66,124 is east, and it takes him CLOCKWISE around the central block in
+#   map terms (x east, y north); the listed order is that direction;
+# - 85,50 is not standable on the stand grid (GAT + server map cache); 83,50 is (he stood there).
+# Checked against the map (2026-10-22 ~19:3x ICT): all 25 waypoints standable, inside the hunt's search
+# area, outside both no-enter zones; every leg (the closing one included) routes on the zones' route
+# grid; the loop is 380 cells (scripts/map_routes.py prove orcsdun01 is the check of record). It
+# keeps his excursions into the north spur (105,172) and the NE pocket (145,144): he walked them on
+# his lap, so the bot does.
+# It passes both White Plant spawn areas (rAthena orcsdun01: 83,50 +-5 and 58,67 +-10; 180-s respawn).
+#
+# Batt 2026-10-22: "Bot behaviour: walk the loop continuously in the same direction; a fight or a
+# loot step interrupts it; afterwards resume at the NEXT waypoint AHEAD on the loop (never turn back
+# to a passed one)."
+map: orcsdun01
+reviewed_by: "agent (delegated by batt, 2026-10-22)"
+reviewed: 2026-10-22
+delegation: "Batt 2026-10-22 overnight brief item A: store my patrol loop as config/routes/orcsdun01.yaml (delegated review)"
+source: "20261022T184536-demo-human-demo-orcsdun01-crusader (Batt's demo, packets); scripts/dungeon_style.py circuit --live 961, eps 3, merge 6"
+routes:
+  - id: batt-loop
+    kind: loop
+    note: "Batt's clockwise circuit around the central block (x east, y north): east along the north corridor, the north spur and the NE pocket, south down the east side, west along the south past the White Plant spawn 83,50, north up the west side past the White Plant spawn 58,67"
+    waypoints:
+      - [66, 124]
+      - [78, 123]
+      - [105, 141]
+      - [117, 143]
+      - [105, 172]
+      - [113, 162]
+      - [113, 155]
+      - [132, 132]
+      - [145, 144]
+      - [166, 119]
+      - [159, 107]
+      - [144, 105]
+      - [143, 94]
+      - [111, 57]
+      - [90, 57]
+      - [83, 50]
+      - [75, 58]
+      - [65, 58]
+      - [59, 49]
+      - [48, 57]
+      - [52, 69]
+      - [40, 75]
+      - [36, 88]
+      - [50, 100]
+      - [55, 114]
