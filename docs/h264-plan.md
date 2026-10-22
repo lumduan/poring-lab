@@ -156,6 +156,9 @@ from trixie-backports, in a layer of its own on top of the unchanged 3.15 layer.
   `xfreerdp3`, so the process's comm stays `xfreerdp3`.
 - **Rollback image:** `poring-lab/desktop:freerdp-3.15` (227cd4aac623): re-tag it as `:local`, then
   a guarded `recreate:desktop@90`. The new `:local` is f49703cfee4d (864 MB, +9 MB).
+  ➡️ The rollback image was removed 2026-10-23 ~03:15 ICT in the host's approved image cleanup (home-assistant-ops OS-039 phase 3 A); checked 2026-10-23 ~04:0x
+  (`docker image inspect`: no such image; `:local` f49703cfee4d intact). A rollback now means
+  rebuilding FreeRDP 3.15 from git history (not byte-identical).
 - **Build path and the IO guard** (quant-postgres ±5 min in the 2026-10-01 report):
   1. Try 1 put the upgrade in the big RUN layer. Re-unpacking 135 packages tripped `--spike 25`
      (27.8 %).

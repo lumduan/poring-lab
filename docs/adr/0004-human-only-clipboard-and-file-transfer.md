@@ -338,7 +338,8 @@ Until both are resolved, reverse text goes through a file in `\\tsclient\transfe
 3. **T1 paste interplay on 3.32 is unverified.** After the backend's paste, Windows may announce
    its new clipboard, so xfreerdp claims, and the watchdog clears. The live check is Batt's (see
    next_action).
-4. **Rolling back to 3.15** (`poring-lab/desktop:freerdp-3.15`) restores the old behaviour, at the
+4. **Rolling back to 3.15** (`poring-lab/desktop:freerdp-3.15`; ➡️ removed 2026-10-23 ~03:15 ICT in the host's approved image cleanup (home-assistant-ops OS-039 phase 3 A) -- a rollback is
+   now a rebuild from git history) restores the old behaviour, at the
    cost of Arm C's delivery gain (30 → 9 fps outdoor).
 
 ## Amendment 2026-10-02 (c): human secret typing, and the purge of older human typing
