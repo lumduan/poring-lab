@@ -910,8 +910,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ev({"kind": "unlock", "why": "no hits" if since <= LOCK_MAX_S
                                 else "max", "s": round(since, 1)})  # fmt: skip
                             lock = None
+                    quiet = tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick)
+                    if lock is None and quiet and kills_seen and kills_seen[-1] > tick - 3.0:
+                        # pilot 4: after a kill with no hit for 2.5 s, rings 1 + 2 took 8.6 s to
+                        # find nobody -- end the fight; the loot step's hovers still see a SWORD
+                        mode = "after"
+                        ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
+                        continue
                     if lock is None:
-                        found = scan("defend", ring(1), "sword") or scan("defend", ring(2), "sword")
+                        found = scan("defend", ring(1), "sword")
+                        if found is None and not quiet:  # ring 2 only while hits still come
+                            found = scan("defend", ring(2), "sword")
                         if found is not None:
                             c, (u, v), _res = found
                             strike(u, v, c, "scan")

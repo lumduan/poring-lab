@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A dedicated Crusader (Base 60 / Job 50, AGI-first, one-handed sword + shield, unmounted) hunting orcsdun01 with immunity OFF survives on pixel-read HP, potions, Fly Wing escapes and Auto Guard, using the hunt flow's striking, EXP-line dead, stand + one-pass HAND loot and heading search."
-status: "ACCEPTED by Batt 2026-10-21 ~16:4x (character A + jobchange + questskill, all logged; LIVE since the guarded restart:rathena 16:45:35-16:47:46). The build and the survival skills on prt_fild08 proceed. The dungeon run waits for the orcsdun01 detector to pass its pre-registered evaluation (../benchmarks/v2orc-vs-v1.md)."
+status: "ACCEPTED by Batt 2026-10-21 ~16:4x (character A + jobchange + questskill, all logged; LIVE since the guarded restart:rathena 16:45:35-16:47:46). The build and the survival skills on prt_fild08 proceed. The dungeon run waits for the orcsdun01 detector to pass its pre-registered evaluation (../benchmarks/v2orc-vs-v1.md). ➡️ SUPERSEDED 2026-10-22 (Batt's day-run brief): the Crusader hunts orcsdun01 WITHOUT a trained detector, by DEFEND-SCAN (the Battle Log / HP / a v1 box trigger a SWORD scan around the character); three sustain strategies A / B / C compared in demonstrations 3.98."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "Build DONE (2b). Survival 3.96-3.96g (demonstrations): S2 PASS, S3 PASS (the 200 HP/s rate trigger escapes at 72-91 % HP: a finding for Batt), S4b2 PASS, S6b PASS; S1b FAILED on the absolute truth (91 %) -> S1c (the decoded regen ticks, 3.96g) trials tonight; regen measured (3.96f: standing 1,232 HP/min; IRP off while walking). The orcsdun01 human demo is READY to arm (section 9): Batt says go. The dungeon run waits for the v2orc detector (its labels FAILED C1: orcsdun01-detector.md 3c/3d)."
+next_action: "2026-10-22: demonstrations 3.98 (dungeon@2, scripts/dungeon_hunt.py) -- the Crusader on orcsdun01 with DEFEND-SCAN; A POTIONS / B REST / C HEAL (Batt's Heal tree, now the Crusader's tree for all three; section 2c) in rotated 45-min runs; judged by scripts/dungeon_judge.py. Earlier: build DONE (2b); survival 3.96-3.96g (S1c, S2, S3, S4b2, S6b PASS); the orcsdun01 human demo READY (section 9); the v2orc detector still untrained (its labels FAILED C1)."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
@@ -202,6 +202,21 @@ command: `LogCommands: true`).
   - Two-hand / Spear skills were never touched; 1 skill point and 15 status points are left
     (Batt's plan; the 15 are the DEX reserve for the re-spec loop).
 
+### 2c. Batt's HEAL tree (2026-10-22 11:21-11:31; the Crusader's tree for 3.98's A, B and C)
+
+- `@resetskill` (keeps Basic Skill 9 and the quest skills), then by learn_skill@1's rule:
+  - first-job tab: Sword Mastery 10, Increase HP Recovery 10, Bash 10, Provoke 5, **Magnum Break
+    4**, Endure 10 (49);
+  - Crusader tab: Faith 10, Cure 1, Divine Protection 10, Demon Bane 10, **Heal 8**, Auto Guard 10
+    (49). 0 points left. No Riding / Cavalier Mastery.
+- **Magnum Break 4, not Batt's 3:** his Swordman list is 48 points and the pinned server
+  (`player_skillup_limit: yes`) refuses every Crusader skill until 9 + 49 are spent. The spare
+  point went to a skill the bot never casts.
+- Heal 8 = 544 HP for 34 SP (pinned `skill_calc_heal`, INT 7; proven live 11:32: sp -34, hp +544
+  in one tick). On F5 at cast level 8; cast on self by F5 + a click on the drawn character.
+- The 2b tree (Riding 1, Cavalier Mastery 5, Magnum Break 5, no Heal) is restored only on Batt's
+  word: the difference does nothing unmounted except Heal.
+
 ## 3. The survival skills (build and test on prt_fild08, immunity OFF; each pre-registered)
 
 The test bed: the Crusader at its full build on prt_fild08 with immunity OFF. prt_fild08's own
@@ -313,7 +328,7 @@ the server's status updates, item use, damage, deaths).
 2. NOW: the character, the build (section 2), each scripted step judged on screenshots.
 3. The survival skills S1-S6 on prt_fild08, immunity OFF, each pre-registered, with its
    positive case.
-4. The dungeon run: only when the orcsdun01 detector PASSES its pre-registered evaluation
+4. ~~The dungeon run: only when the orcsdun01 detector PASSES its pre-registered evaluation~~ ➡️ SUPERSEDED 2026-10-22 by Batt's day-run brief: DEFEND-SCAN without a trained detector (demonstrations 3.98). Originally: the dungeon run only when the orcsdun01 detector PASSES its pre-registered evaluation
    (../benchmarks/v2orc-vs-v1.md). As of 2026-10-21 16:00 that detector is not trained: its
    label gates failed (orcsdun01-detector.md 3a, 3b).
 - The client keeps alternating with the hunting work, as ordered. The GM's Novice baseline is
