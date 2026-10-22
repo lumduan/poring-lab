@@ -1,0 +1,6 @@
+{
+  "map": "orcsdun01",
+  "source": "docs/planning/orcsdun01-dungeon-prep.md section 2 (orc_dungeon_prep.py rest-spots over col1-col3 packets, 2026-10-22): the ranked quiet cells, each passing check_warps' three stand-cell checks, in the main component, outside config/map_zones/orcsdun01.yaml",
+  "rest_spots": [[58, 101], [28, 69], [187, 28], [87, 172], [28, 165]],
+  "note": "static map knowledge read at plan time (ADR-0015): the runner picks the nearest by Chebyshev distance and walks the zone-free route grid there"
+}

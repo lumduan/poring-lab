@@ -172,6 +172,17 @@ def test_a_language_is_data_its_lines_parse_by_the_format() -> None:
     assert c("Yonder snagglepuss is here.")["type"] == "other"
 
 
+def test_species_names_tolerate_the_missing_glyphs() -> None:
+    """2026-10-22: no 'l' / 'y' glyph yet -- the reader takes an 'l' for 'i' and a 'y' for 'v';
+    each may stand for either, '?' for 1-2 letters, and the fit must stay unique."""
+    vocab = ("Zolly Bim", "Zoiiy Bim", "Grelt", "Gax")
+    assert bl.species_of("Greit", vocab) == "Grelt"
+    assert bl.species_of("?reit", vocab) == "Grelt"
+    assert bl.species_of("Zoiiv Bim", vocab) is None  # fits two names: never a guess
+    assert bl.species_of("Gax", vocab) == "Gax"
+    assert bl.species_of("Gix", vocab) is None
+
+
 def test_a_language_with_trailing_anchors_and_a_unit_word() -> None:
     alt = bl.lang_from_formats(ALT_FORMATS)
     assert alt.render.band_above == 3 and alt.render.band_h == bl.LINE_PITCH + 5
@@ -210,10 +221,20 @@ def test_the_english_file_is_generated_and_parses(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(bl, "ANCHORS", tmp_path)
     bl.formats_init("en")
     fm = json.loads((tmp_path / "en" / "formats.json").read_text())
-    assert set(fm["events"]) == {"damage", "base_exp", "job_exp", "item"}
+    assert set(fm["events"]) == {"damage", "taken", "base_exp", "job_exp", "item"}
     lang = bl.lang_from_formats(fm)
     words = [e["lit"] for e in fm["events"]["base_exp"]["pattern"] if "lit" in e]
     assert bl.classify("'7' " + " ".join(words) + ".", "", lang) == {"type": "base_exp", "n": 7}
+    # 2026-10-22: a hit ON US vs our hit, each spelled from its own generated words; the taken
+    # line's f / l / y have no glyph (read '?', 'i', 'v'), and it still types as taken
+    tk = [e["lit"] for e in fm["events"]["taken"]["pattern"] if "lit" in e]
+    dm = [e["lit"] for e in fm["events"]["damage"]["pattern"] if "lit" in e]
+    spoiled = [tk[0].replace("f", "?").replace("l", "i"), *tk[1:-1], tk[-1].replace("y", "v")]
+    line = f"[{bl.SPECIES[0]}] {spoiled[0]} '49' {' '.join(spoiled[1:])}."
+    assert bl.classify(line, "yellow", lang) == {
+        "type": "taken", "name_read": bl.SPECIES[0], "name": bl.SPECIES[0], "n": 49}  # fmt: skip
+    ours = f"[{bl.SPECIES[0]}] {dm[0]} '200' {' '.join(dm[1:])}."
+    assert bl.classify(ours, "yellow", lang)["type"] == "damage"
     with pytest.raises(SystemExit):
         bl.formats_init("en")  # never overwrites without --force
     with pytest.raises(SystemExit):

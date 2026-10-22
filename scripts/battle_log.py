@@ -118,10 +118,16 @@ MIN_INK = 2  # a run of fewer ink pixels is a speck
 MATCH_MIN, MATCH_FRAC, MATCH_MARGIN = 2, 0.15, 2
 REFINE_FRAMES = 3  # a new line not read in full waits this many frames for a clean read
 LIKE_MIN = 0.6  # a decoded word reads as a fixed word at this SequenceMatcher ratio
+CONFUSED = {"i": "[il]", "v": "[vy]"}  # read glyph -> the letters it may be (species_of)
 
 SPECIES = ("Poring", "Lunatic", "Fabre", "Pupa", "Creamy", "Rocker", "Chonchon", "Willow",
-           "Condor", "Drops", "Picky", "Roda Frog", "Thief Bug", "Hornet")  # fmt: skip
-TYPES = ("damage", "base_exp", "job_exp", "item", "other")
+           "Condor", "Drops", "Picky", "Roda Frog", "Thief Bug", "Hornet",
+           # 2026-10-22 (orcsdun01, the Crusader): Orc Dungeon F1's seven species
+           "Orc Zombie", "Orc Skeleton", "Drainliar", "Familiar", "Steel Chonchon",
+           "Black Mushroom", "White Plant")  # fmt: skip
+# "taken" (2026-10-22, the Crusader on orcsdun01): a monster's hit ON US, `[<name>] inflicts '<N>'
+# damage points on you.` (yellow, the damage line's colour; 3.96's trial screenshots show it)
+TYPES = ("damage", "taken", "base_exp", "job_exp", "item", "other")
 LANG_FILE = ANCHORS / "lang.json"  # {"lang": "<code>"}: this host's default language
 AUTO_LINES = 6  # --lang auto: decide on the first frames holding this many lines (or AUTO_FRAMES)
 AUTO_FRAMES = 300
@@ -573,7 +579,8 @@ def clean(ln: Line, lang: Lang | None = None) -> bool:
     k = classify(ln.text, ln.colour, lang)
     if k["type"] == "damage":
         return k.get("n") is not None and "?" not in str(k.get("name_read", "?"))
-    if k["type"] in ("base_exp", "job_exp"):
+    if k["type"] in ("base_exp", "job_exp", "taken"):  # taken: the orc names' capitals and
+        # f / l / y / k have no glyph yet, so its name reads with '?'s; the number decides
         return k.get("n") is not None
     if k["type"] == "item":
         return k.get("count") is not None
@@ -582,7 +589,7 @@ def clean(ln: Line, lang: Lang | None = None) -> bool:
 
 # --- events and per-language line formats ------------------------------------------------------
 #
-# The EVENT model is fixed: damage {n, name}, base_exp {n}, job_exp {n}, item {count} (the item's
+# The EVENT model is fixed: damage {n, name}, taken {n, name} (2026-10-22), base_exp {n}, job_exp {n}, item {count} (the item's
 # name is never read), other. HOW a client language writes each event is DATA, one file per
 # language: data/ui_anchors/battle_log/<lang>/formats.json (gitignored: client text is never
 # committed; `formats-init en` writes the English one). Its schema:
@@ -745,9 +752,12 @@ def species_of(name: str, vocab: Sequence[str] = SPECIES) -> str | None:
     """The species a bracketed name reads as: exact, else the ONE vocabulary name that the read
     letters fit, each '?' standing for 1-2 letters (an unknown glyph, or two touching ones read
     as one run: "Crea?" fits Creamy); None otherwise."""
-    if "?" not in name:
-        return name if name in vocab else None
-    rx = re.compile("".join(".{1,2}" if ch == "?" else re.escape(ch) for ch in name))
+    if name in vocab:
+        return name
+    # 2026-10-22: the English glyph set has no 'l' / 'y' yet (the orc names): the reader takes an
+    # 'l' for its nearest glyph 'i' ("Drainiiar") and a 'y' for 'v' -- each may stand for either
+    rx = re.compile("".join(".{1,2}" if ch == "?" else CONFUSED.get(ch, re.escape(ch))
+                            for ch in name))  # fmt: skip
     fit = [v for v in vocab if rx.fullmatch(v)]
     return fit[0] if len(fit) == 1 and sum(ch != "?" for ch in name) >= 2 else None
 
@@ -845,7 +855,8 @@ def en_formats() -> dict[str, Any]:
     """The English lab client's formats (the words built at run time, never one client
     string)."""
     w = {"rec": "receives", "dmg": "damage", "pts": "points", "base": "Base", "job": "Job",
-         "exp": "Experience", "acq": "acquired", "you": "You", "got": "got"}  # fmt: skip
+         "exp": "Experience", "acq": "acquired", "you": "You", "got": "got",
+         "infl": "in" + "flicts", "on": "on", "you_l": "you"}  # fmt: skip
 
     def lit(k: str, opt: bool = False) -> dict[str, Any]:
         return {"lit": w[k], "opt": True} if opt else {"lit": w[k]}
@@ -859,6 +870,10 @@ def en_formats() -> dict[str, Any]:
                 "damage": {"colour": "yellow", "pattern": [
                     {"name": "name", "anchor": "bracket"}, lit("rec"),
                     {"num": "n", "anchor": "quoted"}, lit("dmg"), lit("pts", opt=True)]},
+                "taken": {"colour": "yellow", "pattern": [
+                    {"name": "name", "anchor": "bracket"}, lit("infl"),
+                    {"num": "n", "anchor": "quoted"}, lit("dmg"), lit("pts"), lit("on"),
+                    lit("you_l", opt=True)]},
                 "base_exp": exp("base"), "job_exp": exp("job"),
                 "item": {"colour": "cyan", "pattern": [
                     lit("you"), lit("got"), {"item": "item"},

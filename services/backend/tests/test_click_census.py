@@ -102,6 +102,15 @@ ALLOWED = {
                                "'+' in the status window (rebuild_hunting, Batt 2026-10-18), after "
                                "two fresh frames show that window ALONE at its home; the '+' lies "
                                "inside it"),
+    "scripts/dungeon_hunt.py": (2, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
+                                   "Crusader on orcsdun01): ONE world-click path (click_at) "
+                                   "through FrameGuard (off-frame refused) -- the DEFEND-SCAN "
+                                   "strike and its burst only where cursor_sword read SWORD at "
+                                   "the hovered point; the loot click only where it read the "
+                                   "PICKUP hand; the walk click only where it read clear (WALK / "
+                                   "PICKUP) on a zone-free route cell; Heal's target click on our "
+                                   "own drawn body after F5. And the death dialog's known step "
+                                   "(its second button), as survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
                                     "Basic Info's arrow and a chat TAB, two motions, each step "
                                     "verified on pixels (the chat's message area is "

@@ -48,9 +48,12 @@ AID = 2000002
 Bin = npt.NDArray[np.bool_]
 
 
-def ink(client_bgr: Any) -> Bin:
-    """PURE: the text band as ink (True) / paper."""
-    g = np.asarray(client_bgr)[Y0:Y1, :, :3].astype(np.float32).mean(axis=2)
+SP_DY = 14  # 2026-10-22: the SP percent prints one Basic Info line (14 px) below the HP's
+
+
+def ink(client_bgr: Any, dy: int = 0) -> Bin:
+    """PURE: the text band (``dy`` rows below the HP's: SP_DY = the SP line) as ink / paper."""
+    g = np.asarray(client_bgr)[Y0 + dy : Y1 + dy, :, :3].astype(np.float32).mean(axis=2)
     return g < INK
 
 
@@ -65,10 +68,10 @@ def dist(a: Bin, b: Bin) -> float:
     return 1.0 if a.shape != b.shape else float((a != b).mean())
 
 
-def read(client_bgr: Any, glyphs: Mapping[str, Bin]) -> int | None:
+def read(client_bgr: Any, glyphs: Mapping[str, Bin], dy: int = 0) -> int | None:
     """PURE: the percent as an int, or None (no layout of 1-3 digits + '%' matches; a value > 100;
-    a leading zero)."""
-    band = ink(client_bgr)
+    a leading zero). ``dy`` = SP_DY reads the SP line with the same glyphs (2026-10-22)."""
+    band = ink(client_bgr, dy)
     best: tuple[float, int] | None = None
     for k in (1, 2, 3):
         ds, pc = cells(band, k)
