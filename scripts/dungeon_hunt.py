@@ -56,7 +56,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
-VERSION = "dungeon@1"
+VERSION = "dungeon@2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -82,7 +82,10 @@ LOCK_NO_HIT_S = 3.5  # locked, but none of OUR hits in the log for this long -> 
 LOCK_MAX_S = 25.0
 BURST_GAP_S, BURST_MAX, BURST_MAX_S = 0.6, 4, 3.0  # arm C: re-click until the lock arrow
 CURSOR_WAIT_S = 0.35
-LOOT_MAX_HOVERS, LOOT_MAX_PICKS = 9, 5
+LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
+SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
+SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
+SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
 PICKUP_MIN = 0.90  # cursor_sword: a drawn PICKUP hand
 WALK_AHEAD = 7  # the walk click's target: this many path cells ahead (in view)
 WALK_EVERY_S = 1.2
@@ -91,7 +94,12 @@ REST_MAX_S = 300.0
 UI_EVERY_S = 10.0
 JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
-POTIONS_TO, WINGS_TO = 50, 15  # the setup's top-up (by @item, against the DB's last save)
+POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
+CLEAR_AT = 0.40  # the setup drops the Etc tab (loot only) at or over this weight share ...
+CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand (no monster)
+ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike point
+QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
+MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 
@@ -188,6 +196,10 @@ def pickup_seen(rec: Mapping[str, float]) -> bool:
     return rec.get("pickup", 0.0) >= PICKUP_MIN and rec.get("sword", 0.0) < csw.SWORD_MIN
 
 
+def cheb2(a: Sequence[int], b: Sequence[int] | None) -> int:
+    return 0 if b is None else max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
 def nearest_spot(spots: Sequence[Cell], here: Cell) -> Cell | None:
     return min(spots, key=lambda s: max(abs(s[0] - here[0]), abs(s[1] - here[1])), default=None)
 
@@ -252,6 +264,77 @@ class BoxWatch:
     def stop(self) -> None:
         self.halt.set()
         self.th.join(timeout=3)
+
+
+def first_item(kinds: Sequence[str]) -> int | None:
+    """PURE: the first slot of the ETC tab that is not empty -- every Etc item is loot for the
+    Crusader (potions and Fly Wings live in Use, the gear in Eqp)."""
+    return next((i for i, k in enumerate(kinds) if k != "empty"), None)
+
+
+def clear_etc(agent: Any, screen: Any, *, why: str, max_drops: int = 40) -> dict[str, Any]:
+    """Drop every stack of the inventory's ETC tab by gm_state.clear_loot's own known path (the
+    tab label, two motions; a drag onto open ground; Enter on the quantity prompt matched to its
+    OK button first; the tab must change after each drop), r.Stop on anything unexpected."""
+    import gm_state as gs
+    import ro_agent as r
+    import ui_gate
+
+    refs = gs.load_loot_refs()
+    ok_ref = np.load(gs.LOOT_DIR / "prompt_ok.npy")
+    region = r.game_region()
+    out: dict[str, Any] = {"dropped": 0}
+
+    def frame() -> Any:
+        return np.ascontiguousarray(r.grab_after(screen, region, r.ns())[..., :3])
+
+    def prompt_shown(f: Any) -> bool:
+        x, y, w, h = gs.PROMPT_OK_BOX
+        return float(np.abs(gs.to_gray(f)[y : y + h, x : x + w] - ok_ref).mean()) <= gs.PROMPT_MATCH
+
+    r.activate_client(agent, screen)
+    agent.chord(*ui_gate.window_keys("inventory"))
+    time.sleep(1.0)
+    try:
+        gs._tab(agent, screen, "etc")
+        fails = 0
+        n = gs.INV_COLS * gs.INV_ROWS
+        while out["dropped"] < max_drops:
+            f = frame()
+            crops = [gs.icon_crop(f, c % gs.INV_COLS, c // gs.INV_COLS) for c in range(n)]
+            i = first_item([gs.classify_icon(c, refs)[0] for c in crops])
+            if i is None:
+                break
+            cx, cy = gs.slot_centre(i % gs.INV_COLS, i // gs.INV_COLS)
+            x1, y1 = r.at(cx, cy)
+            x2, y2 = r.at(*gs.DROP_AT)
+            agent.move(x1 + 3, y1 + 3)
+            time.sleep(0.15)
+            agent.move(x1, y1)
+            time.sleep(0.6)
+            agent.drag(x1, y1, x2, y2, steps=12)
+            time.sleep(1.0)
+            f2 = frame()
+            if prompt_shown(f2):
+                r.activate_client(agent, screen)
+                agent.chord("Enter")
+                time.sleep(1.0)
+                f2 = frame()
+                if prompt_shown(f2):
+                    raise r.Stop(f"clear_etc ({why}): the quantity prompt stayed open")
+            after = [gs.icon_crop(f2, c % gs.INV_COLS, c // gs.INV_COLS) for c in range(n)]
+            if not gs.tab_changed(crops, after, i):
+                fails += 1
+                if fails >= 2:
+                    raise r.Stop(f"clear_etc ({why}): slot {i} did not drop twice")
+                continue
+            out["dropped"] += 1
+    finally:
+        r.activate_client(agent, screen)
+        agent.chord(*ui_gate.window_keys("inventory"))
+        time.sleep(1.0)
+        ui_gate.ensure_clear(agent, screen, why=f"{why}:etc")
+    return out
 
 
 def load_rest_spots(path: Path = REST_FILE) -> list[Cell]:
@@ -355,6 +438,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             setup.append(f"@item 504 {POTIONS_TO - inv.get(504, 0)}")
         if inv.get(601, 0) < WINGS_TO:
             setup.append(f"@item 601 {WINGS_TO - inv.get(601, 0)}")
+        import gm_state
+
+        w0 = gm_state._weight(gm_state._frames(screen))
+        cleared: dict[str, Any] | None = None
+        if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT:
+            cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
+                       f"{CLEAR_STAND[2]}", "crusader")  # fmt: skip
+            time.sleep(3.0)
+            bench.close_chat(agent_raw, screen)
+            cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
         setup.append(f"@warp {MAP} {start[0]} {start[1]}")
         for cmd in setup:
             cr.gm_line(agent_raw, screen, cmd, "crusader")
@@ -366,13 +459,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def frame() -> Any:
             return np.ascontiguousarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())[..., :3])
 
-        import gm_state
-
         w_ = gm_state._weight(gm_state._frames(screen))
         share = gm_state.weight_share(w_)
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "version": VERSION,
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
-            "setup": setup, "weight": w_, "params": strat, "rest_spots": spots})  # fmt: skip
+            "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
+            "params": strat, "rest_spots": spots})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
@@ -396,7 +488,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         goal_path: list[Cell] | None = None
         fly_at = -1e9
         n_reads = 0
-        pending_loot: Cell | None = None
+        loot_list: list[tuple[Cell, float]] = []  # Batt 11:5x: the GM's cell at EVERY kill
+        fight_ref: dict[str, Any] | None = None  # the frame + our cell when the fight began
         t_end = time.monotonic() + a.minutes * 60.0
 
         def press(what: str, why: str) -> None:
@@ -423,27 +516,75 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return csw.check(agent, screen, sword_refs, gx0, gy0, u, v, wait_s=CURSOR_WAIT_S)
 
         def above(img: Any, u: float, v: float) -> Any:
+            """Where the client draws its lock arrow over the target: an orc's head is higher than
+            a Poring's (the pilot's 11:41 strikes never saw it in hunt_flow's 80..15 px band)."""
             a_ = np.asarray(img)
-            return a_[max(0, int(v) - 80): max(0, int(v) - 15),
-                      max(0, int(u) - 45): max(0, int(u) + 45), :3]  # fmt: skip
+            return a_[max(0, int(v) - ARROW_UP): max(0, int(v) - 10),
+                      max(0, int(u) - 50): max(0, int(u) + 50), :3]  # fmt: skip
+
+        escaped = [False]
+        last_quick = [0.0]
+
+        def guard_tick() -> bool:
+            """Sustain INSIDE a long action (a scan's hovers, a strike's burst): a fresh HP / SP
+            read and the strategy's keys at most every QUICK_S; True once we flew away (the caller
+            stops). The same Sustain state as the main loop's reads."""
+            now_ = time.monotonic()
+            if now_ - last_quick[0] < QUICK_S:
+                return escaped[0]
+            last_quick[0] = now_
+            img_ = frame()
+            p_, s_ = hpp.read(img_, glyphs), hpp.read(img_, glyphs, hpp.SP_DY)
+            ev({"kind": "hp_read", "pct": p_, "sp_pct": s_, "quick": True})
+            if p_ is None:
+                return escaped[0]
+            for what_, why_ in sustain(st, now_, p_ / 100.0, None if s_ is None else s_ / 100.0,
+                                       strat):  # fmt: skip
+                if what_ == "fly":
+                    press("fly", why_)
+                    ev({"kind": "escape", "how": "fly", "why": why_, "inside": True})
+                    escaped[0] = True
+                elif what_ == "heal":
+                    heal_self(why_)
+                else:
+                    press(what_, why_)
+            return escaped[0]
+
+        n_shots = [0]
 
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
-            """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow."""
+            """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow;
+            the HP is read between the clicks (guard_tick)."""
             ref = frame()
+            t_click = r.ns()
             click_at(u, v, "strike")
             t_c = time.monotonic()
             n, arrow = 1, None
+            cur = ref
             while time.monotonic() - t_c < BURST_MAX_S:
-                time.sleep(0.08)
-                if hf.arrow_new(above(ref, u, v), above(frame(), u, v)):
+                time.sleep(0.06)
+                cur = frame()
+                if hf.arrow_new(above(ref, u, v), above(cur, u, v)):
                     arrow = round(time.monotonic() - t_c, 2)
+                    break
+                if guard_tick():
                     break
                 if n < BURST_MAX and time.monotonic() - t_c >= n * BURST_GAP_S:
                     click_at(u, v, "strike_burst")
                     n += 1
-            ev({"kind": "strike", "u": round(u, 1), "v": round(v, 1), "rel": list(rel),
-                "clicks": n, "arrow_s": arrow, "end": "arrow" if arrow is not None else "bound",
-                "by": by})  # fmt: skip
+            if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
+                n_shots[0] += 1
+                from PIL import Image
+
+                Image.fromarray(np.asarray(cur)[..., ::-1]).save(
+                    out / f"strike-{n_shots[0]:03d}.jpg", quality=80)  # fmt: skip
+            # stamped at the FIRST click (the judge's landing window starts there), the end
+            # time beside it (pilot 11:42: the end stamp put the attack before the window)
+            ev({"t_ns": t_click, "t_end_ns": r.ns(), "kind": "strike", "u": round(u, 1),
+                "v": round(v, 1), "rel": list(rel),
+                "clicks": n, "arrow_s": arrow, "end": "arrow" if arrow is not None else
+                ("escape" if escaped[0] else "bound"), "by": by,
+                "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
             return True
 
         def scan(purpose: str, cells: Sequence[Cell], stop_on: str
@@ -460,6 +601,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     verdicts["off"] += 1
                     continue
                 res = hover(u, v_)
+                if guard_tick():
+                    break
                 vd = "pickup" if pickup_seen(res["rec"]) else res["verdict"]
                 verdicts[vd] += 1
                 if vd == stop_on or (stop_on == "pickup" and vd == "sword"):
@@ -474,9 +617,128 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
             return found
 
+        def read_here() -> Cell | None:
+            xy = selfpos.read_minimap_xy(frame(), digits)
+            return None if xy is None else (int(xy[0]), int(xy[1]))
+
+        def patch(img_: Any, u: float, v: float) -> Any:
+            a_ = np.asarray(img_)[..., :3].astype(np.float32).mean(axis=2)
+            y0_, x0_ = int(v) - 14, int(u) - 12
+            if y0_ < 0 or x0_ < 0 or y0_ + 20 > a_.shape[0] or x0_ + 24 > a_.shape[1]:
+                return None
+            return a_[y0_ : y0_ + 20, x0_ : x0_ + 24]
+
+        def loot_step(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
+            """Batt 2026-10-22 11:5x (his 11:44 clip: an item left in a mob fight). After the
+            fight: (1) the LOOT LIST -- the union of the 5 x 5 around our cell at EVERY kill of
+            the fight (items do not move; <= 55 s old), walkable and outside the zones, nearest
+            first; (2) the SWEEP -- every cell in view whose image changed since the fight began
+            (the fight's first frame, re-projected from our cell then). Each cell is hovered at
+            its ground point; a PICKUP hand is clicked, a SWORD engaged ("fight"), anything else
+            passed. Bounded by LOOT_MAX_HOVERS / LOOT_MAX_PICKS / LOOT_MAX_S."""
+            nonlocal here, lock, mode
+            t_s = time.monotonic()
+            hovered: set[Cell] = set()
+            picks = 0
+            out_: dict[str, Any] = {"kind": "loot_step", "list_kills": len(lst)}
+            if here is None:
+                ev({**out_, "end": "no_position"})
+                return "none"
+            plan = {(g[0] + dx, g[1] + dy) for g, t_ in lst if t_s - t_ <= 55.0
+                    for dx in range(-2, 3) for dy in range(-2, 3)}  # fmt: skip
+            plan = {c for c in plan if 0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                    and ok[c[1], c[0]] and not mz.in_no_enter(zones, c)}  # fmt: skip
+            out_["planned"] = len(plan)
+
+            def visit(c: Cell, why: str) -> str:
+                nonlocal here, lock, mode, picks
+                assert here is not None
+                rel = (c[0] - here[0], c[1] - here[1])
+                u, v = project(here, [rel])[0]
+                hovered.add(c)
+                if not in_view(u, v):
+                    return "off"
+                res = hover(u, v)
+                if guard_tick():
+                    return "escape"
+                if res["verdict"] == "sword":
+                    ev({"kind": "engage", "by": "loot_sword", "name": None})
+                    strike(u, v - BODY_UP, rel, "loot_sword")
+                    lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
+                    mode = "fight"
+                    return "fight"
+                if pickup_seen(res["rec"]):
+                    d_ = max(abs(rel[0]), abs(rel[1]))
+                    click_at(u, v, "loot")
+                    ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
+                        "rel": list(rel), "cell": list(c), "why": why})  # fmt: skip
+                    picks += 1
+                    time.sleep(0.45 + 0.2 * d_)  # the walk there and the pickup
+                    here = read_here() or c
+                return "ok"
+
+            end = "done"
+            while picks < LOOT_MAX_PICKS and len(hovered) < LOOT_MAX_HOVERS:
+                todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))
+                if not todo or time.monotonic() - t_s > LOOT_MAX_S:
+                    break
+                if time.monotonic() - last_taken < 1.0:
+                    end = "hit"
+                    break
+                got = visit(todo[0], "list")
+                if got in ("fight", "escape"):
+                    end = got
+                    break
+            out_["list_hovered"] = len(hovered)
+            sweep_n, changed = 0, []
+            if end == "done" and ref is not None and here is not None:
+                img_now = frame()
+                for dx in range(-SWEEP_X, SWEEP_X + 1):
+                    for dy in range(-SWEEP_Y, SWEEP_Y + 1):
+                        c = (here[0] + dx, here[1] + dy)
+                        if c in hovered or not (
+                            0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                        ):
+                            continue
+                        if not ok[c[1], c[0]] or mz.in_no_enter(zones, c) or (dx, dy) == (0, 0):
+                            continue
+                        u, v = project(here, [(dx, dy)])[0]
+                        h0 = ref["here"]
+                        u0, v0 = project(h0, [(c[0] - h0[0], c[1] - h0[1])])[0]
+                        if not in_view(u, v):
+                            continue
+                        pa, pb = patch(ref["img"], u0, v0), patch(img_now, u, v)
+                        if pa is None or pb is None:
+                            continue
+                        diff = float(np.abs(pa - pb).mean())
+                        if diff >= SWEEP_DIFF:
+                            changed.append((diff, c))
+                changed.sort(key=lambda dc: (cheb2(dc[1], here), -dc[0]))
+                for _diff, c in changed[:SWEEP_MAX]:
+                    if picks >= LOOT_MAX_PICKS or time.monotonic() - t_s > LOOT_MAX_S:
+                        break
+                    if time.monotonic() - last_taken < 1.0:
+                        end = "hit"
+                        break
+                    got = visit(c, "sweep")
+                    sweep_n += 1
+                    if got in ("fight", "escape"):
+                        end = got
+                        break
+            ev({**out_, "hovered": len(hovered), "picks": picks, "sweep_changed": len(changed),
+                "sweep_hovered": sweep_n, "end": end,
+                "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+            return "fight" if end == "fight" else "done"
+
         try:
             while time.monotonic() < t_end:
                 tick = time.monotonic()
+                if escaped[0]:  # a Fly Wing inside a scan or a strike (guard_tick)
+                    escaped[0] = False
+                    fly_at = tick
+                    lock, goal_path = None, None
+                    loot_list, fight_ref = [], None
+                    mode = "search"
                 img = frame()
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
@@ -511,21 +773,20 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 with blt.lock:
                     new = blt.lines[seen_lines:]
                     seen_lines = len(blt.lines)
+                taken_new = None
                 for ln in new:
                     typ = ln.get("type")
                     if typ == "taken":
                         last_taken = tick
-                        if mode in ("search", "rest") or (mode == "fight" and lock is None):
-                            ev({"kind": "engage", "by": "battle_log", "name": ln.get("name"),
-                                "n": ln.get("n")})  # fmt: skip
+                        taken_new = taken_new or ln
                     elif typ == "damage":
                         last_ours = tick
                     elif typ == "base_exp":
                         kills_seen.append(tick)
-                        ev({"kind": "kill", "by": "exp_line",
-                            "name": None if lock is None else lock.get("name")})  # fmt: skip
-                        if lock is not None:
-                            pending_loot = lock["rel"]
+                        ev({"kind": "kill", "by": "exp_line", "gm": None if here is None
+                            else list(here)})  # fmt: skip
+                        if here is not None:  # the loot list: the 5 x 5 around us at this death
+                            loot_list.append((here, tick))
                         lock = None
                 if not blt.alive():
                     reason = "battle_log_reader_died"
@@ -542,7 +803,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             press("fly", why)
                             fly_at = time.monotonic()
                             ev({"kind": "escape", "how": "fly", "why": why})
-                            lock, goal_path, pending_loot = None, None, None
+                            lock, goal_path = None, None
+                            loot_list, fight_ref = [], None  # far away now
                             mode = "search"
                             time.sleep(1.0)
                         elif what == "heal":
@@ -567,23 +829,28 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # a fight?
                 hit_now = tick - last_taken < FIGHT_TAKEN_S
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
-                if dropped and not hit_now and mode in ("search", "rest"):
-                    ev({"kind": "engage", "by": "hp_drop", "name": None})
-                boxed = False
-                if boxes is not None and mode in ("search", "rest") and not hit_now \
-                        and not dropped:  # fmt: skip
-                    near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S)
-                    if near_ is not None:
-                        boxed = True
+                near_ = None
+                if boxes is not None and mode != "fight" and not sitting:  # a box never
+                    near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S)  # stands us up
+                if (hit_now or dropped or near_ is not None) and mode != "fight":
+                    # ONE engage event per fight, by what started it
+                    if taken_new is not None:
+                        ev({"kind": "engage", "by": "battle_log", "name": taken_new.get("name"),
+                            "n": taken_new.get("n")})  # fmt: skip
+                    elif hit_now:
+                        ev({"kind": "engage", "by": "battle_log", "name": None, "late": True})
+                    elif dropped:
+                        ev({"kind": "engage", "by": "hp_drop", "name": None})
+                    else:
                         ev({"kind": "engage", "by": "box", "name": None,
-                            "box": [round(x_, 1) for x_ in near_]})  # fmt: skip
-                if hit_now or dropped or boxed:
+                            "box": [round(x_, 1) for x_ in near_ or ()]})  # fmt: skip
                     if sitting:
                         press("stand", "hit while sitting")
                         sitting = False
                         ev({"kind": "rest_end", "why": "hit", "pct": pct, "sp_pct": spp})
-                    if mode != "fight":
-                        mode, goal_path = "fight", None
+                    mode, goal_path = "fight", None
+                    if fight_ref is None and here is not None:  # the sweep's "before"
+                        fight_ref = {"img": img, "here": here, "t": tick}
                 # UI watch (the hard bar: an unknown UI state)
                 if tick - last_ui >= UI_EVERY_S and mode != "fight":
                     last_ui = tick
@@ -619,36 +886,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if mode == "fight" or (lock is not None):
                     continue
                 # --- AFTER a fight: loot, then rest or search
-                if pending_loot is not None:
-                    pl, pending_loot = pending_loot, None
-                    cells = sorted(
-                        {(pl[0] + dx, pl[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)},
-                        key=lambda c: (abs(c[0] - pl[0]) + abs(c[1] - pl[1]), c),
-                    )
-                    picks, hovers = 0, 0
-                    while picks < LOOT_MAX_PICKS and hovers < LOOT_MAX_HOVERS and cells:
-                        if time.monotonic() - last_taken < 1.0:
-                            break
-                        found = scan("loot", cells, "pickup")
-                        hovers += 1
-                        if found is None:
-                            break
-                        c, (u, v), res = found
-                        if res["verdict"] == "sword":
-                            ev({"kind": "engage", "by": "loot_sword", "name": None})
-                            strike(u, v, c, "loot_sword")
-                            lock = {"t": time.monotonic(), "rel": c, "cell": None}
-                            mode = "fight"
-                            break
-                        click_at(u, v, "loot")
-                        ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
-                            "rel": list(c)})  # fmt: skip
-                        picks += 1
-                        time.sleep(0.9)  # the walk there and the pickup
-                        # we now stand on c: the remaining cells relative to it
-                        cells = [(x_ - c[0], y_ - c[1]) for x_, y_ in cells if (x_, y_) != c]
-                    if mode == "fight":
+                if mode == "after" and (loot_list or fight_ref is not None):
+                    got_ = loot_step(loot_list, fight_ref)
+                    if got_ == "fight":
                         continue
+                    loot_list, fight_ref = [], None
                 if mode in ("after", "search") and frac is not None and not sitting \
                         and rest_wanted(strat, frac, spf):  # fmt: skip
                     mode, goal_path = "rest", None

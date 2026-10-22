@@ -104,3 +104,26 @@ def test_the_runner_reads_no_packets_at_decision_time() -> None:
     assert not {n for n in names if "packets" in n or n.endswith("_judge")}, names
     assert "read_packets" not in src and "packets.jsonl" not in src
     assert src.count("write_packets(") == 1
+
+
+def test_the_etc_clear_drops_the_first_non_empty_slot() -> None:
+    assert dh.first_item(["empty", "unknown", "loot"]) == 1
+    assert dh.first_item(["empty", "empty"]) is None
+
+
+def test_the_loot_list_model_groups_chained_kills_and_needs_the_item_on_the_floor() -> None:
+    """dungeon_loot_list (Batt 11:5x, offline): a fight = kills <= 8 s apart; an item is reached
+    by the list when it lies within 2 cells of our cell at ANY kill of its fight and is still on
+    the floor when the loot step starts; by the sweep when it fell during the fight, in view."""
+    import dungeon_loot_list as dl
+
+    s = dl.NS
+    assert dl.fights([0, 5 * s, 20 * s, 21 * s]) == [[0, 5 * s], [20 * s, 21 * s]]
+    track = [(0, (100, 100)), (4 * s, (106, 100))]  # we moved 6 cells east between the kills
+    west = {"t_fall": 0, "cell": (99, 101), "t_end": None}  # fell at the FIRST kill, west
+    got = dl.reach(west, [0, 5 * s], track)
+    assert got["list"] and got["sweep"]  # the last kill's 3 x 3 would have missed it
+    gone = {"t_fall": 0, "cell": (99, 101), "t_end": 2 * s}  # a looter took it mid-fight
+    assert not dl.reach(gone, [0, 5 * s], track)["list"]
+    far = {"t_fall": 0, "cell": (90, 100), "t_end": None}
+    assert not dl.reach(far, [0, 5 * s], track)["list"]
