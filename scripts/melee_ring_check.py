@@ -87,6 +87,35 @@ def scan_verdict(t0: int, t1: int, acts: Sequence[tuple[int, int]], dead: Mappin
             "acts_on_x": sum(1 for t, g in acts[j:] if t <= t1 and g == x)}  # fmt: skip
 
 
+def chain_gaps(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
+               max_s: float = 15.0) -> dict[str, Any]:  # fmt: skip
+    """The hand-off for EVERY engagement style (MR vs defend-scan alike): per kill of ours in
+    [t0, t1] (arm_judge.kills_of: each death, gids are reused on respawn), the time from the
+    death to our next act on ANOTHER unit; "chained" when <= max_s."""
+    import statistics
+
+    import arm_judge as aj
+
+    acts = our_acts(packets)
+    ts = [a[0] for a in acts]
+    kills = [(t, g) for t, g in aj.kills_of(packets) if t0 <= t <= t1]
+    gaps = []
+    for td, g in kills:
+        k = bisect.bisect_left(ts, td)
+        nxt = next((a for a in acts[k:] if a[1] != g), None)
+        if nxt is not None and nxt[0] - td <= max_s * NS:
+            gaps.append((nxt[0] - td) / NS)
+    s = sorted(gaps)
+    mins = (t1 - t0) / NS / 60
+    return {"kills": len(kills), "minutes": round(mins, 1),
+            "s_per_kill": round(mins * 60 / len(kills), 1) if kills else None,
+            "chained": len(s), "chained_share": round(len(s) / len(kills), 3) if kills else None,
+            "gap_median_s": round(statistics.median(s), 2) if s else None,
+            "gap_p25_s": round(s[len(s) // 4], 2) if s else None,
+            "gap_p75_s": round(s[3 * len(s) // 4], 2) if s else None,
+            "gap_le_1s": sum(x <= 1.0 for x in s)}  # fmt: skip
+
+
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]]
           ) -> dict[str, Any]:  # fmt: skip
     acts = our_acts(packets)
@@ -101,26 +130,27 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         scans.append(scan_verdict(t0, t1, acts, dead, [t for t, _ in reqs],
                                   [g for _, g in reqs]))  # fmt: skip
     hand = []
+    ts = [a[0] for a in acts]
     for e in events:
         if e.get("kind") != "handoff":
             continue
         t = int(e["t_ns"])
-        ts = [a[0] for a in acts]
+        # the death just before the hand-off (<= 10 s): the last target we hit that died by then
         k = bisect.bisect_left(ts, t)
-        prev = acts[k - 1][1] if k > 0 else None
-        first_new = next((a for a in acts[k:] if a[1] != prev), None)
-        hand.append(
-            {
-                "runner_from_kill_ms": e.get("from_kill_ms"),
-                "packets_death_to_next_act_s": None
-                if prev is None or first_new is None or prev not in dead
-                else round((first_new[0] - dead[prev]) / NS, 2),
-            }
-        )
+        prev = next((g for _, g in reversed(acts[max(0, k - 20):k])
+                     if 0 <= t - dead.get(g, 1 << 62) <= 10 * NS), None)  # fmt: skip
+        nxt = next((a for a in acts[k:] if a[1] != prev and a[0] - t <= 10 * NS), None)
+        lat = None
+        if prev is not None and nxt is not None:
+            lat = round((nxt[0] - dead[prev]) / NS, 2)
+        hand.append({"runner_from_kill_ms": e.get("from_kill_ms"),
+                     "packets_death_to_next_act_s": lat})  # fmt: skip
     verdicts: dict[str, int] = {}
     for s in scans:
         verdicts[s["verdict"]] = verdicts.get(s["verdict"], 0) + 1
-    return {"queue_scans": len(scans), "verdicts": verdicts,
+    t0 = next((int(e["t_ns"]) for e in events if e.get("kind") == "run_start"), 0)
+    t1 = next((int(e["t_ns"]) for e in events if e.get("kind") == "run_end"), 1 << 62)
+    return {"chain": chain_gaps(packets, t0, t1), "queue_scans": len(scans), "verdicts": verdicts,
             "requests_during_scans": sum(s["requests"] for s in scans),
             "handoffs": len(hand), "handoff_rows": hand}  # fmt: skip
 
