@@ -59,6 +59,10 @@ SPAWNS = (
     "npc/pre-re/mobs/fields/payon.txt",
     "npc/pre-re/mobs/fields/lutie.txt",
     "npc/pre-re/mobs/dungeons/glastheim.txt",
+    # orcsdun01 (Batt 2026-10-21: the Crusader's dungeon). The local KB has carried its spawns and
+    # warps since 10-21 10:18, written outside this list; without these a rebuild DROPS them
+    # (dungeon_hunt.py's warp keep-away, the zones' notes and the plant spawn areas read them)
+    "npc/pre-re/mobs/dungeons/orcsdun.txt",
 )
 # Loaded by npc/pre-re/scripts_warps.conf (pre-renewal overrides) and npc/scripts_warps.conf
 WARPS = (
@@ -71,6 +75,7 @@ WARPS = (
     "npc/pre-re/warps/fields/payon_fild.txt",
     "npc/warps/cities/lutie.txt",
     "npc/warps/fields/glastheim.txt",
+    "npc/warps/dungeons/orcsdun.txt",  # orcsdun01 (see SPAWNS)
 )
 DEFAULT_MAPS = ("prt_fild08", "iz_dun00", "iz_dun01")
 # 2026-10-08 (loot@1 P4). db/item_db.yml imports db/pre-re/item_db.yml in a pre-renewal build,
