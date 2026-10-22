@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "3f (PRE-REGISTERED 2026-10-22): build fix 2 (i)-(iii) + 2b + 2c, run C1 / C2 on col1 (T1: C1 pooled <= 5 %), build the round-3 blind pack (seed 2) for two new blind labellers (T2: every species passes), label Batt's 2026-10-22 demo with the same rules. Train only if the training tier passes; else report why to Batt."
+next_action: "3g: T1 PASSES (C1 pooled 2.7 % on col1 with fix 2); T2 = blind round 3 (seed 2, pack built on the NAS) is the parent's next step. Batt's demo is NOT added (own C1 14.8 %). If every orcsdun01 species passes T2: the cache needs build_frame_cache --fix and per-session label modes (v1 rules + species for v1, v2 + fix 2 for orcsdun01), then training; else report to Batt."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -859,6 +859,128 @@ packets as truth, never col2").
 **Expected, from col3 (an estimate, not a bar):** C1 about 1.9-2.7 % with fix 2 + 2b + 2c (3e),
 under T1's 5 %. T2 is the open question: round 2's Orc Skeleton failed at 86.7 % for one labeller.
 
+### 3g. RESULT of fix 2 (3f) on col1 and on Batt's demo: T1 PASSES (C1 2.7 %); T2 waits for the blind round 3
+
+**The order of events** (times from `date` and the tools' own stamps, 2026-10-22 ICT):
+- 3f was pre-registered at **19:33:52** (8b7d629). Only col3's archived rows had been read before
+  it, for the 2b estimate.
+- Fix 2 was built at 19:41:51 (11434a8), and the check ran at 19:42-19:43 at that commit.
+- col2 was not read.
+
+**The tool first reproduced 3c (a positive control):** the same check with `--rule 1a` at 11434a8
+gives 3c's numbers exactly: 1,366 standing labels scored, 213 `bad_label`, 15.59 %.
+
+**THE CHECK on col1** (`orc_labels_fix.py check --rule fix2`, 3c's frozen parameters, params sha256
+`fe1fb9b3…f6d5af`; every 5th frame inside a dwell, outside the GM windows: 2,325 frames read).
+C1 / C2 judge the PREDICTION, after the 1c, 2b and 2c exclusions:
+
+| species | standing scored | 1c excluded | 2b `next_move` | 2c `ambiguous_view` | C1 `bad_label` (3c, 1a) | C2 median \|dx\| / \|dy\| px |
+|---|---|---|---|---|---|---|
+| Orc Zombie 1153 | 610 | 874 | 31 | 46 | 4.1 % (17.5) | 1 / 1 PASS |
+| Orc Skeleton 1152 | 113 | 91 | 6 | 12 | **0.0 %** (29.8) | 1 / 1 PASS |
+| White Plant 1082 | 125 | 107 | 0 | 0 | 0.0 % (0.0) | 1 / 1 PASS |
+| Black Mushroom 1084 | 0 | 132 (every one) | 0 | 0 | -- (none left after 1c) | -- |
+| Familiar 1005 | 169 | 256 | 7 | 15 | 1.2 % (12.0) | 1 / 1 PASS |
+| Steel Chonchon 1042 | 160 | 116 | 7 | 11 | 3.1 % (15.7) | 1 / 1 PASS |
+| Drainliar 1111 | 50 | 37 | 3 | 7 | 2.0 % (5.4) | 1 / 1 PASS |
+| **pooled** | **1,227** | 1,613 | 54 | 91 | **2.69 %** (33; 3c 15.6) | |
+
+- **T1 PASSES:** C1 pooled 0.0269 <= 0.050.
+  - The tool's own `verdict` field still says FAIL. It judges against section 3's < 2 %, which is no
+    longer the training gate (3f).
+  - The 3e estimate on col3 was 1.9-2.7 %.
+- **C2 passes for every species with >= 20 standing labels.** All are at 1 / 1 px.
+- **The other drops** are unchanged from 3c: not standing 6,297; crowded 5,463; under the UI or at
+  an edge 1,275.
+- **Reported, not deciding: the facing, by IMAGE** (3e's finding 0: the heading ties are counted
+  as the same view).
+  - fix 2's view equals the best of the 8 on 94.1 % of the labels; 1a's on 76.1 %.
+  - Per species, fix 2: Orc Zombie 94.1, Orc Skeleton 91.2, White Plant 100, Familiar 93.5, Steel
+    Chonchon 98.8, Drainliar 72.0 %.
+
+**THE LABELS on col1** (`orc_label_sheets.py --fix PARAMS --rule fix2`, every 3rd frame as rounds 1
+and 2: 5,010 frames; v2's own frame rules keep 4,343):
+
+| species | kept (fitted) | 1c | 2b | 2c | unfit | crowd | UI | (3c kept) |
+|---|---|---|---|---|---|---|---|---|
+| Orc Zombie 1153 | 7,305 | 8,866 | 172 | 376 | 175 | 95 | 44 | (6,942) |
+| Orc Skeleton 1152 | 753 | 893 | 24 | 58 | 20 | 3 | 5 | (710) |
+| White Plant 1082 | 722 | 623 | 0 | 0 | 0 | 9 | 0 | (722) |
+| Black Mushroom 1084 | 56 | 1,719 | 0 | 0 | 0 | 0 | 0 | (56) |
+| Familiar 1005 | 1,384 | 1,823 | 45 | 81 | 17 | 9 | 10 | (1,294) |
+| Steel Chonchon 1042 | 1,215 | 970 | 39 | 99 | 20 | 1 | 10 | (1,198) |
+| Drainliar 1111 | 381 | 318 | 11 | 13 | 8 | 1 | 0 | (390) |
+| all | 11,816 | 15,212 | 291 | 627 | 240 | 118 | 69 | (11,312) |
+
+- **The fit fails far less often:** unfit + crowd + UI = 427 labels, against 3c's 1,847.
+- **Frames labelled whole:** 356 of the 4,343 (3c: 283). The literal 1c rule still decides that
+  (3,851 frames have a monster under a model box). O1-O4 remain Batt's call.
+
+**THE BLIND PACK, round 3 (T2), built, NOT run** (the parent launches two NEW blind labeller agents):
+- seed 2; 30 crops per orcsdun01 species, drawn from every KEPT fix-2 label of col1. Every species
+  has >= 30 (Black Mushroom 56).
+- Plus col1's 15 Poring controls: 225 crops, 12 numbered grids, the reference sheet A-L.
+- **The pack:** `/mnt/poring-lab-datasets/scratch-archive/2026-10-22/orc-fix2/blind-pack-seed2/`,
+  with `instructions.txt` = round 2's word for word (byte-identical).
+- **The answer key, in its own directory:** `.../orc-fix2/answer-key-seed2/answer_key.json`.
+- **The score:** `scripts/blind_score.py --key <key> <answers A> <answers B>`, with section 5's
+  bars.
+
+**Batt's demo (`20261022T184536-demo-human-demo-orcsdun01-crusader`), labelled by the same rules
+through the adapter (a625def). Under 3f it is NOT added: its own C1 is 14.8 %.**
+- **C1:** 22 `bad_label` of 149 standing labels (every 5th frame: 976 frames read). That is over
+  5 %, and >= 50 labels were scored, so 3f's rule leaves it out.
+  - Per species: Orc Zombie 11 / 65 (16.9 %), Steel Chonchon 8 / 54 (14.8 %), White Plant 3 / 14,
+    Familiar 0 / 16.
+  - C2: Orc Zombie 2 / 1 px, Steel Chonchon 2 / 1 px.
+- **Split by our own motion (reported, not deciding):**
+  - the Crusader moving: 5 / 12 (41.7 %), C2 median 13 / 9.5 px. The camera is misplaced during
+    our own walks: frame 1000's minimap reads "88 123", which the Timeline gives at ~376 ms, not
+    at 120 ms;
+  - the Crusader still: 17 / 137 (12.4 %), C2 1 / 1 px.
+- **By eye, on the 22 low crops:**
+  - orcs ENGAGED with the Crusader are drawn facing another way than any rule says. Fix 2 was
+    measured on col3, where the GM was immune and nothing fought;
+  - boxes are shifted while the Crusader walks;
+  - three White Plants.
+- **What it would have added** (every 3rd frame, 1,627 candidates):
+  - 261 whole frames and 1,747 kept monster labels;
+  - the hunt-layout check excluded 2 frames.
+- **The bot's 3.98 / 3.99 runs add nothing:** they recorded no frames (3f).
+
+**v1's prt_fild08 data, "v1 rules + species split": BUILDABLE.**
+- **The tool:** 347db05, `build_frame_cache.py --labels v1 --classes species --kb DIR`. It keeps
+  v1's frames and boxes and gives each its class id per species. Batt's 3b item 2 and 3f.
+- **The dry run** (packets and indexes only, 19:51-19:59, v1png's arguments: `--every 15
+  --every-png 1`, its split):
+  - every one of v1's 10 sessions keeps EXACTLY v1png-20261008's frames and boxes (kept, GM
+    window, off scene, boxes all equal), with 0 species exclusions;
+  - train 8,193 frames: 14,658 npc, 20,558 Poring, 738 Lunatic, 164 Pupa, 779 Drops;
+  - val 3,242 frames; test 2,511 frames;
+  - Creamy: 0 boxes; `player`: 0 (v1 never labels our own GM).
+- Section 6's labels-v2 route kept 3.3 % of the frames. This one keeps all of v1's.
+
+**Where the outputs live (client-derived, never committed):**
+`/mnt/poring-lab-datasets/scratch-archive/2026-10-22/orc-fix2/`:
+- `col1/` (`check_fix2.json`, `check_rows_fix2.json`, `check_1a_repro.json`, the labels'
+  `labels_summary.json` and `sheets/`);
+- `blind-pack-seed2/` and `answer-key-seed2/`;
+- `demo/` (the check and its rows, the labels' summary);
+- `v1-dry-run/dry.json`;
+- `params.json` (the frozen 3c file, the same sha256).
+
+**NEXT (the parent's):**
+1. Run blind round 3 (T2).
+2. If every orcsdun01 species passes, the training tier passes. Before training, the cache needs
+   two changes that do not exist yet:
+   - **`--fix PARAMS --rule fix2` in `build_frame_cache.py`'s v2 path.** Today the fitted fix-2
+     boxes come only from `orc_label_sheets.py`. A cache built now would carry v2's PREDICTED
+     orcsdun01 boxes instead.
+   - **Two label modes in ONE cache:** `train.py` reads one `--cache`. v1's sessions need
+     `--labels v1 --classes species`, the orcsdun01 blocks `--labels v2 --classes species --fix`,
+     and one build takes one `--labels`.
+3. If a species fails, nothing of orcsdun01 trains, and the result goes to Batt.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
@@ -961,6 +1083,9 @@ pre-registered in 3f.
   - No species outside the class list appears in v1's data, and Creamy has 0 boxes.
   - So the "not forgotten" half needs those inputs, or a decision on how v1's sessions are
     re-labelled, before the combined cache is built.
+    ➡️ **DECIDED and BUILT:** Batt's 3b item 2 / 3f say "v1 rules + species split".
+    `build_frame_cache.py --labels v1 --classes species` (347db05) keeps ALL of v1png's frames and
+    boxes in its dry run (3g).
   - The setup is v1's: `train-day.sh` in the long-lived vision worker, `MID_CKPT=1`, the adaptive
     duty cycle, the IO guard, VRAM 25 %, batch 2 / workers 1.
   - Cache building stays outside 09:30-10:15 and 14:00-14:45.

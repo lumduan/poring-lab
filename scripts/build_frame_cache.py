@@ -806,6 +806,9 @@ def v01_session(sid: str, part: str, a: argparse.Namespace,
     (``species_ids``). ``sink=None``: a dry run (packets and indexes only, no image read)."""
     path = dataset_session(sid, a)
     manifest = json.loads((path / "manifest.json").read_text())
+    if getattr(a, "kb", None) is not None:  # the sprite names / species of --kb (as v2 reads them)
+        qa_export.KB_CLASSES = a.kb / "classes.json"
+        qa_export.KB_SPRITE_NAMES = a.kb / "monster_sprite_names.json"
     labeler = qa_export.Labeler(path, labels=a.labels,
                                 **({"k": a.k} if a.k is not None else {}))  # fmt: skip
     classes = SpeciesClasses.load(a.class_list) if a.classes == "species" else None
