@@ -15148,6 +15148,50 @@ still trips; a long walk to a struck target no longer does. The chain resumes at
     rings 1-2 only and finds no SWORD, the fight ends, the box starts it again. No strike came of
     them. A runner issue of the base (either arm can meet it); recorded, NOT changed mid-series.
   - P - C: **+80.9 kills / h**, +10.5 met / 10 min (ci5 lost much of its run to the loop).
+- **Pair 6 (C first):**
+  - **ci6** (C, seed 22211, `20261023T040834-demo-dungeon-H-ci6`, 04:08-04:50, time box, 40.1 min):
+    70 kills (**104.8 / h**), deaths 0, HP min 28.1 %, 1 potion, 4 Fly Wings (2 rate escapes at HP
+    28 / 34 %, 2 by the idle watchdog), 13 Heals, loot 78 / 86 %, net 2,863 z / h, met 23 / 10 min,
+    walking 12.7 %, 34.4 s / kill (8.9 / 3.9 / 21.6), landing 74 %, hard bars 0. The Crusader
+    reached Base Lv 61 during it.
+  - **pi6** (P, seed 22212, `20261023T045130-demo-dungeon-patrol-H-pi6`, 04:51-05:32, time box,
+    40.0 min): 108 kills (**161.8 / h**), deaths 0, HP min 87.6 %, 0 potions / Fly Wings, 1 Heal,
+    loot 91 / 97 %, net 6,422 z / h, met 34.5 / 10 min, walking 8.4 %, 22.2 s / kill (8.4 / 1.5 /
+    12.4), landing 82 %, hard bars 0.
+  - P - C: **+57.1 kills / h**, +11.5 met / 10 min.
+
+**4.00 RESULT (recorded 2026-10-23 ~05:4x ICT; 6 complete pairs after Amendment I, every run on its
+time box; descriptive, no adoption rule -- the decision is Batt's):**
+
+| pooled (6 runs each) | P: patrol loop | C: heading search | Batt's demo (target) |
+|---|---|---|---|
+| hours | 4.01 | 4.00 | 0.25 |
+| kills / h | **186.0** | 141.6 | 472 |
+| P - C per pair (kills / h) | +138.4, +37.4, -75.0, +27.0, +80.9, +57.1: **5 of 6 for P**, mean +44.3, median +47.3 | | |
+| monsters met / 10 min (mean) | **36.1** | 27.6 | 67 |
+| net zeny / h (gross) | **8,318** (8,363) | 5,642 (6,961) | 20,520 |
+| potions / h, Fly Wings / h | 0.0, 0.7 | 1.0, 2.0 | 0, 0 |
+| Heals / h | 21.5 | 15.7 | 20 |
+| HP min (worst run) | 32.5 % | 28.0 % | 74 % |
+| deaths, hard bars | 0, 0 | 0, 0 | 0, 0 |
+| s / kill: fighting / walking / standing | 19.4: 8.6 / 1.2 / 9.6 | 25.4: 8.3 / 2.1 / 15.1 | 7.6: 5.4 / 0.7 / 1.6 |
+| walking share, reversals / min | 7.5 %, 0.52 | 9.3 %, 0.64 | 10 %, 1.5 |
+| loot gross (pooled items) | 69.9 % | 65.8 % | 68 % |
+| White Plants seen / killed; herbs fell / picked | 30 / 10; 11 / 6 | 25 / 10; 4 / 3 | 5 / 5; 1 / 0 |
+| rest (share of time) | 0.3 % | 0 % | 0 % |
+
+- **The expectation held:** P met more monsters (36.1 vs 27.6 / 10 min) and killed more per hour
+  (186.0 vs 141.6, +31 %) in 5 of 6 pairs. The one loss (pair 3) was a sparse spell the loop walked
+  three times; ci5's low figure includes a v1 box loop at the Black Mushroom spawn.
+- **Against 3.98's base** (defend-B 87.5 kills / h): dungeon@4's base alone (C) is 141.6, the loop on
+  top 186.0 -- the base's fixes (H's Heal rhythm, the burst ending on our damage line, the carve) and
+  Amendment I's 10 potions count for much of the night's gain; the pair design isolates the loop.
+- **Against Batt's 472:** the loop reaches 39 %. The gap is still mostly STANDING between fights
+  (8.0 s / kill lost for P, 13.5 for C), then fighting (3.2) -- the loot step (722-965 s per 40-min
+  run) is the largest single part: 4.01 (loot v2) is pre-registered for it.
+- **Open for Batt:** adopt the patrol loop for orcsdun01; the box loop at the Black Mushroom spawn (a
+  box that no ring scan can strike: approach it, or ignore a box spot that yields no SWORD twice);
+  the plant sweep's yield (10 kills of 30 seen per arm, the same with or without the loop).
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
