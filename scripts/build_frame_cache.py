@@ -489,6 +489,9 @@ class FixInputs:
         import orc_labels_fix as olf
 
         params = olf.load_params(a.fix)
+        want = getattr(a, "fix_sha256", None)
+        if want is not None and sha256_of(a.fix) != want:
+            raise SystemExit(f"{a.fix}: sha256 {sha256_of(a.fix)}, not the frozen {want}")
         if a.rule not in olf.RULES:
             raise SystemExit(f"--rule {a.rule}: one of {olf.RULES}")
         prov = {"labels": olf.labels_name(a.rule), "rule": a.rule, "params": str(a.fix),
@@ -729,11 +732,21 @@ def v2_frames(
             yield fid, t, {"frame_id": fid}, None
 
 
+def extra_roots(a: argparse.Namespace) -> list[Path]:
+    """The session roots searched after --datasets: --also-datasets, then each --collection MAP's
+    warp_watch directory (<datasets>/detector-collection/<MAP>: a relative name, so the guarded
+    cache step -- whose arguments cannot start with "/" -- can name it)."""
+    roots = list(getattr(a, "also_datasets", None) or ())
+    for name in getattr(a, "collection", None) or ():
+        roots.append(a.datasets / "detector-collection" / name)
+    return roots
+
+
 def resolve_session(sid: str, a: argparse.Namespace) -> Path:
     """v2: a banked demo session under --demo-root (RAM) first, else the session under --datasets
     (a recorded session, or a demo session dataset_ship already copied to the NAS), else under an
     --also-datasets root (warp_watch's detector-collection/<map>: a combined cache)."""
-    roots = (a.demo_root, a.datasets, *(getattr(a, "also_datasets", None) or ()))
+    roots = (a.demo_root, a.datasets, *extra_roots(a))
     for root in roots:
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
@@ -742,7 +755,7 @@ def resolve_session(sid: str, a: argparse.Namespace) -> Path:
 
 def dataset_session(sid: str, a: argparse.Namespace) -> Path:
     """v0 / v1: the session under --datasets, else under an --also-datasets root."""
-    for root in (a.datasets, *(getattr(a, "also_datasets", None) or ())):
+    for root in (a.datasets, *extra_roots(a)):
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
     return a.datasets / sid  # type: ignore[no-any-return]
@@ -1147,6 +1160,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="v2 + --classes species: the orcsdun01 label fix's frozen parameters "
         "(orc_labels_fix.py freeze); every kept frame is fitted on its pixels",
+    )
+    g.add_argument(
+        "--fix-sha256",
+        default=None,
+        help="--fix: refuse unless the parameter file has exactly this sha256 (the frozen one)",
+    )
+    g.add_argument(
+        "--collection",
+        nargs="*",
+        default=[],
+        help="session roots <--datasets>/detector-collection/<MAP> searched after --datasets "
+        "(e.g. orcsdun01: the warp_watch blocks), a name the guarded cache step accepts",
     )
     g.add_argument(
         "--rule",

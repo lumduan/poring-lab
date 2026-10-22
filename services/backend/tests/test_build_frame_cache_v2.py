@@ -661,3 +661,27 @@ def test_real_the_cache_fits_col1_exactly_as_orc_label_sheets() -> None:
     assert seen[5457] == []
     assert "fix_next_move:1153" in seen[5160]
     assert {"fix_unfit:1153", "fix_ui:1153"} <= set(seen[5220])
+
+
+def test_collection_roots_and_the_frozen_params_hash(bfc: ModuleType, tmp_path: Path) -> None:
+    """The guarded cache step admits no argument starting with "/": --collection names the
+    warp_watch root relatively, and --fix-sha256 pins the frozen parameter file."""
+    import argparse
+
+    s = tmp_path / "nas" / "detector-collection" / "orcsdun01" / "S1"
+    s.mkdir(parents=True)
+    (s / "manifest.json").write_text("{}")
+    a = argparse.Namespace(demo_root=tmp_path / "demo", datasets=tmp_path / "nas",
+                           also_datasets=[], collection=["orcsdun01"])  # fmt: skip
+    assert bfc.resolve_session("S1", a) == s and bfc.dataset_session("S1", a) == s
+    with pytest.raises(SystemExit, match="no manifest"):
+        bfc.resolve_session("S1", argparse.Namespace(**{**vars(a), "collection": []}))
+    p = params_file(tmp_path)
+    good = bfc.sha256_of(p)
+    ns = argparse.Namespace(fix=p, rule="fix2", fix_sha256=good)
+    fix = bfc.FixInputs.from_args(ns)
+    assert fix is not None and fix.provenance["params_sha256"] == good
+    with pytest.raises(SystemExit, match="not the frozen"):
+        bfc.FixInputs.from_args(argparse.Namespace(fix=p, rule="fix2", fix_sha256="0" * 64))
+    with pytest.raises(SystemExit, match="rule"):
+        bfc.FixInputs.from_args(argparse.Namespace(fix=p, rule="best", fix_sha256=None))
