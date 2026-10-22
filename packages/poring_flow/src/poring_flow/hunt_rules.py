@@ -22,6 +22,13 @@ THE BADGES (nothing here is a judgement; each badge is derived from those files)
 The choices themselves are the registry's (blocks.yaml): a rule version is offered only there; the
 index only describes it. A choice the index does not know is shown with ``known`` false (the
 linter and the engine refuse nothing more or less because of it).
+
+OPTION parameters (blocks.yaml ``options``; Batt 2026-10-22, the hunt block's ``engage_source``:
+``detector`` or ``melee_ring``) sit in their group beside the rule versions, with ``kind``
+"option": plain values, no PARAMS version, no numbers and no D8 evidence (the index never holds
+them), the registry's ``default`` (what an absent parameter means) and its ``note``. Every
+parameter carries ``kind`` ("rule" | "option") and ``required``: the editor writes an optional
+parameter only when it differs from its default.
 """
 
 from __future__ import annotations
@@ -115,12 +122,24 @@ def rules_doc(
     groups: list[dict[str, Any]] = []
     by_group: dict[str, dict[str, Any]] = {}
     for p in blk.spec.params:
-        if not p.choices:
+        if not (p.choices or p.options):
             continue
         g = p.group or p.name
         if g not in by_group:
             by_group[g] = {"name": g, "params": []}
             groups.append(by_group[g])
+        if p.options:
+            dflt = p.default if p.default is not None else p.options[0]
+            by_group[g]["params"].append({
+                "name": p.name, "kind": "option", "required": p.required, "default": dflt,
+                "note": p.note or "",
+                "choices": [
+                    {"id": o, "known": True, "values": {}, "versions": [], "adopted": False,
+                     "evidence": [], "option": True, "is_default": o == dflt}
+                    for o in p.options
+                ],
+            })  # fmt: skip
+            continue
         known_rules = _map(rules.get(p.name, {}), f"index.rules.{p.name}")
         choices = []
         for c in p.choices:
@@ -137,7 +156,7 @@ def rules_doc(
             })  # fmt: skip
         adopted_choice = versions[adopted].get(p.name)
         by_group[g]["params"].append({
-            "name": p.name, "choices": choices,
+            "name": p.name, "kind": "rule", "required": p.required, "choices": choices,
             "default": adopted_choice if adopted_choice in p.choices else p.choices[0],
         })  # fmt: skip
     groups.append({"name": "stop", "params": [], "note": STOP_NOTE})

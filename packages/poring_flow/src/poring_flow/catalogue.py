@@ -85,6 +85,7 @@ RESERVED = ("main",)  # the plain flow's node path root
 
 
 RULE_VERSION = r"^[a-z][a-z0-9_]*@[0-9]{1,4}$"  # name@N: PARAMS[N]'s numbers (hunt_config.py)
+OPTION = r"^[a-z][a-z0-9_]*$"  # a plain OPTION value: no @N, no numbers travel with it
 
 
 class ParamSpec(BaseModel):
@@ -98,6 +99,14 @@ class ParamSpec(BaseModel):
     # editor (Batt D2: one hunt block with groups). The linter refuses any other value.
     group: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
     choices: list[str] = []
+    # An OPTION parameter (Batt 2026-10-22, the hunt block's `engage_source`): a plain value that
+    # picks an engine behaviour which is NOT a hunt_flow PARAMS rule, so it has no version and no
+    # numbers (hunt_config.py never exports it). `default` is what an ABSENT parameter means: an
+    # option with a default is never required, so a flow written before it keeps its JSON and
+    # its hash. The linter refuses any value not in `options` (lint/hunt.py `param_option`).
+    options: list[str] = []
+    default: str | None = None
+    note: str | None = None  # the editor's text beside an option parameter (what each value does)
 
     @model_validator(mode="after")
     def _choices(self) -> ParamSpec:
@@ -108,6 +117,19 @@ class ParamSpec(BaseModel):
         bad = [c for c in self.choices if not re.match(RULE_VERSION, c)]
         if bad or len(set(self.choices)) != len(self.choices):
             raise ValueError(f"{self.name}: choices are distinct name@N rule versions: {bad}")
+        if self.options:
+            if self.choices:
+                raise ValueError(f"{self.name}: rule versions (choices) or options, not both")
+            if self.type != "str":
+                raise ValueError(f"{self.name}: options are plain values, a str parameter's")
+            bad = [o for o in self.options if not re.match(OPTION, o)]
+            if bad or len(set(self.options)) != len(self.options):
+                raise ValueError(f"{self.name}: options are distinct plain names: {bad}")
+        if self.default is not None:
+            if self.default not in self.options:
+                raise ValueError(f"{self.name}: the default is one of its options")
+            if self.required:
+                raise ValueError(f"{self.name}: an option with a default is not required")
         return self
 
 

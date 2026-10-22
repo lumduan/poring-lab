@@ -187,6 +187,7 @@ def lint_doc(
         resolver_given=resolver is not None,
         runtime_max_s=runtime_max_s,
         zones_loaded=zones_provider is not None,
+        world_server=world.server if world is not None else None,
     )
     return {
         "flow_hash": ir.flow_hash(flow),

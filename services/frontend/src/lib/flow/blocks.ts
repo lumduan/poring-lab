@@ -13,7 +13,7 @@
 // (`n:town.3`), so lint findings and simulate results land on the right block.
 import { DEF_BY_TYPE } from "./blockdefs.ts";
 import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
-import { fieldOf, HUNT_TYPE, type HuntRules, paramOf, params as huntParams } from "./hunt.ts";
+import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import {
   type ActionStmt,
   type CellRef,
@@ -143,21 +143,34 @@ function paramsPlain(a: ActionStmt): boolean {
   return Object.values(a.params).every((e) => !hasDo(e));
 }
 
-/** The pl_hunt fields of a hunt action: only when it has exactly the block's parameters, each a
- * literal rule version among its choices (anything else stays a generic block, exactly). */
+/** The pl_hunt fields of a hunt action: only when it has the block's parameters and no other,
+ * each a literal rule version (or option) among its choices; an OPTIONAL parameter that is absent
+ * shows its default, and one written AT its default stays a generic block (the editor would leave
+ * it out: not exact). Anything else stays a generic block, exactly. */
 function huntFields(a: ActionStmt, rules: HuntRules): Record<string, string> | null {
   const ps = huntParams(rules);
-  const keys = Object.keys(a.params);
-  if (keys.length !== ps.length) return null;
+  const omit = omitted(rules);
+  if (Object.keys(a.params).some((k) => !ps.some((p) => p.name === k))) return null;
   const out: Record<string, string> = {};
   for (const p of ps) {
     const e = a.params[p.name];
+    if (!e && p.name in omit) {
+      out[fieldOf(p.name)] = omit[p.name];
+      continue;
+    }
     if (!e || e.kind !== "lit" || typeof e.value !== "string") return null;
     const v = e.value;
-    if (!p.choices.some((c) => c.id === v)) return null;
+    if (!p.choices.some((c) => c.id === v) || omit[p.name] === v) return null;
     out[fieldOf(p.name)] = v;
   }
   return out;
+}
+
+/** The hunt block's extra state: what it does not show, plus the optional parameters' defaults
+ * (`omit`: written back only when the dropdown differs from them). */
+function huntState(rest: object, rules: HuntRules | null): object {
+  const omit = rules ? omitted(rules) : {};
+  return Object.keys(omit).length ? { ...rest, omit } : rest;
 }
 
 function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
@@ -167,7 +180,7 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
       case "action": {
         if (s.block === "hunt" && ids.hunt) {
           const f = huntFields(s, ids.hunt);
-          if (f) return { type: HUNT_TYPE, fields: f, extraState: actionRest(s) };
+          if (f) return { type: HUNT_TYPE, fields: f, extraState: huntState(actionRest(s), ids.hunt) };
         }
         const p = PALETTE[s.block];
         const keys = Object.keys(s.params);
@@ -509,12 +522,15 @@ class Reader {
       case "pl_action":
         return this.generic(b, where);
       case HUNT_TYPE: {
-        // the dropdowns ARE the parameters: P_<NAME> -> <name>, each a rule version literal
+        // the dropdowns ARE the parameters: P_<NAME> -> <name>, each a rule version (or option)
+        // literal; an optional one at its default (extraState `omit`) is left out (absent = it)
+        const omit = ((b.extraState ?? {}) as { omit?: Record<string, string> }).omit ?? {};
         const ps: Record<string, Expr> = {};
         for (const [k, v] of Object.entries(b.fields ?? {})) {
           const name = paramOf(k);
           if (name === null) continue;
           if (typeof v !== "string" || !v) this.err(where, `hunt: ${name} has no rule version`);
+          if (name in omit && omit[name] === v) continue;
           ps[name] = { kind: "lit", value: String(v) };
         }
         return { kind: "action", block: "hunt", params: ps, ...this.rest(b, "hunt", where) };

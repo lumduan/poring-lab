@@ -25,6 +25,10 @@
 #   group        its group in the editor (Batt D2, 2026-10-21: one hunt block with groups)
 #   choices      the RULE VERSIONS a person may pick (name@N: PARAMS[N]'s numbers, read-only;
 #                scripts/hunt_config.py, config/flows/hunt/index.yaml); the linter refuses others
+#   options      plain OPTION values (no @N: not a PARAMS rule, no numbers travel with it); the
+#                linter refuses others (Batt 2026-10-22: the hunt block's engage_source)
+#   default      what an ABSENT option parameter means (never required: old flows keep their hash)
+#   note         the editor's text beside an option parameter
 version: 1
 blocks:
   walk_to:
@@ -136,10 +140,23 @@ blocks:
     # the plan names that exist as versions; another value is a new version, pre-registered.
     # ➡️ The adopted base is v55 since 2026-10-22 04:32 (3.97): its loot rule gm_fast_scan@54
     # joins the loot choices (first: the adopted one); the other rules are v52's, unchanged.
+    # ➡️ engage_source (Batt 2026-10-22 ~13:45): WHO finds what to strike -- the detector (the
+    # default; absent = detector) or the MELEE RING (the client's cursor reads SWORD over the 8
+    # cells around the character). An OPTION, not a rule version: it is no hunt_flow PARAMS rule
+    # (its runtime is scripts/dungeon_hunt.py `--engage melee_ring`). melee_ring strikes EVERY
+    # monster in melee range, so lint/hunt.py refuses it on a map with an IGNORE list or a
+    # non-TARGET species and on any server but the lab's; runstart.py refuses it unless the
+    # attested environment is the lab's. The NPC sprite guard and every gate stay underneath.
     concept: combat.hunt
     params:
       - {name: strike, type: str, required: true, group: engage, choices: [arm_c@32]}
       - {name: engage_on_the_way, type: str, required: true, group: engage, choices: [on_the_way@19]}
+      - name: engage_source
+        type: str
+        group: engage
+        options: [detector, melee_ring]
+        default: detector
+        note: "detector: the detector's boxes pick the target (the default). melee_ring: the cursor picks it -- every SWORD in the 8 cells around the character, struck at once, the next queued; NPCs read TALK and are never struck. Lint refuses melee_ring on a map with an IGNORE list or any non-TARGET species, and on any server but the lab's"
       - {name: dead, type: str, required: true, group: dead_loot, choices: [exp_line@48]}
       - {name: loot, type: str, required: true, group: dead_loot, choices: [gm_fast_scan@54, gm_scan_one_pass@51, gm_scan@50]}
       - {name: search, type: str, required: true, group: search, choices: [heading_coverage@22]}

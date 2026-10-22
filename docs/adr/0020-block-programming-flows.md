@@ -2198,6 +2198,15 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 > map node's Zones layer (drawn, checked by the runner's own loader through POST /flows/zones/check,
 > exported only), and /flows lint with the zones provider. B4 and B5 are not built; the amendment's
 > TEXT stays a draft.
+> ➡️ **2026-10-22 (Batt ~13:45): the hunt block gains an OPTION parameter, `engage_source`**
+> (`detector`, the default and what an absent parameter means, or `melee_ring`: the cursor, not the
+> detector, picks the target). Decision 1's "named RULE VERSIONS" stays for hunt_flow's PARAMS
+> rules; an option is a plain value with no version and no numbers (blocks.yaml `options` /
+> `default`). The linter refuses `melee_ring` on a map with an IGNORE list or a non-TARGET species
+> and on any server but the lab's; the run-start check refuses it unless the attested environment is
+> the lab's. The NPC sprite guard, every gate and the hard bars are unchanged. Its runtime is
+> `scripts/dungeon_hunt.py`, not the block engine. The plan's section 7c; built offline on branch
+> feat/melee-ring-block (not merged).
 
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
 > (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
