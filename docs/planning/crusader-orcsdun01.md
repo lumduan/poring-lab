@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "2026-10-22: demonstrations 3.98 (dungeon@2, scripts/dungeon_hunt.py) -- the Crusader on orcsdun01 with DEFEND-SCAN; A POTIONS / B REST / C HEAL (Batt's Heal tree, now the Crusader's tree for all three; section 2c) in rotated 45-min runs; judged by scripts/dungeon_judge.py. Earlier: build DONE (2b); survival 3.96-3.96g (S1c, S2, S3, S4b2, S6b PASS); the orcsdun01 human demo READY (section 9); the v2orc detector still untrained (its labels FAILED C1)."
+next_action: "2026-10-22 RESULTS (demonstrations 3.98 / 3.99, comparisons, no decision rule): the Crusader hunted orcsdun01 for real, deaths 0 and hard bars 0 in every run; NET z/h A -6,049 / B 4,225 / C 798 (sustain is not the bottleneck at this build; B never rested in its full runs); MELEE-RING (MR-B) 107.5 kills/h vs defend-B 87.5, the same net. Batt decides: the sustain, the rest trigger, the skill tree (the Heal tree now, 2c), melee-ring, the next loot step (the list is right, the step slow), and two small runner fixes (the no-entry carve, the rest spots inside the warp margins)."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
