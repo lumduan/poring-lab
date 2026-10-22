@@ -39,6 +39,7 @@ the dialog closes by its known step (its second button), then @alive + @heal.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import sys
@@ -100,6 +101,8 @@ CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand
 ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike point
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
+NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
+STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 
@@ -174,6 +177,18 @@ def rest_wanted(strat: Mapping[str, Any], hp: float, sp: float | None) -> bool:
                 and sp >= strat["heal_sp_min"])  # fmt: skip
 
 
+def turn_heading(st: dict[str, Any]) -> None:
+    """The search heading turned by 90 degrees (a wall the client shows, or a stall)."""
+    st["ang"] = float(st.get("ang", 0.0)) + math.pi / 2
+
+
+def red_px(crop: Any) -> int:
+    """PURE: the no-entry ring's red pixels in a cursor crop (BGR): R high, G and B low."""
+    a = np.asarray(crop)[..., :3].astype(np.int16)
+    b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
+    return int(((r_ >= 170) & (g <= 90) & (b <= 90)).sum())
+
+
 def ring(r_: int) -> list[Cell]:
     """PURE: the cells at Chebyshev distance r_ around (0, 0), the orthogonal ones first (a melee
     attacker stands there more often than on a diagonal), then clockwise from north."""
@@ -228,7 +243,10 @@ class BoxWatch:
         import unit_detector
 
         self.det = unit_detector.UnitDetector()
-        self.screen, self.region, self.r = screen, region, r
+        # its OWN grab helper: ro_agent.Screen is one pipe, not thread-safe (pilot 3, 12:02: the
+        # main loop's grab and this thread's interleaved and the pipe's framing broke)
+        self.screen, self.region, self.r = r.Screen(), region, r
+        del screen
         self.lock = threading.Lock()
         self.last: tuple[float, list[Any]] = (0.0, [])
         self.halt = threading.Event()
@@ -264,6 +282,8 @@ class BoxWatch:
     def stop(self) -> None:
         self.halt.set()
         self.th.join(timeout=3)
+        with contextlib.suppress(Exception):
+            self.screen.proc.terminate()
 
 
 def first_item(kinds: Sequence[str]) -> int | None:
@@ -497,6 +517,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_ui = time.monotonic()
         last_walk = 0.0
         walk_st: dict[str, Any] = {"ang": float(rng.uniform(0, 2 * math.pi))}
+        walk_from: Cell | None = None
+        stall = 0
+        noentry_n = 0
         goal_path: list[Cell] | None = None
         fly_at = -1e9
         n_reads = 0
@@ -525,7 +548,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             click_at(SELF_PX[0], SELF_PX[1], "heal_self")
 
         def hover(u: float, v: float) -> dict[str, Any]:
-            return csw.check(agent, screen, sword_refs, gx0, gy0, u, v, wait_s=CURSOR_WAIT_S)
+            res = csw.check(agent, screen, sword_refs, gx0, gy0, u, v, wait_s=CURSOR_WAIT_S)
+            # pilot 3 (12:0x): the client's NO-ENTRY cursor (its arrow inside a red ring) read
+            # "clear" over a cliff, and 4 walk clicks sent no request: the ring's red decides
+            red = red_px(csw.crop_at(screen, gx0, gy0, u, v))
+            res["red"] = red
+            if red >= NOENTRY_RED and res["verdict"] == "clear":
+                res["verdict"] = "noentry"
+            return res
 
         def above(img: Any, u: float, v: float) -> Any:
             """Where the client draws its lock arrow over the target: an orc's head is higher than
@@ -976,6 +1006,21 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             u, v = project(here, [rel])[0]
                             res = hover(u, v)
                             if res["verdict"] == "clear":
+                                stall = stall + 1 if walk_from == here else 0
+                                walk_from = here
+                                if stall >= STALL_CLICKS:  # clicks that did not move us
+                                    ev({"kind": "stall", "at": list(here), "to": list(c)})
+                                    turn_heading(walk_st)
+                                    goal_path, stall = None, 0
+                                    # monsters that only MISS write no log line: look around
+                                    found = scan("defend", ring(1), "sword")
+                                    if found is not None:
+                                        c2, (u2, v2), _r2 = found
+                                        ev({"kind": "engage", "by": "stall_scan", "name": None})
+                                        strike(u2, v2, c2, "stall_scan")
+                                        lock = {"t": time.monotonic(), "rel": c2, "cell": None}
+                                        mode = "fight"
+                                    continue
                                 click_at(u, v, "walk")
                                 ev({"kind": "walk", "from": list(here), "to": list(c),
                                     "clicked": True, "why": mode})  # fmt: skip
@@ -986,7 +1031,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 mode = "fight"
                             else:
                                 ev({"kind": "walk", "from": list(here), "to": list(c),
-                                    "clicked": False, "why": "cursor unknown"})  # fmt: skip
+                                    "clicked": False, "why": f"cursor {res['verdict']}",
+                                    "red": res.get("red")})  # fmt: skip
+                                if res["verdict"] == "noentry":
+                                    noentry_n += 1
+                                    if noentry_n >= 2:  # the client calls it a wall: turn
+                                        turn_heading(walk_st)
+                                        goal_path, noentry_n = None, 0
                 if here is None and tick - last_pos_t > 30.0:
                     reason = "position unread for 30 s"
                     break

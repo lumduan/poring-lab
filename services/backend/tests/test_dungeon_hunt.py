@@ -127,3 +127,17 @@ def test_the_loot_list_model_groups_chained_kills_and_needs_the_item_on_the_floo
     assert not dl.reach(gone, [0, 5 * s], track)["list"]
     far = {"t_fall": 0, "cell": (90, 100), "t_end": None}
     assert not dl.reach(far, [0, 5 * s], track)["list"]
+
+
+def test_the_no_entry_ring_is_counted_by_its_red() -> None:
+    import numpy as np
+
+    crop = np.zeros((64, 64, 3), np.uint8)
+    assert dh.red_px(crop) == 0
+    crop[10:20, 10:15] = (40, 30, 220)  # BGR: a red ring's pixels
+    assert dh.red_px(crop) == 50 >= dh.NOENTRY_RED
+    crop[30:40, 30:40] = (60, 170, 250)  # a torch's orange is not the ring's red
+    assert dh.red_px(crop) == 50
+    st: dict[str, float] = {"ang": 0.0}
+    dh.turn_heading(st)
+    assert abs(st["ang"] - 1.5707963) < 1e-6
