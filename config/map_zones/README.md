@@ -22,7 +22,8 @@ allows: static map knowledge used at plan time.
     who is not the agent and a real date.
   - The file must also carry a top-level `delegation:` note citing the person's decision. Any other
     agent-like reviewer is still refused, and `delegation:` without a delegated reviewer is refused.
-  - `prt_fild08.yaml` is the first such file.
+  - `prt_fild08.yaml` is the first such file (2026-10-21), `orcsdun01.yaml` the second (2026-10-22:
+    no-enter areas around both warp spans; docs/planning/orcsdun01-dungeon-prep.md section 3).
 
 Check a file before a run:
 

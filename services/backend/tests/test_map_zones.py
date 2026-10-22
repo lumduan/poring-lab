@@ -208,11 +208,15 @@ def test_v52_is_the_first_version_that_loads_the_zones() -> None:
                                          if k != "loot_gm_one_pass_ab"}  # fmt: skip
 
 
-def test_the_repo_ships_prt_fild08_under_batts_recorded_delegation() -> None:
-    """Batt authors the files -- or delegates one, recorded in it (2026-10-21: prt_fild08)."""
+def test_the_repo_ships_two_zone_files_under_batts_recorded_delegations() -> None:
+    """Batt authors the files -- or delegates one, recorded in it (2026-10-21: prt_fild08;
+    2026-10-22: orcsdun01, its own checks in test_orc_dungeon_prep.py)."""
     assert mz.ZONES_DIR.name == "map_zones" and (mz.ZONES_DIR / "README.md").exists()
     assert not list(mz.ZONES_DIR.glob("*.yml"))
-    assert sorted(p.name for p in mz.ZONES_DIR.glob("*.yaml")) == ["prt_fild08.yaml"]
+    assert sorted(p.name for p in mz.ZONES_DIR.glob("*.yaml")) == [
+        "orcsdun01.yaml", "prt_fild08.yaml"]  # fmt: skip
+    zo = mz.load("orcsdun01")
+    assert zo is not None and zo.reviewed_by == "agent (delegated by batt, 2026-10-22)"
     z = mz.load("prt_fild08")
     assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-10-21)"
     assert "decision 1" in z.delegation

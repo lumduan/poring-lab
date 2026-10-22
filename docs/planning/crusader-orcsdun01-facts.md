@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, ../competition.md, ../../config/map_zones/README.md]
-next_action: "The build agent's exact numbers (HIT, FLEE, DEF, VIT, LUK, MaxHP, skills) go into the tables in sections 2 and 4. Batt decides the HP-threshold rule and whether any orcsdun01 zone is wanted; section 3c only lists candidates."
+next_action: "The build agent's exact numbers (HIT, FLEE, DEF, VIT, LUK, MaxHP, skills) go into the tables in sections 2 and 4. Batt decides the HP-threshold rule and whether any orcsdun01 zone beyond the warp areas is wanted (the warp no-enter areas exist since 2026-10-22, orcsdun01-dungeon-prep.md section 3); section 3c only lists candidates."
 title: "Crusader on orcsdun01 (Orc Dungeon F1): the monsters' numbers, the map and survival (offline facts)"
 date: 2026-10-21
 owner: Batt
@@ -567,6 +567,11 @@ so every non-walkable cell is a wall: it blocks both walking and sight.
   time and deaths in the SE wing and the N pocket.
 - One thing to settle before the first run either way: whether the runner's warp handling already
   keeps the bot off orc03's area (x179-187 y6-10). The stand grid excludes warp spans.
+  ➡️ **SETTLED 2026-10-22 by a zones file** (Batt delegated it in the day-run brief):
+  `config/map_zones/orcsdun01.yaml` has no-enter areas around BOTH warp spans, each grown by 4
+  cells. They seal nothing and cut 143 walkable cells; every sampled click into them is refused.
+  The proof is [orcsdun01-dungeon-prep.md](orcsdun01-dungeon-prep.md) section 3. The SE wing and
+  N pocket candidates above still have no zone (no run evidence yet).
 
 ### 3d. The aggro picture
 
