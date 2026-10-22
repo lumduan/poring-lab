@@ -14728,6 +14728,19 @@ Reported, not deciding:
 - Fix (code 8df938d): any non-search mode, and every loot step, resets the idle clock.
 - The attempt is NOT scored (kept as `...-B-r3-attempt1-stopped`); run 3 restarts with seed 22003.
 
+**Amendment F (2026-10-22 13:3x, after run 3 ended on a FALSE hard bar; the parent):**
+- Run 3 (B, `20261022T132000-demo-dungeon-B-r3`, 13:20:52-13:32:25, 11.5 min) ended on "position
+  jump (map change?)". The packets: 0 map changes to another map, 2 same-map changes = its two
+  Fly Wings (B's emergency, correctly: HP 33 % at 234 HP/s). After the second Fly Wing the runner
+  entered a fight on the OLD spot's hit lines, scanned and struck for ~9 s, and its next position
+  read (116 cells away) came after the 6-s Fly Wing allowance.
+- Fix (code 690dac6): after ANY Fly Wing our cell is unknown until the next read (no jump check
+  against the old spot) and the old spot's hit lines are dropped.
+- Run 3 is reported as PARTIAL; run 3 restarts (B, seed 22003); the order B C A B C A stands.
+- Also (be60710, outside the measured window): after `run_end` the Crusader warps to its
+  prt_fild08 stand unless dead. Twice today (13:19, 13:33) a stopped run left it at 30-42 % HP
+  among orcs with no runner; both times the next setup warped it out in time.
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
