@@ -92,6 +92,7 @@ WALK_AHEAD = 7  # the walk click's target: this many path cells ahead (in view)
 WALK_EVERY_S = 1.2
 REST_NEAR = 1  # at the rest spot = within this many cells (Chebyshev)
 REST_MAX_S = 300.0
+REST_WALK_MAX_S = 120.0  # 3.98 Amendment B: the spot not reached in this long -> sit where we are
 UI_EVERY_S = 10.0
 JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
@@ -975,15 +976,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         continue
                     if here is not None:
                         spot = nearest_spot(spots, here)
-                        if (
-                            spot is not None
-                            and max(abs(spot[0] - here[0]), abs(spot[1] - here[1])) <= REST_NEAR
-                        ):
-                            press("sit", "at rest spot")
+                        at_spot = spot is not None and cheb2(spot, here) <= REST_NEAR
+                        late = tick - rest_since > REST_WALK_MAX_S  # Amendment B (3.98)
+                        if at_spot or late:
+                            press("sit", "at rest spot" if at_spot else "rest spot not reached")
                             sitting = True
                             rest_since = tick
                             ev({"kind": "rest_start", "cell": list(here), "pct": pct,
-                                "sp_pct": spp})  # fmt: skip
+                                "sp_pct": spp, "spot": None if spot is None else list(spot),
+                                "fallback": not at_spot})  # fmt: skip
                             continue
                         if goal_path is None or goal_path[-1] != spot:
                             goal_path = hc.astar(okr, here, spot) if spot else None
