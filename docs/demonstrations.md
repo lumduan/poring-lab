@@ -14817,6 +14817,25 @@ are targets and there is no script NPC; this is the lab server. The hunt block o
 ignore list, non-target species, any server but the lab) are built separately (a subagent, today);
 the NPC sprite guard and all gates stay underneath. Hard bars unchanged.
 
+**Verify-first pilot (UNSCORED, `20261022T142105-demo-dungeon-mr-B-mrpilot`, 14:21-14:25, MR, B):**
+- 4 min, 3 kills (packets), HP min 93.9 %, 1 Fly Wing (the idle watchdog), hard bars 0, loot 100 %.
+- `melee_ring_check` over its 8 hover windows while locked: kept 2, **retargeted 1**, died_inside 3
+  (the target died in the window: the stop is the kill's), not_swinging 2 (the swing had already
+  stopped before the hovers began). The retarget, read in the packets: at 24.33 s, while we swung
+  at one Orc Zombie and only HOVERED, the client sent an attack request ("repeat") on ANOTHER unit,
+  and our next acts hit that one. 1 of 3 valid windows = 33 % > the pre-registered 10 %.
+- 1 hand-off (the queue's next SWORD struck after a death; 3.37 s from the death to our next act).
+
+**Amendment G (2026-10-22 14:3x, by the rule above, BEFORE 3.99 run 1; the parent):**
+- The queue hovers move BETWEEN SWINGS (code 3a830fa): while locked, ONE ring cell is read right after
+  our own hit (the Battle Log damage line, <= 0.3 s; one per swing), then the pointer moves back
+  onto the locked target (moves only). A full ring takes ~8 swings (~6 s).
+- `melee_ring_check` now names `not_swinging` and `died_inside`, and counts an attack request on
+  another unit inside a window as a retarget; the runs report its verdicts.
+- **Run length:** the remaining five runs (3.99's two and 3.98's C, defend-B, A) are 40 min, not 45,
+  so all five fit before ~18:20 (it is 14:3x). Order: MR-B, C, defend-B, A, MR-B; seeds 22101,
+  22004, 22005, 22006, 22102.
+
 **Run log (3.99):** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
