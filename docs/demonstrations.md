@@ -15133,6 +15133,21 @@ still trips; a long walk to a struck target no longer does. The chain resumes at
   - P - C: **+27.0 kills / h**, +12.5 met / 10 min.
   - Noted at pi5's pre-run frame: the Crusader's Base EXP bar is nearly full (Lv 60 -> 61 within the
     next runs; MaxHP / MaxSP rise for both arms alike from then on). The end state restores Lv 60.
+- **Pair 5:**
+  - **pi5** (P, seed 22209, `20261023T024429-demo-dungeon-patrol-H-pi5`, 02:44-03:26, time box,
+    40.0 min): 106 kills (**158.9 / h**), deaths 0, HP min 83.0 %, 0 potions / Fly Wings, 1 Heal,
+    loot 76 / 92 %, net 7,894 z / h, met 26.5 / 10 min, walking 6.7 %, 22.7 s / kill (8.4 / 1.2 /
+    13.1), landing 75 %, hard bars 0.
+  - **ci5** (C, seed 22210, `20261023T032727-demo-dungeon-H-ci5`, 03:27-04:07, time box, 40.0 min):
+    52 kills (**78.0 / h**), deaths 0, HP min 89.3 %, 0 potions, 1 Fly Wing, 0 Heals, loot 74 / 94 %,
+    net 3,681 z / h, met 16 / 10 min, walking 9.4 %, 46.2 s / kill (7.8 / 4.1 / 34.3), landing 50 %,
+    hard bars 0.
+  - **A BOX LOOP in ci5:** 120 fights started by the v1 box trigger (other runs 7-35), 58 of them at
+    our cell 171,135 with the box at the SAME screen spot (~520,300) and 23 at 165,138 -- the Black
+    Mushroom spawn (167,133 +-5): v1 boxes the immobile mushroom ~3 cells off, the defend scan reads
+    rings 1-2 only and finds no SWORD, the fight ends, the box starts it again. No strike came of
+    them. A runner issue of the base (either arm can meet it); recorded, NOT changed mid-series.
+  - P - C: **+80.9 kills / h**, +10.5 met / 10 min (ci5 lost much of its run to the loop).
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
