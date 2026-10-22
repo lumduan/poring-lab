@@ -15094,6 +15094,16 @@ fighting / walking / standing outside fights):
     confirmed), loot 52 / 79 %, net 8,903 z / h, met 41.5 / 10 min, walking 6.6 %, 15.7 s / kill
     (8.0 / 0.8 / 7.0), landing 83 %, hard bars 0.
   - P - C: **+37.5 kills / h**, +0.5 met / 10 min.
+- **pi3 attempt 1** (P, seed 22205, `20261022T235526-demo-dungeon-patrol-H-pi3`, 23:55-23:56): STOPPED
+  at 50 s by a FALSE "position jump" hard bar. A plant sweep read a SWORD 13 cells off and struck
+  it; the server walked the Crusader there while no position was read, and the next read (74,54)
+  lay 21 cells from the stale one (95,57) > JUMP_CELLS 20. The packets: 0 other-map changes (only the
+  setup warp and the end warp). A stopped attempt, not scored.
+
+**Amendment J (2026-10-22 ~23:5x ICT, BEFORE pi3's re-run; the parent):** a position change is a
+JUMP (the map-change hard bar) only when it is larger than JUMP_CELLS AND larger than our walk could
+cover since the last read (`is_jump`: 150 ms a cell + 5). A map change teleports at once, so it
+still trips; a long walk to a struck target no longer does. The chain resumes at pi3 (the same seed).
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 

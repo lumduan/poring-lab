@@ -124,7 +124,8 @@ REST_WALK_MAX_S = 120.0  # 3.98 Amendment B: the spot not reached in this long -
 UI_EVERY_S = 10.0
 FLY_SETTLE_S = 2.5  # Amendment H: the position is not read this long after a Fly Wing ...
 FLY_JUMP_S = 15.0  # ... and a jump within this long after one is never a hard bar
-JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop)
+JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop) ...
+WALK_S_PER_CELL, WALK_SLACK = 0.15, 5  # ... and larger than a walk could cover (Amendment J)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
 CLEAR_AT = 0.40  # the setup drops the Etc tab (loot only) at or over this weight share ...
@@ -275,6 +276,15 @@ def overweight_red(frame_bgr: Any) -> bool:
     a = np.asarray(frame_bgr)[y : y + h, x : x + w, :3].astype(np.int16)
     b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
     return int(((r_ >= 150) & (g <= 90) & (b <= 90)).sum()) >= WEIGHT_RED_MIN
+
+
+def is_jump(here: Cell, p_: Cell, since_s: float) -> bool:
+    """PURE (4.00 Amendment J, pi3 23:56: a plant strike 13 cells off walked the Crusader 21 cells
+    while no position was read -- a false map-change bar, 0 other-map changes in the packets): a
+    position change is a JUMP only above JUMP_CELLS AND above what our walk covers since the last
+    read (150 ms a cell + WALK_SLACK). A map change teleports at once, so it still trips."""
+    d = max(abs(p_[0] - here[0]), abs(p_[1] - here[1]))
+    return d > max(JUMP_CELLS, since_s / WALK_S_PER_CELL + WALK_SLACK)
 
 
 def route(base: Any, carved: Any, here: Cell, goal: Cell) -> list[Cell] | None:
@@ -1063,9 +1073,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 pos = selfpos.read_minimap_xy(img, digits) if fresh else None
                 if pos is not None:
                     p_ = (int(pos[0]), int(pos[1]))
-                    if (here is not None and max(abs(p_[0] - here[0]), abs(p_[1] - here[1]))
-                            > JUMP_CELLS and tick - fly_at > FLY_JUMP_S):  # fmt: skip
-                        ev({"kind": "jump", "from": list(here), "to": list(p_)})
+                    if (here is not None and is_jump(here, p_, tick - last_pos_t)
+                            and tick - fly_at > FLY_JUMP_S):  # fmt: skip
+                        ev({"kind": "jump", "from": list(here), "to": list(p_),
+                            "since_s": round(tick - last_pos_t, 2)})  # fmt: skip
                         reason = "hard_bar: position jump (map change?)"
                         break
                     here, last_pos_t = p_, tick

@@ -275,3 +275,11 @@ def test_overweight_is_the_red_weight_line() -> None:
     frame2 = np.full((720, 1280, 3), 255, np.uint8)
     frame2[200:300, 200:300] = (20, 20, 230)  # red elsewhere (a monster): not the weight line
     assert not dh.overweight_red(frame2)
+
+
+def test_amendment_j_a_jump_is_more_than_the_walk_could_cover() -> None:
+    """pi3 (23:56): 21 cells in ~4.5 s of a plant strike is a WALK; a teleport is not."""
+    assert not dh.is_jump((95, 57), (74, 54), 4.5)  # 21 cells, reach 4.5 / 0.15 + 5 = 35
+    assert dh.is_jump((95, 57), (74, 54), 0.2)  # the same 21 cells in 0.2 s: a jump
+    assert not dh.is_jump((95, 57), (80, 57), 0.1)  # 15 cells: under JUMP_CELLS, never a jump
+    assert dh.is_jump((30, 160), (180, 20), 6.0)  # across the map in 6 s: a map change
