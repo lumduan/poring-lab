@@ -15505,6 +15505,48 @@ loot 18.8 / 22.2 %.
     picks), moved on 8.81 s, pulled 5.0 / 10 min, hard bars 0.
     - **Loot 66.7 % gross / 87.5 % net** (items 231: picked 154, looters 59, expired 9, out of
       sight 7; re-drops 55, recovered 38); **net 11,844 z / h**.
+  - **ri2** (R, seed 23304, `20261024T055201-demo-dungeon-patrol-H-ri2`, 05:51-06:33, time box,
+    40.0 min): 72 kills (**108.0 / h**), deaths 0, **HP min 19.2 %**, 2 potions, **8 Fly Wings** (8
+    escapes), 42 Heals, met 31.5 / 10 min, 33.3 s / kill (**27.6** / 0.5 / 5.2), loot step 1.03 s /
+    kill (34 steps, 12 picks), pulled **10.2 / 10 min**, hard bars 0.
+    - **Loot 19.0 % gross / 24.2 % net** (items 79: picked 15, out of sight 29, looters 19, expired
+      11); **net -2,871 z / h** (potions and Fly Wings cost more than the loot).
+  - R - L1: **-172.3 kills / h**.
+
+**4.02 RESULT (recorded 2026-10-24 ~06:4x ICT; 2 complete pairs, every run on its time box, each
+after >= 6 min out of the dungeon; descriptive, no adoption rule -- the decision is Batt's):**
+
+| pooled (2 runs each, 1.33 h) | R: Batt's rhythm (2.5 s, 2 picks) | L1: loot v1 (patrol base) | Batt's demo |
+|---|---|---|---|
+| kills / h | 204.7 (301.4 / 108.0) | **280.4** (280.5 / 280.3) | 472 |
+| R - L1 per pair | +20.9, -172.3 | | |
+| monsters met / 10 min (mean) | 44.0 | 51.2 | 67 |
+| loot step s / kill | **~1.0** (0.96 / 1.03) | 4.2 (3.80 / 4.65) | -- |
+| moved on after a fight (median) | 2.49 / 6.16 s | 5.53 / 8.81 s | 2.4 s |
+| loot gross / net | **18.1 / 22.3 %** | 59.9 / 78.0 % | 68 / 96 % |
+| net z / h | 267 | **11,307** | 20,520 gross |
+| s / kill: fighting / walking / standing | 17.5: 13.2 / 0.6 / 3.8 | 12.8: 7.2 / 0.7 / 5.0 | 7.6: 5.4 / 0.7 / 1.6 |
+| pulled along / 10 min (mean) | 9.4 | 5.1 | 0.7 |
+| HP min (worst), potions, Fly Wings, Heals | 19.2 %, 2, 8, 75 | 32.8 %, 0, 1, 48 | 74 %, 0, 0, 5 |
+| deaths, hard bars | 0, 0 | 0, 0 | 0, 0 |
+
+- **The expectation, point by point:**
+  - less loot time and less standing per kill than L1: **yes** (loot ~1.0 vs 4.2 s; standing 3.8
+    vs 5.0 s);
+  - more kills per hour: **no** (204.7 vs 280.4);
+  - gross completeness lower: **yes** (18.1 vs 59.9 %);
+  - net within 10 points: **no** (22.3 vs 78.0 %).
+- **Why the rhythm does not transfer:**
+  - Batt picks what he SEES. The bot finds items only by hovering, and in 2.5 s it hovers 1-3
+    cells: ~1 pick per 7 kills.
+  - The loop did not "recover the rest": 2-4 re-drops recovered, against Batt's 37 of 40.
+  - Moving on fast also pulled more monsters along (9.4 vs 5.1 / 10 min): ri2's fights grew
+    (27.6 s fighting per kill, HP min 19.2 %, 8 Fly Wings).
+- **The lever this points to is LOOT BY SIGHT** (decision 3's item class). It failed its label tier
+  tonight (`item-class.md` 8a / 8b).
+- **The patrol base (L1) with Amendment B's faster sweep** is the night's best:
+  - 280.4 kills / h and 11,307 net z / h on a fresh dungeon;
+  - 4.00's P arm: 186.0 kills / h and 8,318 z / h.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
