@@ -444,6 +444,128 @@ def test_the_fix2_rule_chooses_and_excludes() -> None:
         olf.FacingRule.for_events("best_of_8", evs)
 
 
+# --- 3i: W, the occlusion candidates, S3, round 4's samples (PRE-REGISTERED 0f039b9) -----------
+
+
+def test_fit_label_is_the_first_best_of_fit_label_all() -> None:
+    sheet = textured_sheet()
+    frame, pred = planted(sheet, 3, -2)
+    valid = np.ones(frame.shape, bool)
+    fits = olf.fit_label_all(frame, valid, sheet, pred, 6)
+    assert fits and olf.fit_label(frame, valid, sheet, pred, 6) == olf.best_fit(fits)
+    assert olf.best_fit([(0.5, 0, 0, 0), (0.7, 1, 0, 1), (0.7, 2, 0, 2)]) == (0.7, 1, 0, 1)
+    assert olf.best_fit([]) is None
+
+
+def stub_sheet(extents: dict[int, tuple[float, float, float, float]]) -> Any:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(extent=lambda _a, m: extents.get(m))
+
+
+def stub_pred(anchor: tuple[float, float] = (100.0, 200.0), scale: float = 1.0) -> Any:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(anchor_px=anchor, scale=scale, action_index=0)
+
+
+def test_w_is_the_plausible_frames_union_plus_two_px() -> None:
+    """3i's W: frames whose own fit >= best - 0.05 and not at the edge, each at its own offset,
+    the union grown by 2 px, clipped."""
+    sheet = stub_sheet({0: (-20, -40, 20, -10), 1: (-30, -30, 10, -12), 2: (-40, -50, 40, -5),
+                        3: (-10, -60, 10, -20)})  # fmt: skip
+    pred = stub_pred()
+    fits = [(0.70, 0, 0, 0), (0.66, 2, -1, 1), (0.60, 0, 0, 2), (0.69, 10, 0, 3)]
+    w = olf.wing_box(sheet, pred, fits, 10, (1280, 720))
+    # frame 0 at (0, 0): 80..120 x 160..190; frame 1 at (2, -1): 72..112 x 169..187; frame 2 is
+    # 0.10 below the best; frame 3 sits at the +-10 search edge: both left out
+    assert w == pytest.approx((70.0, 158.0, 122.0, 192.0))
+    assert olf.wing_box(sheet, pred, [(0.7, 0, 0, 0)], 10, (1280, 720)) == pytest.approx(
+        (78.0, 158.0, 122.0, 192.0)
+    )  # one decisive frame: the fitted box + 2 px
+    edge = olf.wing_box(sheet, stub_pred((15.0, 200.0)), [(0.7, 0, 0, 0)], 10, (1280, 720))
+    assert edge is not None and edge[0] == 0.0  # clipped to the frame
+    assert olf.wing_box(sheet, pred, [], 10, (1280, 720)) is None
+    assert olf.WING_MOBS == (1005, 1111) and olf.WING_DELTA == 0.05 and olf.WING_PAD_PX == 2
+
+
+def fate(gid: int, under: bool, ncc: float | None = 0.7, fail: str | None = None,
+         pre: str | None = None, box: tuple[float, ...] = (0, 0, 10, 10)) -> Any:  # fmt: skip
+    fit = None if ncc is None else (ncc, 0, 0, 0)
+    return olf.LabelFate(gid, 1153, under, pre, fit, fail, box=box, raw=box)  # type: ignore[arg-type]
+
+
+def test_the_candidates_decide_from_one_set_of_fates() -> None:
+    """3i's decision table: 1c's model test first, then 2b / 2c, then the fit (an under-box
+    failure is occluded_model), o3h's 0.48, then S3 among the kept."""
+    fates = [
+        fate(1, False, box=(0, 0, 10, 10)),  # clear, fits
+        fate(2, True, 0.70, box=(100, 0, 110, 10)),  # under, fits well
+        fate(3, True, 0.30, box=(200, 0, 210, 10)),  # under, fits weakly (< 0.48)
+        fate(4, True, 0.80, fail="unfit"),  # under, the fit fails (e.g. at the edge)
+        fate(5, False, None, fail="crowd"),  # clear, the fit fails
+        fate(6, False, pre="next_move"),  # 2b
+        fate(7, True, pre="ambiguous_view"),  # under + 2c
+        fate(8, False, box=(2, 2, 12, 12)),  # stacked on 1 (IoU 64 / 136 = 0.47)
+    ]
+
+    def run(occ_: str, stack: bool) -> tuple[set[int], dict[int, str]]:
+        kept, ex = olf.decide(fates, occ_, stack)
+        return {f.gid for f in kept}, {g: why for g, _m, why in ex}
+
+    k, ex = run("1c", False)
+    assert k == {1, 8} and ex == {2: "occluded_model", 3: "occluded_model", 4: "occluded_model",
+                                  5: "crowd", 6: "next_move", 7: "occluded_model"}  # fmt: skip
+    k, ex = run("o3h", False)
+    assert k == {1, 2, 8} and ex[3] == "occluded_model" and ex[7] == "ambiguous_view"
+    k, ex = run("o3", False)
+    assert k == {1, 2, 3, 8} and ex[4] == "occluded_model" and ex[5] == "crowd"
+    k, ex = run("o3", True)
+    assert k == {2, 3} and ex[1] == ex[8] == "stacked"
+    for c in olf.CANDIDATES:  # every candidate keeps a subset of o3's (round 4's pool)
+        assert run(*olf.parse_candidate(c))[0] <= run("o3", False)[0]
+    with pytest.raises(SystemExit):
+        olf.decide(fates, "o2", False)
+    assert (
+        olf.parse_candidate("o3h+S3") == ("o3h", True) and olf.candidate_name("1c", True) == "1c+S3"
+    )
+    with pytest.raises(SystemExit):
+        olf.parse_candidate("o3+S4")
+
+
+def test_iou_and_the_stacked_pairs() -> None:
+    assert olf.iou((0, 0, 10, 10), (0, 0, 10, 10)) == 1.0
+    assert olf.iou((0, 0, 10, 10), (10, 0, 20, 10)) == 0.0
+    assert olf.iou((0, 0, 10, 10), (5, 0, 15, 10)) == pytest.approx(50 / 150)
+    boxes = [(1, (0.0, 0.0, 10.0, 10.0)), (2, (5.0, 0.0, 15.0, 10.0)), (3, (0.0, 6.0, 10.0, 16.0))]
+    assert olf.stacked_gids(boxes) == {1, 2}  # 1-3: 40 / 160 = 0.25 < 0.30
+    assert olf.STACK_IOU == 0.30 and olf.O3H_TAU == 0.48
+
+
+def test_the_labels_name_keeps_3fs_without_3is_options() -> None:
+    assert olf.labels_name("fix2") == "v2orc-fix2" and olf.labels_name("1a") == "v2orc-fix"
+    assert olf.labels_name("fix2", "o3", True, True) == "v2orc-fix2+W+o3+S3"
+
+
+def test_round4_samples_are_each_candidates_first_30_of_one_order() -> None:
+    """3i: one seeded order of o3's pool; candidate X's sample = the first n labels X keeps."""
+    import qa_export
+
+    refs = [qa_export.JpegRef(i, i * 1000, Path("s.tar"), i, 1) for i in range(200)]
+    pool = [ols.Item(r, 1153, r.frame_id + 7, (0.0, 0.0, 1.0, 1.0), "fit") for r in refs]
+    all_ = {(it.ref.frame_id, it.gid) for it in pool}
+    half = {k for k in all_ if k[0] % 2 == 0}
+    few = {k for k in all_ if k[0] % 20 == 0}  # 10 labels
+    keeps = {"o3": all_, "1c": half, "1c+S3": few}
+    got = ols.round4_samples(pool, keeps, 30, "S", 4, 1153)
+    assert [len(got[c]) for c in ("o3", "1c", "1c+S3")] == [30, 30, 10]
+    order = ols.round4_samples(pool, {"o3": all_}, 200, "S", 4, 1153)["o3"]
+    for c, kp in keeps.items():  # the first n of the ONE order that the candidate keeps
+        assert got[c] == [it for it in order if (it.ref.frame_id, it.gid) in kp][:30]
+    assert got == ols.round4_samples(list(reversed(pool)), keeps, 30, "S", 4, 1153)  # seeded
+    assert got["o3"] != ols.round4_samples(pool, keeps, 30, "S", 5, 1153)["o3"]
+
+
 # --- REAL positive cases (local data only: skipped elsewhere) -----------------------------------
 
 RSW = Path("/dev/shm/poring-lab-tmp/orc/gat/data/orcsdun01.rsw")
