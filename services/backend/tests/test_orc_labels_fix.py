@@ -658,6 +658,115 @@ def test_real_fix2_draws_the_back_of_an_orc_after_an_east_move() -> None:
     assert s2 > 0.5 and s1 < olf.TAU  # measured 0.629 vs 0.060 (2026-10-22)
 
 
+# 3c's frozen parameters (params.json sha256 fe1fb9b3...f6d5af), restated for the 3i real cases
+FROZEN_3C = {"offset_ms": 120.0, "anchors_px": {"1005": [1.0, -1.0], "1042": [0.0, -2.0],
+                                                 "1111": [1.0, -1.0]},
+             "fit_px": {"1005": 10, "1042": 10, "1082": 6, "1084": 6, "1111": 10, "1152": 6,
+                        "1153": 6},
+             "tau": 0.092}  # fmt: skip
+
+
+def real_fates(frame_id: int, **kw: Any) -> tuple[Any, Any, Any]:
+    """(the FixLabeler, the col3 frame's FixFrame, its BGR) -- fix 2 + 3c's frozen values."""
+    if not (COL3 / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("col3 or the local KB is not here")
+    if not (RSW.exists() and MODELS.exists()):
+        pytest.skip("the orcsdun01 RSW / RSM are not extracted here")
+    import qa_export
+
+    sess = olf.Session.open(COL3, KB)
+    if sess.lab.sheets(1153) is None:
+        pytest.skip("the decoded sprites are not here")
+    fx = olf.FixLabeler(sess.lab, FROZEN_3C, occluders=olf.Occluders(RSW, MODELS), rule="fix2",
+                        **kw)  # fmt: skip
+    ref = next(r for r in sess.refs if r.frame_id == frame_id)
+    bgr = qa_export.read_jpeg(ref)
+    got = fx.frame(ref.t_mono_ns, bgr)
+    assert got is not None and got.applies
+    return fx, got, bgr
+
+
+def drawn_pixels(bgr: Any, box: Any, pad: int = 14, ring: tuple[int, int] = (10, 16),
+                 thr: float = 40.0) -> tuple[Any, Any]:  # fmt: skip
+    """3i's col3 measure: pixels whose RGB distance from the median of a ring around the box
+    exceeds ``thr``, 8-connected to such pixels inside the box (within ``pad`` px of it)."""
+    from collections import deque
+
+    x0, y0, x1, y1 = (int(round(v)) for v in box)
+    X0, Y0 = x0 - pad - ring[1], y0 - pad - ring[1]
+    win = bgr[Y0 : y1 + pad + ring[1], X0 : x1 + pad + ring[1], :3].astype(float)
+    m = ring[1] - ring[0]
+    rim = np.ones(win.shape[:2], bool)
+    rim[m:-m, m:-m] = False
+    fg = np.linalg.norm(win - np.median(win[rim], axis=0), axis=2) > thr
+    lim = np.zeros_like(fg)
+    lim[y0 - Y0 - pad : y1 - Y0 + pad, x0 - X0 - pad : x1 - X0 + pad] = True
+    fg &= lim
+    seen = np.zeros_like(fg)
+    q = deque((y, x) for y in range(y0 - Y0, y1 - Y0) for x in range(x0 - X0, x1 - X0) if fg[y, x])
+    for y, x in q:
+        seen[y, x] = True
+    while q:
+        y, x = q.popleft()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                yy, xx = y + dy, x + dx
+                if 0 <= yy < fg.shape[0] and 0 <= xx < fg.shape[1] and fg[yy, xx] \
+                        and not seen[yy, xx]:  # fmt: skip
+                    seen[yy, xx] = True
+                    q.append((yy, xx))
+    ys, xs = np.nonzero(seen)
+    return xs + X0, ys + Y0
+
+
+def inside(xs: Any, ys: Any, b: Any) -> Any:
+    return (xs >= b[0]) & (xs < b[2]) & (ys >= b[1]) & (ys < b[3])
+
+
+def test_real_w_reaches_a_wing_tip_past_the_fitted_box() -> None:
+    """THE REAL POSITIVE CASE of 3i's W: col3 frame 3180, Familiar gid 110096056 (fit 0.82). Its
+    left wing tip crosses the FITTED box's left edge (checked by eye, 2026-10-23); the drawn
+    pixels outside the fitted box (21 measured) all fall inside W, and W stays tight."""
+    _fx, got, bgr = real_fates(3180, wing=True)
+    k = next(x for x in got.kept if x.gid == 110096056)
+    assert k.mob == 1005 and k.fit_box is not None and k.ncc > 0.7
+    fb, w = k.fit_box, k.box
+    assert w[0] <= fb[0] and w[1] <= fb[1] and w[2] >= fb[2] and w[3] >= fb[3]
+    xs, ys = drawn_pixels(bgr, fb)
+    out_fit = ~inside(xs, ys, fb)
+    assert out_fit.sum() >= 10 and inside(xs, ys, w)[out_fit].all()
+    area = lambda b: (b[2] - b[0]) * (b[3] - b[1])  # noqa: E731
+    assert area(w) / area(fb) < 1.4
+    _fx0, got0, _ = real_fates(3180)  # without W: the same label, the fitted box (3f's)
+    k0 = next(x for x in got0.kept if x.gid == 110096056)
+    assert k0.box == fb
+
+
+def test_real_o3_keeps_a_visible_orc_under_a_model_box() -> None:
+    """THE REAL POSITIVE CASE of 3i's o3 / o3h: col3 frame 510, Orc Zombie gid 110096084 stands
+    under a model's projected box (1c excludes it) yet is drawn whole (checked by eye); its fit
+    (0.717) passes o3 and o3h's 0.48."""
+    _fx, got, _ = real_fates(510, fit_all=True)
+    f = next(x for x in got.fates if x.gid == 110096084)
+    assert f.mob == 1153 and f.under and f.pre is None and f.fail is None and f.fit[0] > 0.6
+    keeps = {c: f.gid in {x.gid for x in olf.decide(got.fates, *olf.parse_candidate(c))[0]}
+             for c in ("1c", "o3h", "o3")}  # fmt: skip
+    assert keeps == {"1c": False, "o3h": True, "o3": True}
+    _fx3, got3, _ = real_fates(510, occlusion="o3")  # the labeller's own o3 path agrees
+    assert 110096084 in {k.gid for k in got3.kept}
+
+
+def test_real_o3h_drops_a_white_plant_hidden_under_canopy() -> None:
+    """The case o3h exists for: col3 frame 6105, White Plant gid 110096168 under canopy, hidden
+    (a few specks by eye); its fit (0.279) still passes tau 0.092, so o3 keeps it, o3h not."""
+    _fx, got, _ = real_fates(6105, fit_all=True)
+    f = next(x for x in got.fates if x.gid == 110096168)
+    assert f.mob == 1082 and f.under and f.fail is None and f.fit[0] < olf.O3H_TAU
+    kept = {c: f.gid in {x.gid for x in olf.decide(got.fates, *olf.parse_candidate(c))[0]}
+            for c in ("1c", "o3h", "o3")}  # fmt: skip
+    assert kept == {"1c": False, "o3h": False, "o3": True}
+
+
 # --- a HUMAN DEMO as extra training data (3f): frame files, the hunting layout per frame ---------
 
 

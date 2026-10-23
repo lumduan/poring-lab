@@ -1287,7 +1287,7 @@ that reach the cache):
 **THE COMBINED TRAIN CACHE under each candidate that can still qualify: built, NOT run.**
 - **The guarded step**, with the chosen candidate's flags: `o3h` -> `--occlusion o3h --wing`;
   `o3h+S3` -> `--occlusion o3h --stack --wing`; `1c` -> `--wing`; `1c+S3` -> `--stack --wing`.
-  Everything else is 3h's step:
+  Everything else is 3h's step (ONE line in practice, wrapped here):
 
   ```
   cache@14400=--labels v2 --classes species --kb data/kb --fix data/labels/v2orc-fix-params.json
@@ -1310,7 +1310,7 @@ that reach the cache):
   - its RSW and RSMs sit at the frozen paths (the tool checks every sha256). The RSMs were restored
     tonight from the NAS (`scratch-archive/2026-10-21/poring-lab-tmp/orc-labels-fix/grf/`) to
     `/dev/shm/poring-lab-tmp/orc-labels-fix/grf/data/model/`.
-- **The plumbing was run** on col1 alone, as a dry run (`--occlusion o3h --wing`, 23:16-23:20):
+- **The plumbing was run** on col1 alone, as a dry run (`--occlusion o3h --wing`, 23:15-23:20):
   rc 0, labels `v2orc-fix2+W+o3h`, the candidate recorded in the provenance.
   - Without pixels it is an UPPER bound: 2,710 col1 frames, against 1,273 with the fits.
   - So the expectation below comes from the pixel passes, not from a dry run.
