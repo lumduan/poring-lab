@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "3i (PRE-REGISTERED 2026-10-23, Batt decision 5): the wing-reach box W for the Familiar / Drainliar and six occlusion candidates (1c, o3h, o3, each +-S3); T1 per candidate on col1, then blind round 4 (seed 4, one sample of 30 per candidate per species from ONE seeded order); the qualifying candidate that keeps the most col1 labels is chosen. 3h (round 3) failed on the Familiar."
+next_action: "3j: T1 per 3i candidate on col1 -- 1c 2.69 % PASS, o3h 1.55 % PASS, o3 5.03 % FAIL (out, with o3+S3); o3h keeps the most col1 labels of those that can qualify (5,122 in 1,264 whole frames vs 1c 858 in 347). Blind round 4 (seed 4, 336 crops, each candidate on its own 30 per species) is BUILT, NOT run: two new labellers, then blind_score.py --each-sample; the first qualifying of o3h, o3h+S3, 1c, 1c+S3 trains."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -1177,6 +1177,187 @@ frame), labels in whole frames, frames whole (and the session's), and the exclus
 - `../benchmarks/v2orc-vs-v1.md` Amendment B (this commit): col2's evaluation labels follow the
   same candidate; seed 3 stays the evaluation pack's;
 - 3f's added-session rule and Batt's demo (not added, 3g) are unchanged.
+
+### 3j. RESULT of 3i on col1: T1 per candidate, the counts, the round-4 pack (built, NOT run)
+
+**The order of events** (2026-10-23 ICT, from `date` and the tools' own stamps):
+- 3i pre-registered at **22:46:39** (0f039b9). Before it: only 3i's col3 measurements and round 3's
+  crops. col2 was not read, then or after.
+- The code: **1a64652** (22:58:39), then 8afa2b6 (23:09:03: `--counts-only`, used for col3 only).
+- The col1 runs, both at 1a64652: the three checks 22:58:56-23:03:07; the round-4 pass
+  22:58:57-23:08:50.
+
+**Positive controls (each reproduces a known result exactly):**
+- the new labeller under `1c` = 3f's labeller on 154 col3 frames (the kept boxes and the
+  exclusions);
+- the check under `1c` = 3g: 33 / 1,227 = 2.69 %;
+- the round-4 pass under `1c` = 3g's label table: 11,816 kept, every exclusion count per species;
+  347 whole orcsdun01 frames + the 9 prt_fild08 ones = 3g's 356;
+- `blind_score.py` (with the new `--sample` code) = round 3's score.
+
+**Real positive cases** (col3, committed as tests):
+- **W:** frame 3180, Familiar gid 110096056 (fit 0.82). By eye its left wing tip crosses the fitted
+  box. 21 drawn pixels lie outside the fitted box, all of them inside W; W / fitted area < 1.4.
+- **o3:** frame 510, Orc Zombie gid 110096084 stands under a model's projected box. By eye it is
+  drawn whole. Its fit is 0.717: `1c` excludes it, `o3` and `o3h` keep it.
+- **o3h's reason:** frame 6105, White Plant gid 110096168 under canopy. By eye it is hidden (a few
+  specks). Its fit is 0.279: `o3` keeps it, `o3h` drops it.
+
+**T1 PER CANDIDATE** (C1 judges the PREDICTION; col1, every 5th dwell frame, 2,325 frames read):
+
+| candidate | standing labels scored | C1 `bad_label` | C1 pooled | T1 (<= 0.050) | C2 (section 3's bars) |
+|---|---|---|---|---|---|
+| `1c`, `1c+S3` | 1,227 | 33 | 0.0269 | **PASS** | PASS for every species with >= 20 (Black Mushroom: none left) |
+| `o3h`, `o3h+S3` | 2,194 | 34 | **0.0155** | **PASS** | PASS for every species with >= 20 (Black Mushroom 14: no verdict) |
+| `o3`, `o3+S3` | 2,507 | 126 | **0.0503** | **FAIL** (over 0.050) | **FAIL for the Black Mushroom** (8 / 9 px; bar 4) |
+
+C1 per species (`bad_label` / scored):
+
+| species | `1c` | `o3h` | `o3` |
+|---|---|---|---|
+| Orc Zombie 1153 | 25 / 610 (4.1 %) | 25 / 1,200 (2.1 %) | 56 / 1,326 (4.2 %) |
+| Orc Skeleton 1152 | 0 / 113 | 0 / 187 | 0 / 195 |
+| White Plant 1082 | 0 / 125 | 0 / 166 | 0 / 204 |
+| Black Mushroom 1084 | -- (0) | 0 / 14 | **58 / 98 (59.2 %)** |
+| Familiar 1005 | 2 / 169 (1.2 %) | 2 / 325 (0.6 %) | 5 / 358 (1.4 %) |
+| Steel Chonchon 1042 | 5 / 160 (3.1 %) | 6 / 230 (2.6 %) | 6 / 247 (2.4 %) |
+| Drainliar 1111 | 1 / 50 (2.0 %) | 1 / 72 (1.4 %) | 1 / 79 (1.3 %) |
+
+- **The under-box standing labels:** `1c` excludes 1,613. `o3h` keeps 967 and excludes 458. `o3`
+  keeps 1,280 and excludes 145.
+- **2b / 2c:** 54 / 91 under `1c`; 115 / 218 under `o3h` and `o3`. The under-box labels now reach
+  the 2b / 2c test, where `1c` had already dropped them.
+- **⇒ `o3` and `o3+S3` cannot qualify, whatever round 4 says.**
+  - `o3`'s C1 is 0.0503, over T1's 0.050. The Black Mushroom drives it: 58 of the 98 under-canopy
+    labels it keeps on weak fits are `bad_label`.
+  - `o3+S3` has `o3`'s C1 (3i).
+  - C2 also fails for `o3`'s Black Mushroom: a stop under 3f.
+
+**THE COUNTS PER SPECIES** (col1, every 3rd frame, v2's frame rules). v2 keeps 4,343 frames: 4,334
+on orcsdun01, plus 9 on prt_fild08 before the first warp, which keep v1's labels: the Poring
+controls. Each cell is the labels kept in any frame / the labels in frames kept WHOLE (the ones
+that reach the cache):
+
+| species | `1c` (3b's literal rule) | `1c+S3` | `o3h` | `o3h+S3` | `o3` | `o3+S3` |
+|---|---|---|---|---|---|---|
+| Orc Zombie 1153 | 7,305 / 593 | 7,128 / 579 | 13,268 / 3,404 | 13,046 / 3,271 | 14,720 / 5,587 | 14,362 / 5,227 |
+| Orc Skeleton 1152 | 753 / 125 | 748 / 125 | 1,375 / 355 | 1,368 / 349 | 1,488 / 584 | 1,474 / 555 |
+| White Plant 1082 | 722 / 2 | 721 / 2 | 1,159 / 143 | 1,157 / 138 | 1,270 / 308 | 1,262 / 292 |
+| Black Mushroom 1084 | 56 / 0 | 56 / 0 | 892 / 28 | 892 / 28 | 1,471 / 198 | 1,471 / 195 |
+| Familiar 1005 | 1,384 / 44 | 1,381 / 42 | 2,666 / 550 | 2,657 / 536 | 2,833 / 973 | 2,815 / 932 |
+| Steel Chonchon 1042 | 1,215 / 81 | 1,214 / 80 | 1,666 / 488 | 1,665 / 476 | 1,982 / 741 | 1,981 / 716 |
+| Drainliar 1111 | 381 / 13 | 380 / 13 | 587 / 154 | 584 / 145 | 621 / 232 | 618 / 210 |
+| **all** | 11,816 / **858** | 11,628 / 841 | 21,613 / **5,122** | 21,369 / 4,943 | 24,385 / **8,623** | 23,983 / 8,127 |
+| frames whole (of 4,334) | 347 | 343 | 1,264 | 1,238 | 1,818 | 1,751 |
+
+- **The exclusions by reason** (labels; every candidate):
+  - 2b / 2c / unfit / crowd / ui: as 3g under `1c`; more 2b / 2c under `o3h` and `o3`, for the
+    reason above;
+  - `occluded_model`: `1c` 15,212; `o3h` 4,216; `o3` 1,444;
+  - `stacked` (S3): `1c+S3` 188 (Orc Zombie 177); `o3h+S3` 244 (Orc Zombie 222); `o3+S3` 402 (Orc
+    Zombie 358);
+  - per species and reason: `round4_summary.json`.
+- **3i's order of preference** (labels in whole frames): `o3` > `o3+S3` > `o3h` > `o3h+S3` > `1c`
+  > `1c+S3`.
+  - **The most-keeping candidate is `o3`, and T1 rules it out.**
+  - **The most-keeping candidate that can still qualify is `o3h`:** 5,122 labels in 1,264 whole
+    frames, against `1c`'s 858 in 347 (6.0x the labels, 3.6x the frames).
+- **3i's expected pack size (~350-500 crops) was an estimate, not a rule;** the pack holds 336.
+
+**THE PACK, round 4: built, NOT run.** The parent launches two NEW blind labellers.
+- **The sample:** seed 4.
+  - Every candidate keeps >= 30 labels of every species, so every sample is exactly 30 per
+    species.
+  - The union: Orc Zombie 43, Orc Skeleton 45, White Plant 43, Black Mushroom 72, Familiar 41,
+    Steel Chonchon 40, Drainliar 37.
+  - Plus 15 Poring controls: 336 crops, 17 grids, the reference sheet A-L.
+  - `instructions.txt` = round 2's, byte-identical (sha256 `1253e64b…fae13`).
+- **Where (local, client-derived, never committed):**
+  - the pack: `/dev/shm/poring-lab-tmp/orc-r4/pack/`;
+  - the key, apart: `/dev/shm/poring-lab-tmp/orc-r4/key/answer_key.json`;
+  - the runs: `/dev/shm/poring-lab-tmp/orc-r4/work/` (`check_{1c,o3h,o3}.json` with their rows,
+    `round4_summary.json`, `counts_<col3>.json`).
+- **The score:** `scripts/blind_score.py --key KEY --each-sample A.json B.json` gives every
+  candidate's T2 on its own 30 per species (`--sample X` for one).
+- **The selection when it is scored (3i, fixed):**
+  - `o3h` if it passes T2;
+  - else `o3h+S3`, else `1c`, else `1c+S3`;
+  - none: nothing of orcsdun01 trains, and the table goes to Batt.
+
+**THE COMBINED TRAIN CACHE under each candidate that can still qualify: built, NOT run.**
+- **The guarded step**, with the chosen candidate's flags: `o3h` -> `--occlusion o3h --wing`;
+  `o3h+S3` -> `--occlusion o3h --stack --wing`; `1c` -> `--wing`; `1c+S3` -> `--stack --wing`.
+  Everything else is 3h's step:
+
+  ```
+  cache@14400=--labels v2 --classes species --kb data/kb --fix data/labels/v2orc-fix-params.json
+    --fix-sha256 fe1fb9b3b5f72c5dd6e099dd2d16b28cd4ccd6eb0f0d4ff87c73b2cb23f6d5af --rule fix2
+    --occlusion o3h --wing --collection orcsdun01 --every 15 --every-png 1 --every-jpeg 3
+    --image png --cache-id v2orc-fix2-w-o3h-YYYYMMDD
+    --train 20261004T150114-console-p3-outdoor-d 20261004T130548-console-p3-outdoor-a
+      20261004T135714-console-p3-outdoor-b 20261004T141832-console-p3-indoor-b
+      20261003T215314-console-s2-outdoor 20261021T103231-orcsdun01-col1
+      20261021T142100-orcsdun01-col3
+    --val 20261004T143947-console-p3-outdoor-c 20261004T133558-console-p3-indoor-a
+    --test 20261004T152232-console-p3-indoor-c 20261004T054429-console-s2-outdoor
+      20261004T103815-console-s2-indoor-v2
+    --v1-species-sessions (the ten v1 sessions above)
+  ```
+- **Before it runs:**
+  - this branch is merged: the guarded step runs the main checkout's code;
+  - `data/labels/v2orc-fix-params.json` is the frozen file (sha256 `fe1fb9b3…f6d5af`). It is not in
+    the main checkout today; the NAS copy is `scratch-archive/2026-10-22/orc-fix2/params.json`;
+  - its RSW and RSMs sit at the frozen paths (the tool checks every sha256). The RSMs were restored
+    tonight from the NAS (`scratch-archive/2026-10-21/poring-lab-tmp/orc-labels-fix/grf/`) to
+    `/dev/shm/poring-lab-tmp/orc-labels-fix/grf/data/model/`.
+- **The plumbing was run** on col1 alone, as a dry run (`--occlusion o3h --wing`, 23:16-23:20):
+  rc 0, labels `v2orc-fix2+W+o3h`, the candidate recorded in the provenance.
+  - Without pixels it is an UPPER bound: 2,710 col1 frames, against 1,273 with the fits.
+  - So the expectation below comes from the pixel passes, not from a dry run.
+- **Expected per class** (TRAIN; exact for orcsdun01):
+  - col1 is round 4's pass and col3 a `--counts-only` pass (8afa2b6, 23:09-23:14), the same code
+    path and frames as the cache (`--every-jpeg 3`; the cache test asserts that the cache's path
+    equals the labeller's);
+  - v1's part is 3g's dry run (8,193 frames);
+  - VAL (3,242 frames) and TEST (2,511) are v1's only and do not depend on the candidate.
+
+| class (id) | `o3h` | `o3h+S3` | `1c` | `1c+S3` |
+|---|---|---|---|---|
+| TRAIN frames | 10,416 | 10,366 | 8,779 | 8,764 |
+| of which orcsdun01 blocks (col1 + col3, incl. their prt_fild08 frames 9 + 14) | 2,223 (1,273 + 950) | 2,173 | 586 | 571 |
+| player (0) | 2,223 | 2,173 | 586 | 571 |
+| npc (1) | 14,658 | 14,658 | 14,658 | 14,658 |
+| warp (2) | 0 | 0 | 0 | 0 |
+| Poring (3) | 20,573 | 20,573 | 20,573 | 20,573 |
+| Lunatic (4) / Pupa (5) / Drops (6) | 738 / 164 / 779 | same | same | same |
+| Creamy (7) | 0 | 0 | 0 | 0 |
+| Familiar (8) | 1,134 | 1,108 | 135 | 132 |
+| Steel Chonchon (9) | 754 | 738 | 155 | 154 |
+| White Plant (10) | 195 | 190 | 10 | 10 |
+| Black Mushroom (11) | 56 | 56 | 0 | 0 |
+| Drainliar (12) | 339 | 330 | 58 | 58 |
+| Orc Skeleton (13) | 763 | 745 | 205 | 202 |
+| Orc Zombie (14) | 6,145 | 5,911 | 1,083 | 1,032 |
+
+- The orcsdun01 share of the TRAIN frames: `o3h` 21.3 %; `1c` 6.7 % (3h's upper bound was 7.4 %).
+- **Adding a class from another label source (an ITEM class): the cache offers NO hook today.**
+  - `SpeciesClasses.load` refuses any fixed class other than player / npc / warp.
+  - The labels of a frame are assembled in `v2_session` (after `fixed_frame`, before `v2_yolo`)
+    and in `v01_session` for v1's sessions.
+  - What a hook needs:
+    - a class list that appends `item` as id 15 (ids 0-14 unchanged);
+    - an `--extra-labels` file keyed like the cache's own samples (session id + `t_mono_ns`; the
+      sample key is `<sid>.<kid:09d>`), merged as `V2Label("item", ..., kind="item:<source>")` in
+      BOTH paths;
+    - the completeness rule: a frame the item source has not judged is EXCLUDED, or the model
+      learns items as background. That changes the frame counts above and needs its own dry run.
+
+**NEXT (the parent's):**
+1. Launch two NEW blind labellers on the pack, then score with `--each-sample`.
+2. Apply 3i's selection (`o3h` first).
+3. If a candidate qualifies: merge this branch, place the params file, and run the cache step with
+   its flags.
+4. If none qualifies: nothing of orcsdun01 trains, and the table goes to Batt.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
