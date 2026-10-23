@@ -365,3 +365,20 @@ def test_loot_rhythm_is_v2s_order_with_batts_per_fight_bounds(monkeypatch) -> No
     assert dh.main() == 0 and got["a"].loot == "rhythm"
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
     assert 'loot_v2 = a.loot in ("v2", "rhythm")' in src  # rhythm runs v2's step
+
+
+def test_the_rest_spots_name_is_bound_once_in_run() -> None:
+    """4.01 Amendment C (li1 attempt 1, 22:55): dungeon@5's box spots were bound to `spots`, the
+    name of the REST spots, and the first rest crashed (`nearest_spot(spots, ...)`: 'BoxSpots'
+    object is not iterable). Every binding of `spots` inside run() must stay the rest spots."""
+    tree = ast.parse((ROOT / "scripts" / "dungeon_hunt.py").read_text())
+    run = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+    bound = [
+        t
+        for n in ast.walk(run)
+        if isinstance(n, ast.Assign | ast.AnnAssign)
+        for t in (n.targets if isinstance(n, ast.Assign) else [n.target])
+        if isinstance(t, ast.Name) and t.id == "spots"
+    ]
+    assert len(bound) == 1
+    assert "box_spots = (" in (ROOT / "scripts" / "dungeon_hunt.py").read_text()

@@ -949,7 +949,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
-        spots = BoxSpots(after=a.box_ignore) if a.box_ignore > 0 else None
+        box_spots = (
+            BoxSpots(after=a.box_ignore) if a.box_ignore > 0 else None
+        )  # NOT `spots`: the rest spots (4.01 Amendment C)
         box_fight: dict[str, Any] = {}
         spot_logged: dict[Cell, float] = {}
 
@@ -961,12 +963,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         def box_fight_done() -> None:
             """dungeon@5 (decision 4): a box-started fight that ended with no strike is a miss."""
-            if spots is not None and box_fight.get("spot") is not None \
+            if box_spots is not None and box_fight.get("spot") is not None \
                     and n_strike[0] == box_fight["n0"]:  # fmt: skip
                 sp_ = box_fight["spot"]
-                n_ = spots.miss(sp_)
+                n_ = box_spots.miss(sp_)
                 ev({"kind": "box_miss", "spot": list(sp_), "misses": n_,
-                    "ignored": spots.ignored(sp_)})  # fmt: skip
+                    "ignored": box_spots.ignored(sp_)})  # fmt: skip
             box_fight.clear()
 
         n_ag_diag, ag_diag_t = [0], [-1e9]
@@ -1399,8 +1401,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
                     def skip_b(foot: Sequence[float], here_b: Cell | None = here_b,
                                tick_b: float = tick) -> bool:  # fmt: skip
-                        sp_ = box_spot(here_b, foot) if spots is not None else None
-                        if sp_ is None or not spots.ignored(sp_):  # type: ignore[union-attr]
+                        sp_ = box_spot(here_b, foot) if box_spots is not None else None
+                        if sp_ is None or not box_spots.ignored(sp_):  # type: ignore[union-attr]
                             return False
                         if tick_b - spot_logged.get(sp_, -1e9) >= 30.0:  # rate-limited record
                             spot_logged[sp_] = tick_b
@@ -1775,8 +1777,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 boxes.stop()
                 ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self,
                     "spot_boxes_skipped": boxes.n_skip,
-                    "spots_ignored": [list(c) for c in (spots.misses if spots else {})
-                                      if spots and spots.ignored(c)]})  # fmt: skip
+                    "spots_ignored": [list(c) for c in (box_spots.misses if box_spots else {})
+                                      if box_spots and box_spots.ignored(c)]})  # fmt: skip
             if sitting:
                 agent_raw.keys(KEYS["stand"])
             if reason == "death":

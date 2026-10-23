@@ -15297,6 +15297,22 @@ with **0 hovers**: computing the changed cells came BEFORE the first hover and t
 - **A second unscored L2 pilot (~5 min, seed 23199)** checks that the loot step now hovers and
   picks before run 1.
 
+**The second pilot** (`20261023T224432-demo-dungeon-patrol-H-li-pilot2`, 22:46-22:51, seed 23199):
+the loot steps now hover and pick (11 steps, 14 loot clicks; e.g. 13 hovers / 2 picks in 7.6 s, 11
+hovers / 5 picks in 10.2 s). Box spots ignored 6 times. No further amendment from it.
+
+**li1 attempt 1** (`20261023T225045-...-li1`, seed 23201, started 22:50:45): **CRASHED at 22:55:54**
+(TypeError: 'BoxSpots' object is not iterable) at its first REST. A runner bug, not a result: the
+runner's own end warp put the Crusader back at its field stand (HP 84 %, judged on a screenshot at
+22:56). A stopped attempt, not scored.
+
+**Amendment C (2026-10-23 ~22:5x ICT, BEFORE li1's re-run; the parent):** Amendment A's code bound
+the box spots to `spots`, the name `run()` already used for the REST spots, so the first rest's
+`nearest_spot(spots, here)` failed. The box spots are now `box_spots`; a test asserts `spots` is
+bound once in `run()` (it fails on the old code, passes on the fix), and every other name dungeon@5
+added is bound once (checked by an AST walk). The chain re-runs li1 with the same seed, its gate
+reset first.
+
 ### 4.02 dungeon@5 + LOOT RHYTHM: Batt's demo rhythm -- 1-2 pickups, move on within ~2.5 s, the loop recovers the rest -- vs the patrol base's loot, in PAIRED runs (pre-registered 2026-10-23, the commit time of 4.02's first commit, BEFORE its code is built or run; Batt's decision 2 on the overnight report, received ~22:1x ICT: "Then, as its own next version, Batt's real loot rhythm from his demo: click what is seen/found quickly (1-2 pickups), move on within ~2-3 s, and let the loop recover the rest (his gross 68 % -> net 95.7 %: looters' items come back when he kills them on the next lap). Measure gross AND net completeness, s per kill, standing time, monsters pulled along.")
 
 **Why (Batt's demo, 4.00's source):** he moved on 2.4 s after a fight (median) with one pickup; 83
