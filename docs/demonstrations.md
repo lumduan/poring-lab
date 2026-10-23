@@ -15328,6 +15328,22 @@ standing outside fights; "loot s / kill" = the runner's loot-step seconds per ki
     pulled 5.0 / 10 min, hard bars 0. Amendment B shows here: v1's steps that ended "done" took
     p50 11.8 s for 29.5 hovers (4.00's pi6: 23.4 s for the same 29.5).
   - L2 - L1: **+165.3 kills / h**, +22.5 met / 10 min; loot gross -41.8 points.
+- **Pair 2 (L1 first):**
+  - **ll2** (L1, seed 23203, `20261024T002201-demo-dungeon-patrol-H-ll2`, 00:22-01:03, time box,
+    40.0 min): 56 kills (**84.0 / h**), deaths 0, HP min 93.0 %, 0 potions / Fly Wings / Heals,
+    loot **80.3 / 100 %** (items 71: picked 57, looters 14, re-drops 14, recovered 12), net 5,334 z
+    / h, met 22 / 10 min, 42.9 s / kill (8.9 / 6.7 / 27.3), loot 8.86 s / kill (54 steps, 52
+    picks), pulled 2.2 / 10 min, hard bars 0.
+  - **li2** (L2, seed 23204, `20261024T010415-demo-dungeon-patrol-H-li2`, 01:04-01:45, time box,
+    40.0 min): 17 kills (**25.5 / h**), deaths 0, HP min 96.5 %, 0 potions / Fly Wings / Heals,
+    loot **58.8 / 62.5 %** (items 17: picked 10, out of sight 3, expired 3, looters 1), net 717 z
+    / h, met **15 / 10 min** (the sparsest run of the two nights), 141.2 s / kill (8.3 / 32.3 /
+    100.6), loot 6.58 s / kill, walking 23.1 %, hard bars 0.
+    - **Not a runner fault** (checked before li3): 1,012 of its 1,509 walk attempts were refused
+      "cursor unknown" (no click). That is the same two-thirds share as every run, 4.00's included
+      (pi5 233 / 353, pi6 291 / 438). The box watcher ran normally (2,400 frames). The loop met
+      almost nothing.
+  - L2 - L1: **-58.5 kills / h**, -7 met / 10 min.
 
 **Decision 7's packet check (offline, 2026-10-23 23:0x ICT; no runner change):** "the 160 'no icon
 while remembered' cases: check the status packets".
