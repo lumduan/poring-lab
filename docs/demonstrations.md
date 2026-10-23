@@ -15277,6 +15277,43 @@ its time). Batt's decisions on the overnight report (received ~22:1x ICT), verba
 - the last run ends its time box by ~06:30 ICT (the end state by 07:00); a partial run is reported
   apart; a pair is complete only with both runs full.
 
+### 4.02 dungeon@5 + LOOT RHYTHM: Batt's demo rhythm -- 1-2 pickups, move on within ~2.5 s, the loop recovers the rest -- vs the patrol base's loot, in PAIRED runs (pre-registered 2026-10-23, the commit time of 4.02's first commit, BEFORE its code is built or run; Batt's decision 2 on the overnight report, received ~22:1x ICT: "Then, as its own next version, Batt's real loot rhythm from his demo: click what is seen/found quickly (1-2 pickups), move on within ~2-3 s, and let the loop recover the rest (his gross 68 % -> net 95.7 %: looters' items come back when he kills them on the next lap). Measure gross AND net completeness, s per kill, standing time, monsters pulled along.")
+
+**Why (Batt's demo, 4.00's source):** he moved on 2.4 s after a fight (median) with one pickup; 83
+of his 88 pickups came within 10 s after a fight; gross 68.2 % / net 95.7 % (looters took 40, 37
+re-dropped when he killed them). The bot's loot step took 722-965 s of every 40-min 4.00 run
+(30-40 %), the largest part of its standing time (P: 9.6 s / kill standing vs his 1.6).
+
+**The change (`--loot rhythm`, dungeon@5's base otherwise):** loot v2's ORDER (4.01: the cells
+whose image changed since the fight began first, then the 5 x 5 list cells around the fight's
+kills, nearest first; a cell hovered empty is not hovered again unless a kill came near it
+after), with Batt's rhythm as its bounds:
+- **one time budget per FIGHT: 2.5 s** (v2: 10 s), shared by every loot step after the same
+  fight, checked before each hover (a pickup click already made completes its walk);
+- **at most 2 pickups per fight** (v2: 10);
+- PICKUP -> click, SWORD -> fight, as v1 / v2. Nothing else changes; the patrol loop "recovers
+  the rest" by passing again.
+
+**Arms (paired, alternating; everything else dungeon@5 on the patrol loop):** R = `--loot rhythm`,
+L1 = `--loot v1` (the patrol base's loot: 4.01's control, so 4.01's L2 and 4.02's R are each set
+against the same base). **An unscored R pilot (~5 min) first;** a bug = an amendment before run 1.
+
+**Runs:** after 4.01's three pairs (4.01 Amendment A), 40 min each, R first in odd pairs, L1 first in
+even pairs (labels ri1 / rl1, rl2 / ri2, ...; seeds 23301, 23302, ...); as many pairs as fit, the
+last run ending its time box by ~06:30 ICT; a pair is complete only with both runs full.
+
+**Measures (per run, pooled per arm; `dungeon_judge.py` + `dungeon_style.py` + `loot_complete`,
+packets):** loot completeness GROSS and NET and the fates (picked, looters, re-dropped, expired,
+out of sight); the loot step's seconds per kill; seconds per kill split fighting / walking /
+STANDING outside fights; monsters PULLED ALONG / 10 min; kills / h; monsters met / 10 min; net
+zeny / h; HP min; potions, Fly Wings, Heals; deaths; hard bars. Batt's demo beside them (target).
+
+**Expectation (stated before any run), no adoption rule:** R spends less loot time and less
+standing time per kill than L1 and kills more per hour; its GROSS completeness is lower than L1's;
+its NET completeness is within 10 points of L1's. The decision is Batt's.
+
+**Hard bars and deaths:** as 4.00 / 4.01.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
