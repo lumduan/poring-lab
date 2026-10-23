@@ -15313,6 +15313,33 @@ bound once in `run()` (it fails on the old code, passes on the fix), and every o
 added is bound once (checked by an AST walk). The chain re-runs li1 with the same seed, its gate
 reset first.
 
+**Decision 7's packet check (offline, 2026-10-23 23:0x ICT; no runner change):** "the 160 'no icon
+while remembered' cases: check the status packets".
+- **How:** a new decoder for the status icons, ZC_MSG_STATE_CHANGE 0x0196 / 0x0983 (`status_change`:
+  the icon id, the block, on / off, the timers; Auto Guard = EFST 58). It is on branch
+  `feat/status-change` (c62a6de); the ids are not in the lock's disagreements, so the table and lock
+  are unchanged.
+  - 4.00's captures (2026-10-22 13-22 UTC, 11 files) were replayed with it
+    (`guarded_build.py replaydev:`, 74 s, worst capture stall 6.0 %): 88,149 events, 172 Auto Guard
+    packets for the Crusader (86 on, 86 off).
+  - The 387 diagnostic frames were joined with the server's state at their time.
+- **The 227 frames the dungeon bar reads PRESENT: the server said ON for all 227.** The field bar
+  (30) had misread every one.
+- **The 160 frames read ABSENT:**
+  - 143: the server said OFF, and Auto Guard had EXPIRED at its 300 s each time;
+  - 17: the server said ON but the client drew NO status icon (scores 68-175; e.g. pi4 #10 under
+    Blind's dark vignette, pi5 #5 with an empty status column in a normal scene).
+- **Uptime:** Auto Guard was up **76.6 %** of the 13 runs' time (per run 48-98 %).
+  - All 80 off packets inside the runs were 300-s expiries; NONE was our F3 toggling it off.
+  - **15 expiries were followed by more than 200 s without it**: the runner recasts only 300 s after
+    its REMEMBERED cast, and that memory can run late (S4b2: an icon first seen on counts as "just
+    cast").
+- **For Batt (a later version, not tonight's base):** with the dungeon bar's presence now matching
+  the server on 227 / 227 frames, recast as soon as the icon has read absent for a few seconds on a
+  scene that is not dark, instead of waiting for 300 s after the remembered cast. The 17 frames
+  with no icon while it was on are that rule's toggle-off risk; they need a wider "dark / no icons"
+  guard (e.g. no other status icon in the column either).
+
 ### 4.02 dungeon@5 + LOOT RHYTHM: Batt's demo rhythm -- 1-2 pickups, move on within ~2.5 s, the loop recovers the rest -- vs the patrol base's loot, in PAIRED runs (pre-registered 2026-10-23, the commit time of 4.02's first commit, BEFORE its code is built or run; Batt's decision 2 on the overnight report, received ~22:1x ICT: "Then, as its own next version, Batt's real loot rhythm from his demo: click what is seen/found quickly (1-2 pickups), move on within ~2-3 s, and let the loop recover the rest (his gross 68 % -> net 95.7 %: looters' items come back when he kills them on the next lap). Measure gross AND net completeness, s per kill, standing time, monsters pulled along.")
 
 **Why (Batt's demo, 4.00's source):** he moved on 2.4 s after a fight (median) with one pickup; 83
