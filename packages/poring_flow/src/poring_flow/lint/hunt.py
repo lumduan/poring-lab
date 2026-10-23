@@ -52,7 +52,8 @@ PATROL_ROUTE = "patrol_route"
 # nobody else plays on, so striking every monster in melee range steals no one's kill. Deliberately
 # a fixed list, not the interlock's `allowed` status: an allowed SHARED server (the community one,
 # if it is ever approved) must still refuse the melee ring. lab-rathena-th (environment 1b,
-# stopped, not adopted) is left out; adding a server here is a reviewed code change.
+# stopped, not adopted) is left out -- Batt 2026-10-23, decision 9: "not added to LAB_SERVERS";
+# adding a server here is a reviewed code change.
 LAB_SERVERS = frozenset({"lab-rathena"})
 
 

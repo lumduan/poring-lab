@@ -499,7 +499,7 @@ Watch it with `docker compose logs -f desktop`.
 
 **FreeRDP 2 vs 3 flags.** This image pins FreeRDP **3.32.1** from trixie-backports (`xfreerdp3`, a link to
 `xfreerdp`; rollback image `poring-lab/desktop:freerdp-3.15` ➡️ removed 2026-10-23 ~03:15 ICT in the host's approved image cleanup (home-assistant-ops OS-039 phase 3 A): a rollback now means
-rebuilding 3.15 from git history, not byte-identical). 2.x spellings aren't even compiled in:
+rebuilding 3.15 from git history, not byte-identical: docs/operations/freerdp-315-rollback.md). 2.x spellings aren't even compiled in:
 
 | Purpose | 2.x | 3.x (used here) |
 |---|---|---|

@@ -12,7 +12,8 @@
 # package whose `xfreerdp3` link rdp-loop.sh keeps using (the process's comm stays `xfreerdp3`;
 # scripts/rdp_reconnect.sh counts both names). Rollback image: poring-lab/desktop:freerdp-3.15
 # (re-tag it as :local, then a guarded recreate) -- REMOVED 2026-10-23 in the host's approved image
-# cleanup (OS-039 phase 3 A): a rollback now means rebuilding 3.15 from git history.
+# cleanup (OS-039 phase 3 A): a rollback now means rebuilding 3.15 from git history
+# (docs/operations/freerdp-315-rollback.md; Batt 2026-10-23: documented, not rebuilt).
 FROM debian:trixie-20260918-slim
 
 ENV DEBIAN_FRONTEND=noninteractive

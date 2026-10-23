@@ -19,7 +19,8 @@ next_action: Phase 0 - measure capture FPS, fidelity and end-to-end latency per 
 - ➡️ **AMENDED 2026-10-01 (Arm C): the pin moved to FreeRDP 3.32.1** from trixie-backports.
   - Decision 6 and the CVE note below are updated.
   - The rollback image is `poring-lab/desktop:freerdp-3.15`. ➡️ That image was removed 2026-10-23 ~03:15 ICT in the host's approved image cleanup (home-assistant-ops OS-039 phase 3 A); a
-    rollback now means rebuilding FreeRDP 3.15 from git history (not byte-identical).
+    rollback now means rebuilding FreeRDP 3.15 from git history (not byte-identical): the recipe is
+    `docs/operations/freerdp-315-rollback.md` (Batt 2026-10-23, decision 8: documented, not rebuilt).
   - Evidence: [h264-plan.md](../h264-plan.md), "Arm C results".
   - [ADR-0009](0009-console-session-capture.md) (PROPOSED) would generalize this ADR to "one
     Windows session, one display path at a time".
