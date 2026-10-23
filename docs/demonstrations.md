@@ -15469,6 +15469,15 @@ run.**
 - **Checked by the pilot:** distinct monsters seen and monsters met / 10 min, against li3's 18 and
   15.
 
+**The unscored R pilot** (`20261024T031550-demo-dungeon-patrol-H-ri-pilot`, 03:15-03:22, seed 23300,
+after 6 min out of orcsdun01): 5.0 min, 29 kills (348 / h), deaths 0, HP min 72.8 %, hard bars 0;
+loot 18.8 / 22.2 %.
+- **Amendment A's check: met 92 / 10 min and 50 distinct monsters in 5 min** (22 Orc Zombies,
+  7 Orc Skeletons), against li3's 18 in 40 min. The population is back. A gap of under 5 min
+  between runs carried the dungeon's state over.
+- **The rhythm works as built:** 12 steps, each <= 2.5 s of budget and <= 2 picks per fight; a
+  SWORD in a hover starts the fight. No amendment from the pilot.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
