@@ -55,6 +55,25 @@ Four readings the pre-registration left open, fixed before the step each one tou
    section 2): FIT [0, 282.913519548), TRAIN [302.913519548, 649.527039097), TEST
    [669.527039097, end]. Frames between are in no block.
 
+## AMENDMENT B (written 2026-10-23 22:5x ICT, the commit time of this amendment; AFTER the prt_fild08 FIT measurement, BEFORE the freeze and BEFORE any TRAIN or TEST frame is read)
+
+**What happened:** section 4.5's rule returned NO value for `D_APPEAR` on prt_fild08's FIT data
+(`measure_prt_fild08.json`). The present share of fresh drops at their final spot is low even when
+settled (plateau over ages [2, 3] s = 0.325), so the 0.1-s bins up to 2.0 s (n 26-86 each) scatter
+around it (0.17-0.45 from 0.9 s on) and "every bin >= 0.95 x plateau" never holds. The tool
+(`freeze`, written before the measurement) stops in that case.
+
+**The change (the only one):** `D_APPEAR = 2.0 s + the pre-registered 0.2 s margin = 2.2 s`.
+- 2.0 s is the start of section 4.5's own PLATEAU window: the pre-registration already defines ages
+  >= 2.0 s as "settled". The value comes from that definition and the margin, not from the bins.
+- It is the conservative side: frames up to 2.2 s after a drop are EXCLUDED (`item_settling`),
+  never labelled.
+- Reported, NOT used: the bins rise from <= 0.05 (ages 0-0.6 s) to ~0.3 from 0.9-1.1 s, so the
+  fall + display delay itself looks like ~1 s (item_icons.py's 2026-10-17 `FALL_SETTLE_S` was 1.1 s).
+- Nothing else changes. In particular G1 keeps TAU[map] (Youden) and its 5.0 % bar, although the
+  FIT data's TPR at TAU is 0.754 (FPR 0.031): that predicts a G1 near 25 %, i.e. a FAIL by the
+  pre-registered tier. It is not changed after that was seen; G1 runs and is reported as written.
+
 ## 1. What the packets say (OFFLINE ground truth, ADR-0007)
 
 - `floor_item_appear` kind `fall` = ZC_ITEM_FALL_ENTRY5 0x0ADD: a FRESH drop (a kill, a throw):
