@@ -15478,6 +15478,17 @@ loot 18.8 / 22.2 %.
 - **The rhythm works as built:** 12 steps, each <= 2.5 s of budget and <= 2 picks per fight; a
   SWORD in a hover starts the fight. No amendment from the pilot.
 
+**Run log** (each run after >= 6 min out of orcsdun01, Amendment A; packets):
+- **Pair 1:**
+  - **ri1** (R, seed 23301, `20261024T032844-demo-dungeon-patrol-H-ri1`, 03:28-04:09, time box,
+    40.0 min): 201 kills (**301.4 / h**), deaths 0, HP min 41.5 %, 0 potions / Fly Wings, 33 Heals,
+    met **56.5 / 10 min**, 11.9 s / kill (8.1 / 0.6 / 3.3), loot step **0.96 s / kill** (87 steps,
+    29 picks), moved on 2.49 s after a fight (median; Batt 2.4), pulled 8.7 / 10 min, hard bars 0.
+    - **Loot 17.8 % gross / 21.7 % net** (items 219: picked 39, out of sight 89, looters 54, expired
+      37; re-drops 39, recovered 4); net 3,404 z / h.
+    - The loop did NOT recover the rest: only 4 of 39 looter re-drops were picked, against Batt's
+      37 of 40.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
