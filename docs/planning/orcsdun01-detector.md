@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Warp-and-watch collection plus packet labels give a per-species detector for orcsdun01 that does not forget prt_fild08 (v1's gold set and held-out sessions no worse)."
-status: PROPOSED (collection done 2026-10-21; the 15 classes decided (3b); label fix 2 + exclusions and the two tiers PRE-REGISTERED 2026-10-22 in 3f; the evaluation is pre-registered in ../benchmarks/v2orc-vs-v1.md BEFORE training, its P1 amended by 3f)
+status: PROPOSED (collection done 2026-10-21; the 15 classes decided (3b); label fix 2 + exclusions and the two tiers PRE-REGISTERED 2026-10-22 in 3f; round 3 failed on the Familiar (3h); W + the occlusion candidates + blind round 4 PRE-REGISTERED 2026-10-23 in 3i; the evaluation is pre-registered in ../benchmarks/v2orc-vs-v1.md BEFORE training, its P1 amended by 3f and 3i)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "3h: the TRAINING TIER FAILS -- T1 passes (C1 2.69 % on col1), T2 (blind round 3) fails on ONE species, the Familiar (labeller E 86.7 % good < 90 %: wing tips cut). By 3f nothing of orcsdun01 trains; Batt's call: a wing-reach box for the bats, the Familiar's labels left out, or accept it. The cache tooling (build_frame_cache --fix, per-session label modes) is built anyway for the next attempt."
+next_action: "3i (PRE-REGISTERED 2026-10-23, Batt decision 5): the wing-reach box W for the Familiar / Drainliar and six occlusion candidates (1c, o3h, o3, each +-S3); T1 per candidate on col1, then blind round 4 (seed 4, one sample of 30 per candidate per species from ONE seeded order); the qualifying candidate that keeps the most col1 labels is chosen. 3h (round 3) failed on the Familiar."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -1027,6 +1027,156 @@ through the adapter (a625def). Under 3f it is NOT added: its own C1 is 14.8 %.**
   1c excludes 3,851 + 3,234 frames). Boxes per orcsdun01 class (upper bounds): Orc Zombie 1,275,
   Orc Skeleton 241, Steel Chonchon 198, Familiar 155, Drainliar 64, White Plant 16, Black Mushroom
   0. Batt's O1-O4 occlusion choice (3e) is what would change that.
+- ➡️ **Batt decided (decision 5, 2026-10-23 ~22:1x): a wing-reach box W for the bats, a new blind
+  round, and the occlusion option that keeps the most labels while the blind check passes.
+  Pre-registered in 3i.**
+
+### 3i. PRE-REGISTERED: the wing-reach box W, the occlusion candidates and blind round 4 (Batt's decision 5, 2026-10-23 ~22:1x; pre-registered at the commit time of 3i's first commit, BEFORE W or any candidate is built and BEFORE anything new runs on col1)
+
+**Batt (verbatim):** "Familiar: a wing-reach box (Familiar + Drainliar), then a new blind round;
+don't lower the bar. Occlusion: choose the O-option that keeps the most visible-monster labels
+while the blind check still passes; report the counts per species."
+
+**Read before this commit (nothing new on col1; col2 not read):**
+- col3, the fitting block: every 15th dwell frame, fix 2 and 3c's frozen parameters (params
+  sha256 `fe1fb9b3…f6d5af`), local scratch scripts, 2026-10-23 22:2x-22:4x ICT. The measurements
+  below.
+- Round 3's failed Familiar crops 056 and 108 (the NAS pack, scored in 3h), by eye, and E / F's
+  notes on 032 / 056 / 108 / 109.
+
+**Measured on col3 for W:**
+- **590 bat labels kept** (Familiar + Drainliar; idle 470, walk 120; no one-shot action).
+- **The fit picks its frame decisively:** best minus second-best frame NCC, median 0.20 (5.3 %
+  under 0.02).
+- **The drawn size is right:** a scale sweep (x0.90-1.25) on 323 bats clear of model boxes peaks
+  at x1.00 (median NCC 0.725; x1.05 0.695; x0.95 0.682).
+- **The drawn pixels reach 0-2 px past the fitted box.**
+  - The sample: 255 isolated bats.
+  - The pixels: an RGB distance over 40 from the median of a ring around the box, 8-connected to
+    such pixels inside the box.
+  - Per side (left / top / right / bottom): p50 0-1 px, p90 2 px.
+  - Larger values were mostly floods into the background: 10 % reached the 14-px window.
+- **3e's S2 taken literally (the whole action envelope at the fit) is too loose:**
+  - 2.0x the fitted box's area (median; p90 2.63);
+  - the envelope spans every flap position (frames from 24 x 31 to 62 x 28 native px inside a
+    62 x 44 envelope);
+  - by eye on 40 col3 crops it is visibly loose around most bats;
+  - "loose" is not "good" under section 5's bar, so it would fail the bar it is meant to pass.
+- **Round 3's crops, by eye:**
+  - 056 shows another flap frame than the fitted one (wings up);
+  - 108 extends a wing past the box;
+  - 109's notes say a wing tip sits above the box.
+
+**W, THE WING-REACH BOX** (Familiar 1005 and Drainliar 1111 only; every other species keeps 3b's
+fitted box):
+- W = the union of the boxes of every frame of the drawn action that passes BOTH tests:
+  - its OWN fit (3b item 0's fit: the masked NCC on the visible pixels within +-10 px) scores at
+    least the best frame's NCC minus 0.05;
+  - that fit is not at the search edge.
+- Each frame sits at its own best offset; the fitted frame is always in the union.
+- The union is grown by 2 px on every side, then clipped to the frame.
+- **Frozen:** delta 0.05 (3e's "decisive" margin), pad 2 px (col3's p90 above).
+- **W changes the BOX only.** Whether a label is kept, its fit, C1 and C2 are unchanged.
+- **On col3:**
+  - the union adds a frame for 50 of the 590 labels (8.5 %): the ambiguous fits, mostly under
+    canopy;
+  - W's area is 1.26x the fitted box's (median; p90 1.33, p95 1.70).
+
+**THE OCCLUSION CANDIDATES buildable tonight.** Each runs with fix 2, 2b, 2c, W and 3c's frozen
+parameters, and the fit unchanged. The column says what happens to a label whose predicted box
+overlaps a model's projected box (1c's test):
+
+| candidate | a label under a model box | S3 |
+|---|---|---|
+| `1c` | EXCLUDED: 3b's literal rule, today's | no |
+| `o3h` | KEPT when its fit passes AND its fit NCC >= 0.48; else EXCLUDED (`occluded_model`) | no |
+| `o3` | KEPT when its fit passes (3b's: >= tau 0.092, not at the edge); else EXCLUDED (`occluded_model`): 3e's O3 | no |
+| `1c+S3`, `o3h+S3`, `o3+S3` | as the base candidate | yes: see below |
+
+- **S3 (3e's stacked rule):** after the base rule, every kept monster label whose FITTED box
+  (before W) has IoU >= 0.30 with another kept monster label's fitted box in the same frame is
+  EXCLUDED (`stacked`). Both labels of the pair go.
+- **Unchanged:**
+  - a label clear of every model box whose fit fails is excluded as `crowd` / `ui` / `unfit`, as
+    in 3b;
+  - a frame with any excluded monster label is excluded from the cache, as in 3b / 3f.
+- **o3h's 0.48** is the pooled 5th percentile of the fit NCC of the labels kept CLEAR of every model
+  box on col3 (n 1,869; 0.4775, measured 22:3x today).
+  - The meaning: an under-box label must fit as well as 95 % of the clearly visible ones.
+  - It targets O3's own risk (3e: tau 0.092 is low, a fit can pass on clutter).
+  - On col3 the White Plants under canopy fit at 0.23-0.26 (hidden), against >= 0.65 clear.
+  - The labels under a box whose fit passes: p5 0.24, p25 0.49, median 0.67 (n 1,788).
+  - The col3 crops viewed for W included bats under canopy kept at fits of 0.17-0.43 that are
+    barely visible.
+- **Out of tonight's reach** (3e's costs):
+  - O1, per-label ignore regions: ~0.5 day, a cache rebuild, and a matching don't-care list for
+    col2; the mask is a visual cue the model can learn;
+  - O2, a depth test: ~1 day for the 162 placed RSM models rasterised per dwell, ~0.5 day for the
+    alpha-textured leaves, and its own positive case;
+  - O4 = O2 + O3: O2's cost.
+  - None can be built, verified and pre-registered by ~01:00.
+
+**T1 PER CANDIDATE** (3f's C1, unchanged: `orc_labels_fix.py check --rule fix2`, col1, every 5th
+dwell frame, the PREDICTION, no fit):
+- **The standing labels scored are those the candidate does not exclude for occlusion:**
+  - `1c`: as 3g. It must reproduce 3g's 33 / 1,227 = 2.69 % exactly (the positive control);
+  - `o3` / `o3h`: they add the standing labels under a model box whose fit passes their rule.
+- **S3 never changes C1.** Section 3's standing rule isolates every scored label by 120 px from
+  every other unit, so no fitted box can overlap another's. X+S3's C1 is X's.
+- **T1 passes for a candidate when its C1 pooled <= 0.050** (the unrounded ratio).
+- **Reported:** C1 per species, C2 per species (section 3's bars), the exclusions per reason. A C2
+  failure stops before any cache (3f); it is not a verdict.
+
+**T2 = BLIND ROUND 4** (the same check, the same bars):
+- **The labellers:** two NEW blind labeller agents, launched by the parent. Each sees ONLY the pack
+  directory and its `instructions.txt`: round 2's, byte-identical (sha256 `1253e64b…fae13`).
+- **The seed:** 4. Rounds 1-3 used 0, 1, 2; 3 is reserved for the evaluation pack.
+- **The labels:** col1's, by the same tools as 3g (every 3rd frame, v2's frame rules,
+  `--blind-from kept_labels`), under the six candidates at once.
+- **The bars, unchanged:** for each orcsdun01 species, >= 90 % "good" from EACH labeller AND the
+  species right on >= 95 %. Scored by `scripts/blind_score.py`.
+- **THE SAMPLE: one per candidate, all drawn from ONE seeded order**, so that one round judges
+  every candidate on its own n = 30:
+  - **the pool:** per species, the labels `o3` keeps. Every other candidate's kept set is a subset
+    of it.
+  - **the order:** one seeded random order of that pool (sorted by frame, then gid, then shuffled
+    with `random.Random(f"{session}:4:{mob}")`);
+  - **candidate X's sample** for the species = the FIRST 30 labels in that order that X keeps. When
+    X keeps fewer than 30, all of them; when it keeps none, the species fails T2 for X.
+  - **the pack** = the union of the six samples, per species, plus col1's 15 Poring controls (v1's
+    labels, as in rounds 1-3), in one seeded shuffled numbering.
+  - **the key** records, for every crop, the candidates whose sample contains it.
+  - So each candidate's sample is a uniform random sample of its own kept labels, of exactly 3f's
+    size. The labellers cannot tell which candidate a crop serves.
+  - **Expected size:** ~45-70 crops per species (1c keeps about half of what o3 keeps, and Black
+    Mushroom far less), ~350-500 in all. No cap.
+- **Scoring per candidate:** `blind_score.py --key KEY --sample X` restricts the key to X's sample.
+  - The Poring controls stay in every sample: reported, deciding nothing.
+  - X passes T2 when EVERY orcsdun01 species passes for BOTH labellers.
+  - A crop's answers count for every sample it is in.
+
+**THE SELECTION RULE** (Batt's, made operational; fixed now):
+- **A candidate QUALIFIES** when it passes T1 and T2.
+- **The chosen one** keeps the MOST orcsdun01 monster labels that reach the cache from col1:
+  - the labels in the frames it keeps WHOLE (every 3rd frame, v2's frame rules), summed over the
+    7 species;
+  - a tie: more whole frames; then the order o3, o3+S3, o3h, o3h+S3, 1c, 1c+S3.
+- **The counts are computed and reported BEFORE the round is scored** (in this run), so the order of
+  preference exists before any blind answer.
+- **If no candidate qualifies,** nothing of orcsdun01 trains, and the per-candidate table goes to
+  Batt.
+- **No failure is "attributed".** Every candidate is judged on its own sample.
+
+**Reported per species, for each candidate** (`1c` = 3b's literal rule, today's): labels kept (any
+frame), labels in whole frames, frames whole (and the session's), and the exclusions by reason
+(`occluded_model`, `stacked`, `next_move`, `ambiguous_view`, `unfit`, `crowd`, `ui`).
+
+**What follows:**
+- the chosen candidate's flags go into the combined cache: `build_frame_cache.py --fix ... --rule
+  fix2` plus its occlusion, S3 and W flags;
+- `../benchmarks/v2orc-vs-v1.md` Amendment B (this commit): col2's evaluation labels follow the
+  same candidate; seed 3 stays the evaluation pack's;
+- 3f's added-session rule and Batt's demo (not added, 3g) are unchanged.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
