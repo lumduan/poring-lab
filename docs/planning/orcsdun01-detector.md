@@ -1359,6 +1359,88 @@ that reach the cache):
    its flags.
 4. If none qualifies: nothing of orcsdun01 trains, and the table goes to Batt.
 
+### 3k. RESULT: blind round 4 (T2) -- FAILS for every candidate on ONE question: the Familiar's SPECIES (scored 2026-10-23 ~23:4x ICT)
+
+- **The round:** two NEW blind labeller agents, G and H (started 23:3x, done by 23:4x), each given
+  only `pack/` (336 crops = the six candidates' samples of 30 per species + 15 Poring controls;
+  round 2's instructions, sha256 `1253e64b…fae13`). Scored by `blind_score.py --each-sample` against
+  `key/answer_key.json` (3i's design: each candidate on exactly its own 30 per species).
+- **`candidates_passing_t2`: none.**
+
+| species (o3h, 3i's first choice) | G good / species | H good / species | T2 |
+|---|---|---|---|
+| Orc Zombie 1153 | 100 / 100 | 100 / 100 | PASS |
+| Orc Skeleton 1152 | 100 / 100 | 100 / 100 | PASS |
+| White Plant 1082 | 96.7 / 96.7 | 96.7 / 96.7 | PASS |
+| Black Mushroom 1084 | 100 / 100 | 100 / 100 | PASS |
+| **Familiar 1005** | 96.7 / **53.3** | 93.3 / **53.3** | **FAIL (species)** |
+| Steel Chonchon 1042 | 93.3 / 100 | 93.3 / 100 | PASS |
+| Drainliar 1111 | 93.3 / 100 | 93.3 / 100 | PASS |
+| (Poring 1002, control) | 100 / 100 | 100 / 100 | PASS |
+
+- **The other candidates:**
+  - 1c, 1c+S3, o3h+S3: the same picture (Familiar species 53.3 % for both labellers; every other
+    species passes);
+  - o3 and o3+S3 also fail the Black Mushroom (66.7 % good; 8 "no"); they were already out on T1.
+- **W worked:** the Familiar's BOXES are 93-97 % good for both labellers (round 3: E 86.7 %, the
+  wing tips).
+- **The species failure, from the key (read after scoring):**
+  - Of the 41 Familiar crops, G named 21 and H 20 "L", the rest "J" (the Familiar's letter); 21
+    crops both called L.
+  - L is the LUNATIC (1063), a prt_fild08 species that does not spawn on orcsdun01. Every
+    Drainliar crop was named right by both (37 / 37).
+  - The labellers' notes: "bat-like with white crescent wing and red-tinted wing; matched to L by
+    red+white colouring".
+  - `reference.png` shows each species in ONE pose (idle, direction 0, frame 0). Its Lunatic is a
+    white crescent with a red mark; its Familiar a grey bat with level wings. The raised white
+    wing of a Familiar in other poses matches the Lunatic's single tile.
+  - A label's species is the server's monster id (packets), so this is a flaw of the REFERENCE
+    SHEET, not of the labels. The round's verdict stands: **T2 FAILS** (3i: "none means nothing of
+    orcsdun01 trains").
+- **The item class failed its own tier the same evening** (`item-class.md` 8a). So on round 4's
+  result NOTHING trains tonight.
+
+### 3l. PRE-REGISTERED: blind round 5 -- round 4 with a MULTI-VIEW reference sheet (the parent, 2026-10-23 ~23:5x ICT; pre-registered at the commit time of 3l's first commit, BEFORE its code is built and before any round-5 crop exists)
+
+**Why it is a re-registration, not a re-run:** the house rule (3b) is "one that fails is fixed and
+re-registered, never re-run under these bars". What failed in round 4 is the INSTRUMENT (a
+one-pose reference sheet, 3k), not a label rule. Batt's decision 5 says "don't lower the bar":
+nothing here lowers it. Round 4's FAIL stays on the record above.
+
+**What changes (one thing):**
+- `reference.png` shows each species in SEVERAL views: its IDLE action in directions 0, 2, 4 and 6
+  (S, W, N, E under our mapping), each at frame 0 and at the action's middle frame. Identical
+  images are shown once. Each species' views are drawn side by side in its tile, under its letter.
+- The same 12 species and letters scheme: the 7 orcsdun01 species + the 5 prt_fild08 ones, with a
+  seeded order.
+
+**What stays exactly as 3i (no exceptions):**
+- the labels: fix 2 + 2b + 2c, W, the six occlusion candidates, the frozen parameters
+  (`fe1fb9b3…f6d5af`);
+- T1 as computed in 3j: o3h 1.55 % and 1c 2.69 % pass, o3 5.03 % out;
+- the pack design: one seeded order of o3's kept labels per species, each candidate's sample = the
+  first 30 it keeps, plus 15 Poring controls, from col1 (every 3rd frame);
+- **the instructions, byte-identical** (sha256 `1253e64b…fae13`). They describe the reference as
+  "12 rendered monster sprites, each under a LETTER", which still holds;
+- **the bars:** >= 90 % good from EACH labeller AND the species right >= 95 %, every species;
+- scoring by `blind_score.py --each-sample`;
+- 3i's selection rule: the qualifier with the most col1 labels in frames kept whole (o3h, then
+  o3h+S3, then 1c, then 1c+S3).
+
+**New:**
+- **seed 7** (0-2 used, 3 reserved for the monster evaluation, 4 = round 4, 5 = the item round, 6
+  reserved for the item evaluation);
+- **two NEW blind labeller agents** who saw neither round 4's pack nor the item pack.
+- The pack and key go to `/dev/shm/poring-lab-tmp/orc-r5/` (pack and key apart).
+
+**The decision rule:**
+- **If a candidate qualifies:** the training tier passes for it. Batt's brief then applies:
+  - build the combined cache (3j's step with that candidate's flags; the IO rules);
+  - train 15 classes (the item class failed its tier) in the long-lived worker (MID_CKPT, R1-R3,
+    the VRAM cap);
+  - score `v2orc-vs-v1.md` once, after training ends.
+- **If none qualifies:** nothing trains, and both rounds go to Batt.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
