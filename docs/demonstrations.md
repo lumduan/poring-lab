@@ -15344,6 +15344,45 @@ standing outside fights; "loot s / kill" = the runner's loot-step seconds per ki
       (pi5 233 / 353, pi6 291 / 438). The box watcher ran normally (2,400 frames). The loop met
       almost nothing.
   - L2 - L1: **-58.5 kills / h**, -7 met / 10 min.
+- **Pair 3:**
+  - **li3** (L2, seed 23205, `20261024T014651-demo-dungeon-patrol-H-li3`, 01:46-02:27, time box,
+    40.0 min): 9 kills (**13.5 / h**), deaths 0, HP min 96.5 %, loot 100 / 100 % (9 items), net
+    1,387 z / h, met **15 / 10 min**; the patrol walked **9 laps** and the packets show only 18
+    distinct monsters in 40 min (8 Black Mushrooms, 5 White Plants, **2 Orc Zombies**, 1 Steel
+    Chonchon, 1 Orc Skeleton, 1 Poring); loot 10.17 s / kill, hard bars 0.
+  - **ll3** (L1, seed 23206, `20261024T022850-demo-dungeon-patrol-H-ll3`, 02:28-03:09, time box,
+    40.0 min): 5 kills (**7.5 / h**), deaths 0, HP min 95.0 %, loot 100 / 100 % (4 items), net 660
+    z / h, met 15.5 / 10 min, loot 11.41 s / kill, hard bars 0.
+  - L2 - L1: **+6.0 kills / h** (both starved: the population collapse, 4.02 Amendment A).
+
+**4.01 RESULT (recorded 2026-10-24 ~03:1x ICT; 3 complete pairs, every run on its time box;
+descriptive, no adoption rule -- the decision is Batt's):**
+
+| pooled (3 runs each, 2.0 h) | L2: loot v2 | L1: loot v1 (patrol base) | Batt's demo |
+|---|---|---|---|
+| kills / h | **109.0** (288.0 / 25.5 / 13.5) | 71.4 (122.7 / 84.0 / 7.5) | 472 |
+| L2 - L1 per pair | +165.3, -58.5, +6.0 (2 of 3 for L2) | | |
+| monsters met / 10 min (mean) | 28.3 | 23.3 | 67 |
+| **loot step s / kill** | **3.19** | **7.77** | -- |
+| loot gross / net | **43.7 % / 60.5 %** | **81.8 % / 98.4 %** | 68 % / 96 % |
+| s / kill: fighting / walking / standing | 33.0: 7.7 / 6.0 / 19.4 | 50.4: 12.1 / 8.2 / 30.0 | 7.6: 5.4 / 0.7 / 1.6 |
+| net z / h | 3,304 | 3,963 | 20,520 gross |
+| pulled / 10 min (mean) | 3.4 | 2.6 | 0.7 |
+| HP min (worst), deaths, hard bars | 34.7 %, 0, 0 | 65.9 %, 0, 0 | 74 %, 0, 0 |
+| potions / Fly Wings / Heals | 0 / 3 / 28 | 0 / 0 / 2 | 0 / 0 / 5 |
+
+- **The expectation held only in part.** L2 spends less loot time per kill (3.19 vs 7.77 s), but it
+  lost **38 points** of gross completeness, not "at most 5". Its items went to LOOTERS: in li1, 79
+  of 237 items, against 12 of 79 in ll1. A 10-s budget plus "no re-hover of empty cells" leaves
+  items behind, and in a dense spell the looters take them.
+- **The pairs are dominated by density.** One dense spell (li1: met 55 / 10 min, 288 kills / h)
+  against four starved runs (met 15-22). The population along the loop collapsed through the
+  night (Orc Zombies seen per run 49 -> 12 -> 2; see 4.02 Amendment A). Pairs 2 and 3 say little
+  about loot.
+- **Amendment B's fix lowered L1's loot time too** (v1 steps p50 11.8 s, against 23.4 s in 4.00),
+  so L1 here is not 4.00's P arm.
+- **For Batt:** loot v2 trades completeness for time. Batt's own rhythm (4.02) bounds the time
+  harder and relies on the loop to come back for the rest.
 
 **Decision 7's packet check (offline, 2026-10-23 23:0x ICT; no runner change):** "the 160 'no icon
 while remembered' cases: check the status packets".
