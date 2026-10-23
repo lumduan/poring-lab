@@ -15301,7 +15301,7 @@ with **0 hovers**: computing the changed cells came BEFORE the first hover and t
 the loot steps now hover and pick (11 steps, 14 loot clicks; e.g. 13 hovers / 2 picks in 7.6 s, 11
 hovers / 5 picks in 10.2 s). Box spots ignored 6 times. No further amendment from it.
 
-**li1 attempt 1** (`20261023T225045-...-li1`, seed 23201, started 22:50:45): **CRASHED at 22:55:54**
+**li1 attempt 1** (`20261023T225048-demo-dungeon-patrol-H-li1`, seed 23201, started 22:50:45): **CRASHED at 22:55:54**
 (TypeError: 'BoxSpots' object is not iterable) at its first REST. A runner bug, not a result: the
 runner's own end warp put the Crusader back at its field stand (HP 84 %, judged on a screenshot at
 22:56). A stopped attempt, not scored.
