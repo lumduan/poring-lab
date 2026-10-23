@@ -244,6 +244,8 @@ function describeInteraction(e: Interaction): string {
       return `drop ${e.amount}× slot ${e.index}`;
     case "drop_result":
       return e.ok ? `dropped ${e.amount}× slot ${e.index}` : `drop of slot ${e.index} refused`;
+    case "status_change":
+      return `status icon ${e.efst} ${e.on ? "on" : "off"} (unit ${e.gid})`;
   }
 }
 

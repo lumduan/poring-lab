@@ -3818,6 +3818,101 @@
       "title": "StatRaiseResult",
       "type": "object"
     },
+    "StatusChange": {
+      "additionalProperties": false,
+      "description": "ZC_MSG_STATE_CHANGE (0x0196) / ZC_MSG_STATE_CHANGE2 (0x0983, with timers): a status ICON of a\nblock in sight turned on or off (2026-10-23, Batt's decision 7: did Auto Guard lapse?).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "efst": {
+          "description": "The status icon id (rAthena enum efst_type; 58 = Auto Guard).",
+          "type": "integer"
+        },
+        "gid": {
+          "description": "The block the status belongs to (our account id for us).",
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "on": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remain_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0x0983 only: the time remaining."
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0x0983 only: the total duration."
+        },
+        "type": {
+          "const": "status_change",
+          "default": "status_change",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "efst",
+        "gid",
+        "on",
+        "total_ms",
+        "remain_ms"
+      ],
+      "title": "StatusChange",
+      "type": "object"
+    },
     "TimeSync": {
       "additionalProperties": false,
       "description": "ZC_NOTIFY_TIME: rAthena gettick() (CLOCK_MONOTONIC ms, mod 2^32) at send.",
@@ -4267,6 +4362,7 @@
           "stat_change": "#/$defs/StatChange",
           "stat_raise_request": "#/$defs/StatRaiseRequest",
           "stat_raise_result": "#/$defs/StatRaiseResult",
+          "status_change": "#/$defs/StatusChange",
           "time_sync": "#/$defs/TimeSync",
           "unequip_request": "#/$defs/UnequipRequest",
           "unequip_result": "#/$defs/UnequipResult",
@@ -4435,6 +4531,9 @@
         },
         {
           "$ref": "#/$defs/DropResult"
+        },
+        {
+          "$ref": "#/$defs/StatusChange"
         },
         {
           "$ref": "#/$defs/UnknownPacket"

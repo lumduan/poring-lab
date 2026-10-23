@@ -438,6 +438,20 @@ def _drop_request(b: bytes) -> Decoded:
     return Decoded("drop_request", {"index": _u16(b, 2), "amount": _u16(b, 4)})
 
 
+def _status_change(b: bytes) -> Decoded:
+    # ZC_MSG_STATE_CHANGE 0x0196 (9 bytes) and, with battle_config display_status_timers on and the
+    # status starting, ZC_MSG_STATE_CHANGE2 0x0983 (29 bytes; PACKETVER >= 20120618)
+    # (clif_status_change_sub, clif.cpp:6472-6532 at e985006): the status ICON id u16 @2 (rAthena
+    # enum efst_type, status.hpp:1453; EFST_AUTOGUARD = 58), the block id u32 @4, the flag u8 @8
+    # (1 on, 0 off); 0x0983 adds the total u32 @9 and the remaining u32 @13 (client ms) and val1-3
+    # i32 @17 / 21 / 25. Sent to the block's AREA: every status of every unit in sight.
+    timed = len(b) >= 29
+    return Decoded("status_change", {
+        "efst": _u16(b, 2), "gid": _u32(b, 4), "on": b[8] != 0,
+        "total_ms": _u32(b, 9) if timed else None, "remain_ms": _u32(b, 13) if timed else None,
+    })  # fmt: skip
+
+
 def _drop_result(b: bytes) -> Decoded:
     # ZC_ITEM_THROW_ACK 0x00AF (clif_dropitem, clif.cpp:2893-2903; 6 bytes): the client's
     # inventory index u16 @2, amount u16 @4 -- removed from the inventory. A refused drop answers
@@ -486,6 +500,8 @@ MAP_SC: dict[int, _Layout] = {
     0x00A1: _Layout(6, _floor_item_vanish),  # ZC_ITEM_DISAPPEAR
     0x0B41: _Layout(70, _pickup_result),  # ZC_ITEM_PICKUP_ACK (V7 + grade)
     0x00AF: _Layout(6, _drop_result),  # ZC_ITEM_THROW_ACK
+    0x0196: _Layout(9, _status_change),  # ZC_MSG_STATE_CHANGE (2026-10-23, Batt decision 7)
+    0x0983: _Layout(29, _status_change),  # ZC_MSG_STATE_CHANGE2 (with timers)
 }  # fmt: skip
 # client -> server: the map server's packet_db at PACKETVER 20211103 (clif_packetdb.hpp +
 # clif_shuffle.hpp, last write wins), where each id maps to the clif_parse_* handler named.

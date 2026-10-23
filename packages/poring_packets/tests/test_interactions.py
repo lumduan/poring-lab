@@ -91,6 +91,9 @@ SAMPLES: dict[tuple[str, int], bytes] = {
     ("sc", 0x00A1): struct.pack("<HI", 0x00A1, 77),
     ("sc", 0x0B41): pickup_ack(5, 2, 9001, 3, 0),
     ("sc", 0x00AF): struct.pack("<HHH", 0x00AF, 6, 1),
+    # 2026-10-23 (Batt decision 7): the status icons, ZC_MSG_STATE_CHANGE and its timed variant
+    ("sc", 0x0196): struct.pack("<HHIB", 0x0196, 58, 2_000_002, 0),
+    ("sc", 0x0983): struct.pack("<HHIBIIiii", 0x0983, 58, 2_000_002, 1, 300_000, 299_000, 0, 0, 0),
     ("cs", 0x0362): struct.pack("<HI", 0x0362, 77),
     ("cs", 0x0363): struct.pack("<HHH", 0x0363, 6, 1),
 }

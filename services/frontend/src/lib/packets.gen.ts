@@ -58,6 +58,7 @@ export interface PoringPackets {
     | PickupResult
     | DropRequest
     | DropResult
+    | StatusChange
     | UnknownPacket
     | Desync;
   source: PacketSource;
@@ -1409,6 +1410,42 @@ export interface DropResult {
    */
   t_mono_ns: number;
   type: "drop_result";
+  validation_account: boolean;
+}
+/**
+ * ZC_MSG_STATE_CHANGE (0x0196) / ZC_MSG_STATE_CHANGE2 (0x0983, with timers): a status ICON of a
+ * block in sight turned on or off (2026-10-23, Batt's decision 7: did Auto Guard lapse?).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "StatusChange".
+ */
+export interface StatusChange {
+  dir: "cs" | "sc";
+  /**
+   * The status icon id (rAthena enum efst_type; 58 = Auto Guard).
+   */
+  efst: number;
+  /**
+   * The block the status belongs to (our account id for us).
+   */
+  gid: number;
+  gm_command: boolean;
+  on: boolean;
+  packet_id: number;
+  /**
+   * 0x0983 only: the time remaining.
+   */
+  remain_ms: number | null;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  /**
+   * 0x0983 only: the total duration.
+   */
+  total_ms: number | null;
+  type: "status_change";
   validation_account: boolean;
 }
 /**
