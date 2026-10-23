@@ -15488,6 +15488,16 @@ loot 18.8 / 22.2 %.
       37; re-drops 39, recovered 4); net 3,404 z / h.
     - The loop did NOT recover the rest: only 4 of 39 looter re-drops were picked, against Batt's
       37 of 40.
+  - **rl1** (L1, seed 23302, `20261024T041537-demo-dungeon-patrol-H-rl1`, 04:15-04:57, time box,
+    40.0 min, the v2orc training running beside it from 04:31): 187 kills (**280.5 / h**), deaths 0,
+    HP min 32.8 %, 0 potions, 1 Fly Wing, 32 Heals, met 53.5 / 10 min, 12.8 s / kill (7.2 / 0.7 /
+    4.9), loot step 3.80 s / kill (83 steps, 107 picks), moved on 5.53 s, pulled 5.2 / 10 min,
+    hard bars 0.
+    - **Loot 52.8 % gross / 68.1 % net** (items 218: picked 115, looters 72, expired 20, out of
+      sight 4; re-drops 49, recovered 23); **net 10,770 z / h**, the best of the two nights.
+    - The CPU box detector kept its rhythm with the training running: 2,399 box frames against
+      ri1's 2,400 (1 Hz).
+  - R - L1: **+20.9 kills / h**; loot gross -35.0 points; net z / h -7,366.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
