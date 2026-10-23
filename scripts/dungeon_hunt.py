@@ -131,6 +131,10 @@ SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
 # cell hovered empty is skipped unless a kill came within 2 cells of it after that hover
 LOOT_FIGHT_BUDGET_S = 10.0
 LOOT_V2_MAX_HOVERS = 40
+# 4.02 (Batt 2026-10-23, decision 2: his demo's RHYTHM): v2's order, at most 2 pickups and 2.5 s
+# per FIGHT (he moved on 2.4 s after a fight, median, with one pickup); the loop recovers the rest
+LOOT_RHYTHM_BUDGET_S = 2.5
+LOOT_RHYTHM_PICKS = 2
 PICKUP_MIN = 0.90  # cursor_sword: a drawn PICKUP hand
 WALK_AHEAD = 7  # the walk click's target: this many path cells ahead (in view)
 WALK_EVERY_S = 1.2
@@ -1058,8 +1062,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 return None
             return g_[y0_ : y0_ + 20, x0_ : x0_ + 24]
 
-        loot_v2 = a.loot == "v2"
+        loot_v2 = a.loot in ("v2", "rhythm")
+        rhythm = a.loot == "rhythm"  # 4.02: v2's order with Batt's per-fight bounds
+        fight_budget = LOOT_RHYTHM_BUDGET_S if rhythm else LOOT_FIGHT_BUDGET_S
         loot_used: dict[float, float] = {}  # loot v2: the fight (its ref's time) -> seconds used
+        loot_picked: dict[float, int] = {}  # 4.02: the fight -> pickups so far (rhythm's bound)
         empty_cells: dict[Cell, float] = {}  # loot v2: cells hovered empty -> when
 
         def changed_cells(
@@ -1114,12 +1121,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             nonlocal here, lock, mode
             t_s = time.monotonic()
             key = ref["t"] if ref is not None else t_s
-            left = LOOT_FIGHT_BUDGET_S - loot_used.get(key, 0.0)
-            out_: dict[str, Any] = {"kind": "loot_step", "loot": "v2", "list_kills": len(lst),
+            left = fight_budget - loot_used.get(key, 0.0)
+            max_picks = (LOOT_RHYTHM_PICKS - loot_picked.get(key, 0)) if rhythm else LOOT_MAX_PICKS
+            out_: dict[str, Any] = {"kind": "loot_step", "loot": a.loot, "list_kills": len(lst),
                                     "budget_left_s": round(left, 2)}  # fmt: skip
-            if here is None or left <= 0:
-                ev({**out_, "end": "no_position" if here is None else "budget",
-                    "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+            if here is None or left <= 0 or max_picks <= 0:
+                ev({**out_, "end": "no_position" if here is None else "budget" if left <= 0
+                    else "picks", "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
                 return "none"
             plan = {(g[0] + dx, g[1] + dy) for g, t_ in lst if t_s - t_ <= 55.0
                     for dx in range(-2, 3) for dy in range(-2, 3)}  # fmt: skip
@@ -1136,7 +1144,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             picks, hovered, n_changed = 0, 0, 0
             end = "done"
             for c, why in order:
-                if picks >= LOOT_MAX_PICKS or hovered >= LOOT_V2_MAX_HOVERS:
+                if picks >= max_picks or hovered >= LOOT_V2_MAX_HOVERS:
                     end = "bound"
                     break
                 if time.monotonic() - t_s > left:
@@ -1176,6 +1184,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     empty_cells[c] = time.monotonic()
             used = time.monotonic() - t_s
             loot_used[key] = loot_used.get(key, 0.0) + used
+            loot_picked[key] = loot_picked.get(key, 0) + picks
             ev({**out_, "hovered": hovered, "hovered_changed": n_changed, "picks": picks,
                 "end": end, "ms": round(used * 1e3)})  # fmt: skip
             return "fight" if end == "fight" else "done"
@@ -1832,10 +1841,11 @@ def main() -> int:
     )
     t.add_argument(
         "--loot",
-        choices=["v1", "v2"],
+        choices=["v1", "v2", "rhythm"],
         default="v1",
-        help="the loot step: v1 (3.98's list + sweep) or v2 (Batt decision 4: changed cells first, "
-        "a budget per fight, no re-hover of empty cells; 4.01)",
+        help="the loot step: v1 (3.98's list + sweep), v2 (Batt decision 4: changed cells first, "
+        "a budget per fight, no re-hover of empty cells; 4.01) or rhythm (4.02: v2's order, 2.5 s "
+        "and 2 pickups per fight)",
     )
     t.add_argument(
         "--search",

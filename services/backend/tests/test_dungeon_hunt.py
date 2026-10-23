@@ -346,3 +346,22 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     assert a.plant_sweep is False and a.box_ignore == dh.BOX_IGNORE_AFTER == 2
     assert a.ag_match == sv.AG_MATCH_DUNGEON == 40.0
     assert dh.VERSION == "dungeon@5"
+
+
+def test_loot_rhythm_is_v2s_order_with_batts_per_fight_bounds(monkeypatch) -> None:
+    """4.02 (Batt 2026-10-23, decision 2): --loot rhythm = v2's order, 2.5 s and 2 pickups per
+    fight (his demo: moved on 2.4 s after a fight, median, with one pickup)."""
+    assert dh.LOOT_RHYTHM_BUDGET_S == 2.5 and dh.LOOT_RHYTHM_PICKS == 2
+    assert dh.LOOT_FIGHT_BUDGET_S == 10.0  # v2's own budget is unchanged
+    got = {}
+
+    def fake_run(a):
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "H", "--seed", "1", "--loot", "rhythm"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].loot == "rhythm"
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert 'loot_v2 = a.loot in ("v2", "rhythm")' in src  # rhythm runs v2's step
