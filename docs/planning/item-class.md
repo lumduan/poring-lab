@@ -427,3 +427,27 @@ further):
    pre-registration covers the hunt recordings.
 5. The `sub / 16` reading should replace `sub / 12` in drop_blobs.py / item_icons.py (measured
    here; their own evaluation would need a re-run).
+
+### 8b. RESULT: the blind round 1 (seed 5), scored 2026-10-23 ~23:5x ICT (the parent)
+
+- **Two new blind labeller agents, A and B**, each given only `blind-pack-seed5/` and its
+  `instructions.txt` (62 crops: prt_fild08 40 items + 20 negatives; orcsdun01 1 + 1). Scored by
+  `scripts/item_blind_score.py` (`answers-round1/score.json`).
+
+| map | labeller | good box (bar >= 90 %) | item present right (bar >= 95 %) | pass |
+|---|---|---|---|---|
+| prt_fild08 | A | 67.5 % (27 / 40; 13 "off") | 100 % (60 / 60) | FAIL |
+| prt_fild08 | B | 55.0 % (22 / 40; 18 "off") | 100 % (60 / 60) | FAIL |
+| orcsdun01 | A / B | 0 / 1 each | 1 / 2 and 2 / 2 | no sample to speak of |
+
+- **What it says:**
+  - The LABELS sit on real items: every item crop was seen as an item and every negative as empty,
+    by both labellers.
+  - The BOXES are too small. "Off" = the box cuts the item: bottle necks and tops, plant stems,
+    a carrot's leaves (labeller A's notes). The box is the template's size (11-15 x 13-15 px, cut
+    from FIT samples), not the drawn sprite's.
+  - Agreement: q1 61 / 62, q2 56 / 62; both labellers judged 22 crops good.
+- **With G1 (8a) this confirms the tier's FAIL on both maps** (section 6 needs both checks). The
+  item class does not train tonight.
+- **For a next pre-registration (Batt's call):** the box from the item's own sprite extent, not
+  the template crop, alongside 8a's G1 options.
