@@ -4,8 +4,11 @@ three strategies, the defend-scan ring, the triggers, and the runner's isolation
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -298,3 +301,48 @@ def test_loot_v2_hovers_changed_cells_first_then_the_list_and_skips_known_empty_
     assert (11, 10) in [c for c, _w in again]
     far = dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [((20, 20), 6.0)])
     assert (11, 10) not in [c for c, _w in far]
+
+
+def test_dungeon5_a_box_spot_is_ignored_after_two_box_fights_without_a_sword() -> None:
+    """Batt 2026-10-23, decision 4. The REAL case, 4.00's ci5 (20261023T032727): the v1 box at the
+    Black Mushroom spawn, the same box (523.1, 307.3, 552.7, 331.1) 58 times beside our cell
+    162,136 (the last walk's start), no strike from any of those fights."""
+    from poring_dataset import camera as cam
+
+    cj = json.loads(
+        (ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json").read_text()
+    )
+    camera = cam.camera_from_json(cj["camera"])
+    uv = camera.project(np.asarray(dh.BOX_GRID, float), np.zeros(len(dh.BOX_GRID)))
+    assert dh.nearest_rel(uv, dh.BOX_GRID, dh.FOOT_PX) == (0, 0)  # our own cell
+    c = dh.nearest_rel(uv, dh.BOX_GRID, ((523.1 + 552.7) / 2, 331.1))
+    assert c == (-3, 1)
+    spot = (162 + c[0], 136 + c[1])
+    s = dh.BoxSpots()
+    assert not s.ignored(spot)
+    assert s.miss(spot) == 1 and not s.ignored(spot)  # one miss: still believed
+    assert s.miss((spot[0] + 1, spot[1])) == 2 and s.ignored(spot)  # the foot jitters a cell
+    assert not s.ignored((spot[0] + 3, spot[1]))  # another spot stays live
+    off = dh.BoxSpots(after=0)
+    off.miss(spot)
+    off.miss(spot)
+    assert not off.ignored(spot)
+
+
+def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypatch) -> None:
+    """Batt 2026-10-23, decisions 4 / 6 / 7 are the defaults of a plain run."""
+    import survive as sv
+
+    got = {}
+
+    def fake_run(a):
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--strategy", "H", "--seed", "1"])
+    assert dh.main() == 0
+    a = got["a"]
+    assert a.plant_sweep is False and a.box_ignore == dh.BOX_IGNORE_AFTER == 2
+    assert a.ag_match == sv.AG_MATCH_DUNGEON == 40.0
+    assert dh.VERSION == "dungeon@5"

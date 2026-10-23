@@ -15192,6 +15192,9 @@ time box; descriptive, no adoption rule -- the decision is Batt's):**
 - **Open for Batt:** adopt the patrol loop for orcsdun01; the box loop at the Black Mushroom spawn (a
   box that no ring scan can strike: approach it, or ignore a box spot that yields no SWORD twice);
   the plant sweep's yield (10 kills of 30 seen per arm, the same with or without the loop).
+- ➡️ **ADOPTED (Batt, 2026-10-23 ~22:1x ICT, decision 1 on the overnight report): "ADOPT the patrol
+  loop for orcsdun01 (4.00)."** The patrol loop is the orcsdun01 search from 4.01 on. The box loop
+  and the plant sweep: his decisions 4 and 6, built as 4.01 Amendment A (below).
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
@@ -15224,6 +15227,55 @@ zeny / h; HP min; deaths.
 
 **Expectation (stated before any run), no adoption rule tonight:** L2 spends less loot time per
 kill than L1 and loses at most 5 points of gross completeness. The decision is Batt's.
+
+**Amendment A (2026-10-23, written BEFORE 4.01's pilot and runs; the commit time of this amendment is
+its time). Batt's decisions on the overnight report (received ~22:1x ICT), verbatim:**
+- 1: "ADOPT the patrol loop for orcsdun01 (4.00)."
+- 2: "RUN 4.01 (loot v2) on the patrol loop. Then, as its own next version, Batt's real loot rhythm
+  from his demo ..." (4.02, pre-registered separately before it is built).
+- 4: "Black Mushroom box loop: ignore a box spot that gave no SWORD twice."
+- 6: "White Plants: drop the cursor sweep; strike plants only when met on the route."
+- 7: "Auto Guard icon: a dungeon bar of ~40 (absent reads score > 45); the 160 "no icon while
+  remembered" cases: check the status packets."
+- and the night's plan: "CLIENT: 4.01 on the adopted patrol loop (pilot + paired runs), items 4, 6
+  and 7 riding along as declared fixes".
+
+**What changes (the BASE of BOTH arms, `dungeon@5`; nothing else in 4.01 changes):**
+- **The search:** `--search patrol` for L1 and L2 (4.01's own rule already named the search 4.00
+  favours; Batt adopted it).
+- **Decision 6, no plant sweep:** `--plant-sweep` is off. A White Plant is struck only when the run
+  meets it as any monster: a SWORD read by a walk click's cursor check, a loot hover or a defend
+  scan.
+- **Decision 4, box spots:** a box-started fight that ends with NO strike is a MISS at the box's
+  spot (the map cell under the box's foot: the camera's projection grid, the nearest cell). Once
+  the misses within 1 cell (Chebyshev; the foot jitters) reach 2, the box trigger passes over boxes
+  there for the rest of the run (a monster that hits us still starts a fight by the Battle Log or
+  the HP drop). Events: `box_miss`, `box_ignored` (rate-limited), `box_watch.spots_ignored`.
+  - Its real case (a test, `test_dungeon5_a_box_spot_is_ignored_after_two_box_fights_without_a_sword`):
+    ci5's box (523.1, 307.3, 552.7, 331.1) beside our cell 162,136 maps to the cell 159,137, the
+    Black Mushroom spawn.
+  - A replay of the night's events through the rule (approximate: the skipped fights would have
+    changed what followed): ci5 120 box fights -> 11 misses, then ~104 skipped (spots 159,137;
+    162,135; 72,59; 66,127; 122,135); pi6 20 -> 2 skipped; pi5 15 -> 0.
+- **Decision 7, the Auto Guard icon's dungeon bar:** 40 (`survive.AG_MATCH_DUNGEON`; the field
+  bar stays 30). Its real case: the 387 diagnostic frames of 4.00 (`ag-absent-*.jpg`, every frame
+  the field bar read absent while our cast was remembered) score 30-35 on 226, 35-40 on 1, 40-45 on
+  NONE and > 45 on 160: the bar keeps the 227 present icons present. The 160 absent ones are an
+  offline check of the status packets (reported with 4.01; no runner change).
+- Code: `scripts/dungeon_hunt.py` (VERSION `dungeon@5`, `--plant-sweep` / `--box-ignore` /
+  `--ag-match`, recorded in `run_start.fixes` and the manifest), `scripts/survive.py`
+  (`ag_score`, `AG_MATCH_DUNGEON`); tests: dungeon_hunt 2 new, survive 1 new; the click census and
+  the dungeon / safety tests green before the pilot.
+
+**The runs (fixed now, before any 4.01 result):**
+- the unscored L2 pilot (~5 min), as 4.01 said; a bug = an amendment before run 1;
+- then **3 complete pairs**, 40 min each, alternating as 4.00 did: L2 first in pairs 1 and 3, L1
+  first in pair 2 (labels li1 / ll1, ll2 / li2, li3 / ll3: `li` = L2, `ll` = L1); seeds 23201,
+  23202, ...; the Crusader, immunity OFF, a judged screenshot before each; Batt's hunting layout;
+- then 4.02 (Batt's loot rhythm) as its own pre-registered version. If 4.02 is not ready when the
+  3 pairs end, a 4th 4.01 pair runs meanwhile;
+- the last run ends its time box by ~06:30 ICT (the end state by 07:00); a partial run is reported
+  apart; a pair is complete only with both runs full.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

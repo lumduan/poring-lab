@@ -51,6 +51,16 @@ runs) changes the BASE for every search, and adds the PATROL search:
   resume at the NEXT waypoint AHEAD (map_routes.resume_index), never a passed one. --search heading
   (the default) keeps the heading walk.
 
+dungeon@5 (Batt's decisions on the 2026-10-23 overnight report, riding along with 4.01 as declared
+fixes of the BASE, both arms; docs/demonstrations.md 4.01 Amendment A, written before its runs):
+- decision 6: NO White Plant cursor sweep (--plant-sweep off); a plant is struck only when met on
+  the route (a SWORD read by the walk, a loot hover or a scan, as any monster);
+- decision 4: a BOX SPOT (the map cell under a v1 box's foot) whose box-started fights gave no
+  SWORD twice is ignored by the box trigger for the rest of the run (4.00's ci5: 120 box fights at
+  the Black Mushroom spawn, none struck);
+- decision 7: the Auto Guard icon's DUNGEON bar, 40 (survive.AG_MATCH_DUNGEON; 4.00's diagnostic:
+  the icon present scored 30.5-35 on the dark dungeon, absent > 45).
+
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
 """
 
@@ -77,7 +87,8 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@4"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base
+VERSION = "dungeon@5"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+# @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -147,6 +158,8 @@ IDLE_MAX_S = 45.0  # Amendment D: searching this long with no walk click and no 
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
+BOX_IGNORE_AFTER, BOX_SPOT_R = 2, 1  # dungeon@5 (decision 4): misses within 1 cell -> ignored
+BOX_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-12, 13) for dy in range(-10, 11)]
 SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 CALM_S = 2.0  # dungeon@4: no hit on us for this long = between fights (H's calm Heal)
@@ -369,6 +382,37 @@ def turn_heading(st: dict[str, Any]) -> None:
     st["ang"] = float(st.get("ang", 0.0)) + math.pi / 2
 
 
+def nearest_rel(uv: Any, grid: Sequence[Cell], px: Sequence[float]) -> Cell:
+    """PURE: the grid cell (relative to us) whose projected point is nearest to ``px``."""
+    uv_ = np.asarray(uv, dtype=float)
+    d = np.hypot(uv_[:, 0] - px[0], uv_[:, 1] - px[1])
+    return tuple(grid[int(np.argmin(d))])  # type: ignore[return-value]
+
+
+@dataclass
+class BoxSpots:
+    """PURE (Batt 2026-10-23, decision 4: "ignore a box spot that gave no SWORD twice"; 4.00's ci5:
+    the v1 box at the Black Mushroom spawn started 120 fights no ring scan could strike). A box
+    spot is the map cell under a box's foot; a box-started fight with no strike is a MISS there.
+    A spot is ignored once the misses within ``r`` cells (Chebyshev; the foot jitters) reach
+    ``after`` -- by the box trigger only: a monster that hits us still starts a fight."""
+
+    after: int = BOX_IGNORE_AFTER
+    r: int = BOX_SPOT_R
+    misses: Counter[Cell] = field(default_factory=Counter)
+
+    def _near(self, spot: Cell) -> int:
+        return sum(n for c, n in self.misses.items()
+                   if max(abs(c[0] - spot[0]), abs(c[1] - spot[1])) <= self.r)  # fmt: skip
+
+    def miss(self, spot: Cell) -> int:
+        self.misses[(int(spot[0]), int(spot[1]))] += 1
+        return self._near(spot)
+
+    def ignored(self, spot: Cell) -> bool:
+        return self.after > 0 and self._near(spot) >= self.after
+
+
 def self_box(cx: float, cy: float) -> bool:
     """PURE: a box centred on OUR drawn Crusader (the camera centres it: foot (641, 362), head ~280)
     -- v1 never saw a Crusader in training and boxes it as a monster (3.98 run 1, 12:11)."""
@@ -446,6 +490,7 @@ class BoxWatch:
         self.halt = threading.Event()
         self.n = 0
         self.n_self = 0
+        self.n_skip = 0
         self.th = threading.Thread(target=self._loop, name="box-watch", daemon=True)
         self.th.start()
 
@@ -462,7 +507,10 @@ class BoxWatch:
                 self.n += 1
             self.halt.wait(max(0.0, BOX_EVERY_S - (time.monotonic() - t)))
 
-    def near(self, px: Sequence[float], max_px: float, fresh_s: float) -> tuple[float, ...] | None:
+    def near(self, px: Sequence[float], max_px: float, fresh_s: float,
+             skip: Any = None) -> tuple[float, ...] | None:  # fmt: skip
+        """The nearest fresh monster box whose foot is within ``max_px`` of ``px``; a box whose
+        foot ``skip`` (dungeon@5: an ignored box spot) refuses is passed over."""
         with self.lock:
             t, got = self.last
         if time.monotonic() - t > fresh_s:
@@ -471,6 +519,9 @@ class BoxWatch:
         for b in got:
             if self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2):
                 self.n_self += 1  # 3.98 run 1 (12:11): v1 boxes our OWN Crusader as a monster
+                continue
+            if skip is not None and skip(((b.x0 + b.x1) / 2, b.y1)):
+                self.n_skip += 1
                 continue
             d = math.hypot((b.x0 + b.x1) / 2 - px[0], b.y1 - px[1])
             if d <= max_px and (best is None or d < best[0]):
@@ -746,6 +797,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
+            "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
+                      "ag_match": a.ag_match},
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
@@ -891,6 +944,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return escaped[0]
 
         n_shots = [0]
+        n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
+        spots = BoxSpots(after=a.box_ignore) if a.box_ignore > 0 else None
+        box_fight: dict[str, Any] = {}
+        spot_logged: dict[Cell, float] = {}
+
+        def box_spot(here_: Cell | None, foot: Sequence[float]) -> Cell | None:
+            if here_ is None:
+                return None
+            c_ = nearest_rel(project(here_, BOX_GRID), BOX_GRID, foot)
+            return (here_[0] + c_[0], here_[1] + c_[1])
+
+        def box_fight_done() -> None:
+            """dungeon@5 (decision 4): a box-started fight that ended with no strike is a miss."""
+            if spots is not None and box_fight.get("spot") is not None \
+                    and n_strike[0] == box_fight["n0"]:  # fmt: skip
+                sp_ = box_fight["spot"]
+                n_ = spots.miss(sp_)
+                ev({"kind": "box_miss", "spot": list(sp_), "misses": n_,
+                    "ignored": spots.ignored(sp_)})  # fmt: skip
+            box_fight.clear()
+
         n_ag_diag, ag_diag_t = [0], [-1e9]
 
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
@@ -902,6 +976,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             with blt.lock:
                 n_lines0 = len(blt.lines)
             click_at(u, v, "strike")
+            n_strike[0] += 1
             t_c = time.monotonic()
             n, arrow, dmg = 1, None, None
             cur = ref
@@ -1205,7 +1280,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
                 n_reads += 1
                 dark = sv.dark_screen(img)
-                ag_on = (sv.ag_present(img, ag_t, ag_m)
+                ag_on = (sv.ag_present(img, ag_t, ag_m, a.ag_match)
                          if n_reads % sv.AG_EVERY == 1 and not dark else None)  # fmt: skip
                 dead = r.is_state(screen, gv.DEAD_STATE)
                 # Amendment H (r4 15:49): the minimap's coordinates still showed the OLD cell 0.25 s
@@ -1314,9 +1389,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
                 if boxes is not None and mode != "fight" and not sitting:  # a box never
-                    near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S)  # stands us up
+                    here_b = here  # stands us up
+
+                    def skip_b(foot: Sequence[float], here_b: Cell | None = here_b,
+                               tick_b: float = tick) -> bool:  # fmt: skip
+                        sp_ = box_spot(here_b, foot) if spots is not None else None
+                        if sp_ is None or not spots.ignored(sp_):  # type: ignore[union-attr]
+                            return False
+                        if tick_b - spot_logged.get(sp_, -1e9) >= 30.0:  # rate-limited record
+                            spot_logged[sp_] = tick_b
+                            ev({"kind": "box_ignored", "spot": list(sp_)})
+                        return True
+
+                    near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)
                 if (hit_now or dropped or near_ is not None) and mode != "fight":
                     # ONE engage event per fight, by what started it
+                    box_fight.clear()
                     if taken_new is not None:
                         ev({"kind": "engage", "by": "battle_log", "name": taken_new.get("name"),
                             "n": taken_new.get("n")})  # fmt: skip
@@ -1325,8 +1413,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     elif dropped:
                         ev({"kind": "engage", "by": "hp_drop", "name": None})
                     else:
+                        sp_e = (None if near_ is None else
+                                box_spot(here, ((near_[0] + near_[2]) / 2, near_[3])))  # fmt: skip
                         ev({"kind": "engage", "by": "box", "name": None,
-                            "box": [round(x_, 1) for x_ in near_ or ()]})  # fmt: skip
+                            "box": [round(x_, 1) for x_ in near_ or ()],
+                            "spot": None if sp_e is None else list(sp_e)})  # fmt: skip
+                        box_fight.update({"spot": sp_e, "n0": n_strike[0]})
                     if sitting:
                         press("stand", "hit while sitting")
                         sitting = False
@@ -1374,6 +1466,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         # find nobody -- end the fight; the loot step's hovers still see a SWORD
                         mode = "after"
                         ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
+                        box_fight_done()
                         continue
                     if mr and lock is not None and here is not None and last_ours != ours_used \
                             and tick - last_ours <= MR_AFTER_HIT_S:  # fmt: skip
@@ -1438,6 +1531,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         elif tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick):
                             mode = "after"
                             ev({"kind": "fight_end", "kills": len(kills_seen)})
+                            box_fight_done()
                     time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
                     continue
                 if mode == "fight" or (lock is not None):
@@ -1522,7 +1616,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     continue
                 # --- dungeon@4: the WHITE PLANT sweep when passing a spawn area (both searches)
                 if mode == "search" and here is not None and lock is None and plant_areas \
-                        and (frac is None or frac >= 0.6):  # fmt: skip
+                        and a.plant_sweep and (frac is None or frac >= 0.6):  # fmt: skip
                     i_p = pfm.near_area(plant_areas, here, PLANT_NEAR)
                     if i_p is not None and tick - plant_last.get(i_p, -1e9) >= PLANT_EVERY_S:
                         plant_last[i_p] = tick
@@ -1673,7 +1767,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             blt.stop()
             if boxes is not None:
                 boxes.stop()
-                ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self})
+                ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self,
+                    "spot_boxes_skipped": boxes.n_skip,
+                    "spots_ignored": [list(c) for c in (spots.misses if spots else {})
+                                      if spots and spots.ignored(c)]})  # fmt: skip
             if sitting:
                 agent_raw.keys(KEYS["stand"])
             if reason == "death":
@@ -1710,6 +1807,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         print(f"packets not written: {exc!r}")
     man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
            "engage": a.engage, "search": a.search, "loot": a.loot, "strategy": a.strategy,
+           "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
+                     "ag_match": a.ag_match},
            "seed": a.seed,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
@@ -1753,7 +1852,30 @@ def main() -> int:
         default=True,
         help="the v1 box watcher (the third trigger, 1 Hz in its own thread)",
     )
+    t.add_argument(
+        "--plant-sweep",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@4's White Plant cursor sweep (dungeon@5: OFF, Batt decision 6)",
+    )
+    t.add_argument(
+        "--box-ignore",
+        type=int,
+        default=BOX_IGNORE_AFTER,
+        help="dungeon@5 (decision 4): ignore a box spot after this many no-SWORD box fights "
+        "(0 = off)",
+    )
+    t.add_argument(
+        "--ag-match",
+        type=float,
+        default=None,
+        help="the Auto Guard icon bar (default survive.AG_MATCH_DUNGEON, Batt decision 7)",
+    )
     a = ap.parse_args()
+    if a.cmd == "run" and a.ag_match is None:
+        import survive as sv
+
+        a.ag_match = sv.AG_MATCH_DUNGEON
     return run(a)
 
 

@@ -59,6 +59,9 @@ AG_ICON = Path(__file__).resolve().parents[1] / "data" / "crusader" / "ag_icon.n
 AG_X = (1230, 1235)  # the status column's x range for the icon's left edge (cut at 1232)
 AG_Y = (160, 430)  # its y range (the icons stack downward under the minimap)
 AG_MATCH = 30.0  # grey masked mean |diff|: on 0-14, absent 50.2 (19:3x frames; the midpoint)
+# Batt 2026-10-23, decision 7 (the 4.00 diagnostic: 383 "absent" frames on orcsdun01, 222 of them
+# showing the icon PRESENT at 30.5-35 on the dark dungeon, absent reads > 45): a DUNGEON bar
+AG_MATCH_DUNGEON = 40.0
 AG_EVERY = 3  # the icon is checked on every 3rd read
 AG_STATE = Path(__file__).resolve().parents[1] / "data" / "crusader" / "ag_state.json"  # S4b2
 DARK_BOX = (300, 150, 1100, 550)  # S4b2: the open-field box (client px) a Blind blackens
@@ -109,9 +112,15 @@ def _grey(a: Any) -> Any:
     return a[..., 0] * 0.114 + a[..., 1] * 0.587 + a[..., 2] * 0.299
 
 
-def ag_present(client_bgr: Any, tmpl: Any, mask: Any) -> bool:
+def ag_present(client_bgr: Any, tmpl: Any, mask: Any, match: float = AG_MATCH) -> bool:
     """PURE: Auto Guard's status icon anywhere in the right-hand status column (its template, in
-    grey, on its own bright pixels: masked mean |diff| <= AG_MATCH)."""
+    grey, on its own bright pixels: masked mean |diff| <= ``match``; AG_MATCH on the field,
+    AG_MATCH_DUNGEON on orcsdun01)."""
+    return ag_score(client_bgr, tmpl, mask) <= match
+
+
+def ag_score(client_bgr: Any, tmpl: Any, mask: Any) -> float:
+    """PURE: the best (lowest) masked mean |diff| of the icon's template over the status column."""
     from numpy.lib.stride_tricks import sliding_window_view
 
     x0, x1 = AG_X
@@ -119,7 +128,7 @@ def ag_present(client_bgr: Any, tmpl: Any, mask: Any) -> bool:
     reg = _grey(np.asarray(client_bgr)[y0 : y1 + 32, x0 : x1 + 32])
     win = sliding_window_view(reg, (32, 32))  # (ny, nx, 32, 32)
     d = np.abs(win[..., mask] - _grey(tmpl)[mask]).mean(axis=-1)
-    return bool(d.min() <= AG_MATCH)
+    return float(d.min())
 
 
 def dark_screen(client_bgr: Any) -> bool:

@@ -115,3 +115,18 @@ def test_s3h_is_the_hp_path_alone() -> None:
     assert sv.decide(st2, 1.0, 0.30, sv.SETS["T-S3"])[0][0] == "fly"  # the rate path (< 60 %)
     got = sv.decide(st, 1.4, 0.24, sv.SETS["T-S3h"])
     assert got and got[0][0] == "fly" and got[0][1].startswith("hp")
+
+
+def test_the_dungeon_bar_keeps_a_dim_icon_present_that_the_field_bar_calls_absent() -> None:
+    """Batt 2026-10-23, decision 7: on orcsdun01 the PRESENT icon scored 30.5-35 (the field bar is
+    30) and absent reads > 45; the dungeon bar is 40."""
+    import numpy as np
+
+    rng = np.random.default_rng(2)
+    tmpl = rng.integers(60, 200, (32, 32, 3), dtype=np.uint8)
+    mask = np.ones((32, 32), bool)
+    frame = np.full((720, 1280, 3), 90, np.uint8)
+    frame[201:233, 1233:1265] = np.clip(tmpl.astype(int) - 33, 0, 255).astype(np.uint8)  # dimmed
+    assert 30.0 < sv.ag_score(frame, tmpl, mask) <= sv.AG_MATCH_DUNGEON
+    assert not sv.ag_present(frame, tmpl, mask)  # the field bar: absent
+    assert sv.ag_present(frame, tmpl, mask, sv.AG_MATCH_DUNGEON)  # the dungeon bar: present
