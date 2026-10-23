@@ -59,7 +59,8 @@ WORK = Path(os.environ.get("POR_GEN_DIR", "/dev/shm/poring-lab-pktgen"))
 # stat/skill points, equipment, item use, CZ_REQUEST_ACT2): any disagreement here is fatal.
 # None of the 2026-10-07 ids is in the lock's disagreement list (checked 2026-10-07), so adding
 # them changes neither the output nor the lock. The same holds for the 2026-10-08 loot@1 ids (floor
-# items, the pickup request/result, the drop; checked 2026-10-08).
+# items, the pickup request/result, the drop; checked 2026-10-08) and the 2026-10-23 status icons
+# (0x0196, 0x0983; checked against the lock's 67 disagreements 2026-10-23).
 DECODED = {
     0x0064, 0x0AC4, 0x083E, 0x0065, 0x082D, 0x006B, 0x0B72, 0x0066, 0x0AC5, 0x0436, 0x0283, 0x02EB,
     0x007D, 0x0360, 0x007F, 0x035F, 0x0087, 0x0088, 0x09FD, 0x09FE, 0x09FF, 0x0080, 0x0091, 0x0AC7,
@@ -71,6 +72,7 @@ DECODED = {
     0x0090, 0x00B8, 0x00B9, 0x0146, 0x0143, 0x01D5, 0x00C5, 0x00C8, 0x00C9, 0x00BB, 0x0112, 0x0998,
     0x00AB, 0x0439, 0x0437,
     0x0ADD, 0x009D, 0x00A1, 0x0B41, 0x00AF, 0x0362, 0x0363,
+    0x0196, 0x0983,
 }  # fmt: skip
 CS_PREFIXES = {"CA": "login", "CH": "char", "CZ": "map"}
 SC_PREFIXES = {"AC": "login", "HC": "char", "ZC": "map"}

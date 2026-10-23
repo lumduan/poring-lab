@@ -578,6 +578,18 @@ class DropResult(PacketEventBase):
     ok: bool
 
 
+class StatusChange(PacketEventBase):
+    """ZC_MSG_STATE_CHANGE (0x0196) / ZC_MSG_STATE_CHANGE2 (0x0983, with timers): a status ICON of a
+    block in sight turned on or off (2026-10-23, Batt's decision 7: did Auto Guard lapse?)."""
+
+    type: Literal["status_change"] = "status_change"
+    efst: int = Field(description="The status icon id (rAthena enum efst_type; 58 = Auto Guard).")
+    gid: int = Field(description="The block the status belongs to (our account id for us).")
+    on: bool
+    total_ms: int | None = Field(default=None, description="0x0983 only: the total duration.")
+    remain_ms: int | None = Field(default=None, description="0x0983 only: the time remaining.")
+
+
 class UnknownPacket(PacketEventBase):
     """A packet id the length table does not know; its stream is resynchronised (counted)."""
 
@@ -630,6 +642,7 @@ _Interaction = (
     | PickupResult
     | DropRequest
     | DropResult
+    | StatusChange
 )
 PacketEvent = Annotated[
     LoginAccepted
