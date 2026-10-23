@@ -15313,6 +15313,22 @@ bound once in `run()` (it fails on the old code, passes on the fix), and every o
 added is bound once (checked by an AST walk). The chain re-runs li1 with the same seed, its gate
 reset first.
 
+**Run log** (`dungeon_judge.py` + `dungeon_style.py`, packets; s / kill = fighting / walking /
+standing outside fights; "loot s / kill" = the runner's loot-step seconds per kill):
+- **Pair 1:**
+  - **li1** (L2, seed 23201, `20261023T225850-demo-dungeon-patrol-H-li1`, 22:58-23:39, time box,
+    40.0 min): 192 kills (**288.0 / h**), deaths 0, HP min 34.7 %, 0 potions, 3 Fly Wings, 28
+    Heals, loot **40.5 / 58.2 %** (items 237: picked 96, looters 79, out of sight 34, expired 23;
+    re-drops 72, recovered 23), net 7,807 z / h, met 55 / 10 min, 12.5 s / kill (7.5 / 0.8 / 4.3),
+    loot 2.56 s / kill (99 steps, 90 picks), pulled 8.7 / 10 min, hard bars 0.
+  - **ll1** (L1, seed 23202, `20261023T233948-demo-dungeon-patrol-H-ll1`, 23:39-00:21, time box,
+    40.1 min): 82 kills (**122.7 / h**), deaths 0, HP min 65.9 %, 0 potions / Fly Wings, 2 Heals,
+    loot **82.3 / 97.0 %** (items 79: picked 65, looters 12, out of sight 2), net 5,891 z / h, met
+    32.5 / 10 min, 29.3 s / kill (14.5 / 2.4 / 12.4), loot 6.81 s / kill (69 steps, 63 picks),
+    pulled 5.0 / 10 min, hard bars 0. Amendment B shows here: v1's steps that ended "done" took
+    p50 11.8 s for 29.5 hovers (4.00's pi6: 23.4 s for the same 29.5).
+  - L2 - L1: **+165.3 kills / h**, +22.5 met / 10 min; loot gross -41.8 points.
+
 **Decision 7's packet check (offline, 2026-10-23 23:0x ICT; no runner change):** "the 160 'no icon
 while remembered' cases: check the status packets".
 - **How:** a new decoder for the status icons, ZC_MSG_STATE_CHANGE 0x0196 / 0x0983 (`status_change`:
