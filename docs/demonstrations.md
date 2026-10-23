@@ -15409,6 +15409,27 @@ its NET completeness is within 10 points of L1's. The decision is Batt's.
 
 **Hard bars and deaths:** as 4.00 / 4.01.
 
+**Amendment A (2026-10-24 ~02:5x ICT, BEFORE 4.02's pilot; the parent): a fresh dungeon before every
+run.**
+- **The evidence (4.01's packets, distinct monsters seen per 40-min run):** the orcsdun01
+  population along the loop collapsed through the night.
+  - Orc Zombies seen: li1 49, ll2 12, li3 **2**. li3 saw 18 monsters in all, 13 of them immobile
+    Black Mushrooms / White Plants, while the patrol walked **9 laps**.
+  - Monsters met / 10 min by run: 55, 32.5, 22, 15, 15.
+- **Respawn delays cannot explain it** (pinned rAthena, `npc/pre-re/mobs/dungeons/orcsdun.txt:16-26`):
+  80 Orc Zombies (3-120 s + up to 60 s), 10 Orc Skeletons (180 s), 30 bats (0 s), all
+  map-wide.
+- **The mechanism that can carry a population state across runs:** `conf/battle/monster.conf`
+  `dynamic_mobs: yes`, `mob_remove_delay: 300000`. The map's monsters are unloaded and
+  re-spawned only after it has been EMPTY for 5 min. Our gap between runs (the end warp, then the
+  next setup at the field stand) is ~1.5 min, so whatever state the monsters drifted into carried
+  over all night. Why they drifted off the loop is NOT known.
+- **The change (both arms, the pilot included):** the Crusader stays OUT of orcsdun01 for **at
+  least 6 min** before each run's setup (at its field stand, after the previous run's end warp).
+  rAthena then unloads the map, and the run starts on a freshly spawned population.
+- **Checked by the pilot:** distinct monsters seen and monsters met / 10 min, against li3's 18 and
+  15.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
