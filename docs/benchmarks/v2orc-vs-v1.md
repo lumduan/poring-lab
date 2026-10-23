@@ -34,6 +34,19 @@ check; EVALUATION only on crops both blind labellers judged good (col2 stays TES
   - The bar is unchanged (>= 0.80 each, for a species with >= 50 evaluated crops).
   - It replaces "The labels are the same packet labels the training used".
 
+## Amendment B (2026-10-23, before any training; the clock time is the commit time of `../planning/orcsdun01-detector.md` 3i's first commit)
+
+Batt's decision 5 (2026-10-23 ~22:1x): a wing-reach box for the Familiar and the Drainliar, and the
+occlusion option that keeps the most labels while the blind check passes. The plan's 3i makes it
+operational. Two lines change; nothing else does.
+- **The labels row:** the TRAINING tier is 3f's with 3i's candidates. orcsdun01 labels train only
+  under the candidate 3i selects: T1 (C1 pooled on col1 <= 5 % under its rule) and T2 (blind round 4
+  on its own sample) both pass. The orcsdun01 TRAIN boxes are that candidate's (W for 1005 / 1111,
+  its occlusion rule, S3 if it has it).
+- **P1:** col2 is labelled after training with the SAME candidate's rules (W, occlusion, S3), then
+  Amendment A's evaluation pack (seed 3, reserved; up to 60 crops per species) as written. Nothing
+  else in Amendment A changes.
+
 ## The model and the data (fixed now)
 
 | | v1 (`v1png-20261008`, the live CPU detector) | v2orc (to train) |

@@ -5,6 +5,13 @@ species passes when EACH labeller calls >= GOOD_BAR of its crops "good" AND name
 on >= SPECIES_BAR of them. The key never reaches a labeller (it lives outside the pack).
 
     blind_score.py --key KEY.json ANSWERS.json [ANSWERS.json ...] [--both-good OUT.json]
+                   [--sample NAME | --each-sample]
+
+Round 4 (orcsdun01-detector.md 3i): the key records, per crop, the candidates whose sample holds
+it (``samples``) and whether it is a control (``control``). ``--sample NAME`` scores ONE
+candidate on its own sample (the controls stay in, reported); ``--each-sample`` scores every
+candidate the key lists, each with ``candidate_pass`` = every non-control species passes for every
+labeller. A key without ``samples`` (rounds 1-3) scores as before.
 
 Committed 2026-10-21 for round 2 (round 1's copy lived only in scratch: scorers are committed). Its
 positive case: round 1's answers (blind-A / blind-B on the col1 key) reproduce the 12:10 table
@@ -65,6 +72,38 @@ def both_good(key: Mapping[str, Any], a: Mapping[str, Mapping[str, Any]],
             if ok(a.get(c, {}), int(k["mob"])) and ok(b.get(c, {}), int(k["mob"]))]  # fmt: skip
 
 
+def restrict(key: Mapping[str, Any], sample: str) -> dict[str, Any]:
+    """PURE: the key with only the crops of candidate ``sample``'s sample (3i)."""
+    if "candidates" in key and sample not in key["candidates"]:
+        raise SystemExit(f"--sample {sample!r}: the key lists {key['candidates']}")
+    crops = {c: k for c, k in key["crops"].items() if sample in (k.get("samples") or ())}
+    if not crops:
+        raise SystemExit(f"--sample {sample!r}: no crop of the key is in it")
+    return {**key, "crops": crops}
+
+
+def verdict(key: Mapping[str, Any], ans: Mapping[str, Mapping[str, Mapping[str, Any]]]
+            ) -> dict[str, Any]:  # fmt: skip
+    """PURE: per labeller and species, the species' pass (both labellers) and, over the
+    NON-control species, the candidate's pass."""
+    res: dict[str, Any] = {"per_labeller": {}, "species_pass": {}}
+    controls = {int(k["mob"]) for k in key["crops"].values() if k.get("control")}
+    deciding: dict[str, bool] = {}
+    for who, an in ans.items():
+        res["per_labeller"][who] = {
+            NAMES.get(m, str(m)): v for m, v in per_species(key, an).items()
+        }
+    mobs = {NAMES.get(int(k["mob"]), str(k["mob"])): int(k["mob"]) for k in key["crops"].values()}
+    for name in next(iter(res["per_labeller"].values())):
+        res["species_pass"][name] = all(r[name]["pass"] for r in res["per_labeller"].values())
+        if mobs[name] not in controls:
+            deciding[name] = res["species_pass"][name]
+    res["candidate_pass"] = bool(deciding) and all(deciding.values())
+    res["controls"] = sorted(NAMES.get(m, str(m)) for m in controls)
+    res["n_crops"] = len(key["crops"])
+    return res
+
+
 def load_answers(path: Path) -> dict[str, dict[str, Any]]:
     return {str(x["crop"]): x for x in json.loads(path.read_text())}
 
@@ -75,9 +114,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--key", type=Path, required=True)
     ap.add_argument("answers", type=Path, nargs="+")
     ap.add_argument("--both-good", type=Path)
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--sample", default=None, help="round 4 (3i): score ONE candidate's sample")
+    g.add_argument("--each-sample", action="store_true",
+                   help="round 4 (3i): score every candidate the key lists")  # fmt: skip
     a = ap.parse_args(argv)
     key = json.loads(a.key.read_text())
     ans = {str(p): load_answers(p) for p in a.answers}
+    if a.each_sample:
+        out = {c: verdict(restrict(key, c), ans) for c in key["candidates"]}
+        print(json.dumps({"per_candidate": out,
+                          "candidates_passing_t2": [c for c in key["candidates"]
+                                                    if out[c]["candidate_pass"]]},
+                         indent=1))  # fmt: skip
+        return 0
+    if a.sample is not None:
+        key = restrict(key, a.sample)
     res: dict[str, Any] = {"per_labeller": {}, "species_pass": {}}
     for who, an in ans.items():
         res["per_labeller"][who] = {
@@ -85,6 +137,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
     for name in next(iter(res["per_labeller"].values())):
         res["species_pass"][name] = all(r[name]["pass"] for r in res["per_labeller"].values())
+    if a.sample is not None:
+        v = verdict(key, ans)
+        res.update({"sample": a.sample, "candidate_pass": v["candidate_pass"],
+                    "controls": v["controls"], "n_crops": v["n_crops"]})  # fmt: skip
     if len(ans) == 2:
         x, y = ans.values()
         n = len(key["crops"])

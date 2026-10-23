@@ -302,8 +302,11 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     fix_other_map = 0
     _FIX.clear()
     rule = getattr(a, "rule", "1a")
+    occlusion = getattr(a, "occlusion", "1c")
+    stack, wing = bool(getattr(a, "stack", False)), bool(getattr(a, "wing", False))
     _FIX.update(sess=sess, v2=v2, layout=layout, fixer=None if fix_params is None else
-                olf.FixLabeler(sess.labeler, fix_params, rule=rule))  # fmt: skip
+                olf.FixLabeler(sess.labeler, fix_params, rule=rule, occlusion=occlusion,
+                               stack=stack, wing=wing))  # fmt: skip
     if fix_params is not None:
         results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
     else:
@@ -361,9 +364,8 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                "warp_rule": v2.provenance["warp_rule"],
                "offset_ms": sess.labeler.offset_ms}  # fmt: skip
     if fix_params is not None:
-        summary["labels"] = (
-            f"{olf.labels_name(rule)} (fitted monster boxes) + v2's frame rules + --classes species"
-        )
+        name = olf.labels_name(rule, occlusion, stack, wing)
+        summary["labels"] = f"{name} (fitted monster boxes) + v2's frame rules + --classes species"
         summary["fix"] = {
             "facing_rule": rule,
             "params": str(a.fix), "measured_on": fix_params["measured_on"],
@@ -394,7 +396,7 @@ def _frame_fate(ref: qa_export.JpegRef) -> tuple[Any, ...]:
     sess, v2, fixer = _FIX["sess"], _FIX["v2"], _FIX["fixer"]
     outcome, fr, reasons, _mk = bfc.decide(sess, ref.t_mono_ns, v2)
     written: list[tuple[str, int | None, int | None, tuple[float, ...], str]] = []
-    fixed = None
+    fixed: Any = None
     if outcome == "ok" and fr is not None:
         _text, out = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
         written = [(b.cls, b.job, b.gid, b.box, b.kind) for b in out]
@@ -406,6 +408,8 @@ def _frame_fate(ref: qa_export.JpegRef) -> tuple[Any, ...]:
             got = fixer.frame(ref.t_mono_ns, bgr)
             if got is None:
                 outcome, reasons = "excluded", ["fix_no_world"]
+            elif _FIX.get("round4"):  # 3i: every candidate's verdict comes from the fates
+                fixed = (got.applies, got.hidden, list(got.fates))
             else:
                 fixed = (got.applies, [(k.mob, k.gid, k.box) for k in got.kept],
                          list(got.excluded), got.hidden)  # fmt: skip
@@ -483,6 +487,218 @@ def write_outputs(session: Path, a: argparse.Namespace) -> dict[str, Any]:
             "blind_per_species": key["per_species"], "summary": summary}  # fmt: skip
 
 
+# --- 3i: blind round 4, every candidate judged on its own 30 from ONE seeded order --------------
+
+ROUND4_PER_SPECIES = 30
+
+
+def round4_samples(pool: Sequence[Item], keeps: dict[str, set[tuple[int, int | None]]],
+                   n: int, sid: str, seed: int, mob: int) -> dict[str, list[Item]]:  # fmt: skip
+    """PURE (3i): the pool (o3's kept labels of one species) sorted by (frame, gid) and shuffled
+    by ``random.Random(f"{sid}:{seed}:{mob}")``; candidate X's sample = the FIRST ``n`` labels
+    in that order that X keeps (``keeps[X]``: (frame_id, gid)), all of them when fewer."""
+    order = sorted(pool, key=lambda it: (it.ref.frame_id, it.gid or 0))
+    random.Random(f"{sid}:{seed}:{mob}").shuffle(order)
+    return {c: [it for it in order if (it.ref.frame_id, it.gid) in kp][:n]
+            for c, kp in keeps.items()}  # fmt: skip
+
+
+def round4(session: Path, a: argparse.Namespace) -> dict[str, Any]:
+    """3i's blind round 4 on col1: ONE pass (fix 2 + W, every label fitted), every candidate's
+    verdict per frame (orc_labels_fix.decide), the per-candidate counts, the samples, the pack
+    (``--pack-dir``: crops, grids, reference, pack.json, the instructions file copied verbatim)
+    and the key (``--key-dir``), apart. The summary goes to ``--out-root`` (never the pack)."""
+    import hashlib
+    import shutil
+
+    import orc_labels_fix as olf
+
+    if a.fix is None or a.rule != "fix2":
+        raise SystemExit("--round4 is 3i's: --fix PARAMS --rule fix2")
+    olf.refuse_test_block(session)
+    instr_sha = None
+    if not getattr(a, "counts_only", False):
+        instr_sha = hashlib.sha256(a.instructions.read_bytes()).hexdigest()
+        if a.instructions_sha256 and instr_sha != a.instructions_sha256:
+            raise SystemExit(f"{a.instructions}: sha256 {instr_sha}, not round 2's")
+    fix_params = olf.load_params(a.fix)
+    a.offset_ms = float(fix_params["offset_ms"])
+    ns = argparse.Namespace(
+        kb=a.kb, warp_visibility=a.warp_visibility, npc_sprites=a.npc_sprites,
+        npc_sprite_names=a.npc_sprite_names, npc_extents=a.npc_extents,
+        npc_checked=a.npc_checked, cutin_rect=None, offset_ms=a.offset_ms, allow_hold=[],
+        k=a.k, classes="species", class_list=a.class_list,
+    )  # fmt: skip
+    v2 = bfc.V2Inputs.from_args(ns)
+    assert v2.classes is not None
+    manifest = json.loads((session / "manifest.json").read_text())
+    if not qa_export.is_warp_watch(manifest):
+        raise SystemExit(f"{session}: --round4 reads a warp_watch block (col1)")
+    sess = bfc.make_v2_session(session, v2)
+    sid = qa_export.session_id(manifest)
+    refs = qa_export.frame_refs(session, manifest)[:: a.every]
+    _FIX.clear()
+    _FIX.update(sess=sess, v2=v2, layout=None, round4=True,
+                fixer=olf.FixLabeler(sess.labeler, fix_params, rule="fix2", wing=True,
+                                     fit_all=True))  # fmt: skip
+    results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
+    cands = olf.CANDIDATES
+    outcomes: Counter[str] = Counter()
+    kept_any = {c: Counter[int]() for c in cands}
+    in_whole = {c: Counter[int]() for c in cands}
+    frames_whole = Counter[str]()
+    excl: dict[str, dict[str, Counter[int]]] = {
+        c: defaultdict(Counter) for c in cands
+    }  # reason -> mob -> n
+    keeps: dict[int, dict[str, set[tuple[int, int | None]]]] = defaultdict(
+        lambda: {c: set() for c in cands}
+    )
+    pool: dict[int, list[Item]] = defaultdict(list)
+    controls: list[Item] = []
+    orc_frames = other_map = hidden = 0
+    for ref, outcome, _reasons, written, fixed in results:
+        outcomes[outcome] += 1
+        if outcome != "ok" or fixed is None:
+            continue
+        applies, hid, fates = fixed
+        if not applies:  # prt_fild08 before the first warp: v2's (v1's) labels, the controls
+            other_map += 1
+            for cls, job, gid, box, kind in written:
+                if cls == "monster" and job is not None:
+                    controls.append(Item(ref, job, gid, box, kind))
+            continue
+        orc_frames += 1
+        hidden += hid
+        by_gid = {f.gid: f for f in fates}
+        for c in cands:
+            occlusion, stack = olf.parse_candidate(c)
+            kept, ex = olf.decide(fates, occlusion, stack)
+            for f in kept:
+                kept_any[c][f.mob] += 1
+                keeps[f.mob][c].add((ref.frame_id, f.gid))
+            for _g, mob, why in ex:
+                excl[c][why][mob] += 1
+            if not ex:
+                frames_whole[c] += 1
+                for f in kept:
+                    in_whole[c][f.mob] += 1
+        for f in olf.decide(fates, "o3", False)[0]:  # the pool: o3's kept labels
+            box = f.wbox if f.wbox is not None else f.box
+            assert box is not None
+            pool[f.mob].append(Item(ref, f.mob, f.gid, box, "fit_w" if f.wbox else "fit"))
+            assert by_gid[f.gid] is f
+    for mob, per in keeps.items():  # every candidate's kept set is inside o3's (3i)
+        for c, kp in per.items():
+            if not kp <= per["o3"]:
+                raise SystemExit(f"{c} keeps a {mob} label o3 does not: the pool is wrong")
+    mobs = sorted({m for c in cands for m in kept_any[c]})
+    table: dict[str, dict[str, Any]] = {
+        c: {"labels_kept_any_frame": {str(m): kept_any[c][m] for m in mobs},
+                 "labels_in_whole_frames": {str(m): in_whole[c][m] for m in mobs},
+                 "labels_in_whole_frames_total": sum(in_whole[c].values()),
+                 "labels_kept_total": sum(kept_any[c].values()),
+                 "frames_whole": frames_whole[c],
+                 "excluded_by_reason": {w: {str(m): n for m, n in sorted(v.items())}
+                                        for w, v in sorted(excl[c].items())}}
+        for c in cands}  # fmt: skip
+    rank = sorted(cands, key=lambda c: (-table[c]["labels_in_whole_frames_total"],
+                                        -table[c]["frames_whole"], cands.index(c)))  # fmt: skip
+    if getattr(a, "counts_only", False):  # col3 / the cache's expectation: no pack, no key
+        out = {"what": "3i: every candidate's counts (no pack)", "session": sid,
+               "made_at": olf.now_ict(), "commit": olf.git_head(), "every": a.every,
+               "params_sha256": olf.sha256_file(a.fix), "frames_considered": len(refs),
+               "outcomes": dict(outcomes), "orcsdun01_frames_v2_keeps": orc_frames,
+               "frames_off_orcsdun01": other_map, "controls": len(controls),
+               "control_boxes_by_species": dict(Counter(str(i.mob) for i in controls)),
+               "candidates": table, "preference_order_by_3i": rank}  # fmt: skip
+        a.out_root.mkdir(parents=True, exist_ok=True)
+        (a.out_root / f"counts_{sid}.json").write_text(json.dumps(out, indent=1) + "\n")
+        return out
+    samples: dict[int, dict[str, list[Item]]] = {
+        mob: round4_samples(pool[mob], keeps[mob], a.per_blind, sid, a.seed, mob)
+        for mob in sorted(pool)
+    }
+    chosen: dict[tuple[int, int | None], tuple[Item, set[str]]] = {}
+    for per_c in samples.values():
+        for cand, members in per_c.items():
+            for item in members:
+                ck = (item.ref.frame_id, item.gid)
+                chosen.setdefault(ck, (item, set()))[1].add(cand)
+    crops = [(item, sorted(cs, key=cands.index), False) for item, cs in chosen.values()]
+    crops += [(item, list(cands), True) for item in controls]
+    random.Random(f"{sid}:{a.seed}:order").shuffle(crops)
+    pack, keydir = a.pack_dir, a.key_dir
+    if pack.resolve() == keydir.resolve() or keydir.resolve().is_relative_to(pack.resolve()):
+        raise SystemExit("the key must live OUTSIDE the pack directory")
+    for d in (pack / "crops", pack / "grids", keydir):
+        d.mkdir(parents=True, exist_ok=True)
+    size = tuple(sess.labeler.size)
+    frames: dict[qa_export.JpegRef, npt.NDArray[np.uint8]] = {}
+    for ref in sorted({c[0].ref for c in crops}, key=lambda r: (str(r.shard), r.offset)):
+        frames[ref] = qa_export.read_jpeg(ref)[:, :, ::-1]
+    names: list[str] = []
+    enlarged: list[tuple[str, Any]] = []
+    key_crops: dict[str, dict[str, Any]] = {}
+    for i, (it, cs, control) in enumerate(crops, 1):
+        x0, y0, x1, y1 = crop_box(it.box, size)
+        big = enlarge(draw_box(frames[it.ref][y0:y1, x0:x1], it.box, (x0, y0)))
+        name = f"{i:03d}.png"
+        save_png(pack / "crops" / name, big)
+        names.append(name)
+        enlarged.append((f"{i:03d}", big))
+        key_crops[f"{i:03d}"] = {"mob": it.mob, "frame_id": it.ref.frame_id,
+                                 "t_ns": it.ref.t_mono_ns, "gid": it.gid, "kind": it.kind,
+                                 "box": [round(v, 1) for v in it.box], "samples": cs,
+                                 "control": control}  # fmt: skip
+    letters = letters_for(v2.classes.monsters, a.seed)
+    save_png(
+        pack / "reference.png",
+        reference_sheet({m: sess.labeler.sheets(m) for m in v2.classes.monsters}, letters),
+    )
+    grids = []
+    for page, idx in enumerate(grid_pages(len(enlarged)), 1):
+        gname = f"grids/grid_{page:02d}.png"
+        save_png(pack / gname, blind_grid([enlarged[i] for i in idx]))
+        grids.append(gname)
+    (pack / "pack.json").write_text(json.dumps({
+        "crops": names, "grids": grids, "reference": "reference.png", "letters": sorted(letters),
+        "box": "the green rectangle drawn just outside the label box",
+        "questions": QUESTIONS,
+    }, indent=1) + "\n")  # fmt: skip
+    shutil.copyfile(a.instructions, pack / "instructions.txt")
+    per_sample: dict[str, dict[str, int]] = {
+        c: {str(m): len(samples[m][c]) for m in sorted(samples)} for c in cands
+    }
+    key: dict[str, Any] = {"session": sid, "seed": a.seed, "per_blind": a.per_blind, "round": 4,
+           "plan": "docs/planning/orcsdun01-detector.md 3i",
+           "labels": "v2orc-fix2+W, six occlusion candidates (3i)", "letters": letters,
+           "crops": key_crops, "candidates": list(cands), "per_sample": per_sample,
+           "per_species": dict(Counter(str(v["mob"]) for v in key_crops.values())),
+           "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller; "
+                   "score each candidate with blind_score.py --sample NAME"}  # fmt: skip
+    (keydir / "answer_key.json").write_text(json.dumps(key, indent=1) + "\n")
+    summary = {
+        "what": "3i: blind round 4's pack and every candidate's counts on col1 (every "
+                f"{a.every}rd frame, v2's frame rules, fix 2 + W)",
+        "session": sid, "seed": a.seed, "made_at": olf.now_ict(), "commit": olf.git_head(),
+        "params": str(a.fix), "params_sha256": olf.sha256_file(a.fix),
+        "instructions": str(a.instructions), "instructions_sha256": instr_sha,
+        "frames_considered": len(refs), "outcomes": dict(outcomes),
+        "orcsdun01_frames_v2_keeps": orc_frames, "frames_off_orcsdun01": other_map,
+        "monsters_not_visible": hidden, "candidates": table,
+        "preference_order_by_3i": rank,
+        "most_keeping": rank[0],
+        "pool_o3_by_species": {str(m): len(v) for m, v in sorted(pool.items())},
+        "sample_sizes": per_sample,
+        "crops_total": len(names), "crops_per_species": key["per_species"],
+        "controls": len(controls),
+        "pack": str(pack), "key": str(keydir / "answer_key.json"),
+    }  # fmt: skip
+    a.out_root.mkdir(parents=True, exist_ok=True)
+    (a.out_root / "round4_summary.json").write_text(json.dumps(summary, indent=1) + "\n")
+    return summary
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("session", type=Path)
@@ -525,7 +741,47 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="--fix: the facing, 1a (3b, as round 2) or fix2 (3f: labels v2orc-fix2, with the "
         "exclusions 2b next_move / 2c ambiguous_view)",
     )
+    ap.add_argument(
+        "--occlusion",
+        choices=("1c", "o3h", "o3"),
+        default="1c",
+        help="--fix: 3i's occlusion candidate (1c: 3b's literal rule)",
+    )
+    ap.add_argument("--stack", action="store_true", help="--fix: 3i's S3 (IoU >= 0.30)")
+    ap.add_argument(
+        "--wing", action="store_true", help="--fix: 3i's W box for the Familiar / Drainliar"
+    )
+    ap.add_argument(
+        "--round4",
+        action="store_true",
+        help="3i's blind round 4: every candidate at once (needs --fix --rule fix2 "
+        "--pack-dir --key-dir --instructions); the summary goes to --out-root",
+    )
+    ap.add_argument("--pack-dir", type=Path, default=None)
+    ap.add_argument("--key-dir", type=Path, default=None)
+    ap.add_argument(
+        "--instructions",
+        type=Path,
+        default=None,
+        help="--round4: round 2's labeller instructions, copied verbatim",
+    )
+    ap.add_argument(
+        "--instructions-sha256",
+        default=None,
+        help="--round4: refuse unless the instructions have exactly this sha256",
+    )
+    ap.add_argument(
+        "--counts-only",
+        action="store_true",
+        help="--round4: every candidate's counts only (no pack, no key): col3 / the cache",
+    )
     a = ap.parse_args(argv)
+    if a.round4:
+        if not a.counts_only and (a.pack_dir is None or a.key_dir is None
+                                  or a.instructions is None):  # fmt: skip
+            raise SystemExit("--round4 needs --pack-dir, --key-dir and --instructions")
+        print(json.dumps(round4(a.session, a), indent=1))
+        return 0
     out = write_outputs(a.session, a)
     print(json.dumps(out, indent=1))
     return 0

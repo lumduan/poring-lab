@@ -106,6 +106,10 @@ THE ORCSDUN01 LABEL FIX IN THE CACHE (orcsdun01-detector.md 3b / 3f):
   layout is excluded (``ui_layout_mismatch``);
 - ``--dry-run`` reads no pixel, so it applies every rule up to the fit (visibility, 1c, 2b, 2c)
   and counts the labels the fit would judge as PENDING: its kept frames are an UPPER BOUND.
+- 3i (orcsdun01-detector.md, Batt's decision 5): ``--occlusion o3h|o3`` (an under-box label is
+  kept when its fit passes; o3h also needs its fit NCC >= 0.48), ``--stack`` (S3: stacked kept
+  labels excluded), ``--wing`` (W: the Familiar / Drainliar box reaches their plausible flap
+  frames + 2 px). Without them the build is 3f's, byte for byte.
 
 ONE BUILD, TWO LABEL MODES (3f: v1's prt_fild08 data with v1's rules + the species split, the
 orcsdun01 blocks with v2 + the fix):
@@ -490,6 +494,9 @@ class FixInputs:
     params: dict[str, Any]
     rule: str
     provenance: dict[str, Any]
+    occlusion: str = "1c"  # 3i: 1c (3b's literal rule) / o3h / o3
+    stack: bool = False  # 3i: S3
+    wing: bool = False  # 3i: W for the Familiar / Drainliar
 
     @classmethod
     def from_args(cls, a: argparse.Namespace) -> FixInputs | None:
@@ -503,16 +510,25 @@ class FixInputs:
             raise SystemExit(f"{a.fix}: sha256 {sha256_of(a.fix)}, not the frozen {want}")
         if a.rule not in olf.RULES:
             raise SystemExit(f"--rule {a.rule}: one of {olf.RULES}")
-        prov = {"labels": olf.labels_name(a.rule), "rule": a.rule, "params": str(a.fix),
+        occlusion = getattr(a, "occlusion", None) or "1c"
+        stack, wing = bool(getattr(a, "stack", False)), bool(getattr(a, "wing", False))
+        if occlusion not in olf.OCCLUSIONS:
+            raise SystemExit(f"--occlusion {occlusion}: one of {olf.OCCLUSIONS}")
+        name = olf.labels_name(a.rule, occlusion, stack, wing)
+        prov = {"labels": name, "rule": a.rule, "params": str(a.fix),
                 "params_sha256": sha256_of(a.fix), "measured_on": params.get("measured_on"),
                 "offset_ms": float(params["offset_ms"]),
                 "rsw_sha256": (params.get("occluders") or {}).get("rsw_sha256")}  # fmt: skip
-        return cls(params, a.rule, prov)
+        if (occlusion, stack, wing) != ("1c", False, False):  # 3i (old builds keep their keys)
+            prov["candidate"] = {"occlusion": occlusion, "stack": stack, "wing": wing,
+                                 "plan": "docs/planning/orcsdun01-detector.md 3i"}  # fmt: skip
+        return cls(params, a.rule, prov, occlusion, stack, wing)
 
     def labeler(self, lab: Any) -> Any:
         import orc_labels_fix as olf
 
-        return olf.FixLabeler(lab, self.params, rule=self.rule)
+        return olf.FixLabeler(lab, self.params, rule=self.rule, occlusion=self.occlusion,
+                              stack=self.stack, wing=self.wing)  # fmt: skip
 
 
 def apply_fix(fr: lv.Frame, got: Any) -> tuple[lv.Frame | None, list[str]]:
@@ -1267,6 +1283,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--rule",
         default="1a",
         help="--fix: the facing rule (1a: 3b; fix2: 3f, with 2b / 2c)",
+    )
+    g.add_argument(
+        "--occlusion",
+        default="1c",
+        help="--fix: 3i's occlusion candidate: 1c (3b's literal rule), o3h or o3",
+    )
+    g.add_argument("--stack", action="store_true", help="--fix: 3i's S3 (stacked labels)")
+    g.add_argument(
+        "--wing", action="store_true", help="--fix: 3i's W box for the Familiar / Drainliar"
     )
     g.add_argument(
         "--v1-species-sessions",

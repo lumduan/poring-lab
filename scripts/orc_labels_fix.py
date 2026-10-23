@@ -52,6 +52,17 @@ move (3b's walk rule) -> its map_calc_dir heading taken to the diagonal. Exclude
 2c ``ambiguous_view``, an (iii) unit after a MIXED move whose two candidate images differ. 1b-1d,
 tau, k and the fit radius stay 3c's frozen values.
 
+3i (PRE-REGISTERED 2026-10-23 22:46:39 ICT, 0f039b9, before it was built), Batt's decision 5:
+- W (``wing``), the Familiar 1005 / Drainliar 1111 only: the union of the PLAUSIBLE frames' boxes
+  (own fit >= the best - 0.05, not at the search edge, each at its own offset) + 2 px, clipped;
+  it changes the box only.
+- the occlusion candidates (``occlusion``): 1c (3b's literal rule), o3 (an under-box label is
+  kept when its fit passes, else ``occluded_model``), o3h (o3 with the under-box fit NCC >=
+  0.48); ``stack`` (S3): kept labels whose FITTED boxes (before W) overlap by IoU >= 0.30 are
+  both excluded (``stacked``). ``check --occlusion`` scores C1 on the standing labels the
+  candidate keeps (S3 never changes C1). decide() gives any candidate's verdict from a frame's
+  LabelFates (one pass for round 4's pack: orc_label_sheets.py --round4).
+
 C1 / C2 (the check) judge the PREDICTION, never the fitted box: C1 = label_check.score of the
 prediction at its projected position; C2 = its best-NCC offset within +-16 px. The standing rule,
 the bars and their summary are scripts/orc_camera_check.py's, unchanged.
@@ -170,8 +181,103 @@ def _fs() -> Any:
     return orc_facing_study
 
 
-def labels_name(rule: str) -> str:
-    return {"1a": "v2orc-fix", "fix2": "v2orc-fix2"}[rule]
+def labels_name(rule: str, occlusion: str = "1c", stack: bool = False,
+                wing: bool = False) -> str:  # fmt: skip
+    """The labels' name: 3b / 3f's unchanged without 3i's options (old invocations keep it)."""
+    base = {"1a": "v2orc-fix", "fix2": "v2orc-fix2"}[rule]
+    extra = ([] if occlusion == "1c" else [occlusion]) + (["S3"] if stack else [])
+    return base + ("+W" if wing else "") + "".join(f"+{x}" for x in extra)
+
+
+# --- 3i (PRE-REGISTERED 2026-10-23 22:46:39 ICT, 0f039b9): W, the occlusion candidates, S3 ------
+
+OCCLUSIONS = ("1c", "o3h", "o3")  # 1c: 3b's literal rule; o3h / o3: the fit's evidence (3e O3)
+O3H_TAU = 0.48  # o3h: an under-box label's fit NCC (col3's clear-label p5, 0.4775)
+STACK_IOU = 0.30  # S3: fitted boxes (before W) of two kept monster labels in one frame
+WING_MOBS = (1005, 1111)  # W: the Familiar and the Drainliar only
+WING_DELTA = 0.05  # W: a frame is plausible when its own fit >= the best - 0.05 ...
+WING_PAD_PX = 2  # ... and the union is grown by 2 px (col3: the drawn pixels' p90 reach)
+OCCLUDED, STACKED = "occluded_model", "stacked"
+# 3i's six candidates, in its tie-break order
+CANDIDATES = ("o3", "o3+S3", "o3h", "o3h+S3", "1c", "1c+S3")
+
+
+def parse_candidate(name: str) -> tuple[str, bool]:
+    """``o3h+S3`` -> ("o3h", True)."""
+    occlusion, _, s3 = name.partition("+")
+    if occlusion not in OCCLUSIONS or s3 not in ("", "S3"):
+        raise SystemExit(f"unknown candidate {name!r} (one of {CANDIDATES})")
+    return occlusion, s3 == "S3"
+
+
+def candidate_name(occlusion: str, stack: bool) -> str:
+    return occlusion + ("+S3" if stack else "")
+
+
+def iou(a: Box, b: Box) -> float:
+    ix = min(a[2], b[2]) - max(a[0], b[0])
+    iy = min(a[3], b[3]) - max(a[1], b[1])
+    if ix <= 0 or iy <= 0:
+        return 0.0
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def stacked_gids(boxes: Sequence[tuple[int, Box]], thr: float = STACK_IOU) -> set[int]:
+    """S3: the gids whose box has IoU >= ``thr`` with another's (both of a pair)."""
+    out: set[int] = set()
+    for i, (g1, b1) in enumerate(boxes):
+        for g2, b2 in boxes[i + 1 :]:
+            if iou(b1, b2) >= thr:
+                out.update((g1, g2))
+    return out
+
+
+@dataclass(frozen=True)
+class LabelFate:
+    """One visible monster's evidence in a frame, for every candidate at once (3i): its model-box
+    overlap, fix 2's 2b / 2c reason, its fit and the failure reason a clear label would get."""
+
+    gid: int
+    mob: int
+    under: bool  # its predicted box overlaps a model's projected box (1c's test)
+    pre: str | None  # 2b / 2c (excluded under every candidate)
+    fit: tuple[float, int, int, int] | None  # (ncc, dx, dy, motion) of the best frame; None: unfit
+    fail: str | None  # None: the fit passes (>= tau, not at the edge, a box); else crowd/ui/unfit
+    box: Box | None = None  # the fitted frame's box, clipped (S3 compares these)
+    raw: Box | None = None  # unclipped
+    wbox: Box | None = None  # W (clipped), for the WING_MOBS
+    heading: int = 0
+    facing_from: str = ""
+    state: str = ""
+
+
+def decide(fates: Sequence[LabelFate], occlusion: str, stack: bool,
+           ) -> tuple[list[LabelFate], list[tuple[int, int, str]]]:  # fmt: skip
+    """PURE: (kept, excluded (gid, mob, reason)) under one candidate (3i). The order: 1c's model
+    test, then 2b / 2c, then the fit (an under-box failure is ``occluded_model``), then o3h's
+    0.48, then S3 among the kept."""
+    if occlusion not in OCCLUSIONS:
+        raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
+    kept: list[LabelFate] = []
+    out: list[tuple[int, int, str]] = []
+    for f in fates:
+        if f.under and occlusion == "1c":
+            out.append((f.gid, f.mob, OCCLUDED))
+        elif f.pre is not None:
+            out.append((f.gid, f.mob, f.pre))
+        elif f.fit is None or f.fail is not None:
+            out.append((f.gid, f.mob, OCCLUDED if f.under else (f.fail or "unfit")))
+        elif f.under and occlusion == "o3h" and f.fit[0] < O3H_TAU:
+            out.append((f.gid, f.mob, OCCLUDED))
+        else:
+            kept.append(f)
+    if stack:
+        bad = stacked_gids([(f.gid, f.box) for f in kept if f.box is not None])
+        out += [(f.gid, f.mob, STACKED) for f in kept if f.gid in bad]
+        kept = [f for f in kept if f.gid not in bad]
+    return kept, out
 
 
 def move_vector(world: World, gid: int, t_ns: int) -> tuple[int, int] | None:
@@ -594,11 +700,13 @@ Cand = tuple[EntityState, ActorState, SpriteSheet, SpritePrediction, tuple[int, 
 def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, float]],
                         occluders: Occluders | None, dropped: Counter[str],
                         facing_rule: FacingRule | None = None,
+                        under_out: list[Cand] | None = None,
                         ) -> tuple[FrameWorld, Scene | None, dict[int, ActorState],
                                    list[Cand]]:  # fmt: skip
     """Section 3's STANDING labels at ``tw`` (idle >= 1 s, isolated 120 px, clear of the UI and the
     edges by the C2 margin), facing 1a (or ``facing_rule``'s: fix 2), anchor 1b; 1c's model
-    overlap excluded, then fix 2's 2b / 2c (3f)."""
+    overlap excluded, then fix 2's 2b / 2c (3f). With ``under_out`` (3i's o3 / o3h) a label under
+    a model box that 2b / 2c keep is put there instead of being dropped: its fit decides."""
     lab = sess.lab
     replay, world, states, rules = lab.timeline.at_world(tw)
     choice = facing_rule if facing_rule is not None else FacingRule.for_events("1a", ())
@@ -632,13 +740,17 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
         if not occ.clear_box(pred.box, lab.ui_rects, lab.size):
             dropped["ui_or_edge"] += 1
             continue
-        if occluders is not None and occluders.hit(scene, pred.box) is not None:
+        under = occluders is not None and occluders.hit(scene, pred.box) is not None
+        if under and under_out is None:
             dropped["occluded_model"] += 1
             dropped[f"occluded_model:{e.job}"] += 1
             continue
         if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
             dropped[why] += 1
             dropped[f"{why}:{e.job}"] += 1
+            continue
+        if under and under_out is not None:
+            under_out.append((e, st, sheet, pred, facing))
             continue
         out.append((e, st, sheet, pred, facing))
     return world, scene, now, out
@@ -925,22 +1037,45 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
     sess, occluders = _JOB["sess"], _JOB["occluders"]
     off_ms, anchors = _JOB["offset_ms"], _JOB["anchors"]
     facing_rule: FacingRule = _JOB["facing_rule"]
+    occlusion: str = _JOB.get("occlusion", "1c")
     dropped: Counter[str] = Counter()
     seen: Counter[int] = Counter()
     tw = ref.t_mono_ns - int(off_ms * 1e6)
+    under: list[Cand] | None = None if occlusion == "1c" else []
     world, scene, now, cands = standing_candidates(sess, tw, anchors, occluders, dropped,
-                                                   facing_rule)  # fmt: skip
+                                                   facing_rule, under)  # fmt: skip
     if scene is None:
         dropped["frame_no_scene"] += 1
         return [], dropped, seen
     for e in world.entities:
         if e.objtype == 5 and not e.hidden:
             seen[e.job] += 1
-    if not cands:
+    if not cands and not under:
         return [], dropped, seen
     bgr = qa_export.read_jpeg(ref)
     if not sess.layout_ok(bgr):  # a human demo's frame in another UI layout (3f)
         dropped["frame_ui_layout_mismatch"] += 1
+        return [], dropped, seen
+    if under:  # 3i's o3 / o3h: the fit's evidence decides an under-box label (C1 then scores
+        grey = bgr[:, :, :3].astype(float) @ label_check.GREY  # the PREDICTION, as ever)
+        valid = valid_map(sess.lab.size, sess.lab.ui_rects)
+        tau = float(_JOB.get("tau", TAU))
+        fit_px: dict[int, int] = _JOB.get("fit_px", FIT_PX)
+        for cand in under:
+            e, _st, sheet, pred, _facing = cand
+            r = fit_px.get(int(e.job), 6)
+            fit = fit_label(grey, valid, sheet, pred, r)
+            ok = fit is not None and fit[0] >= tau and not at_edge(fit[1], fit[2], r)
+            if ok and occlusion == "o3h":
+                ok = fit is not None and fit[0] >= O3H_TAU
+            if not ok:
+                dropped["occluded_model"] += 1
+                dropped[f"occluded_model:{e.job}"] += 1
+                continue
+            dropped["under_model_kept"] += 1
+            dropped[f"under_model_kept:{e.job}"] += 1
+            cands.append(cand)
+    if not cands:
         return [], dropped, seen
     dropped["frame_with_standing"] += 1
     before = sess.lab.timeline.frame_world(tw - SELF_MOTION_NS).self_pos
@@ -993,8 +1128,12 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     anchors = anchors_of(params)
     occluders = occluders_of(params)
     facing_rule = sess.facing_rule(a.rule)
+    occlusion = getattr(a, "occlusion", "1c")
+    if occlusion not in OCCLUSIONS:
+        raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
     _JOB.update(sess=sess, occluders=occluders, offset_ms=off_ms, anchors=anchors,
-                facing_rule=facing_rule)  # fmt: skip
+                facing_rule=facing_rule, occlusion=occlusion, tau=float(params["tau"]),
+                fit_px={int(k): int(v) for k, v in params["fit_px"].items()})  # fmt: skip
     refs = list(sess.candidates(a.every))
     rows: list[dict[str, Any]] = []
     dropped: Counter[str] = Counter()
@@ -1036,9 +1175,16 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     if a.rows is not None:
         a.rows.write_text(json.dumps(rows) + "\n")
     return {
-        "what": f"C1 / C2 on the labels {labels_name(a.rule)} PREDICTION (no fit), section 3's "
-                "bars",
-        "labels": labels_name(a.rule), "facing_rule": a.rule,
+        "what": f"C1 / C2 on the labels {labels_name(a.rule, occlusion)} PREDICTION (no fit), "
+                "section 3's bars",
+        "labels": labels_name(a.rule, occlusion), "facing_rule": a.rule,
+        "occlusion": occlusion,
+        "occlusion_rule": {"1c": "3b's literal 1c: under a model box -> excluded",
+                           "o3": "3i o3: under a model box -> kept when the fit passes (tau, not "
+                                 "at the edge), else excluded",
+                           "o3h": f"3i o3h: under a model box -> kept when the fit passes and "
+                                  f"its NCC >= {O3H_TAU}, else excluded"}[occlusion],
+        "under_model_kept_by_species": by_species("under_model_kept"),
         "session": sess.sid, "checked_at": now_ict(), "commit": git_head(),
         "params": str(a.params), "params_sha256": sha256_file(a.params),
         "offset_ms": off_ms, "anchors_px": params["anchors_px"], "k": K, "tau": TAU,
@@ -1078,6 +1224,7 @@ class FixLabel:
     heading: int
     facing_from: str
     state: str
+    fit_box: Box | None = None  # the fitted frame's box, clipped, before 3i's W (S3 reads it)
 
 
 def valid_map(size: tuple[int, int], rects: UiRects) -> npt.NDArray[np.bool_]:
@@ -1088,25 +1235,27 @@ def valid_map(size: tuple[int, int], rects: UiRects) -> npt.NDArray[np.bool_]:
     return ok
 
 
-def fit_label(grey: npt.NDArray[np.float64], valid: npt.NDArray[np.bool_], sheet: SpriteSheet,
-              pred: SpritePrediction, r: int) -> tuple[float, int, int, int] | None:  # fmt: skip
-    """(best NCC, dx, dy, motion) over the action's frames (the known one when the phase is
-    known) and every offset within ``r``, on the visible pixels only; None when nothing scores."""
+def fit_label_all(grey: npt.NDArray[np.float64], valid: npt.NDArray[np.bool_],
+                  sheet: SpriteSheet, pred: SpritePrediction,
+                  r: int) -> list[tuple[float, int, int, int]]:  # fmt: skip
+    """Every frame's own best (NCC, dx, dy, motion), in frame order: the action's frames (the
+    known one when the phase is known), each at its best offset within ``r``, on the visible
+    pixels only; frames that score nowhere are left out."""
     i0, j0 = math.floor(pred.box[0]), math.floor(pred.box[1])
     i1, j1 = math.ceil(pred.box[2]), math.ceil(pred.box[3])
     if i1 - i0 < 2 or j1 - j0 < 2:
-        return None
+        return []
     h, w = grey.shape
     wi0, wj0, wi1, wj1 = i0 - r, j0 - r, i1 + r, j1 + r
     obs = np.zeros((wj1 - wj0, wi1 - wi0))
     ok = np.zeros(obs.shape, bool)
     ci0, cj0, ci1, cj1 = max(0, wi0), max(0, wj0), min(w, wi1), min(h, wj1)
     if ci1 <= ci0 or cj1 <= cj0:
-        return None
+        return []
     obs[cj0 - wj0 : cj1 - wj0, ci0 - wi0 : ci1 - wi0] = grey[cj0:cj1, ci0:ci1]
     ok[cj0 - wj0 : cj1 - wj0, ci0 - wi0 : ci1 - wi0] = valid[cj0:cj1, ci0:ci1]
     motions = [pred.motion] if pred.motion is not None else range(sheet.motions(pred.action_index))
-    best: tuple[float, int, int, int] | None = None
+    out = []
     for mo in motions:
         tgrey, opaque = label_check.rendered(sheet, pred.action_index, int(mo), pred.anchor_px,
                                              pred.scale, (i0, j0, i1, j1))  # fmt: skip
@@ -1114,10 +1263,48 @@ def fit_label(grey: npt.NDArray[np.float64], valid: npt.NDArray[np.bool_], sheet
         if np.isnan(grid).all():
             continue
         a_, b_ = np.unravel_index(int(np.nanargmax(grid)), grid.shape)
-        cand = (float(grid[a_, b_]), int(b_) - r, int(a_) - r, int(mo))
+        out.append((float(grid[a_, b_]), int(b_) - r, int(a_) - r, int(mo)))
+    return out
+
+
+def best_fit(fits: Sequence[tuple[float, int, int, int]]) -> tuple[float, int, int, int] | None:
+    """The first frame with the highest NCC (fit_label's choice)."""
+    best: tuple[float, int, int, int] | None = None
+    for cand in fits:
         if best is None or cand[0] > best[0]:
             best = cand
     return best
+
+
+def fit_label(grey: npt.NDArray[np.float64], valid: npt.NDArray[np.bool_], sheet: SpriteSheet,
+              pred: SpritePrediction, r: int) -> tuple[float, int, int, int] | None:  # fmt: skip
+    """(best NCC, dx, dy, motion) over the action's frames (the known one when the phase is
+    known) and every offset within ``r``, on the visible pixels only; None when nothing scores."""
+    return best_fit(fit_label_all(grey, valid, sheet, pred, r))
+
+
+def wing_box(sheet: SpriteSheet, pred: SpritePrediction,
+             fits: Sequence[tuple[float, int, int, int]], r: int, size: tuple[int, int],
+             delta: float = WING_DELTA, pad: float = WING_PAD_PX) -> Box | None:  # fmt: skip
+    """3i's W: the union of the boxes of every PLAUSIBLE frame -- its own fit >= the best's NCC -
+    ``delta`` and not at the search edge, each at its own best offset; the best frame always in --
+    grown by ``pad`` px on every side, clipped to the frame. None when the best draws nothing."""
+    best = best_fit(fits)
+    if best is None:
+        return None
+    boxes = []
+    for f in fits:
+        if f is not best and (f[0] < best[0] - delta or at_edge(f[1], f[2], r)):
+            continue
+        b = motion_box(sheet, pred, f[3])
+        if b is not None:
+            boxes.append((b[0] + f[1], b[1] + f[2], b[2] + f[1], b[3] + f[2]))
+    if not boxes:
+        return None
+    w, h = size
+    return (max(0.0, min(b[0] for b in boxes) - pad), max(0.0, min(b[1] for b in boxes) - pad),
+            min(float(w), max(b[2] for b in boxes) + pad),
+            min(float(h), max(b[3] for b in boxes) + pad))  # fmt: skip
 
 
 def motion_box(sheet: SpriteSheet, pred: SpritePrediction, motion: int) -> Box | None:
@@ -1153,16 +1340,26 @@ class FixFrame:
     applies: bool = True  # False off orcsdun01: the frame keeps v1's labels (Batt's 3b item 2)
     # without pixels (a dry run): the labels the fit WOULD judge, (gid, mob, predicted box)
     pending: list[tuple[int, int, Box]] = field(default_factory=list)
+    # 3i: every visible monster's evidence (decide() gives any candidate's verdict from it)
+    fates: list[LabelFate] = field(default_factory=list)
 
 
 class FixLabeler:
-    """The labels v2orc-fix monster boxes of a frame (section 3b, 0 + 1a-1d)."""
+    """The labels v2orc-fix monster boxes of a frame (section 3b, 0 + 1a-1d), with 3i's options:
+    ``occlusion`` (1c / o3h / o3), ``stack`` (S3) and ``wing`` (W for the WING_MOBS). Without
+    them it is 3b / 3f's labeller, unchanged. ``fit_all`` also fits the labels under a model box
+    under 1c (3i's round-4 pack: every candidate's verdict from one pass, ``FixFrame.fates``)."""
 
     def __init__(self, lab: qa_export.Labeler, params: dict[str, Any],
-                 occluders: Occluders | None = None, rule: str = "1a") -> None:  # fmt: skip
+                 occluders: Occluders | None = None, rule: str = "1a",
+                 occlusion: str = "1c", stack: bool = False, wing: bool = False,
+                 fit_all: bool = False) -> None:  # fmt: skip
+        if occlusion not in OCCLUSIONS:
+            raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
         self.lab = lab
         self.params = params
         self.rule = rule
+        self.occlusion, self.stack, self.wing, self.fit_all = occlusion, stack, wing, fit_all
         self.facing = FacingRule.for_events(rule, getattr(lab.timeline, "events", ()))
         self.offset_ns = int(float(params["offset_ms"]) * 1e6)
         self.anchors = anchors_of(params)
@@ -1171,10 +1368,43 @@ class FixLabeler:
         self.tau = float(params["tau"])
         self.valid = valid_map(lab.size, lab.ui_rects)
 
+    def fate(self, e: EntityState, st: ActorState, sheet: SpriteSheet, pred: SpritePrediction,
+             facing: tuple[int, str], why: str | None, under: bool,
+             grey: npt.NDArray[np.float64],
+             unit_boxes: Sequence[tuple[int, Box]]) -> LabelFate:  # fmt: skip
+        """One label's evidence: the fit (3b item 0), its failure reason, its boxes and W."""
+        lab = self.lab
+        base = LabelFate(e.gid, e.job, under, why, None, "unfit", heading=facing[0],
+                         facing_from=facing[1], state=st.state)  # fmt: skip
+        r = self.fit_px.get(int(e.job), 6)
+        fits = fit_label_all(grey, self.valid, sheet, pred, r)
+        fit = best_fit(fits)
+        if fit is None or fit[0] < self.tau or at_edge(fit[1], fit[2], r):
+            crowd = any(g != e.gid and overlap(pred.box, b) for g, b in unit_boxes)
+            grown = (pred.box[0] - r, pred.box[1] - r, pred.box[2] + r, pred.box[3] + r)
+            ui = covered_fraction(grown, lab.ui_rects) > 0
+            return replace(base, fit=fit, fail="crowd" if crowd else "ui" if ui else "unfit")
+        raw = motion_box(sheet, pred, fit[3])
+        if raw is None:
+            return replace(base, fit=fit)  # fail stays "unfit"
+        raw = (raw[0] + fit[1], raw[1] + fit[2], raw[2] + fit[1], raw[3] + fit[2])
+        w, h = lab.size
+        box = (max(0.0, raw[0]), max(0.0, raw[1]), min(float(w), raw[2]), min(float(h), raw[3]))
+        wbox = wing_box(sheet, pred, fits, r, lab.size) if int(e.job) in WING_MOBS else None
+        return replace(base, fit=fit, fail=None, box=box, raw=raw, wbox=wbox)
+
+    def label(self, f: LabelFate) -> FixLabel:
+        """A kept fate as the label written: W's box for the WING_MOBS when ``wing``."""
+        assert f.fit is not None and f.box is not None and f.raw is not None
+        box = f.wbox if (self.wing and f.wbox is not None) else f.box
+        return FixLabel(f.gid, f.mob, box, f.raw, round(f.fit[0], 4), f.fit[1], f.fit[2],
+                        f.fit[3], f.heading, f.facing_from, f.state, fit_box=f.box)  # fmt: skip
+
     def frame(self, t: int, bgr: npt.NDArray[np.uint8] | None) -> FixFrame | None:
         """The frame's fitted labels and exclusions. ``bgr=None`` (a dry run: packets only) runs
-        every rule up to the fit -- visibility, 1c, 2b, 2c -- and lists the labels the fit would
-        judge in ``pending`` (their unfit / crowd / UI fates need the pixels)."""
+        every rule up to the fit -- visibility, 1c (under 1c), 2b, 2c -- and lists the labels the
+        fit would judge in ``pending`` (their unfit / crowd / UI / o3 / S3 fates need the
+        pixels)."""
         lab = self.lab
         tw = t - self.offset_ns
         replay, world, all_states, rules = lab.timeline.at_world(tw)
@@ -1209,33 +1439,20 @@ class FixLabeler:
                 continue
             preds.append((e, st, sheet, pred, facing, why))
             unit_boxes.append((e.gid, pred.box))
+        fit_under = self.fit_all or self.occlusion != "1c"
         for e, st, sheet, pred, facing, why in preds:
-            if self.occluders.hit(scene, pred.box) is not None:
-                out.excluded.append((e.gid, e.job, "occluded_model"))
+            under = self.occluders.hit(scene, pred.box) is not None
+            if (under and not fit_under) or why is not None or grey is None:
+                if grey is None and not (under and self.occlusion == "1c") and why is None:
+                    out.pending.append((e.gid, e.job, pred.box))  # no pixels: the fit's fate
+                    continue
+                out.fates.append(LabelFate(e.gid, e.job, under, why, None, None,
+                                           heading=facing[0], facing_from=facing[1],
+                                           state=st.state))  # fmt: skip
                 continue
-            if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
-                out.excluded.append((e.gid, e.job, why))
-                continue
-            if grey is None:  # no pixels: the fit's fate is unknown
-                out.pending.append((e.gid, e.job, pred.box))
-                continue
-            r = self.fit_px.get(int(e.job), 6)
-            fit = fit_label(grey, self.valid, sheet, pred, r)
-            if fit is None or fit[0] < self.tau or at_edge(fit[1], fit[2], r):
-                crowd = any(g != e.gid and overlap(pred.box, b) for g, b in unit_boxes)
-                grown = (pred.box[0] - r, pred.box[1] - r, pred.box[2] + r, pred.box[3] + r)
-                ui = covered_fraction(grown, lab.ui_rects) > 0
-                out.excluded.append((e.gid, e.job, "crowd" if crowd else "ui" if ui else "unfit"))
-                continue
-            raw = motion_box(sheet, pred, fit[3])
-            if raw is None:
-                out.excluded.append((e.gid, e.job, "unfit"))
-                continue
-            raw = (raw[0] + fit[1], raw[1] + fit[2], raw[2] + fit[1], raw[3] + fit[2])
-            w, h = lab.size
-            box = (max(0.0, raw[0]), max(0.0, raw[1]), min(float(w), raw[2]), min(float(h), raw[3]))
-            out.kept.append(FixLabel(e.gid, e.job, box, raw, round(fit[0], 4), fit[1], fit[2],
-                                     fit[3], facing[0], facing[1], st.state))  # fmt: skip
+            out.fates.append(self.fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes))
+        kept, out.excluded = decide(out.fates, self.occlusion, self.stack)
+        out.kept = [self.label(f) for f in kept]
         return out
 
 
@@ -1276,6 +1493,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--rule", choices=RULES, default="1a",
                    help="the facing: 1a (3b, as 3c ran) or fix2 (3f, with 2b / 2c)")  # fmt: skip
     p.add_argument("--rows", type=Path, default=None, help="also every scored row (JSON)")
+    p.add_argument("--occlusion", choices=OCCLUSIONS, default="1c",
+                   help="3i: 1c (3b's literal rule), o3h or o3 (an under-box label's fit "
+                        "decides); S3 never changes C1 (the standing rule isolates)")  # fmt: skip
     a = ap.parse_args(argv)
     run = {"offset": cmd_offset, "anchor": cmd_anchor, "freeze": cmd_freeze, "check": cmd_check}
     out = run[a.cmd](a)
