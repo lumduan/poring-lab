@@ -516,10 +516,11 @@ def round4(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     if a.fix is None or a.rule != "fix2":
         raise SystemExit("--round4 is 3i's: --fix PARAMS --rule fix2")
     olf.refuse_test_block(session)
-    instr = a.instructions.read_bytes()
-    instr_sha = hashlib.sha256(instr).hexdigest()
-    if a.instructions_sha256 and instr_sha != a.instructions_sha256:
-        raise SystemExit(f"{a.instructions}: sha256 {instr_sha}, not round 2's")
+    instr_sha = None
+    if not getattr(a, "counts_only", False):
+        instr_sha = hashlib.sha256(a.instructions.read_bytes()).hexdigest()
+        if a.instructions_sha256 and instr_sha != a.instructions_sha256:
+            raise SystemExit(f"{a.instructions}: sha256 {instr_sha}, not round 2's")
     fix_params = olf.load_params(a.fix)
     a.offset_ms = float(fix_params["offset_ms"])
     ns = argparse.Namespace(
@@ -590,6 +591,29 @@ def round4(session: Path, a: argparse.Namespace) -> dict[str, Any]:
         for c, kp in per.items():
             if not kp <= per["o3"]:
                 raise SystemExit(f"{c} keeps a {mob} label o3 does not: the pool is wrong")
+    mobs = sorted({m for c in cands for m in kept_any[c]})
+    table: dict[str, dict[str, Any]] = {
+        c: {"labels_kept_any_frame": {str(m): kept_any[c][m] for m in mobs},
+                 "labels_in_whole_frames": {str(m): in_whole[c][m] for m in mobs},
+                 "labels_in_whole_frames_total": sum(in_whole[c].values()),
+                 "labels_kept_total": sum(kept_any[c].values()),
+                 "frames_whole": frames_whole[c],
+                 "excluded_by_reason": {w: {str(m): n for m, n in sorted(v.items())}
+                                        for w, v in sorted(excl[c].items())}}
+        for c in cands}  # fmt: skip
+    rank = sorted(cands, key=lambda c: (-table[c]["labels_in_whole_frames_total"],
+                                        -table[c]["frames_whole"], cands.index(c)))  # fmt: skip
+    if getattr(a, "counts_only", False):  # col3 / the cache's expectation: no pack, no key
+        out = {"what": "3i: every candidate's counts (no pack)", "session": sid,
+               "made_at": olf.now_ict(), "commit": olf.git_head(), "every": a.every,
+               "params_sha256": olf.sha256_file(a.fix), "frames_considered": len(refs),
+               "outcomes": dict(outcomes), "orcsdun01_frames_v2_keeps": orc_frames,
+               "frames_off_orcsdun01": other_map, "controls": len(controls),
+               "control_boxes_by_species": dict(Counter(str(i.mob) for i in controls)),
+               "candidates": table, "preference_order_by_3i": rank}  # fmt: skip
+        a.out_root.mkdir(parents=True, exist_ok=True)
+        (a.out_root / f"counts_{sid}.json").write_text(json.dumps(out, indent=1) + "\n")
+        return out
     samples: dict[int, dict[str, list[Item]]] = {
         mob: round4_samples(pool[mob], keeps[mob], a.per_blind, sid, a.seed, mob)
         for mob in sorted(pool)
@@ -653,18 +677,6 @@ def round4(session: Path, a: argparse.Namespace) -> dict[str, Any]:
            "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller; "
                    "score each candidate with blind_score.py --sample NAME"}  # fmt: skip
     (keydir / "answer_key.json").write_text(json.dumps(key, indent=1) + "\n")
-    mobs = sorted({m for c in cands for m in kept_any[c]})
-    table: dict[str, dict[str, Any]] = {
-        c: {"labels_kept_any_frame": {str(m): kept_any[c][m] for m in mobs},
-                 "labels_in_whole_frames": {str(m): in_whole[c][m] for m in mobs},
-                 "labels_in_whole_frames_total": sum(in_whole[c].values()),
-                 "labels_kept_total": sum(kept_any[c].values()),
-                 "frames_whole": frames_whole[c],
-                 "excluded_by_reason": {w: {str(m): n for m, n in sorted(v.items())}
-                                        for w, v in sorted(excl[c].items())}}
-        for c in cands}  # fmt: skip
-    rank = sorted(cands, key=lambda c: (-table[c]["labels_in_whole_frames_total"],
-                                        -table[c]["frames_whole"], cands.index(c)))  # fmt: skip
     summary = {
         "what": "3i: blind round 4's pack and every candidate's counts on col1 (every "
                 f"{a.every}rd frame, v2's frame rules, fix 2 + W)",
@@ -758,9 +770,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="--round4: refuse unless the instructions have exactly this sha256",
     )
+    ap.add_argument(
+        "--counts-only",
+        action="store_true",
+        help="--round4: every candidate's counts only (no pack, no key): col3 / the cache",
+    )
     a = ap.parse_args(argv)
     if a.round4:
-        if a.pack_dir is None or a.key_dir is None or a.instructions is None:
+        if not a.counts_only and (a.pack_dir is None or a.key_dir is None
+                                  or a.instructions is None):  # fmt: skip
             raise SystemExit("--round4 needs --pack-dir, --key-dir and --instructions")
         print(json.dumps(round4(a.session, a), indent=1))
         return 0
