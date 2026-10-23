@@ -39,6 +39,22 @@ the candidate sessions, their frame-file names (capture times) and manifests, an
 occupancy of the orcsdun01 demo over time (to cut its blocks, section 2). No frame was read and no
 item was projected.
 
+## AMENDMENT A (written 2026-10-23 22:4x ICT, the commit time of this amendment; BEFORE any item label, measurement or check exists: nothing has been measured, built or read but the inventory)
+
+Four readings the pre-registration left open, fixed before the step each one touches:
+1. **"KEPT" item labels (section 5's blind round 1 and its negatives) = the labels that TRAIN:**
+   the item labels of KEPT ROUTE-U frames (3g) of the map's TRAIN data, and the negatives come from
+   the same kept Route-U frames. The blind check judges what would train, as the monsters' did. A
+   map with fewer than 40 such labels is sampled whole.
+2. **G1's scope** is every labelled frame's item that passes 3a-3e (Route U or not; the fit not
+   yet applied), on the TRAIN data, as written. Route U decides the cache, not G1.
+3. **Outside Route U (the evaluation frames of ../benchmarks/item-class.md) no `under_unit` rule
+   applies:** an item covered by a monster fails the fit (`unfit`) or, if it passes, is judged by
+   the seed-6 blind pack like any other evaluated label. Nothing is added.
+4. **The orcsdun01 cuts, exactly** (seconds after the demo's first frame, the computation of
+   section 2): FIT [0, 282.913519548), TRAIN [302.913519548, 649.527039097), TEST
+   [669.527039097, end]. Frames between are in no block.
+
 ## 1. What the packets say (OFFLINE ground truth, ADR-0007)
 
 - `floor_item_appear` kind `fall` = ZC_ITEM_FALL_ENTRY5 0x0ADD: a FRESH drop (a kill, a throw):
