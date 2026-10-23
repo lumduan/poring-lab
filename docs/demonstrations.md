@@ -15498,6 +15498,13 @@ loot 18.8 / 22.2 %.
     - The CPU box detector kept its rhythm with the training running: 2,399 box frames against
       ri1's 2,400 (1 Hz).
   - R - L1: **+20.9 kills / h**; loot gross -35.0 points; net z / h -7,366.
+- **Pair 2 (L1 first):**
+  - **rl2** (L1, seed 23303, `20261024T050342-demo-dungeon-patrol-H-rl2`, 05:03-05:45, time box,
+    40.0 min): 187 kills (**280.3 / h**), deaths 0, HP min 43.8 %, 0 potions / Fly Wings, 16 Heals,
+    met 49 / 10 min, 12.8 s / kill (7.2 / 0.6 / 5.0), loot step 4.65 s / kill (97 steps, 148
+    picks), moved on 8.81 s, pulled 5.0 / 10 min, hard bars 0.
+    - **Loot 66.7 % gross / 87.5 % net** (items 231: picked 154, looters 59, expired 9, out of
+      sight 7; re-drops 55, recovered 38); **net 11,844 z / h**.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
