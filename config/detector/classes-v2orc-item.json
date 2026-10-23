@@ -1,0 +1,9 @@
+{
+ "scheme": "v2orc-item",
+ "source": "docs/planning/item-class.md section 6 (pre-registered 2026-10-23): classes-v2orc.json + the class item appended",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR); item is a fixed id after the monsters",
+ "fixed": {"player": 0, "npc": 1, "warp": 2},
+ "monster_first_id": 3,
+ "monsters": [1002, 1063, 1008, 1113, 1018, 1005, 1042, 1082, 1084, 1111, 1152, 1153],
+ "appended": {"item": 15}
+}
