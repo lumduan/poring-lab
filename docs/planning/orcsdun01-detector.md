@@ -1441,6 +1441,35 @@ nothing here lowers it. Round 4's FAIL stays on the record above.
   - score `v2orc-vs-v1.md` once, after training ends.
 - **If none qualifies:** nothing trains, and both rounds go to Batt.
 
+### 3m. RESULT: blind round 5 (3l) -- PASSES for o3h, o3h+S3, 1c, 1c+S3 -> the TRAINING TIER PASSES with **o3h** (scored 2026-10-24 ~00:0x ICT)
+
+- **The round:** the pack built 23:47-23:56 from main 7ff76e1 (seed 7, 354 crops, the multi-view
+  reference; instructions sha256 `1253e64b…fae13`, byte-identical). Two NEW blind labeller agents,
+  I and J (23:57-00:04), each given only `pack/`. Scored by `blind_score.py --each-sample`
+  (`orc-r5/answers/score-each.json`).
+- **`candidates_passing_t2`: o3h, o3h+S3, 1c, 1c+S3.** o3 and o3+S3 fail the Black Mushroom (63-70 %
+  good, 9 "no"), as in round 4; they were already out on T1.
+
+| species (o3h) | I good / species | J good / species | T2 |
+|---|---|---|---|
+| Orc Zombie 1153 | 100 / 100 | 100 / 100 | PASS |
+| Orc Skeleton 1152 | 100 / 100 | 100 / 100 | PASS |
+| White Plant 1082 | 96.7 / 100 | 96.7 / 100 | PASS |
+| Black Mushroom 1084 | 100 / 100 | 100 / 100 | PASS |
+| Familiar 1005 | 100 / 100 | 100 / 100 | PASS (round 4: species 53.3 %) |
+| Steel Chonchon 1042 | 100 / 100 | 100 / 100 | PASS |
+| Drainliar 1111 | 100 / 100 | 100 / 100 | PASS |
+| (Poring 1002, control) | 100 / 100 | 100 / 100 | PASS |
+
+- **3i's selection:** the qualifier with the most col1 labels in frames kept whole is **o3h**
+  (5,122 labels in 1,264 whole frames; 3j). It also passes T1 (C1 pooled 1.55 %).
+- **The training tier passes with o3h** (T1 + T2, every species). The item class failed its own
+  tier (`item-class.md` 8a / 8b), so per its section 6 the run is the monsters' own: 15 classes.
+- **Next (3l's rule):**
+  - the combined cache: 3j's step with `--occlusion o3h --wing`;
+  - then training in the long-lived worker (MID_CKPT, R1-R3, the VRAM cap);
+  - `v2orc-vs-v1.md` scored once, after training ends.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
