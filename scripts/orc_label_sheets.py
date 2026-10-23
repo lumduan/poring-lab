@@ -214,30 +214,66 @@ def to_tile(img: npt.NDArray[np.uint8], height: int, text: str | None = None) ->
     return np.asarray(im.convert("RGB"))
 
 
-def reference_sheet(sheets: dict[int, Any], letters: dict[str, int], scale: int = 3) -> Any:
-    """Each species' rendered idle sprite (direction 0, frame 0; ACT tint applied) on mid grey,
-    enlarged, under its letter. No name."""
-    from PIL import Image, ImageDraw, ImageFont
+REFERENCE_DIRECTIONS = (0, 2, 4, 6)  # 3l (round 5): S, W, N, E under our mapping
 
+
+def reference_views(sheet: Any, views: str) -> list[Any]:
+    """The RGBA images a species' reference tile shows. ``one`` (rounds 1-4): the idle action,
+    direction 0, frame 0. ``multi`` (3l, round 5; round 4's labellers matched raised Familiar wings
+    to the one-pose Lunatic tile): the idle action in REFERENCE_DIRECTIONS, each at frame 0 and at
+    its middle frame; identical images once, in that order."""
     from poring_dataset.render import MonsterAction
     from poring_dataset.sprites import compose_frame
 
+    if views == "one":
+        ai = sheet.act.action_index(MonsterAction.IDLE, 0)
+        return [compose_frame(sheet.spr, sheet.act, ai, 0)[0]]
+    out: list[Any] = []
+    seen: set[tuple[tuple[int, ...], bytes]] = set()
+    for d in REFERENCE_DIRECTIONS:
+        ai = sheet.act.action_index(MonsterAction.IDLE, d)
+        n = len(sheet.act.actions[ai])
+        for f in sorted({0, n // 2}):
+            rgba = compose_frame(sheet.spr, sheet.act, ai, f)[0]
+            k = (tuple(rgba.shape), np.ascontiguousarray(rgba).tobytes())
+            if k not in seen:
+                seen.add(k)
+                out.append(rgba)
+    return out
+
+
+def reference_sheet(
+    sheets: dict[int, Any], letters: dict[str, int], scale: int = 3, views: str = "one"
+) -> Any:
+    """Each species' rendered idle sprite(s) (``reference_views``; ACT tint applied) on mid grey,
+    enlarged, under its letter. No name. ``multi`` draws a species' views side by side (scale 2,
+    two tiles to a row)."""
+    from PIL import Image, ImageDraw, ImageFont
+
     font = ImageFont.load_default(size=28)
+    if views == "multi":
+        scale = 2
     tiles = []
     for letter, mob in letters.items():
         sheet = sheets.get(mob)
         if sheet is None or sheet.spr is None:
             raise SystemExit(f"no decoded sprite for listed species {mob}: the reference is "
                              "incomplete")  # fmt: skip
-        rgba, _ = compose_frame(sheet.spr, sheet.act, sheet.act.action_index(MonsterAction.IDLE,
-                                                                             0), 0)  # fmt: skip
-        a = rgba[..., 3:4].astype(float) / 255.0
-        rgb = (rgba[..., :3] * a + 110.0 * (1 - a)).astype(np.uint8)
-        rgb = np.repeat(np.repeat(rgb, scale, axis=0), scale, axis=1)
-        tiles.append((letter, rgb))
+        parts = []
+        for rgba in reference_views(sheet, views):
+            a = rgba[..., 3:4].astype(float) / 255.0
+            rgb = (rgba[..., :3] * a + 110.0 * (1 - a)).astype(np.uint8)
+            parts.append(np.repeat(np.repeat(rgb, scale, axis=0), scale, axis=1))
+        h = max(x.shape[0] for x in parts)
+        row = np.full((h, sum(x.shape[1] for x in parts) + 8 * (len(parts) - 1), 3), 110, np.uint8)
+        x0 = 0
+        for x in parts:
+            row[h - x.shape[0] :, x0 : x0 + x.shape[1]] = x
+            x0 += x.shape[1] + 8
+        tiles.append((letter, row))
     tw = max(t.shape[1] for _, t in tiles) + 20
     th = max(t.shape[0] for _, t in tiles) + 50
-    cols = 4
+    cols = 2 if views == "multi" else 4
     rows = (len(tiles) + cols - 1) // cols
     canvas = Image.new("RGB", (cols * tw, rows * th), (110, 110, 110))
     d = ImageDraw.Draw(canvas)
@@ -653,7 +689,11 @@ def round4(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     letters = letters_for(v2.classes.monsters, a.seed)
     save_png(
         pack / "reference.png",
-        reference_sheet({m: sess.labeler.sheets(m) for m in v2.classes.monsters}, letters),
+        reference_sheet(
+            {m: sess.labeler.sheets(m) for m in v2.classes.monsters},
+            letters,
+            views=getattr(a, "reference_views", "one"),
+        ),
     )
     grids = []
     for page, idx in enumerate(grid_pages(len(enlarged)), 1):
@@ -769,6 +809,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--instructions-sha256",
         default=None,
         help="--round4: refuse unless the instructions have exactly this sha256",
+    )
+    ap.add_argument(
+        "--reference-views",
+        choices=["one", "multi"],
+        default="one",
+        help="--round4: reference.png's poses per species: one (rounds 1-4) or multi (3l, round 5)",
     )
     ap.add_argument(
         "--counts-only",

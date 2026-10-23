@@ -585,3 +585,37 @@ def test_sessions_are_found_under_the_extra_roots(bfc: ModuleType, tmp_path: Pat
     assert bfc.dataset_session(SID, a) == orc / SID
     with pytest.raises(SystemExit, match="no manifest"):
         bfc.resolve_session("nowhere", a)
+
+
+def test_round5_multi_view_reference_shows_each_distinct_idle_pose_once(monkeypatch) -> None:
+    """3l (blind round 5): round 4's labellers matched raised Familiar wings to the ONE-pose
+    Lunatic tile. ``multi`` shows the idle action in directions 0/2/4/6 at frame 0 and its middle
+    frame, identical images once; ``one`` stays rounds 1-4's single image."""
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from poring_dataset import sprites
+
+    calls = []
+
+    def fake_compose(spr, act, ai, f):
+        calls.append((ai, f))
+        img = np.zeros((4, 4, 4), np.uint8)
+        img[..., 3] = 255
+        img[0, 0, 0] = (ai // 2) % 2 * 100 + f  # directions 0/4 draw alike, 2/6 alike
+        return img, (0.0, 0.0)
+
+    monkeypatch.setattr(sprites, "compose_frame", fake_compose)
+    act = SimpleNamespace(
+        action_index=lambda g, d: g * 8 + d, actions=[(1, 2, 3, 4)] * 16
+    )  # 4 frames each
+    sheet = SimpleNamespace(spr=object(), act=act)
+    one = ols.reference_views(sheet, "one")
+    assert len(one) == 1 and calls == [(0, 0)]
+    calls.clear()
+    multi = ols.reference_views(sheet, "multi")
+    assert calls == [(0, 0), (0, 2), (2, 0), (2, 2), (4, 0), (4, 2), (6, 0), (6, 2)]
+    assert len(multi) == 4  # directions 4 / 6 repeat 0 / 2's images: shown once
+    sheet_img = ols.reference_sheet({1005: sheet}, {"A": 1005}, views="multi")
+    assert sheet_img.ndim == 3 and sheet_img.shape[2] == 3
