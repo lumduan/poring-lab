@@ -1481,6 +1481,14 @@ nothing here lowers it. Round 4's FAIL stays on the record above.
     not by id: a reporting difference only.
   - **The IO guard:** worst capture stall 17.8 % (quant-postgres), 132 s above 10 % in all, never
     30 s in a row: ALL STEPS OK.
+- **Training STARTED 2026-10-24 04:31:06 ICT:**
+  - `quiet_start` waited 03:15-04:29 for 10 quiet minutes: quant-postgres and frigate burst at
+    25-62 % every few minutes until 04:19.
+  - `worker:vision@120` came up 04:29-04:31 (worst stall 4.1 %; idle, no CUDA context).
+  - `WORKER=1 MID_CKPT=1 scripts/runbooks/train-day.sh v2orc-20261024 v2orc-fix2-w-o3h-20261024 30
+    /dev/shm/poring-lab-tmp/train-v2orc 2 1`: YOLO11n, 15 classes, imgsz 1280, batch 2, workers
+    1, 5,208 batches an epoch, the adaptive duty cycle from its slowest level, R1-R3, the IO guard.
+  - `v2orc-vs-v1.md` is scored once, after epoch 30.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
