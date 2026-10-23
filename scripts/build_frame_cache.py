@@ -317,6 +317,8 @@ class SpeciesClasses:
     first: int
     path: Path
     sha256: str
+    # classes after the monsters (docs/planning/item-class.md: "item"); empty for older lists
+    appended: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> SpeciesClasses:
@@ -324,7 +326,8 @@ class SpeciesClasses:
         fixed = {str(k): int(v) for k, v in doc["fixed"].items()}
         monsters = tuple(int(m) for m in doc["monsters"])
         first = int(doc["monster_first_id"])
-        ids = [*fixed.values(), *range(first, first + len(monsters))]
+        appended = {str(k): int(v) for k, v in (doc.get("appended") or {}).items()}
+        ids = [*fixed.values(), *range(first, first + len(monsters)), *appended.values()]
         if (
             set(fixed) != {"player", "npc", "warp"}
             or len(set(ids)) != len(ids)
@@ -334,7 +337,9 @@ class SpeciesClasses:
                              f"species, 0..n-1 without a gap or a repeat")  # fmt: skip
         if len(set(monsters)) != len(monsters):
             raise SystemExit(f"{path}: a monster species is listed twice")
-        return cls(fixed, monsters, first, path, sha256_of(path) or "")
+        if set(appended) & set(fixed):
+            raise SystemExit(f"{path}: an appended class repeats a fixed one")
+        return cls(fixed, monsters, first, path, sha256_of(path) or "", appended)
 
     @property
     def index(self) -> dict[int, int]:
@@ -378,12 +383,16 @@ class SpeciesClasses:
             raise SystemExit(f"the KB ({kb}) has no name for listed species {missing}")
         out = {v: k for k, v in self.fixed.items()}
         out.update({self.index[m]: aegis[m].lower() for m in self.monsters})
+        out.update({v: k for k, v in self.appended.items()})
         return dict(sorted(out.items()))
 
     def provenance(self) -> dict[str, Any]:
-        return {"mode": "species", "list": str(self.path), "sha256": self.sha256,
-                "fixed": self.fixed, "monster_first_id": self.first,
-                "monsters": list(self.monsters)}  # fmt: skip
+        doc = {"mode": "species", "list": str(self.path), "sha256": self.sha256,
+               "fixed": self.fixed, "monster_first_id": self.first,
+               "monsters": list(self.monsters)}  # fmt: skip
+        if self.appended:  # a list without appended classes keeps its provenance unchanged
+            doc["appended"] = dict(self.appended)
+        return doc
 
 
 @dataclass(frozen=True)
@@ -874,6 +883,7 @@ def dry_run(
     v2: V2Inputs,
     fix: FixInputs | None = None,
     v1_species: frozenset[str] = frozenset(),
+    item_sessions: frozenset[str] = frozenset(),
 ) -> int:
     """Counts only: no directory, no shard, no manifest, no image read. With ``fix`` the kept
     orcsdun01 frames are an UPPER BOUND (the fit needs pixels: ``fix.fit_pending_frames``); the
@@ -882,8 +892,17 @@ def dry_run(
     total = V2Tally()
     v1_parts: dict[str, Counter[str]] = {part: Counter() for part in split}
     fix_parts: dict[str, Counter[str]] = {part: Counter() for part in split}
+    item_parts: dict[str, Counter[str]] = {part: Counter() for part in split}
     for part, ids in split.items():
         for sid in ids:
+            if sid in item_sessions:  # counts from item_labels.py's records (no image read)
+                assert v2.classes is not None
+                row = item_session(sid, part, a, None, v2.classes)
+                row.pop("shards")
+                print(json.dumps({"session": sid, **row}), flush=True)
+                item_parts[part].update({k: int(row[k]) for k in
+                                         ("kept", "item_boxes", "frames_with_items")})  # fmt: skip
+                continue
             if sid in v1_species:
                 row = v01_session(sid, part, a, None, mode=("v1", True))
                 row.pop("shards")
@@ -915,6 +934,8 @@ def dry_run(
     if v1_species:
         out["v1_species"] = {p: dict(sorted(c.items())) for p, c in v1_parts.items()}
         out["combined"] = combined_counts(parts, v1_parts, v2)
+    if item_sessions:
+        out["item_sessions"] = {p: dict(sorted(c.items())) for p, c in item_parts.items()}
     print(json.dumps(out, indent=1))
     return 0
 
@@ -1052,6 +1073,75 @@ def v01_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | No
     return row
 
 
+# --- ITEM frames (docs/planning/item-class.md 3g / 6, pre-registered 2026-10-23) ------------------
+
+
+def item_records(labels_dir: Path, map_name: str, sid: str) -> list[dict[str, Any]]:
+    """The Route-U frames scripts/item_labels.py KEPT for one TRAIN session (its sampling: every
+    3rd frame with an item, every 15th without): ``<labels_dir>/<map>/train/<sid>.jsonl``."""
+    path = labels_dir / map_key(map_name) / "train" / f"{sid}.jsonl"
+    if not path.exists():
+        raise SystemExit(f"{path}: no item labels for {sid} (item_labels.py label --split train)")
+    out = []
+    for line in path.read_text().splitlines():
+        r = json.loads(line)
+        if r["status"] == "keep" and r["route_u"]:
+            out.append(r)
+    return out
+
+
+def item_yolo(rec: dict[str, Any], classes: SpeciesClasses, w: int, h: int
+              ) -> tuple[str, list[list[Any]]]:  # fmt: skip
+    """PURE: one item frame's YOLO text: our own character (``player``, labels v2's self box) +
+    every item (``item``), clipped to the frame; and the json's box rows."""
+    boxes: list[dict[str, Any]] = []
+    ids: list[int] = []
+    rows: list[list[Any]] = []
+    if rec.get("self_box"):
+        x0, y0, x1, y1 = rec["self_box"]
+        boxes.append({"x1": x0, "y1": y0, "x2": x1, "y2": y1})
+        ids.append(classes.fixed["player"])
+        rows.append([classes.fixed["player"], None, "self"])
+    for it in rec["items"]:
+        x0, y0, x1, y1 = it["box"]
+        boxes.append({"x1": x0, "y1": y0, "x2": x1, "y2": y1})
+        ids.append(classes.appended["item"])
+        rows.append([classes.appended["item"], int(it["item_id"]), "item"])
+    return yolo_lines(boxes, w, h, ids), rows
+
+
+def item_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | None,
+                 classes: SpeciesClasses) -> dict[str, Any]:  # fmt: skip
+    """One session's item frames (Route U, the TRAIN data only): the JPEG from the session's
+    frames_dir, re-encoded as the build's image format, + item_yolo's labels."""
+    if part != "train":
+        raise SystemExit(f"{sid}: item frames are TRAIN data only (item-class.md 6)")
+    path = dataset_session(sid, a)
+    manifest = json.loads((path / "manifest.json").read_text())
+    frames_dir = Path(manifest["frames_dir"])
+    recs = item_records(a.item_labels, str(manifest["map"]), sid)
+    row: dict[str, Any] = {"split": part, "path": str(path), "format": "item-r1", "shards": [],
+                           "kept": 0, "item_boxes": 0, "frames_with_items": 0}  # fmt: skip
+    for r in recs:
+        row["kept"] += 1
+        row["item_boxes"] += len(r["items"])
+        row["frames_with_items"] += bool(r["items"])
+        if sink is None:
+            continue
+        rgb = np.asarray(Image.open(frames_dir / r["frame"]).convert("RGB"))
+        h, w = rgb.shape[:2]
+        text, rows = item_yolo(r, classes, w, h)
+        info = {"session": sid, "t_mono_ns": int(r["t_ns"]), "map": map_key(str(manifest["map"])),
+                "labels": "item-r1", "boxes": rows}  # fmt: skip
+        bgr = np.ascontiguousarray(rgb[:, :, ::-1])
+        image = {"png": encode_png(bgr)} if a.image == "png" else {"jpg": jpeg(bgr, a.quality)}
+        files = {**image, "txt": text.encode(), "json": json.dumps(info).encode()}
+        shard = sink.add(f"{sid}.{int(r['k']):09d}", files)
+        if shard not in row["shards"]:
+            row["shards"].append(shard)
+    return row
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--train", nargs="*", default=[])
@@ -1186,6 +1276,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--classes species path instead (v1's rules + the species split; one cache)",
     )
     g.add_argument(
+        "--item-sessions",
+        nargs="*",
+        default=[],
+        help="--classes species with an appended 'item' class: these TRAIN sessions are written "
+        "from scripts/item_labels.py's kept Route-U frames (docs/planning/item-class.md 3g)",
+    )
+    g.add_argument(
+        "--item-labels",
+        type=Path,
+        default=Path("/dev/shm/poring-lab-tmp/item-r1/labels"),
+        help="--item-sessions: item_labels.py's labels directory (<map>/train/<sid>.jsonl)",
+    )
+    g.add_argument(
+        "--item-params-sha256",
+        default=None,
+        help="--item-sessions: the frozen params.json's sha256 (checked against "
+        "<item-labels>/../params/params.json)",
+    )
+    g.add_argument(
         "--allow-test-block",
         action="store_true",
         help="admit a *-col2 session (orcsdun01's TEST block) in --test: only after training ends",
@@ -1218,6 +1327,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         missing = sorted(v1_species - set(seen))
         if missing:
             raise SystemExit(f"--v1-species-sessions {missing}: not in any split")
+    item_sessions = frozenset(a.item_sessions)
+    if item_sessions:
+        if a.classes != "species" or "item" not in SpeciesClasses.load(a.class_list).appended:
+            raise SystemExit("--item-sessions needs --classes species and a --class-list with "
+                             "an appended 'item' class (classes-v2orc-item.json)")  # fmt: skip
+        if sorted(item_sessions - set(a.train)) or item_sessions & v1_species:
+            raise SystemExit("--item-sessions: TRAIN sessions only, not --v1-species-sessions")
+        params = a.item_labels.parent / "params" / "params.json"
+        if a.item_params_sha256 is None or sha256_of(params) != a.item_params_sha256:
+            raise SystemExit(f"--item-params-sha256 does not match {params}")
     if a.fix is not None and (a.labels != "v2" or a.classes != "species"):
         raise SystemExit("--fix belongs to a --labels v2 --classes species build")
     fix = FixInputs.from_args(a)
@@ -1240,7 +1359,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                              "without --resume")  # fmt: skip
         if v2 is None:
             return dry_run_v1(a, split)
-        return dry_run(a, split, v2, fix, v1_species)
+        return dry_run(a, split, v2, fix, v1_species, item_sessions)
     cache_id = a.cache_id or f"{a.labels}-{time.strftime('%Y%m%dT%H%M%S')}"
     directory = a.out / cache_id
     args = {"labels": a.labels, "k": a.k, "every": a.every, "every_png": a.every_png,
@@ -1255,6 +1374,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         extra["fix"] = fix.provenance
     if v1_species:
         extra["v1_species_sessions"] = sorted(v1_species)
+    if item_sessions:
+        extra["item_sessions"] = sorted(item_sessions)
+        extra["item_params_sha256"] = a.item_params_sha256
     args.update(extra)
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
@@ -1274,7 +1396,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         for sid in ids:
             if sid in sessions:
                 continue  # done before the interruption (its shards were checked)
-            if sid in v1_species:
+            if sid in item_sessions:
+                row = item_session(sid, part, a, sink, SpeciesClasses.load(a.class_list))
+            elif sid in v1_species:
                 row = v01_session(sid, part, a, sink, mode=("v1", True))
             elif v2 is not None:
                 row, _ = v2_session(sid, part, resolve_session(sid, a), a, v2, sink, fix)
