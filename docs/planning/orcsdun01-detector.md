@@ -1469,6 +1469,18 @@ nothing here lowers it. Round 4's FAIL stays on the record above.
   - the combined cache: 3j's step with `--occlusion o3h --wing`;
   - then training in the long-lived worker (MID_CKPT, R1-R3, the VRAM cap);
   - `v2orc-vs-v1.md` scored once, after training ends.
+- **The cache (built 2026-10-24 00:05-03:13 ICT)**, `guarded_build.py cache@14400=` (3j's step +
+  `--occlusion o3h --wing`; the step line is on the NAS with tonight's scratch):
+  - `v2orc-fix2-w-o3h-20261024`: **16,169 frames, 54 shards**, 11,274 s;
+  - TRAIN 10,416 frames (the expectation exactly), VAL 3,242, TEST 2,511 (v1's sessions only);
+  - orcsdun01 TRAIN: col1 1,273 frames, col3 950; 9,401 monster boxes + 2,223 player boxes;
+  - v1 TRAIN: Poring 20,558, Lunatic 738, Pupa 164, Drops 779, npc 14,658;
+  - **checked in a shard:** col1's YOLO labels carry the per-species ids (200 col1 label files:
+    player 0, Familiar 8, Steel Chonchon 9, White Plant 10, Drainliar 12, Orc Skeleton 13, Orc
+    Zombie 14). The manifest's per-session tally for col1 / col3 is keyed "monster" / "player",
+    not by id: a reporting difference only.
+  - **The IO guard:** worst capture stall 17.8 % (quant-postgres), 132 s above 10 % in all, never
+    30 s in a row: ALL STEPS OK.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
