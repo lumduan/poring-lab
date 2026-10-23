@@ -5,7 +5,6 @@ params are absent; client data is never committed)."""
 
 from __future__ import annotations
 
-import json
 import math
 import sys
 from pathlib import Path
@@ -281,22 +280,29 @@ def test_item_blind_score_bars() -> None:
 # --- a REAL positive case (local / NAS data only) ------------------------------------------------
 
 PARAMS = il.OUT / "params" / "params.json"
-POSITIVE = il.OUT / "params" / "positive_case.json"
+# found on the FIT data with the frozen params (2026-10-23 22:5x, params sha256 1c1348ab...ec639):
+# a Jellopy (909) dropped by a Poring, lying in the Poring's pink splat, checked by eye
+POSITIVE = {
+    "sid": "20261020T093755-demo-hunt-flow48",
+    "floor_id": 12726,
+    "t_ns": 1206122021953374,
+    "empty_centre": (885.8, 452.12),
+}
 
 
 @pytest.mark.skipif(
-    not (PARAMS.exists() and POSITIVE.exists() and il.DATASETS.exists()),
-    reason="the frozen params / the positive case / the NAS are not here",
+    not (PARAMS.exists() and (il.DATASETS / POSITIVE["sid"]).exists()),
+    reason="the frozen params (local) / the NAS are not here",
 )
 def test_real_drop_visible_at_its_predicted_spot() -> None:
     """A fit-session frame (prt_fild08, flow48) where a known fresh drop lies at its predicted
     spot: the frozen params' prediction scores >= tau at +-1 px (G1's own test), and the same
     template at an empty-floor point of the same frame scores < tau."""
     p = il.load_params()
-    pc = json.loads(POSITIVE.read_text())
-    s = il.load_session(pc["sid"])
+    pc = POSITIVE
+    s = il.load_session(str(pc["sid"]))
     fl = next(f for f in il.floor_items(s.events) if f.floor_id == pc["floor_id"])
-    t_f = int(pc["t_ns"])
+    t_f = int(pc["t_ns"])  # type: ignore[call-overload]
     assert il.phase(fl, t_f, int(p["D_APPEAR_s"] * S), int(p["D_GONE_s"] * S)) == "on"
     world = il.World(s)
     fws = world.steps(t_f)
@@ -310,5 +316,6 @@ def test_real_drop_visible_at_its_predicted_spot() -> None:
     img = il.read_rgb(path)
     hit = il.best_ncc(img, tpl, c, il.R_G2)
     assert hit is not None and hit["r1"]["ncc"] >= m["tau"]
-    empty = il.best_ncc(img, tpl, tuple(pc["empty_centre"]), il.R_FIT)
+    assert abs(hit["full"]["dx"]) <= 2 and abs(hit["full"]["dy"]) <= 2
+    empty = il.best_ncc(img, tpl, pc["empty_centre"], il.R_FIT)  # type: ignore[arg-type]
     assert empty is not None and empty["fit"]["ncc"] < m["tau"]

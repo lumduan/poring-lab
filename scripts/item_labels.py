@@ -1064,7 +1064,7 @@ def cmd_freeze(_a: argparse.Namespace) -> int:
     ms = {m: json.loads((pdir / f"measure_{m}.json").read_text()) for m in SPLIT}
     pr = ms["prt_fild08"]
     params = {
-        "pre_registration": "docs/planning/item-class.md a46893d + amendment A 19201ea",
+        "pre_registration": "docs/planning/item-class.md a46893d, amendments A 19201ea, B 62454f8",
         "constants": {
             k: globals()[k]
             for k in (
@@ -1084,7 +1084,14 @@ def cmd_freeze(_a: argparse.Namespace) -> int:
             )
         },
         "subtable": {"ox": pr["subtable"]["ox"], "oy": pr["subtable"]["oy"]},
-        "D_APPEAR_s": pr["delays"]["D_APPEAR_s"],
+        # amendment B (62454f8): section 4.5's rule returned no value -> the plateau's 2.0 s +
+        # the 0.2 s margin
+        "D_APPEAR_s": (
+            pr["delays"]["D_APPEAR_s"]
+            if pr["delays"]["D_APPEAR_s"] is not None
+            else PLATEAU[0] + DELAY_MARGIN_S
+        ),
+        "D_APPEAR_from": "measured" if pr["delays"]["D_APPEAR_s"] is not None else "amendment B",
         "D_GONE_s": pr["delays"]["D_GONE_s"],
         "maps": {
             m: {
@@ -1415,10 +1422,11 @@ def crop_pair(img: Any, box: Sequence[float]) -> Any:
     h, w = b.shape[:2]
     bx0, by0, bx1, by1 = max(bx0, 0), max(by0, 0), min(bx1, w - 1), min(by1, h - 1)
     cyan = np.array([0, 255, 255], np.uint8)
-    b[by0, bx0 : bx1 + 1] = cyan
-    b[by1, bx0 : bx1 + 1] = cyan
-    b[by0 : by1 + 1, bx0] = cyan
-    b[by0 : by1 + 1, bx1] = cyan
+    t = s - 1  # one SOURCE pixel thick, on the box's own boundary pixels (the PAD ring)
+    b[by0 : by0 + t + 1, bx0 : bx1 + 1] = cyan
+    b[max(by1 - t, 0) : by1 + 1, bx0 : bx1 + 1] = cyan
+    b[by0 : by1 + 1, bx0 : bx0 + t + 1] = cyan
+    b[by0 : by1 + 1, max(bx1 - t, 0) : bx1 + 1] = cyan
     gap = np.full((h, 8, 3), 255, np.uint8)
     return np.concatenate([a, gap, b], axis=1)
 

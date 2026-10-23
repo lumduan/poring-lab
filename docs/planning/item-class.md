@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Floor items labelled from the packets (exact cell, sub-cell, drop and vanish times), projected by the monsters' camera model on frames where our character stands still, give boxes a blind check accepts, so a detector class `item` can be trained with the monsters."
-status: PRE-REGISTERED 2026-10-23 (the commit time of this file's first commit; BEFORE any item label is built, measured or checked)
+status: PRE-REGISTERED 2026-10-23 22:38:40 ICT (a46893d; amendments A 19201ea, B 62454f8). RESULT 2026-10-23 23:0x -- the item TRAINING TIER FAILS on both maps (G1 prt_fild08 35.7 % > 5 %; orcsdun01 9 scored < 50, no verdict), so by section 6 the item class does NOT train tonight
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, labels-v2.md, ../benchmarks/item-class.md, ../benchmarks/v2orc-vs-v1.md]
-next_action: "Measure on the FIT sessions (section 4), freeze the params, build the labels of the TRAIN and TEST sessions, run G1 per map, build blind round 1 (seed 5); the parent launches two NEW blind labellers."
+next_action: "Batt's call (section 8): G1 failed as written; the blind round 1 pack (seed 5) is built and may still be run to judge the FITTED labels (it cannot make a map train under section 6). Options for a new pre-registration in 8: a G1 that judges geometry (G2-style offset) instead of the matcher's recall, a model-occlusion rule for items under trees, the cursor / corpse exclusions."
 title: "An ITEM class for the detector: the label rule, the measurements, the checks and the training tier (pre-registered)"
 date: 2026-10-23
 owner: Batt
@@ -322,3 +322,108 @@ from file names or crop order.
 absence) is a LATER bot version, pre-registered on its own after the item evaluation is scored.
 
 ## 8. RESULTS (appended below, clock-labelled; nothing above this line is edited after the pre-registration commit except by a labelled AMENDMENT)
+
+### 8a. RESULT (2026-10-23, clock times from `date` and the commits)
+
+**The order of events:** pre-registration a46893d 22:38:40; amendment A 19201ea 22:41:04; tools
+f3e2a36 22:50:23; prt_fild08 FIT measured 22:45:57-22:53:38; amendment B 62454f8 22:55:00;
+orcsdun01 FIT measured 22:55; **FROZEN 22:55:49** (`params.json` sha256
+`1c1348abdaa3cf1d90e76b24361615ab26fce0116ee170fadb7a66681ceec639`; templates prt_fild08
+`bd43befa…7fee7b`, orcsdun01 `95dadfd5…936051`); TRAIN + TEST labels 22:56-23:06; G1 23:07; blind
+pack 23:07:47. No TRAIN or TEST frame was read before the freeze; col2 was never read.
+
+**The measurements (FIT only; section 4):**
+
+| what | prt_fild08 (FIT flow48 x 2) | orcsdun01 (FIT block, 283 s) |
+|---|---|---|
+| clean samples / floor items | 261 / 88 | 61 / 8 |
+| templates (item ids; samples) | 7: 909 (84), 705 (37), 512 (23), 713 (19), 949 (17), 507 (12), 515 (10); 11-15 x 13-15 px | 2: 935 (13), 938 (10), from 2 floor items each |
+| sub-cell table OX (cells, s = 3 / 6 / 9 / 12) | -0.189 / 0 / +0.185 / +0.376 | (prt_fild08's) |
+| sub-cell table OY | -0.210 / 0 / +0.173 / +0.329 | (prt_fild08's) |
+| table fit | 249 rows, 224 used (25 beyond 3 MAD), median residual 2.07 px | -- |
+| median anchor residual (reported) | H12 3.92 px, **H16 1.68 px**, measured 2.22 px | -- |
+| anchors (sprite centre - ground point) | x -4.3 .. -6.8 px, y -0.4 .. +4.9 px per item | x -4.2 / -6.0, y -0.1 / -1.1 |
+| TAU (Youden) | **0.612** (TPR 0.754, FPR 0.031; 260 / 260) | **0.789** (TPR 0.70, FPR 0.0; 40 / 40) |
+| D_APPEAR | section 4.5's rule: NO VALUE (plateau 0.325) -> **2.2 s** by amendment B | (cross-check, not used: 2.1 s) |
+| D_GONE | **0.6 s** (344 frames; bins <= 0.10 from 0.4 s) | (cross-check: 0.3 s, 46 frames) |
+
+- **The sub-cell step is 1/16 of a cell per sub unit** (3 units = 0.185-0.21 cells), i.e. the
+  client reads `sub / 16` (H16's slope), not roBrowser's `sub / 12` that drop_blobs.py and
+  item_icons.py assume. H12 misplaces a sub 12 item by ~0.12-0.17 cells (~4 px).
+- The fall + display delay itself looks like ~1 s (the present share rises from <= 0.05 before
+  0.6 s to ~0.3 from 0.9-1.1 s); amendment B's 2.2 s is the conservative value used.
+- **The REAL positive case** (committed test, it ran): flow48 frame `03019-1206122021953374`,
+  floor id 12726 (a Jellopy in a Poring's splat): NCC 0.80 at +-1 px of the frozen prediction
+  (best offset 1 / 1 px), the same template at an empty point of that frame 0.10.
+
+**THE LABELS (every 3rd frame; section 3):**
+
+| map / split | sessions | frames considered | kept | kept Route U (with items) | item labels kept (in Route U) | floor items in Route U |
+|---|---|---|---|---|---|---|
+| prt_fild08 TRAIN | 6 | 25,628 | 1,699 | 1,188 (539) | 1,430 (761) | 178 |
+| prt_fild08 TEST | 2 | 8,498 | 507 | 416 (170) | 296 (193) | 47 |
+| orcsdun01 TRAIN block | 1 | 329 | 8 | 2 (1) | 7 (1) | 1 |
+| orcsdun01 TEST block | 1 | 347 | 0 | 0 | 0 | 0 |
+
+Frame exclusions per reason (a frame can carry several; a `self_moving` frame is not judged
+further):
+- prt_fild08 TRAIN: self_moving 20,868; item_settling 2,107; item_vanishing 916; unfit 679;
+  item_truth_unknown 334; under_self 157; item_untemplated 112; ui_partial 37; stacked 5;
+  edge_partial 1.
+- prt_fild08 TEST: self_moving 6,977; item_settling 644; item_vanishing 278; unfit 226;
+  item_untemplated 163; under_self 60; item_truth_unknown 40; stacked 15; edge_partial 7.
+- orcsdun01 TRAIN: item_untemplated 144; self_moving 128; item_settling 85; item_vanishing 48;
+  unfit 17; under_self 10. TEST: item_untemplated 310; unfit 105; item_settling 91; under_self 61;
+  self_moving 64; item_vanishing 48.
+- **The yield is thin by construction:** the bot walks most of the time (81 % of the TRAIN frames
+  considered are `self_moving`), and in the inventory's sample (every 30th frame of the first FIT
+  session) only 21 of 145 still frames were unit-free.
+
+**G1 / G2 (section 5; `item_labels.py check`):**
+
+| map | split | scored | bad (NCC at the prediction < TAU) | G1 | bar <= 5.0 % (>= 50) | G2 median abs dx / dy |
+|---|---|---|---|---|---|---|
+| prt_fild08 | **TRAIN (gates)** | 2,088 | 745 | **35.7 %** | **FAIL** | 1 / 1 px |
+| prt_fild08 | TEST (reported) | 455 | 153 | 33.6 % | -- | 1 / 1 px |
+| orcsdun01 | **TRAIN (gates)** | 9 | 2 | 22.2 % | **NO VERDICT (< 50)** | 0 / 0 px |
+| orcsdun01 | TEST (reported) | 3 | 3 | 100 % | -- | 8 / 1 px |
+
+- prt_fild08 TRAIN per item id (n, bad share): 909 678, 48.7 %; 705 519, 32.4 %; 512 431, 31.8 %;
+  949 84, 34.5 %; 507 92, 27.2 %; 713 217, 20.3 %; 515 67, 17.9 %. Route-U items alone: 35.4 %.
+- **As amendment B predicted from the FIT TPR (0.754), G1 fails.** TAU is a Youden threshold, so a
+  quarter of the FIT data's own clean items already score under it.
+- **What the "bad" items are (by eye, 16 random TRAIN rows, `diagnostics/g1_bad.png`; NOT a
+  measurement):** 4 lie under TREE CANOPY (only a sparkle shows: map-model occlusion, which
+  `MODEL_OCCLUSION = "none"` left to the fit); 4 under the bot's own HAND CURSOR (with the
+  client's item-name tag beside it); 3 in or under a CORPSE / dying monster / a live Poring; 3
+  visibly 3-8 px off the prediction (an item beside the box); 2 with nothing visible at all. G2's
+  median of 1 / 1 px says the geometry is right for most; these are its tail.
+- **The fitted (kept) labels are a different set:** a label is kept only with NCC >= TAU within
+  +-4 px, so the cases above are mostly `unfit` (their frames excluded), not mislabelled.
+
+**THE VERDICT (section 6, as written): the item TRAINING TIER FAILS on both maps.**
+- prt_fild08: G1 35.7 % > 5.0 %. orcsdun01: 9 scored < 50 (no verdict; and only 2 item templates
+  from 4 floor items: `item_untemplated` excluded 144 of its 329 TRAIN frames considered and 310
+  of 347 TEST).
+- **=> The item class does NOT train tonight; nothing of it enters the cache.** The monster run is
+  unaffected (its own pre-registration).
+- **The blind round 1 pack is built anyway** (it cannot make a map train under section 6; it
+  measures the FITTED labels, as round 2 did for the monsters in orcsdun01-detector.md 3d):
+  `/dev/shm/poring-lab-tmp/item-r1/blind-pack-seed5/` (62 crops: prt_fild08 40 items + 20 negatives;
+  orcsdun01, sampled whole, 1 item + 1 negative; `instructions.txt` byte-identical to section 5),
+  key `/dev/shm/poring-lab-tmp/item-r1/answer-key-seed5/answer_key.json`, scored by
+  `scripts/item_blind_score.py --key <key> <answers A> <answers B>`.
+
+**For Batt (new decisions, a new pre-registration; NOT taken here):**
+1. Replace G1's matcher-recall test by a geometry test (G2's offset, a bar fixed in advance) and let
+   the blind check judge the fitted labels -- the analogue of the monsters' 3d / 3f split.
+2. Exclude items under map models (the monsters' 1c box rule or its round-4 successor), under our
+   own cursor (its drawn position is in the input log), and within N s of a death on their cell
+   (the corpse), instead of leaving them to the fit.
+3. More item templates (orcsdun01 has 2; prt_fild08's rare drops have none): a longer FIT, or
+   templates decoded from the client's own item sprites.
+4. More frames: Route U holds 761 of the 1,430 kept TRAIN item labels; the other 669 sit on frames
+   with monsters on screen, which need the monsters' labels too (Route M), and no monster
+   pre-registration covers the hunt recordings.
+5. The `sub / 16` reading should replace `sub / 12` in drop_blobs.py / item_icons.py (measured
+   here; their own evaluation would need a re-run).
