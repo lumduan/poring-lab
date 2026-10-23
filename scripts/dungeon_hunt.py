@@ -1046,43 +1046,60 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             xy = selfpos.read_minimap_xy(frame(), digits)
             return None if xy is None else (int(xy[0]), int(xy[1]))
 
-        def patch(img_: Any, u: float, v: float) -> Any:
-            a_ = np.asarray(img_)[..., :3].astype(np.float32).mean(axis=2)
+        def grey(img_: Any) -> Any:
+            return np.asarray(img_)[..., :3].astype(np.float32).mean(axis=2)
+
+        def patch(g_: Any, u: float, v: float) -> Any:
+            """A cell's 24 x 20 patch of a GREY frame. 4.01 Amendment B (its pilot, 22:3x): this
+            converted the WHOLE frame on every call (~44 ms; two calls a cell, ~200 cells), ~10-14 s
+            before a loot step's first hover; now grey() runs once per frame."""
             y0_, x0_ = int(v) - 14, int(u) - 12
-            if y0_ < 0 or x0_ < 0 or y0_ + 20 > a_.shape[0] or x0_ + 24 > a_.shape[1]:
+            if y0_ < 0 or x0_ < 0 or y0_ + 20 > g_.shape[0] or x0_ + 24 > g_.shape[1]:
                 return None
-            return a_[y0_ : y0_ + 20, x0_ : x0_ + 24]
+            return g_[y0_ : y0_ + 20, x0_ : x0_ + 24]
 
         loot_v2 = a.loot == "v2"
         loot_used: dict[float, float] = {}  # loot v2: the fight (its ref's time) -> seconds used
         empty_cells: dict[Cell, float] = {}  # loot v2: cells hovered empty -> when
 
-        def changed_cells(ref: dict[str, Any] | None) -> list[tuple[float, Cell]]:
-            """Every cell in view whose image changed since the fight began (the sweep's rule)."""
+        def changed_cells(
+            ref: dict[str, Any] | None, skip: Any = frozenset()
+        ) -> list[tuple[float, Cell]]:
+            """Every cell in view whose image changed since the fight began (the sweep's rule);
+            ``skip``: cells not to consider (v1's sweep: those its list already hovered). 4.01
+            Amendment B: the two frames go grey ONCE and the cells are projected in one batch
+            (the same cells, the same diffs)."""
             if ref is None or here is None:
                 return []
-            img_now = frame()
-            out_c: list[tuple[float, Cell]] = []
+            g_now, g_ref = grey(frame()), grey(ref["img"])
             h0 = ref["here"]
+            cells: list[Cell] = []
             for dx in range(-SWEEP_X, SWEEP_X + 1):
                 for dy in range(-SWEEP_Y, SWEEP_Y + 1):
                     c = (here[0] + dx, here[1] + dy)
-                    if (dx, dy) == (0, 0) or not (
-                        0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                    if (
+                        c in skip
+                        or (dx, dy) == (0, 0)
+                        or not (0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0])
                     ):
                         continue
                     if not ok[c[1], c[0]] or mz.in_no_enter(zones, c):
                         continue
-                    u, v = project(here, [(dx, dy)])[0]
-                    u0, v0 = project(h0, [(c[0] - h0[0], c[1] - h0[1])])[0]
-                    if not in_view(u, v):
-                        continue
-                    pa, pb = patch(ref["img"], u0, v0), patch(img_now, u, v)
-                    if pa is None or pb is None:
-                        continue
-                    diff = float(np.abs(pa - pb).mean())
-                    if diff >= SWEEP_DIFF:
-                        out_c.append((diff, c))
+                    cells.append(c)
+            if not cells:
+                return []
+            uv_now = project(here, [(c[0] - here[0], c[1] - here[1]) for c in cells])
+            uv_ref = project(h0, [(c[0] - h0[0], c[1] - h0[1]) for c in cells])
+            out_c: list[tuple[float, Cell]] = []
+            for c, (u, v), (u0, v0) in zip(cells, uv_now, uv_ref, strict=True):
+                if not in_view(u, v):
+                    continue
+                pa, pb = patch(g_ref, u0, v0), patch(g_now, u, v)
+                if pa is None or pb is None:
+                    continue
+                diff = float(np.abs(pa - pb).mean())
+                if diff >= SWEEP_DIFF:
+                    out_c.append((diff, c))
             return out_c
 
         def loot_step(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
@@ -1227,27 +1244,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             out_["list_hovered"] = len(hovered)
             sweep_n, changed = 0, []
             if end == "done" and ref is not None and here is not None:
-                img_now = frame()
-                for dx in range(-SWEEP_X, SWEEP_X + 1):
-                    for dy in range(-SWEEP_Y, SWEEP_Y + 1):
-                        c = (here[0] + dx, here[1] + dy)
-                        if c in hovered or not (
-                            0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
-                        ):
-                            continue
-                        if not ok[c[1], c[0]] or mz.in_no_enter(zones, c) or (dx, dy) == (0, 0):
-                            continue
-                        u, v = project(here, [(dx, dy)])[0]
-                        h0 = ref["here"]
-                        u0, v0 = project(h0, [(c[0] - h0[0], c[1] - h0[1])])[0]
-                        if not in_view(u, v):
-                            continue
-                        pa, pb = patch(ref["img"], u0, v0), patch(img_now, u, v)
-                        if pa is None or pb is None:
-                            continue
-                        diff = float(np.abs(pa - pb).mean())
-                        if diff >= SWEEP_DIFF:
-                            changed.append((diff, c))
+                changed = changed_cells(ref, skip=hovered)  # 4.01 Amendment B: the shared helper
                 changed.sort(key=lambda dc: (cheb2(dc[1], here), -dc[0]))
                 for _diff, c in changed[:SWEEP_MAX]:
                     if picks >= LOOT_MAX_PICKS or time.monotonic() - t_s > LOOT_MAX_S:

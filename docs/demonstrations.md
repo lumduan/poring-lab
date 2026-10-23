@@ -15277,6 +15277,26 @@ its time). Batt's decisions on the overnight report (received ~22:1x ICT), verba
 - the last run ends its time box by ~06:30 ICT (the end state by 07:00); a partial run is reported
   apart; a pair is complete only with both runs full.
 
+**The unscored L2 pilot** (`20261023T223511-demo-dungeon-patrol-H-li-pilot`, 22:37-22:42, seed 23200):
+5.0 min, 21 kills (252 / h), deaths 0, HP min 64.0 %, 0 potions / Fly Wings, 2 Heals, hard bars 0
+(packets). The patrol joined and resumed; the box-spot rule fired live (spot 110,58: 2 misses, then
+ignored). **A BUG: 0 loot clicks.** Every loot v2 step took 10.4-14.1 s and ended on its 10-s budget
+with **0 hovers**: computing the changed cells came BEFORE the first hover and took the whole budget.
+
+**Amendment B (2026-10-23 ~22:4x ICT, after the pilot, BEFORE run 1; the parent):**
+- **The cause:** `patch()` (a cell's 24 x 20 grey patch) converted the WHOLE frame to grey on every
+  call: ~44 ms a call on tonight's loaded CPU (measured), two calls per cell, ~200 cells in view.
+- **The same code runs in v1's sweep** (after its list): 4.00's pi6 loot steps that ended "done"
+  took p50 23.4 s for p50 29.5 hovers (34 steps) -- a part of 4.00's "standing" was this
+  computation, in BOTH 4.00 arms.
+- **The fix (both arms, the same cells and diffs):** each frame goes grey ONCE per changed-cell
+  computation and the cells are projected in one batch (`grey()`, `changed_cells(ref, skip=)`;
+  v1's sweep now calls the same helper with its list's hovered cells as `skip`).
+- It changes how fast both loot steps run, not what they choose. L1 is therefore faster than 4.00's
+  P arm; the pairs compare L1 and L2 under the same fix.
+- **A second unscored L2 pilot (~5 min, seed 23199)** checks that the loot step now hovers and
+  picks before run 1.
+
 ### 4.02 dungeon@5 + LOOT RHYTHM: Batt's demo rhythm -- 1-2 pickups, move on within ~2.5 s, the loop recovers the rest -- vs the patrol base's loot, in PAIRED runs (pre-registered 2026-10-23, the commit time of 4.02's first commit, BEFORE its code is built or run; Batt's decision 2 on the overnight report, received ~22:1x ICT: "Then, as its own next version, Batt's real loot rhythm from his demo: click what is seen/found quickly (1-2 pickups), move on within ~2-3 s, and let the loop recover the rest (his gross 68 % -> net 95.7 %: looters' items come back when he kills them on the next lap). Measure gross AND net completeness, s per kill, standing time, monsters pulled along.")
 
 **Why (Batt's demo, 4.00's source):** he moved on 2.4 s after a fight (median) with one pickup; 83
