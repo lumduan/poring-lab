@@ -1027,3 +1027,12 @@ joined by 3c, each by its own C1 (bad / scored):
 - With v2orc linked by reference: **16,793 TRAIN frames**.
 - The cache id is `v2orc-payf07-20261024`, built by the guarded `cache:` step; the full argument
   list is `/dev/shm/poring-lab-tmp/payf07-cache/cache-args-final.txt`.
+
+**13e. The cache BUILT (guarded `cache:` step, 2026-10-24 22:32:32-23:01:30 ICT, ALL STEPS OK).**
+- `/mnt/poring-lab-datasets/.framecache/v2orc-payf07-20261024`: 6,377 frames written, 31 shards.
+  The manifest lists 22,546 frames with v2orc's linked.
+- **Per session, the kept frames and the boxes per class EQUAL the dry run (13d), 8 of 8.**
+- The IO guard's worst capture stall was 18.1 % on quant-postgres (62 s above 10 %), under the
+  tolerant guard's 25 % spike: no abort.
+- Next (13b / 13c): the vision worker through `quiet_start`, then `train-day.sh` with 13b's
+  settings.
