@@ -64,7 +64,7 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0, clock: str = "12
     out = tmp_path / "out"
     env = {**os.environ, "GUARD": f"bash {guard}", "QUIET": f"bash {quiet}", "STATE": str(state),
            "OUTCOMES": outcomes, "IO_PAUSE_S": "0", "R3_PAUSE_S": "0", "CLOCK_HHMM": clock,
-           "SLEEP": f"bash {sleeper}"}  # fmt: skip
+           "CLOCK_DOW": "3", "SLEEP": f"bash {sleeper}"}  # fmt: skip
     for k in (
         "DUTY_START",
         "DUTY_MIN",
@@ -143,6 +143,18 @@ def test_no_attempt_starts_inside_a_market_open_window(tmp_path: Path) -> None:
     assert "waiting 2760 s" in log
     log, _, _ = run_rc(tmp_path / "out", "ok", clock="1445")
     assert "market-open window" not in log and not (tmp_path / "out" / "state" / "slept").exists()
+
+
+def test_the_market_windows_are_weekdays_only(tmp_path: Path) -> None:
+    """Rule 5: no market windows on Saturday or Sunday (Batt 2026-10-09). 2026-10-24, a Saturday,
+    09:31: the old check waited 2,700 s anyway."""
+    for d in ("sat", "sun", "fri"):
+        (tmp_path / d).mkdir()
+    for d, dow in (("sat", "6"), ("sun", "7")):
+        log, _, rc = run_rc(tmp_path / d, "ok", clock="0931", extra={"CLOCK_DOW": dow})
+        assert rc == 0 and "market-open window" not in log
+    log, _, _ = run_rc(tmp_path / "fri", "ok", clock="0931", extra={"CLOCK_DOW": "5"})
+    assert "market-open window: waiting" in log
 
 
 def test_max_attempts_one_never_retries_after_any_stop(tmp_path: Path) -> None:

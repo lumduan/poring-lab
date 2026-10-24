@@ -61,8 +61,12 @@ SLEEP=${SLEEP:-sleep}  # overridable for tests only
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-0}
 KIND=rundev; [ "${WORKER:-0}" = 1 ] && KIND=execdev  # option A: an exec inside the long-lived worker
 now_hhmm() { if [ -n "${CLOCK_HHMM:-}" ]; then echo "$CLOCK_HHMM"; else TZ=Asia/Bangkok date +%H%M; fi; }  # CLOCK_HHMM: tests only
+now_dow() { if [ -n "${CLOCK_DOW:-}" ]; then echo "$CLOCK_DOW"; else TZ=Asia/Bangkok date +%u; fi; }  # 1 Mon .. 7 Sun; CLOCK_DOW: tests only
 market_wait_s() {  # seconds until the market-open window we are in ends (minute grain, +1 min); 0 outside
+  # Monday to Friday only (CLAUDE.md rule 5; Batt 2026-10-09: "not on Saturday or Sunday"). Until
+  # 2026-10-24 this ignored the weekday: Saturday 09:31 waited 45 min for a closed market.
   local now w a b
+  [ "$(now_dow)" -ge 6 ] && { echo 0; return; }
   now=$((10#$(now_hhmm)))
   for w in $MARKET_WINDOWS; do
     a=$((10#${w%-*})); b=$((10#${w#*-}))
