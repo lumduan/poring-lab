@@ -356,3 +356,32 @@ So that P1, if chosen, can proceed at once:
   labels and the pack are rebuilt with the frozen values.
 - A DIAGNOSTIC (not a measurement under the rule) for P2: 1d's sweep on staged 0-7 + t1b +
   s-pilot + s1, reported, never frozen.
+
+### 10c. FIT finding under P1 (provisional): T_h came out 0.111, driven by ENGAGED Elder Willows
+
+- **The provisional T_h run** (P1's 120 ms, FIT = staged spots 0-7 + t1b, 4e's method; 18:39:18-
+  18:41:31 at 67f0bc6; `payf07/fit/threshold-P1.json`): **T_h = 0.111** (orcsdun01: 0.48). The
+  clear kept fits: n 737, p5 0.111, p25 0.695, median 0.761.
+- **The cause** (scratch diagnostics on FIT only, `payf07/scratch/diag_th.py`, `diag_engaged.py`):
+  - Elder Willow's clear kept fits: staged median 0.751 (49), t1b median 0.133 (123);
+  - in t1b, split by ENGAGEMENT (an `act` between the unit and our character, either way, or our
+    `attack_request` on it, within [tw - 3 s, tw + 1 s]): **engaged 87, median 0.127, 80 of them
+    under 0.3; not engaged 36, median 0.784.** Every engaged unit in t1b was an Elder Willow (the
+    bot's Steal / fight target);
+  - every other species, not engaged: median 0.73-0.91.
+- So the rule, built on immune-GM data where nothing fought (orcsdun01 3g saw the same on Batt's
+  demo), keeps fights' units on spurious fits barely above tau, and they drag T_h down.
+
+### 10d. AMENDMENT B (2026-10-24 18:54:50 ICT, from `date`; written after 10c's FIT diagnostics and BEFORE any parameter is frozen, before T_h is re-measured and before any TEST frame is read)
+
+- **New exclusion `engaged`** (handled as 2b / 2c: the label is not kept, its frame is not whole;
+  counted under its own name): a monster with an `act` packet between it and our character (either
+  direction) or an `attack_request` of ours targeting it, at a time within **[tw - 3 s, tw + 1 s]**
+  (tw = the label's timeline time). It applies to the labels, to 4e's T_h and to C1 (where 5's
+  standing rule already isolates almost every such unit).
+- **Why these numbers:** 3 s back spans a fight's ongoing attack and hurt animations (attack
+  delays ~1-2 s, our hits every ~0.5-0.7 s); 1 s forward covers a fight starting just after the
+  frame (2b's idea, wider for a fight's approach).
+- **What stays:** everything else, including Amendment A, the stops, T1's and T2's bars and data.
+- The provisional P1 work of 10b is redone under B (T_h, the parameters, the TRAIN labels, the
+  pack). The decision on 1d (10a) is still open: T1 does not run.
