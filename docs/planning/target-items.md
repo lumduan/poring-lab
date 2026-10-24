@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Batt's four target items (Rough Elunium 757, Rough Oridecon 756, Dead Branch 604, Honey 518), staged on pay_fild07's floor and labelled from the packets, are found from ONE 1-fps frame by per-item masked colour templates built on FIT spots: on held-out TEST spots recall >= 80 % and precision >= 90 % per item within +-6 px, with <= 1 false detection per 100 hunting frames per item."
-status: "RESULT 2026-10-24 (5ed077c 18:31:23): ALL FOUR FAIL the recall bar (757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %; bar 80 %); precision 100 % and 0 false detections in 4,392 hunting frames for every item; the natural Dead Branch FOUND (0.8 px). Trees hide 29.3 % of the TEST labels (no detector can pass on this TEST set). PRE-REGISTERED fbc077e 17:48:17, amendment A b0bdc10 18:00:54, frozen 18:05:45."
+status: "ROUND 2 RESULT 2026-10-25 (section 10.9b): ALL FOUR PASS on open ground: TEST recall 757 97.3 %, 756 95.7 %, 604 95.7 %, 518 94.9 % (bar 80 %), precision 100 %, TEST-NEG 0.0 / 0.0 / 0.022 / 0.0 false per 100 hunting frames (4,628; bar 1.0); every miss on 3 frames where the client flashes floor items yellow. PRE-REGISTERED 3995290 23:13:14, frozen 23:45:44, no amendment. ROUND 1 RESULT 2026-10-24 (5ed077c 18:31:23): ALL FOUR FAILED the recall bar (757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %), mostly because trees hid 29.3 % of its TEST labels."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [item-class.md, thief-payon.md, ../demonstrations.md, ../../scripts/target_items.py, ../../scripts/stage_items.py, ../../scripts/item_labels.py]
-next_action: "Parent / Batt (section 9b): (1) a live 'loot by sight' fast path for 518 / 604 only, as its own pre-registration, the hover sweep kept as fallback; (2) a CPU re-staging on OPEN ground for the Roughs (757 had one visible FIT floor item) before any GPU item class; (3) stage_items.py: spots away from tree models, Poporings cleared first."
+related: [item-class.md, thief-payon.md, ../demonstrations.md, ../../scripts/target_items.py, ../../scripts/target_items_r2.py, ../../scripts/stage_items.py, ../../scripts/item_labels.py]
+next_action: "Parent / Batt (10.9b): a live loot-by-sight fast path for all four targets on pay_fild07 open ground, as its own pre-registration (region scan around the kill, direct click, the hover sweep kept as the fallback for canopy / flash frames / cursor occlusion); no GPU item class needed for these four; CPU follow-ups: a natural Rough case from the next hunts, the flash state (a FIT-only variant or a 2-frame rule)."
 title: "Target items from pixels: staged Rough Elunium / Rough Oridecon / Dead Branch / Honey on pay_fild07, template matching, held-out spots (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -355,3 +355,307 @@ frozen `params/` (params.json, templates.npz, frozen.json, fit_report.json), `sc
 candidates of TEST, TEST-NEG and the pilot window), score.json, the post-hoc JSONs, the logs.
 DELETED 2026-10-24 18:32: the contact sheets and crop sheets (`scratch/`, 11 MB), the FIT sample
 crops (8.6 MB), the FIT candidates (8.5 MB), the frame indexes (0.7 MB; rebuilt on demand).
+
+## 10. PRE-REGISTERED: round 2 (open ground)
+
+**Batt's ask stands** (2026-10-24 ~16:0x: "train the target drop items ... for pickup accuracy").
+Round 1 (sections 1-9) failed the recall bar for all four items, mostly because trees hid 29 % of
+its TEST labels and the Roughs' templates came from too few visible floor items (9b). Its three
+recommendations are what this round tests: staging on OPEN ground (done: stage-c below),
+MULTI-templates per item, and FIT-NEG from real hunting frames.
+
+This section is committed BEFORE any round-2 frame's pixels are read. Its commit time is the
+pre-registration time; a rule below changes only by a clock-labelled AMENDMENT (10.8) written
+BEFORE the step it changes. Sections 1-9 are round 1's and stay as they are. **Read before this
+commit (no pixel of stage-c, s4, s5, s6 was decoded):** the packets of stage-c, t1b, t2, s1, s2,
+s4, s5, s6 (floor items, lifetimes, map spans), stage-c's manifest and events.jsonl, the frame
+indexes (tar headers and per-frame JSON only), the canopy mask stage@2 used, round 1's outputs
+(`/dev/shm/poring-lab-tmp/target-items/`, read-only), and `target_items_r2.py inventory`
+(packet-only counts, 10.2). The code (`scripts/target_items_r2.py`, tests
+`services/backend/tests/test_target_items_r2.py`, synthetic data only) is in this commit.
+
+### 10.1 The data (OFFLINE ground truth, ADR-0007)
+
+| set | recording (NAS) | what the packets say | role |
+|---|---|---|---|
+| STAGE-C | `20261024T222352-rdp-stage-items-c` (1,554 frames, 1 fps PNG, RDP, the hunt layout), events `/dev/shm/poring-lab-demo/20261024T222356-stage-items-pay_fild07-c/events.jsonl` | stage@2 `--open`, seed 8, 2026-10-24 22:23-22:51: 12 spots outside the RSW tall-model footprints (widened 3 cells, 6 north), the same four items dropped at each; 48 falls. Items alive the full 60.0 s at spots 0, 3, 4, 6, 8, 10, 11; EARLY vanishes (looted: 0.2-20 s after the fall) at spots 1 (0.2-3.9 s), 2 (2.9-15.5 s), 5 (1.1-1.7 s), 7 (8.8-20.1 s), 9 (0.5-2.6 s) | FIT spots 0-7, TEST spots 8-11 |
+| STAGE-B | `20261024T170356-rdp-stage-items-b` (round 1's staging; READ in round 1) | section 1 | FIT: spots 0, 3, 5, 9, 10 only |
+| t1b | `20261024T123622-rdp-thief-t1b` (4.03 hunt) | no target item; 2,400 s on pay_fild07 | FIT-NEG |
+| s4, s5 | `20261024T193810-rdp-thief-s4`, `20261024T201949-rdp-thief-s5` (4.04 hunts) | no target item; 2,405 s + 2,400 s on pay_fild07 | TEST-NEG |
+| NATURAL | the 4.04 pilot `20261024T164555-rdp-thief-s-pilot` and s6 `20261024T210115-rdp-thief-s6` | the pilot's Dead Branch (floor 117, section 6); s6: Rough Elunium 291 at (114, 161) living 2.4 s, Dead Branch 293 / 296 / 304 living 3.4 / 1.0 / 4.5 s (the bot picked them up) | reported, no bar |
+
+- Not used: t2 (round 1's TEST-NEG; kept unread by round 2 as a reserve), s1, s2 (no target item
+  either), s3 (staged items back from a looter), stage-b's spots 1, 2, 4, 6, 11 (under trees by
+  eye in round 1) and 7, 8 (looted).
+- The canopy mask stage@2 used is NOT a usable visibility rule for stage-b: it puts 47 of stage-b's
+  48 falls inside the widened footprints, including round 1's open spots 0, 3, 5, 9, 10 where
+  Honey was found 100 % (9b). Stage-b's spots are therefore chosen by round 1's by-eye notes
+  (amendment A: spots 0, 3, 5 open ground; 9b: spots 9-10 open, spot 11 under a willow), written
+  before this round.
+
+### 10.2 The split (fixed now)
+
+- **FIT** = stage-c spots 0-7 + stage-b spots 0, 3, 5, 9, 10 (templates, variants, anchors,
+  thresholds). Why stage-b: stage-c's FIT spots give only 4 floor items per id that live the full
+  60 s (spots 0, 3, 4, 6); stage-b's five open spots add 5 more per id from other places and other
+  light (another afternoon), which is what the multi-templates need. Stage-b's spots 9 and 10 were
+  round 1's TEST: they are not round 2's TEST, so they may be FIT here.
+- **TEST** = stage-c spots 8-11 (spot 9's items vanished within 2.6 s: frames only, like round 1's
+  spots 7-8). Never read before the freeze.
+- **FIT-NEG** = (i) every FIT still-window frame (detections away from every present item of the
+  same id are false) and (ii) t1b's frames on pay_fild07 (from each pay_fild07 map change + 5 s).
+  Why t1b: round 1 read it only through its frozen detector's scan (no frame looked at, no
+  parameter fitted on it), it is a real hunt (walking, fighting, Resin 907 and other floor items,
+  name tags, skill effects), and it keeps both 4.04 sessions below unseen.
+- **TEST-NEG** = s4 + s5's frames on pay_fild07 (same span rule), never read by any target-item
+  detector before the freeze. Why not t2: s4 and s5 were never scanned in any round, they are the
+  4.04 runner (Steal casts, its own UI states) rather than the 4.03 one FIT-NEG comes from, and
+  together they are ~4,700 frames (round 1's TEST-NEG: 4,392).
+- **The inventory** (`target_items_r2.py inventory`, packets only, the provisional 36-px
+  SAMPLE_BOX geometry; the counts move a little once the anchors exist):
+
+| split | frames (all `ok` by the packets) | labelled + fully in view (757 / 756 / 604 / 518) | floor items | exclusions (item views) |
+|---|---|---|---|---|
+| FIT | 430 | 83 / 113 / 132 / 142 | 8 / 9 / 9 / 9 | under_self_bar 103, under_self 84, stacked 40, under_unit 16, vanishing 8 |
+| TEST | 138 | 37 / 47 / 40 / 61 | 3 / 3 / 3 / 3 | under_self_bar 38, under_unit 14, vanishing 3 |
+
+- **Honest limit (as round 1):** TEST is 3 floor items per id (stage-c spots 8, 10, 11), one
+  session, one character, one evening. Per-floor-item recall is reported beside the pooled one.
+
+### 10.3 The label rule: round 1's section 3 with ONE change
+
+Round 1's section 3 applies unchanged (frames in the still windows, `D_APPEAR` 2.2 s / `D_GONE`
+0.6 s, the sub-cell table, the 28-px ITEM_BOX, the exclusions; trees are NOT excluded), with one
+addition: **`under_self_bar`**: an item whose box touches our own HP / SP bar's box, `BAR` =
+(-36, 0, +36, +24) px around our feet (the projection of our cell; x right, y down), is excluded
+like `under_self` (it stays PRESENT). Why: round 1's 9b saw a TEST 756 centred (-32, +19) px from
+our feet hidden under the bar, outside the 34 x 74 self box. The box is a generous guess around
+that observation, not a measurement. The same box at the camera target is added to the detector's
+fixed no-go boxes (10.4). **Reported beside the verdict, not the verdict:** TEST recall under
+round 1's rule (the bar exclusion off).
+
+### 10.4 The detector: MULTI-templates (then FROZEN)
+
+**Per item one sprite MASK and K colour VARIANTS:**
+1. **Samples:** round 1's section 4.1 rules (the item labelled and fully in view under the 36-px
+   SAMPLE_BOX, aged >= 2.5 s, >= 1.0 s before its vanish, no other item's ground point within
+   24 px, the region and UI margins), on the FIT frames of both sessions, `ui_layout` `hunt` only;
+   89 x 89 crops around the projected ground point.
+2. **The pooled template:** round 1's `build_seeded` (unchanged maths, now `build_seeded_core`)
+   on ALL of the item's FIT samples: the mask (the tight box), the median colours (variant 0), the
+   anchor (the median sprite-centre offset of the kept crops). `MIN_SAMPLES` = 12, else the item
+   has no template and NO verdict. There is no visible-floor-item filter this time (round 1's
+   amendment A is not carried over); any rescue needs an amendment before the freeze.
+3. **The variants (several samples, views, places):** for every FIT floor item ("place") with >=
+   `MIN_PLACE_SAMPLES` = 5 crops kept by the pooled build, the median of those crops' final
+   windows (aligned by the pooled build), cut to the pooled tight box, under the pooled mask. A
+   place's variant pools its views (the 4 @warp offsets put it at different screen positions);
+   the floor sprite has one state (no animation; the fresh-drop phase is excluded by `D_APPEAR`).
+   Variants = [pooled, place 1, place 2, ...].
+4. **The alignment check (a STOP):** round 1's 4.4 with the pooled template on all FIT samples
+   (median |dx| or |dy| > 3 px: stop, no threshold, no TEST read).
+5. **The scan (pixels only, `scan_multi`):** over the whole 1280 x 720 frame, the POOLED
+   template's masked colour NCC (`item_icons.match_maps`); its local maxima within +-2 px with NCC
+   >= `GEN_NCC` = 0.35 whose centres lie outside the hunt layout's UI rectangles, our own sprite's
+   fixed box (round 1) and our bar's fixed box (10.3); each re-scored by EVERY variant at every
+   offset within +-2 px (the same masked NCC, RMS colour distance and inlier share as round 1,
+   computed directly) and moved to its best (variant, offset) by NCC; kept with NCC >=
+   `CAND_NCC` = 0.45 and a centre still outside the no-go boxes; greedy NMS within 10 px by NCC.
+   A candidate carries the best variant's NCC, RMS and inlier share. A DETECTION = a candidate
+   with NCC >= `t_ncc`, RMS <= `t_rms`, inlier share >= `t_inl` (per item, frozen).
+6. **The colour gates and the threshold (per item, on FIT):** round 1's 4.5 unchanged: the grid
+   `t_ncc` 0.45 .. 0.98 x `t_rms` 15 .. 80 or none x `t_inl` 0.0 .. 0.9; the triple with the
+   **highest FIT recall** (the labelled FIT items, 28-px geometry, a detection within 6 px)
+   **subject to FIT-NEG <= `FIT_FALSE_MAX` = 0.5 false detections per 100 FIT-NEG frames**; ties:
+   fewer false, the higher NCC, the lower RMS, the higher inlier share. False on FIT-NEG = a
+   detection not within 6 px (Chebyshev) of a PRESENT floor item of that id (every t1b detection
+   is false).
+- **Frozen:** `params.json` (every constant, the spots, the sessions, the anchors, the variant
+  keys, the thresholds) + `templates.npz` (masks, pooled colours, variants), under
+  /dev/shm/poring-lab-tmp/target-items-r2/params/, their sha256 quoted in 10.9 with the clock
+  time, BEFORE any TEST, TEST-NEG or NATURAL frame is read. `scan` refuses without them.
+
+### 10.5 The measures and the BARS (per item; the SAME as round 1's section 5)
+
+- **Recall (TEST)** over the labelled, fully-in-view TEST items (10.3): a detection of the same id
+  within **+-6 px** of the predicted centre. **Bar >= 80 %.**
+- **Precision (TEST)** over every detection of the item on the TEST frames: within 6 px of a
+  PRESENT floor item of that id. **Bar >= 90 %** (no detection at all: the item fails).
+- **False detections (TEST-NEG):** per 100 TEST-NEG frames (s4 + s5). **Bar <= 1.0.**
+- **PASS** only with all three; fewer than `N_MIN` = 20 labelled TEST items: NO verdict.
+- **Reported, no bar:** FIT recall and FIT-NEG rate at the frozen threshold; per-floor-item TEST
+  recall; which variant made each hit; TEST recall under round 1's rule (10.3); the misses by eye;
+  TEST-NEG per session and on non-hunt layouts; and, AFTER the verdict and labelled NOT the
+  verdict, the curves of TEST recall and TEST-NEG false rate against `t_ncc`.
+
+### 10.6 The natural cases (reported, no bar)
+
+Section 6's rule on the NATURAL sessions: every frame in [a target's fall + `D_APPEAR`, its
+vanish); FOUND = a detection of its id within 6 px of the predicted centre on a frame where our
+character is still (3a). The s6 items lived 1.0-4.5 s, so 0-3 frames each are expected, mostly
+while we walk to them (then the nearest detection is context only).
+
+### 10.7 The recommendation (written with the result)
+
+Which items qualify for a "loot by sight" fast path (a seen target clicked directly, the hover
+sweep kept as the fallback; its live use is its own pre-registration, Batt and the parent decide),
+and whether a learned item class (GPU, R1-R3) is still needed, for which items, with the numbers
+that limit it.
+
+### 10.8 Amendments (clock-labelled, appended here, each BEFORE the step it changes)
+
+(none yet)
+
+### 10.9 RESULTS (appended below, clock-labelled)
+
+#### 10.9a FIT and the FREEZE (2026-10-24; clock times from `date`, the commits and file times)
+
+**The order of events:** pre-registration 3995290 23:13:14. The first round-2 pixel read, FIT
+frames only (the sample crops of the first FIT run), 23:13:22. That run's scan was too slow
+(~13 s per frame) and was stopped ~23:23; a profile and an equality check read three FIT frames
+of stage-c spots 0 and 3 (23:23-23:28); the second run (12 workers) was stopped at 23:29 because
+multi-threaded BLAS in the workers drove the host load to ~129; a49fc66 23:32:24 (the speed-up:
+the same numbers, max |diff| 0.0 on those FIT frames against the pre-registration's code; one BLAS
+thread per worker, 10 workers). The third FIT run 23:29:24-23:45:07 (it runs a49fc66's code, the
+file was edited before its start). **FROZEN 2026-10-24 23:45:44 +0700**: `params.json` sha256
+`2995b4d62d95614c6de55d2dc11bf003b3ce7aa18b5b0cd6c42013f685d00392`, `templates.npz` sha256
+`fba39e9f5376c3a533f429faa45e307cc3f89fb387d2f12dddfb3a99fdc0abc7`
+(/dev/shm/poring-lab-tmp/target-items-r2/params/). No TEST (stage-c spots 8-11), TEST-NEG (s4,
+s5) or NATURAL frame had been read. No amendment.
+
+**The FIT measurements** (FIT eval frames 430, all `ok`, none `ui_layout_mismatch`; FIT-NEG =
+those 430 + 2,188 t1b frames on pay_fild07 = 2,618, none `ui_layout_mismatch`):
+
+| item | FIT samples (floor items) | kept by the pooled build (floor items) | variants (pooled + places) | template h x w px (mask px) | anchor du / dv px | alignment median abs dx / dy (NCC median, p10) | threshold NCC / RMS / inlier | FIT recall (labelled) | FIT-NEG false / 100 frames | candidates / frame |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 43 (5) | 34 (4) | 1 + 4 | 12 x 15 (116) | -4.5 / +0.5 | 1 / 1 (0.978, 0.764) | 0.90 / 25 / 0.7 | 0.835 (103) | 0.0 | 179.3 |
+| 756 Rough Oridecon | 92 (7) | 75 (7) | 1 + 6 | 13 x 16 (121) | -4.5 / +1.0 | 0 / 1 (0.952, 0.868) | 0.83 / 30 / 0.8 | 0.991 (113) | 0.0 | 25.5 |
+| 604 Dead Branch | 112 (7) | 92 (7) | 1 + 7 | 12 x 18 (86) | -6.5 / +3.5 | 0 / 0 (0.879, 0.791) | 0.72 / 30 / 0.6 | 0.912 (136) | 0.0 | 193.4 |
+| 518 Honey | 108 (9) | 87 (9) | 1 + 7 | 22 x 20 (305) | -5.5 / +1.5 | 0 / 0 (0.971, 0.942) | 0.91 / 25 / 0.8 | 0.994 (158) | 0.0 | 251.5 |
+
+- No alignment STOP (all medians <= 1 px); every item has a template (no amendment needed: 757
+  built from all its samples this time, round 1's needed amendment A).
+- Places with fewer than 5 kept samples have no variant of their own: 756 c:341 (4), 518 c:327
+  and b:138 (1 each).
+- **FIT recall is IN-SAMPLE** (the variants come from these same floor items), so it overstates
+  TEST; round 1's FIT recall was 0.27-0.64. The 0.0 FIT-NEG rate at these thresholds leaves the
+  TEST-NEG bar (1.0 / 100) a margin only if s4 / s5 resemble t1b. Written before any TEST read.
+
+#### 10.9b RESULT (2026-10-25; clock times from `date`, the commits and file times)
+
+**The order of events (after 10.9a):** the freeze record committed c3099c3 23:46:10; the first
+TEST read 23:46:18 (`scan --set test`, 33 min after the pre-registration commit 23:13:14 and 34 s
+after the freeze 23:45:44); the NATURAL frames 23:47:10-23:47:17; TEST-NEG (s4 + s5)
+23:47:18-00:09:29 (4,628 frames on pay_fild07, 1,331 s on 10 workers). While TEST-NEG ran, a
+TEST-only `score` (~23:47; every verdict line read FAIL by construction, no TEST-NEG frame yet), the
+TEST misses' contact sheet 23:48:06 and the miss frames' diff 23:49:00 were looked at: nothing
+frozen can change after the freeze. The final `score` 00:10:06. TEST frames: 138, all `ok`, none
+`ui_layout_mismatch`; TEST-NEG frames: 4,628, none on a non-hunt layout.
+
+**THE VERDICT (10.5, as written): ALL FOUR ITEMS PASS.**
+
+| item | threshold NCC / RMS / inlier | TEST labelled (floor items) | recall (bar >= 80 %) | per floor item (spot 8 / 10 / 11) | precision (bar >= 90 %) | TEST-NEG false / 100 frames (bar <= 1.0) | verdict |
+|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 0.90 / 25 / 0.7 | 37 (3) | **97.3 %** (36) | 12/13, 9/9, 15/15 | 100 % (47 / 47) | **0.0** (0 in 4,628) | **PASS** |
+| 756 Rough Oridecon | 0.83 / 30 / 0.8 | 47 (3) | **95.7 %** (45) | 13/15, 20/20, 12/12 | 100 % (57 / 57) | **0.0** | **PASS** |
+| 604 Dead Branch | 0.72 / 30 / 0.6 | 47 (3) | **95.7 %** (45) | 18/20, 14/14, 13/13 | 100 % (58 / 58) | **0.022** (1 in 4,628, in s4) | **PASS** |
+| 518 Honey | 0.91 / 25 / 0.8 | 59 (3) | **94.9 %** (56) | 18/20, 19/20, 19/19 | 100 % (62 / 62) | **0.0** | **PASS** |
+
+- TEST item exclusions (not in the denominators): `under_self_bar` 30, `under_unit` 14,
+  `under_self` 2; no stacked, UI or edge case. Spot 9 (its items vanished within 2.6 s) adds frames
+  only: no detection there.
+- **Under round 1's label rule** (the bar exclusion off; reported, NOT the verdict): 757 95.9 % (49
+  labels), 756 94.7 % (57), 604 96.2 % (53), 518 94.9 % (59): every item stays above the bar. The two
+  extra misses are under the bar: 757 floor 356 (frame 1134) and 756 floor 357 (frame 1102).
+- Versus round 1 (9b): recall 19.0 / 40.0 / 66.7 / 66.7 % -> 97.3 / 95.7 / 95.7 / 94.9 %, with
+  precision still 100 % and the hunting false rate still ~0.
+
+**All 8 TEST misses fall on 3 frames where the client draws EVERY floor item YELLOW** (by eye on
+the contact sheet, then measured): frames 1116 and 1134 (spot 8) and 1362 (spot 10). Between
+1115 and 1116 only the item sprites change (823 px, and back at 1117); a Honey pixel goes from RGB
+(161, 135, 114) to (164, 137, 0). The flashes were 19.0 s and 233.0 s apart and each lasted at most
+one 1-fps frame; the cause is not known. On those frames the best candidate near the item has NCC
+0.49-0.76 and RMS 31-84, or there is none (756). It is the floor sprite's second STATE: no variant
+models it, because the medians drop it. 3 of 138 TEST frames.
+
+**The one TEST-NEG false detection** (604, s4 frame 1524 at (1124.5, 489.5), NCC 0.748, RMS 26.9,
+inlier 0.69, the pooled variant): by eye, bark and roots at a tree's foot inside a canopy: brown
+branches like the Dead Branch's. At 1 fps that is one false Dead Branch per ~77 min of hunting.
+
+**The natural cases (10.6; reported, no bar):**
+- Pilot Dead Branch 117: **FOUND** on all 9 still frames, 0.2 px from the predicted centre (round 1:
+  0.8 px).
+- s6 Dead Branch 304 (lived 4.5 s): **FOUND** on 2 of its 3 frames (0.9 px, 0.1 px), our character
+  still. On the third frame (4.4 s after the fall, 0.07 s before its vanish) the bot's pickup cursor
+  covers the item (by eye): no candidate.
+- s6 Dead Branch 293 (3.4 s): 2 frames, both `under_unit` (a monster's box over it): the first has no
+  detection (best NCC 0.64 nearby), the second is **FOUND** at 0.8 px.
+- s6 Rough Elunium 291 (2.4 s) and Dead Branch 296 (1.0 s): no frame in [fall + 2.2 s, vanish), so
+  no case. **There is still no natural Rough case.**
+
+**POST-HOC, NOT the verdict:**
+1. **What the variants add** (`posthoc_pooled_only.json`: the TEST frames re-scanned with variant 0
+   only, at the frozen thresholds): 757 97.3 %, **756 83.0 %** (39 / 47, vs 95.7 %), 604 95.7 %,
+   518 94.9 %. The per-floor-item variants matter for the Rough Oridecon only. For the other three,
+   the pooled template from 4-9 visible open-ground floor items is enough. Hits per variant:
+   - 757: b:159 14, c:340 13, b:143 6, c:336 3;
+   - 756: b:144 20, c:337 13, b:160 6, b:124 6;
+   - 604: c:338 11, b:161 8, c:350 7, pooled 7, b:137 6, b:165 6;
+   - 518: b:162 22, c:351 15, c:343 7, b:126 6, b:146 6.
+
+   Stage-b's variants make about half of the hits, so adding round 1's open spots was worth it.
+2. **Margins** (`posthoc_curves.json`): with the frozen gates, TEST recall is flat from NCC 0.60 up
+   to the frozen NCC for every item, because the only misses are the flash frames. TEST-NEG stays at
+   0.0 / 100 with the frozen gates down to NCC 0.80 (757), 0.73 (756), 0.75 (604) and 0.81 (518):
+   lower values were not kept for 757, 756 and 518. 604 rises to 0.065 at 0.70 and to 4.45-4.88 at
+   0.62-0.64. Without the colour gates: 757 has 1.23 / 100 at NCC 0.80 and 0.04 at 0.83, 518 has
+   0.065 at 0.81, and 604 has 35.4 at 0.62. The gates are still what keep the forest out.
+3. **Why round 2 passed where round 1 failed:**
+   - Open ground: apart from the flash frames, every TEST label had a candidate (round 1: 29.3 % had
+     none, all under one willow).
+   - More visible floor items per template: 757 34 kept samples from 4 floor items (round 1: 16 from
+     1); 756 75 from 7 (68 from 5); 604 92 from 7; 518 87 from 9.
+   - The thresholds were chosen with 2,618 FIT-NEG frames including a real hunt (round 1: 651
+     frames, no hunt), so 757's gates relaxed from RMS 20 / inlier 0.8 to 25 / 0.7.
+
+**Honest limits:**
+- TEST is 3 floor items per id at 3 places of one session: one evening's light, a still character,
+  1 fps, and open ground by construction. Under a canopy an item is still invisible (round 1).
+- The hunting false rate comes from 2 sessions of the same map.
+- No natural Rough has been seen by the detector yet.
+- Live play adds our own cursor over the item (s6 frame 608) and camera motion.
+- Cost: TEST-NEG ran at ~2.9 s of one core per whole frame (4 items, PNG decode and the NAS read
+  included).
+
+**THE RECOMMENDATION (10.7):**
+- **"Loot by sight" qualifies for ALL FOUR targets on pay_fild07 on open ground**, with this frozen
+  multi-template detector (params sha256 `2995b4d6...`, templates `fba39e9f...`). The live version
+  is its own pre-registration (the parent and Batt decide):
+  - scan a region around the kill, not the whole frame;
+  - click a detected target directly;
+  - keep the hover sweep as the fallback for canopy spots, the flash frames and cursor occlusion;
+  - treat a one-frame miss as "look again on the next frame" (a flash lasts at most one frame).
+- **A learned item class (GPU) is NOT needed for these four items on this map.** The remaining
+  misses are not a template problem:
+  - the yellow flash STATE: a FIT-only fix, i.e. a flash variant cut from FIT flash frames, or a
+    second frame;
+  - canopy occlusion: no pixel detector sees through it; use a non-visual fallback or a camera step;
+  - our own cursor and HP / SP bar.
+
+  Consider a GPU item class only for a NEW map or many more item ids, where staging each one is the
+  bigger cost.
+- **Next, CPU only:**
+  - confirm a natural Rough case: the next hunts' packets will say when one drops;
+  - for a live pre-registration, measure the flash's period on FIT-like frames.
+
+**Scratch** (client-derived; never committed or shipped):
+- **KEPT** in /dev/shm/poring-lab-tmp/target-items-r2/ (4.1 MB), for a re-score or a live
+  pre-registration:
+  - `params/`: params.json, templates.npz, frozen.json, fit_report.json;
+  - `scan/`: the candidates of TEST, TEST-NEG and NATURAL;
+  - score.json, the two post-hoc JSONs, inventory.json and the logs.
+- **DELETED** 2026-10-25 00:14:
+  - the contact sheets and crops, and the scratch scripts that made the post-hoc JSONs and the
+    sheets (0.9 MB);
+  - the FIT sample crops (8.1 MB) and the FIT candidates (40 MB);
+  - the frame indexes (1.4 MB; rebuilt on demand by `target_items_r2.py index`).

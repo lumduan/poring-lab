@@ -396,6 +396,35 @@ def build_seeded(
     re-centred on the mask's centroid, the median, the consistency mask; then each crop
     re-aligned by masked NCC within +-``refine`` and the best ``keep_share`` kept. The anchor =
     the median shift of the kept crops (sprite centre = the mask's tight box centre)."""
+    b = build_seeded_core(crops, item_id, instances, seed, half, iters, refine, keep_share,
+                          fg_thr, fg_share, mad_max)  # fmt: skip
+    return None if b is None else b.tpl
+
+
+@dataclass
+class Built:
+    """build_seeded's result plus the kept crops' final windows cut to the template's tight box
+    (round 2's colour variants are medians of subsets of them)."""
+
+    tpl: Tpl
+    kept: Any  # indices (into the crops) of the samples in the final median
+    windows: Any  # len(kept) x h x w x 3 float32: each kept crop's tight window
+
+
+def build_seeded_core(
+    crops: Any,
+    item_id: int,
+    instances: Sequence[int],
+    seed: tuple[int, int] = SEED,
+    half: int = HALF,
+    iters: int = ITERS,
+    refine: int = REFINE,
+    keep_share: float = KEEP_SHARE,
+    fg_thr: float = 38.0,
+    fg_share: float = 0.6,
+    mad_max: float = 40.0,
+) -> Built | None:
+    """build_seeded, also returning the kept samples' tight windows (the same maths)."""
     import item_icons as ii
 
     crops = np.asarray(crops, np.float32)
@@ -453,7 +482,7 @@ def build_seeded(
     tpl.anchor = (round(float(s[1] + off[1]), 3), round(float(s[0] + off[0]), 3))
     tpl.samples = int(use.sum())
     tpl.instances = len({int(instances[i]) for i in np.nonzero(use)[0]})
-    return tpl
+    return Built(tpl, np.nonzero(use)[0], stack[:, ya:yb, xa:xb].astype(np.float32))
 
 
 def scan(
@@ -498,13 +527,13 @@ def scan(
 # --- recordings: the frame index, frames, packets ------------------------------------------------
 
 
-def index_path(sid: str) -> Path:
-    return OUT / "index" / f"{sid}.json"
+def index_path(sid: str, out: Path | None = None) -> Path:
+    return (OUT if out is None else out) / "index" / f"{sid}.json"
 
 
-def build_index(sid: str) -> list[dict[str, Any]]:
+def build_index(sid: str, out: Path | None = None) -> list[dict[str, Any]]:
     """(frame_id, t_mono_ns, shard, png offset, png size) per frame, from the tar headers and the
-    per-frame JSON only (no pixel read)."""
+    per-frame JSON only (no pixel read). ``out``: the study's scratch root (default OUT)."""
     d = DATASETS / sid
     man = json.loads((d / "manifest.json").read_text())
     rows: dict[str, dict[str, Any]] = {}
@@ -520,17 +549,18 @@ def build_index(sid: str) -> list[dict[str, Any]]:
                     assert fh is not None
                     meta = json.loads(fh.read())
                     r["frame_id"], r["t"] = int(meta["frame_id"]), int(meta["t_mono_ns"])
-    out = [r for r in rows.values() if "off" in r and "t" in r]
-    out.sort(key=lambda r: r["t"])
-    p = index_path(sid)
+    root = out
+    rows_out = [r for r in rows.values() if "off" in r and "t" in r]
+    rows_out.sort(key=lambda r: r["t"])
+    p = index_path(sid, out=root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(out))
-    return out
+    p.write_text(json.dumps(rows_out))
+    return rows_out
 
 
-def load_index(sid: str) -> list[dict[str, Any]]:
-    p = index_path(sid)
-    return json.loads(p.read_text()) if p.exists() else build_index(sid)
+def load_index(sid: str, out: Path | None = None) -> list[dict[str, Any]]:
+    p = index_path(sid, out)
+    return json.loads(p.read_text()) if p.exists() else build_index(sid, out)
 
 
 def read_frame(sid: str, row: Mapping[str, Any]) -> Any:
