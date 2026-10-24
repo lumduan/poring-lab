@@ -431,11 +431,13 @@ Every candidate frame (1 fps). "kept" = the kept fitted labels in any candidate 
 | **all** | 552 / 242 | 626 / 400 | 188 / 151 | 774 / 514 | **2,140** | **1,307** |
 | frames: recorded / candidates / whole | 1,538 (spots 0-7 of it) / 513 / 281 | 2,271 / 1,645 / 975 | 523 / 423 / 267 | 1,950 / 1,675 / 1,137 | | **2,660 whole** |
 
-- **The exclusions, by reason** (labels, all four parts): `occluded_model` 1,177 (o3h); `engaged`
-  1,091 (Elder Willow 1,007 of them); `ambiguous_view` 174; `next_move` 130; `unfit` 88; `crowd` 6;
-  `ui` 9. Frames: `warp_in_view` 3 (t1b); no other player, no unchecked species.
-- **The candidate-frame drops:** our character moving t1b 543, s-pilot 73, s1 256; the staged
-  inventory span 314; GM windows 164; map changes 113; off pay_fild07 76.
+- **The exclusions, by reason** (labels, all four parts; recounted from the label files):
+  `engaged` 1,089 (Elder Willow 1,007 of them); `occluded_model` 933 (o3h); `ambiguous_view` 173;
+  `next_move` 116; `unfit` 88; `ui` 9; `crowd` 6. Frames: `warp_in_view` 3 (t1b); no other player,
+  no unchecked species.
+- **The candidate-frame drops:** our character moving 872 (t1b 543, s-pilot 73, s1 256); the
+  staged session's other spots 474 (TEST and before spot 0: 13 more), its inventory spans 314; GM
+  windows 164; map changes 113; off pay_fild07 76.
 - **Green Plant:** 116 kept labels (>= 30), so it is a class and in the tier (section 7), but 0 of
   them lie in a whole frame (its neighbours under canopy are excluded), so a cache would hold no
   Green Plant box today.
