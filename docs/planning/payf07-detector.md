@@ -557,6 +557,18 @@ T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1
 - Next: 10h step 3 (the TRAIN labels with the frozen file, then the pack, its key compared with
   10g's), then T2 by two new blind labellers.
 
+### 10l. The T2 pack from the FROZEN labels (10h step 3; 2026-10-24 19:17 ICT)
+
+- The TRAIN labels were rebuilt with the frozen `params.json` (19:11-19:16), then the pack
+  (seed 21): `/dev/shm/poring-lab-tmp/payf07/t2/pack/`, key `t2-key/answer_key.json`, sha256
+  `48818815fd4b66bb8cf61288794ca7e5f90bec28fb19714107c94e0266fafb7e`.
+- **The crop-by-crop comparison with 10g's provisional key: 180 of 180 identical** (mob, session,
+  frame, gid, box, NCC, under, state, spot). Only the provenance differs (params FROZEN, the
+  frozen label files).
+- Two NEW blind labellers (A, B) started ~19:18-19:19 ICT. Each was given ONLY the pack, its
+  instructions (sha256 dc3ee728...) and an answers path outside it
+  (`/dev/shm/poring-lab-tmp/payf07/t2-answers/A.json`, `B.json`). The key stays apart.
+
 ### 10i. Estimates: the cache and the training (by analogy with v2orc)
 
 - **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
