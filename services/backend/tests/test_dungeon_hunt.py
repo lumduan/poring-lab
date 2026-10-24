@@ -346,8 +346,9 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     assert a.plant_sweep is False and a.box_ignore == dh.BOX_IGNORE_AFTER == 2
     assert a.ag_match == sv.AG_MATCH_DUNGEON == 40.0
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
-    # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01
-    assert dh.VERSION == "dungeon@6"
+    # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
+    # changes only what --steal does
+    assert dh.VERSION == "dungeon@7"
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
 
 
@@ -365,12 +366,19 @@ def test_dungeon6_characters_keys_and_stock() -> None:
     assert round(dh.rate_hp_s(hist, 1.0)) == 526  # the Crusader's 5260
 
 
-def test_dungeon6_steal_rules() -> None:
-    """Batt 2026-10-24: steal first from Elder Willow / Bigfoot; a monster is stolen from ONCE
-    (pc_steal_item's steal_flag), so a target near a recent steal is not tried again; success =
-    the weight readout rose."""
-    assert dh.steal_species("Elder Willow") and dh.steal_species("Bigfoot")
-    assert not dh.steal_species("Willow") and not dh.steal_species(None)
+def test_dungeon7_steal_rules() -> None:
+    """Batt 2026-10-24 ~16:0x (4.04): ONE Steal first on EVERY monster while the SP pays for it
+    (Steal costs 10 SP; the Thief has 112), plain strikes below; a monster is stolen from ONCE
+    (pc_steal_item's steal_flag), so a target near a recent steal is not tried again; the cast =
+    the SP percent falling; success = the weight readout rose."""
+    assert dh.STEAL_SP == 10 and dh.CHARS_CONF["thief"]["max_sp"] == 112
+    assert dh.steal_sp_pct(112) == 10  # ceil(1100 / 112): 11.2 SP floored, 10.6 rounded
+    assert dh.steal_ready(10, 112) and dh.steal_ready(100, 112)
+    assert not dh.steal_ready(9, 112) and not dh.steal_ready(None, 112)
+    assert not dh.steal_ready(100, None)  # a character without SP never steals
+    assert dh.steal_cast(100, 91) and dh.steal_cast(14, 5)  # 10 of 112 SP = 8.9 points
+    assert not dh.steal_cast(100, 96) and not dh.steal_cast(100, None)
+    assert not dh.steal_cast(None, 50)
     done = [((100, 100), 10.0)]
     assert not dh.steal_forgotten(done, (101, 102), 20.0)  # within 2 cells, 10 s later
     assert dh.steal_forgotten(done, (103, 100), 20.0)  # 3 cells away: another monster
@@ -380,6 +388,22 @@ def test_dungeon6_steal_rules() -> None:
     assert dh.stolen([570, 2430], [570, 2430]) is False
     assert dh.stolen([570, 2430], [555, 2430]) is False  # a potion drunk meanwhile
     assert dh.stolen(None, [571, 2430]) is None
+
+
+def test_dungeon7_steal_ring_order() -> None:
+    """After the Steal walk the target stands beside us, on its own side: the major axis's
+    neighbour first, the diagonal second (the other path shape), then the rest of ring 1."""
+    ring1 = {(x, y) for x in (-1, 0, 1) for y in (-1, 0, 1)} - {(0, 0)}
+    for rel in [(5, 2), (3, 3), (-2, 5), (1, -1), (0, 0), (0, -4), (-6, -1)]:
+        order = dh.steal_ring_order(rel)
+        assert len(order) == 8 and set(order) == ring1, rel
+    assert dh.steal_ring_order((5, 2))[:2] == [(1, 0), (1, 1)]
+    assert dh.steal_ring_order((-2, 5))[:2] == [(0, 1), (-1, 1)]
+    assert dh.steal_ring_order((-6, -1))[:2] == [(-1, 0), (-1, -1)]
+    assert dh.steal_ring_order((0, -4))[:2] == [(0, -1), (-1, -1)]  # then the nearest, by (x, y)
+    assert dh.steal_ring_order((3, 3))[0] == (1, 1)  # a diagonal: one prediction
+    assert dh.steal_ring_order((3, 3))[1] in {(0, 1), (1, 0)}
+    assert dh.steal_ring_order((1, -1))[0] == (1, -1)  # already beside us: no walk, it stays
 
 
 def test_dungeon6_rest_spots_per_map(tmp_path) -> None:

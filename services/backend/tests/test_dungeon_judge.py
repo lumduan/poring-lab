@@ -401,3 +401,27 @@ def test_item_gains_by_cause_and_the_per_hour_table() -> None:
     assert [(x["item_id"], x["picked"], x["stolen"], x["per_h"]) for x in pooled] == [
         (907, 2, 2, 4.0), (604, 0, 0, 2.0)]  # fmt: skip
     assert "* Dead Branch" in dj.items_box(rows, "t")
+
+
+def test_steal_by_species_names_the_monster_our_next_attack_hits() -> None:
+    """dungeon@7 (a Steal on every monster): each Steal's SP fall is credited to the monster OUR
+    next attack act hits within STEAL_TARGET_S (its entity_appear name); stolen = an item gained
+    within STEAL_S with no pickup request of ours just before it."""
+    me, s = 2000002, 10**9
+    pk = [
+        {"type": "entity_appear", "gid": 7, "name": "Elder Willow", "t_mono_ns": 0},
+        {"type": "entity_appear", "gid": 8, "name": "Bigfoot", "t_mono_ns": 0},
+        # Steal 1 at 10 s: Resin in at 10.5 s, then our hit on the Elder Willow at 12 s
+        {"type": "pickup_result", "ok": True, "item_id": 907, "t_mono_ns": 10 * s + s // 2},
+        {"type": "act", "src_gid": me, "target_gid": 7, "action": 0, "t_mono_ns": 12 * s},
+        # Steal 2 at 30 s: nothing gained; a sit (action 2) is no attack; the Bigfoot hit at 31 s
+        {"type": "act", "src_gid": me, "target_gid": me, "action": 2, "t_mono_ns": 30 * s + 1},
+        {"type": "act", "src_gid": me, "target_gid": 8, "action": 8, "t_mono_ns": 31 * s},
+        # Steal 3 at 50 s: a PICKUP's gain (request at 49.9 s) is not a steal; no attack follows
+        {"type": "pickup_request", "t_mono_ns": 49 * s + 9 * s // 10},
+        {"type": "pickup_result", "ok": True, "item_id": 907, "t_mono_ns": 50 * s + s // 4},
+        {"type": "act", "src_gid": me, "target_gid": 7, "action": 0, "t_mono_ns": 80 * s},
+    ]
+    got = dj.steal_by_species(pk, [10 * s, 30 * s, 50 * s], me)
+    assert got == {"Elder Willow": {"tries": 1, "stolen": 1}, "Bigfoot": {"tries": 1, "stolen": 0},
+                   "unknown": {"tries": 1, "stolen": 0}}  # fmt: skip

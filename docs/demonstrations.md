@@ -15751,6 +15751,92 @@ the day's only target item
 add). The proposal is steal right AFTER the first hit names the target, instead of before it.
 That is Batt's call.
 
+**➡️ Batt's call on that proposal (2026-10-24 ~16:0x): NO.** He chose a Steal on EVERY monster
+first, with no Battle Log read. That is 4.04 below.
+
+### 4.04 dungeon@7: a STEAL FIRST on EVERY monster (SP permitting), then a plain fight -- the Thief on pay_fild07, in MANY runs (pre-registered 2026-10-24, the commit time of 4.04's first commit, BEFORE its pilot and its runs; Batt's reply to the 14:10 report, received ~16:0x ICT)
+
+**Batt's words (translated from Thai):**
+- items per hour: "there is still too little time: try many more runs";
+- Steal: "try a new rule: Steal Lv 10 on every monster, once, first, with no waiting, then attack
+  normally, for speed, until the SP runs out. With no SP, attack normally; once the SP is enough
+  for Steal again, open with Steal as before";
+- the 4.04 choice: "use Steal first on every monster, so there is no waiting to read the Battle
+  Log; in future, as a Rogue, Snatcher will raise the chance";
+- Elder Willow's magic: "don't skip it; resting is fine";
+- Renewal: "park it; use ours as before" (docs/planning/renewal-feasibility.md stays PROPOSED and
+  parked);
+- also: "try training the target drops (Rough Elunium, Rough Oridecon, Dead Branch ...) for
+  pickup accuracy". That is its own study, outside 4.04's runs. No 4.04 run changes for it.
+
+**The one change, dungeon@7 (`--steal`; everything else is 4.03's dungeon@6 with Amendment C):**
+- every strike on a monster (not a plant) opens with ONE Steal (F3 + a click on the target's
+  SWORD point) when both hold:
+  - the Basic Info SP percent, read from PIXELS, is >= 10 (`steal_sp_pct`: Steal costs 10 of the
+    Thief's 112 SP);
+  - no Steal was tried within 2 cells of that spot in the last 40 s (a monster is robbed ONCE:
+    pc_steal_item's steal_flag);
+- otherwise a plain strike (SP below 10: `steal_skip`, logged);
+- the click makes the client walk to range 1 and cast. The cast = the SP percent falling by
+  >= 5 points within 3.0 s. The target then stands beside us, so the runner hovers ring 1 for
+  its SWORD, the predicted neighbour first (`steal_ring_order`). It strikes there. No SWORD
+  beside us, or no cast = no strike click: the fight loop's own scan takes over;
+- no name tag is needed. Tags are still banked (off orcsdun01), as in 4.03.
+
+**The runs:** `dungeon_hunt.py run --char thief --map pay_fild07 --strategy B --search heading
+--loot v1 --steal --minutes 40 --seed S`. Frames are recorded at 1 fps into RAM and shipped to
+the NAS (capture first), as in 4.03.
+- **An unscored pilot first (~10 min).** It must show three things, or there is an amendment
+  before run 1:
+  - the SP reader reads values under 100 (4.03 never spent SP: every read was 100);
+  - the runner's casts match the packets' SP falls of 10;
+  - the post-Steal ring scan finds the target.
+- Then **6 x 40-min runs**, seeds 24401-24406, labels s1-s6, pooled = THE 4.04 result.
+  - Runs after s6 (s7, s8, ... while the hard bars stay clean and the night allows) are a SECOND
+    block, pooled apart and reported beside it. Batt: "many runs".
+- Thief8fce: Base 50 / Job 40, the +8 Damascus. Immunity OFF. Strategy B. The setup tops up 10
+  potions and 10 Fly Wings, and stops for a person at 40 % weight.
+- A judged pre-run frame before every run.
+
+**Measures (per run and pooled; `dungeon_judge.py row` / `items`):**
+- 4.03's set: kills / h, met / 10 min, EVERY item gained per hour by cause (picked / stolen /
+  other) with the target items flagged, loot gross / net, NPC net z / h, s / kill, HP min,
+  potions, Fly Wings, deaths, hard bars;
+- Steal:
+  - tries (packets: SP falls of 10) per hour and per kill;
+  - success per try, overall and per species (`steal_by_species`: the monster our next attack
+    hits);
+  - stolen items per hour per item;
+  - the runner's casts, its found-after-cast share, and its SP skips.
+- **Beside 4.03 (t1b + t2 pooled):** kills / h, s / kill, items / h. Not interleaved: a different
+  hour and spawn state, so this is a comparison, not a verdict.
+
+**Expectations (stated before any run).** No adoption rule: this is Batt's rule, and it becomes
+the new base.
+- **Steal per try** (pinned pre-re pc_steal_item: rate = (DEX - mob DEX) / 2 + 6 x 10 + 4 with the
+  Thief's DEX 42; the drop slots tried in order, each at slot rate x rate / 100; the first success
+  wins):
+  - Elder Willow 61.2 % (Resin 59.2 %);
+  - Bigfoot 82.7 % (Bear's Footskin 67.5 %);
+  - Willow 87.2 %, Poporing 51.5 %, Eggyra 20.2 %.
+  - Measured within +-15 points per species with >= 20 tries.
+- **Target items per Steal try:**
+  - Elder Willow: Dead Branch 0.26 %, Rough Elunium 0.10 %;
+  - Eggyra: Rough Elunium 0.32 %;
+  - Bigfoot: Honey 0.60 %, Rough Oridecon 0.06 %.
+  - So Steal adds little to the target items. Six runs (~150-250 kills) expect 2-5 target items in
+    total from kills AND steals. That is still too few to rate any one item; every report gives
+    the counts with the hours behind them.
+- **SP:** natural regen covers about one Steal a kill at 4.03's pace. SP skips are expected
+  under 20 % of the strikes.
+- **Pace:** a Steal adds the walk, the cast and a ring hover (~1-3 s a kill). Kills / h within
+  -25 % .. +10 % of 4.03's 41.3.
+- **Safety:** deaths 0, hard bars 0. The Steal click lands only on a SWORD point that the caller
+  hovered. The post-Steal strike lands only on a hovered SWORD.
+
+**Hard bars and deaths:** as 4.00. A death is a result: the run stops, the cause is recorded, the
+dialog closes by its known step, then @alive + @heal.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

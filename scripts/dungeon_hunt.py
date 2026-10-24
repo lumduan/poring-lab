@@ -71,12 +71,26 @@ exactly. New:
   else the rest sits where it is);
 - TAG BANKING (on by default off orcsdun01): at every strike the raw name-tag band under the target
   is saved with its time and box (tags/), for the packet-labelled templates (nametag.py, per map);
-- --steal (off by default): STEAL FIRST on a strike whose name tag reads one of STEAL_SPECIES: F3
-  (Steal) + a click on the target, until the weight readout rises (= an item stolen) or
-  STEAL_MAX tries; a target stolen from (or given up) is not tried again for STEAL_FORGET_S.
+- --steal (off by default): STEAL FIRST on a strike whose name tag read Elder Willow or Bigfoot,
+  up to 5 tries until the weight rose. ➡️ SUPERSEDED by dungeon@7 below (never run scored).
+
+dungeon@7 (Batt 2026-10-24 ~16:0x, his reply to the 14:10 report: "steal Lv 10 on EVERY monster
+once first, no waiting, then attack normally, for speed, until SP runs out; with no SP attack
+normally, and once SP is enough for Steal again open with Steal as before"; docs/demonstrations.md
+4.04). --steal now means that rule; @6's tag-gated steal (never run scored) is gone:
+- every strike on a monster (not a plant) whose spot was not stolen at within STEAL_FORGET_S opens
+  with ONE Steal while the Basic Info SP percent (pixels) reads >= steal_sp_pct (Steal costs
+  STEAL_SP of the character's max SP); below it, a plain strike;
+- the Steal click makes the client walk to range 1 and cast: the cast is read as the SP percent
+  falling by >= STEAL_SP_FALL within STEAL_CAST_MAX_S; then the target is beside us, so the strike
+  point is FOUND again by hovering ring 1 for the SWORD (the predicted neighbour first:
+  steal_ring_order); no SWORD there = no strike click (the fight loop's own scan takes over);
+- success = the weight readout rose after the cast (logged; the judge counts it from packets).
+  Name tags are no longer needed (--bank-tags still banks them).
 
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief] [--map M] [--steal] [--bank-tags]
+    (dungeon@7: --steal = Batt's steal-first on every monster, SP permitting)
 """
 
 from __future__ import annotations
@@ -102,9 +116,10 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@6"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@7"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
-# --steal / tag banking (2026-10-24; the defaults are @5's behaviour)
+# --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
+# (Batt 2026-10-24 ~16:0x, demonstrations 4.04)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -171,18 +186,20 @@ CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand
 CHARS_CONF: dict[str, dict[str, Any]] = {
     "crusader": {"job": "crusader", "max_hp": 5260, "keys": KEYS, "autoguard": True,
                  "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True},
-    "thief": {"job": "thief", "max_hp": 952,  # its status window and DB (thief-payon.md 4)
+    "thief": {"job": "thief", "max_hp": 952, "max_sp": 112,  # its status window (thief-payon 4)
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10,
               # Rough Oridecon 756 / Rough Elunium 757 are Etc: never dropped by the setup
               "clear_etc": False},
 }  # fmt: skip
-STEAL_SPECIES = ("Elder Willow", "Bigfoot")  # Batt 2026-10-24: steal from these first
-STEAL_MAX = 5  # tries per target (EW 61 % / Bigfoot 83 % a try: >= 99 % within 5)
-STEAL_WAIT_S = 0.9  # after the click: the walk to range 1 + the cast + the weight line redrawn
-STEAL_FORGET_S = 40.0  # a target stolen from / given up: no new try within 2 cells for this long
-TAG_WAIT_S = 0.45  # no word in the strike's first frame: one more look after this
+STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
+# dungeon@7 (Batt ~16:0x: ONE Steal on every monster first, SP permitting)
+STEAL_SP = 10  # pinned pre-re skill_db TF_STEAL SpCost (every level)
+STEAL_CAST_MAX_S = 3.0  # the walk to range 1 (~0.15 s a cell) + the cast + the SP line redrawn
+STEAL_SP_FALL = 5  # SP percent points: the Steal was cast (10 of the Thief's 112 = 8.9 points)
+STEAL_POLL_S = 0.1
+STEAL_SETTLE_S = 0.3  # after the cast: the weight line redrawn before it is read
 TAG_BOTTOM = 4  # px below the cell's projected point: the pseudo box's bottom for the tag band
 ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike point
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
@@ -685,9 +702,47 @@ def rest_spots_for(map_name: str, root: Path = ROOT) -> list[Cell]:
     return []
 
 
-def steal_species(word: str | None) -> bool:
-    """PURE: a name-tag read that Batt's steal-first rule applies to."""
-    return word in STEAL_SPECIES
+def steal_sp_pct(max_sp: int) -> int:
+    """PURE: the lowest Basic Info SP percent that still pays for a Steal (STEAL_SP) whether the
+    client floors or rounds the percent: ceil(100 * (STEAL_SP + 1) / max_sp). Thief: 10."""
+    return -(-100 * (STEAL_SP + 1) // max_sp)
+
+
+def steal_ready(sp_pct: int | None, max_sp: int | None) -> bool:
+    """PURE: dungeon@7's gate: open with Steal only when the SP percent was READ and pays for it."""
+    return sp_pct is not None and max_sp is not None and sp_pct >= steal_sp_pct(max_sp)
+
+
+def steal_cast(sp0: int | None, sp1: int | None) -> bool:
+    """PURE: the SP percent fell by >= STEAL_SP_FALL points = the Steal was cast."""
+    return sp0 is not None and sp1 is not None and sp0 - sp1 >= STEAL_SP_FALL
+
+
+def _sgn(x: int) -> int:
+    return (x > 0) - (x < 0)
+
+
+def steal_ring_order(rel: Cell) -> list[Cell]:
+    """PURE: where the target stands after the client walked us to range 1 of it, most likely
+    first. A target already within 1 cell stays where it was. Else the walk ends one cell short on
+    the target's side: the major axis's neighbour (both axes on a diagonal), then the neighbour
+    that also keeps the minor axis's sign (the other path shape), then the rest of ring 1 by
+    distance to the first."""
+    dx, dy = rel
+    ring1 = [(x, y) for x in (-1, 0, 1) for y in (-1, 0, 1) if (x, y) != (0, 0)]
+    if max(abs(dx), abs(dy)) <= 1:
+        first: list[Cell] = [(dx, dy)] if (dx, dy) != (0, 0) else []
+    else:
+        sx, sy = _sgn(dx), _sgn(dy)
+        pred = (sx if abs(dx) >= abs(dy) else 0, sy if abs(dy) >= abs(dx) else 0)
+        first = [pred]
+        alt = (sx, sy)
+        if alt != pred:
+            first.append(alt)
+    p0 = first[0] if first else (0, 0)
+    rest = sorted((c for c in ring1 if c not in first),
+                  key=lambda c: (max(abs(c[0] - p0[0]), abs(c[1] - p0[1])), c))  # fmt: skip
+    return first + rest
 
 
 def steal_forgotten(done: Sequence[tuple[Cell, float]], cell: Cell | None, now: float) -> bool:
@@ -735,16 +790,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     map_ = a.map
     keys_ = conf["keys"]
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
-    if a.steal and "steal" not in keys_:
-        raise SystemExit(f"dungeon@6 refused: --steal for the {a.char}, who has no Steal key")
+    if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
+        raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     import nametag
 
     tag_tpl = nametag.load_templates(nametag.map_dir(ROOT, map_) / "templates.npz")
-    if a.steal and not all(s_ in tag_tpl for s_ in STEAL_SPECIES):
-        raise SystemExit(
-            f"dungeon@6 refused: --steal needs name tags for {STEAL_SPECIES} on {map_} "
-            f"(nametag.py build --map {map_}; have {sorted(tag_tpl)})"
-        )
     bank = a.bank_tags if a.bank_tags is not None else map_ != "orcsdun01"
     if a.engage == "melee_ring":
         # Batt 13:4x: melee-ring strikes EVERY monster in melee range -- only on a map whose every
@@ -1134,49 +1184,78 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 tags_log.flush()
             return word
 
-        def do_steal(u: float, v: float, word: str, cell_: Cell | None) -> None:
-            """dungeon@6, Batt's steal-first: F3 (Steal) + a click on the target, until the weight
-            readout rises (an item stolen) or STEAL_MAX tries; HP guarded between tries."""
-            got = None
-            for k in range(1, STEAL_MAX + 1):
+        def sp_now(img_: Any) -> int | None:
+            return hpp.read(img_, glyphs, hpp.SP_DY)
+
+        def do_steal(u: float, v: float, rel: Cell, cell_: Cell | None, sp0: int, by: str
+                     ) -> tuple[Cell, tuple[float, float]] | None:  # fmt: skip
+            """dungeon@7, Batt's steal-first: F3 (Steal) + ONE click on the target. The client
+            walks to range 1 and casts; the cast = the SP percent falling (steal_cast). Then the
+            target is beside us: ring 1 is hovered for its SWORD (steal_ring_order). Returns the
+            strike's new (rel, (u, v)), or None (no cast, or no SWORD beside us: no strike)."""
+            w0 = gm_state._weight(gm_state._frames(screen))
+            press("steal", f"{by} rel {rel[0]},{rel[1]} sp {sp0}")
+            time.sleep(0.12)
+            click_at(u, v, "steal")
+            counts["steal_try"] += 1
+            t_c = time.monotonic()
+            sp1, cast = sp0, False
+            while time.monotonic() - t_c < STEAL_CAST_MAX_S:
+                time.sleep(STEAL_POLL_S)
+                sp1_ = sp_now(frame())
+                if sp1_ is not None:
+                    sp1 = sp1_
+                if steal_cast(sp0, sp1):
+                    cast = True
+                    break
                 if guard_tick():
                     break
-                w0 = gm_state._weight(gm_state._frames(screen))
-                press("steal", f"{word} try {k}")
-                time.sleep(0.12)
-                click_at(u, v, "steal")
-                time.sleep(STEAL_WAIT_S)
-                w1 = gm_state._weight(gm_state._frames(screen))
-                got = stolen(w0, w1)
-                ev({"kind": "steal", "try": k, "species": word,
-                    "cell": None if cell_ is None else list(cell_), "w0": w0, "w1": w1,
-                    "ok": got})  # fmt: skip
+            cast_s = round(time.monotonic() - t_c, 2)
+            got = None
+            if cast:
+                time.sleep(STEAL_SETTLE_S)
+                got = stolen(w0, gm_state._weight(gm_state._frames(screen)))
+                counts["steal_cast"] += 1
                 if got:
                     counts["steal_ok"] += 1
-                    break
-            else:
-                counts["steal_gave_up"] += 1
             steal_done.append((cell_ if cell_ is not None else (-999, -999), time.monotonic()))
+            found = None
+            if cast and not escaped[0]:
+                found = scan("defend", steal_ring_order(rel), "sword")
+            ev({"kind": "steal", "by": by, "rel": list(rel),
+                "cell": None if cell_ is None else list(cell_), "sp0": sp0, "sp1": sp1,
+                "cast": cast, "cast_s": cast_s, "w0": w0,
+                "ok": got, "found": None if found is None else list(found[0])})  # fmt: skip
+            if found is None:
+                return None
+            c_, uv_, _res = found
+            return c_, (float(uv_[0]), float(uv_[1]))
 
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
             """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow --
             dungeon@4 (decision 5): or until OUR first damage line in the Battle Log; the HP is
-            read between the clicks (guard_tick). dungeon@6: the name tag read + banked first;
-            with --steal, Batt's steal-first on STEAL_SPECIES."""
+            read between the clicks (guard_tick). dungeon@6: the name tag read + banked first.
+            dungeon@7: with --steal, ONE Steal first on every monster while the SP pays for it
+            (Batt ~16:0x); the strike then goes to where the target stands beside us."""
             ref = frame()
-            if bank or a.steal:
-                word = read_tag(ref, rel, u, v, r.ns(), by)
-                if word is None and a.steal:
-                    time.sleep(TAG_WAIT_S)
-                    word = read_tag(frame(), rel, u, v, r.ns(), by + "+")
+            if bank:
+                read_tag(ref, rel, u, v, r.ns(), by)
+            if a.steal and by != "plant":
                 cell_ = None if here is None else (here[0] + rel[0], here[1] + rel[1])
-                if a.steal:
-                    ev({"kind": "tag", "word": word, "rel": list(rel), "by": by})
-                if (a.steal and word is not None and steal_species(word)
-                        and steal_forgotten(steal_done, cell_, time.monotonic())):  # fmt: skip
-                    do_steal(u, v, word, cell_)
+                sp0 = sp_now(ref)
+                if not steal_forgotten(steal_done, cell_, time.monotonic()):
+                    counts["steal_skip_done"] += 1
+                elif not steal_ready(sp0, conf["max_sp"]):
+                    counts["steal_skip_sp"] += 1
+                    ev({"kind": "steal_skip", "why": "sp", "sp": sp0, "by": by})
+                else:
+                    assert sp0 is not None
+                    moved = do_steal(u, v, rel, cell_, sp0, by)
                     if escaped[0]:
                         return True
+                    if moved is None:
+                        return True  # the fight loop's own scan finds the target (lock timeout)
+                    rel, (u, v) = moved
                     ref = frame()
             t_click = r.ns()
             with blt.lock:
@@ -2095,7 +2174,7 @@ def main() -> int:
         "--steal",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="dungeon@6: Batt's steal-first on STEAL_SPECIES (needs the map's tags)",
+        help="dungeon@7: Batt's steal-first, ONE Steal on every monster while the SP pays for it",
     )
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "

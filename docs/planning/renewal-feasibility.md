@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "The lab's rAthena (pinned e985006) and its 2021-11-03 kRO client can run in RENEWAL mode, with the third classes, by a server rebuild alone: the same exe, the same client data and no Windows change; and a separate renewal server beside the pre-renewal one (one at a time, as rathena-th was) can be stood up without putting the pre-renewal work, its data or its rollback at risk."
-status: "PROPOSED 2026-10-24 12:14 ICT (offline study only: no build, no docker, no client input, no live query; the server facts are read from the pinned tree, the client facts from the repo's records and one read-only table listing of the Thai GRF). Batt decides: whether to migrate, option A or B (section 7), and the community server's facts (section 4)."
+status: "PARKED by Batt 2026-10-24 ~16:0x ICT ('park it; use ours as before'). It was PROPOSED 2026-10-24 12:14 ICT (offline study only: no build, no docker, no client input, no live query; the server facts are read from the pinned tree, the client facts from the repo's records and one read-only table listing of the Thai GRF). Batt decides: whether to migrate, option A or B (section 7), and the community server's facts (section 4)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [thief-payon.md, payf07-prep.md, crusader-build.md, ../thai-data-experiment.md, ../client/rathena-client.md, ../environments/community-server.md, ../adr/0006-sanctioned-test-environments.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Batt: (1) the community server's mode, episode, job set and client date (section 4: without them 'our data matches the group's' cannot be checked); (2) migrate or not, and option A (a second renewal rAthena, recommended) or B (switch in place); (3) a build window; (4) the renewal Thief's base level and map (section 6). Nothing is built before his go."
+next_action: "PARKED (Batt ~16:0x): nothing to do until he reopens it. When reopened: Batt: (1) the community server's mode, episode, job set and client date (section 4: without them 'our data matches the group's' cannot be checked); (2) migrate or not, and option A (a second renewal rAthena, recommended) or B (switch in place); (3) a build window; (4) the renewal Thief's base level and map (section 6). Nothing is built before his go."
 title: "Renewal (third classes) for the lab: server, client, community server, code impact, the map question, and a migration plan"
 date: 2026-10-24
 owner: Batt

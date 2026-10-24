@@ -414,6 +414,45 @@ def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
     return {str(k): dict(v) for k, v in sorted(by.items())}
 
 
+STEAL_TARGET_S = 15.0  # dungeon@7: the robbed monster = the one our next attack hits within this
+
+
+def steal_by_species(packets: Sequence[Mapping[str, Any]], steal_falls: Sequence[int], aid: int
+                     ) -> dict[str, dict[str, int]]:  # fmt: skip
+    """PURE (dungeon@7, a Steal on every monster): per Steal (an SP fall of STEAL_SP), the robbed
+    monster's name = the target of OUR next attack act within STEAL_TARGET_S (the runner strikes
+    the same monster right after its Steal; its name from the entity_appear packets), and whether
+    an item came in within STEAL_S with no pickup request of ours just before it."""
+    names: dict[int, str] = {}
+    acts: list[tuple[int, int]] = []
+    gains: list[int] = []
+    reqs = sorted(_t(e) for e in packets if e.get("type") == "pickup_request")
+    for e in sorted(packets, key=_t):
+        ty = e.get("type")
+        if ty == "entity_appear" and e.get("name"):
+            names[int(e.get("gid") or 0)] = str(e["name"])
+        elif (ty == "act" and e.get("src_gid") == aid and e.get("target_gid") != aid
+              and e.get("action") in (0, 8, 10)):  # fmt: skip
+            acts.append((_t(e), int(e.get("target_gid") or 0)))
+        elif ty == "pickup_result" and e.get("ok"):
+            t = _t(e)
+            i = bisect.bisect_right(reqs, t)
+            if not (i and t - reqs[i - 1] <= PICK_S * NS):
+                gains.append(t)
+    out: dict[str, dict[str, int]] = defaultdict(lambda: {"tries": 0, "stolen": 0})
+    act_t = [t for t, _g in acts]
+    for f in sorted(steal_falls):
+        k = bisect.bisect_left(act_t, f)
+        name = "unknown"
+        if k < len(acts) and acts[k][0] - f <= STEAL_TARGET_S * NS:
+            name = names.get(acts[k][1], "unknown")
+        g = bisect.bisect_right(gains, f)
+        ok = g < len(gains) and gains[g] - f <= STEAL_S * NS
+        out[name]["tries"] += 1
+        out[name]["stolen"] += int(ok)
+    return {k: dict(v) for k, v in sorted(out.items())}
+
+
 def items_rows(gains: Mapping[str, Mapping[str, int]], hours: float,
                names: Mapping[str, str] | None = None) -> list[dict[str, Any]]:  # fmt: skip
     """PURE: the per-item table (picked / stolen / other, total and per hour), the target items
@@ -538,8 +577,11 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "steal": {"tries_packets": len(st_falls), "stolen": n_stolen,
                   "per_try": round(n_stolen / len(st_falls), 4) if st_falls else None,
                   "runner_tries": len(steal_ev),
+                  "runner_cast": sum(1 for e in steal_ev if e.get("cast")),
                   "runner_ok": sum(1 for e in steal_ev if e.get("ok")),
-                  "by_species": dict(Counter(str(e.get("species")) for e in steal_ev))},
+                  "runner_found": sum(1 for e in steal_ev if e.get("found") is not None),
+                  "skipped_sp": sum(1 for e in ev if e.get("kind") == "steal_skip"),
+                  "by_species": steal_by_species(packets, st_falls, aid)},
         "loot": {"definition": "loot_complete: picked / dropped by ALL our kills (packets); net "
                  "leaves a looter's re-drop of our own item out of the dropped",
                  **{k: ls[k] for k in ("kills", "items", "picked", "out_of_sight", "looter",

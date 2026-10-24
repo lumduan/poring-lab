@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A Thief (Base 50 / Job 40, AGI 62 / DEX 40, Damascus + NPC gear) hunting a Payon field by the dungeon runner's walk-and-hit, with Steal Lv 10 tried first on Elder Willow / Bigfoot, yields measurable counts of the high-value items (Dead Branch, Rough Elunium, Rough Oridecon, Honey) per hour, safely (deaths and hard bars counted)."
-status: "4.03 RESULT 2026-10-24 ~14:0x (demonstrations 4.03): the Thief (+8 Damascus) on pay_fild07, 55 kills in 1.33 h (41.3 / h), deaths 0, sitting 33 % (Elder Willow magic), net -3,513 z / h at NPC prices, no target item yet; hover name tags do not read on this map. 4.04 (Steal first) waits for Batt: steal after the first hit names the target (Battle Log)?"
+status: "4.04 PRE-REGISTERED 2026-10-24 (demonstrations 4.04): Batt ~16:0x chose a Steal on EVERY monster first (SP permitting, dungeon@7), Elder Willow kept with rests, many runs; Renewal PARKED. 4.03 RESULT ~14:0x: 41.3 kills / h, deaths 0, sitting 33 %, net -3,513 z / h, no target item yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [crusader-orcsdun01.md, item-class.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/crusader.py]
-next_action: "Batt: (1) 4.04 species source (Battle Log after the first hit vs hover tags); (2) the sustain (Elder Willow magic: MDEF gear / skip Elder Willow / more potions); (3) Renewal (renewal-feasibility.md option A)."
+next_action: "4.04 runs (6 x 40 min + a second block); the target-item recognition study for pickup accuracy (Batt ~16:0x)."
 title: "A Thief (then Rogue) for economics on a Payon field: the decisions, the facts, the build and the plan"
 date: 2026-10-24
 owner: Batt
@@ -163,6 +163,39 @@ through data/kb). The spawn tables:
 - The status window: ATK 131 + 40; the rest unchanged. Pre-re adds the refine bonus after DEF, so
   that is ~+40 per hit against anything.
 
+### 4b3. The status window vs Batt's sample (Batt 2026-10-24 ~16:0x: "make ATK, Flee and Hit close to the sample")
+
+Our window: ATK 131 + 40, HIT 92, FLEE 146 + 1. The sample's: ATK 27 + 158, HIT 271, FLEE 249 + 1.
+The gap is the SERVER MODE's formulas, not the build. The pinned source (e985006), read
+2026-10-24 ~16:2x:
+
+| | pre-renewal (ours) | renewal (the sample's server) |
+|---|---|---|
+| a player's HIT (status.cpp status_calc_misc) | Base Lv + DEX | Base Lv + DEX + LUK / 3 **+ 175** |
+| a player's FLEE | Base Lv + AGI | Base Lv + AGI + LUK / 5 **+ 100** |
+| a monster's HIT / FLEE | Lv + DEX / Lv + AGI | Lv + DEX **+ 150** / Lv + AGI **+ 100** |
+| hit chance (battle.cpp is_attack_hitting) | **80** + HIT - FLEE | **0** + HIT - FLEE |
+| caps (conf/battle/battle.conf) | min_hitrate 5, max_hitrate 100 | the same |
+
+- The renewal constants are added to BOTH sides and cancel in the chance. Our attacks: 80 + 92 -
+  (Lv + AGI) is over 100 against every pay_fild07 monster (Elder Willow 40, Eggyra 60, Bigfoot
+  50), so it is capped at 100 %. Their attacks: 80 + (Lv + DEX) - 146 is under 5 for all of them,
+  so it is floored at 5 %.
+- **Measured (t1b + t2 packets):**
+  - our attacks hit 455 of 457 (99.6 %);
+  - the monsters' attacks hit us 39 of 629 (6.2 %).
+  - A bigger window number cannot do better than these caps. Elder Willow's MAGIC ignores flee in
+    both modes.
+- No pre-renewal stat or NPC gear shows HIT 271: DEX 99 at Base 50 shows 149.
+- **ATK:** the pre-renewal window shows Damascus 118 + STR / DEX / LUK 13 = 131, + 40 for the
+  refine. It does NOT show the OVER-REFINE bonus:
+  - refine.yml (pre-re, weapon level 3): RandomBonus 2400 at +8, so overrefine = 24;
+  - battle.cpp battle_add_weapon_damage adds rnd() % 24 + 1 to every hit's base damage, a mean
+    of +12.5.
+  - Effective ATK = 171 + 12.5 = ~183.5 against the sample's 185.
+- **So nothing was changed.** The 7 unspent status points stay unspent: the sample keeps STR at
+  1 too. Raising STR 1 -> 4 (6 points) would add +3 ATK, if Batt wants it.
+
 ### 4c. The economics model (econ_model.py build, NPC prices only; rares out)
 
 | map | V z / kill | aggressive share | note |
@@ -177,6 +210,8 @@ V counts NPC sell prices only. The four target items are worth far more in a pla
 counted per hour apart (dungeon_judge.py items).
 
 ### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
+
+**➡️ PARKED by Batt 2026-10-24 ~16:0x: "park it; use ours as before".** The study below stays as written.
 
 A PROPOSED study is in [renewal-feasibility.md](renewal-feasibility.md):
 - the server is a rebuild with `PRERE=no`; the same client exe and data, no Windows change;
