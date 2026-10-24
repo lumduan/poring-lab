@@ -1,0 +1,8 @@
+{
+ "scheme": "v2orc-payf07",
+ "source": "docs/planning/payf07-detector.md section 7 (PROPOSED 2026-10-24 18:25:24, Batt's default): classes-v2orc.json's ids 0-14 unchanged + pay_fild07's six species appended (Green Plant 1080: its condition held, 116 kept labels in T2's pool and T2 passed, 10m / 11a)",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR); 15 Elder Willow 1033, 16 Willow 1010, 17 Eggyra 1116, 18 Bigfoot 1060, 19 Poporing 1031, 20 Green Plant 1080",
+ "fixed": {"player": 0, "npc": 1, "warp": 2},
+ "monster_first_id": 3,
+ "monsters": [1002, 1063, 1008, 1113, 1018, 1005, 1042, 1082, 1084, 1111, 1152, 1153, 1033, 1010, 1116, 1060, 1031, 1080]
+}

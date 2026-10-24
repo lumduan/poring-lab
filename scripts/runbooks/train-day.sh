@@ -28,7 +28,8 @@
 # - MID_CKPT=1 (Batt 2026-10-08; v1 onwards, once docs/operations/mid-epoch-checkpoints.md's proof
 #   PASSED): `--mid-ckpt`, so an abort loses at most ~5 min (weights/mid.pt), not the epoch, and
 #   the resume is exact. A run keeps the mode it started with (train.py refuses a mixed resume).
-#   [RESUME=1] [MID_CKPT=1] [INIT_WEIGHTS=/data/train/RUN0/weights/last.pt] [DUTY_START=4] [DUTY_MIN=0] \
+#   [RESUME=1] [MID_CKPT=1] [INIT_WEIGHTS=/data/train/RUN0/weights/last.pt] [HSV_S=0.2] [CLOSE_MOSAIC=3] \
+#     [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
 # - MARKET-OPEN WINDOWS (Batt 2026-10-09): no attempt starts or auto-resumes between 09:30-10:15 or
 #   14:00-14:45 ICT (CLAUDE.md rule 5; two IO aborts that day came from auto-resumes at 14:12 and
@@ -88,6 +89,18 @@ mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"
 # --weights; container path), e.g. a finished run's last.pt. Never passed with --resume, which
 # continues from the run's own checkpoint.
 init=""; [ -n "${INIT_WEIGHTS:-}" ] && init=" --weights $INIT_WEIGHTS"
+# HSV_S / CLOSE_MOSAIC (2026-10-24, docs/planning/payf07-detector.md 12f): a NEW run's ultralytics
+# hsv_s and close_mosaic (train.py --hsv-s / --close-mosaic), numbers only. Unset: ultralytics'
+# defaults (0.7 / 10), as every run before. Never with --resume: a run keeps its checkpoint's own.
+hyp=""
+if [ -n "${HSV_S:-}" ]; then
+  [[ "$HSV_S" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] || { log "TRAIN STOPPED: HSV_S=$HSV_S is not a number in 0..1"; exit 2; }
+  hyp="$hyp --hsv-s $HSV_S"
+fi
+if [ -n "${CLOSE_MOSAIC:-}" ]; then
+  [[ "$CLOSE_MOSAIC" =~ ^[0-9]+$ ]] || { log "TRAIN STOPPED: CLOSE_MOSAIC=$CLOSE_MOSAIC is not a count"; exit 2; }
+  hyp="$hyp --close-mosaic $CLOSE_MOSAIC"
+fi
 trips=0; attempt=0; status=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
@@ -98,7 +111,7 @@ while :; do
   fi
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
-  w="$init"; [ "$extra" = "--resume" ] && w=""
+  w="$init$hyp"; [ "$extra" = "--resume" ] && w=""
   $GUARD --sustain 30 --spike 25 \
     "$KIND:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid$w $extra" \
     > "$out" 2>&1

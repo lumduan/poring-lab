@@ -115,6 +115,17 @@ def step_sleeper(ms: int, duty_file: Path | None = None, report_every: int = DUT
     return sleep
 
 
+def hyp_overrides(a: argparse.Namespace) -> dict[str, float]:
+    """Opt-in augmentation overrides for a NEW run (docs/planning/payf07-detector.md 12f): only
+    ``--hsv-s``, the saturation gain (Elder Willow and Willow differ by saturation only, section 7).
+    Absent: ultralytics' default (0.7), as every run before."""
+    if a.hsv_s is None:
+        return {}
+    if not 0.0 <= a.hsv_s <= 1.0:
+        raise SystemExit(f"--hsv-s {a.hsv_s}: 0..1")
+    return {"hsv_s": float(a.hsv_s)}
+
+
 def label_dicts(samples: list[Sample], h: int = 720, w: int = 1280) -> list[dict[str, Any]]:
     """Ultralytics' label records (dataset.py: im_file, shape, cls, bboxes, ...) for our samples."""
     out = []
@@ -154,6 +165,8 @@ def main() -> int:  # noqa: PLR0915
     ap.add_argument("--mid-every-s", type=float, default=300.0)
     ap.add_argument("--close-mosaic", type=int, default=None,
                     help="ultralytics' close_mosaic (default 10); the proof uses 1")  # fmt: skip
+    ap.add_argument("--hsv-s", type=float, default=None,
+                    help="ultralytics' hsv_s (default 0.7); payf07 12f proposes 0.2")  # fmt: skip
     ap.add_argument("--trace", type=Path, default=None,
                     help="--mid-ckpt: one JSON line per batch (the resume proof)")  # fmt: skip
     ap.add_argument("--die-after-batches", type=int, default=None,
@@ -256,6 +269,7 @@ def main() -> int:  # noqa: PLR0915
     }  # fmt: skip
     if a.close_mosaic is not None:
         overrides["close_mosaic"] = a.close_mosaic
+    overrides.update(hyp_overrides(a))
     if a.resume:
         from poring_vision.midckpt import effective_workers
 

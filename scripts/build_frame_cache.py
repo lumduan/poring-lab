@@ -126,6 +126,40 @@ orcsdun01 blocks with v2 + the fix):
 WARP-AND-WATCH sessions (scripts/warp_watch.py, JPEG tar shards; qa_export.is_warp_watch): every
 ``--every-jpeg``-th frame (5 Hz recordings; default 3, ~1.7 fps, near v1's ~2 fps), their labels in
 the recorded UI layout's rectangles. orcsdun01 is a scene map of v0 / v1 too.
+
+MAP LABELS: recorder sessions labelled by scripts/map_labels.py (docs/planning/payf07-detector.md
+11 / 12, the rule "payf07-o3h-all"):
+
+    build_frame_cache.py --labels map --classes species --class-list LIST --kb DIR
+                         --map-params PARAMS --map-params-sha256 HEX --map-labels FILE [FILE ...]
+                         [--own-c1 CHECK [CHECK ...]] [--link-cache ID] [--dry-run]
+                         --train S [S ...] --cache-id ID --image png
+
+- the label files are ``map_labels.py labels`` outputs (one per part; the kept FITTED boxes per
+  candidate frame, no pixels). They and the frozen PARAMS must agree (labels, map, FROZEN, the
+  sha256); no part may share a frame with the map's TEST parts, and the staged session trains on
+  its FIT spots only;
+- a frame is written only WHOLE: no excluded monster label (2b / 2c / engaged / o3h / unfit /
+  crowd / ui), no frame exclusion (4g: warp_in_view, other_player, unchecked_species; the
+  label pass's ui_layout_mismatch / no_scene), NO kept label clear of the models whose fit is
+  below the frozen T_h (11's ``weak_fit``), no monster of a species outside --class-list, our
+  own character alive (labels v2's ``self_dead``) and placed (``self_unknown``);
+- its YOLO lines: our own character as ``player`` (labels v2's self box: v0's 34 x 74 at the
+  camera target, as v2 / v2orc) + every kept monster box at its species' class id;
+- the join rule 3c: a session other than the staged one needs its OWN C1 (``map_labels.py
+  check``'s per-part ``own_c1``) = ADDED under the same frozen PARAMS (--own-c1); a real build
+  refuses it otherwise, a dry run reports it (``join_rule_3c``);
+- TRAIN only (3b / 3c): a labelled session in --val or --test is refused;
+- the image: the session's PNG frame (one seek), decoded, re-encoded as --image says;
+- ``--link-cache ID``: every session of the finished cache ``<out>/ID`` joins this one BY
+  REFERENCE, in its own split (its manifest rows with shard paths ``../ID/<shard>``; nothing is
+  copied or re-labelled). Its class names must equal this list's for the same ids (a list that
+  only APPENDS classes, e.g. classes-v2orc-payf07.json after v2orc) and its recorded shard sizes
+  must hold on the NAS. poring_vision.shards reads ``<cache>/<shard path>``, so the trainer
+  reads the linked frames unchanged. The linked cache must then stay where it is;
+- ``--dry-run``: the label files and the packets only (no image, no directory): per session the
+  frames considered, written, excluded by reason, boxes per class id, and the estimated shards and
+  bytes (from the recorded PNG sizes); the linked cache's frames and boxes per class id beside.
 """
 
 from __future__ import annotations
@@ -134,6 +168,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import sys
 import tarfile
 import time
@@ -265,7 +300,8 @@ class ShardSink:
 
 
 RESUME_KEYS = ("labels", "k", "every", "every_png", "max_per_session", "shard_mb", "image",
-               "quality", "split", "every_demo", "every_jpeg", "v2")  # fmt: skip
+               "quality", "split", "every_demo", "every_jpeg", "v2", "map_labels",
+               "link")  # fmt: skip
 
 
 def write_json(directory: Path, name: str, doc: Any) -> None:
@@ -1158,13 +1194,371 @@ def item_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | N
     return row
 
 
+# --- MAP LABELS: recorder sessions labelled by scripts/map_labels.py (payf07-detector.md 11, 12) -
+
+MAP_RULE = "payf07-o3h-all"  # 11: the frozen params + the weak_fit floor (T_h on EVERY label)
+TAR_HEADER = 1024  # ShardSink's per-member allowance (its rotation rule)
+JOIN_ADDED = "ADDED"  # map_labels.own_c1_verdict's pass
+
+
+def map_frame(f: dict[str, Any], floor: float, index: dict[int, int]
+              ) -> tuple[list[tuple[int, int, list[float]]], list[str]]:  # fmt: skip
+    """PURE ("payf07-o3h-all", payf07-detector.md 11): one frame of a map_labels.py label file ->
+    (its monster boxes as (class id, mob, box), or the reasons it is not written). A frame is
+    written only whole: no excluded monster label, no frame exclusion (4g), no kept label NOT
+    under a model whose fit is below ``floor`` (``weak_fit``), no species without a class."""
+    if "kept" not in f:  # the label pass's own drop (ui_layout_mismatch, no_scene)
+        return [], list(dict.fromkeys(f.get("excluded_frame") or ["unlabelled"]))
+    whole = not f["excluded"] and not f["excluded_frame"]
+    if bool(f.get("whole")) != whole:
+        raise SystemExit(f"frame {f.get('frame_id')}: 'whole' contradicts its exclusions")
+    reasons = [f"{why}:{mob}" for _gid, mob, why in f["excluded"]] + list(f["excluded_frame"])
+    for k in f["kept"]:
+        ncc = k.get("ncc")
+        if not k.get("under") and (ncc is None or float(ncc) < floor):
+            reasons.append(f"weak_fit:{k['mob']}")
+    mobs = {int(k["mob"]) for k in f["kept"]} | {int(x[1]) for x in f["excluded"]}
+    reasons += [f"species_unlisted:{m}" for m in sorted(mobs) if m not in index]
+    if reasons:
+        return [], list(dict.fromkeys(reasons))
+    return [(index[int(k["mob"])], int(k["mob"]), [float(v) for v in k["box"]])
+            for k in f["kept"]], []  # fmt: skip
+
+
+def shard_count(member_sizes: Sequence[int], max_bytes: int) -> int:
+    """PURE: how many shards ShardSink opens for one session's frames (``member_sizes``: each
+    frame's member bytes + their headers), by its own rotation rule."""
+    n, size = 0, 0
+    for s in member_sizes:
+        if n == 0 or size >= max_bytes:
+            n, size = n + 1, 0
+        size += s
+    return n
+
+
+def join_verdict(sid: str, staged: str, own: dict[str, str]) -> str:
+    """3c: the staged session's FIT spots train when the tier passes; any other session needs its
+    own C1 ADDED (``own``: session id -> its check's verdict)."""
+    return "STAGED_FIT" if sid == staged else own.get(sid, "MISSING")
+
+
+@dataclass(frozen=True)
+class MapLabelInputs:
+    """``--labels map``: the frozen parameters, the label files per session, the join-rule checks
+    (validated once; recorded in the progress file and the manifest)."""
+
+    spec: Any  # map_labels.MapSpec
+    params: dict[str, Any]
+    floor: float
+    docs: dict[str, list[dict[str, Any]]]
+    own: dict[str, str]
+    provenance: dict[str, Any]
+
+    @classmethod
+    def from_args(cls, a: argparse.Namespace) -> MapLabelInputs:
+        import map_labels as ml
+
+        if a.map_params is None or a.map_params_sha256 is None or not a.map_labels:
+            raise SystemExit("--labels map needs --map-params, --map-params-sha256 and "
+                             "--map-labels FILE ...")  # fmt: skip
+        sha = sha256_of(a.map_params)
+        if sha != a.map_params_sha256:
+            raise SystemExit(f"{a.map_params}: sha256 {sha}, not the frozen {a.map_params_sha256}")
+        head = json.loads(a.map_params.read_text())
+        spec = ml.MAPS.get(str(head.get("map")))
+        if spec is None:
+            raise SystemExit(f"{a.map_params}: map {head.get('map')!r} has no map_labels spec")
+        params = ml.load_params(a.map_params, spec)
+        if params.get("status") != "FROZEN":
+            raise SystemExit(f"{a.map_params}: {params.get('status')}: FROZEN parameters only")
+        docs: dict[str, list[dict[str, Any]]] = {}
+        files = []
+        for p in a.map_labels:
+            doc = json.loads(p.read_text())
+            if doc.get("labels") != ml.LABELS or doc.get("map") != spec.name:
+                raise SystemExit(f"{p}: not {ml.LABELS} labels of {spec.name}")
+            if doc.get("params_sha256") != sha or doc.get("params_status") != "FROZEN":
+                raise SystemExit(f"{p}: labelled with other parameters than {a.map_params}")
+            sid, spots = str(doc["session"]), ml.parse_part(str(doc["part"]))[1]
+            if ml.overlaps_role(sid, spots, spec.test):
+                raise SystemExit(f"{p}: {doc['part']} shares frames with TEST (3b): never cached")
+            if sid == spec.staged and not ml.inside_role(sid, spots, spec.fit):
+                raise SystemExit(f"{p}: the staged session trains on its FIT spots only (3c)")
+            docs.setdefault(sid, []).append(doc)
+            files.append({"file": str(p), "sha256": sha256_of(p), "part": doc["part"],
+                          "frames": len(doc["frames"]), "labelled_at": doc.get("labelled_at"),
+                          "commit": doc.get("commit")})  # fmt: skip
+        own: dict[str, str] = {}
+        checks = []
+        for p in a.own_c1 or ():
+            doc = json.loads(p.read_text())
+            if doc.get("params_sha256") != sha:
+                raise SystemExit(f"{p}: checked with other parameters than {a.map_params}")
+            for name, row in (doc.get("per_part") or {}).items():
+                psid, spots = ml.parse_part(str(name))
+                if spots is None:  # 3c: a session's OWN C1 is the whole session's
+                    own[str(psid)] = str(row.get("own_c1"))
+            checks.append({"file": str(p), "sha256": sha256_of(p),
+                           "parts": sorted(doc.get("per_part") or {})})  # fmt: skip
+        prov = {"rule": MAP_RULE, "plan": "docs/planning/payf07-detector.md 11 / 12",
+                "map": spec.name, "params": str(a.map_params), "params_sha256": sha,
+                "offset_ms": float(params["offset_ms"]),
+                "weak_fit_floor": float(params["o3h_tau"]), "label_files": files,
+                "own_c1_checks": checks, "own_c1": dict(sorted(own.items())),
+                "self_box": "labels_v2.self_label: v0's player box at the camera target",
+                }  # fmt: skip
+        return cls(spec, params, float(params["o3h_tau"]), docs, own, prov)
+
+    def frames(self, sid: str) -> list[dict[str, Any]]:
+        """Every labelled frame of a session over its label files, in frame order (a frame in two
+        files is refused)."""
+        out: dict[int, dict[str, Any]] = {}
+        for doc in self.docs.get(sid, []):
+            for f in doc["frames"]:
+                fid = int(f["frame_id"])
+                if fid in out:
+                    raise SystemExit(f"{sid}: frame {fid} is in two label files")
+                out[fid] = f
+        return [out[k] for k in sorted(out)]
+
+
+@dataclass
+class MapTally:
+    """Counts only (ids, never names)."""
+
+    seen: int = 0
+    kept: int = 0
+    excluded: Counter[str] = field(default_factory=Counter)  # reason head -> frames
+    excluded_detail: Counter[str] = field(default_factory=Counter)  # reason -> frames
+    boxes: Counter[int] = field(default_factory=Counter)  # class id -> boxes
+    frames: Counter[int] = field(default_factory=Counter)  # class id -> frames holding one
+    source_bytes: int = 0  # the kept frames' recorded PNG bytes
+    member_sizes: list[int] = field(default_factory=list)
+
+    def exclude(self, reasons: Sequence[str]) -> None:
+        for r in {r.split(":", 1)[0] for r in reasons}:
+            self.excluded[r] += 1
+        self.excluded_detail.update(dict.fromkeys(reasons, 1))
+
+    def as_dict(self, max_bytes: int) -> dict[str, Any]:
+        est = sum(self.member_sizes)
+        return {"seen": self.seen, "kept": self.kept, "excluded_frames": self.seen - self.kept,
+                "excluded": _keyed(self.excluded), "excluded_detail": _keyed(self.excluded_detail),
+                "boxes_by_class_id": {str(k): v for k, v in sorted(self.boxes.items())},
+                "frames_by_class_id": {str(k): v for k, v in sorted(self.frames.items())},
+                "boxes": sum(self.boxes.values()), "source_png_bytes": self.source_bytes,
+                "est_bytes": est,
+                "est_shards": shard_count(self.member_sizes, max_bytes)}  # fmt: skip
+
+
+def own_aid(lab: Any) -> int | None:
+    """Our character's id (labels v2's Session: the Timeline's, else the login packet's)."""
+    aid = lab.timeline.inferred_aid
+    if aid is None:
+        aid = next((int(e["aid"]) for e in lab.timeline.events
+                    if e.get("type") == "login_accepted"), None)  # fmt: skip
+    return None if aid is None else int(aid)
+
+
+def self_box(lab: Any, spec: Any, tw: int, dead: Sequence[tuple[int, int]]
+             ) -> tuple[tuple[float, float, float, float] | None, str | None]:  # fmt: skip
+    """Our own character's ``player`` box at timeline time ``tw`` (labels_v2.self_label, the same
+    camera as map_labels' scene), or why there is none (``self_dead`` / ``self_unknown``)."""
+    import orc_camera_check as occ
+
+    if any(a <= tw <= b for a, b in dead):
+        return None, "self_dead"
+    world = lab.timeline.frame_world(tw)
+    if world.self_pos is None or not world.map or map_key(world.map) != spec.name:
+        return None, "self_unknown"
+    me = lv.self_label(world, occ.scene_for(lab, world.map, world.self_pos))
+    return (None, "self_unknown") if me is None else (me.box, None)
+
+
+def map_session(
+    sid: str, part: str, a: argparse.Namespace, sink: ShardSink | None, classes: SpeciesClasses,
+    mli: MapLabelInputs, lab: Any = None,
+) -> dict[str, Any]:  # fmt: skip
+    """One labelled recorder session: its label files' frames through map_frame, our own box,
+    (with a sink) the PNG frame re-encoded and written; ``sink=None``: the dry run (packets and
+    label files only). ``lab``: the session's label stack (map_labels.session_labeler)."""
+    import map_labels as ml
+
+    if part != "train":
+        raise SystemExit(f"{sid}: labelled map sessions are TRAIN data only (3b / 3c)")
+    path = dataset_session(sid, a)
+    manifest = json.loads((path / "manifest.json").read_text())
+    ml.check_recording(manifest)
+    if qa_export.session_id(manifest) != sid:
+        raise SystemExit(f"{path}: its manifest names {qa_export.session_id(manifest)}")
+    if lab is None:
+        lab = ml.session_labeler(path, mli.spec)
+    if tuple(lab.size) != V2_SIZE:
+        raise SystemExit(f"{sid}: game region {lab.size}, the boxes are {V2_SIZE}")
+    dead = lv.self_dead_spans(lab.timeline.events, own_aid(lab))
+    off = int(float(mli.params["offset_ms"]) * 1e6)
+    index, player = classes.index, classes.fixed["player"]
+    tally = MapTally()
+    row: dict[str, Any] = {"split": part, "path": str(path), "format": "png", "labels": MAP_RULE,
+                           "join_rule_3c": join_verdict(sid, mli.spec.staged, mli.own),
+                           "shards": []}  # fmt: skip
+    w, h = V2_SIZE
+    for f in mli.frames(sid):
+        tally.seen += 1
+        monsters, reasons = map_frame(f, mli.floor, index)
+        box = None
+        if not reasons:
+            box, why = self_box(lab, mli.spec, int(f["t"]) - off, dead)
+            reasons = [why] if why else []
+        if reasons:
+            tally.exclude(reasons)
+            continue
+        assert box is not None
+        dicts = [{"x1": box[0], "y1": box[1], "x2": box[2], "y2": box[3]}]
+        dicts += [{"x1": b[0], "y1": b[1], "x2": b[2], "y2": b[3]} for _c, _m, b in monsters]
+        ids = [player] + [c for c, _m, _b in monsters]
+        text = yolo_lines(dicts, w, h, ids)
+        fid = int(f["frame_id"])
+        info = {
+            "session": sid,
+            "frame_id": fid,
+            "t_mono_ns": int(f["t"]),
+            "map": mli.spec.name,
+            "labels": MAP_RULE,
+            "spot": f.get("spot"),
+            "boxes": [[player, None, "self"]] + [[c, m, "fit"] for c, m, _b in monsters],
+        }
+        meta = json.dumps(info).encode()
+        tally.kept += 1
+        tally.source_bytes += int(f["size"])
+        tally.member_sizes.append(int(f["size"]) + len(text) + len(meta) + 3 * TAR_HEADER)
+        tally.boxes.update(ids)
+        tally.frames.update(set(ids))
+        if sink is not None:
+            img = ml.read_png(qa_export.JpegRef(fid, int(f["t"]), path / str(f["shard"]),
+                                                int(f["offset"]), int(f["size"])))  # fmt: skip
+            if img.shape[:2] != (h, w):
+                raise SystemExit(f"{sid}: frame {fid} is {img.shape[1]}x{img.shape[0]}, the "
+                                 f"labels are {w}x{h}")  # fmt: skip
+            image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
+                     if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
+            shard = sink.add(f"{sid}.{fid:09d}", {**image, "txt": text.encode(), "json": meta})
+            if shard not in row["shards"]:
+                row["shards"].append(shard)
+        if a.max_per_session and tally.kept >= a.max_per_session:
+            break
+    row.update(tally.as_dict(a.shard_mb << 20))
+    return row
+
+
+def linked_cache(out: Path, cache_id: str, names: dict[int, str]
+                 ) -> tuple[dict[str, list[str]], dict[str, Any], dict[str, Any]]:  # fmt: skip
+    """``--link-cache``: the finished cache ``<out>/<cache_id>``'s split and session rows, their
+    shard paths made relative to a sibling cache (``../<cache_id>/<shard>``); refused when its
+    class names differ from ``names`` for any id it has, or a recorded shard's size differs on
+    the NAS (stat only: nothing is read or copied)."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", cache_id):
+        raise SystemExit(f"--link-cache {cache_id!r}: a cache id (a sibling directory)")
+    d = out / cache_id
+    mpath = d / "manifest.json"
+    if not mpath.exists():
+        raise SystemExit(f"--link-cache: {mpath} not found (a finished cache only)")
+    m = json.loads(mpath.read_text())
+    theirs = {int(k): str(v) for k, v in m["names"].items()}
+    wrong = {k: (v, names.get(k)) for k, v in theirs.items() if names.get(k) != v}
+    if wrong:
+        raise SystemExit(f"--link-cache {cache_id}: its class names differ for ids {wrong}")
+    for name, info in m["shards"].items():
+        size = (d / name).stat().st_size if (d / name).exists() else -1
+        if size != int(info["bytes"]):
+            raise SystemExit(f"--link-cache {cache_id}: {name} is {size} B, {info['bytes']} "
+                             "recorded")  # fmt: skip
+    rows = {}
+    for sid, r in m["sessions"].items():
+        rows[sid] = {**r, "shards": [f"../{cache_id}/{s}" for s in r["shards"]],
+                     "linked_from": cache_id}  # fmt: skip
+    split = {k: list(m["split"].get(k) or []) for k in ("train", "val", "test")}
+    prov = {"cache_id": cache_id, "manifest_sha256": sha256_of(mpath), "names": len(theirs),
+            "sessions": len(rows), "frames": sum(int(r.get("kept") or 0) for r in rows.values()),
+            "shards": len(m["shards"]),
+            "bytes": sum(int(i["bytes"]) for i in m["shards"].values())}  # fmt: skip
+    return split, rows, prov
+
+
+def linked_class_boxes(row: dict[str, Any], classes: SpeciesClasses) -> Counter[int]:
+    """PURE: a linked session row's boxes per class id (a v1 + species row has them by id; a v2
+    row by class name and by species)."""
+    out: Counter[int] = Counter()
+    if row.get("boxes_by_class_id"):
+        out.update({int(k): int(v) for k, v in row["boxes_by_class_id"].items()})
+        return out
+    for cls, n in (row.get("class_boxes") or {}).items():
+        if cls != "monster":
+            out[classes.fixed[cls]] += int(n)
+    for job, n in (row.get("species_boxes") or {}).items():
+        out[classes.index[int(job)]] += int(n)
+    return out
+
+
+def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabelInputs,
+                classes: SpeciesClasses, linked: tuple[Any, Any, Any] | None) -> int:  # fmt: skip
+    """``--labels map --dry-run``: counts only (label files and packets; no image, no directory)."""
+    names = classes.names(a.kb)
+    total = MapTally()
+    rows = {}
+    for part, ids in split.items():
+        for sid in ids:
+            row = map_session(sid, part, a, None, classes, mli)
+            row.pop("shards")
+            rows[sid] = row
+            print(json.dumps({"session": sid, **row}), flush=True)
+            total.seen += row["seen"]
+            total.kept += row["kept"]
+            total.excluded.update(row["excluded"])
+            total.excluded_detail.update(row["excluded_detail"])
+            total.boxes.update({int(k): v for k, v in row["boxes_by_class_id"].items()})
+            total.frames.update({int(k): v for k, v in row["frames_by_class_id"].items()})
+            total.source_bytes += row["source_png_bytes"]
+    out: dict[str, Any] = {
+        "dry_run": True, "labels": "map", "inputs": mli.provenance, "names": names,
+        "map_sessions": {k: {x: r[x] for x in ("seen", "kept", "boxes_by_class_id", "est_bytes",
+                                               "est_shards", "join_rule_3c")}
+                         for k, r in rows.items()},
+        "map_total": {**{k: v for k, v in total.as_dict(a.shard_mb << 20).items()
+                         if k not in ("est_bytes", "est_shards")},
+                      "est_bytes": sum(r["est_bytes"] for r in rows.values()),
+                      "est_shards": sum(r["est_shards"] for r in rows.values())},
+        "would_refuse_3c": sorted(k for k, r in rows.items()
+                                  if r["join_rule_3c"] not in ("STAGED_FIT", JOIN_ADDED)),
+    }  # fmt: skip
+    if linked is not None:
+        lsplit, lrows, lprov = linked
+        per: dict[str, Any] = {}
+        for part, ids in lsplit.items():
+            c: Counter[int] = Counter()
+            for sid in ids:
+                c.update(linked_class_boxes(lrows[sid], classes))
+            per[part] = {
+                "frames": sum(int(lrows[s].get("kept") or 0) for s in ids),
+                "boxes_by_class_id": {str(k): v for k, v in sorted(c.items())},
+            }
+        out["linked"] = {**lprov, "splits": per}
+        train = Counter({int(k): v for k, v in per["train"]["boxes_by_class_id"].items()})
+        train.update(total.boxes)
+        out["train_combined"] = {"frames": per["train"]["frames"] + total.kept,
+                                 "boxes_by_class_id": {str(k): v for k, v in
+                                                       sorted(train.items())}}  # fmt: skip
+    print(json.dumps(out, indent=1))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--train", nargs="*", default=[])
     ap.add_argument("--val", nargs="*", default=[])
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
-    ap.add_argument("--labels", choices=("v0", "v1", "v2"), default="v0")
+    ap.add_argument("--labels", choices=("v0", "v1", "v2", "map"), default="v0")
     ap.add_argument("--k", type=float, default=None, help="v1/v2: M4's k (default: nostalro)")
     ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
     ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
@@ -1330,7 +1724,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="--fix on a human demo: client_layout's templates (default its TEMPLATES)",
     )
+    m = ap.add_argument_group("labels map (scripts/map_labels.py label files; payf07-detector.md "
+                              "11 / 12; local inputs, never committed)")  # fmt: skip
+    m.add_argument("--map-labels", type=Path, nargs="*", default=[],
+                   help="map: map_labels.py labels outputs (one per part)")  # fmt: skip
+    m.add_argument("--map-params", type=Path, default=None,
+                   help="map: the FROZEN params.json the labels were made with")  # fmt: skip
+    m.add_argument("--map-params-sha256", default=None,
+                   help="map: refuse unless --map-params has exactly this sha256")  # fmt: skip
+    m.add_argument("--own-c1", type=Path, nargs="*", default=[],
+                   help="map: map_labels.py check outputs (3c: own C1 = ADDED)")  # fmt: skip
+    m.add_argument("--link-cache", default=None,
+                   help="map: a finished cache id under --out, joined BY REFERENCE")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.labels == "map":
+        return map_main(a)
+    if a.map_labels or a.map_params or a.own_c1 or a.link_cache:
+        raise SystemExit("--map-labels / --map-params / --own-c1 / --link-cache belong to "
+                         "--labels map")  # fmt: skip
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
     if not seen:
@@ -1454,6 +1865,100 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory), "frames": sum(r["kept"] for r in sessions.values()),
+                      "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
+    return 0
+
+
+def map_main(a: argparse.Namespace) -> int:
+    """``--labels map``: labelled recorder sessions (+ a linked cache), dry run or build."""
+    if a.classes != "species" or a.kb is None:
+        raise SystemExit("--labels map needs --classes species --class-list LIST --kb DIR")
+    for flag in ("fix", "v1_species_sessions", "item_sessions"):
+        if getattr(a, flag):
+            raise SystemExit(f"--{flag.replace('_', '-')} does not belong to --labels map")
+    if a.every_png != 1:
+        raise SystemExit("--labels map takes every labelled frame (--every-png 1)")
+    if a.k is None:
+        a.k = SPECIES_K  # recorded only: the labels' k is the frozen params' (0.140)
+    classes = SpeciesClasses.load(a.class_list)
+    names = classes.names(a.kb)  # fail closed: every listed species has a name
+    mli = MapLabelInputs.from_args(a)
+    own = {"train": list(a.train), "val": list(a.val), "test": list(a.test)}
+    if own["val"] or own["test"]:
+        raise SystemExit("--labels map: labelled map sessions are TRAIN only (3b / 3c); the "
+                         "linked cache brings its own val / test")  # fmt: skip
+    labelled = set(mli.docs)
+    if sorted(set(own["train"]) ^ labelled):
+        raise SystemExit(f"--train and the label files must name the same sessions: "
+                         f"{sorted(set(own['train']) ^ labelled)}")  # fmt: skip
+    linked = linked_cache(a.out, a.link_cache, names) if a.link_cache else None
+    split = {k: list(v) for k, v in own.items()}
+    if linked is not None:
+        for k, ids in linked[0].items():
+            split[k] += ids
+    seen = [s for ss in split.values() for s in ss]
+    if not seen or len(seen) != len(set(seen)):
+        raise SystemExit("no session, or a session in two splits / in the linked cache too")
+    if GOLD in split["train"] or GOLD in split["val"]:
+        raise SystemExit(f"{GOLD} is the hand-checked gold set: test only")
+    if any(is_test_block(s) for s in split["train"] + split["val"]):
+        raise SystemExit("orcsdun01's TEST block (3f) is never in train / val")
+    if a.dry_run:
+        if a.resume:
+            raise SystemExit("--dry-run without --resume")
+        return map_dry_run(a, own, mli, classes, linked)
+    refused = {s: join_verdict(s, mli.spec.staged, mli.own) for s in own["train"]}
+    refused = {s: v for s, v in refused.items() if v not in ("STAGED_FIT", JOIN_ADDED)}
+    if refused:
+        raise SystemExit(f"3c's join rule: no own C1 ADDED for {refused} (--own-c1 CHECK)")
+    cache_id = a.cache_id or f"map-{time.strftime('%Y%m%dT%H%M%S')}"
+    directory = a.out / cache_id
+    args = {"labels": a.labels, "k": a.k, "every": a.every, "every_png": a.every_png,
+            "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
+            "quality": a.quality if a.image == "jpeg" else None, "split": split,
+            "classes": classes.provenance(), "map_labels": mli.provenance,
+            "link": None if linked is None else linked[2]}  # fmt: skip
+    sessions: dict[str, Any] = {}
+    shards: dict[str, Any] = {}
+    if a.resume:
+        if not a.cache_id:
+            raise SystemExit("--resume needs the --cache-id of the interrupted build")
+        sessions, shards = resume_state(directory, args)
+        print(json.dumps({"resume": cache_id, "sessions_done": list(sessions)}), flush=True)
+    elif directory.exists():
+        raise SystemExit(f"{directory} exists: pick another --cache-id (or --resume it)")
+    else:
+        directory.mkdir(parents=True)
+    if linked is not None:
+        sessions.update(linked[1])  # by reference: nothing to write
+    start = 1 + max((int(n[6:12]) for n in shards), default=-1)
+    sink = ShardSink(directory, a.shard_mb << 20, start, shards)
+    t0 = time.monotonic()
+    for sid in own["train"]:
+        if sid in sessions:
+            continue
+        row = map_session(sid, "train", a, sink, classes, mli)
+        sink.close()  # a session owns its shards: complete, or absent after a resume
+        sessions[sid] = row
+        write_json(directory, "progress.json",
+                   {"args": args, "sessions": sessions, "shards": sink.done})  # fmt: skip
+        print(json.dumps({sid: {k: v for k, v in row.items() if k != "excluded_detail"}}),
+              flush=True)  # fmt: skip
+    sink.close()
+    manifest = {
+        "cache_id": cache_id, "labels": "map", "k": a.k, "every": a.every,
+        "every_png": a.every_png, "image": a.image,
+        "quality": a.quality if a.image == "jpeg" else None, "names": names, "split": split,
+        "sessions": sessions, "shards": sink.done, "gold": GOLD,
+        "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "seconds": round(time.monotonic() - t0, 1), "classes": classes.provenance(),
+        "map_labels": mli.provenance, "linked": None if linked is None else linked[2],
+    }  # fmt: skip
+    for name, doc in (("manifest.json", manifest), ("split.json", split)):
+        write_json(directory, name, doc)
+    print(json.dumps({"cache": str(directory),
+                      "frames": sum(int(r.get("kept") or 0) for r in sessions.values()),
+                      "frames_written": sum(int(sessions[s]["kept"]) for s in own["train"]),
                       "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
     return 0
 

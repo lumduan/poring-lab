@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "TRAINING TIER PASSES 2026-10-24 19:52 ICT: T1 PASS under Amendment C (10k); T2 round 1 failed on Elder Willow (10m); round 2 (11: the frozen T_h on every label, seed 22, new labellers) PASSES for every species (11a). Pre-registered 18:25:24 (7ed0422)."
+status: "TRAINING TIER PASSES 2026-10-24 19:52 ICT: T1 PASS under Amendment C (10k); T2 round 1 failed on Elder Willow (10m); round 2 (11: the frozen T_h on every label, seed 22, new labellers) PASSES for every species (11a). Pre-registered 18:25:24 (7ed0422). 12 (20:2x): the class list, the cache tooling + its dry run (2,626 pay_fild07 TRAIN frames; Elder Willow 92 boxes, Green Plant 0) and the training PROPOSED; the evaluation pre-registered (../benchmarks/payf07-eval.md, ad5e3be)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md]
-next_action: "Before any GPU step: the cache (payf07-o3h-all), the classes file (section 7, Batt default) and the evaluation, pre-registered; ENGAGED units (Batt clip) need their own label hypothesis; more Elder Willow from a still collection."
+related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md, ../benchmarks/payf07-eval.md]
+next_action: "The parent: merge, decide and record 12f (start weights, epochs, hsv_s), build the cache (12e, the guarded cache: step) and compare it with 12d, train, then score ../benchmarks/payf07-eval.md ONCE. ENGAGED units (Batt clip) need their own label hypothesis; more Elder Willow (92 boxes) and Green Plant (0) from a still collection."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -714,3 +714,256 @@ pre-registration (section 8) before any GPU step.
   - the evaluation pre-registered BEFORE training.
 - **Known gap:** ENGAGED monsters (fighting our character) are excluded (Amendment B), and that
   is Batt's clip's situation. Labelling them is a separate hypothesis.
+
+## 12. PROPOSED: the cache and the training run (2026-10-24 20:23 ICT from `date`; section 8's "what the parent needs before a cache"; nothing here is built or trained)
+
+**What this section adds:** the class list (7), the cache tooling for these labels and its dry run,
+3c's own-C1 checks of the hunting TRAIN sessions, the real build's command, and a training
+proposal. The evaluation is pre-registered apart, BEFORE any of it runs:
+`../benchmarks/payf07-eval.md` (ad5e3be, 2026-10-24 20:20:01 ICT).
+
+### 12a. The class list: `config/detector/classes-v2orc-payf07.json` (4e6b574)
+
+- Section 7's scheme exactly: v2orc's ids 0-14 unchanged, then Elder Willow 15 (1033), Willow 16
+  (1010), Eggyra 17 (1116), Bigfoot 18 (1060), Poporing 19 (1031), Green Plant 20 (1080). sha256
+  `aa78912d03315c35ecda7dbf9b2765f0f41f45d3be4ecf3ff3cc1394b8da9a80`.
+- **Green Plant's condition (7) holds:** 116 kept labels in T2's pool (>= 30) and T2 passed (10m,
+  11a). So it is class 20, not `unchecked_species`.
+- Ids only, as `classes-v2orc.json`: the names come from a KB at build time. **The lab KB
+  (`data/kb`) cannot name 1033, 1116, 1060, 1031 or 1080**, so the build reads the pay_fild07 KB
+  (`/dev/shm/poring-lab-tmp/payf07/kb`, 1a). Its names for ids 0-14 equal v2orc's manifest names
+  exactly (checked by `--link-cache`, 12b). Ids 15-20: `elder_wilow`, `wilow`, `eggyra`, `bigfoot`,
+  `poporing`, `green_plant` (the KB's aegis names, lower case).
+
+### 12b. The cache tooling (fcb5620, 104ef54; tests on synthetic data)
+
+**`build_frame_cache.py --labels map`** reads `map_labels.py labels` files (one per part; the kept
+FITTED boxes per candidate frame; no pixel). Per frame:
+- **written only WHOLE** under `payf07-o3h-all`:
+  - no excluded monster label (2b, 2c, `engaged`, o3h's `occluded_model`, `unfit`, `crowd`, `ui`);
+  - no frame exclusion (4g: `warp_in_view`, `other_player`, `unchecked_species`; the label pass's
+    `ui_layout_mismatch` / `no_scene`);
+  - no kept label NOT under a model whose fit is below the frozen T_h 0.479 (11's `weak_fit`);
+  - no species outside the class list;
+  - our own character alive (labels v2's `self_dead`) and placed (`self_unknown`).
+- **Its YOLO lines:** our own character as `player`, plus every kept monster box at its species' id.
+  - The player box is labels v2's self box (`labels_v2.self_label`: v0's 34 x 74 at the camera
+    target), the box v2 / v2orc gave their own character (the Crusader in 3f's demo), from the same
+    camera as the labels' scene.
+  - Checked by eye on 4 frames (s1 110 and 555, staged 78 and 601; crops in
+    `/dev/shm/poring-lab-tmp/payf07-cache/selfbox/`, client-derived, listed for removal): it
+    holds the red-haired Thief, whose feet reach ~4 px below the box. Under a leaf plane the box
+    labels a partly covered Thief: the self box is not subject to o3h, as in v2 / v2orc.
+- **The image:** the recorded PNG (one seek), decoded, re-encoded as `--image` says.
+- **Fail closed, before any frame:**
+  - the PARAMS file's sha256 must equal `--map-params-sha256`, and its status must be FROZEN;
+  - every label file must carry the same params sha256 and the FROZEN status;
+  - no part may share a frame with TEST (3b), and the staged session trains on FIT spots only;
+  - **3c's join rule:** a session other than the staged one needs its own C1 = ADDED under the same
+    params (`--own-c1`, `map_labels.py check` outputs). A real build refuses it otherwise; a dry
+    run reports it (`join_rule_3c`, `would_refuse_3c`);
+  - TRAIN only: a labelled session in `--val` / `--test` is refused.
+- **`--dry-run`:** label files and packets only (no image, no directory). Per session it prints the
+  frames considered and written, the exclusions by reason, the boxes per class id, and the
+  estimated shards and bytes. With no fit at cache time, its counts are the build's exactly.
+
+**`--link-cache ID`:** every session of a FINISHED cache joins the new one BY REFERENCE, in its own
+split. The new manifest holds its rows with shard paths `../ID/<shard>`; nothing is copied or
+re-labelled.
+- **Why:**
+  - v2orc's part needs no rebuild (11,274 s, 10i);
+  - its orcsdun01 fit inputs (RSW / RSMs, orcsdun01-detector.md 3j) are no longer in /dev/shm;
+  - 25.9 GB are not duplicated on the NAS;
+  - `poring_vision.shards.load_split` reads `<cache>/<shard path>`, so the trainer reads the
+    linked frames UNCHANGED (tested end to end with the vision reader).
+- **Refused when:** the linked cache's class names differ from the list's for any of its ids, or a
+  recorded shard's size differs on the NAS.
+- **Valid here because:**
+  - the list only APPENDS classes, so v2orc's YOLO ids 0-14 mean the same;
+  - v2orc's v1 sessions excluded no frame for an unlisted species (`excluded_species` is empty in
+    its manifest), so no pay_fild07 species hides unlabelled in a linked frame.
+- **The linked cache must stay where it is** while the model is trained or evaluated.
+
+**The guarded `cache:` step** now admits absolute paths below `/dev/shm/poring-lab-tmp/` only (the
+label files, the frozen params, the KB: rule 7), never another absolute path or a `..` (104ef54).
+
+Existing builds are unchanged: v0 / v1 / v2 / `--fix` / items; their tests stay green.
+`map_labels.session_labeler` is RecSession's own label stack, moved, not changed.
+
+### 12c. RESULT: 3c's own C1 for the hunting TRAIN sessions (the parent's 10h step 4; frozen params sha256 e93367fe...; `map_labels.py check`, the main checkout's tool at 989b11b; run 20:04:50-20:08:29, 20:17:00-20:17:58 and 20:24:53-20:26:22 ICT; one session at a time, 2 workers)
+
+| session | frames | candidates | standing labels scored | bad | own C1 | 3c |
+|---|---|---|---|---|---|---|
+| t1b (`--allow-fit`: a FIT part) | 2,271 | 1,645 | 271 | 8 | 2.95 % | **ADDED** |
+| s-pilot | 523 | 423 | 65 | 0 | 0.00 % | **ADDED** |
+| s1 | 1,950 | 1,675 | 339 | 7 | 2.06 % | **ADDED** |
+| s2 (`20261024T181454-rdp-thief-s2`) | 1,266 | 1,082 | 156 | 11 | **7.05 %** | **NOT ADDED** |
+| s3 (`20261024T185649-rdp-thief-s3`) | 56 | 22 | 17 | 0 | 0.00 % | **NOT ADDED** (< 50 scored) |
+| s4 (`20261024T193810-rdp-thief-s4`, shipped 20:2x; the parent's message) | 2,351 | 1,562 | 293 | 9 | 3.07 % | **ADDED** |
+
+- **s2 does NOT join TRAIN (3c: C1 > 0.050).** Willow has 8 of its 19 scored labels bad; Bigfoot 2 of
+  17; Elder Willow 1 of 10. s2's recorder stopped at ~21 min on a host IO-guard trip (10f); no cause
+  of the failure is established here.
+  - **It is a real negative case of the builder's gate:** a build with s2 refused with "3c's join
+    rule: no own C1 ADDED for {s2: NOT_ADDED_C1}" and created nothing.
+  - **For the record, s2's frozen labels:** `/dev/shm/poring-lab-tmp/payf07-cache/s2/`. Under the
+    rule they would have written 539 frames: Elder Willow 16, Willow 15, Eggyra 81, Bigfoot 12,
+    Poporing 55.
+- **s3 is too short to measure** (17 standing labels scored < 50): not added (3c), whatever its C1.
+- **s4 joins TRAIN by 3c** (Willow 9 of 111 bad; every other species 0). Its frozen labels:
+  `/dev/shm/poring-lab-tmp/payf07-cache/candidates/` (s3's too).
+- C2 per session is reported in the check files, and it does not gate 3c.
+- **The check files:** `/dev/shm/poring-lab-tmp/payf07-cache/own-c1/<session>.json`. sha256: t1b
+  `6a650302…`, s-pilot `9db5192b…`, s1 `0af8f625…`, s2 `808aa779…`, s3 `f27d02e3…`, s4
+  `cbb8449b…`. The candidates' label files: s2 `49e682ad…`, s3 `2f735074…`, s4 `fb9cc322…`.
+
+### 12d. RESULT: the dry run (fcb5620; 20:15:47-20:15:57 ICT; the four TRAIN label files of 10l, 3c's checks of 12c, `--link-cache v2orc-fix2-w-o3h-20261024`)
+
+Boxes written per class; frames = candidates considered / frames written (whole, the floor, our
+own box).
+
+| part | frames | player 0 | Elder Willow 15 | Willow 16 | Eggyra 17 | Bigfoot 18 | Poporing 19 | Green Plant 20 | est. GB / shards |
+|---|---|---|---|---|---|---|---|---|---|
+| staged spots 0-7 | 513 / 281 | 281 | 57 | 64 | 54 | 15 | 52 | 0 | 0.64 / 2 |
+| t1b | 1,645 / 953 | 953 | 23 | 133 | 49 | 43 | 127 | 0 | 2.13 / 4 |
+| s-pilot | 423 / 261 | 261 | 6 | 27 | 38 | 74 | 0 | 0 | 0.58 / 2 |
+| s1 | 1,675 / 1,131 | 1,131 | 6 | 219 | 178 | 87 | 11 | 0 | 2.56 / 5 |
+| **pay_fild07 TRAIN** | **4,256 / 2,626** | **2,626** | **92** | **443** | **319** | **219** | **190** | **0** | **5.91 / 13** |
+
+- **Frames holding each species:** Elder Willow 80, Willow 403, Eggyra 310, Bigfoot 207, Poporing
+  190.
+- **The exclusions** (frames; a frame counts under each reason it has): `occluded_model` 821,
+  `engaged` 667 (Elder Willow in 626 of them), `ambiguous_view` 170, `next_move` 116, `unfit` 85,
+  `weak_fit` 61, `ui` 9, `crowd` 5, `warp_in_view` 3. `self_dead` and `self_unknown`: 0.
+- **Against 10f's provisional whole frames** (2,660):
+  - the floor removes 34 frames (t1b 22, s-pilot 6, s1 6, staged 0);
+  - per species: Elder Willow 100 -> 92, Willow 450 -> 443, Eggyra 326 -> 319, Bigfoot 238 -> 219,
+    Poporing 193 -> 190.
+- **The estimate is the recorded PNG sizes:**
+  - on 3 s1 frames, the re-encoded PNG (`encode_png`, level 1) came out exactly as large as the
+    recorded one (2,282,362 / 2,242,658 / 2,254,256 B);
+  - read and decode took 0.06-0.15 s a frame, the encode 0.15-0.19 s.
+- **The linked cache `v2orc-fix2-w-o3h-20261024`:** 16,169 frames (TRAIN 10,416, VAL 3,242, TEST
+  2,511), 54 shards, 25.9 GB, manifest sha256 `11bf2814…`. Names 0-14 equal.
+- **The combined TRAIN: 13,042 frames.** Boxes per class (ids):
+
+| class | boxes | class | boxes | class | boxes |
+|---|---|---|---|---|---|
+| player 0 | 4,849 | Familiar 8 | 1,134 | Elder Willow 15 | 92 |
+| npc 1 | 14,658 | Steel Chonchon 9 | 754 | Willow 16 | 443 |
+| warp 2 | 0 | White Plant 10 | 195 | Eggyra 17 | 319 |
+| Poring 3 | 20,573 | Black Mushroom 11 | 56 | Bigfoot 18 | 219 |
+| Lunatic 4 | 738 | Drainliar 12 | 339 | Poporing 19 | 190 |
+| Pupa 5 | 164 | Orc Skeleton 13 | 763 | Green Plant 20 | 0 |
+| Drops 6 | 779 | Orc Zombie 14 | 6,145 | | |
+| Creamy 7 | 0 | | | | |
+
+- 🔴 **Elder Willow, the species Batt asked about, is the thinnest class:** 92 boxes in 80 frames,
+  against training-cost.md 2's B = 1,500 frames per species.
+- 🔴 **Green Plant is a class with 0 training boxes.** All 116 of its kept labels lie in frames
+  that are not whole: their neighbours under the canopy are excluded (10f).
+- 10i's proposals stand:
+  - a still warp-and-watch collection at Elder Willow and Green Plant areas;
+  - a separate label hypothesis for ENGAGED units.
+
+### 12d-2. RESULT: the dry run of the CANDIDATES after 3c, reported apart (20:28:55-20:29:02 ICT, the same code; the parent's instruction: "include them only as candidates after 3c, apart from the four frozen TRAIN files")
+
+| session | 3c | frames | player 0 | Elder Willow 15 | Willow 16 | Eggyra 17 | Bigfoot 18 | Poporing 19 | est. GB / shards |
+|---|---|---|---|---|---|---|---|---|---|
+| s2 | NOT ADDED (C1 7.05 %) | 1,082 / 539 | 539 | 16 | 15 | 81 | 12 | 55 | 1.22 / 3 |
+| s3 | NOT ADDED (too few) | 22 / 9 | 9 | 0 | 8 | 0 | 0 | 0 | 0.02 / 1 |
+| **s4** | **ADDED** | **1,562 / 979** | **979** | **6** | **170** | **166** | **70** | **68** | **2.19 / 5** |
+
+- The dry run lists s2 and s3 in `would_refuse_3c`: a real build with them refuses.
+- s4's exclusions (frames): `engaged` 303, `occluded_model` 223, `ambiguous_view` 68, `unfit` 39,
+  `next_move` 18, `weak_fit` 15, `ui` 5. 757 of its frames were dropped as `self_moving` (4f).
+- **With s4, the pay_fild07 TRAIN would be 3,605 frames** (Elder Willow 98, Willow 613, Eggyra
+  485, Bigfoot 289, Poporing 258; ~8.1 GB, 18 shards), and the combined TRAIN 14,021 frames.
+  - s4 adds only 6 Elder Willow boxes: the hunting runs fight it (`engaged`).
+  - The time estimate of 12f grows by 7.5 % (E = 10: 5.7 compute-h; ~25 h running at v2orc's
+    pace).
+- s5 / s6 follow tonight (the parent): each one the same way (its own C1, frozen labels), BEFORE the
+  build. A session that comes after the build waits for the next cache.
+
+### 12e. The real build (the parent's, after this branch is merged; NOT run here)
+
+The guarded step (ONE line in practice, wrapped here; `L=/dev/shm/poring-lab-tmp/payf07/labels-frozen`,
+`C=/dev/shm/poring-lab-tmp/payf07-cache/own-c1`, both written out in full):
+
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 'cache@3600=--labels map
+      --classes species --class-list config/detector/classes-v2orc-payf07.json
+      --kb /dev/shm/poring-lab-tmp/payf07/kb --map-params /dev/shm/poring-lab-tmp/payf07/params.json
+      --map-params-sha256 e93367fe7d333a4ce74289a76915d48ded8631a77a042e62f68d83dc0dc2de14
+      --map-labels L/20261024T170356-rdp-stage-items-b-fitspots.json L/20261024T123622-rdp-thief-t1b.json
+        L/20261024T164555-rdp-thief-s-pilot.json L/20261024T173322-rdp-thief-s1.json
+      --own-c1 C/20261024T123622-rdp-thief-t1b.json C/20261024T164555-rdp-thief-s-pilot.json
+        C/20261024T173322-rdp-thief-s1.json
+      --link-cache v2orc-fix2-w-o3h-20261024 --image png --cache-id v2orc-payf07-20261024
+      --train 20261024T170356-rdp-stage-items-b 20261024T123622-rdp-thief-t1b
+        20261024T164555-rdp-thief-s-pilot 20261024T173322-rdp-thief-s1'
+
+- **To include s4** (12d-2, ADDED by 3c), add
+  `/dev/shm/poring-lab-tmp/payf07-cache/candidates/20261024T193810-rdp-thief-s4.json` to
+  `--map-labels`, `C/20261024T193810-rdp-thief-s4.json` to `--own-c1`, and
+  `20261024T193810-rdp-thief-s4` to `--train`. The eval's TRAIN definition covers it ("any later
+  session that passes 3c before the build"). Then the expected counts are 12d + 12d-2's s4 row.
+- **The exact line** without s4 (paths written out) is in
+  `/dev/shm/poring-lab-tmp/payf07-cache/cache-step.txt`.
+  `guarded_build.parse_step` accepts it (checked: 32 builder arguments). The same arguments plus
+  `--dry-run` reproduced 12d byte for byte.
+- **The shards go to** `/mnt/poring-lab-datasets/.framecache/v2orc-payf07-20261024/`:
+  - 13 new shards, ~5.9 GB, plus `manifest.json`, `split.json` and `progress.json`;
+  - v2orc's 54 shards stay in their own directory, referenced, not copied.
+- **Expected time:** ~2,626 frames x ~0.3-0.4 s (a 2.25 MB NAS read, decode, encode, write, the
+  read-back hash) ≈ 15-20 min. The step's timeout is 3600 s; resume with `--resume` and the same
+  arguments.
+- **Before it runs:**
+  1. this branch is merged (the step runs the main checkout's builder);
+  2. the /dev/shm inputs are in place: params.json (sha256 above), the four label files (10l), the
+     three check files (12c), the pay_fild07 KB, and the GAT `/dev/shm/poring-lab-tmp/gat/data/
+     pay_fild07.gat`; a host reboot wipes them (after-host-reboot);
+  3. the same line with `--dry-run` matches 12d;
+  4. on a weekday, it starts outside 09:30-10:15 and 14:00-14:45.
+- **After it runs:** the manifest's per-session `kept` and `boxes_by_class_id` must equal 12d's.
+  Then a vision-side read (the trainer's `--smoke`, or `load_split` on train) before the real run.
+
+### 12f. PROPOSED: the training run (not run; Batt's / the parent's decision, recorded here BEFORE the launch)
+
+| setting | proposal | why |
+|---|---|---|
+| start weights | **v2orc's epoch-3 `last.pt`**: `/datasets/archive/train/v2orc-20261024/weights/last.pt` in the container (val mAP50 0.805, 3n) | Its backbone, neck and box branch are already fitted to RO at imgsz 1280. Ultralytics transfers every tensor of the same shape; the class branch's last layers (15 -> 21 classes) start fresh. The alternative, COCO YOLO11n (v2orc-vs-v1.md's start), took 3 epochs to reach 0.805 on v2orc and was planned for 30 |
+| data | **the 12e cache**: TRAIN 13,042 frames (v1's prt_fild08 8,193, orcsdun01 2,223, pay_fild07 2,626); VAL v1's 3,242 | all of v2orc's data is replayed, so nothing is forgotten by design (G1, G2, O1 of the evaluation) |
+| epochs | **10**, `close_mosaic` 3 (v2orc's one third without mosaic) | the faster alternative: **6** epochs, `close_mosaic` 2. That is training-cost.md 1's incremental compute: 2 x the new frames x E/2 = 78,780 frame-epochs ≈ 6 epochs of 13,042 |
+| `hsv_s` | **0.2** (section 7's flag) | Elder Willow and Willow differ by saturation only (0.54 vs 0.30); 0.7 can turn one into the other. hsv_h 0.015 and the rest stay ultralytics' defaults, as v2orc |
+| the rest | YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1, WORKER=1, MID_CKPT=1, R1-R3, the IO guard, the 25 % VRAM cap | v2orc's |
+
+**The launch** (443944f adds `HSV_S` / `CLOSE_MOSAIC` to train-day.sh and `--hsv-s` to train.py;
+both opt-in, and unset means the defaults as before):
+
+    WORKER=1 MID_CKPT=1 INIT_WEIGHTS=/datasets/archive/train/v2orc-20261024/weights/last.pt \
+      HSV_S=0.2 CLOSE_MOSAIC=3 scripts/runbooks/train-day.sh payf07-20261024 \
+      v2orc-payf07-20261024 10 /dev/shm/poring-lab-tmp/train-payf07 2 1
+
+**The time estimate** (6,521 batches an epoch):
+
+| | E = 10 | E = 6 |
+|---|---|---|
+| compute (training-cost.md's k = 0.146 s per frame-epoch: 0.53 compute-h an epoch) | 5.3 compute-h | 3.2 compute-h |
+| wall at the measured night availability 0.63 / around the clock 0.505 | ~8.4 h / ~10.5 h | ~5.0 h / ~6.3 h |
+| **wall at v2orc's real pace** (3 epochs of 10,416 frames in 04:31-11:35 with ~1.5 h of stops: ~0.63 s per frame-epoch running, ~2.3 h an epoch here) | **~23 h running, ~29 h with v2orc's share of stops** | **~14 h running, ~17.5 h** |
+
+- Plan for the slower figure: v2orc's duty cycle ran at its slow levels (10i).
+- Sunday has no market-open windows (train-day.sh: weekdays only).
+- **Scoring:** `../benchmarks/payf07-eval.md`, once. It scores `last.pt` of the LAST COMPLETED
+  epoch. A run Batt stops early is scored at the epoch it reached, and the report says so.
+
+### 12g. Open (Batt / the parent)
+
+1. Decide 12f (start weights, E, `hsv_s`) and record it here BEFORE the launch.
+2. Build the cache (12e) and compare it with 12d.
+3. Later sessions (s3: 56 frames; s4-s6) join TRAIN only by 3c: labelled with the frozen params,
+   their own C1 ADDED, then a new `--labels map` cache. `--link-cache` takes one finished cache, so
+   that build lists every map session again with the v2orc link.
+4. Elder Willow's budget (92 boxes) and Green Plant's 0 boxes: 10i's still collection, before or
+   after this run.
+5. Engaged units: a separate label hypothesis (10i). The evaluation reports them as E1.
