@@ -1001,3 +1001,29 @@ session, and its item frames serve the item study only.
 - no market-open window (Sunday: none);
 - the hunt keeps its CPU detector, and training must not slow it (the loader niced; v2orc ran the
   same way).
+
+**13d. The cache's composition, fixed by its dry run BEFORE the build (2026-10-24 22:32:20 ICT).** Sessions
+joined by 3c, each by its own C1 (bad / scored):
+- s4 9 / 293 (3.07 %);
+- s5 11 / 676 (1.63 %);
+- s6 1 / 383 (0.26 %);
+- the Elder Willow watch `20261024T214323-rdp-watch-w1` 2 / 699 (0.29 %). It ran 21:43-22:23:
+  the immune Thief, 30-s dwells, 1,944 frames;
+- s2 stays out (7.05 %), and s3 has too few labels.
+
+| session | frames seen / written | EW 15 | Willow 16 | Eggyra 17 | Bigfoot 18 | Poporing 19 | Green Plant 20 | shards |
+|---|---|---|---|---|---|---|---|---|
+| staged spots 0-7 (FIT) | 513 / 281 | 57 | 64 | 54 | 15 | 52 | 0 | 2 |
+| t1b | 1,645 / 953 | 23 | 133 | 49 | 43 | 127 | 0 | 4 |
+| s-pilot | 423 / 261 | 6 | 27 | 38 | 74 | 0 | 0 | 2 |
+| s1 | 1,675 / 1,131 | 6 | 219 | 178 | 87 | 11 | 0 | 5 |
+| s4 | 1,562 / 979 | 6 | 170 | 166 | 70 | 68 | 0 | 5 |
+| s5 | 1,752 / 881 | 36 | 151 | 388 | 264 | 76 | 0 | 4 |
+| s6 | 1,523 / 839 | 2 | 54 | 330 | 105 | 86 | 0 | 4 |
+| watch-w1 | 1,660 / 1,052 | **273** | 34 | 252 | 152 | 225 | **80** | 5 |
+| **pay_fild07 total** | **6,377 written** | **409** | 852 | 1,455 | 810 | 645 | 80 | **31 (14.4 GB)** |
+
+- Every written frame carries our own `player` box: 6,377.
+- With v2orc linked by reference: **16,793 TRAIN frames**.
+- The cache id is `v2orc-payf07-20261024`, built by the guarded `cache:` step; the full argument
+  list is `/dev/shm/poring-lab-tmp/payf07-cache/cache-args-final.txt`.
