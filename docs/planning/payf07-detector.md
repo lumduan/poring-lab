@@ -512,6 +512,21 @@ of the subagent brief:
 T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1.ratio`,
 `c1.per_species`, `c2.per_species` and `c2_stop`, `per_part` (staged / t2).
 
+### 10j. AMENDMENT C (the parent's decision, 2026-10-24 19:08:31 ICT from `date`; written BEFORE any parameter is frozen and BEFORE any TEST frame is read): **P1, 1d = 120 ms**
+
+- **Adopted: P1.** The packet -> frame offset 1d is orcsdun01's frozen 120 ms.
+- **Why:**
+  - The 1-fps recorder and warp_watch read the same RDP frame bus and the same timestamps.
+    orcsdun01 froze 120 ms on 260 samples (col3, 2.24 px median).
+  - Both FIT attempts here put the minimum at 100-150 ms (3.2 / 5.0 px at n = 47).
+  - 10e's P2 diagnostic, on TRAIN sessions only (s-pilot + s1, never TEST), found 120 ms exactly
+    on 89 samples (2.83 px median).
+  - P3 (lowering the 50-sample floor after the fact) is rejected.
+- Nothing else changes. Amendment B (engaged), T_h measured on FIT under P1 + B (0.479), the
+  split, T1's bar (C1 <= 0.050) and T2's bars stay as written.
+- Next: 10h's steps 1-4, in order (freeze, then T1 on TEST, then the frozen TRAIN labels and
+  the pack). The decision is reported to Batt.
+
 ### 10i. Estimates: the cache and the training (by analogy with v2orc)
 
 - **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
