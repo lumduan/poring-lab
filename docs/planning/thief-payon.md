@@ -209,6 +209,37 @@ The gap is the SERVER MODE's formulas, not the build. The pinned source (e985006
 V counts NPC sell prices only. The four target items are worth far more in a player shop, and are
 counted per hour apart (dungeon_judge.py items).
 
+### 4e. The target items, staged on the floor for their recognition (Batt 2026-10-24 ~16:0x: "train the target drops ... for pickup accuracy")
+
+- **Why staged:** the four items almost never drop: 0.07-0.75 per 100 kills (4c). 4.03's 69 kills
+  gave 1 and the 4.04 pilot's 7 gave 1. The labelled frames have to be made.
+- **The tool:** `scripts/stage_items.py` (fa5062b; settle fix 9119de9).
+  - The Thief, immune (`@monsterignore`; its "You are now immune to attacks." line read on a
+    frame), gives itself one of each (`@item 757 / 756 / 604 / 518 1`).
+  - It drops them by the inventory's KNOWN path: `gm_state.clear_loot` with the tool's own icon
+    set (data/thief/stage_icons, cut from judged inventory frames). Only these four are loot;
+    everything else is never dropped.
+  - Then ~5 s still at the spot and at 4 offsets (+-3 cells, same-map `@warp`): typed lines only,
+    no world click.
+  - The 1-fps recorder banks the frames. The packets give each floor item's cell and its drop and
+    vanish times: the OFFLINE labels.
+- **The session (2026-10-24 17:04-17:31):**
+  - 12 spots on pay_fild07 (seed 7, >= 25 cells apart, inside the hunt's own search area);
+  - all four items dropped at every spot: 48 drops;
+  - recording `20261024T170356-rdp-stage-items-b`: 1,538 frames, 3.42 GB, 1,617 packet events;
+    shipped to the NAS and verified;
+  - events `20261024T170401-stage-items-pay_fild07-b`.
+  - A first attempt (17:02) stopped safely at spot 0: a fixed 2.5-s wait after the map-change
+    `@warp` checked the loading screen. It now waits for the identity to read.
+  - A relog at 17:32 cleared the immunity before 4.04's s1.
+- The Dead Branch picked in the 4.04 pilot and the Rough Elunium from 4.03 t1 were in the bag.
+  They were dropped with the staged stacks (lab items; counted in their runs' tables already).
+- **The study:** a subagent, offline (CPU, no GPU, no live input). It pre-registers a split by
+  spot (0-7 fit, 8-11 test) and bars, builds packet labels and per-item templates, and tests them
+  against the 4.03 hunting frames as negatives and the pilot's natural Dead Branch.
+  `docs/planning/target-items.md` (its branch). The verdict decides "loot by sight" by templates,
+  or a learned item class later (GPU: R1-R3).
+
 ### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
 
 **➡️ PARKED by Batt 2026-10-24 ~16:0x: "park it; use ours as before".** The study below stays as written.
