@@ -15837,6 +15837,21 @@ the new base.
 **Hard bars and deaths:** as 4.00. A death is a result: the run stops, the cause is recorded, the
 dialog closes by its known step, then @alive + @heal.
 
+**Amendment A (2026-10-24 ~16:5x ICT, BEFORE the pilot ran and before every scored run): the
+setup's @heal on a chat-guard refusal.** No hunting behaviour changes.
+- At 16:29 the first pre-run found the client FROZEN after 2.5 h idle. Its picture and its own
+  cursor stood still, and 10 x F12 changed nothing, yet it still pinged the server.
+- One `@heal` was counted by the chat guard but never reached the client. The client was closed
+  (Alt+F4), confirmed gone, relaunched, and the Thief re-entered (16:36-16:37).
+- The guard then refused the next `@heal` as the 3rd identical line in a row. It did so in the
+  pre-run, and again in the runner's setup: the pilot attempt at 16:41 stopped at setup, and no
+  hunting ran.
+- The fix is chat_guard's OWN option for an idempotent GM command: `crusader.gm_line(...,
+  on_refuse="skip")` (1ac1293). It is used for the pre-run's `@heal` and the runner setup's
+  `@heal` only. A refused `@heal` is not typed and is counted (`setup_heal_skipped`). HP / SP are
+  full then anyway (the relog, or the pre-run's heal). Every other line still stops on a refusal.
+- The chain now stops on a failed pre-run, and stops the recorder when the runner ends.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

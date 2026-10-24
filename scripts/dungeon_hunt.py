@@ -938,7 +938,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             time.sleep(1.0)
         setup.append(f"@warp {map_} {start[0]} {start[1]}")
         for cmd in setup:
-            cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char)
+            # 4.04 Amendment A: @heal is idempotent -- chat_guard's skip (a refused 3rd @heal in a
+            # row is not typed; the HP / SP are full after the pre-run's heal or the relog)
+            got_ = cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char,
+                              on_refuse="skip" if cmd == "@heal" else "raise")  # fmt: skip
+            if not got_.get("typed", True):
+                counts["setup_heal_skipped"] += 1
             time.sleep(3.0 if "@warp" in cmd else 0.8)
         bench.close_chat(agent_raw, screen)
         r.activate_client(agent_raw, screen)
