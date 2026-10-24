@@ -47,6 +47,7 @@ OFFSETS: list[tuple[int, int]] = [(0, 0), (3, 0), (0, 3), (-3, 0), (0, -3)]
 STILL_S = 5.0  # frames at 1 fps: ~5 per offset
 SPOT_SEP = 25  # cells between spots (Chebyshev): other ground, other light
 WARP_SETTLE_S = 2.5
+READY_MAX_S = 20.0  # a map change's loading screen took longer than 2.5 s (prt_fild08 -> 07)
 CHAR = "thief"
 
 
@@ -128,6 +129,21 @@ def _check(screen: Any) -> None:
         raise r.Stop("stage_items: not the Thief")
 
 
+def _settle(screen: Any, max_s: float = READY_MAX_S) -> float:
+    """After a @warp: wait until the Basic Info identity reads again (the first run's 2.5 s fixed
+    wait checked the LOADING screen of a map change and stopped). Returns the seconds waited."""
+    import crusader as cr
+    import ro_agent as r
+
+    t0 = time.monotonic()
+    time.sleep(WARP_SETTLE_S)
+    while not cr.check(screen, CHAR, CHAR)["ok"]:
+        if time.monotonic() - t0 > max_s:
+            raise r.Stop(f"stage_items: the identity did not read within {max_s} s of a @warp")
+        time.sleep(0.5)
+    return round(time.monotonic() - t0, 1)
+
+
 def give() -> None:
     """LIVE: one of each target (for the icon cut, then the inventory frames to judge)."""
     import bench
@@ -191,7 +207,8 @@ def run(a: argparse.Namespace) -> int:
         try:
             for k, (x, y) in enumerate(spots):
                 cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", CHAR, CHAR)
-                time.sleep(WARP_SETTLE_S)
+                ev({"kind": "warp", "spot": k, "at": [x, y], "settle_s": _settle(screen)})
+                bench.close_chat(agent, screen)
                 for iid in TARGETS:
                     cr.gm_line(agent, screen, f"@item {iid} 1", CHAR, CHAR)
                     time.sleep(0.8)
@@ -206,7 +223,7 @@ def run(a: argparse.Namespace) -> int:
                 for dx, dy in OFFSETS:
                     if (dx, dy) != (0, 0):
                         cr.gm_line(agent, screen, f"@warp {a.map} {x + dx} {y + dy}", CHAR, CHAR)
-                        time.sleep(WARP_SETTLE_S)
+                        _settle(screen)
                         bench.close_chat(agent, screen)
                     ev({"kind": "still", "spot": k, "at": [x + dx, y + dy], "s": STILL_S})
                     time.sleep(STILL_S)
