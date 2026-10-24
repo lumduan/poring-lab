@@ -15681,6 +15681,28 @@ the rest must sit on a map without rest spots.**
 - Tested (`test_rest_sits_where_it_stands_on_a_map_without_rest_spots`); the click census is green.
 - **The scored runs restart as t1b, t2, ... (seeds 24311, 24302, ...).**
 
+**4.03 run t1b** (`20261024T123624-demo-dungeon-thief-pay_fild07-B-t1b`, 12:36:20-13:17:56, seed
+24311; judged pre-run frame thief-pre-t1b.png; frames recorded 1 fps, 2,271 frames shipped to the
+NAS as `20261024T123622-rdp-thief-t1b`). Packets (`dungeon_judge.py row` / `items`,
+`dungeon_style.py row`):
+- 40.0 min, **26 kills (39.0 / h)**, deaths 0, hard bars 0 (1 same-map change = its Fly Wing);
+- HP min 162 / 952 (17.0 %), potions 5, Fly Wings 1, **sitting 31.1 %** (6 rests: 4 broken by a
+  hit, 1 at its time cap, 1 full);
+- loot 95.7 % gross / 100 % net (22 of 23; 1 looter, re-dropped and recovered);
+- gross 1,983 z / h, cost 9,090 z / h (White Potions at 1,200 z), **net -7,107 z / h**;
+- met 13.5 / 10 min; kills: Elder Willow 25 of 31 targets, Bigfoot 3, Eggyra 2, Poporing 1;
+- kill time median: Elder Willow 3.4 s, Poporing 2.0 s, Eggyra 11.7 s, Bigfoot 16.6 s;
+- s / kill 92.3 = fighting 12.8 + walking 9.8 + **standing 69.7**. Standing = rest 744 s, loot
+  steps ~316 s (28 steps of ~11 s), defend scans 240 s;
+- **items per hour:** Resin 30.0, Sticky Mucus 1.5, Bear's Footskin 1.5. No target item, as
+  expected at 26 kills (0.1 each).
+- **Where the HP went:** the packets' HP falls total 3,348.
+  - Melee acts explain 1,134: Elder Willow 288 attacks, 268 missed, 20 hit = 967; Bigfoot 15 /
+    14 / 167.
+  - The other ~2,200 has no act packet: Elder Willow's spells (Fire Bolt Lv 3 and Fire Attack,
+    mob_skill_db; magic ignores flee). Our decoder reads no skill packet.
+  - So Elder Willow MAGIC drives the resting.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
