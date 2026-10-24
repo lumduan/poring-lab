@@ -967,3 +967,37 @@ both opt-in, and unset means the defaults as before):
 4. Elder Willow's budget (92 boxes) and Green Plant's 0 boxes: 10i's still collection, before or
    after this run.
 5. Engaged units: a separate label hypothesis (10i). The evaluation reports them as E1.
+
+## 13. The parent's decisions before the build and the training (2026-10-24 20:45:11 ICT from `date`; BEFORE any cache shard, worker start or training)
+
+**13a. More Elder Willow first, on the SAME recording path (no rule change).** Section 12's dry run
+gives Elder Willow 92 boxes (98 with s4), and payf07-eval.md requires Elder Willow's bar to EXIST
+(>= 50 evaluated crops) and to pass. So before the cache is built, after 4.04's s6, the immune Thief
+runs `stage_items.py watch`:
+- 30-s dwells on the seeded lattice of three-check stand cells
+  (`/dev/shm/poring-lab-tmp/payf07-ww/lattice.json`: 779 cells ~11 apart + 45 in the Green Plant
+  box; `npc_click_test.check_warps` PASS);
+- ~40 min, beside the 1-fps recorder (PNG, the same path as the staged session);
+- typed `@warp` lines only, with immunity read on a frame first and a relog after.
+Its session, s5 and s6 join TRAIN only by 3c (own C1 <= 0.050 on >= 50 standing labels), labelled
+with the frozen params; s2 stays out (own C1 7.05 %). The open-ground item re-staging
+(`stage_items.py run --open`) is recorded too. Its monster frames join TRAIN by 3c like any later
+session, and its item frames serve the item study only.
+
+**13b. The training settings (12f), decided:**
+- warm start from v2orc's epoch-3 `last.pt` (`/datasets/archive/train/v2orc-20261024/weights/last.pt`);
+  the class head goes 15 -> 21;
+- **E = 10, close_mosaic 3, hsv_s 0.2.** Elder Willow and Willow differ by saturation only. All
+  else is v2orc's (YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1);
+- `WORKER=1 MID_CKPT=1 INIT_WEIGHTS=... HSV_S=0.2 CLOSE_MOSAIC=3 scripts/runbooks/train-day.sh`
+  with the cache built in 13a; R1-R3 throughout (the adaptive duty cycle; R2: Ollama's `/api/ps`
+  empty at the start);
+- scored only per `docs/benchmarks/payf07-eval.md` (ad5e3be): `last.pt` of the last completed
+  epoch.
+
+**13c. Launch conditions:**
+- the cache's manifest per session equals its `--dry-run`;
+- the guarded `worker:vision` is up;
+- no market-open window (Sunday: none);
+- the hunt keeps its CPU detector, and training must not slow it (the loader niced; v2orc ran the
+  same way).
