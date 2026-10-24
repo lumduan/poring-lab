@@ -9,6 +9,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "scripts" / "runbooks" / "train-day.sh"
 
@@ -75,6 +77,8 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0, clock: str = "12
         "WORKER",
         "INIT_WEIGHTS",
         "RESUME",
+        "HSV_S",
+        "CLOSE_MOSAIC",
     ):
         env.pop(k, None)
     env.update(extra or {})
@@ -238,3 +242,23 @@ def test_init_weights_start_a_new_run_and_never_ride_along_a_resume(tmp_path: Pa
     assert rc == 0 and "--weights" not in args[0] and args[0].endswith("--resume")
     _, args, _ = run_rc(tmp_path / "plain", "ok")
     assert "--weights" not in args[0]
+
+
+def test_hsv_s_and_close_mosaic_reach_a_new_run_only(tmp_path: Path) -> None:
+    """HSV_S / CLOSE_MOSAIC (2026-10-24, payf07-detector.md 12f): numbers only, a NEW run only (a
+    --resume keeps its checkpoint's own), unset = ultralytics' defaults as before; a bad value
+    stops (rc 2) before any attempt."""
+    for d in ("new", "resume", "plain", "bad", "bad2"):
+        (tmp_path / d).mkdir()
+    hyp = {"HSV_S": "0.2", "CLOSE_MOSAIC": "3", "INIT_WEIGHTS": "/datasets/w/last.pt"}
+    _, args, rc = run_rc(tmp_path / "new", "ok", extra=hyp)
+    assert rc == 0 and "--weights /datasets/w/last.pt --hsv-s 0.2 --close-mosaic 3 " in args[0]
+    _, args, rc = run_rc(tmp_path / "resume", "ok", extra={**hyp, "RESUME": "1"})
+    assert rc == 0 and "--hsv-s" not in args[0] and "--close-mosaic" not in args[0]
+    _, args, _ = run_rc(tmp_path / "plain", "ok")
+    assert "--hsv-s" not in args[0] and "--close-mosaic" not in args[0]
+    for d, bad in (("bad", {"HSV_S": "1.5"}), ("bad2", {"CLOSE_MOSAIC": "3; id"})):
+        with pytest.raises(FileNotFoundError):  # the stub guard was never called
+            run_rc(tmp_path / d, "ok", extra=bad)
+        log = (tmp_path / d / "out" / "train.log").read_text()
+        assert "TRAIN STOPPED" in log and "attempt 0" not in log
