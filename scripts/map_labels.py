@@ -456,10 +456,12 @@ class RecSession:
     def facing_rule(self, rule: str) -> olf.FacingRule:
         """fix 2 + Amendment B (``engaged``), our character's id from the Timeline."""
         base = olf.FacingRule.for_events(rule, self.lab.timeline.events)
+        events = self.lab.timeline.events
         aid = self.lab.timeline.frame_world(self.refs[-1].t_mono_ns).aid if self.refs else None
-        if aid is None:
+        fights = any(e.get("type") in ("act", "attack_request") for e in events)
+        if aid is None and fights:
             raise SystemExit(f"{self.sid}: our character's id is unknown (Amendment B needs it)")
-        times = engagement_times(self.lab.timeline.events, int(aid))
+        times = engagement_times(events, int(aid)) if aid is not None else {}  # no fight: none
         return EngagedRule(base.rule, base.moves, base.classes, times)
 
     def scene(self, world: Any) -> Any:
