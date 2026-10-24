@@ -15726,7 +15726,10 @@ NAS as `20261024T123622-rdp-thief-t1b`). Packets (`dungeon_judge.py row` / `item
 | met / 10 min | 13.5 | 20.0 | |
 
 **Every item, per hour (pooled 1.33 h, `dungeon_judge.py items`):** Resin 27.0, Sticky Mucus 1.5,
-Red Herb 0.75, Pet Incubator 0.75, Bear's Footskin 0.75, Egg Shell 0.75. **No target item**
+Red Herb 0.75, Pet Incubator 0.75, Bear's Footskin 0.75, Egg Shell 0.75. **No target item in the
+pooled runs.** t1, apart (stopped at 14.6 min, packets: 14 kills, 57.4 / h, sitting 0 % by the bug,
+net -6,861 z / h), picked Resin 7, **Rough Elunium 1**, Tree Root 1, Sticky Mucus 1, Barren Trunk 1:
+the day's only target item
 (Dead Branch / Rough Elunium / Rough Oridecon / Honey). At 55 kills the expectation was about
 0.2 Dead Branch, 0.15 Rough Elunium, 0.4 Honey, 0.04 Rough Oridecon.
 
