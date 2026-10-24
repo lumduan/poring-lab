@@ -274,7 +274,8 @@ pass for every item).
 - TEST item exclusions (not in the denominators): under_self 13, under_unit 5; no stacked, UI or
   edge case. Spot 8 (looted, section 1) adds frames only: no detection there.
 - Not one false detection anywhere: 0 on the 113 TEST frames away from the items, 0 on 4,392
-  hunting frames (walking, fighting, Resin and the other confusers, the bot's cursor and name tags).
+  hunting frames (walking and fighting frames, with Resin 907 and the other floor items of
+  section 1 as confusers).
 
 **The natural Dead Branch (PILOT, section 6): FOUND.** All 9 frames of its window ([fall + 2.2 s,
 the pickup at 169.9 s): frames 000000153-000000161) had our character still, and on every one the
@@ -286,13 +287,18 @@ frozen 604 detector put exactly one detection **0.8 px** from the predicted cent
    0.45 within 6 px): every one is at spot 11, which stands under a willow (by eye, contact sheet
    `scratch/test_sheet_1.png`: the hanging branches cover all four items in every view). On FIT the
    same measure is 177 of 475 labels (37.3 %; spot 1 under a canopy, spots 2 / 4 / 6 partly, by
-   eye). No pixel detector, template or learned, finds an item the client draws under a canopy:
-   these frames cap recall at ~71 % for 518 / 604 at spots like these.
+   eye). No pixel detector, template or learned, finds an item the client draws under a canopy.
+   **On this TEST set they cap recall below the 80 % bar for EVERY item, even for a perfect
+   detector:** 757 28 / 42 = 66.7 %, 756 33 / 45 = 73.3 %, 604 28 / 36 = 77.8 %, 518 34 / 51 =
+   66.7 %.
 2. **On open ground (spots 9-10; POST-HOC, NOT the verdict) at the frozen thresholds:** 518 **100 %**
    (34 / 34), 604 **85.7 %** (24 / 28), 756 54.5 % (18 / 33), 757 28.6 % (8 / 28), still with 0
-   false detections in 4,392 hunting frames. By eye on the TEST sheets, the open-ground misses are
-   visible items: 756 on dirt (spot 9, view 0), 757 at a bush edge in shade (spot 10, every view),
-   604 on grass (spot 10, view 0).
+   false detections in 4,392 hunting frames. By eye on the TEST sheets (one frame per view), the
+   open-ground misses are VISIBLE items: 756 on bare dirt (spot 9, view (0, 0)); 757 at the forest
+   edge (spot 9, view (+3, 0)) and beside a bush in its shade (spot 10, views (0, 0), (+3, 0),
+   (0, +3)); 604 on grass (spot 10, view (0, 0)); and 756 under our own HP / SP bar (spot 10, view
+   (+3, 0)): the bar is drawn below our feet, outside the 34 x 74 `under_self` box, so it is an
+   occluder the label rule does not exclude.
 3. **The FIT-chosen colour gates are what cost the Roughs and the Dead Branch on open ground**
    (POST-HOC, NOT the verdict; `posthoc_curves.json`): with the RMS and inlier gates removed,
    756 reaches 78.8 % on open ground at NCC >= 0.79 with 0.0 false / 100 hunting frames, and 604
@@ -318,7 +324,7 @@ frozen 604 detector put exactly one detection **0.8 px** from the predicted cent
   display delay, a detector has ~57 frames: time is not the limit, the Poporing is.
 - **Cost:** the whole-frame scan of 4 templates took ~1.8 s of one core per frame here (4,392
   frames in 1,320 s on 6 workers, PNG decode and the NAS read included); a live version would scan
-  a region around the kill, as item_icons.py does (~60 ms for 200 x 200).
+  a region around the kill, as item_icons.py does (~60 ms per call on 200 x 200, 7 templates).
 
 **THE RECOMMENDATION (section 7):**
 - **(a) is NOT met for any item by the pre-registered bars.** The closest are **Honey (518) and
