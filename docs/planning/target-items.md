@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Batt's four target items (Rough Elunium 757, Rough Oridecon 756, Dead Branch 604, Honey 518), staged on pay_fild07's floor and labelled from the packets, are found from ONE 1-fps frame by per-item masked colour templates built on FIT spots: on held-out TEST spots recall >= 80 % and precision >= 90 % per item within +-6 px, with <= 1 false detection per 100 hunting frames per item."
-status: PRE-REGISTERED (the commit time of this file; nothing measured yet)
+status: "RESULT 2026-10-24 (5ed077c 18:31:23): ALL FOUR FAIL the recall bar (757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %; bar 80 %); precision 100 % and 0 false detections in 4,392 hunting frames for every item; the natural Dead Branch FOUND (0.8 px). Trees hide 29.3 % of the TEST labels (no detector can pass on this TEST set). PRE-REGISTERED fbc077e 17:48:17, amendment A b0bdc10 18:00:54, frozen 18:05:45."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [item-class.md, thief-payon.md, ../demonstrations.md, ../../scripts/target_items.py, ../../scripts/stage_items.py, ../../scripts/item_labels.py]
-next_action: "Build the FIT templates and the threshold, freeze (sha256 in section 9), then measure TEST, the negatives and the natural Dead Branch; write the result and the recommendation into section 9."
+next_action: "Parent / Batt (section 9b): (1) a live 'loot by sight' fast path for 518 / 604 only, as its own pre-registration, the hover sweep kept as fallback; (2) a CPU re-staging on OPEN ground for the Roughs (757 had one visible FIT floor item) before any GPU item class; (3) stage_items.py: spots away from tree models, Poporings cleared first."
 title: "Target items from pixels: staged Rough Elunium / Rough Oridecon / Dead Branch / Honey on pay_fild07, template matching, held-out spots (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -254,7 +254,7 @@ had been read; the pilot's Dead Branch window (section 6) neither.
   pre-registration (3d), so FIT already predicts TEST recall well under 80 % unless the TEST spots
   are open ground. Written here before any TEST read.
 
-### 9b. RESULT (written 2026-10-24 18:3x ICT; clock times from `date` and file times)
+### 9b. RESULT (committed 2026-10-24 18:31:23, 5ed077c; clock times from `date` and file times)
 
 **The order of events (after 9a):** the first TEST read 18:06:32 (`scan --set test`, 18 minutes
 after the pre-registration commit 17:48:17 and 47 s after the freeze 18:05:45); the pilot's Dead
@@ -349,5 +349,9 @@ frozen 604 detector put exactly one detection **0.8 px** from the predicted cent
 - **For the next staging run (stage_items.py):** choose spots away from tree models, and clear or
   avoid Poporings near the spot first.
 
-**Scratch** (/dev/shm/poring-lab-tmp/target-items/, client-derived, never committed): see the
-parent's report for what was kept and deleted.
+**Scratch** (client-derived, never committed or shipped). KEPT in
+/dev/shm/poring-lab-tmp/target-items/ (4.2 MB, for a re-score or the parent's decision): the
+frozen `params/` (params.json, templates.npz, frozen.json, fit_report.json), `scan/` (the
+candidates of TEST, TEST-NEG and the pilot window), score.json, the post-hoc JSONs, the logs.
+DELETED 2026-10-24 18:32: the contact sheets and crop sheets (`scratch/`, 11 MB), the FIT sample
+crops (8.6 MB), the FIT candidates (8.5 MB), the frame indexes (0.7 MB; rebuilt on demand).
