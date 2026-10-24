@@ -454,8 +454,8 @@ Every candidate frame (1 fps). "kept" = the kept fitted labels in any candidate 
   `reference.png` with 12 letters, `pack.json`, `instructions.txt`); the answer key, apart:
   `/dev/shm/poring-lab-tmp/payf07/t2-seed21-key/answer_key.json` (sha256 `3c4748bc…`).
 - **The sample:** 30 per species from the T2 pool (pool sizes: Elder Willow 206, Willow 603, Eggyra
-  513, Bigfoot 431, Poporing 271, Green Plant 116), section 6's seeded order. 77 of the 180 lie
-  under a model box (kept by o3h). No controls.
+  513, Bigfoot 431, Poporing 271, Green Plant 116), section 6's seeded order. 61 of the 180 lie
+  under a model box (kept by o3h). By session: staged 72, s1 48, t1b 47, s-pilot 13. No controls.
 - **The reference letters** (in the key only): 12 species, the six of pay_fild07 + Poring, White
   Plant, Lunatic, Pupa, Drops, Creamy, each in its idle views side by side.
 - **The labeller instructions:** `docs/planning/payf07-blind-instructions.txt`, copied verbatim as
