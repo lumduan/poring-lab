@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@1"
+VERSION = "stage@2"  # @2: --open (target-items.md 9b)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -69,6 +69,24 @@ def pick_spots(area: Any, n: int, seed: int, sep: int = SPOT_SEP,
             if len(out) == n:
                 break
     return out
+
+
+CANOPY_NORTH, CANOPY_AROUND = 6, 3  # cells: a tall model hides what stands NORTH of its base on
+# screen (the camera looks north); the target-items study (9b) found 29 % of its items under trees
+
+
+def open_area(
+    area: Any, canopy: Any, north: int = CANOPY_NORTH, around: int = CANOPY_AROUND
+) -> Any:
+    """PURE: ``area`` minus the tall-model footprints ``canopy`` (bool [y, x]) widened by ``around``
+    cells and by ``north`` cells towards +y (north), where an item would be drawn behind a tree."""
+    h, w = canopy.shape
+    grown = canopy.copy()
+    ys, xs = np.nonzero(canopy)
+    for dy in range(-around, north + 1):
+        for dx in range(-around, around + 1):
+            grown[np.clip(ys + dy, 0, h - 1), np.clip(xs + dx, 0, w - 1)] = True
+    return area & ~grown
 
 
 def search_area(map_: str) -> Any:
@@ -188,7 +206,10 @@ def run(a: argparse.Namespace) -> int:
     missing = [n for n in TARGETS.values() if not (ICON_DIR / f"loot-{n}.npy").exists()]
     if missing:
         raise SystemExit(f"stage_items refused: no icon for {missing} in {ICON_DIR} (cut)")
-    spots = pick_spots(search_area(a.map), a.n, a.seed)
+    area = search_area(a.map)
+    if a.open is not None:  # target-items.md 9b: stage on OPEN ground (the RSW's tall models)
+        area = open_area(area, np.load(a.open))
+    spots = pick_spots(area, a.n, a.seed)
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-stage-items-{a.map}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True)
@@ -199,6 +220,7 @@ def run(a: argparse.Namespace) -> int:
         evf.flush()
 
     ev({"kind": "run_start", "version": VERSION, "map": a.map, "seed": a.seed, "spots": spots,
+        "open": None if a.open is None else str(a.open),
         "offsets": OFFSETS, "still_s": STILL_S, "targets": TARGETS})  # fmt: skip
     reason = "done"
     with _session("run") as (agent, screen):
@@ -247,6 +269,7 @@ def main() -> int:
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--n", type=int, default=12)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--open", type=Path, default=None)
     p = sub.add_parser("cut")
     p.add_argument("spec", type=Path)
     sub.add_parser("give")
@@ -257,9 +280,14 @@ def main() -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--label", default="s")
     p.add_argument("--immune-confirmed", action="store_true")
+    p.add_argument("--open", type=Path, default=None,
+                   help="a canopy mask .npy (client-derived, /dev/shm): open ground")  # fmt: skip
     a = ap.parse_args()
     if a.cmd == "spots":
-        print(json.dumps(pick_spots(search_area(a.map), a.n, a.seed)))
+        area = search_area(a.map)
+        if a.open is not None:
+            area = open_area(area, np.load(a.open))
+        print(json.dumps(pick_spots(area, a.n, a.seed)))
     elif a.cmd == "cut":
         print(json.dumps(cut(a.spec)))
     elif a.cmd == "give":

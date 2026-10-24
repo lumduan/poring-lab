@@ -34,3 +34,15 @@ def test_the_four_targets_and_offsets() -> None:
                           518: "honey"}  # fmt: skip
     assert si.OFFSETS[0] == (0, 0) and len(set(si.OFFSETS)) == 5
     assert "data" in si.ICON_DIR.parts  # client pixels: gitignored data/
+
+
+def test_open_area_keeps_cells_off_and_north_of_the_canopy_out() -> None:
+    """target-items.md 9b: trees hid 29 % of the staged items; a tall model hides what stands north
+    of its base on screen, so the canopy grows ``around`` cells and ``north`` cells towards +y."""
+    area = np.ones((40, 40), dtype=bool)
+    canopy = np.zeros((40, 40), dtype=bool)
+    canopy[20, 20] = True
+    o = si.open_area(area, canopy, north=6, around=3)
+    assert not o[20, 20] and not o[26, 20] and not o[17, 23] and not o[20, 17]
+    assert o[27, 20] and o[16, 20] and o[20, 24] and o[20, 16]
+    assert o.sum() == 40 * 40 - 7 * 10
