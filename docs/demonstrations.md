@@ -15906,6 +15906,70 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
   Fly Wing. The hover-cursor read fails over the swaying Elder Willow. Batt: "train YOLO for the
   monsters in this map too" -> docs/planning/payf07-detector.md.
 
+**RESULT, 4.04 (the 6 scored runs s1-s6, 17:33-21:42 ICT; judged by `dungeon_judge.py row` +
+`dungeon_style.py row`):**
+
+| run | min | kills (/h) | met / 10 min | HP min | pot / wing | sitting | loot g / n | net z / h | s / kill (fight / walk / stand) | steal tries / stolen | deaths | hard bars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| s1 | 40.2 | 21 (31.4) | 16.0 | 15.9 % | 5 / 1 | 59.5 % | 95.0 / 100 % | -7,511 | 114.8 (11.5 / 5.7 / 97.5) | 12 / 9 | 0 | pass |
+| s2 | 40.0 | 27 (40.5) | 18.0 | 38.2 % | 0 / 0 | 47.2 % | 96.2 / 100 % | +2,049 | 88.9 (8.9 / 6.0 / 74.0) | 19 / 12 | 0 | pass |
+| s3 | 40.0 | 35 (52.5) | 16.5 | 19.6 % | 4 / 1 | 34.0 % | 89.5 / 91.9 % | -3,324 | 68.6 (9.4 / 6.2 / 53.0) | 22 / 10 | 0 | pass |
+| s4 | 40.0 | 20 (30.0) | 20.5 | 27.5 % | 1 / 0 | 12.0 % | 100 / 100 % | -257 | 120.0 (13.4 / 18.6 / 88.0) | 16 / 7 | 0 | pass |
+| s5 | 40.0 | 16 (24.0) | 29.5 | 18.4 % | 1 / 1 | 33.7 % | 100 / 100 % | -467 | 150.0 (9.5 / 17.9 / 122.7) | 15 / 6 | 0 | pass |
+| s6 | 40.1 | 24 (35.9) | 30.0 | 62.7 % | 0 / 0 | 0.0 % | 75.8 / 100 % | +2,073 | 100.2 (7.8 / 18.1 / 74.3) | 25 / 12 | 0 | pass |
+| **pooled** | **240.3** | **143 (35.7)** | | | 11 / 3 | | | | | **109 / 56 (51.4 %)** | **0** | **pass** |
+
+**Steal (packets, `steal_by_species`):**
+
+| species | tries | stolen | per try | formula (pre-registered) |
+|---|---|---|---|---|
+| Elder Willow | 65 | 39 | 60.0 % | 61.2 % |
+| Eggyra | 12 | 1 | 8.3 % | 20.2 % |
+| Poporing | 10 | 4 | 40 % | 51.5 % |
+| Bigfoot | 6 | 4 | 67 % | 82.7 % |
+| Willow | 2 | 1 | | 87.2 % |
+| unknown (no attack followed within 15 s) | 14 | 7 | | |
+
+- 0.76 tries per kill; SP skips 0 (the gate never blocked).
+- Runner casts vs packet SP falls: 117 casts logged; packets 109 falls of 10 (several casts
+  fell in the same batch).
+
+**Every item per hour (pooled 4.0 h; picked / stolen):**
+- Resin 29.5 (83 / 35);
+- Sticky Mucus 3.5 (10 / 4); Bear's Footskin 3.5 (10 / 4); Trunk 2.25; Tree Root 2.0;
+- Potato, Animal Skin, Red Herb, Piece of Egg Shell, Grape 0.75 each;
+- Scell, Barren Trunk, Green Herb 0.5; Apple, Main Gauche 0.25.
+
+**Target items, read with the packets:**
+- **Natural hunting income: Dead Branch 3 (0.75 / h) and Rough Elunium 1 (0.25 / h).**
+  - s5: 1 Dead Branch STOLEN from an Elder Willow attacking us. The SP fall 112 -> 102 and the
+    item came in one packet batch; the runner logged cast and ok.
+  - s6: 2 Dead Branches picked. One came from our Elder Willow kill, was looted, and dropped
+    again when we killed the looter. The other came from a kill's mixed pile.
+  - s6: 1 Rough Elunium picked, a lone drop after our hits.
+- **Excluded as staged:** s3's Honey, Dead Branch, Rough Oridecon and Rough Elunium. They came
+  back from a looter (stage_items spot 8).
+- **Lost to looters:** s3's Dead Branch (1.7 s) and one of s6's (210,170).
+
+**Against the expectations (stated before any run):**
+- Steal per try within +-15 points for a species with >= 20 tries: Elder Willow 60.0 % vs 61.2 %,
+  MET. The others had too few tries to judge.
+- Target items 2-5 in total: 4 natural, MET.
+- SP skips < 20 %: 0 %, MET.
+- Pace within -25 % .. +10 % of 4.03's 41.3 / h: 35.7 / h = -13.6 %, MET.
+- Deaths 0 and hard bars 0: MET.
+
+**What limits it:**
+- STANDING outside fights is 53-123 s a kill, with sitting 0-60 %.
+- The hover-cursor engagement fails over Elder Willows (Batt's clip, s1 30.9-31.8 min).
+- Walking rose to ~18 s a kill in s4-s6.
+- Met / 10 min rose from 16 to 30 while kills / h fell: the bot sees more monsters than it
+  engages.
+- -> the pay_fild07 monster detector (docs/planning/payf07-detector.md: the training tier PASSED
+  19:52; cache and training after an Elder Willow watch collection).
+- Recordings: s2 and s3 stopped early on the host IO guard (quant's own cron spikes); s4-s6 are
+  full.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
