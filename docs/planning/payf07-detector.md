@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "PRE-REGISTERED at the commit time of this section's first commit (2026-10-24, ICT), BEFORE any label is built and before any TEST frame is read"
+status: "PRE-REGISTERED 2026-10-24 18:25:24 ICT (7ed0422), BEFORE any label was built and before any TEST frame was read; the tool c8812fd (18:32:03)"
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -291,3 +291,37 @@ this map's species appended:
     crops, a NEW seed and two NEW labellers, recall and precision >= 0.80 for a species with >= 50
     evaluated crops; v1's gold set and held-out prt_fild08 sessions no worse than v1; orcsdun01's
     col2 per v2orc-vs-v1.md).
+
+## 9. RESULT: 4b, the 1d measurement on FIT, attempt 1 -- STOPPED (17 walker samples < 50)
+
+- **Run** 2026-10-24 18:32:12-18:33:22 ICT at c8812fd (`map_labels.py offset`, FIT = staged spots
+  0-7 + t1b; local `/dev/shm/poring-lab-tmp/payf07/fit/offset.json`). Nothing was frozen.
+- **The candidates:** staged spots 0-7: 507 frames (dropped: other spots 474, inventory 320, GM
+  windows 138, map changes 86, before spot 0 13); t1b: 1,450 (our character moving 738, off the
+  map 62, map changes 11, GM windows 10).
+- **The samples: 17, all from t1b; the staged spots gave 0.** 4b's stop (< 50) applies.
+- **The coarse curve (n = 17, median px):** 0 ms 13.6; 50 ms 9.4; **100 ms 4.5; 150 ms 4.2**;
+  200 ms 10.8; every offset from 250 to 1,000 ms 13.0-18.9.
+- **Why so few (a scratch diagnostic on FIT only, `payf07/scratch/diag_1d.py`):** in the staged
+  FIT frames ~175 walker-instances walk at any one offset. Only 15-26 of them are isolated, clear
+  of the UI and clear of every model box; 72-79 more are isolated and clear but under a model box
+  (the forest). And 1d's sample must walk ONE move through the whole 1-s sweep: at 1 fps and
+  5 cells/s (Elder Willow, Willow, Eggyra walk 200 ms / cell) such moves are rare. orcsdun01's
+  col3 had 5 Hz frames and Orc Zombies at 400 ms / cell.
+
+### 9a. AMENDMENT A (2026-10-24 18:35:20 ICT, from `date`; written after attempt 1's STOP and BEFORE any 1d is frozen, before T_h and before any TEST frame is read)
+
+- **What changes (4b only):** the 1d sweep is narrowed from 0..1,000 ms to **0..500 ms** (coarse
+  50 ms steps, then 10 ms within ±50 of the coarse best, clipped to 0..500). A sample must then walk
+  one move through 0.5 s instead of 1 s. For the sweep, a candidate frame's character must stand
+  still from t - 1.5 s (the sweep's edge + 4f's 1 s) to t.
+- **What stays:** everything else in 4b (the walkers, isolation, UI / edge / model-box clearance at
+  every offset, the error, the median), the stop at < 50 samples, and **the stop when the best
+  coarse offset lies at the sweep's edge** (0 or 500 ms). If the true offset were >= 500 ms (the
+  brief's "~0.4-0.6 s on the hunt path"), attempt 2 stops at the edge instead of freezing it.
+- **Why this is not tuning to TEST:** it is a FIT-only instrument change; T1's and T2's bars and
+  data are untouched. It is informed by attempt 1's FIT curve (the minimum at 100-150 ms, every
+  offset >= 250 ms at >= 13 px), and by orcsdun01's 1d on the SAME RDP frame bus (warp_watch's
+  frames also come from the bus: 120 ms, 260 samples).
+- **If attempt 2 also stops:** nothing is frozen, T1 does not run, and the report proposes
+  orcsdun01's 120 ms (the same bus) for Batt's decision.
