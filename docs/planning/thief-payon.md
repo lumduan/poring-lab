@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [crusader-orcsdun01.md, item-class.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/crusader.py]
-next_action: "4.04 runs (6 x 40 min + a second block); the target-item recognition study for pickup accuracy (Batt ~16:0x)."
+next_action: "4.04 runs (6 x 40 min + a second block); the pay_fild07 monster detector (Batt ~18:0x: payf07-detector.md, labels by a subagent); target items: target-items.md 9b (all four FAIL recall: trees; Honey / Dead Branch closest on open ground) -> re-stage on open ground is the proposal."
 title: "A Thief (then Rogue) for economics on a Payon field: the decisions, the facts, the build and the plan"
 date: 2026-10-24
 owner: Batt
@@ -239,6 +239,13 @@ counted per hour apart (dungeon_judge.py items).
   against the 4.03 hunting frames as negatives and the pilot's natural Dead Branch.
   `docs/planning/target-items.md` (its branch). The verdict decides "loot by sight" by templates,
   or a learned item class later (GPU: R1-R3).
+  - **➡️ RESULT (target-items.md 9b, merged 2026-10-24 ~18:4x): all four FAIL the recall bar.**
+    - Recall: 757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %. Precision 100 %, and 0 false
+      detections in 4,392 hunting frames. The pilot's natural Dead Branch was found.
+    - Trees hide 29 % of the TEST labels, which caps recall under 80 % for every item.
+    - On open ground: Honey 100 %, Dead Branch 85.7 %.
+    - The proposal: re-stage on OPEN ground, use multi-templates, and clear the Poporings, which
+      looted spots 7-8 within seconds.
 
 ### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
 
