@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Batt's four target items (Rough Elunium 757, Rough Oridecon 756, Dead Branch 604, Honey 518), staged on pay_fild07's floor and labelled from the packets, are found from ONE 1-fps frame by per-item masked colour templates built on FIT spots: on held-out TEST spots recall >= 80 % and precision >= 90 % per item within +-6 px, with <= 1 false detection per 100 hunting frames per item."
-status: "ROUND 2 (open ground, multi-templates) PRE-REGISTERED 2026-10-24 (section 10; its commit time); no round-2 pixel read yet. ROUND 1 RESULT 2026-10-24 (5ed077c 18:31:23): ALL FOUR FAIL the recall bar (757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %; bar 80 %); precision 100 % and 0 false detections in 4,392 hunting frames for every item; the natural Dead Branch FOUND (0.8 px). Trees hide 29.3 % of the TEST labels (no detector can pass on this TEST set). PRE-REGISTERED fbc077e 17:48:17, amendment A b0bdc10 18:00:54, frozen 18:05:45."
+status: "ROUND 2 RESULT 2026-10-25 (section 10.9b): ALL FOUR PASS on open ground: TEST recall 757 97.3 %, 756 95.7 %, 604 95.7 %, 518 94.9 % (bar 80 %), precision 100 %, TEST-NEG 0.0 / 0.0 / 0.022 / 0.0 false per 100 hunting frames (4,628; bar 1.0); every miss on 3 frames where the client flashes floor items yellow. PRE-REGISTERED 3995290 23:13:14, frozen 23:45:44, no amendment. ROUND 1 RESULT 2026-10-24 (5ed077c 18:31:23): ALL FOUR FAILED the recall bar (757 19.0 %, 756 40.0 %, 604 66.7 %, 518 66.7 %), mostly because trees hid 29.3 % of its TEST labels."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [item-class.md, thief-payon.md, ../demonstrations.md, ../../scripts/target_items.py, ../../scripts/target_items_r2.py, ../../scripts/stage_items.py, ../../scripts/item_labels.py]
-next_action: "Round 2 (section 10): fit, freeze, score TEST / TEST-NEG, then the recommendation. Round 1's (section 9b): (1) a live 'loot by sight' fast path for 518 / 604 only, as its own pre-registration, the hover sweep kept as fallback; (2) a CPU re-staging on OPEN ground for the Roughs (757 had one visible FIT floor item) before any GPU item class; (3) stage_items.py: spots away from tree models, Poporings cleared first."
+next_action: "Parent / Batt (10.9b): a live loot-by-sight fast path for all four targets on pay_fild07 open ground, as its own pre-registration (region scan around the kill, direct click, the hover sweep kept as the fallback for canopy / flash frames / cursor occlusion); no GPU item class needed for these four; CPU follow-ups: a natural Rough case from the next hunts, the flash state (a FIT-only variant or a 2-frame rule)."
 title: "Target items from pixels: staged Rough Elunium / Rough Oridecon / Dead Branch / Honey on pay_fild07, template matching, held-out spots (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -540,3 +540,122 @@ those 430 + 2,188 t1b frames on pay_fild07 = 2,618, none `ui_layout_mismatch`):
 - **FIT recall is IN-SAMPLE** (the variants come from these same floor items), so it overstates
   TEST; round 1's FIT recall was 0.27-0.64. The 0.0 FIT-NEG rate at these thresholds leaves the
   TEST-NEG bar (1.0 / 100) a margin only if s4 / s5 resemble t1b. Written before any TEST read.
+
+#### 10.9b RESULT (2026-10-25; clock times from `date`, the commits and file times)
+
+**The order of events (after 10.9a):** the freeze record committed c3099c3 23:46:10; the first
+TEST read 23:46:18 (`scan --set test`, 33 min after the pre-registration commit 23:13:14 and 34 s
+after the freeze 23:45:44); the NATURAL frames 23:47:10-23:47:17; TEST-NEG (s4 + s5)
+23:47:18-00:09:29 (4,628 frames on pay_fild07, 1,331 s on 10 workers). While TEST-NEG ran, a
+TEST-only `score` (~23:47; every verdict line read FAIL by construction, no TEST-NEG frame yet), the
+TEST misses' contact sheet 23:48:06 and the miss frames' diff 23:49:00 were looked at: nothing
+frozen can change after the freeze. The final `score` 00:10:06. TEST frames: 138, all `ok`, none
+`ui_layout_mismatch`; TEST-NEG frames: 4,628, none on a non-hunt layout.
+
+**THE VERDICT (10.5, as written): ALL FOUR ITEMS PASS.**
+
+| item | threshold NCC / RMS / inlier | TEST labelled (floor items) | recall (bar >= 80 %) | per floor item (spot 8 / 10 / 11) | precision (bar >= 90 %) | TEST-NEG false / 100 frames (bar <= 1.0) | verdict |
+|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 0.90 / 25 / 0.7 | 37 (3) | **97.3 %** (36) | 12/13, 9/9, 15/15 | 100 % (47 / 47) | **0.0** (0 in 4,628) | **PASS** |
+| 756 Rough Oridecon | 0.83 / 30 / 0.8 | 47 (3) | **95.7 %** (45) | 13/15, 20/20, 12/12 | 100 % (57 / 57) | **0.0** | **PASS** |
+| 604 Dead Branch | 0.72 / 30 / 0.6 | 47 (3) | **95.7 %** (45) | 18/20, 14/14, 13/13 | 100 % (58 / 58) | **0.022** (1 in 4,628, in s4) | **PASS** |
+| 518 Honey | 0.91 / 25 / 0.8 | 59 (3) | **94.9 %** (56) | 18/20, 19/20, 19/19 | 100 % (62 / 62) | **0.0** | **PASS** |
+
+- TEST item exclusions (not in the denominators): `under_self_bar` 30, `under_unit` 14,
+  `under_self` 2; no stacked, UI or edge case. Spot 9 (its items vanished within 2.6 s) adds frames
+  only: no detection there.
+- **Under round 1's label rule** (the bar exclusion off; reported, NOT the verdict): 757 95.9 % (49
+  labels), 756 94.7 % (57), 604 96.2 % (53), 518 94.9 % (59): every item stays above the bar. The two
+  extra misses are under the bar: 757 floor 356 (frame 1134) and 756 floor 357 (frame 1102).
+- Versus round 1 (9b): recall 19.0 / 40.0 / 66.7 / 66.7 % -> 97.3 / 95.7 / 95.7 / 94.9 %, with
+  precision still 100 % and the hunting false rate still ~0.
+
+**All 8 TEST misses fall on 3 frames where the client draws EVERY floor item YELLOW** (by eye on
+the contact sheet, then measured): frames 1116 and 1134 (spot 8) and 1362 (spot 10). Between
+1115 and 1116 only the item sprites change (823 px, and back at 1117); a Honey pixel goes from RGB
+(161, 135, 114) to (164, 137, 0). The flashes were 19.0 s and 233.0 s apart and each lasted at most
+one 1-fps frame; the cause is not known. On those frames the best candidate near the item has NCC
+0.49-0.76 and RMS 31-84, or there is none (756). It is the floor sprite's second STATE: no variant
+models it, because the medians drop it. 3 of 138 TEST frames.
+
+**The one TEST-NEG false detection** (604, s4 frame 1524 at (1124.5, 489.5), NCC 0.748, RMS 26.9,
+inlier 0.69, the pooled variant): by eye, bark and roots at a tree's foot inside a canopy: brown
+branches like the Dead Branch's. At 1 fps that is one false Dead Branch per ~77 min of hunting.
+
+**The natural cases (10.6; reported, no bar):**
+- Pilot Dead Branch 117: **FOUND** on all 9 still frames, 0.2 px from the predicted centre (round 1:
+  0.8 px).
+- s6 Dead Branch 304 (lived 4.5 s): **FOUND** on 2 of its 3 frames (0.9 px, 0.1 px), our character
+  still. On the third frame (4.4 s after the fall, 0.07 s before its vanish) the bot's pickup cursor
+  covers the item (by eye): no candidate.
+- s6 Dead Branch 293 (3.4 s): 2 frames, both `under_unit` (a monster's box over it): the first has no
+  detection (best NCC 0.64 nearby), the second is **FOUND** at 0.8 px.
+- s6 Rough Elunium 291 (2.4 s) and Dead Branch 296 (1.0 s): no frame in [fall + 2.2 s, vanish), so
+  no case. **There is still no natural Rough case.**
+
+**POST-HOC, NOT the verdict:**
+1. **What the variants add** (`posthoc_pooled_only.json`: the TEST frames re-scanned with variant 0
+   only, at the frozen thresholds): 757 97.3 %, **756 83.0 %** (39 / 47, vs 95.7 %), 604 95.7 %,
+   518 94.9 %. The per-floor-item variants matter for the Rough Oridecon only. For the other three,
+   the pooled template from 4-9 visible open-ground floor items is enough. Hits per variant:
+   - 757: b:159 14, c:340 13, b:143 6, c:336 3;
+   - 756: b:144 20, c:337 13, b:160 6, b:124 6;
+   - 604: c:338 11, b:161 8, c:350 7, pooled 7, b:137 6, b:165 6;
+   - 518: b:162 22, c:351 15, c:343 7, b:126 6, b:146 6.
+
+   Stage-b's variants make about half of the hits, so adding round 1's open spots was worth it.
+2. **Margins** (`posthoc_curves.json`): with the frozen gates, TEST recall is flat from NCC 0.60 up
+   to the frozen NCC for every item, because the only misses are the flash frames. TEST-NEG stays at
+   0.0 / 100 with the frozen gates down to NCC 0.80 (757), 0.73 (756), 0.75 (604) and 0.81 (518):
+   lower values were not kept for 757, 756 and 518. 604 rises to 0.065 at 0.70 and to 4.45-4.88 at
+   0.62-0.64. Without the colour gates: 757 has 1.23 / 100 at NCC 0.80 and 0.04 at 0.83, 518 has
+   0.065 at 0.81, and 604 has 35.4 at 0.62. The gates are still what keep the forest out.
+3. **Why round 2 passed where round 1 failed:**
+   - Open ground: apart from the flash frames, every TEST label had a candidate (round 1: 29.3 % had
+     none, all under one willow).
+   - More visible floor items per template: 757 34 kept samples from 4 floor items (round 1: 16 from
+     1); 756 75 from 7 (68 from 5); 604 92 from 7; 518 87 from 9.
+   - The thresholds were chosen with 2,618 FIT-NEG frames including a real hunt (round 1: 651
+     frames, no hunt), so 757's gates relaxed from RMS 20 / inlier 0.8 to 25 / 0.7.
+
+**Honest limits:**
+- TEST is 3 floor items per id at 3 places of one session: one evening's light, a still character,
+  1 fps, and open ground by construction. Under a canopy an item is still invisible (round 1).
+- The hunting false rate comes from 2 sessions of the same map.
+- No natural Rough has been seen by the detector yet.
+- Live play adds our own cursor over the item (s6 frame 608) and camera motion.
+- Cost: TEST-NEG ran at ~2.9 s of one core per whole frame (4 items, PNG decode and the NAS read
+  included).
+
+**THE RECOMMENDATION (10.7):**
+- **"Loot by sight" qualifies for ALL FOUR targets on pay_fild07 on open ground**, with this frozen
+  multi-template detector (params sha256 `2995b4d6...`, templates `fba39e9f...`). The live version
+  is its own pre-registration (the parent and Batt decide):
+  - scan a region around the kill, not the whole frame;
+  - click a detected target directly;
+  - keep the hover sweep as the fallback for canopy spots, the flash frames and cursor occlusion;
+  - treat a one-frame miss as "look again on the next frame" (a flash lasts at most one frame).
+- **A learned item class (GPU) is NOT needed for these four items on this map.** The remaining
+  misses are not a template problem:
+  - the yellow flash STATE: a FIT-only fix, i.e. a flash variant cut from FIT flash frames, or a
+    second frame;
+  - canopy occlusion: no pixel detector sees through it; use a non-visual fallback or a camera step;
+  - our own cursor and HP / SP bar.
+
+  Consider a GPU item class only for a NEW map or many more item ids, where staging each one is the
+  bigger cost.
+- **Next, CPU only:**
+  - confirm a natural Rough case: the next hunts' packets will say when one drops;
+  - for a live pre-registration, measure the flash's period on FIT-like frames.
+
+**Scratch** (client-derived; never committed or shipped):
+- **KEPT** in /dev/shm/poring-lab-tmp/target-items-r2/ (4.1 MB), for a re-score or a live
+  pre-registration:
+  - `params/`: params.json, templates.npz, frozen.json, fit_report.json;
+  - `scan/`: the candidates of TEST, TEST-NEG and NATURAL;
+  - score.json, the two post-hoc JSONs, inventory.json and the logs.
+- **DELETED** 2026-10-25 00:14:
+  - the contact sheets and crops, and the scratch scripts that made the post-hoc JSONs and the
+    sheets (0.9 MB);
+  - the FIT sample crops (8.1 MB) and the FIT candidates (40 MB);
+  - the frame indexes (1.4 MB; rebuilt on demand by `target_items_r2.py index`).

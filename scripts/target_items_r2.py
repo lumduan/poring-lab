@@ -755,7 +755,8 @@ def cmd_score(_a: argparse.Namespace) -> int:
                     "open_cell": None if open_ is None else bool(open_[fl.y, fl.x]),
                     "bar_only": bar_only,
                 })  # fmt: skip
-    neg = pickle.loads((OUT / "scan" / "neg.pkl").read_bytes())
+    npath = OUT / "scan" / "neg.pkl"  # not scanned yet: no TEST-NEG frames, every item fails
+    neg = pickle.loads(npath.read_bytes()) if npath.exists() else {"jobs": [], "res": {}}
     n_neg = len(neg["jobs"])
     fneg: Counter[int] = Counter()
     fneg_bad: Counter[int] = Counter()
