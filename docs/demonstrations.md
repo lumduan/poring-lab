@@ -15548,6 +15548,58 @@ after >= 6 min out of the dungeon; descriptive, no adoption rule -- the decision
   - 280.4 kills / h and 11,307 net z / h on a fresh dungeon;
   - 4.00's P arm: 186.0 kills / h and 8,318 z / h.
 
+### 4.03 dungeon@6: the THIEF walks and hits on a Payon field -- the base runs, name tags banked, no Steal yet (pre-registered 2026-10-24, the commit time of 4.03's first commit, BEFORE its pilot and its runs; Batt's reply to the overnight report, ~09:45 ICT: "End the Crusader tests here for now ... a new job for economics: Thief, then Rogue ... high-value items (Dead Branch, Rough Elunium, Rough Oridecon, Honey) ... collect at pay_fild08; if you meet an Elder Willow or a Bigfoot, Steal Lv 10 first ... for this map, practise walking and hitting first"; docs/planning/thief-payon.md)
+
+**The map is CONDITIONAL on Batt.** On this pre-renewal server pay_fild08 has neither Elder Willow
+nor Bigfoot. pay_fild07 has Elder Willow 70, Eggyra 40, Bigfoot 30, Poporing 20, Willow 20
+(thief-payon.md 2). It is the default, told to Batt at 10:0x. Its zones file
+(`config/map_zones/pay_fild07.yaml`, the 4 warp spans + 4 cells) is a DRAFT the loader refuses
+until Batt reviews or delegates it. **No run starts before both answers.** If he names pay_fild08,
+this section is amended before any run (its 1 script NPC at 218,283, its own zones).
+
+**Why this first:** Batt's order is "practise walking and hitting first". Steal-first needs to tell
+an Elder Willow or a Bigfoot from pixels. That is the client's name tag, and pay_fild07 has no tag
+templates yet: the 10:39 cut with the immune GM standing still gave 5 crops and 0 labelled words.
+So these runs BANK the raw tag band at every strike (dungeon@6), and the packets label them
+offline. Steal-first is its own next version (4.04).
+
+**The runs:** `dungeon_hunt.py run --char thief --map pay_fild07 --strategy B --search heading
+--loot v1 --minutes 40 --seed S` (dungeon@6: tags banked by default off orcsdun01, `--steal` off).
+- **An unscored pilot first (~5 min).** A bug = an amendment before run 1.
+- Then 40-min runs, seeds 24301, 24302, ...; labels t1, t2, ... No gap is imposed (Batt: "not
+  needed for this map yet").
+- Thief8fce (slot 3; Base 50 / Job 40; Damascus + NPC gear; F1 White Potion, F2 Fly Wing, F3
+  Steal unused here). Immunity OFF. Strategy B: a potion below 30 %, a Fly Wing below 20 % (or
+  falling > 200 HP/s under 40 %), a rest (sit where it stands: no rest spots yet) after a fight
+  under 60 %.
+- The setup tops up 10 potions and 10 Fly Wings and never drops the Etc tab. At 40 % weight it
+  stops for a person.
+
+**Measures (per run and pooled; packets: `dungeon_judge.py row` / `items`, `dungeon_style.py row`):**
+- kills / h; monsters met / 10 min; distinct monsters seen;
+- **EVERY item gained per hour by cause (picked / stolen / other)**, with the four target items
+  flagged (Batt 2026-10-24);
+- loot completeness gross / net; NPC net z / h; s / kill (fight / walk / stand);
+- HP min, potions, Fly Wings; deaths; hard bars (map change, NPC contact, an attack on a
+  non-monster, unknown UI state);
+- tags banked, and labelled per species by packets (`nametag.py build/check --map pay_fild07`
+  over the banked bands).
+
+**Expectations (stated before any run), no adoption rule (this is the base):**
+- **Safety:** the Thief's flee is 146 +1, so a single Elder Willow (HIT 58), Bigfoot (45) or
+  Eggyra (56) lands its 5 % minimum. Expected deaths 0; Elder Willow's Fire Bolt (magic) is the
+  HP risk.
+- **Target items at the spawn mix,** per 100 kills (kill drops; pinned mob_db):
+  - Dead Branch 0.39, Rough Elunium 0.28, Honey 0.75, Rough Oridecon 0.07;
+  - that is 0-3 of each per run-hour, so one run cannot rate them. Every report gives the counts
+    with the hours behind them.
+- **Tags:** at least 20 labelled bands each for Elder Willow and Bigfoot after the runs. This is
+  4.04's gate: their leave-one-out check reads each species right >= 90 %, and calls another
+  species one of them <= 5 %.
+
+**Hard bars and deaths:** as 4.00. A death is a result: the run stops, the cause is recorded, the
+dialog closes by its known step, then @alive + @heal.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
