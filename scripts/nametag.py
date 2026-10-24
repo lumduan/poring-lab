@@ -9,8 +9,15 @@ live frames (the recordings are JPEG q80: thin outlined letters break), labelled
 (the species of the mob nearest the hovered cell), and kept in data/nametags (gitignored: client
 pixels, rule 4).
 
-    nametag.py cut [--minutes 6] [--warp X Y]   no clicks: hover monsters, cut the raw tag regions
-    nametag.py build                            label the cuts by packets, write the templates
+    nametag.py cut [--minutes 6] [--warp X Y] [--map M]
+                                                no clicks: hover monsters, cut the raw tag
+                                                regions (the warp lands on M, default prt_fild08)
+    nametag.py build [--map M]                  label the cuts by packets, write the templates
+    nametag.py check [--map M]                  leave-one-out confusion
+
+PER MAP (2026-10-24, the Thief's Payon field): prt_fild08 keeps its files and its five species
+exactly; any other map labels by the KB's names of its spawn species (data/kb) and keeps its cuts'
+records and templates under data/nametags/<map>/.
 """
 
 from __future__ import annotations
@@ -35,6 +42,23 @@ MIN_WORD_W = 25  # a name is wider than the cursor tip that can enter the band (
 HOVER_S = 0.6  # the tag showed 0.5 s after the pointer stopped (20:3x probe)
 MATCH_MIN = 0.72  # template agreement (IoU of the letter cores) to accept a name
 TARGET_NAMES = ("Poring", "Lunatic", "Pupa", "Drops")  # prt_fild08's spawn table (farm0.TARGETS)
+HOME_MAP = "prt_fild08"  # the original map: its files sit at data/nametags/ itself
+PRT_FILD08_NAMES = {1002: "Poring", 1063: "Lunatic", 1008: "Pupa", 1113: "Drops", 1018: "Creamy"}
+
+
+def map_dir(root: Path, map_name: str) -> Path:
+    """data/nametags for prt_fild08 (unchanged), data/nametags/<map> for any other map."""
+    d = root / "data" / "nametags"
+    return d if map_name == HOME_MAP else d / map_name
+
+
+def species_names(map_name: str, spawns: dict[str, Any], mobs: dict[str, Any]) -> dict[int, str]:
+    """PURE: the mob id -> name table that labels a map's cuts: prt_fild08's fixed five; else every
+    species spawning on the map (the KB's spawns.json + mobs.json)."""
+    if map_name == HOME_MAP:
+        return dict(PRT_FILD08_NAMES)
+    return {int(sp["id"]): str(mobs[str(sp["id"])]["name"]) for sp in spawns.get(map_name, [])
+            if str(sp["id"]) in mobs}  # fmt: skip
 
 
 def letter_mask(a: Any) -> Any:
@@ -140,7 +164,7 @@ def load_templates(path: Path | None = None) -> dict[str, Any]:
 # --- the live cut (no clicks) ------------------------------------------------------------------
 
 
-def cut(minutes: float, warp: tuple[int, int] | None) -> int:
+def cut(minutes: float, warp: tuple[int, int] | None, map_name: str = HOME_MAP) -> int:
     import bench
     import farm0 as f0
     import farm1 as f1
@@ -148,7 +172,7 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
     import ro_agent as r
     import unit_detector
 
-    out = r.ROOT / "data" / "nametags" / "cuts"
+    out = map_dir(r.ROOT, map_name) / "cuts"
     out.mkdir(parents=True, exist_ok=True)
     gx0, gy0, gw, gh = r.game_region()
     stamp = time.strftime("%Y%m%dT%H%M%S")
@@ -157,7 +181,7 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
     with r.session("rule:nametag-cut@1") as (agent, screen):
         f0.stop_on_takeover(agent)
         if warp is not None:
-            r.gm(agent, screen, f"@warp prt_fild08 {warp[0]} {warp[1]}")
+            r.gm(agent, screen, f"@warp {map_name} {warp[0]} {warp[1]}")
             time.sleep(2.5)
             bench.close_chat(agent, screen)
         det = unit_detector.UnitDetector()
@@ -204,7 +228,7 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
     return 0
 
 
-def labelled_words() -> dict[str, list[Any]]:
+def labelled_words(map_name: str = HOME_MAP) -> dict[str, list[Any]]:
     """Every cut labelled by the packets (the species of the live mob nearest the hovered cell):
     {species: [its word's letter mask]}."""
     import flow_judge as fj
@@ -212,7 +236,7 @@ def labelled_words() -> dict[str, list[Any]]:
     import record_session as rs
     import ro_agent as r
 
-    d = r.ROOT / "data" / "nametags" / "cuts"
+    d = map_dir(r.ROOT, map_name) / "cuts"
     recs = [
         json.loads(x) for f in sorted(d.glob("cuts-*.jsonl")) for x in f.read_text().splitlines()
     ]
@@ -222,8 +246,10 @@ def labelled_words() -> dict[str, list[Any]]:
     events = sorted(rs.session_packets(t0, t1)[0], key=lambda e: int(e["t_mono_ns"]))
     pos, life = hc.walk_positions(events), fj.alive(events)
     gm_track, _ = fj.gm_track(events)
-    pick = fj.picker("prt_fild08")
-    names = {1002: "Poring", 1063: "Lunatic", 1008: "Pupa", 1113: "Drops", 1018: "Creamy"}
+    pick = fj.picker(map_name)
+    kb = r.ROOT / "data" / "kb"
+    names = species_names(map_name, json.loads((kb / "spawns.json").read_text()),
+                          json.loads((kb / "mobs.json").read_text()))  # fmt: skip
     by: dict[str, list[Any]] = {}
     for x in recs:
         gm = fj.at(gm_track, x["t"])
@@ -269,20 +295,20 @@ def template_of(words: list[Any]) -> Any:
     return acc / len(words) >= 0.5
 
 
-def build() -> int:
+def build(map_name: str = HOME_MAP) -> int:
     """A template per species from the packet-labelled cuts."""
     import ro_agent as r
 
-    by = labelled_words()
+    by = labelled_words(map_name)
     tpl = {sp: template_of(v) for sp, v in by.items()}
-    np.savez(r.ROOT / "data" / "nametags" / "templates.npz", **tpl)
+    np.savez(map_dir(r.ROOT, map_name) / "templates.npz", **tpl)
     print(json.dumps({sp: len(v) for sp, v in by.items()}))
     return 0
 
 
-def check() -> int:
+def check(map_name: str = HOME_MAP) -> int:
     """Leave one out: each labelled word matched against templates built without it."""
-    by = labelled_words()
+    by = labelled_words(map_name)
     conf: dict[str, dict[str, int]] = {}
     for sp, words in by.items():
         for k, w in enumerate(words):
@@ -304,14 +330,14 @@ def main() -> int:
     c = sub.add_parser("cut")
     c.add_argument("--minutes", type=float, default=6.0)
     c.add_argument("--warp", type=int, nargs=2, default=None)
-    sub.add_parser("build")
-    sub.add_parser("check")
+    for sp_ in (c, sub.add_parser("build"), sub.add_parser("check")):
+        sp_.add_argument("--map", default=HOME_MAP)
     a = ap.parse_args()
     if a.cmd == "cut":
-        return cut(a.minutes, tuple(a.warp) if a.warp else None)
+        return cut(a.minutes, tuple(a.warp) if a.warp else None, a.map)
     if a.cmd == "check":
-        return check()
-    return build()
+        return check(a.map)
+    return build(a.map)
 
 
 if __name__ == "__main__":

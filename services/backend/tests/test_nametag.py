@@ -50,3 +50,20 @@ def test_a_word_matches_its_own_template_and_not_another() -> None:
     assert name == "Poring" and iou > 0.9
     name, _ = nt.match(m, {"Creamy": other})
     assert name is None
+
+
+def test_per_map_names_and_dirs_keep_prt_fild08_unchanged(tmp_path) -> None:
+    """2026-10-24: other maps label by the KB's spawn species; prt_fild08 keeps its five and its
+    files at data/nametags/ itself."""
+    spawns = {"pay_fild07": [{"id": 1033}, {"id": 1060}, {"id": 1080}],
+              "prt_fild08": [{"id": 1002}, {"id": 1063}]}  # fmt: skip
+    mobs = {"1033": {"name": "Elder Willow"}, "1060": {"name": "Bigfoot"},
+            "1080": {"name": "Green Plant"}, "1002": {"name": "Poring"}}  # fmt: skip
+    assert nt.species_names("pay_fild07", spawns, mobs) == {
+        1033: "Elder Willow",
+        1060: "Bigfoot",
+        1080: "Green Plant",
+    }
+    assert nt.species_names("prt_fild08", spawns, mobs) == nt.PRT_FILD08_NAMES
+    assert nt.map_dir(tmp_path, "prt_fild08") == tmp_path / "data" / "nametags"
+    assert nt.map_dir(tmp_path, "pay_fild07") == tmp_path / "data" / "nametags" / "pay_fild07"

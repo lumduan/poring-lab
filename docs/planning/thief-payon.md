@@ -61,8 +61,9 @@ through data/kb). The spawn tables:
   - Job 40 is also the minimum for the Rogue change.
   - Plus Basic Skill 9 (the Novice's 9 job levels).
 - **Stats:** STR 1, AGI 62, VIT 1, INT 1, DEX 40, LUK 1.
-  - The server's `db/pre-re/statpoint.yml` gives 420 points at Base 50; these stats cost 418, so
-    **2 points are left**. His calculator showed 7.
+  - The server's `db/pre-re/statpoint.yml` gives 420 points at Base 50; these stats cost 413
+    (AGI 1→62: 278, DEX 1→40: 135), so **7 points are left, as his calculator shows**. (This doc
+    first said 418 / 2: an arithmetic slip, corrected 10:25 from the live status window.)
   - The Thief's job bonus at Job 40 (`job_stats.yml`): STR +3, AGI +3, VIT +1, INT +1, DEX +2,
     LUK +2. The calculator had Job Lv 1, so it showed none.
 - **Weight cap:** 2,400 + 30 x STR = 2,430 (as the calculator).
