@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import pickle
 import sys
 import time
@@ -34,7 +35,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):  # one BLAS thread per
+    os.environ.setdefault(_v, "1")  # worker: a shared host (WORKERS processes, no oversubscription)
+
+import numpy as np  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -66,7 +70,7 @@ BAR = (-36.0, 0.0, 36.0, 24.0)  # (du0, dv0, du1, dv1) px from our feet (10.3: r
 # --- the multi-template detector (10.4) -----------------------------------------------------------
 GEN_NCC = 0.35  # the pooled template's NCC local maxima that are re-scored by every variant
 MIN_PLACE_SAMPLES = 5  # a floor item's kept samples for its own colour variant
-WORKERS = 8
+WORKERS = 10
 CHUNK = 48  # frames read sequentially (one session at a time) per batch: paced NAS reads
 
 
@@ -162,37 +166,58 @@ def place_variants(
     return out_k, (np.stack(out).astype(np.float32) if out else np.zeros((0, h, w, 3), np.float32))
 
 
-def score_at(img: Any, mask: Any, variants: Any, ys: Any, xs: Any) -> tuple[Any, Any, Any]:
-    """PURE: masked colour NCC, RMS and inlier share (item_icons' maths: one mean over the three
-    channels; inlier = every channel within INLIER_PX) of each variant with its top-left at
-    (xs, ys): three K x N arrays."""
+def ncc_rms_at(img: Any, mask: Any, variants: Any, ys: Any, xs: Any) -> tuple[Any, Any]:
+    """PURE: masked colour NCC and RMS colour distance (item_icons' maths: one mean over the three
+    channels) of each variant with its top-left at (xs, ys): two K x N arrays."""
     a = np.asarray(img)[..., :3]
     my, mx = np.nonzero(np.asarray(mask, bool))
-    tv = np.asarray(variants, np.float64)[:, my, mx]  # K x P x 3
-    k_n, p_n = tv.shape[0], len(my)
-    n = 3 * p_n
+    tv = np.asarray(variants, np.float64)[:, my, mx].reshape(len(variants), -1)  # K x 3P
+    n = tv.shape[1]
+    mu = tv.mean(1)
+    tp = tv - mu[:, None]
+    tvar = np.maximum((tp**2).sum(1), 1e-6)
+    tsq = (tv**2).sum(1)
     ys = np.asarray(ys, int)
     xs = np.asarray(xs, int)
-    ncc = np.zeros((k_n, len(ys)))
-    rms = np.zeros((k_n, len(ys)))
-    inl = np.zeros((k_n, len(ys)))
-    mu = tv.reshape(k_n, -1).mean(1)
-    tp = tv - mu[:, None, None]
-    tvar = (tp**2).reshape(k_n, -1).sum(1)
-    tsq = (tv**2).reshape(k_n, -1).sum(1)
-    tr = tv.round()
+    ncc = np.zeros((len(tv), len(ys)))
+    rms = np.zeros((len(tv), len(ys)))
     for s0 in range(0, len(ys), 1024):
         yb, xb = ys[s0 : s0 + 1024], xs[s0 : s0 + 1024]
-        patch = a[yb[:, None] + my[None, :], xb[:, None] + mx[None, :]].astype(np.float64)
-        s1 = patch.reshape(len(yb), -1).sum(1)
-        s2 = (patch**2).reshape(len(yb), -1).sum(1)
+        patch = a[yb[:, None] + my[None, :], xb[:, None] + mx[None, :]]
+        patch = patch.reshape(len(yb), -1).astype(np.float64)  # N x 3P
+        s1 = patch.sum(1)
+        s2 = (patch**2).sum(1)
         var_i = np.maximum(s2 - s1 * s1 / n, 1e-6)
-        for k in range(k_n):
-            num = np.einsum("npc,pc->n", patch, tp[k])
-            ncc[k, s0 : s0 + 1024] = num / np.sqrt(var_i * max(float(tvar[k]), 1e-6))
-            ssd = s2 - 2.0 * (num + mu[k] * s1) + tsq[k]
-            rms[k, s0 : s0 + 1024] = np.sqrt(np.maximum(ssd, 0.0) / n)
-            inl[k, s0 : s0 + 1024] = (np.abs(patch - tr[k][None]).max(-1) <= ti.INLIER_PX).mean(1)
+        num = patch @ tp.T  # N x K
+        ncc[:, s0 : s0 + 1024] = (num / np.sqrt(var_i[:, None] * tvar[None, :])).T
+        ssd = s2[:, None] - 2.0 * (num + mu[None, :] * s1[:, None]) + tsq[None, :]
+        rms[:, s0 : s0 + 1024] = np.sqrt(np.maximum(ssd, 0.0) / n).T
+    return ncc, rms
+
+
+def inlier_at(img: Any, mask: Any, variants: Any, ys: Any, xs: Any, ks: Any) -> Any:
+    """PURE: the inlier share (every channel within INLIER_PX of the rounded template) of variant
+    ``ks[i]`` with its top-left at (xs[i], ys[i])."""
+    a = np.asarray(img)[..., :3]
+    my, mx = np.nonzero(np.asarray(mask, bool))
+    tr = np.asarray(variants, np.float32)[:, my, mx].round().astype(np.int16)  # K x P x 3
+    ys = np.asarray(ys, int)
+    xs = np.asarray(xs, int)
+    ks = np.asarray(ks, int)
+    out = np.zeros(len(ys))
+    for s0 in range(0, len(ys), 1024):
+        yb, xb, kb = ys[s0 : s0 + 1024], xs[s0 : s0 + 1024], ks[s0 : s0 + 1024]
+        patch = a[yb[:, None] + my[None, :], xb[:, None] + mx[None, :]].astype(np.int16)
+        out[s0 : s0 + 1024] = (np.abs(patch - tr[kb]).max(-1) <= ti.INLIER_PX).mean(1)
+    return out
+
+
+def score_at(img: Any, mask: Any, variants: Any, ys: Any, xs: Any) -> tuple[Any, Any, Any]:
+    """PURE: NCC, RMS and inlier share of EVERY variant at every position (three K x N arrays;
+    the scan computes the inlier share only for the chosen variant: the same numbers)."""
+    ncc, rms = ncc_rms_at(img, mask, variants, ys, xs)
+    inl = np.stack([inlier_at(img, mask, variants, ys, xs, np.full(len(ys), k))
+                    for k in range(len(variants))])  # fmt: skip
     return ncc, rms, inl
 
 
@@ -226,13 +251,13 @@ def scan_multi(
         py = (ys[:, None] + dyx[None, :, 0]).ravel()
         px = (xs[:, None] + dyx[None, :, 1]).ravel()
         ok = (py >= 0) & (px >= 0) & (py + h <= hh) & (px + w <= ww)
-        nc, rm, il_ = score_at(a, m.pooled.mask, m.variants, py[ok], px[ok])
+        nc, rm = ncc_rms_at(a, m.pooled.mask, m.variants, py[ok], px[ok])
         kb = np.argmax(nc, 0)
         col = np.arange(nc.shape[1])
         best = np.full(len(py), -np.inf)
         best[ok] = nc[kb, col]
-        feats = np.zeros((len(py), 3))
-        feats[ok] = np.stack([rm[kb, col], il_[kb, col], kb], 1)
+        feats = np.zeros((len(py), 2))
+        feats[ok] = np.stack([rm[kb, col], kb], 1)
         best = best.reshape(len(ys), len(dyx))
         j = np.argmax(best, 1)
         sc = best[np.arange(len(ys)), j]
@@ -241,14 +266,13 @@ def scan_multi(
         v = py[sel] + (h - 1) / 2.0
         f = feats[sel]
         keep = (sc >= ti.CAND_NCC) & ~ti.inside_any(u, v, drop)
-        u, v, sc, f = u[keep], v[keep], sc[keep], f[keep]
+        sel, u, v, sc, f = sel[keep], u[keep], v[keep], sc[keep], f[keep]
         if not len(u):
             out[m.item_id] = empty
             continue
         k = ti.nms(np.stack([u, v], 1), sc)
-        out[m.item_id] = np.stack([u[k], v[k], sc[k], f[k, 0], f[k, 1], f[k, 2]], 1).astype(
-            np.float32
-        )
+        inl = inlier_at(a, m.pooled.mask, m.variants, py[sel[k]], px[sel[k]], f[k, 1])
+        out[m.item_id] = np.stack([u[k], v[k], sc[k], f[k, 0], inl, f[k, 1]], 1).astype(np.float32)
     return out
 
 
@@ -707,7 +731,8 @@ def cmd_score(_a: argparse.Namespace) -> int:
             hit = ti.near(d[:, :2], pc).any(1) if pc else np.zeros(len(d), bool)
             prec[it] += [bool(x) for x in hit]
             for iv in fr["items"]:
-                if iv.item_id != it or not iv.labelled:
+                bar_only = iv.phase == "on" and iv.excl == ["under_self_bar"]  # round 1's rule
+                if iv.item_id != it or not (iv.labelled or bar_only):
                     continue
                 nb = ti.near([iv.centre], d[:, :2])[0]
                 best = None
@@ -728,6 +753,7 @@ def cmd_score(_a: argparse.Namespace) -> int:
                     "best": best,
                     "best_cand": None if bc is None else [round(float(x), 3) for x in bc],
                     "open_cell": None if open_ is None else bool(open_[fl.y, fl.x]),
+                    "bar_only": bar_only,
                 })  # fmt: skip
     neg = pickle.loads((OUT / "scan" / "neg.pkl").read_bytes())
     n_neg = len(neg["jobs"])
@@ -743,7 +769,8 @@ def cmd_score(_a: argparse.Namespace) -> int:
                 fneg_bad[it] += n
     neg_layout_bad = sum(1 for ok, _c in neg["res"].values() if not ok)
     for it in th:
-        rs = rec[it]
+        rs = [x for x in rec[it] if not x["bar_only"]]
+        r1 = rec[it]  # round 1's label rule: the bar exclusion off (reported, not the verdict)
         n = len(rs)
         found = sum(bool(x["found"]) for x in rs)
         per_inst: dict[str, list[int]] = {}
@@ -774,6 +801,11 @@ def cmd_score(_a: argparse.Namespace) -> int:
             "neg_false_per_100": round(f100, 3),
             "verdict": verdict,
             "variant_of_hits": dict(Counter(x["best"][3] for x in rs if x["found"])),
+            "round1_rule_labelled": len(r1),
+            "round1_rule_recall": round(sum(bool(x["found"]) for x in r1) / len(r1), 4)
+            if r1
+            else None,
+            "bar_only_misses": [x for x in r1 if x["bar_only"] and not x["found"]],
             "misses": [x for x in rs if not x["found"]],
         }
     out["test_status"] = dict(st)
