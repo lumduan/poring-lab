@@ -15636,6 +15636,25 @@ The packets say why:
   now per character (952): fixed before any scored run.
 - **No scored run starts:** the target choice for Bigfoot is Batt's (his build) -- asked at 11:5x.
 
+**Amendment B (2026-10-24 ~12:1x ICT, BEFORE pilot 2 and every scored run): a +8 Damascus.**
+- **Batt's answer (~11:5x-12:0x):** "change your weapon: use a Damascus knife, or raise STR to 50;
+  don't lower AGI or DEX", then "I want the character's ATK like this sample".
+  - His sample is this same Thief on a RENEWAL server: STR 1+4, AGI 64+4, DEX 40+5, Hit 271
+    (= 175 + Base 51 + DEX 45), equipment ATK 158 = Damascus 118 + a +8 refine (5 per level, a
+    level-3 weapon).
+  - He then chose "add @refine to group 20" over an NPC refiner and over STR 50 (STR 50 with these
+    stats needs 607 points = Base 64).
+- **Done:**
+  - `refine` added to group 20, in place, logged (4625ad0);
+  - a guarded `restart:rathena` 12:06:07-12:08:18 (worst capture stall 8.5 %);
+  - `@refine 2 8` at 12:09:18 through the Thief's name + job check.
+  - The status window reads ATK 131 + 40. STR 1, AGI 62, DEX 40 and every other stat are unchanged.
+- **Expected (pinned battle.cpp, `battle_calc_attack_post_defense`: pre-re adds the refine bonus
+  AFTER DEF and VIT reduction):** about +40 on every hit.
+  - Bigfoot: ~2.7 -> ~40 damage per hit, ~25 attacks per Bigfoot at Double Attack's 50 %.
+  - Elder Willow and Eggyra: faster kills.
+- **An unscored PILOT 2 (5 min) checks it before the scored runs.**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

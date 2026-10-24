@@ -155,6 +155,14 @@ through data/kb). The spawn tables:
     of 10 frames read). RESET restored the points, the reader got the per-skill geometry, and the
     whole tree applied.
 
+### 4b2. The +8 Damascus (Batt 2026-10-24 ~12:0x; demonstrations 4.03 Amendment B)
+
+- 4.03's pilot did 2.7 damage per attack to Bigfoot (dagger 50 % vs Large, VIT 55).
+- Batt's sample status window (Renewal; this build with a +8 Damascus) sets the target. Group 20
+  got `refine` (logged), and `@refine 2 8` made the equipped Damascus +8.
+- The status window: ATK 131 + 40; the rest unchanged. Pre-re adds the refine bonus after DEF, so
+  that is ~+40 per hit against anything.
+
 ### 4c. The economics model (econ_model.py build, NPC prices only; rares out)
 
 | map | V z / kill | aggressive share | note |
