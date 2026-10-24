@@ -15970,6 +15970,24 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
 - Recordings: s2 and s3 stopped early on the host IO guard (quant's own cron spikes); s4-s6 are
   full.
 
+**The SECOND block (runs after s6, pooled apart):**
+- **s7** (22:52-23:33, seed 24407, judged pre-run frame; the Thief relogged after the open-ground
+  staging, so immunity was off):
+  - 20 kills (30.0 / h), met 23.5 / 10 min, deaths 0, hard bars pass;
+  - HP min 28.7 %, 1 potion, sitting 11.8 %;
+  - s / kill 120.1 (fight 9.9 / walk 19.2 / stand 91.0);
+  - Steal 19 tries / 4 stolen.
+- **Its four target items are STAGED items recovered.** Honey, Dead Branch, Rough Oridecon and
+  Rough Elunium fell in ONE pile at (170-172, 141-143) with a Sticky Mucus, a Poporing's own drop.
+  It is a looter carrying a staged set. Natural target items in s7: 0.
+- **The lesson:** staging on the hunting map leaves looters carrying staged sets. Later runs then
+  "pick" target items that were never income. Stage elsewhere, or flag such piles (all four staged
+  ids at once).
+- **The block ends at s7.** s8's pre-run frame showed weight 1,034 / 2,430 (42.6 %; s7 picked a
+  Wooden Mail, weight 100). The Thief's setup never drops its Etc tab and stops at 40 % for a
+  person, so s8 was not released (STOP marker 23:3x). Freeing weight is Batt's call.
+- The recorder stopped early on the IO guard (quant-postgres 29.7 %): 1,325 frames, shipped.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
