@@ -92,6 +92,12 @@ CHAR_MAX_HP = {"crusader": 5260, "thief": 952}  # 4.03 pilot: no max_hp packet i
 STEAL_SP = 10  # TF_STEAL's SpCost (pinned skill_db): a Thief's SP fall of exactly 10 = a try
 PICK_S, STEAL_S = 2.0, 1.5  # a gain this soon after our pickup request / a steal's SP fall
 TARGET_ITEMS = {604: "Dead Branch", 757: "Rough Elunium", 756: "Rough Oridecon", 518: "Honey"}
+# A looter killed after taking a STAGED target set (stage_items.py) drops the whole set in one batch
+# around its corpse (4.04 s3 and s7). No pay_fild07 species drops more than two of the four target
+# ids (Elder Willow 604 + 757, Bigfoot 518 + 756: econ_model's drop lists), so a pile holding
+# >= STAGED_MIN_TARGETS different ones is a staged set coming back, not income. rAthena scatters a
+# kill's drops within 1 cell of the corpse, so one pile spans <= 2 cells (s3: 324,58 and 326,57).
+PILE_S, PILE_CELLS, STAGED_MIN_TARGETS = 0.5, 2, 3
 
 
 # --- pure helpers --------------------------------------------------------------------------------
@@ -387,13 +393,49 @@ def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
 # --- the row -------------------------------------------------------------------------------------
 
 
+def staged_floor_ids(packets: Sequence[Mapping[str, Any]]) -> set[int]:
+    """PURE: the floor ids of the TARGET items in every pile that holds >= STAGED_MIN_TARGETS
+    different target ids (a staged set back from a looter; see PILE_S). A pile links
+    floor_item_appear entries <= PILE_S and <= PILE_CELLS (Chebyshev) apart, transitively. The
+    looter's own drop in the same pile stays income."""
+    fl = sorted((e for e in packets if e.get("type") == "floor_item_appear"), key=_t)
+    up = list(range(len(fl)))
+
+    def root(i: int) -> int:
+        while up[i] != i:
+            up[i] = up[up[i]]
+            i = up[i]
+        return i
+
+    for i, a in enumerate(fl):
+        for b_ in range(i + 1, len(fl)):
+            b = fl[b_]
+            if _t(b) - _t(a) > PILE_S * NS:
+                break
+            if max(abs(int(a["x"]) - int(b["x"])), abs(int(a["y"]) - int(b["y"]))) <= PILE_CELLS:
+                up[root(b_)] = root(i)
+    piles: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
+    for i, e in enumerate(fl):
+        piles[root(i)].append(e)
+    out: set[int] = set()
+    for pile in piles.values():
+        tgt = [e for e in pile if int(e.get("item_id") or 0) in TARGET_ITEMS]
+        if len({int(e["item_id"]) for e in tgt}) >= STAGED_MIN_TARGETS:
+            out |= {int(e["floor_id"]) for e in tgt}
+    return out
+
+
 def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
-               steal_falls: Sequence[int] = ()) -> dict[str, Any]:  # fmt: skip
+               steal_falls: Sequence[int] = (), staged: Container[int] = ()
+               ) -> dict[str, Any]:  # fmt: skip
     """PURE (Batt 2026-10-24: every item collected, per hour): each successful inventory gain
     (pickup_result ok, which fires for EVERY gain) in [t0, t1] by its cause -- "picked" when our
-    pickup_request came <= PICK_S before it, "stolen" when a Steal's SP fall did <= STEAL_S before
-    it, else "other" (reported, e.g. a GM @item) -- per item id."""
-    reqs = sorted(_t(e) for e in packets if e.get("type") == "pickup_request")
+    pickup_request came <= PICK_S before it ("staged" instead when that request's floor id is in
+    ``staged``: staged_floor_ids), "stolen" when a Steal's SP fall did <= STEAL_S before it, else
+    "other" (reported, e.g. a GM @item) -- per item id."""
+    req = sorted((_t(e), int(e.get("floor_id") or 0)) for e in packets
+                 if e.get("type") == "pickup_request")  # fmt: skip
+    reqs = [t for t, _f in req]
     falls_ = sorted(steal_falls)
     by: dict[int, Counter[str]] = defaultdict(Counter)
     for e in packets:
@@ -405,7 +447,7 @@ def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
         i = bisect.bisect_right(reqs, t)
         j = bisect.bisect_right(falls_, t)
         if i and t - reqs[i - 1] <= PICK_S * NS:
-            kind = "picked"
+            kind = "staged" if req[i - 1][1] in staged else "picked"
         elif j and t - falls_[j - 1] <= STEAL_S * NS:
             kind = "stolen"
         else:
@@ -456,13 +498,15 @@ def steal_by_species(packets: Sequence[Mapping[str, Any]], steal_falls: Sequence
 def items_rows(gains: Mapping[str, Mapping[str, int]], hours: float,
                names: Mapping[str, str] | None = None) -> list[dict[str, Any]]:  # fmt: skip
     """PURE: the per-item table (picked / stolen / other, total and per hour), the target items
-    flagged, most collected first."""
+    flagged, most collected first. "staged" (a staged set back from a looter) is shown but kept
+    OUT of the total and the per-hour rate: it is not income."""
     out = []
     for k, c in gains.items():
-        tot = sum(int(v) for v in c.values())
+        tot = sum(int(v) for f, v in c.items() if f != "staged")
         out.append({"item_id": int(k), "name": (names or {}).get(k) or TARGET_ITEMS.get(int(k)),
                     "picked": int(c.get("picked", 0)), "stolen": int(c.get("stolen", 0)),
-                    "other": int(c.get("other", 0)), "total": tot,
+                    "other": int(c.get("other", 0)), "staged": int(c.get("staged", 0)),
+                    "total": tot,
                     "per_h": round(tot / hours, 2) if hours > 0 else None,
                     "target": int(k) in TARGET_ITEMS})  # fmt: skip
     return sorted(out, key=lambda x: (-x["total"], x["item_id"]))
@@ -546,7 +590,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     # character with Steal on its keys: the Crusader's Endure costs 10 too)
     thief = rs.get("char") == "thief"
     st_falls = [t for t, d in sp_falls if d == STEAL_SP] if thief else []
-    gains = item_gains(packets, w0, w1, st_falls)
+    gains = item_gains(packets, w0, w1, st_falls, staged_floor_ids(packets))
     n_stolen = sum(int(c.get("stolen", 0)) for c in gains.values())
     steal_ev = [e for e in ev if e.get("kind") == "steal"]
     if not any(e.get("kind") == "run_start" for e in events):
@@ -645,7 +689,7 @@ def pool_items(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     for r in rows:
         for it in r.get("items") or []:
             k = str(it["item_id"])
-            for f in ("picked", "stolen", "other"):
+            for f in ("picked", "stolen", "other", "staged"):
                 acc[k][f] += int(it.get(f, 0))
             if it.get("name"):
                 names[k] = str(it["name"])
@@ -653,11 +697,12 @@ def pool_items(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def items_box(items: Sequence[Mapping[str, Any]], title: str) -> str:
-    """The per-item table as a box (Batt 2026-10-24); target items marked *."""
-    head = ("item", "picked", "stolen", "other", "total", "per h")
+    """The per-item table as a box (Batt 2026-10-24); target items marked *; "staged" is not in
+    the total."""
+    head = ("item", "picked", "stolen", "other", "staged", "total", "per h")
     rows_ = [(("* " if it["target"] else "  ") + str(it["name"] or it["item_id"])[:22],
-              str(it["picked"]), str(it["stolen"]), str(it["other"]), str(it["total"]),
-              _f(it["per_h"], 2)) for it in items]  # fmt: skip
+              str(it["picked"]), str(it["stolen"]), str(it["other"]), str(it.get("staged", 0)),
+              str(it["total"]), _f(it["per_h"], 2)) for it in items]  # fmt: skip
     w = [max(len(h_), *(len(x[i]) for x in rows_)) if rows_ else len(h_)
          for i, h_ in enumerate(head)]  # fmt: skip
     line = lambda a_, m_, b_: a_ + m_.join("─" * (x + 2) for x in w) + b_  # noqa: E731

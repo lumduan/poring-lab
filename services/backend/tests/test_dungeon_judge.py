@@ -403,6 +403,67 @@ def test_item_gains_by_cause_and_the_per_hour_table() -> None:
     assert "* Dead Branch" in dj.items_box(rows, "t")
 
 
+def _fall(t_s: float, fid: int, item: int, x: int, y: int) -> dict[str, object]:
+    return {"type": "floor_item_appear", "t_mono_ns": int(t_s * dj.NS), "kind": "fall",
+            "floor_id": fid, "item_id": item, "x": x, "y": y, "amount": 1}  # fmt: skip
+
+
+def test_staged_floor_ids_flag_a_looters_returned_set_not_a_natural_drop() -> None:
+    """staged-items-looter-contamination: a pile with >= 3 DIFFERENT target ids (no pay_fild07
+    species drops more than two) is a staged set back from a looter. The s3 shape: four target
+    ids over 324..326 x 57..58 plus the Poporing's Sticky Mucus, in one batch. The looter's own
+    drop stays income; a natural Elder Willow pile (Dead Branch + Rough Elunium + Resin) is not
+    flagged; neither are three target ids 3 cells or 1 s apart."""
+    pk = [
+        _fall(978.8, 236, 757, 324, 58), _fall(978.8, 237, 756, 326, 57),
+        _fall(978.8, 238, 604, 324, 58), _fall(978.8, 239, 518, 326, 58),
+        _fall(978.8, 240, 938, 325, 58),  # the looter's own drop
+        _fall(10.0, 50, 604, 100, 100), _fall(10.0, 51, 757, 101, 101),
+        _fall(10.0, 52, 907, 99, 100),  # a natural Elder Willow pile: two target ids
+        _fall(20.0, 60, 604, 200, 200), _fall(20.0, 61, 757, 203, 200),
+        _fall(20.0, 62, 518, 206, 200),  # three target ids, but 3 cells apart: no pile
+        _fall(30.0, 70, 604, 300, 300), _fall(31.0, 71, 757, 300, 300),
+        _fall(32.0, 72, 518, 300, 300),  # three target ids, but 1 s apart: no pile
+    ]  # fmt: skip
+    assert dj.staged_floor_ids(pk) == {236, 237, 238, 239}
+
+
+def test_item_gains_count_a_staged_pickup_apart_and_out_of_the_total() -> None:
+    """A pickup whose request names a staged floor id is "staged": shown in the table and pooled,
+    never in the total or the per-hour rate."""
+    S = dj.NS
+    pk = [
+        {"type": "pickup_request", "t_mono_ns": 10 * S, "floor_id": 238},
+        {"type": "pickup_result", "t_mono_ns": 10 * S + S // 2, "ok": True, "item_id": 604,
+         "amount": 1},
+        {"type": "pickup_request", "t_mono_ns": 30 * S, "floor_id": 50},
+        {"type": "pickup_result", "t_mono_ns": 30 * S + S // 2, "ok": True, "item_id": 604,
+         "amount": 1},
+    ]  # fmt: skip
+    g = dj.item_gains(pk, 0, 60 * S, staged={236, 237, 238, 239})
+    assert g == {"604": {"staged": 1, "picked": 1}}
+    rows = dj.items_rows(g, 0.5)
+    assert [(x["picked"], x["staged"], x["total"], x["per_h"]) for x in rows] == [(1, 1, 1, 2.0)]
+    pooled = dj.pool_items([{"hours": 0.5, "items": rows}, {"hours": 0.5, "items": rows}])
+    assert [(x["staged"], x["total"], x["per_h"]) for x in pooled] == [(2, 2, 2.0)]
+    box = dj.items_box(rows, "t").splitlines()
+    assert "staged" in box[2] and len({len(x) for x in box[1:]}) == 1
+
+
+S3 = "20261024T185652-demo-dungeon-thief-pay_fild07-B-s3"
+S7 = "20261024T225301-demo-dungeon-thief-pay_fild07-B-s7"
+
+
+@pytest.mark.skipif(not _have(S3, S7), reason="the 4.04 s3 / s7 sessions are not here")
+def test_real_staged_sets_back_from_looters_in_404_s3_and_s7() -> None:
+    """The REAL positive case: 4.04 s3 (18:5x) and s7 (22:5x) each picked a staged set a Poporing
+    had looted (all four target ids in one pile beside Sticky Mucus); s3's natural Dead Branch
+    beside Resin (floor id 220, an Elder Willow kill) stays income."""
+    st3 = dj.staged_floor_ids(dj.load(S3)[1])
+    assert st3 == {236, 237, 238, 239} and 220 not in st3
+    assert dj.staged_floor_ids(dj.load(S7)[1]) == {375, 376, 377, 378}
+
+
 def test_steal_by_species_names_the_monster_our_next_attack_hits() -> None:
     """dungeon@7 (a Steal on every monster): each Steal's SP fall is credited to the monster OUR
     next attack act hits within STEAL_TARGET_S (its entity_appear name); stolen = an item gained

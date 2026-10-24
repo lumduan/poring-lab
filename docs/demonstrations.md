@@ -15983,6 +15983,13 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
 - **The lesson:** staging on the hunting map leaves looters carrying staged sets. Later runs then
   "pick" target items that were never income. Stage elsewhere, or flag such piles (all four staged
   ids at once).
+  - ➡️ **FLAGGED by the judge since 2026-10-25** (`dungeon_judge.staged_floor_ids`): a pickup from a
+    pile holding >= 3 DIFFERENT target ids (<= 0.5 s, <= 2 cells; no pay_fild07 species drops more
+    than two) counts as "staged". `dungeon_judge.py items` shows it in its own column and keeps it
+    out of the total and the per-hour rate. The real positive case: s3's floor ids 236-239 and s7's
+    375-378 flagged, s3's natural Dead Branch (220) not. On s1-s6 the pooled table now gives the
+    RESULT's hand count by itself: Dead Branch 3 (1 stolen) + Rough Elunium 1, plus 1 staged of
+    each target item.
 - **The block ends at s7.** s8's pre-run frame showed weight 1,034 / 2,430 (42.6 %; s7 picked a
   Wooden Mail, weight 100). The Thief's setup never drops its Etc tab and stops at 40 % for a
   person, so s8 was not released (STOP marker 23:3x). Freeing weight is Batt's call.
