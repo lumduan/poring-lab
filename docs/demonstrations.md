@@ -15655,6 +15655,15 @@ The packets say why:
   - Elder Willow and Eggyra: faster kills.
 - **An unscored PILOT 2 (5 min) checks it before the scored runs.**
 
+**Pilot 2** (`20261024T121118-demo-dungeon-thief-pay_fild07-B-t-pilot2`, 12:11:18-12:16:58, seed
+24299, judged pre-run frame thief-pre-t-pilot2.png):
+- 5.0 min, **9 kills (108 / h)**, deaths 0, hard bars 0;
+- HP min 434 / 952 (45.6 %), potions 0, Fly Wings 0;
+- loot 7 / 7 (Resin 5, Animal Skin 1, Bear's Footskin 1); net +4,858 z / h.
+- Damage per attack: **Bigfoot 76.1** (pilot 1: 2.7), **Elder Willow 147.5** (pilot 1: 58-103).
+  The Elder Willows' 95 attacks missed 92 times.
+- The fix works. The scored runs start (t1, t2, ...: 40 min, seeds 24301...).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
