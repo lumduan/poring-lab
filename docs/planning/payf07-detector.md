@@ -569,6 +569,40 @@ T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1
   instructions (sha256 dc3ee728...) and an answers path outside it
   (`/dev/shm/poring-lab-tmp/payf07/t2-answers/A.json`, `B.json`). The key stays apart.
 
+### 10m. RESULT: T2, blind round 1 (seed 21), scored 2026-10-24 19:30:15 ICT -- **FAILS on ONE species, Elder Willow**; by section 8 the TRAINING TIER FAILS and nothing of pay_fild07 trains on this round
+
+- Labellers A and B, each alone, 180 / 180 crops answered. The answers are in
+  `/dev/shm/poring-lab-tmp/payf07/t2-answers/`, the score in `t2-score.json`.
+- Agreement A vs B: q1 179, q2 178, q3 178 of 180.
+
+| species | A good / species right | B good / species right | bar: >= 90 % good EACH and species >= 95 % | verdict |
+|---|---|---|---|---|
+| Eggyra (1116) | 96.7 % / 96.7 % | 96.7 % / 96.7 % | | PASS |
+| Willow (1010) | 100 / 100 | 100 / 100 | | PASS |
+| Bigfoot (1060) | 100 / 100 | 100 / 100 | | PASS |
+| Poporing (1031) | 100 / 100 | 96.7 / 100 | | PASS |
+| Green Plant (1080) | 100 / 100 | 100 / 100 | (>= 30 kept labels in the pool: 116) | PASS |
+| **Elder Willow (1033)** | 93.3 / **93.3** | 93.3 / **93.3** | species below 95 % | **FAIL** |
+
+- **The Elder Willow misses:**
+  - **079** (s1, fit 0.123, not under a model): both labellers saw empty grass, with an Elder Willow
+    just OUTSIDE the box's corner. A: no; B: off.
+  - **176** (s1, fit 0.170, not under a model): both saw the box on grass, with an EGG (Eggyra) just
+    outside it. Both: off, species H.
+  - **048** (s-pilot, fit 0.734, under a model, in deep shadow): A said Elder Willow, B said Willow
+    by colour.
+- **Eggyra's one miss:** 007 (s1, fit 0.152), empty grass for both. This is the crop 10g flagged
+  by eye.
+- **What the misses share:** three of the four have a fit under 0.2 and are not under a model. 10g
+  had counted 5 of the 180 crops under 0.3.
+- **The procedure note (labeller A):** once, while checking that the answers directory existed, it
+  ran `ls` on `/dev/shm/poring-lab-tmp/payf07/`, which printed directory NAMES, including the key
+  directories. It opened nothing there. Labeller B used only PACK files and also read pixel colours
+  from them, which its instructions allow.
+- **Next (a NEW pre-registration, not an amendment of this round):** a fit floor for labels not
+  under a model, a new seed and two NEW labellers. More Elder Willow labels may come from a still
+  collection (warp and watch, the immune GM).
+
 ### 10i. Estimates: the cache and the training (by analogy with v2orc)
 
 - **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
