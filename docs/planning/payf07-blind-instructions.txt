@@ -1,0 +1,27 @@
+BLIND LABEL CHECK -- instructions for ONE labeller (work alone; another labeller does the same pack).
+
+Your pack is the directory PACK (given by the parent). Use ONLY these files:
+  PACK/reference.png    12 monster species, each under a LETTER (A-L), each drawn in SEVERAL
+                        views side by side (directions and animation frames). No names.
+  PACK/grids/grid_NN.png  the crops, 20 per grid, each under its number (#001 ...).
+  PACK/crops/NNN.png    the same crops one by one, enlarged (open one when a grid tile is too small).
+  PACK/pack.json        the list of crops and the three questions.
+Never open anything outside PACK (no answer key, no other directory, no repository file, no
+other labeller's answers). Do not guess from file names or order: they carry no class information.
+
+Every crop shows a GREEN rectangle drawn 1 px just OUTSIDE a label box. For EVERY crop answer:
+  Q1: is there a monster inside the green box?           yes / no / unsure
+  Q2: the box:  good  (tight around the monster)
+                loose (the monster is in it, with much background)
+                off   (cuts the monster or misses it)
+                n/a   (when Q1 is no)
+  Q3: which species is it?  one LETTER from reference.png, or none / unsure
+The game scene is a forest field; parts of it lie in shadow under tree canopies, and sprites may
+be partly hidden by trees, leaves or bushes, or stand next to other monsters or next to the
+player's own character (a red-haired thief). Some species look alike and differ mainly in COLOUR:
+compare the colours with reference.png, not only the shape. Judge the box against the ONE monster
+it is drawn around.
+
+Write ANSWERS (the path the parent gives you) as a JSON list, one object per crop, every crop:
+  [{"crop": "001", "q1": "yes", "q2": "good", "q3": "B", "note": ""}, ...]
+"note" is free text (what you saw when unsure, a second monster, a UI window, ...).
