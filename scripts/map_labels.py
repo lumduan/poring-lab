@@ -411,6 +411,23 @@ def use_kb(spec: MapSpec) -> None:
     qa_export.KB_SPRITE_NAMES = spec.kb / "monster_sprite_names.json"
 
 
+def session_labeler(path: Path, spec: MapSpec) -> qa_export.Labeler:
+    """The recorder session's label stack (packets only, no pixel): the map's KB and sprites, the
+    hunting layout's UI rectangles, a finer Timeline. RecSession and the frame cache share it
+    (build_frame_cache.py --labels map: our own character's box from the same camera)."""
+    use_kb(spec)
+    lab = qa_export.Labeler(path, str(olf.OLD_OFFSET_MS), labels="v1", k=olf.K)
+    import client_layout
+
+    lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0)
+                         for x0, y0, x1, y1 in client_layout.RECTS["hunt"])  # fmt: skip
+    lab.sheets = qa_export.Sheets(directory=spec.sprites)
+    tl = lab.timeline
+    lab.timeline = Timeline(tl.events, tl.maps, snapshot_every=32, die_ms=tl.die_ms,
+                            default_die_ms=tl.default_die_ms)  # fmt: skip
+    return lab
+
+
 @dataclass
 class RecSession:
     """A recorder session (or some of the staged session's spots) as orc_labels_fix.Session's
@@ -435,16 +452,9 @@ class RecSession:
         manifest = json.loads((path / "manifest.json").read_text())
         check_recording(manifest)
         sid = qa_export.session_id(manifest)
-        use_kb(spec)
-        lab = qa_export.Labeler(path, str(olf.OLD_OFFSET_MS), labels="v1", k=olf.K)
+        lab = session_labeler(path, spec)
         import client_layout
 
-        lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0)
-                             for x0, y0, x1, y1 in client_layout.RECTS["hunt"])  # fmt: skip
-        lab.sheets = qa_export.Sheets(directory=spec.sprites)
-        tl = lab.timeline
-        lab.timeline = Timeline(tl.events, tl.maps, snapshot_every=32, die_ms=tl.die_ms,
-                                default_die_ms=tl.default_die_ms)  # fmt: skip
         occ.cache_compose()
         olf._speed_up()
         events = lab.timeline.events
