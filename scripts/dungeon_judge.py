@@ -87,6 +87,10 @@ LAND_S = 1.5
 MOB = 5  # entity_appear objtype of a monster
 NOT_A_HIT = ("pickup", "sit", "stand")
 MAP = "orcsdun01"
+CHAR_MAX_SP = {"crusader": 312, "thief": 112}  # the runner's run_start "char" (dungeon@6)
+STEAL_SP = 10  # TF_STEAL's SpCost (pinned skill_db): a Thief's SP fall of exactly 10 = a try
+PICK_S, STEAL_S = 2.0, 1.5  # a gain this soon after our pickup request / a steal's SP fall
+TARGET_ITEMS = {604: "Dead Branch", 757: "Rough Elunium", 756: "Rough Oridecon", 518: "Honey"}
 
 
 # --- pure helpers --------------------------------------------------------------------------------
@@ -382,6 +386,48 @@ def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
 # --- the row -------------------------------------------------------------------------------------
 
 
+def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
+               steal_falls: Sequence[int] = ()) -> dict[str, Any]:  # fmt: skip
+    """PURE (Batt 2026-10-24: every item collected, per hour): each successful inventory gain
+    (pickup_result ok, which fires for EVERY gain) in [t0, t1] by its cause -- "picked" when our
+    pickup_request came <= PICK_S before it, "stolen" when a Steal's SP fall did <= STEAL_S before
+    it, else "other" (reported, e.g. a GM @item) -- per item id."""
+    reqs = sorted(_t(e) for e in packets if e.get("type") == "pickup_request")
+    falls_ = sorted(steal_falls)
+    by: dict[int, Counter[str]] = defaultdict(Counter)
+    for e in packets:
+        if e.get("type") != "pickup_result" or not e.get("ok"):
+            continue
+        t = _t(e)
+        if not t0 <= t <= t1:
+            continue
+        i = bisect.bisect_right(reqs, t)
+        j = bisect.bisect_right(falls_, t)
+        if i and t - reqs[i - 1] <= PICK_S * NS:
+            kind = "picked"
+        elif j and t - falls_[j - 1] <= STEAL_S * NS:
+            kind = "stolen"
+        else:
+            kind = "other"
+        by[int(e.get("item_id") or 0)][kind] += int(e.get("amount") or 1)
+    return {str(k): dict(v) for k, v in sorted(by.items())}
+
+
+def items_rows(gains: Mapping[str, Mapping[str, int]], hours: float,
+               names: Mapping[str, str] | None = None) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: the per-item table (picked / stolen / other, total and per hour), the target items
+    flagged, most collected first."""
+    out = []
+    for k, c in gains.items():
+        tot = sum(int(v) for v in c.values())
+        out.append({"item_id": int(k), "name": (names or {}).get(k) or TARGET_ITEMS.get(int(k)),
+                    "picked": int(c.get("picked", 0)), "stolen": int(c.get("stolen", 0)),
+                    "other": int(c.get("other", 0)), "total": tot,
+                    "per_h": round(tot / hours, 2) if hours > 0 else None,
+                    "target": int(k) in TARGET_ITEMS})  # fmt: skip
+    return sorted(out, key=lambda x: (-x["total"], x["item_id"]))
+
+
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]],
           table: Mapping[str, Mapping[str, Any]] | None, manifest: Mapping[str, Any] | None = None,
           map_name: str | None = None, t0: int | None = None, t1: int | None = None,
@@ -418,9 +464,10 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     hp_pct = [v / (in_force(mxs, t) or mx) for t, v in hp]  # against the MaxHP in force then
     sp_raw = series(packets, "sp")
     sp_start = in_force(sp_raw, w0)
+    max_sp = CHAR_MAX_SP.get(str(rs.get("char") or "crusader"), MAX_SP)
     if sp_start is None:
-        sp_start = MAX_SP
-        why["sp_start"] = f"no sp packet before the window: its start ASSUMED MaxSP {MAX_SP}"
+        sp_start = max_sp
+        why["sp_start"] = f"no sp packet before the window: its start ASSUMED MaxSP {max_sp}"
     sp = clip(sp_raw, w0, w1, sp_start)
     skip = not_casts(packets, "sp")
     sp_falls = falls(sp, skip=skip)
@@ -455,6 +502,13 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     sits = [(max(a, w0), min(b, w1)) for a, b in sit_spans(packets, w1, aid) if b > w0 and a < w1]
     sit_ns = sum(b - a for a, b in sits)
     presses = Counter(str(e.get("what")) for e in ev if e.get("kind") == "press")
+    # dungeon@6: every item gained per hour, by cause; Steal tries = SP falls of exactly 10 (only a
+    # character with Steal on its keys: the Crusader's Endure costs 10 too)
+    thief = rs.get("char") == "thief"
+    st_falls = [t for t, d in sp_falls if d == STEAL_SP] if thief else []
+    gains = item_gains(packets, w0, w1, st_falls)
+    n_stolen = sum(int(c.get("stolen", 0)) for c in gains.values())
+    steal_ev = [e for e in ev if e.get("kind") == "steal"]
     if not any(e.get("kind") == "run_start" for e in events):
         why["events"] = "no run_start event: not a dungeon runner session (window from manifest)"
     return {
@@ -478,6 +532,13 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "autoguard": len(falls(sp, AG_SP, skip)),
         "autoguard_h": per_h(len(falls(sp, AG_SP, skip))),
         "endure": len(falls(sp, ENDURE_SP, skip)),
+        "char": rs.get("char") or "crusader",
+        "items": items_rows(gains, h, item_names()),
+        "steal": {"tries_packets": len(st_falls), "stolen": n_stolen,
+                  "per_try": round(n_stolen / len(st_falls), 4) if st_falls else None,
+                  "runner_tries": len(steal_ev),
+                  "runner_ok": sum(1 for e in steal_ev if e.get("ok")),
+                  "by_species": dict(Counter(str(e.get("species")) for e in steal_ev))},
         "loot": {"definition": "loot_complete: picked / dropped by ALL our kills (packets); net "
                  "leaves a looter's re-drop of our own item out of the dropped",
                  **{k: ls[k] for k in ("kills", "items", "picked", "out_of_sight", "looter",
@@ -521,6 +582,46 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         },
         "why": why,
     }  # fmt: skip
+
+
+def item_names(path: Path | None = None) -> dict[str, str]:
+    """The KB's item names (data/kb/items.json, run-time GPL-derived data, never committed); {}
+    when absent (the table then names only the target items)."""
+    p = path or Path(__file__).resolve().parents[1] / "data" / "kb" / "items.json"
+    try:
+        return {k: str(v.get("name")) for k, v in json.loads(p.read_text()).items()}
+    except OSError:
+        return {}
+
+
+def pool_items(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """PURE: the per-item table pooled over runs (counts summed, per hour from the summed hours)."""
+    hours = sum(float(r.get("hours") or 0) for r in rows)
+    acc: dict[str, Counter[str]] = defaultdict(Counter)
+    names: dict[str, str] = {}
+    for r in rows:
+        for it in r.get("items") or []:
+            k = str(it["item_id"])
+            for f in ("picked", "stolen", "other"):
+                acc[k][f] += int(it.get(f, 0))
+            if it.get("name"):
+                names[k] = str(it["name"])
+    return items_rows({k: dict(v) for k, v in acc.items()}, hours, names)
+
+
+def items_box(items: Sequence[Mapping[str, Any]], title: str) -> str:
+    """The per-item table as a box (Batt 2026-10-24); target items marked *."""
+    head = ("item", "picked", "stolen", "other", "total", "per h")
+    rows_ = [(("* " if it["target"] else "  ") + str(it["name"] or it["item_id"])[:22],
+              str(it["picked"]), str(it["stolen"]), str(it["other"]), str(it["total"]),
+              _f(it["per_h"], 2)) for it in items]  # fmt: skip
+    w = [max(len(h_), *(len(x[i]) for x in rows_)) if rows_ else len(h_)
+         for i, h_ in enumerate(head)]  # fmt: skip
+    line = lambda a_, m_, b_: a_ + m_.join("─" * (x + 2) for x in w) + b_  # noqa: E731
+    fmt = lambda c: "│" + "│".join(f" {v:<{w[i]}} " for i, v in enumerate(c)) + "│"  # noqa: E731
+    out = [title, line("┌", "┬", "┐"), fmt(head), line("├", "┼", "┤")]
+    out += [fmt(x) for x in rows_] + [line("└", "┴", "┘")]
+    return "\n".join(out)
 
 
 # --- pooling and the tables ----------------------------------------------------------------------
@@ -946,10 +1047,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("row", "table", "positive"):
+    for name in ("row", "table", "positive", "items"):
         p = sub.add_parser(name)
         if name != "positive":
-            p.add_argument("sids", nargs="+" if name == "table" else 1)
+            p.add_argument("sids", nargs="+" if name in ("table", "items") else 1)
             p.add_argument("--map", default=None, help="the run's map (default: run_start's)")
             p.add_argument(
                 "--live",
@@ -981,6 +1082,12 @@ def main() -> int:
         return 1
     if a.cmd == "row":
         print(json.dumps(rows[0], indent=1, default=str))
+        return 0
+    if a.cmd == "items":  # Batt 2026-10-24: every item per hour, per run and pooled
+        for r in rows:
+            print(items_box(r["items"], f"{run_label(r)}  ({r['hours']:.2f} h)  steal "
+                            f"{r['steal']}"))  # fmt: skip
+        print(items_box(pool_items(rows), f"POOLED ({sum(r['hours'] for r in rows):.2f} h)"))
         return 0
     pooled = by_strategy(rows)
     text = (box([(run_label(r), r) for r in rows], "PER RUN (packets + events)") + "\n"

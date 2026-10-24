@@ -376,3 +376,28 @@ def test_live_window_is_first_input_plus_seconds_capped_at_the_end() -> None:
     assert dj.live_window(man, 3600) == (10 * dj.NS, 900 * dj.NS)  # capped at the recording
     with pytest.raises(ValueError):
         dj.live_window({"t_end_ns": 5}, 600)  # never played: no window invented
+
+
+def test_item_gains_by_cause_and_the_per_hour_table() -> None:
+    """Batt 2026-10-24: every item per hour, by cause. A gain right after our pickup request is
+    picked, right after a Steal's SP fall is stolen, anything else (a GM @item) is other; a failed
+    pickup_result is no gain."""
+    S = dj.NS
+    pk = [
+        {"type": "pickup_request", "t_mono_ns": 10 * S, "floor_id": 7},
+        {"type": "pickup_result", "t_mono_ns": 10 * S + S // 2, "ok": True, "item_id": 907,
+         "amount": 1},
+        {"type": "pickup_result", "t_mono_ns": 20 * S, "ok": True, "item_id": 907, "amount": 1},
+        {"type": "pickup_result", "t_mono_ns": 40 * S, "ok": True, "item_id": 604, "amount": 1},
+        {"type": "pickup_result", "t_mono_ns": 41 * S, "ok": False, "item_id": 0, "amount": 0},
+        {"type": "pickup_result", "t_mono_ns": 99 * S, "ok": True, "item_id": 518, "amount": 1},
+    ]  # fmt: skip
+    g = dj.item_gains(pk, 0, 60 * S, steal_falls=[int(19.5 * S)])
+    assert g == {"604": {"other": 1}, "907": {"picked": 1, "stolen": 1}}
+    rows = dj.items_rows(g, 0.5, {"907": "Resin"})
+    assert [(x["name"], x["total"], x["per_h"], x["target"]) for x in rows] == [
+        ("Resin", 2, 4.0, False), ("Dead Branch", 1, 2.0, True)]  # fmt: skip
+    pooled = dj.pool_items([{"hours": 0.5, "items": rows}, {"hours": 0.5, "items": rows}])
+    assert [(x["item_id"], x["picked"], x["stolen"], x["per_h"]) for x in pooled] == [
+        (907, 2, 2, 4.0), (604, 0, 0, 2.0)]  # fmt: skip
+    assert "* Dead Branch" in dj.items_box(rows, "t")

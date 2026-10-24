@@ -345,7 +345,55 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     a = got["a"]
     assert a.plant_sweep is False and a.box_ignore == dh.BOX_IGNORE_AFTER == 2
     assert a.ag_match == sv.AG_MATCH_DUNGEON == 40.0
-    assert dh.VERSION == "dungeon@5"
+    # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
+    # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01
+    assert dh.VERSION == "dungeon@6"
+    assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
+
+
+def test_dungeon6_characters_keys_and_stock() -> None:
+    """2026-10-24: the Thief's F3 is Steal (no Auto Guard, no Heal key), its max HP and stock are
+    its own, and its setup never drops the Etc tab (Batt's Rough Oridecon / Elunium are Etc)."""
+    cru, thf = dh.CHARS_CONF["crusader"], dh.CHARS_CONF["thief"]
+    assert cru["keys"] is dh.KEYS and cru["autoguard"] and cru["clear_etc"]
+    assert thf["keys"]["steal"] == "F3" and "autoguard" not in thf["keys"]
+    assert "heal" not in thf["keys"] and not thf["autoguard"] and not thf["clear_etc"]
+    assert (thf["max_hp"], thf["potions_to"], thf["wings_to"]) == (952, 10, 10)
+    # the HP-rate trigger scales by the character's max HP: 10 % in 1 s
+    hist = [(0.0, 0.9), (1.0, 0.8)]
+    assert round(dh.rate_hp_s(hist, 1.0, max_hp=952)) == 95
+    assert round(dh.rate_hp_s(hist, 1.0)) == 526  # the Crusader's 5260
+
+
+def test_dungeon6_steal_rules() -> None:
+    """Batt 2026-10-24: steal first from Elder Willow / Bigfoot; a monster is stolen from ONCE
+    (pc_steal_item's steal_flag), so a target near a recent steal is not tried again; success =
+    the weight readout rose."""
+    assert dh.steal_species("Elder Willow") and dh.steal_species("Bigfoot")
+    assert not dh.steal_species("Willow") and not dh.steal_species(None)
+    done = [((100, 100), 10.0)]
+    assert not dh.steal_forgotten(done, (101, 102), 20.0)  # within 2 cells, 10 s later
+    assert dh.steal_forgotten(done, (103, 100), 20.0)  # 3 cells away: another monster
+    assert dh.steal_forgotten(done, (100, 100), 10.0 + dh.STEAL_FORGET_S + 1)
+    assert dh.steal_forgotten(done, None, 20.0)
+    assert dh.stolen([570, 2430], [571, 2430]) is True
+    assert dh.stolen([570, 2430], [570, 2430]) is False
+    assert dh.stolen([570, 2430], [555, 2430]) is False  # a potion drunk meanwhile
+    assert dh.stolen(None, [571, 2430]) is None
+
+
+def test_dungeon6_rest_spots_per_map(tmp_path) -> None:
+    """orcsdun01's rest spots stay required; a map without a file rests where it is."""
+    assert dh.rest_spots_for("pay_fild07", tmp_path) == []
+    (tmp_path / "config" / "dungeon").mkdir(parents=True)
+    (tmp_path / "config" / "dungeon" / "pay_fild07.json").write_text('{"rest_spots": [[1, 2]]}')
+    assert dh.rest_spots_for("pay_fild07", tmp_path) == [(1, 2)]
+    try:
+        dh.rest_spots_for("orcsdun01", tmp_path / "nowhere")
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError("orcsdun01 without its rest spots must refuse")
 
 
 def test_loot_rhythm_is_v2s_order_with_batts_per_fight_bounds(monkeypatch) -> None:

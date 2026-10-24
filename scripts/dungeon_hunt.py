@@ -61,7 +61,22 @@ fixes of the BASE, both arms; docs/demonstrations.md 4.01 Amendment A, written b
 - decision 7: the Auto Guard icon's DUNGEON bar, 40 (survive.AG_MATCH_DUNGEON; 4.00's diagnostic:
   the icon present scored 30.5-35 on the dark dungeon, absent > 45).
 
+dungeon@6 (Batt 2026-10-24, docs/planning/thief-payon.md: the Crusader tests end; a THIEF hunts a
+Payon field for economics). The defaults (--char crusader --map orcsdun01, no --steal) are dungeon@5
+exactly. New:
+- --char thief: the Thief's identity check (crusader.py --char thief), its keys (F1 potion, F2 Fly
+  Wing, F3 STEAL; no Auto Guard, no Heal), its max HP (952) and stock (10 potions, 10 Fly Wings);
+  the setup never drops the Etc tab for it (Rough Oridecon / Elunium are Etc: it stops instead);
+- --map M: the map (its zones file is REQUIRED; rest spots from config/dungeon/M.json when there,
+  else the rest sits where it is);
+- TAG BANKING (on by default off orcsdun01): at every strike the raw name-tag band under the target
+  is saved with its time and box (tags/), for the packet-labelled templates (nametag.py, per map);
+- --steal (off by default): STEAL FIRST on a strike whose name tag reads one of STEAL_SPECIES: F3
+  (Steal) + a click on the target, until the weight readout rises (= an item stolen) or
+  STEAL_MAX tries; a target stolen from (or given up) is not tried again for STEAL_FORGET_S.
+
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
+                        [--char crusader|thief] [--map M] [--steal] [--bank-tags]
 """
 
 from __future__ import annotations
@@ -87,8 +102,9 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@5"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
-# @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A)
+VERSION = "dungeon@6"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+# @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
+# --steal / tag banking (2026-10-24; the defaults are @5's behaviour)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -110,7 +126,7 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 }  # fmt: skip
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "heal": "F5", "sit": "Insert",
         "stand": "Insert"}  # fmt: skip
-MAX_HP = 5260
+MAX_HP = 5260  # the Crusader's (CHARS_CONF holds each character's)
 READ_HZ = 5.0
 HEAL_GAP_S = 1.1  # Heal's after-cast delay is 1 s (pinned skill_db AL_HEAL AfterCastActDelay)
 SELF_PX = (640, 330)  # the drawn character's body (client px): Heal's target click
@@ -150,6 +166,24 @@ WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen s
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
 CLEAR_AT = 0.40  # the setup drops the Etc tab (loot only) at or over this weight share ...
 CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand (no monster)
+# dungeon@6: each test character (crusader.py CHARS): its job for the identity check, max HP (the
+# HP-rate trigger), keys, Auto Guard or not, stock, and whether the setup may drop the Etc tab
+CHARS_CONF: dict[str, dict[str, Any]] = {
+    "crusader": {"job": "crusader", "max_hp": 5260, "keys": KEYS, "autoguard": True,
+                 "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True},
+    "thief": {"job": "thief", "max_hp": 952,  # its status window and DB (thief-payon.md 4)
+              "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
+                       "stand": "Insert"},
+              "autoguard": False, "potions_to": 10, "wings_to": 10,
+              # Rough Oridecon 756 / Rough Elunium 757 are Etc: never dropped by the setup
+              "clear_etc": False},
+}  # fmt: skip
+STEAL_SPECIES = ("Elder Willow", "Bigfoot")  # Batt 2026-10-24: steal from these first
+STEAL_MAX = 5  # tries per target (EW 61 % / Bigfoot 83 % a try: >= 99 % within 5)
+STEAL_WAIT_S = 0.9  # after the click: the walk to range 1 + the cast + the weight line redrawn
+STEAL_FORGET_S = 40.0  # a target stolen from / given up: no new try within 2 cells for this long
+TAG_WAIT_S = 0.45  # no word in the strike's first frame: one more look after this
+TAG_BOTTOM = 4  # px below the cell's projected point: the pseudo box's bottom for the tag band
 ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike point
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
@@ -189,13 +223,14 @@ class Sustain:
     healing: bool = False
 
 
-def rate_hp_s(hist: Sequence[tuple[float, float]], now: float, win: float = 2.0) -> float | None:
+def rate_hp_s(hist: Sequence[tuple[float, float]], now: float, win: float = 2.0,
+              max_hp: float = MAX_HP) -> float | None:  # fmt: skip
     """PURE: HP lost per second over the last ``win`` s (survive.rate_hp_s)."""
     pts = [(t, f) for t, f in hist if now - win <= t <= now]
     if len(pts) < 2 or pts[-1][0] - pts[0][0] < win / 2:
         return None
     (t0, f0), (t1, f1) = pts[0], pts[-1]
-    return (f0 - f1) * MAX_HP / (t1 - t0)
+    return (f0 - f1) * max_hp / (t1 - t0)
 
 
 def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping[str, Any],
@@ -204,7 +239,7 @@ def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping
     then Heal. ``hp`` / ``sp`` are shares (0..1); ``st`` is updated for what is returned.
     ``calm`` (no hit on us for CALM_S, not fighting): H's between-fights Heal may fire."""
     st.hist.append((now, hp))
-    rate = rate_hp_s(st.hist, now)
+    rate = rate_hp_s(st.hist, now, max_hp=float(strat.get("max_hp", MAX_HP)))
     if now - st.fly >= 3.0:
         why = None
         if hp < strat["fly_below"]:
@@ -627,6 +662,39 @@ def load_rest_spots(path: Path = REST_FILE) -> list[Cell]:
     return [(int(c[0]), int(c[1])) for c in doc["rest_spots"]]
 
 
+def rest_spots_for(map_name: str, root: Path = ROOT) -> list[Cell]:
+    """dungeon@6: config/dungeon/<map>.json's rest spots; REQUIRED on orcsdun01 (dungeon@5), else
+    an absent file = no spots (the rest sits where it is: rest_spot_not_reached at once)."""
+    path = root / "config" / "dungeon" / f"{map_name}.json"
+    if map_name == "orcsdun01" or path.exists():
+        return load_rest_spots(path)
+    return []
+
+
+def steal_species(word: str | None) -> bool:
+    """PURE: a name-tag read that Batt's steal-first rule applies to."""
+    return word in STEAL_SPECIES
+
+
+def steal_forgotten(done: Sequence[tuple[Cell, float]], cell: Cell | None, now: float) -> bool:
+    """PURE: True when no target near ``cell`` (Chebyshev <= 2) was stolen from / given up within
+    STEAL_FORGET_S (a monster is stolen from ONCE: pc_steal_item's steal_flag)."""
+    if cell is None:
+        return True
+    return not any(
+        now - t <= STEAL_FORGET_S and max(abs(c[0] - cell[0]), abs(c[1] - cell[1])) <= 2
+        for c, t in done
+    )
+
+
+def stolen(w0: Sequence[int] | None, w1: Sequence[int] | None) -> bool | None:
+    """PURE: the weight readout rose (= an item stolen: every stealable item weighs >= 1);
+    None when either read failed."""
+    if not w0 or not w1:
+        return None
+    return int(w1[0]) > int(w0[0])
+
+
 def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     import bench
     import crusader as cr
@@ -649,18 +717,32 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     from poring_dataset import gat as gatmod
     from poring_env import selfpos
 
-    strat = STRATEGIES[a.strategy]
+    conf = CHARS_CONF[a.char]  # dungeon@6
+    map_ = a.map
+    keys_ = conf["keys"]
+    strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
+    if a.steal and "steal" not in keys_:
+        raise SystemExit(f"dungeon@6 refused: --steal for the {a.char}, who has no Steal key")
+    import nametag
+
+    tag_tpl = nametag.load_templates(nametag.map_dir(ROOT, map_) / "templates.npz")
+    if a.steal and not all(s_ in tag_tpl for s_ in STEAL_SPECIES):
+        raise SystemExit(
+            f"dungeon@6 refused: --steal needs name tags for {STEAL_SPECIES} on {map_} "
+            f"(nametag.py build --map {map_}; have {sorted(tag_tpl)})"
+        )
+    bank = a.bank_tags if a.bank_tags is not None else map_ != "orcsdun01"
     if a.engage == "melee_ring":
         # Batt 13:4x: melee-ring strikes EVERY monster in melee range -- only on a map whose every
         # spawning species is a target and that has no script NPC, on the lab server (the hunt
-        # block's lint / run start: poring_flow lint/hunt.py; this runner hunts MAP only, on the
+        # block's lint / run start: poring_flow lint/hunt.py; this runner hunts map_ only, on the
         # lab, where the interlock attests the lab rAthena)
         kb_ = ROOT / "data" / "kb"
         npcs_ = (
-            json.loads((kb_ / "npc_cells.json").read_text())["maps"].get(MAP, {}).get("npcs", [])
+            json.loads((kb_ / "npc_cells.json").read_text())["maps"].get(map_, {}).get("npcs", [])
         )
-        if MAP not in MR_MAPS or npcs_:
-            raise SystemExit(f"dungeon@3 refused: melee_ring on {MAP} (allowed {sorted(MR_MAPS)}, "
+        if map_ not in MR_MAPS or npcs_:
+            raise SystemExit(f"dungeon@3 refused: melee_ring on {map_} (allowed {sorted(MR_MAPS)}, "
                              f"{len(npcs_)} script NPCs)")  # fmt: skip
     z = np.load(hpp.GLYPHS)
     glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
@@ -668,29 +750,29 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     ag_t, ag_m = agz["template"], agz["mask"].astype(bool)
     sword_refs = csw.SwordRefs.load()
     digits = selfpos.load_digit_templates()
-    gat = gatmod.parse((cam.GAT_DIR / f"{MAP}.gat").read_bytes())
-    ok = stand_grid(MAP, gat)
+    gat = gatmod.parse((cam.GAT_DIR / f"{map_}.gat").read_bytes())
+    ok = stand_grid(map_, gat)
     kb = ROOT / "data" / "kb"
-    warps = json.loads((kb / "warps.json").read_text()).get(MAP, [])
+    warps = json.loads((kb / "warps.json").read_text()).get(map_, [])
     keep = [(w["x"], w["y"], w["span_x"], w["span_y"]) for w in warps]
     try:
-        zones = mz.load(MAP, shape=ok.shape)
+        zones = mz.load(map_, shape=ok.shape)
     except mz.ZoneError as e:
         raise SystemExit(f"dungeon@1 refused: map zones: {e}") from None
     if zones is None:
-        raise SystemExit("dungeon@1 refused: no config/map_zones/orcsdun01.yaml (the warp zones)")
+        raise SystemExit(f"dungeon@1 refused: no config/map_zones/{map_}.yaml (the warp zones)")
     area = mz.apply(ok, hc.search_area(ok, keep, margin=10), zones)[1]
     okr = mz.route_grid(ok, zones)
     cut = mz.sealed_off(ok, okr)
     area = hf.main_component(area & ~cut)
     okr = okr & ~cut
-    spots = load_rest_spots()
+    spots = rest_spots_for(map_)  # dungeon@6: per map (orcsdun01's required, as before)
     for s_ in spots:
         if not okr[s_[1], s_[0]]:
             raise SystemExit(f"dungeon@1 refused: rest spot {s_} is not on the route grid")
     import plant_finder as pfm
 
-    plant_areas = pfm.spawn_areas(MAP)  # White Plant spawn lines (static map knowledge)
+    plant_areas = pfm.spawn_areas(map_)  # White Plant spawn lines (static map knowledge)
     patrol = a.search == "patrol"
     rt: Any = None
     wps: list[Cell] = []
@@ -698,11 +780,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         import map_routes as mroutes
 
         try:
-            routes_ = mroutes.load(MAP, shape=ok.shape)
+            routes_ = mroutes.load(map_, shape=ok.shape)
         except Exception as e:  # noqa: BLE001 -- fail closed: no input before this
             raise SystemExit(f"dungeon@4 refused: the patrol route: {e}") from None
         if routes_ is None or not routes_.routes:
-            raise SystemExit(f"dungeon@4 refused: --search patrol with no config/routes/{MAP}.yaml")
+            raise SystemExit(
+                f"dungeon@4 refused: --search patrol with no config/routes/{map_}.yaml"
+            )
         rt = routes_.routes[0]
         wps = [(int(c[0]), int(c[1])) for c in rt.waypoints]
         for c_ in wps:
@@ -725,6 +809,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         return camera.project(rel_, alt)
 
     mr_tag = "-mr" if a.engage == "melee_ring" else ""
+    if (a.char, map_) != ("crusader", "orcsdun01"):  # dungeon@6: the session name says who / where
+        mr_tag = f"-{a.char}-{map_}{mr_tag}"
     pt_tag = "-patrol" if a.search == "patrol" else ""
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-dungeon{mr_tag}{pt_tag}-{a.strategy}-{a.label}"
     out = DEMO / sid
@@ -741,23 +827,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     with r.session(f"rule:dungeon-{a.strategy}") as (agent_raw, screen):
         agent_raw.wait_for_human()
         agent = hf.FrameGuard(agent_raw, (gx0, gy0, gw, gh), counts)
-        got = cr.check(screen, "crusader")
+        got = cr.check(screen, conf["job"], a.char)
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")
         # the setup (the experimenter's restore, never a decision): full HP / SP, the stock topped
         # up against the DB's last save (an upper bound of what is carried), the weight checked
-        name = json.loads((ROOT / "data" / "crusader" / "char.json").read_text())["name"]
+        name = json.loads((cr.data_dir(a.char) / "char.json").read_text())["name"]
         cid = int(r.db_query(f"SELECT char_id FROM `char` WHERE name = {r.sql_str(name)};")[0][0])
         inv = {int(i): int(n) for i, n in r.db_query(
             f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
             "AND nameid IN (504, 601);")}  # fmt: skip
         setup = ["@heal"]
-        p_to = int(strat.get("potions_to", POTIONS_TO))
+        p_to = int(strat.get("potions_to") or conf["potions_to"] or POTIONS_TO)
+        w_to = int(conf["wings_to"])
         if inv.get(504, 0) < p_to:
             setup.append(f"@item 504 {p_to - inv.get(504, 0)}")
-        if inv.get(601, 0) < WINGS_TO:
-            setup.append(f"@item 601 {WINGS_TO - inv.get(601, 0)}")
+        if inv.get(601, 0) < w_to:
+            setup.append(f"@item 601 {w_to - inv.get(601, 0)}")
         import gm_state
 
         fr0 = gm_state._frames(screen)
@@ -765,8 +852,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         red0 = overweight_red(fr0[0])  # Amendment I: the reader is blind to the red (>= 50 %) line
         cleared: dict[str, Any] | None = None
         if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT or (w0 is None and red0):
+            if not conf["clear_etc"]:  # dungeon@6: the Thief's Etc tab holds Batt's target items
+                raise r.Stop(f"dungeon@6: weight {w0} at or over {CLEAR_AT} for the {a.char}: "
+                             "the setup never drops its Etc tab (a person first)")  # fmt: skip
             cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                       f"{CLEAR_STAND[2]}", "crusader")  # fmt: skip
+                       f"{CLEAR_STAND[2]}", conf["job"], a.char)  # fmt: skip
             time.sleep(3.0)
             bench.close_chat(agent_raw, screen)
             cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
@@ -778,13 +868,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
             r.activate_client(agent_raw, screen)
             for _ in range(excess):
-                agent_raw.keys(KEYS["potion"])
+                agent_raw.keys(keys_["potion"])
                 drunk += 1
                 time.sleep(0.35)
             time.sleep(1.0)
-        setup.append(f"@warp {MAP} {start[0]} {start[1]}")
+        setup.append(f"@warp {map_} {start[0]} {start[1]}")
         for cmd in setup:
-            cr.gm_line(agent_raw, screen, cmd, "crusader")
+            cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char)
             time.sleep(3.0 if "@warp" in cmd else 0.8)
         bench.close_chat(agent_raw, screen)
         r.activate_client(agent_raw, screen)
@@ -803,7 +893,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
             "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
                       "ag_match": a.ag_match},
-            "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
+            "char": a.char, "steal": a.steal, "bank_tags": bank,
+            "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
+            "wings_to": w_to,
+            "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots})  # fmt: skip
@@ -851,9 +944,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         t_end = time.monotonic() + a.minutes * 60.0
 
         def press(what: str, why: str) -> None:
-            agent_raw.keys(KEYS[what])
+            agent_raw.keys(keys_[what])
             counts[what] += 1
-            ev({"kind": "press", "what": what, "key": KEYS[what], "why": why})
+            ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
 
         def click_at(u: float, v: float, why: str) -> None:
             """Every world click of this runner: FrameGuard refuses one off the game frame."""
@@ -973,11 +1066,104 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         n_ag_diag, ag_diag_t = [0], [-1e9]
 
+        steal_done: list[tuple[Cell, float]] = []  # dungeon@6: targets stolen from / given up
+        n_tags = [0]
+        tags_dir = out / "tags"
+        tags_log = None
+        if bank:
+            tags_dir.mkdir()
+            tags_log = (tags_dir / f"cuts-{sid}.jsonl").open("a")
+
+        def read_tag(img_: Any, rel: Cell, u: float, v: float, t_img: int, by: str
+                     ) -> str | None:  # fmt: skip
+            """dungeon@6: the name tag under the target (the band under its cell's projected point,
+            nametag.band's), matched against this map's templates; the band is BANKED (raw, with
+            its time and box: nametag's cut record) for the packet-labelled templates."""
+            if here is not None:
+                uc, vc = (float(x) for x in project(here, [rel])[0])
+            else:
+                uc, vc = u, v + BODY_UP
+            box = type("Box", (), {"x0": uc - 20.0, "x1": uc + 20.0, "y1": vc + TAG_BOTTOM})()
+            reg = nametag.band(img_, box)
+            m = nametag.letter_mask(reg)
+            wb = nametag.word_box(m)
+            if wb is None:
+                return None
+            word, iou = nametag.match(m, tag_tpl) if tag_tpl else (None, 0.0)
+            if tags_log is not None and wb[2] - wb[0] >= nametag.MIN_WORD_W:
+                n_tags[0] += 1
+                name_ = f"tag-{sid}-{n_tags[0]:04d}"
+                np.save(tags_dir / f"{name_}.npy", np.asarray(reg))
+                tags_log.write(
+                    json.dumps(
+                        {
+                            "name": name_,
+                            "t": int(t_img),
+                            "u": round(uc, 1),
+                            "v": round(vc, 1),
+                            "box": [
+                                round(box.x0, 1),
+                                round(box.y1 - 50, 1),
+                                round(box.x1, 1),
+                                round(box.y1, 1),
+                            ],
+                            "word": list(wb),
+                            "read": word,
+                            "iou": round(iou, 3),
+                            "by": by,
+                            "rel": list(rel),
+                            "here": None if here is None else list(here),
+                        }
+                    )
+                    + "\n"
+                )
+                tags_log.flush()
+            return word
+
+        def do_steal(u: float, v: float, word: str, cell_: Cell | None) -> None:
+            """dungeon@6, Batt's steal-first: F3 (Steal) + a click on the target, until the weight
+            readout rises (an item stolen) or STEAL_MAX tries; HP guarded between tries."""
+            got = None
+            for k in range(1, STEAL_MAX + 1):
+                if guard_tick():
+                    break
+                w0 = gm_state._weight(gm_state._frames(screen))
+                press("steal", f"{word} try {k}")
+                time.sleep(0.12)
+                click_at(u, v, "steal")
+                time.sleep(STEAL_WAIT_S)
+                w1 = gm_state._weight(gm_state._frames(screen))
+                got = stolen(w0, w1)
+                ev({"kind": "steal", "try": k, "species": word,
+                    "cell": None if cell_ is None else list(cell_), "w0": w0, "w1": w1,
+                    "ok": got})  # fmt: skip
+                if got:
+                    counts["steal_ok"] += 1
+                    break
+            else:
+                counts["steal_gave_up"] += 1
+            steal_done.append((cell_ if cell_ is not None else (-999, -999), time.monotonic()))
+
         def strike(u: float, v: float, rel: Cell, by: str) -> bool:
             """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow --
             dungeon@4 (decision 5): or until OUR first damage line in the Battle Log; the HP is
-            read between the clicks (guard_tick)."""
+            read between the clicks (guard_tick). dungeon@6: the name tag read + banked first;
+            with --steal, Batt's steal-first on STEAL_SPECIES."""
             ref = frame()
+            if bank or a.steal:
+                word = read_tag(ref, rel, u, v, r.ns(), by)
+                if word is None and a.steal:
+                    time.sleep(TAG_WAIT_S)
+                    word = read_tag(frame(), rel, u, v, r.ns(), by + "+")
+                cell_ = None if here is None else (here[0] + rel[0], here[1] + rel[1])
+                if a.steal:
+                    ev({"kind": "tag", "word": word, "rel": list(rel), "by": by})
+                if (a.steal and word is not None and steal_species(word)
+                        and steal_forgotten(steal_done, cell_, time.monotonic())):  # fmt: skip
+                    do_steal(u, v, word, cell_)
+                    if escaped[0]:
+                        return True
+                    ref = frame()
             t_click = r.ns()
             with blt.lock:
                 n_lines0 = len(blt.lines)
@@ -1289,7 +1475,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 n_reads += 1
                 dark = sv.dark_screen(img)
                 ag_on = (sv.ag_present(img, ag_t, ag_m, a.ag_match)
-                         if n_reads % sv.AG_EVERY == 1 and not dark else None)  # fmt: skip
+                         if conf["autoguard"] and n_reads % sv.AG_EVERY == 1 and not dark
+                         else None)  # fmt: skip
                 dead = r.is_state(screen, gv.DEAD_STATE)
                 # Amendment H (r4 15:49): the minimap's coordinates still showed the OLD cell 0.25 s
                 # after a Fly Wing -- no read for FLY_SETTLE_S after one, and no jump bar for
@@ -1773,6 +1960,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         finally:
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts)})
             blt.stop()
+            if tags_log is not None:
+                tags_log.close()
+                ev({"kind": "tags_banked", "n": n_tags[0]})
             if boxes is not None:
                 boxes.stop()
                 ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self,
@@ -1780,7 +1970,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     "spots_ignored": [list(c) for c in (box_spots.misses if box_spots else {})
                                       if box_spots and box_spots.ignored(c)]})  # fmt: skip
             if sitting:
-                agent_raw.keys(KEYS["stand"])
+                agent_raw.keys(keys_["stand"])
             if reason == "death":
                 x, y = gx0 + gv.RETURN_TO_GAME[0], gy0 + gv.RETURN_TO_GAME[1]
                 agent_raw.move(x + 4, y + 3)
@@ -1792,14 +1982,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if r.is_state(screen, gv.DEAD_STATE):
                     raise r.Stop("dungeon@1: the death dialog stayed after its known step")
                 for cmd in ("@alive", "@heal"):
-                    cr.gm_line(agent_raw, screen, cmd, "crusader")
+                    cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char)
                     time.sleep(0.8)
                 bench.close_chat(agent_raw, screen)
             if reason != "death":  # 13:19: a stopped run left the Crusader at 30 % HP among
                 # orcs with no runner: after run_end (outside the measured window) it goes home
                 try:
                     cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                               f"{CLEAR_STAND[2]}", "crusader")  # fmt: skip
+                               f"{CLEAR_STAND[2]}", conf["job"], a.char)  # fmt: skip
                     time.sleep(3.0)
                     bench.close_chat(agent_raw, screen)
                 except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
@@ -1817,7 +2007,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
            "engage": a.engage, "search": a.search, "loot": a.loot, "strategy": a.strategy,
            "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
                      "ag_match": a.ag_match},
-           "seed": a.seed,
+           "seed": a.seed, "char": a.char, "map": map_, "steal": a.steal, "bank_tags": bank,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
@@ -1880,6 +2070,22 @@ def main() -> int:
         default=None,
         help="the Auto Guard icon bar (default survive.AG_MATCH_DUNGEON, Batt decision 7)",
     )
+    t.add_argument(
+        "--char",
+        default="crusader",
+        choices=sorted(CHARS_CONF),
+        help="dungeon@6: the test character (crusader.py --char)",
+    )
+    t.add_argument("--map", default=MAP, help="dungeon@6: the map (its zones file is required)")
+    t.add_argument(
+        "--steal",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@6: Batt's steal-first on STEAL_SPECIES (needs the map's tags)",
+    )
+    t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
+                   help="dungeon@6: bank the raw name-tag band at every strike (default: on off "
+                   "orcsdun01)")  # fmt: skip
     a = ap.parse_args()
     if a.cmd == "run" and a.ag_match is None:
         import survive as sv
