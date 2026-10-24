@@ -44,3 +44,29 @@ def test_a_few_noisy_pixels_still_match_but_a_changed_line_does_not() -> None:
     noisy[24, 5:6] = 0  # one more
     assert not cr.identity(noisy, name_ref, jobs, "novice")["ok"]
     assert cr.differing(name_ref, name_ref[:, :-1]) > cr.MATCH  # a shape mismatch never matches
+
+
+def test_each_test_character_has_its_own_data_dir_and_jobs(tmp_path, monkeypatch) -> None:
+    """2026-10-24: the Thief (slot 3) gets the same guard; the Crusader stays the default."""
+    import json
+
+    assert cr.CHARS["thief"] == ("novice", "thief", "rogue")
+    assert cr.CHARS["crusader"] == cr.JOBS
+    assert cr.data_dir() == cr.DATA and cr.data_dir("thief").name == "thief"
+    try:
+        cr.data_dir("knight")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an unknown character must be refused")
+    monkeypatch.setattr(cr, "ROOT", tmp_path)
+    d = tmp_path / "data" / "thief"
+    d.mkdir(parents=True)
+    (d / "char.json").write_text(json.dumps({"name": "T"}))
+    ref = frame(200, 100)
+    np.save(d / "ref_name.npy", cr.crop(ref, cr.NAME_BOX))
+    np.save(d / "ref_job_thief.npy", cr.crop(ref, cr.JOB_BOX))
+    np.save(d / "ref_job_swordman.npy", cr.crop(ref, cr.JOB_BOX))  # not a Thief job: never loaded
+    name, name_ref, jobs = cr.load_refs("thief")
+    assert name == "T" and sorted(jobs) == ["thief"]
+    assert cr.identity(ref, name_ref, jobs, "thief")["ok"]
