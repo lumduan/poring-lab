@@ -57,3 +57,14 @@ def test_watch_cells_are_seeded_cut_and_refuse_repeats() -> None:
     assert set(si.watch_cells(lat, 5, 99)) == {(i, 2 * i) for i in range(10)}
     with pytest.raises(SystemExit):
         si.watch_cells([{"x": 1, "y": 1}, {"x": 1, "y": 1}], 0, 2)
+
+
+def test_staging_refuses_while_the_thief_holds_a_target_item() -> None:
+    """stage@3: clear_loot drops WHOLE stacks, so a held target item would be staged and lost
+    (run c, 2026-10-24 22:23: Dead Branch 5 at its first spot, 4.04's natural ones among them).
+    Other items and empty stacks never refuse."""
+    assert si.held_refusal([]) is None
+    assert si.held_refusal([(907, 190), (504, 9), (604, 0)]) is None
+    why = si.held_refusal([(604, 4), (757, 2), (907, 190)])
+    assert why is not None and "{604: 4, 757: 2}" in why and "whole stacks" in why
+    assert si.VERSION == "stage@3"

@@ -28,6 +28,7 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@2"  # @2: --open (target-items.md 9b)
+VERSION = "stage@3"  # @2: --open (target-items.md 9b); @3: refuses while targets are held
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -162,6 +163,35 @@ def _settle(screen: Any, max_s: float = READY_MAX_S) -> float:
     return round(time.monotonic() - t0, 1)
 
 
+def held_refusal(rows: Iterable[Sequence[Any]]) -> str | None:
+    """PURE (stage@3, 2026-10-25): why a staging run must NOT start, or None. gm_state.clear_loot
+    drops WHOLE stacks, so a target item already held goes to the floor with the staged copy and
+    is lost: run c (2026-10-24 22:23) dropped Dead Branch 5, Rough Elunium 3, Rough Oridecon 2 and
+    Honey 2 at its first spot, 4.04's natural Dead Branches and Rough Elunium among them. ``rows``
+    = (nameid, amount) from the DB, its LAST SAVE: a pickup since then is not in it."""
+    held = {int(i): int(n) for i, n in rows if int(i) in TARGETS and int(n) > 0}
+    if not held:
+        return None
+    return (
+        f"stage_items refused: the {CHAR} holds target items {held} (DB last save): "
+        "clear_loot drops whole stacks, so they would be staged and lost (a person stores "
+        "them first)"
+    )
+
+
+def _held_rows() -> list[Sequence[Any]]:
+    """The Thief's target-item stacks from the lab DB (the experimenter's check, as
+    dungeon_hunt's setup reads its stock; never a decision input of the agent)."""
+    import crusader as cr
+    import ro_agent as r
+
+    name = json.loads((cr.data_dir(CHAR) / "char.json").read_text())["name"]
+    cid = int(r.db_query(f"SELECT char_id FROM `char` WHERE name = {r.sql_str(name)};")[0][0])
+    ids = ", ".join(str(i) for i in sorted(TARGETS))
+    return list(r.db_query(f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
+                           f"AND nameid IN ({ids});"))  # fmt: skip
+
+
 def give() -> None:
     """LIVE: one of each target (for the icon cut, then the inventory frames to judge)."""
     import bench
@@ -206,6 +236,9 @@ def run(a: argparse.Namespace) -> int:
     missing = [n for n in TARGETS.values() if not (ICON_DIR / f"loot-{n}.npy").exists()]
     if missing:
         raise SystemExit(f"stage_items refused: no icon for {missing} in {ICON_DIR} (cut)")
+    why = held_refusal(_held_rows())
+    if why:
+        raise SystemExit(why)
     area = search_area(a.map)
     if a.open is not None:  # target-items.md 9b: stage on OPEN ground (the RSW's tall models)
         area = open_area(area, np.load(a.open))

@@ -252,6 +252,18 @@ counted per hour apart (dungeon_judge.py items).
     - False detections: <= 0.022 per 100 unseen hunting frames (s4 + s5).
     - All 8 misses fall on 3 frames where the client flashes floor items yellow.
     - "Loot by sight" qualifies for all four. The live version needs its own pre-registration.
+- **➡️ STAGING c ALSO DROPPED 4.04's NATURAL TARGET ITEMS (found 2026-10-25 ~03:2x from its
+  packets; not seen at the time).** `clear_loot` drops WHOLE stacks, as with b above.
+  - c's first spot (79,118-121) dropped Dead Branch 5, Rough Elunium 3, Rough Oridecon 2 and
+    Honey 2: one fresh `@item` copy each, plus everything held.
+  - What was held: 4.04's natural Dead Branch 3 (2 picked + 1 stolen) and Rough Elunium 1, plus
+    s3's looter-returned staged set (1 of each).
+  - Nothing picked them back up. The 4.04 RESULT still counts them as collected (demonstrations
+    4.04), but the Thief no longer holds them.
+  - Its target items now (DB, 2026-10-25 ~03:1x) are 1 of each: s7's returned staged set, not
+    income.
+  - **Fix: stage@3 (`stage_items.held_refusal`) refuses to stage while the Thief holds any target
+    item** (DB last save). A person stores them first.
 
 ### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
 

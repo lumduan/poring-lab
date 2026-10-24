@@ -15947,6 +15947,10 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
   - s6: 2 Dead Branches picked. One came from our Elder Willow kill, was looted, and dropped
     again when we killed the looter. The other came from a kill's mixed pile.
   - s6: 1 Rough Elunium picked, a lone drop after our hits.
+  - ➡️ **No longer held (found 2026-10-25):** staging c (22:23) dropped these 4 items (Dead
+    Branch 3, Rough Elunium 1) with its staged stacks (`clear_loot` drops whole stacks), and
+    nothing picked them back up. They stay counted as collected here. Fix and ledger:
+    thief-payon.md 4e (stage@3 refuses while targets are held).
 - **Excluded as staged:** s3's Honey, Dead Branch, Rough Oridecon and Rough Elunium. They came
   back from a looter (stage_items spot 8).
 - **Lost to looters:** s3's Dead Branch (1.7 s) and one of s6's (210,170).
