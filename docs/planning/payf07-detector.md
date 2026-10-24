@@ -527,6 +527,13 @@ T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1
 - Next: 10h's steps 1-4, in order (freeze, then T1 on TEST, then the frozen TRAIN labels and
   the pack). The decision is reported to Batt.
 
+- **FROZEN 2026-10-24 19:08:56 ICT** (from `date`; BEFORE the first TEST read):
+  - `/dev/shm/poring-lab-tmp/payf07/params.json`, sha256
+    `e93367fe7d333a4ce74289a76915d48ded8631a77a042e62f68d83dc0dc2de14`;
+  - its T_h file `fit/threshold-P1.json`, sha256
+    `f477de49852e656e7e8ac025af151d3fd86e5e6ed9abc4683dea4635d8138247`;
+  - decision "Amendment C (2026-10-24 19:08:32, c508f3d): 1d = 120 ms (P1)".
+
 ### 10i. Estimates: the cache and the training (by analogy with v2orc)
 
 - **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
