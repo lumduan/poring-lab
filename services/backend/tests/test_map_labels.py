@@ -220,3 +220,37 @@ def test_t1_refuses_parameters_that_are_not_frozen(tmp_path: Path) -> None:
         a = argparse.Namespace(map="pay_fild07", params=params, parts=["/nonexistent"])
         with pytest.raises(SystemExit, match="FROZEN parameters only"):
             ml.cmd_check(a)
+
+
+def test_amendment_b_engagement() -> None:
+    aid = 7
+    events = [
+        {"type": "act", "src_gid": 7, "target_gid": 100, "t_mono_ns": 10 * S},
+        {"type": "act", "src_gid": 200, "target_gid": 7, "t_mono_ns": 20 * S},
+        {"type": "act", "src_gid": 300, "target_gid": 400, "t_mono_ns": 20 * S},  # not ours
+        {"type": "attack_request", "target_gid": 500, "t_mono_ns": 30 * S},
+        {"type": "act", "src_gid": 7, "target_gid": 7, "t_mono_ns": 5 * S},  # self (a skill)
+    ]
+    times = ml.engagement_times(events, aid)
+    assert times == {100: [10 * S], 200: [20 * S], 500: [30 * S]}
+    assert ml.is_engaged(times, 100, 13 * S)  # 3 s after: still engaged
+    assert not ml.is_engaged(times, 100, 13 * S + 1)
+    assert ml.is_engaged(times, 100, 9 * S)  # 1 s before the fight starts
+    assert not ml.is_engaged(times, 100, 9 * S - 1)
+    assert not ml.is_engaged(times, 300, 20 * S) and not ml.is_engaged(times, 400, 20 * S)
+    assert ml.is_engaged(times, 500, 30 * S)
+
+
+def test_engaged_rule_adds_its_reason_after_2b_2c(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def base(self: Any, world: Any, e: Any, *_a: Any) -> Any:
+        calls.append(e.gid)
+        return (3, "fix2:walk"), ("next_move" if e.gid == 1 else None)
+
+    monkeypatch.setattr(olf.FacingRule, "choose", base)
+    rule = ml.EngagedRule("fix2", olf.NextMoves(()), olf.ViewClasses(), {1: [S], 2: [S]})
+    e1, e2, e3 = (SimpleNamespace(gid=g) for g in (1, 2, 3))
+    assert rule.choose(None, e1, None, {}, S, None, 0.0)[1] == "next_move"  # 2b keeps its name
+    assert rule.choose(None, e2, None, {}, S, None, 0.0)[1] == ml.ENGAGED
+    assert rule.choose(None, e3, None, {}, S, None, 0.0)[1] is None

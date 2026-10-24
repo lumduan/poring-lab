@@ -79,6 +79,9 @@ OWN_C1_MIN = 50  # 3c: a session's own C1 needs >= 50 standing labels scored
 T2_PER_SPECIES = 30
 T2_SALT = "payf07"
 LABELS = "payf07-o3h"
+ENGAGED = "engaged"  # Amendment B (18:54:50): a fight with our character near the label's time
+ENGAGED_BACK_NS = 3_000_000_000
+ENGAGED_FWD_NS = 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -211,6 +214,45 @@ def recent(times: Sequence[int], t: int, window: int) -> bool:
 def sweep_fine(best: int) -> list[int]:
     """4b's fine grid: 10 ms within +-50 of the coarse best, clipped to the sweep (Amendment A)."""
     return olf.fine_grid(best, lo=COARSE_MS[0], hi=COARSE_MS[-1])
+
+
+def engagement_times(events: Iterable[dict[str, Any]], aid: int) -> dict[int, list[int]]:
+    """Amendment B: per unit, the times of an ``act`` between it and our character (either
+    direction) or of our ``attack_request`` on it, sorted."""
+    out: dict[int, list[int]] = defaultdict(list)
+    for e in events:
+        kind = e.get("type")
+        if kind == "act":
+            src, dst = e.get("src_gid"), e.get("target_gid")
+            if src == aid and dst is not None and dst != aid:
+                out[int(dst)].append(int(e["t_mono_ns"]))
+            elif dst == aid and src is not None and src != aid:
+                out[int(src)].append(int(e["t_mono_ns"]))
+        elif kind == "attack_request" and e.get("target_gid") is not None:
+            out[int(e["target_gid"])].append(int(e["t_mono_ns"]))
+    return {g: sorted(ts) for g, ts in out.items()}
+
+
+def is_engaged(times: dict[int, list[int]], gid: int, tw: int, back: int = ENGAGED_BACK_NS,
+               fwd: int = ENGAGED_FWD_NS) -> bool:  # fmt: skip
+    """Amendment B: an engagement time of ``gid`` lies in [tw - back, tw + fwd]."""
+    ts = times.get(gid, [])
+    i = bisect.bisect_left(ts, tw - back)
+    return i < len(ts) and ts[i] <= tw + fwd
+
+
+@dataclass
+class EngagedRule(olf.FacingRule):
+    """fix 2's facing and 2b / 2c (orc_labels_fix.FacingRule), then Amendment B's ``engaged``."""
+
+    times: dict[int, list[int]] = field(default_factory=dict)
+
+    def choose(self, world: Any, e: Any, st: Any, rules: Any, tw: int, sheet: Any,
+               yaw: float) -> tuple[tuple[int, str], str | None]:  # fmt: skip
+        facing, why = super().choose(world, e, st, rules, tw, sheet, yaw)
+        if why is None and is_engaged(self.times, e.gid, tw):
+            return facing, ENGAGED
+        return facing, why
 
 
 def percentile(values: Sequence[float], q: float) -> float:
@@ -412,7 +454,13 @@ class RecSession:
         return bool(self.layout(bgr))
 
     def facing_rule(self, rule: str) -> olf.FacingRule:
-        return olf.FacingRule.for_events(rule, self.lab.timeline.events)
+        """fix 2 + Amendment B (``engaged``), our character's id from the Timeline."""
+        base = olf.FacingRule.for_events(rule, self.lab.timeline.events)
+        aid = self.lab.timeline.frame_world(self.refs[-1].t_mono_ns).aid if self.refs else None
+        if aid is None:
+            raise SystemExit(f"{self.sid}: our character's id is unknown (Amendment B needs it)")
+        times = engagement_times(self.lab.timeline.events, int(aid))
+        return EngagedRule(base.rule, base.moves, base.classes, times)
 
     def scene(self, world: Any) -> Any:
         if world.self_pos is None or not world.map or map_key(world.map) != self.spec.name:
@@ -598,8 +646,10 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
 
 def labeler_for(sess: RecSession, params: dict[str, Any], occl: olf.Occluders,
                 occlusion: str, fit_all: bool = False) -> olf.FixLabeler:  # fmt: skip
-    return olf.FixLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
-                          fit_all=fit_all, map_name=sess.spec.name)  # fmt: skip
+    fl = olf.FixLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
+                        fit_all=fit_all, map_name=sess.spec.name)  # fmt: skip
+    fl.facing = sess.facing_rule("fix2")  # Amendment B
+    return fl
 
 
 def _fates_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
@@ -807,6 +857,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "under_model_kept_by_species": by_species("under_model_kept"),
         "next_move_by_species": by_species(olf.NEXT_MOVE),
         "ambiguous_view_by_species": by_species(olf.AMBIGUOUS),
+        "engaged_by_species": by_species(ENGAGED),
         "facing_agreement": olf.agreement(rows),
         "self_moving_rows": motion.get(True, 0),
         "per_part": per_part,
