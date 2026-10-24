@@ -176,6 +176,15 @@ through data/kb). The spawn tables:
 V counts NPC sell prices only. The four target items are worth far more in a player shop, and are
 counted per hour apart (dungeon_judge.py items).
 
+### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
+
+A PROPOSED study is in [renewal-feasibility.md](renewal-feasibility.md):
+- the server is a rebuild with `PRERE=no`; the same client exe and data, no Windows change;
+- under renewal, the targets move: Elder Willow leaves pay_fild07, and the drop level penalty
+  halves a Base 50 Thief's kill drops;
+- option A, a second renewal rAthena run one at a time beside today's, is recommended.
+Batt decides. 4.03 runs on pre-re as registered.
+
 ## 5. pay_fild07 prep (offline; a subagent in a tmpfs worktree)
 
 As orcsdun01-dungeon-prep.md did for the dungeon:
