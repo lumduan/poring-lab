@@ -441,6 +441,12 @@ Every candidate frame (1 fps). "kept" = the kept fitted labels in any candidate 
 - **Green Plant:** 116 kept labels (>= 30), so it is a class and in the tier (section 7), but 0 of
   them lie in a whole frame (its neighbours under canopy are excluded), so a cache would hold no
   Green Plant box today.
+- **s2 (`20261024T181454-rdp-thief-s2`, shipped 19:0x; the parent's message), labelled the same
+  way at 19:05-19:06 with paced reads (3 workers):** 1,266 frames (its recorder stopped at ~21 min
+  on a host IO-guard trip), 1,082 candidates, 542 whole; kept / in whole frames: Elder Willow
+  34 / 16 (155 `engaged`), Willow 26 / 16, Eggyra 207 / 81, Bigfoot 38 / 12, Poporing 87 / 57,
+  Green Plant 0; all 392 / 182. It is NOT in T2's pool (fixed in 3b) and joins TRAIN only by 3c,
+  whose own-C1 check needs the FROZEN parameters (not run).
 - 🔴 **Elder Willow, the species Batt asked about, is the THINNEST: 100 boxes in whole frames.** The
   hunting runs fight it (Steal first): 1,007 of its hunting sightings are `engaged`, the very
   situation of Batt's clip, and Amendment B removes them because their fits are spurious (10c).
