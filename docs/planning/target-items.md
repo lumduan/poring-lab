@@ -223,3 +223,28 @@ nearest 604 detection anywhere in the region and its distance, as context only.
 - Offline CPU only (`nice -n 15`), no GPU, no live action.
 
 ## 9. RESULTS (appended below, clock-labelled; nothing above this line is edited after the pre-registration commit except by a labelled AMENDMENT)
+
+### 9a. FIT and the FREEZE (2026-10-24; clock times from `date` and the commits)
+
+**The order of events:** pre-registration fbc077e 17:48:17; first FIT run 17:5x (757: no
+template); amendment A b0bdc10 18:00:54; FIT re-run 18:01-18:05; **FROZEN 2026-10-24 18:05:45
++0700**: `params.json` sha256 `ed19713cda41ad9b08deb74e0bb23a9588d7f1f40bedcbaaff474f8fb2c882af`,
+`templates.npz` sha256 `345d895011dc4b02314124f7cfd366a418f904d537efbc1370f7e9ad13468ce2`
+(/dev/shm/poring-lab-tmp/target-items/params/). No TEST (spots 8-11) or TEST-NEG (t1b, t2) frame
+had been read; the pilot's Dead Branch window (section 6) neither.
+
+**The FIT measurements** (FIT eval frames 285, all `ok`, none `ui_layout_mismatch`; FIT-NEG = those
+285 + 366 pilot frames = 651):
+
+| item | FIT samples (floor items) | template built from | template h x w px (mask px) | anchor du / dv px | alignment median abs dx / dy (NCC median, p10) | threshold NCC / RMS / inlier | FIT recall (labelled) | FIT-NEG false / 100 frames | candidates / frame (NCC >= 0.45) |
+|---|---|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 55 (4) | floor 143 only (amendment A), 16 kept | 14 x 16 (136) | -5.5 / +0.5 | 0 / 0 (0.977, 0.967) | 0.90 / 20 / 0.8 | 0.266 (94) | 0.0 | 62.8 |
+| 756 Rough Oridecon | 81 (5) | all, 68 kept (5) | 11 x 14 (71) | -4.5 / +1.0 | 1 / 1 (0.782, 0.149) | 0.78 / 35 / 0.8 | 0.516 (95) | 0.0 | 12.4 |
+| 604 Dead Branch | 104 (6) | all, 84 kept (5) | 12 x 18 (73) | -6.5 / +3.5 | 0 / 0 (0.838, 0.340) | 0.75 / 25 / 0.7 | 0.618 (131) | 0.0 | 184.6 |
+| 518 Honey | 135 (7) | all, 112 kept (7) | 21 x 19 (265) | -5.0 / +1.0 | 0 / 0 (0.925, 0.312) | 0.72 / 55 / 0.7 | 0.639 (155) | 0.0 | 298.4 |
+
+- No alignment STOP (all medians <= 1 px): the packet labels sit on the sprites.
+- **FIT recall is 0.27-0.64 at zero FIT-NEG false detections.** The FIT spots' canopy (amendment A's
+  by-eye note: spot 1 all four items, spots 2 / 4 / 6 some) is in that denominator by the
+  pre-registration (3d), so FIT already predicts TEST recall well under 80 % unless the TEST spots
+  are open ground. Written here before any TEST read.
