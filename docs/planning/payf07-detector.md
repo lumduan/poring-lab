@@ -325,3 +325,34 @@ this map's species appended:
   frames also come from the bus: 120 ms, 260 samples).
 - **If attempt 2 also stops:** nothing is frozen, T1 does not run, and the report proposes
   orcsdun01's 120 ms (the same bus) for Batt's decision.
+
+## 10. RESULT: 4b attempt 2 (Amendment A) -- STOPPED again (47 walker samples < 50); 1d is NOT frozen and T1 does NOT run
+
+- **Run** 2026-10-24 18:36:22-18:37:09 ICT at c6ac191 (sweep 0..500 ms; local
+  `payf07/fit/offset.json`, attempt 1 kept as `offset-attempt1.json`).
+- **The samples: 47** (staged spots 0-7: 6 from 512 candidate frames; t1b: 41 from 1,560). Under
+  50, so Amendment A's rule holds: **nothing is frozen, T1 does not run, no TEST frame is read.**
+- **The coarse curve (n = 47, median px):** 0 ms 13.6; 50 ms 9.2; **100 ms 3.2**; 150 ms 5.0;
+  200 ms 10.1; 250-500 ms 15.1-17.5. The fine sweep did not run (the stop comes first). Both attempts
+  put the minimum at 100-150 ms, where orcsdun01 froze 120 ms on the same RDP frame bus.
+
+### 10a. THE PROPOSAL for the decision (the parent's / Batt's; NOT adopted here)
+
+| option | what | for | against |
+|---|---|---|---|
+| **P1 (recommended)** | 1d = **120 ms**, orcsdun01's frozen value (col3, 260 samples, 2.24 px median) | the same RDP frame bus and timestamps (warp_watch and the 1-fps recorder both read the bus); both FIT attempts here put the minimum at 100-150 ms (3.2 / 5.0 px at n = 47) | a value measured on another map's frames |
+| P2 | 1d measured with the 50-sample floor on a larger FIT: + s-pilot and s1 (TRAIN sessions, never TEST) | keeps 4b's measurement on this path | changes FIT after two stops; adds a third attempt |
+| P3 | accept attempt 2's 47 samples and run its fine sweep | the measurement as designed, 3 samples short | lowers a pre-registered floor after the fact |
+
+### 10b. What is done meanwhile (PROVISIONAL under P1; no TEST read, nothing frozen)
+
+So that P1, if chosen, can proceed at once:
+- T_h is measured on FIT at 120 ms (4e's method, unchanged);
+- the parameters are written as `params-P1-proposed.json` with `status: PROPOSED_NOT_FROZEN`. The
+  tool REFUSES T1 on them (c.f. `map_labels.py check`);
+- the TRAIN sessions are labelled under them (staged spots 0-7, t1b, s-pilot, s1): the counts;
+- the T2 pack is built from them (seed 21, as section 6), marked provisional in its key. It may be
+  run only if the decision is P1 and T1 then runs on the frozen P1 parameters; under P2 / P3 the
+  labels and the pack are rebuilt with the frozen values.
+- A DIAGNOSTIC (not a measurement under the rule) for P2: 1d's sweep on staged 0-7 + t1b +
+  s-pilot + s1, reported, never frozen.

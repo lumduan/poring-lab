@@ -520,8 +520,8 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
     per_part: dict[str, Any] = {}
     samples: list[tuple[RecSession, qa_export.JpegRef, int, dict[int, float]]] = []
     sessions = [RecSession.open(p, spec, a.layout_templates) for p in a.parts]
-    for sess in sessions:
-        refuse(sess, "fit")
+    for sess in sessions:  # --diagnostic: any non-TEST part, never frozen (9b)
+        refuse(sess, "not_test" if a.diagnostic else "fit")
     for sess in sessions:  # the coarse sweep: still from the sweep's edge (1,000 ms) to t
         refs = sess.candidates_at(SWEEP_MAX_MS)
         olf._JOB.update(sess=sess, occluders=occl, walkers=spec.walkers, reader=read_png)
@@ -546,6 +546,7 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
         "map": spec.name, "parts": [s.name for s in sessions], "measured_at": olf.now_ict(),
         "commit": olf.git_head(), "walkers": list(spec.walkers), "samples": len(samples),
         "sweep_ms": [COARSE_MS[0], COARSE_MS[-1]], "amendment": "A (2026-10-24 18:35:20 ICT)",
+        "diagnostic": bool(a.diagnostic),
         "per_part": per_part, "curve_coarse_median_px": {str(k): v for k, v in curve.items()},
         "curve_coarse_n": {str(k): len(errs[k]) for k in COARSE_MS},
         "best_coarse_ms": best_coarse,
@@ -624,9 +625,14 @@ def provisional(offset: dict[str, Any], spec: MapSpec) -> dict[str, Any]:
 
 def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
-    offset = json.loads(a.offset.read_text())
-    if offset.get("offset_ms") is None:
-        raise SystemExit("1d stopped: no offset to measure T_h at")
+    if (a.offset is None) == (a.proposed_offset_ms is None):
+        raise SystemExit("one of --offset (a measured 1d) or --proposed-offset-ms (9b)")
+    if a.offset is not None:
+        offset = json.loads(a.offset.read_text())
+        if offset.get("offset_ms") is None or offset.get("diagnostic"):
+            raise SystemExit("1d stopped (or a diagnostic): no offset to measure T_h at")
+    else:
+        offset = {"offset_ms": float(a.proposed_offset_ms), "proposal": a.proposal}
     params = provisional(offset, spec)
     occl = occluders(spec)
     sessions = [RecSession.open(p, spec, a.layout_templates) for p in a.parts]
@@ -688,6 +694,7 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
                 "model box (fix 2, 2b / 2c, the fit at +-6 px, tau, not at the edge)",
         "map": spec.name, "parts": [s.name for s in sessions], "measured_at": olf.now_ict(),
         "commit": olf.git_head(), "offset_ms": params["offset_ms"], "o3h_tau": t_h,
+        "offset_source": offset.get("proposal") or str(a.offset),
         "clear_kept": dist(clear), "under_fit_passes": dist(under),
         "under_below_t_h": sum(1 for v in under if v < t_h), "per_species": per_species,
         "per_part": per_part, "other_species_fates": len(rows) - len(mine),
@@ -696,19 +703,28 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
-    off = json.loads(a.offset.read_text())
     th = json.loads(a.threshold.read_text())
-    if off.get("offset_ms") is None or float(th["offset_ms"]) != float(off["offset_ms"]):
-        raise SystemExit("T_h must be measured at 1d's frozen offset")
+    if a.proposed:  # 9b: 1d stopped; the proposal's parameters, NOT frozen (check refuses them)
+        off = {"offset_ms": th["offset_ms"], "parts": [th["offset_source"]]}
+        status = f"PROPOSED_NOT_FROZEN: {th['offset_source']}"
+        off_file: dict[str, Any] = {"offset_file": None, "offset_sha256": None}
+    else:
+        off = json.loads(a.offset.read_text())
+        if off.get("offset_ms") is None or off.get("diagnostic") or \
+                float(th["offset_ms"]) != float(off["offset_ms"]):  # fmt: skip
+            raise SystemExit("T_h must be measured at 1d's frozen offset")
+        status = "FROZEN"
+        off_file = {"offset_file": str(a.offset), "offset_sha256": olf.sha256_file(a.offset)}
     occl = occluders(spec)
     return {
-        "labels": LABELS, "plan": "docs/planning/payf07-detector.md 4", "map": spec.name,
+        "labels": LABELS, "status": status, "plan": "docs/planning/payf07-detector.md 4",
+        "map": spec.name,
         "map_cells": list(spec.cells), "frozen_at": olf.now_ict(), "commit": olf.git_head(),
         "measured_on": off["parts"], "offset_ms": float(off["offset_ms"]), "anchors_px": {},
         "fit_px": {str(m): spec.fit_px for m in spec.species}, "tau": olf.TAU, "k": olf.K,
         "search_px": olf.SEARCH_PX, "o3h_tau": float(th["o3h_tau"]), "facing_rule": "fix2",
         "occlusion": "o3h", "occluders": occl.provenance(),
-        "offset_file": str(a.offset), "offset_sha256": olf.sha256_file(a.offset),
+        **off_file,
         "threshold_file": str(a.threshold), "threshold_sha256": olf.sha256_file(a.threshold),
     }  # fmt: skip
 
@@ -735,6 +751,8 @@ def frozen_occluders(params: dict[str, Any], spec: MapSpec) -> olf.Occluders:
 def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
     params = load_params(a.params, spec)
+    if params.get("status") != "FROZEN":
+        raise SystemExit(f"{a.params}: {params.get('status')}: T1 runs on FROZEN parameters only")
     occl = frozen_occluders(params, spec)
     off_ms = float(params["offset_ms"])
     rows: list[dict[str, Any]] = []
@@ -884,7 +902,8 @@ def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
     gp = 1080
     out = {
         "what": f"the {LABELS} labels (no pixels): kept fitted boxes per candidate frame",
-        "labels": LABELS, "map": spec.name, "part": sess.name, "session": sess.sid,
+        "labels": LABELS, "params_status": params.get("status"), "map": spec.name,
+        "part": sess.name, "session": sess.sid,
         "labelled_at": olf.now_ict(), "commit": olf.git_head(), "params": str(a.params),
         "params_sha256": olf.sha256_file(a.params), "frames_recorded": len(sess.refs),
         "candidates": len(refs), "candidate_drops": dict(sorted(sess.dropped.items())),
@@ -913,6 +932,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     pool: dict[int, list[dict[str, Any]]] = defaultdict(list)
     sources = []
     params_sha = set()
+    statuses: set[str] = set()
     for path in a.labels:
         doc = json.loads(path.read_text())
         if doc.get("labels") != LABELS:
@@ -920,6 +940,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         if overlaps_role(doc["session"], parse_part(doc["part"])[1], spec.test):
             raise SystemExit(f"{doc['part']}: TEST is not in T2's pool")
         params_sha.add(doc["params_sha256"])
+        statuses.add(str(doc.get("params_status")))
         sources.append({"part": doc["part"], "file": str(path), "sha256": olf.sha256_file(path)})
         root = Path(a.session_root)
         for f in doc["frames"]:
@@ -985,12 +1006,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     key = {"labels": LABELS, "seed": a.seed, "per_species_target": T2_PER_SPECIES,
            "letters": letters, "crops": key_crops, "tier_species": tier,
            "per_species": per, "sources": sources, "params_sha256": params_sha.pop(),
+           "params_status": sorted(statuses),
            "instructions_sha256": sha, "built_at": olf.now_ict(), "commit": olf.git_head(),
            "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller",
            }  # fmt: skip
     (key_dir / "answer_key.json").write_text(json.dumps(key, indent=1) + "\n")
     return {"pack": str(pack), "key": str(key_dir / "answer_key.json"), "crops": len(names),
             "per_species": per, "tier_species": tier, "letters": len(letters),
+            "params_status": key["params_status"],
             "grids": len(grids)}  # fmt: skip
 
 
@@ -1010,14 +1033,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--layout-templates", type=Path, default=layout)
         p.add_argument("--out", type=Path, required=True)
 
-    common(sub.add_parser("offset"))
+    p = sub.add_parser("offset")
+    common(p)
+    p.add_argument("--diagnostic", action="store_true",
+                   help="9b: any non-TEST part; reported, never frozen")  # fmt: skip
     p = sub.add_parser("threshold")
     common(p)
-    p.add_argument("--offset", type=Path, required=True)
+    p.add_argument("--offset", type=Path, default=None)
+    p.add_argument("--proposed-offset-ms", type=float, default=None)
+    p.add_argument("--proposal", default=None, help="the proposal's name (9b)")
     p = sub.add_parser("freeze")
     common(p, parts=False)
-    p.add_argument("--offset", type=Path, required=True)
+    p.add_argument("--offset", type=Path, default=None)
     p.add_argument("--threshold", type=Path, required=True)
+    p.add_argument("--proposed", action="store_true",
+                   help="9b: write the proposal's parameters, NOT frozen")  # fmt: skip
     p = sub.add_parser("check")
     common(p)
     p.add_argument("--params", type=Path, required=True)

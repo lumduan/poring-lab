@@ -207,3 +207,16 @@ def test_amendment_a_sweep_is_0_to_500() -> None:
     assert ml.sweep_fine(150) == list(range(100, 201, 10))
     assert ml.sweep_fine(500) == list(range(450, 501, 10))  # clipped to the sweep
     assert ml.sweep_fine(0) == list(range(0, 51, 10))
+
+
+def test_t1_refuses_parameters_that_are_not_frozen(tmp_path: Path) -> None:
+    """9b: the proposal's parameters label TRAIN provisionally, but T1 never runs on them."""
+    import argparse
+    import json
+
+    for status in ("PROPOSED_NOT_FROZEN: P1", None):
+        params = tmp_path / "params.json"
+        params.write_text(json.dumps({"labels": ml.LABELS, "map": "pay_fild07", "status": status}))
+        a = argparse.Namespace(map="pay_fild07", params=params, parts=["/nonexistent"])
+        with pytest.raises(SystemExit, match="FROZEN parameters only"):
+            ml.cmd_check(a)
