@@ -40,6 +40,11 @@
 #                  permission to group 20, logged"): the Crusader's quest skills 144 Moving HP
 #                  Recovery, 145 Fatal Blow (Attack Weak Point), 146 Auto Berserk, 1002 Shrink.
 #                  Pinned atcommand.cpp:3819 ACMD_FUNC(questskill) -> pc_skill(..., ADDSKILL_PERMANENT).
+#   refine         lab only (Batt, 2026-10-24 ~12:0x: "Add @refine to group 20", his choice for the
+#                  THIEF's +8 Damascus -- his sample status window, docs/planning/thief-payon.md): typed
+#                  as @refine <position> <amount> on EQUIPPED items only (position 2 = the right
+#                  hand); pinned atcommand.cpp:2469 ACMD_FUNC(refine): no break chance, capped at
+#                  MAX_REFINE. Through the character's name + job check like every group-20 line.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -72,3 +77,4 @@ Body:
       resetskill: true
       jobchange: true
       questskill: true
+      refine: true
