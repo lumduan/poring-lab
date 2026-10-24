@@ -493,8 +493,12 @@ of the subagent brief:
         /mnt/poring-lab-datasets/20261024T131838-rdp-thief-t2 \
         --params params.json --workers 8 --rows t1/rows.json --out t1/check.json
     # 3. the TRAIN labels with the frozen file, then the pack (compare the key with 10g's)
-    scratch/run_labels.sh <the four TRAIN parts>   (with --params params.json)
-    python $W/scripts/map_labels.py pack labels/*.json --seed 21 --pack-dir t2/pack \
+    mkdir -p labels-frozen && PARAMS=params.json OUTDIR=labels-frozen scratch/run_labels.sh \
+        /mnt/poring-lab-datasets/20261024T170356-rdp-stage-items-b:spots=0-7 \
+        /mnt/poring-lab-datasets/20261024T123622-rdp-thief-t1b \
+        /mnt/poring-lab-datasets/20261024T164555-rdp-thief-s-pilot \
+        /mnt/poring-lab-datasets/20261024T173322-rdp-thief-s1
+    python $W/scripts/map_labels.py pack labels-frozen/*.json --seed 21 --pack-dir t2/pack \
         --key-dir t2-key --instructions $W/docs/planning/payf07-blind-instructions.txt \
         --instructions-sha256 dc3ee728ba5637c2416fcd34775e3ed7b5bc22afeae6096bdec8eb378d1c19f9 --out t2-build.json
     # 4. each TRAIN hunting session's own C1 (3c): check --allow-fit for t1b; check s-pilot, s1
