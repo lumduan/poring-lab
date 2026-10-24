@@ -15703,6 +15703,51 @@ NAS as `20261024T123622-rdp-thief-t1b`). Packets (`dungeon_judge.py row` / `item
     mob_skill_db; magic ignores flee). Our decoder reads no skill packet.
   - So Elder Willow MAGIC drives the resting.
 
+**4.03 run t2** (`20261024T131841-demo-dungeon-thief-pay_fild07-B-t2`, 13:18:36-14:00:10, seed
+24302; judged pre-run frame thief-pre-t2.png; 2,292 frames shipped as `20261024T131838-rdp-thief-t2`):
+- 40.0 min, **29 kills (43.5 / h)**, deaths 0, hard bars 0 (1 same-map change = its Fly Wing);
+- HP min 153 / 952 (16.1 %), potions 2, Fly Wings 1, **sitting 35.6 %**;
+- loot 74.1 % gross / 90.9 % net; gross 3,771 z / h, cost 3,690, **net +81 z / h**;
+- met 20.0 / 10 min; targets: Elder Willow 23, Eggyra 7, Bigfoot 3, Poporing 3;
+- kill time median: Elder Willow 3.4 s, Poporing 2.4 s, Eggyra 14.5 s, Bigfoot 16.6 s;
+- s / kill 82.8 = fighting 10.7 + walking 9.0 + standing 63.1.
+
+**4.03 RESULT (2026-10-24 ~14:0x; t1b + t2 pooled, 1.33 h; t1 apart: stopped, Amendment C).**
+
+| | t1b | t2 | pooled |
+|---|---|---|---|
+| kills / h | 39.0 | 43.5 | 41.3 (55 kills) |
+| deaths, hard bars | 0, 0 | 0, 0 | 0, 0 |
+| HP min | 17.0 % | 16.1 % | 16.1 % |
+| potions / Fly Wings | 5 / 1 | 2 / 1 | 7 / 2 |
+| sitting | 31.1 % | 35.6 % | 33.4 % |
+| loot gross / net | 95.7 / 100 % | 74.1 / 90.9 % | |
+| net z / h (NPC prices) | -7,107 | +81 | -3,513 |
+| met / 10 min | 13.5 | 20.0 | |
+
+**Every item, per hour (pooled 1.33 h, `dungeon_judge.py items`):** Resin 27.0, Sticky Mucus 1.5,
+Red Herb 0.75, Pet Incubator 0.75, Bear's Footskin 0.75, Egg Shell 0.75. **No target item**
+(Dead Branch / Rough Elunium / Rough Oridecon / Honey). At 55 kills the expectation was about
+0.2 Dead Branch, 0.15 Rough Elunium, 0.4 Honey, 0.04 Rough Oridecon.
+
+**Against the expectations:**
+- deaths 0: MET;
+- target items 0-3 per run-hour: consistent (0);
+- >= 20 labelled tags each for Elder Willow AND Bigfoot: NOT met (Elder Willow 63, Bigfoot 3).
+  Worse, the hover tags do not read on this map: the leave-one-out check matched 0 of 79 labelled
+  bands with the current mask. A light-text mask matched worse; the forest backgrounds and the
+  Thief's own name and HP bars break the word shapes.
+
+**What limits it:**
+- Elder Willow MAGIC: about 2/3 of the HP lost (t1b), so a third of the time is spent sitting;
+- the loot step: ~11 s, 25 hovers a kill;
+- few monsters met: 13.5-20 / 10 min.
+
+**For 4.04 (Steal first):** the Battle Log names the target in a clean chat font at our first hit
+("[Elder Willow] receives '105' damage points"; its reader read "Big?ot" for Bigfoot: glyphs to
+add). The proposal is steal right AFTER the first hit names the target, instead of before it.
+That is Batt's call.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

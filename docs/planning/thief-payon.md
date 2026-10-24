@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A Thief (Base 50 / Job 40, AGI 62 / DEX 40, Damascus + NPC gear) hunting a Payon field by the dungeon runner's walk-and-hit, with Steal Lv 10 tried first on Elder Willow / Bigfoot, yields measurable counts of the high-value items (Dead Branch, Rough Elunium, Rough Oridecon, Honey) per hour, safely (deaths and hard bars counted)."
-status: "PHASE 1a DONE 2026-10-24 10:09-10:29: Thief8fce built on slot 3 and verified (section 4b). pay_fild07 prep merged (payf07-prep.md). 4.03 (the walk-and-hit base) pre-registered 0055ed6 10:54:38, CONDITIONAL: no run before Batt confirms the map (pay_fild07 by default: section 2) and reviews or delegates config/map_zones/pay_fild07.yaml (a DRAFT the loader refuses)."
+status: "4.03 RESULT 2026-10-24 ~14:0x (demonstrations 4.03): the Thief (+8 Damascus) on pay_fild07, 55 kills in 1.33 h (41.3 / h), deaths 0, sitting 33 % (Elder Willow magic), net -3,513 z / h at NPC prices, no target item yet; hover name tags do not read on this map. 4.04 (Steal first) waits for Batt: steal after the first hit names the target (Battle Log)?"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [crusader-orcsdun01.md, item-class.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/crusader.py]
-next_action: "Batt: the map (pay_fild07?) and the zones delegation. Then 4.03 (pilot + 40-min runs, tags banked), then 4.04 (Steal first, gated on the labelled tags)."
+next_action: "Batt: (1) 4.04 species source (Battle Log after the first hit vs hover tags); (2) the sustain (Elder Willow magic: MDEF gear / skip Elder Willow / more potions); (3) Renewal (renewal-feasibility.md option A)."
 title: "A Thief (then Rogue) for economics on a Payon field: the decisions, the facts, the build and the plan"
 date: 2026-10-24
 owner: Batt
