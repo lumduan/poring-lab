@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "RESULT 2026-10-24 19:30 ICT: T1 PASSES under Amendment C (C1 2/463, 10k); T2 round 1 FAILS on Elder Willow (species 93.3 % < 95 %, 10m) -> the TRAINING TIER FAILS: nothing of pay_fild07 trains on this round. Pre-registered 18:25:24 (7ed0422); Amendment C (P1, 1d = 120 ms) 19:08:32 by the parent."
+status: "TRAINING TIER PASSES 2026-10-24 19:52 ICT: T1 PASS under Amendment C (10k); T2 round 1 failed on Elder Willow (10m); round 2 (11: the frozen T_h on every label, seed 22, new labellers) PASSES for every species (11a). Pre-registered 18:25:24 (7ed0422)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md]
-next_action: "A NEW pre-registered round (parent): a fit floor for labels not under a model, new seed, two NEW labellers; more Elder Willow labels from a still warp-and-watch collection (immune GM); then the cache + evaluation pre-registration before any training."
+next_action: "Before any GPU step: the cache (payf07-o3h-all), the classes file (section 7, Batt default) and the evaluation, pre-registered; ENGAGED units (Batt clip) need their own label hypothesis; more Elder Willow from a still collection."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -673,3 +673,44 @@ collection), not a further rule. That would be its own pre-registration.
 **Not changed by a passing round:** the cache and the evaluation still need their own
 pre-registration (section 8) before any GPU step.
 
+### 11a. RESULT: round 2 (seed 22), scored 2026-10-24 19:52:28 ICT -- **T2 PASSES for every species -> the TRAINING TIER PASSES** (T1 from 10k)
+
+- **The pack** (`t2r2/pack`, key `t2r2-key/answer_key.json`; built 19:4x from the frozen labels
+  with `--min-fit 0.479 --exclude-key t2-key/answer_key.json`). The pool removals, per species:
+
+  | species | weak_fit | judged in round 1 | pool left |
+  |---|---|---|---|
+  | Elder Willow | 12 | 30 | 164 |
+  | Willow | 10 | 30 | 563 |
+  | Eggyra | 7 | 30 | 476 |
+  | Bigfoot | 20 | 30 | 381 |
+  | Poporing | 8 | 30 | 233 |
+  | Green Plant | 0 | 30 | 86 |
+
+- **Labellers C and D** (new, each alone, only the pack): 180 / 180 answered each.
+- **Agreement:** q1 180, q2 180, q3 180 of 180. Both good with the species right: 179.
+
+| species | C good / species right | D good / species right | verdict |
+|---|---|---|---|
+| Elder Willow (1033) | 100 % / 96.7 % | 100 % / 96.7 % | PASS |
+| Willow (1010) | 100 / 100 | 100 / 100 | PASS |
+| Eggyra (1116) | 100 / 100 | 100 / 100 | PASS |
+| Bigfoot (1060) | 100 / 100 | 100 / 100 | PASS |
+| Poporing (1031) | 100 / 100 | 100 / 100 | PASS |
+| Green Plant (1080) | 100 / 100 | 100 / 100 | PASS |
+
+- **The one species miss:** an Elder Willow in deep shade (crop 127). Both labellers read it as a
+  Willow by colour (C: G/R 0.69; D: R/G 1.45, the highest of their "Willow" group). It is the same
+  kind of miss as round 1's 048.
+- **Procedure:** both read only PACK files. C made and at once removed an empty directory outside
+  the pack and wrote nothing into it. Both used read-only pixel-colour reads of PACK images (as
+  allowed).
+- **What the pass allows (section 8):** pay_fild07's TRAIN labels may train, under
+  `payf07-o3h-all` (frozen params + the weak_fit floor).
+- **Still needed BEFORE any GPU step (section 8):**
+  - the cache built with this rule;
+  - the classes file `classes-v2orc-payf07.json` (section 7's scheme, Batt's default unless he
+    answers);
+  - the evaluation pre-registered BEFORE training.
+- **Known gap:** ENGAGED monsters (fighting our character) are excluded (Amendment B), and that
+  is Batt's clip's situation. Labelling them is a separate hypothesis.
