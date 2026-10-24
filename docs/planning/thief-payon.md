@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A Thief (Base 50 / Job 40, AGI 62 / DEX 40, Damascus + NPC gear) hunting a Payon field by the dungeon runner's walk-and-hit, with Steal Lv 10 tried first on Elder Willow / Bigfoot, yields measurable counts of the high-value items (Dead Branch, Rough Elunium, Rough Oridecon, Honey) per hour, safely (deaths and hard bars counted)."
-status: "PHASE 1a (the build) in progress 2026-10-24. The map is pay_fild07 by default: Batt named pay_fild08, which has neither Elder Willow nor Bigfoot on this server (section 2). He was told at 10:0x; his answer overrides the default."
+status: "PHASE 1a DONE 2026-10-24 10:09-10:29: Thief8fce built on slot 3 and verified (section 4b). pay_fild07 prep merged (payf07-prep.md). 4.03 (the walk-and-hit base) pre-registered 0055ed6 10:54:38, CONDITIONAL: no run before Batt confirms the map (pay_fild07 by default: section 2) and reviews or delegates config/map_zones/pay_fild07.yaml (a DRAFT the loader refuses)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [crusader-orcsdun01.md, item-class.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/crusader.py]
-next_action: "Build the Thief on slot 3 of the GM account (section 4), then the pay_fild07 prep (section 5), then pre-register the runner version (section 6) before its first scored run."
+next_action: "Batt: the map (pay_fild07?) and the zones delegation. Then 4.03 (pilot + 40-min runs, tags banked), then 4.04 (Steal first, gated on the labelled tags)."
 title: "A Thief (then Rogue) for economics on a Payon field: the decisions, the facts, the build and the plan"
 date: 2026-10-24
 owner: Batt
@@ -122,6 +122,51 @@ through data/kb). The spawn tables:
      the equipped items.
 - **Stop rule:** any identity, UI-gate or read-back mismatch stops the build for a judged look.
   Nothing is retried blind.
+
+### 4b. BUILT 2026-10-24 10:09-10:29 (every GM line through `crusader.py --char thief`)
+
+- **Thief8fce**, slot 3 of the GM account, char id 150004 (the name is in data/thief/char.json,
+  gitignored). Made by the client's Make Character UI (Human, the default look).
+- **Steps, each judged on a frame:**
+  1. `@warp prt_fild08 170 375`;
+  2. `@joblevelup 9`, then Basic Skill 9 (learn_skill@1's rule: points 9 → 0);
+  3. `@job 6`, `@joblevelup 39`;
+  4. the six skills by the same rule, the geometry shifted per icon on the Thief tab: Steal 10 →
+     Hiding 1 → Envenom 7 → Detoxify 1 → Double Attack 10 → Increase Dodge 10 (points 39 → 29 →
+     28 → 21 → 20 → 10 → 0);
+  5. `@baselevelup 49`;
+  6. the status window's '+': AGI x 61, DEX x 39;
+  7. `@item` x 9, then 8 double-clicks in the Eqp tab, each located by its icon;
+  8. hotbar drags: F1 White Potion, F2 Fly Wing, F3 Steal.
+- **The status window, judged:**
+  - STR 1+3, AGI 62+4 (Thief Clothes +1), VIT 1+1, INT 1+1, DEX 40+2, LUK 1+6 (Rosaries +4),
+    Status Point 7;
+  - ATK 131, DEF 23+2, MDEF 10+2, HIT 92, FLEE 146+1, ASPD 165;
+  - HP 952, SP 112; weight 570 / 2,430. That includes the starter Knife and Cotton Shirt (50),
+    which the client had equipped and which came off at the first equips.
+- **The DB read-back:** class 6, Base 50 / Job 40, the same stats, 7 status points, 0 skill
+  points; skills NV_BASIC 9, TF_DOUBLE 10, TF_MISS 10, TF_STEAL 10, TF_HIDING 1, TF_POISON 7,
+  TF_DETOXIFY 1.
+- **What was met on the way (each recorded, none worked around):**
+  - learn_skill@1's no-modal reference was cut over the Novice tree. On the Thief tab its side
+    reads 0.84 (bar 0.85), so the modal was read one-sided, the Crusader build's way.
+  - The FIRST Steal attempt declined "no tentative": my builder's Io kept the UNSHIFTED reader
+    geometry (Basic Skill's +N box). A diagnostic frame showed the +1 inside the shifted box (10
+    of 10 frames read). RESET restored the points, the reader got the per-skill geometry, and the
+    whole tree applied.
+
+### 4c. The economics model (econ_model.py build, NPC prices only; rares out)
+
+| map | V z / kill | aggressive share | note |
+|---|---|---|---|
+| pay_fild07 | 63.7 | 0.372 | Elder Willow, Eggyra, Bigfoot, Poporing, Willow |
+| pay_fild09 | 62.0 | 0.0 | Smokie, Bigfoot |
+| orcsdun01 | 56.0 | 0.815 | the Crusader's dungeon |
+| pay_fild08 | 17.3 | 0.0 | Spore, Willow, Poring, Pupa |
+| prt_fild08 | 7.4 | 0.0 | the Novice's field |
+
+V counts NPC sell prices only. The four target items are worth far more in a player shop, and are
+counted per hour apart (dungeon_judge.py items).
 
 ## 5. pay_fild07 prep (offline; a subagent in a tmpfs worktree)
 
