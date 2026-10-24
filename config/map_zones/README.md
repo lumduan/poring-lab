@@ -24,6 +24,11 @@ allows: static map knowledge used at plan time.
     agent-like reviewer is still refused, and `delegation:` without a delegated reviewer is refused.
   - `prt_fild08.yaml` is the first such file (2026-10-21), `orcsdun01.yaml` the second (2026-10-22:
     no-enter areas around both warp spans; docs/planning/orcsdun01-dungeon-prep.md section 3).
+- **`pay_fild07.yaml` is a DRAFT with NO review** (2026-10-24: no-enter areas around its 4 warp
+  spans; docs/planning/payf07-prep.md section 4). Batt has not delegated pay_fild07, so its
+  `reviewed_by` is empty and the loader REFUSES it: `check pay_fild07` exits 1 and any run on
+  pay_fild07 that loads zones stops before input. Its geometry was proved on a test-reviewer copy
+  outside the repo. It becomes a valid file only when Batt reviews it or records a delegation.
 
 Check a file before a run:
 

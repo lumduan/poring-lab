@@ -541,6 +541,59 @@ def test_npc_cells_mark_drawn_and_completeness() -> None:
     assert rows[(10, 10)]["dir"] == 6 and rows[(11, 10)]["dir"] is None
 
 
+def test_merge_npc_cells_adds_only_the_named_maps_and_keeps_the_rest() -> None:
+    fresh = fw.npc_cells(_doc())
+    existing = {"generator": "g", "kb_built_at": "old", "rathena_ref": "abc", "rule": "r",
+                "maps": {"town": {"complete": True, "npcs": [],
+                                  "packet_check": {"objects": 1, "pass": True}},
+                         "elsewhere": {"complete": True, "npcs": []}}}  # fmt: skip
+    before = json.dumps(existing, sort_keys=True)
+    out = fw.merge_npc_cells(existing, fresh, ["hall"])
+    assert json.dumps(existing, sort_keys=True) == before  # the input is not touched
+    assert out["maps"]["hall"] == fresh["maps"]["hall"]
+    # every other block (its banked packet check too) and the header stay exactly as they were
+    assert out["maps"]["town"] == existing["maps"]["town"]
+    assert out["maps"]["elsewhere"] == existing["maps"]["elsewhere"]
+    assert {k: out[k] for k in existing if k != "maps"} == {
+        k: existing[k] for k in existing if k != "maps"}  # fmt: skip
+    assert out["merged"] == [{"maps": ["hall"], "kb_built_at": "synthetic", "rathena_ref": "abc",
+                              "generator": fresh["generator"]}]  # fmt: skip
+    # a replaced block is the fresh one; a second merge appends its own record
+    again = fw.merge_npc_cells(out, fresh, ["town"])
+    assert again["maps"]["town"] == fresh["maps"]["town"] and len(again["merged"]) == 2
+
+
+def test_merge_npc_cells_refuses_a_mixed_ref_or_an_absent_map() -> None:
+    import pytest
+
+    fresh = fw.npc_cells(_doc())
+    existing = {"rathena_ref": "abc", "maps": {}}
+    with pytest.raises(ValueError, match="rathena_ref"):
+        fw.merge_npc_cells({**existing, "rathena_ref": "other"}, fresh, ["hall"])
+    with pytest.raises(ValueError, match="not in the fresh build"):
+        fw.merge_npc_cells(existing, fresh, ["nowhere"])
+    with pytest.raises(ValueError, match="none named"):
+        fw.merge_npc_cells(existing, fresh, [])
+
+
+def test_npc_cells_cli_only_merges_into_the_existing_file(tmp_path: Path) -> None:
+    import pytest
+
+    kb = tmp_path / "first_workflow.json"
+    kb.write_text(json.dumps(_doc()))
+    out = tmp_path / "npc_cells.json"
+    with pytest.raises(SystemExit, match="missing"):
+        fw.main(["npc-cells", "--kb", str(kb), "--out", str(out), "--only", "hall"])
+    out.write_text(json.dumps({"rathena_ref": "abc", "maps": {
+        "town": {"complete": True, "npcs": [], "packet_check": {"pass": True}}}}))  # fmt: skip
+    assert fw.main(["npc-cells", "--kb", str(kb), "--out", str(out), "--only", "hall"]) == 0
+    got = json.loads(out.read_text())
+    assert sorted(got["maps"]) == ["hall", "town"]
+    assert got["maps"]["town"]["packet_check"] == {"pass": True}
+    with pytest.raises(SystemExit, match="not in the fresh build"):
+        fw.main(["npc-cells", "--kb", str(kb), "--out", str(out), "--only", "nowhere"])
+
+
 def test_packet_check_per_map_matches_cells_sprites_and_drawn_marks(tmp_path: Path) -> None:
     s = tmp_path / "s1"
     s.mkdir()

@@ -133,6 +133,14 @@ As orcsdun01-dungeon-prep.md did for the dungeon:
 - a start stand that passes the three stand-cell checks;
 - the hunt lint's map allowlist.
 
+➡️ **DONE offline 2026-10-24 10:06-10:33 ICT: [payf07-prep.md](payf07-prep.md).** Two items are
+still open, and the runner refuses pay_fild07 until both are done:
+- the zones file is a DRAFT the loader refuses, PENDING Batt's review or delegation;
+- the rebuilt first_workflow.json (the touch areas) waits to be installed in data/kb.
+
+That doc's section 6 lists what dungeon_hunt.py needs per map. It also lists two Thief conflicts
+that are not map files: the Etc drop takes Rough Oridecon / Elunium, and the Auto Guard F3 is Steal.
+
 The name tags (`nametag.py cut` / `build`) for the five species are cut live, by the immune
 Novice GM hovering monsters without clicking.
 

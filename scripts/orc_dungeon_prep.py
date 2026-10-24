@@ -3,7 +3,7 @@
 REST SPOTS from the warp-and-watch blocks' packets, and the zone CLICK PROOF.
 
     orc_dungeon_prep.py rest-spots SESSION_DIR [...] [--min-observed-s 60] [--top 5] [--out JSON]
-    orc_dungeon_prep.py zone-clicks [--samples 400] [--seed 0]
+    orc_dungeon_prep.py zone-clicks [--map orcsdun01] [--root DIR] [--samples 400] [--seed 0]
 
 OFFLINE ONLY (ADR-0007: packets are ground truth for a measurement, never an agent input). No
 frame is read, no client, no GPU. The KB (data/kb, L3), the client GAT and the server map cache
@@ -22,10 +22,11 @@ Only cells observed >= --min-observed-s count. The candidates also pass:
 - the main walkable component (client AND server, poring_dataset.walkable.load_both);
 - outside the map zones (config/map_zones/orcsdun01.yaml), when the file is there.
 
-``zone-clicks``: for each no-enter area of config/map_zones/orcsdun01.yaml, --samples walk clicks
-from walkable cells outside it into it, and as many onto its warp span: every one must be refused
-by map_zones.walk_why (the runner's gate); also the share of outside -> outside clicks near the area
-it refuses (an over-reach, not a leak).
+``zone-clicks``: for each no-enter area of config/map_zones/<map>.yaml (--map, default orcsdun01;
+--root another zones directory, e.g. a test-reviewer copy of a DRAFT in /dev/shm: 2026-10-24,
+docs/planning/payf07-prep.md), --samples walk clicks from walkable cells outside it into it, and as
+many onto its warp span: every one must be refused by map_zones.walk_why (the runner's gate); also
+the share of outside -> outside clicks near the area it refuses (an over-reach, not a leak).
 """
 
 from __future__ import annotations
@@ -363,20 +364,19 @@ def cmd_rest(a: argparse.Namespace) -> dict[str, Any]:
 # --- zone click proof -------------------------------------------------------------------------
 
 
-def cmd_zone_clicks(a: argparse.Namespace) -> dict[str, Any]:
+def zone_clicks(zones: Any, both: np.ndarray, warps: Sequence[dict[str, Any]], samples: int,
+                seed: int) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: for each no-enter area of ``zones`` on the walkable grid ``both`` ([y, x]),
+    ``samples`` walk clicks from walkable cells outside every zone (within 12 cells of the area)
+    INTO it and as many ONTO the span of each warp whose centre lies inside it, through
+    map_zones.walk_why (the runner's gate, the client-route proxy on ``both``); plus as many
+    outside -> outside clicks near it, the refused ones counted (an over-reach, not a leak). An
+    area with no warp inside, or no outside cell near it, says so instead of sampling that leg.
+    The draw order is the orcsdun01 proof's (its 400 / 400 numbers reproduce)."""
     import map_zones
-    import npc_click_test as nct
 
-    from poring_dataset import walkable as wk
-
-    _gat, both_ = wk.load_both(MAP)
-    both = np.asarray(both_, dtype=bool)
     shape = (int(both.shape[0]), int(both.shape[1]))
-    zones = map_zones.load(MAP, shape=shape)
-    if zones is None:
-        raise SystemExit("no zones file for orcsdun01")
-    warps = nct.load_warps(MAP) or []
-    rng = np.random.default_rng(a.seed)
+    rng = np.random.default_rng(seed)
     _, masks = map_zones._masks(zones, shape)
     zone = map_zones.no_cross_mask(zones, shape) | map_zones.no_enter_mask(zones, shape)
     out = []
@@ -393,27 +393,53 @@ def cmd_zone_clicks(a: argparse.Namespace) -> dict[str, Any]:
         for y, x in inside:
             near[max(0, y - 12) : y + 13, max(0, x - 12) : x + 13] = True
         outside = np.argwhere(near & both & ~zone)
+        row: dict[str, Any] = {"id": ne.id, "walkable_in_area": int(len(inside)),
+                               "warp_span_cells": int(len(on_span)),
+                               "outside_near": int(len(outside))}  # fmt: skip
+        if not len(inside) or not len(outside):
+            out.append({**row, "note": "no walkable cell inside, or none outside near it"})
+            continue
         why: Counter[str] = Counter()
         n_in = n_span = n_out = 0
-        for _ in range(a.samples):
+        for _ in range(samples):
             yo, xo = outside[rng.integers(len(outside))]
             yi, xi = inside[rng.integers(len(inside))]
             w1 = map_zones.walk_why(zones, both, (int(xo), int(yo)), (int(xi), int(yi)))
             n_in += w1 is not None
             why[str(w1)] += 1
-            ys_, xs_ = on_span[rng.integers(len(on_span))]
-            n_span += map_zones.walk_why(zones, both, (int(xo), int(yo)),
-                                         (int(xs_), int(ys_))) is not None  # fmt: skip
+            if len(on_span):
+                ys_, xs_ = on_span[rng.integers(len(on_span))]
+                n_span += map_zones.walk_why(zones, both, (int(xo), int(yo)),
+                                             (int(xs_), int(ys_))) is not None  # fmt: skip
             (ya, xa), (yb, xb) = (outside[rng.integers(len(outside))],
                                   outside[rng.integers(len(outside))])  # fmt: skip
             n_out += map_zones.walk_why(zones, both, (int(xa), int(ya)),
                                         (int(xb), int(yb))) is not None  # fmt: skip
-        out.append({"id": ne.id, "walkable_in_area": int(len(inside)),
-                    "warp_span_cells": int(len(on_span)), "outside_near": int(len(outside)),
-                    "into_refused": f"{n_in}/{a.samples}", "onto_span_refused":
-                    f"{n_span}/{a.samples}", "outside_to_outside_refused": f"{n_out}/{a.samples}",
+        out.append({**row, "into_refused": f"{n_in}/{samples}",
+                    "onto_span_refused": f"{n_span}/{samples}" if len(on_span) else None,
+                    "outside_to_outside_refused": f"{n_out}/{samples}",
                     "into_reasons": dict(why)})  # fmt: skip
-    return {"map": MAP, "file": zones.path, "sha256": zones.sha256, "areas": out}
+    return out
+
+
+def cmd_zone_clicks(a: argparse.Namespace) -> dict[str, Any]:
+    """``zone-clicks`` on ``a.map`` (default orcsdun01) with the zones file under ``a.root``
+    (default config/map_zones; a test-reviewer COPY elsewhere proves a draft's geometry)."""
+    import map_zones
+    import npc_click_test as nct
+
+    from poring_dataset import walkable as wk
+
+    map_name = getattr(a, "map", None) or MAP
+    _gat, both_ = wk.load_both(map_name)
+    both = np.asarray(both_, dtype=bool)
+    shape = (int(both.shape[0]), int(both.shape[1]))
+    zones = map_zones.load(map_name, getattr(a, "root", None) or map_zones.ZONES_DIR, shape=shape)
+    if zones is None:
+        raise SystemExit(f"no zones file for {map_name}")
+    warps = nct.load_warps(map_name) or []
+    out = zone_clicks(zones, both, warps, a.samples, a.seed)
+    return {"map": map_name, "file": zones.path, "sha256": zones.sha256, "areas": out}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -428,6 +454,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     r.add_argument("--entrance-radius", type=int, default=20, help="path steps from 32,166")
     r.add_argument("--out")
     z = sub.add_parser("zone-clicks")
+    z.add_argument("--map", default=MAP, help="the map (default orcsdun01)")
+    z.add_argument("--root", default=None, help="the zones directory (default config/map_zones)")
     z.add_argument("--samples", type=int, default=400)
     z.add_argument("--seed", type=int, default=0)
     z.add_argument("--out")
