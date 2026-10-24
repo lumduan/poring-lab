@@ -15837,7 +15837,7 @@ the new base.
 **Hard bars and deaths:** as 4.00. A death is a result: the run stops, the cause is recorded, the
 dialog closes by its known step, then @alive + @heal.
 
-**Amendment A (2026-10-24 ~16:5x ICT, BEFORE the pilot ran and before every scored run): the
+**Amendment A (2026-10-24 16:44:59 ICT, the commit time 3444764; BEFORE the pilot ran and every scored run): the
 setup's @heal on a chat-guard refusal.** No hunting behaviour changes.
 - At 16:29 the first pre-run found the client FROZEN after 2.5 h idle. Its picture and its own
   cursor stood still, and 10 x F12 changed nothing, yet it still pinged the server.
