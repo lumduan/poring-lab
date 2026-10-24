@@ -122,9 +122,12 @@ def check(screen: Any, job: str, char: str = "crusader") -> dict[str, Any]:
 
 
 def gm_line(agent: Any, screen: Any, command: str, job: str,
-            char: str = "crusader") -> dict[str, Any]:  # fmt: skip
+            char: str = "crusader", on_refuse: str = "raise") -> dict[str, Any]:  # fmt: skip
     """One GM line, typed only after `check` passes; ro_agent.gm's path without its Novice-GM
-    check (which would refuse here by design)."""
+    check (which would refuse here by design). ``on_refuse="skip"``: chat_guard's own option for
+    an IDEMPOTENT GM command (@heal), whose repeat the client would drop anyway: a refusal is not
+    typed and returns ``typed: False`` instead of stopping (2026-10-24: a frozen client had
+    swallowed one @heal, so the pre-run's would have been the 3rd in a row)."""
     import chat_guard
     import ro_agent as r
 
@@ -138,13 +141,20 @@ def gm_line(agent: Any, screen: Any, command: str, job: str,
     r.STATE_DIR.mkdir(parents=True, exist_ok=True)
     with (r.STATE_DIR / "gm.jsonl").open("a") as fh:
         fh.write(json.dumps(record) + "\n")
+    if on_refuse == "skip" and not chat_guard.before_typing(command, on_refuse="skip"):
+        r.log(f"{char} gm: {command} NOT typed (chat_guard refused; idempotent: skipped)")
+        return {**got, "typed": False}
     r.activate_client(agent, screen)
     try:
-        r.chat_line(agent, screen, command)
+        if on_refuse == "skip":  # the guard passed it just above: type without a 2nd count
+            r.open_chat(agent, screen)
+            agent.type_text(command + "\n")
+        else:
+            r.chat_line(agent, screen, command)
     except chat_guard.ChatRefused as exc:
         raise r.Stop(f"{char}: {command!r} refused by chat_guard ({exc})") from None
     r.log(f"{char} gm: {command}")
-    return got
+    return {**got, "typed": True}
 
 
 def main() -> int:

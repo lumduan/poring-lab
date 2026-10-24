@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
@@ -70,3 +71,37 @@ def test_each_test_character_has_its_own_data_dir_and_jobs(tmp_path, monkeypatch
     name, name_ref, jobs = cr.load_refs("thief")
     assert name == "T" and sorted(jobs) == ["thief"]
     assert cr.identity(ref, name_ref, jobs, "thief")["ok"]
+
+
+def test_gm_line_skip_types_nothing_when_the_guard_refuses(monkeypatch, tmp_path) -> None:
+    """2026-10-24: on_refuse="skip" is chat_guard's own option for an idempotent GM command (@heal):
+    a refused line is NOT typed and the caller is told; the default still stops."""
+    import types
+
+    import chat_guard
+    import ro_agent
+
+    typed: list[str] = []
+    fake_agent = types.SimpleNamespace(type_text=typed.append)
+    monkeypatch.setattr(cr, "check", lambda screen, job, char: {"ok": True, "job": job})
+    monkeypatch.setattr(ro_agent, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(ro_agent, "activate_client", lambda a, s: None)
+    monkeypatch.setattr(ro_agent, "open_chat", lambda a, s: typed.append("<open>"))
+    monkeypatch.setattr(ro_agent, "log", lambda m: None)
+    refuse = {"on": True}
+
+    def before(text, reason=None, on_refuse="raise"):
+        if refuse["on"]:
+            if on_refuse == "skip":
+                return False
+            raise chat_guard.ChatRefused("repeat", "the 3rd identical line")
+        return True
+
+    monkeypatch.setattr(chat_guard, "before_typing", before)
+    got = cr.gm_line(fake_agent, None, "@heal", "thief", "thief", on_refuse="skip")
+    assert got["typed"] is False and typed == []
+    with pytest.raises(ro_agent.Stop):
+        cr.gm_line(fake_agent, None, "@heal", "thief", "thief")
+    refuse["on"] = False
+    got = cr.gm_line(fake_agent, None, "@heal", "thief", "thief", on_refuse="skip")
+    assert got["typed"] is True and typed == ["<open>", "@heal\n"]
