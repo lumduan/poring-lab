@@ -246,6 +246,12 @@ counted per hour apart (dungeon_judge.py items).
     - On open ground: Honey 100 %, Dead Branch 85.7 %.
     - The proposal: re-stage on OPEN ground, use multi-templates, and clear the Poporings, which
       looted spots 7-8 within seconds.
+  - **➡️ ROUND 2 (target-items.md 10, merged 2026-10-25 ~00:1x): ALL FOUR PASS on open ground.**
+    - Staging c (22:23-22:51, 12 spots outside the tree footprints) + multi-templates.
+    - TEST recall: 757 97.3 %, 756 95.7 %, 604 95.7 %, 518 94.9 %; precision 100 %.
+    - False detections: <= 0.022 per 100 unseen hunting frames (s4 + s5).
+    - All 8 misses fall on 3 frames where the client flashes floor items yellow.
+    - "Loot by sight" qualifies for all four. The live version needs its own pre-registration.
 
 ### 4d. Renewal? (Batt 2026-10-24 ~11:3x: "can our server and client move to Renewal (third classes)?")
 
