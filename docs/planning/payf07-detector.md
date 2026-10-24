@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "TRAINING TIER PASSES 2026-10-24 19:52 ICT: T1 PASS under Amendment C (10k); T2 round 1 failed on Elder Willow (10m); round 2 (11: the frozen T_h on every label, seed 22, new labellers) PASSES for every species (11a). Pre-registered 18:25:24 (7ed0422). 12 (20:2x): the class list, the cache tooling + its dry run (2,626 pay_fild07 TRAIN frames; Elder Willow 92 boxes, Green Plant 0) and the training PROPOSED; the evaluation pre-registered (../benchmarks/payf07-eval.md, ad5e3be)."
+status: "TRAINING RUNNING since 2026-10-25 02:56:41 ICT (13f): payf07-20261024 on the cache v2orc-payf07-20261024 (16,793 TRAIN frames), E = 10, close_mosaic 3, hsv_s 0.2, warm from v2orc's last.pt, 21 classes; R1-R3 + the IO guard. Training tier PASSED 2026-10-24 19:52 ICT (T1 under Amendment C, 10k; T2 round 2, 11a). Scoring: ../benchmarks/payf07-eval.md, once, on the last completed epoch."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md, ../benchmarks/payf07-eval.md]
-next_action: "The parent: merge, decide and record 12f (start weights, epochs, hsv_s), build the cache (12e, the guarded cache: step) and compare it with 12d, train, then score ../benchmarks/payf07-eval.md ONCE. ENGAGED units (Batt clip) need their own label hypothesis; more Elder Willow (92 boxes) and Green Plant (0) from a still collection."
+next_action: "The parent: watch the run (13f). Attempt 0 ends at its 12 h step cap ~14:57 ICT 2026-10-25: resume it in the warm worker with RESUME=1 (13f). After the last epoch, score ../benchmarks/payf07-eval.md ONCE. ENGAGED units (Batt clip) need their own label hypothesis."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -1036,3 +1036,31 @@ joined by 3c, each by its own C1 (bad / scored):
   tolerant guard's 25 % spike: no abort.
 - Next (13b / 13c): the vision worker through `quiet_start`, then `train-day.sh` with 13b's
   settings.
+
+**13f. The training LAUNCHED (2026-10-25, times from the logs).**
+- The vision worker: `quiet_start` was requested 2026-10-24 23:02:09. IO bursts kept restarting its
+  10 quiet minutes (quant-postgres 28.4 %, Frigate 29.5 % at 00:14-00:15, among others), so it
+  started only at 02:53:06. It was UP and idle at 02:55:10 (ALL STEPS OK; worst capture stall
+  10.8 % on quant-postgres, 4 s above 10 %).
+- R2: Ollama's `/api/ps` returned `{"models":[]}` just before the launch.
+- `train-day.sh` with 13b's settings (the command in 12f): attempt 0 at **02:56:41**, the guarded
+  `execdev:vision@43200` at 02:56:43, duty start level 4 (2,000 ms).
+- `data/train/payf07-20261024/args.yaml` confirms the decided settings:
+  - model = v2orc's `last.pt`, epochs 10, close_mosaic 3, hsv_s 0.2;
+  - batch 2, imgsz 1280, seed 20261004.
+- The cache loaded from the NAS in ~3 min; the first `weights/mid.pt` was written at 03:04.
+- The duty cycle went from level 4 to level 0 (100 ms) by 03:01:09 at a fleet load of 0.7-2.1
+  detections/s. The R3 paired windows began at 03:01:44.
+- **The 12 h step cap:** each attempt is `execdev:vision@43200`, and section 12f puts this run at
+  ~23 h running. So attempt 0 ends at ~14:57 ICT, with an exit that `train-day.sh` logs as
+  `TRAIN STOPPED: not a guard trip`. That is expected, not a fault.
+  - Resume in the warm worker at once (vision-long-lived.md 5c), with no quiet window:
+
+        WORKER=1 MID_CKPT=1 RESUME=1 scripts/runbooks/train-day.sh payf07-20261024 \
+          v2orc-payf07-20261024 10 /dev/shm/poring-lab-tmp/train-payf07 2 1
+
+  - The resume carries no INIT_WEIGHTS / HSV_S / CLOSE_MOSAIC: the run keeps its checkpoint's own,
+    and train-day.sh drops them with `--resume`.
+  - Sunday has no market-open windows.
+- The hunt stays on its CPU detector. No hunt runs while it trains: the next block waits for
+  Batt's weight decision (thief-payon.md).
