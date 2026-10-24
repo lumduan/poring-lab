@@ -15871,6 +15871,41 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
   and its SP fall share a packet batch, so they have the SAME timestamp. `steal_by_species`
   skipped equal times and said 0 stolen; it now counts 3, as the totals do.
 
+**Runs so far (scored, judged pre-run frames; `dungeon_judge.py row` + `dungeon_style.py row`):**
+
+| run | min | kills (/h) | met / 10 min | HP min | pot / wing | sitting | loot g / n | net z / h | s / kill (fight / walk / stand) | steal tries / stolen | deaths | hard bars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| s1 (17:33) | 40.2 | 21 (31.4) | 16.0 | 15.9 % | 5 / 1 | 59.5 % | 95.0 / 100 % | -7,511 | 114.8 (11.5 / 5.7 / 97.5) | 12 / 9 | 0 | pass |
+| s2 (18:14) | 40.0 | 27 (40.5) | 18.0 | 38.2 % | 0 / 0 | 47.2 % | 96.2 / 100 % | +2,049 | 88.9 (8.9 / 6.0 / 74.0) | 19 / 12 | 0 | pass |
+| s3 (18:56) | 40.0 | 35 (52.5) | 16.5 | 19.6 % | 4 / 1 | 34.0 % | 89.5 / 91.9 % | -3,324 | 68.6 (9.4 / 6.2 / 53.0) | 22 / 10 | 0 | pass |
+| **pooled s1-s3** | 120.2 | **83 (41.4)** | | | | | | | | **53 / 31 (58.5 %)** | 0 | pass |
+
+- **Steal by species (pooled):**
+  - Elder Willow 40 tries / 25 stolen (62.5 %; formula 61.2 %);
+  - Bigfoot 4 / 3; Poporing 3 / 1; Eggyra 2 / 0; unknown 4 / 2.
+  - 0.64 tries per kill. The rest were skipped as a monster already stolen at. SP skips: 0.
+- **Items per hour (pooled 2.0 h, by cause picked / stolen):**
+  - Resin 38.4 (54 / 23);
+  - Bear's Footskin 5.0 (6 / 4);
+  - Sticky Mucus, Trunk, Potato, Tree Root, Animal Skin, Red Herb, Scell: 0.5-3.0 each.
+- **Target items, read with the packets:**
+  - s3 picked Honey, Dead Branch, Rough Oridecon and Rough Elunium within 11 s, from ONE pile
+    at (324-326, 57-58). That pile is the staged set of stage_items spot 8 (329,80). A Poporing
+    looted it at 17:2x (target-items.md 1) and dropped it when it died. **These four are staged
+    items recovered, not hunting income.** They show the loot step does pick target items that
+    fall near a kill.
+  - s3's ONE natural target drop: our Elder Willow kill at 18:57 dropped Resin + a **Dead
+    Branch** at (171-172, 166-167). Both vanished 1.2-1.7 s later with no pickup request of ours:
+    a looter took them before any loot step.
+  - So the natural target items are, so far: 1 dropped, 0 kept.
+- **Recordings:** the 1-fps recorder stopped early TWICE on the host IO guard: quant's own
+  capture-streaming-pro cron, 29.7 % / 32.7 % / 29.1 % spikes (the recorder writes to RAM). s2
+  kept 1,266 frames and s3 only 56. The runs themselves are complete.
+- **Batt's clip (~18:04, s1 at 30.9-31.8 min):** an Elder Willow beside the Thief. Twelve defend
+  scans read clear / unknown / no-entry, never a SWORD. HP fell 82 % -> 15 %, then potions and a
+  Fly Wing. The hover-cursor read fails over the swaying Elder Willow. Batt: "train YOLO for the
+  monsters in this map too" -> docs/planning/payf07-detector.md.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
