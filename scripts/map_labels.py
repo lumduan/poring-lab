@@ -68,7 +68,8 @@ STILL_STEP_NS = 100_000_000  # ... checked every 100 ms up to t
 MAP_CHANGE_NS = 5_000_000_000  # 4f: no map change in [t - 5 s, t]
 INV_BEFORE_NS = 20_000_000_000  # 4f: the staged inventory span, first drop - 20 s ...
 INV_AFTER_NS = 5_000_000_000  # ... last drop result + 5 s
-SWEEP_MAX_MS = 1000  # 4b: the 1d sweep's upper edge (orc's coarse 0..1000)
+SWEEP_MAX_MS = 500  # 4b: the 1d sweep's upper edge (Amendment A 18:35:20; attempt 1: 1,000)
+COARSE_MS = tuple(range(0, SWEEP_MAX_MS + 1, 50))
 MIN_WALKER_SAMPLES = 50  # 4b's stop
 T_H_PERCENTILE = 5.0  # 4e: the clear kept labels' p5
 C1_BAR = 0.050  # T1 (5): unrounded
@@ -205,6 +206,11 @@ def recent(times: Sequence[int], t: int, window: int) -> bool:
     """A time of ``times`` (sorted) lies in [t - window, t]."""
     i = bisect.bisect_left(times, t - window)
     return i < len(times) and times[i] <= t
+
+
+def sweep_fine(best: int) -> list[int]:
+    """4b's fine grid: 10 ms within +-50 of the coarse best, clipped to the sweep (Amendment A)."""
+    return olf.fine_grid(best, lo=COARSE_MS[0], hi=COARSE_MS[-1])
 
 
 def percentile(values: Sequence[float], q: float) -> float:
@@ -473,7 +479,7 @@ def occluders(spec: MapSpec) -> olf.Occluders:
 
 def _offset_frame(ref: qa_export.JpegRef) -> tuple[list[tuple[int, int, dict[int, float]]], str]:
     sess, occl = olf._JOB["sess"], olf._JOB["occluders"]
-    found = olf.walker_samples(sess, ref.t_mono_ns, list(olf.COARSE_MS), occl)
+    found = olf.walker_samples(sess, ref.t_mono_ns, list(COARSE_MS), occl)
     if not found:
         return [], "no_walker"
     bgr = read_png(ref)
@@ -533,25 +539,26 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
                                "dropped": dict(sorted(sess.dropped.items())),
                                "frames_by_outcome": dict(why), "samples": n}  # fmt: skip
     curve = {ms: round(statistics.median(errs[ms]), 3) if errs[ms] else None
-             for ms in olf.COARSE_MS}  # fmt: skip
+             for ms in COARSE_MS}  # fmt: skip
     best_coarse = olf.pick_offset(curve)
     result: dict[str, Any] = {
         "what": "4b: 1d, the packet -> frame offset on the recorder path (RDP bus, 1 fps PNG)",
         "map": spec.name, "parts": [s.name for s in sessions], "measured_at": olf.now_ict(),
         "commit": olf.git_head(), "walkers": list(spec.walkers), "samples": len(samples),
+        "sweep_ms": [COARSE_MS[0], COARSE_MS[-1]], "amendment": "A (2026-10-24 18:35:20 ICT)",
         "per_part": per_part, "curve_coarse_median_px": {str(k): v for k, v in curve.items()},
-        "curve_coarse_n": {str(k): len(errs[k]) for k in olf.COARSE_MS},
+        "curve_coarse_n": {str(k): len(errs[k]) for k in COARSE_MS},
         "best_coarse_ms": best_coarse,
     }  # fmt: skip
     stop = None
     if len(samples) < MIN_WALKER_SAMPLES:
         stop = f"{len(samples)} walker samples < {MIN_WALKER_SAMPLES}"
-    elif best_coarse is None or best_coarse in (olf.COARSE_MS[0], olf.COARSE_MS[-1]):
+    elif best_coarse is None or best_coarse in (COARSE_MS[0], COARSE_MS[-1]):
         stop = f"the best coarse offset {best_coarse} is at the sweep's edge"
     if stop is not None:
         result.update({"STOP": stop, "offset_ms": None})
         return result
-    fine = [ms for ms in olf.fine_grid(best_coarse) if ms not in olf.COARSE_MS]
+    fine = [ms for ms in sweep_fine(best_coarse) if ms not in COARSE_MS]
     by_sess: dict[int, list[tuple[qa_export.JpegRef, int]]] = defaultdict(list)
     for sess, ref, gid, _by in samples:
         by_sess[id(sess)].append((ref, gid))
@@ -565,8 +572,8 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
                 for ms, v in by.items():
                     errs[ms].append(v)
     full = {ms: round(statistics.median(errs[ms]), 3) if errs[ms] else None
-            for ms in sorted(set(olf.COARSE_MS) | set(fine))}  # fmt: skip
-    best = olf.pick_offset({ms: full[ms] for ms in olf.fine_grid(best_coarse)})
+            for ms in sorted(set(COARSE_MS) | set(fine))}  # fmt: skip
+    best = olf.pick_offset({ms: full[ms] for ms in sweep_fine(best_coarse)})
     species: Counter[str] = Counter()
     for sess, ref, gid, _by in samples:
         ent = next((e for e in sess.lab.timeline.frame_world(ref.t_mono_ns).entities

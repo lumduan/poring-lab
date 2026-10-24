@@ -200,3 +200,10 @@ def test_orcsdun01_defaults_unchanged() -> None:
     assert [k.gid for k in kept] == [1] and not out
     olf._JOB.clear()
     assert olf._JOB.get("reader", olf.qa_export.read_jpeg) is olf.qa_export.read_jpeg
+
+
+def test_amendment_a_sweep_is_0_to_500() -> None:
+    assert ml.COARSE_MS[0] == 0 and ml.COARSE_MS[-1] == 500 and len(ml.COARSE_MS) == 11
+    assert ml.sweep_fine(150) == list(range(100, 201, 10))
+    assert ml.sweep_fine(500) == list(range(450, 501, 10))  # clipped to the sweep
+    assert ml.sweep_fine(0) == list(range(0, 51, 10))
