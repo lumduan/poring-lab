@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """KB P1 for the FIRST WORKFLOW: the Novice training grounds -> Merchant (Batt 2026-10-09 ~18:20).
 
-    kb_first_workflow.py build [--src DIR] [--out data/kb/first_workflow.json]
+    kb_first_workflow.py build [--src DIR] [--out data/kb/first_workflow.json] [--also MAP...]
+    kb_first_workflow.py npc-cells [--kb ...] [--out data/kb/npc_cells.json] [--sessions S...]
+                                   [--only MAP...]   --only: merge just those maps' blocks
     kb_first_workflow.py summary [--kb ...]               ids, cells and counts only
     kb_first_workflow.py check-packets SESSION... [--kb ...]   banked packets vs the KB
     kb_first_workflow.py budget [--kb ...] [--kb-dir ...]  training-cost.md's estimate
@@ -1913,6 +1915,30 @@ def npc_cells(doc: dict[str, Any], check: dict[str, Any] | None = None) -> dict[
     }
 
 
+def merge_npc_cells(existing: dict[str, Any], fresh: dict[str, Any],
+                    maps: Sequence[str]) -> dict[str, Any]:  # fmt: skip
+    """PURE (2026-10-24, the pay_fild07 prep): ``existing`` (an npc_cells.json) with ONLY the
+    blocks of ``maps`` taken from ``fresh`` (``npc_cells`` of a KB build that covers them), added
+    or replaced; every other block and the header stay exactly as they were (a whole-file rewrite
+    would drop their banked ``packet_check``). Each merge is recorded under ``merged``: the maps,
+    the fresh build's time and ref. Refused (ValueError) when the two builds' rathena refs differ
+    or a map is not in ``fresh``: never a partial or mixed-ref list."""
+    if fresh.get("rathena_ref") != existing.get("rathena_ref"):
+        raise ValueError(f"rathena_ref {fresh.get('rathena_ref')!r} is not the existing file's "
+                         f"{existing.get('rathena_ref')!r}: refused")  # fmt: skip
+    missing = [m for m in maps if m not in fresh["maps"]]
+    if missing or not maps:
+        raise ValueError(f"maps not in the fresh build: {missing or 'none named'}: refused")
+    out = json.loads(json.dumps(existing))
+    for m in maps:
+        out["maps"][m] = fresh["maps"][m]
+    out.setdefault("merged", []).append(
+        {"maps": list(maps), "kb_built_at": fresh.get("kb_built_at"),
+         "rathena_ref": fresh.get("rathena_ref"), "generator": fresh.get("generator")}
+    )  # fmt: skip
+    return out
+
+
 def packet_check_per_map(doc: dict[str, Any], sessions: Sequence[Path]) -> dict[str, Any]:
     """P1's check per map: every NPC object the server showed is in the list at its cell with its
     sprite, and the DRAWN marks agree with the packets: an object sent with an invisibility option
@@ -2078,6 +2104,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     q.add_argument("--kb", type=Path, default=OUT)
     q.add_argument("--out", type=Path, default=NPC_CELLS)
     q.add_argument("--sessions", nargs="*", type=Path, default=[], help="banked: P1's check")
+    q.add_argument(
+        "--only",
+        nargs="+",
+        default=None,
+        metavar="MAP",
+        help="merge ONLY these maps' blocks into the existing --out (merge_npc_cells); every "
+        "other block, its packet_check included, stays as it is",
+    )
     for name in ("summary", "budget", "check-packets"):
         q = sub.add_parser(name)
         q.add_argument("--kb", type=Path, default=OUT)
@@ -2111,7 +2145,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "npc-cells":
         check = packet_check_per_map(doc, a.sessions) if a.sessions else None
         cells = npc_cells(doc, check)
-        _write(a.out, cells)
+        if a.only is not None:
+            if not a.out.exists():
+                raise SystemExit(f"--only merges into an existing {a.out}: it is missing")
+            try:
+                merged = merge_npc_cells(json.loads(a.out.read_text()), cells, a.only)
+            except ValueError as e:
+                raise SystemExit(f"npc-cells --only: {e}") from None
+            cells = {**cells, "maps": {m: cells["maps"][m] for m in a.only}}
+            _write(a.out, merged)
+        else:
+            _write(a.out, cells)
         report = {
             m: {"complete": b["complete"], "npcs": len(b["npcs"]),
                 "probe": sum(1 for n in b["npcs"] if n["probe"]),

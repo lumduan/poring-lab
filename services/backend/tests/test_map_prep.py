@@ -1,0 +1,168 @@
+"""scripts/map_prep.py (the map-agnostic hunt-map prep, docs/planning/payf07-prep.md) on SYNTHETIC
+grids; the per-area zone click proof (orc_dungeon_prep.zone_clicks, generalised to any map); and
+the committed pay_fild07 zones DRAFT: the loader refuses it until a person reviews it, and its
+geometry (proved on a test-reviewer copy in tmp, never committed) covers every warp span + 4."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import map_prep as mp  # noqa: E402
+import map_zones as mz  # noqa: E402
+import orc_dungeon_prep as odp  # noqa: E402
+
+# --- pure parts ------------------------------------------------------------------------------
+
+
+def test_clearance_is_the_largest_all_walkable_square() -> None:
+    m = np.ones((9, 9), dtype=bool)
+    m[0, 0] = False
+    c = mp.clearance(m, max_r=6)
+    assert c[4, 4] == 3  # the 7 x 7 square; the 9 x 9 one holds the hole at (0, 0)
+    assert c[1, 1] == 0  # its 3 x 3 square holds the hole
+    assert c[0, 0] == -1  # off the mask
+    assert c[2, 2] == 1 and c[3, 3] == 2
+    assert c[4, 1] == 1  # the map's edge counts as not walkable
+    m[4, 6] = False
+    assert mp.clearance(m, max_r=6)[4, 4] == 1  # a hole 2 cells east caps it at r = 1
+
+
+def test_pick_fallback_is_the_nearest_clear_cell_far_enough() -> None:
+    area = np.ones((50, 50), dtype=bool)
+    clear = np.zeros((50, 50), dtype=np.int64)
+    for x, y in [(10, 25), (25, 37), (45, 25), (27, 25)]:  # distances 15, 12, 20 and 2
+        clear[y, x] = 10
+    assert mp.pick_fallback(area, clear, (25, 25), min_sep=5, min_clear=10) == (25, 37)
+    assert mp.pick_fallback(area, clear, (25, 25), min_sep=13, min_clear=10) == (10, 25)
+    assert mp.pick_fallback(area, clear, (25, 25), min_sep=21, min_clear=10) is None
+    area[37, 25] = False  # not in the area
+    assert mp.pick_fallback(area, clear, (25, 25), min_sep=5, min_clear=10) == (10, 25)
+    assert mp.pick_fallback(area, clear, (25, 25), min_sep=5, min_clear=11) is None
+
+
+def test_open_neighbours_and_span_distance() -> None:
+    ok = np.ones((5, 5), dtype=bool)
+    ok[1, 1] = False
+    assert mp.open_neighbours(ok, (2, 2)) == 7 and mp.open_neighbours(ok, (0, 0)) == 2
+    warps = [{"x": 10, "y": 10, "span_x": 2, "span_y": 1}]
+    assert mp.span_distance((10, 10), warps) == 0 and mp.span_distance((12, 11), warps) == 0
+    assert mp.span_distance((15, 10), warps) == 3 and mp.span_distance((10, 14), warps) == 3
+    assert mp.span_distance((0, 0), []) is None
+
+
+def _zones(tmp_path: Path, polys: list[list[list[int]]], name: str = "syn_map",
+           shape: tuple[int, int] = (40, 60)) -> mz.Zones:  # fmt: skip
+    items = "".join(
+        f'  - id: a{i}\n    note: "area {i}"\n    polygon: {p}\n' for i, p in enumerate(polys)
+    )
+    (tmp_path / f"{name}.yaml").write_text(
+        f"map: {name}\nreviewed_by: tester\nreviewed: 2026-10-24\nno_cross: []\nno_enter:\n{items}"
+    )
+    z = mz.load(name, tmp_path, shape)
+    assert z is not None
+    return z
+
+
+def test_runner_area_keeps_warps_off_and_drops_zones_and_sealed_cells(tmp_path: Path) -> None:
+    ok = np.ones((80, 100), dtype=bool)
+    warps = [{"x": 50, "y": 40, "span_x": 1, "span_y": 1}]
+    z = _zones(tmp_path, [[[22, 22], [30, 22], [30, 30], [22, 30]]], shape=ok.shape)
+    area, okr = mp.runner_area(ok, warps, z)
+    assert not area[40, 50] and not area[40, 39] and area[40, 38]  # the span + 10 kept off
+    assert not area[25, 25] and not okr[25, 25] and okr[40, 50]  # a zone cell; the warp stays
+    # the search area: 20 cells off every edge (60 x 40), minus the span box (23 x 23), minus
+    # the area (9 x 9); the route grid: everything but the area
+    assert area.sum() == 60 * 40 - 23 * 23 - 9 * 9
+    assert okr.sum() == ok.sum() - 9 * 9
+    # a line that seals a room: the room leaves the area and the route grid
+    (tmp_path / "syn_seal.yaml").write_text(
+        "map: syn_seal\nreviewed_by: tester\nreviewed: 2026-10-24\nno_cross:\n"
+        "  - id: door\n    note: \"the door\"\n    points: [[60, 30], [60, 31]]\n")  # fmt: skip
+    room = np.zeros((80, 100), dtype=bool)
+    room[20:60, 20:80] = True
+    room[20:60, 60] = False  # a wall at x 60 ...
+    room[30:32, 60] = True  # ... with a 2-cell door at y 30-31
+    zs = mz.load("syn_seal", tmp_path, room.shape)
+    assert zs is not None
+    area_s, okr_s = mp.runner_area(room, [], zs)
+    assert not area_s[45, 70] and not okr_s[45, 70]  # the room east of the door is sealed off
+
+
+def test_components_counts_both_connectivities() -> None:
+    m = np.zeros((5, 5), dtype=bool)
+    m[0, 0] = m[1, 1] = True  # diagonal only: one piece without the corner rule, two with it
+    m[4, 4] = True
+    c = mp.components(m)
+    assert c["no_corner_rule"] == {"n": 2, "largest": [2, 1]}
+    assert c["corner_rule"] == {"n": 3, "largest": [1, 1, 1]}
+
+
+# --- the zone click proof, any map -----------------------------------------------------------
+
+
+def test_zone_clicks_refuses_every_click_into_an_area_and_onto_its_span(tmp_path: Path) -> None:
+    both = np.ones((40, 60), dtype=bool)
+    z = _zones(tmp_path, [[[40, 10], [52, 10], [52, 22], [40, 22]]])
+    warps = [{"x": 46, "y": 16, "span_x": 2, "span_y": 2}]
+    rows = odp.zone_clicks(z, both, warps, samples=50, seed=0)
+    assert len(rows) == 1
+    r = rows[0]
+    assert (r["walkable_in_area"], r["warp_span_cells"]) == (13 * 13, 25)
+    assert r["into_refused"] == "50/50" and r["onto_span_refused"] == "50/50"
+    assert set(r["into_reasons"]) == {"dest_no_enter"}
+    # an area with no warp inside says so instead of sampling the span leg
+    z2 = _zones(tmp_path, [[[5, 5], [12, 5], [12, 12], [5, 12]]], "syn_two")
+    r2 = odp.zone_clicks(z2, both, warps, samples=10, seed=0)[0]
+    assert r2["warp_span_cells"] == 0 and r2["onto_span_refused"] is None
+    assert r2["into_refused"] == "10/10"
+
+
+# --- the committed pay_fild07 DRAFT ----------------------------------------------------------
+
+PAY07_SPANS = {  # data/kb/warps.json (rAthena npc/pre-re/warps/fields/payon_fild.txt)
+    "warp-pay_fild01": (16, 200, 3, 3),
+    "warp-pay_fild03": (163, 17, 5, 2),
+    "warp-pay_fild08": (280, 382, 4, 2),
+    "warp-pay_fild10": (382, 290, 2, 5),
+}
+PAY07_ARRIVALS = [(23, 207), (167, 20), (280, 379), (379, 290)]  # from the neighbouring maps
+
+
+def test_the_pay_fild07_draft_is_refused_until_a_person_reviews_it() -> None:
+    with pytest.raises(mz.ZoneError, match="no reviewed_by"):
+        mz.load("pay_fild07", mz.ZONES_DIR, (400, 400))
+    text = (mz.ZONES_DIR / "pay_fild07.yaml").read_text()
+    data = yaml.safe_load(text)
+    assert data["reviewed_by"] == "" and data["reviewed"] is None and "delegation" not in data
+    assert "PENDING Batt's delegation" in text
+
+
+def test_the_pay_fild07_draft_geometry_covers_every_span_plus_four(tmp_path: Path) -> None:
+    text = (mz.ZONES_DIR / "pay_fild07.yaml").read_text()
+    copy = text.replace('reviewed_by: ""', "reviewed_by: tester").replace(
+        "reviewed: null", "reviewed: 2026-10-24")  # fmt: skip
+    (tmp_path / "pay_fild07.yaml").write_text(copy)
+    z = mz.load("pay_fild07", tmp_path, (400, 400))
+    assert z is not None and not z.no_cross
+    assert [n.id for n in z.no_enter] == list(PAY07_SPANS)
+    for ne, (x, y, sx, sy) in PAY07_SPANS.items():
+        item = next(n for n in z.no_enter if n.id == ne)
+        for cx in range(x - sx - 4, x + sx + 5):
+            for cy in range(y - sy - 4, y + sy + 5):
+                assert mz.in_polygon((cx, cy), item.polygon), (ne, cx, cy)
+        # exactly the span + 4: the next ring outside is not in the area
+        assert not mz.in_polygon((x - sx - 5, y), item.polygon)
+        assert not mz.in_polygon((x + sx + 5, y), item.polygon)
+        assert not mz.in_polygon((x, y - sy - 5), item.polygon)
+        assert not mz.in_polygon((x, y + sy + 5), item.polygon)
+    for c in PAY07_ARRIVALS:
+        assert mz.in_no_enter(z, c), c
+    for c in [(198, 202), (198, 182)]:  # the proposed START and FALLBACK stands (payf07-prep 5)
+        assert not mz.in_no_enter(z, c)

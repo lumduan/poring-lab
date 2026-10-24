@@ -1,0 +1,37 @@
+# pay_fild07's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
+# the server's numbers). The format and what each kind does: README.md beside this file.
+#
+# DRAFT, NOT REVIEWED: PENDING Batt's delegation. The loader REFUSES this file on purpose
+# (`reviewed_by` is empty): `python3 scripts/map_zones.py check pay_fild07` exits 1, so every
+# runner that loads zones on pay_fild07 stops before any input until a person reviews it. The
+# agent may not approve a zone without a recorded delegation (README.md), and Batt has not
+# delegated pay_fild07 (2026-10-24, docs/planning/payf07-prep.md section 4).
+# When he does, these two lines change and a `delegation:` line follows them, e.g.:
+#   reviewed_by: "agent (delegated by batt, YYYY-MM-DD)"
+#   reviewed: YYYY-MM-DD
+#   delegation: "Batt YYYY-MM-DD <his decision, quoted>: author config/map_zones/pay_fild07.yaml"
+# or Batt reviews it himself (`reviewed_by: batt`).
+#
+# The spans are data/kb/warps.json's (rAthena npc/pre-re/warps/fields/payon_fild.txt, touch area
+# = centre +- span). Each area is the span grown by 4 cells on every side, as orcsdun01.yaml: a
+# click made while the GM moves can land up to ~3 cells further along its walk than the cell
+# aimed at (frames lag the server ~0.5 s), so a destination just outside the area still stops
+# >= 1 cell short of the span. Each warp's ARRIVAL from the neighbouring map lies inside its
+# area. The offline proof on a test-reviewer copy (never committed): payf07-prep.md section 4.
+map: pay_fild07
+reviewed_by: ""
+reviewed: null
+no_cross: []
+no_enter:
+  - id: warp-pay_fild01
+    note: "the west edge warp payf03-1 to pay_fild01 (16,200), span 3,3 = x 13-19 y 197-203, grown by 4: x 9-23 y 193-207; the arrival from pay_fild01 (23,207) is inside (its corner)"
+    polygon: [[9, 193], [23, 193], [23, 207], [9, 207]]
+  - id: warp-pay_fild03
+    note: "the south edge warp payf08-1 to pay_fild03 (163,17), span 5,2 = x 158-168 y 15-19, grown by 4: x 154-172 y 11-23; the arrival from pay_fild03 (167,20) is inside"
+    polygon: [[154, 11], [172, 11], [172, 23], [154, 23]]
+  - id: warp-pay_fild08
+    note: "the north edge warp payf11 to pay_fild08 (280,382), span 4,2 = x 276-284 y 380-384, grown by 4: x 272-288 y 376-388; the arrival from pay_fild08 (280,379) is inside"
+    polygon: [[272, 376], [288, 376], [288, 388], [272, 388]]
+  - id: warp-pay_fild10
+    note: "the east edge warp payf12 to pay_fild10 (382,290), span 2,5 = x 380-384 y 285-295, grown by 4: x 376-388 y 281-299; the arrival from pay_fild10 (379,290) is inside"
+    polygon: [[376, 281], [388, 281], [388, 299], [376, 299]]

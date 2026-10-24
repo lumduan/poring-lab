@@ -210,11 +210,15 @@ def test_v52_is_the_first_version_that_loads_the_zones() -> None:
 
 def test_the_repo_ships_two_zone_files_under_batts_recorded_delegations() -> None:
     """Batt authors the files -- or delegates one, recorded in it (2026-10-21: prt_fild08;
-    2026-10-22: orcsdun01, its own checks in test_orc_dungeon_prep.py)."""
+    2026-10-22: orcsdun01, its own checks in test_orc_dungeon_prep.py). A THIRD file, the
+    pay_fild07 DRAFT (2026-10-24), is not delegated: the loader refuses it until a person reviews
+    it (its own checks in test_map_prep.py), so a run on pay_fild07 stops before any input."""
     assert mz.ZONES_DIR.name == "map_zones" and (mz.ZONES_DIR / "README.md").exists()
     assert not list(mz.ZONES_DIR.glob("*.yml"))
     assert sorted(p.name for p in mz.ZONES_DIR.glob("*.yaml")) == [
-        "orcsdun01.yaml", "prt_fild08.yaml"]  # fmt: skip
+        "orcsdun01.yaml", "pay_fild07.yaml", "prt_fild08.yaml"]  # fmt: skip
+    with pytest.raises(mz.ZoneError, match="no reviewed_by"):
+        mz.load("pay_fild07")
     zo = mz.load("orcsdun01")
     assert zo is not None and zo.reviewed_by == "agent (delegated by batt, 2026-10-22)"
     z = mz.load("prt_fild08")
