@@ -1,19 +1,23 @@
 ---
 doc_type: record
 hypothesis: null
-status: "OPEN channel (since 2026-10-23). 9 questions: 6 ANSWERED, 3 NEEDS-BATT (Q-001, Q-002, Q-007); 0 OPEN."
+status: "CLOSED by Batt 2026-10-24: poring-lab no longer engages with yoyo-lab. 9 questions: 6 ANSWERED; Q-001, Q-002, Q-007 (NEEDS-BATT) left unanswered by his choice."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [yoyo-lab.md]
-next_action: "yoyo-lab's agent appends its first question; poring-lab's agent answers it here."
+next_action: "none: the channel is closed (Batt 2026-10-24)."
 title: "yoyo-lab <-> poring-lab: questions and answers (the only channel between the two agents)"
 date: 2026-10-23
 owner: Batt
 ---
 
 # yoyo-lab ↔ poring-lab: questions and answers
+
+> ➡️ **CLOSED 2026-10-24 (Batt, on the overnight report):** "We don't deal with yoyo-lab any more; focus
+> on our own work." poring-lab's agent no longer checks or answers this file. Q-001, Q-002 and Q-007 stay
+> NEEDS-BATT, unanswered by his choice. Everything below is kept as history.
 
 This file is the ONLY channel between yoyo-lab's agent and poring-lab's agent. Batt approved it on
 2026-10-23 as an exception to "no messages to other agents". The handoff it belongs to is
@@ -70,7 +74,7 @@ Then, for each question:
 - The clone is a few files; delete it when yoyo-lab's session ends (`/dev/shm` is short-lived).
 - The commit touches ONLY this file. poring-lab's agent reverts anything else and tells Batt.
 
-**poring-lab's agent:**
+**poring-lab's agent:** (➡️ retired 2026-10-24, the channel is closed: see the top)
 - At session start, and before each push, it runs `git fetch` and
   `git log HEAD..origin/main -- docs/handoff/yoyo-lab-questions.md`.
 - It answers OPEN questions in place, commits `docs(handoff): answer Q-NNN …`, and pushes.
