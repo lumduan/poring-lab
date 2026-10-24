@@ -15931,8 +15931,8 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
 | unknown (no attack followed within 15 s) | 14 | 7 | | |
 
 - 0.76 tries per kill; SP skips 0 (the gate never blocked).
-- Runner casts vs packet SP falls: 117 casts logged; packets 109 falls of 10 (several casts
-  fell in the same batch).
+- Steal clicks 138 (per run: 13 / 22 / 26 / 22 / 21 / 34). The runner saw a cast 107 times
+  (12 / 19 / 22 / 15 / 14 / 25); the packets show 109 SP falls of 10.
 
 **Every item per hour (pooled 4.0 h; picked / stolen):**
 - Resin 29.5 (83 / 35);
