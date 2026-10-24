@@ -507,3 +507,36 @@ that limit it.
 (none yet)
 
 ### 10.9 RESULTS (appended below, clock-labelled)
+
+#### 10.9a FIT and the FREEZE (2026-10-24; clock times from `date`, the commits and file times)
+
+**The order of events:** pre-registration 3995290 23:13:14. The first round-2 pixel read, FIT
+frames only (the sample crops of the first FIT run), 23:13:22. That run's scan was too slow
+(~13 s per frame) and was stopped ~23:23; a profile and an equality check read three FIT frames
+of stage-c spots 0 and 3 (23:23-23:28); the second run (12 workers) was stopped at 23:29 because
+multi-threaded BLAS in the workers drove the host load to ~129; a49fc66 23:32:24 (the speed-up:
+the same numbers, max |diff| 0.0 on those FIT frames against the pre-registration's code; one BLAS
+thread per worker, 10 workers). The third FIT run 23:29:24-23:45:07 (it runs a49fc66's code, the
+file was edited before its start). **FROZEN 2026-10-24 23:45:44 +0700**: `params.json` sha256
+`2995b4d62d95614c6de55d2dc11bf003b3ce7aa18b5b0cd6c42013f685d00392`, `templates.npz` sha256
+`fba39e9f5376c3a533f429faa45e307cc3f89fb387d2f12dddfb3a99fdc0abc7`
+(/dev/shm/poring-lab-tmp/target-items-r2/params/). No TEST (stage-c spots 8-11), TEST-NEG (s4,
+s5) or NATURAL frame had been read. No amendment.
+
+**The FIT measurements** (FIT eval frames 430, all `ok`, none `ui_layout_mismatch`; FIT-NEG =
+those 430 + 2,188 t1b frames on pay_fild07 = 2,618, none `ui_layout_mismatch`):
+
+| item | FIT samples (floor items) | kept by the pooled build (floor items) | variants (pooled + places) | template h x w px (mask px) | anchor du / dv px | alignment median abs dx / dy (NCC median, p10) | threshold NCC / RMS / inlier | FIT recall (labelled) | FIT-NEG false / 100 frames | candidates / frame |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 43 (5) | 34 (4) | 1 + 4 | 12 x 15 (116) | -4.5 / +0.5 | 1 / 1 (0.978, 0.764) | 0.90 / 25 / 0.7 | 0.835 (103) | 0.0 | 179.3 |
+| 756 Rough Oridecon | 92 (7) | 75 (7) | 1 + 6 | 13 x 16 (121) | -4.5 / +1.0 | 0 / 1 (0.952, 0.868) | 0.83 / 30 / 0.8 | 0.991 (113) | 0.0 | 25.5 |
+| 604 Dead Branch | 112 (7) | 92 (7) | 1 + 7 | 12 x 18 (86) | -6.5 / +3.5 | 0 / 0 (0.879, 0.791) | 0.72 / 30 / 0.6 | 0.912 (136) | 0.0 | 193.4 |
+| 518 Honey | 108 (9) | 87 (9) | 1 + 7 | 22 x 20 (305) | -5.5 / +1.5 | 0 / 0 (0.971, 0.942) | 0.91 / 25 / 0.8 | 0.994 (158) | 0.0 | 251.5 |
+
+- No alignment STOP (all medians <= 1 px); every item has a template (no amendment needed: 757
+  built from all its samples this time, round 1's needed amendment A).
+- Places with fewer than 5 kept samples have no variant of their own: 756 c:341 (4), 518 c:327
+  and b:138 (1 each).
+- **FIT recall is IN-SAMPLE** (the variants come from these same floor items), so it overstates
+  TEST; round 1's FIT recall was 0.27-0.64. The 0.0 FIT-NEG rate at these thresholds leaves the
+  TEST-NEG bar (1.0 / 100) a margin only if s4 / s5 resemble t1b. Written before any TEST read.
