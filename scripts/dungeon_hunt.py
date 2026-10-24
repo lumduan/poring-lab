@@ -492,6 +492,20 @@ def cheb2(a: Sequence[int], b: Sequence[int] | None) -> int:
     return 0 if b is None else max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
+def rest_sit_why(spot: Cell | None, at_spot: bool, waited_s: float) -> str | None:
+    """PURE: why to sit now in the REST mode, or None (keep walking to the spot).
+    4.03 Amendment C (2026-10-24): a map with NO rest spot sits where it stands at once -- before,
+    the missing route sent the mode back to "search" every read, so it never sat (t1: 782 rest_go
+    -> rest_route cycles, the walk's goal reset on each)."""
+    if spot is None:
+        return "no rest spot: sit where we stand"
+    if at_spot:
+        return "at rest spot"
+    if waited_s > REST_WALK_MAX_S:  # Amendment B (3.98)
+        return "rest spot not reached"
+    return None
+
+
 def nearest_spot(spots: Sequence[Cell], here: Cell) -> Cell | None:
     return min(spots, key=lambda s: max(abs(s[0] - here[0]), abs(s[1] - here[1])), default=None)
 
@@ -1775,14 +1789,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if here is not None:
                         spot = nearest_spot(spots, here)
                         at_spot = spot is not None and cheb2(spot, here) <= REST_NEAR
-                        late = tick - rest_since > REST_WALK_MAX_S  # Amendment B (3.98)
-                        if at_spot or late:
-                            press("sit", "at rest spot" if at_spot else "rest spot not reached")
+                        sit_why = rest_sit_why(spot, at_spot, tick - rest_since)
+                        if sit_why is not None:
+                            press("sit", sit_why)
                             sitting = True
                             rest_since = tick
                             ev({"kind": "rest_start", "cell": list(here), "pct": pct,
                                 "sp_pct": spp, "spot": None if spot is None else list(spot),
-                                "fallback": not at_spot})  # fmt: skip
+                                "fallback": not at_spot, "why": sit_why})  # fmt: skip
                             continue
                         if goal_path is None or goal_path[-1] != spot:
                             goal_path = route(okr, carved, here, spot) if spot else None

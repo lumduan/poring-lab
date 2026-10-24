@@ -15664,6 +15664,23 @@ The packets say why:
   The Elder Willows' 95 attacks missed 92 times.
 - The fix works. The scored runs start (t1, t2, ...: 40 min, seeds 24301...).
 
+**Amendment C (2026-10-24 ~12:4x ICT, after t1 was STOPPED and before any other scored run):
+the rest must sit on a map without rest spots.**
+- t1 (`20261024T121831-demo-dungeon-thief-pay_fild07-B-t1`, 12:18:27) was stopped by the parent at
+  12:33:30 (SIGINT, 15.0 min).
+- Its events showed **782 `rest_go` -> `rest_route (to: None)` cycles, 0 rests.** pay_fild07 has no
+  rest spots, so the missing route sent the mode back to "search" on every read. The Thief never
+  sat, against this section's "sit where it stands", and the search walk's goal was reset on each
+  read while HP was under 60 %.
+- At the stop: 13 kills (runner), 3 potions, 1 Fly Wing, HP min 16 % (runner read).
+- The runner re-raises a stop after its end warp, so t1's packets and manifest were written
+  afterwards by the parent from the sniffer archive (reason "stopped_by_parent", with this note).
+- t1 is NOT pooled with the scored runs. It is reported apart.
+- **The fix (dungeon@6, both pilots' code otherwise):** `rest_sit_why`. No rest spot means sit
+  where it stands at once; a spot keeps its walk, and the 120-s fallback stays.
+- Tested (`test_rest_sits_where_it_stands_on_a_map_without_rest_spots`); the click census is green.
+- **The scored runs restart as t1b, t2, ... (seeds 24311, 24302, ...).**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

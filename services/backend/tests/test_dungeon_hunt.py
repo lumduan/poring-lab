@@ -430,3 +430,12 @@ def test_the_rest_spots_name_is_bound_once_in_run() -> None:
     ]
     assert len(bound) == 1
     assert "box_spots = (" in (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+
+
+def test_rest_sits_where_it_stands_on_a_map_without_rest_spots() -> None:
+    """4.03 Amendment C: t1 (pay_fild07, no rest spots) never sat: 782 rest_go -> search."""
+    assert dh.rest_sit_why(None, False, 0.0) == "no rest spot: sit where we stand"
+    assert dh.rest_sit_why((5, 5), True, 0.0) == "at rest spot"
+    assert dh.rest_sit_why((5, 5), False, 1.0) is None  # still walking to it
+    assert dh.rest_sit_why((5, 5), False, dh.REST_WALK_MAX_S + 1) == "rest spot not reached"
+    assert dh.nearest_spot([], (1, 1)) is None
