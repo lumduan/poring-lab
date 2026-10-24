@@ -398,3 +398,7 @@ of the six species is aggressive, 70 of 188 monsters (37 %).
 
 The sections 4-5 numbers need the rebuilt first_workflow.json in `data/kb` (section 3). Against
 the installed KB, `stand_grid` and `check_warps` refuse pay_fild07.
+
+> ➡️ **2026-10-24 ~11:3x: Batt DELEGATED the zones** ("ok" to the 11:13 report, item 2). The
+> draft in section 4 is now the reviewed file: only its review lines changed (`map_zones.py check
+> pay_fild07` ok; `prove`: 0 cut, 0 newly unreachable).

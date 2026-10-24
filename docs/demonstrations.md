@@ -15600,6 +15600,19 @@ offline. Steal-first is its own next version (4.04).
 **Hard bars and deaths:** as 4.00. A death is a result: the run stops, the cause is recorded, the
 dialog closes by its known step, then @alive + @heal.
 
+**Amendment A (2026-10-24 ~11:3x ICT, BEFORE the pilot): the conditions are met.** Batt's reply to
+the 11:13 report:
+- map: "use pay_fild07 for now ... train on pay_fild07, because pay_fild08's environment is
+  hardly different";
+- zones: "ok" to the delegation. `config/map_zones/pay_fild07.yaml` now carries
+  `reviewed_by: agent (delegated by batt, 2026-10-24)` and only its review lines changed;
+  `map_zones.py prove pay_fild07`: 0 cut, 248 zone cells, 0 newly unreachable;
+- the body armor stays Thief Clothes;
+- the starter Knife + Cotton Shirt are dropped before the pilot (50 weight; outside any measured
+  window);
+- Steal: "check it against real runs" (4.04).
+Nothing else in 4.03 changes.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

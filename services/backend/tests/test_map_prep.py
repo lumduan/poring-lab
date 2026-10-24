@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -124,7 +123,7 @@ def test_zone_clicks_refuses_every_click_into_an_area_and_onto_its_span(tmp_path
     assert r2["into_refused"] == "10/10"
 
 
-# --- the committed pay_fild07 DRAFT ----------------------------------------------------------
+# --- the committed pay_fild07 zones (a DRAFT until Batt delegated it, 2026-10-24 ~11:3x) ------
 
 PAY07_SPANS = {  # data/kb/warps.json (rAthena npc/pre-re/warps/fields/payon_fild.txt)
     "warp-pay_fild01": (16, 200, 3, 3),
@@ -135,20 +134,17 @@ PAY07_SPANS = {  # data/kb/warps.json (rAthena npc/pre-re/warps/fields/payon_fil
 PAY07_ARRIVALS = [(23, 207), (167, 20), (280, 379), (379, 290)]  # from the neighbouring maps
 
 
-def test_the_pay_fild07_draft_is_refused_until_a_person_reviews_it() -> None:
-    with pytest.raises(mz.ZoneError, match="no reviewed_by"):
-        mz.load("pay_fild07", mz.ZONES_DIR, (400, 400))
-    text = (mz.ZONES_DIR / "pay_fild07.yaml").read_text()
-    data = yaml.safe_load(text)
-    assert data["reviewed_by"] == "" and data["reviewed"] is None and "delegation" not in data
-    assert "PENDING Batt's delegation" in text
+def test_the_pay_fild07_zones_carry_batts_recorded_delegation() -> None:
+    """Batt 2026-10-24 ~11:3x: "ok" to the delegation asked in the 11:13 report (item 2)."""
+    z = mz.load("pay_fild07", mz.ZONES_DIR, (400, 400))
+    assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-10-24)"
+    data = yaml.safe_load((mz.ZONES_DIR / "pay_fild07.yaml").read_text())
+    assert "11:13 report item 2" in data["delegation"]
 
 
 def test_the_pay_fild07_draft_geometry_covers_every_span_plus_four(tmp_path: Path) -> None:
     text = (mz.ZONES_DIR / "pay_fild07.yaml").read_text()
-    copy = text.replace('reviewed_by: ""', "reviewed_by: tester").replace(
-        "reviewed: null", "reviewed: 2026-10-24")  # fmt: skip
-    (tmp_path / "pay_fild07.yaml").write_text(copy)
+    (tmp_path / "pay_fild07.yaml").write_text(text)
     z = mz.load("pay_fild07", tmp_path, (400, 400))
     assert z is not None and not z.no_cross
     assert [n.id for n in z.no_enter] == list(PAY07_SPANS)

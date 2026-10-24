@@ -1,16 +1,10 @@
 # pay_fild07's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
 # the server's numbers). The format and what each kind does: README.md beside this file.
 #
-# DRAFT, NOT REVIEWED: PENDING Batt's delegation. The loader REFUSES this file on purpose
-# (`reviewed_by` is empty): `python3 scripts/map_zones.py check pay_fild07` exits 1, so every
-# runner that loads zones on pay_fild07 stops before any input until a person reviews it. The
-# agent may not approve a zone without a recorded delegation (README.md), and Batt has not
-# delegated pay_fild07 (2026-10-24, docs/planning/payf07-prep.md section 4).
-# When he does, these two lines change and a `delegation:` line follows them, e.g.:
-#   reviewed_by: "agent (delegated by batt, YYYY-MM-DD)"
-#   reviewed: YYYY-MM-DD
-#   delegation: "Batt YYYY-MM-DD <his decision, quoted>: author config/map_zones/pay_fild07.yaml"
-# or Batt reviews it himself (`reviewed_by: batt`).
+# DELEGATED REVIEW. Batt delegated this file to the agent on 2026-10-24 (~11:3x ICT, his reply to
+# the 11:13 report, item 2 "allow the pay_fild07 warp zones: reply e.g. 'author pay_fild07 zones,
+# delegated as before'"): "ok". The file is the 10:3x draft (payf07-prep.md section 4) unchanged
+# except these review lines. (Before that it was a DRAFT the loader refused: `reviewed_by` empty.)
 #
 # The spans are data/kb/warps.json's (rAthena npc/pre-re/warps/fields/payon_fild.txt, touch area
 # = centre +- span). Each area is the span grown by 4 cells on every side, as orcsdun01.yaml: a
@@ -19,8 +13,9 @@
 # >= 1 cell short of the span. Each warp's ARRIVAL from the neighbouring map lies inside its
 # area. The offline proof on a test-reviewer copy (never committed): payf07-prep.md section 4.
 map: pay_fild07
-reviewed_by: ""
-reviewed: null
+reviewed_by: "agent (delegated by batt, 2026-10-24)"
+reviewed: 2026-10-24
+delegation: "Batt 2026-10-24 ~11:3x ICT, reply to the 11:13 report item 2 ('allow the pay_fild07 warp zones: reply e.g. author pay_fild07 zones, delegated as before'): ok"
 no_cross: []
 no_enter:
   - id: warp-pay_fild01
