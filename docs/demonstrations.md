@@ -15613,6 +15613,29 @@ the 11:13 report:
 - Steal: "check it against real runs" (4.04).
 Nothing else in 4.03 changes.
 
+**The unscored pilot** (`20261024T114537-demo-dungeon-thief-pay_fild07-B-t-pilot`, 11:45:34-11:51:08,
+seed 24300, judged pre-run frame thief-pre-t-pilot.png). The time box ended it:
+- 5.0 min, **1 kill**, deaths 0, hard bars 0;
+- HP min 158 / 952 (16.6 %), 5 potions, **3 Fly Wings** (escapes);
+- loot 1 / 1 (Resin); net -73,216 z / h.
+
+The packets say why:
+
+| our target | our attacks | damage | per attack |
+|---|---|---|---|
+| **Bigfoot** | 71 | **192** | **2.7** |
+| Elder Willow x 3 | 6 / 12 / 3 | 350 / 722 / 308 | 58-103 |
+| Eggyra | 2 | 30 | 15 |
+
+- **The build cannot hurt a Bigfoot.** A dagger does 50 % against a Large monster, and Bigfoot's
+  VIT 55 soft DEF soaks nearly all of the rest (STR 1+3, ATK 131). Its 1,619 HP is out of reach.
+  The fight held the Thief in place.
+- Meanwhile two Elder Willows attacked: 108 attacks, 95 missed (flee 146 works), 13 hit for 641.
+  Bigfoot: 32 attacks, 29 missed, 3 hit for 473 (~158 each).
+- The judge's MaxHP fallback was the Crusader's 5,260 (no max_hp packet in the window). It is
+  now per character (952): fixed before any scored run.
+- **No scored run starts:** the target choice for Bigfoot is Batt's (his build) -- asked at 11:5x.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
