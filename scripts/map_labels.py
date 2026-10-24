@@ -322,6 +322,23 @@ def t2_order(items: Sequence[dict[str, Any]], seed: int, mob: int) -> list[dict[
     return order
 
 
+def round2_pool(
+    items: Sequence[dict[str, Any]], min_fit: float | None, exclude: set[tuple[str, int, int]]
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """PURE (11, round 2): the pool without (a) labels NOT under a model whose fit is below
+    ``min_fit`` (``weak_fit``: the frozen T_h on every label) and (b) the crops an earlier round
+    judged (session, frame, gid). Returns the kept items and the counts removed by each rule."""
+    kept, cut = [], {"weak_fit": 0, "judged_before": 0}
+    for it in items:
+        if (it["session"], int(it["frame_id"]), int(it["gid"])) in exclude:
+            cut["judged_before"] += 1
+        elif min_fit is not None and not it["under"] and float(it["ncc"]) < min_fit:
+            cut["weak_fit"] += 1
+        else:
+            kept.append(it)
+    return kept, cut
+
+
 def frame_exclusions(world: Any, scene: Any, size: tuple[int, int], spec_species: Sequence[int],
                      class_species: Sequence[int], aid: int | None) -> list[str]:  # fmt: skip
     """4g: what keeps a frame from being labelled whole besides its monster labels: a warp / NPC
@@ -1013,6 +1030,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
                 })  # fmt: skip
     if len(params_sha) != 1:
         raise SystemExit(f"the labels come from {len(params_sha)} parameter files")
+    exclude: set[tuple[str, int, int]] = set()
+    for kp in a.exclude_key or []:  # 11: the crops an earlier round judged
+        for c in json.loads(kp.read_text())["crops"].values():
+            exclude.add((c["session"], int(c["frame_id"]), int(c["gid"])))
+    cut_by: dict[str, dict[str, int]] = {}
+    if a.min_fit is not None or exclude:
+        for mob in list(pool):
+            pool[mob], cut_by[str(mob)] = round2_pool(pool[mob], a.min_fit, exclude)
     tier = [m for m in spec.species if m != 1080 or len(pool.get(1080, [])) >= T2_PER_SPECIES]
     chosen: list[dict[str, Any]] = []
     per = {}
@@ -1069,11 +1094,13 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
            "params_status": sorted(statuses),
            "instructions_sha256": sha, "built_at": olf.now_ict(), "commit": olf.git_head(),
            "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller",
+           "min_fit": a.min_fit, "removed_from_pool": cut_by,
+           "exclude_keys": [str(k) for k in (a.exclude_key or [])],
            }  # fmt: skip
     (key_dir / "answer_key.json").write_text(json.dumps(key, indent=1) + "\n")
     return {"pack": str(pack), "key": str(key_dir / "answer_key.json"), "crops": len(names),
             "per_species": per, "tier_species": tier, "letters": len(letters),
-            "params_status": key["params_status"],
+            "params_status": key["params_status"], "removed_from_pool": cut_by,
             "grids": len(grids)}  # fmt: skip
 
 
@@ -1128,6 +1155,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--instructions", type=Path, required=True)
     p.add_argument("--instructions-sha256", required=True)
     p.add_argument("--session-root", default="/mnt/poring-lab-datasets")
+    p.add_argument("--min-fit", type=float, default=None,
+                   help="11: the frozen T_h on labels NOT under a model (weak_fit)")  # fmt: skip
+    p.add_argument("--exclude-key", type=Path, action="append", default=None,
+                   help="11: an earlier round's answer key: its crops leave the pool")  # fmt: skip
     p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     if a.cmd == "labels" and len(a.parts) != 1:

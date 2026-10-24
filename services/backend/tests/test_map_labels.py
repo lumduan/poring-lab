@@ -254,3 +254,19 @@ def test_engaged_rule_adds_its_reason_after_2b_2c(monkeypatch: pytest.MonkeyPatc
     assert rule.choose(None, e1, None, {}, S, None, 0.0)[1] == "next_move"  # 2b keeps its name
     assert rule.choose(None, e2, None, {}, S, None, 0.0)[1] == ml.ENGAGED
     assert rule.choose(None, e3, None, {}, S, None, 0.0)[1] is None
+
+
+def test_round2_pool_drops_weak_clear_fits_and_judged_crops() -> None:
+    """11: the frozen T_h on every label (a weak fit NOT under a model leaves the pool; one under
+    a model was already gated by o3h) and an earlier round's crops leave the pool."""
+
+    def it(s, f, g, ncc, under):
+        return {"session": s, "frame_id": f, "gid": g, "ncc": ncc, "under": under}
+
+    items = [it("a", 1, 7, 0.12, False), it("a", 2, 7, 0.80, False), it("a", 3, 8, 0.30, True),
+             it("b", 1, 9, 0.90, False), it("b", 2, 9, 0.479, False)]  # fmt: skip
+    kept, cut = ml.round2_pool(items, 0.479, {("b", 1, 9)})
+    assert [(k["session"], k["frame_id"]) for k in kept] == [("a", 2), ("a", 3), ("b", 2)]
+    assert cut == {"weak_fit": 1, "judged_before": 1}
+    kept0, cut0 = ml.round2_pool(items, None, set())
+    assert kept0 == items and cut0 == {"weak_fit": 0, "judged_before": 0}
