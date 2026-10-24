@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "PRE-REGISTERED 2026-10-24 18:25:24 ICT (7ed0422), BEFORE any label was built and before any TEST frame was read; the tool c8812fd (18:32:03)"
+status: "PRE-REGISTERED 2026-10-24 18:25:24 ICT (7ed0422). 1d STOPPED twice on its 50-sample floor (17, then 47 under Amendment A): nothing frozen, T1 NOT run, no TEST read; proposal P1 (120 ms, = the P2 diagnostic). Amendment B (engaged) after a FIT finding. Provisional P1 + B: T_h 0.479, TRAIN labels 2,140 kept / 1,307 in 2,660 whole frames, the T2 pack built (seed 21, 180 crops)"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md]
-next_action: "Build the map-parameterised label tool and its tests; measure and FREEZE 1d and the o3h threshold on FIT; run T1 on TEST; build the T2 blind pack (the parent runs the labellers)."
+next_action: "The parent / Batt: decide 1d (10a; P1 = 120 ms recommended, P2 diagnostic also 120 ms), record it as Amendment C, then 10h: freeze, T1 on TEST, the frozen TRAIN labels, the T2 pack (seed 21) and two new blind labellers. Elder Willow is thin (100 boxes in whole frames): consider a staged block first (10i)."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -385,3 +385,140 @@ So that P1, if chosen, can proceed at once:
 - **What stays:** everything else, including Amendment A, the stops, T1's and T2's bars and data.
 - The provisional P1 work of 10b is redone under B (T_h, the parameters, the TRAIN labels, the
   pack). The decision on 1d (10a) is still open: T1 does not run.
+
+### 10e. RESULT of the provisional work (P1 + Amendment B; no TEST read, nothing frozen)
+
+**The order of events** (2026-10-24 ICT, from `date` and the commits): pre-registered 18:25:24
+(7ed0422) -> tool c8812fd 18:32:03 -> 4b attempt 1 18:32-18:33 STOP -> Amendment A 18:35:38
+(f7dbd42) -> attempt 2 18:36-18:37 STOP -> 10a / 10b 18:38:53 (67f0bc6) -> the P2 diagnostic and the
+first P1 T_h 18:39-18:41 -> 10c / Amendment B 18:55:06 (adda47a; code fe8047f, efa7739) -> T_h
+under P1 + B 18:56-18:58 -> the proposed parameters 18:58:08 -> the TRAIN labels 18:58-19:00 -> the
+T2 pack 19:01. **No TEST frame and no TEST packet has been read by any of it** (TEST = staged spots
+8-11 + t2: the tools refuse them; t2's packets were never opened).
+
+- **The P2 DIAGNOSTIC** (`offset --diagnostic` on staged spots 0-7 + t1b + s-pilot + s1; never
+  frozen; `payf07/fit/offset-diag-P2.json`): **89 walker samples (35 units; Willow 22, Bigfoot 22,
+  Poporing 21, Eggyra 17, Elder Willow 7), the best coarse 100 ms, the fine sweep's best 120 ms**
+  (median 2.83 px, p25-p75 1.41-6.08; 130 ms ties at 2.83, the tie keeps the smaller). So P2, run
+  as 4b's rule with the floor met, lands on **exactly P1's 120 ms**.
+- **T_h under P1 + B** (`payf07/fit/threshold-P1.json`, sha256 `f477de49…`): **0.479** (orcsdun01:
+  0.4775). The clear kept fits: n 650, p5 0.479, median 0.769. The fits of under-box labels that
+  pass: n 834, median 0.676; 306 of them fall under T_h (o3h excludes them).
+  - Per species, the clear kept median: Elder Willow 0.767 (85), Willow 0.750 (148), Eggyra 0.903
+    (62), Bigfoot 0.754 (111), Poporing 0.734 (128), Green Plant 0.810 (116). The Green Plants
+    under a model box all fit at <= 0.443 (46): o3h drops every one.
+  - **Amendment B's positive case, on real data:** `engaged` excluded 404 Elder Willow, 22 Bigfoot,
+    13 Eggyra and 2 Poporing fates in t1b; T_h moved from 0.111 to 0.479.
+  - The reported anchors (4c): every species' clear kept median fit offset is within 1 px
+    ((0..1, -1..0) px): no anchor is needed, as 1b expected.
+- **The proposed parameters:** `payf07/params-P1-proposed.json` (sha256 `798508ee…`), `status:
+  PROPOSED_NOT_FROZEN` (its `frozen_at` field is only the write time). `map_labels.py check`
+  refuses it.
+
+### 10f. The TRAIN labels under P1 + B (provisional): counts per species and session
+
+Every candidate frame (1 fps). "kept" = the kept fitted labels in any candidate frame (T2's pool);
+"whole" = the labels in frames labelled whole (what a cache would hold).
+
+| species | staged spots 0-7 (kept / whole) | t1b | s-pilot | s1 | ALL kept | ALL in whole frames |
+|---|---|---|---|---|---|---|
+| Elder Willow 1033 | 130 / 57 | 41 / 30 | 8 / 7 | 27 / 6 | **206** | **100** |
+| Willow 1010 | 88 / 64 | 185 / 137 | 41 / 27 | 289 / 222 | 603 | 450 |
+| Eggyra 1116 | 99 / 54 | 85 / 52 | 49 / 38 | 280 / 182 | 513 | 326 |
+| Bigfoot 1060 | 61 / 15 | 131 / 52 | 90 / 79 | 149 / 92 | 431 | 238 |
+| Poporing 1031 | 58 / 52 | 184 / 129 | 0 / 0 | 29 / 12 | 271 | 193 |
+| Green Plant 1080 | 116 / 0 | 0 | 0 | 0 | 116 | **0** |
+| **all** | 552 / 242 | 626 / 400 | 188 / 151 | 774 / 514 | **2,140** | **1,307** |
+| frames: recorded / candidates / whole | 1,538 (spots 0-7 of it) / 513 / 281 | 2,271 / 1,645 / 975 | 523 / 423 / 267 | 1,950 / 1,675 / 1,137 | | **2,660 whole** |
+
+- **The exclusions, by reason** (labels, all four parts): `occluded_model` 1,177 (o3h); `engaged`
+  1,091 (Elder Willow 1,007 of them); `ambiguous_view` 174; `next_move` 130; `unfit` 88; `crowd` 6;
+  `ui` 9. Frames: `warp_in_view` 3 (t1b); no other player, no unchecked species.
+- **The candidate-frame drops:** our character moving t1b 543, s-pilot 73, s1 256; the staged
+  inventory span 314; GM windows 164; map changes 113; off pay_fild07 76.
+- **Green Plant:** 116 kept labels (>= 30), so it is a class and in the tier (section 7), but 0 of
+  them lie in a whole frame (its neighbours under canopy are excluded), so a cache would hold no
+  Green Plant box today.
+- 🔴 **Elder Willow, the species Batt asked about, is the THINNEST: 100 boxes in whole frames.** The
+  hunting runs fight it (Steal first): 1,007 of its hunting sightings are `engaged`, the very
+  situation of Batt's clip, and Amendment B removes them because their fits are spurious (10c).
+  A detector trained on these labels learns Elder Willow from stills and wanderers, not from a
+  fight next to our character. See 10i.
+
+### 10g. The T2 blind pack (PROVISIONAL: built from the P1 + B labels; seed 21)
+
+- **Where (local, client-derived, never committed):** the pack
+  `/dev/shm/poring-lab-tmp/payf07/t2-seed21/pack/` (180 crops in `crops/`, 9 grids, the multi-view
+  `reference.png` with 12 letters, `pack.json`, `instructions.txt`); the answer key, apart:
+  `/dev/shm/poring-lab-tmp/payf07/t2-seed21-key/answer_key.json` (sha256 `3c4748bc…`).
+- **The sample:** 30 per species from the T2 pool (pool sizes: Elder Willow 206, Willow 603, Eggyra
+  513, Bigfoot 431, Poporing 271, Green Plant 116), section 6's seeded order. 77 of the 180 lie
+  under a model box (kept by o3h). No controls.
+- **The reference letters** (in the key only): 12 species, the six of pay_fild07 + Poring, White
+  Plant, Lunatic, Pupa, Drops, Creamy, each in its idle views side by side.
+- **The labeller instructions:** `docs/planning/payf07-blind-instructions.txt`, copied verbatim as
+  the pack's `instructions.txt` (sha256 `dc3ee728…19f9`, checked by the tool). Each of two NEW
+  blind labeller agents gets ONLY the pack directory and this text, plus an answers path outside
+  the pack; never the key directory, never this document.
+- **The score:**
+
+      python3 scripts/blind_score.py --key /dev/shm/poring-lab-tmp/payf07/t2-seed21-key/answer_key.json \
+          ANSWERS_A.json ANSWERS_B.json --both-good /dev/shm/poring-lab-tmp/payf07/t2-seed21-both-good.json
+
+  The bars (section 6): per species, >= 90 % good from EACH labeller AND the species right >= 95 %.
+- **When it may be run:** only after the 1d decision is recorded and the parameters are FROZEN.
+  Under P1 the frozen labels are the provisional ones exactly (the same 120 ms and T_h; only the
+  parameter file's status differs), so the pack is rebuilt from the frozen labels and its key
+  compared crop by crop (mob, session, frame, gid, box) before the labellers start. Under P2 the
+  result is the same 120 ms (10e). Under P3 the labels and the pack are rebuilt.
+- **A sanity look, by eye, at the RENDERING only** (`grid_01.png`, crops 001-020, before any
+  labeller): the crops, boxes and reference draw correctly. Crop 007 (an Eggyra in s1, clear of
+  the models, fit 0.152) shows grass and no monster. Nothing was changed for it: it is the blind
+  round's to judge. 5 of the 180 crops have a fit under 0.3 (3 Elder Willow, 1 Bigfoot, 1 Eggyra).
+
+### 10h. What the parent runs next (after recording the decision as Amendment C)
+
+Under **P1** (recommended; the same as P2's outcome), from this worktree, the PYTHONPATH and venv
+of the subagent brief:
+
+    cd /dev/shm/poring-lab-tmp/payf07
+    # 1. freeze: the proposal's T_h file + the decision, cited
+    python $W/scripts/map_labels.py freeze --threshold fit/threshold-P1.json \
+        --decision "Amendment C (<time>): 1d = 120 ms (P1)" --out params.json
+    # 2. T1 on TEST (the first TEST read)
+    python $W/scripts/map_labels.py check \
+        /mnt/poring-lab-datasets/20261024T170356-rdp-stage-items-b:spots=8-11 \
+        /mnt/poring-lab-datasets/20261024T131838-rdp-thief-t2 \
+        --params params.json --workers 8 --rows t1/rows.json --out t1/check.json
+    # 3. the TRAIN labels with the frozen file, then the pack (compare the key with 10g's)
+    scratch/run_labels.sh <the four TRAIN parts>   (with --params params.json)
+    python $W/scripts/map_labels.py pack labels/*.json --seed 21 --pack-dir t2/pack \
+        --key-dir t2-key --instructions $W/docs/planning/payf07-blind-instructions.txt \
+        --instructions-sha256 dc3ee728ba5637c2416fcd34775e3ed7b5bc22afeae6096bdec8eb378d1c19f9 --out t2-build.json
+    # 4. each TRAIN hunting session's own C1 (3c): check --allow-fit for t1b; check s-pilot, s1
+
+T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1.ratio`,
+`c1.per_species`, `c2.per_species` and `c2_stop`, `per_part` (staged / t2).
+
+### 10i. Estimates: the cache and the training (by analogy with v2orc)
+
+- **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
+  (1.60 MB a frame, ~300 frames a shard), built in 11,274 s (0.70 s a frame).
+- **Adding pay_fild07's TRAIN as labelled today** (2,660 whole frames, 1,307 monster boxes + one
+  player box a frame): ~18,800 frames, **~63 shards, ~30 GB**, a build of ~3.7 h.
+- **With s2-s6 joining by 3c** (s1's yield: 58 % of its frames whole, ~0.26 monster box a frame):
+  ~+7,000 whole frames and ~+3,200 boxes: ~25,800 frames, **~86 shards, ~41 GB**, ~5 h to build.
+- **Training** (training-cost.md: k = 0.146 s per frame per epoch, 30 epochs, the long-lived
+  worker; R1-R3 and the IO guard add their stops):
+  - TRAIN 10,416 (v2orc) + 2,660 = 13,076 frames: **~15.9 compute-h**; ~25 h wall at night
+    availability (0.63), ~31 h around the clock (0.505);
+  - with s2-s6: ~20,100 frames: ~24.4 compute-h; ~39 h / ~48 h wall.
+  - v2orc's own run reached 3 epochs in 04:31-11:35 with ~1.5 h of stops and the duty cycle at its
+    slow levels: a wall pace far slower than k suggests. Plan for the slower figure by day.
+- **Per-species budget** (training-cost.md 2: B = 1,500 frames per species): every pay_fild07
+  species is far below it in whole frames; Elder Willow worst (100 boxes), Green Plant at 0.
+  **Proposal (not decided here):** an immune-Thief warp-and-watch block on pay_fild07 (the staged
+  session's stills gave Elder Willow 130 kept labels in ~1/3 of their frames), dwelling at Elder
+  Willow and Green Plant areas, before training; and, as a separate hypothesis, a label rule for
+  ENGAGED units (drawn facing our character, in their attack / hurt actions) so the fight that
+  Batt's clip shows can be labelled at all.
