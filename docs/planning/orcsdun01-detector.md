@@ -1490,6 +1490,22 @@ nothing here lowers it. Round 4's FAIL stays on the record above.
     1, 5,208 batches an epoch, the adaptive duty cycle from its slowest level, R1-R3, the IO guard.
   - `v2orc-vs-v1.md` is scored once, after epoch 30.
 
+### 3n. STOPPED by Batt (2026-10-24 ~11:3x ICT): v2orc-20261024 is NOT finished and NOT scored
+
+- **Batt's reply to the 11:13 report (item 5):** "stop it now, a waste of time; use it to train the
+  rogue instead". orcsdun01 is ended (docs/planning/thief-payon.md 1).
+- **The run reached 3 epochs of 30.** Its validation mAP50 by epoch: 0.572, 0.795, 0.805.
+  - Interruptions: IO stops 07:32 and 09:16, the (then weekend-blind) market wait 09:31-10:16, and
+    an R3-HARD camera frame-drop stop 10:40, resumed 10:59.
+- **Stopped by the documented pause path:** a SIGINT at 11:35:43 to the in-worker `timeout …
+  poring_vision.train`.
+  - train-day ended 11:37:28 with "TRAIN STOPPED: not a guard trip" and no retry.
+  - `worker-stop:vision` at 11:38:25 verified nothing of ours on the GPU.
+- **The weights** (best / last / mid, 127 MB) went to `/mnt/poring-lab-datasets/archive/train/
+  v2orc-20261024/` (guarded archive, verified, local copy deleted 11:38:57).
+- **v2orc-vs-v1.md is NOT scored.** An unfinished run says nothing about the pre-registered bars.
+  The cache (v2orc-fix2-w-o3h-20261024 on the NAS) and the labels stay, should orcsdun01 return.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
