@@ -119,8 +119,10 @@ On a breach:
                 the HOST frame-cache builder, `nice -n 19 .venv/bin/python
                 scripts/build_frame_cache.py <args>` (it reads sessions from the NAS and writes tar
                 shards to it; nothing on the root disk), killed after <seconds> (default 7200).
-                Nothing else runs through it. A breach sends SIGINT: re-run with `--resume` later
-                (Batt, 2026-10-06: daytime caches pause on a trip and resume, never retry fast).
+                Its arguments: options, ids, relative paths, and absolute paths only below
+                /dev/shm/poring-lab-tmp/ (RAM scratch inputs). Nothing else runs through it. A
+                breach sends SIGINT: re-run with `--resume` later (Batt, 2026-10-06: daytime caches
+                pause on a trip and resume, never retry fast).
   measure:du=<path> | measure:docker-df | measure:buildx-du
                 the DISK AUDIT's measurements (Batt, 2026-10-21: "measure ... under the IO guard,
                 nice 19 + ionice idle; one directory at a time; stop on any guard trip"). du:
@@ -373,7 +375,7 @@ def parse_step(step: str) -> Step:
         argv = shlex.split(command)
         if head not in ("cache", f"cache@{secs}") or not eq or not argv:
             raise ValueError(f"{step}: expected cache[@<seconds>]=<build_frame_cache args>")
-        if any(not a.startswith("-") and not CACHE_ARG.match(a) for a in argv):
+        if any(not cache_arg_ok(a) for a in argv):
             raise ValueError(f"{step}: cache: takes build_frame_cache options and session ids")
         return Step("cache", [], float(secs or 7200), argv)
     raise ValueError(f"unknown step {step}")
@@ -851,6 +853,21 @@ def verify_stop(
 
 
 CACHE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")  # session ids, ids, numbers, paths
+# Absolute inputs only from the RAM scratch root (rule 7: client- / GPL-derived label files, frozen
+# parameters, a map's KB live in /dev/shm, never on the shared disk; payf07-detector.md 12).
+CACHE_SHM_ROOT = "/dev/shm/poring-lab-tmp/"
+
+
+def cache_arg_ok(arg: str) -> bool:
+    """A cache: step argument: an option, a session / cache id or relative path, or an absolute
+    path below CACHE_SHM_ROOT with no '..' component."""
+    if arg.startswith("-") or CACHE_ARG.match(arg):
+        return True
+    rest = arg[len(CACHE_SHM_ROOT) :]
+    return (arg.startswith(CACHE_SHM_ROOT) and CACHE_ARG.match(rest) is not None
+            and ".." not in rest.split("/"))  # fmt: skip
+
+
 CACHE_PY = REPO / ".venv" / "bin" / "python"
 
 

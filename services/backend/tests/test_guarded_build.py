@@ -190,6 +190,24 @@ def test_cache_runs_only_the_host_frame_cache_builder(gb: ModuleType) -> None:
     assert gb.cache_env()["PYTHONDONTWRITEBYTECODE"] == "1"
 
 
+def test_cache_takes_absolute_inputs_only_from_the_ram_scratch(gb: ModuleType) -> None:
+    """--labels map (payf07-detector.md 12): label files, frozen params and the map's KB live in
+    /dev/shm/poring-lab-tmp (rule 7); any other absolute path, or a '..', stays refused."""
+    shm = "/dev/shm/poring-lab-tmp/payf07"
+    step = gb.parse_step(f"cache@3600=--labels map --kb {shm}/kb --map-params {shm}/params.json "
+                         f"--map-labels {shm}/labels-frozen/S1.json --train S1")  # fmt: skip
+    assert gb.cache_cmd(step)[7:] == [
+        "--labels", "map", "--kb", f"{shm}/kb", "--map-params", f"{shm}/params.json",
+        "--map-labels", f"{shm}/labels-frozen/S1.json", "--train", "S1",
+    ]  # fmt: skip
+    for refused in ("cache=--kb /etc/passwd", "cache=--kb /dev/shm/other/kb",
+                    f"cache=--kb {shm}/../../../etc", "cache=--kb /dev/shm/poring-lab-tmp/",
+                    "cache=--kb /dev/shm/poring-lab-tmp/x;id",
+                    "cache=--kb /home/batt/x"):  # fmt: skip
+        with pytest.raises(ValueError):
+            gb.parse_step(refused)
+
+
 def test_tables_runs_only_the_packet_table_generator(gb: ModuleType) -> None:
     """The packet-table generator under the IO guard (2026-10-08): niced, the generator only,
     with its two options at most."""
