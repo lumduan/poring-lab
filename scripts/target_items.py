@@ -1171,10 +1171,11 @@ def cmd_score(_a: argparse.Namespace) -> int:
                 rec[it].append(
                     {"frame": f"{r['frame_id']:09d}", "t": t, "spot": wins[t].spot,
                      "view": list(wins[t].at), "floor_id": iv.floor_id,
-                     "centre": list(iv.centre), "found": nb.any(), "best": best}
+                     "centre": list(iv.centre), "found": bool(nb.any()), "best": best}
                 )  # fmt: skip
     # TEST-NEG
-    neg = pickle.loads((OUT / "scan" / "neg.pkl").read_bytes())
+    npath = OUT / "scan" / "neg.pkl"
+    neg = pickle.loads(npath.read_bytes()) if npath.exists() else {"jobs": [], "res": {}}
     n_neg = len(neg["jobs"])
     fneg: dict[int, int] = {it: 0 for it in tpls}
     fneg_layout_bad: dict[int, int] = {it: 0 for it in tpls}
@@ -1187,7 +1188,7 @@ def cmd_score(_a: argparse.Namespace) -> int:
     for it in tpls:
         rs = rec[it]
         n = len(rs)
-        found = sum(x["found"] for x in rs)
+        found = int(sum(bool(x["found"]) for x in rs))
         per_inst: dict[str, list[int]] = {}
         for x in rs:
             per_inst.setdefault(str(x["floor_id"]), [0, 0])
@@ -1196,7 +1197,7 @@ def cmd_score(_a: argparse.Namespace) -> int:
         pr = prec[it]
         recall = found / n if n else None
         precision = sum(pr) / len(pr) if pr else None
-        f100 = 100.0 * fneg[it] / max(1, n_neg)
+        f100 = 100.0 * fneg[it] / n_neg if n_neg else math.inf  # no negatives scanned: fails
         verdict = "NO VERDICT" if n < N_MIN else (
             "PASS" if recall is not None and recall >= RECALL_MIN and precision is not None
             and precision >= PRECISION_MIN and f100 <= FALSE_MAX else "FAIL")  # fmt: skip
@@ -1207,7 +1208,7 @@ def cmd_score(_a: argparse.Namespace) -> int:
             "recall": None if recall is None else round(recall, 4),
             "per_instance": per_inst,
             "test_detections": len(pr),
-            "test_true": sum(pr),
+            "test_true": int(sum(pr)),
             "precision": None if precision is None else round(precision, 4),
             "neg_frames": n_neg,
             "neg_false": fneg[it],

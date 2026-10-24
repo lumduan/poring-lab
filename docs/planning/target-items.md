@@ -253,3 +253,95 @@ had been read; the pilot's Dead Branch window (section 6) neither.
   by-eye note: spot 1 all four items, spots 2 / 4 / 6 some) is in that denominator by the
   pre-registration (3d), so FIT already predicts TEST recall well under 80 % unless the TEST spots
   are open ground. Written here before any TEST read.
+
+### 9b. RESULT (written 2026-10-24 18:3x ICT; clock times from `date` and file times)
+
+**The order of events (after 9a):** the first TEST read 18:06:32 (`scan --set test`, 18 minutes
+after the pre-registration commit 17:48:17 and 47 s after the freeze 18:05:45); the pilot's Dead
+Branch window 18:07; TEST-NEG (t1b + t2) 18:07:29-18:29:29; `score` 18:29:36. TEST frames: 113,
+all `ok` (none `ui_layout_mismatch`); TEST-NEG frames: 4,392 (pay_fild07 only).
+
+**THE VERDICT (section 5, as written): ALL FOUR ITEMS FAIL** (the recall bar; the other two bars
+pass for every item).
+
+| item | threshold NCC / RMS / inlier | TEST labelled (floor items) | recall (bar >= 80 %) | per floor item (spot 9 / 10 / 11) | precision (bar >= 90 %) | TEST-NEG false / 100 frames (bar <= 1.0) | verdict |
+|---|---|---|---|---|---|---|---|
+| 757 Rough Elunium | 0.90 / 20 / 0.8 | 42 (3) | **19.0 %** (8) | 8/14, 0/14, 0/14 | 100 % (8 / 8) | **0.0** (0 in 4,392) | **FAIL** |
+| 756 Rough Oridecon | 0.78 / 35 / 0.8 | 45 (3) | **40.0 %** (18) | 10/18, 8/15, 0/12 | 100 % (18 / 18) | **0.0** | **FAIL** |
+| 604 Dead Branch | 0.75 / 25 / 0.7 | 36 (3) | **66.7 %** (24) | 12/13, 12/15, 0/8 | 100 % (24 / 24) | **0.0** | **FAIL** |
+| 518 Honey | 0.72 / 55 / 0.7 | 51 (3) | **66.7 %** (34) | 19/19, 15/15, 0/17 | 100 % (34 / 34) | **0.0** | **FAIL** |
+
+- TEST item exclusions (not in the denominators): under_self 13, under_unit 5; no stacked, UI or
+  edge case. Spot 8 (looted, section 1) adds frames only: no detection there.
+- Not one false detection anywhere: 0 on the 113 TEST frames away from the items, 0 on 4,392
+  hunting frames (walking, fighting, Resin and the other confusers, the bot's cursor and name tags).
+
+**The natural Dead Branch (PILOT, section 6): FOUND.** All 9 frames of its window ([fall + 2.2 s,
+the pickup at 169.9 s): frames 000000153-000000161) had our character still, and on every one the
+frozen 604 detector put exactly one detection **0.8 px** from the predicted centre (NCC 0.83 >=
+0.75). No other 604 detection in those frames.
+
+**Why recall fails (measured; the by-eye parts labelled):**
+1. **Trees: 51 of the 174 labelled TEST items (29.3 %) have NO candidate at all** (masked NCC <
+   0.45 within 6 px): every one is at spot 11, which stands under a willow (by eye, contact sheet
+   `scratch/test_sheet_1.png`: the hanging branches cover all four items in every view). On FIT the
+   same measure is 177 of 475 labels (37.3 %; spot 1 under a canopy, spots 2 / 4 / 6 partly, by
+   eye). No pixel detector, template or learned, finds an item the client draws under a canopy:
+   these frames cap recall at ~71 % for 518 / 604 at spots like these.
+2. **On open ground (spots 9-10; POST-HOC, NOT the verdict) at the frozen thresholds:** 518 **100 %**
+   (34 / 34), 604 **85.7 %** (24 / 28), 756 54.5 % (18 / 33), 757 28.6 % (8 / 28), still with 0
+   false detections in 4,392 hunting frames. By eye on the TEST sheets, the open-ground misses are
+   visible items: 756 on dirt (spot 9, view 0), 757 at a bush edge in shade (spot 10, every view),
+   604 on grass (spot 10, view 0).
+3. **The FIT-chosen colour gates are what cost the Roughs and the Dead Branch on open ground**
+   (POST-HOC, NOT the verdict; `posthoc_curves.json`): with the RMS and inlier gates removed,
+   756 reaches 78.8 % on open ground at NCC >= 0.79 with 0.0 false / 100 hunting frames, and 604
+   96.4 % at NCC >= 0.76 with 0.02 / 100. For Honey the gates are essential: without them NCC >=
+   0.80 alone gives 0.91 false / 100 frames and NCC >= 0.70 gives 100 / 100, while with them it
+   stays 0.0 down to NCC 0.62.
+4. **757's template comes from ONE floor item** (amendment A: 3 of its 4 FIT floor items lay under
+   trees), so its FIT threshold went to NCC 0.90 / RMS 20. On the open TEST spots its best NCC at
+   the label has median 0.715 (27 of 28 >= 0.6): the template is too specific to one place's
+   light. TEST-NEG candidates were kept only down to the frozen NCC - 0.10, so a lower 757
+   threshold cannot be judged on this data.
+
+**What limits it, with numbers:**
+- **Item size:** templates (the mask's tight box) 757 14 x 16 px (136 mask px), 756 11 x 14
+  (71), 604 12 x 18 (73), 518 21 x 19 (265). The two Roughs are the smallest and the least
+  colourful: 756 has 71 sprite pixels.
+- **The forest background:** 12-298 NCC >= 0.45 local maxima per frame per item (FIT); the colour
+  gates (RMS, inlier share) are what bring false detections to zero (point 3).
+- **Occlusion:** trees 29.3 % of TEST labels and 37.3 % of FIT labels with no candidate (point 1);
+  our own character 13 TEST labels excluded (`under_self`), monsters 5 (`under_unit`).
+- **The 60-s life and the looters:** 40 of 48 staged items lived exactly 60.0 s; 8 of 48 (all of
+  spots 7 and 8) were taken by a Poporing 0.2-4.2 s after their fall. At 1 fps, after the 2.2-s
+  display delay, a detector has ~57 frames: time is not the limit, the Poporing is.
+- **Cost:** the whole-frame scan of 4 templates took ~1.8 s of one core per frame here (4,392
+  frames in 1,320 s on 6 workers, PNG decode and the NAS read included); a live version would scan
+  a region around the kill, as item_icons.py does (~60 ms for 200 x 200).
+
+**THE RECOMMENDATION (section 7):**
+- **(a) is NOT met for any item by the pre-registered bars.** The closest are **Honey (518) and
+  Dead Branch (604)**: on open ground 100 % and 85.7 % at the frozen thresholds, precision 100 %,
+  zero false detections in 4,392 hunting frames, and the natural Dead Branch found 0.8 px from its
+  cell. A "loot by sight" version could ADD them as a fast path (a seen 518 / 604 clicked
+  directly) while the hover sweep stays the fallback for everything else; that is a new, live
+  pre-registration (the parent and Batt decide), not a conclusion of this one.
+- **(b) for the Roughs (757, 756), and for any target under a tree:**
+  - Under a canopy the item is not drawn visibly: no detector fixes that. The bot keeps a non-visual
+    fallback there (the hover sweep), or a camera step; the staging should pick OPEN-ground spots.
+  - **Before any GPU:** re-stage on open ground for more VISIBLE floor items per Rough (757 had 1,
+    756 had 5) and fit the gates on more of them (multi-template per lighting), with FIT-NEG from
+    real hunting frames. It is CPU-only and reuses this tool.
+  - **A learned item class (GPU later, R1-R3; the parent decides): an ESTIMATE, not a measurement.**
+    ~300 visible labelled boxes per item from >= 30 floor items. Measured yield here: 12 spots gave
+    3 floor items per id at TEST and 4-7 at FIT; after the looters (2 of 12 spots) and the trees
+    (29-37 % of labels), ~8-10 visible labelled frames per item per spot. So ~30-40 open-ground
+    spots, i.e. 3-4 staging runs like this one (27 min each: 1,636 s for 12 spots), ~1.5-2 h.
+    Packets cannot tell a canopy, so its labels also need a visibility rule (a blind check of the
+    boxes or a map-model mask) before any training.
+- **For the next staging run (stage_items.py):** choose spots away from tree models, and clear or
+  avoid Poporings near the spot first.
+
+**Scratch** (/dev/shm/poring-lab-tmp/target-items/, client-derived, never committed): see the
+parent's report for what was kept and deleted.
