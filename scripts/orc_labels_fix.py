@@ -254,10 +254,12 @@ class LabelFate:
 
 
 def decide(fates: Sequence[LabelFate], occlusion: str, stack: bool,
+           o3h_tau: float = O3H_TAU,
            ) -> tuple[list[LabelFate], list[tuple[int, int, str]]]:  # fmt: skip
     """PURE: (kept, excluded (gid, mob, reason)) under one candidate (3i). The order: 1c's model
     test, then 2b / 2c, then the fit (an under-box failure is ``occluded_model``), then o3h's
-    0.48, then S3 among the kept."""
+    0.48 (``o3h_tau``: another map's own frozen value, payf07-detector.md 4e), then S3 among the
+    kept."""
     if occlusion not in OCCLUSIONS:
         raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
     kept: list[LabelFate] = []
@@ -269,7 +271,7 @@ def decide(fates: Sequence[LabelFate], occlusion: str, stack: bool,
             out.append((f.gid, f.mob, f.pre))
         elif f.fit is None or f.fail is not None:
             out.append((f.gid, f.mob, OCCLUDED if f.under else (f.fail or "unfit")))
-        elif f.under and occlusion == "o3h" and f.fit[0] < O3H_TAU:
+        elif f.under and occlusion == "o3h" and f.fit[0] < o3h_tau:
             out.append((f.gid, f.mob, OCCLUDED))
         else:
             kept.append(f)
@@ -761,6 +763,12 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
 _JOB: dict[str, Any] = {}  # the open session, occluders and parameters, inherited by fork
 
 
+def _read(ref: qa_export.JpegRef) -> npt.NDArray[np.uint8]:
+    """A frame as BGR: warp_watch's JPEG shards here; another map's recorder session sets its own
+    reader in _JOB (map_labels.py, payf07-detector.md)."""
+    return _JOB.get("reader", qa_export.read_jpeg)(ref)  # type: ignore[no-any-return]
+
+
 def run_parallel(func: Any, items: Sequence[Any], workers: int) -> list[Any]:
     """``func`` over ``items`` in ``workers`` forked processes (the job state in _JOB is inherited,
     never pickled); in order."""
@@ -789,7 +797,7 @@ def walkers_at(sess: Session, t: int, ms: int, occluders: Occluders,
     units = unit_anchors(world, scene)
     out: dict[int, tuple[EntityState, SpritePrediction | None, int | None]] = {}
     for e in world.entities:
-        if e.objtype != 5 or e.hidden or e.job not in WALKERS:
+        if e.objtype != 5 or e.hidden or e.job not in _JOB.get("walkers", WALKERS):
             continue
         st = now.get(e.gid)
         sheet = lab.sheets(e.job)
@@ -835,7 +843,7 @@ def _offset_coarse(ref: qa_export.JpegRef) -> list[tuple[int, int, dict[int, flo
     found = walker_samples(sess, ref.t_mono_ns, list(COARSE_MS), occluders)
     if not found:
         return []
-    bgr = qa_export.read_jpeg(ref)
+    bgr = _read(ref)
     out = []
     for gid, by in found.items():
         errs = {}
@@ -852,7 +860,7 @@ def _offset_fine(job: tuple[qa_export.JpegRef, list[int]]) -> list[tuple[int, di
     """[(gid, {fine offset: error px})] for the given samples of one frame."""
     ref, gids = job
     sess, occluders = _JOB["sess"], _JOB["occluders"]
-    bgr = qa_export.read_jpeg(ref)
+    bgr = _read(ref)
     out: dict[int, dict[int, float]] = defaultdict(dict)
     for ms in _JOB["fine"]:
         found = walkers_at(sess, ref.t_mono_ns, ms, occluders)
@@ -937,7 +945,7 @@ def _anchor_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[
     if not cands:
         return [], dropped
     dropped["frame_with_standing"] += 1
-    bgr = qa_export.read_jpeg(ref)
+    bgr = _read(ref)
     rows = []
     for e, _st, sheet, pred, facing in cands:
         bo = occ.best_offset(bgr, sheet, pred, SEARCH_PX)
@@ -1052,7 +1060,7 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
             seen[e.job] += 1
     if not cands and not under:
         return [], dropped, seen
-    bgr = qa_export.read_jpeg(ref)
+    bgr = _read(ref)
     if not sess.layout_ok(bgr):  # a human demo's frame in another UI layout (3f)
         dropped["frame_ui_layout_mismatch"] += 1
         return [], dropped, seen
@@ -1067,7 +1075,7 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
             fit = fit_label(grey, valid, sheet, pred, r)
             ok = fit is not None and fit[0] >= tau and not at_edge(fit[1], fit[2], r)
             if ok and occlusion == "o3h":
-                ok = fit is not None and fit[0] >= O3H_TAU
+                ok = fit is not None and fit[0] >= float(_JOB.get("o3h_tau", O3H_TAU))
             if not ok:
                 dropped["occluded_model"] += 1
                 dropped[f"occluded_model:{e.job}"] += 1
@@ -1353,10 +1361,12 @@ class FixLabeler:
     def __init__(self, lab: qa_export.Labeler, params: dict[str, Any],
                  occluders: Occluders | None = None, rule: str = "1a",
                  occlusion: str = "1c", stack: bool = False, wing: bool = False,
-                 fit_all: bool = False) -> None:  # fmt: skip
+                 fit_all: bool = False, map_name: str = MAP) -> None:  # fmt: skip
         if occlusion not in OCCLUSIONS:
             raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
         self.lab = lab
+        self.map_name = map_name  # the map whose models the occluders are (payf07-detector.md)
+        self.o3h_tau = float(params.get("o3h_tau", O3H_TAU))  # 3i's 0.48 unless frozen per map
         self.params = params
         self.rule = rule
         self.occlusion, self.stack, self.wing, self.fit_all = occlusion, stack, wing, fit_all
@@ -1410,8 +1420,8 @@ class FixLabeler:
         replay, world, all_states, rules = lab.timeline.at_world(tw)
         if world.self_pos is None or not world.map:
             return None
-        if map_key(world.map) != MAP:
-            return FixFrame(t, [], [], 0, applies=False)  # the fix (and its models) is orcsdun01's
+        if map_key(world.map) != self.map_name:
+            return FixFrame(t, [], [], 0, applies=False)  # the fix (and its models) is the map's
         scene = occ.scene_for(lab, world.map, world.self_pos)
         states = {s.gid: s for s in all_states}
         grey = None if bgr is None else bgr[:, :, :3].astype(float) @ label_check.GREY
@@ -1451,7 +1461,7 @@ class FixLabeler:
                                            state=st.state))  # fmt: skip
                 continue
             out.fates.append(self.fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes))
-        kept, out.excluded = decide(out.fates, self.occlusion, self.stack)
+        kept, out.excluded = decide(out.fates, self.occlusion, self.stack, self.o3h_tau)
         out.kept = [self.label(f) for f in kept]
         return out
 
