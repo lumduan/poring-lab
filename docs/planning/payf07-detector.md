@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "PRE-REGISTERED 2026-10-24 18:25:24 ICT (7ed0422). 1d STOPPED twice on its 50-sample floor (17, then 47 under Amendment A): nothing frozen, T1 NOT run, no TEST read; proposal P1 (120 ms, = the P2 diagnostic). Amendment B (engaged) after a FIT finding. Provisional P1 + B: T_h 0.479, TRAIN labels 2,140 kept / 1,307 in 2,660 whole frames, the T2 pack built (seed 21, 180 crops)"
+status: "RESULT 2026-10-24 19:30 ICT: T1 PASSES under Amendment C (C1 2/463, 10k); T2 round 1 FAILS on Elder Willow (species 93.3 % < 95 %, 10m) -> the TRAINING TIER FAILS: nothing of pay_fild07 trains on this round. Pre-registered 18:25:24 (7ed0422); Amendment C (P1, 1d = 120 ms) 19:08:32 by the parent."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md]
-next_action: "The parent / Batt: decide 1d (10a; P1 = 120 ms recommended, P2 diagnostic also 120 ms), record it as Amendment C, then 10h: freeze, T1 on TEST, the frozen TRAIN labels, the T2 pack (seed 21) and two new blind labellers. Elder Willow is thin (100 boxes in whole frames): consider a staged block first (10i)."
+next_action: "A NEW pre-registered round (parent): a fit floor for labels not under a model, new seed, two NEW labellers; more Elder Willow labels from a still warp-and-watch collection (immune GM); then the cache + evaluation pre-registration before any training."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
