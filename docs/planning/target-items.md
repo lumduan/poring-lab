@@ -31,6 +31,29 @@ manifests, the staging tool's events.jsonl, the staged session's frame INDEX (th
 per-frame JSON; no PNG decoded), and `target_items.py inventory` (packet-only label counts per
 split, with the provisional 36-px geometry of 3c). No pixel was read.
 
+## AMENDMENT A (written 2026-10-24 18:00 ICT from `date`; the commit time of this amendment is its time. AFTER the first FIT run, BEFORE the freeze and BEFORE any TEST or TEST-NEG frame is read)
+
+**What happened:** section 4.2's builder returned NO template for 757 (Rough Elunium); 756, 604
+and 518 built (sizes 11 x 14, 12 x 18, 21 x 19 px; alignment medians 0-1 px). 757's 55 FIT samples
+come from 4 floor items: 131 (spot 2, 10 samples), 139 (spot 4, 15), 143 (spot 5, 17), 147 (spot
+6, 13). By eye on the FIT crops (Claude, 2026-10-24 ~17:58, `scratch/s757.png`): 131 lies under a
+willow's hanging branches (the rock shows through, partly), 139 under a willow (barely visible),
+147 under a leaf canopy (not visible at all); only 143 (open dirt) shows the rock. The median of
+the seeded windows is the ground's colour (centre RGB 47 / 81 / 28 vs the ring's 49 / 84 / 33),
+so the foreground mask fails. Lowering the mask threshold (30 / 24 / 18) builds templates of
+grass and leaves (anchors -12 / -11 / -13 px): not a fix.
+
+**The change (the only one; 757 only):** for an item whose builder returns no template, the
+template samples are restricted to the floor items judged VISIBLE by eye on the FIT crops: for
+757, floor id **143** (17 samples; the sprite is the same for every floor item of an id). Its
+alignment check (4.4) runs on those samples. Everything else is unchanged: 757's threshold (4.5) is
+chosen on ALL its FIT labels (occluded ones included) and FIT-NEG, and TEST counts every labelled
+757 as pre-registered.
+
+**Reported:** the canopy is the main limit seen on FIT: by eye on the FIT contact sheet, spot 1's
+four items are under a canopy in every view, spots 2 / 4 / 6 have one to four items under
+trees; spots 0, 3, 5 are open ground. Measured numbers come with the result.
+
 ## 1. The data and what the packets say (OFFLINE ground truth, ADR-0007)
 
 | set | recording (NAS) | frames | what the packets say |

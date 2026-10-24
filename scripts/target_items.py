@@ -26,12 +26,11 @@ import hashlib
 import io
 import json
 import math
-import os
 import sys
 import tarfile
 import time
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -89,6 +88,9 @@ ITEM_GAP_PX = 24.0
 REGION_MARGIN_PX = 44.0
 UI_MARGIN_PX = 30.0
 ALIGN_STOP_PX = 3.0  # FIT: median |offset| of the best match vs the prediction above it -> STOP
+# AMENDMENT A (2026-10-24 18:00): an item with no template is rebuilt from the floor items judged
+# VISIBLE by eye on the FIT crops (757: 131 / 139 / 147 lie under trees)
+AMEND_A_VISIBLE: dict[int, tuple[int, ...]] = {757: (143,)}
 
 # --- the detector -------------------------------------------------------------------------------
 CAND_NCC = 0.45
@@ -214,6 +216,9 @@ class ItemView:
     centre: tuple[float, float]
     box: Rect
     excl: list[str] = field(default_factory=list)
+    t_a: int = 0
+    t_v: int = 0
+    vanished: bool = False
 
     @property
     def labelled(self) -> bool:
@@ -555,14 +560,11 @@ def map_spans(events: Sequence[Mapping[str, Any]], map_name: str = MAP) -> list[
         a = t + int(MAP_SETTLE_S * NS)
         if a < t1:
             out.append((a, t1))
-    # merge consecutive same-map spans (a same-map @warp is a map change too)
-    merged: list[tuple[int, int]] = []
-    for a, b in out:
-        if merged and a <= merged[-1][1] + int(MAP_SETTLE_S * NS):
-            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
-        else:
-            merged.append((a, b))
-    return merged
+    return out
+
+
+def in_spans(spans: Sequence[tuple[int, int]], t: int) -> bool:
+    return any(a <= t < b for a, b in spans)
 
 
 # --- the packet labels (OFFLINE ground truth) ---------------------------------------------------
@@ -635,16 +637,14 @@ class Truth:
                     (round(g[0], 2), round(g[1], 2)),
                     (round(c[0], 2), round(c[1], 2)),
                     square(c, side),
+                    t_a=f.t_a,
+                    t_v=f.t_v,
+                    vanished=f.vanished,
                 )
             )
+        present = [(v.item_id, v.centre) for v in views]
         views = exclusions([v for v in views if v.phase != "none"], sbox, ubs, rects)
-        return {
-            "status": "ok",
-            "gm": gm,
-            "self_box": sbox,
-            "items": views,
-            "floors": {f.floor_id: f for f in self.present(t_f)},
-        }
+        return {"status": "ok", "gm": gm, "self_box": sbox, "items": views, "present": present}
 
 
 def ui_rects() -> list[Rect]:
@@ -674,6 +674,142 @@ def staged_frames(split: str) -> list[tuple[Window, dict[str, Any]]]:
         if w is not None and split_of_spot(w.spot) == split:
             out.append((w, r))
     return out
+
+
+def best_offset(crop: Any, tpl: Tpl, centre: tuple[float, float], r: int) -> dict[str, Any] | None:
+    """PURE: the masked NCC of ``tpl`` with its centre within +-r px of ``centre`` (crop px, u v):
+    the best value and its offset; None when the window leaves the crop."""
+    import item_icons as ii
+
+    h, w = tpl.size
+    x_tl = int(round(centre[0] - (w - 1) / 2))
+    y_tl = int(round(centre[1] - (h - 1) / 2))
+    y0, x0 = y_tl - r, x_tl - r
+    if y0 < 0 or x0 < 0 or y0 + h + 2 * r > crop.shape[0] or x0 + w + 2 * r > crop.shape[1]:
+        return None
+    sub = crop[y0 : y0 + h + 2 * r, x0 : x0 + w + 2 * r]
+    ncc = ii.match_maps(sub, [tpl.as_icon()])[0][0][: 2 * r + 1, : 2 * r + 1]
+    ncc = np.where(np.isfinite(ncc), ncc, -1.0)
+    iy, ix = np.unravel_index(int(np.argmax(ncc)), ncc.shape)
+    return {"ncc": float(ncc[iy, ix]), "dx": int(ix) - r, "dy": int(iy) - r}
+
+
+def match_frame(
+    cands: Mapping[int, Any], labelled: Sequence[ItemView], present: Sequence[Any]
+) -> dict[int, dict[str, Any]]:
+    """PURE: per target id, the labelled items' nearby candidates (lists of n x 3 ncc / rms /
+    inl, one per labelled item, within MATCH_PX of its centre) and the FALSE candidates (m x 3:
+    not within MATCH_PX of any present item of that id)."""
+    out = {}
+    for it in TARGETS:
+        c = np.asarray(cands.get(it, np.zeros((0, 5))), float).reshape(-1, 5)
+        labs = [iv for iv in labelled if iv.item_id == it]
+        pos = []
+        if labs:
+            nb = near([iv.centre for iv in labs], c[:, :2])
+            pos = [c[nb[j], 2:5] for j in range(len(labs))]
+        pc = [cen for iid, cen in present if iid == it]
+        false = ~near(c[:, :2], pc).any(1) if pc else np.ones(len(c), bool)
+        out[it] = {"pos": pos, "false": c[false, 2:5], "labs": labs, "cands": c}
+    return out
+
+
+# --- the scanner pool -------------------------------------------------------------------------
+
+WORKERS = 6
+_POOL: dict[str, Any] = {}
+
+
+def _scan_job(job: tuple[str, dict[str, Any]]) -> tuple[int, bool, dict[int, Any]]:
+    sid, row = job
+    img = read_frame(sid, row)
+    ok = bool(_POOL["layout"].ok(img))
+    return int(row["t"]), ok, scan(img, _POOL["tpls"], _POOL["drop"])
+
+
+def scan_many(jobs: Sequence[tuple[str, dict[str, Any]]], tpls: Sequence[Tpl]) -> dict[int, Any]:
+    """{t: (layout ok, candidates)} over the frames, WORKERS processes (fork), each frame once."""
+    import multiprocessing as mp
+
+    import item_labels as il
+
+    _POOL.update(tpls=list(tpls), drop=[*ui_rects(), self_screen_box()], layout=il.Layout())
+    out: dict[int, Any] = {}
+    t0 = time.time()
+    ctx = mp.get_context("fork")
+    with ctx.Pool(WORKERS) as pool:
+        for i, (t, ok, c) in enumerate(pool.imap(_scan_job, jobs, chunksize=2)):
+            out[t] = (ok, c)
+            if (i + 1) % 200 == 0:
+                print(f"  {i + 1}/{len(jobs)} frames ({time.time() - t0:.0f} s)", flush=True)
+    return out
+
+
+def pilot_frames(part: str) -> list[dict[str, Any]]:
+    """The PILOT's frames: 'neg' = on pay_fild07 outside the Dead Branch guard (FIT-NEG);
+    'natural' = in [its fall + D_APPEAR, its vanish)."""
+    import item_labels as il
+
+    ev = load_events(PILOT)
+    db = [f for f in il.floor_items(ev) if f.item_id in TARGETS]
+    spans = map_spans(ev)
+    rows = load_index(PILOT)
+    if part == "natural":
+        return [r for r in rows for f in db if f.t_a + int(D_APPEAR_S * NS) <= int(r["t"]) < f.t_v]
+    g = int(PILOT_GUARD_S * NS)
+    return [
+        r
+        for r in rows
+        if in_spans(spans, int(r["t"]))
+        and not any(f.t_a - g <= int(r["t"]) < f.t_v + g for f in db)
+    ]
+
+
+def neg_frames() -> list[tuple[str, dict[str, Any]]]:
+    out = []
+    for sid in NEGATIVES:
+        ev = load_events(sid)
+        if any(e["type"] == "floor_item_appear" and e.get("item_id") in TARGETS for e in ev):
+            raise SystemExit(f"{sid}: a target item is on the floor: not a negative session")
+        spans = map_spans(ev)
+        out += [(sid, r) for r in load_index(sid) if in_spans(spans, int(r["t"]))]
+    return out
+
+
+# --- params ---------------------------------------------------------------------------------------
+
+PDIR = OUT / "params"
+
+
+def save_tpls(tpls: Mapping[int, Tpl], path: Path) -> None:
+    arrs = {}
+    for it, t in tpls.items():
+        arrs[f"rgb_{it}"] = np.asarray(t.rgb, np.float32)
+        arrs[f"mask_{it}"] = np.asarray(t.mask, bool)
+    with open(path, "wb") as fh:
+        np.savez(fh, **arrs)
+
+
+def load_frozen() -> tuple[dict[str, Any], dict[int, Tpl]]:
+    fz = PDIR / "frozen.json"
+    if not fz.exists():
+        raise SystemExit("not frozen: run fit, then freeze (target-items.md section 4)")
+    f = json.loads(fz.read_text())
+    for name in ("params.json", "templates.npz"):
+        if sha256(PDIR / name) != f[name]:
+            raise SystemExit(f"{name}: sha256 differs from the frozen one")
+    p = json.loads((PDIR / "params.json").read_text())
+    z = np.load(PDIR / "templates.npz")
+    tpls = {}
+    for it in TARGETS:
+        if f"rgb_{it}" in z.files:
+            a = p["items"][str(it)]["anchor"]
+            tpls[it] = Tpl(it, z[f"rgb_{it}"], z[f"mask_{it}"], (float(a[0]), float(a[1])))
+    return p, tpls
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 # --- commands ------------------------------------------------------------------------------------
@@ -723,6 +859,404 @@ def cmd_inventory(_a: argparse.Namespace) -> int:
     return 0
 
 
+def _sample_ok(iv: ItemView, present: Sequence[Any], rects: Sequence[Rect], t_f: int) -> bool:
+    """Section 4.1's sampling rule (the ground point; anchors do not exist yet)."""
+    if not iv.labelled or (t_f - iv.t_a) / NS < TPL_MIN_AGE_S:
+        return False
+    if iv.vanished and (iv.t_v - t_f) / NS < TPL_BEFORE_VANISH_S:
+        return False
+    u, v = iv.ground
+    if not (
+        REGION_MARGIN_PX <= u <= GAME[0] - REGION_MARGIN_PX
+        and REGION_MARGIN_PX <= v <= GAME[1] - REGION_MARGIN_PX
+    ):
+        return False
+    if any(
+        r[0] - UI_MARGIN_PX <= u <= r[2] + UI_MARGIN_PX
+        and r[1] - UI_MARGIN_PX <= v <= r[3] + UI_MARGIN_PX
+        for r in rects
+    ):
+        return False
+    n_close = sum(1 for _iid, c in present if math.hypot(c[0] - u, c[1] - v) <= ITEM_GAP_PX)
+    return n_close <= 1  # itself
+
+
+def cmd_fit(_a: argparse.Namespace) -> int:
+    tr = Truth(STAGED)
+    rects = ui_rects()
+    fit = staged_frames("fit")
+    PDIR.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    # 1. samples (packet rules), then their crops (pixels: FIT frames only)
+    picks: list[tuple[dict[str, Any], ItemView]] = []
+    for _w, r in fit:
+        fr = tr.frame(int(r["t"]), None, rects)
+        if fr["status"] != "ok":
+            continue
+        for iv in fr["items"]:
+            if iv.item_id in TARGETS and _sample_ok(iv, fr["present"], rects, int(r["t"])):
+                picks.append((r, iv))
+    by_frame: dict[int, list[ItemView]] = {}
+    rows = {int(r["t"]): r for r, _iv in picks}
+    for r, iv in picks:
+        by_frame.setdefault(int(r["t"]), []).append(iv)
+    import item_labels as il
+
+    layout = il.Layout()
+    crops: dict[int, list[Any]] = {it: [] for it in TARGETS}
+    inst: dict[int, list[int]] = {it: [] for it in TARGETS}
+    names: dict[int, list[str]] = {it: [] for it in TARGETS}
+    layout_bad = 0
+    for t, ivs in sorted(by_frame.items()):
+        img = read_frame(STAGED, rows[t])
+        if not layout.ok(img):
+            layout_bad += 1
+            continue
+        for iv in ivs:
+            cu, cv = int(round(iv.ground[0])), int(round(iv.ground[1]))
+            c = img[cv - CROP_HALF : cv + CROP_HALF + 1, cu - CROP_HALF : cu + CROP_HALF + 1]
+            crops[iv.item_id].append(np.ascontiguousarray(c))
+            inst[iv.item_id].append(iv.floor_id)
+            names[iv.item_id].append(f"{rows[t]['frame_id']:09d}")
+    print(f"samples: { {k: len(v) for k, v in crops.items()} } ({time.time() - t0:.0f} s)")
+    with open(PDIR / "fit_samples.npz", "wb") as fh:  # client pixels: /dev/shm only
+        np.savez(
+            fh,
+            **{f"crops_{it}": np.stack(v) for it, v in crops.items() if v},
+            **{f"inst_{it}": np.asarray(inst[it]) for it in TARGETS if inst[it]},
+        )
+    if getattr(_a, "samples_only", False):
+        return 0
+    # 2-3. templates and anchors
+    tpls: dict[int, Tpl] = {}
+    rep: dict[str, Any] = {"layout_bad_sample_frames": layout_bad, "items": {}}
+    for it in TARGETS:
+        tp = build_seeded(np.stack(crops[it]) if crops[it] else np.zeros((0, 89, 89, 3)), it,
+                          inst[it])  # fmt: skip
+        used = list(range(len(crops[it])))
+        amended = None
+        if tp is None and it in AMEND_A_VISIBLE and crops[it]:
+            used = [i for i, f in enumerate(inst[it]) if f in AMEND_A_VISIBLE[it]]
+            amended = list(AMEND_A_VISIBLE[it])
+            tp = build_seeded(np.stack([crops[it][i] for i in used]), it,
+                              [inst[it][i] for i in used])  # fmt: skip
+        if tp is None:
+            rep["items"][str(it)] = {"samples": len(crops[it]), "template": None}
+            continue
+        tpls[it] = tp
+        # 4. the alignment check on the samples the template was built from
+        offs = []
+        for c in [crops[it][i] for i in used]:
+            m = best_offset(c, tp, (CROP_HALF + tp.anchor[0], CROP_HALF + tp.anchor[1]), 8)
+            if m is not None:
+                offs.append((m["dx"], m["dy"], m["ncc"]))
+        o = np.asarray(offs, float)
+        rep["items"][str(it)] = {
+            "samples": len(crops[it]),
+            "instances": len(set(inst[it])),
+            "amendment_a_floor_ids": amended,
+            "samples_used": len(used),
+            "kept": tp.samples,
+            "kept_instances": tp.instances,
+            "size_hw": list(tp.size),
+            "mask_px": int(np.asarray(tp.mask).sum()),
+            "anchor": list(tp.anchor),
+            "align_median_abs_dx": float(np.median(np.abs(o[:, 0]))),
+            "align_median_abs_dy": float(np.median(np.abs(o[:, 1]))),
+            "align_ncc_median": round(float(np.median(o[:, 2])), 4),
+            "align_ncc_p10": round(float(np.quantile(o[:, 2], 0.1)), 4),
+            "frames_first": names[it][:3],
+        }
+        print(json.dumps({it: rep["items"][str(it)]}), flush=True)
+    save_tpls(tpls, PDIR / "templates.npz")
+    stop = [
+        it
+        for it in tpls
+        if max(rep["items"][str(it)]["align_median_abs_dx"],
+               rep["items"][str(it)]["align_median_abs_dy"]) > ALIGN_STOP_PX
+    ]  # fmt: skip
+    if stop:
+        rep["STOP"] = f"alignment: median |offset| > {ALIGN_STOP_PX} px for {stop}"
+        (PDIR / "fit_report.json").write_text(json.dumps(rep, indent=1))
+        print(rep["STOP"])
+        return 2
+    anchors = {it: t.anchor for it, t in tpls.items()}
+    # 5. candidates on FIT (staged) + FIT-NEG (pilot outside the guard)
+    jobs = [(STAGED, r) for _w, r in fit] + [(PILOT, r) for r in pilot_frames("neg")]
+    res = scan_many(jobs, list(tpls.values()))
+    pos: dict[int, list[Any]] = {it: [] for it in tpls}
+    false: dict[int, list[Any]] = {it: [] for it in tpls}
+    n_neg = 0
+    n_cand: Counter[int] = Counter()
+    st: Counter[str] = Counter()
+    labelled_n: Counter[int] = Counter()
+    for _w, r in fit:
+        t = int(r["t"])
+        ok, cands = res[t]
+        fr = tr.frame(t, anchors, rects)
+        status = fr["status"] if ok or fr["status"] != "ok" else "ui_layout_mismatch"
+        st[status] += 1
+        if status != "ok":
+            continue
+        n_neg += 1
+        labs = [iv for iv in fr["items"] if iv.labelled and iv.item_id in tpls]
+        mf = match_frame(cands, labs, fr["present"])
+        for it in tpls:
+            pos[it] += mf[it]["pos"]
+            false[it].append(mf[it]["false"])
+            n_cand[it] += len(mf[it]["cands"])
+            labelled_n[it] += len(mf[it]["labs"])
+    n_pilot = 0
+    for r in pilot_frames("neg"):
+        _ok, cands = res[int(r["t"])]
+        n_pilot += 1
+        for it in tpls:
+            c = np.asarray(cands.get(it, np.zeros((0, 5))), float).reshape(-1, 5)
+            false[it].append(c[:, 2:5])
+            n_cand[it] += len(c)
+    nf = n_neg + n_pilot
+    params: dict[str, Any] = {
+        "pre_registration": "docs/planning/target-items.md fbc077e (2026-10-24 17:48:17 +0700)",
+        "constants": {
+            k: globals()[k]
+            for k in (
+                "D_APPEAR_S",
+                "D_GONE_S",
+                "OX",
+                "OY",
+                "STILL_LEAD_S",
+                "STILL_MAX_S",
+                "STILL_S",
+                "ITEM_BOX",
+                "SAMPLE_BOX",
+                "UNIT_HALF_W",
+                "UNIT_UP",
+                "UNIT_DOWN",
+                "UNIT_LAG_S",
+                "SELF_PAD",
+                "STACK_IOU",
+                "CROP_HALF",
+                "HALF",
+                "SEED",
+                "REFINE",
+                "ITERS",
+                "KEEP_SHARE",
+                "MIN_SAMPLES",
+                "CAND_NCC",
+                "LOCAL_R",
+                "NMS_PX",
+                "INLIER_PX",
+                "FIT_FALSE_MAX",
+                "MATCH_PX",
+                "RECALL_MIN",
+                "FALSE_MAX",
+                "PRECISION_MIN",
+                "N_MIN",
+            )
+        },  # fmt: skip
+        "self_screen_box": self_screen_box(),
+        "fit_frames": {"staged_eval": n_neg, "pilot_neg": n_pilot, "status": dict(st)},
+        "items": {},
+    }
+    for it, tp in tpls.items():
+        gs = grid_stats(pos[it], np.concatenate(false[it]) if false[it] else [], nf)
+        ch = choose(gs, FIT_FALSE_MAX)
+        params["items"][str(it)] = {
+            "anchor": list(tp.anchor),
+            "size_hw": list(tp.size),
+            "mask_px": int(np.asarray(tp.mask).sum()),
+            "threshold": ch,
+            "fit_labelled": labelled_n[it],
+            "fit_candidates_per_frame": round(n_cand[it] / max(1, nf), 1),
+        }
+        print(json.dumps({it: params["items"][str(it)]}), flush=True)
+    (PDIR / "params.json").write_text(json.dumps(params, indent=1, default=str))
+    (PDIR / "fit_report.json").write_text(json.dumps(rep, indent=1))
+    with open(PDIR / "fit_cands.pkl", "wb") as fh:  # for the report's curves (FIT only)
+        import pickle
+
+        pickle.dump({"pos": pos, "false": false, "n_frames": nf}, fh)
+    print(f"fit done ({time.time() - t0:.0f} s); freeze next")
+    return 0
+
+
+def cmd_freeze(_a: argparse.Namespace) -> int:
+    f = {
+        "params.json": sha256(PDIR / "params.json"),
+        "templates.npz": sha256(PDIR / "templates.npz"),
+        "frozen_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
+    }
+    (PDIR / "frozen.json").write_text(json.dumps(f, indent=1))
+    print(json.dumps(f, indent=1))
+    return 0
+
+
+def cmd_scan(a: argparse.Namespace) -> int:
+    import pickle
+
+    p, tpls = load_frozen()
+    if a.set == "test":
+        jobs = [(STAGED, r) for _w, r in staged_frames("test")]
+    elif a.set == "neg":
+        jobs = neg_frames()
+    else:
+        jobs = [(PILOT, r) for r in pilot_frames("natural")]
+    print(f"scan {a.set}: {len(jobs)} frames", flush=True)
+    t0 = time.time()
+    res = scan_many(jobs, [tpls[it] for it in TARGETS if it in tpls])
+    if a.set == "neg":  # keep the candidates the curves can use (NCC >= the frozen one - 0.10)
+        lo = {it: float(p["items"][str(it)]["threshold"]["ncc"]) - 0.10 for it in tpls}
+        res = {
+            t: (ok, {it: c[c[:, 2] >= lo[it]] for it, c in cs.items()})
+            for t, (ok, cs) in res.items()
+        }
+    sdir = OUT / "scan"
+    sdir.mkdir(parents=True, exist_ok=True)
+    with open(sdir / f"{a.set}.pkl", "wb") as fh:
+        pickle.dump({"jobs": [(s, r) for s, r in jobs], "res": res}, fh)
+    print(f"scan {a.set} done ({time.time() - t0:.0f} s)")
+    return 0
+
+
+def _detections(c: Any, th: Mapping[str, Any]) -> Any:
+    c = np.asarray(c, float).reshape(-1, 5)
+    return c[passes(c, float(th["ncc"]), float(th["rms"]), float(th["inl"]))]
+
+
+def cmd_score(_a: argparse.Namespace) -> int:
+    import pickle
+
+    p, tpls = load_frozen()
+    anchors = {it: t.anchor for it, t in tpls.items()}
+    th = {it: p["items"][str(it)]["threshold"] for it in tpls}
+    rects = ui_rects()
+    out: dict[str, Any] = {"items": {}}
+    # TEST: recall, precision
+    tr = Truth(STAGED)
+    test = pickle.loads((OUT / "scan" / "test.pkl").read_bytes())
+    wins = {int(r["t"]): w for w, r in staged_frames("test")}
+    st: Counter[str] = Counter()
+    rec: dict[int, list[dict[str, Any]]] = {it: [] for it in tpls}
+    prec: dict[int, list[bool]] = {it: [] for it in tpls}
+    excl: Counter[str] = Counter()
+    for _sid, r in test["jobs"]:
+        t = int(r["t"])
+        ok, cands = test["res"][t]
+        fr = tr.frame(t, anchors, rects)
+        status = fr["status"] if ok or fr["status"] != "ok" else "ui_layout_mismatch"
+        st[status] += 1
+        if status != "ok":
+            continue
+        for iv in fr["items"]:
+            for x in iv.excl:
+                excl[x] += 1
+        for it in tpls:
+            d = _detections(cands.get(it, np.zeros((0, 5))), th[it])
+            pc = [c for iid, c in fr["present"] if iid == it]
+            hit = near(d[:, :2], pc).any(1) if pc else np.zeros(len(d), bool)
+            prec[it] += [bool(x) for x in hit]
+            for iv in fr["items"]:
+                if iv.item_id != it or not iv.labelled:
+                    continue
+                nb = near([iv.centre], d[:, :2])[0]
+                best = None
+                if nb.any():
+                    dd = d[nb]
+                    k = int(np.argmax(dd[:, 2]))
+                    best = [
+                        round(float(dd[k, 0] - iv.centre[0]), 1),
+                        round(float(dd[k, 1] - iv.centre[1]), 1),
+                        round(float(dd[k, 2]), 3),
+                    ]
+                rec[it].append(
+                    {"frame": f"{r['frame_id']:09d}", "t": t, "spot": wins[t].spot,
+                     "view": list(wins[t].at), "floor_id": iv.floor_id,
+                     "centre": list(iv.centre), "found": nb.any(), "best": best}
+                )  # fmt: skip
+    # TEST-NEG
+    neg = pickle.loads((OUT / "scan" / "neg.pkl").read_bytes())
+    n_neg = len(neg["jobs"])
+    fneg: dict[int, int] = {it: 0 for it in tpls}
+    fneg_layout_bad: dict[int, int] = {it: 0 for it in tpls}
+    for _t, (ok, cands) in neg["res"].items():
+        for it in tpls:
+            n = len(_detections(cands.get(it, np.zeros((0, 5))), th[it]))
+            fneg[it] += n
+            if not ok:
+                fneg_layout_bad[it] += n
+    for it in tpls:
+        rs = rec[it]
+        n = len(rs)
+        found = sum(x["found"] for x in rs)
+        per_inst: dict[str, list[int]] = {}
+        for x in rs:
+            per_inst.setdefault(str(x["floor_id"]), [0, 0])
+            per_inst[str(x["floor_id"])][0] += int(x["found"])
+            per_inst[str(x["floor_id"])][1] += 1
+        pr = prec[it]
+        recall = found / n if n else None
+        precision = sum(pr) / len(pr) if pr else None
+        f100 = 100.0 * fneg[it] / max(1, n_neg)
+        verdict = "NO VERDICT" if n < N_MIN else (
+            "PASS" if recall is not None and recall >= RECALL_MIN and precision is not None
+            and precision >= PRECISION_MIN and f100 <= FALSE_MAX else "FAIL")  # fmt: skip
+        out["items"][str(it)] = {
+            "threshold": th[it],
+            "test_labelled": n,
+            "test_found": found,
+            "recall": None if recall is None else round(recall, 4),
+            "per_instance": per_inst,
+            "test_detections": len(pr),
+            "test_true": sum(pr),
+            "precision": None if precision is None else round(precision, 4),
+            "neg_frames": n_neg,
+            "neg_false": fneg[it],
+            "neg_false_on_non_hunt_layout": fneg_layout_bad[it],
+            "neg_false_per_100": round(f100, 3),
+            "verdict": verdict,
+            "misses": [x for x in rs if not x["found"]],
+        }
+    out["test_status"] = dict(st)
+    out["test_exclusions"] = dict(excl)
+    # the natural Dead Branch
+    pil = pickle.loads((OUT / "scan" / "pilot.pkl").read_bytes())
+    ptr = Truth(PILOT)
+    nat = []
+    for _sid, r in pil["jobs"]:
+        t = int(r["t"])
+        ok, cands = pil["res"][t]
+        d = (
+            _detections(cands.get(604, np.zeros((0, 5))), th[604])
+            if 604 in th
+            else np.zeros((0, 5))
+        )
+        fr = ptr.frame(t, anchors, rects)
+        row: dict[str, Any] = {"frame": f"{r['frame_id']:09d}", "status": fr["status"],
+                               "layout_ok": ok, "n604": len(d)}  # fmt: skip
+        ivs = [iv for iv in fr.get("items", []) if iv.item_id == 604]
+        if ivs:
+            iv = ivs[0]
+            row["centre"], row["excl"], row["phase"] = list(iv.centre), iv.excl, iv.phase
+            if len(d):
+                dist = np.abs(d[:, :2] - np.asarray(iv.centre)).max(1)
+                row["nearest_px"] = round(float(dist.min()), 1)
+                row["found"] = bool(dist.min() <= MATCH_PX)
+        elif len(d):
+            row["dets"] = [[round(float(x), 1) for x in dd[:3]] for dd in d[:5]]
+        cand = np.asarray(cands.get(604, np.zeros((0, 5))), float)
+        row["best_cand_ncc"] = round(float(cand[:, 2].max()), 3) if len(cand) else None
+        nat.append(row)
+    out["natural_dead_branch"] = nat
+    (OUT / "score.json").write_text(json.dumps(out, indent=1, default=str))
+    for it in tpls:
+        x = {k: v for k, v in out["items"][str(it)].items() if k not in ("misses", "per_instance")}
+        print(it, json.dumps(x))
+    print(json.dumps({"status": out["test_status"], "excl": out["test_exclusions"]}))
+    for row in nat:
+        print(json.dumps(row))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -731,14 +1265,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = sub.add_parser("index")
     p.add_argument("sid", nargs="+")
     sub.add_parser("inventory")
+    p = sub.add_parser("fit")
+    p.add_argument("--samples-only", action="store_true")
+    sub.add_parser("freeze")
+    p = sub.add_parser("scan")
+    p.add_argument("--set", choices=("test", "neg", "pilot"), required=True)
+    sub.add_parser("score")
     a = ap.parse_args(argv)
     OUT.mkdir(parents=True, exist_ok=True)
-    return {"index": cmd_index, "inventory": cmd_inventory}[a.cmd](a)
+    cmds = {"index": cmd_index, "inventory": cmd_inventory, "fit": cmd_fit,
+            "freeze": cmd_freeze, "scan": cmd_scan, "score": cmd_score}  # fmt: skip
+    return cmds[a.cmd](a)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-__all__: Iterable[str] = ()
-_ = (hashlib, os)
