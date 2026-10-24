@@ -446,8 +446,8 @@ def steal_by_species(packets: Sequence[Mapping[str, Any]], steal_falls: Sequence
         name = "unknown"
         if k < len(acts) and acts[k][0] - f <= STEAL_TARGET_S * NS:
             name = names.get(acts[k][1], "unknown")
-        g = bisect.bisect_right(gains, f)
-        ok = g < len(gains) and gains[g] - f <= STEAL_S * NS
+        g = bisect.bisect_left(gains, f)  # the item and the SP fall share a packet batch (4.04
+        ok = g < len(gains) and gains[g] - f <= STEAL_S * NS  # pilot: the SAME t_mono_ns)
         out[name]["tries"] += 1
         out[name]["stolen"] += int(ok)
     return {k: dict(v) for k, v in sorted(out.items())}

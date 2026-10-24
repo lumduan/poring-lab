@@ -425,3 +425,6 @@ def test_steal_by_species_names_the_monster_our_next_attack_hits() -> None:
     got = dj.steal_by_species(pk, [10 * s, 30 * s, 50 * s], me)
     assert got == {"Elder Willow": {"tries": 1, "stolen": 1}, "Bigfoot": {"tries": 1, "stolen": 0},
                    "unknown": {"tries": 1, "stolen": 0}}  # fmt: skip
+    # the 4.04 pilot: a stolen item and its SP fall share a packet batch, so the SAME t_mono_ns
+    pk2 = [*pk, {"type": "pickup_result", "ok": True, "item_id": 907, "t_mono_ns": 30 * s}]
+    assert dj.steal_by_species(pk2, [10 * s, 30 * s, 50 * s], me)["Bigfoot"]["stolen"] == 1

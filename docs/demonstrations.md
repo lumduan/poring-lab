@@ -15852,6 +15852,25 @@ setup's @heal on a chat-guard refusal.** No hunting behaviour changes.
   full then anyway (the relog, or the pre-run's heal). Every other line still stops on a refusal.
 - The chain now stops on a failed pre-run, and stops the recorder when the runner ends.
 
+**The unscored pilot** (`20261024T164557-demo-dungeon-thief-pay_fild07-B-s-pilot`, 16:45:54-16:56:37,
+seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
+- 10.0 min, 7 kills (41.9 / h), deaths 0, hard bars pass. HP min 40.3 %, 0 potions, 0 Fly Wings.
+- **The three checks:**
+  - SP read under 100: 91 / 92 / 94 / 96 / 98: PASS;
+  - the runner's casts (7) = the packets' SP falls of 10 (7): PASS;
+  - the target found beside us after 6 of the 7 casts: PASS.
+- Steal: 8 tries, 7 casts, 3 stolen (all Resin), all from Elder Willow (6 tries, 3 stolen; the
+  formula said 61.2 %).
+  - Six were opened by the defend scan, with an Elder Willow already beside us: cast in ~0.2 s,
+    found at the first hover 5 times, the second hover once.
+  - The two at a distance (loot step SWORDs at (0,-2) and (-8,-3)): one never cast in 3 s; the
+    other cast at 1.7 s, but its target was not found beside us (no strike click; the fight
+    loop's scan took over).
+- Items: Resin 10 (7 picked, 3 stolen), **Dead Branch 1 (picked)**.
+- **A judge bug found here and fixed before any scored run (judge output only):** a stolen item
+  and its SP fall share a packet batch, so they have the SAME timestamp. `steal_by_species`
+  skipped equal times and said 0 stolen; it now counts 3, as the totals do.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

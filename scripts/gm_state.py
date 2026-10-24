@@ -567,15 +567,19 @@ def _tab(agent: Any, screen: Any, name: str) -> None:
     time.sleep(0.8)
 
 
-def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None) -> dict[str, Any]:
+def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None,
+               refs_dir: Path = LOOT_DIR) -> dict[str, Any]:  # fmt: skip
     """Drop every LOOT stack of the inventory by its known path; r.Stop on anything unexpected
-    (a prompt that stays, a slot that does not change). Returns what was dropped and what stayed."""
+    (a prompt that stays, a slot that does not change). Returns what was dropped and what stayed.
+    ``refs_dir``: the icon set that says what is loot (2026-10-24: stage_items.py drops ONLY the
+    target items it gave itself, from its own set; the quantity prompt's reference stays
+    LOOT_DIR's)."""
     import ui_gate
 
-    refs = load_loot_refs()
+    refs = load_loot_refs(refs_dir)
     prompt = LOOT_DIR / "prompt_ok.npy"
     if not refs or not prompt.exists():
-        raise r.Stop(f"gm_state ({why}): no loot icons in {LOOT_DIR} (gm_state.py cut-loot)")
+        raise r.Stop(f"gm_state ({why}): no loot icons in {refs_dir} (or no prompt in {LOOT_DIR})")
     ok_ref = np.load(prompt)
     region = r.game_region()
     out: dict[str, Any] = {"dropped": [], "unknown": 0, "kept": []}
