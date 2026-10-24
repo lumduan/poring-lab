@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import stage_items as si  # noqa: E402
@@ -46,3 +47,13 @@ def test_open_area_keeps_cells_off_and_north_of_the_canopy_out() -> None:
     assert not o[20, 20] and not o[26, 20] and not o[17, 23] and not o[20, 17]
     assert o[27, 20] and o[16, 20] and o[20, 24] and o[20, 16]
     assert o.sum() == 40 * 40 - 7 * 10
+
+
+def test_watch_cells_are_seeded_cut_and_refuse_repeats() -> None:
+    lat = [{"x": i, "y": 2 * i} for i in range(10)]
+    a = si.watch_cells(lat, 5, 4)
+    assert len(a) == 4 and len(set(a)) == 4 and a == si.watch_cells(lat, 5, 4)
+    assert a != si.watch_cells(lat, 6, 4)
+    assert set(si.watch_cells(lat, 5, 99)) == {(i, 2 * i) for i in range(10)}
+    with pytest.raises(SystemExit):
+        si.watch_cells([{"x": 1, "y": 1}, {"x": 1, "y": 1}], 0, 2)

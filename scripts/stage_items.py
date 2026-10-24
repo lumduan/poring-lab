@@ -261,6 +261,70 @@ def run(a: argparse.Namespace) -> int:
     return 0 if reason == "done" else 1
 
 
+WATCH_DWELL_S = 30.0  # payf07-detector.md: still frames of monsters around an immune Thief
+
+
+def watch_cells(lattice: list[dict[str, Any]], seed: int, max_cells: int) -> list[tuple[int, int]]:
+    """PURE: the lattice's cells in a seeded order, cut at ``max_cells`` (successive seeds cover the
+    map evenly when a time box cuts the list, as warp_watch's plan does)."""
+    cells = [(int(c["x"]), int(c["y"])) for c in lattice]
+    if len(set(cells)) != len(cells) or not cells:
+        raise SystemExit("watch: an empty lattice or a repeated cell")
+    order = np.random.default_rng(seed).permutation(len(cells))
+    return [cells[int(i)] for i in order[:max_cells]]
+
+
+def watch(a: argparse.Namespace) -> int:
+    """LIVE (payf07-detector.md, Elder Willow is the thinnest class): the IMMUNE Thief warps over a
+    lattice of three-check stand cells and dwells WATCH_DWELL_S at each while the 1-fps recorder
+    (started beside this tool) banks the frames. Typed @warp lines only, no world click; the same
+    recording path as the staged session, so its frames join TRAIN by the 3c rule."""
+    import bench
+    import crusader as cr
+    import ro_agent as r
+    import ui_gate
+
+    if not a.immune_confirmed:
+        raise SystemExit("stage_items watch refused: --immune-confirmed (a person read the frame)")
+    cells = watch_cells(json.loads(a.lattice.read_text()), a.seed, a.max_cells)
+    sid = f"{time.strftime('%Y%m%dT%H%M%S')}-watch-{a.map}-{a.label}"
+    out = DEMO / sid
+    out.mkdir(parents=True)
+    evf = (out / "events.jsonl").open("a")
+
+    def ev(rec: dict[str, Any]) -> None:
+        evf.write(json.dumps({"t_ns": r.ns(), **rec}) + "\n")
+        evf.flush()
+
+    ev({"kind": "run_start", "version": VERSION, "what": "watch", "map": a.map, "seed": a.seed,
+        "cells": cells, "dwell_s": a.dwell_s, "lattice": str(a.lattice)})  # fmt: skip
+    reason = "done"
+    t_end = time.monotonic() + a.max_minutes * 60
+    with _session("watch") as (agent, screen):
+        agent.wait_for_human()
+        _check(screen)
+        try:
+            for k, (x, y) in enumerate(cells):
+                if time.monotonic() > t_end:
+                    reason = "time_box"
+                    break
+                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", CHAR, CHAR)
+                settle = _settle(screen)
+                bench.close_chat(agent, screen)
+                ev({"kind": "dwell", "i": k, "at": [x, y], "settle_s": settle, "s": a.dwell_s})
+                time.sleep(a.dwell_s)
+                print(f"cell {k + 1}/{len(cells)} at {x},{y}", flush=True)
+        except r.Stop as exc:
+            reason = f"stop: {exc}"
+        finally:
+            ui_gate.ensure_clear(agent, screen, why="watch-end")
+            print(r.to_png(screen.full(), r.SHOTS / f"watch-end-{a.label}.png"), flush=True)
+    ev({"kind": "run_end", "reason": reason})
+    evf.close()
+    print(json.dumps({"sid": sid, "reason": reason, "cells": len(cells)}))
+    return 0 if reason in ("done", "time_box") else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
@@ -274,6 +338,15 @@ def main() -> int:
     p.add_argument("spec", type=Path)
     sub.add_parser("give")
     sub.add_parser("immune-on")
+    p = sub.add_parser("watch")
+    p.add_argument("--map", default="pay_fild07")
+    p.add_argument("--lattice", type=Path, required=True)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--max-cells", type=int, default=200)
+    p.add_argument("--max-minutes", type=float, default=40.0)
+    p.add_argument("--dwell-s", type=float, default=WATCH_DWELL_S)
+    p.add_argument("--label", default="w")
+    p.add_argument("--immune-confirmed", action="store_true")
     p = sub.add_parser("run")
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--n", type=int, default=12)
@@ -294,6 +367,8 @@ def main() -> int:
         give()
     elif a.cmd == "immune-on":
         immune_on()
+    elif a.cmd == "watch":
+        return watch(a)
     elif a.cmd == "run":
         return run(a)
     return 0
