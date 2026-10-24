@@ -625,3 +625,51 @@ T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1
   Willow and Green Plant areas, before training; and, as a separate hypothesis, a label rule for
   ENGAGED units (drawn facing our character, in their attack / hurt actions) so the fight that
   Batt's clip shows can be labelled at all.
+
+## 11. PRE-REGISTERED: round 2 -- the fit floor on EVERY label, a new blind round (the parent, 2026-10-24 19:40:44 ICT from `date`; written BEFORE any round-2 code, label filter or crop exists)
+
+**Why.** Round 1 (10m) failed on Elder Willow alone: species 93.3 % < 95 %.
+- Two of its three misses (079 fit 0.123, 176 fit 0.170) and Eggyra's one miss (007, 0.152) are
+  labels NOT under a model whose best fit is far below the evidence threshold T_h.
+- o3h applies T_h only to labels under a model box. A clear label with a weak fit is kept on the
+  prediction alone: exactly the kind both labellers judged "box beside the monster" or "empty".
+
+**The rule change ("payf07-o3h-all"), the only one:**
+- the FROZEN T_h = 0.479 (`fit/threshold-P1.json`, sha256 f477de49...) applies to EVERY kept
+  label, under a model or not;
+- a label NOT under a model with best NCC < T_h is excluded as `weak_fit`. A frame holding one is
+  not whole (3f / 4g: a frame is labelled completely or excluded);
+- nothing else changes: params.json (sha256 e93367fe...), 1d = 120 ms (Amendment C), Amendment B
+  (engaged), the split, T1's and T2's bars.
+- **Its cost, counted BEFORE this commit** on the frozen TRAIN label files only (label fields,
+  no pixel, no TEST): clear labels below 0.479:
+  - Bigfoot 21 of 274;
+  - Elder Willow 15 of 109;
+  - Poporing 8 of 150;
+  - Eggyra 8 of 232;
+  - Willow 10 of 359;
+  - Green Plant 0 of 116.
+  - Below 0.30 the counts are 14 / 14 / 5 / 8 / 10 / 0. No Elder Willow clear label lies between
+    0.20 and 0.40.
+
+**T1 stands.** C1 / C2 judge the PREDICTION before any fit (10k: "on the payf07-o3h PREDICTION
+... no fit"). The floor only removes fitted labels, so T1 is not re-run.
+
+**T2, round 2:**
+- the pool is the frozen TRAIN labels with the floor applied;
+- every crop judged in round 1 (by session, frame, gid in `t2-key/answer_key.json`) is REMOVED
+  from the pool, so round 2 is a fresh sample;
+- seed **22**; 30 per species; the same multi-view reference rule and the same instructions
+  (sha256 dc3ee728...);
+- two NEW labellers (C, D), each given ONLY the pack, its instructions and an answers path outside
+  it;
+- the SAME bars: per species >= 90 % good from EACH labeller AND species right >= 95 %, every
+  species of the tier (Green Plant by section 7).
+
+**The training tier** is section 8's, on round 2's T2 (with T1 from 10k). If Elder Willow fails
+again on SPECIES in shadow (round 1's 048), the next step is data (a still warp-and-watch
+collection), not a further rule. That would be its own pre-registration.
+
+**Not changed by a passing round:** the cache and the evaluation still need their own
+pre-registration (section 8) before any GPU step.
+
