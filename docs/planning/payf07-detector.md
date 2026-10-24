@@ -534,6 +534,29 @@ T1's numbers come from `t1/check.json`: `T1` (PASS / FAIL against <= 0.050), `c1
     `f477de49852e656e7e8ac025af151d3fd86e5e6ed9abc4683dea4635d8138247`;
   - decision "Amendment C (2026-10-24 19:08:32, c508f3d): 1d = 120 ms (P1)".
 
+### 10k. RESULT: T1 on TEST under Amendment C -- **PASS** (run 2026-10-24 19:09:06-19:10:33 ICT; `t1/check.json`, commit 4b8d61e, params sha256 e93367fe...)
+
+- **C1 (the bar: bad labels / scored <= 0.050, pooled): 2 / 463 = 0.0043. PASS.** The NCC
+  median is 0.731, p10 0.477.
+- **C2 (median |dx|, |dy| <= 4.0 px, species with >= 20): PASS for every species scored.**
+
+| species | C1 scored | bad | NCC median | C2 n | median abs dx / dy (px) | C2 |
+|---|---|---|---|---|---|---|
+| Eggyra (1116) | 313 | 2 | 0.787 | 313 | 0 / 1 | PASS |
+| Willow (1010) | 52 | 0 | 0.554 | 52 | 0 / 1 | PASS |
+| Bigfoot (1060) | 39 | 0 | 0.610 | 39 | 1 / 1 | PASS |
+| Poporing (1031) | 34 | 0 | 0.482 | 34 | 1 / 2 | PASS |
+| Elder Willow (1033) | 25 | 0 | 0.595 | 25 | 1 / 1 | PASS |
+| Green Plant (1080) | 0 | -- | -- | -- | -- | not in TEST |
+
+- **By part:**
+  - staged spots 8-11: 1,538 frames, 219 candidates, 25 scored, 0 bad;
+  - t2: 2,292 frames, 1,665 candidates, 438 scored, 2 bad.
+- **Excluded as occluded by a model:** Eggyra 151, Poporing 29, Bigfoot 17, Willow 16, Elder
+  Willow 4.
+- Next: 10h step 3 (the TRAIN labels with the frozen file, then the pack, its key compared with
+  10g's), then T2 by two new blind labellers.
+
 ### 10i. Estimates: the cache and the training (by analogy with v2orc)
 
 - **v2orc's cache** (`v2orc-fix2-w-o3h-20261024`): 16,169 frames in 54 shards, 25.9 GB on the NAS
