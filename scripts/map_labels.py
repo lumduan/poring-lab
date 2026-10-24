@@ -756,10 +756,17 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
 def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
     th = json.loads(a.threshold.read_text())
-    if a.proposed:  # 9b: 1d stopped; the proposal's parameters, NOT frozen (check refuses them)
+    if a.proposed or a.decision:  # 10a: 1d stopped; a proposed offset (NOT frozen), or the
+        if a.offset is not None or "offset_source" not in th:  # decision that adopts it
+            raise SystemExit("--proposed / --decision take a T_h measured at a proposed offset")
         off = {"offset_ms": th["offset_ms"], "parts": [th["offset_source"]]}
-        status = f"PROPOSED_NOT_FROZEN: {th['offset_source']}"
-        off_file: dict[str, Any] = {"offset_file": None, "offset_sha256": None}
+        if a.decision:
+            status = "FROZEN"
+            off_file: dict[str, Any] = {"offset_file": None, "offset_sha256": None,
+                                        "decision": a.decision}  # fmt: skip
+        else:
+            status = f"PROPOSED_NOT_FROZEN: {th['offset_source']}"
+            off_file = {"offset_file": None, "offset_sha256": None}
     else:
         off = json.loads(a.offset.read_text())
         if off.get("offset_ms") is None or off.get("diagnostic") or \
@@ -1100,7 +1107,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--offset", type=Path, default=None)
     p.add_argument("--threshold", type=Path, required=True)
     p.add_argument("--proposed", action="store_true",
-                   help="9b: write the proposal's parameters, NOT frozen")  # fmt: skip
+                   help="10a: write the proposal's parameters, NOT frozen")  # fmt: skip
+    p.add_argument("--decision", default=None,
+                   help="10a: FREEZE the proposed offset (cite the amendment)")  # fmt: skip
     p = sub.add_parser("check")
     common(p)
     p.add_argument("--params", type=Path, required=True)
