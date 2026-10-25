@@ -31,13 +31,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import orclord_edge_watch as ow  # noqa: E402
 
-VERSION = "orclord-flee@1"
+VERSION = "orclord-flee@2"
 ROOT = Path(__file__).resolve().parents[1]
 BUBBLES = ROOT / "data" / "mvp_watch" / "immune_bubbles.npz"  # client pixels: never committed
 WATCH_S, DWELL_S, AFTER_FLY_S = 0.25, 4.0, 3.0
 HP_FLY = 0.5  # the backup: HP below this share during a trial -> F2 (logged as "hp")
 TEXT_LEVEL, READ_LEVEL = 200.0, 170.0  # a reference's text pixels / a frame pixel read as text
 BUBBLE_WAIT_S = 3.0
+SHIFT_PX = 2  # flee@2 (fp1, 03:56-04:00): the real "off" bubble drew 1 px lower than its reference
+SAFE_STAND = (268, 107)  # dungeon_hunt.CLEAR_STAND's cell on prt_fild08 (open field, no aggressor)
 
 
 def bubble_score(gray_box: np.ndarray, ref: np.ndarray) -> float:
@@ -56,6 +58,33 @@ def bubble_state(gray_box: np.ndarray, on: np.ndarray, off: np.ndarray) -> str |
     if s_on >= 0.8 and s_off < 0.6:
         return "on"
     if s_off >= 0.8 and s_on < 0.6:
+        return "off"
+    return None
+
+
+def read_bubble(
+    gray: np.ndarray,
+    box: tuple[int, int, int, int],
+    on: np.ndarray,
+    off: np.ndarray,
+    shift: int = SHIFT_PX,
+) -> str | None:
+    """PURE: ``bubble_state`` on the frame's box moved by up to ``shift`` px each way, each
+    reference at its own best offset (a 1-px drift between a reference and a live bubble is
+    rendering, not a different text); None when neither reads, as before."""
+    x, y, w, h = box
+    best_on = best_off = 0.0
+    for dy in range(-shift, shift + 1):
+        for dx in range(-shift, shift + 1):
+            y0, x0 = y + dy, x + dx
+            if y0 < 0 or x0 < 0:
+                continue
+            g = gray[y0 : y0 + h, x0 : x0 + w]
+            best_on = max(best_on, bubble_score(g, on))
+            best_off = max(best_off, bubble_score(g, off))
+    if best_on >= 0.8 and best_off < 0.6:
+        return "on"
+    if best_off >= 0.8 and best_on < 0.6:
         return "off"
     return None
 
@@ -103,10 +132,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
             gm("@monsterignore")
             end = time.monotonic() + BUBBLE_WAIT_S
             while time.monotonic() < end:
-                f = frame()
-                x, y, w, h = box
-                g = f[y : y + h, x : x + w].astype(np.float32).mean(axis=2)
-                got = bubble_state(g, ref_on, ref_off)
+                got = read_bubble(frame().astype(np.float32).mean(axis=2), box, ref_on, ref_off)
                 if got is not None:
                     ev({"kind": "immune", "want": want, "got": got})
                     if got != want:
@@ -118,6 +144,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
         if not cr.check(screen, ow.JOB, ow.CHAR)["ok"]:
             raise r.Stop("not the Rogue")
         state = "off"
+        spawned = False
         try:
             for k, c in enumerate(cells):
                 x0, y0 = c["cell"]
@@ -126,6 +153,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
                 gm(f"@warp {a.map} {x0} {y0}")
                 ow._settle(screen)
                 gm(f"@monster {ow.MOB} 1")
+                spawned = True
                 ev({"kind": "spawn", "i": k, "at": [x0, y0]})
                 time.sleep(ow.SPAWN_SETTLE_S)
                 px, py = c["path"][0]
@@ -162,10 +190,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
                 immune("on")
                 state = "on"
                 gm("@killmonster2")
+                spawned = False
                 ev({"kind": "trial_end", "i": k, "fled": fled})
                 print(f"trial {k + 1}/{len(cells)}: fled={fled}", flush=True)
         except r.Stop as exc:
             reason = f"stop: {exc}"
+            if spawned and not r.is_state(screen, gv.DEAD_STATE):
+                # flee@2 (fp1): a stop after a spawn left the Rogue 17 cells from the party with
+                # its immunity unread -- away to the open-field stand FIRST, then clear the party
+                try:
+                    gm(f"@warp {a.map} {SAFE_STAND[0]} {SAFE_STAND[1]}")
+                    ow._settle(screen)
+                    gm("@killmonster2")
+                    ev({"kind": "safe_exit", "at": list(SAFE_STAND), "killmonster2": True})
+                except r.Stop as exc2:
+                    ev({"kind": "safe_exit_failed", "why": str(exc2)})
+                    reason += f"; safe exit failed: {exc2}"
         finally:
             ev({"kind": "immune_state_at_end", "believed": state})
             ui_gate.ensure_clear(agent, screen, why="orclord-flee-end")

@@ -583,3 +583,26 @@ Reproduce: section 9's environment, then:
   at once, the 8.2 stand fix kept);
 - it is used only AFTER the scored A/B block (a1-a8), so the block is not changed.
 - Batt then decides whether `--clear-map` goes.
+
+### 12a. Attempt 1 stopped safely by its own check; flee@2 (2026-10-26 04:02 ICT from `date`, BEFORE attempt 2)
+
+- **fp1 (03:55:33-03:56:17), trial 1 of 6:** immunity ON was read; `@warp` 252,329,
+  `@monster 1190 1`, `@warp` 252,346 (17 cells out). The OFF toggle was typed, but **no reply
+  bubble was read within 3 s**, and the proof stopped by design. The flee rule never ran: no hop
+  and no watch. Nothing about the rule was measured. HP stayed at 100 %.
+- **The cause, read on frames afterwards** (the parent, on the open-field stand, 03:57-04:00):
+  - The toggle had worked: the next read on the stand said "on", so the state before it was OFF.
+  - The live "Returned to normal state." bubble draws **1 px lower** than its reference: text rows
+    8-17 vs 7-16, a score of 0.50 at the box and 1.00 one row down.
+  - The reference's "off 1.00" (section 12) was a self-match on the frames it was cut from. That
+    is not a positive case (feedback: a verifier proves a positive case).
+  - The ON bubble matches at 0 px.
+- **flee@2 (this commit):**
+  - `read_bubble` searches +-2 px for each reference. On tonight's real frames it reads on 5/5,
+    off 5/5, and None with no bubble. The cross-scores stay <= 0.44 (the bar is 0.8 / 0.6).
+  - **A stop after a spawn now exits safely:** `@warp` to the open-field stand (268,107), then
+    `@killmonster2`. In fp1 the parent did this by hand: stand first, then immunity read and set
+    OFF by eye on the bubble, at 04:00.
+  - Tests: thin-stroke synthetic shifts and a 7-px miss stay None.
+- **Attempt 2** runs the same plan unchanged (seed 27, 6 trials, the same model, cue, watch and
+  bars) under label `fp1b`. fp1 counts as no trial.
