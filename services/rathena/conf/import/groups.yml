@@ -45,6 +45,12 @@
 #                  as @refine <position> <amount> on EQUIPPED items only (position 2 = the right
 #                  hand); pinned atcommand.cpp:2469 ACMD_FUNC(refine): no break chance, capped at
 #                  MAX_REFINE. Through the character's name + job check like every group-20 line.
+#   storage        lab only (Batt, 2026-10-25 ~13:1x, his answer "Add @storage to group 20" to the
+#                  question how the setup stores loot for his Overcharge merchant; docs/planning/
+#                  rogue-gef10.md section 4): the setup opens the ACCOUNT storage between runs, on
+#                  the clear stand, and moves the loot in (no Kafra NPC, no 130 z fee). Pinned
+#                  atcommand.cpp ACMD_FUNC(storage) -> storage_storageopen. Through the character's
+#                  name + job check like every group-20 line.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -78,3 +84,4 @@ Body:
       jobchange: true
       questskill: true
       refine: true
+      storage: true

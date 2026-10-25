@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with the orcsdun01 o3h rule (fix 2 facing, 2b / 2c, the map's RSW models with a fit-evidence gate), re-measured on pay_fild07's own FIT data, give per-species monster boxes for pay_fild07 (Elder Willow, Willow, Eggyra, Bigfoot, Poporing, Green Plant) that pass the training tier (T1: C1 <= 5 % on the held-out TEST data; T2: every species passes a blind check), so ONE detector can be trained on v2orc's classes plus this map's species."
-status: "TRAINING RUNNING since 2026-10-25 02:56:41 ICT (13f): payf07-20261024 on the cache v2orc-payf07-20261024 (16,793 TRAIN frames), E = 10, close_mosaic 3, hsv_s 0.2, warm from v2orc's last.pt, 21 classes; R1-R3 + the IO guard. Training tier PASSED 2026-10-24 19:52 ICT (T1 under Amendment C, 10k; T2 round 2, 11a). Scoring: ../benchmarks/payf07-eval.md, once, on the last completed epoch."
+status: "STOPPED 2026-10-25 12:40 ICT by Batt's target change (gef_fild10 instead; 13g), after epoch 1 of 10 (val mAP50 0.800). The run: payf07-20261024 on the cache v2orc-payf07-20261024 (16,793 TRAIN frames), launched 02:56:41 (13f), 7 attempts (2 IO trips, 4 R3-HARD camera-drop aborts). Training tier PASSED 2026-10-24 19:52 ICT (T1 under Amendment C, 10k; T2 round 2, 11a). payf07-eval.md is NOT scored."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, thief-payon.md, payf07-prep.md, labels-v2-plan.md, training-cost.md, ../benchmarks/v2orc-vs-v1.md, ../benchmarks/payf07-eval.md]
-next_action: "The parent: watch the run (13f). Attempt 0 ends at its 12 h step cap ~14:57 ICT 2026-10-25: resume it in the warm worker with RESUME=1 (13f). After the last epoch, score ../benchmarks/payf07-eval.md ONCE. ENGAGED units (Batt clip) need their own label hypothesis."
+next_action: "None here. The parent archives data/train/payf07-20261024 to the NAS (13g); its epoch-1 last.pt is a candidate init for gef_fild10's detector (rogue-gef10.md 6), where ENGAGED units are part of the label pre-registration."
 title: "A detector for pay_fild07's monsters: the facts, the split, the label rule, the two tiers and the class scheme (pre-registered)"
 date: 2026-10-24
 owner: Batt
@@ -1064,3 +1064,34 @@ joined by 3c, each by its own C1 (bad / scored):
   - Sunday has no market-open windows.
 - The hunt stays on its CPU detector. No hunt runs while it trains: the next block waits for
   Batt's weight decision (thief-payon.md).
+- ➡️ **SUPERSEDED: the run was STOPPED on 2026-10-25 at 12:40 ICT, before its 12 h cap (13g).**
+
+**13g. The training STOPPED by the target change (Batt 2026-10-25 ~12:3x: "train on gef_fild10
+instead"; [rogue-gef10.md](rogue-gef10.md) section 0). Times from train.log.**
+- **Epoch 1 completed** (results.csv: 3,242 s of training; val precision 0.852, recall 0.834,
+  mAP50 0.800, mAP50-95 0.568). Its `weights/last.pt` and `best.pt` were written at 05:17. The last
+  mid-epoch checkpoint (epoch 2 in progress) is `weights/mid.pt`, 12:09.
+- **The attempts after 13f:**
+
+  | attempt | ran (ICT) | ended by |
+  |---|---|---|
+  | 0 | 02:56:41-04:05:17 | IO guard: quant-postgres 31.2 % (spike over 25 %) |
+  | 1 | 04:20:20-08:19:16 | R3-HARD: cam-1-01-font-s dropping frames 31 s (skipped_fps 0.1, camera_fps 5.0; fleet 79.8 detections/s) |
+  | 2 | 09:51:39-09:52:28 | IO guard: quant-postgres 11.6 % (over 10 % for 31 s) |
+  | 3 | 10:07:31-10:08:43 | R3-HARD: the same camera, 32 s (fleet 88.9) |
+  | 4 | 10:27:34-10:44:06 | R3-HARD: the same camera, 31 s (fleet 86.6) |
+  | 5 | 11:19:01-12:12:24 | R3-HARD: the same camera, 31 s (fleet 75.1) |
+  | 6 | 12:37:12-12:40:25 | SIGINT by the parent at 12:40:19 (the target change); "TRAIN STOPPED: not a guard trip" |
+
+  - No abort ever made 3 within 2 h, so the duty cap and NOTIFY never fired.
+  - The guard verified the stop: the worker "up and idle (no CUDA context), nothing of ours on the
+    GPU" (12:40:25). The worker stays up for the gef_fild10 training (rogue-gef10.md 6).
+- **An observation for Batt (suggestion only, nothing done):** after each R3-HARD abort,
+  train-day.sh waits for 15 minutes without a camera dropping frames. Those waits took 92, 19, 35
+  and 25 min. So drops kept appearing for up to ~77, 4, 20 and 10 min after our stop, while
+  NOTHING of ours ran (the gate re-arms on any camera's drop; train.log names cam-1-01-font-s in
+  every abort). The drops on that camera are, at least mostly, its own.
+- **What is kept:** `data/train/payf07-20261024` (args.yaml, results.csv, the weights) goes to the
+  NAS archive with a guarded `archive:` step. Its epoch-1 `last.pt` is a candidate init for
+  gef_fild10's detector, decided in that pre-registration. payf07-eval.md is NOT scored: no run of
+  this pre-registration reached its last epoch.

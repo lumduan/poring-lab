@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A Thief (Base 50 / Job 40, AGI 62 / DEX 40, Damascus + NPC gear) hunting a Payon field by the dungeon runner's walk-and-hit, with Steal Lv 10 tried first on Elder Willow / Bigfoot, yields measurable counts of the high-value items (Dead Branch, Rough Elunium, Rough Oridecon, Honey) per hour, safely (deaths and hard bars counted)."
-status: "4.04 RESULT 2026-10-24 (demonstrations 4.04, s1-s6, 240.3 min): 35.7 kills / h, deaths 0, hard bars pass; Steal 56 of 109 tries (Elder Willow 39 / 65); natural target items: Dead Branch 3 + Rough Elunium 1. Second block s7: 30.0 / h, then the 40 % weight stop (42.6 %). Target items round 2 PASSES all four on open ground (target-items.md). The pay_fild07 detector is TRAINING since 2026-10-25 02:56 ICT (payf07-detector.md 13f). Renewal PARKED."
+status: "CLOSED 2026-10-25 by Batt's target change (~12:3x ICT: gef_fild10 and a Rogue instead; rogue-gef10.md). Its last results stand: 4.04 RESULT 2026-10-24 (demonstrations 4.04, s1-s6, 240.3 min): 35.7 kills / h, deaths 0, hard bars pass; Steal 56 of 109 tries (Elder Willow 39 / 65); natural target items: Dead Branch 3 + Rough Elunium 1. Second block s7: 30.0 / h, then the 40 % weight stop (42.6 %). Target items round 2 PASSES all four on open ground (target-items.md). The pay_fild07 detector training was STOPPED at epoch 1 + (payf07-detector.md 13g). Renewal stays PARKED."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [crusader-orcsdun01.md, item-class.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/crusader.py]
-next_action: "Batt: the weight (42.6 %: sell / store / drop non-target loot) before more runs; whether to pre-register a live loot-by-sight version (target-items.md round 2). The parent: watch the detector training (payf07-detector.md 13f; resume at the 12 h step cap) and score it per ../benchmarks/payf07-eval.md."
+next_action: "None here: the work continues in rogue-gef10.md. Batt answered the four open decisions (weight, the held staged set, ENGAGED labels, loot by sight) with 'change the target to gef_fild10' (2026-10-25); the weight is now handled by @storage (rogue-gef10.md 4)."
 title: "A Thief (then Rogue) for economics on a Payon field: the decisions, the facts, the build and the plan"
 date: 2026-10-24
 owner: Batt
