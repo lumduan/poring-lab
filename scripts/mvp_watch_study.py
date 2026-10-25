@@ -2,11 +2,13 @@
 """OFFLINE study for scripts/mvp_watch.py (docs/planning/orclord-recognizer.md): the per-frame truth
 from the packets, the crops a recognizer is fitted on, and the held-out score.
 
-    mvp_watch_study.py truth SESSION --layout standard|hunt --out TRUTH.json
+    mvp_watch_study.py truth SESSION --layout standard|hunt [--map MAP] --out TRUTH.json
     mvp_watch_study.py fit   --watch S --watch-truth T --events E --pilot S T [--extra S T]...
                              --work DIR --out MODEL.npz        DEV only (section 3 + Amendment B)
     mvp_watch_study.py score --model MODEL.npz --sha256 HEX --watch S --watch-truth T --events E
                              --pilot S T [--supplement S T]... --out SCORE.json   HELD-OUT, once
+    mvp_watch_study.py entries --model MODEL.npz --sha256 HEX --watch S --watch-truth T --events E
+                             --hunt S T [--hunt S T]... --out SCORE.json   ROUND 2 (10), once
 
 OFFLINE ONLY (ADR-0007: packets are ground truth, never an input at decision time). Reads a
 recorder session (manifest, PNG tar shards, packets.jsonl.gz), the client's GAT and the decoded
@@ -181,9 +183,11 @@ def _events(session: Path) -> list[dict[str, Any]]:
 
 
 def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
-          offset_ms: float = OFFSET_MS) -> dict[str, Any]:  # fmt: skip
+          offset_ms: float = OFFSET_MS, map_name: str = MAP) -> dict[str, Any]:  # fmt: skip
     """Per frame of a recorder session: every monster's predicted sprite box (unclipped), its
-    Timeline state and whether it is in view, at the frame's capture time - 1d."""
+    Timeline state and whether it is in view, at the frame's capture time - 1d. Units are kept on
+    ``map_name`` only (Amendment 10a: round 2's watch is on prt_fild08; the projection reads that
+    map's GAT from the same GAT_DIR, nothing else changes)."""
     import client_layout
     import map_labels as ml
     import qa_export
@@ -219,7 +223,7 @@ def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
                                "flags": frame_flags(t, changes, gm, vanish, new),
                                "units": [], "players": 0}  # fmt: skip
         rows.append(row)
-        if world.self_pos is None or not world.map or map_key(world.map) != MAP:
+        if world.self_pos is None or not world.map or map_key(world.map) != map_name:
             continue
         scene = load_scene(camera, world.map, world.self_pos, indoor_table=indoor)
         for ent in world.entities:
@@ -248,13 +252,15 @@ def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
                                  "cell": (round(ent.x, 2), round(ent.y, 2)),
                                  "in_view": in_view(box, size, rects)})  # fmt: skip
     return {"session": manifest["session_id"], "layout": layout, "offset_ms": offset_ms, "k": K,
-            "size": size, "frames": rows, "missing_sheets": sheets.missing}  # fmt: skip
+            "size": size, "map": map_name, "frames": rows,
+            "missing_sheets": sheets.missing}  # fmt: skip
 
 
 def summary(doc: dict[str, Any]) -> dict[str, Any]:
     """Counts: frames, frames with each species in view, the MVP party's episodes."""
     rows = doc["frames"]
-    on_map = [r for r in rows if r["map"] and r["map"].startswith(MAP)]
+    target = str(doc.get("map", MAP))
+    on_map = [r for r in rows if r["map"] and r["map"].startswith(target)]
     per = Counter()
     units = Counter()
     for r in on_map:
@@ -295,8 +301,8 @@ def cell_of(t: int, spawns: Sequence[int]) -> int:
     return bisect.bisect_right(spawns, t) - 1
 
 
-def on_map(row: dict[str, Any]) -> bool:
-    return bool(row["map"]) and str(row["map"]).startswith(MAP)
+def on_map(row: dict[str, Any], map_name: str = MAP) -> bool:
+    return bool(row["map"]) and str(row["map"]).startswith(map_name)
 
 
 def party_in_view(row: dict[str, Any]) -> bool:
@@ -737,6 +743,228 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     }  # fmt: skip
 
 
+# --- round 2: the aura rule alone on EDGE ENTRIES (orclord-recognizer.md section 10 + 10a) -------
+#
+# Written and tested on synthetic cases BEFORE any round-2 frame was scored (Amendment 10a).
+# - The recipe: mvp_watch.decide(frame, model, cues=ROUND2_CUES) with the round-1 model.
+# - An ENTRY is a hop of orclord_edge_watch.py at which the Orc Lord or an archer goes from not in
+#   view to in view (round 1's truth rule, kind_of == "pos"): the last frame before the hop's @warp
+#   is not "pos", and a frame of the hop's window is. The window runs from the hop's settle (its
+#   event, written after the settle) to the next hop's @warp (the next map change) or the cell's
+#   @killmonster2, whichever comes first.
+# - Its delay = t(the first "pos" frame of the window that is seen) - t(the window's first "pos"
+#   frame), on "pos" frames only (as round 1's cell_scores). Within 1 s = delay <= RECALL_S, round
+#   1's constant unchanged (1.1 s: frame-spacing jitter; at 2 fps the entry's first three frames);
+#   the strict delay <= 1.0 s is reported beside it.
+# - The hunting negatives: every frame on the map whose kind is "neg" (no party box even partly on
+#   screen, no party_edge: round 1's FP definition). Frames with a party unit are LISTED, never
+#   counted. The recorder skips a 1-fps tick whose picture is unchanged (manifest
+#   unchanged_skipped), so a stored frame stands for itself and the skipped ticks after it
+#   (stream_frames). The bar's minutes and false positives are counted on that 1-fps stream (round
+#   1's count / frames x 600 at 1 fps, the skipped ticks included: the hunting time); the stored-
+#   frames-only rate is reported beside it.
+
+ROUND2_CUES = ("aura",)  # section 10: the aura rule alone
+ROUND2_RECALL = 0.95  # bar 1
+ROUND2_FP_PER_10MIN = 1.0  # bar 2
+ROUND2_MIN_MINUTES = 120.0  # section 10: ">= 2 h" of hunting negatives
+
+
+def hop_windows(events: Sequence[dict[str, Any]],
+                map_changes: Sequence[int]) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: the edge watch's events.jsonl rows (time order) and the recording's map-change times
+    -> one window per ``hop``: ``warp`` = the last map change at or before the hop's event and after
+    the previous event (None: no such @warp), ``settle`` = the hop event's time (written after the
+    settle), ``end`` = the first map change after the settle or the next @killmonster2, whichever
+    comes first (None: the recording's end)."""
+    import bisect
+
+    mc = sorted(int(t) for t in map_changes)
+    kills = sorted(int(e["t_ns"]) for e in events if e.get("kind") == "killmonster2")
+    out: list[dict[str, Any]] = []
+    prev: int | None = None
+    for e in events:
+        t = int(e["t_ns"])
+        if e.get("kind") == "hop":
+            k = bisect.bisect_right(mc, t)
+            warp = mc[k - 1] if k and (prev is None or mc[k - 1] > prev) else None
+            ends = [mc[k]] if k < len(mc) else []
+            kk = bisect.bisect_right(kills, t)
+            if kk < len(kills):
+                ends.append(kills[kk])
+            out.append({"i": int(e["i"]), "j": int(e["j"]), "at": list(e.get("at") or []),
+                        "dist": e.get("dist"), "warp": warp, "settle": t,
+                        "end": min(ends) if ends else None})  # fmt: skip
+        prev = t
+    return out
+
+
+def entries_of(windows: Sequence[dict[str, Any]],
+               frames: Sequence[tuple[int, int, str, bool, bool]],
+               recall_s: float = RECALL_S) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: hop windows (hop_windows) and the watch's frames as (t_ns, frame_id, kind, seen,
+    lord: the Orc Lord itself in view) -> each window with ``before`` (the kind of the last frame
+    before its @warp), ``entry``, its first in-view frame, ``delay`` (s; None: never seen on a
+    "pos" frame of the window), ``within`` (<= recall_s), ``within_1s`` (<= 1.0, strict),
+    ``early`` (a seen "edge" frame of the window before the first "pos" one: reported only) and
+    ``pre_settle`` ("pos" frames between the @warp and the settle, and how many were seen:
+    reported only, outside the window)."""
+    seq = sorted(frames)
+    out = []
+    for w in windows:
+        r = dict(w)
+        warp, settle, end = w["warp"], w["settle"], w["end"]
+        before = [f for f in seq if warp is not None and f[0] < warp]
+        r["before"] = before[-1][2] if before else None
+        win = [f for f in seq if f[0] >= settle and (end is None or f[0] < end)]
+        pos = [f for f in win if f[2] == "pos"]
+        pre = [f for f in seq if warp is not None and warp <= f[0] < settle and f[2] == "pos"]
+        r.update(frames=len(win), pos=len(pos), seen_pos=sum(f[3] for f in pos),
+                 pre_settle=[len(pre), sum(f[3] for f in pre)])  # fmt: skip
+        r["entry"] = warp is not None and r["before"] != "pos" and bool(pos)
+        r.update(first=None, t_first=None, lord_first=None, delay=None, within=False,
+                 within_1s=False, first_frame=False, early=False)  # fmt: skip
+        if pos:
+            t0 = pos[0][0]
+            r.update(first=pos[0][1], t_first=t0, lord_first=pos[0][4])
+            hit = next((f for f in pos if f[3]), None)
+            if hit is not None:
+                d = round((hit[0] - t0) / 1e9, 3)
+                r.update(delay=d, within=d <= recall_s, within_1s=d <= 1.0, first_frame=d == 0.0)
+            r["early"] = any(f[3] and f[2] == "edge" for f in win if f[0] < t0)
+        out.append(r)
+    return out
+
+
+def stream_frames(ts: Sequence[int], fps: float) -> list[int]:
+    """PURE: a recording's stored frame times (ns, time order) -> how many ticks of its ``fps``
+    stream each stored frame stands for: itself and the unchanged ticks the recorder skipped
+    before the next stored frame (round(gap x fps), at least 1; the last frame 1)."""
+    out = []
+    for a, b in zip(ts, ts[1:], strict=False):
+        out.append(max(1, round((int(b) - int(a)) / 1e9 * fps)))
+    if ts:
+        out.append(1)
+    return out
+
+
+def pool_hunting(sessions: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """PURE: per-session hunting counts -> the pooled rates. Each session: ``fps``,
+    ``neg_frames`` / ``fp`` (stored frames) and ``neg_ticks`` / ``fp_ticks`` (its 1-fps stream,
+    stream_frames). Minutes = ticks / fps / 60; the rates are per 10 min."""
+    neg_min = sum(s["neg_ticks"] / s["fps"] / 60.0 for s in sessions)
+    stored_min = sum(s["neg_frames"] / s["fps"] / 60.0 for s in sessions)
+    fp_ticks = sum(s["fp_ticks"] for s in sessions)
+    fp = sum(s["fp"] for s in sessions)
+    return {
+        "minutes": round(neg_min, 2), "fp_ticks": fp_ticks,
+        "fp_per_10min": round(fp_ticks / neg_min * 10.0, 4) if neg_min else None,
+        "stored_minutes": round(stored_min, 2), "fp_stored": fp,
+        "fp_per_10min_stored": round(fp / stored_min * 10.0, 4) if stored_min else None,
+    }  # fmt: skip
+
+
+def _party_units(row: dict[str, Any]) -> list[list[Any]]:
+    return [[u["job"], u["gid"], u["box"], u["in_view"], u.get("state")] for u in row["units"]
+            if u["job"] in MVP_PARTY]  # fmt: skip
+
+
+def cmd_entries(a: argparse.Namespace) -> dict[str, Any]:
+    """ROUND 2, once (section 10 + 10a): the edge watch's entries and the hunting negatives, with
+    decide(..., cues=ROUND2_CUES) on the FULL frames, timed."""
+    import mvp_watch as mw
+
+    model = mw.load(a.model, a.sha256)
+    ms: list[float] = []
+    wdoc = json.loads(a.watch_truth.read_text())
+    wmap = str(wdoc.get("map", MAP))
+    wrects = mw.HUNT_RECTS if wdoc["layout"] == "hunt" else mw.STANDARD_RECTS
+    wrows = {int(r["frame_id"]): r for r in wdoc["frames"]}
+    events = [json.loads(x) for x in a.events.read_text().splitlines() if x.strip()]
+    windows = hop_windows(events, _changes(a.watch))
+    keep = {f for f, r in wrows.items() if on_map(r, wmap)}
+    frames: list[tuple[int, int, str, bool, bool]] = []
+    per = {"pos": [0, 0], "lord": [0, 0], "neg": [0, 0], "edge": [0, 0]}
+    watch_fp: list[list[Any]] = []
+    for fid, t, img in _full_frames(a.watch, keep):
+        v, dt = mw.timed(img, model, ui_rects=wrects, cues=ROUND2_CUES)
+        ms.append(dt)
+        row = wrows[fid]
+        kind = kind_of(row)
+        lord = any(u["in_view"] and u["job"] == ORC_LORD for u in row["units"])
+        seen = bool(v["seen"])
+        frames.append((t, fid, kind, seen, lord))
+        per[kind][0] += 1
+        per[kind][1] += int(seen)
+        if lord:
+            per["lord"][0] += 1
+            per["lord"][1] += int(seen)
+        if kind == "neg" and seen:
+            watch_fp.append([fid, t, v["aura"], v["where"]])
+    wins = entries_of(windows, frames)
+    ents = [w for w in wins if w["entry"]]
+    n = len(ents)
+    within = sum(w["within"] for w in ents)
+    hunting = []
+    for session, tpath in a.hunt:
+        doc = json.loads(Path(tpath).read_text())
+        hmap = str(doc.get("map", MAP))
+        rows = sorted(doc["frames"], key=lambda r: int(r["t"]))
+        manifest = json.loads((Path(session) / "manifest.json").read_text())
+        fps = float(manifest.get("fps_cap") or 1.0)
+        ticks = dict(zip((int(r["frame_id"]) for r in rows),
+                         stream_frames([int(r["t"]) for r in rows], fps), strict=True))  # fmt: skip
+        by_id = {int(r["frame_id"]): r for r in rows}
+        keep = {f for f, r in by_id.items() if on_map(r, hmap)}
+        s: dict[str, Any] = {"session": Path(session).name, "fps": fps, "on_map": len(keep),
+                             "neg_frames": 0, "neg_ticks": 0, "fp": 0, "fp_ticks": 0,
+                             "fp_frames": [], "party_frames": [], "reasons": Counter(),
+                             "skipped_in_manifest": manifest.get("unchanged_skipped"),
+                             "skipped_counted": sum(ticks.values()) - len(ticks)}  # fmt: skip
+        for fid, t, img in _full_frames(Path(session), keep):
+            v, dt = mw.timed(img, model, ui_rects=mw.HUNT_RECTS, cues=ROUND2_CUES)
+            ms.append(dt)
+            row = by_id[fid]
+            kind = kind_of(row)
+            s["reasons"][str(v["reason"])] += 1
+            if kind != "neg":
+                s["party_frames"].append([fid, t, kind, bool(v["seen"]), v["aura"], v["where"],
+                                          row["flags"], _party_units(row)])  # fmt: skip
+                continue
+            s["neg_frames"] += 1
+            s["neg_ticks"] += ticks[fid]
+            if v["seen"]:
+                s["fp"] += 1
+                s["fp_ticks"] += ticks[fid]
+                s["fp_frames"].append([fid, t, v["aura"], v["where"], ticks[fid]])
+        s["reasons"] = dict(s["reasons"])
+        s["minutes"] = round(s["neg_ticks"] / fps / 60.0, 2)
+        hunting.append(s)
+    pooled = pool_hunting(hunting)
+    lat = np.array(ms)
+    return {
+        "model": str(a.model), "sha256": model.sha256, "cues": list(ROUND2_CUES),
+        "recall_s": RECALL_S, "watch_map": wmap, "watch_layout": wdoc["layout"],
+        "windows": wins,
+        "entries_n": n, "entries_within": within,
+        "entries_within_1s_strict": sum(w["within_1s"] for w in ents),
+        "entries_first_frame": sum(w["first_frame"] for w in ents),
+        "entries_recall": round(within / n, 4) if n else None,
+        "watch_frames": {k: {"n": v[0], "seen": v[1]} for k, v in per.items()},
+        "watch_neg_positives": watch_fp,
+        "hunting": hunting, "hunting_pooled": pooled,
+        "latency_ms": {"calls": len(lat), "p50": round(float(np.percentile(lat, 50)), 2),
+                       "p95": round(float(np.percentile(lat, 95)), 2),
+                       "max": round(float(lat.max()), 2)},
+        "bars": {
+            "entries_recall_within_1s>=0.95": n > 0 and within / n >= ROUND2_RECALL,
+            "hunting_fp_per_10min<=1": pooled["fp_per_10min"] is not None
+            and pooled["fp_per_10min"] <= ROUND2_FP_PER_10MIN,
+        },
+        "hunting_minutes>=120": pooled["minutes"] >= ROUND2_MIN_MINUTES,
+    }  # fmt: skip
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -749,7 +977,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=MAIN / "packages/poring_dataset/src/poring_dataset/_generated",
     )
+    p.add_argument("--map", default=MAP, help="keep units on this map (Amendment 10a)")
     p.add_argument("--out", type=Path, required=True)
+    q = sub.add_parser("entries")
+    q.add_argument("--model", type=Path, required=True)
+    q.add_argument("--sha256", required=True)
+    q.add_argument("--watch", type=Path, required=True)
+    q.add_argument("--watch-truth", type=Path, required=True)
+    q.add_argument("--events", type=Path, required=True)
+    q.add_argument("--hunt", nargs=2, action="append", required=True,
+                   metavar=("SESSION", "TRUTH"))  # fmt: skip
+    q.add_argument("--out", type=Path, required=True)
     for name in ("fit", "score"):
         q = sub.add_parser(name)
         q.add_argument("--watch", type=Path, required=True)
@@ -766,13 +1004,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             q.add_argument("--supplement", nargs=2, action="append", metavar=("SESSION", "TRUTH"))
     a = ap.parse_args(argv)
     if a.cmd == "truth":
-        doc = truth(a.session, a.layout, kb=a.kb, mapcache_dir=a.mapcache_dir)
+        doc = truth(a.session, a.layout, kb=a.kb, mapcache_dir=a.mapcache_dir, map_name=a.map)
         doc["summary"] = summary(doc)
         a.out.write_text(json.dumps(doc) + "\n")
         print(json.dumps(doc["summary"], indent=1))
     elif a.cmd == "fit":
         rep = cmd_fit(a)
         print(json.dumps(rep, indent=1))
+    elif a.cmd == "entries":
+        rep = cmd_entries(a)
+        a.out.write_text(json.dumps(rep, indent=1) + "\n")
+        brief = {k: v for k, v in rep.items() if k not in ("windows", "hunting")}
+        print(json.dumps(brief, indent=1))
     else:
         rep = cmd_score(a)
         a.out.write_text(json.dumps(rep, indent=1) + "\n")

@@ -200,6 +200,108 @@ def test_party_edge_flags_after_a_vanish_and_around_an_appearance() -> None:
     assert st.frame_flags(10 * s, [9 * s], [9 * s], [], []) == ["settle", "gm"]
 
 
+# --- round 2 (orclord-recognizer.md section 10 + Amendment 10a): synthetic cases only -----------
+
+SEC = 1_000_000_000
+
+
+def _ev(kind: str, t: float, **kw: object) -> dict[str, object]:
+    return {"kind": kind, "t_ns": int(t * SEC), **kw}
+
+
+def _win(warp: float | None, settle: float, end: float | None) -> dict[str, object]:
+    return {"i": 0, "j": 0, "at": [], "dist": None,
+            "warp": None if warp is None else int(warp * SEC), "settle": int(settle * SEC),
+            "end": None if end is None else int(end * SEC)}  # fmt: skip
+
+
+def _f(t: float, fid: int, kind: str, seen: bool = False,
+       lord: bool = False) -> tuple[int, int, str, bool, bool]:  # fmt: skip
+    return (int(t * SEC), fid, kind, seen, lord)
+
+
+def test_round2_recipe_is_the_aura_rule_alone() -> None:
+    assert st.ROUND2_CUES == ("aura",)
+    assert st.RECALL_S == 1.1 and st.ROUND2_RECALL == 0.95 and st.ROUND2_FP_PER_10MIN == 1.0
+
+
+def test_hop_windows_run_from_the_settle_to_the_next_warp_or_the_kill() -> None:
+    events = [_ev("run_start", 0), _ev("at_cell", 12, i=0, at=[10, 10]), _ev("spawn", 14, i=0),
+              _ev("hop", 22, i=0, j=0, at=[27, 10], dist=17),
+              _ev("hop", 35, i=0, j=1, at=[24, 10], dist=14),
+              _ev("hop", 48, i=0, j=2, at=[21, 10], dist=11),
+              _ev("killmonster2", 58, i=0), _ev("at_cell", 70, i=1, at=[50, 50])]  # fmt: skip
+    # map changes: at_cell 0, hops 0 and 1, at_cell 1 (hop 2's own @warp is missing)
+    w = st.hop_windows(events, [int(t * SEC) for t in (10, 20, 33, 68)])
+    assert [(x["i"], x["j"], x["dist"]) for x in w] == [(0, 0, 17), (0, 1, 14), (0, 2, 11)]
+    assert [x["warp"] for x in w] == [20 * SEC, 33 * SEC, None]  # 33 s is before hop 1's event
+    assert [x["settle"] for x in w] == [22 * SEC, 35 * SEC, 48 * SEC]
+    assert [x["end"] for x in w] == [33 * SEC, 58 * SEC, 58 * SEC]  # the next @warp, else the kill
+
+
+def test_entries_need_not_in_view_before_the_warp_and_in_view_in_the_window() -> None:
+    frames = [_f(9.5, 1, "pos", True, True),  # the spawn cell: in view before the far hop's warp
+              _f(11.0, 2, "neg"), _f(12.0, 3, "neg"),  # the far hop: out of view
+              _f(13.5, 4, "pos", True),  # the next @warp, before its settle: outside the window
+              _f(15.0, 5, "neg"), _f(15.5, 6, "edge", True),  # partly on screen, seen: "early"
+              _f(16.0, 7, "pos"), _f(16.5, 8, "pos"), _f(17.05, 9, "pos", True, True),
+              _f(17.5, 10, "pos", True),
+              _f(19.5, 11, "pos", True)]  # fmt: skip
+    far, entry, near = st.entries_of([_win(10, 11, 13), _win(13, 15, 19), _win(19, 20, None)],
+                                     frames)  # fmt: skip
+    assert far["before"] == "pos" and far["entry"] is False and far["frames"] == 2
+    assert entry["before"] == "neg" and entry["entry"] is True
+    assert entry["first"] == 7 and entry["t_first"] == 16 * SEC and entry["lord_first"] is False
+    assert entry["delay"] == 1.05 and entry["within"] is True  # <= 1.1 s (round 1's constant)
+    assert entry["within_1s"] is False and entry["first_frame"] is False  # the strict 1.0 s
+    assert entry["early"] is True and entry["pre_settle"] == [1, 1] and entry["seen_pos"] == 2
+    assert near["before"] == "pos" and near["entry"] is False and near["pre_settle"] == [1, 1]
+
+
+def test_entry_delays_first_frame_late_never_and_no_warp() -> None:
+    frames = [_f(1.0, 1, "pos", True),
+              _f(4.5, 2, "neg"), _f(6.0, 3, "pos"), _f(6.5, 4, "pos"), _f(7.0, 5, "pos"),
+              _f(7.5, 6, "pos", True),
+              _f(9.5, 7, "neg"), _f(11.0, 8, "pos"), _f(11.5, 9, "pos"),
+              _f(14.5, 10, "neg"), _f(16.0, 11, "pos", True)]  # fmt: skip
+    wins = [_win(0, 1, 5), _win(5, 6, 10), _win(10, 11, 14), _win(None, 16, None)]
+    a, b, c, d = st.entries_of(wins, frames)
+    assert a["before"] is None and a["entry"] is True  # nothing recorded before: not in view
+    assert a["delay"] == 0.0 and a["first_frame"] is True and a["within_1s"] is True
+    assert b["entry"] is True and b["delay"] == 1.5 and b["within"] is False
+    assert c["entry"] is True and c["delay"] is None and c["within"] is False
+    assert d["entry"] is False and d["pos"] == 1  # a hop without its own @warp is never scored
+
+
+def test_stream_frames_count_the_skipped_unchanged_ticks() -> None:
+    assert st.stream_frames([int(t * SEC) for t in (0, 1, 2, 5, 6.02)], 1.0) == [1, 1, 3, 1, 1]
+    assert st.stream_frames([int(t * SEC) for t in (0, 0.5, 1.0, 2.5)], 2.0) == [1, 1, 3, 1]
+    assert st.stream_frames([], 1.0) == []
+
+
+def test_pool_hunting_rates_on_the_stream_and_on_stored_frames() -> None:
+    p = st.pool_hunting([
+        {"fps": 1.0, "neg_frames": 1200, "neg_ticks": 1800, "fp": 1, "fp_ticks": 3},
+        {"fps": 1.0, "neg_frames": 600, "neg_ticks": 600, "fp": 0, "fp_ticks": 0},
+    ])  # fmt: skip
+    assert p["minutes"] == 40.0 and p["fp_ticks"] == 3 and p["fp_per_10min"] == 0.75
+    assert p["stored_minutes"] == 30.0 and p["fp_stored"] == 1
+    assert p["fp_per_10min_stored"] == round(1 / 30 * 10, 4)
+    assert st.pool_hunting([])["fp_per_10min"] is None
+
+
+def test_truth_map_is_a_parameter() -> None:
+    row = {"map": "prt_fild08.gat"}
+    assert st.on_map(row, "prt_fild08") is True and st.on_map(row) is False
+    lord = {"job": 1190, "in_view": True}
+    frames = [{"map": "prt_fild08.gat", "units": [lord], "t": 0, "frame_id": 0},
+              {"map": "prt_fild08.gat", "units": []},
+              {"map": "gef_fild10.gat", "units": [lord]}]  # fmt: skip
+    doc = {"map": "prt_fild08", "frames": frames}
+    s = st.summary(doc)
+    assert s["on_map"] == 2 and s["lord_frames"] == 1 and s["party_frames"] == 1
+
+
 # --- the real positive case (skips without the local data) -------------------------------------
 
 WATCH = "20261025T195325-rdp-ow1"
