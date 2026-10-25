@@ -367,3 +367,29 @@ So nothing on our side can repair it. What limits the damage:
 - the Orc Lord recognizer (a subagent, from the watch `20261025T195325-rdp-ow1`);
 - the gef_fild10 detector's pre-registration and FIT work (a subagent; TEST = s7, s8, never read
   before the parameters are frozen).
+
+## Amendment C (2026-10-25 21:38 ICT from `date`; BEFORE any run of the restarted block)
+
+**What happened in the first block attempt:**
+- **s1** (arm N, 20:43-21:24): time box. 35 kills (52.5 / h), deaths 0, hard bars pass. The
+  Rogue sat or rested 45 % of the time. 8,967 z at Overcharge.
+- **s2** (arm S, 21:25) ended after 5.1 min: "position unread for 30 s".
+  - The Rogue stood at (292,62) in the forest, where the minimap's "292 62" readout sits over
+    sunlit grass.
+  - The reader read every digit but refused the frame: one "stroke start" in the rect's LAST
+    column, where no whole digit can begin, failed its uncovered-ink rule.
+  - With no position, the heading walk had no goal and stood still. The stuck rule then pressed a
+    Fly Wing (a same-map teleport, loading screen), and the 30-s rule ended the run.
+  - It is a safe stop: the hard bars pass, deaths 0.
+- **The fix** (2d0100c, `poring_env.selfpos`): ink beyond (rect width - glyph width + the
+  templates' largest first-stroke offset, 2) is scenery.
+  - On 90 real strike frames only that one reading changes, None -> (292,62).
+  - The same failure stopped hunt.py once before (2026-10-15, "uncovered_ink" at 122,78).
+
+**The restarted block:**
+- The reader fix changes the runner's perception for both arms. So the block RESTARTS with it: a1
+  N, a2 S, a3 S, a4 N, a5 N, a6 S, a7 S, a8 N (seeds 25521-25528, 40 min). Then a9+ in the same
+  order until the 40 % stop.
+- **The verdict uses a1-a8.** s1 and s2 are reported apart, as the first attempt.
+- The gef_fild10 detector's TEST sessions move with it: a7 and a8, never read before its
+  parameters are frozen.
