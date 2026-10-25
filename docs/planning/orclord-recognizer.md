@@ -663,3 +663,23 @@ Reproduce: section 9's environment, then:
   - a plan where the party is in view in every trial; it wanders while we are immune;
   - the OFF toggle out of the party's reach;
   - the Lord's own entry time separated from the archers'.
+
+### 12d. Reported after 12c, deciding nothing: the Lord's own entry -> F2 (2026-10-26 04:46 ICT from `date`)
+
+From the same truth (`in_view` per species), in the 3 counted trials:
+
+| trial | an archer in view | the Lord in view | F2 (the Fly Wing request) | Lord -> F2 | first damage |
+|---|---|---|---|---|---|
+| 1 | 0.30 s | 0.30 s | 0.52 s | 0.22 s | 0.38 s |
+| 3 | 5.44 s | 14.48 s | 14.91 s | 0.43 s | none |
+| 5 | 26.97 s | 36.47 s | 36.78 s | 0.31 s | none |
+
+(seconds after the verified OFF read)
+
+- **The aura rule fired within 0.22-0.43 s of the Lord entering view in all three.** Round 2's
+  bar was "within 1.1 s".
+- **The archers enter view first:** about 9 s before the Lord in trials 3 and 5. They spread out
+  and shoot from range, so a rule keyed on the Lord alone can be late against them. They did not
+  shoot in 3 and 5.
+- **Trial 1's fail is the procedure, not the recognizer:** the whole party was in view when
+  immunity went OFF.
