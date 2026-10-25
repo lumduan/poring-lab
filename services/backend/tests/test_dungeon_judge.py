@@ -486,6 +486,23 @@ def test_real_staged_sets_back_from_looters_in_404_s3_and_s7() -> None:
     assert dj.staged_floor_ids(dj.load(S7)[1]) == {375, 376, 377, 378}
 
 
+def test_the_item_value_counts_every_cause_the_bot_earned_at_npc_and_overcharge() -> None:
+    """4.05's primary measure: picked + stolen + snatched at NPC sell and at Overcharge; staged and
+    other are not income; an item missing from the table is named, not priced at 0 silently."""
+    table = {"7053": {"sell": 386, "sell_oc10": 478}, "931": {"sell": 71, "sell_oc10": 88}}
+    items = [
+        {"item_id": 7053, "picked": 5, "stolen": 0, "snatched": 6, "other": 2, "staged": 1},
+        {"item_id": 931, "picked": 3, "stolen": 1, "snatched": 0, "other": 0, "staged": 0},
+        {"item_id": 999, "picked": 1, "stolen": 0, "snatched": 0, "other": 0, "staged": 0},
+    ]
+    v = dj.items_value(items, table, 0.25)
+    assert (v["value"], v["value_oc"]) == (11 * 386 + 4 * 71, 11 * 478 + 4 * 88)
+    assert v["value_oc_h"] == round((11 * 478 + 4 * 88) / 0.25, 1) and v["unpriced"] == [999]
+    assert "why" in dj.items_value(items, None, 0.25)
+    pooled = dj._pool_value([{"value": v}, {"value": v}], 0.5)
+    assert pooled["value_oc"] == 2 * v["value_oc"] and pooled["value_oc_h"] == v["value_oc_h"]
+
+
 P405 = "20261025T200925-demo-dungeon-rogue-gef_fild10-B-pilot"
 
 

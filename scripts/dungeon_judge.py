@@ -519,6 +519,33 @@ def items_rows(gains: Mapping[str, Mapping[str, int]], hours: float,
     return sorted(out, key=lambda x: (-x["total"], x["item_id"]))
 
 
+INCOME = ("picked", "stolen", "snatched")  # the bot's own gains (staged / other are not income)
+
+
+def items_value(items: Sequence[Mapping[str, Any]], table: Mapping[str, Mapping[str, Any]] | None,
+                hours: float) -> dict[str, Any]:  # fmt: skip
+    """PURE (rogue-gef10.md section 5, 4.05's PRIMARY measure): the value of every item the bot
+    itself gained (picked + stolen + snatched) at NPC sell and at Overcharge Lv 10 (econ_items'
+    `sell` / `sell_oc10`, pre-renewal), total and per hour. econ_row's gross counts pickups only."""
+    if table is None:
+        return {"why": "no item table (econ_items.py build)"}
+    v = voc = 0
+    unpriced = []
+    for it in items:
+        n = sum(int(it.get(f, 0)) for f in INCOME)
+        t = table.get(str(it["item_id"]))
+        if not n:
+            continue
+        if t is None:
+            unpriced.append(int(it["item_id"]))
+            continue
+        v += n * int(t.get("sell") or 0)
+        voc += n * int(t.get("sell_oc10") or 0)
+    per = (lambda x: round(x / hours, 1)) if hours > 0 else (lambda x: None)  # noqa: E731
+    return {"value": v, "value_oc": voc, "value_h": per(v), "value_oc_h": per(voc),
+            "unpriced": unpriced}  # fmt: skip
+
+
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]],
           table: Mapping[str, Mapping[str, Any]] | None, manifest: Mapping[str, Any] | None = None,
           map_name: str | None = None, t0: int | None = None, t1: int | None = None,
@@ -629,6 +656,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "endure": len(falls(sp, ENDURE_SP, skip)),
         "char": rs.get("char") or "crusader",
         "items": items_rows(gains, h, item_names()),
+        "value": items_value(items_rows(gains, h, item_names()), table, h),
         "steal": {"tries_packets": len(st_falls), "stolen": n_stolen,
                   "per_try": round(n_stolen / len(st_falls), 4) if st_falls else None,
                   "runner_tries": len(steal_ev),
@@ -730,6 +758,17 @@ _SUMS = ("hours", "kills", "deaths", "potions", "fly_wings", "heals", "heals_con
          "sp_used", "autoguard", "endure", "escapes", "runner_kills")  # fmt: skip
 
 
+def _pool_value(rows: Sequence[Mapping[str, Any]], hours: float) -> dict[str, Any]:
+    """PURE: items_value pooled: the runs' values summed, per hour from the summed hours."""
+    vals = [r.get("value") or {} for r in rows]
+    if not rows or any("value" not in v for v in vals):
+        return {"why": "a run without an item value"}
+    v, voc = sum(int(x["value"]) for x in vals), sum(int(x["value_oc"]) for x in vals)
+    return {"value": v, "value_oc": voc,
+            "value_h": round(v / hours, 1) if hours else None,
+            "value_oc_h": round(voc / hours, 1) if hours else None}  # fmt: skip
+
+
 def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, Any]:
     """PURE: several runs pooled: counts / seconds summed, rates re-taken from the sums, minima
     the minimum, the economics by econ_row.pool (all runs' 10-min windows together)."""
@@ -795,6 +834,7 @@ def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, 
         "gross_h": econ.get("gross_h"), "cost_h": econ.get("cost_h"), "net_h": econ.get("net_h"),
         "cost_ratio": econ.get("cost_ratio"), "sharpe_10min": econ.get("sharpe_10min"),
         "economics": econ,
+        "value": _pool_value(rows, h),
         "moving_hp_recovery": {
             "walking_min": round(s["walking_min"], 3),
             "natural_while_walking": int(s["natural_while_walking"]),
