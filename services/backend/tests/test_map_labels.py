@@ -524,3 +524,37 @@ def test_amendment_a_the_watch_reads_the_4_row_layout() -> None:
     assert not ml.layout_matches({**four, "panel": None}, "rows4")
     with pytest.raises(SystemExit):
         ml.layout_matches(hunt, "other")
+
+
+def test_amendment_c_facing_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """gef10 Amendment C (2d): a unit whose facing has NO source is excluded, except an engaged
+    unit under E2 / E3 that is drawn toward our character; 2b / 2c keep their names."""
+
+    def base(self: Any, world: Any, e: Any, *_a: Any) -> Any:
+        return (0, "timeline:None"), ("next_move" if e.gid == 1 else None)
+
+    monkeypatch.setattr(olf.FacingRule, "choose", base)
+    idle, walk = SimpleNamespace(state="idle"), SimpleNamespace(state="walk")
+    world = SimpleNamespace(self_x=12, self_y=10)
+    times = {1: [S], 2: [S]}  # 1 and 2 engaged; 9 not
+
+    def rule(v: str) -> Any:
+        return ml.EngagedLabelRule("fix2", olf.NextMoves(()), olf.ViewClasses(), times, variant=v)
+
+    for v in ("E0", "E1", "E2", "E3"):
+        assert rule(v).choose(world, _unit(9), idle, {}, S, None, 0.0)[1] == ml.FACING_UNKNOWN
+        assert rule(v).choose(world, _unit(1), idle, {}, S, None, 0.0)[1] == "next_move"
+    assert rule("E0").choose(world, _unit(2), idle, {}, S, None, 0.0)[1] == ml.ENGAGED
+    e1 = rule("E1")
+    assert e1.choose(world, _unit(2), idle, {}, S, None, 0.0)[1] == ml.FACING_UNKNOWN
+    assert e1.engaged_now == set()
+    e2 = rule("E2")
+    assert e2.choose(world, _unit(2), idle, {}, S, None, 0.0) == ((6, "engaged:toward_self"), None)
+    assert e2.engaged_now == {2}
+    assert e2.choose(world, _unit(2), walk, {}, 2 * S, None, 0.0)[1] == ml.FACING_UNKNOWN
+    assert e2.engaged_now == set()
+    on_us = SimpleNamespace(self_x=10, self_y=10)
+    assert rule("E3").choose(on_us, _unit(2), idle, {}, S, None, 0.0)[1] == ml.FACING_UNKNOWN
+    # pay_fild07's rule (EngagedRule) is unchanged: no 2d
+    pay = ml.EngagedRule("fix2", olf.NextMoves(()), olf.ViewClasses(), times)
+    assert pay.choose(world, _unit(9), idle, {}, S, None, 0.0)[1] is None

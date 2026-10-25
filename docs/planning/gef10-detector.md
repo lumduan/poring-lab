@@ -572,3 +572,34 @@ then this map's new species, then the floor items:
 - **What stays:** the floor and o3h apply to EVERY kept label as before, crowded ones included (a
   buried archer's fit falls under the floor, so its frame is not whole); the label rule, C1, the
   split and the bars.
+
+### 13e. RESULT: T_h under Amendment B, and what its low tail is (FIT; nothing frozen)
+
+- **Run** 21:25:46-21:33:08 ICT at 3787d30 (`fit/threshold-P1.json`, rows `fit/th-rows-B.json`):
+  **T_h = 0.265** from 222 clear, not engaged, uncrowded labels (p25 0.680, median 0.719); the
+  pre-B set gives 0.140 (722). Per species (n, p5): Orc Lady 124, 0.498; Orc Warrior 23, 0.637;
+  Poporing 41, 0.718; Orc Lord 8, 0.225; Orc Archer 25, 0.201. 91.8 % / 93.7 % of the Orc Lord's /
+  archers' clear kept labels are crowded (their pile).
+- **The low tail is the units whose FACING the packets never gave** (the Timeline's
+  `facing_from` is None: no appear heading, turn, walk or stop seen; fix 2's (i)-(iii) do not
+  cover them and the drawn view is a guess). Over every FIT fate: 43 of 3,333; clear and alone, 13
+  with a median fit of 0.237 (10 of them under 0.3), against 0.727 (after a move), 0.714
+  (walking), 0.743 (appear heading) for the others clear and alone. Without them the B set's p5
+  is **0.636** (209 labels).
+- The engaged selection started at 0.265 (21:33:08) was stopped at 21:34:24 (killed by PID) for
+  Amendment C; nothing of it is used.
+
+### AMENDMENT C (2026-10-25 21:34:34 ICT, from `date`; after 13e's FIT diagnostic, BEFORE any parameter is frozen and before any TEST frame is read)
+
+- **What changes (2, the exclusions):** a new exclusion **2d `facing_unknown`**, handled as 2b /
+  2c (the label is not kept, its frame is not whole; C1 drops it before scoring, as 2b / 2c): a
+  unit whose drawn facing would come from the Timeline with NO source (no appear heading, no turn,
+  no walk, no stop: `facing_from` None). It does not apply to an ENGAGED unit under E2 / E3
+  (its facing is set toward our character, 4h).
+- **Why:** 13e: those labels draw a guessed view and fit at a median 0.237 even when clear and
+  alone; fix 2 was never defined for them. It is a label-quality rule (they are 43 of 3,333 FIT
+  fates), and as a side effect T_h is no longer set by them.
+- **What stays:** everything else, including Amendment B's measuring set.
+- **For the parent (D9, new):** T_h is a strong lever here. Measured on FIT: 0.140 (A), 0.265
+  (B), 0.636 (B without the unknown facings, a preview of C). payf07 and orcsdun01 froze 0.479 /
+  0.48. 13f reports what each value keeps.

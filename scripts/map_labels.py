@@ -336,6 +336,7 @@ ENGAGED_TAG = "engaged:"  # an engaged label's facing source starts with it
 SELF_MASK_PAD_PX = 4  # 4h E2 / E3: our self box + 4 px leaves the fit's valid pixels
 E3_GROUPS = (MonsterAction.IDLE, MonsterAction.ATTACK, MonsterAction.HURT)
 E_OFFSET_BAR_PX = 2.0  # 4h's selection: the kept engaged fits' median |dx| and |dy|
+FACING_UNKNOWN = "facing_unknown"  # gef10 Amendment C (2d): the Timeline never saw the facing
 
 
 def heading_toward(src: tuple[float, float], dst: tuple[float, float]) -> int | None:
@@ -364,20 +365,29 @@ class EngagedLabelRule(EngagedRule):
         if tw != self.tw_now:
             self.tw_now, self.engaged_now = tw, set()
         facing, why = olf.FacingRule.choose(self, world, e, st, rules, tw, sheet, yaw)
+        unknown = facing[1] == "timeline:None"  # Amendment C (2d): no facing source at all
         if not is_engaged(self.times, e.gid, tw):
-            return facing, why
+            return facing, FACING_UNKNOWN if why is None and unknown else why
         if self.variant == "E0":
             return facing, ENGAGED if why is None else why
         tagged = (facing[0], ENGAGED_TAG + facing[1])
         if why == olf.NEXT_MOVE or self.variant == "E1":
+            if why is None and unknown:
+                why = FACING_UNKNOWN
             if why is None:
                 self.engaged_now.add(e.gid)
             return tagged, why
         self.engaged_now.add(e.gid)
         me = (getattr(world, "self_x", None), getattr(world, "self_y", None))
         if st.state == "walk" or me[0] is None or me[1] is None:
+            if unknown:
+                self.engaged_now.discard(e.gid)
+                return tagged, FACING_UNKNOWN
             return tagged, None
         h = heading_toward((float(e.x), float(e.y)), (float(me[0]), float(me[1])))
+        if h is None and unknown:  # on our own cell with no facing source: nothing to draw by
+            self.engaged_now.discard(e.gid)
+            return tagged, FACING_UNKNOWN
         return ((h, ENGAGED_TAG + "toward_self") if h is not None else tagged), None
 
 
@@ -1372,6 +1382,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "next_move_by_species": by_species(olf.NEXT_MOVE),
         "ambiguous_view_by_species": by_species(olf.AMBIGUOUS),
         "engaged_by_species": by_species(ENGAGED),
+        "facing_unknown_by_species": by_species(FACING_UNKNOWN),
         "facing_agreement": olf.agreement(rows),
         "self_moving_rows": motion.get(True, 0),
         "per_part": per_part,
