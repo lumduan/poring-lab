@@ -646,6 +646,120 @@ def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None
     return out
 
 
+# --- storage (Batt 2026-10-25, docs/planning/rogue-gef10.md section 4: loot is VALUE now, kept for
+# his Overcharge merchant; "Add @storage to group 20") ---------------------------------------------
+# The caller opens the ACCOUNT storage with `@storage` (its character's name + job check first);
+# the window then sits at its own place beside the inventory's home. Proven by hand 2026-10-25
+# 19:31-19:35 on the Rogue (Thief8fce): an equipment item dragged in moved with no prompt
+# (inventory 32 -> 31, storage 0 -> 1); Resin x190 raised the SAME quantity prompt as a drop (its OK
+# button 0.0 from prompt_ok.npy) with the whole stack filled in, and Enter stored it (31 -> 30,
+# 1 -> 2). Every stack that is not KEPT (stock: the White Potion and Fly Wing references) and not
+# empty is stored, unknown icons included: storing is reversible, unlike a drop.
+STORAGE_TITLE_BOX = (366, 203, 60, 12)  # client px x, y, w, h: the storage window's title text
+STORAGE_MATCH = 12.0  # mean grey difference: the open window reads 0.0, no window 71.0 (19:3x)
+STORE_AT = (500, 330)  # client px: inside the storage window's item list
+STORAGE_CLOSE = (600, 644)  # client px: the storage window's own CLOSE button
+MAX_STORES = 60
+
+
+def next_store(kinds: list[str]) -> int | None:
+    """PURE: the first slot (reading order) of a tab to STORE: anything but kept stock and empty
+    slots, unknown icons included. A store shifts the later stacks left, so the tab is read again
+    after every store."""
+    return next((i for i, k in enumerate(kinds) if k in ("loot", "unknown")), None)
+
+
+def store_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None,
+               refs_dir: Path = LOOT_DIR) -> dict[str, Any]:  # fmt: skip
+    """Move every non-stock stack of the inventory into the OPEN storage window by the known path
+    (two motions, a drag into the list, Enter only on the quantity prompt matched to its OK button),
+    then close the inventory by its chord and the storage by its own CLOSE button. r.Stop on
+    anything unexpected: no storage window, a prompt that stays, a slot that does not move twice,
+    a storage window that does not close."""
+    import ui_gate
+
+    refs = {n: kr for n, kr in load_loot_refs(refs_dir).items() if kr[0] in ("kept", "empty")}
+    prompt, title = LOOT_DIR / "prompt_ok.npy", LOOT_DIR / "storage_title.npy"
+    if "slot" not in refs or not any(k == "kept" for k, _ in refs.values()):
+        raise r.Stop(f"gm_state ({why}): no kept / empty references in {refs_dir}")
+    if not prompt.exists() or not title.exists():
+        raise r.Stop(f"gm_state ({why}): no prompt or storage-title reference in {LOOT_DIR}")
+    ok_ref, title_ref = np.load(prompt), np.load(title)
+    region = r.game_region()
+    out: dict[str, Any] = {"stored": [], "kept": []}
+
+    def frame() -> Any:
+        return np.ascontiguousarray(r.grab_after(screen, region, r.ns())[..., :3])
+
+    def shown(f: Any, box: tuple[int, int, int, int], ref: Any, bar: float) -> bool:
+        x, y, w, h = box
+        return float(np.abs(to_gray(f)[y : y + h, x : x + w] - ref).mean()) <= bar
+
+    if not shown(frame(), STORAGE_TITLE_BOX, title_ref, STORAGE_MATCH):
+        raise r.Stop(f"gm_state ({why}): the storage window is not open (@storage first)")
+    r.activate_client(agent, screen)
+    agent.chord(*ui_gate.window_keys("inventory"))
+    time.sleep(1.0)
+    try:
+        moves = 0
+        for tab in INV_TABS:
+            _tab(agent, screen, tab)
+            fails = 0
+            while moves < MAX_STORES:
+                f = frame()
+                got = [classify_icon(icon_crop(f, i % INV_COLS, i // INV_COLS), refs)
+                       for i in range(INV_COLS * INV_ROWS)]  # fmt: skip
+                i = next_store([k for k, _n, _d in got])
+                if i is None:
+                    out["kept"] += [n for k, n, _d in got if k == "kept"]
+                    break
+                n = INV_COLS * INV_ROWS
+                before = [icon_crop(f, c % INV_COLS, c // INV_COLS) for c in range(n)]
+                x1, y1 = r.at(*slot_centre(i % INV_COLS, i // INV_COLS))
+                x2, y2 = r.at(*STORE_AT)
+                agent.move(x1 + 3, y1 + 3)
+                time.sleep(0.15)
+                agent.move(x1, y1)
+                time.sleep(0.6)
+                agent.drag(x1, y1, x2, y2, steps=12)
+                time.sleep(1.0)
+                f2 = frame()
+                if shown(f2, PROMPT_OK_BOX, ok_ref, PROMPT_MATCH):
+                    r.activate_client(agent, screen)
+                    agent.chord("Enter")
+                    time.sleep(1.0)
+                    f2 = frame()
+                    if shown(f2, PROMPT_OK_BOX, ok_ref, PROMPT_MATCH):
+                        raise r.Stop(f"gm_state ({why}): the quantity prompt stayed open")
+                after = [icon_crop(f2, c % INV_COLS, c // INV_COLS) for c in range(n)]
+                if not tab_changed(before, after, i):
+                    fails += 1
+                    if fails >= 2:
+                        raise r.Stop(f"gm_state ({why}): slot {i} of {tab} did not store twice")
+                    continue
+                moves += 1
+                out["stored"].append({"tab": tab, "slot": i, "d": round(got[i][2], 1)})
+    finally:
+        r.activate_client(agent, screen)
+        agent.chord(*ui_gate.window_keys("inventory"))
+        time.sleep(1.0)
+        if shown(frame(), STORAGE_TITLE_BOX, title_ref, STORAGE_MATCH):
+            x, y = r.at(*STORAGE_CLOSE)
+            agent.move(x + 3, y + 3)
+            time.sleep(0.15)
+            agent.move(x, y)
+            time.sleep(0.6)  # a cold-jump UI click is ignored: two motions first
+            agent.click(x, y)
+            time.sleep(1.0)
+        if shown(frame(), STORAGE_TITLE_BOX, title_ref, STORAGE_MATCH):
+            raise r.Stop(f"gm_state ({why}): the storage window did not close")
+        ui_gate.ensure_clear(agent, screen, why=f"{why}:store")
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"store-{r.ns()}.json").write_text(json.dumps(out))
+    return out
+
+
 def cut_loot(spec: Path) -> dict[str, Any]:
     """OFFLINE: icon references from full-desktop PNGs. ``spec`` (JSON): {"origin": [gx, gy],
     "icons": [{"png", "col", "row", "kind", "name"}], "prompt": {"png"}} -- the slots a person

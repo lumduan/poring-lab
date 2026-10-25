@@ -95,13 +95,15 @@ ALLOWED = {
                                  "rule); the walk click while the GM walks, after the walk guard "
                                  "and a 40-px unit check (the bot's moving rule; from a standstill "
                                  "the cursor gate, GATED)"),
-    "scripts/gm_state.py": (2, "UI only: an inventory TAB label inside the open window, after two "
+    "scripts/gm_state.py": (3, "UI only: an inventory TAB label inside the open window, after two "
                                "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
                                "rule); the loot leaves by agent.drag onto open ground + Enter on "
                                "the quantity prompt, matched to its OK button first. And STR's "
                                "'+' in the status window (rebuild_hunting, Batt 2026-10-18), after "
                                "two fresh frames show that window ALONE at its home; the '+' lies "
-                               "inside it"),
+                               "inside it. And the storage window's own CLOSE button (store_loot, "
+                               "Batt 2026-10-25: loot kept via @storage), only while its title "
+                               "matched, after two motions"),
     "scripts/dungeon_hunt.py": (2, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
                                    "Crusader on orcsdun01): ONE world-click path (click_at) "
                                    "through FrameGuard (off-frame refused) -- the DEFEND-SCAN "

@@ -294,6 +294,26 @@ def test_only_loot_slots_are_dropped_and_kept_ones_are_skipped(gs: Any) -> None:
     assert gs.next_loot([]) is None
 
 
+def test_storing_takes_every_stack_but_the_kept_stock_and_empty_slots(gs: Any) -> None:
+    # store_loot (Batt 2026-10-25): storing is reversible, so unknown icons are stored too
+    assert gs.next_store(["kept", "kept", "unknown", "loot", "empty"]) == 2
+    assert gs.next_store(["kept", "kept", "empty", "empty"]) is None
+    assert gs.next_store(["loot"]) == 0
+    assert gs.next_store([]) is None
+    assert gs.next_loot(["kept", "unknown", "empty"]) is None  # a DROP still leaves unknowns
+
+
+def test_store_points_lie_inside_the_storage_window_not_on_the_inventory(gs: Any) -> None:
+    # the inventory at its home spans client x 0-280; the storage window x 361-639, y 202-658
+    sx, sy = gs.STORE_AT
+    cx, cy = gs.STORAGE_CLOSE
+    x, y, w, h = gs.STORAGE_TITLE_BOX
+    for px, py in ((sx, sy), (cx, cy), (x, y), (x + w, y + h)):
+        assert 361 <= px <= 639 and 202 <= py <= 658
+    last = gs.slot_centre(gs.INV_COLS - 1, gs.INV_ROWS - 1)
+    assert last[0] < 361
+
+
 def test_a_drop_counts_when_any_later_slot_changed(gs: Any) -> None:
     """2026-10-20 00:44: two identical equipment items in slots 2-3; dropping slot 2 shifts the
     copy into it (slot 2 unchanged) and empties slot 3. That is a drop; nothing changing is not."""
