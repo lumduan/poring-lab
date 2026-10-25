@@ -153,6 +153,29 @@ def test_a_bright_scene_through_the_strip_is_not_ink(templates: selfpos.DigitTem
     assert selfpos.read_minimap_xy(frame, templates) is None
 
 
+def test_a_stroke_start_at_the_rect_edge_where_no_digit_fits_is_scenery(
+    templates: selfpos.DigitTemplates,
+) -> None:
+    """2026-10-25 (4.05 s2): "292 62" over sunlit grass had ONE unexplained stroke start, in the
+    rect's last column, where no whole digit can start -- scenery, read. The same speck where a
+    third y digit could start is still a refusal (it could be a hidden digit)."""
+    rng = np.random.default_rng(25)
+    x, y, w, h = RECT
+    frame = scene(rng, paving=False)
+    draw_text(frame, "292 62", rng, noise=0)
+    assert selfpos.read_minimap_xy(frame, templates) == (292, 62)
+    assert selfpos.first_stroke_max(templates) <= 2
+    edge = frame.copy()
+    edge[TEXT_Y + 3 : TEXT_Y + 7, x + w - 2] = 5  # a dark speck, then a bright one: a "start"
+    edge[TEXT_Y + 3 : TEXT_Y + 7, x + w - 1] = 250
+    assert selfpos.read_minimap_xy(edge, templates) == (292, 62)
+    third = frame.copy()  # "62" sits at TEXT_X + 29 and + 36 (draw_text): a third y digit's
+    c = TEXT_X + 6 * PITCH + 1  # shadow column would be TEXT_X + 43, its first stroke one right
+    third[TEXT_Y + 3 : TEXT_Y + 7, c] = 5
+    third[TEXT_Y + 3 : TEXT_Y + 7, c + 1] = 250
+    assert selfpos.read_minimap_xy(third, templates) is None
+
+
 def test_a_glyph_between_two_digits_is_ambiguous(templates: selfpos.DigitTemplates) -> None:
     """Half a 6 and half an 8 in one cell: either would be a guess."""
     base = scene(np.random.default_rng(7))

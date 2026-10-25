@@ -194,6 +194,23 @@ def stroke_starts(gray: Gray, templates: DigitTemplates) -> npt.NDArray[np.bool_
     return (gray[:, 1:] >= templates.ink_level) & (gray[:, :-1] <= templates.shadow_level)
 
 
+def first_stroke_max(templates: DigitTemplates) -> int:
+    """The largest column, over the digits seen in calibration, at which a digit's FIRST stroke
+    starts (a bright template column right of a dark one, on the stroke rows); the cell width - 1
+    when none can be found (then every column counts, as before)."""
+    r0, r1 = templates.stroke_rows
+    firsts = []
+    for d in range(10):
+        if templates.counts[d] == 0:
+            continue
+        m = templates.mean[d][r0:r1]
+        starts = np.flatnonzero(((m[:, 1:] > 0.5) & (m[:, :-1] < 0.2)).any(axis=0))
+        if starts.size == 0:
+            return int(templates.shape[1]) - 1
+        firsts.append(int(starts[0]) + 1)
+    return max(firsts) if firsts else int(templates.shape[1]) - 1
+
+
 def read_rect(gray: Gray, templates: DigitTemplates) -> Reading:  # noqa: PLR0911
     """Parse the readout from its rect (grey, rect pixels). See the module docstring."""
     prob = stroke_probability(gray, templates.bright, templates.ink_level, templates.shadow_level)
@@ -224,6 +241,11 @@ def read_rect(gray: Gray, templates: DigitTemplates) -> Reading:  # noqa: PLR091
     _, w = templates.shape
     r0, r1 = templates.stroke_rows
     ink_cols = 1 + np.flatnonzero(stroke_starts(gray[row + r0 : row + r1], templates).any(axis=0))
+    # ... where a digit could be: a whole glyph inside the rect starts its first stroke at most
+    # first_stroke_max(templates) columns in, so a stroke start further right is the scene at the
+    # rect's edge, never a hidden digit (2026-10-25, 4.05 s2: "292 62" over sunlit grass, its only
+    # uncovered start in the rect's last column; the run lost its position and stalled)
+    ink_cols = ink_cols[ink_cols <= gray.shape[1] - w + first_stroke_max(templates)]
     covered = np.zeros(gray.shape[1], bool)
     for g in glyphs:
         covered[g.x : g.x + w] = True
