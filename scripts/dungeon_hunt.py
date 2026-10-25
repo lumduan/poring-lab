@@ -88,8 +88,16 @@ normally, and once SP is enough for Steal again open with Steal as before"; docs
 - success = the weight readout rose after the cast (logged; the judge counts it from packets).
   Name tags are no longer needed (--bank-tags still banks them).
 
+dungeon@8 (Batt 2026-10-25, docs/planning/rogue-gef10.md: the Thief became a ROGUE for gef_fild10;
+arms "no Steal" (Snatcher Lv 10 alone) vs --steal). New:
+- --char rogue: the same character's data (data/thief, the identity check with job "rogue"), its
+  max HP 2146 / SP 336 and the Thief's keys and stock; the setup never drops loot (it is value for
+  Batt's Overcharge merchant) and stops at 40 % ("train until the bag is full first");
+- the Steal cast is read as an SP-percent fall of half Steal's share of max SP, rounded up
+  (steal_sp_fall: Thief 5 points as before, Rogue 10 / 336 SP -> 2 points).
+
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
-                        [--char crusader|thief] [--map M] [--steal] [--bank-tags]
+                        [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
     (dungeon@7: --steal = Batt's steal-first on every monster, SP permitting)
 """
 
@@ -116,10 +124,11 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@7"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
-# (Batt 2026-10-24 ~16:0x, demonstrations 4.04)
+# (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
+# (Batt 2026-10-25, docs/planning/rogue-gef10.md)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -192,12 +201,21 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
               "autoguard": False, "potions_to": 10, "wings_to": 10,
               # Rough Oridecon 756 / Rough Elunium 757 are Etc: never dropped by the setup
               "clear_etc": False},
+    # dungeon@8 (Batt 2026-10-25, rogue-gef10.md): the SAME character (data/thief, Thief8fce) after
+    # its job change; its status window 2026-10-25 19:3x: HP 2146, SP 336 (Base 62 / Rogue 50).
+    # Loot is value now (his Overcharge merchant): never dropped; at 40 % the setup stops ("train
+    # until the bag is full first", Batt 2026-10-25)
+    "rogue": {"job": "rogue", "data": "thief", "max_hp": 2146, "max_sp": 336,
+              "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
+                       "stand": "Insert"},
+              "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False},
 }  # fmt: skip
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
 # dungeon@7 (Batt ~16:0x: ONE Steal on every monster first, SP permitting)
 STEAL_SP = 10  # pinned pre-re skill_db TF_STEAL SpCost (every level)
 STEAL_CAST_MAX_S = 3.0  # the walk to range 1 (~0.15 s a cell) + the cast + the SP line redrawn
-STEAL_SP_FALL = 5  # SP percent points: the Steal was cast (10 of the Thief's 112 = 8.9 points)
+STEAL_SP_FALL = 5  # SP percent points: the Steal was cast (10 of the Thief's 112 = 8.9 points);
+# dungeon@8: steal_sp_fall(max_sp) = half the expected fall, rounded up (Thief 5, Rogue 10/336 -> 2)
 STEAL_POLL_S = 0.1
 STEAL_SETTLE_S = 0.3  # after the cast: the weight line redrawn before it is read
 TAG_BOTTOM = 4  # px below the cell's projected point: the pseudo box's bottom for the tag band
@@ -713,9 +731,15 @@ def steal_ready(sp_pct: int | None, max_sp: int | None) -> bool:
     return sp_pct is not None and max_sp is not None and sp_pct >= steal_sp_pct(max_sp)
 
 
-def steal_cast(sp0: int | None, sp1: int | None) -> bool:
-    """PURE: the SP percent fell by >= STEAL_SP_FALL points = the Steal was cast."""
-    return sp0 is not None and sp1 is not None and sp0 - sp1 >= STEAL_SP_FALL
+def steal_sp_fall(max_sp: int) -> int:
+    """PURE: the SP-percent fall that says a Steal was cast: half of STEAL_SP's share of max SP,
+    rounded up (dungeon@8). Thief (112): 5 = STEAL_SP_FALL; Rogue (336): 2."""
+    return -(-100 * STEAL_SP // (2 * max_sp))
+
+
+def steal_cast(sp0: int | None, sp1: int | None, max_sp: int = 112) -> bool:
+    """PURE: the SP percent fell by >= steal_sp_fall(max_sp) points = the Steal was cast."""
+    return sp0 is not None and sp1 is not None and sp0 - sp1 >= steal_sp_fall(max_sp)
 
 
 def _sgn(x: int) -> int:
@@ -787,6 +811,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     from poring_env import selfpos
 
     conf = CHARS_CONF[a.char]  # dungeon@6
+    crk = conf.get("data", a.char)  # dungeon@8: the crusader.py data dir (the Rogue is data/thief)
     map_ = a.map
     keys_ = conf["keys"]
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
@@ -891,13 +916,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     with r.session(f"rule:dungeon-{a.strategy}") as (agent_raw, screen):
         agent_raw.wait_for_human()
         agent = hf.FrameGuard(agent_raw, (gx0, gy0, gw, gh), counts)
-        got = cr.check(screen, conf["job"], a.char)
+        got = cr.check(screen, conf["job"], crk)
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")
         # the setup (the experimenter's restore, never a decision): full HP / SP, the stock topped
         # up against the DB's last save (an upper bound of what is carried), the weight checked
-        name = json.loads((cr.data_dir(a.char) / "char.json").read_text())["name"]
+        name = json.loads((cr.data_dir(crk) / "char.json").read_text())["name"]
         cid = int(r.db_query(f"SELECT char_id FROM `char` WHERE name = {r.sql_str(name)};")[0][0])
         inv = {int(i): int(n) for i, n in r.db_query(
             f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
@@ -920,7 +945,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 raise r.Stop(f"dungeon@6: weight {w0} at or over {CLEAR_AT} for the {a.char}: "
                              "the setup never drops its Etc tab (a person first)")  # fmt: skip
             cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                       f"{CLEAR_STAND[2]}", conf["job"], a.char)  # fmt: skip
+                       f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
             time.sleep(3.0)
             bench.close_chat(agent_raw, screen)
             cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
@@ -940,7 +965,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         for cmd in setup:
             # 4.04 Amendment A: @heal is idempotent -- chat_guard's skip (a refused 3rd @heal in a
             # row is not typed; the HP / SP are full after the pre-run's heal or the relog)
-            got_ = cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char,
+            got_ = cr.gm_line(agent_raw, screen, cmd, conf["job"], crk,
                               on_refuse="skip" if cmd == "@heal" else "raise")  # fmt: skip
             if not got_.get("typed", True):
                 counts["setup_heal_skipped"] += 1
@@ -1210,7 +1235,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 sp1_ = sp_now(frame())
                 if sp1_ is not None:
                     sp1 = sp1_
-                if steal_cast(sp0, sp1):
+                if steal_cast(sp0, sp1, conf["max_sp"]):
                     cast = True
                     break
                 if guard_tick():
@@ -2080,14 +2105,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if r.is_state(screen, gv.DEAD_STATE):
                     raise r.Stop("dungeon@1: the death dialog stayed after its known step")
                 for cmd in ("@alive", "@heal"):
-                    cr.gm_line(agent_raw, screen, cmd, conf["job"], a.char)
+                    cr.gm_line(agent_raw, screen, cmd, conf["job"], crk)
                     time.sleep(0.8)
                 bench.close_chat(agent_raw, screen)
             if reason != "death":  # 13:19: a stopped run left the Crusader at 30 % HP among
                 # orcs with no runner: after run_end (outside the measured window) it goes home
                 try:
                     cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                               f"{CLEAR_STAND[2]}", conf["job"], a.char)  # fmt: skip
+                               f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
                     time.sleep(3.0)
                     bench.close_chat(agent_raw, screen)
                 except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again

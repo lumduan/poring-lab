@@ -348,7 +348,7 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@7"
+    assert dh.VERSION == "dungeon@8"  # @8 = @7 + --char rogue (2026-10-25)
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
 
 
@@ -379,6 +379,23 @@ def test_dungeon7_steal_rules() -> None:
     assert dh.steal_cast(100, 91) and dh.steal_cast(14, 5)  # 10 of 112 SP = 8.9 points
     assert not dh.steal_cast(100, 96) and not dh.steal_cast(100, None)
     assert not dh.steal_cast(None, 50)
+
+
+def test_the_steal_cast_fall_scales_with_max_sp_and_keeps_the_thiefs_five() -> None:
+    # dungeon@8: 10 SP is 8.9 % of the Thief's 112 but 3.0 % of the Rogue's 336
+    assert dh.steal_sp_fall(112) == dh.STEAL_SP_FALL == 5
+    assert dh.steal_sp_fall(336) == 2
+    assert dh.steal_cast(100, 97, 336) and dh.steal_cast(30, 28, 336)
+    assert not dh.steal_cast(100, 99, 336) and not dh.steal_cast(100, 96, 112)
+    assert dh.steal_sp_pct(336) == 4  # ceil(100 * 11 / 336): the gate to open with a Steal
+
+
+def test_the_rogue_is_the_thiefs_character_with_its_own_job_and_numbers() -> None:
+    rogue, thief = dh.CHARS_CONF["rogue"], dh.CHARS_CONF["thief"]
+    assert rogue["job"] == "rogue" and rogue["data"] == "thief"
+    assert (rogue["max_hp"], rogue["max_sp"]) == (2146, 336)
+    assert rogue["keys"] == thief["keys"] and rogue["keys"]["steal"] == "F3"
+    assert rogue["clear_etc"] is False and "data" not in thief
     done = [((100, 100), 10.0)]
     assert not dh.steal_forgotten(done, (101, 102), 20.0)  # within 2 cells, 10 s later
     assert dh.steal_forgotten(done, (103, 100), 20.0)  # 3 cells away: another monster

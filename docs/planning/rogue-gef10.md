@@ -260,3 +260,69 @@ The chances on gef_fild10 (one attacker):
    - the store step, built, census-tested, then its first live use (4).
 4. Merge the prep; the census plus the targeted safety tests; the pilot; the runs (5).
 5. The detector pre-registration once the recordings exist (6).
+
+## Amendment A (2026-10-25 19:45 ICT from `date`; BEFORE any run on gef_fild10)
+
+**Batt's answers to the 18:49 report (translated from Thai):**
+1. "Run on; do whatever can run in parallel at the same time."
+2. The Orc Lord: "run away; you may try spawning it first."
+3. The Kafra: "first get the hunting to fill the bag."
+4. The shell-permission outage: "fix it if you can" (section A5).
+
+**A1. Done live (19:06-19:40 ICT):**
+- `@storage` is live: a guarded `recreate:rathena@120` 19:06:39-19:08:52 (worst capture stall
+  7.2 %), then `recreate:sniffer@30` 19:09:04-19:09:39 (the sniffer shares rathena's network).
+  - `verify_mount.py rathena`: groups.yml ok.
+  - The auto GM recover reported rc 3 ("the character never came online"): the client entered its
+    last-used slot, the Thief, not the Novice GM. The interlock was green and the Thief online, so
+    nothing was retried.
+- **The Rogue build (3c), each step read back on a frame:**
+  - @resetskill; @joblevelup -6 (Job 34; the pinned atcommand.cpp lowers the points with it: 33);
+    @job 17;
+  - `cut-job rogue` on the judged frame; @joblevelup 49; @baselevelup 12; @resetstat (585 points);
+  - AGI +81, DEX +39 by the status window;
+  - skills one at a time. The skill window reopens on the ROGUE tab, so each Thief skill had the
+    Thief tab clicked and checked on a frame first;
+  - Snatcher sits at (2,0) of the Rogue tab, not (1,0) (that is Tunnel Drive): only the three
+    learnable icons were lit, matching the pinned tree;
+  - @questskill 149 / 150 / 151 / 152 / 1005; F3 = Steal (dragged from the Thief tab).
+- **The final status window:** Base 62 / Job 50, STR 1 AGI 82 (+8) VIT 1 INT 1 DEX 40 (+7) LUK 1,
+  Status Point 0, HIT 109, **FLEE 192 + 1**, Aspd 170, HP 2146, SP 336, skill points 29 left.
+  - FLEE is 10 above 3b's estimate: Increase Dodge gives the 2nd class +4 per level.
+  - So Orc Lady hits us 5 % alone and ~7 % with 3 attackers (3b said ~18 %).
+- **The store step:** `gm_state.store_loot` (842e1d0, census 2 -> 3, tests). Its first live use
+  19:38-19:40 stored 20 stacks and kept White Potion x9 / Fly Wing x10. Weight 1,034 -> 505 /
+  2,430 (20.8 %), as section 4 predicted.
+
+**A2. Storage is ONCE, not between runs (Batt 3).** The runs follow each other with the loot kept in
+the bag. The setup stops at 40 % (972): that is "the bag is full", the milestone before any Kafra
+trip. Section 5's "the store step between runs" is withdrawn.
+
+**A3. The runner is dungeon@8:**
+- `--char rogue`: the same character's data, job "rogue", HP 2146 / SP 336;
+- the Steal cast is read as a fall of half Steal's SP share, rounded up (Rogue: 2 points; the
+  Thief's 5 unchanged).
+
+**A4. The Orc Lord (Batt 2: flee; practise on spawned ones first):**
+- **Practice first, off the scored runs:**
+  - an immune watch on gef_fild10 (the elder-willow watch's way): at each lattice cell `@monster
+    1190 1`, a dwell, then `@killmonster2`, recorded with its packets;
+  - then a recognizer, built offline on those frames and scored against the packet positions;
+  - then a FLEE rule (a Fly Wing at once, since the Orc Lord's walk speed decides whether a run on
+    foot can work), proven live on a spawned Orc Lord with immunity OFF before any scored run
+    uses it.
+- **Until that rule is proven,** each scored run's setup types `@killmonster2` on gef_fild10 before
+  the start. Every monster there dies without drops and respawns, and the natural Orc Lord comes
+  back only after 2 h (+- 10 min), longer than a 40-min run. Both arms get the same fresh map.
+- That keeps an MVP death out of the Steal comparison. It is an experimenter's setup step, never a
+  decision of the bot.
+
+**A5. The outage (Batt 4).** The docs (claude-code-guide, 19:0x) say:
+- the auto mode classifier is server-side;
+- allow rules and PreToolUse "allow" do not bypass it;
+- there is no fallback setting.
+So nothing on our side can repair it. What limits the damage:
+- long work runs as DETACHED background chains, which keep going while the agent's turn is stopped;
+- after 2-3 failed checks the agent switches to non-shell work and spaces its retries, not 10 in a
+  row;
+- Batt can switch the session to manual approval with Shift+Tab during an outage.
