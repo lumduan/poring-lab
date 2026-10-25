@@ -88,6 +88,41 @@ def test_warps_skip_comments_and_read_the_span() -> None:
     ]
 
 
+def test_classes_include_the_slaves_a_spawn_summons() -> None:
+    """gef_fild10's Orc Lord calls Orc Archers (NPC_SUMMONSLAVE, val1): they stand on the map
+    beside it, so the detector's species list holds them; a slave that also spawns keeps its
+    spawn row (an Orc Baby's Orc Warrior)."""
+    skills = kb.parse_mob_skills(
+        "1190,Orc Lord@NPC_SUMMONSLAVE,idle,196,5,10000,0,0,yes,self,onspawn,0,1189,,,,,,\n"
+        "1686,Orc Baby@NPC_SUMMONSLAVE,idle,196,2,10000,0,0,yes,self,slavele,0,1023,1273,,,,,\n"
+    )
+    spawns = kb.parse_spawns(
+        "gef_fild10,0,0,0,0\tboss_monster\tOrc Lord\t1190,1,7200000,600000,0\n"
+        "gef_fild10,0,0\tmonster\tOrc Baby\t1686,5\n"
+        "gef_fild10,0,0\tmonster\tOrc Warrior\t1023,20\n"
+    )
+    classes = kb.classes_for(["gef_fild10"], spawns, skills, {})["gef_fild10"]
+    assert classes["1189"]["via"] == "slave of 1190" and classes["1189"]["slots"] == 0
+    assert classes["1273"]["via"] == "slave of 1686"
+    assert classes["1023"] == {"slots": 20, "via": "spawn", "aegis": None, "name": None}
+    assert list(classes)[:3] == ["1023", "1686", "1190"]  # by spawn slots
+
+
+def test_the_hunt_maps_sources_are_listed_once_with_the_pre_renewal_overrides() -> None:
+    """A rebuild keeps every hunt map's spawns and warps (orcsdun01 since 10-21, pay_fild07, and
+    gef_fild10 since 2026-10-25: gef10-prep.md). Spawn files are the pre-renewal overrides
+    (npc/pre-re/scripts_monsters.conf); a warp file is the npc/pre-re/ copy where one exists."""
+    assert "npc/pre-re/mobs/fields/geffen.txt" in kb.SPAWNS
+    assert "npc/pre-re/warps/fields/geffen_fild.txt" in kb.WARPS
+    assert "npc/pre-re/mobs/fields/payon.txt" in kb.SPAWNS
+    assert "npc/pre-re/warps/fields/payon_fild.txt" in kb.WARPS
+    assert "npc/pre-re/mobs/dungeons/orcsdun.txt" in kb.SPAWNS
+    assert "npc/warps/dungeons/orcsdun.txt" in kb.WARPS
+    assert all(p.startswith("npc/pre-re/mobs/") for p in kb.SPAWNS)
+    assert len(set(kb.SPAWNS)) == len(kb.SPAWNS) and len(set(kb.WARPS)) == len(kb.WARPS)
+    assert not any(p.startswith("npc/re/") for p in (*kb.SPAWNS, *kb.WARPS))  # never Renewal's
+
+
 def test_classes_include_what_a_spawn_turns_into() -> None:
     mobs = kb.parse_mob_db(MOB_DB)
     classes = kb.classes_for(
