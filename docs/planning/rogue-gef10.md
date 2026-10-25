@@ -342,7 +342,7 @@ So nothing on our side can repair it. What limits the damage:
   row;
 - Batt can switch the session to manual approval with Shift+Tab during an outage.
 
-## Amendment B (2026-10-25 20:45 ICT from `date`; during s1, before s1's result is read)
+## Amendment B (2026-10-25 20:43 ICT from `date`; during s1, before s1's result is read)
 
 **B1. The two pilots (unscored):**
 - **Arm N pilot** `20261025T200925-...-B-pilot`: 15.0 min, 16 kills, deaths 0, hard bars pass.
