@@ -1,0 +1,70 @@
+# gef_fild10's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
+# the server's numbers). The format and what each kind does: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt delegated this file to the agent on 2026-10-25 (~13:1x ICT, his answer to
+# the parent's question "Do you delegate the gef_fild10 warp zones to me, as for pay_fild07?"):
+# "Delegate gef_fild10 zones" (docs/planning/rogue-gef10.md section 0, decision 4).
+#
+# WARPS. The 9 spans are data/kb/warps.json's (rAthena npc/pre-re/warps/fields/geffen_fild.txt,
+# touch area = centre +- span): 4 map exits and 5 doors into the Orc village houses (in_orcs01).
+# Each area is the span grown by 4 cells on every side, as orcsdun01.yaml and pay_fild07.yaml: a
+# click made while the GM moves can land up to ~3 cells further along its walk than the cell aimed
+# at (frames lag the server ~0.5 s), so a destination just outside the area still stops >= 1 cell
+# short of the span (one door's area reaches 2 cells further west: its note says why). Each warp's
+# ARRIVAL from the neighbouring map (or from its house) lies inside its area.
+#
+# SCRIPT NPCs. The 5 NPCs the pre-renewal server loads on this map (data/kb/npc_cells.json) are
+# dialog NPCs with NO touch area, all drawn. A click on one opens a dialog (an NPC contact, a hard
+# bar). Each NPC cell is grown by 4 cells on every side like a span of 0: the drawn body covers its
+# cell and up to 3 cells north of it on the RDP camera (the Kafra's idle box, 80.5 px up), so the
+# area keeps walk targets, strikes and loot off the sprite with a cell to spare.
+#
+# The offline proof (check, prove, zone clicks): docs/planning/gef10-prep.md section 4.
+map: gef_fild10
+reviewed_by: "agent (delegated by batt, 2026-10-25)"
+reviewed: 2026-10-25
+delegation: "Batt 2026-10-25 ~13:1x ICT, his answer to the parent's question 'Do you delegate the gef_fild10 warp zones to me, as for pay_fild07?': Delegate gef_fild10 zones (rogue-gef10.md section 0, decision 4)"
+no_cross: []
+no_enter:
+  - id: warp-gef_fild09
+    note: "the north edge warp geff11-1 to gef_fild09 (251,371), span 5,2 = x 246-256 y 369-373, grown by 4: x 242-260 y 365-377; the arrival from gef_fild09 (251,368) is inside"
+    polygon: [[242, 365], [260, 365], [260, 377], [242, 377]]
+  - id: warp-gef_fild11
+    note: "the south edge warp geff12 to gef_fild11 (104,21), span 5,2 = x 99-109 y 19-23, grown by 4: x 95-113 y 15-27; the arrival from gef_fild11 (104,24) is inside; the bulletin board NPC at (109,23) stands on the span's corner"
+    polygon: [[95, 15], [113, 15], [113, 27], [95, 27]]
+  - id: warp-gef_fild03
+    note: "the east edge warp geff05-1 to gef_fild03 (370,56), span 2,5 = x 368-372 y 51-61, grown by 4: x 364-376 y 47-65; the arrival from gef_fild03 (367,56) is inside"
+    polygon: [[364, 47], [376, 47], [376, 65], [364, 65]]
+  - id: warp-gef_fild14
+    note: "the west edge warp geff19-1 to gef_fild14 (27,219), span 1,1 = x 26-28 y 218-220, grown by 4: x 22-32 y 214-224; the arrival from gef_fild14 (31,219) is inside"
+    polygon: [[22, 214], [32, 214], [32, 224], [22, 224]]
+  - id: door-in_orcs01-136-331
+    note: "the house door gef018 to in_orcs01 (136,331), span 1,1 = x 135-137 y 330-332, grown by 4: x 131-141 y 326-336; the arrival from its house (138,329) is inside"
+    polygon: [[131, 326], [141, 326], [141, 336], [131, 336]]
+  - id: door-in_orcs01-138-284
+    note: "the house door gef019 to in_orcs01 (138,284), span 1,1 = x 137-139 y 283-285, grown by 4: x 133-143 y 279-289; the arrival from its house (137,286) is inside"
+    polygon: [[133, 279], [143, 279], [143, 289], [133, 289]]
+  - id: door-in_orcs01-215-51
+    note: "the house door gef020 to in_orcs01 (215,51), span 1,1 = x 214-216 y 50-52, grown by 4: x 210-220 y 46-56; the arrival from its house (214,53) is inside"
+    polygon: [[210, 46], [220, 46], [220, 56], [210, 56]]
+  - id: door-in_orcs01-223-205
+    note: "the house door gef021 to in_orcs01 (223,205), span 1,1 = x 222-224 y 204-206, grown by 4: x 218-228 y 200-210; the arrival from its house (223,203) is inside"
+    polygon: [[218, 200], [228, 200], [228, 210], [218, 210]]
+  - id: door-in_orcs01-63-337
+    note: "the house door gef022 to in_orcs01 (63,337), span 1,1 = x 62-64 y 336-338, grown by 4: x 58-68 y 332-342, and by 6 to the west (x 56-68): the 2-cell pocket (56-57,334) is reachable only through the area, so it is inside the area instead of sealed off; the arrival from its house (65,335) is inside"
+    polygon: [[56, 332], [68, 332], [68, 342], [56, 342]]
+  - id: npc-kafra-73-340
+    note: "the Kafra NPC (npc/kafras/kafras.txt:664) at (73,340), no touch area, grown by 4: x 69-77 y 336-344"
+    polygon: [[69, 336], [77, 336], [77, 344], [69, 344]]
+  - id: npc-board-69-340
+    note: "a bulletin board NPC (npc/pre-re/other/bulletin_boards.txt:109) at (69,340), no touch area, grown by 4: x 65-73 y 336-344"
+    polygon: [[65, 336], [73, 336], [73, 344], [65, 344]]
+  - id: npc-board-109-23
+    note: "a bulletin board NPC (npc/other/bulletin_boards.txt:264) at (109,23), no touch area, grown by 4: x 105-113 y 19-27 (inside warp-gef_fild11's area; kept as its own item)"
+    polygon: [[105, 19], [113, 19], [113, 27], [105, 27]]
+  - id: npc-orcsmemory-242-202
+    note: "the Orc's Memory instance NPC (npc/instances/OrcsMemory.txt:38) at (242,202), no touch area, grown by 4: x 238-246 y 198-206"
+    polygon: [[238, 198], [246, 198], [246, 206], [238, 206]]
+  - id: npc-orcsmemory-238-202
+    note: "the Orc's Memory quest NPC (npc/instances/OrcsMemory.txt:108) at (238,202), no touch area, grown by 4: x 234-242 y 198-206"
+    polygon: [[234, 198], [242, 198], [242, 206], [234, 206]]

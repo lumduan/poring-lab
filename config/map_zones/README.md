@@ -28,6 +28,10 @@ allows: static map knowledge used at plan time.
     docs/planning/payf07-prep.md section 4). It was committed first as a DRAFT the loader refused
     (`reviewed_by` empty); Batt delegated it the same day (~11:3x, "ok" to the 11:13 report's
     item 2), and only its review lines changed.
+  - `gef_fild10.yaml` is the fourth (2026-10-25: delegated BEFORE it was written, Batt's answer
+    "Delegate gef_fild10 zones"; no-enter areas around its 9 warp spans and its 5 script-NPC
+    cells; docs/planning/gef10-prep.md section 4). An NPC without a touch area has no span: its
+    cell is grown by 4 like a span of 0, which also covers the body the client draws north of it.
 
 Check a file before a run:
 
