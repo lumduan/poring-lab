@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A detector trained on v2orc + pay_fild07's cached data plus gef_fild10's TRAIN labels (gef10-o3h-e, frozen 2026-10-25 22:14) finds gef_fild10's species on held-out TEST data (recall and precision >= 0.80 for each species with >= 50 evaluated crops) without losing prt_fild08 (v1's gold set and held-out set no worse than v1)."
-status: PRE-REGISTERED 2026-10-26 (BEFORE the cache is built and BEFORE any model with the gef10 classes exists; amendments only before training starts, clock-labelled)
+status: "NOT RUN: T1 FAILED 2026-10-26 03:16 ICT (gef10-detector.md 13r), so no gef10 model is trained this round and this evaluation has nothing to score. Was: PRE-REGISTERED 2026-10-26 (BEFORE the cache is built and BEFORE any model with the gef10 classes exists)"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../planning/gef10-detector.md, payf07-eval.md, v2orc-vs-v1.md, ../planning/rogue-gef10.md]
-next_action: "T1 on TEST (gef10-detector.md 12 step 3); the cache (dry run first); the run with its settings recorded BEFORE the launch; then score ONCE, after training ends, as written here."
+next_action: "None this round (T1 failed, gef10-detector.md 13r). A round 2 would need its own TEST and its own evaluation pre-registration; this one is not reused with TEST read."
 ---
 
 # gef10: gef_fild10's species, without forgetting prt_fild08 (pre-registered 2026-10-26)
@@ -125,3 +125,10 @@ precision each >= v1's on the same frames - 0.02**. v1 is re-scored first with t
    - the latency.
    - Each scorer is committed with a positive case before it scores. Scored ONCE. The results go
      below this line, with nothing above it edited.
+
+## RESULT (2026-10-26 03:19 ICT): not run
+
+T1 failed at 03:16 (C1 5 / 61 = 8.2 % on TEST, bar 5 %; [gef10-detector.md 13r](../planning/gef10-detector.md)).
+By that plan's section 9, nothing of gef_fild10 trains this round. No cache was built and no model
+exists, so nothing above is scored. TEST (watch cells 11-14, a7, a8) has now been read by T1 and a
+look at its bad labels. A later round needs a NEW TEST and its own pre-registration.

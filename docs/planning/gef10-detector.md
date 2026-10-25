@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with payf07's o3h-all rule (fix 2 facing, 2b / 2c, the fit, o3h, the T_h floor on every label), re-measured on gef_fild10's own FIT data, PLUS a rule that LABELS monsters engaged in a fight with our character (drawn facing it, in the action the packets give), give per-species monster boxes for gef_fild10 (Orc Lady, Orc Warrior, Orc Baby, Poporing, Orc Lord, Orc Archer, the plants) that pass the training tier (T1: C1 <= 5 % on held-out TEST data; T2: every species in the tier passes a blind check, the engaged labels in their own stratum), and floor-item boxes from the items' own client sprites that pass their own geometric and blind checks, so ONE detector can be trained on payf07's 21 classes plus this map's monsters and items."
-status: "PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
+status: "T1 FAILED 2026-10-26 03:16 ICT (13r): the monster tier fails, nothing of gef_fild10 trains this round. History: PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [payf07-detector.md, orcsdun01-detector.md, labels-v2-plan.md, training-cost.md, target-items.md, item-class.md, rogue-gef10.md, gef10-prep.md, ../benchmarks/payf07-eval.md]
-next_action: "The parent: decide 13l's D2 / D3 / D9 / D10 (and section 0's D1-D8) by an amendment, freeze, label s1 + a1..a6 (3c), T1 on TEST (watch cells 11-14 + a7 + a8, Amendment D), T2 (seed 31, strata N / E), then the evaluation pre-registration before any cache or GPU step."
+next_action: "T1 FAILED 2026-10-26 03:16 (13r: C1 5 / 61 = 8.2 % > 5 %; two a7 sightings: a pickup notice over an Orc Warrior, a Poporing beside a raised rock face). Nothing of gef_fild10 trains this round. Batt decides whether a round 2 (a popup rule + a raised-terrain rule, measured on FIT; a NEW TEST; T2 again) is worth it."
 title: "A detector for gef_fild10's monsters and floor items: the facts, the split, the label rule (engaged units labelled), T1 / T2, the classes, the cache and training proposal, the evaluation plan (PROPOSED pre-registration)"
 date: 2026-10-25
 owner: Batt
@@ -914,3 +914,49 @@ methodology choices are the parent's, made on the FIT results above and nothing 
     Archer 1189.
   - No item class this round (D10).
 - **Next:** T1 on TEST (watch cells 11-14 + a7 + a8), once a8 is recorded and shipped.
+
+### 13r. RESULT: T1 FAILS -- C1 5 / 61 = 8.2 % on TEST (bar <= 5.0 %); the monster tier fails, nothing of it trains (checked 2026-10-26 03:16:22 ICT, the parent)
+
+- **The run:** `map_labels.py check --map gef_fild10` on the watch's cells 11-14 + a7 + a8, the
+  FROZEN `params.json` (sha256 `00ef6383...b0aac1`), commit 1eab7c3.
+  - The first and only read of TEST; `t1/check.json`, `t1/rows.json`.
+- **C1 pooled: 5 bad of 61 scored = 0.082 > 0.050: T1 FAILS.** C2: no STOP (Poporing PASS, n 38;
+  the other species NO_VERDICT, < 20 standing labels).
+
+| TEST part | frames | candidates | scored | bad | C1 |
+|---|---|---|---|---|---|
+| watch cells 11-14 | 835 | 172 | 4 | 0 | 0.0 % |
+| a7 | 1,374 | 1,171 | 35 | 5 | 14.3 % |
+| a8 | 2,081 | 1,538 | 22 | 0 | 0.0 % |
+| **pooled** | | | **61** | **5** | **8.2 %** |
+
+| species | scored | bad |
+|---|---|---|
+| Poporing 1031 | 38 | 3 |
+| Orc Lady 1273 | 14 | 0 |
+| Orc Warrior 1023 | 6 | 2 |
+| Orc Baby 1686 | 3 | 0 |
+
+- **The five bad labels are TWO sightings in a7** (a report, read after the fail; it changes no
+  rule of this round):
+  1. **Orc Warrior gid 110020901, frames 505 / 510** (507-509 scored just above tau): its box (top
+     at y 28) lies under the client's transient **"... - 1 obtained."** pickup notice (x 541-799,
+     y 77-104). The sprite is drawn there; the notice covers it. The UI rule knows the static
+     windows only, so the label was scored as visible.
+  2. **Poporing gid 110020984, frames 548-550:** no match anywhere within +-16 px (best NCC 0.198
+     at dx 12, dy -14). The box lies on a palm's leaf edge beside the raised rock face east of
+     the orc village. A Poporing IS drawn about 120 px higher, on the rock top (its identity is
+     not verified). A height or occlusion case the rule does not cover.
+- **The consequence (section 9):**
+  - The monster tier fails. NOTHING of gef_fild10 trains this round: no cache, no GPU run.
+  - The pre-registered evaluation (`docs/benchmarks/gef10-eval.md`) has no model to score.
+  - Not re-run under the same bars (section 0).
+  - The T2 PASS (13q) and the class list stand as records.
+- **What a next round would need (PROPOSED here; Batt's decision, not started):**
+  - a rule for the transient pickup notice (and the other popups) over a label: pixel-detected
+    and excluded like `ui_or_edge`;
+  - a rule for labels on or beside raised terrain (cliff faces): measured on FIT;
+  - a NEW TEST never read before it (e.g. tonight's a9-a12);
+  - T2 again for the changed rule, two new labellers.
+- **The live hunting detector is unchanged** (v1 on the CPU). The scored A/B block does not use a
+  detector of this map.
