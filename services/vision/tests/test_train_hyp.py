@@ -17,3 +17,13 @@ def test_hsv_s_is_opt_in_and_bounded() -> None:
     for bad in (-0.1, 1.5):
         with pytest.raises(SystemExit):
             hyp_overrides(SimpleNamespace(hsv_s=bad))
+
+
+def test_scale_is_opt_in_bounded_and_independent_of_hsv_s() -> None:
+    # gef10-detector.md D7: the size cue survives a small rescale only
+    assert hyp_overrides(SimpleNamespace(hsv_s=None, scale=None)) == {}
+    assert hyp_overrides(SimpleNamespace(hsv_s=0.2, scale=0.1)) == {"hsv_s": 0.2, "scale": 0.1}
+    assert hyp_overrides(SimpleNamespace(hsv_s=None, scale=0.0)) == {"scale": 0.0}
+    for bad in (-0.1, 0.95):
+        with pytest.raises(SystemExit):
+            hyp_overrides(SimpleNamespace(hsv_s=None, scale=bad))

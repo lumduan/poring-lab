@@ -79,6 +79,7 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0, clock: str = "12
         "RESUME",
         "HSV_S",
         "CLOSE_MOSAIC",
+        "SCALE",
     ):
         env.pop(k, None)
     env.update(extra or {})
@@ -258,6 +259,23 @@ def test_hsv_s_and_close_mosaic_reach_a_new_run_only(tmp_path: Path) -> None:
     _, args, _ = run_rc(tmp_path / "plain", "ok")
     assert "--hsv-s" not in args[0] and "--close-mosaic" not in args[0]
     for d, bad in (("bad", {"HSV_S": "1.5"}), ("bad2", {"CLOSE_MOSAIC": "3; id"})):
+        with pytest.raises(FileNotFoundError):  # the stub guard was never called
+            run_rc(tmp_path / d, "ok", extra=bad)
+        log = (tmp_path / d / "out" / "train.log").read_text()
+        assert "TRAIN STOPPED" in log and "attempt 0" not in log
+
+
+def test_scale_reaches_a_new_run_only_and_is_bounded(tmp_path: Path) -> None:
+    """SCALE (2026-10-26, gef10-detector.md D7): a number in 0..0.9, a NEW run only (a --resume
+    keeps its checkpoint's own), unset = ultralytics' 0.5; a bad value stops before any attempt."""
+    for d in ("new", "resume", "bad", "bad2"):
+        (tmp_path / d).mkdir()
+    hyp = {"SCALE": "0.1", "HSV_S": "0.2", "INIT_WEIGHTS": "/datasets/w/last.pt"}
+    _, args, rc = run_rc(tmp_path / "new", "ok", extra=hyp)
+    assert rc == 0 and "--hsv-s 0.2 --scale 0.1 " in args[0]
+    _, args, rc = run_rc(tmp_path / "resume", "ok", extra={**hyp, "RESUME": "1"})
+    assert rc == 0 and "--scale" not in args[0]
+    for d, bad in (("bad", {"SCALE": "1.5"}), ("bad2", {"SCALE": "0.1; id"})):
         with pytest.raises(FileNotFoundError):  # the stub guard was never called
             run_rc(tmp_path / d, "ok", extra=bad)
         log = (tmp_path / d / "out" / "train.log").read_text()

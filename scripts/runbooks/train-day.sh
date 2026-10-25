@@ -101,6 +101,12 @@ if [ -n "${CLOSE_MOSAIC:-}" ]; then
   [[ "$CLOSE_MOSAIC" =~ ^[0-9]+$ ]] || { log "TRAIN STOPPED: CLOSE_MOSAIC=$CLOSE_MOSAIC is not a count"; exit 2; }
   hyp="$hyp --close-mosaic $CLOSE_MOSAIC"
 fi
+# SCALE (2026-10-26, docs/planning/gef10-detector.md D7): a NEW run's ultralytics scale (train.py
+# --scale), a number in 0..0.9; unset: ultralytics' 0.5. Never with --resume.
+if [ -n "${SCALE:-}" ]; then
+  [[ "$SCALE" =~ ^0(\.[0-9]+)?$ ]] || { log "TRAIN STOPPED: SCALE=$SCALE is not a number in 0..0.9"; exit 2; }
+  hyp="$hyp --scale $SCALE"
+fi
 trips=0; attempt=0; status=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done

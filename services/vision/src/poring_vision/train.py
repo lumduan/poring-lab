@@ -116,14 +116,23 @@ def step_sleeper(ms: int, duty_file: Path | None = None, report_every: int = DUT
 
 
 def hyp_overrides(a: argparse.Namespace) -> dict[str, float]:
-    """Opt-in augmentation overrides for a NEW run (docs/planning/payf07-detector.md 12f): only
-    ``--hsv-s``, the saturation gain (Elder Willow and Willow differ by saturation only, section 7).
-    Absent: ultralytics' default (0.7), as every run before."""
-    if a.hsv_s is None:
-        return {}
-    if not 0.0 <= a.hsv_s <= 1.0:
-        raise SystemExit(f"--hsv-s {a.hsv_s}: 0..1")
-    return {"hsv_s": float(a.hsv_s)}
+    """Opt-in augmentation overrides for a NEW run: ``--hsv-s``, the saturation gain
+    (docs/planning/payf07-detector.md 12f: Elder Willow and Willow differ by saturation only), and
+    ``--scale``, the random rescale gain (gef10-detector.md D7: the RO camera's zoom is fixed, and
+    the Orc Lord differs from the Orc Warrior / Archer mainly by SIZE; ultralytics' 0.5 rescales an
+    image by 0.5-1.5). Absent: ultralytics' defaults (0.7 / 0.5), as every run before."""
+    out: dict[str, float] = {}
+    hsv_s = getattr(a, "hsv_s", None)
+    if hsv_s is not None:
+        if not 0.0 <= hsv_s <= 1.0:
+            raise SystemExit(f"--hsv-s {hsv_s}: 0..1")
+        out["hsv_s"] = float(hsv_s)
+    scale = getattr(a, "scale", None)
+    if scale is not None:
+        if not 0.0 <= scale <= 0.9:
+            raise SystemExit(f"--scale {scale}: 0..0.9")
+        out["scale"] = float(scale)
+    return out
 
 
 def label_dicts(samples: list[Sample], h: int = 720, w: int = 1280) -> list[dict[str, Any]]:
@@ -167,6 +176,8 @@ def main() -> int:  # noqa: PLR0915
                     help="ultralytics' close_mosaic (default 10); the proof uses 1")  # fmt: skip
     ap.add_argument("--hsv-s", type=float, default=None,
                     help="ultralytics' hsv_s (default 0.7); payf07 12f proposes 0.2")  # fmt: skip
+    ap.add_argument("--scale", type=float, default=None,
+                    help="ultralytics' scale (default 0.5); gef10 D7 uses 0.1")  # fmt: skip
     ap.add_argument("--trace", type=Path, default=None,
                     help="--mid-ckpt: one JSON line per batch (the resume proof)")  # fmt: skip
     ap.add_argument("--die-after-batches", type=int, default=None,
