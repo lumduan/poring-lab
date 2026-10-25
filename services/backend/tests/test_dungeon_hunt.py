@@ -481,3 +481,13 @@ def test_rest_sits_where_it_stands_on_a_map_without_rest_spots() -> None:
     assert dh.rest_sit_why((5, 5), False, 1.0) is None  # still walking to it
     assert dh.rest_sit_why((5, 5), False, dh.REST_WALK_MAX_S + 1) == "rest spot not reached"
     assert dh.nearest_spot([], (1, 1)) is None
+
+
+def test_the_setup_waits_for_the_identity_after_each_warp() -> None:
+    """dungeon@8 (4.05 pilot2, 2026-10-25 20:28): the line after the setup's @warp read the map's
+    LOADING screen, its identity check refused and nothing was sent; the setup now waits (<= 20 s)
+    until Basic Info reads the character again after every @warp."""
+    src = Path(dh.__file__).read_text()
+    i = src.index('if "@warp" in cmd:  # dungeon@8 (4.05 pilot2)')
+    assert 'while not cr.check(screen, conf["job"], crk)' in src[i : i + 600]
+    assert dh.WARP_READY_S == 20.0

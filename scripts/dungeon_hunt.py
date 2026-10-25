@@ -190,6 +190,7 @@ FLY_JUMP_S = 15.0  # ... and a jump within this long after one is never a hard b
 JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop) ...
 WALK_S_PER_CELL, WALK_SLACK = 0.15, 5  # ... and larger than a walk could cover (Amendment J)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
+WARP_READY_S = 20.0  # dungeon@8: after a setup @warp, Basic Info must read again within this
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
 CLEAR_AT = 0.40  # the setup drops the Etc tab (loot only) at or over this weight share ...
 CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand (no monster)
@@ -975,6 +976,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if not got_.get("typed", True):
                 counts["setup_heal_skipped"] += 1
             time.sleep(3.0 if "@warp" in cmd else 0.8)
+            if "@warp" in cmd:  # dungeon@8 (4.05 pilot2): a map load can outlast the 3 s, and the
+                # next line's identity check then read the LOADING screen and refused (nothing sent)
+                t_w = time.monotonic()
+                while not cr.check(screen, conf["job"], crk)["ok"]:
+                    if time.monotonic() - t_w > WARP_READY_S:
+                        raise r.Stop(f"dungeon@8: the identity did not read within {WARP_READY_S}"
+                                     " s of the setup's @warp")  # fmt: skip
+                    time.sleep(0.5)
         bench.close_chat(agent_raw, screen)
         r.activate_client(agent_raw, screen)
         time.sleep(1.0)
