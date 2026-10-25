@@ -348,7 +348,7 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.1"  # @8 = @7 + --char rogue; .1 = the position-unread fly
+    assert dh.VERSION == "dungeon@8.2"  # .1 position-unread fly, .2 no stand toggle on a hit
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -513,3 +513,16 @@ def test_an_unread_position_costs_a_fly_wing_before_it_ends_the_run() -> None:
     block = src[i - 400 : i + 900]
     assert 'press("fly", "pos_unread")' in block and "pos_flies += 1" in block
     assert "tick - max(last_pos_t, fly_at) > 30.0" in block
+
+
+def test_damage_while_sitting_never_presses_the_stand_toggle() -> None:
+    """dungeon@8.2 (4.05 a6, 2026-10-26 00:3x): the server stands a sitting player up when hit
+    (pinned pc.cpp pc_damage -> pc_setstand), so a "stand" press after a hit is a toggle that SITS
+    the character back down; every potion and Fly Wing was then refused ("cannot use this item
+    while sitting") and the run sat for 20 min. After damage the runner only records it."""
+    src = Path(dh.__file__).read_text()
+    assert 'press("stand", "hit while sitting")' not in src
+    i = src.index('"why": "damage (the server stood us up)"')
+    block = src[i - 500 : i]
+    assert "if sitting and (tick - last_taken <= FIGHT_TAKEN_S or hp_dropped(" in block
+    assert 'press("stand"' not in block

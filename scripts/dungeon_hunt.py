@@ -127,7 +127,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.1"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
@@ -1671,6 +1671,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 frac = None if pct is None else pct / 100.0
                 spf = None if spp is None else spp / 100.0
                 # sustain first (every strategy), then Auto Guard (S4b2)
+                if sitting and (tick - last_taken <= FIGHT_TAKEN_S or hp_dropped(st.hist, tick)):
+                    # dungeon@8.2: damage stands a sitting player up on the server (pc_damage ->
+                    # pc_setstand); never press "stand" (a toggle) after it -- just know it
+                    sitting = False
+                    ev({"kind": "rest_end", "why": "damage (the server stood us up)", "pct": pct,
+                        "sp_pct": spp})  # fmt: skip
                 calm = (tick - last_taken > CALM_S and mode != "fight" and not sitting
                         and not hp_dropped(st.hist, tick))  # fmt: skip
                 if frac is not None:
@@ -1753,8 +1759,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             "box": [round(x_, 1) for x_ in near_ or ()],
                             "spot": None if sp_e is None else list(sp_e)})  # fmt: skip
                         box_fight.update({"spot": sp_e, "n0": n_strike[0]})
-                    if sitting:
-                        press("stand", "hit while sitting")
+                    if sitting:  # dungeon@8.2: the SERVER stood us up (pc_damage -> pc_setstand,
+                        # pinned pc.cpp); a stand press here is a TOGGLE and sat us back down
+                        # (4.05 a6: then every potion / Fly Wing was refused while sitting)
                         sitting = False
                         ev({"kind": "rest_end", "why": "hit", "pct": pct, "sp_pct": spp})
                     mode, goal_path = "fight", None

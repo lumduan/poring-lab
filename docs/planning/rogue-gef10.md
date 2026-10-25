@@ -468,3 +468,28 @@ ALIVE then.
 - a5 is RE-RUN as **a5b (N, seed 25535)** in cycle 3.
 - Each arm then has 2 runs before the fix and 2 after: N a1, a4 / a5b, a8; S a2, a3 / a6, a7.
 - The verdict pools a1-a4, a5b, a6-a8 by hours. a5 is reported apart (1.5 min).
+
+## Amendment G (2026-10-26 01:06 ICT from `date`; BEFORE a7)
+
+**a6 (S, 00:24:59) ran its 36 min but sat stuck for ~20 of them.** Its counters: 192 potion
+presses, 33 Fly Wing presses, 8 strikes. Its recording shows why (frame 445: "You cannot use this
+item while sitting" x3, the Rogue sitting under a tree at (72,79)):
+- **The server stands a sitting player up when hit** (pinned pc.cpp `pc_damage` ->
+  `pc_setstand`). The runner then pressed "stand", which is the Insert TOGGLE: the character SAT
+  back down while the runner believed it stood.
+- From then on, every walk click stalled, and every potion and Fly Wing was refused while
+  sitting.
+- This bug is in every version since dungeon@1. a6 is where it bit hardest: a hit during a rest.
+
+**dungeon@8.2** (this commit):
+- a hit or an HP drop seen while the runner believes it sits only RECORDS that the server stood it
+  up; it presses nothing;
+- the "hit while sitting" stand press is gone;
+- the other stand presses (rest full / max, overweight, escape) remain. They come with no damage
+  first.
+
+**The block:**
+- a7 (S), a5b (N) and a8 (N) run @8.2.
+- The verdict pools a1-a4, a5b, a6-a8 as registered.
+- Beside it, a sensitivity view leaves out a6, the run that hit the since-fixed fault. Both are
+  reported, and neither is chosen after the fact.
