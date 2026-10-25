@@ -816,3 +816,22 @@ p10-p90; the native idle box of 1b beside it):
   The labels of the FIT parts are re-made with the frozen file (the proposed ones are
   provisional). Every step runs one process at a time (`--workers 1`), niced, outside the market
   windows on a weekday.
+
+### 13m. Where the outputs live (client-derived, never committed)
+
+- **Kept in `/dev/shm/poring-lab-tmp/gef10-det/` (13 MB) for the parent's freeze, T1 and T2:**
+  `params-P1-proposed.json`; `fit/` (every FIT output and log quoted above, the rows files, the
+  superseded attempts `*-attempt*.json`, `steps.log` with the start / end of every step);
+  `labels-proposed/` (the provisional FIT labels); `grf/` (gef_fild10.rsw, its 46 RSMs, the item
+  name tables); `items/` (13 item sprites); `sprites-all/` (the decoded monster sprites, lab +
+  pay_fild07 + gef_fild10); `kb/` (classes.json, the merged sprite-name table). A host reboot
+  wipes them: the RSW / RSMs / item sprites are re-extracted with `grf_read.py extract ...
+  --decode-mixcrypt` (1a's list).
+- **Archived to the NAS, deleted locally (2026-10-25 ~22:05):** the scratch diagnostics and by-eye
+  sheets quoted in 13b, 13d, 13g (`diag_th.py`, `diag_engaged.py`, `sheet.py`, `facts.py`, the
+  runners, `archer_low.png`, `archer_high.png`, `engaged_sheet.png`, `watch_28.png`,
+  `watch_291.png`, `pilot_300.png`): `/mnt/poring-lab-datasets/scratch-archive/2026-10-25/gef10-det-scratch/`
+  (15 files, `checksums.sha256` verified).
+- The watch recording is now read from `/mnt/poring-lab-datasets/20261025T195325-rdp-ow1` (the
+  parent's 21:5x message: the local copy is deleted after its checksummed ship); the FIT label
+  files store shard names and offsets only, so they resolve against the NAS root unchanged.
