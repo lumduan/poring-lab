@@ -544,3 +544,42 @@ Reproduce: section 9's environment, then:
         --events /dev/shm/poring-lab-demo/20261026T000416-watch-prt_fild08-ow2/events.jsonl \
         --hunt $D/20261025T213953-rdp-rogue-a1 $T/a1-truth.json ... --hunt $D/20261026T002500-rdp-rogue-a6 $T/a6-truth.json \
         --out $T/score-round2.json
+
+## 12. PRE-REGISTERED: the FLEE rule's live proof (the parent, 2026-10-26 01:48 ICT from `date`, BEFORE it runs)
+
+**The rule:** a Fly Wing (F2) on the FIRST aura positive.
+- The recognizer is round 2's recipe unchanged: `mvp_watch.decide(frame, model, cues=("aura",))`,
+  model sha256 `43179452...`, threshold 0.08, HUNT_RECTS.
+- It reads fresh frames every 0.25 s.
+- A backup fires F2 below 50 % HP. It is logged apart and is not the rule under test.
+
+**The proof** (`scripts/orclord_flee_proof.py run --map prt_fild08 --n 6 --seed 27 --label fp1`):
+- 6 trials on prt_fild08, the edge-watch plan's cells (gef_fild10's natural Lord is untouched).
+- Per trial:
+  1. immunity ON;
+  2. `@warp` the cell, `@monster 1190 1`, then `@warp` 17 cells out;
+  3. immunity OFF;
+  4. hop back 3 cells at a time with the watcher running;
+  5. on the first positive, F2;
+  6. immunity ON, `@killmonster2`.
+- Each immunity toggle is VERIFIED on the client's own reply bubble ("You are now immune to
+  attacks." / "Returned to normal state."). The text pixels of tonight's judged frames
+  (`data/mvp_watch/immune_bubbles.npz`, never committed) read on 1.00 / off 1.00 / another
+  bubble 0.13. An unreadable or wrong bubble stops the proof.
+- A death stops it too.
+- It runs in Amendment E's 04:24 gap (rogue-gef10.md), between scored runs, never inside one.
+
+**The bars** (from the packets, offline):
+1. In >= 5 of 6 trials, F2 is pressed by the AURA (not the HP backup) BEFORE the Orc Lord party's
+   first damage on us. A trial with no party unit in view at all is reported and not counted.
+2. No death.
+3. Reported, not bars:
+   - seen -> F2 (ms);
+   - F2 -> the same-map teleport (the `map_change` packet);
+   - the HP lost per trial.
+
+**If both pass:**
+- the runner gains the rule as **dungeon@9** (the watcher thread, its own `r.Screen()`, a Fly Wing
+  at once, the 8.2 stand fix kept);
+- it is used only AFTER the scored A/B block (a1-a8), so the block is not changed.
+- Batt then decides whether `--clear-map` goes.
