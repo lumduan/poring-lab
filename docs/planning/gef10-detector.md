@@ -835,3 +835,30 @@ p10-p90; the native idle box of 1b beside it):
 - The watch recording is now read from `/mnt/poring-lab-datasets/20261025T195325-rdp-ow1` (the
   parent's 21:5x message: the local copy is deleted after its checksummed ship); the FIT label
   files store shard names and offsets only, so they resolve against the NAS root unchanged.
+
+### 13n. The parent's DECISIONS and the FREEZE (2026-10-25 22:13 ICT from `date`; before any TRAIN label or TEST read)
+
+Batt delegated the GPU work on this map's monsters and items (2026-10-25 ~12:3x). These
+methodology choices are the parent's, made on the FIT results above and nothing else:
+- **D1-D8: adopted** as section 0 proposes:
+  - the watch split by cell, 0-10 FIT / 11-14 TEST;
+  - D4 (< 30 kept labels: not a class this round) and D5 (a failing engaged stratum drops only
+    that species' engaged labels);
+  - the item classes Cyfar / Orcish Voucher / pooled `item`;
+  - init payf07 epoch-1 with `scale` 0.1, and `dying_in_view`.
+- **D2: 1d = 120 ms** (P1). Both FIT attempts stopped under 50 samples, and every curve's minimum
+  lies at 100-150 ms.
+- **D3: E2** as the pre-registered selection chose it. E4 (+-16 px for engaged units) is NOT
+  adopted: it would need its own amendment and T2 stratum, and engaged boxes are a small add-on.
+- **D9: T_h = 0.636**, the measured floor (Amendments B + C). payf07's 0.479 is not this map's
+  number.
+- **D10: no item class from the hunts this round.** Floor-item classes wait for an immune
+  staged-items session on open ground (target-items.md's method). Until then, the detector trains
+  on monsters only.
+- **D11:** the class list is written after D4's tier, from the species that pass it.
+- **TEST:** watch cells 11-14 + a7 + a8 (Amendment D). Nothing of TEST has been read.
+- The freeze follows 13l's command, with this section cited as the decision.
+- **FROZEN 2026-10-25 22:14 ICT:** `/dev/shm/poring-lab-tmp/gef10-det/params.json`, sha256
+  `00ef6383883927e35991355f7d29597c0f918af73f65751885a53edfb1b0aac1` (`map_labels.py freeze`,
+  threshold file sha256 `2f80b858a10d474a8b7e07990231cd4fa8906b32bd85701254b2a6d20b0f1395`). The
+  TRAIN labels (s1, a1-a6 by 3c) follow, one session at a time.
