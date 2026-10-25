@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, a CPU recognizer cheap enough for the runner (<= 60 ms per 1280 x 720 frame, niced) tells 'the Orc Lord (mob 1190) or its Orc Archers (1189 / 1473) are in view' on gef_fild10 within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of held-out hunting frames."
-status: "ROUND 2 SCORED 2026-10-26 01:21-01:33 ICT (section 11): the aura rule alone (frozen v1 model) PASSES both bars by the letter -- recall 4 / 4 edge entries within 1.1 s (3 / 4 within 1.0 s; a one-sided 95 % lower bound of 47 %), false positives 0.56 per 10 min on 143 min of gef_fild10 hunting (all 8: our own lock-on magic circle, 0.080-0.100 against 0.08). Thin evidence: only 4 entries; archers alone are not seen. Round 1 (section 5) FAILED with both cues."
+status: "FLEE PROOF fp1c 2026-10-26 04:07-04:14 (12c): bar 1 NO VERDICT (3 / 6 trials had the party in view; 2 / 3 fled by the aura before any damage; trial 1 was hit first), bar 2 PASS (no death); the flee rule is NOT adopted. Earlier: ROUND 2 SCORED 2026-10-26 01:21-01:33 ICT (section 11): the aura rule alone (frozen v1 model) PASSES both bars by the letter -- recall 4 / 4 edge entries within 1.1 s (3 / 4 within 1.0 s; a one-sided 95 % lower bound of 47 %), false positives 0.56 per 10 min on 143 min of gef_fild10 hunting (all 8: our own lock-on magic circle, 0.080-0.100 against 0.08). Thin evidence: only 4 entries; archers alone are not seen. Round 1 (section 5) FAILED with both cues."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, payf07-detector.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py]
-next_action: "The parent: the FLEE rule (a Fly Wing on the first aura positive) is pre-registered on its own with a live proof on a spawned Lord, immunity OFF, BEFORE any scored run uses it (rogue-gef10.md); until then --clear-map and Amendment E's schedule keep the natural Lord out of the runs."
+next_action: "Batt: whether a second flee proof is worth it (12c: a plan with the party in view in every trial, the OFF toggle out of its reach, the Lord's entry separated from the archers'). Until then --clear-map and Amendment E's schedule keep the natural Lord out of the runs."
 title: "An Orc Lord recognizer for the Rogue's flee rule on gef_fild10 (pixels only, CPU, scored offline on held-out lattice cells)"
 date: 2026-10-25
 owner: Batt
