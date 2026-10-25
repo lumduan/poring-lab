@@ -349,3 +349,198 @@ It gets a live proof on a spawned Lord with immunity OFF before any scored run u
   - an entry is a hop where the Lord or an archer goes from not in view to in view;
   - its frames run from the hop's settle to the next hop.
   - Both are written before the score runs and tested on synthetic cases only.
+
+## 11. RESULT: round 2, scored ONCE (2026-10-26 01:21:23-01:33:45 ICT from `date`; written 01:38)
+
+**Both bars PASS by the letter: entries 4 / 4 within 1 s, false positives 0.56 per 10 min.**
+The evidence is thinner than the bars suggest. Only 4 of the 32 hops were edge entries, and one
+of the four passes on round 1's 0.1-s jitter allowance. All 8 hunting false positives are one
+effect, at margins of 0.0004-0.0205 over the threshold.
+
+**What ran:**
+- The scorer (`mvp_watch_study.py entries`, `truth --map`) was committed BEFORE the score:
+  89ed662, 01:19:14 ICT. It was tested on synthetic cases only (Amendment 10a).
+- Nothing was fitted or changed after it. The run: one process, `nice -n 19`, one thread.
+- The recipe: `decide(frame, model, cues=("aura",))`, HUNT_RECTS, the aura threshold 0.08.
+- The model: round 1's `orclord-v1.npz`, its sha256 checked before the run (43179452...).
+- The truth: round 1's rule. ow2 used `--layout hunt --map prt_fild08`; by eye its frames are in
+  the hunt layout, as are a1-a6's.
+  - prt_fild08's own monsters (Poring, Pupa, Lunatic, Drops) have no decoded sprite sheet, so
+    they are not in the truth. Only the party matters to the bars.
+- The output: `score-round2.json`.
+
+**The rules as committed** (89ed662; recorded here because 10a gave them in one line):
+- **An entry** is a hop whose last frame before its @warp has no party unit in view, and whose
+  window has at least one in-view frame.
+  - The window runs from the hop's settle (its event is written after the settle) to the next
+    @warp, or to the cell's @killmonster2.
+- **The delay** = the first in-view frame of the window with a positive, minus the window's first
+  in-view frame. Positives on in-view frames only, as round 1's `cell_scores`.
+- **Within 1 s** = a delay <= 1.1 s: round 1's RECALL_S, unchanged. At 2 fps that is an entry's
+  first three frames. The strict <= 1.0 s is reported beside it.
+- **The hunting minutes and false positives** are counted on the recorders' 1-fps stream.
+  - The recorder skips a tick whose picture is unchanged, so a stored frame stands for itself and
+    the ticks skipped after it.
+  - The skipped ticks counted from the frame times equal each manifest's `unchanged_skipped`
+    exactly (123 / 160 / 375 / 0 / 0 / 1,099).
+  - The stored-frames-only rate is reported beside it.
+
+### 11a. The bars
+
+| bar | measured | verdict |
+|---|---|---|
+| 1. >= 95 % of edge entries with a positive within 1 s of the first in-view frame | **4 / 4 = 100 %** within 1.1 s. Strict 1.0 s: 3 / 4 (one at 1.007 s). On the first in-view frame: 2 / 4 | **PASS** |
+| 2. <= 1 false positive per 10 min of a1-a6 hunting frames (>= 2 h) | **8 in 143.0 min = 0.56 per 10 min** on the 1-fps stream. Stored frames only: 8 in 113.9 min = 0.70 | **PASS** |
+| (data) >= 2 h of hunting negatives | 143.0 min on the stream; **113.9 min** by stored frames alone | met on the stream only |
+| 3. latency (reported, not a bar) | p50 9.5 ms, p95 16.2 ms, max 49.3 ms; 8,090 calls, `nice -n 19`, one thread, load average ~9-12 | -- |
+
+**How much these numbers can carry:**
+- 4 / 4 has a one-sided 95 % lower bound of **47 %** (Clopper-Pearson). It cannot show 95 %
+  recall.
+- 8 false positives in 143 min have a 95 % Poisson interval of **0.24-1.10 per 10 min**. The bar's
+  limit, 1, lies inside it.
+
+### 11b. The edge entries (ow2, prt_fild08, 2 fps, 1,233 frames)
+
+Of the 32 hops, **4 were entries**. Section 10 expected about one per cell, and that held in 4 of
+the 8 cells.
+- In cells 4, 5 and 6 the party was already in view at the far hop, 17 cells away. Why (its
+  own walking, or the view's reach on those directions) is not established here.
+- In cell 1 the party never came into view at any hop.
+
+| cell | dir | hop 0 (17 cells) | hop 1 (14) | hop 2 (11) | hop 3 (8) |
+|---|---|---|---|---|---|
+| 0 | (-1,-1) | out of view | out | **ENTRY** | out |
+| 1 | (-1,-1) | out | out | out | out |
+| 2 | (1,1) | out | out | out | **ENTRY** |
+| 3 | (1,-1) | out | out | out | **ENTRY** |
+| 4 | (0,-1) | in view (already before the warp) | in view | out | out |
+| 5 | (-1,1) | in view | in view | in view | in view |
+| 6 | (-1,0) | in view | in view | in view | in view |
+| 7 | (-1,1) | out | out | **ENTRY** | in view (continuing) |
+
+**Per entry** (frame ids of `20261026T000413-rdp-ow2`; "by eye" is from the frames):
+
+| # | cell / hop (dist) | first in-view frame of the window | first in | first positive | delay | <= 1.1 s | <= 1.0 s | by eye |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0 / 2 (11) | 110 (settle + 0.16 s) | Orc Lord | 110 | **0.0 s** | yes | yes | the Lord and its aura at the top-right edge from frame 109, before the settle, already positive |
+| 2 | 2 / 3 (8) | 434 (settle + 0.39 s) | archers | 436 | **1.007 s** | yes | **no** | archers at the left edge from 432 (pre-settle); the aura rule sees nothing until the Lord walks in on 436 |
+| 3 | 3 / 3 (8) | 588 (settle + 0.38 s) | Orc Lord | 588 | **0.0 s** | yes | yes | the Lord and its aura at the top edge from 586, before the settle (2 of the 4 pre-settle in-view frames 584-587 were positive) |
+| 4 | 7 / 2 (11) | 1190 (settle + 6.93 s) | Orc Lord | 1191 | **0.504 s** | yes | yes | the Lord walks in at the bottom right on 1190 (see below for 1174-1176) |
+
+**The frames between a @warp and its settle** are outside every window, as pre-registered. The
+pre-settle columns of the JSON show why the window starts at the settle:
+- The truth already counts the party in view there.
+- The first 1-2 frames, however, still show the PRE-warp picture (584) or the client's dark warp
+  fade (107, 431, 585, 1173).
+
+Two of them matter for the flee rule (POST-HOC, read from the frames, not a bar):
+- **Entry 2:** archers were on screen from frame 432. The first positive came on 436, about
+  **2.0 s** later, when the Lord itself came in.
+- **Cell 7:** archers were on screen on 1174-1176, right after the warp, with no positive. They
+  left the view on 1177. The entry scored is the Lord's later walk-in (1190).
+- So the aura rule sees the Orc Lord, not its archers. Archers ahead of their Lord are a gap of
+  about 2 s on these frames.
+
+**Per frame on ow2** (not a bar):
+- the party in view: positive on 307 / 493 frames (0.62);
+- the Orc Lord in view: 304 / 456 (0.67);
+- partly on screen: 9 / 74.
+- In two non-entry windows the party stayed in view with archers first, and the first positive
+  came 4.0 s (cell 5, hop 0) and 2.5 s (cell 5, hop 3) after the window's first in-view frame.
+- **One positive on a negative ow2 frame:** frame 351, aura 0.140 at (423, 181).
+  - It is the first frame after cell 2's far @warp. The client still draws the pre-warp picture,
+    with the Lord, its aura and the archers on screen.
+  - The truth (packets, 1d = 120 ms) already has us 17 cells away.
+  - So it is a truth-timing artefact at a warp, not a wrong positive.
+
+### 11c. The hunting negatives (gef_fild10 a1-a6, 1 fps, every frame on the map)
+
+| session | stored frames on map | negative frames | 1-fps ticks (min) | party frames (not counted) | false positives |
+|---|---|---|---|---|---|
+| a1 `20261025T213953-rdp-rogue-a1` | 1,334 | 1,309 | 1,429 (23.82) | 25 | 1 |
+| a2 `20261025T221059-rdp-rogue-a2` | 2,027 | 2,027 | 2,181 (36.35) | 0 | 3 |
+| a3 `20261025T224840-rdp-rogue-a3` | 1,806 | 1,806 | 2,181 (36.35) | 0 | 0 |
+| a4 `20261025T232619-rdp-rogue-a4` | 556 | 556 | 556 (9.27) | 0 | 2 |
+| a5 `20261026T001947-rdp-rogue-a5` | 52 | 52 | 52 (0.87) | 0 | 0 |
+| a6 `20261026T002500-rdp-rogue-a6` | 1,082 | 1,082 | 2,181 (36.35) | 0 | 2 |
+| **total** | 6,857 | 6,832 | **8,580 (143.0)** | 25 | **8** (8 ticks) |
+
+- 29 frames were refused as `no_game_view` (loading screens).
+- Every false positive stood for one tick: none was followed by skipped duplicates.
+- Leaving out a6 (Amendment G's stuck run): 6 in 106.7 min, 0.56 per 10 min, but then under 2 h.
+
+**The 8 false positives** are all one effect. Each is a **pale green-white pentagram magic
+circle on the ground around our own Rogue**, the effect round 1 met at 0.0697 on pilot frame 722.
+Here it reaches 0.0804-0.1005 against the threshold 0.08, with its foot just outside the masked
+centre box:
+
+| session | frame | aura score | where | on screen (by eye) |
+|---|---|---|---|---|
+| a1 | 133 | 0.0969 | (627, 409) | the circle around our Rogue; an Orc Lady attacking beside it |
+| a2 | 471 | 0.1005 | (627, 409) | the circle around our Rogue; an orc beside it |
+| a2 | 1444 | 0.0875 | (597, 343) | the circle around our Rogue; two Orc Ladies, one mid-swing, a "Miss" |
+| a2 | 1740 | 0.0946 | (657, 421) | the circle around our Rogue; an Orc Lady |
+| a4 | 298 | 0.0993 | (639, 421) | the circle around our Rogue (just sat down); an Orc Lady |
+| a4 | 414 | 0.0816 | (567, 391) | the circle around our Rogue; an Orc Lady, a fallen log |
+| a6 | 266 | 0.0851 | (723, 367) | the circle around our Rogue behind a yellow bush; an Orc Warrior attacking from the left, "Miss" x3 |
+| a6 | 348 | 0.0804 | (693, 337) | the same spot; the Orc Warrior, damage "122", our HP bar red |
+
+**Where the circle comes from: not confirmed.** The sniffer decodes no skill-cast packet. It
+matches the client's lock-on circle around a skill's TARGET:
+- in the local KB (`mob_skills.json`), every hunting species on this map casts a targeted skill
+  with a cast time;
+- Orc Lady and Orc Warrior: NPC_GROUNDATTACK, 500 ms;
+- Orc Baby: SM_BASH, 800 ms;
+- Poporing: NPC_POISON, 800 ms.
+
+Our own SP fell by 10 within 2 s of 2 of the 8 frames, and was unchanged around the other 6.
+
+**The natural Orc Lord in a1** (frames 1326-1350; listed, never counted; not a bar):
+- the party came in under a tree canopy over our Rogue;
+- 1326: an archer in view at the bottom edge, no positive;
+- 1327: the Lord and 5 archers in view, aura 0.065, no positive;
+- **first positive 1328** (aura 0.122): 2.0 s after the first in-view frame (1 fps) and 1.0 s
+  after the Lord's own;
+- the first HP loss (none in the 40 s before) came 2.4 s after 1328, and HP reached 1 at 4.2 s
+  (Amendment E's death);
+- positives on 17 / 22 of its in-view frames.
+- It is the only natural approach in these data: a canopy case, which section 10 named as a known
+  gap.
+
+### 11d. What this says
+
+- **By the pre-registration, both bars pass.** Section 10 then calls for a FLEE rule,
+  pre-registered on its own, with a live proof on a spawned Lord with immunity OFF before any
+  scored run uses it. That is Batt's / the parent's step; nothing here starts it.
+- **The caveats belong in that rule's pre-registration:**
+  1. Recall rests on 4 entries. The lower bound is 47 %, and one entry passes only on the 0.1-s
+     allowance.
+  2. The aura sees the Lord, not its archers. Archers ahead of the Lord were on screen ~2 s
+     before the first positive (entry 2, cell 7).
+  3. Every false positive is the target lock-on circle around our own Rogue, just over 0.08. A
+     map or build where monsters cast on us more often would raise the rate. Two things would
+     address it:
+     - an exclusion for the circle's own shape (a thin ring centred on our feet);
+     - a 2-frame confirmation, which round 1 (section 6) found cost one frame of delay.
+     Either is a NEW recipe and needs new held-out data.
+  4. A canopy hides the Lord: a1's real approach was first positive 2 s after the first in-view
+     frame, 4.2 s before the death.
+
+**Files** (in `/dev/shm/poring-lab-tmp/orclord-r2/score/`, then archived to the NAS scratch
+archive):
+- `score-round2.json` and its log;
+- the truths `ow2-truth.json` and `a1-truth.json` ... `a6-truth.json`;
+- the frames looked at by eye.
+
+Reproduce: section 9's environment, then:
+
+    T=/dev/shm/poring-lab-tmp/orclord-r2/score; D=/mnt/poring-lab-datasets
+    python3 scripts/mvp_watch_study.py truth $D/20261026T000413-rdp-ow2 --layout hunt --map prt_fild08 --out $T/ow2-truth.json
+    python3 scripts/mvp_watch_study.py truth $D/20261025T213953-rdp-rogue-a1 --layout hunt --out $T/a1-truth.json   # a2-a6 alike
+    python3 scripts/mvp_watch_study.py entries --model /dev/shm/poring-lab-tmp/orclord/model/orclord-v1.npz \
+        --sha256 43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff \
+        --watch $D/20261026T000413-rdp-ow2 --watch-truth $T/ow2-truth.json \
+        --events /dev/shm/poring-lab-demo/20261026T000416-watch-prt_fild08-ow2/events.jsonl \
+        --hunt $D/20261025T213953-rdp-rogue-a1 $T/a1-truth.json ... --hunt $D/20261026T002500-rdp-rogue-a6 $T/a6-truth.json \
+        --out $T/score-round2.json
