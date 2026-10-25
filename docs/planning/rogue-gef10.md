@@ -583,3 +583,30 @@ item while sitting" x3, the Rogue sitting under a tree at (72,79)):
   pre-registration and tests). Proposed: **dungeon@8.3**, where the setup reads the stock after
   the restock from a source that cannot lag (the hotbar counts, or a forced save), and refuses to
   start below the target.
+
+## Amendment K (2026-10-26 06:41 ICT from `date`): the second block and the night's end
+
+**a11 (S, 05:59:47-06:36):** it started with the stock SEEN on its frame (10 / 10; its setup added
+none). 36 min, 31.7 kills / h, 14,420 z / h at OC, 0 deaths, loot 100 %, Steal 6 / 15. It used 9
+potions and 2 wings, and ended by the time box.
+
+**The second block (a9-a11, reported pooled by arm; it decides nothing, B2 / C):**
+
+| arm | runs | hours | value at OC / h |
+|---|---|---|---|
+| N | a9 | 0.60 | 11,171 |
+| S | a10 (died: the restock bug), a11 | 0.98 | 16,068 |
+
+**All 11 scored runs, descriptive only** (a1-a4, a5b, a6-a11; 6.18 h):
+- N 13,201 / h (2.80 h) vs S 14,874 / h (3.38 h);
+- 2 deaths: a1 (the natural Orc Lord, before Amendment E) and a10 (the restock bug, J);
+- items per hour: Cyfar 25.2, Orcish Voucher 13.3, Milk 2.3, Iron 1.9, Sticky Mucus 1.5, Large
+  Jellopy 1.0, Axe 0.5, Garlet 0.3;
+- of 284 items: 148 picked, 30 stolen, 106 by Snatcher (37 %).
+
+**The end state (06:40):**
+- The Rogue stands on prt_fild08 268,107, HP 94 %, weight 485 / 2,430, 1 potion and 8 wings,
+  immunity OFF.
+- No runner, recorder or chain is running. a12 and a13 do not run (H3.4).
+- The bag was stored once more (03:52). Storage holds the night's loot for Batt's Overcharge
+  merchant.
