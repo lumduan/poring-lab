@@ -417,3 +417,31 @@ So nothing on our side can repair it. What limits the damage:
 2. The aura-alone recipe pre-registered on it.
 3. Hunting negatives from a1-a6, hours of them; a7 / a8 stay the detector's TEST.
 4. Then a live flee proof on a spawned Lord with immunity OFF.
+
+## Amendment E (2026-10-25 22:08 ICT from `date`; after a1's death, BEFORE a2)
+
+**a1 (arm N, 21:39:52) ended in a DEATH at 23.7 min.** Its kills and items count, and the death is
+recorded as a result. The cause, from the packets' last 20 s:
+- 4 Orc Archer hits (253-286 damage each), then an Orc Lord hit of 3,296;
+- HP 2,146 -> 665 -> 1 within 2.5 s.
+
+That was the NATURAL Orc Lord respawning:
+- the watch's first `@killmonster2` (~19:54) had killed it;
+- it respawns 120-130 min after its death, so ~21:54-22:04;
+- a1's own `@killmonster2` at 21:40 found it still dead and could not reset its timer.
+
+**A4's premise was wrong.** `--clear-map` at a run's start keeps the Orc Lord away only when it is
+ALIVE then.
+
+**The schedule (from a2):**
+- The Orc Lord is alive now (it killed us at 22:04, and nothing killed it after). a2's setup kills
+  it at a KNOWN time D.
+- Runs are then 36 min, three per cycle, released at D, D+38, D+76. Each ends before D+120, the
+  earliest respawn.
+- The next cycle's first run is released only after D+131. The Lord has respawned by then, and
+  that run's `@killmonster2` kills it again (the new D).
+- The parent holds each run's ok gate by the clock: no new bot behaviour, no mid-run GM line.
+- The idle part of each cycle (~17 min) is for the Orc Lord practice (Amendment D), never a scored
+  run.
+- a1 keeps its 40-min registration (its result stands at 23.7 min). a2-a8 are 36 min. The verdict
+  pools by hours, as section 5 says.
