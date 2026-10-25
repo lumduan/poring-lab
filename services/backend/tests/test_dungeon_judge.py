@@ -428,6 +428,28 @@ def test_staged_floor_ids_flag_a_looters_returned_set_not_a_natural_drop() -> No
     assert dj.staged_floor_ids(pk) == {236, 237, 238, 239}
 
 
+def test_a_gain_inside_our_own_attack_is_snatched_and_counts_as_income() -> None:
+    """dungeon@8: the Rogue's Snatcher steals inside its attack -- a gain with no pickup request
+    and no Steal SP fall just before, but OUR attack act <= SNATCH_S before it, is "snatched" (in
+    the total); a gain with neither stays "other"; a pickup still wins over an attack."""
+    S = dj.NS
+    pk = [
+        {"type": "pickup_result", "t_mono_ns": 10 * S + S // 2, "ok": True, "item_id": 7053,
+         "amount": 1},
+        {"type": "pickup_result", "t_mono_ns": 30 * S, "ok": True, "item_id": 931, "amount": 1},
+        {"type": "pickup_request", "t_mono_ns": 50 * S, "floor_id": 9},
+        {"type": "pickup_result", "t_mono_ns": 50 * S + S // 4, "ok": True, "item_id": 931,
+         "amount": 1},
+    ]  # fmt: skip
+    g = dj.item_gains(pk, 0, 60 * S, attacks=[10 * S, 50 * S])
+    assert g == {"7053": {"snatched": 1}, "931": {"other": 1, "picked": 1}}
+    rows = dj.items_rows(g, 0.5)
+    assert [(x["item_id"], x["snatched"], x["total"]) for x in rows] == [(931, 0, 2), (7053, 1, 1)]
+    assert dj.pool_items([{"hours": 0.5, "items": rows}])[1]["snatched"] == 1
+    assert "snatched" in dj.items_box(rows, "t")
+    assert dj.item_gains(pk, 0, 60 * S) == {"7053": {"other": 1}, "931": {"other": 1, "picked": 1}}
+
+
 def test_item_gains_count_a_staged_pickup_apart_and_out_of_the_total() -> None:
     """A pickup whose request names a staged floor id is "staged": shown in the table and pooled,
     never in the total or the per-hour rate."""
@@ -462,6 +484,19 @@ def test_real_staged_sets_back_from_looters_in_404_s3_and_s7() -> None:
     st3 = dj.staged_floor_ids(dj.load(S3)[1])
     assert st3 == {236, 237, 238, 239} and 220 not in st3
     assert dj.staged_floor_ids(dj.load(S7)[1]) == {375, 376, 377, 378}
+
+
+P405 = "20261025T200925-demo-dungeon-rogue-gef_fild10-B-pilot"
+
+
+@pytest.mark.skipif(not _have(P405), reason="the 4.05 pilot session is not here")
+def test_real_snatcher_gains_in_the_405_pilot() -> None:
+    """The REAL positive case (4.05's pilot, arm N, 2026-10-25 20:09-20:24): 7 gains with no
+    pickup request and no Steal, each 0.289-0.306 s after OUR attack act, and each an item of the
+    attacked species' drop table (Cyfar <- Orc Lady x6, Orcish Voucher <- Orc Warrior x1)."""
+    row = dj.row(P405, None, map_name="gef_fild10")
+    got = {it["item_id"]: (it["picked"], it["snatched"], it["other"]) for it in row["items"]}
+    assert got == {7053: (5, 6, 0), 931: (3, 1, 0), 756: (1, 0, 0)}
 
 
 def test_steal_by_species_names_the_monster_our_next_attack_hits() -> None:
