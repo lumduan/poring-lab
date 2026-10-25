@@ -418,7 +418,7 @@ So nothing on our side can repair it. What limits the damage:
 3. Hunting negatives from a1-a6, hours of them; a7 / a8 stay the detector's TEST.
 4. Then a live flee proof on a spawned Lord with immunity OFF.
 
-## Amendment E (2026-10-25 22:08 ICT from `date`; after a1's death, BEFORE a2)
+## Amendment E (2026-10-25 22:06 ICT from `date`; after a1's death, BEFORE a2)
 
 **a1 (arm N, 21:39:52) ended in a DEATH at 23.7 min.** Its kills and items count, and the death is
 recorded as a result. The cause, from the packets' last 20 s:
