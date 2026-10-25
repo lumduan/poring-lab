@@ -1259,8 +1259,14 @@ def cmd_engaged(a: argparse.Namespace) -> dict[str, Any]:
 def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
     params = load_params(a.params, spec)
-    if params.get("status") != "FROZEN":
+    diag = bool(getattr(a, "fit_diagnostic", False))
+    if params.get("status") != "FROZEN" and not diag:
         raise SystemExit(f"{a.params}: {params.get('status')}: T1 runs on FROZEN parameters only")
+    if diag:  # gef10 13: C1 on FIT under PROPOSED parameters, a DIAGNOSTIC (never T1, never 3c)
+        for part in a.parts:
+            path, spots = parse_part(part)
+            if not spec.is_fit(path.name, spots):
+                raise SystemExit(f"{part}: --fit-diagnostic reads FIT parts only")
     occl = frozen_occluders(params, spec)
     off_ms = float(params["offset_ms"])
     rows: list[dict[str, Any]] = []
@@ -1268,7 +1274,9 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     dropped_all: Counter[str] = Counter()
     for part in a.parts:
         sess = RecSession.open(part, spec, a.layout_templates)
-        if overlaps_role(sess.sid, sess.spots, spec.fit) and not a.allow_fit:
+        if diag and not spec.is_fit(sess.sid, sess.spots):
+            raise SystemExit(f"{sess.name}: --fit-diagnostic reads FIT parts only")
+        if overlaps_role(sess.sid, sess.spots, spec.fit) and not (a.allow_fit or diag):
             raise SystemExit(f"{sess.name}: a FIT part (the parameters' own data): --allow-fit")
         refs = sess.candidates_at(off_ms)
         olf._JOB.update(sess=sess, occluders=occl, offset_ms=off_ms, anchors={},
@@ -1302,7 +1310,12 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     if a.rows is not None:
         a.rows.write_text(json.dumps(rows) + "\n")
     motion = Counter(bool(r.get("self_moving")) for r in rows)
+    if diag:
+        summ = {**summ, "T1": "NOT_T1: a FIT diagnostic under PROPOSED parameters"}
+        for row in per_part.values():
+            row["own_c1"] = f"DIAGNOSTIC (not 3c): {row['own_c1']}"
     return {
+        "diagnostic": diag, "params_status": params.get("status"),
         "what": f"5: C1 / C2 on the {spec.labels} PREDICTION (fix 2 facing, 1d, no anchor, no "
                 "fit), o3h's under-box rule, 2b / 2c (engaged units excluded: E0)",
         "map": spec.name, "parts": a.parts, "checked_at": olf.now_ict(),
@@ -1631,6 +1644,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--rows", type=Path, default=None)
     p.add_argument("--allow-fit", action="store_true", help="report C1 on FIT (not T1)")
+    p.add_argument(
+        "--fit-diagnostic",
+        action="store_true",
+        help="gef10 13: FIT parts only, PROPOSED parameters allowed (not T1, not 3c)",
+    )
     p = sub.add_parser("labels")
     common(p)
     p.add_argument("--params", type=Path, required=True)

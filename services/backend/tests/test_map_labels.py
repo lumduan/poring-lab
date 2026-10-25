@@ -488,3 +488,23 @@ def test_freeze_needs_the_engaged_selection_at_the_same_offset_and_t_h(tmp_path:
     sel.write_text(json.dumps({"chosen": "E2", "t_h": 0.4, "offset_ms": 120.0}))
     with pytest.raises(SystemExit, match="same 1d and T_h"):
         ml.cmd_freeze(argparse.Namespace(**base, engaged=sel))
+
+
+def test_fit_diagnostic_check_refuses_every_non_fit_part(tmp_path: Path) -> None:
+    """gef10 13: C1 under PROPOSED parameters only on FIT parts, refused before anything is read
+    (a TEST cell, s7 / s8 by name, a TRAIN session)."""
+    import argparse
+    import json
+
+    params = tmp_path / "params.json"
+    params.write_text(json.dumps({"labels": "gef10-o3h-e", "map": "gef_fild10",
+                                  "status": "PROPOSED_NOT_FROZEN: P1"}))  # fmt: skip
+    for part in ("/nonexistent/20261025T195325-rdp-ow1:spots=10-11",
+                 "/nonexistent/20261026T010101-rdp-rogue-s7",
+                 "/nonexistent/20261025T204315-rdp-rogue-s1"):  # fmt: skip
+        a = argparse.Namespace(map="gef_fild10", params=params, parts=[part], fit_diagnostic=True)
+        with pytest.raises(SystemExit, match="FIT parts only"):
+            ml.cmd_check(a)
+    a = argparse.Namespace(map="gef_fild10", params=params, parts=["/x"], fit_diagnostic=False)
+    with pytest.raises(SystemExit, match="FROZEN parameters only"):
+        ml.cmd_check(a)
