@@ -341,3 +341,29 @@ So nothing on our side can repair it. What limits the damage:
 - after 2-3 failed checks the agent switches to non-shell work and spaces its retries, not 10 in a
   row;
 - Batt can switch the session to manual approval with Shift+Tab during an outage.
+
+## Amendment B (2026-10-25 20:45 ICT from `date`; during s1, before s1's result is read)
+
+**B1. The two pilots (unscored):**
+- **Arm N pilot** `20261025T200925-...-B-pilot`: 15.0 min, 16 kills, deaths 0, hard bars pass.
+  - 7 items came in with no pickup and no Steal, each 0.289-0.306 s after our own hit and from the
+    hit species' drop table. That is Snatcher: judge column "snatched" (2319ce7).
+  - Value 5,951 z at Overcharge (all causes; `items_value`, ccbeec9).
+- **Arm S pilot2** `20261025T203118-...-B-pilot2` (its first start, 20:28, stopped safely: the line
+  after the setup's @warp read the LOADING screen and was refused; fixed 9c04fcf):
+  - 10.0 min, 13 kills, deaths 0, hard bars pass;
+  - Steal casts read by the runner 6 = packet SP falls of 10: 6. Stolen 1, snatched 5.
+- Both arms work on gef_fild10, so the 8 scored runs started at 20:43 (s1).
+
+**B2. Past s8: "until the bag is full" (Batt 3).**
+- The 8 runs add only ~210 weight at the pilots' rate (540 -> ~750 of 2,430, ~31 %), short of the
+  40 % stop.
+- So the chain goes on in the same ABBA order (s9 N, s10 S, s11 S, s12 N, ...) until the setup's
+  40 % stop. That stop is the milestone.
+- **The N-vs-S verdict uses s1-s8 only**, as section 5 registered. s9 and later are reported as a
+  second block, pooled by arm, not used for the decision.
+
+**B3. Work beside the runs (offline, niced, single-threaded; noted for the load):**
+- the Orc Lord recognizer (a subagent, from the watch `20261025T195325-rdp-ow1`);
+- the gef_fild10 detector's pre-registration and FIT work (a subagent; TEST = s7, s8, never read
+  before the parameters are frozen).
