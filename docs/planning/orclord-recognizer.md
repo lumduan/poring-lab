@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, a CPU recognizer cheap enough for the runner (<= 60 ms per 1280 x 720 frame, niced) tells 'the Orc Lord (mob 1190) or its Orc Archers (1189 / 1473) are in view' on gef_fild10 within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of held-out hunting frames."
-status: "SCORED 2026-10-25 21:34-21:37 ICT (once, frozen model sha256 43179452...): bar 1 FAILS (recall within 1 s 5 / 7 = 71.4 %: a spawn under a canopy, a spawn behind the summon's light pillar), bar 2 FAILS (2 false positives in the pilot's 10.6 held-out min = 1.89 per 10 min; supplementary s1 0.88), bar 3 PASSES (p95 53.7 ms). Pre-registered 20:20 ICT before any recognizer; Amendments A + B on DEV only. Offline only."
+status: "ROUND 2 SCORED 2026-10-26 01:21-01:33 ICT (section 11): the aura rule alone (frozen v1 model) PASSES both bars by the letter -- recall 4 / 4 edge entries within 1.1 s (3 / 4 within 1.0 s; a one-sided 95 % lower bound of 47 %), false positives 0.56 per 10 min on 143 min of gef_fild10 hunting (all 8: our own lock-on magic circle, 0.080-0.100 against 0.08). Thin evidence: only 4 entries; archers alone are not seen. Round 1 (section 5) FAILED with both cues."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, payf07-detector.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py]
-next_action: "Batt / the parent: decide whether the runner uses the frozen v1 (both cues) or the aura alone (section 6, POST-HOC: 0 FP in 33 min, the same 5 / 7 cells) for the live flee-rule proof; a second pre-registered watch with edge entries at 2-5 fps and >= 2 h of hunting negatives (section 8) to pass the bars."
+next_action: "The parent: the FLEE rule (a Fly Wing on the first aura positive) is pre-registered on its own with a live proof on a spawned Lord, immunity OFF, BEFORE any scored run uses it (rogue-gef10.md); until then --clear-map and Amendment E's schedule keep the natural Lord out of the runs."
 title: "An Orc Lord recognizer for the Rogue's flee rule on gef_fild10 (pixels only, CPU, scored offline on held-out lattice cells)"
 date: 2026-10-25
 owner: Batt
