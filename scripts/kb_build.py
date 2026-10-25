@@ -17,7 +17,8 @@ Outputs (data/kb/):
     spawns.json    map -> spawn lines (area, species, amount, respawn delays, boss flag)
     warps.json     map -> warp lines (source cell + span -> destination map and cell)
     classes.json   the detector's species per bot map: every species spawned there, plus the
-                   species they turn into (metamorphosis), with the evidence
+                   species they turn into (metamorphosis) and the slaves they summon
+                   (NPC_SUMMONSLAVE: gef_fild10's Orc Lord brings Orc Archers), with the evidence
     items.json     id -> aegis, name, type, weight (rAthena units: 10 = 1 shown weight) and
                    weight_shown (2026-10-08, loot@1 P4: what a pickup adds to the weight readout)
     drops.json     mob id -> its normal and MVP drops: item id + aegis, rate per 10000 as in
@@ -63,6 +64,9 @@ SPAWNS = (
     # warps since 10-21 10:18, written outside this list; without these a rebuild DROPS them
     # (dungeon_hunt.py's warp keep-away, the zones' notes and the plant spawn areas read them)
     "npc/pre-re/mobs/dungeons/orcsdun.txt",
+    # gef_fild10 (Batt 2026-10-25: the Rogue's field; docs/planning/gef10-prep.md). The pre-renewal
+    # override, loaded by npc/pre-re/scripts_monsters.conf
+    "npc/pre-re/mobs/fields/geffen.txt",
 )
 # Loaded by npc/pre-re/scripts_warps.conf (pre-renewal overrides) and npc/scripts_warps.conf
 WARPS = (
@@ -76,6 +80,7 @@ WARPS = (
     "npc/warps/cities/lutie.txt",
     "npc/warps/fields/glastheim.txt",
     "npc/warps/dungeons/orcsdun.txt",  # orcsdun01 (see SPAWNS)
+    "npc/pre-re/warps/fields/geffen_fild.txt",  # gef_fild10 (see SPAWNS; scripts_warps.conf)
 )
 DEFAULT_MAPS = ("prt_fild08", "iz_dun00", "iz_dun01")
 # 2026-10-08 (loot@1 P4). db/item_db.yml imports db/pre-re/item_db.yml in a pre-renewal build,
@@ -111,6 +116,7 @@ RATE_CLASS = {
 ITEM_FIELDS = {"AegisName": "aegis", "Name": "name", "Type": "type", "SubType": "subtype",
                "Weight": "weight", "Buy": "buy", "Sell": "sell", "Slots": "slots"}  # fmt: skip
 METAMORPHOSIS = 193  # NPC_METAMORPHOSIS: val1 is the mob it turns into
+SUMMONSLAVE = 196  # NPC_SUMMONSLAVE: val1..val5 are the slaves it calls (mob_summonslave, mob.cpp)
 MOB_FIELDS = {
     "AegisName": "aegis", "Name": "name", "Level": "level", "Hp": "hp", "WalkSpeed": "walk_speed",
     "AttackDelay": "attack_delay", "AttackMotion": "attack_motion",
@@ -341,7 +347,8 @@ def classes_for(
     skills: dict[int, list[dict[str, Any]]],
     mobs: dict[int, dict[str, Any]],
 ) -> dict[str, Any]:
-    """Every species a bot map spawns, plus what they turn into (NPC_METAMORPHOSIS val1)."""
+    """Every species a bot map spawns, plus what they turn into (NPC_METAMORPHOSIS val1) and the
+    slaves they summon (NPC_SUMMONSLAVE val1..val5: on the map beside their master)."""
     out: dict[str, Any] = {}
     for m in maps:
         species: dict[int, dict[str, Any]] = {}
@@ -353,6 +360,10 @@ def classes_for(
                 if sk["skill"] == METAMORPHOSIS and sk["vals"][0].isdigit():
                     into = int(sk["vals"][0])
                     species.setdefault(into, {"slots": 0, "via": f"metamorphosis of {mid}"})
+                if sk["skill"] == SUMMONSLAVE:
+                    for v in sk["vals"]:
+                        if v.isdigit() and int(v) > 0:
+                            species.setdefault(int(v), {"slots": 0, "via": f"slave of {mid}"})
         out[m] = {
             str(mid): {
                 **row,

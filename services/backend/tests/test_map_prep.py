@@ -1,7 +1,9 @@
 """scripts/map_prep.py (the map-agnostic hunt-map prep, docs/planning/payf07-prep.md) on SYNTHETIC
 grids; the per-area zone click proof (orc_dungeon_prep.zone_clicks, generalised to any map); and
 the committed pay_fild07 zones DRAFT: the loader refuses it until a person reviews it, and its
-geometry (proved on a test-reviewer copy in tmp, never committed) covers every warp span + 4."""
+geometry (proved on a test-reviewer copy in tmp, never committed) covers every warp span + 4; and
+the committed gef_fild10 zones (delegated 2026-10-25, docs/planning/gef10-prep.md): every warp
+span and every script-NPC cell + 4, each arrival inside, the proposed stands outside."""
 
 from __future__ import annotations
 
@@ -161,4 +163,61 @@ def test_the_pay_fild07_draft_geometry_covers_every_span_plus_four(tmp_path: Pat
     for c in PAY07_ARRIVALS:
         assert mz.in_no_enter(z, c), c
     for c in [(198, 202), (198, 182)]:  # the proposed START and FALLBACK stands (payf07-prep 5)
+        assert not mz.in_no_enter(z, c)
+
+
+# --- the committed gef_fild10 zones (delegated by Batt 2026-10-25 ~13:1x, gef10-prep.md 4) ------
+
+GEF10_SPANS = {  # data/kb/warps.json (rAthena npc/pre-re/warps/fields/geffen_fild.txt)
+    "warp-gef_fild09": (251, 371, 5, 2),
+    "warp-gef_fild11": (104, 21, 5, 2),
+    "warp-gef_fild03": (370, 56, 2, 5),
+    "warp-gef_fild14": (27, 219, 1, 1),
+    "door-in_orcs01-136-331": (136, 331, 1, 1),
+    "door-in_orcs01-138-284": (138, 284, 1, 1),
+    "door-in_orcs01-215-51": (215, 51, 1, 1),
+    "door-in_orcs01-223-205": (223, 205, 1, 1),
+    "door-in_orcs01-63-337": (63, 337, 1, 1),
+}
+GEF10_NPCS = {  # data/kb/npc_cells.json: the 5 dialog NPCs (no touch area), a span of 0
+    "npc-kafra-73-340": (73, 340, 0, 0),
+    "npc-board-69-340": (69, 340, 0, 0),
+    "npc-board-109-23": (109, 23, 0, 0),
+    "npc-orcsmemory-242-202": (242, 202, 0, 0),
+    "npc-orcsmemory-238-202": (238, 202, 0, 0),
+}
+# from the neighbouring maps' warp lines and the 5 houses' (npc/warps/dungeons/orcsdun.txt)
+GEF10_ARRIVALS = [(251, 368), (104, 24), (367, 56), (31, 219), (138, 329), (137, 286), (214, 53),
+                  (223, 203), (65, 335)]  # fmt: skip
+GEF10_WEST = {"door-in_orcs01-63-337": 2}  # + 2 more west: the pocket (56-57, 334) is inside
+
+
+def test_the_gef_fild10_zones_carry_batts_recorded_delegation() -> None:
+    """Batt 2026-10-25 ~13:1x, his answer to the parent's question: "Delegate gef_fild10 zones"."""
+    z = mz.load("gef_fild10", mz.ZONES_DIR, (400, 400))
+    assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-10-25)"
+    assert str(z.reviewed) == "2026-10-25"
+    data = yaml.safe_load((mz.ZONES_DIR / "gef_fild10.yaml").read_text())
+    assert "Delegate gef_fild10 zones" in data["delegation"]
+
+
+def test_the_gef_fild10_geometry_covers_every_span_and_npc_plus_four() -> None:
+    z = mz.load("gef_fild10", mz.ZONES_DIR, (400, 400))
+    assert z is not None and not z.no_cross
+    want = {**GEF10_SPANS, **GEF10_NPCS}
+    assert [n.id for n in z.no_enter] == list(want)
+    for ne, (x, y, sx, sy) in want.items():
+        item = next(n for n in z.no_enter if n.id == ne)
+        west = GEF10_WEST.get(ne, 0)
+        for cx in range(x - sx - 4 - west, x + sx + 5):
+            for cy in range(y - sy - 4, y + sy + 5):
+                assert mz.in_polygon((cx, cy), item.polygon), (ne, cx, cy)
+        # exactly the span + 4 (+ the recorded west extension): the next ring is not in the area
+        assert not mz.in_polygon((x - sx - 5 - west, y), item.polygon)
+        assert not mz.in_polygon((x + sx + 5, y), item.polygon)
+        assert not mz.in_polygon((x, y - sy - 5), item.polygon)
+        assert not mz.in_polygon((x, y + sy + 5), item.polygon)
+    for c in GEF10_ARRIVALS:
+        assert mz.in_no_enter(z, c), c
+    for c in [(186, 179), (186, 159)]:  # the proposed START and FALLBACK stands (gef10-prep 5)
         assert not mz.in_no_enter(z, c)

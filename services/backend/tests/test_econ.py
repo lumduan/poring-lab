@@ -155,6 +155,38 @@ def test_trip_fields_across_a_portal() -> None:
     assert em.route_maps(portals, "B", ["A"], ["A", "B"]) == []  # no way back from B
 
 
+def test_overcharge_truncates_the_gef_fild10_loot_per_unit() -> None:
+    """The Rogue's loot sells at Overcharge Lv 10 (rogue-gef10.md 2c): (int32)(v x 124 / 100.)
+    per unit, never the rounded x 1.24 of a whole stack (npc.cpp:3080-3082)."""
+    assert [ei.overcharge(v) for v in (386, 71, 420, 35, 20)] == [478, 88, 520, 43, 24]
+    assert 10 * ei.overcharge(35) == 430 != round(10 * 35 * 1.24)  # 434 for a stack of 10
+
+
+def test_species_rows_value_per_kill_at_npc_sell_and_overcharge() -> None:
+    """species_rows: per species V / V_oc / W (rares out, their value apart), the top items by
+    Overcharge value, then the spawn mix and the mix without plants (IgnoreMelee)."""
+    lady = {"name": "A", "aggressive": True, "rare_v": 0.5, "modes": [], "drops": [
+        {"item_id": 1, "p": 0.5, "sell": 100, "sell_oc": 124, "weight": 1.0, "rare": False,
+         "base": 5000},
+        {"item_id": 2, "p": 0.1, "sell": 10, "sell_oc": 12, "weight": 5.0, "rare": False,
+         "base": 1000},
+        {"item_id": 3, "p": 0.001, "sell": 500, "sell_oc": 620, "weight": 1.0, "rare": True,
+         "base": 10}]}  # fmt: skip
+    plant = {"name": "P", "aggressive": False, "rare_v": 0.0, "modes": ["IgnoreMelee"],
+             "drops": [{"item_id": 4, "p": 1.0, "sell": 2, "sell_oc": 2, "weight": 1.0,
+                        "rare": False, "base": 10000}]}  # fmt: skip
+    mdoc = {"mix": {"10": 3, "20": 1}, "species": {"10": lady, "20": plant}}
+    rows = dict(em.species_rows(mdoc, top=1))
+    a = rows["10 A"]
+    assert (a["V"], a["V_oc"], a["W"]) == (51.0, 63.2, 1.0)  # 50 + 1; 62 + 1.2; 0.5 + 0.5
+    assert a["rare_v"] == 0.5 and a["top_oc"] == [[1, 0.5, 100, 124]] and a["spawns"] == 3
+    assert rows["20 P"]["V_oc"] == 2.0
+    assert rows["spawn mix"]["V_oc"] == round((3 * 63.2 + 2.0) / 4, 2)
+    assert rows["mix, no plants"] == {"spawns": 3, "V": 51.0, "V_oc": 63.2, "W": 1.0,
+                                      "V_core_oc": 63.2}  # fmt: skip
+    assert "gef_fild10" in em.CANDIDATES  # `build` without maps builds the Rogue's field
+
+
 # --- econ_row: the per-run row --------------------------------------------------------------------
 
 

@@ -80,6 +80,16 @@ fetched into `/dev/shm`) or from the lab DB. No rAthena table is copied here (GP
   pixels yet, so meeting it most likely ends a run in a DEATH, which is a RESULT (the run stops,
   the cause is recorded, the dialog closes by its known step, then @alive + @heal).
 
+> ➡️ **2026-10-25, the map prep ([gef10-prep.md](gef10-prep.md) 1a, 1c) adds:**
+> - the Orc Lord walks with **5 Orc Archers**, its slaves (range 9, 73 % to hit this Rogue);
+> - it comes back **120-130 min** after a death, not 2 h +- 10;
+> - it stays on the map while alive: `dynamic_mobs` never removes an MVP.
+> - It walks 100 ms per cell (75 under its Increase AGI) against the Rogue's 150. While it
+>   chases it casts Lv 10 bolts from 9 cells: 1,700-2,660 before MDEF, about the Rogue's
+>   ~2,030 HP.
+> - **On foot it cannot be outrun.** Only a Fly Wing at first sight breaks contact. Silence
+>   does not block the Fly Wing; Stun (its Shield Charge) does.
+
 ### 2b. Warps and NPCs (what the zones and the hard bars must keep us off)
 
 - **9 warps** (`npc/pre-re/warps/fields/geffen_fild.txt`):
@@ -107,6 +117,11 @@ fetched into `/dev/shm`) or from the lab DB. No rAthena table is copied here (GP
 
 - Weighted by the spawns: ~171 z and ~1.0 weight per kill. At 4.04's 35.7 kills / h that is
   ~36 weight / h, so a bag stored down to its fixed part lasts many hours before the 40 % stop.
+- ➡️ 2026-10-25 ([gef10-prep.md](gef10-prep.md) 8): the values above INCLUDE the rares.
+  - The econ model's V (rares out, Batt's rule) at Overcharge: Orc Lady 224.42, Orc Warrior
+    84.97, Orc Baby 78.71, Poporing 30.23.
+  - The mix without plants: 165.96 z and 0.94 weight per kill (`econ_model.py species
+    gef_fild10`).
 - Batt's window prices (Voucher 53, Cyfar 289) are RENEWAL's item_db; ours are pre-renewal's
   (71, 386). The judge uses ours.
 - Steal and Snatcher take from the same drop table.
