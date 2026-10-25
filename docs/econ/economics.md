@@ -37,6 +37,7 @@ What exists now:
     econ_model.py build                     # the maps (prt_fild08, prt_fild06, orcsdun01 + 6 candidates; ~60 s)
     econ_row.py SID ...                     # rows; --banked prt_fild08 / --trials for a back-fill; --json --pool
     econ_model.py table --L 0.9             # the map comparison (section 7)
+    econ_model.py species gef_fild10        # value per kill per species, NPC sell and Overcharge (2026-10-25)
     run_row.py SID ...                      # the standard row + the economics block
 ```
 

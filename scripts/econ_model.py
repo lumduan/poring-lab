@@ -7,6 +7,7 @@ stocks. OFFLINE; nothing here runs during play.
     econ_model.py show MAP [--K 150 --L 0.9 --C 1155 --T-s ... --cost-h 0 --gear 310000]
     econ_model.py table [MAP ...]          the comparison table (docs/econ/economics.md section 6)
     econ_model.py screen                   every map with spawn lines: a Base-60 Crusader screen
+    econ_model.py species MAP [--L 1.0]    value per kill PER SPECIES, at NPC sell and at Overcharge
 
 The formulas, every symbol and their sources are in docs/econ/economics.md. In short:
 - per species s: V_s = sum_i p_i x sell_i (zeny per kill dropped), W_s = sum_i p_i x weight_i,
@@ -19,6 +20,10 @@ The formulas, every symbol and their sources are in docs/econ/economics.md. In s
   their expected NPC value is reported apart as ``rare_v``. MVP drops are never in V.
 - the map's kill mix = its spawn lines' amounts (normal `monster` lines; boss_monster lines are
   listed, not farmed), or a run's measured kill mix for model-vs-measured.
+- OVERCHARGE (Lv 10, the merchant's +24 %): every drop row carries ``sell_oc`` = econ_items'
+  ``sell_oc10``, pc_modifysellvalue at the pin (pc.cpp:5708-5719: (int32)(sell x 124 / 100.),
+  truncated PER UNIT, then x the amount, npc.cpp:3080-3082); ``--oc`` (show / table) and
+  ``species`` use it. Batt 2026-10-25 (rogue-gef10.md): the Rogue's loot sells at Overcharge.
 - per farming hour: G = K x L x V (gross), weight rate K x L x W, fill time F = C / (K x L x W),
   trip T (round trip to the nearest NPC that buys: walk over portals + a fixed sell time),
   u = F / (F + T), net per wall-clock hour N = u x (G - c), cost ratio c / G, payback = gear / N
@@ -65,7 +70,8 @@ MAPS = ("prt_fild08", "prt_fild06", "orcsdun01")
 CANDIDATES = {
     "gef_fild10": "the orc field the Crusader walks through to orcsdun01 (its portal via "
                   "in_orcs01): Orc Lady / Orc Warrior lv 24-31, NOT undead (no Demon Bane): the "
-                  "baseline beside orcsdun01",
+                  "baseline beside orcsdun01; since 2026-10-25 the Rogue's field (Batt; "
+                  "rogue-gef10.md), its loot sold at Overcharge (species --oc)",
     "orcsdun02": "Orc Dungeon F2, the stairs from orcsdun01: Orc Skeleton (Undead, lv 28) + Zenorc "
                  "(lv 31, FLEE 108: MAIN hits 55 %); Orc Archer lv 49 x 5",
     "pay_dun01": "Payon Cave F2: Soldier / Archer Skeleton (Undead, lv 29-31: Demon Bane + Divine "
@@ -753,9 +759,43 @@ def gear_cost(items_doc: Mapping[str, Any], ids: Sequence[int] = CRUSADER["gear"
     return None if any(v is None for v in vals) else int(sum(vals))
 
 
-def fmt_table(rows: Sequence[tuple[str, Mapping[str, Any]]], keys: Sequence[str]) -> str:
-    """PURE: a box-drawing table, one row per map."""
-    head = ["map", *keys]
+def species_rows(mdoc: Mapping[str, Any], L: float = 1.0, top: int = 3
+                 ) -> list[tuple[str, dict[str, Any]]]:  # fmt: skip
+    """PURE: value per kill PER SPECIES of a built map (``mdoc``: maps.json's entry), at the NPC
+    sell price (V) and at Overcharge Lv 10 (V_oc), with the weight (W), the core part (drops at
+    >= 1 %), the rares' value apart (rare_v, NPC sell; never in V) and the ``top`` items by their
+    Overcharge value per kill [item id, p, sell, sell_oc]; ``L`` the loot completeness. Then the
+    spawn mix (normal lines; boss lines are not farmed) and the same mix without the plants
+    (IgnoreMelee species: one damage per hit, struck only when met)."""
+    sp = mdoc["species"]
+    mix = {str(k): float(v) for k, v in mdoc["mix"].items()}
+    rows: list[tuple[str, dict[str, Any]]] = []
+    for s in [*mix, *(k for k in sp if k not in mix)]:
+        if s not in sp:
+            continue
+        r, k, ko = sp[s], kill_stats(sp[s]["drops"], L), kill_stats(sp[s]["drops"], L, "sell_oc")
+        best = sorted((d for d in r["drops"] if not d.get("rare")),
+                      key=lambda d: -float(d["p"]) * float(d["sell_oc"]))[:top]  # fmt: skip
+        rows.append((f"{s} {r.get('name')}", {
+            "spawns": int(mix.get(s, 0)), "aggressive": bool(r.get("aggressive")),
+            "V": round(k["ev"], 2), "V_oc": round(ko["ev"], 2), "W": round(k["ew"], 3),
+            "V_core_oc": round(ko["ev_core"], 2), "rare_v": r.get("rare_v"),
+            "top_oc": [[d["item_id"], d["p"], d["sell"], d["sell_oc"]] for d in best],
+        }))  # fmt: skip
+    plants = {s for s in mix if s in sp and "IgnoreMelee" in (sp[s].get("modes") or ())}
+    for name, m in (("spawn mix", mix), ("mix, no plants", {s: n for s, n in mix.items()
+                                                             if s not in plants})):  # fmt: skip
+        a, b = mix_stats(sp, m, L), mix_stats(sp, m, L, "sell_oc")
+        rows.append((name, {"spawns": int(sum(m.values())), "V": round(a["ev"], 2),
+                            "V_oc": round(b["ev"], 2), "W": round(a["ew"], 3),
+                            "V_core_oc": round(b["ev_core"], 2)}))  # fmt: skip
+    return rows
+
+
+def fmt_table(rows: Sequence[tuple[str, Mapping[str, Any]]], keys: Sequence[str],
+              first: str = "map") -> str:  # fmt: skip
+    """PURE: a box-drawing table, one row per map (``first``: the first column's title)."""
+    head = [first, *keys]
     cells = [[name, *("-" if r.get(k) is None else str(r.get(k)) for k in keys)]
              for name, r in rows]  # fmt: skip
     ws = [max(len(h), *(len(c[i]) for c in cells)) for i, h in enumerate(head)]
@@ -818,6 +858,10 @@ def main() -> int:
         t.add_argument("--search-s", type=float, default=SEARCH_S)
     sub.choices["table"].add_argument("maps", nargs="*")
     sub.add_parser("screen")
+    sp_ = sub.add_parser("species")
+    sp_.add_argument("map")
+    sp_.add_argument("--L", type=float, default=1.0)
+    sp_.add_argument("--top", type=int, default=3)
     a = ap.parse_args()
     import econ_items
 
@@ -839,6 +883,14 @@ def main() -> int:
     if a.cmd == "screen":
         return screen(items_doc)
     doc = load()
+    if a.cmd == "species":
+        if a.map not in doc["maps"]:
+            print(f"{a.map}: not built (econ_model.py build {a.map})")
+            return 1
+        print(fmt_table(species_rows(doc["maps"][a.map], a.L, a.top),
+                        ("spawns", "aggressive", "V", "V_oc", "W", "V_core_oc", "rare_v",
+                         "top_oc"), first="species"))  # fmt: skip
+        return 0
     gear = a.gear if a.gear is not None else gear_cost(items_doc)
     names = [a.map] if a.cmd == "show" else (a.maps or list(doc["maps"]))
     rows = []
