@@ -862,3 +862,16 @@ methodology choices are the parent's, made on the FIT results above and nothing 
   `00ef6383883927e35991355f7d29597c0f918af73f65751885a53edfb1b0aac1` (`map_labels.py freeze`,
   threshold file sha256 `2f80b858a10d474a8b7e07990231cd4fa8906b32bd85701254b2a6d20b0f1395`). The
   TRAIN labels (s1, a1-a6 by 3c) follow, one session at a time.
+
+### 13o. RESULT: the first TRAIN sessions under the frozen params (2026-10-25 22:14-22:23 ICT)
+
+| session | frames labelled / whole | own C1 (bad / scored) | joins TRAIN (3c: >= 50 scored)? |
+|---|---|---|---|
+| s1 (`20261025T204315-rdp-rogue-s1`, partial: 1,384 frames) | 1,059 / 752 | 0 / 26 | no: 26 < 50 |
+| a1 (`20261025T213953-rdp-rogue-a1`, death at 23.7 min) | 901 / 593 | 0 / 48 | no: 48 < 50 |
+
+- The labels are clean where scored, but too few. A 25-40 min hunt gives under 50 standing labels.
+- **The plan for data (no rule change):** IMMUNE lattice watches on gef_fild10, as 13a of
+  payf07-detector.md did for Elder Willow (136 -> 409 boxes). They use 30-s dwells, `@warp` only
+  and no spawn. They run in rogue-gef10.md Amendment E's gaps (no `@killmonster2`, so the Orc
+  Lord's timer is untouched) and join TRAIN by 3c like any later session.
