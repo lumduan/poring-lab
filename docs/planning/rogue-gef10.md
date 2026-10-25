@@ -394,7 +394,7 @@ So nothing on our side can repair it. What limits the damage:
 - The gef_fild10 detector's TEST sessions move with it: a7 and a8, never read before its
   parameters are frozen.
 
-## Amendment D (2026-10-25 21:5x ICT; the Orc Lord recognizer's RESULT)
+## Amendment D (2026-10-25 21:51 ICT from `date`; the Orc Lord recognizer's RESULT)
 
 **The result:** [orclord-recognizer.md](orclord-recognizer.md), a subagent, offline.
 - Its bars were pre-registered at 20:21:07, before any recognizer existed. The scoring used
