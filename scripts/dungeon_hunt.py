@@ -94,7 +94,10 @@ arms "no Steal" (Snatcher Lv 10 alone) vs --steal). New:
   max HP 2146 / SP 336 and the Thief's keys and stock; the setup never drops loot (it is value for
   Batt's Overcharge merchant) and stops at 40 % ("train until the bag is full first");
 - the Steal cast is read as an SP-percent fall of half Steal's share of max SP, rounded up
-  (steal_sp_fall: Thief 5 points as before, Rogue 10 / 336 SP -> 2 points).
+  (steal_sp_fall: Thief 5 points as before, Rogue 10 / 336 SP -> 2 points);
+- --clear-map (off by default): the setup types @killmonster2 right after the warp to the map, so
+  gef_fild10's natural Orc Lord (MVP, 2 h respawn) is absent from a scored run until the Orc Lord
+  flee rule is proven (rogue-gef10.md Amendment A4); every monster respawns.
 
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
@@ -962,6 +965,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 time.sleep(0.35)
             time.sleep(1.0)
         setup.append(f"@warp {map_} {start[0]} {start[1]}")
+        if a.clear_map:  # dungeon@8, Amendment A4: the experimenter's step, never the bot's
+            setup.append("@killmonster2")
         for cmd in setup:
             # 4.04 Amendment A: @heal is idempotent -- chat_guard's skip (a refused 3rd @heal in a
             # row is not typed; the HP / SP are full after the pre-run's heal or the relog)
@@ -987,7 +992,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
             "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
                       "ag_match": a.ag_match},
-            "char": a.char, "steal": a.steal, "bank_tags": bank,
+            "char": a.char, "steal": a.steal, "bank_tags": bank, "clear_map": a.clear_map,
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
@@ -2205,6 +2210,14 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@7: Batt's steal-first, ONE Steal on every monster while the SP pays for it",
+    )
+    t.add_argument(
+        "--clear-map",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@8 (rogue-gef10.md Amendment A4): the setup types @killmonster2 "
+        "after the warp to the map, so its MVP (gef_fild10's Orc Lord, 2 h "
+        "respawn) is absent until the flee rule is proven; everything respawns",
     )
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "

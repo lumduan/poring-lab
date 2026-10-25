@@ -350,6 +350,7 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # changes only what --steal does
     assert dh.VERSION == "dungeon@8"  # @8 = @7 + --char rogue (2026-10-25)
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
+    assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
 
 def test_dungeon6_characters_keys_and_stock() -> None:
