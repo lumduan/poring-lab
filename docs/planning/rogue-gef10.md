@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On gef_fild10 (the lab's pre-renewal server), a Rogue built to Batt's sample at the SAME EFFECT (Base 62 / Job 50: 100 % hit on, and 5 % hit from, every normal species of the map) gains at least as much NPC-sell value per hour (at Overcharge +24 %) WITHOUT a Steal opening (Snatcher Lv 10 steals on its own) as WITH dungeon@7's Steal-first opening, because the opening's casts, SP and rests cost kill time that its extra steals do not repay."
-status: "PRE-REGISTERED 2026-10-25 (Batt's decisions 12:3x-13:1x ICT, section 0). Nothing live yet: the map prep, @storage in group 20, the Rogue build, then the pilot and the runs (section 7)."
+status: "VERDICT 2026-10-26 03:51 (Amendment H): as registered, NO DIFFERENCE (N 13,754 vs S 14,381 z / h at OC), so N is kept; the sensitivity view without a6 says S wins (18,055 vs 13,754). Bag full 03:49, stored 1,069 -> 480. A second block (a9-a11, reported only) runs after it. History: PRE-REGISTERED 2026-10-25 (Batt's decisions 12:3x-13:1x ICT, section 0)."
 role: null
-verdict_date: null
+verdict_date: 2026-10-26
 verdict_ticket: null
 supersedes: null
 related: [thief-payon.md, payf07-detector.md, payf07-prep.md, renewal-feasibility.md, ../demonstrations.md, ../../config/map_zones/README.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py]
-next_action: "The parent: the map prep (a subagent), @storage in group 20, the Rogue build (live), the store step and its first live use, then the pilot and the 8 runs (section 7)."
+next_action: "Batt: pick the arm (the registered verdict keeps N; the sensitivity view favours S), and decide the next step (a Kafra trip needs his OK for the NPC contact; a second Orc Lord flee proof; a gef10 detector round 2). The parent: report the second block (a9-a11) when it ends."
 title: "The Rogue on gef_fild10: Batt's build at the same effect, no Steal vs Steal first, loot kept for the Overcharge merchant (pre-registered)"
 date: 2026-10-25
 owner: Batt
