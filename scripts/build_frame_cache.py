@@ -1197,6 +1197,14 @@ def item_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | N
 # --- MAP LABELS: recorder sessions labelled by scripts/map_labels.py (payf07-detector.md 11, 12) -
 
 MAP_RULE = "payf07-o3h-all"  # 11: the frozen params + the weak_fit floor (T_h on EVERY label)
+
+
+def map_rule(spec: Any) -> str:
+    """The cached labels' rule name: the map's labels + "-all" (the T_h floor on every label):
+    payf07-o3h-all (MAP_RULE), gef10-o3h-e-all (gef10-detector.md 4)."""
+    return f"{getattr(spec, 'labels', 'payf07-o3h')}-all"
+
+
 TAR_HEADER = 1024  # ShardSink's per-member allowance (its rotation rule)
 JOIN_ADDED = "ADDED"  # map_labels.own_c1_verdict's pass
 
@@ -1275,14 +1283,14 @@ class MapLabelInputs:
         files = []
         for p in a.map_labels:
             doc = json.loads(p.read_text())
-            if doc.get("labels") != ml.LABELS or doc.get("map") != spec.name:
-                raise SystemExit(f"{p}: not {ml.LABELS} labels of {spec.name}")
+            if doc.get("labels") != spec.labels or doc.get("map") != spec.name:
+                raise SystemExit(f"{p}: not {spec.labels} labels of {spec.name}")
             if doc.get("params_sha256") != sha or doc.get("params_status") != "FROZEN":
                 raise SystemExit(f"{p}: labelled with other parameters than {a.map_params}")
             sid, spots = str(doc["session"]), ml.parse_part(str(doc["part"]))[1]
-            if ml.overlaps_role(sid, spots, spec.test):
+            if spec.is_test(sid, spots):
                 raise SystemExit(f"{p}: {doc['part']} shares frames with TEST (3b): never cached")
-            if sid == spec.staged and not ml.inside_role(sid, spots, spec.fit):
+            if sid == spec.staged and not spec.is_fit(sid, spots):
                 raise SystemExit(f"{p}: the staged session trains on its FIT spots only (3c)")
             docs.setdefault(sid, []).append(doc)
             files.append({"file": str(p), "sha256": sha256_of(p), "part": doc["part"],
@@ -1300,7 +1308,9 @@ class MapLabelInputs:
                     own[str(psid)] = str(row.get("own_c1"))
             checks.append({"file": str(p), "sha256": sha256_of(p),
                            "parts": sorted(doc.get("per_part") or {})})  # fmt: skip
-        prov = {"rule": MAP_RULE, "plan": "docs/planning/payf07-detector.md 11 / 12",
+        plan = ("docs/planning/payf07-detector.md 11 / 12" if spec.name == "pay_fild07"
+                else f"{spec.plan} 4 / 10")  # fmt: skip
+        prov = {"rule": map_rule(spec), "plan": plan,
                 "map": spec.name, "params": str(a.map_params), "params_sha256": sha,
                 "offset_ms": float(params["offset_ms"]),
                 "weak_fit_floor": float(params["o3h_tau"]), "label_files": files,
@@ -1399,7 +1409,8 @@ def map_session(
     off = int(float(mli.params["offset_ms"]) * 1e6)
     index, player = classes.index, classes.fixed["player"]
     tally = MapTally()
-    row: dict[str, Any] = {"split": part, "path": str(path), "format": "png", "labels": MAP_RULE,
+    row: dict[str, Any] = {"split": part, "path": str(path), "format": "png",
+                           "labels": map_rule(mli.spec),
                            "join_rule_3c": join_verdict(sid, mli.spec.staged, mli.own),
                            "shards": []}  # fmt: skip
     w, h = V2_SIZE
@@ -1424,7 +1435,7 @@ def map_session(
             "frame_id": fid,
             "t_mono_ns": int(f["t"]),
             "map": mli.spec.name,
-            "labels": MAP_RULE,
+            "labels": map_rule(mli.spec),
             "spot": f.get("spot"),
             "boxes": [[player, None, "self"]] + [[c, m, "fit"] for c, m, _b in monsters],
         }

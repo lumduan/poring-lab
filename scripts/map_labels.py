@@ -13,6 +13,16 @@ module adds what another map and another recording path need, and never changes 
     map_labels.py pack      LABELS.json... --seed 21 --pack-dir DIR --key-dir DIR
                             --instructions TXT --instructions-sha256 HEX       6: T2's pack
 
+gef_fild10 (docs/planning/gef10-detector.md, PROPOSED 2026-10-25 20:51:49 ICT, 3e31b01, before
+this was built): ``--map gef_fild10``. Its "staged" session is the Orc Lord WATCH, split by CELL
+(one cell per map change, 3a); TEST is also refused by NAME (``*-rdp-rogue-s7`` / ``-s8``); the
+ENGAGED units are LABELLED by the frozen variant (4h: E1 / E2 / E3, chosen on FIT by ``engaged``;
+E0 = payf07's Amendment B); ``dying_in_view`` (4g) excludes a frame with a die animation on
+screen; T2's pack has two strata per species (N / E: the key's ``samples``, blind_score.py
+``--sample N|E``).
+
+    map_labels.py engaged   PART... --offset-ms MS --o3h-tau T --out JSON   4h's selection (FIT)
+
 A PART is a session directory, optionally restricted to the staged session's spots:
 ``DIR`` or ``DIR:spots=0-7``. The map's spec (MAPS) names its FIT and TEST parts; the measuring
 commands refuse TEST, and ``labels`` / ``pack`` refuse TEST too (the evaluation's TEST labels are a
@@ -42,7 +52,7 @@ import sys
 import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +67,11 @@ import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
 
 from poring_dataset.camera import map_key  # noqa: E402
-from poring_dataset.labels import in_windows  # noqa: E402
-from poring_dataset.render import anchor_and_depth  # noqa: E402
+from poring_dataset.labels import STATE_ACTION, in_windows  # noqa: E402
+from poring_dataset.render import MonsterAction, anchor_and_depth  # noqa: E402
+from poring_dataset.sprites import union  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
+from poring_packets.world import direction_toward  # noqa: E402
 
 Box = tuple[float, float, float, float]
 TMP = Path("/dev/shm/poring-lab-tmp/payf07")
@@ -84,9 +96,13 @@ ENGAGED_BACK_NS = 3_000_000_000
 ENGAGED_FWD_NS = 1_000_000_000
 
 
+REFERENCE_PRT = (1002, 1082, 1063, 1008, 1113, 1018)  # Poring, White Plant + prt_fild08's others
+
+
 @dataclass(frozen=True)
 class MapSpec:
-    """One map's label inputs (payf07-detector.md 1-4)."""
+    """One map's label inputs (payf07-detector.md 1-4; gef10-detector.md 3-4 for the fields with
+    defaults, which keep pay_fild07's behaviour)."""
 
     name: str
     cells: tuple[int, int]
@@ -100,6 +116,24 @@ class MapSpec:
     test: dict[str, frozenset[int] | None]
     kb: Path
     sprites: Path
+    labels: str = "payf07-o3h"  # the labels' name (label files, params, the cache)
+    t2_salt: str = "payf07"
+    staged_kind: str = "items"  # "items": stage_items' spots; "watch": one spot per map change
+    test_suffixes: tuple[str, ...] = ()  # TEST by session NAME too (gef10 3b: s7, s8)
+    conditional: tuple[int, ...] = (1080,)  # in T2's tier only with >= 30 kept labels in the pool
+    reference: tuple[int, ...] = REFERENCE_PRT  # T2's reference beside the map's species
+    engaged_labels: bool = False  # gef10 4h: engaged units may be LABELLED (the frozen variant)
+    dying_rule: bool = False  # gef10 4g (D8): dying_in_view
+    tmp: Path = Path("/dev/shm/poring-lab-tmp/payf07")
+    plan: str = "docs/planning/payf07-detector.md"
+
+    def is_test(self, sid: str, spots: frozenset[int] | None) -> bool:
+        """The part shares a frame with TEST: by the role table, or by the session's NAME."""
+        return overlaps_role(sid, spots, self.test) or any(
+            sid.endswith(s) for s in self.test_suffixes)  # fmt: skip
+
+    def is_fit(self, sid: str, spots: frozenset[int] | None) -> bool:
+        return inside_role(sid, spots, self.fit)
 
 
 PAYF07 = MapSpec(
@@ -118,7 +152,35 @@ PAYF07 = MapSpec(
     kb=TMP / "kb",
     sprites=TMP / "sprites-all",
 )  # fmt: skip
-MAPS = {"pay_fild07": PAYF07}
+G10 = Path("/dev/shm/poring-lab-tmp/gef10-det")
+GEF10_WATCH = "20261025T195325-rdp-ow1"
+GEF10 = MapSpec(
+    name="gef_fild10",
+    cells=(400, 400),
+    rsw=G10 / "grf" / "data" / "gef_fild10.rsw",
+    models=G10 / "grf" / "data" / "model",
+    species=(1273, 1023, 1031, 1686, 1190, 1189, 1079, 1080),
+    walkers=(1273, 1023, 1686, 1031, 1190, 1189),
+    fit_px=6,
+    staged=GEF10_WATCH,
+    fit={GEF10_WATCH: frozenset(range(11)),
+         "20261025T200922-rdp-rogue-pilot": None,
+         "20261025T203115-rdp-rogue-pilot2": None},
+    test={GEF10_WATCH: frozenset(range(11, 15))},
+    kb=G10 / "kb",
+    sprites=G10 / "sprites-all",
+    labels="gef10-o3h-e",
+    t2_salt="gef10",
+    staged_kind="watch",
+    test_suffixes=("-rdp-rogue-s7", "-rdp-rogue-s8"),
+    conditional=(1273, 1023, 1031, 1686, 1190, 1189, 1079, 1080),  # D4: every species
+    reference=(1002, 1082, 1153, 1152),  # Poring, White Plant, Orc Zombie, Orc Skeleton (6)
+    engaged_labels=True,
+    dying_rule=True,
+    tmp=G10,
+    plan="docs/planning/gef10-detector.md",
+)  # fmt: skip
+MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 
 
 # --- pure parts -------------------------------------------------------------------------------
@@ -172,6 +234,18 @@ def spot_starts(events: Iterable[dict[str, Any]]) -> list[int]:
     if last is not None and dropped:
         out.append(last)
     return out
+
+
+def cell_starts(events: Iterable[dict[str, Any]], map_name: str) -> list[int]:
+    """gef10-detector.md 3a: the WATCH's cells, one per ``map_change`` to ``map_name`` (each cell
+    starts with its @warp), in time order."""
+    return sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "map_change"
+                  and map_key(str(e.get("map") or "")) == map_name)  # fmt: skip
+
+
+def staged_starts(spec: MapSpec, events: Iterable[dict[str, Any]]) -> list[int]:
+    """The staged session's spot (or cell) starts by its kind."""
+    return cell_starts(events, spec.name) if spec.staged_kind == "watch" else spot_starts(events)
 
 
 def spot_of(t: int, starts: Sequence[int]) -> int | None:
@@ -255,6 +329,156 @@ class EngagedRule(olf.FacingRule):
         return facing, why
 
 
+ENGAGED_VARIANTS = ("E0", "E1", "E2", "E3")  # gef10-detector.md 4h
+ENGAGED_TAG = "engaged:"  # an engaged label's facing source starts with it
+SELF_MASK_PAD_PX = 4  # 4h E2 / E3: our self box + 4 px leaves the fit's valid pixels
+E3_GROUPS = (MonsterAction.IDLE, MonsterAction.ATTACK, MonsterAction.HURT)
+E_OFFSET_BAR_PX = 2.0  # 4h's selection: the kept engaged fits' median |dx| and |dy|
+
+
+def heading_toward(src: tuple[float, float], dst: tuple[float, float]) -> int | None:
+    """PURE (4h E2 / E3): rAthena's direction from cell ``src`` toward ``dst`` (map_calc_dir's
+    rule, poring_packets.world.direction_toward, on the rounded offset). None for the same cell."""
+    return direction_toward(int(round(dst[0] - src[0])), int(round(dst[1] - src[1])))
+
+
+@dataclass
+class EngagedLabelRule(EngagedRule):
+    """gef10 4h: fix 2 + 2b / 2c for every unit, and an ENGAGED unit (Amendment B's test) by
+    ``variant``: E0 EXCLUDED (``engaged``: payf07's rule, EngagedRule's exactly); E1 fix 2's facing,
+    labelled (2b / 2c as any unit); E2 / E3 fix 2's walk facing while WALKING, else TOWARD our
+    character, labelled (2b applies, 2c does not: the facing is not a move's). The engaged units
+    labelled at the current timeline time are ``engaged_now`` (the labeller's fit reads it); their
+    facing source is prefixed ``engaged:``."""
+
+    variant: str = "E0"
+    engaged_now: set[int] = field(default_factory=set)
+    tw_now: int | None = None
+
+    def choose(self, world: Any, e: Any, st: Any, rules: Any, tw: int, sheet: Any,
+               yaw: float) -> tuple[tuple[int, str], str | None]:  # fmt: skip
+        if self.variant not in ENGAGED_VARIANTS:
+            raise SystemExit(f"engaged variant {self.variant!r}: one of {ENGAGED_VARIANTS}")
+        if tw != self.tw_now:
+            self.tw_now, self.engaged_now = tw, set()
+        facing, why = olf.FacingRule.choose(self, world, e, st, rules, tw, sheet, yaw)
+        if not is_engaged(self.times, e.gid, tw):
+            return facing, why
+        if self.variant == "E0":
+            return facing, ENGAGED if why is None else why
+        tagged = (facing[0], ENGAGED_TAG + facing[1])
+        if why == olf.NEXT_MOVE or self.variant == "E1":
+            if why is None:
+                self.engaged_now.add(e.gid)
+            return tagged, why
+        self.engaged_now.add(e.gid)
+        me = (getattr(world, "self_x", None), getattr(world, "self_y", None))
+        if st.state == "walk" or me[0] is None or me[1] is None:
+            return tagged, None
+        h = heading_toward((float(e.x), float(e.y)), (float(me[0]), float(me[1])))
+        return ((h, ENGAGED_TAG + "toward_self") if h is not None else tagged), None
+
+
+def envelope(sheet: Any, pred: Any, group: int) -> Any:
+    """4h E2 / E3: ``pred`` redrawn with action ``group`` at the same anchor, scale and direction,
+    EVERY frame (the phase is not trusted): its box the frames' envelope. None: it draws nothing."""
+    ai = sheet.act.action_index(int(group), pred.direction)
+    ext = union([sheet.extent(ai, m) for m in range(sheet.motions(ai))])
+    if ext is None:
+        return None
+    ax, ay = pred.anchor_px
+    k = pred.scale
+    return replace(pred, box=(ax + k * ext[0], ay + k * ext[1], ax + k * ext[2], ay + k * ext[3]),
+                   action=int(group), action_index=ai, motion=None, phase_known=False,
+                   mask=None, mask_origin=None)  # fmt: skip
+
+
+def without_box(valid: npt.NDArray[np.bool_], box: Box, pad: float = SELF_MASK_PAD_PX
+                ) -> npt.NDArray[np.bool_]:  # fmt: skip
+    """PURE (4h E2 / E3): ``valid`` with ``box`` grown by ``pad`` px set False (a copy)."""
+    out = valid.copy()
+    h, w = out.shape
+    x0, y0 = max(0, int(np.floor(box[0] - pad))), max(0, int(np.floor(box[1] - pad)))
+    x1, y1 = min(w, int(np.ceil(box[2] + pad))), min(h, int(np.ceil(box[3] + pad)))
+    if x1 > x0 and y1 > y0:
+        out[y0:y1, x0:x1] = False
+    return out
+
+
+class EngagedLabeler(olf.FixLabeler):
+    """FixLabeler with 4h's fit for the engaged units of E2 / E3 (every frame of the Timeline
+    action -- E3: also of IDLE, ATTACK and HURT -- at the rule's facing, our self box masked out of
+    the valid pixels; the best fit). Every other unit, and E0 / E1, is FixLabeler's fit."""
+
+    def __init__(self, *args: Any, variant: str = "E0", **kw: Any) -> None:
+        super().__init__(*args, **kw)
+        if variant not in ENGAGED_VARIANTS:
+            raise SystemExit(f"engaged variant {variant!r}: one of {ENGAGED_VARIANTS}")
+        self.variant = variant
+
+    def fate(self, e: Any, st: Any, sheet: Any, pred: Any, facing: tuple[int, str],
+             why: str | None, under: bool, grey: npt.NDArray[np.float64],
+             unit_boxes: Sequence[tuple[int, Box]]) -> olf.LabelFate:  # fmt: skip
+        if self.variant not in ("E2", "E3") or e.gid not in getattr(self.facing, "engaged_now", ()):
+            return super().fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes)
+        from poring_dataset.ui_layout import covered_fraction
+
+        r = self.fit_px.get(int(e.job), 6)
+        own = next((b for g, b in unit_boxes if g == -1), None)
+        valid = self.valid if own is None else without_box(self.valid, own)
+        groups = [int(STATE_ACTION.get(st.state, MonsterAction.IDLE))]
+        if self.variant == "E3":
+            groups += [int(g) for g in E3_GROUPS if int(g) not in groups]
+        best: tuple[tuple[float, int, int, int], Any, int] | None = None
+        for g in groups:
+            p = envelope(sheet, pred, g)
+            if p is None:
+                continue
+            f = olf.best_fit(olf.fit_label_all(grey, valid, sheet, p, r))
+            if f is not None and (best is None or f[0] > best[0][0]):
+                best = (f, p, g)
+        base = olf.LabelFate(e.gid, e.job, under, why, None, "unfit", heading=facing[0],
+                             facing_from=facing[1], state=st.state)  # fmt: skip
+        fit = None if best is None else best[0]
+        if best is None or fit is None or fit[0] < self.tau or olf.at_edge(fit[1], fit[2], r):
+            crowd = any(g != e.gid and olf.overlap(pred.box, b) for g, b in unit_boxes)
+            grown = (pred.box[0] - r, pred.box[1] - r, pred.box[2] + r, pred.box[3] + r)
+            ui = covered_fraction(grown, self.lab.ui_rects) > 0
+            return replace(base, fit=fit, fail="crowd" if crowd else "ui" if ui else "unfit")
+        f, p, g = best
+        raw = olf.motion_box(sheet, p, f[3])
+        if raw is None:
+            return replace(base, fit=fit)
+        raw = (raw[0] + f[1], raw[1] + f[2], raw[2] + f[1], raw[3] + f[2])
+        w, h = self.lab.size
+        box = (max(0.0, raw[0]), max(0.0, raw[1]), min(float(w), raw[2]), min(float(h), raw[3]))
+        return replace(base, fit=fit, fail=None, box=box, raw=raw,
+                       state=f"{st.state}>{MonsterAction(g).name.lower()}")  # fmt: skip
+
+
+def engaged_selection(rows: Sequence[dict[str, Any]], t_h: float,
+                      variants: Sequence[str] = ("E1", "E2", "E3"),
+                      bar: float = E_OFFSET_BAR_PX) -> dict[str, Any]:  # fmt: skip
+    """PURE (4h's selection, FIT): per variant, the engaged fates KEPT (no 2b / 2c, the fit passes,
+    NCC >= ``t_h``: o3h under a model box, the floor elsewhere) and their median |dx|, |dy|; the
+    chosen variant = the most kept among those with both medians <= ``bar`` px, ties to the
+    earlier (simpler) one; none qualifies: E0."""
+    per: dict[str, Any] = {}
+    for v in variants:
+        rs = [r for r in rows if r["variant"] == v]
+        kept = [r for r in rs if r["pre"] is None and r["fail"] is None and r["ncc"] is not None
+                and float(r["ncc"]) >= t_h]  # fmt: skip
+        mdx = statistics.median(abs(r["dx"]) for r in kept) if kept else None
+        mdy = statistics.median(abs(r["dy"]) for r in kept) if kept else None
+        good = mdx is not None and mdy is not None and mdx <= bar and mdy <= bar
+        per[v] = {"fates": len(rs), "kept": len(kept),
+                  "kept_share": round(len(kept) / len(rs), 4) if rs else None,
+                  "median_abs_dx": mdx, "median_abs_dy": mdy, "qualifies": good}  # fmt: skip
+    ok = [v for v in variants if per[v]["qualifies"]]
+    chosen = max(ok, key=lambda v: (per[v]["kept"], -variants.index(v))) if ok else "E0"
+    return {"per_variant": per, "chosen": chosen, "t_h": t_h, "offset_bar_px": bar}
+
+
 def percentile(values: Sequence[float], q: float) -> float:
     """numpy's linear percentile, rounded to 3 decimals (4e: frozen to 3 decimals)."""
     return round(float(np.percentile(np.asarray(values, float), q)), 3)
@@ -314,11 +538,13 @@ def own_c1_verdict(summary: dict[str, Any]) -> str:
     return "ADDED" if summary["c1"]["ratio"] <= C1_BAR else "NOT_ADDED_C1"
 
 
-def t2_order(items: Sequence[dict[str, Any]], seed: int, mob: int) -> list[dict[str, Any]]:
+def t2_order(items: Sequence[dict[str, Any]], seed: int, mob: int, salt: str = T2_SALT,
+             stratum: str | None = None) -> list[dict[str, Any]]:  # fmt: skip
     """6: one species' pool sorted by (session, frame, gid), shuffled by
-    ``random.Random(f"payf07:{seed}:{mob}")``."""
+    ``random.Random(f"payf07:{seed}:{mob}")`` (gef10 6: ``f"gef10:{seed}:{mob}:{stratum}"``)."""
     order = sorted(items, key=lambda it: (it["session"], it["frame_id"], it["gid"]))
-    random.Random(f"{T2_SALT}:{seed}:{mob}").shuffle(order)
+    tail = "" if stratum is None else f":{stratum}"
+    random.Random(f"{salt}:{seed}:{mob}{tail}").shuffle(order)
     return order
 
 
@@ -340,11 +566,19 @@ def round2_pool(
 
 
 def frame_exclusions(world: Any, scene: Any, size: tuple[int, int], spec_species: Sequence[int],
-                     class_species: Sequence[int], aid: int | None) -> list[str]:  # fmt: skip
+                     class_species: Sequence[int], aid: int | None,
+                     dying: Sequence[tuple[float, float]] = ()) -> list[str]:  # fmt: skip
     """4g: what keeps a frame from being labelled whole besides its monster labels: a warp / NPC
-    in view, another player in view, a monster of a species outside the tier or the classes."""
+    in view, another player in view, a monster of a species outside the tier or the classes;
+    gef10 4g (D8): a unit in its die animation whose cell projects on screen (``dying``: their
+    cells; ``dying_in_view``)."""
     out = []
     w, h = size
+    for cell in dying:
+        u = anchor_and_depth(scene, (float(cell[0]), float(cell[1])))[0]
+        if 0 <= u[0] < w and 0 <= u[1] < h:
+            out.append("dying_in_view")
+            break
     for e in world.entities:
         if e.hidden:
             continue
@@ -458,7 +692,7 @@ class RecSession:
         occ.cache_compose()
         olf._speed_up()
         events = lab.timeline.events
-        starts = spot_starts(events) if sid == spec.staged else []
+        starts = staged_starts(spec, events) if sid == spec.staged else []
         if spots is not None and sid != spec.staged:
             raise SystemExit(f"{sid}: spots exist only in the staged session {spec.staged}")
         tm = client_layout.load_templates(layout_templates)
@@ -480,8 +714,10 @@ class RecSession:
     def layout_ok(self, bgr: npt.NDArray[np.uint8]) -> bool:
         return bool(self.layout(bgr))
 
-    def facing_rule(self, rule: str) -> olf.FacingRule:
-        """fix 2 + Amendment B (``engaged``), our character's id from the Timeline."""
+    def facing_rule(self, rule: str, variant: str | None = None) -> olf.FacingRule:
+        """fix 2 + Amendment B (``engaged``), our character's id from the Timeline; a map whose
+        spec labels engaged units (gef10 4h) gets EngagedLabelRule with ``variant`` (E0 when
+        None: payf07's exclusion)."""
         base = olf.FacingRule.for_events(rule, self.lab.timeline.events)
         events = self.lab.timeline.events
         aid = self.lab.timeline.frame_world(self.refs[-1].t_mono_ns).aid if self.refs else None
@@ -489,6 +725,9 @@ class RecSession:
         if aid is None and fights:
             raise SystemExit(f"{self.sid}: our character's id is unknown (Amendment B needs it)")
         times = engagement_times(events, int(aid)) if aid is not None else {}  # no fight: none
+        if self.spec.engaged_labels:
+            return EngagedLabelRule(base.rule, base.moves, base.classes, times,
+                                    variant=variant or "E0")  # fmt: skip
         return EngagedRule(base.rule, base.moves, base.classes, times)
 
     def scene(self, world: Any) -> Any:
@@ -541,9 +780,9 @@ class RecSession:
 
 def refuse(sess: RecSession, role: str) -> None:
     spec = sess.spec
-    if role == "fit" and not inside_role(sess.sid, sess.spots, spec.fit):
-        raise SystemExit(f"{sess.name}: not a FIT part (payf07-detector.md 3b): refused")
-    if role == "not_test" and overlaps_role(sess.sid, sess.spots, spec.test):
+    if role == "fit" and not spec.is_fit(sess.sid, sess.spots):
+        raise SystemExit(f"{sess.name}: not a FIT part ({spec.plan} 3b): refused")
+    if role == "not_test" and spec.is_test(sess.sid, sess.spots):
         raise SystemExit(f"{sess.name}: shares frames with TEST (3b): refused")
 
 
@@ -674,10 +913,19 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
 
 
 def labeler_for(sess: RecSession, params: dict[str, Any], occl: olf.Occluders,
-                occlusion: str, fit_all: bool = False) -> olf.FixLabeler:  # fmt: skip
-    fl = olf.FixLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
-                        fit_all=fit_all, map_name=sess.spec.name)  # fmt: skip
-    fl.facing = sess.facing_rule("fix2")  # Amendment B
+                occlusion: str, fit_all: bool = False,
+                variant: str | None = None) -> olf.FixLabeler:  # fmt: skip
+    """The label stack: fix 2 + Amendment B; gef10 (4h): the engaged ``variant`` (else the
+    parameters' frozen ``engaged_variant``, else E0)."""
+    if not sess.spec.engaged_labels:
+        fl = olf.FixLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
+                            fit_all=fit_all, map_name=sess.spec.name)  # fmt: skip
+        fl.facing = sess.facing_rule("fix2")  # Amendment B
+        return fl
+    v = variant or str(params.get("engaged_variant") or "E0")
+    fl = EngagedLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
+                        fit_all=fit_all, map_name=sess.spec.name, variant=v)  # fmt: skip
+    fl.facing = sess.facing_rule("fix2", v)
     return fl
 
 
@@ -690,11 +938,36 @@ def _fates_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
     ff = fl.frame(ref.t_mono_ns, bgr)
     if ff is None or not ff.applies:
         return [], "no_scene"
+    models: dict[int, str | None] = {}
+    if any(f.under for f in ff.fates):  # REPORTED: which model the FITTED box falls under
+        scene = sess.scene(sess.lab.timeline.frame_world(ref.t_mono_ns - fl.offset_ns))
+        names = {idx: name for idx, name, _c, _a in fl.occluders.models}
+        for f in ff.fates:
+            if f.under and f.raw is not None and scene is not None:
+                hit = fl.occluders.hit(scene, f.raw)
+                models[f.gid] = None if hit is None else names.get(hit)
     rows = [{"frame_id": ref.frame_id, "gid": f.gid, "mob": f.mob, "under": f.under,
              "pre": f.pre, "fail": f.fail, "ncc": None if f.fit is None else round(f.fit[0], 4),
-             "dx": None if f.fit is None else f.fit[1], "dy": None if f.fit is None else f.fit[2]}
+             "dx": None if f.fit is None else f.fit[1], "dy": None if f.fit is None else f.fit[2],
+             "w": None if f.raw is None else round(f.raw[2] - f.raw[0], 1),
+             "h": None if f.raw is None else round(f.raw[3] - f.raw[1], 1),
+             "state": f.state, "facing_from": f.facing_from, "model": models.get(f.gid)}
             for f in ff.fates]  # fmt: skip
     return rows, "labelled"
+
+
+def box_geometry(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """PURE (REPORTED): the fitted boxes' width / height (px) of kept labels clear of every model
+    box: n, median, p10, p90 of each."""
+    ws = [float(r["w"]) for r in rows if r.get("w") is not None]
+    hs = [float(r["h"]) for r in rows if r.get("h") is not None]
+    if not ws or not hs:
+        return {"n": 0}
+    return {
+        "n": len(ws),
+        "w": {q: percentile(ws, v) for q, v in (("p10", 10), ("p50", 50), ("p90", 90))},
+        "h": {q: percentile(hs, v) for q, v in (("p10", 10), ("p50", 50), ("p90", 90))},
+    }
 
 
 def provisional(offset: dict[str, Any], spec: MapSpec) -> dict[str, Any]:
@@ -751,6 +1024,10 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
             "under_fit_passes": dist([r["ncc"] for r in rs if r["under"] and r["pre"] is None
                                       and r["fail"] is None]),
             "under_share": round(sum(r["under"] for r in rs) / len(rs), 4) if rs else None,
+            "box_px_clear_kept": box_geometry([r for r in rs if not r["under"] and r["pre"] is None
+                                               and r["fail"] is None]),
+            "under_by_model": dict(Counter(str(r.get("model")) for r in rs if r["under"]
+                                           ).most_common(8)),
             "excluded_pre": dict(Counter(str(r["pre"]) for r in rs if r["pre"] is not None)),
             "fails": dict(Counter(f"{'under' if r['under'] else 'clear'}:{r['fail']}"
                                   for r in rs if r["fail"] is not None and r["pre"] is None)),
@@ -777,6 +1054,11 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
         "clear_kept": dist(clear), "under_fit_passes": dist(under),
         "under_below_t_h": sum(1 for v in under if v < t_h), "per_species": per_species,
         "per_part": per_part, "other_species_fates": len(rows) - len(mine),
+        "under_share_pooled": round(sum(r["under"] for r in mine) / len(mine), 4) if mine else None,
+        "under_by_model_pooled": dict(Counter(str(r.get("model")) for r in mine if r["under"]
+                                              ).most_common(12)),
+        "fates_by_part_species": {pt: dict(Counter(str(r["mob"]) for r in mine if r["part"] == pt))
+                                  for pt in per_part},
     }  # fmt: skip
 
 
@@ -802,9 +1084,27 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
         status = "FROZEN"
         off_file = {"offset_file": str(a.offset), "offset_sha256": olf.sha256_file(a.offset)}
     occl = occluders(spec)
+    extra: dict[str, Any] = {}
+    if spec.engaged_labels:  # gef10 4h / 4g: the engaged variant (4h's selection file) + D8
+        if a.engaged is None:
+            raise SystemExit(f"{spec.name}: --engaged SELECTION.json (4h's FIT selection)")
+        sel = json.loads(a.engaged.read_text())
+        variant = a.engaged_variant or sel["chosen"]
+        if variant not in ENGAGED_VARIANTS:
+            raise SystemExit(f"engaged variant {variant!r}: one of {ENGAGED_VARIANTS}")
+        if float(sel["t_h"]) != float(th["o3h_tau"]) or float(sel["offset_ms"]) != float(
+                th["offset_ms"]):  # fmt: skip
+            raise SystemExit("the engaged selection must be measured at the same 1d and T_h")
+        extra = {
+            "engaged_variant": variant,
+            "engaged_selection": str(a.engaged),
+            "engaged_selection_sha256": olf.sha256_file(a.engaged),
+            "engaged_chosen_by_fit": sel["chosen"],
+            "dying_in_view": spec.dying_rule,
+        }
     return {
-        "labels": LABELS, "status": status, "plan": "docs/planning/payf07-detector.md 4",
-        "map": spec.name,
+        "labels": spec.labels, "status": status, "plan": f"{spec.plan} 4",
+        "map": spec.name, **extra,
         "map_cells": list(spec.cells), "frozen_at": olf.now_ict(), "commit": olf.git_head(),
         "measured_on": off["parts"], "offset_ms": float(off["offset_ms"]), "anchors_px": {},
         "fit_px": {str(m): spec.fit_px for m in spec.species}, "tau": olf.TAU, "k": olf.K,
@@ -817,8 +1117,8 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
 
 def load_params(path: Path, spec: MapSpec) -> dict[str, Any]:
     p = json.loads(path.read_text())
-    if p.get("labels") != LABELS or p.get("map") != spec.name:
-        raise SystemExit(f"{path}: not a {LABELS} parameter file for {spec.name}")
+    if p.get("labels") != spec.labels or p.get("map") != spec.name:
+        raise SystemExit(f"{path}: not a {spec.labels} parameter file for {spec.name}")
     return p
 
 
@@ -829,6 +1129,128 @@ def frozen_occluders(params: dict[str, Any], spec: MapSpec) -> olf.Occluders:
             occl.files != params["occluders"]["model_files_sha256"]:  # fmt: skip
         raise SystemExit("the RSW / RSM files differ from the frozen ones")
     return occl
+
+
+# --- gef10 4h: the ENGAGED variants on FIT (the selection) -----------------------------------
+
+
+def _engaged_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], list[dict[str, Any]],
+                                                    str]:  # fmt: skip
+    """One FIT frame under every variant: the engaged units' fates (rows) and the frame's
+    wholeness (monsters + 4g, the T_h floor on kept labels clear of a model). A frame with no
+    engaged unit at tw (packets only) is not read."""
+    sess: RecSession = olf._JOB["sess"]
+    labelers: dict[str, EngagedLabeler] = olf._JOB["labelers"]
+    t_h: float = olf._JOB["t_h"]
+    first = next(iter(labelers.values()))
+    tw = ref.t_mono_ns - first.offset_ns
+    _replay, world, states, _rules = sess.lab.timeline.at_world(tw)
+    times = first.facing.times  # type: ignore[attr-defined]
+    if not any(e.objtype == 5 and not e.hidden and is_engaged(times, e.gid, tw)
+               for e in world.entities):  # fmt: skip
+        return [], [], "no_engaged"
+    bgr = read_png(ref)
+    if not sess.layout_ok(bgr):
+        return [], [], "ui_layout_mismatch"
+    scene = sess.scene(world)
+    if scene is None:
+        return [], [], "no_scene"
+    dying = [(st.x, st.y) for st in states if st.state == "dying"] if sess.spec.dying_rule else []
+    frame_ex = frame_exclusions(world, scene, sess.lab.size, sess.spec.species,
+                                sess.spec.species, world.aid, dying)  # fmt: skip
+    rows: list[dict[str, Any]] = []
+    frames: list[dict[str, Any]] = []
+    for v, fl in labelers.items():
+        ff = fl.frame(ref.t_mono_ns, bgr)
+        if ff is None or not ff.applies:
+            return [], [], "no_scene"
+        n_eng = 0
+        for f in ff.fates:
+            if not f.facing_from.startswith(ENGAGED_TAG):
+                continue
+            n_eng += 1
+            rows.append({"variant": v, "frame_id": ref.frame_id, "gid": f.gid, "mob": f.mob,
+                         "under": f.under, "pre": f.pre, "fail": f.fail,
+                         "ncc": None if f.fit is None else round(f.fit[0], 4),
+                         "dx": None if f.fit is None else f.fit[1],
+                         "dy": None if f.fit is None else f.fit[2],
+                         "w": None if f.raw is None else round(f.raw[2] - f.raw[0], 1),
+                         "h": None if f.raw is None else round(f.raw[3] - f.raw[1], 1),
+                         "state": f.state, "facing_from": f.facing_from})  # fmt: skip
+        floor_ok = all(k.ncc >= t_h for k in ff.kept)  # o3h already gated the under-box ones
+        frames.append({"variant": v, "frame_id": ref.frame_id, "engaged_fates": n_eng,
+                       "kept": len(ff.kept), "excluded": len(ff.excluded),
+                       "whole": not ff.excluded and floor_ok and not frame_ex,
+                       "frame_exclusions": frame_ex})  # fmt: skip
+    return rows, frames, "sampled"
+
+
+def cmd_engaged(a: argparse.Namespace) -> dict[str, Any]:
+    """4h's selection on FIT: E1 / E2 / E3 at a 1d and a T_h (measured or proposed: 13)."""
+    spec = MAPS[a.map]
+    if not spec.engaged_labels:
+        raise SystemExit(f"{spec.name}: its rule does not label engaged units")
+    for v in a.variants:
+        if v not in ENGAGED_VARIANTS[1:]:
+            raise SystemExit(f"--variants: E1 / E2 / E3, not {v!r}")
+    params = {**provisional({"offset_ms": a.offset_ms}, spec), "o3h_tau": float(a.o3h_tau)}
+    occl = occluders(spec)
+    sessions = [RecSession.open(p, spec, a.layout_templates) for p in a.parts]
+    for sess in sessions:
+        refuse(sess, "fit")
+    rows: list[dict[str, Any]] = []
+    frames: list[dict[str, Any]] = []
+    per_part: dict[str, Any] = {}
+    for sess in sessions:
+        refs = sess.candidates_at(float(a.offset_ms))
+        labelers = {v: labeler_for(sess, params, occl, "o3h", variant=v) for v in a.variants}
+        olf._JOB.update(sess=sess, labelers=labelers, t_h=float(a.o3h_tau))
+        why: Counter[str] = Counter()
+        n0, f0 = len(rows), len(frames)
+        for r, fr, w in olf.run_parallel(_engaged_frame, refs, a.workers):
+            why[w] += 1
+            rows += [{**x, "part": sess.name} for x in r]
+            frames += [{**x, "part": sess.name} for x in fr]
+        per_part[sess.name] = {"frames": len(sess.refs), "candidates": len(refs),
+                               "dropped": dict(sorted(sess.dropped.items())),
+                               "frames_by_outcome": dict(why), "engaged_rows": len(rows) - n0,
+                               "frame_rows": len(frames) - f0}  # fmt: skip
+    sel = engaged_selection(rows, float(a.o3h_tau), tuple(a.variants))
+    per_variant_species: dict[str, Any] = {}
+    for v in a.variants:
+        rs = [r for r in rows if r["variant"] == v]
+        per_variant_species[v] = {}
+        for m in sorted({int(r["mob"]) for r in rs}):
+            mr = [r for r in rs if int(r["mob"]) == m]
+            kept = [r for r in mr if r["pre"] is None and r["fail"] is None
+                    and r["ncc"] is not None and float(r["ncc"]) >= float(a.o3h_tau)]  # fmt: skip
+            nccs = [float(r["ncc"]) for r in mr if r["ncc"] is not None and r["pre"] is None]
+            per_variant_species[v][str(m)] = {
+                "fates": len(mr), "kept": len(kept),
+                "pre": dict(Counter(str(r["pre"]) for r in mr if r["pre"] is not None)),
+                "fail": dict(Counter(str(r["fail"]) for r in mr if r["pre"] is None
+                                     and r["fail"] is not None)),
+                "ncc_median": round(statistics.median(nccs), 3) if nccs else None,
+                "below_floor": sum(1 for r in mr if r["pre"] is None and r["fail"] is None
+                                   and r["ncc"] is not None and float(r["ncc"]) < float(a.o3h_tau)),
+                "kept_median_abs_dxdy": [statistics.median(abs(r["dx"]) for r in kept),
+                                         statistics.median(abs(r["dy"]) for r in kept)]
+                if kept else None,
+                "kept_box_px": box_geometry(kept),
+                "kept_states": dict(Counter(str(r["state"]) for r in kept)),
+            }  # fmt: skip
+    whole = {v: sum(1 for f in frames if f["variant"] == v and f["whole"]) for v in a.variants}
+    if a.rows is not None:
+        a.rows.write_text(json.dumps({"rows": rows, "frames": frames}) + "\n")
+    return {
+        "what": "4h: the ENGAGED variants on FIT (frames with an engaged unit at tw only)",
+        "map": spec.name, "parts": [s.name for s in sessions], "measured_at": olf.now_ict(),
+        "commit": olf.git_head(), "offset_ms": float(a.offset_ms), "t_h": float(a.o3h_tau),
+        "offset_source": a.offset_source, "variants": list(a.variants),
+        **sel, "per_variant_species": per_variant_species,
+        "frames_with_engaged_read": len({(f["part"], f["frame_id"]) for f in frames}),
+        "whole_frames_by_variant": whole, "per_part": per_part,
+    }  # fmt: skip
 
 
 # --- 5: the check (C1 / C2 on the PREDICTION) -------------------------------------------------
@@ -881,8 +1303,8 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         a.rows.write_text(json.dumps(rows) + "\n")
     motion = Counter(bool(r.get("self_moving")) for r in rows)
     return {
-        "what": "5: C1 / C2 on the payf07-o3h PREDICTION (fix 2 facing, 1d, no anchor, no fit), "
-                "o3h's under-box rule, 2b / 2c",
+        "what": f"5: C1 / C2 on the {spec.labels} PREDICTION (fix 2 facing, 1d, no anchor, no "
+                "fit), o3h's under-box rule, 2b / 2c (engaged units excluded: E0)",
         "map": spec.name, "parts": a.parts, "checked_at": olf.now_ict(),
         "commit": olf.git_head(), "params": str(a.params),
         "params_sha256": olf.sha256_file(a.params), "offset_ms": off_ms,
@@ -922,14 +1344,21 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
     if ff is None or not ff.applies:
         return {**row, "excluded_frame": ["no_scene"], "whole": False}
     tw = ref.t_mono_ns - fl.offset_ns
-    world = sess.lab.timeline.frame_world(tw)
+    dying: list[tuple[float, float]] = []
+    if sess.spec.dying_rule:  # gef10 4g (D8): the die animations at tw, from ONE replay
+        _replay, world, states, _rules = sess.lab.timeline.at_world(tw)
+        dying = [(st.x, st.y) for st in states if st.state == "dying"]
+    else:
+        world = sess.lab.timeline.frame_world(tw)
     scene = sess.scene(world)
     frame_ex = frame_exclusions(world, scene, sess.lab.size, sess.spec.species, classes,
-                                world.aid)  # fmt: skip
+                                world.aid, dying)  # fmt: skip
     under = {f.gid: f.under for f in ff.fates}
     kept = [{"gid": k.gid, "mob": k.mob, "box": [round(v, 1) for v in k.box],
              "ncc": k.ncc, "dx": k.dx, "dy": k.dy, "motion": k.motion, "heading": k.heading,
-             "facing_from": k.facing_from, "state": k.state, "under": under.get(k.gid)}
+             "facing_from": k.facing_from, "state": k.state, "under": under.get(k.gid),
+             **({"engaged": k.facing_from.startswith(ENGAGED_TAG)}
+                if sess.spec.engaged_labels else {})}
             for k in ff.kept]  # fmt: skip
     return {**row, "kept": kept, "excluded": [list(x) for x in ff.excluded],
             "hidden": ff.hidden, "excluded_frame": frame_ex,
@@ -986,26 +1415,67 @@ def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
     refs = sess.candidates_at(float(params["offset_ms"]))
     olf._JOB.update(sess=sess, labeler=labeler_for(sess, params, occl, "o3h"), classes=classes)
     frames = olf.run_parallel(_label_frame, refs, a.workers)
-    gp = 1080
     out = {
-        "what": f"the {LABELS} labels (no pixels): kept fitted boxes per candidate frame",
-        "labels": LABELS, "params_status": params.get("status"), "map": spec.name,
+        "what": f"the {spec.labels} labels (no pixels): kept fitted boxes per candidate frame",
+        "labels": spec.labels, "params_status": params.get("status"), "map": spec.name,
         "part": sess.name, "session": sess.sid,
         "labelled_at": olf.now_ict(), "commit": olf.git_head(), "params": str(a.params),
         "params_sha256": olf.sha256_file(a.params), "frames_recorded": len(sess.refs),
         "candidates": len(refs), "candidate_drops": dict(sorted(sess.dropped.items())),
-        "counts_green_plant_class": count_labels(frames, spec.species),
-        "counts_green_plant_not_class": count_labels(frames, [m for m in spec.species if m != gp],
-                                                     drop_species=[gp]),
-        "frames": frames,
     }  # fmt: skip
+    if spec.name == "pay_fild07":  # payf07 7: the Green Plant fallback, both ways
+        gp = 1080
+        out["counts_green_plant_class"] = count_labels(frames, spec.species)
+        out["counts_green_plant_not_class"] = count_labels(
+            frames, [m for m in spec.species if m != gp], drop_species=[gp]
+        )
+    else:
+        out["counts"] = count_labels(frames, spec.species)
+        out["counts_engaged"] = count_engaged(frames)
+    out["frames"] = frames
     return out
+
+
+def count_engaged(frames: Sequence[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    """PURE (gef10 4h): per species, the kept ENGAGED labels in any frame / in frames whole."""
+    out: dict[str, Counter[str]] = defaultdict(Counter)
+    for f in frames:
+        for k in f.get("kept", []):
+            if k.get("engaged"):
+                out[str(k["mob"])]["kept"] += 1
+                out[str(k["mob"])]["kept_in_whole_frames"] += bool(f.get("whole"))
+    return {m: dict(c) for m, c in sorted(out.items())}
 
 
 # --- 6: the T2 pack ---------------------------------------------------------------------------
 
 
-REFERENCE_PRT = (1002, 1082, 1063, 1008, 1113, 1018)  # Poring, White Plant + prt_fild08's others
+def stratum_of(items: Sequence[dict[str, Any]], stratum: str | None) -> list[dict[str, Any]]:
+    """PURE (gef10 6): the items of one stratum: N = not engaged, E = engaged, None = all."""
+    if stratum is None:
+        return list(items)
+    return [it for it in items if bool(it.get("engaged")) == (stratum == "E")]
+
+
+def t2_sample(pool: dict[int, list[dict[str, Any]]], spec: MapSpec, seed: int
+              ) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]], list[int]]:  # fmt: skip
+    """PURE (6): T2's sample: the tier (a ``conditional`` species needs >= 30 kept labels -- in its
+    N stratum for a map that labels engaged units), per species and stratum the first 30 of
+    t2_order, then one seeded shuffle of the whole pack. Returns (chosen, per, tier)."""
+    strata: tuple[str | None, ...] = ("N", "E") if spec.engaged_labels else (None,)
+    tier = [m for m in spec.species if m not in spec.conditional
+            or len(stratum_of(pool.get(m, []), strata[0])) >= T2_PER_SPECIES]  # fmt: skip
+    chosen: list[dict[str, Any]] = []
+    per: dict[str, dict[str, int]] = {}
+    for mob in tier:
+        for st in strata:
+            items = stratum_of(pool.get(mob, []), st)
+            pick = t2_order(items, seed, mob, spec.t2_salt, st)[:T2_PER_SPECIES]
+            per[str(mob) if st is None else f"{mob}:{st}"] = {"pool": len(items),
+                                                              "sampled": len(pick)}  # fmt: skip
+            chosen += [{**it, "stratum": st} for it in pick]
+    random.Random(f"{spec.t2_salt}:{seed}:order").shuffle(chosen)
+    return chosen, per, tier
 
 
 def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
@@ -1022,9 +1492,9 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     statuses: set[str] = set()
     for path in a.labels:
         doc = json.loads(path.read_text())
-        if doc.get("labels") != LABELS:
-            raise SystemExit(f"{path}: not {LABELS} labels")
-        if overlaps_role(doc["session"], parse_part(doc["part"])[1], spec.test):
+        if doc.get("labels") != spec.labels:
+            raise SystemExit(f"{path}: not {spec.labels} labels")
+        if spec.is_test(doc["session"], parse_part(doc["part"])[1]):
             raise SystemExit(f"{doc['part']}: TEST is not in T2's pool")
         params_sha.add(doc["params_sha256"])
         statuses.add(str(doc.get("params_status")))
@@ -1036,6 +1506,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
                     "session": doc["session"], "frame_id": f["frame_id"], "gid": k["gid"],
                     "mob": k["mob"], "box": k["box"], "ncc": k["ncc"], "under": k["under"],
                     "state": k["state"], "spot": f.get("spot"), "t": f["t"],
+                    "engaged": bool(k.get("engaged")),
                     "ref": (str(root / doc["session"] / f["shard"]), f["offset"], f["size"]),
                 })  # fmt: skip
     if len(params_sha) != 1:
@@ -1048,14 +1519,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     if a.min_fit is not None or exclude:
         for mob in list(pool):
             pool[mob], cut_by[str(mob)] = round2_pool(pool[mob], a.min_fit, exclude)
-    tier = [m for m in spec.species if m != 1080 or len(pool.get(1080, [])) >= T2_PER_SPECIES]
-    chosen: list[dict[str, Any]] = []
-    per = {}
-    for mob in tier:
-        pick = t2_order(pool.get(mob, []), a.seed, mob)[:T2_PER_SPECIES]
-        per[str(mob)] = {"pool": len(pool.get(mob, [])), "sampled": len(pick)}
-        chosen += pick
-    random.Random(f"{T2_SALT}:{a.seed}:order").shuffle(chosen)
+    chosen, per, tier = t2_sample(pool, spec, a.seed)
     pack, key_dir = a.pack_dir, a.key_dir
     if pack.resolve() == key_dir.resolve() or key_dir.resolve().is_relative_to(pack.resolve()):
         raise SystemExit("the key must live outside the pack")
@@ -1079,9 +1543,12 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         names.append(f"{num}.png")
         key_crops[num] = {k: it[k] for k in ("mob", "session", "frame_id", "gid", "box", "ncc",
                                              "under", "state", "spot")}  # fmt: skip
+        if it.get("stratum") is not None:  # gef10 6: blind_score.py --sample N | E
+            key_crops[num].update({"stratum": it["stratum"], "samples": [it["stratum"]],
+                                   "engaged": it["engaged"]})  # fmt: skip
     use_kb(spec)
     sheets = qa_export.Sheets(directory=spec.sprites)
-    ref_mobs = list(spec.species) + list(REFERENCE_PRT)
+    ref_mobs = list(spec.species) + list(spec.reference)
     ref_mobs = ref_mobs[:12] if len(ref_mobs) > 12 else ref_mobs
     letters = ols.letters_for(ref_mobs, a.seed)
     ols.save_png(
@@ -1098,7 +1565,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         "box": "the green rectangle drawn just outside the label box",
         "questions": ols.QUESTIONS}, indent=1) + "\n")  # fmt: skip
     shutil.copyfile(a.instructions, pack / "instructions.txt")
-    key = {"labels": LABELS, "seed": a.seed, "per_species_target": T2_PER_SPECIES,
+    key = {"labels": spec.labels, "seed": a.seed, "per_species_target": T2_PER_SPECIES,
+           **({"candidates": ["N", "E"]} if spec.engaged_labels else {}),
            "letters": letters, "crops": key_crops, "tier_species": tier,
            "per_species": per, "sources": sources, "params_sha256": params_sha.pop(),
            "params_status": sorted(statuses),
@@ -1143,10 +1611,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     common(p, parts=False)
     p.add_argument("--offset", type=Path, default=None)
     p.add_argument("--threshold", type=Path, required=True)
+    p.add_argument("--engaged", type=Path, default=None,
+                   help="gef10 4h: the engaged selection (map_labels.py engaged)")  # fmt: skip
+    p.add_argument("--engaged-variant", default=None,
+                   help="gef10 4h: an amendment's variant instead of the selection's")  # fmt: skip
     p.add_argument("--proposed", action="store_true",
                    help="10a: write the proposal's parameters, NOT frozen")  # fmt: skip
     p.add_argument("--decision", default=None,
                    help="10a: FREEZE the proposed offset (cite the amendment)")  # fmt: skip
+    p = sub.add_parser("engaged")
+    common(p)
+    p.add_argument("--offset-ms", type=float, required=True)
+    p.add_argument("--offset-source", required=True, help="the 1d file or the proposal's name")
+    p.add_argument("--o3h-tau", type=float, required=True, help="T_h (4e), the floor")
+    p.add_argument("--variants", nargs="+", default=["E1", "E2", "E3"])
+    p.add_argument("--rows", type=Path, default=None)
     p = sub.add_parser("check")
     common(p)
     p.add_argument("--params", type=Path, required=True)
@@ -1174,7 +1653,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "labels" and len(a.parts) != 1:
         raise SystemExit("labels: one PART per run")
     run = {"offset": cmd_offset, "threshold": cmd_threshold, "freeze": cmd_freeze,
-           "check": cmd_check, "labels": cmd_labels, "pack": cmd_pack}  # fmt: skip
+           "check": cmd_check, "labels": cmd_labels, "pack": cmd_pack,
+           "engaged": cmd_engaged}  # fmt: skip
     out = run[a.cmd](a)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1) + "\n")
