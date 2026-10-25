@@ -337,3 +337,15 @@ its rule. An entry is a hop at which the Lord (or an archer) goes from not in vi
 **If both pass:** a FLEE rule follows, pre-registered on its own: a Fly Wing on the first positive.
 It gets a live proof on a spawned Lord with immunity OFF before any scored run uses it.
 **If either fails:** no flee. `--clear-map` with Amendment E's schedule stays.
+
+### 10a. Amendment (2026-10-26 00:26 ICT from `date`; BEFORE any round-2 frame is scored)
+
+- **Negatives become a1-a6** (was a2-a6). The recorders stopped early on the IO guard (a4: 578
+  frames; a5: 84, a 1.5-min run), so a2-a6 give ~111 min of recorded hunting, short of the
+  required >= 2 h. a1 (`20261025T213953-rdp-rogue-a1`, 23.7 min) was never seen by round 1 and
+  brings it to ~135 min. Nothing else changes: the recipe, the entries and both bars stay as above.
+- **The tool:** `mvp_watch_study.py` gains a `--map` (ow2 is on prt_fild08: its GAT for the
+  projection) and a round-2 `entries` scorer:
+  - an entry is a hop where the Lord or an archer goes from not in view to in view;
+  - its frames run from the hop's settle to the next hop.
+  - Both are written before the score runs and tested on synthetic cases only.
