@@ -240,14 +240,17 @@ def game_view(half: npt.NDArray[np.uint8], model: Model) -> bool:
     return float(np.abs(grey - model.title).mean()) <= model.title_max
 
 
-def scores(half: npt.NDArray[np.uint8], model: Model,
-           ui_rects: Rects = HUNT_RECTS) -> dict[str, Any]:  # fmt: skip
-    """The two cues' maps of one frame's half-res view (decide's inputs; the study's too)."""
+def scores(half: npt.NDArray[np.uint8], model: Model, ui_rects: Rects = HUNT_RECTS,
+           party: bool = True) -> dict[str, Any]:  # fmt: skip
+    """The cues' maps of one frame's half-res view (decide's inputs; the study's too); with
+    ``party`` False only the aura's (about a third of the time)."""
     skip, valid, zone = masks(model, half.shape[:2], ui_rects)
     idx = lut_index(half)
     apx = model._cache["aura_lut"][idx]
     apx[skip] = 0.0
     am = aura_map(apx, model.ring, model.ring_cell)
+    if not party:
+        return {"aura_map": am, "party_map": None}
     feats = cell_features(half, idx, model.body_lut, apx)
     raw = window_scores(feats, model.lin_w, model.lin_b)
     raw[~valid] = -np.inf
@@ -262,38 +265,47 @@ def scores(half: npt.NDArray[np.uint8], model: Model,
     }
 
 
-def decide(frame: npt.NDArray[np.uint8], model: Model,
-           ui_rects: Rects = HUNT_RECTS) -> dict[str, Any]:  # fmt: skip
+def decide(frame: npt.NDArray[np.uint8], model: Model, ui_rects: Rects = HUNT_RECTS,
+           cues: tuple[str, ...] = ("aura", "party")) -> dict[str, Any]:  # fmt: skip
     """PURE: one 1280 x 720 BGR(A) frame -> {"seen", "where", "score", "cue", "aura", "party",
     "reason"}. ``where`` is the full-frame pixel of the winning cue's foot point (the aura ring's,
     or the party window's bottom centre); ``score`` = the larger relative margin over its
-    threshold (>= 0: seen)."""
+    threshold (>= 0: seen). ``cues``: the frozen v1 recipe uses both; ("aura",) is the aura rule
+    alone (orclord-recognizer.md 6: no hunting false positive in 33 min, POST-HOC)."""
     frame = np.asarray(frame)[..., :3]
     out: dict[str, Any] = {"seen": False, "where": None, "score": None, "cue": None,
                            "aura": None, "party": None, "reason": None}  # fmt: skip
     if frame.shape[:2] != (720, 1280):
         out["reason"] = "not_1280x720"
         return out
-    return decide_half(frame[::STEP, ::STEP], model, ui_rects, out)
+    return decide_half(frame[::STEP, ::STEP], model, ui_rects, out, cues)
 
 
 def decide_half(half: npt.NDArray[np.uint8], model: Model,
                 ui_rects: tuple[tuple[int, int, int, int], ...] = HUNT_RECTS,
-                out: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
+                out: dict[str, Any] | None = None,
+                cues: tuple[str, ...] = ("aura", "party")) -> dict[str, Any]:  # fmt: skip
     """decide() on the half-res view (360 x 640) the study caches."""
     if out is None:
         out = {"seen": False, "where": None, "score": None, "cue": None, "aura": None,
                "party": None, "reason": None}  # fmt: skip
+    if not set(cues) <= {"aura", "party"} or not cues:
+        raise ValueError(f"unknown cues {cues!r}")
     if not game_view(half, model):
         out["reason"] = "no_game_view"
         return out
-    m = scores(half, model, ui_rects)
+    m = scores(half, model, ui_rects, party="party" in cues)
     am, pm = m["aura_map"], m["party_map"]
-    ai, pi = int(am.argmax()), int(pm.argmax())
-    sa, sp = float(am.flat[ai]), float(pm.flat[pi])
+    ai = int(am.argmax())
+    sa = float(am.flat[ai]) if "aura" in cues else -np.inf
+    pi, sp = 0, -np.inf
+    if pm is not None:
+        pi = int(pm.argmax())
+        sp = float(pm.flat[pi])
     ma = (sa - model.aura_thr) / max(model.aura_thr, 1e-6)
     mp = (sp - model.lin_thr) / max(abs(model.lin_thr), 1e-6)
-    out.update(aura=round(sa, 4), party=round(sp, 3), score=round(max(ma, mp), 4))
+    out.update(aura=round(float(am.flat[ai]), 4), score=round(max(ma, mp), 4),
+               party=None if pm is None else round(sp, 3))  # fmt: skip
     if ma >= mp:
         y, x = divmod(ai, am.shape[1])
         kh, kw = ring_kernel(model.ring, model.ring_cell).shape

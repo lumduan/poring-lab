@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, a CPU recognizer cheap enough for the runner (<= 60 ms per 1280 x 720 frame, niced) tells 'the Orc Lord (mob 1190) or its Orc Archers (1189 / 1473) are in view' on gef_fild10 within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of held-out hunting frames."
-status: "PRE-REGISTERED 2026-10-25 20:20 ICT (from `date`), BEFORE any recognizer existed; AMENDED A (party edges) and B (pilot2 joins DEV, s1 a supplementary FP test, the frozen recipe) on DEV only; the model is FROZEN (sha256 43179452...) and NOT yet scored on HELD-OUT. Offline only (no client, no GPU, no input)."
+status: "SCORED 2026-10-25 21:34-21:37 ICT (once, frozen model sha256 43179452...): bar 1 FAILS (recall within 1 s 5 / 7 = 71.4 %: a spawn under a canopy, a spawn behind the summon's light pillar), bar 2 FAILS (2 false positives in the pilot's 10.6 held-out min = 1.89 per 10 min; supplementary s1 0.88), bar 3 PASSES (p95 53.7 ms). Pre-registered 20:20 ICT before any recognizer; Amendments A + B on DEV only. Offline only."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, payf07-detector.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py]
-next_action: "This branch: score the HELD-OUT cells and minutes once with the frozen model (section 3 + Amendment B)."
+next_action: "Batt / the parent: decide whether the runner uses the frozen v1 (both cues) or the aura alone (section 6, POST-HOC: 0 FP in 33 min, the same 5 / 7 cells) for the live flee-rule proof; a second pre-registered watch with edge entries at 2-5 fps and >= 2 h of hunting negatives (section 8) to pass the bars."
 title: "An Orc Lord recognizer for the Rogue's flee rule on gef_fild10 (pixels only, CPU, scored offline on held-out lattice cells)"
 date: 2026-10-25
 owner: Batt
@@ -169,3 +169,129 @@ party threshold:
   - 7 / 8 cells seen on the first or second frame. Cell 1 is first seen on its third frame: the
     summon's light pillars.
 - **Nothing is re-fitted after the held-out score.**
+
+## 5. RESULT: the held-out score (run 2026-10-25 21:34:25-21:36:37 ICT, once, model sha256 43179452...; `score-heldout.json`)
+
+**Bars 1 and 2 FAIL; bar 3 passes.**
+
+| bar | measured | verdict |
+|---|---|---|
+| 1. recall within 1 s >= 95 % of held-out cells | **5 / 7 = 71.4 %** (first-frame recall also 71.4 %) | **FAIL** |
+| 2. false positives <= 1 per 10 min of the pilot's held-out hunting frames | **2 in 634 frames (10.6 min) = 1.89 per 10 min** | **FAIL** |
+| 3. latency p95 <= 60 ms | **p50 30.5 ms, p95 53.7 ms, max 114.6 ms** (1,006 calls, `nice -n 15`, one thread, full 1280 x 720 frames) | PASS |
+
+**Per held-out cell** (the first episode's delay; the recording is 1 fps):
+
+| cell | spawn | delay | within 1.1 s | what the frames show |
+|---|---|---|---|---|
+| 8 | (159,291) | 0.0 s | yes | |
+| 9 | (148,269) | **11.0 s** | **no** | the party AND our Rogue spawn under a big tree's canopy: nothing of them is visible for 11 frames (the truth has no canopy occlusion, section 2) |
+| 10 | (49,302) | 0.0 s | yes | |
+| 11 | (82,137) | 0.0 s | yes | |
+| 12 | (159,302) | **2.0 s** | **no** | frame 1: the summon's white starburst over the party; frame 2: its light pillar; seen on frame 3 |
+| 13 | (335,159) | 0.0 s | yes | |
+| 14 | (93,93) | 0.0 s | yes | |
+
+- Per frame (held-out cells): the party seen on 224 / 268 frames in view (0.836); the Orc Lord
+  in view on 254, seen on 220 (0.866).
+- Re-entries (a later episode after > 3 s out of view): 1, seen within 1 s.
+- The watch's held-out gap frames: 0 false positives in 71.
+
+**The two hunting false positives** (both the PARTY cue; the aura stayed under 0.08):
+- pilot frame 475: an Orc Lady wrapped in a bright yellow-white cast flash, (488, 304). Its
+  score was 9.209 against the threshold 9.190, a 0.02 margin.
+- pilot frame 722: a green MAGIC CIRCLE (pentagram) on the ground around our Rogue and an Orc
+  attacking it, (584, 416). The raw window score was 20.56, far above anything on DEV in the
+  self zone (14.39), so 14.36 remained after the zone penalty.
+
+**The supplementary test (Amendment B, NOT a bar):** `20261025T204315-rdp-rogue-s1`.
+- It was stopped by its IO guard at 26 min; 1,356 frames are on the map (22.6 min).
+- **2 false positives = 0.88 per 10 min**, both the party cue at the self zone's edge:
+  - frame 906 at (552, 400), score 11.98;
+  - frame 1248 at (744, 432), score 10.62.
+- 4 frames were refused as `no_game_view` (loading screens).
+- Pooled with the pilot's held-out minutes: 4 FPs in 33.2 min = 1.2 per 10 min.
+
+## 6. POST-HOC (after the score; NOT a bar, nothing here passes or fails anything)
+
+Run on the same held-out frames with the frozen model (`posthoc.py`, scratch), to say what the
+next pre-registration should test:
+- **The aura rule ALONE** (`decide(..., cues=("aura",))`, added after the score; the default stays
+  the frozen two-cue recipe):
+  - false positives: 0 in the pilot's 634 held-out frames and 0 in s1's 1,356, i.e. **0 in
+    33.2 min of hunting**;
+  - the highest hunting aura score is 0.0697 (pilot 722's magic circle), against the threshold
+    0.08. **The margin is thin.**
+  - **The same 5 / 7 cells** within 1 s, missing the same two (canopy, summon pillar);
+  - per-frame recall 0.735 against 0.836 for both cues;
+  - it costs **p50 8.9 ms, p95 12.5 ms** per frame, against 32-40 / 44-54 ms for both cues.
+  - So on these frames the party detector added frame recall but no cell, and all four false
+    positives.
+- **Two consecutive positive frames, both cues:** 0 pilot false positives, but only 4 / 7 cells
+  within the window (one frame later).
+- **Latency under load** (load average 17-20): both cues p95 44-54 ms with a max of 76-128 ms;
+  the aura alone p95 10-12.5 ms.
+
+## 7. For the runner (the parent wires it; `dungeon_hunt.py` is not edited here)
+
+    import mvp_watch
+    model = mvp_watch.load(Path("data/mvp_watch/orclord-v1.npz"),
+                           sha256="43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff")
+    # in its own thread with its OWN r.Screen() (screen-grab-not-thread-safe), every ~0.5 s:
+    v, ms = mvp_watch.timed(frame_bgr_1280x720, model)            # the frozen v1: both cues
+    # or, after Batt's / the parent's decision on section 6: cues=("aura",)
+    if v["seen"]:
+        ...  # the flee rule: the Fly Wing key at once; log v (aura, party, where, cue) and ms
+
+- `load` fails closed (`ModelUnavailable`): the runner must then refuse the flee-dependent mode,
+  not run blind.
+- The frame is the game region only (1280 x 720, BGR), in the hunt layout. Other layouts pass
+  their own `ui_rects`. A loading screen returns `reason: no_game_view`, never `seen`.
+- Install: `cp /dev/shm/poring-lab-tmp/orclord/model/orclord-v1.npz data/mvp_watch/` on the main
+  checkout (gitignored; it holds client-derived pixel statistics).
+
+## 8. What more data would fix the bars
+
+1. **Real approaches, not spawns.** Both missed cells are artefacts of `@monster` next to the
+   Rogue: the summon's starburst and pillar, and a spawn under a canopy. A natural Orc Lord walks
+   in from the screen edge. Proposal for a second, pre-registered watch:
+   - spawn the Orc Lord;
+   - `@warp` the immune Rogue 16-20 cells away, then walk back toward it;
+   - every episode is then an EDGE ENTRY;
+   - record at 2-5 fps so the delay is measured at the runner's 0.5-s poll, not in 1-s steps.
+2. **Canopies in the truth:** extract gef_fild10's RSW and models, as payf07's occluders, so a
+   party hidden under a tree is flagged rather than counted. Or Batt decides that a hidden Orc
+   Lord counts as a miss.
+3. **Our own fight effects are the false positives' source:** magic circles, cast flashes, swing
+   arcs and potion sparkles, all around our own character. They are rare, so they need hours of
+   hunting to sample. The scored runs s2-s8 (40 min each, `@killmonster2` at setup) would give
+   them:
+   - some as DEV negatives for the party detector;
+   - the rest as a held-out FP test of >= 2 h, which an FP bar of 1 per 10 min needs (10.6 min
+     cannot show 1 per 10 min with any confidence).
+4. **Pre-register the aura-alone recipe** on that new data. The post-hoc numbers in section 6 are
+   NOT evidence for it, because they were seen after the score.
+
+## 9. Reproduce
+
+    W=<checkout>; export PYTHONPATH=$W/scripts:$W/packages/poring_dataset/src:$W/packages/poring_env/src:$W/packages/poring_packets/src:$W/packages/poring_flow/src
+    T=/dev/shm/poring-lab-tmp/orclord; E=/dev/shm/poring-lab-demo/20261025T195327-watch-gef_fild10-ow1/events.jsonl
+    D=/mnt/poring-lab-datasets
+    python3 scripts/mvp_watch_study.py truth $D/20261025T195325-rdp-ow1 --layout standard --out $T/ow1-truth.json
+    python3 scripts/mvp_watch_study.py truth $D/20261025T200922-rdp-rogue-pilot --layout hunt --out $T/pilot-truth.json
+    python3 scripts/mvp_watch_study.py truth $D/20261025T203115-rdp-rogue-pilot2 --layout hunt --out $T/pilot2-truth.json
+    python3 scripts/mvp_watch_study.py truth $D/20261025T204315-rdp-rogue-s1 --layout hunt --out $T/s1-truth.json
+    python3 scripts/mvp_watch_study.py fit --watch $D/20261025T195325-rdp-ow1 --watch-truth $T/ow1-truth.json --events $E \
+        --pilot $D/20261025T200922-rdp-rogue-pilot $T/pilot-truth.json \
+        --extra $D/20261025T203115-rdp-rogue-pilot2 $T/pilot2-truth.json --work $T/fit --out $T/model/orclord-v1.npz
+    python3 scripts/mvp_watch_study.py score --model $T/model/orclord-v1.npz --sha256 43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff \
+        --watch $D/20261025T195325-rdp-ow1 --watch-truth $T/ow1-truth.json --events $E \
+        --pilot $D/20261025T200922-rdp-rogue-pilot $T/pilot-truth.json \
+        --supplement $D/20261025T204315-rdp-rogue-s1 $T/s1-truth.json --out $T/score.json
+
+- The truth needs the KB with gef_fild10 (data/kb), the client GAT
+  (`/dev/shm/poring-lab-tmp/gat/data/gef_fild10.gat`) and the decoded sprites
+  (`/dev/shm/poring-lab-tmp/gef10-prep/sprites/`): all local, client- or GPL-derived, never
+  committed.
+- The watch's events.jsonl lives in /dev/shm/poring-lab-demo/ (the parent's session folder).
+- The fit is deterministic (seed 0).

@@ -125,6 +125,21 @@ def test_a_party_window_above_its_threshold_is_seen_with_its_foot() -> None:
     assert abs(v["where"][0] - 940) <= 16 and abs(v["where"][1] - 412) <= 16
 
 
+def test_cue_selection_aura_alone_ignores_the_party_window() -> None:
+    w = np.zeros((mw.N_FEATURES, *mw.WIN), np.float32)
+    w[2] = 1.0
+    m = _model(lin_w=w, lin_b=0.0, lin_thr=20.0)
+    f = _frame(m)
+    f[300:412, 900:980] = (40, 60, 250)
+    v = mw.decide(f, m, cues=("aura",))
+    assert v["seen"] is False and v["party"] is None
+    _ring(f, (300, 450))
+    v = mw.decide(f, m, cues=("aura",))
+    assert v["seen"] is True and v["cue"] == "aura"
+    with pytest.raises(ValueError):
+        mw.decide(f, m, cues=("nose",))
+
+
 def test_save_load_round_trip_and_fail_closed(tmp_path: Path) -> None:
     m = _model()
     p = tmp_path / "m.npz"
