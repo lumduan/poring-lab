@@ -493,3 +493,52 @@ item while sitting" x3, the Rogue sitting under a tree at (72,79)):
 - The verdict pools a1-a4, a5b, a6-a8 as registered.
 - Beside it, a sensitivity view leaves out a6, the run that hit the since-fixed fault. Both are
   reported, and neither is chosen after the fact.
+
+## Amendment H (2026-10-26 03:55 ICT from `date`; after a5b, BEFORE the store step and a9)
+
+**H1. The A/B verdict (section 5's rule, value per hour at Overcharge, `dungeon_judge.py`):**
+
+| run | arm | hours | value at OC | per hour | kills / h | deaths |
+|---|---|---|---|---|---|---|
+| a1 | N | 0.395 | 6,706 | 16,961 | 53.1 | 1 |
+| a2 | S | 0.600 | 12,521 | 20,867 | 48.3 | 0 |
+| a3 | S | 0.600 | 9,445 | 15,741 | 50.0 | 0 |
+| a4 | N | 0.600 | 9,902 | 16,502 | 51.7 | 0 |
+| a5b | N | 0.600 | 7,574 | 12,619 | 43.3 | 0 |
+| a6 | S | 0.600 | 2,014 | 3,356 | 11.7 | 0 |
+| a7 | S | 0.600 | 10,539 | 17,557 | 46.6 | 0 |
+| a8 | N | 0.600 | 6,016 | 10,026 | 33.3 | 0 |
+
+- **As registered (a1-a4, a5b, a6-a8, pooled by hours):** N 13,754 / h (4 runs, 2.20 h, range
+  6,935); S 14,381 / h (4 runs, 2.40 h, range 17,511). |N - S| = 627 < 8,755 (half the larger
+  range): **NO DIFFERENCE, so N is kept** (no SP, simpler). The prediction N >= S is not shown
+  either way.
+- **The sensitivity view (Amendment G: a6 left out, the run that hit the since-fixed stand-toggle
+  fault):** S 18,055 / h (3 runs, 1.80 h, range 5,126) vs N 13,754. |N - S| = 4,301 > 3,467:
+  **S WINS** in this view.
+- Both are reported, and neither is chosen after the fact (Amendment G). The registered verdict is
+  "no difference". The sensitivity view says that without a6's fault, Steal-first earned ~31 %
+  more per hour. Batt decides the arm for the next step.
+
+**H2. The milestone: "the bag is full" (A2, B2).**
+- a9's pre-run frame (03:49:19) reads Weight 1,069 / 2,430 = **44.0 % >= 40 %** (972). a9's setup
+  would refuse. Batt's "first train hunting until the bag is full" is reached at a5b's end (03:49).
+- **What the 44 % holds:** about 160 of it is the restocked stock (8 White Potions, 8 Fly Wings,
+  read on the hotbar). a8 had used all 10 of each; a5b's setup restocked 10 + 10. The rest is the
+  equipped gear (~320) plus the loot since the 19:38 store.
+
+**H3. What follows tonight:**
+1. **The store step** (section 4, at its registered 40 % trigger; Batt decision 4, @storage in
+   group 20; its first use 19:38 is its positive case). A2 withdrew storing BETWEEN runs so the bag
+   could fill; the milestone is now reached. It runs on the safe stand (prt_fild08 268,107), with a
+   judged frame of the open storage first and the DB weight after.
+2. **The schedule (Amendment E).** After the store, a9 cannot end by D3 + 120 (04:32:08), so
+   cycle 3 ends with a8 and a5b. a9 moves to cycle 4.
+3. **The Orc Lord flee proof** (orclord-recognizer.md section 12) runs in this gap, on prt_fild08,
+   instead of at 04:24. It starts with the Fly Wings topped up; afterwards the stand first, then
+   immunity OFF (verified on the bubble), then a fresh pre-run frame.
+4. **Cycle 4:** a9 (N), a10 (S) and a11 (S), released at D4, D4 + 38 and D4 + 76, where D4 >= 04:43:08
+   is a9's setup kill. Each ends <= D4 + 120.
+   - a12 and a13 do not run tonight: cycle 5 would end after the 07:00 report.
+   - The second block (a9+) is reported pooled by arm and decides nothing (B2, C).
+5. **Not done:** a Kafra NPC trip (a deliberate NPC contact) needs Batt's OK (section 4).
