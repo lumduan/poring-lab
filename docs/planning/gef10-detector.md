@@ -492,3 +492,41 @@ then this map's new species, then the floor items:
 6. The evaluation pre-registered; then the cache (dry run first), then training (10).
 
 ## 13. RESULTS (appended below, clock-labelled; nothing above this line is edited after the pre-registration commit except by a labelled AMENDMENT)
+
+### 13a. RESULT: 4b, 1d on FIT -- STOPPED (2 walker samples < 50); the proposal is 120 ms (D2)
+
+- **Run** 2026-10-25 21:03:17-21:04:33 ICT at 9783aab's code (`map_labels.py offset --map
+  gef_fild10`, FIT = watch cells 0-10 + pilot + pilot2; local
+  `/dev/shm/poring-lab-tmp/gef10-det/fit/offset.json`). Nothing is frozen.
+- **The candidates:** watch cells 0-10: 506 frames (dropped: the TEST cells and the time before
+  cell 0, 217; GM windows 84; map changes 28); pilot 663 and pilot 2 401 at the sweep's 500 ms
+  (our character moving 260 / 101).
+- **The samples: 2** (both from the pilot). The watch gave 0: its Orc Archers stay within ~2 cells
+  of the Orc Lord and of us (never isolated by 120 px), and its natural orcs are few; in the hunts
+  the orcs walk straight into a fight. 4b's stop applies.
+- The coarse curve (n = 2, median px; not evidence): 150 ms 6.4, every other offset 9.2-16.6.
+- **By 4b, the proposal is 120 ms** (payf07 Amendment C's P1). D2 is the parent's.
+
+### 13b. RESULT: 4e, T_h on FIT at 120 ms, attempt 1 -- every watch frame failed the hunting-layout check
+
+- **Run** 2026-10-25 21:05:09-21:09:40 ICT at 9783aab (`threshold --proposed-offset-ms 120`;
+  `fit/threshold-P1.json`): T_h came out 0.312 from 55 clear kept labels, **all from the two
+  pilots**.
+- **Why:** all 506 of the watch's FIT candidate frames were `ui_layout_mismatch`. By eye on two
+  FIT frames (28 and 291) and from `client_layout.read`: the watch ran with the hotbar showing
+  **4 rows** and the Basic Information panel **expanded** (the chat on Battle Log), not the hunting
+  layout (1 row, collapsed). The pilots read as the hunting layout (pilot frame 300).
+- Superseded by AMENDMENT A (below) and its re-run (13c). Kept for the record.
+
+### AMENDMENT A (2026-10-25 21:10:53 ICT, from `date`; after 13b's FIT finding, BEFORE any parameter is frozen and before any TEST frame is read)
+
+- **What changes (4f only, for the watch session):** a frame of the watch is a candidate when its
+  layout READ from pixels has the hotbar at **4 rows** and the panel **expanded** (either chat
+  tab); its UI rectangles are then `client_layout.RECTS["standard"]` (exactly that bar and panel;
+  the chat window's rectangle is the same in both layouts, and the tab changes no rectangle).
+  Every other session keeps the hunting layout of 4f.
+- **Why:** the watch is the only source of the Orc Lord and its archers (3a), and its UI simply
+  covers more of the screen; with the right rectangles the labels and their visibility / fit
+  rules are the same rules. The layout is still read per frame: a watch frame in any other state
+  is `ui_layout_mismatch`.
+- **What stays:** everything else, including the split (3a), the stops and both tiers.

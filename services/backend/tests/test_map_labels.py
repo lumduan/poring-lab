@@ -508,3 +508,19 @@ def test_fit_diagnostic_check_refuses_every_non_fit_part(tmp_path: Path) -> None
     a = argparse.Namespace(map="gef_fild10", params=params, parts=["/x"], fit_diagnostic=False)
     with pytest.raises(SystemExit, match="FROZEN parameters only"):
         ml.cmd_check(a)
+
+
+def test_amendment_a_the_watch_reads_the_4_row_layout() -> None:
+    """gef10 Amendment A: the watch's frames are candidates in the 4-row / expanded layout (either
+    tab), with the standard rectangles; every other session keeps the hunting layout."""
+    assert ml.GEF10.layouts == {ml.GEF10_WATCH: "rows4"} and ml.PAYF07.layouts == {}
+    assert ml.LAYOUT_RECTS == {"hunt": "hunt", "rows4": "standard"}
+    hunt = {"rows": 1, "panel": "collapsed", "tab": "battle"}
+    four = {"rows": 4, "panel": "expanded", "tab": "battle"}
+    assert ml.layout_matches(hunt, "hunt") and not ml.layout_matches(four, "hunt")
+    assert ml.layout_matches(four, "rows4") and ml.layout_matches({**four, "tab": "regular"},
+                                                                  "rows4")  # fmt: skip
+    assert not ml.layout_matches(hunt, "rows4")
+    assert not ml.layout_matches({**four, "panel": None}, "rows4")
+    with pytest.raises(SystemExit):
+        ml.layout_matches(hunt, "other")

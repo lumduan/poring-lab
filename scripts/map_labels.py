@@ -126,6 +126,7 @@ class MapSpec:
     dying_rule: bool = False  # gef10 4g (D8): dying_in_view
     tmp: Path = Path("/dev/shm/poring-lab-tmp/payf07")
     plan: str = "docs/planning/payf07-detector.md"
+    layouts: dict[str, str] = field(default_factory=dict)  # session id -> its layout (else hunt)
 
     def is_test(self, sid: str, spots: frozenset[int] | None) -> bool:
         """The part shares a frame with TEST: by the role table, or by the session's NAME."""
@@ -179,6 +180,7 @@ GEF10 = MapSpec(
     dying_rule=True,
     tmp=G10,
     plan="docs/planning/gef10-detector.md",
+    layouts={GEF10_WATCH: "rows4"},  # Amendment A (2026-10-25 21:10:53): the watch's 4-row layout
 )  # fmt: skip
 MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 
@@ -640,12 +642,27 @@ def check_recording(manifest: dict[str, Any]) -> None:
         raise SystemExit(f"{manifest.get('session_id')}: not the recording path of 3c: {bad}")
 
 
+LAYOUT_RECTS = {"hunt": "hunt", "rows4": "standard"}  # a frame layout -> its UI rectangles
+
+
+def layout_matches(state: dict[str, Any], layout: str) -> bool:
+    """PURE (4f; gef10 Amendment A): the read state IS the session's layout: ``hunt`` (1 row,
+    collapsed, Battle Log) or ``rows4`` (the hotbar at 4 rows, the panel expanded, either tab)."""
+    import client_layout
+
+    if layout == "hunt":
+        return bool(client_layout.matches(state, "hunt"))
+    if layout == "rows4":
+        return state.get("rows") == 4 and state.get("panel") == "expanded"
+    raise SystemExit(f"unknown layout {layout!r}")
+
+
 def use_kb(spec: MapSpec) -> None:
     qa_export.KB_CLASSES = spec.kb / "classes.json"
     qa_export.KB_SPRITE_NAMES = spec.kb / "monster_sprite_names.json"
 
 
-def session_labeler(path: Path, spec: MapSpec) -> qa_export.Labeler:
+def session_labeler(path: Path, spec: MapSpec, layout: str = "hunt") -> qa_export.Labeler:
     """The recorder session's label stack (packets only, no pixel): the map's KB and sprites, the
     hunting layout's UI rectangles, a finer Timeline. RecSession and the frame cache share it
     (build_frame_cache.py --labels map: our own character's box from the same camera)."""
@@ -653,8 +670,8 @@ def session_labeler(path: Path, spec: MapSpec) -> qa_export.Labeler:
     lab = qa_export.Labeler(path, str(olf.OLD_OFFSET_MS), labels="v1", k=olf.K)
     import client_layout
 
-    lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0)
-                         for x0, y0, x1, y1 in client_layout.RECTS["hunt"])  # fmt: skip
+    rects = client_layout.RECTS[LAYOUT_RECTS[layout]]
+    lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in rects)
     lab.sheets = qa_export.Sheets(directory=spec.sprites)
     tl = lab.timeline
     lab.timeline = Timeline(tl.events, tl.maps, snapshot_every=32, die_ms=tl.die_ms,
@@ -686,7 +703,8 @@ class RecSession:
         manifest = json.loads((path / "manifest.json").read_text())
         check_recording(manifest)
         sid = qa_export.session_id(manifest)
-        lab = session_labeler(path, spec)
+        layout = spec.layouts.get(sid, "hunt")
+        lab = session_labeler(path, spec, layout)
         import client_layout
 
         occ.cache_compose()
@@ -699,7 +717,7 @@ class RecSession:
 
         def check(bgr: npt.NDArray[np.uint8]) -> bool:
             state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm)
-            return bool(client_layout.matches(state, "hunt"))
+            return layout_matches(state, layout)
 
         changes = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "map_change")
         return cls(path, spec, spots, lab, png_index(path, manifest), sid, check, starts,
