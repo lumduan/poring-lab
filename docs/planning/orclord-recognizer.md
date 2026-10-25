@@ -297,3 +297,43 @@ fit logs, the crops and a copy of the model are archived, sha256-checked (103 fi
   committed.
 - The watch's events.jsonl lives in /dev/shm/poring-lab-demo/ (the parent's session folder).
 - The fit is deterministic (seed 0).
+
+## 10. PRE-REGISTERED: round 2 -- the AURA rule alone on EDGE ENTRIES (the parent, 2026-10-25 22:2x ICT, BEFORE any round-2 frame exists)
+
+**Why:** round 1 failed both bars (section 5). Its two missed cells were spawn artefacts (the Lord
+spawned on us under a canopy; the summon's starburst). Its false positives came from the party
+cue near our own effects. Section 6 saw the aura rule ALONE give 0 false positives in 33.2
+hunting minutes, but that was post hoc. Section 8 asked for edge entries. This round tests exactly
+that recipe on new data, once.
+
+**The recipe (frozen now, nothing fitted on round-2 data):**
+- `mvp_watch.decide(frame, model, cues=("aura",))` with the round-1 model;
+  - sha256 `43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff`;
+  - `/dev/shm/poring-lab-tmp/orclord/model/orclord-v1.npz`, with a copy in the NAS scratch
+    archive;
+- the aura threshold 0.08 and HUNT_RECTS unchanged.
+
+**The data:**
+- **ow2** (`scripts/orclord_edge_watch.py run --map prt_fild08 --n 8 --seed 26`): the immune Rogue
+  on prt_fild08, in the gap between gef_fild10 runs (its `@killmonster2` cannot touch gef_fild10's
+  natural Lord; rogue-gef10.md Amendment E).
+  - At each of 8 cells: spawn the Lord, warp 17 cells away, then hop back 3 cells at a time to 8.
+  - The Lord enters the view from its edge at one of the hops.
+  - A 2-fps PNG recorder runs beside it.
+- **Hunting negatives:** gef_fild10's a2-a6 recordings, every frame on the map. (Round 1 used the
+  pilots and s1.)
+- **Limits, said now:** prt_fild08 is open ground, so this tests edge entries, not canopy. A Lord
+  hidden under gef_fild10's trees stays a known gap.
+
+**The truth:** packets + projection, round 1's `mvp_watch_study.py truth` unchanged. "In view" is
+its rule. An entry is a hop at which the Lord (or an archer) goes from not in view to in view.
+
+**The bars (scored ONCE, by `mvp_watch_study.py score` with cues=("aura",)):**
+1. **Recall:** >= 95 % of the edge entries have a positive within 1 s of the first in-view frame.
+   Each entry also gets its delay.
+2. **False positives:** <= 1 per 10 min of gef_fild10 hunting frames (a2-a6, >= 2 h).
+3. Latency already passed (p95 12.5 ms for the aura alone, section 6): reported, not a bar.
+
+**If both pass:** a FLEE rule follows, pre-registered on its own: a Fly Wing on the first positive.
+It gets a live proof on a spawned Lord with immunity OFF before any scored run uses it.
+**If either fails:** no flee. `--clear-map` with Amendment E's schedule stays.
