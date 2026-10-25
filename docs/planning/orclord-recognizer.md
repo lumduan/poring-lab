@@ -621,3 +621,45 @@ Reproduce: section 9's environment, then:
 - **Attempt 3** (`fp1c`) runs the full plan again: seed 27, all 6 trials, everything else
   unchanged. fp1b's trial 1 is reported apart and not counted, so no trial is selected after the
   fact.
+
+### 12c. RESULT: fp1c -- bar 1 NO VERDICT (3 of 6 trials counted, 2 passed), bar 2 PASS (no death) (2026-10-26 04:18 ICT from `date`)
+
+- **The run:** fp1c, 04:07:04-04:14:06, flee@3, the plan unchanged (seed 27, 6 trials). Every
+  immunity toggle was read and verified; it ended "done". Recording
+  `20261026T040702-rdp-fp1c` (NAS, 841 frames at 2 fps).
+- **Scored once** (04:16-04:17) with the scorer committed BEFORE the scoring (630b1c1, 04:09:51):
+  the per-frame truth (`mvp_watch_study.py truth --layout hunt --map prt_fild08`), our AID
+  2000002 (DB).
+  - **Result: counted 3 / 6, passed 2 / 3. Bar 1 NO_VERDICT (fewer than 4 counted). Bar 2 PASS.**
+- **A scorer flaw, found reading that output, and fixed in this commit:**
+  - The proof logs its `flee` event after the key send returns, about 130 ms after the press.
+  - 630b1c1 timed F2 at the event, and matched a LATER map change: F2 -> teleport read 134 s,
+    155 s and none.
+  - The fix takes the press from the Fly Wing's `use_item_request` and the teleport from the
+    first map change after it, GM-tagged or not.
+  - Re-run: **the same verdict** (counted 3, passed 2; no trial changes). F2 -> teleport is
+    34.6-35.9 ms. Both outputs are kept (`score-fp1c-v1.json`, `-v2.json`).
+
+| trial | cell | counted | F2 by | seen -> F2 | F2 vs the first damage | passed |
+|---|---|---|---|---|---|---|
+| 1 | 252,329 | yes | aura | 221 ms | 136 ms AFTER it | no |
+| 2 | 164,299 | no (no party unit in view in 49 s) | - | - | no damage | - |
+| 3 | 248,217 | yes | aura | 9,473 ms | no damage | yes |
+| 4 | 92,79 | no | - | - | no damage | - |
+| 5 | 48,121 | yes | aura | 9,804 ms | no damage | yes |
+| 6 | 279,72 | no | - | - | no damage | - |
+
+- **Trial 1:** the party stood within reach of the far cell; it had wandered while we were
+  immune. Its archers hit us (288 / 287 / 265) in the moment of the OFF toggle, 0.24 s before the
+  OFF read was logged. The Orc Lord's act of 3,050 followed. HP went 2,146 -> 1,306 (61 %). F2
+  came 221 ms after the party was in view: fast, but after the damage.
+- **Trials 2, 4, 6:** the immune party wandered out of the approach. No unit came in view during
+  the 4 hops down to 8 cells, so these trials are not counted.
+- **Trials 3, 5:** the first party unit in view (an archer or the Lord; not separated here) came
+  9.5 / 9.8 s before the aura fired. Nothing hit us before F2.
+- **By section 12: not both bars pass, so the flee rule is NOT adopted.** No dungeon@9, and
+  `--clear-map` stays. The clock schedule keeps gef_fild10's natural Lord out of the runs.
+- **What a next attempt would need (Batt's decision):**
+  - a plan where the party is in view in every trial; it wanders while we are immune;
+  - the OFF toggle out of the party's reach;
+  - the Lord's own entry time separated from the archers'.

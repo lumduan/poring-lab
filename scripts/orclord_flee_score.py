@@ -10,8 +10,11 @@ Per trial k of the proof's events.jsonl (`orclord_flee_proof.py`):
   game frame, off the UI rects);
 - HIT: the first `act` with target = our AID, source = a party gid and damage > 0 (the first
   attack of any damage, a miss included, is reported beside it);
-- FLEE: the trial's `flee` event (`why` aura / hp) and the next non-GM `map_change` (the Fly
-  Wing's same-map teleport);
+- FLEE: the trial's `flee` event (`why` aura / hp). Its PRESS time is the Fly Wing's
+  `use_item_request` (601) in the second before the event: the event is logged after the key
+  send returns (~130 ms late; fp1c, the first scoring, used the event time and matched a later
+  map change). The teleport is the first `map_change` at or after the press, GM-tagged or not
+  (the recorder tags packets near a GM line);
 - HP: the lowest `stat_change` hp in the window and the hp at the window's start.
 
 A trial is COUNTED when SEEN exists ("a trial with no party unit in view at all is reported and
@@ -88,8 +91,11 @@ def score_trial(w: dict[str, Any], truth_rows: Sequence[dict[str, Any]],
     flee_t = int(flee["t_ns"]) if flee else None
     tele = None
     if flee_t is not None:
+        press = [int(p["t_mono_ns"]) for p in packets if p.get("type") == "use_item_request"
+                 and flee_t - 1_000_000_000 <= int(p["t_mono_ns"]) <= flee_t]  # fmt: skip
+        flee_t = max(press) if press else flee_t
         tele = _first([int(p["t_mono_ns"]) for p in packets if p.get("type") == "map_change"
-                       and not p.get("gm_command") and int(p["t_mono_ns"]) >= flee_t])  # fmt: skip
+                       and int(p["t_mono_ns"]) >= flee_t])  # fmt: skip
     counted = seen is not None
     why = flee.get("why") if flee else None
     passed = counted and why == "aura" and flee_t is not None and (hit is None or flee_t < hit)

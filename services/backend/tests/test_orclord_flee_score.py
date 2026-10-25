@@ -77,3 +77,15 @@ def test_bar1_counts_five_of_six_and_needs_four_counted() -> None:
     assert fs.verdict(trials(4, 4))["bar1"] == "PASS"  # ceil(20 / 6) = 4
     assert fs.verdict(trials(3, 3))["bar1"] == "NO_VERDICT"
     assert fs.verdict(trials(6, 6), stopped_dead=True)["bar2"] == "FAIL"
+
+
+def test_the_press_is_the_fly_wing_request_not_the_late_event() -> None:
+    """fp1c: the flee event is logged ~130 ms after the press; the teleport precedes the event."""
+    (w,) = fs.trial_windows(_events({"t": 12 * S, "why": "aura"}))
+    pk = [p for p in _packets(hit_t=None) if p["type"] != "map_change"]
+    press = 12 * S - 130_000_000
+    pk += [{"type": "use_item_request", "index": 11, "t_mono_ns": press},
+           {"type": "map_change", "gm_command": True, "t_mono_ns": press + 40_000_000}]  # fmt: skip
+    t = fs.score_trial(w, _truth(11 * S), pk, AID)
+    assert t["flee_t"] == press and t["f2_to_teleport_ms"] == 40.0
+    assert t["seen_to_f2_ms"] == 870.0 and t["passed"]
