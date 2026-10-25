@@ -606,3 +606,18 @@ Reproduce: section 9's environment, then:
   - Tests: thin-stroke synthetic shifts and a 7-px miss stay None.
 - **Attempt 2** runs the same plan unchanged (seed 27, 6 trials, the same model, cue, watch and
   bars) under label `fp1b`. fp1 counts as no trial.
+
+### 12b. Attempt 2 stopped safely at trial 2; flee@3 (2026-10-26 04:06 ICT from `date`, BEFORE attempt 3)
+
+- **fp1b (04:03:40-04:05:16), flee@2:**
+  - **Trial 1 ran whole:** immunity ON, then OFF read live at the far cell (the 12a fix works),
+    then 4 hops at 17 / 14 / 11 / 8 cells, then ON and `@killmonster2`. `fled=None`: no aura
+    positive and no HP backup. Its packets decide whether any party unit was in view (an unseen
+    trial is not counted).
+  - **Trial 2 stopped by the read:** each trial began with an ON toggle, but trial 1 had ended ON,
+    so the toggle flipped it OFF. The check read "off" (wanted "on") and stopped. The party was
+    already cleared; the Rogue stood at 252,337 among passive monsters.
+- **flee@3:** a trial toggles ON only when the believed state is not ON.
+- **Attempt 3** (`fp1c`) runs the full plan again: seed 27, all 6 trials, everything else
+  unchanged. fp1b's trial 1 is reported apart and not counted, so no trial is selected after the
+  fact.

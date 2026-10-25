@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import orclord_edge_watch as ow  # noqa: E402
 
-VERSION = "orclord-flee@2"
+VERSION = "orclord-flee@3"
 ROOT = Path(__file__).resolve().parents[1]
 BUBBLES = ROOT / "data" / "mvp_watch" / "immune_bubbles.npz"  # client pixels: never committed
 WATCH_S, DWELL_S, AFTER_FLY_S = 0.25, 4.0, 3.0
@@ -148,8 +148,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
         try:
             for k, c in enumerate(cells):
                 x0, y0 = c["cell"]
-                immune("on")
-                state = "on"
+                if state != "on":  # flee@3 (fp1b): the previous trial already ended ON; a 2nd
+                    immune("on")  # toggle flipped it OFF (caught by the read, 04:05:07)
+                    state = "on"
                 gm(f"@warp {a.map} {x0} {y0}")
                 ow._settle(screen)
                 gm(f"@monster {ow.MOB} 1")
