@@ -393,3 +393,27 @@ So nothing on our side can repair it. What limits the damage:
 - **The verdict uses a1-a8.** s1 and s2 are reported apart, as the first attempt.
 - The gef_fild10 detector's TEST sessions move with it: a7 and a8, never read before its
   parameters are frozen.
+
+## Amendment D (2026-10-25 21:5x ICT; the Orc Lord recognizer's RESULT)
+
+**The result:** [orclord-recognizer.md](orclord-recognizer.md), a subagent, offline.
+- Its bars were pre-registered at 20:21:07, before any recognizer existed. The scoring used
+  held-out lattice cells 8-14 and the pilot after 300 s.
+- **Recall within 1 s: FAIL**, 5 of 7 cells (bar 95 %).
+  - One Orc Lord spawned with our Rogue under a tree canopy: 11 s.
+  - One was hidden 2 s by the spawn's starburst.
+- **False positives: FAIL**, 1.89 per 10 min of hunting (bar 1). Both came near our own effects:
+  a cast flash, a magic circle.
+- **Latency: PASS**, p95 54 ms.
+- A finding: the client draws a bright green AURA ring at the Orc Lord's feet. Post hoc, the aura
+  rule ALONE had 0 false positives in 33.2 hunting minutes with the same 5 of 7 cells. That is not
+  a bar result: it gets its own pre-registration.
+
+**So the FLEE rule does NOT go live.** `--clear-map` stays on for every scored run (A4).
+
+**Next (before any flee):**
+1. A second immune watch, pre-registered, with EDGE ENTRIES at 2-5 fps: spawn the Lord, warp
+   16-20 cells away, walk back.
+2. The aura-alone recipe pre-registered on it.
+3. Hunting negatives from a1-a6, hours of them; a7 / a8 stay the detector's TEST.
+4. Then a live flee proof on a spawned Lord with immunity OFF.
