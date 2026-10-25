@@ -298,7 +298,7 @@ fit logs, the crops and a copy of the model are archived, sha256-checked (103 fi
 - The watch's events.jsonl lives in /dev/shm/poring-lab-demo/ (the parent's session folder).
 - The fit is deterministic (seed 0).
 
-## 10. PRE-REGISTERED: round 2 -- the AURA rule alone on EDGE ENTRIES (the parent, 2026-10-25 22:2x ICT, BEFORE any round-2 frame exists)
+## 10. PRE-REGISTERED: round 2 -- the AURA rule alone on EDGE ENTRIES (the parent, 2026-10-25 22:16 ICT from `date`, BEFORE any round-2 frame exists)
 
 **Why:** round 1 failed both bars (section 5). Its two missed cells were spawn artefacts (the Lord
 spawned on us under a canopy; the summon's starburst). Its false positives came from the party
