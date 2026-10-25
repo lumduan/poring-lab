@@ -417,10 +417,16 @@ class EngagedLabeler(olf.FixLabeler):
         if variant not in ENGAGED_VARIANTS:
             raise SystemExit(f"engaged variant {variant!r}: one of {ENGAGED_VARIANTS}")
         self.variant = variant
+        self.crowded: dict[int, bool] = {}  # gef10 Amendment B: the predicted box touches a unit's
+
+    def frame(self, t: int, bgr: npt.NDArray[np.uint8] | None) -> Any:
+        self.crowded = {}
+        return super().frame(t, bgr)
 
     def fate(self, e: Any, st: Any, sheet: Any, pred: Any, facing: tuple[int, str],
              why: str | None, under: bool, grey: npt.NDArray[np.float64],
              unit_boxes: Sequence[tuple[int, Box]]) -> olf.LabelFate:  # fmt: skip
+        self.crowded[e.gid] = any(g != e.gid and olf.overlap(pred.box, b) for g, b in unit_boxes)
         if self.variant not in ("E2", "E3") or e.gid not in getattr(self.facing, "engaged_now", ()):
             return super().fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes)
         from poring_dataset.ui_layout import covered_fraction
@@ -969,7 +975,9 @@ def _fates_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
              "dx": None if f.fit is None else f.fit[1], "dy": None if f.fit is None else f.fit[2],
              "w": None if f.raw is None else round(f.raw[2] - f.raw[0], 1),
              "h": None if f.raw is None else round(f.raw[3] - f.raw[1], 1),
-             "state": f.state, "facing_from": f.facing_from, "model": models.get(f.gid)}
+             "state": f.state, "facing_from": f.facing_from, "model": models.get(f.gid),
+            "box": None if f.raw is None else [round(v, 1) for v in f.raw],
+            "crowded": getattr(fl, "crowded", {}).get(f.gid)}
             for f in ff.fates]  # fmt: skip
     return rows, "labelled"
 
@@ -1021,8 +1029,14 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
         per_part[sess.name] = {"frames": len(sess.refs), "candidates": len(refs),
                                "dropped": dict(sorted(sess.dropped.items())),
                                "frames_by_outcome": dict(why), "fates": len(rows) - n0}  # fmt: skip
+    if getattr(a, "rows", None) is not None:  # the per-label fates (REPORTED diagnostics)
+        a.rows.write_text(json.dumps(rows) + "\n")
     mine = [r for r in rows if r["mob"] in spec.species]
-    clear = [r["ncc"] for r in mine if not r["under"] and r["pre"] is None and r["fail"] is None]
+    # gef10 Amendment B (2026-10-25 21:24:48): T_h's set also leaves out labels whose predicted
+    # box touches another unit's (a map with engaged labels records it; payf07 records nothing)
+    alone = spec.engaged_labels
+    clear = [r["ncc"] for r in mine if not r["under"] and r["pre"] is None and r["fail"] is None
+             and not (alone and r.get("crowded"))]  # fmt: skip
     under = [r["ncc"] for r in mine if r["under"] and r["pre"] is None and r["fail"] is None]
     if not clear:
         raise SystemExit("4e: no clear kept label on FIT")
@@ -1039,6 +1053,13 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
             "fates": len(rs),
             "clear_kept": dist([r["ncc"] for r in rs if not r["under"] and r["pre"] is None
                                 and r["fail"] is None]),
+            "clear_kept_alone": dist([r["ncc"] for r in rs if not r["under"] and r["pre"] is None
+                                      and r["fail"] is None and not r.get("crowded")]),
+            "crowded_share_of_clear_kept": round(
+                sum(1 for r in rs if not r["under"] and r["pre"] is None and r["fail"] is None
+                    and r.get("crowded")) / max(1, sum(1 for r in rs if not r["under"]
+                                                       and r["pre"] is None and r["fail"] is None)),
+                4) if alone else None,
             "under_fit_passes": dist([r["ncc"] for r in rs if r["under"] and r["pre"] is None
                                       and r["fail"] is None]),
             "under_share": round(sum(r["under"] for r in rs) / len(rs), 4) if rs else None,
@@ -1070,6 +1091,10 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
         "commit": olf.git_head(), "offset_ms": params["offset_ms"], "o3h_tau": t_h,
         "offset_source": offset.get("proposal") or str(a.offset),
         "clear_kept": dist(clear), "under_fit_passes": dist(under),
+        "t_h_set": "clear of every model box, not engaged" + (
+            ", predicted box touching no other unit's (gef10 Amendment B)" if alone else ""),
+        "clear_kept_any_crowding": dist([r["ncc"] for r in mine if not r["under"]
+                                         and r["pre"] is None and r["fail"] is None]),
         "under_below_t_h": sum(1 for v in under if v < t_h), "per_species": per_species,
         "per_part": per_part, "other_species_fates": len(rows) - len(mine),
         "under_share_pooled": round(sum(r["under"] for r in mine) / len(mine), 4) if mine else None,
@@ -1638,6 +1663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--offset", type=Path, default=None)
     p.add_argument("--proposed-offset-ms", type=float, default=None)
     p.add_argument("--proposal", default=None, help="the proposal's name (9b)")
+    p.add_argument("--rows", type=Path, default=None, help="write every FIT fate (diagnostics)")
     p = sub.add_parser("freeze")
     common(p, parts=False)
     p.add_argument("--offset", type=Path, default=None)

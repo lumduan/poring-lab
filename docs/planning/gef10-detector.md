@@ -530,3 +530,45 @@ then this map's new species, then the floor items:
   rules are the same rules. The layout is still read per frame: a watch frame in any other state
   is `ui_layout_mismatch`.
 - **What stays:** everything else, including the split (3a), the stops and both tiers.
+
+### 13c. RESULT: 1d and T_h re-run under Amendment A (FIT; nothing frozen)
+
+- **1d** (21:11:51-21:13:28 ICT at eb84410, `fit/offset.json`; attempt 1 kept as
+  `offset-attempt1.json`): **15 walker samples** (watch 13, pilot 2, pilot 2 none) < 50: **STOP**
+  again. The coarse curve (n = 15, median px): 0 ms 17.7; 50 ms 10.0; **100 ms 3.6; 150 ms 5.8**;
+  200 ms 14.4; 250-500 ms 13.6-18.4. The minimum lies at 100-150 ms, where orcsdun01 and payf07
+  froze 120 ms. By 4b the proposal stays **120 ms** (D2).
+- **T_h at 120 ms** (21:13:28-21:20:13 at eb84410, `fit/threshold-P1.json`; attempt 1 kept as
+  `threshold-P1-attempt1.json`): **0.140** from 722 clear kept labels (p25 0.390, median 0.640).
+  The watch's 506 FIT frames are all labelled now (2,257 fates).
+- **Per species, the clear kept fits** (n, p5, median): Orc Lady 154, 0.412, 0.712; Orc Warrior
+  31, 0.207, 0.680; Poporing 42, 0.718, 0.787; Orc Baby 1; **Orc Lord 97, 0.272, 0.663; Orc
+  Archer 397, 0.126, 0.520**. The archers are 55 % of the measuring set and drag its p5 down.
+
+### 13d. FIT diagnostic: the low fits are Orc Archers buried in their own pile (scratch, FIT only)
+
+- Rows of the watch's FIT cells (`threshold --rows`, 21:20:53-21:23:47, `fit/th-watch-rows.json`)
+  split by state, facing source, time since the `@monster` line and overlap with another FITTED
+  box (`scratch/diag_th.py`): every split of the archers keeps a low tail (idle 117 of 380 under
+  0.3; "after_move" facing 89 of 300; even those not overlapping another fitted box 8 of 43).
+- **By eye on 12 low (< 0.3) and 12 high (>= 0.6) archer labels** (`scratch/archer_low.png`,
+  `archer_high.png`, FIT frames): every low crop is an archer inside a tight pile of orcs (the
+  Orc Lord's slaves are summoned onto its cell and follow within 2 cells), with the box in the
+  right place but the archer mostly hidden by the others in front of it; some under emote bubbles
+  or the summon's light. The overlap test on FITTED boxes misses these piles because the hidden
+  neighbours fail their own fit (no fitted box).
+- So the p5 measures mutual occlusion between monsters, not a visible label's evidence. payf07's
+  measuring set had no such piles (its Amendment B removed the fights, the only units in contact).
+
+### AMENDMENT B (2026-10-25 21:24:48 ICT, from `date`; after 13c / 13d's FIT diagnostics, BEFORE any parameter is frozen and before any TEST frame is read)
+
+- **What changes (4e only):** T_h's measuring set = FIT's kept labels clear of every model box,
+  NOT engaged, **and whose PREDICTED box overlaps no other drawn unit's predicted box** (every
+  monster, player and our own character's self box, as the labeller's crowd test uses them).
+  Still the pooled 5th percentile, frozen to 3 decimals.
+- **Why:** 13d: the summoned archers stand in piles where each hides the others; their fits
+  measure occlusion by units, which T_h (the evidence that a VISIBLE label is really drawn there)
+  is not about. Units in contact are the same situation as payf07's engaged fights.
+- **What stays:** the floor and o3h apply to EVERY kept label as before, crowded ones included (a
+  buried archer's fit falls under the floor, so its frame is not whole); the label rule, C1, the
+  split and the bars.
