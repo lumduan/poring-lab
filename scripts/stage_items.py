@@ -38,7 +38,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@3"  # @2: --open (target-items.md 9b); @3: refuses while targets are held
+VERSION = "stage@4"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
+# @4: the character is a ROGUE (job "rogue", data/thief) and watch --spawn (rogue-gef10 A4)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -49,7 +50,8 @@ STILL_S = 5.0  # frames at 1 fps: ~5 per offset
 SPOT_SEP = 25  # cells between spots (Chebyshev): other ground, other light
 WARP_SETTLE_S = 2.5
 READY_MAX_S = 20.0  # a map change's loading screen took longer than 2.5 s (prt_fild08 -> 07)
-CHAR = "thief"
+CHAR = "thief"  # the data dir (crusader.py --char)
+JOB = "rogue"  # its job since 2026-10-25 (rogue-gef10.md 3c): every identity check reads it
 
 
 def pick_spots(area: Any, n: int, seed: int, sep: int = SPOT_SEP,
@@ -144,7 +146,7 @@ def _check(screen: Any) -> None:
     import crusader as cr
     import ro_agent as r
 
-    if not cr.check(screen, CHAR, CHAR)["ok"]:
+    if not cr.check(screen, JOB, CHAR)["ok"]:
         raise r.Stop("stage_items: not the Thief")
 
 
@@ -156,7 +158,7 @@ def _settle(screen: Any, max_s: float = READY_MAX_S) -> float:
 
     t0 = time.monotonic()
     time.sleep(WARP_SETTLE_S)
-    while not cr.check(screen, CHAR, CHAR)["ok"]:
+    while not cr.check(screen, JOB, CHAR)["ok"]:
         if time.monotonic() - t0 > max_s:
             raise r.Stop(f"stage_items: the identity did not read within {max_s} s of a @warp")
         time.sleep(0.5)
@@ -202,7 +204,7 @@ def give() -> None:
         agent.wait_for_human()
         _check(screen)
         for iid in TARGETS:
-            cr.gm_line(agent, screen, f"@item {iid} 1", CHAR, CHAR)
+            cr.gm_line(agent, screen, f"@item {iid} 1", JOB, CHAR)
             time.sleep(0.8)
         bench.close_chat(agent, screen)
         print(r.to_png(screen.full(), r.SHOTS / "stage-give.png"))
@@ -217,7 +219,7 @@ def immune_on() -> None:
     with _session("immune") as (agent, screen):
         agent.wait_for_human()
         _check(screen)
-        cr.gm_line(agent, screen, "@monsterignore", CHAR, CHAR)
+        cr.gm_line(agent, screen, "@monsterignore", JOB, CHAR)
         time.sleep(1.2)
         print(r.to_png(screen.full(), r.SHOTS / "stage-immune.png"))
 
@@ -261,11 +263,11 @@ def run(a: argparse.Namespace) -> int:
         _check(screen)
         try:
             for k, (x, y) in enumerate(spots):
-                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", CHAR, CHAR)
+                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", JOB, CHAR)
                 ev({"kind": "warp", "spot": k, "at": [x, y], "settle_s": _settle(screen)})
                 bench.close_chat(agent, screen)
                 for iid in TARGETS:
-                    cr.gm_line(agent, screen, f"@item {iid} 1", CHAR, CHAR)
+                    cr.gm_line(agent, screen, f"@item {iid} 1", JOB, CHAR)
                     time.sleep(0.8)
                 bench.close_chat(agent, screen)
                 res = gm_state.clear_loot(agent, screen, why=f"stage-{k}", refs_dir=ICON_DIR)
@@ -277,7 +279,7 @@ def run(a: argparse.Namespace) -> int:
                     break
                 for dx, dy in OFFSETS:
                     if (dx, dy) != (0, 0):
-                        cr.gm_line(agent, screen, f"@warp {a.map} {x + dx} {y + dy}", CHAR, CHAR)
+                        cr.gm_line(agent, screen, f"@warp {a.map} {x + dx} {y + dy}", JOB, CHAR)
                         _settle(screen)
                         bench.close_chat(agent, screen)
                     ev({"kind": "still", "spot": k, "at": [x + dx, y + dy], "s": STILL_S})
@@ -330,7 +332,8 @@ def watch(a: argparse.Namespace) -> int:
         evf.flush()
 
     ev({"kind": "run_start", "version": VERSION, "what": "watch", "map": a.map, "seed": a.seed,
-        "cells": cells, "dwell_s": a.dwell_s, "lattice": str(a.lattice)})  # fmt: skip
+        "cells": cells, "dwell_s": a.dwell_s, "lattice": str(a.lattice),
+        "spawn": a.spawn, "spawn_n": a.spawn_n})  # fmt: skip
     reason = "done"
     t_end = time.monotonic() + a.max_minutes * 60
     with _session("watch") as (agent, screen):
@@ -341,11 +344,18 @@ def watch(a: argparse.Namespace) -> int:
                 if time.monotonic() > t_end:
                     reason = "time_box"
                     break
-                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", CHAR, CHAR)
+                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", JOB, CHAR)
                 settle = _settle(screen)
+                if a.spawn is not None:  # stage@4: the practice monster beside us (Amendment A4)
+                    cr.gm_line(agent, screen, f"@monster {a.spawn} {a.spawn_n}", JOB, CHAR)
+                    ev({"kind": "spawn", "i": k, "mob": a.spawn, "n": a.spawn_n})
                 bench.close_chat(agent, screen)
                 ev({"kind": "dwell", "i": k, "at": [x, y], "settle_s": settle, "s": a.dwell_s})
                 time.sleep(a.dwell_s)
+                if a.spawn is not None:  # it (and every monster here) dies, no drops; all respawn
+                    cr.gm_line(agent, screen, "@killmonster2", JOB, CHAR)
+                    ev({"kind": "killmonster2", "i": k})
+                    bench.close_chat(agent, screen)
                 print(f"cell {k + 1}/{len(cells)} at {x},{y}", flush=True)
         except r.Stop as exc:
             reason = f"stop: {exc}"
@@ -380,6 +390,14 @@ def main() -> int:
     p.add_argument("--dwell-s", type=float, default=WATCH_DWELL_S)
     p.add_argument("--label", default="w")
     p.add_argument("--immune-confirmed", action="store_true")
+    p.add_argument(
+        "--spawn",
+        type=int,
+        default=None,
+        help="stage@4: a mob id spawned at each cell after the warp (@monster), removed "
+        "after the dwell by @killmonster2 (rogue-gef10.md Amendment A4)",
+    )
+    p.add_argument("--spawn-n", type=int, default=1)
     p = sub.add_parser("run")
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--n", type=int, default=12)
