@@ -214,8 +214,10 @@ party threshold:
 
 ## 6. POST-HOC (after the score; NOT a bar, nothing here passes or fails anything)
 
-Run on the same held-out frames with the frozen model (`posthoc.py`, scratch), to say what the
-next pre-registration should test:
+Run on the same held-out frames with the frozen model, to say what the next pre-registration should
+test. The scratch scripts (`posthoc.py`, `posthoc_s1.py`), the score JSONs, the truth files, the
+fit logs, the crops and a copy of the model are archived, sha256-checked (103 files), in
+`/mnt/poring-lab-datasets/scratch-archive/2026-10-25/orclord/`.
 - **The aura rule ALONE** (`decide(..., cues=("aura",))`, added after the score; the default stays
   the frozen two-cue recipe):
   - false positives: 0 in the pilot's 634 held-out frames and 0 in s1's 1,356, i.e. **0 in
