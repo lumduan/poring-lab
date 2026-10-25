@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with payf07's o3h-all rule (fix 2 facing, 2b / 2c, the fit, o3h, the T_h floor on every label), re-measured on gef_fild10's own FIT data, PLUS a rule that LABELS monsters engaged in a fight with our character (drawn facing it, in the action the packets give), give per-species monster boxes for gef_fild10 (Orc Lady, Orc Warrior, Orc Baby, Poporing, Orc Lord, Orc Archer, the plants) that pass the training tier (T1: C1 <= 5 % on held-out TEST data; T2: every species in the tier passes a blind check, the engaged labels in their own stratum), and floor-item boxes from the items' own client sprites that pass their own geometric and blind checks, so ONE detector can be trained on payf07's 21 classes plus this map's monsters and items."
-status: "PROPOSED 2026-10-25 (a subagent, offline). Nothing frozen, nothing trained. The parent freezes the parameters (or amends them) and decides sections 0's open items BEFORE any TEST frame is read."
+status: "PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [payf07-detector.md, orcsdun01-detector.md, labels-v2-plan.md, training-cost.md, target-items.md, item-class.md, rogue-gef10.md, gef10-prep.md, ../benchmarks/payf07-eval.md]
-next_action: "The parent: read section 0 (the decisions), then section 12's order of work: s1-s6 labelled and joined by 3c, the parameters frozen, T1 on TEST, T2 (two new labellers), then the cache and the evaluation pre-registration before any GPU step."
+next_action: "The parent: decide 13l's D2 / D3 / D9 / D10 (and section 0's D1-D8) by an amendment, freeze, label s1 + a1..a6 (3c), T1 on TEST (watch cells 11-14 + a7 + a8, Amendment D), T2 (seed 31, strata N / E), then the evaluation pre-registration before any cache or GPU step."
 title: "A detector for gef_fild10's monsters and floor items: the facts, the split, the label rule (engaged units labelled), T1 / T2, the classes, the cache and training proposal, the evaluation plan (PROPOSED pre-registration)"
 date: 2026-10-25
 owner: Batt
@@ -615,3 +615,204 @@ then this map's new species, then the floor items:
   recorder stopped at ~21:09 on the IO guard, quant-postgres 27.3 %) and a1..a6. `s2`
   (`20261025T212506-rdp-rogue-s2`, 30 frames) is ignored (too short).
 - Nothing else changes.
+
+### 13f. RESULT: T_h under Amendment C, the box geometry and the occlusion test (FIT; nothing frozen)
+
+**T_h** (21:35:55-21:41:59 ICT at 90dcf04; `fit/threshold-P1.json`, rows `fit/th-rows-C.json`):
+**0.636** from 209 labels clear of every model box, not engaged, uncrowded, facing known (p25
+0.687, median 0.723, p95 0.837). With crowded labels in (B's exclusion off): p5 0.136 (702).
+Per species (the measuring set: n, p5, median): Orc Lady 119, 0.634, 0.717; Orc Warrior 23,
+0.637, 0.687; Poporing 41, 0.718, 0.787; Orc Baby 1; Orc Lord 5, 0.691, 0.730; Orc Archer 20,
+0.544, 0.709.
+
+**What a value of T_h keeps on FIT** (D9; from the rows: frames that hold a monster fate and NO
+engaged unit, 646 of the 1,071 with any fate; monster labels only, without 4g's frame rules, so an
+upper bound of the whole frames; engaged units excluded, E0):
+
+| T_h | whole frames (watch / pilot / pilot 2) | kept: Orc Lady | Orc Warrior | Poporing | Orc Baby | Orc Lord | Orc Archer |
+|---|---|---|---|---|---|---|---|
+| 0.265 (B) | 204 (91 / 108 / 5) | 222 | 31 | 109 | 5 | 226 | 688 |
+| 0.479 (payf07's) | 150 (64 / 82 / 4) | 206 | 30 | 84 | 4 | 181 | 420 |
+| **0.636 (C, measured)** | **134 (61 / 69 / 4)** | 179 | 30 | 68 | 3 | 126 | 175 |
+
+- The floor mostly cuts the buried archers (688 -> 175) and labels under canopy (o3h: 874 of the
+  1,143 under-box fits that pass tau lie below 0.636). The hunting pilots lose few whole frames:
+  their frames are lost to the ENGAGED units instead (425 of the 1,071 frames hold one; 4h).
+
+**The box geometry** (the fitted frame's box of FIT's clear kept labels, px; median w x h, with
+p10-p90; the native idle box of 1b beside it):
+
+| species | n | w (p10-p90) | h (p10-p90) | native idle | median fit offset (4c, reported) |
+|---|---|---|---|---|---|
+| Orc Lady | 149 | 50.6 (45.9-58.9) | 82.0 (74.3-92.7) | 51 x 86 | (1, 0) |
+| Orc Warrior | 31 | 64.0 (56.8-71.4) | 94.8 (89.4-101.6) | 65 x 96 | (0, -1) |
+| Poporing | 42 | 39.3 (36.5-41.7) | 36.3 (31.9-39.4) | 37 x 36 | (0, 0) |
+| Orc Baby | 1 | 46 | 46 | 45 x 51 | (-2, 0) |
+| Orc Lord | 94 | 76.7 (72.1-83.4) | 101.2 (96.1-108.0) | 81 x 100 | (0, 0) |
+| Orc Archer | 385 | 62.4 (58.7-73.1) | 89.8 (85.1-93.7) | 66 x 89 | (0, -1) |
+
+- The drawn scale is ~1:1 with the native sprite on this camera. **The size cue holds on screen:**
+  the Orc Lord's box is ~20 % wider and ~7-13 % taller than the Orc Warrior's / Archer's (D7's
+  `scale` flag).
+- Every species' median fit offset is within 2 px (1 px for all with n > 1): no anchor (4c).
+
+**The occlusion test (1c's projected model boxes, gef_fild10's 1,497 models):**
+- **67.6 % of every FIT fate's predicted box overlaps a model box** (Orc Lady 63.3 %, Orc Warrior
+  72.8 %, Poporing 81.3 %, Orc Baby 98.1 %, Orc Lord 65.9 %, Orc Archer 66.6 %); pay_fild07's
+  forest was in the same range (o3h's evidence decides, as there).
+- **Which models** (the first model whose box the FITTED box overlaps, for the under-box labels
+  whose fit passed tau): leaves 418, tree 07 248, **orc house 180**, tree 02 153, trunk 01 40,
+  vine 03 36, bush 01 35, others 14; 1,127 under-box fates have no fitted box (excluded before the
+  fit, or the fit failed).
+- The under-box fits that pass tau: n 1,143, median 0.411 (clear ones: 0.723): most labels under a
+  canopy are poor evidence, as on pay_fild07 (0.676 there).
+
+### 13g. RESULT: 4h's ENGAGED selection on FIT -- E2 is chosen, but it keeps only 14 engaged labels
+
+- **Run** 21:41:59-21:48:40 ICT at 90dcf04's code (`map_labels.py engaged`, T_h 0.636, 1d 120 ms;
+  `fit/engaged-P1.json`, sha256 `0b14ee60…999b`, rows `fit/engaged-rows.json`). Only frames with an
+  engaged unit at tw are read: 428 (pilot 281, pilot 2 147; the watch has none: immune).
+
+| variant | engaged fates | kept (fit passes, >= T_h) | median abs dx / dy of the kept | qualifies (<= 2 px) | whole frames among the 428 |
+|---|---|---|---|---|---|
+| E1 | 620 | 7 (1.1 %) | 0 / 1 | yes | 4 |
+| **E2 (chosen)** | 620 | **14 (2.3 %)** | 0 / 1 | yes | 9 |
+| E3 | 620 | 14 (2.3 %) | 0 / 1 | yes | 9 |
+
+- E2 and E3 tie on 14; the tie goes to the simpler (4h). Kept per species under E2: Orc Lady 12
+  (attacking 8, idle 2, walk 2), Orc Warrior 2 (walk). Orc Baby 0 of 21, Poporing 0 of 2.
+- **Why so few:** under E2, 431 of the 620 fates fail the fit and **423 of them end at the +-6 px
+  search edge** (395 called `crowd`: the predicted box touches our own); the 181 that pass fit at a
+  median 0.18.
+- **A scratch diagnostic** (`scratch/diag_engaged.py`, FIT pilots only, every 2nd candidate frame,
+  21:58-22:00; `fit/diag-engaged-16px.json`): E2's prediction searched over +-16 px. Of 304
+  engaged units, 245 peak inside the window; **the peaks are displaced systematically by the
+  unit's side of us**: an attacker north-west of us (76 units) peaks at a median (+1, -9) px with
+  NCC 0.650; south-east (47) at (+1, +6); north-east (18) at (-6.5, -8); south-west (36) at
+  (-4.5, -1). So the client draws an engaged unit up to ~0.4 cell short of its packet cell along
+  the side it came from (a client-side lag of the approach), beyond the +-6 px fit radius. At
+  +-16 px, **76 of the 304 reach NCC >= 0.636** (60 attacking, 14 idle, 2 hurt; all Orc Lady),
+  10 times E2's rate.
+- **By eye** (`scratch/engaged_sheet.png`, 16 FIT crops; prediction red, the +-16 px fit green, our
+  self box blue): the engaged orcs carry the client's overlays: damage numbers (large white
+  digits), "Miss", the target's HP bar, name tags, our hand / sword cursor, and our own sprite;
+  some engaged units stand under the canopy. Where the green box lands on the orc, it is the
+  orc's body; the overlays are drawn over it.
+- **What this means for D3 (the parent's):** the pre-registered selection chooses E2; it would
+  label ~2 % of the engaged units (the rest exclude their frames, as payf07's E0). A variant **E4
+  (E2 with a +-16 px fit radius for engaged units, the T_h floor unchanged)** would keep about ten
+  times more on FIT; it is NOT pre-registered here and needs its own amendment and a T2 stratum
+  before it trains.
+
+### 13h. RESULT: C1 on FIT under the PROPOSED parameters (a DIAGNOSTIC: not T1, not 3c)
+
+- **Run** 21:48:41-21:50:17 ICT (`check --fit-diagnostic`, `params-P1-proposed.json` sha256
+  `275a8ed5…8121`; `fit/check-fit-diagnostic.json`): **C1 1 / 125 = 0.8 %** (the T1 bar is 5 %);
+  Orc Lady 1 / 72, Poporing 0 / 41, Orc Warrior 0 / 12. C2: Orc Lady 1 / 1 px PASS, Poporing 0 / 1
+  px PASS, Orc Warrior n 12 (no verdict).
+- **The Orc Lord and its archers are never standing labels** (C1's standing rule needs 120 px of
+  isolation; they stand in their pile): 1,608 standing candidates were `crowded`. T1 cannot judge
+  them; T2 is their only check (a known limit, 1d).
+- Per part: watch cells 0-10: 72 scored, 0 bad; pilot: 53 scored, 1 bad; **pilot 2: 0 scored** (a
+  10-min hunt has no isolated standing monster: 3c's ">= 50 scored" may leave short hunts out).
+
+### 13i. RESULT: the FIT labels under the PROPOSED parameters, through the cache's own frame rule
+
+- **Labelled** 21:50:17-21:57:20 ICT (`labels-proposed/`: watch cells 0-10 `c9a1f202…`, pilot
+  `425cdfae…`, pilot 2 `f8641d0f…`), then `build_frame_cache.map_frame` with the floor 0.636 (what
+  a cache would write; our own `player` box not counted):
+
+| part | candidates | frames written | ... with a monster box | boxes: Orc Lady | Poporing | Orc Archer | Orc Lord | Orc Warrior | engaged boxes |
+|---|---|---|---|---|---|---|---|---|---|
+| watch cells 0-10 | 506 | 131 | 61 | 45 | 4 | 20 | 9 | 4 | 0 |
+| pilot | 689 | 275 | 77 | 34 | 44 | 0 | 0 | 0 | 9 (Orc Lady) |
+| pilot 2 | 416 | 248 | 4 | 6 | 0 | 0 | 0 | 0 | 0 |
+| **FIT** | **1,611** | **654** | **142** | **85** | **48** | **20** | **9** | **4** | **9** |
+
+- **The frames lost, by reason** (a frame counts once per reason): `occluded_model` 686 (o3h at
+  0.636), `crowd` 134, `weak_fit` 174, `next_move` 107, `ambiguous_view` 103, `dying_in_view` 59
+  (D8's positive case: 59 frames with a die animation on screen), `facing_unknown` 36,
+  `warp_in_view` 24 (the pilot's house door), `unfit` 20, `ui` 1.
+- 🔴 **The yield is thin:** 142 FIT frames with a monster (8.8 % of the candidates). The causes, in
+  order: the canopy and the orc houses (o3h), the Orc Lord's pile (crowd, weak fits), the engaged
+  units of the hunts (13g). TRAIN (s1 + a1..a6, ~4.4 h of hunting) is expected to give the
+  pilots' rate: (77 + 4) / 1,105 candidate frames ≈ 7 % of a hunt's candidates with a monster box,
+  mostly Orc Lady and Poporing. A model trained on it would see very few Orc Warriors, Orc Babies
+  and plants (0 so far).
+
+### 13j. RESULT: the floor items on FIT (8)
+
+- **Run** 21:57:20-21:57:45 ICT (`gef10_items.py measure`, pilot + pilot 2; `fit/items-P1.json`,
+  sha256 `04307e93…a593`): 22 floor items (Cyfar 14, Orcish Voucher 5, Rough Oridecon 1, Large
+  Jellopy 1, Milk 1); 240 labelled views on still frames (19 frames of the pilot, 85 of pilot 2).
+- **Clean samples: 15, ALL from ONE floor item** (the pilot's Rough Oridecon): anchor **(-3, +1)
+  px**, T_item **0.792**, MAD 0 / 0. 8's ">= 12 samples" holds literally, but from one place
+  (target-items.md round 1 needed its amendment A for the same reason).
+- **Why so few, per item** (views: reasons): Cyfar 47: under our HP bar 38 (the bot kills next to
+  itself, the drop falls at its feet), young / vanishing 7, under a model 2; Orcish Voucher 105:
+  under a model 49, beside another item 30, under our bar 20; Milk 41: under a model 40; Large
+  Jellopy 30: beside another item 28.
+- **Cyfar is picked up fast:** 8 of its 14 FIT floor items lived < 2.5 s (the bot's pickup), so they
+  are never labelled (D_APPEAR 2.2 s); only 5 had any labelled still frame (13a's packets count:
+  47 frames, 31 of them one item).
+- **The drawn item boxes match the native sprites (scale 0.97-0.99):** Cyfar 13.5 x 21.2 px
+  (native 14 x 22), Orcish Voucher 20.7 x 18.7 (21 x 19), Milk 11.8 x 20.7 (12 x 21), Rough
+  Oridecon 15.5 x 12.6 (16 x 13), Large Jellopy 13.7 x 15.6 (14 x 16).
+- **What it means (D10):** the hunting runs alone will not give per-item classes: nearly every
+  floor item in view lies under our bar, under a tree / house, or beside another item. An immune
+  staged-items session on gef_fild10's OPEN ground (stage_items.py's method, the target-items.md
+  round-2 recipe: spots off the RSW footprints, Poporings cleared) is the way to the 40 labels /
+  10 floor items per class of section 7.
+
+### 13k. RESULT: 1d's diagnostic on a TRAIN session (never frozen)
+
+- `offset --diagnostic` on s1 (21:57:45-21:58:20, `fit/offset-diag-s1.json`): 6 walker samples
+  (1,015 candidates); the coarse minimum again at 100-150 ms (5.6 / 5.1 px median), every other
+  offset >= 10 px. Over FIT (15) and s1 (6): 21 samples, every curve's minimum at 100-150 ms. The
+  proposal stays 120 ms (D2); the 50-sample floor is not met.
+
+### 13l. The PROPOSED parameters (NOT frozen) and the decisions for the parent
+
+- `/dev/shm/poring-lab-tmp/gef10-det/params-P1-proposed.json` (sha256
+  `275a8ed56b4ae7e4cc89a0d6c892a235ac947ccadde59584e617634a1a128121`), status
+  `PROPOSED_NOT_FROZEN`: 1d 120 ms (P1), T_h 0.636 (`fit/threshold-P1.json`, sha256 `2f80b858…`),
+  the engaged variant E2 (`fit/engaged-P1.json`), `dying_in_view`, tau 0.092, k 0.140, +-6 px, the
+  RSW `b9b0e9bd…` and its 46 RSMs, labels `gef10-o3h-e`, the commit 4e40769.
+- **The decisions** (section 0's D1-D8 stand; new ones from the FIT results):
+
+| # | decision | the subagent's proposal | where |
+|---|---|---|---|
+| D2 | 1d = 120 ms (both FIT attempts and s1 stopped under 50 samples; every curve's minimum at 100-150 ms) | adopt P1 | 13a, 13c, 13k |
+| D3 | the engaged variant: E2 as selected (14 FIT labels), or a NEW variant E4 (+-16 px for engaged units: ~10 x more on FIT) by its own amendment | E2 now; E4 as an amendment with its own T2 stratum if Batt wants the fights labelled | 13g |
+| D9 | T_h: the measured 0.636 (Amendments B + C), or payf07's 0.479 | 0.636 (it costs ~11 % of the FIT whole frames against 0.479: 134 vs 150) | 13f |
+| D10 | floor items: no item class from these hunts; an immune staged-items session on open ground first | adopt | 13j |
+| D11 | the class list `classes-v2orc-payf07-gef10.json` (7) is NOT written: it waits for D4's tier and the item decision | -- | 7 |
+
+- **Then, in order (section 12, with Amendment D's names):**
+
+      W=/home/batt/docker/poring-lab; T=/dev/shm/poring-lab-tmp/gef10-det; cd $T
+      # 0. after the decisions: freeze (the proposal's T_h and engaged files, the decision cited)
+      python $W/scripts/map_labels.py freeze --map gef_fild10 --threshold fit/threshold-P1.json \
+          --engaged fit/engaged-P1.json --decision "Amendment E (<time>): 1d = 120 ms (P1), ..." \
+          --out params.json
+      # 1. TRAIN: label s1 and a1..a6 (one at a time), their own C1 (3c)
+      python $W/scripts/map_labels.py labels --map gef_fild10 /mnt/poring-lab-datasets/<sid> \
+          --params params.json --classes $W/config/detector/classes-v2orc-payf07.json --out labels/<sid>.json
+      python $W/scripts/map_labels.py check --map gef_fild10 /mnt/poring-lab-datasets/<sid> \
+          --params params.json --out own-c1/<sid>.json
+      # 2. T1 on TEST (the first TEST read): the watch's cells 11-14, a7, a8
+      python $W/scripts/map_labels.py check --map gef_fild10 \
+          /mnt/poring-lab-datasets/20261025T195325-rdp-ow1:spots=11-14 \
+          /mnt/poring-lab-datasets/<a7> /mnt/poring-lab-datasets/<a8> --params params.json \
+          --rows t1/rows.json --out t1/check.json
+      # 3. T2: the pack (seed 31, strata N / E) from the frozen TRAIN labels, with the floor
+      python $W/scripts/map_labels.py pack --map gef_fild10 labels/*.json --seed 31 \
+          --min-fit <T_h> --pack-dir t2/pack --key-dir t2-key \
+          --instructions $W/docs/planning/gef10-blind-instructions.txt \
+          --instructions-sha256 247b79197e47f732f4d1acf04bc6ed1ba2b7162c0c9fab26fe49cb5eab4b54b0 \
+          --out t2-build.json
+      python $W/scripts/blind_score.py --key t2-key/answer_key.json A.json B.json --each-sample
+
+  The labels of the FIT parts are re-made with the frozen file (the proposed ones are
+  provisional). Every step runs one process at a time (`--workers 1`), niced, outside the market
+  windows on a weekday.
