@@ -15997,7 +15997,28 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
 - **The block ends at s7.** s8's pre-run frame showed weight 1,034 / 2,430 (42.6 %; s7 picked a
   Wooden Mail, weight 100). The Thief's setup never drops its Etc tab and stops at 40 % for a
   person, so s8 was not released (STOP marker 23:3x). Freeing weight is Batt's call.
+  ➡️ Answered 2026-10-25: the target moved to gef_fild10 (4.05), and the loot went to storage
+  (`gm_state.store_loot`, 1,034 -> 505).
 - The recorder stopped early on the IO guard (quant-postgres 29.7 %): 1,325 frames, shipped.
+
+### 4.05 dungeon@8: the ROGUE on gef_fild10 -- no Steal (Snatcher Lv 10 alone) vs Steal first, many runs until the bag is full (pre-registered 2026-10-25 in docs/planning/rogue-gef10.md, 5af7a1f + Amendment A e2bdaf8, BEFORE its pilot and its runs; Batt ~12:3x: "train on Geffen Field (gef_fild10) instead ... change the job to Rogue ... try without Steal first, and try Steal before attacking, because the Rogue has Snatcher Lv 10")
+
+- **The plan, the build, the arms, the measures and the decision rule:**
+  [rogue-gef10.md](planning/rogue-gef10.md), sections 3-5 and Amendment A.
+- **The character:** Thief8fce became a Rogue (Base 62 / Job 50, AGI 82, DEX 40), HIT 109,
+  FLEE 192 + 1. Batt chose "pre-renewal, same effect" (his window is renewal's).
+- **The runs:**
+  - a 15-min unscored pilot in arm N;
+  - then N S S N N S S N, 40 min each, `dungeon_hunt.py run --char rogue --map gef_fild10
+    --strategy B --search heading --loot v1 --clear-map [--steal]`;
+  - a judged frame before each run;
+  - loot is kept: the runs go on until the setup's 40 % stop ("the bag is full", Batt).
+- **The Orc Lord (MVP):**
+  - it is practised on spawned ones first: the immune watch `stage_items.py watch --spawn 1190`,
+    then an escape rule (a Fly Wing at first sight);
+  - until that rule is proven, `--clear-map`'s `@killmonster2` keeps the natural one off the map
+    for the run (Amendment A4).
+- Results go here when the runs are judged.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
