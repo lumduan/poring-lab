@@ -251,8 +251,9 @@ label takes its frame out, with that frame's other labels.
 
 - The code: `scripts/gef10_r2_measure.py` and its pure tests
   (`services/backend/tests/test_gef10_r2_measure.py`, synthetic data only).
-- The outputs: `/dev/shm/poring-lab-tmp/gef10-r2/`. They are archived to the NAS
-  (`/mnt/poring-lab-datasets/scratch-archive/2026-10-26/gef10-r2/`) and listed in the report.
+- The outputs now live ONLY on the NAS: `/mnt/poring-lab-datasets/scratch-archive/2026-10-26/gef10-r2/`
+  (63 files, 17.4 MB). `checksums.sha256` there was verified before 03:45:23 ICT (`date`; 62 files OK). They were
+  made in `/dev/shm/poring-lab-tmp/gef10-r2/`, which was then deleted.
   - `scan-train.json`, `scan-out.json`: the detector per frame;
   - `validate-all.json`;
   - `heights.json`;
