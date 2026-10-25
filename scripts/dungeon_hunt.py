@@ -127,7 +127,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.1"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
@@ -191,6 +191,7 @@ JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map chang
 WALK_S_PER_CELL, WALK_SLACK = 0.15, 5  # ... and larger than a walk could cover (Amendment J)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
 WARP_READY_S = 20.0  # dungeon@8: after a setup @warp, Basic Info must read again within this
+POS_FLY_S, POS_FLY_MAX = 20.0, 3  # dungeon@8.1: no position read this long -> a Fly Wing (<= 3)
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
 CLEAR_AT = 0.40  # the setup drops the Etc tab (loot only) at or over this weight share ...
 CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand (no monster)
@@ -1046,6 +1047,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         noentry_n = 0
         goal_path: list[Cell] | None = None
         fly_at = -1e9
+        pos_flies = 0  # dungeon@8.1: Fly Wings pressed because the position did not read
         n_reads = 0
         loot_list: list[tuple[Cell, float]] = []  # Batt 11:5x: the GM's cell at EVERY kill
         fight_ref: dict[str, Any] | None = None  # the frame + our cell when the fight began
@@ -2084,7 +2086,23 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 lock = {"t": time.monotonic(), "rel": c_w,
                                         "cell": [here[0] + c_w[0], here[1] + c_w[1]]}  # fmt: skip
                                 mode, goal_path = "fight", None
-                if here is None and tick - last_pos_t > 30.0:
+                # dungeon@8.1 (4.05 a5, 2026-10-26 00:21): the readout sat over a bright roof and
+                # never read, and the run stopped at 30 s; s2's had failed over sunlit grass. A
+                # Fly Wing (a same-map teleport) gives the readout a new background: after
+                # POS_FLY_S without a read, at most POS_FLY_MAX a run, POS_FLY_S apart
+                if (tick - last_pos_t > POS_FLY_S and tick - fly_at > POS_FLY_S
+                        and pos_flies < POS_FLY_MAX):  # fmt: skip
+                    ev({"kind": "stuck", "at": None if here is None else list(here),
+                        "why": "pos_unread"})  # fmt: skip
+                    press("fly", "pos_unread")
+                    fly_at = time.monotonic()
+                    pos_flies += 1
+                    ev({"kind": "escape", "how": "fly", "why": "pos_unread"})
+                    idle_pos, idle_since, goal_path = None, tick, None
+                    loot_list, fight_ref = [], None
+                    here, last_taken = None, -1e9  # Amendment F
+                # every Fly Wing restarts the 30 s (s2: a fly after a read gap ended the run)
+                if here is None and tick - max(last_pos_t, fly_at) > 30.0:
                     reason = "position unread for 30 s"
                     break
                 time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))

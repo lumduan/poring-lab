@@ -445,3 +445,26 @@ ALIVE then.
   run.
 - a1 keeps its 40-min registration (its result stands at 23.7 min). a2-a8 are 36 min. The verdict
   pools by hours, as section 5 says.
+
+## Amendment F (2026-10-26 00:24 ICT from `date`; BEFORE a6)
+
+**What happened:**
+- a2 (S), a3 (S) and a4 (N) ran their 36 min. 
+- **a5 (N, 00:19:45) ended after 1.5 min:** "position unread for 30 s".
+  - Its seeded start (206,191) is beside the Orc village. The minimap readout "206 191" sat over
+    a bright thatched roof, and the reader found no strokes (no_glyph / uncovered_ink).
+  - The runner never had a position. Its idle watchdog (a Fly Wing after 45 s) comes later than
+    the 30-s stop.
+  - s2's case was the other side of the same gap: a Fly Wing after a read gap ended the run at
+    once.
+
+**dungeon@8.1** (from a6; the code commit follows this amendment):
+- after POS_FLY_S = 20 s without a position read, a Fly Wing (at most 3 a run, 20 s apart). That
+  is a same-map teleport, so the readout gets a new background;
+- every Fly Wing restarts the 30-s window.
+- It reuses the runner's proven escape. Nothing in the hunt's decisions changes.
+
+**The block:**
+- a5 is RE-RUN as **a5b (N, seed 25535)** in cycle 3.
+- Each arm then has 2 runs before the fix and 2 after: N a1, a4 / a5b, a8; S a2, a3 / a6, a7.
+- The verdict pools a1-a4, a5b, a6-a8 by hours. a5 is reported apart (1.5 min).

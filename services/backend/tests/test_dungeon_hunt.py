@@ -348,7 +348,7 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8"  # @8 = @7 + --char rogue (2026-10-25)
+    assert dh.VERSION == "dungeon@8.1"  # @8 = @7 + --char rogue; .1 = the position-unread fly
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -501,3 +501,15 @@ def test_the_run_end_warps_home_after_a_death_too() -> None:
     i = src.index('for cmd in ("@alive", "@heal"):')
     tail = src[i : i + 1500]
     assert "@warp {CLEAR_STAND[0]}" in tail and 'if reason != "death"' not in tail
+
+
+def test_an_unread_position_costs_a_fly_wing_before_it_ends_the_run() -> None:
+    """dungeon@8.1 (4.05 a5, 2026-10-26 00:21): the minimap readout over a bright roof never read
+    and the run stopped at 30 s. Now: no read for POS_FLY_S -> a Fly Wing (<= POS_FLY_MAX a run,
+    POS_FLY_S apart), and every Fly Wing restarts the 30-s window."""
+    assert (dh.POS_FLY_S, dh.POS_FLY_MAX) == (20.0, 3) and dh.POS_FLY_S < 30.0
+    src = Path(dh.__file__).read_text()
+    i = src.index('"why": "pos_unread"})')
+    block = src[i - 400 : i + 900]
+    assert 'press("fly", "pos_unread")' in block and "pos_flies += 1" in block
+    assert "tick - max(last_pos_t, fly_at) > 30.0" in block
