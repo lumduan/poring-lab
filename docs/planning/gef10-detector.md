@@ -952,7 +952,8 @@ methodology choices are the parent's, made on the FIT results above and nothing 
   - The pre-registered evaluation (`docs/benchmarks/gef10-eval.md`) has no model to score.
   - Not re-run under the same bars (section 0).
   - The T2 PASS (13q) and the class list stand as records.
-- **What a next round would need (PROPOSED here; Batt's decision, not started):**
+- **MEASURED since (03:21-03:46, offline, FIT / TRAIN only):** [gef10-round2-measure.md](gef10-round2-measure.md). The notice rule is validated (587 / 595, 0 / 8,156 false) and removes NO kept TRAIN label: the masked-NCC fit already drops labels under it, so the hole is in C1, which scores the unfitted prediction. The raised-terrain rule below is NOT supported: 11.0 % of the written labels lost (all Green Plant), with no worse fit.
+- **What a next round would need (PROPOSED when written, 03:19; read it with the measurement above):**
   - a rule for the transient pickup notice (and the other popups) over a label: pixel-detected
     and excluded like `ui_or_edge`;
   - a rule for labels on or beside raised terrain (cliff faces): measured on FIT;
