@@ -16018,7 +16018,21 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
     then an escape rule (a Fly Wing at first sight);
   - until that rule is proven, `--clear-map`'s `@killmonster2` keeps the natural one off the map
     for the run (Amendment A4).
-- Results go here when the runs are judged.
+- **RESULTS (judged 2026-10-26 03:51, rogue-gef10.md Amendments C-I; the runs became a1-a8 +
+  a5b, 36 min, after the selfpos fix restarted the block):**
+  - **The A/B verdict, as registered** (value per hour at Overcharge, pooled by hours): N 13,754
+    vs S 14,381 z / h, |N - S| 627 < 8,755: **no difference, so N is kept**.
+  - **The sensitivity view** (a6 left out, the run that hit the since-fixed stand-toggle fault):
+    S 18,055 vs N 13,754, **S wins**. Both are reported; neither is chosen afterwards. Batt picks
+    the arm.
+  - 4.60 h, 1 death (a1: the natural Orc Lord, before Amendment E's clock), hard bars clean.
+    Items per hour pooled: Cyfar 25.5, Orcish Voucher 12.4, Milk 2.4, Iron 1.3. Of 204 items, 102
+    were picked, 21 stolen and 81 (40 %) came by Snatcher.
+  - **"The bag is full" at 03:49** (44.0 % on a9's pre-run frame), then the store step:
+    1,069 -> 480.
+  - The Orc Lord escape rule's live proof had NO VERDICT (orclord-recognizer.md 12c); it is not
+    adopted.
+  - A second block (a9-a11, reported only) runs after the store.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
