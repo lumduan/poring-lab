@@ -542,3 +542,19 @@ item while sitting" x3, the Rogue sitting under a tree at (72,79)):
    - a12 and a13 do not run tonight: cycle 5 would end after the 07:00 report.
    - The second block (a9+) is reported pooled by arm and decides nothing (B2, C).
 5. **Not done:** a Kafra NPC trip (a deliberate NPC contact) needs Batt's OK (section 4).
+
+## Amendment I (2026-10-26 04:44 ICT from `date`; a9 running, BEFORE a10)
+
+- **The store step (H3.1), 03:52-03:54:** `@storage` was opened and the open window judged.
+  `store_loot` moved 12 stacks (8 Etc, 1 Usable, 3 Axes). Weight went **1,069 -> 480 / 2,430
+  (19.8 %)**. The DB holds only the equipped gear plus 8 White Potions and 8 Fly Wings; storage
+  holds the loot, e.g. Cyfar 159 and Orcish Voucher 79.
+- **The flee proof (H3.3):** see orclord-recognizer.md 12a-12c.
+  - Attempts fp1 and fp1b stopped safely by their own immunity checks (a 1-px bubble drift, then
+    a double toggle; both fixed: flee@2, flee@3).
+  - fp1c ran whole: bar 1 NO VERDICT (3 / 6 trials counted, 2 passed), bar 2 PASS. **The flee
+    rule is not adopted.** `--clear-map` and the clock schedule stay.
+- **Cycle 4 (H3.4):** a9 was released at 04:43:08 (judged frame `rogue-pre-a9b.png`: immunity
+  OFF, verified 04:15:59) and started 04:43:11.
+  - **D4 = 04:43:47** (a9's setup `@killmonster2`).
+  - a10 is released >= 05:21:47, a11 >= 05:59:47. Each ends <= 06:43:47.
