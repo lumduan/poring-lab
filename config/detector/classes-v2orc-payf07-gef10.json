@@ -1,0 +1,36 @@
+{
+ "scheme": "v2orc-payf07-gef10",
+ "source": "docs/planning/gef10-detector.md section 7 + 13q (2026-10-26): classes-v2orc-payf07.json's ids 0-20 unchanged + gef_fild10's species that passed T2 appended (D4: Blue Plant 1079 had no kept label in T2's pool, not a class this round; D10: no item class this round)",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR); 21 Orc Lady 1273, 22 Orc Warrior 1023, 23 Orc Baby 1686, 24 Orc Lord 1190, 25 Orc Archer 1189 (Poporing 1031 = 19 and Green Plant 1080 = 20 already exist)",
+ "fixed": {
+  "player": 0,
+  "npc": 1,
+  "warp": 2
+ },
+ "monster_first_id": 3,
+ "monsters": [
+  1002,
+  1063,
+  1008,
+  1113,
+  1018,
+  1005,
+  1042,
+  1082,
+  1084,
+  1111,
+  1152,
+  1153,
+  1033,
+  1010,
+  1116,
+  1060,
+  1031,
+  1080,
+  1273,
+  1023,
+  1686,
+  1190,
+  1189
+ ]
+}

@@ -896,3 +896,21 @@ methodology choices are the parent's, made on the FIT results above and nothing 
   - Orc Lady N 30 / E 30; Orc Warrior N 30 / E 6;
   - Poporing, Orc Baby, Orc Lord, Orc Archer and Green Plant N 30 each.
 - Two NEW blind labellers (A, B) started; each sees only the pack and writes its own answers file.
+
+### 13q. RESULT: T2 PASSES (scored 2026-10-26 02:55 ICT, `blind_score.py --each-sample`); the class list (D11) (02:55)
+
+- **Labellers A and B** (new, blind; each saw only the pack): 246 crops each.
+  - A answered 1 species "unsure" (crop 207, under a UI bar); B none.
+  - Both judged every box "good".
+- **N stratum** (210 crops): every species passes with BOTH labellers: good 1.00, species right
+  0.967-1.00. That covers Orc Lady, Orc Warrior, Orc Baby, Orc Lord, Orc Archer, Poporing and
+  Green Plant.
+- **E stratum** (36 crops): Orc Lady (30) and Orc Warrior (6) pass. Their engaged labels train
+  (D5).
+- **D4:** Blue Plant 1079 had no kept label in the pool, so it is not a class this round.
+- **D11, the class list:** `config/detector/classes-v2orc-payf07-gef10.json`, 26 classes.
+  - payf07's ids 0-20 are unchanged;
+  - added: 21 Orc Lady 1273, 22 Orc Warrior 1023, 23 Orc Baby 1686, 24 Orc Lord 1190, 25 Orc
+    Archer 1189.
+  - No item class this round (D10).
+- **Next:** T1 on TEST (watch cells 11-14 + a7 + a8), once a8 is recorded and shipped.
