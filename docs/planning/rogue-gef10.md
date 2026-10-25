@@ -494,7 +494,7 @@ item while sitting" x3, the Rogue sitting under a tree at (72,79)):
 - Beside it, a sensitivity view leaves out a6, the run that hit the since-fixed fault. Both are
   reported, and neither is chosen after the fact.
 
-## Amendment H (2026-10-26 03:55 ICT from `date`; after a5b, BEFORE the store step and a9)
+## Amendment H (2026-10-26 03:51 ICT from `date`; after a5b, BEFORE the store step and a9)
 
 **H1. The A/B verdict (section 5's rule, value per hour at Overcharge, `dungeon_judge.py`):**
 
