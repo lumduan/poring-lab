@@ -558,3 +558,28 @@ item while sitting" x3, the Rogue sitting under a tree at (72,79)):
   OFF, verified 04:15:59) and started 04:43:11.
   - **D4 = 04:43:47** (a9's setup `@killmonster2`).
   - a10 is released >= 05:21:47, a11 >= 05:59:47. Each ends <= 06:43:47.
+
+## Amendment J (2026-10-26 05:48 ICT from `date`; a10 died, BEFORE a11)
+
+- **a9 (N, 04:43-05:20):** 29 kills (48.1 / h), 0 deaths, loot 94 %, 11,171 z / h at OC. It used
+  ALL 10 potions and 10 Fly Wings (HP escapes at 15-19 %), as a8 did. The last wing went at
+  35.1 of 36 min.
+- **a10 (S, 05:21:47-05:45) DIED** after 22.8 min (23 kills, 60.5 / h).
+  - **The cause is a runner bug, read from the packets.**
+  - The setup tops the stock up against the DB's last SAVE. a9's last wings were used after the
+    last save, so the DB still showed them. a10's setup typed `@item 504 8` and **no
+    `@item 601`**.
+  - a10 hunted with 0 Fly Wings. Its 7 HP escapes (17 % -> 0 %) sent **no** use-item request.
+  - It died to Orc Ladies after its 8 potions. Then the runner's death path ran: `@alive`,
+    `@heal`, the stand.
+  - a10's pre-run frame showed F1 / F2 empty. The frame check passed that as the stock being out
+    before the restock, but it was never checked AFTER the restock.
+- **a11 (S, cycle 4, released >= 05:59:47, ends <= 06:43:47) runs only with:**
+  1. the stock topped up by the parent first (`@item 601 10`, `@item 504 10`, on the stand,
+     through the identity check);
+  2. a judged pre-run frame that SHOWS the counts on F1 and F2 (wings >= 10); otherwise a11 does
+     not run.
+- **The runner fix is NOT made tonight** (it changes the setup; it needs its own
+  pre-registration and tests). Proposed: **dungeon@8.3**, where the setup reads the stock after
+  the restock from a source that cannot lag (the hotbar counts, or a forced save), and refuses to
+  start below the target.
