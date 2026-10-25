@@ -491,3 +491,13 @@ def test_the_setup_waits_for_the_identity_after_each_warp() -> None:
     i = src.index('if "@warp" in cmd:  # dungeon@8 (4.05 pilot2)')
     assert 'while not cr.check(screen, conf["job"], crk)' in src[i : i + 600]
     assert dh.WARP_READY_S == 20.0
+
+
+def test_the_run_end_warps_home_after_a_death_too() -> None:
+    """dungeon@8 (4.05 a1, 2026-10-25 22:04): @alive revived the Rogue on the spot beside the Orc
+    Lord that had killed it, and it died again; the end warp to the clear stand now follows the
+    death step as it follows every other end."""
+    src = Path(dh.__file__).read_text()
+    i = src.index('for cmd in ("@alive", "@heal"):')
+    tail = src[i : i + 1500]
+    assert "@warp {CLEAR_STAND[0]}" in tail and 'if reason != "death"' not in tail
