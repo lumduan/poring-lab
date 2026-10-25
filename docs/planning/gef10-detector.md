@@ -875,3 +875,24 @@ methodology choices are the parent's, made on the FIT results above and nothing 
   payf07-detector.md did for Elder Willow (136 -> 409 boxes). They use 30-s dwells, `@warp` only
   and no spawn. They run in rogue-gef10.md Amendment E's gaps (no `@killmonster2`, so the Orc
   Lord's timer is untouched) and join TRAIN by 3c like any later session.
+
+### 13p. TRAIN by 3c, the FIT labels re-made, and the T2 pack (2026-10-26 02:43 ICT from `date`)
+
+**Joins TRAIN (own C1 <= 0.050 on >= 50 scored):**
+
+| session | own C1 |
+|---|---|
+| a2 | 1 / 64 |
+| a4 | 0 / 67 |
+| **w2** (the immune lattice watch, 01:45-02:19) | 6 / 271 |
+
+- **Out:** s1 (26 scored), a1 (48), a3 (25), a6 (4: it sat under a tree for 20 min). a5 is too
+  short.
+- **The FIT parts were re-labelled with the frozen params** (02:33-02:41): the watch's cells 0-10,
+  the pilot and pilot2.
+- **The T2 pack** (`map_labels.py pack`, seed 31, `--min-fit 0.636`, the instructions' sha256
+  `247b7919...`): from the FIT parts + a2 + a4 + w2 only. 246 crops in 13 grids, 30 per stratum
+  where the pool allows:
+  - Orc Lady N 30 / E 30; Orc Warrior N 30 / E 6;
+  - Poporing, Orc Baby, Orc Lord, Orc Archer and Green Plant N 30 each.
+- Two NEW blind labellers (A, B) started; each sees only the pack and writes its own answers file.
