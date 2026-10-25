@@ -87,8 +87,8 @@ LAND_S = 1.5
 MOB = 5  # entity_appear objtype of a monster
 NOT_A_HIT = ("pickup", "sit", "stand")
 MAP = "orcsdun01"
-CHAR_MAX_SP = {"crusader": 312, "thief": 112}  # the runner's run_start "char" (dungeon@6)
-CHAR_MAX_HP = {"crusader": 5260, "thief": 952}  # 4.03 pilot: no max_hp packet in its window
+CHAR_MAX_SP = {"crusader": 312, "thief": 112, "rogue": 336}  # run_start "char" (dungeon@6/@8)
+CHAR_MAX_HP = {"crusader": 5260, "thief": 952, "rogue": 2146}  # 4.03 pilot: no max_hp packet
 STEAL_SP = 10  # TF_STEAL's SpCost (pinned skill_db): a Thief's SP fall of exactly 10 = a try
 PICK_S, STEAL_S = 2.0, 1.5  # a gain this soon after our pickup request / a steal's SP fall
 TARGET_ITEMS = {604: "Dead Branch", 757: "Rough Elunium", 756: "Rough Oridecon", 518: "Honey"}
@@ -588,7 +588,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     presses = Counter(str(e.get("what")) for e in ev if e.get("kind") == "press")
     # dungeon@6: every item gained per hour, by cause; Steal tries = SP falls of exactly 10 (only a
     # character with Steal on its keys: the Crusader's Endure costs 10 too)
-    thief = rs.get("char") == "thief"
+    thief = rs.get("char") in ("thief", "rogue")  # dungeon@8: the Rogue keeps Steal on F3
     st_falls = [t for t, d in sp_falls if d == STEAL_SP] if thief else []
     gains = item_gains(packets, w0, w1, st_falls, staged_floor_ids(packets))
     n_stolen = sum(int(c.get("stolen", 0)) for c in gains.values())
