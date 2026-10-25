@@ -603,3 +603,15 @@ then this map's new species, then the floor items:
 - **For the parent (D9, new):** T_h is a strong lever here. Measured on FIT: 0.140 (A), 0.265
   (B), 0.636 (B without the unknown facings, a preview of C). payf07 and orcsdun01 froze 0.479 /
   0.48. 13f reports what each value keeps.
+
+### AMENDMENT D (2026-10-25 21:42:11 ICT, from `date`; recording the parent's message of 21:39, rogue-gef10.md Amendment C, c650413; BEFORE any TEST frame is read)
+
+- **The scored block restarted** after a minimap-reader fix; its runs are now **a1..a8** (then a9+),
+  recordings `*-rdp-rogue-a1` .. `a8`.
+- **TEST = watch cells 11-14 + a7 + a8** (by name `*-rdp-rogue-a7`, `*-rdp-rogue-a8`), replacing s7 /
+  s8 everywhere in 3b, 5 and 11. The tools also keep refusing `*-rdp-rogue-s7` / `-s8` (they never
+  exist).
+- **TRAIN candidates (3c):** `20261025T204315-rdp-rogue-s1` (a partial 1,384-frame recording: its
+  recorder stopped at ~21:09 on the IO guard, quant-postgres 27.3 %) and a1..a6. `s2`
+  (`20261025T212506-rdp-rogue-s2`, 30 frames) is ignored (too short).
+- Nothing else changes.

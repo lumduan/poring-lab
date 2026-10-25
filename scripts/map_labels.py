@@ -173,7 +173,9 @@ GEF10 = MapSpec(
     labels="gef10-o3h-e",
     t2_salt="gef10",
     staged_kind="watch",
-    test_suffixes=("-rdp-rogue-s7", "-rdp-rogue-s8"),
+    # Amendment D (the parent, rogue-gef10.md Amendment C, 21:39): the scored block restarted as
+    # a1..a8; TEST = a7, a8 (s7 / s8 stay refused: they never exist)
+    test_suffixes=("-rdp-rogue-a7", "-rdp-rogue-a8", "-rdp-rogue-s7", "-rdp-rogue-s8"),
     conditional=(1273, 1023, 1031, 1686, 1190, 1189, 1079, 1080),  # D4: every species
     reference=(1002, 1082, 1153, 1152),  # Poring, White Plant, Orc Zombie, Orc Skeleton (6)
     engaged_labels=True,

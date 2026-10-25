@@ -284,9 +284,11 @@ def test_gef10_roles_split_the_watch_by_cell_and_refuse_s7_s8_by_name() -> None:
     assert not spec.is_test(w, frozenset(range(11)))
     assert spec.is_fit("20261025T200922-rdp-rogue-pilot", None)
     assert spec.is_fit("20261025T203115-rdp-rogue-pilot2", None)
-    for sid in ("20261026T010101-rdp-rogue-s7", "20261026T020202-rdp-rogue-s8"):
-        assert spec.is_test(sid, None) and not spec.is_fit(sid, None)
-    for sid in ("20261025T204315-rdp-rogue-s1", "20261025T230000-rdp-rogue-s6"):
+    for sid in ("20261026T010101-rdp-rogue-a7", "20261026T020202-rdp-rogue-a8",
+                "20261026T010101-rdp-rogue-s7", "20261026T020202-rdp-rogue-s8"):  # fmt: skip
+        assert spec.is_test(sid, None) and not spec.is_fit(sid, None)  # Amendment D: a7, a8
+    for sid in ("20261025T204315-rdp-rogue-s1", "20261025T230000-rdp-rogue-a1",
+                "20261025T230000-rdp-rogue-a6", "20261026T040000-rdp-rogue-a9"):  # fmt: skip
         assert not spec.is_test(sid, None) and not spec.is_fit(sid, None)  # TRAIN by 3c
     for sid, spots in spec.fit.items():
         assert not spec.is_test(sid, spots)
@@ -500,7 +502,7 @@ def test_fit_diagnostic_check_refuses_every_non_fit_part(tmp_path: Path) -> None
     params.write_text(json.dumps({"labels": "gef10-o3h-e", "map": "gef_fild10",
                                   "status": "PROPOSED_NOT_FROZEN: P1"}))  # fmt: skip
     for part in ("/nonexistent/20261025T195325-rdp-ow1:spots=10-11",
-                 "/nonexistent/20261026T010101-rdp-rogue-s7",
+                 "/nonexistent/20261026T010101-rdp-rogue-a7",
                  "/nonexistent/20261025T204315-rdp-rogue-s1"):  # fmt: skip
         a = argparse.Namespace(map="gef_fild10", params=params, parts=[part], fit_diagnostic=True)
         with pytest.raises(SystemExit, match="FIT parts only"):
