@@ -564,13 +564,33 @@ def summary(values: Sequence[float]) -> dict[str, Any]:
 
 
 def mann_whitney(a: Sequence[float], b: Sequence[float]) -> float | None:
-    try:
-        from scipy.stats import mannwhitneyu
-    except ImportError:
-        return None
+    """PURE: the two-sided Mann-Whitney U p-value, normal approximation with average ranks for
+    ties (no scipy on the host); None under 3 values a side."""
     if len(a) < 3 or len(b) < 3:
         return None
-    return round(float(mannwhitneyu(a, b, alternative="two-sided").pvalue), 4)
+    import math
+
+    vals = np.concatenate([np.asarray(a, float), np.asarray(b, float)])
+    order = np.argsort(vals, kind="mergesort")
+    ranks = np.empty(len(vals))
+    sv = vals[order]
+    i = 0
+    while i < len(sv):
+        j = i
+        while j + 1 < len(sv) and sv[j + 1] == sv[i]:
+            j += 1
+        ranks[order[i : j + 1]] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    n1, n2 = len(a), len(b)
+    u = float(ranks[:n1].sum()) - n1 * (n1 + 1) / 2.0
+    _, counts = np.unique(vals, return_counts=True)
+    n = n1 + n2
+    tie = float((counts**3 - counts).sum()) / (n * (n - 1))
+    sd = math.sqrt(n1 * n2 / 12.0 * ((n + 1) - tie))
+    if sd == 0:
+        return None
+    z = (u - n1 * n2 / 2.0) / sd
+    return round(math.erfc(abs(z) / math.sqrt(2.0)), 4)
 
 
 def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
@@ -609,7 +629,7 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
                 e = ents.get(k["gid"])
                 cell = None if e is None else (int(round(e.x)), int(round(e.y)))
                 no_cell += cell is None
-                fl = label_flags(tuple(k["box"]), notices, cell, step, a.h)  # type: ignore[arg-type]
+                fl = label_flags(tuple(k["box"]), notices, cell, step, a.h)
                 flags.append(fl)
                 labels.append({"part": doc["part"], "role": doc["_role"], "frame_id": f["frame_id"],
                                "gid": k["gid"], "mob": k["mob"], "ncc": k["ncc"], "dx": k["dx"],
@@ -651,6 +671,10 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
             "ncc_under_notice": summary(under_n), "ncc_not_under_notice": summary(clear_n),
             "mann_whitney_p_notice": mann_whitney(under_n, clear_n),
             "ncc_by_step_distance_cells": by_dist,
+            "ncc_near_vs_not_by_species": {
+                mob: near_vs_not([x for x in mine if str(x["mob"]) == mob], tkey)
+                for mob in sorted({str(x["mob"]) for x in mine})
+            },
         }  # fmt: skip
     out: dict[str, Any] = {
         "what": "gef10 round-2 MEASUREMENT: the notice rule (N) and the terrain rule (T) on the "
@@ -660,6 +684,7 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
         "per_part": per_part, "pooled": {m: dict(c) for m, c in sorted(pooled.items())},
         "flags_pooled": {k: sum(bool(x[k]) for x in labels) for k in FLAG_KEYS},
         "fit_check": fitcheck,
+        "kept_within_r_of_a_step": within_radius(labels),
         "notice_labels": [x for x in labels if x["notice"] or x["notice_grown16"]],
     }  # fmt: skip
     if a.c1rows:
@@ -667,6 +692,25 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
     if a.labels_out is not None:
         a.labels_out.write_text(json.dumps(labels) + "\n")
     return out
+
+
+def near_vs_not(mine: Sequence[dict[str, Any]], key: str) -> dict[str, Any]:
+    """PURE: the fit NCC of the labels flagged by ``key`` against the rest, and the p-value."""
+    near = [float(x["ncc"]) for x in mine if x[key]]
+    far = [float(x["ncc"]) for x in mine if x[key] is False]
+    return {"near": summary(near), "not": summary(far), "mann_whitney_p": mann_whitney(near, far)}
+
+
+def within_radius(labels: Sequence[dict[str, Any]], max_r: int = 15) -> dict[str, Any]:
+    """PURE: per species, the kept labels whose nearest step > H lies within r cells, r = 0..15
+    (what rule T would remove at each R; the label's own cell is r = 0)."""
+    out: dict[str, dict[str, int]] = defaultdict(dict)
+    for mob in sorted({str(x["mob"]) for x in labels}) + ["all"]:
+        mine = [x for x in labels if mob == "all" or str(x["mob"]) == mob]
+        out[mob]["kept"] = len(mine)
+        for r in range(max_r + 1):
+            out[mob][str(r)] = sum(x["step_dist"] is not None and x["step_dist"] <= r for x in mine)
+    return dict(out)
 
 
 def c1_check(paths: Sequence[Path], scans: dict[str, dict[int, dict[str, Any]]],
@@ -681,7 +725,7 @@ def c1_check(paths: Sequence[Path], scans: dict[str, dict[int, dict[str, Any]]],
                 continue
             notices = [tuple(n) for n in scans[r["part"]][r["frame_id"]]["notices"]]
             cell = (int(round(r["cell"][0])), int(round(r["cell"][1])))
-            fl = label_flags(tuple(r["box"]), notices, cell, step, h)  # type: ignore[arg-type]
+            fl = label_flags(tuple(r["box"]), notices, cell, step, h)
             bad = r["c1"] < TAU_C1 and r["why_low"] == "bad_label"
             rows.append({"part": r["part"], "frame_id": r["frame_id"], "gid": r["gid"],
                          "mob": r["mob"], "c1": r["c1"], "why_low": r["why_low"], "bad": bad,

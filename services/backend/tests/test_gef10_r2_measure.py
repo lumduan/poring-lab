@@ -156,3 +156,21 @@ def test_read_top_rows(tmp_path: Path) -> None:
     assert np.array_equal(top, img[:30, :, ::-1])
     with pytest.raises(ValueError):
         m.read_top_rows(shard, 0, len(data), rows=30)
+
+
+def test_within_radius() -> None:
+    labels = [{"mob": 1031, "step_dist": 0}, {"mob": 1031, "step_dist": 3},
+              {"mob": 1273, "step_dist": None}, {"mob": 1273, "step_dist": 12}]  # fmt: skip
+    w = m.within_radius(labels, max_r=12)
+    assert w["1031"]["kept"] == 2 and w["1031"]["0"] == 1 and w["1031"]["2"] == 1
+    assert w["1031"]["3"] == 2
+    assert w["1273"]["11"] == 0 and w["1273"]["12"] == 1
+    assert w["all"]["kept"] == 4 and w["all"]["12"] == 3
+
+
+def test_mann_whitney() -> None:
+    assert m.mann_whitney([1.0, 2.0], [3.0, 4.0, 5.0]) is None
+    same = m.mann_whitney([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0])
+    assert same == 1.0
+    apart = m.mann_whitney([float(x) for x in range(20)], [float(x) for x in range(100, 120)])
+    assert apart is not None and apart < 1e-4
