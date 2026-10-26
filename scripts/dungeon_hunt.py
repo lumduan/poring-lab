@@ -20,7 +20,9 @@ SWORD clicks there and re-clicks every 0.6 s until the client's lock arrow (arm 
 fight then waits for our kill (a Base EXP line) and scans again while hits keep coming. After a
 kill, a LOOT hover of the struck cell's 3 x 3 clicks only where the client drew its PICKUP hand.
 Between fights the HEADING WALK (hunt_flow.heading_goal) searches; each walk click is made only
-where the cursor reads clear (WALK / PICKUP); a SWORD there is engaged (by "walk_sword").
+where the cursor reads clear (WALK / PICKUP); a SWORD there is engaged (by "walk_sword"). (With
+--walk-trust, OFF by default, an UNKNOWN read on a cell walk_trust.trust_why trusts is clicked too:
+docs/planning/gef10-cursor-unknown.md.)
 
 PIXELS IN, KEYS AND CLICKS OUT: HP / SP from Basic Info's percent text (hp_percent), the Battle
 Log from the chat window (battle_log.py live, its own process), the position from the minimap's
@@ -101,6 +103,7 @@ arms "no Steal" (Snatcher Lv 10 alone) vs --steal). New:
 
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
+                        [--walk-trust]
     (dungeon@7: --steal = Batt's steal-first on every monster, SP permitting)
 """
 
@@ -751,6 +754,20 @@ def rest_spots_for(map_name: str, root: Path = ROOT) -> list[Cell]:
     return []
 
 
+def trust_npcs_for(map_name: str, root: Path = ROOT) -> list[Cell]:
+    """--walk-trust (docs/planning/gef10-cursor-unknown.md): every script NPC cell of the map from
+    L3 (data/kb/npc_cells.json, generated locally); the option refuses to run (SystemExit) when L3
+    does not list the map as complete: an NPC it does not know could not be kept away from."""
+    path = root / "data" / "kb" / "npc_cells.json"
+    try:
+        entry = json.loads(path.read_text())["maps"].get(map_name)
+    except (OSError, ValueError, KeyError) as e:
+        raise SystemExit(f"--walk-trust refused: {path} unreadable ({e})") from None
+    if not entry or not entry.get("complete"):
+        raise SystemExit(f"--walk-trust refused: {path} does not list {map_name} as complete")
+    return [(int(n["x"]), int(n["y"])) for n in entry.get("npcs", [])]
+
+
 def steal_sp_pct(max_sp: int) -> int:
     """PURE: the lowest Basic Info SP percent that still pays for a Steal (STEAL_SP) whether the
     client floors or rounds the percent: ceil(100 * (STEAL_SP + 1) / max_sp). Thief: 10."""
@@ -886,6 +903,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     cut = mz.sealed_off(ok, okr)
     area = hf.main_component(area & ~cut)
     okr = okr & ~cut
+    import walk_trust as wtr
+
+    trust_npcs = trust_npcs_for(map_) if a.walk_trust else []  # --walk-trust (off by default)
     spots = rest_spots_for(map_)  # dungeon@6: per map (orcsdun01's required, as before)
     for s_ in spots:
         if not okr[s_[1], s_[0]]:
@@ -1071,7 +1091,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
             "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
-                      "ag_match": a.ag_match},
+                      "ag_match": a.ag_match, "walk_trust": a.walk_trust},
             "char": a.char, "steal": a.steal, "bank_tags": bank, "clear_map": a.clear_map,
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
@@ -2084,7 +2104,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             rel = (c[0] - here[0], c[1] - here[1])
                             u, v = project(here, [rel])[0]
                             res = hover(u, v)
-                            if res["verdict"] == "clear":
+                            tw_ = None  # --walk-trust (off by default): why the cell is untrusted
+                            if a.walk_trust and res["verdict"] == "unknown":
+                                bx_ = boxes is not None and boxes.near(
+                                    (u, v), wtr.BOX_NEAR_PX, BOX_FRESH_S) is not None  # fmt: skip
+                                tw_ = wtr.trust_why(here, c, route_ok=okr, carved=carved,
+                                                    zones=zones, npcs=trust_npcs,
+                                                    box_near=bx_)  # fmt: skip
+                            act_, why_w = wtr.decide(res["verdict"], int(res.get("red") or 0),
+                                                     trusted=tw_ is None,
+                                                     enabled=a.walk_trust,
+                                                     noentry_red=NOENTRY_RED)  # fmt: skip
+                            if act_ == "click":
                                 stall = stall + 1 if walk_from == here else 0
                                 if walk_from != here:
                                     stalls_here.clear()
@@ -2122,18 +2153,25 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     continue
                                 click_at(u, v, "walk")
                                 last_walk_click = tick
-                                ev({"kind": "walk", "from": list(here), "to": list(c),
-                                    "clicked": True, "why": mode})  # fmt: skip
-                            elif res["verdict"] == "sword":
+                                rec_w = {"kind": "walk", "from": list(here), "to": list(c),
+                                         "clicked": True, "why": mode}  # fmt: skip
+                                if why_w == "trusted":  # --walk-trust: an UNKNOWN read, clicked
+                                    counts["walk_trusted"] += 1
+                                    rec_w.update({"gate": "trusted", "red": res.get("red")})
+                                ev(rec_w)
+                            elif act_ == "engage":
                                 ev({"kind": "engage", "by": "walk_sword", "name": None})
                                 strike(u, v - BODY_UP / 2, rel, "walk_sword")
                                 lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
                                 mode = "fight"
                             else:
-                                ev({"kind": "walk", "from": list(here), "to": list(c),
-                                    "clicked": False, "why": f"cursor {res['verdict']}",
-                                    "red": res.get("red")})  # fmt: skip
-                                if res["verdict"] == "noentry":
+                                rec_w = {"kind": "walk", "from": list(here), "to": list(c),
+                                         "clicked": False, "why": why_w,
+                                         "red": res.get("red")}  # fmt: skip
+                                if a.walk_trust:
+                                    rec_w["trust"] = tw_
+                                ev(rec_w)
+                                if act_ == "carve":
                                     # dungeon@4 (decision 5): the client calls it a wall -- the
                                     # target leaves the route grid at once and the walk re-plans
                                     noentry_n += 1
@@ -2241,7 +2279,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
            "engage": a.engage, "search": a.search, "loot": a.loot, "strategy": a.strategy,
            "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
-                     "ag_match": a.ag_match},
+                     "ag_match": a.ag_match, "walk_trust": a.walk_trust},
            "seed": a.seed, "char": a.char, "map": map_, "steal": a.steal, "bank_tags": bank,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
@@ -2325,6 +2363,16 @@ def main() -> int:
         help="dungeon@8 (rogue-gef10.md Amendment A4): the setup types @killmonster2 "
         "after the warp to the map, so its MVP (gef_fild10's Orc Lord, 2 h "
         "respawn) is absent until the flee rule is proven; everything respawns",
+    )
+    t.add_argument(
+        "--walk-trust",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="the trusted walk cell (docs/planning/gef10-cursor-unknown.md; OFF by default, "
+        "switched on by a pre-registration): a walk target whose cursor read stays UNKNOWN is "
+        "clicked when walk_trust.trust_why trusts its cell (route grid + the landing cells "
+        "beyond it, the zones, >= NPC_MIN cells from every NPC, no fresh box near); SWORD still "
+        "engages, NO-ENTRY (or an UNKNOWN with the ring's red) still carves",
     )
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "

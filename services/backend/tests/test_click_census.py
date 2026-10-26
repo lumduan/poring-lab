@@ -110,9 +110,12 @@ ALLOWED = {
                                    "strike and its burst only where cursor_sword read SWORD at "
                                    "the hovered point; the loot click only where it read the "
                                    "PICKUP hand; the walk click only where it read clear (WALK / "
-                                   "PICKUP) on a zone-free route cell; Heal's target click on our "
-                                   "own drawn body after F5. And the death dialog's known step "
-                                   "(its second button), as survive.py"),
+                                   "PICKUP) on a zone-free route cell -- or, with --walk-trust "
+                                   "(OFF by default, gef10-cursor-unknown.md), where the read "
+                                   "stayed UNKNOWN on a cell walk_trust.trust_why trusts; "
+                                   "Heal's target click on our own drawn body after F5. And the "
+                                   "death dialog's known step (its second button), as "
+                                   "survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
                                     "Basic Info's arrow and a chat TAB, two motions, each step "
                                     "verified on pixels (the chat's message area is "
