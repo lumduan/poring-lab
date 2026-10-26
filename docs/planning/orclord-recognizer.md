@@ -683,3 +683,52 @@ From the same truth (`in_view` per species), in the 3 counted trials:
   shoot in 3 and 5.
 - **Trial 1's fail is the procedure, not the recognizer:** the whole party was in view when
   immunity went OFF.
+
+## 13. PRE-REGISTERED: the flee proof, round 2 (fp2) (the parent, 2026-10-26 10:46 ICT from `date`, BEFORE it runs; Batt ~09:4x: "test again")
+
+**Unchanged (the rule under test):** F2 on the FIRST aura positive.
+- `mvp_watch.decide(..., cues=("aura",))`, model sha256 `43179452...`, threshold 0.08, frames
+  every 0.25 s;
+- the HP backup below 50 %, logged apart;
+- every immunity toggle verified on its bubble (flee@3).
+
+**Changed: the PROCEDURE, against fp1c's two failures (12c):**
+1. **The OFF toggle is beyond the party's reach.** Per trial: immunity ON, `@warp` C,
+   `@monster 1190 1`, `@warp` to the TOGGLE cell 25 cells out, immunity OFF there, `@warp` to
+   the first hop (17), then the hops. In fp1c trial 1 the archers hit us at the moment of the OFF
+   toggle, at 17 cells.
+2. **The approach goes closer:** hops at 17 / 14 / 11 / 8 / 5 / 2 cells (`--near 1`). In fp1c,
+   3 of 6 trials never had the party in view down to 8 cells.
+3. **8 trials** (`--n 8 --seed 28`, the plan's cells on prt_fild08, `--toggle 25`).
+   `orclord-flee@4`, recorder at 2 fps.
+
+**Changed: the COUNTING (fixed now, before any data):**
+- **A trial is COUNTED when the ORC LORD itself (1190) is in view** (the truth's `in_view`). The
+  aura is the Lord's cue, and the Lord is the lethal one: its hit was 3,050 in fp1c, an archer's
+  265-288.
+- **It PASSES when the aura's F2** (the Fly Wing request packet) **precedes the Lord's first
+  damage on us.**
+- The archers' damage before F2 is REPORTED per trial; it does not fail a trial.
+- `orclord_flee_score.py --count-by lord` (this commit; tests; fp1c's default scoring is
+  unchanged: 3 counted, 2 passed).
+
+**The bars:**
+1. With c trials counted, **PASS when c >= 4 and passes >= ceil(5c / 6)**. NO VERDICT when c < 4.
+2. No death.
+3. Reported, not bars:
+   - the Lord -> F2 time;
+   - F2 -> teleport;
+   - the archers' damage before F2;
+   - trials with no Lord in view.
+
+**If both pass:**
+- dungeon@9 may carry the flee rule (watcher thread, its own `r.Screen()`, F2 at once).
+- Batt then decides whether `--clear-map` goes. Until then, the clock schedule keeps the natural
+  Lord out of the runs.
+
+**The command (after b1, before 12:00:28):**
+
+    uv run python scripts/orclord_flee_proof.py run --map prt_fild08 \
+        --area /dev/shm/poring-lab-tmp/rogue/prt_fild08_area.npy --n 8 --seed 28 \
+        --near 1 --toggle 25 --label fp2 \
+        --model /dev/shm/poring-lab-tmp/orclord/model/orclord-v1.npz --sha256 43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff

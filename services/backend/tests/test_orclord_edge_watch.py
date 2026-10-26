@@ -45,3 +45,19 @@ def test_a_run_needs_the_immunity_read_by_a_person() -> None:
         assert "immune-confirmed" in str(exc)
     else:
         raise AssertionError("ran without --immune-confirmed")
+
+
+def test_the_fp2_plan_adds_a_far_toggle_cell_and_approaches_closer() -> None:
+    """flee fp2 (orclord-recognizer.md 13): OFF at 25 cells, hops down to 2; the default plan is
+    unchanged (fp1c stays reproducible)."""
+    area = np.zeros((300, 300), bool)
+    area[10:290, 10:290] = True
+    base = ow.plan(area, 4, seed=27)
+    assert base == ow.plan(area, 4, seed=27, near=ow.NEAR, toggle=None)
+    fp2 = ow.plan(area, 4, seed=28, near=1, toggle=25)
+    for c in fp2:
+        cx, cy = c["cell"]
+        assert [ow.cheb(tuple(p), (cx, cy)) for p in c["path"]] == [17, 14, 11, 8, 5, 2]
+        assert ow.cheb(tuple(c["toggle"]), (cx, cy)) == 25
+        tx, ty = c["toggle"]
+        assert area[ty, tx]

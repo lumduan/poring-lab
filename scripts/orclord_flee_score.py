@@ -17,6 +17,11 @@ Per trial k of the proof's events.jsonl (`orclord_flee_proof.py`):
   (the recorder tags packets near a GM line);
 - HP: the lowest `stat_change` hp in the window and the hp at the window's start.
 
+`--count-by lord` (fp2, orclord-recognizer.md 13; the default "party" is fp1c's scoring): a
+trial is counted when the ORC LORD itself is in view, and passes when the aura's F2 precedes the
+ORC LORD's first damage; the archers' damage before F2 is reported, not a fail (the Lord's hit
+was 3,050 in fp1c, an archer's 265-288).
+
 A trial is COUNTED when SEEN exists ("a trial with no party unit in view at all is reported and
 not counted"). It PASSES when counted, FLEE's why is "aura", and FLEE precedes HIT (or there is
 no HIT).
@@ -67,7 +72,8 @@ def trial_windows(events: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def score_trial(w: dict[str, Any], truth_rows: Sequence[dict[str, Any]],
-                packets: Sequence[dict[str, Any]], aid: int) -> dict[str, Any]:  # fmt: skip
+                packets: Sequence[dict[str, Any]], aid: int,
+                count_by: str = "party") -> dict[str, Any]:  # fmt: skip
     """PURE: one trial's SEEN / HIT / FLEE / HP and its verdict (the module docstring)."""
     t0, t1 = w["off_t"], w["end_t"]
     res: dict[str, Any] = {"i": w["i"], "off_t": t0, "end_t": t1}
@@ -96,14 +102,33 @@ def score_trial(w: dict[str, Any], truth_rows: Sequence[dict[str, Any]],
         flee_t = max(press) if press else flee_t
         tele = _first([int(p["t_mono_ns"]) for p in packets if p.get("type") == "map_change"
                        and int(p["t_mono_ns"]) >= flee_t])  # fmt: skip
-    counted = seen is not None
     why = flee.get("why") if flee else None
-    passed = counted and why == "aura" and flee_t is not None and (hit is None or flee_t < hit)
+    lords = {int(p["gid"]) for p in packets if p.get("type") == "entity_appear"
+             and p.get("job") == 1190 and from_t <= int(p["t_mono_ns"]) <= t1}  # fmt: skip
+    lord_rows = [int(r["t"]) for r in truth_rows if t0 <= int(r["t"]) <= t1
+                 and any(u["in_view"] and u["job"] == 1190 for u in r["units"])]  # fmt: skip
+    seen_lord = _first(lord_rows)
+    lord_hits = [int(p["t_mono_ns"]) for p in acts
+                 if int(p.get("src_gid", -1)) in lords and int(p.get("damage", 0)) > 0]  # fmt: skip
+    hit_lord = _first(lord_hits)
+    before = flee_t if flee_t is not None else t1
+    archer_dmg = sum(int(p.get("damage", 0)) for p in acts if int(p.get("src_gid", -1))
+                     not in lords and int(p["t_mono_ns"]) < before)  # fmt: skip
+    if count_by == "lord":
+        counted = seen_lord is not None
+        first_bad = hit_lord
+    else:
+        counted = seen is not None
+        first_bad = hit
+    passed = (counted and why == "aura" and flee_t is not None
+              and (first_bad is None or flee_t < first_bad))  # fmt: skip
     ms = lambda a, b: None if a is None or b is None else round((b - a) / 1e6, 1)  # noqa: E731
     return {**res, "party_gids": sorted(party), "seen_t": seen, "hit_t": hit,
             "first_attack_t": attack, "flee_t": flee_t, "why": why, "teleport_t": tele,
             "seen_to_f2_ms": ms(seen, flee_t), "f2_to_teleport_ms": ms(flee_t, tele),
-            "f2_minus_hit_ms": ms(hit, flee_t),
+            "f2_minus_hit_ms": ms(hit, flee_t), "count_by": count_by,
+            "seen_lord_t": seen_lord, "hit_lord_t": hit_lord,
+            "lord_to_f2_ms": ms(seen_lord, flee_t), "archer_damage_before_f2": archer_dmg,
             "hp_start": hp_before[-1] if hp_before else None,
             "hp_min": min(hp_in) if hp_in else None,
             "died": any(v == 0 for v in hp_in), "counted": counted,
@@ -129,6 +154,7 @@ def main() -> int:
     ap.add_argument("--session", type=Path, required=True, help="the recorder session's dir")
     ap.add_argument("--aid", type=int, default=None, help="our AID (default: inferred)")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--count-by", choices=("party", "lord"), default="party")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages/poring_dataset/src"))
     from poring_dataset.timeline import infer_self_aid
@@ -140,7 +166,7 @@ def main() -> int:
     if aid is None:
         raise SystemExit("our AID could not be inferred: pass --aid")
     truth_rows = json.loads(a.truth.read_text())["frames"]
-    trials = [score_trial(w, truth_rows, packets, aid) for w in trial_windows(events)]
+    trials = [score_trial(w, truth_rows, packets, aid, a.count_by) for w in trial_windows(events)]
     stopped_dead = any(e.get("kind") == "run_end" and "dead" in str(e.get("reason"))
                        for e in events)  # fmt: skip
     doc = {"aid": aid, "trials": trials, "verdict": verdict(trials, stopped_dead)}

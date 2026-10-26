@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import orclord_edge_watch as ow  # noqa: E402
 
-VERSION = "orclord-flee@3"
+VERSION = "orclord-flee@4"
 ROOT = Path(__file__).resolve().parents[1]
 BUBBLES = ROOT / "data" / "mvp_watch" / "immune_bubbles.npz"  # client pixels: never committed
 WATCH_S, DWELL_S, AFTER_FLY_S = 0.25, 4.0, 3.0
@@ -103,8 +103,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
     ref_on, ref_off, box = zb["on"], zb["off"], tuple(int(v) for v in zb["box"])
     z = np.load(hpp.GLYPHS)
     glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
-    cells = ow.plan(np.load(a.area), a.n, a.seed)
+    cells = ow.plan(np.load(a.area), a.n, a.seed, near=a.near, toggle=a.toggle)
     stands = [list(p) for c in cells for p in [c["cell"], *c["path"]]]
+    stands += [c["toggle"] for c in cells if "toggle" in c]  # flee@4: the OFF cells are stands too
     nct.check_warps(a.map, {"npcs": [{"stands": stands}], "clicks": []}, clicks=False)
     out = ow.DEMO / f"{time.strftime('%Y%m%dT%H%M%S')}-flee-{a.map}-{a.label}"
     out.mkdir(parents=True)
@@ -116,7 +117,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
 
     ev({"kind": "run_start", "version": VERSION, "map": a.map, "seed": a.seed, "cells": cells,
         "model_sha256": a.sha256, "cues": ["aura"], "watch_s": WATCH_S,
-        "hp_fly": HP_FLY})  # fmt: skip
+        "hp_fly": HP_FLY, "near": a.near, "toggle": a.toggle})  # fmt: skip
     reason = "done"
     with r.session("rule:orclord-flee") as (agent, screen):
         agent.wait_for_human()
@@ -157,11 +158,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915 -- one live procedure, r
                 spawned = True
                 ev({"kind": "spawn", "i": k, "at": [x0, y0]})
                 time.sleep(ow.SPAWN_SETTLE_S)
+                if "toggle" in c:  # flee@4 (fp2, section 13): OFF beyond the party's reach first
+                    tx, ty = c["toggle"]
+                    gm(f"@warp {a.map} {tx} {ty}")
+                    ow._settle(screen)
+                    immune("off")
+                    state = "off"
                 px, py = c["path"][0]
                 gm(f"@warp {a.map} {px} {py}")
                 ow._settle(screen)
-                immune("off")
-                state = "off"
+                if "toggle" not in c:
+                    immune("off")
+                    state = "off"
                 fled = None
                 for j, (hx, hy) in enumerate(c["path"]):
                     if j:
@@ -229,6 +237,9 @@ def main() -> int:
     p.add_argument("--label", default="fp1")
     p.add_argument("--model", type=Path, required=True)
     p.add_argument("--sha256", required=True)
+    p.add_argument("--near", type=int, default=ow.NEAR, help="the approach ends above this")
+    p.add_argument("--toggle", type=int, default=None,
+                   help="flee@4 (fp2): immunity OFF this many cells out, then hop")  # fmt: skip
     a = ap.parse_args()
     return run(a)
 

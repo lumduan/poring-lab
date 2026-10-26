@@ -55,9 +55,12 @@ def approach(c: tuple[int, int], d: tuple[int, int], far: int = FAR, hop: int = 
     return out
 
 
-def plan(area: np.ndarray, n: int, seed: int) -> list[dict[str, Any]]:
+def plan(area: np.ndarray, n: int, seed: int, near: int = NEAR,
+         toggle: int | None = None) -> list[dict[str, Any]]:  # fmt: skip
     """PURE: ``n`` cells, each with a direction whose whole approach lies in ``area`` (a bool grid,
-    [y, x]), spread out (>= 2 * FAR apart), in a seeded order."""
+    [y, x]), spread out (>= 2 * FAR apart), in a seeded order. ``near`` ends the approach closer;
+    ``toggle`` (flee fp2) adds a cell that far out on the same line, which must lie in the area too
+    (the immunity is turned OFF there, beyond the party's reach). The defaults are fp1c's plan."""
     rng = np.random.default_rng(seed)
     ys, xs = np.nonzero(area)
     order = rng.permutation(len(xs))
@@ -69,9 +72,13 @@ def plan(area: np.ndarray, n: int, seed: int) -> list[dict[str, Any]]:
             continue
         for j in rng.permutation(len(DIRS)):
             d = DIRS[int(j)]
-            path = approach(c, d)
-            if all(0 <= x < w and 0 <= y < h and area[y, x] for x, y in path):
-                cells.append({"cell": list(c), "dir": list(d), "path": [list(p) for p in path]})
+            path = approach(c, d, near=near)
+            extra = [] if toggle is None else [(c[0] + d[0] * toggle, c[1] + d[1] * toggle)]
+            if all(0 <= x < w and 0 <= y < h and area[y, x] for x, y in [*path, *extra]):
+                rec = {"cell": list(c), "dir": list(d), "path": [list(p) for p in path]}
+                if extra:
+                    rec["toggle"] = list(extra[0])
+                cells.append(rec)
                 break
         if len(cells) == n:
             break

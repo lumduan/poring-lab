@@ -89,3 +89,23 @@ def test_the_press_is_the_fly_wing_request_not_the_late_event() -> None:
     t = fs.score_trial(w, _truth(11 * S), pk, AID)
     assert t["flee_t"] == press and t["f2_to_teleport_ms"] == 40.0
     assert t["seen_to_f2_ms"] == 870.0 and t["passed"]
+
+
+def test_counting_by_the_lord_ignores_archer_hits_but_not_the_lords() -> None:
+    """fp2 (orclord-recognizer.md 13): counted when the LORD is in view; an archer's hit before F2
+    is reported, the Lord's hit before F2 fails."""
+    (w,) = fs.trial_windows(_events({"t": 12 * S, "why": "aura"}))
+    pk = _packets(hit_t=None) + [
+        {"type": "entity_appear", "gid": 8, "job": 1189, "t_mono_ns": 1 * S},
+        {"type": "act", "src_gid": 8, "target_gid": AID, "damage": 280, "t_mono_ns": 10 * S},
+    ]
+    truth = _truth(11 * S)  # the Lord (gid 7, job 1190) in view from 11 s
+    party = fs.score_trial(w, truth, pk, AID)
+    lord = fs.score_trial(w, truth, pk, AID, count_by="lord")
+    assert not party["passed"]  # by party: the archer's hit came first
+    assert lord["counted"] and lord["passed"] and lord["archer_damage_before_f2"] == 280
+    pk_lord = pk + [{"type": "act", "src_gid": 7, "target_gid": AID, "damage": 3050,
+                     "t_mono_ns": 11 * S}]  # fmt: skip
+    assert not fs.score_trial(w, truth, pk_lord, AID, count_by="lord")["passed"]
+    no_lord = [dict(r, units=[]) for r in truth]
+    assert not fs.score_trial(w, no_lord, pk, AID, count_by="lord")["counted"]
