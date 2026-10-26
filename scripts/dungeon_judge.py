@@ -313,13 +313,41 @@ def strikes(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, 
             "ends": dict(Counter(str(e.get("end")) for e in st))}  # fmt: skip
 
 
+HOUSE_MATCH_S = 30.0  # --rest house: a map change within this of the runner's own click
+HOUSE_CELL_TOL = 1  # ... at the warp's destination cell (rAthena places us there exactly)
+
+
+def house_allow(events: Sequence[Mapping[str, Any]], map_name: str
+                ) -> list[tuple[int, str, tuple[int, int]]]:  # fmt: skip
+    """PURE (--rest house, docs/planning/gef10-house-rest.md): the map changes the RUNNER caused
+    and recorded -- each ``house_door`` event allows ONE change to in_orcs01 at its ``arrival``,
+    each ``house_exit`` event ONE change back to ``map_name`` at its ``back`` cell (the events'
+    clicks; matched by hard_bars within HOUSE_MATCH_S). No such events (every other run): []."""
+    out: list[tuple[int, str, tuple[int, int]]] = []
+    for e in events:
+        k = e.get("kind")
+        if k == "house_door" and e.get("arrival"):
+            a = e["arrival"]
+            out.append((int(e["t_ns"]), "in_orcs01", (int(a[0]), int(a[1]))))
+        elif k == "house_exit" and e.get("back"):
+            b = e["back"]
+            out.append((int(e["t_ns"]), map_name.removesuffix(".gat"), (int(b[0]), int(b[1]))))
+    return out
+
+
 def hard_bars(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, map_name: str,
-              aid: int = AID) -> dict[str, Any]:  # fmt: skip
+              aid: int = AID, allow: Sequence[tuple[int, str, tuple[int, int]]] = ()
+              ) -> dict[str, Any]:  # fmt: skip
     """PURE: map changes to ANOTHER map (the bar) vs same-map teleports (a Fly Wing), NPC
-    contacts, and our attack requests on a non-monster / an unknown target, in [t0, t1]."""
+    contacts, and our attack requests on a non-monster / an unknown target, in [t0, t1].
+    ``allow`` (house_allow; --rest house only): a map change to the named map at the named cell
+    within HOUSE_MATCH_S after a recorded click of the runner is the house trip it planned --
+    counted as ``map_changes_house``, each allowance used once; every other one stays a bar."""
     appears = objtypes(packets)
     other: list[str] = []
     same = same_gm = npc = non_mob = unknown = 0
+    house = 0
+    left = sorted(allow)
     want = map_name.removesuffix(".gat")
     for e in packets:
         t = _t(e)
@@ -328,7 +356,15 @@ def hard_bars(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, map_name: 
         typ = e.get("type")
         if typ == "map_change":
             m = str(e.get("map") or "").removesuffix(".gat")
-            if m != want:
+            xy = (int(e.get("x") or -1), int(e.get("y") or -1))
+            hit = next((i for i, (ta, ma, ca) in enumerate(left)
+                        if ta <= t <= ta + HOUSE_MATCH_S * NS and ma == m
+                        and max(abs(xy[0] - ca[0]), abs(xy[1] - ca[1])) <= HOUSE_CELL_TOL),
+                       None)  # fmt: skip
+            if hit is not None and not e.get("gm_command"):
+                left.pop(hit)
+                house += 1
+            elif m != want:
                 other.append(m)
             else:
                 same += 1
@@ -345,7 +381,8 @@ def hard_bars(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, map_name: 
             "map_changes_same_map": same, "same_map_by_gm_command": same_gm,
             "npc_contacts": npc, "attack_requests_non_monster": non_mob,
             "attack_requests_unknown_target": unknown,
-            "pass": not other and npc == 0 and non_mob == 0}  # fmt: skip
+            "pass": not other and npc == 0 and non_mob == 0,
+            **({"map_changes_house": house} if allow else {})}  # fmt: skip
 
 
 def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
@@ -695,7 +732,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "economics": econ,
         "moving_hp_recovery": moving_hp_recovery(packets, w0, w1, rests, sits),
         "sitting_pct": round(sit_ns / max(1, w1 - w0), 4),
-        "hard_bars": hard_bars(packets, w0, w1, mp, aid),
+        "hard_bars": hard_bars(packets, w0, w1, mp, aid, house_allow(ev, mp)),
         # events
         "resting_pct": round(rest_ns / max(1, w1 - w0), 4),
         "rest": {"spans": len(rests), "seconds": round(rest_ns / NS, 1),
