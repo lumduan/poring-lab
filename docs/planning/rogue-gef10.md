@@ -818,3 +818,40 @@ from the zoned route grid. Its own commit and tests later.
 - the hard bars from the packets, plus `npc_guard` refusals, `walk_trusted`, kills / h;
 - its numbers are judged from the runner's own packets (its recorder may stop on the IO guard
   during SET hours).
+
+## Amendment Q (2026-10-26 13:36 ICT from `date`): c1-c3 judged; rest is now the bottleneck; 9.1 = react on the first swing; c4-c6
+
+**The runs.** Packets were rebuilt from the sniffer archive (`record_session.write_packets`): the
+fail-closed stop path exits before writing them.
+
+| run | version | minutes | kills / h | deaths | HP low | loot | OC z / h | hard bars | end |
+|---|---|---|---|---|---|---|---|---|---|
+| c1 | 8.3 (heading) | 10.8 | 72.0 | 0 | 28 % | 92 % | 24,649 | pass | stop: no fresh frame within 1.5 s |
+| c2 | 9.0 | 8.6 | 55.9 | 0 | 71 % | 67 % | 18,852 | **NPC contact 1** (Amendment P) | the board's dialog |
+| c3 | 9.0b | 28.8 | 50.0 | 0 | 15 % | 100 % | 17,249 | pass (npc 0) | stop: no fresh frame within 1.5 s |
+
+- **The frame stalls (c1 at 10.8 min, c3 at 28.8 min):** the runner refused to act on a frame
+  older than 1.5 s. Both fell in SET hours, when the host's IO and CPU were busy: the recorders
+  stopped on quant-postgres and Frigate IO spikes all day, and the cache build aborted. The stop
+  is fail-closed and correct.
+- **9.0b did what it targeted (c3's time budget against Batt, time_budget.py):**
+  - idle inside search fell from 15.3 s per kill (the 8-run pool) to **5.8**;
+  - search walking rose from 7.6 % to 13.6 % of the time;
+  - 50 kills / h against the pool's ~44.
+- **But REST grew to 46.7 % of the time (33.6 s per kill, 32.8 lost against Batt).** Rest repays
+  DAMAGE. Sitting regen is ~3.7 HP/s for both. The bot loses ~213 HP per kill, Batt ~22.5,
+  because the bot answers an attacker after ~12.7 s and Batt after 1.3 s.
+- **Why so late:** the defence scan starts on a HIT (the Battle Log) or an HP fall. With FLEE
+  192, orcs hit only 4-7 % of their swings, so the first hit comes many swings in. Batt reacts to
+  the swing itself; the client draws a "Miss" text above our head on every missed swing.
+- **9.1 (next, pre-registered when its detector is validated):** start the defence scan on the
+  FIRST swing at us. A pixel detector of "a Miss above our head" is being built and validated
+  offline against the packets (`act` on us with damage 0; subagent; `gef10-miss-cue.md`).
+  - The house rest (`--rest house`, merged, OFF) estimates only +3 to +5 kills / h. It needs a
+    supervised live probe of the indoor camera first. It comes after 9.1.
+- **c4, c5, c6** (9.0b unchanged: `--search patrol --walk-trust --npc-guard`; seeds
+  25544-25546):
+  - Amendment E's next cycle: D6 = c4's setup kill at >= 14:17:30; c5 at >= D6 + 38; c6 at
+    >= D6 + 76.
+  - Pooled with c3 as 9.0b's result. They run in the market window 14:00-14:45: runs are not
+    disk-heavy steps; their recordings stay in RAM until 17:01.
