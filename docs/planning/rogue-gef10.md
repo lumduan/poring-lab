@@ -1446,11 +1446,11 @@ c9-c11 keep their registered base):
 
 ## Amendment AG (2026-10-27 02:34 ICT from `date`): the e-block judged -- THE LONG WALK LEGS FAIL; the walk-timer block runs on the default legs
 
-| run | arm | kills | kills / h | walk clicks / kill | min HP after the time box |
+| run | arm | kills (packets) | kills / h | walk clicks / kill | min HP after the time box |
 |---|---|---|---|---|---|
 | e1 | L | 58 | 96.6 | 14.2 | 1041 (end_escape) |
-| e2 | V | 66 | 110.0 | 11.3 | 1273 |
-| e3 | L | 61 | 101.7 | 14.8 | 1000 (end_escape) |
+| e2 | V | 66 | 110.0 | 11.1 | 1273 |
+| e3 | L | 59 | 98.3 | 15.3 | 1000 (end_escape) |
 | e4 | V | 54 | 90.0 | 16.4 | 1097 |
 
 **Pooled** (Amendment AD's bars):
@@ -1459,7 +1459,7 @@ c9-c11 keep their registered base):
 |---|---|---|---|---|
 | **kills / h (primary)** | 97.5 | 100.0 | L - V >= +6 | **NO, -2.5** |
 | idle_inside_search s / kill | 5.31 | 7.59 | L lower | yes |
-| walk clicks / kill | 14.5 | 13.9 | L lower | no |
+| walk clicks / kill | 14.7 | 13.5 | L lower | no |
 | search_walk s / kill | 14.44 | 10.78 | not higher | **no** |
 | hard bars / NPC-guard refusals | 0 / 0 | 0 / 0 | not more | yes |
 | damage per kill cycle | 109.5 | 120.5 | at most +10 % | yes |
@@ -1479,12 +1479,12 @@ c9-c11 keep their registered base):
 
 ## Amendment AH (2026-10-27 05:24 ICT from `date`): the f-block judged -- THE WALK TIMER FAILS; the confirmation run
 
-| run | arm | kills | kills / h | walk clicks / kill | potions + wings / kill | min HP after the time box |
+| run | arm | kills (packets) | kills / h | walk clicks / kill | potions + wings / kill | min HP after the time box |
 |---|---|---|---|---|---|---|
-| f1 | F | 66 | 105.0 | 13.6 | 0.455 | 1230 (one dead-end fly, the c7 pocket) |
-| f2 | V | 69 | 108.3 | 11.9 | 0.275 | 1074 (end_escape) |
-| f3 | F | 70 | 116.6 | 13.6 | 0.314 | 1263 (one dead-end fly) |
-| f4 | V | 73 | 119.9 | 10.9 | 0.342 | 1178 |
+| f1 | F | 63 | 105.0 | 14.3 | 0.460 | 1230 (one dead-end fly, the c7 pocket) |
+| f2 | V | 65 | 108.3 | 12.6 | 0.277 | 1074 (end_escape) |
+| f3 | F | 70 | 116.6 | 13.6 | 0.300 | 1263 (one dead-end fly) |
+| f4 | V | 72 | 120.0 | 11.1 | 0.347 | 1178 |
 
 **Pooled** (Amendment AF's bars):
 
@@ -1492,10 +1492,10 @@ c9-c11 keep their registered base):
 |---|---|---|---|---|
 | **kills / h (primary)** | 110.8 | 114.1 | F - V >= +6 | **NO, -3.3** |
 | idle_inside_search s / kill | 4.67 | 5.39 | F lower | yes |
-| walk clicks / kill | 13.6 | 11.4 | -- | higher |
+| walk clicks / kill | 13.9 | 11.8 | -- | higher |
 | search_walk s / kill | 10.65 | 9.62 | not higher | **no** |
 | damage per kill cycle | 134.0 | 110.6 | at most +10 % | **no, +21 %** |
-| potions + wings per kill | 0.38 | 0.31 | at most +10 % | **no, +23 %** |
+| potions + wings per kill | 0.376 | 0.314 | at most +10 % | **no, +20 %** |
 | hard bars / NPC-guard refusals | 0 / 0 | 0 / 0 | not more | yes |
 
 - **Not adopted.**
@@ -1514,3 +1514,14 @@ c9-c11 keep their registered base):
   0 deaths.
 - **The confirmation run, g1** (D13 >= 05:39:58, seed 25564): that configuration, 36 min. A
   MEASUREMENT for the morning report, not a comparison.
+
+**Correction to Amendments AG and AH (2026-10-27 05:56 ICT from `date`).** Some per-run rows
+printed the RUNNER's own kill count (its `kill` events) where the pooled verdicts used the JUDGE's
+count from packets. The two differ by 0-4 kills a run.
+- **Corrected to the judge's count:**
+  - AG: e3 is 59 kills / 98.3 per h (was 61 / 101.7);
+  - AH: f1 63, f2 65, f4 72 (were 66, 69, 73).
+- **Recomputed with the judge's counts:** the per-kill ratios (walk clicks; potions + wings, which
+  are now also the judge's packet counts). Pooled potions + wings per kill: F 0.376 against V
+  0.314, +20 % (was +23 %).
+- **No verdict changes.** The pooled kills / h always used the judge.
