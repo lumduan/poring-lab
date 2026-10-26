@@ -392,6 +392,9 @@ the label.
    - Use longer legs, from his waypoints.
    - Click the next step before the walk ends.
    - Do not gate each walk click on a cursor read: the loop's cells are known walkable.
+   - ➡️ **Measured and built since (2026-10-26):** [gef10-cursor-unknown.md](gef10-cursor-unknown.md).
+     The UNKNOWN reads are a timing failure (93 % within 2 s of a move). `dungeon_hunt --walk-trust`
+     (OFF by default) clicks a trusted cell on an UNKNOWN read: 2,190 of 2,249 offline.
 3. **Shorten the loot pause.** Click the drop where the kill fell, about 1 s after the death, as
    Batt does, instead of a hover sweep.
 4. **Budget HP for a 40-min run.** At his damage profile, either about 12 White Potions an hour or
