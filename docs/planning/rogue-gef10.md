@@ -988,3 +988,35 @@ replays it). Otherwise unchanged: never sits; a potion below 40 %; the Fly Wing 
 - starts at once and ends <= 16:18:15 (D6 + 120);
 - **c6 (9.1) moves to the next cycle** (>= 16:29:15), and the door probe / 9.2 after it.
 - **Measures:** as Amendment T, plus Fly Wings by why (swarm / low / position).
+
+## Amendment V (2026-10-26 15:44 ICT from `date`): c5b (P2, NO REST) -- 96.6 kills / h, 0 deaths; c6 = P2 + `--miss-cue`
+
+**c5b** (P2: never sits; a potion below 40 %; the swarm escape; 9.0b's walk), 15:06:15-15:43:11,
+the full 36 min:
+
+| | c4 (9.0b, sits) | **c5b (P2, no rest)** | Batt's demo |
+|---|---|---|---|
+| kills / h | 43.3 | **96.6** (58 kills) | 232.7 |
+| deaths | 0 | **0** | 0 |
+| HP low | 20 % | 19.9 % | 22 % |
+| potions / wings used | 6 / 5 | **12 / 6** (20 / 10 per h) | 1 / 0 |
+| floor loot | 92 % | 90.5 % | 97.8 % |
+| items / h | ~46 | **~82** (Cyfar 61.7, Voucher 15.0, Sticky Mucus 3.3, Axe 1.7; 30 of 49 by Snatcher) | 329 |
+| value / h at OC | 13,812 | **31,445** | 102,084 |
+| rest share | ~47 % | **0 %** | 0 |
+
+- **All 6 Fly Wings were the new swarm escape:** the rate rule fired at 171-456 HP/s with HP 25-49 %.
+  c5 under P had died to that drain.
+- **Consumables:** 20 White Potions and 10 Fly Wings per hour.
+  - At NPC buy prices that is ~24,590 z / h, so value at OC minus consumables is ~+6,850 z / h.
+  - The judge's stricter net (picked items at NPC sell only, `net_h`) is -15,056 z / h.
+  - The potions' real cost depends on Batt's source.
+- **Answer to Batt's question:** with no sitting, the bot hunts at **~97 kills / h, 2.2x** the
+  resting bot. Its damage per kill is unchanged; it is now paid in potions and Fly Wings instead
+  of time.
+
+**c6, amended (Amendment S had 9.1 on 9.0b):** **P2 + `--miss-cue`**, seed 25546, 36 min, at
+Amendment E's next cycle (>= 16:29:15, D6 + 131). Compared with c5b.
+- **Prediction:** earlier reactions; fewer potions and Fly Wings per hour (damage -20 % or more);
+  kills / h not lower.
+- The house rest (9.2, Amendment R) is shelved while the runs do not sit; its code stays, OFF.
