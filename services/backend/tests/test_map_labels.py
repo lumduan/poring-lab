@@ -288,8 +288,11 @@ def test_gef10_roles_split_the_watch_by_cell_and_refuse_s7_s8_by_name() -> None:
                 "20261026T010101-rdp-rogue-s7", "20261026T020202-rdp-rogue-s8"):  # fmt: skip
         assert spec.is_test(sid, None) and not spec.is_fit(sid, None)  # Amendment D: a7, a8
     for sid in ("20261025T204315-rdp-rogue-s1", "20261025T230000-rdp-rogue-a1",
-                "20261025T230000-rdp-rogue-a6", "20261026T040000-rdp-rogue-a9"):  # fmt: skip
+                "20261025T230000-rdp-rogue-a6"):  # fmt: skip
         assert not spec.is_test(sid, None) and not spec.is_fit(sid, None)  # TRAIN by 3c
+    # ROUND 2 (gef10-round2.md): a9 is TEST2 now (it was a 3c candidate in round 1)
+    assert spec.is_test("20261026T040000-rdp-rogue-a9", None)
+    assert not spec.is_round1_test("20261026T040000-rdp-rogue-a9", None)
     for sid, spots in spec.fit.items():
         assert not spec.is_test(sid, spots)
     # pay_fild07 keeps its own roles, and no name rule
@@ -560,3 +563,175 @@ def test_amendment_c_facing_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     # pay_fild07's rule (EngagedRule) is unchanged: no 2d
     pay = ml.EngagedRule("fix2", olf.NextMoves(()), olf.ViewClasses(), times)
     assert pay.choose(world, _unit(9), idle, {}, S, None, 0.0)[1] is None
+
+
+# --- gef10 ROUND 2: the pickup-notice exclusion in C1 (docs/planning/gef10-round2.md) ----------
+
+
+def _ground(h: int = 720, w: int = 1280, seed: int = 11) -> Any:
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    img[..., 0] = rng.integers(60, 140, (h, w))
+    img[..., 1] = rng.integers(80, 160, (h, w))
+    img[..., 2] = rng.integers(40, 110, (h, w))
+    return img
+
+
+def _draw_notice(img: Any, x0: int, y0: int, x1: int, y1: int) -> None:
+    """The client's notice (test_gef10_r2_measure.draw_notice): white, a grey line inside."""
+    img[y0:y1, x0:x1] = 255
+    g = (192, 192, 192)
+    img[y0 + 2, x0 + 4 : x1 - 4] = g
+    img[y1 - 3, x0 + 4 : x1 - 4] = g
+    img[y0 + 4 : y1 - 4, x0 + 2] = g
+    img[y0 + 4 : y1 - 4, x1 - 3] = g
+    img[y0 + 5 : y0 + 25, x0 + 15 : x0 + 35] = (120, 90, 200)
+    for k in range(x0 + 45, x1 - 20, 9):
+        img[y0 + 10 : y0 + 20, k : k + 5] = 0
+
+
+def test_notice_hits_is_any_overlap() -> None:
+    n = (541.0, 76.0, 800.0, 106.0)
+    assert ml.notice_hits((500.0, 28.0, 565.0, 118.0), [n])  # 13r's Orc Warrior: the box's top
+    assert not ml.notice_hits((500.0, 106.0, 565.0, 150.0), [n])  # touching is no overlap
+    assert not ml.notice_hits((470.0, 28.0, 541.0, 118.0), [n])
+    assert not ml.notice_hits((500.0, 28.0, 565.0, 118.0), [])
+
+
+def _round2_job(monkeypatch: pytest.MonkeyPatch, boxes: dict[int, tuple[float, ...]],
+                frame: Any) -> Any:  # fmt: skip
+    """A fake session for orc_labels_fix._check_rows: one standing candidate per gid at ``boxes``
+    (job 1023), the frame ``frame``; scoring stubbed (c1 0.5 > tau: never low)."""
+    ents = {g: SimpleNamespace(gid=g, job=1023, x=10.0 + g, y=10.0, objtype=5, hidden=False)
+            for g in boxes}  # fmt: skip
+    cands = [(ents[g], None, "sheet", SimpleNamespace(box=b), (0, "fix2:test"))
+             for g, b in boxes.items()]  # fmt: skip
+    world = SimpleNamespace(entities=list(ents.values()), self_pos=(5, 5))
+    scene = SimpleNamespace(camera=SimpleNamespace(yaw=0.0))
+
+    def standing(sess: Any, tw: int, anchors: Any, occl: Any, dropped: Any, rule: Any,
+                 under: Any) -> Any:  # fmt: skip
+        return world, scene, {}, list(cands)
+
+    monkeypatch.setattr(olf, "standing_candidates", standing)
+    monkeypatch.setattr(olf.label_check, "score", lambda bgr, sheet, pred: 0.5)
+    monkeypatch.setattr(olf.occ, "best_offset", lambda *a, **k: None)
+    monkeypatch.setattr(olf, "predict", lambda *a, **k: None)
+    tl = SimpleNamespace(frame_world=lambda t: SimpleNamespace(self_pos=(5, 5)))
+    sess = SimpleNamespace(layout_ok=lambda bgr: True, lab=SimpleNamespace(timeline=tl))
+    olf._JOB.clear()
+    olf._JOB.update(sess=sess, occluders=None, offset_ms=120.0, anchors={},
+                    facing_rule=None, occlusion="1c", reader=lambda ref: frame)  # fmt: skip
+    return SimpleNamespace(frame_id=505, t_mono_ns=10 * S)
+
+
+def _no_notice(dropped: Any) -> bool:
+    return not any(k.startswith("notice") or k == "frame_with_notice" for k in dropped)
+
+
+def test_round2_excludes_a_label_under_a_notice_and_round1_scores_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive case (13r's shape: a box whose top lies under the notice at x 541-799,
+    y 77-104) is excluded as ``notice`` under round 2 and scored as before without it; a box
+    16 px beside the notice is scored either way and marked ``notice_near``; a box far away
+    is scored either way."""
+    frame = _ground()
+    _draw_notice(frame, 541, 76, 800, 106)
+    boxes = {1: (520.0, 28.0, 585.0, 118.0),  # under the notice
+             2: (300.0, 300.0, 360.0, 370.0),  # far away
+             3: (470.0, 60.0, 530.0, 130.0)}  # 11 px left of it: near, not over  # fmt: skip
+    ref = _round2_job(monkeypatch, boxes, frame)
+    rows, dropped, _seen = olf._check_rows(ref)  # round 1: no frame rule
+    assert [r["gid"] for r in rows] == [1, 2, 3] and _no_notice(dropped)
+    assert all("notice_near" not in r for r in rows)
+    olf._JOB["frame_rule"] = ml.NoticeRule()
+    rows2, dropped2, _ = ml._check_rows_round2(ref)
+    assert [r["gid"] for r in rows2] == [2, 3]
+    assert dropped2["notice"] == 1 and dropped2["notice:1023"] == 1
+    assert dropped2["frame_with_notice"] == 1
+    assert {r["gid"]: r["notice_near"] for r in rows2} == {2: False, 3: True}
+    assert olf._JOB["frame_rule"].last == [(541.0, 76.0, 800.0, 106.0)]
+    # the same frame WITHOUT a notice: round 2 scores every row, adds nothing
+    ref = _round2_job(monkeypatch, boxes, _ground())
+    olf._JOB["frame_rule"] = ml.NoticeRule()
+    rows3, dropped3, _ = ml._check_rows_round2(ref)
+    assert [r["gid"] for r in rows3] == [1, 2, 3] and _no_notice(dropped3)
+    assert all("notice_near" not in r for r in rows3)
+    olf._JOB.clear()
+
+
+def test_round2_rule_under_model_candidates_are_dropped_before_their_fit() -> None:
+    """The rule filters the under-model list too (o3h: before the fit), and leaves None alone."""
+    import numpy as np
+
+    frame = _ground()
+    _draw_notice(frame, 541, 76, 732, 106)
+    e = SimpleNamespace(job=1273)
+    over = (e, None, None, SimpleNamespace(box=(600.0, 90.0, 650.0, 160.0)), (0, ""))
+    clear = (e, None, None, SimpleNamespace(box=(100.0, 300.0, 150.0, 370.0)), (0, ""))
+    from collections import Counter
+
+    d: Counter[str] = Counter()
+    rule = ml.NoticeRule()
+    c, u = rule(np.ascontiguousarray(frame), [clear], [over, clear], d)
+    assert c == [clear] and u == [clear] and d["notice:1273"] == 1
+    c, u = rule(frame, [over], None, Counter())
+    assert c == [] and u is None
+
+
+def test_c1_rule_refusals() -> None:
+    """round2: gef_fild10 only, never round 1's spent TEST; TEST2 (a9-a11) under round2 only;
+    round1 everywhere else as before; an unknown rule fails."""
+    gef, pay = ml.GEF10, ml.PAYF07
+    ml.c1_rule_refusals(gef, "round1", ["/x/20261025T221059-rdp-rogue-a2"])
+    ml.c1_rule_refusals(gef, "round2", ["/x/20261025T221059-rdp-rogue-a2",
+                                        f"/x/{ml.GEF10_WATCH}:spots=0-10"])  # fmt: skip
+    ml.c1_rule_refusals(gef, "round1", ["/x/20261026T010738-rdp-rogue-a7"])  # T1's own (13r)
+    for sid in ("20261026T044312-rdp-rogue-a9", "20261026T052148-rdp-rogue-a10",
+                "20261026T055949-rdp-rogue-a11"):  # fmt: skip
+        ml.c1_rule_refusals(gef, "round2", [f"/x/{sid}"])
+        with pytest.raises(SystemExit, match="TEST2"):
+            ml.c1_rule_refusals(gef, "round1", [f"/x/{sid}"])
+    for part in ("/x/20261026T010738-rdp-rogue-a7", "/x/20261026T020202-rdp-rogue-a8",
+                 f"/x/{ml.GEF10_WATCH}:spots=11-14", f"/x/{ml.GEF10_WATCH}:spots=10-11",
+                 f"/x/{ml.GEF10_WATCH}"):  # fmt: skip
+        with pytest.raises(SystemExit, match="spent"):
+            ml.c1_rule_refusals(gef, "round2", [part])
+    with pytest.raises(SystemExit, match="gef_fild10 only"):
+        ml.c1_rule_refusals(pay, "round2", ["/x/20261024T173322-rdp-thief-s1"])
+    with pytest.raises(SystemExit, match="c1-rule"):
+        ml.c1_rule_refusals(gef, "round3", [])
+
+
+def test_round2_test2_is_refused_like_test_and_round1_test_is_unchanged() -> None:
+    spec = ml.GEF10
+    for sid in ("20261026T044312-rdp-rogue-a9", "20261026T052148-rdp-rogue-a10",
+                "20261026T055949-rdp-rogue-a11"):  # fmt: skip
+        assert spec.is_test(sid, None) and not spec.is_round1_test(sid, None)
+    for sid in ("20261025T213953-rdp-rogue-a1", "20261026T002500-rdp-rogue-a6"):
+        assert not spec.is_test(sid, None)  # a1 is not a11's prefix match, a6 stays TRAIN-able
+    assert spec.is_round1_test("20261026T010738-rdp-rogue-a7", None)
+    assert ml.PAYF07.test2_suffixes == ()
+
+
+def test_check_c1_rule_flag_defaults_to_round1(monkeypatch: pytest.MonkeyPatch) -> None:
+    import argparse
+
+    seen: dict[str, Any] = {}
+
+    def fake(a: argparse.Namespace) -> dict[str, Any]:
+        seen["rule"] = a.c1_rule
+        raise SystemExit(0)
+
+    monkeypatch.setattr(ml, "cmd_check", fake)
+    for argv, want in ((["check", "/x", "--params", "p", "--out", "o"], "round1"),
+                       (["check", "/x", "--params", "p", "--out", "o", "--c1-rule", "round2"],
+                        "round2")):  # fmt: skip
+        with pytest.raises(SystemExit):
+            ml.main(argv)
+        assert seen["rule"] == want
+    with pytest.raises(SystemExit):
+        ml.main(["check", "/x", "--params", "p", "--out", "o", "--c1-rule", "round3"])

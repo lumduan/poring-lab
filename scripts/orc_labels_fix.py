@@ -1064,6 +1064,11 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
     if not sess.layout_ok(bgr):  # a human demo's frame in another UI layout (3f)
         dropped["frame_ui_layout_mismatch"] += 1
         return [], dropped, seen
+    frame_rule = _JOB.get("frame_rule")  # a per-frame PIXEL exclusion (map_labels' round-2 C1
+    if frame_rule is not None:  # notice rule, gef10-round2.md); absent: unchanged (every rule)
+        cands, under = frame_rule(bgr, cands, under, dropped)
+        if not cands and not under:
+            return [], dropped, seen
     if under:  # 3i's o3 / o3h: the fit's evidence decides an under-box label (C1 then scores
         grey = bgr[:, :, :3].astype(float) @ label_check.GREY  # the PREDICTION, as ever)
         valid = valid_map(sess.lab.size, sess.lab.ui_rects)
