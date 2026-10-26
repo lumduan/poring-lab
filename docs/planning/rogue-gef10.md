@@ -691,3 +691,43 @@ events such as a storage close. `@save` does not help:
   cycle starts >= 12:00:28 (Amendment E).
 - b1's numbers are reported against Batt's bar (Amendment L). dungeon@9, modelled on his loop,
   follows the time-budget analysis.
+
+## Amendment N (2026-10-26 11:31 ICT from `date`): b1, fp2, the time budget, and the order of work
+
+**b1 (N, dungeon@8.3, 10:41:44-11:18):**
+- 8.3's live proof: the setup read the hotbar as F1 10 / F2 10 before and after, matching the
+  judged frame; no top-up was needed.
+- 36.0 min, 28 kills (**46.6 / h**), 0 deaths, HP low 25 %, 1 potion and 1 wing, loot 91.7 %,
+  14,870 z / h at OC. The same level as the night's runs (8.3 changes the restock only).
+
+**fp2 (the Orc Lord flee proof, round 2):** NO VERDICT, and trial 1 left the Rogue at 1-2 HP
+(orclord-recognizer.md 13a). The sight-based flee is NOT adopted. `--clear-map` plus
+Amendment E's clock schedule stay the protection, for every run.
+
+**Where the bot loses its time against Batt** ([gef10-time-budget.md](gef10-time-budget.md); the
+same ruler from packets; 8 runs, 4.80 h):
+- 81.6 s per kill against Batt's 15.5 s.
+- **Rest takes 50 % of the gap.** It is downstream of DAMAGE: 213 HP lost per kill against
+  22.5. The bot answers an attacker after a median 12.7 s, against 1.3 s; 30 attackers were
+  never hit back.
+- **Stop-and-go walking takes 22 %.** 2,437 of 3,807 walk decisions were refused on a
+  "cursor unknown". The bot walks 8.7 % of its time, Batt 35.6 %.
+- Loot pauses and idle after the fight make up most of the rest.
+- **Why the reactions are slow:** v1 sees almost none of this map's monsters (gef10-round2.md:
+  recall 8.0 %, Orc Lady 1.4 %).
+
+**The order of work (each version pre-registered with one main change, judged against Batt's
+bar):**
+1. **The gef10 detector, round 2** (gef10-detector.md 13s):
+   - w3, the immune watch: 11:29 -> ~12:02;
+   - T1 on TEST2 once;
+   - if it passes, the cache before 14:00, then training on the GPU (R1-R3).
+2. **dungeon@9.0: continuous walking on Batt's loop** (`config/routes/gef_fild10-batt-loop.json`).
+   It waits for the cursor-unknown diagnosis (a subagent, offline).
+3. **dungeon@9.1:** a quick loot click.
+4. **Then the detector-driven engagement,** once a gef10 model passes its evaluation: answer an
+   attacker in about 1 s, target monsters at range.
+5. **The rest policy last** (rest is downstream of damage).
+
+- Recordings stay in /dev/shm during SET hours (`dataset_ship` refuses 09:30-17:00 on
+  weekdays). They ship at 17:01.
