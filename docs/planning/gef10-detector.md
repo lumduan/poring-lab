@@ -1110,3 +1110,37 @@ the same bars, and Batt decides.
 - **Unchanged:**
   - the IO guard (`--sustain 30 --spike 25`); one abort means stop and ask Batt;
   - then the R2 check (Ollama `/api/ps`) and 13u's launch.
+
+### 13x. The resume ABORTED on the IO guard; STOPPED, Batt asked (2026-10-26 20:51 ICT from `date`)
+
+- **[20:47:02] `ABORT cache: quant-postgres full IO stall 26.9 % (spike above 25.0 %)`.**
+  - STOP VERIFIED after 1 s: the container is gone, and nothing of ours is on the GPU or the host.
+  - The resume had started at 20:39:19 and had passed its argument and shard checks.
+- **This is the second abort of this cache** (12:16, 13v; 20:47). Batt approved ONE retry after
+  20:00. **Nothing is retried.** Batt is asked (the standing rule).
+- **Evidence that the spikes are the host's own, not this job's.** Today's 1-fps hunt recorders
+  write only to RAM (/dev/shm). 10 of 11 were stopped by the same one-spike rule, with nothing
+  heavy of ours running:
+
+| recorder | frames | stop |
+|---|---|---|
+| b1 | 527 | quant-postgres 26.4 % |
+| c1 | 560 | frigate 29.3 % |
+| c3 | 345 | quant-postgres 29.8 % |
+| c4 | 199 | quant-postgres 26.3 % |
+| c5b | 891 | quant-postgres 27.0 % |
+| c6 | 1,430 | local cap (12 GB unshipped), not the guard |
+| c7 | 125 | quant-orderbook-engine 31.5 % |
+| c8 | 412 | quant-postgres 26.4 % |
+| c9 | 7 | quant-postgres 33.2 % |
+| c10 | 9 | cron.service(capture-streaming-pro) 30.2 % |
+| c11 | 141 | quant-postgres 31.2 % |
+
+- **What it means.** Under "abort above 25 % once", a job of several hours will trip whatever it
+  does. Separately, most of today's hunt recordings were cut short: round 3 loses those frames.
+- **Options for Batt** (none taken):
+  - (a) an AUTO-RESUME policy for this cache: after a trip, wait 10 quiet minutes and `--resume`,
+    at most N times. The tool is built for it;
+  - (b) a night window, if quant's spikes are rarer then (not measured yet);
+  - (c) a higher spike limit for jobs whose own disk IO is small.
+  - The recorders' guard is the same question.
