@@ -25,7 +25,8 @@ def test_each_character_has_a_safe_stand_and_old_sessions_are_the_gms() -> None:
 
 def test_the_crusaders_lines_go_through_its_guarded_path() -> None:
     src = (ROOT / "scripts" / "demo_aftercare.py").read_text()
-    assert 'cr.gm_line(agent, screen, cmd, "crusader")' in src
+    assert "cr.gm_line(agent, screen, cmd, *IDENTITY[character])" in src
+    assert da.IDENTITY["crusader"] == ("crusader", "crusader")
     assert "@heal" in src and "@warp" in src
 
 
@@ -33,3 +34,12 @@ def test_the_recorder_still_sends_no_input() -> None:
     src = (ROOT / "scripts" / "human_demo.py").read_text()
     for pat in ("Agent(", "session(", ".click(", ".chord(", ".keys(", "gm_line(", ".gm("):
         assert pat not in src, pat
+
+
+def test_the_rogue_has_the_runs_safe_stand_and_its_own_identity_check() -> None:
+    """2026-10-26: Batt's gef_fild10 demo is the Rogue's (data dir "thief", job "rogue")."""
+    assert da.character_of({"character": "rogue"}) == "rogue"
+    assert da.STANDS["rogue"] == ("prt_fild08", 268, 107)
+    assert da.IDENTITY["rogue"] == ("rogue", "thief")
+    src = Path(da.__file__).read_text()
+    assert "cr.gm_line(agent, screen, cmd, *IDENTITY[character])" in src

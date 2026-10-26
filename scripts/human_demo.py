@@ -68,6 +68,12 @@ CRUSADER_TEST_STATE = {
     "immune": "off (never made immune)",
     "autoguard": "off at arming (Batt casts it)",
 }
+ROGUE_TEST_STATE = {  # 2026-10-26: Batt's gef_fild10 demo, the bot's benchmark (rogue-gef10.md)
+    "job": "rogue",
+    "immune": "off",
+    "stock": "White Potion F1, Fly Wing F2 (topped up to 10 each before arming)",
+}
+TEST_STATES = {"gm": GM_TEST_STATE, "crusader": CRUSADER_TEST_STATE, "rogue": ROGUE_TEST_STATE}
 NO_INPUT_CAP_S = 45 * 60.0  # armed but never played: give up, nothing recorded is analysed
 
 
@@ -157,7 +163,7 @@ def arm(
               backend=str(lock.backend), lock_seq=lock.seq, t_armed_ns=t_armed,
               frames_dir=str(frames_dir), rec_hz=REC_HZ, rec_quality=REC_QUALITY,
               battle_log=battle_log,
-              test_state=GM_TEST_STATE if character == "gm" else CRUSADER_TEST_STATE)  # fmt: skip
+              test_state=TEST_STATES[character])  # fmt: skip
     ctx = mp.get_context("spawn")
     stop_rec, stop_det = ctx.Event(), ctx.Event()
     rec = ctx.Process(target=route_demo._record, args=(str(frames_dir), region, stop_rec, REC_HZ,
@@ -256,7 +262,7 @@ def main() -> int:
     a.add_argument("--end-quiet", type=float, default=None,
                    help="also end S s after the last human input (once started)")  # fmt: skip
     a.add_argument("--map", default="prt_fild08", help="the map played (the session's label)")
-    a.add_argument("--character", choices=("gm", "crusader"), default="gm")
+    a.add_argument("--character", choices=("gm", "crusader", "rogue"), default="gm")
     a.add_argument(
         "--battle-log",
         action="store_true",

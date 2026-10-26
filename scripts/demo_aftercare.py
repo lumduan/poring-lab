@@ -27,7 +27,12 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
-STANDS = {"crusader": ("prt_fild08", 268, 107), "gm": ("prt_fild08", 194, 199)}
+STANDS = {
+    "crusader": ("prt_fild08", 268, 107),
+    "gm": ("prt_fild08", 194, 199),
+    "rogue": ("prt_fild08", 268, 107),
+}  # 2026-10-26: Batt's gef_fild10 demo (the Rogue)
+IDENTITY = {"crusader": ("crusader", "crusader"), "rogue": ("rogue", "thief")}  # job, data dir
 DRAWN_WAIT_S = 25.0  # a dungeon -> field warp: the map loads (black) for a few seconds
 
 
@@ -51,15 +56,15 @@ def rescue(character: str, label: str = "demo-aftercare") -> dict[str, Any]:
         agent.wait_for_human()
 
         def line(cmd: str) -> None:
-            if character == "crusader":
-                cr.gm_line(agent, screen, cmd, "crusader")
+            if character in IDENTITY:
+                cr.gm_line(agent, screen, cmd, *IDENTITY[character])
             else:
                 r.gm(agent, screen, cmd)
 
         def drawn() -> bool:
             if r.black(screen):
                 return False
-            return character != "crusader" or bool(cr.check(screen, "crusader")["ok"])
+            return character not in IDENTITY or bool(cr.check(screen, *IDENTITY[character])["ok"])
 
         ui_gate.ensure_clear(agent, screen, why=f"{label}:start")
         line(f"@warp {stand[0]} {stand[1]} {stand[2]}")
