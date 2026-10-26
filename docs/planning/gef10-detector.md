@@ -1055,3 +1055,27 @@ the same bars, and Batt decides.
   2,232 gef_fild10 frames; the nested link `v2orc-payf07-20261024` resolves (20 sessions, 22,546
   frames, 31 shards); combined TRAIN 19,025 frames; no 3c refusal. It is built through
   `guarded_build.py cache@6300=`, capped to end before 14:00. Then the training as recorded.
+
+### 13u. THE TRAINING SETTINGS, recorded BEFORE the launch (2026-10-26 12:13 ICT from `date`; gef10-eval.md "as recorded in gef10-detector.md BEFORE the launch")
+
+- **Cache:** `v2orc-payf07-gef10-20261026`, being built now (13t).
+- **Init weights:** payf07's epoch-1 `last.pt`,
+  `/mnt/poring-lab-datasets/archive/train/payf07-20261024/weights/last.pt` (in the container
+  `/datasets/archive/train/payf07-20261024/weights/last.pt`), sha256 `b2c2912017ea74ffb354621f2cac263d785eb3f29dcb5ec09725c6003f9ef767`.
+- **Settings (section 10, unchanged):**
+  - YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1;
+  - **10 epochs**, `close_mosaic` 3, `hsv_s` 0.2, **`scale` 0.1**;
+  - WORKER=1 (the long-lived worker, up since 2026-10-24 19:53 UTC), MID_CKPT=1;
+  - R1-R3 and the adaptive duty cycle, the IO guard, the 25 % VRAM cap.
+- **R2 at launch:** Ollama's `/api/ps` showed no model at 12:1x; the guard re-checks it before
+  the start.
+- **The launch (after the cache, outside 09:30-10:15 / 14:00-14:45):**
+
+      WORKER=1 MID_CKPT=1 INIT_WEIGHTS=/datasets/archive/train/payf07-20261024/weights/last.pt \
+        HSV_S=0.2 CLOSE_MOSAIC=3 SCALE=0.1 scripts/runbooks/train-day.sh gef10-20261026 \
+        v2orc-payf07-gef10-20261026 10 /dev/shm/poring-lab-tmp/train-gef10 2 1
+
+- **The scored checkpoint (gef10-eval.md):** `last.pt` after the last COMPLETED epoch.
+- **Time:** ~(16,793 + 2,232) x 0.193 s ~ 1.0 h of training per epoch, about 10 h of running,
+  but the duty cycle slows it under Frigate's load. payf07's single epoch took about 10 h of
+  wall time.
