@@ -855,3 +855,45 @@ fail-closed stop path exits before writing them.
     >= D6 + 76.
   - Pooled with c3 as 9.0b's result. They run in the market window 14:00-14:45: runs are not
     disk-heavy steps; their recordings stay in RAM until 17:01.
+
+## Amendment R (2026-10-26 14:19 ICT from `date`): dungeon@9.2 = 9.0b + `--rest house`; the door probe first; run c7
+
+**Done so far** (gef10-house-rest.md 11, 13:38-13:42): the exits of all three SEALED houses
+(gef018, gef019, gef020) work from the computed indoor pixels, landing exactly on the return
+cells. The rooms are dark (17-20), with no minimap, HP readable and the UI clear.
+
+**Before the scored run: the DOOR probe** (unscored, GM-assisted, IMMUNE), at ~16:12-16:25 after
+c6. Per sealed house:
+- `@warp` to one of its approach cells (`house_setup`'s);
+- confirm the readout; hover the door cell's projected pixel;
+- ONE click; expect the load and "inside" by `house_rest.Transition`;
+- exit by the validated pixel; back at the return cell; `@warp` to the stand.
+- **Any STOP or a wrong map = no scored house run** until it is understood.
+
+**Run c7** (if the probe passes):
+- dungeon@9.2 = 9.0b (`--search patrol --walk-trust --npc-guard`) + **`--rest house`**, the ONE
+  change; seed 25547, 36 min;
+- Amendment E's next cycle: D7 = c7's setup kill at >= 16:29:15 (D6 14:18:15 + 131).
+- The baseline is 9.0b's pool (c3-c6).
+
+**Hard bars** (packets, the judge; gef10-house-rest.md 9):
+- map changes other than the recorded house trips: 0;
+- to orcsdun01 / orcsdun02: 0, absolute;
+- NPC contacts 0; attacks on non-targets 0;
+- no Fly Wing between a `house_door` and its `house_back`;
+- no attack act on us inside in_orcs01.
+
+**Trip bars:** >= 90 % of door clicks reach "inside"; 100 % of exits come back at the planned
+return cell; every STOP reported with its frame.
+
+**Measures:**
+- kills / h, items / h, value / h at OC;
+- the rest share, and the HP taken per kill in the rest and around-rest windows;
+- trips / h, the trip time, route steps to the door;
+- fallbacks by why, deaths.
+
+**Prediction:** kills / h +3 to +5 over 9.0b's pool; the HP taken in the rest and around-rest
+windows per kill falls by >= 50 %; the rest share does not rise.
+
+**The 17:01 ship:** it ships every recording in RAM at 17:01. c7's recording, still running then,
+is excluded and shipped after its run.
