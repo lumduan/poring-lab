@@ -1185,3 +1185,45 @@ that showed live at 3 min:
   reported apart.
   - The same measures as above, and the same prediction.
   - The cue is adopted only if, pooled, reaction AND consumables improve with kills / h not lower.
+
+## Amendment Z (2026-10-26 18:43 ICT from `date`): D8 = 18:41:45; the LOOT TRIM block (gef10-eyes-loot.md E1), pre-registered
+
+**The cycle's clock:**
+- **D8 = c9's setup @killmonster2 at 18:41:45.** c9 runs dungeon@8.4: stock 30 / 20 verified on
+  the hotbar, weight 870 / 2430.
+- c10 is released at >= 19:19:45 and c11 at >= 19:57:45; both end by 20:41:45.
+- **The next cycle (D9) starts at >= 20:52:45.**
+
+**The change, `--loot trim`** (branch `feat/loot-trim`, e1e5a70; merged only after c11 ends, so
+c9-c11 keep their registered base):
+- Loot v1's list and its order (nearest first) are unchanged.
+- At most `LOOT_TRIM_HOVERS` = 9 cell hovers. Cells out of view are not counted. No sweep.
+- No new click and no click path changed.
+  - A pickup is still the PICKUP-hand cursor read before its click; no text is read (Batt's rule).
+  - Click census and safety tests are green.
+- **Why:**
+  - The idle study (gef10-idle-study.md): 80 of 84 pickups came within the first 9 hovers, and
+    1,180 of the 1,379 loot-step seconds came after the step's last pickup.
+  - Batt's 18:12:56 clip shows ~10 s of hovers after the last pickup.
+- **Its estimate (offline, before any run):** +14 kills / h (pooled c5b-c8: 88.7 -> 102.7), and
+  4 of 113 pickups lost.
+
+**The block:**
+- Starts at D9 (>= 20:52:45). Amendment E's clock as before: runs at D9, D9 + 38, D9 + 76, then
+  the next cycle.
+- **Arms:** T = `--loot trim` and V = `--loot v1`, alternated T, V, T, V.
+  - Seeds 25552-25555, 36 min each, at least 2 pairs (4 runs, across two cycles).
+- **Everything else is held constant:**
+  - strategy P2 (the default), Batt's loop, `--walk-trust --npc-guard`;
+  - base dungeon@8.4 with the map_zones fix;
+  - **the cue as c9-c11's verdict leaves it** (Amendment Y's rule): on in both arms if adopted,
+    off in both if not. This is recorded in the block's first run_start.
+- **Primary:** kills / h from packets, pooled T against pooled V. **Bar: T - V >= +8.**
+- **Secondary:**
+  - loot-step seconds per kill (time_budget idle_loot_pause + loot): T <= 3.5, against ~8.5;
+  - floor-loot completeness: T within 8 points of V;
+  - items / h and value / h at OC: T not lower;
+  - damage per kill and potions + wings / h: T at most +10 %.
+- **Hard bars as always.** A `stock_out` end counts over its own window.
+- **Known confound, equal for both arms:** the round-2 training (gef10-detector.md 13u) may run on
+  the GPU / CPU during the block, if its cache builds at 20:05. Its load is noted per run.
