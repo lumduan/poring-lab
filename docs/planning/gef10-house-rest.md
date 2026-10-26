@@ -431,3 +431,35 @@ His 5-Hz frames around his map change (packet at 0.00 s; the frames lag ~0.7 s):
     python3 scripts/house_rest.py steps <a2 a3 a4 a7 a8 a5b b1 sids>   # section 6's route steps
     python3 scripts/time_budget.py compare --target 20261026T095021-demo-human-demo-gef10 \
         --live 898 <a2 a3 a4 a7 a8 a5b b1 sids> --json   # section 6's time and damage rows
+
+## 11. LIVE PROBE: the indoor camera and the exits, all 3 sealed houses PASS (the parent, 2026-10-26 13:38-13:42 ICT; recorded 13:43)
+
+- **Unscored, GM-assisted, IMMUNE** (verified on its bubble before and after), nothing else
+  running. `/dev/shm/poring-lab-tmp/house-probe/probe.py` (scratch; archived to the NAS):
+  - `@warp in_orcs01` to the house's ARRIVAL;
+  - read the room (frame mean, the minimap readout, the HP read, `ui_gate.ensure_clear`);
+  - hover the exit pixel computed exactly as `house_setup` does (`house_rest.exit_point`, the
+    RDP camera's indoor projection, in_orcs01's GAT);
+  - ONE click on it; read the frames for 12 s and the readout;
+  - then `@warp` to the stand.
+
+| house | exit pixel | room mean | HP read | minimap inside | ui | hover verdict | back at (readout) | expected |
+|---|---|---|---|---|---|---|---|---|
+| gef018 | (709, 312) | dark (the probe crashed on a JSON bug before writing it) | 88 % (frame) | none | - | - | **138,329** | 138,329 |
+| gef019 | (570, 314) | 17.3 | 94 | none | clear | unknown | **137,286** | 137,286 |
+| gef020 | (570, 314) | 20.0 | 97 | none | clear | unknown | **214,53** | 214,53 |
+
+- **Risk 1 (the indoor camera on RDP): validated for all three exits.** One click on the computed
+  pixel took the Rogue out every time, to the exact return cell.
+- **Risk 2 (the rooms' pixels):** dark (17-20 << 70), no minimap readout, HP readable, the UI gate
+  clear.
+- **Risk 4 (the readout at the return cells):** it read at once at 137,286 and 214,53, and
+  138,329 on the frame.
+- **The load:** the frame mean jumps to ~93 (the loading screen) for ~3 s, one black frame, then
+  the field (~90-103).
+- **New fact:** the cursor over an exit warp reads "unknown", not WALK. The design clicks on
+  unknown and stops on SWORD or no-entry, so this is consistent. It is recorded so that no one
+  "fixes" it into a refusal.
+- **Still unchecked live:** the door step from the field (risk 3), the walk to it at low HP (5),
+  and the field gap bar (7). Those need a supervised run with `--rest house`, pre-registered on
+  its own.
