@@ -162,6 +162,11 @@ STRATEGIES: dict[str, dict[str, Any]] = {
     # 20 %), the Fly Wing only below 15 %, and 30 potions stocked (no sitting repays the damage)
     "P": {"potion_below": 0.40, "fly_below": 0.15, "fly_rate": 200.0, "fly_rate_below": 0.25,
           "rest_below": None, "heal_below": None, "potions_to": 30},
+    # Amendment U (c5 under P died at 4.5 min to a SWARM: 8 orcs, ~200-250 HP/s, 3 potions eaten
+    # within a second each, the last 37 % -> 0 in 0.8 s): P + the swarm escape -- a Fly Wing when
+    # HP < 50 % AND dropping >= 150 HP/s over 2 s (c5 would have flown at ~43 %, 5 s before)
+    "P2": {"potion_below": 0.40, "fly_below": 0.20, "fly_rate": 150.0, "fly_rate_below": 0.50,
+           "rest_below": None, "heal_below": None, "potions_to": 30},
     # dungeon@4 (Batt 2026-10-22: decision 1 + 1b, and his demo's Heal rhythm)
     "H": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.80, "rest_sp_below": 0.30, "rest_until_sp": 0.40,

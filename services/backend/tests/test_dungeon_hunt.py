@@ -578,3 +578,13 @@ def test_batts_no_rest_strategy_never_sits_and_drinks_below_40() -> None:
     p = dh.STRATEGIES["P"]
     assert not dh.rest_wanted(p, 0.21, 0.5) and not dh.rest_wanted(p, 0.05, 0.0)
     assert p["potion_below"] == 0.40 and p["fly_below"] == 0.15 and p["potions_to"] == 30
+
+
+def test_p2_flies_on_a_swarm_drain_below_half() -> None:
+    """Amendment U: c5's swarm -- 74 % -> 43 % in ~3 s (~190 HP/s) -> P2 flies; P did not."""
+    hist = [(0.0, 0.74), (0.5, 0.69), (1.0, 0.63), (1.5, 0.58), (2.0, 0.53), (2.5, 0.47)]
+    for name, flies in (("P2", True), ("P", False)):
+        st = dh.Sustain()
+        st.hist.extend(hist[:-1])
+        got = dh.sustain(st, 3.0, 0.43, 1.0, {**dh.STRATEGIES[name], "max_hp": 2146})
+        assert (got[:1] == [("fly", got[0][1])] if got else False) is flies, (name, got)

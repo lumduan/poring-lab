@@ -965,3 +965,26 @@ It is compared with 9.0b's runs (c3, c4) and Batt's bar.
 
 **The rest of the plan shifts:** 9.1 (`--miss-cue`, Amendment S) and the door probe / 9.2
 (Amendment R) follow in the next cycles.
+
+## Amendment U (2026-10-26 15:03 ICT from `date`): c5 (strategy P) DIED at 4.5 min to a swarm; P2 adds a swarm escape; c5b
+
+**c5** (P: no rest, a potion below 40 %, a Fly Wing below 15 % or a fast drop below 25 %),
+14:56:16-15:00:5x.
+- **A death after ~4.5 min**, recovered by the runner's death path (@alive, @heal, home).
+- **The cause** (packets): a SWARM. 8 orcs were on us at once (6 Orc Ladies, an Orc Warrior, an
+  Orc Baby). The last 30 s held 59 acts on us, 23 hits, 2,900 damage (~200-250 HP/s).
+- Three White Potions at 31 / 39 / 35 % were each eaten within a second.
+- The last 37 % -> 0 took 0.8 s. The escape rule (fast drop BELOW 25 %) never fired before that,
+  because the potions held HP above 25 %.
+- **What it says about Batt's question** (the rate with no rest): the bot as it is reacts and
+  kills too slowly to keep a no-rest pace. The orcs pile up and the potions cannot outrun a swarm.
+
+**P2** (this commit): P plus a SWARM ESCAPE, a Fly Wing when HP < 50 % AND the loss over 2 s is
+>= 150 HP/s. On c5's trace it would have flown at ~43 %, about 5 s before the end (a unit test
+replays it). Otherwise unchanged: never sits; a potion below 40 %; the Fly Wing below 20 %;
+30 potions stocked.
+
+**c5b** (P2: `--strategy P2 --search patrol --walk-trust --npc-guard`), seed 25545, 36 min:
+- starts at once and ends <= 16:18:15 (D6 + 120);
+- **c6 (9.1) moves to the next cycle** (>= 16:29:15), and the door probe / 9.2 after it.
+- **Measures:** as Amendment T, plus Fly Wings by why (swarm / low / position).
