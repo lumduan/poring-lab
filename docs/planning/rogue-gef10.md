@@ -1242,8 +1242,13 @@ c9-c11 keep their registered base):
   - At +7.34 s the GM warp moved it to prt_fild08 with HP 2.
   - The next pre-run frame showed the "Base Experience has lost" line. That is how it was caught.
 - **c10's row therefore says "1 death after the time box".** Every report shows it.
-- **Earlier runs** did not show this. c5b-c9's end frames and pre-run frames had no death line.
-  Their packets after run_end are not yet re-checked.
+- **Earlier runs: re-checked from packets after run_end (20:04).** c10 is the ONLY death after a
+  time box.
+  - b1, c4, c5b, c6, c7, c8 and c9 have the end warp inside their banked tails (6.9-11.2 s). Their
+    minimum HP after run_end was 952-1811, with no experience lost.
+  - c1 and c3 had short rebuilt tails, so 30 s were pulled from the sniffer archive: minimum HP
+    1713 and 1128, experience only rising, then the warp to prt_fild08.
+  - c5's death was in-run and is already counted (it ended that run).
 
 **dungeon@8.5, a safe end** (`end_escape_needed`):
 - **The rule.** When a run ends, a Fly Wing goes first, then the end warp, if all of these hold:
