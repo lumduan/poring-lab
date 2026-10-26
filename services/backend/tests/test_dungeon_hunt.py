@@ -694,3 +694,13 @@ def test_the_walk_timer_is_an_option_and_recorded_only_when_changed() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, walk_every=0.8))["walk_every"] == 0.8
     src = (Path(dh.__file__)).read_text()
     assert "and tick - last_walk >= a.walk_every:" in src and dh.WALK_EVERY_S == 1.2
+
+
+def test_a_full_lap_of_routeless_skips_flies_at_once() -> None:
+    """gef10-idle-study.md 4c (c7: 412 skips, 45.8 s standing until the idle watchdog): a full lap
+    of route-less skips in a row is a dead end and flies at once; a routed goal resets the count."""
+    assert not dh.dead_end(79, 80) and dh.dead_end(80, 80) and not dh.dead_end(5, 0)
+    src = (Path(dh.__file__)).read_text()
+    assert 'wp_st["skips"] += 1  # route-less skips in a row (dead_end)' in src
+    assert 'elif goal_path:\n                        wp_st["skips"] = 0' in src
+    assert 'why_s = "dead_end" if patrol and dead_end(wp_st["skips"], len(wps)) else "idle"' in src

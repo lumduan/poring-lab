@@ -316,6 +316,15 @@ CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid 
 MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
 MR_AFTER_HIT_S = 0.3  # ... and while locked, ONE ring cell is read within this of our own hit
 IDLE_MAX_S = 45.0  # Amendment D: searching this long with no walk click and no move = stuck
+
+
+def dead_end(skips_in_row: int, n_waypoints: int) -> bool:
+    """PURE (gef10-idle-study.md 4c / 6.2): a full lap of route-less patrol skips in a row = a dead
+    end: no waypoint routes from our cell (c7: a whole-run carve sealed the pocket's only exit; it
+    skipped 412 times and stood 45.8 s until the IDLE_MAX_S watchdog). Fly at once instead."""
+    return n_waypoints > 0 and skips_in_row >= n_waypoints
+
+
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
@@ -1449,7 +1458,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                       max(0, int(u) - 50): max(0, int(u) + 50), :3]  # fmt: skip
 
         wp_st: dict[str, Any] = {"i": None, "last": None, "resume": False, "laps": 0, "fly": -1e9,
-                                 "through": None}  # --walk-through's waypoint  # fmt: skip
+                                 "through": None, "skips": 0}  # fmt: skip
 
         def patrol_goal(h: Cell) -> Cell:
             """--search patrol: the waypoint to walk to (joins the loop at the nearest waypoint
@@ -1476,6 +1485,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return wps[wp_st["i"]]
 
         def skip_waypoint(h: Cell) -> None:
+            wp_st["skips"] += 1  # route-less skips in a row (dead_end)
             ev({"kind": "patrol", "event": "skip", "i": wp_st["i"], "at": list(h)})
             wp_st["last"], wp_st["i"] = wp_st["i"], mroutes.next_index(rt, wp_st["i"])
 
@@ -2611,11 +2621,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # move for IDLE_MAX_S = stuck (the routing fails, or the client will not walk)
                 if here != idle_pos or mode != "search":
                     idle_pos, idle_since = here, tick
-                elif tick - max(idle_since, last_walk_click) > IDLE_MAX_S:
-                    ev({"kind": "stuck", "at": None if here is None else list(here), "why": "idle"})
-                    press("fly", "idle")
+                elif tick - max(idle_since, last_walk_click) > IDLE_MAX_S or (
+                        patrol and dead_end(wp_st["skips"], len(wps))):  # fmt: skip
+                    why_s = "dead_end" if patrol and dead_end(wp_st["skips"], len(wps)) else "idle"
+                    ev({"kind": "stuck", "at": None if here is None else list(here), "why": why_s})
+                    press("fly", why_s)
                     fly_at = time.monotonic()
-                    ev({"kind": "escape", "how": "fly", "why": "idle"})
+                    wp_st["skips"] = 0
+                    ev({"kind": "escape", "how": "fly", "why": why_s})
                     idle_pos, idle_since, goal_path = None, tick, None
                     loot_list, fight_ref = [], None
                     here, last_taken = None, -1e9  # Amendment F
@@ -2661,6 +2674,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     goal_path = None if goal is None else route(okr, carved, here, goal)
                     if patrol and goal is not None and goal_path is None:
                         skip_waypoint(here)  # carved off: the next waypoint ahead
+                    elif goal_path:
+                        wp_st["skips"] = 0
                     wp_st["through"] = None
                     ni_ = None if not patrol else mroutes.next_index(rt, wp_st["i"])
                     if a.walk_through and ni_ is not None and goal is not None and goal_path:
