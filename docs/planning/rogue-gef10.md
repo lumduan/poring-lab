@@ -1412,3 +1412,34 @@ c9-c11 keep their registered base):
   minimum HP after its end was 1438.
 - **The clock:** D10 = d4's setup @killmonster2 at 23:05:28. e1 (L) >= 23:43:28, e2 (V) >= 00:21:28,
   both ending by 01:05:28. D11 >= 01:16:28.
+
+## Amendment AF (2026-10-27 01:18 ICT from `date`): the WALK TIMER block, pre-registered (gef10-idle-study.md 4a)
+
+**The change:** `--walk-every 0.8` (3256250; OFF by default, 1.2 s).
+- The walk decision fires every `walk_every` seconds, counted from the previous decision's START.
+- **Why (the idle study):** one decision takes ~0.9 s (a ~0.4 s cursor read, then a ~0.5 s paced
+  click). The 5-6 cell path takes ~0.9 s. So at 1.2 s the Rogue stands ~0.3-0.4 s before nearly
+  every click: 1,679 stops.
+- At 0.8 s the next decision begins as soon as the last one ends, so its click lands while the
+  path is still being walked.
+- Same clicks, same checks (fits, walk-trust, SWORD, NO-ENTRY, NPC guard), no new click path.
+
+**The block:**
+- D11 = e3's setup @killmonster2 at 01:17:13. f1 starts in D11's third slot (>= 02:33:13).
+- D12 (>= 03:28:13) holds f2, f3, f4.
+- **Arms:** F = `--walk-every 0.8` and V = 1.2, alternated F, V, F, V. Seeds 25560-25563.
+- **The base:**
+  - P2, the cue, `--loot trim`, the level hold, dungeon@8.5;
+  - the patrol dead-end fix (c6f3e07, merged after e4, before f1);
+  - **the walk legs as the e-block's verdict leaves them** (Amendment AD): L in both arms if it
+    passes AD's bar, the defaults if not.
+- **Primary:** kills / h from packets, pooled F against pooled V. **Bar: F - V >= +6.**
+- **Secondary:**
+  - idle_inside_search s / kill: F lower;
+  - walk clicks per kill;
+  - search_walk s / kill: not higher;
+  - hard bars and NPC-guard refusals: not more;
+  - damage per kill cycle and potions + Fly Wings PER KILL: at most +10 % (per kill, Amendment AE's
+    lesson).
+- **After f4:** D13 (~05:39) holds ONE confirmation run of the night's best configuration. It is a
+  measurement, not part of any comparison. Then the morning report.
