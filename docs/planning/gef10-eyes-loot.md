@@ -310,6 +310,11 @@ gef_fild10 on 2026-10-26).
   - b1, c1, c3-c8 and Batt's demo, banked on the NAS with packets;
   - the same frozen label rules, TEST sessions held back.
 - Pre-registered like round 2: T1 / T2 label checks, then the eval.
+- **A decision E5's pre-registration must make (from the E3 prep, 2026-10-26 19:2x):** the frozen
+  gef10 item label rule EXCLUDES frames with an item under our own box or HP bar (under_self /
+  under_self_bar). That is exactly the loot case: today's drops land at our feet. So E3's (0,0)
+  views give no labels unless E5 changes that rule, and its T1 / T2 checks must then cover those
+  labels too.
 
 ### E6. THE "EYES" RUNNER VERSION (after E4 passes its eval)
 
