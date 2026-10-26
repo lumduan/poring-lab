@@ -1443,3 +1443,36 @@ c9-c11 keep their registered base):
     lesson).
 - **After f4:** D13 (~05:39) holds ONE confirmation run of the night's best configuration. It is a
   measurement, not part of any comparison. Then the morning report.
+
+## Amendment AG (2026-10-27 02:34 ICT from `date`): the e-block judged -- THE LONG WALK LEGS FAIL; the walk-timer block runs on the default legs
+
+| run | arm | kills | kills / h | walk clicks / kill | min HP after the time box |
+|---|---|---|---|---|---|
+| e1 | L | 58 | 96.6 | 14.2 | 1041 (end_escape) |
+| e2 | V | 66 | 110.0 | 11.3 | 1273 |
+| e3 | L | 61 | 101.7 | 14.8 | 1000 (end_escape) |
+| e4 | V | 54 | 90.0 | 16.4 | 1097 |
+
+**Pooled** (Amendment AD's bars):
+
+| measure | L | V | bar | met? |
+|---|---|---|---|---|
+| **kills / h (primary)** | 97.5 | 100.0 | L - V >= +6 | **NO, -2.5** |
+| idle_inside_search s / kill | 5.31 | 7.59 | L lower | yes |
+| walk clicks / kill | 14.5 | 13.9 | L lower | no |
+| search_walk s / kill | 14.44 | 10.78 | not higher | **no** |
+| hard bars / NPC-guard refusals | 0 / 0 | 0 / 0 | not more | yes |
+| damage per kill cycle | 109.5 | 120.5 | at most +10 % | yes |
+
+- **Not adopted.**
+  - The legs did what they were built for: less standing inside the search (5.31 against 7.59 s
+    per kill).
+  - The bot walked more per kill instead (14.44 against 10.78 s).
+- **A mechanism was considered:** the blind bot meets monsters when they catch it, and slower orcs
+  never catch a bot that keeps walking (Batt's 18:12:40 clip). The engage sources do NOT show it
+  clearly: e1 had the most monster-started fights per hour (114.9) and e3 the fewest (68.3). Spawn
+  variance dominates at this sample size, so it is NOT recorded as a prediction.
+- **The same configuration varies across the night.** Trim + cue + default legs gave d1 134.7,
+  d3 109.9, e2 110.0 and e4 90.0 kills / h.
+- **The f-block (Amendment AF)** therefore runs on the DEFAULT legs (`legs-f` empty). The
+  patrol dead-end fix is merged in its base (0047135, 02:34).
