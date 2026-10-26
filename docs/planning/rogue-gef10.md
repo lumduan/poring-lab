@@ -1074,7 +1074,7 @@ that showed live at 3 min:
 - **Prediction (unchanged from Amendment V):** earlier reactions; damage / kill down >= 20 %, and
   potions + wings / h with it; kills / h not lower.
 
-## Amendment X (2026-10-26 17:16 ICT from `date`): c6 judged (P2 + the 9.1 cue, with its loop); c7 running
+## Amendment X (2026-10-26 17:11 ICT from `date`): c6 judged (P2 + the 9.1 cue, with its loop); c7 running
 
 **c6**, 16:29:15-17:05:43:
 - **Window:** 35.4 min, run_start..run_end.
