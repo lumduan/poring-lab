@@ -1114,3 +1114,74 @@ that showed live at 3 min:
   - The loop's cost shows in idle per kill: 17.4 s against 14.8 s.
   - This is one run on its own seed, so it is **not pooled** (Amendment W). c7 (P2) against
     c8 (P2 + 9.1b) is the registered comparison.
+
+## Amendment Y (2026-10-26 18:27 ICT from `date`): c8 judged; Batt's decisions; base dungeon@8.4 + the map_zones fix; c9-c11
+
+**c7** (P2 alone, seed 25547), 17:09:07-17:46:10, the full 36 min:
+- 75.0 kills / h (45), 0 deaths, HP low 16.9 %.
+- 17 potions and 10 Fly Wings (28.3 + 16.7 per h): 10 escapes, all 10 wings.
+- **Its 10th wing went at 28.5 min.** It then hunted 7.5 min with no escape: the a10 condition.
+- 207 damage per kill cycle (c5b: 126).
+- Items: 98.3 / h (59). Value at OC: 24,352 z / h.
+
+**c8** (P2 + `--miss-cue` 9.1b, seed 25548), 17:47:04-18:24:06, the full 36 min:
+- 81.7 kills / h (49), 0 deaths, HP low 22.3 %.
+- 10 potions and 6 Fly Wings (16.7 + 10.0 per h).
+- 168 damage per kill cycle.
+- Items: 78.3 / h (47). Value at OC: 24,490 z / h.
+- **The cue:** 90 onsets, 0 false; 24 engages, **0 in a loop**, 0 false. 9.1b works live.
+
+**The registered comparison (Amendment W): c5b + c7 (P2) against c8 (P2 + 9.1b):**
+
+| measure | P2 pooled | c8 | Amendment V's prediction | met? |
+|---|---|---|---|---|
+| reaction when attacked first (mean) | 8.66 s | 7.73 s (median 6.56) | earlier | yes, -11 % |
+| damage per kill cycle | ~161 | 168 | -20 % or more | **no**, +4 % |
+| potions + wings / h | 37.5 | 26.7 | lower | yes, -29 % |
+| kills / h | 85.8 | 81.7 | not lower | **no**, -5 % |
+
+- **Sensitivity, both cue runs** (c6 with its loop + c8 against c5b + c7):
+  - kills / h 91.6 vs 85.8;
+  - damage per cycle ~133 vs ~161;
+  - consumables 22.7 vs 37.5 / h.
+- Runs differ a lot from each other: c5b 96.6 against c7 75.0 kills / h, on the same arm.
+- **Verdict: not adopted yet.** The alternation goes on (below). The cue is safe: 0 false fires in
+  212 onsets.
+
+**Batt's decisions (2026-10-26 ~18:2x, in chat):**
+1. **P2 (no sitting) is the DEFAULT strategy** for the gef_fild10 Rogue from now on.
+2. **The immune staged-items session on gef_fild10 is APPROVED**, for floor-item labels (D10's
+   recipe):
+   - the GM immune;
+   - items placed by @item on open ground;
+   - Poporings cleared first;
+   - staged items never counted as income.
+   - Its plan is `docs/planning/gef10-eyes-loot.md`.
+3. **New pixel cues must not read English UI text.** A Thai rAthena server would break them. The
+   "obtained" / "You got" texts are NOT to be used as pickup proof. Sprites, shapes, colours and
+   digits only, each checked on the Thai client before it is relied on.
+
+**Base from c9 on (both arms):**
+- dungeon@8.4, the stock guard (2f1cc9f):
+  - the hotbar count is re-read after every potion and Fly Wing press;
+  - a 0 ends the run as `stock_out`, with the end warp home;
+  - P2 stocks 20 Fly Wings.
+- The map_zones fix (da01ee6): an axis-aligned straight walk through a no-enter area is refused.
+  gef_fild10's loop proves the same: 80 legs, 827 steps.
+- A `stock_out` end is a normal end: the run counts over its own window.
+
+**This cycle (Amendment E):**
+- D8 = c9's setup @killmonster2, at or after 18:41:01 (D7 + 131).
+- Runs of 36 min each, Batt's loop, `--walk-trust --npc-guard`.
+
+| run | arm | seed | release |
+|---|---|---|---|
+| c9 | P2 + `--miss-cue` 9.1b | 25549 | >= 18:41:01 |
+| c10 | P2 | 25550 | >= D8 + 38 |
+| c11 | P2 + `--miss-cue` 9.1b | 25551 | >= D8 + 76, ending by D8 + 120 |
+
+- A store step comes before any run that would start at >= 40 % weight.
+- **The comparison after c11:** P2 (c5b, c7, c10) against P2 + 9.1b (c8, c9, c11). c6 is
+  reported apart.
+  - The same measures as above, and the same prediction.
+  - The cue is adopted only if, pooled, reaction AND consumables improve with kills / h not lower.
