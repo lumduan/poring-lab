@@ -139,7 +139,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.4"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.5"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
@@ -147,7 +147,9 @@ VERSION = "dungeon@8.4"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 # @8.2 = no stand toggle after a hit; @8.3 = the stock read from the HOTBAR (Amendment M: a stale DB
 # save left 4.05 a10 with 0 Fly Wings); @8.4 = the stock guard in the run (Amendment Y: c7 used its
 # 10th Fly Wing at 28.5 min and hunted 7.5 min with no escape): the hotbar count is re-read after
-# every potion / Fly Wing press, and a count of 0 ends the run ("stock_out")
+# every potion / Fly Wing press, and a count of 0 ends the run ("stock_out"); @8.5 = a SAFE END
+# (Amendment AA: c10's time box ended it inside a 10-orc swarm and it died 0.96 s after run_end,
+# during the end warp's typing): under attack or below half HP at the end, a Fly Wing goes first
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -190,6 +192,7 @@ BODY_UP = 26  # a monster's body above its cell's projected point (px): the hove
 FIGHT_TAKEN_S = 2.5  # a hit on us within this long = in a fight
 STOCK_READ_S = 1.0  # dungeon@8.4: the hotbar count is re-read this long after a potion / wing
 STOCK_TRIES = 5  # an unreadable re-read (the teleport's dark frames) is retried, 1 s apart
+END_HOT_S, END_FLY_BELOW = 3.5, 0.5  # dungeon@8.5: still in a fight at the end / HP share
 MISS_CUE_RULE = "9.1b"  # --miss-cue: only a Miss read AFTER the last fight's end starts a fight
 HP_DROP_PTS, HP_DROP_S = 2, 1.5  # the HP percent falling this much this fast = a hit unseen
 LOCK_NO_HIT_S = 3.5  # locked, but none of OUR hits in the log for this long -> scan again
@@ -642,6 +645,19 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
         if fits(path[i]):
             return i, path[i]
     return None
+
+
+def end_escape_needed(now: float, last_taken: float, hist: Sequence[tuple[float, float]],
+                      reason: str) -> bool:  # fmt: skip
+    """PURE (dungeon@8.5): a Fly Wing before the end warp -- the run ended (not a death, not a
+    hard bar: an unknown UI state gets no key) while a hit came within END_HOT_S, the HP fell
+    (hp_dropped), or the last HP share read is under END_FLY_BELOW. c10 (19:57:44): the time box
+    stopped every reaction inside a swarm; the ~7 s end warp let it die 0.96 s after run_end."""
+    if reason == "death" or reason.startswith("hard_bar"):
+        return False
+    if now - last_taken < END_HOT_S or hp_dropped(hist, now):
+        return True
+    return bool(hist) and hist[-1][1] < END_FLY_BELOW
 
 
 def stock_out(counts: Mapping[int, int | None]) -> int | None:
@@ -2755,6 +2771,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                       if box_spots and box_spots.ignored(c)]})  # fmt: skip
             if sitting:
                 agent_raw.keys(keys_["stand"])
+            if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):  # dungeon@8.5
+                press("fly", "end")
+                ev({"kind": "end_escape", "how": "fly", "reason": reason,
+                    "hp": None if not st.hist else round(st.hist[-1][1], 3)})  # fmt: skip
+                time.sleep(1.0)
             if reason == "death":
                 x, y = gx0 + gv.RETURN_TO_GAME[0], gy0 + gv.RETURN_TO_GAME[1]
                 agent_raw.move(x + 4, y + 3)

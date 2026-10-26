@@ -1227,3 +1227,30 @@ c9-c11 keep their registered base):
 - **Hard bars as always.** A `stock_out` end counts over its own window.
 - **Known confound, equal for both arms:** the round-2 training (gef10-detector.md 13u) may run on
   the GPU / CPU during the block, if its cache builds at 20:05. Its load is noted per run.
+
+## Amendment AA (2026-10-26 20:01 ICT from `date`): c10 DIED after its time box; dungeon@8.5, a safe end; c11 runs 8.5
+
+**c10** (P2, seed 25550), 19:20:56-19:57:58: the full 36 min, ended by its time box.
+- **Inside the judged window:** 78.3 kills / h (47), 0 deaths, HP low 357 (16.6 %).
+- **It then DIED 0.96 s AFTER `run_end`.** The judge's window (run_start..run_end) does not count
+  it. The packets:
+  - In its last ~3 s, about ten orcs hit it. HP fell 907 -> 357 within 0.42 s (-1.24 .. -0.82 s).
+  - At 0 the time box ended the loop. From then on the runner stopped reacting: no Fly Wing, no
+    potion.
+  - The end path typed the end @warp (~7 s through the identity check).
+  - At +0.96 s HP read 1, with base experience lost: the death.
+  - At +7.34 s the GM warp moved it to prt_fild08 with HP 2.
+  - The next pre-run frame showed the "Base Experience has lost" line. That is how it was caught.
+- **c10's row therefore says "1 death after the time box".** Every report shows it.
+- **Earlier runs** did not show this. c5b-c9's end frames and pre-run frames had no death line.
+  Their packets after run_end are not yet re-checked.
+
+**dungeon@8.5, a safe end** (`end_escape_needed`):
+- **The rule.** When a run ends, a Fly Wing goes first, then the end warp, if all of these hold:
+  - the reason is not a death and not a hard bar (an unknown UI state gets no key);
+  - and one of: a hit within 3.5 s, an HP fall (`hp_dropped`), or the last HP share read under
+    50 %.
+- It is logged as `end_escape`.
+- **Outside the measured window**, so no measured number changes. c11 runs 8.5. Its
+  pre-registration (Amendment Y) is otherwise unchanged.
+- **Checks:** census and safety tests green; a unit test on c10's numbers.

@@ -348,8 +348,8 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.4"  # .1 position-unread fly, .2 no stand toggle on a hit,
-    # .3 the stock read from the hotbar, .4 the stock guard in the run
+    assert dh.VERSION == "dungeon@8.5"  # .1 position-unread fly, .2 no stand toggle on a hit,
+    # .3 the stock read from the hotbar, .4 the stock guard in the run, .5 the safe end
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -619,4 +619,20 @@ def test_a_stock_at_zero_ends_the_run_but_an_unread_count_never_does() -> None:
     assert "stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S" in src
     assert 'reason = f"stock_out: item {out_item} reads 0 on the hotbar"' in src
     assert 'w_to = int(strat.get("wings_to") or conf["wings_to"])' in src
-    assert dh.VERSION == "dungeon@8.4"
+    assert dh.VERSION.startswith("dungeon@8.")
+
+
+def test_the_end_flies_first_when_still_in_a_fight_or_low() -> None:
+    """dungeon@8.5 (c10, 19:57:44: HP 907 -> 357 in 0.4 s at the time box, dead 0.96 s after
+    run_end): a hit within 3.5 s, an HP fall, or HP under half = a Fly Wing before the end warp;
+    never after a death, never into a hard bar's unknown UI."""
+    now = 100.0
+    calm = [(99.0, 0.9), (99.8, 0.9)]
+    assert dh.end_escape_needed(now, 98.0, calm, "time_box")  # hit 2 s ago
+    assert dh.end_escape_needed(now, -1e9, [(99.0, 0.42), (99.8, 0.17)], "time_box")  # falling
+    assert dh.end_escape_needed(now, -1e9, [(99.8, 0.4)], "stock_out: item 504 reads 0")
+    assert not dh.end_escape_needed(now, -1e9, calm, "time_box")
+    assert not dh.end_escape_needed(now, 99.9, calm, "death")
+    assert not dh.end_escape_needed(now, 99.9, calm, "hard_bar: unknown UI state {}")
+    src = (Path(dh.__file__)).read_text()
+    assert "if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):" in src
