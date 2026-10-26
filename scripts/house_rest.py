@@ -475,7 +475,7 @@ def table(kb: Mapping[str, Any], walk_in: Any, npcs: Sequence[tuple[Cell, int]] 
           ) -> list[dict[str, Any]]:  # fmt: skip
     hs = houses(kb)
     fb = forbidden_warps(kb)
-    rows = []
+    rows: list[dict[str, Any]] = []
     for h in hs:
         c = room_check(h, walk_in, fb, npcs)
         c["usable_why"] = usable_why(c)
@@ -539,7 +539,7 @@ def cmd_steps(sids: Sequence[str], demo: Path, kb: Mapping[str, Any], max_steps:
     usable = {h.name for h in hs if usable_why(room_check(h, walk_in, fb)) is None}
     dist = {h.name: steps_from_many(okr, approach_cells(h, okr, door_free(ok, both, h.door),
                                                        zones)) for h in hs}  # fmt: skip
-    rows = []
+    rows: list[dict[str, Any]] = []
     for sid in sids:
         evs = [json.loads(ln) for ln in (demo / sid / "events.jsonl").open()]
         for here, pct in rest_decisions(evs):
