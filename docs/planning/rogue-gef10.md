@@ -1186,7 +1186,7 @@ that showed live at 3 min:
   - The same measures as above, and the same prediction.
   - The cue is adopted only if, pooled, reaction AND consumables improve with kills / h not lower.
 
-## Amendment Z (2026-10-26 18:43 ICT from `date`): D8 = 18:41:45; the LOOT TRIM block (gef10-eyes-loot.md E1), pre-registered
+## Amendment Z (2026-10-26 18:42 ICT from `date`): D8 = 18:41:45; the LOOT TRIM block (gef10-eyes-loot.md E1), pre-registered
 
 **The cycle's clock:**
 - **D8 = c9's setup @killmonster2 at 18:41:45.** c9 runs dungeon@8.4: stock 30 / 20 verified on
