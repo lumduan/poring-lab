@@ -505,12 +505,10 @@ def _stats(xs: Sequence[float]) -> dict[str, float] | None:
             "mean": round(float(a.mean()), 1)}  # fmt: skip
 
 
-def cmd_steps(sids: Sequence[str], demo: Path, kb: Mapping[str, Any], max_steps: int,
-              min_hp: int) -> dict[str, Any]:  # fmt: skip
-    """The estimate's walking side (gef10-house-rest.md section 6): the route-grid steps from
-    every rest decision of the runs ``sids`` to the nearest USABLE (sealed) door's approach cell,
-    and to any door's, on the grids dungeon_hunt.run builds (stand grid, zones, route grid minus
-    what the zones seal off). Reads the runs' events only."""
+def field_grids(map_name: str = FIELD) -> tuple[Any, Any, Any, Any]:
+    """(ok, okr, zones, both) for ``map_name`` exactly as dungeon_hunt.run builds them: the stand
+    grid, the route grid minus what the zones seal off, the zones, client AND server walkable.
+    Local run-time data only (the client GAT in /dev/shm, L3, the map cache)."""
     import map_zones as mz
     from anim_region import stand_grid
 
@@ -518,12 +516,23 @@ def cmd_steps(sids: Sequence[str], demo: Path, kb: Mapping[str, Any], max_steps:
     from poring_dataset import gat as gatmod
     from poring_dataset import walkable as wk
 
-    gat = gatmod.parse((cam.GAT_DIR / f"{FIELD}.gat").read_bytes())
-    ok = stand_grid(FIELD, gat)
-    zones = mz.load(FIELD, shape=ok.shape)
+    gat = gatmod.parse((cam.GAT_DIR / f"{map_name}.gat").read_bytes())
+    ok = stand_grid(map_name, gat)
+    zones = mz.load(map_name, shape=ok.shape)
     okr = mz.route_grid(ok, zones)
     okr = okr & ~mz.sealed_off(ok, okr)
-    both = wk.load_both(FIELD)[1]
+    return ok, okr, zones, wk.load_both(map_name)[1]
+
+
+def cmd_steps(sids: Sequence[str], demo: Path, kb: Mapping[str, Any], max_steps: int,
+              min_hp: int) -> dict[str, Any]:  # fmt: skip
+    """The estimate's walking side (gef10-house-rest.md section 6): the route-grid steps from
+    every rest decision of the runs ``sids`` to the nearest USABLE (sealed) door's approach cell,
+    and to any door's, on the grids dungeon_hunt.run builds (stand grid, zones, route grid minus
+    what the zones seal off). Reads the runs' events only."""
+    from poring_dataset import walkable as wk
+
+    ok, okr, zones, both = field_grids(FIELD)
     walk_in = wk.load_both(HOUSE_MAP)[1]
     fb = forbidden_warps(kb)
     hs = houses(kb)

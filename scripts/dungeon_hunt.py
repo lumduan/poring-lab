@@ -647,6 +647,68 @@ def still_since(hist: Sequence[tuple[float, Cell]], now: float) -> float:
     return now - t0
 
 
+def house_setup(map_: str, kb_dir: Path, ok: Any, okr: Any, zones: Any,
+                cj: Mapping[str, Any], view: tuple[int, int], in_ui: Any,
+                ) -> tuple[list[Any], dict[str, set[Cell]], dict[str, tuple[float, float]],
+                           dict[str, Any]]:  # fmt: skip
+    """--rest house's start-up (gef10-house-rest.md section 4.1), fail closed: SystemExit unless
+    the map is gef_fild10 and at least one house passes every check -- its room SEALED
+    (house_rest.room_check / usable_why, on in_orcs01's client GAT AND server map cache), an
+    approach cell on the route grid ``okr``, and its exit click's pixel (the indoor camera of
+    ``cj`` + the GAT) inside the game ``view`` (w, h) and off the UI (``in_ui``). Returns (the
+    usable houses, their approach cells, their exit pixels, the run_start record). No input."""
+    import house_rest as hr
+
+    from poring_dataset import camera as cam
+    from poring_dataset import walkable as wk
+
+    if map_ != hr.FIELD:
+        raise SystemExit(f"--rest house refused: {map_} (only {hr.FIELD})")
+    try:
+        kbw = json.loads((kb_dir / "warps.json").read_text())
+        hs_all = hr.houses(kbw)
+        gat_in, both_in = wk.load_both(hr.HOUSE_MAP)
+        both_f = wk.load_both(map_)[1]
+        itab = cam.load_indoor_table()
+    except (ValueError, OSError) as e:  # MapSourceError / IndoorTableMissing / no pairing
+        raise SystemExit(f"--rest house refused: {e}") from None
+    icam = cam.map_camera(dict(cj), hr.HOUSE_MAP, itab)
+    if icam is None or not cam.is_indoor(hr.HOUSE_MAP, itab):
+        raise SystemExit(f"--rest house refused: no indoor camera for {hr.HOUSE_MAP}")
+    gw, gh = view
+    fb_ = hr.forbidden_warps(kbw)
+    refused: dict[str, str] = {}
+    houses_ok: list[Any] = []
+    house_ap: dict[str, set[Cell]] = {}
+    house_px: dict[str, tuple[float, float]] = {}
+    for h_ in hs_all:
+        chk = hr.room_check(h_, both_in, fb_)
+        why_h = hr.usable_why(chk)
+        ap_ = [] if why_h else hr.approach_cells(h_, okr, hr.door_free(ok, both_f, h_.door),
+                                                 zones)  # fmt: skip
+        if why_h is None and not ap_:
+            why_h = "no approach cell on the route grid"
+        px_ = None
+        if why_h is None:
+            px_ = hr.exit_point(icam, gat_in, h_, tuple(chk["click"]))
+            if not (30 <= px_[0] < gw - 30 and 30 <= px_[1] < gh - 30 and not in_ui(*px_)):
+                why_h = f"the exit click {px_} is off the game view"
+        if why_h is not None:
+            refused[h_.name] = why_h
+            continue
+        assert px_ is not None
+        houses_ok.append(h_)
+        house_ap[h_.name] = set(ap_)
+        house_px[h_.name] = px_
+    if not houses_ok:
+        raise SystemExit(f"--rest house refused: no usable house {refused}")
+    rec = {"usable": [h_.name for h_ in houses_ok], "refused": refused,
+           "exit_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in house_px.items()},
+           "approach_cells": {k: len(v) for k, v in house_ap.items()},
+           "max_steps": HOUSE_MAX_STEPS, "min_hp": HOUSE_MIN_HP}  # fmt: skip
+    return houses_ok, house_ap, house_px, rec
+
+
 # --- live ---------------------------------------------------------------------------------------
 
 
@@ -1005,49 +1067,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     if house_on:
         import house_rest as hr
 
-        from poring_dataset import walkable as wk
-
-        if map_ != hr.FIELD:
-            raise SystemExit(f"--rest house refused: {map_} (only {hr.FIELD})")
-        kbw = json.loads((kb / "warps.json").read_text())
-        try:
-            hs_all = hr.houses(kbw)
-            gat_in, both_in = wk.load_both(hr.HOUSE_MAP)
-            both_f = wk.load_both(map_)[1]
-            itab = cam.load_indoor_table()
-        except (ValueError, OSError) as e:  # MapSourceError / IndoorTableMissing / no pairing
-            raise SystemExit(f"--rest house refused: {e}") from None
-        icam = cam.map_camera(cj, hr.HOUSE_MAP, itab)
-        if icam is None or not cam.is_indoor(hr.HOUSE_MAP, itab):
-            raise SystemExit(f"--rest house refused: no indoor camera for {hr.HOUSE_MAP}")
-        fb_ = hr.forbidden_warps(kbw)
-        refused: dict[str, str] = {}
-        for h_ in hs_all:
-            chk = hr.room_check(h_, both_in, fb_)
-            why_h = hr.usable_why(chk)
-            ap_ = [] if why_h else hr.approach_cells(h_, okr, hr.door_free(ok, both_f, h_.door),
-                                                     zones)  # fmt: skip
-            if why_h is None and not ap_:
-                why_h = "no approach cell on the route grid"
-            px_ = None
-            if why_h is None:
-                px_ = hr.exit_point(icam, gat_in, h_, tuple(chk["click"]))
-                if not (30 <= px_[0] < gw - 30 and 30 <= px_[1] < gh - 30
-                        and not loot1.in_ui(*px_)):  # fmt: skip
-                    why_h = f"the exit click {px_} is off the game view"
-            if why_h is not None:
-                refused[h_.name] = why_h
-                continue
-            assert px_ is not None
-            houses_ok.append(h_)
-            house_ap[h_.name] = set(ap_)
-            house_px[h_.name] = px_
-        if not houses_ok:
-            raise SystemExit(f"--rest house refused: no usable house {refused}")
-        house_rec = {"usable": [h_.name for h_ in houses_ok], "refused": refused,
-                     "exit_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in house_px.items()},
-                     "approach_cells": {k: len(v) for k, v in house_ap.items()},
-                     "max_steps": HOUSE_MAX_STEPS, "min_hp": HOUSE_MIN_HP}  # fmt: skip
+        houses_ok, house_ap, house_px, house_rec = house_setup(
+            map_, kb, ok, okr, zones, cj, (gw, gh), loot1.in_ui
+        )
 
     def in_view(u: float, v: float) -> bool:
         return 30 <= u < gw - 30 and 30 <= v < gh - 30 and not loot1.in_ui(u, v)

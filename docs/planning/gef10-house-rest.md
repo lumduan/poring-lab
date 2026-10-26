@@ -23,7 +23,7 @@ this map because it is safer". This document designs the same move for the runne
 
 **What this is.** A design, the pure planning code (`scripts/house_rest.py`), its integration in
 `scripts/dungeon_hunt.py` behind `--rest house` (default `spot` = today's behaviour), the judge's
-hook, 21 tests, and an estimate. **Nothing ran live.** Every number is **measured** unless it is
+hook, 23 tests, and an estimate. **Nothing ran live.** Every number is **measured** unless it is
 marked **estimate**.
 
 ## 0. The answer in brief
@@ -322,7 +322,7 @@ His 5-Hz frames around his map change (packet at 0.00 s; the frames lag ~0.7 s):
   patrol passes within ~30 steps of a sealed door with HP < 80 %, rest there. That gives short
   detours and full rests in safety; Batt himself rested when his loop brought him to his door.
 
-## 7. Tests (`services/backend/tests/test_house_rest.py`, 21; synthetic grids)
+## 7. Tests (`services/backend/tests/test_house_rest.py`, 23; synthetic grids)
 
 - The door / exit pairing for all 5 houses (and a refusal when a door has 0 or 2 matching exits);
   the forbidden warps are orc01 and orc02.
@@ -357,6 +357,11 @@ His 5-Hz frames around his map change (packet at 0.00 s; the frames lag ~0.7 s):
   steps to orc01 / orc02 from gef022 / gef021, every click >= 10 from both.
 - The estimate's helpers: the multi-source steps (= one BFS per source, nearest wins) and the
   rest decisions read from a run's events.
+- The runner's start-up (`dungeon_hunt.house_setup`): any map but gef_fild10 is refused; on the
+  real local data (skipped without it) it accepts exactly gef018 / gef019 / gef020, refuses
+  gef021 / gef022 as not sealed, finds >= 60 approach cells each (on the route grid, outside
+  every area) and computes the exit pixels of section 2. This is the offline proof that a
+  `--rest house` run would start.
 - With them: test_dungeon_hunt, test_click_census (count unchanged, reason extended),
   test_walk_trust, test_map_zones, test_map_routes, test_cursor_unknown, test_dungeon_judge,
   test_time_budget and test_map_prep pass.

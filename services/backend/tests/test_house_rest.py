@@ -451,3 +451,31 @@ def test_rest_decisions_take_the_last_position_read_before_each_rest_go() -> Non
            {"kind": "rest_go", "pct": 44}, {"kind": "hp_read", "pos": [7, 8]},
            {"kind": "rest_go", "pct": None}]  # fmt: skip
     assert hr.rest_decisions(evs) == [((5, 6), 44), ((7, 8), None)]
+
+
+def test_the_runners_start_up_refuses_any_other_map() -> None:
+    with pytest.raises(SystemExit, match="only gef_fild10"):
+        dh.house_setup("orcsdun01", ROOT / "data" / "kb", None, None, None, {}, (1280, 720),
+                       lambda u, v: False)  # fmt: skip
+
+
+def test_the_runners_start_up_on_the_real_local_data() -> None:
+    """The start-up the runner would make with --rest house (skipped without the local data): the
+    three sealed houses with their approach cells and exit pixels; gef021 / gef022 refused."""
+    if not (ROOT / "data" / "kb" / "warps.json").exists() or not all(
+            (cam.GAT_DIR / f"{m}.gat").exists() for m in ("in_orcs01", "gef_fild10")):  # fmt: skip
+        pytest.skip("no local L3 / client GATs (generated at run time, never committed)")
+    try:
+        ok, okr, zones, _both = hr.field_grids("gef_fild10")
+        hs, ap, px, rec = dh.house_setup("gef_fild10", ROOT / "data" / "kb", ok, okr, zones,
+                                         _cj(), (1280, 720), lambda u, v: False)  # fmt: skip
+    except (OSError, ValueError) as e:
+        pytest.skip(f"local data incomplete: {e}")
+    assert [h.name for h in hs] == ["gef018", "gef019", "gef020"]
+    assert sorted(rec["refused"]) == ["gef021", "gef022"]
+    assert all("not sealed" in w for w in rec["refused"].values())
+    assert px["gef018"] == pytest.approx((709.0, 312.0), abs=0.1)
+    assert px["gef019"] == pytest.approx((569.9, 313.8), abs=0.1)
+    assert px["gef020"] == pytest.approx((569.9, 313.8), abs=0.1)
+    assert all(len(v) >= 60 for v in ap.values())
+    assert all(not mz.in_no_enter(zones, c) and okr[c[1], c[0]] for v in ap.values() for c in v)
