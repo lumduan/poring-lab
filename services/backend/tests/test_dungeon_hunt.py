@@ -565,12 +565,29 @@ def test_the_miss_cue_starts_a_fight_like_a_hit_but_never_while_sitting() -> Non
     the HP loop (not while sitting: no stand toggle on a miss, 8.2) and a swing within
     FIGHT_TAKEN_S starts a fight; OFF by default and recorded in the run's fixes."""
     src = (Path(dh.__file__)).read_text()
-    assert "if miss_tpl is not None and not sitting:" in src
+    assert 'if miss_tpl is not None and not sitting and mode != "after":' in src
     assert "(hit_now or dropped or swing_now or near_ is not None)" in src
     assert '"by": "miss_cue"' in src
     a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
                               rest="spot", npc_guard=False, miss_cue=True)  # fmt: skip
     assert dh.fixes_of(a)["miss_cue"] is True
+    assert dh.fixes_of(a)["miss_cue_rule"] == "9.1b"
+    off = dh.argparse.Namespace(**{**vars(a), "miss_cue": False})
+    assert "miss_cue_rule" not in dh.fixes_of(off)
+
+
+def test_a_miss_read_before_the_fights_end_never_restarts_it() -> None:
+    """9.1b (4.05 c6: 152 engages from 17 swings): a Miss still drawn after a quiet kill restarted
+    the fight every 0.1 s. Only a Miss read AFTER the end starts the next fight; both fight-end
+    paths set the floor."""
+    end = 100.0
+    assert dh.swing_engages(100.1, last_swing=99.9, swing_floor=-1e9)  # 9.1's rule: engages
+    assert not dh.swing_engages(100.1, last_swing=99.9, swing_floor=end)  # read before the end
+    assert dh.swing_engages(101.0, last_swing=100.9, swing_floor=end)  # a new read after it
+    assert not dh.swing_engages(104.0, last_swing=101.4, swing_floor=end)  # older than 2.5 s
+    src = (Path(dh.__file__)).read_text()
+    assert src.count('mode, swing_floor = "after", tick') == 2
+    assert "swing_now = swing_engages(tick, last_swing, swing_floor)" in src
 
 
 def test_batts_no_rest_strategy_never_sits_and_drinks_below_40() -> None:

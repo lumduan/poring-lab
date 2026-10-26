@@ -185,6 +185,7 @@ SELF_PX = (640, 330)  # the drawn character's body (client px): Heal's target cl
 FOOT_PX = (641, 362)  # the camera's projection of our own cell
 BODY_UP = 26  # a monster's body above its cell's projected point (px): the hover point
 FIGHT_TAKEN_S = 2.5  # a hit on us within this long = in a fight
+MISS_CUE_RULE = "9.1b"  # --miss-cue: only a Miss read AFTER the last fight's end starts a fight
 HP_DROP_PTS, HP_DROP_S = 2, 1.5  # the HP percent falling this much this fast = a hit unseen
 LOCK_NO_HIT_S = 3.5  # locked, but none of OUR hits in the log for this long -> scan again
 LOCK_MAX_S = 25.0
@@ -638,6 +639,14 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
     return None
 
 
+def swing_engages(tick: float, last_swing: float, swing_floor: float) -> bool:
+    """PURE (--miss-cue, dungeon@9.1b): a Miss read within FIGHT_TAKEN_S starts a fight only when
+    it was read AFTER the last fight's end (``swing_floor``). 4.05 c6 (9.1) restarted a fight every
+    0.1 s from a Miss still drawn after a quiet kill (152 engages from 17 swings in its first
+    3 min): the quiet-kill end tests hits only, so each restarted fight ended again at once."""
+    return tick - last_swing < FIGHT_TAKEN_S and last_swing > swing_floor
+
+
 def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     """PURE: the run's recorded fixes (run_start, manifest); ``rest`` only when it is not the
     default, so a default run's record is the one it was before --rest existed."""
@@ -645,6 +654,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                            "ag_match": a.ag_match, "walk_trust": a.walk_trust,
                            "npc_guard": getattr(a, "npc_guard", False),
                            "miss_cue": getattr(a, "miss_cue", False)}  # fmt: skip
+    if out["miss_cue"]:
+        out["miss_cue_rule"] = MISS_CUE_RULE
     if getattr(a, "rest", "spot") != "spot":
         out["rest"] = a.rest
     return out
@@ -1288,6 +1299,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         seen_lines = 0
         last_taken = -1e9
         last_swing = -1e9  # dungeon@9.1 (--miss-cue): the last Miss read at our attacker
+        swing_floor = -1e9  # 9.1b: the last fight's end; a Miss read before it starts no fight
         last_ours = -1e9
         kills_seen: list[float] = []
         mode = "search"
@@ -2074,8 +2086,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 img = frame()
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
-                if miss_tpl is not None and not sitting:  # dungeon@9.1: a missed swing AT us
-                    mc_ = mcue.read(img, miss_tpl)  # (drawn above the attacker, beside us)
+                if miss_tpl is not None and not sitting and mode != "after":  # dungeon@9.1:
+                    # a missed swing AT us (drawn above the attacker, beside us); 9.1b: not read
+                    # on the tick after a fight's end, so a Miss still drawn goes to the loot step
+                    mc_ = mcue.read(img, miss_tpl)
                     if mc_.score >= mcue.THRESHOLD:
                         if tick - last_swing > 1.0:  # one record per swing, not per frame
                             ev({"kind": "miss_cue", "score": round(mc_.score, 3), "x": mc_.x,
@@ -2209,7 +2223,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ag_absent = None
                 # a fight?
                 hit_now = tick - last_taken < FIGHT_TAKEN_S
-                swing_now = tick - last_swing < FIGHT_TAKEN_S  # dungeon@9.1, --miss-cue
+                swing_now = swing_engages(tick, last_swing, swing_floor)  # 9.1b, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
                 if boxes is not None and mode != "fight" and not sitting:  # a box never
@@ -2291,7 +2305,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if lock is None and quiet and kills_seen and kills_seen[-1] > tick - 3.0:
                         # pilot 4: after a kill with no hit for 2.5 s, rings 1 + 2 took 8.6 s to
                         # find nobody -- end the fight; the loot step's hovers still see a SWORD
-                        mode = "after"
+                        mode, swing_floor = "after", tick
                         ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
                         box_fight_done()
                         continue
@@ -2356,7 +2370,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 "cell": None if here is None else [here[0] + c[0], here[1] + c[1]],
                             }
                         elif tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick):
-                            mode = "after"
+                            mode, swing_floor = "after", tick
                             ev({"kind": "fight_end", "kills": len(kills_seen)})
                             box_fight_done()
                     time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))

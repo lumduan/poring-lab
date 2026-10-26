@@ -1020,3 +1020,56 @@ Amendment E's next cycle (>= 16:29:15, D6 + 131). Compared with c5b.
 - **Prediction:** earlier reactions; fewer potions and Fly Wings per hour (damage -20 % or more);
   kills / h not lower.
 - The house rest (9.2, Amendment R) is shelved while the runs do not sit; its code stays, OFF.
+
+## Amendment W (2026-10-26 16:43 ICT from `date`): c6's re-engage loop; dungeon@9.1b; c7 = P2, c8 = P2 + the 9.1b cue
+
+**c6 (P2 + `--miss-cue` as 9.1, seed 25546) runs as registered**, 16:29:15 onwards. It has a defect
+that showed live at 3 min:
+- **The loop.** After a kill, a Miss still drawn on screen restarts the fight on every 0.1 s tick:
+  - the quiet-kill end (`fight_end` "quiet kill") tests hits only (`last_taken`), so it ends the
+    fight again at once;
+  - `swing_now` stays true for 2.5 s after the last Miss read, so it fires the trigger again.
+- **Counts at 13.6 min:**
+  - 569 engages "by miss_cue" from 60 Miss onsets, and 572 fight ends;
+  - 29 kills (the same pace as 128 kills / h, against c5b's 96.6).
+  - Example: 181.8-182.9 s held 12 engage / end pairs in 1.1 s.
+- **Cost and safety.** The loop sends no click and no input (engage / fight_end events only), so
+  it has no safety effect. It delays the loot step after an affected kill by up to ~2.5 s plus one
+  ring scan.
+- **How c6 is reported.** As "9.1, with the loop", and not pooled. It does not test the cue as
+  Amendment S intended: a swing that restarts a fight the same tick it ended.
+
+**dungeon@9.1b (the runner's fixes record `miss_cue_rule: "9.1b"`):**
+- Every fight end (both paths: the quiet kill and the empty scan) sets `swing_floor = tick`.
+- A Miss starts a fight only when it was read AFTER the floor:
+  `swing_engages(tick, last_swing, swing_floor)`.
+- The cue is not read on the tick right after a fight end (`mode == "after"`), so a Miss still
+  drawn goes to the loot step.
+- **Residual, bounded.** A Miss still readable after the loot step can start one more fight. That
+  fight is a ring-1 scan that then ends. The text is matched only while 0.8-1.8 s old
+  (gef10-miss-cue.md 1c).
+- **Tests:** `test_a_miss_read_before_the_fights_end_never_restarts_it` plus the updated 9.1 pin.
+  The click census and the safety tests are green. No click path changed.
+
+**This cycle (Amendment E, D7 = c6's setup @killmonster2 at 16:30:01):**
+
+| run | arm | seed | release | must end by |
+|---|---|---|---|---|
+| c7 | **P2 alone** (9.0b + P2; the arm of c5b) | 25547 | >= 17:08:01 (D7 + 38) | 18:30:01 |
+| c8 | **P2 + `--miss-cue` 9.1b** | 25548 | >= 17:46:01 (D7 + 76) | 18:30:01 (D7 + 120) |
+
+- Both runs: 36 min; Batt's loop; `--walk-trust --npc-guard`; a judged pre-run frame.
+- **Storage.** A store step on the prt_fild08 stand comes before a run whose weight would start at
+  >= 40 %. c6 read 37.7 % at 13.6 min.
+- The next cycle starts >= 18:41:01 (D7 + 131).
+
+**Compared (pooled):** c5b + c7 (P2) against c8 (P2 + 9.1b). c6 is reported apart.
+- **Measures:**
+  - kills / h;
+  - damage taken / kill;
+  - White Potions + Fly Wings / h;
+  - reaction (first swing or hit at us -> our first strike), from packets;
+  - the cue's false fires (a Miss onset with no monster attack at us within 1.5 s in packets),
+    <= 1 / run (Amendment S).
+- **Prediction (unchanged from Amendment V):** earlier reactions; damage / kill down >= 20 %, and
+  potions + wings / h with it; kills / h not lower.
