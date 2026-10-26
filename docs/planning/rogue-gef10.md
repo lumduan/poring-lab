@@ -1073,3 +1073,44 @@ that showed live at 3 min:
     <= 1 / run (Amendment S).
 - **Prediction (unchanged from Amendment V):** earlier reactions; damage / kill down >= 20 %, and
   potions + wings / h with it; kills / h not lower.
+
+## Amendment X (2026-10-26 17:16 ICT from `date`): c6 judged (P2 + the 9.1 cue, with its loop); c7 running
+
+**c6**, 16:29:15-17:05:43:
+- **Window:** 35.4 min, run_start..run_end.
+- **End:** a fail-closed frame stall ("no frame newer than the action within 1.5 s") about 20 s
+  before its 36 min. The end warp to the prt_fild08 stand ran (17:05:39).
+- **Packets:** rebuilt from the sniffer archive with `record_session.write_packets`.
+
+| | c5b (P2) | **c6 (P2 + 9.1 cue, the loop)** |
+|---|---|---|
+| kills / h | 96.6 | **101.6** (60 kills) |
+| deaths | 0 | **0** |
+| HP low | 19.9 % | **35.5 %** |
+| White Potions / h | 20.0 | **11.9** (7) |
+| Fly Wings / h (all swarm escapes) | 10.0 | **6.8** (4) |
+| damage taken / kill cycle (mean, packets) | 126.1 | **103.9** (-18 %) |
+| reaction when attacked first (median / mean) | 8.40 / 8.53 s | **6.07 / 7.38 s** (-28 % / -13 %) |
+| items / h | ~82 | **110.1** (65; 29 by Snatcher) |
+| value / h at OC | 31,445 | **32,276** |
+| floor loot (completeness) | 90.5 % | 90.7 % |
+| idle per kill | 14.84 s | 17.4 s |
+
+- **c6's items:** Cyfar 34 (57.6 / h), Orcish Voucher 24 (40.7 / h), Sticky Mucus 3, Green Herb 1,
+  Milk 1, Garlet 1, Large Jellopy 1.
+- **The cue's honesty counters** (`scripts/miss_cue_live.py`, committed with this amendment, run on
+  c6's packets):
+  - 122 Miss onsets, **0 false**: every onset came within 3 s after a monster's act on us;
+  - 1,163 engages "by miss_cue": 1,135 were the loop (within 0.3 s after a fight end), 28 were
+    distinct, **0 false**.
+  - The bar (<= 1 false engage per 36-min run) holds.
+  - This run is the scorer's positive case on a real session.
+- **Reading.**
+  - Even with the loop, c6 met Amendment V's prediction on reaction and consumables:
+    - reaction -28 % at the median;
+    - potions + wings per hour -38 %;
+    - kills / h not lower.
+  - Damage per kill fell 18 %, just short of the predicted 20 %.
+  - The loop's cost shows in idle per kill: 17.4 s against 14.8 s.
+  - This is one run on its own seed, so it is **not pooled** (Amendment W). c7 (P2) against
+    c8 (P2 + 9.1b) is the registered comparison.
