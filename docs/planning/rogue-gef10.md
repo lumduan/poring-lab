@@ -731,3 +731,50 @@ bar):**
 
 - Recordings stay in /dev/shm during SET hours (`dataset_ship` refuses 09:30-17:00 on
   weekdays). They ship at 17:01.
+
+## Amendment O (2026-10-26 12:22 ICT from `date`): dungeon@9.0 "the walk" -- Batt's loop + --walk-trust; runs c2, c3
+
+**Why** (gef10-time-budget.md, gef10-cursor-unknown.md):
+- Stop-and-go walking is 22 % of the gap to Batt.
+- 64 % of the walk decisions read the cursor as "unknown", and ~75 % of those are REDRAW LAG:
+  the 0.35-s read ends before the client draws the arrow while the Rogue is still moving.
+- 71 % of the clicks came only after standing still for >= 2 s.
+
+**The change** (the walk; arm N; everything else is 8.3):
+1. `--search patrol` on **config/routes/gef_fild10.yaml** (Batt's loop, 82 waypoints).
+   - Authored and reviewed by the agent under Batt's delegation (~12:2x, "Delegate to the
+     agent").
+   - Waypoint 0 was moved off the Kafra's no-enter area.
+   - `map_routes.py prove gef_fild10`: ok, every waypoint walkable and outside the zones, every
+     leg connected, 834 steps.
+   - The patrol joins at the nearest waypoint and resumes at the NEXT one ahead after a fight (as
+     on orcsdun01).
+2. `--walk-trust` (merged, OFF by default).
+   - An UNKNOWN walk read is clicked when the cell is trusted: on the route grid, the straight
+     walk and 4 landing cells beyond clear of every zone (closed supercover), >= 6 cells from every
+     L3 NPC, no fresh detector box within 60 px.
+   - SWORD still engages; red no-entry still carves.
+   - Its estimate: 2,190 of 2,249 unknowns would have been clicked; risk <= ~3 attack requests per
+     run on target-species monsters.
+
+**Runs:** c2 (seed 25542) at >= 12:44:30 and c3 (seed 25543) at >= 13:22:30, 36 min each.
+- Amendment E's cycle: D5 = c1's setup kill 12:06:30; each run ends <= 14:06:30.
+- `--clear-map`, the judged pre-run frame, 8.3's hotbar stock check.
+
+**Measures** (pooled c2 + c3, against the 8.x arm-N runs a1, a4, a5b, a8, a9, b1 and against
+Batt's bar):
+- kills / h, items / h, value / h at OC;
+- the time budget (walking share, idle inside search);
+- `walk_trusted` and the walk refusals;
+- deaths;
+- the hard bars from the packets: NPC contact 0, map change 0, attacks on non-targets 0.
+
+**Prediction:** the walking share rises from 8.7 % toward Batt's 35.6 %, and kills / h rise by
+>= 5 over the 8.x arm-N pool (rest stays, being damage-driven).
+
+**Census:** the click census and the targeted tests pass with --walk-trust merged
+(walk_trust, cursor_unknown, click_census, dungeon_hunt, map_zones, map_routes: 83 passed).
+
+**Noted, not fixed:** `map_zones.segment_violates` misses axis-aligned straight walks through a
+no-enter area (gef10-cursor-unknown.md 8). No impact is found on this walk, whose targets come
+from the zoned route grid. Its own commit and tests later.

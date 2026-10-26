@@ -1,0 +1,109 @@
+# gef_fild10's PATROL ROUTE (map cells: x east, y north -- the minimap readout's, /where's and the
+# server's numbers). The format and the walking rules: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt delegated the authoring and the review of this file to the agent on
+# 2026-10-26 ~12:2x ICT (his answer: "Delegate to the agent" -- "May I author and review
+# config/routes/gef_fild10.yaml under your delegation, as you did for orcsdun01 on 10-22?").
+#
+# SOURCE: Batt's own demo 20261026T095021-demo-human-demo-gef10 (his first input 09:51:01 ICT, the
+# packets, --live 898): his FIRST LAP of search walking (detours to monsters and items left out),
+# simplified by `scripts/time_budget.py route` (RDP eps 3, spaced 8-15 cells, 6 spikes dropped, 2
+# waypoints snapped onto client-GAT walkable cells): 82 waypoints, CLOCKWISE (x east, y north) from
+# the Kafra. He walked the loop twice in 14.1 min (lap 1 8.95 min, 41 kills; lap 2 4.9 min, ~17).
+# Batt (2026-10-26): "use my play as the bar ... the walking path: I walk a loop around the map".
+# Edits by the agent after `map_routes.py prove`, each recorded here:
+# - waypoint 0, his start 76,337, lies INSIDE the Kafra's no-enter area (npc-kafra-73-340: 73,340
+#   grown by 4), so no leg could reach it: moved to 80,333 (on the route grid, outside every zone, 7
+#   cells from the Kafra; legs 81 -> 0 and 0 -> 1 then route; docs/planning/gef10-cursor-unknown.md 7).
+map: gef_fild10
+reviewed_by: "agent (delegated by batt, 2026-10-26)"
+reviewed: 2026-10-26
+delegation: "Batt 2026-10-26 ~12:2x ICT (AskUserQuestion): 'Delegate to the agent' -- author and review config/routes/gef_fild10.yaml from his demo loop, as for orcsdun01 on 10-22"
+source: "20261026T095021-demo-human-demo-gef10 (Batt's demo, packets, --live 898); scripts/time_budget.py route (first lap, RDP eps 3, spacing 8-15)"
+routes:
+  - id: batt-loop
+    kind: loop
+    note: "Batt's clockwise ring of gef_fild10 from the Kafra (x east, y north): east along the north, down the east side, west along the south, north up the west side"
+    waypoints:
+      - [80, 333]
+      - [88, 337]
+      - [100, 337]
+      - [112, 337]
+      - [122, 328]
+      - [129, 319]
+      - [138, 313]
+      - [149, 317]
+      - [159, 320]
+      - [171, 313]
+      - [181, 308]
+      - [194, 306]
+      - [205, 304]
+      - [217, 304]
+      - [228, 304]
+      - [238, 294]
+      - [247, 288]
+      - [256, 287]
+      - [265, 287]
+      - [270, 279]
+      - [280, 274]
+      - [290, 270]
+      - [297, 265]
+      - [290, 260]
+      - [299, 251]
+      - [304, 242]
+      - [313, 233]
+      - [322, 224]
+      - [321, 211]
+      - [310, 199]
+      - [299, 187]
+      - [290, 176]
+      - [280, 164]
+      - [269, 153]
+      - [276, 147]
+      - [276, 133]
+      - [268, 125]
+      - [259, 122]
+      - [266, 109]
+      - [253, 96]
+      - [239, 95]
+      - [242, 85]
+      - [233, 86]
+      - [224, 93]
+      - [212, 90]
+      - [202, 83]
+      - [200, 81]
+      - [192, 75]
+      - [180, 74]
+      - [168, 77]
+      - [156, 79]
+      - [145, 91]
+      - [135, 94]
+      - [131, 104]
+      - [134, 119]
+      - [132, 128]
+      - [130, 136]
+      - [127, 144]
+      - [128, 155]
+      - [128, 164]
+      - [131, 170]
+      - [122, 173]
+      - [108, 175]
+      - [103, 178]
+      - [95, 170]
+      - [88, 170]
+      - [82, 165]
+      - [78, 173]
+      - [72, 181]
+      - [71, 192]
+      - [67, 203]
+      - [67, 214]
+      - [68, 225]
+      - [68, 236]
+      - [79, 254]
+      - [82, 266]
+      - [82, 276]
+      - [83, 286]
+      - [84, 296]
+      - [80, 307]
+      - [76, 317]
+      - [71, 327]
