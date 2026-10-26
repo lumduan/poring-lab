@@ -280,3 +280,23 @@ def test_scale_reaches_a_new_run_only_and_is_bounded(tmp_path: Path) -> None:
             run_rc(tmp_path / d, "ok", extra=bad)
         log = (tmp_path / d / "out" / "train.log").read_text()
         assert "TRAIN STOPPED" in log and "attempt 0" not in log
+
+
+def test_io_resumes_and_the_measured_quiet_gate_are_batts_option_a(tmp_path: Path) -> None:
+    """Batt 2026-10-26 ~20:5x, option (a): after an IO trip, wait for measured quiet minutes and
+    resume, up to a cap (IO_RESUMES; the night's 20). The default stays 3 resumes and a fixed
+    pause; an R3 latency trip never waits on the IO gate."""
+    for d in ("default", "cap5", "gate", "r3"):
+        (tmp_path / d).mkdir()
+    log, _, rc = run_rc(tmp_path / "default", "io,io,io,io")
+    assert rc == 3 and "3 IO/R2 resumes used" in log and "quiet minutes" not in log
+    log, args, rc = run_rc(tmp_path / "cap5", "io,io,io,io,io,ok", extra={"IO_RESUMES": "5"})
+    assert rc == 0 and "TRAIN DONE" in log and len(args) == 6
+    log, args, rc = run_rc(tmp_path / "gate", "io,io,ok",
+                           extra={"IO_RESUMES": "20", "IO_QUIET_MIN": "10",
+                                  "IO_QUIET": "true"})  # fmt: skip
+    assert rc == 0 and log.count("waiting for 10 measured quiet minutes") == 2
+    assert "IO/R2 trip 2 of 20" in log and "pausing" not in log
+    log, _, rc = run_rc(tmp_path / "r3", "latency,ok",
+                        extra={"IO_QUIET_MIN": "10", "IO_QUIET": "false"})  # fmt: skip
+    assert rc == 0 and "quiet minutes" not in log  # R3 keeps its 30-s pause

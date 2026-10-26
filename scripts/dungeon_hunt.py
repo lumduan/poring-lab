@@ -93,7 +93,8 @@ normally, and once SP is enough for Steal again open with Steal as before"; docs
 dungeon@8 (Batt 2026-10-25, docs/planning/rogue-gef10.md: the Thief became a ROGUE for gef_fild10;
 arms "no Steal" (Snatcher Lv 10 alone) vs --steal). New:
 - --char rogue: the same character's data (data/thief, the identity check with job "rogue"), its
-  max HP 2146 / SP 336 and the Thief's keys and stock; the setup never drops loot (it is value for
+  max HP 2146 / SP 336 at Base 62 (2209 / 341 at Base 63, held there since 2026-10-26 ~20:5x)
+  and the Thief's keys and stock; the setup never drops loot (it is value for
   Batt's Overcharge merchant) and stops at 40 % ("train until the bag is full first");
 - the Steal cast is read as an SP-percent fall of half Steal's share of max SP, rounded up
   (steal_sp_fall: Thief 5 points as before, Rogue 10 / 336 SP -> 2 points);
@@ -248,11 +249,14 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
     # its job change; its status window 2026-10-25 19:3x: HP 2146, SP 336 (Base 62 / Rogue 50).
     # Loot is value now (his Overcharge merchant): never dropped; at 40 % the setup stops ("train
     # until the bag is full first", Batt 2026-10-25)
-    "rogue": {"job": "rogue", "data": "thief", "max_hp": 2146, "max_sp": 336,
+    # Batt 2026-10-26 ~20:5x: the Rogue levelled 62 -> 63 by hunting (max HP 2146 -> 2209); HOLD
+    # it at 63 ("ค้างไว้ที่ 63"): the setup lowers a higher DB level with @baselevelup -N
+    "rogue": {"job": "rogue", "data": "thief", "max_hp": 2209, "max_sp": 341,
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
-              "hotbar_stock": True},  # dungeon@8.3: the stock is read from the hotbar
+              "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
+              "level_hold": 63},
 }  # fmt: skip
 STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
 
@@ -649,6 +653,15 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
         if fits(path[i]):
             return i, path[i]
     return None
+
+
+def level_lines(level_db: int, hold: int | None) -> list[str]:
+    """PURE (Batt 2026-10-26 ~20:5x, hold the Rogue at Base 63): the setup line that brings a DB
+    base level above ``hold`` back down (@baselevelup -N: it takes back that level's status points
+    and zeroes the EXP, pinned atcommand.cpp); never raises a level."""
+    if hold is None or level_db <= hold:
+        return []
+    return [f"@baselevelup -{level_db - hold}"]
 
 
 def end_escape_needed(now: float, last_taken: float, hist: Sequence[tuple[float, float]],
@@ -1194,7 +1207,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         inv = {int(i): int(n) for i, n in r.db_query(
             f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
             "AND nameid IN (504, 601);")}  # fmt: skip
-        setup = ["@heal"]
+        level_db = int(r.db_query(f"SELECT base_level FROM `char` WHERE char_id = {cid};")[0][0])
+        setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]  # the hold, then heal
         p_to = int(strat.get("potions_to") or conf["potions_to"] or POTIONS_TO)
         w_to = int(strat.get("wings_to") or conf["wings_to"])
         if inv.get(504, 0) < p_to:
@@ -1315,6 +1329,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
+            "level_db": level_db, "level_hold": conf.get("level_hold"),
             "setup": typed, "stock": stock, "weight": w_, "weight_before": w0,
             "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,

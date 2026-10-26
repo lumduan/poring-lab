@@ -1297,3 +1297,44 @@ c9-c11 keep their registered base):
 - d1 (T) at >= 20:52:45, then d2 (V), d3 (T), d4 (V), on Amendment E's clock.
 - **The round-2 cache resume** (gef10-detector.md 13w) started at 20:39:19, right after c11. Its
   CPU / NAS load overlaps the d-block, alternated T / V.
+
+## Amendment AC (2026-10-26 21:12 ICT from `date`): Batt's decisions of ~20:5x; the level hold; the night until 07:00
+
+**Batt's decisions (in chat, after the 20:5x report):**
+1. **Cache and training: option (a).** After an IO-guard trip, wait for measured quiet minutes and
+   resume, up to a cap he asked me to set:
+   - **the cache:** `scripts/runbooks/cache-resume.sh`, `MAX_RESUMES=12`, `QUIET_MIN=10`.
+   - **the training:** `train-day.sh` with `IO_RESUMES=20 IO_QUIET_MIN=10`. The defaults stay 3
+     resumes and a fixed 15-min pause.
+   - **Why these caps:**
+     - each resume first needs a MEASURED 10-min quiet window (quiet_start.py: no second of any
+       capture cgroup above 25 %), so the resume rate limits itself;
+     - the cache's remaining work is about an hour, and 12 resumes cover a trip rate like today's
+       recorders' (10 of 11 tripped within 1-36 min);
+     - training runs all night at the duty cycle, and 20 covers ~10 h at a trip every ~30 min;
+     - hitting a cap PAUSES the job (exit 3) for the morning report. It never loops on.
+   - **Unchanged:** the market-open windows (no start or resume 09:30-10:15 / 14:00-14:45 on
+     weekdays), R1-R3, the duty cycle, verified stops.
+2. **The Rogue is HELD at Base 63** ("ค้างไว้ที่ 63"). It levelled 62 -> 63 by hunting during c11
+   (the packets' `base_level`).
+   - The setup reads the DB level and types `@baselevelup -N` if it is above 63. The command takes
+     back that level's (unspent) status points and zeroes the EXP. It never raises a level.
+   - The DB lags the server by up to one autosave, so a level-up in a run's last minutes is undone
+     at the next setup after that.
+   - The char conf now carries Base 63's max HP / SP: 2209 / 341.
+     - It feeds the HP-per-second of the swarm rule. **d1 ran with 2146**, about 3 % under; d2
+       onwards run with 2209. Recorded as a small T / V asymmetry inside the d-block.
+     - The judge already takes max HP from the packets.
+   - `run_start` records `level_db` and `level_hold`.
+3. **Continuous work tonight until 07:00; the report in the morning.**
+
+**The night's plan** (each version pre-registered before its run, as always):
+- The hunts on Amendment E's clock:
+  - the d-block (loot trim T / V: d2 >= 21:31:43, d3 >= 22:09:43, d4 in the next cycle);
+  - then the runner-ups of the idle study, each its own version: longer walk legs, and the patrol
+    dead-end fix.
+- **The round-2 cache**, then the training, under option (a). Both are chained, and quiet_start
+  gates the first attempt.
+- **The staged-items session (E3)** between two cycles, if the hunts leave a slot. Its icon cut
+  and immune frames are judged on screenshots, as every pre-run frame is.
+- A report at ~07:00.

@@ -18,6 +18,9 @@
 #   level and walk back up slowly (DUTY_AFTER_ABORT). The 3rd abort within a rolling 2 h CAPS the
 #   speed at >= 800 ms for the next hour and prints a `NOTIFY:` line (Batt is pushed); no stop.
 # - Other trips (IO, Frigate unreachable, R2): PAUSE 15 min, then --resume from last.pt; at most 3
+#   (IO_RESUMES; Batt 2026-10-26 ~20:5x, option (a): AUTO-RESUME after an IO trip once the capture
+#   cgroups have been QUIET for IO_QUIET_MIN minutes, measured by quiet_start.py -- set for the
+#   night as IO_RESUMES=20 IO_QUIET_MIN=10; the defaults keep the old behaviour)
 #   (unchanged).
 # - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
 #   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
@@ -57,6 +60,8 @@ GUARD=${GUARD:-python3 scripts/guarded_build.py}  # overridable for tests only
 QUIET=${QUIET:-python3 -S scripts/frigate_r3.py quiet --minutes 15 --max-wait-min 120}
 DROP_WINDOW_S=7200; DROP_MAX=3; CAP_LEVEL=3; CAP_S=3600; FLOOR=4
 IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for tests only
+IO_RESUMES=${IO_RESUMES:-3}; IO_QUIET_MIN=${IO_QUIET_MIN:-0}  # 0 = the fixed IO_PAUSE_S pause
+IO_QUIET=${IO_QUIET:-python3 scripts/runbooks/quiet_start.py --quiet-min $IO_QUIET_MIN --max-wait-h 2 -- true}
 MARKET_WINDOWS=${MARKET_WINDOWS:-"0930-1015 1400-1445"}  # ICT, CLAUDE.md rule 5
 SLEEP=${SLEEP:-sleep}  # overridable for tests only
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-0}
@@ -149,7 +154,7 @@ while :; do
     log "15 quiet minutes: resuming at the slowest level (walking back up slowly)"
     continue
   fi
-  pause=$IO_PAUSE_S
+  pause=$IO_PAUSE_S; io_trip=0
   # Only an ABORT line classifies (2026-10-08): an inconclusive R3 no longer aborts -- it logs
   # "R3: inconclusive measurement ... KEEP TRAINING" -- and an IO abort later in the same attempt
   # must not be mistaken for an R3 trip.
@@ -158,13 +163,21 @@ while :; do
     log "R3 $(grep -o 'ABORT [^ ]*: R3 \(inconclusive\|latency\)' "$out" | tail -1 | grep -o 'R3 [a-z]*'): the duty floor is now level $DUTY_MIN; resuming in 30 s"
     pause=$R3_PAUSE_S
   elif grep -q "REFUSED $KIND" "$out"; then
-    trips=$((trips + 1))
+    trips=$((trips + 1)); io_trip=1
   elif ! grep -q "ABORT $KIND" "$out"; then
     log "TRAIN STOPPED: not a guard trip (see $out)"; status=2; break
   else
-    trips=$((trips + 1))
+    trips=$((trips + 1)); io_trip=1
   fi
-  if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 IO/R2 resumes used, resume by hand later (RESUME=1 DUTY_MIN=$DUTY_MIN)"; status=3; break; fi
+  if [ "$trips" -gt "$IO_RESUMES" ]; then log "TRAIN PAUSED: $IO_RESUMES IO/R2 resumes used, resume by hand later (RESUME=1 DUTY_MIN=$DUTY_MIN)"; status=3; break; fi
+  if [ "$IO_QUIET_MIN" != "0" ] && [ "$io_trip" = 1 ]; then
+    log "IO/R2 trip $trips of $IO_RESUMES: waiting for $IO_QUIET_MIN measured quiet minutes (quiet_start.py)"
+    until $IO_QUIET >> "$D/io-quiet.log" 2>&1; do
+      log "no $IO_QUIET_MIN quiet minutes within the gate's 2 h: re-arming the gate"
+    done
+    log "$IO_QUIET_MIN quiet minutes: resuming"
+    continue
+  fi
   log "pausing ${pause} s before the next attempt"
   sleep "$pause"
 done
