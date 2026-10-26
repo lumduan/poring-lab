@@ -46,8 +46,10 @@ import sys
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -568,14 +570,15 @@ def run(a: argparse.Namespace) -> int:
         start |= {"per_spot": per_spot, "groups": groups, "clear": clear}
     ev(start)
     reason = "done"
-    kills: list[int] = []
+    kills: list[str] = []  # ICT clock times: the Orc Lord dies at the first if alive (the D)
+    staged = False  # an item may be on the floor from the first clear_loot on
 
     def kill_all(agent: Any, screen: Any, i: int) -> None:
         """@killmonster2: every monster dies, no drops of its own; a looter still drops what it
         took (mob.cpp mob_dead "Loot MUST drop!", rathena e985006), and that expires in 60 s."""
         cr.gm_line(agent, screen, "@killmonster2", JOB, CHAR)
-        kills.append(r.ns())
-        ev({"kind": "killmonster2", "i": i})
+        kills.append(datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M:%S"))
+        ev({"kind": "killmonster2", "i": i, "ict": kills[-1]})
         bench.close_chat(agent, screen)
 
     with _session("run") as (agent, screen):
@@ -591,6 +594,7 @@ def run(a: argparse.Namespace) -> int:
                     cr.gm_line(agent, screen, f"@item {iid} 1", JOB, CHAR)
                     time.sleep(0.8)
                 bench.close_chat(agent, screen)
+                staged = True
                 res = gm_state.clear_loot(agent, screen, why=f"stage-{k}", refs_dir=ms.icon_dir)
                 names = sorted(d["item"] for d in res["dropped"])
                 ev({"kind": "dropped", "spot": k, "at": [x, y], "items": names,
@@ -606,17 +610,17 @@ def run(a: argparse.Namespace) -> int:
                     ev({"kind": "still", "spot": k, "at": [x + dx, y + dy], "s": STILL_S})
                     time.sleep(STILL_S)
                 print(f"spot {k + 1}/{len(spots)} at {x},{y}: {names}", flush=True)
-            if clear == "end":  # also after a spot's wrong drop: earlier spots may be looted
+            if clear == "end" and staged:  # also after a wrong drop: earlier spots may be looted
                 kill_all(agent, screen, 0)
                 time.sleep(LOOT_LIFE_S)  # what the looters dropped expires; re-looters drop it now
                 kill_all(agent, screen, 1)
         except r.Stop as exc:
             reason = f"stop: {exc}"
         finally:
-            if clear == "end" and len(kills) < 2:
+            if clear == "end" and staged and len(kills) < 2:
                 print(END_KILL_TODO, file=sys.stderr, flush=True)  # first: a UI stop may follow
             ui_gate.ensure_clear(agent, screen, why="stage-end")
-            if clear == "end" and not kills:
+            if clear == "end" and staged and not kills:
                 try:
                     kill_all(agent, screen, 0)
                 except r.Stop as exc:
@@ -624,12 +628,12 @@ def run(a: argparse.Namespace) -> int:
             print(r.to_png(screen.full(), r.SHOTS / f"stage-end-{a.label}.png"), flush=True)
     end: dict[str, Any] = {"kind": "run_end", "reason": reason}
     if clear != "none":
-        end["killmonster2"] = len(kills)
+        end["killmonster2"] = kills
     ev(end)
     evf.close()
     print(json.dumps({"sid": sid, "reason": reason, "spots": len(spots),
-                      **({"killmonster2": len(kills)} if clear != "none" else {})}))  # fmt: skip
-    return 0 if reason == "done" and (clear == "none" or len(kills) == 2) else 1
+                      **({"killmonster2_ict": kills} if clear != "none" else {})}))  # fmt: skip
+    return 0 if reason == "done" and (clear == "none" or not staged or len(kills) == 2) else 1
 
 
 WATCH_DWELL_S = 30.0  # payf07-detector.md: still frames of monsters around an immune Thief
