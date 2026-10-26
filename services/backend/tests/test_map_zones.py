@@ -297,6 +297,19 @@ def test_supercover_closed_takes_corner_cells_open_does_not() -> None:
     assert shallow == {(0, 0), (1, 0), (2, 0), (2, 1), (3, 1), (4, 1)}
 
 
+def test_an_axis_aligned_walk_passes_through_its_cells_open_interiors() -> None:
+    """2026-10-26 (gef10-cursor-unknown.md section 8): the open supercover of a horizontal or
+    vertical segment was EMPTY, so a straight east-west walk through a no-enter area passed."""
+    assert mz.supercover((0, 0), (3, 0), closed=False) == [(0, 0), (1, 0), (2, 0), (3, 0)]
+    assert mz.supercover((2, 5), (2, 2), closed=False) == [(2, 2), (2, 3), (2, 4), (2, 5)]
+    area = zones_of(no_enter=[[(26, 26), (34, 26), (34, 34), (26, 34)]])  # 9 x 9 cells
+    assert mz.segment_violates((20, 30), (40, 30), area) == "no_enter"  # was None
+    assert mz.segment_violates((30, 20), (30, 40), area) == "no_enter"
+    assert mz.segment_violates((20, 30), (40, 34), area) == "no_enter"  # the diagonal: as before
+    assert mz.segment_violates((20, 25), (40, 25), area) is None  # a row outside it
+    assert mz.segment_violates((30, 30), (40, 30), area) is None  # leaving the area it is in
+
+
 def test_no_cross_raster_admits_no_diagonal_leak() -> None:
     """The CLOSED supercover: no 8-connected step between two cells off the raster meets the line
     (hunt_core.astar's diagonal rule or not -- zone_path / unstall_cells' BFS have none); every

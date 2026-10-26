@@ -332,10 +332,13 @@ def _box_hit(a: Cell, b: Cell, x: int, y: int, closed: bool) -> bool:
     else:
         if (a[0], a[1]) == (b[0], b[1]):
             return (a[0], a[1]) == (x, y)
-        if not (max(min(ax, bx), x0) < min(max(ax, bx), x1)):
-            return False
-        if not (max(min(ay, by), y0) < min(max(ay, by), y1)):
-            return False
+        # an axis the segment does not move along projects to a POINT: it meets the open
+        # interval only strictly inside it (2026-10-26: max(p, x0) < min(p, x1) is never true, so
+        # an axis-aligned walk met no cell at all; gef10-cursor-unknown.md section 8)
+        for lo, hi, c0, c1 in ((min(ax, bx), max(ax, bx), x0, x1),
+                               (min(ay, by), max(ay, by), y0, y1)):  # fmt: skip
+            if not (c0 < lo < c1 if lo == hi else max(lo, c0) < min(hi, c1)):
+                return False
     s = [_orient((ax, ay), (bx, by), c) for c in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
     if closed:
         return not (all(v > 0 for v in s) or all(v < 0 for v in s))
