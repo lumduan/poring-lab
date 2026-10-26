@@ -92,7 +92,7 @@ GEF10_ITEMS: dict[int, str] = {
 # mirrors (3, 0) (an item is one billboard frame), and a 3rd offset would start after most of the
 # group expired.
 GEF10_OFFSETS: tuple[tuple[int, int], ...] = ((0, 0), (3, 0), (0, 3))
-GEF10_PER_SPOT = 6  # drops ~5 s apart: the first expires ~35 s after the last, after view (3, 0)
+GEF10_PER_SPOT = 6  # drops ~5.5 s apart: the first expires ~32 s after the last, after view (3, 0)
 PILE: tuple[tuple[int, int], ...] = tuple((dx, dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1))
 LOOT_LIFE_S = 65.0  # a floor item lives 60 s (target-items.md 1: 40 of 48 lived exactly 60.0 s)
 SEARCH_MARGIN = 10  # cells: search_area's margin around every warp span (and NPC, npc_keep)
