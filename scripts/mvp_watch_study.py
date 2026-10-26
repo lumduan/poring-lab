@@ -182,78 +182,113 @@ def _events(session: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in fh]
 
 
+@dataclass
+class TruthStack:
+    """What ``truth_row`` projects with: the Timeline, the sprite sheets, the RDP camera, the
+    indoor table, the frame size, the layout's UI rectangles and the frame-flag times."""
+
+    tl: Any
+    sheets: Any
+    camera: dict[str, Any]
+    indoor: Any
+    size: tuple[int, int]
+    rects: Any
+    changes: list[int]
+    gm: list[int]
+    vanish: list[int]
+    new: list[int]
+
+
+def truth_stack(events: list[dict[str, Any]], layout: str, size: tuple[int, int], *, kb: Path,
+                mapcache_dir: Path) -> TruthStack:  # fmt: skip
+    """The projection stack of ``truth`` for a session's packets (also used at other capture
+    times than a recorder's frames: scripts/detector_vs_packets.py)."""
+    import client_layout
+    import qa_export
+
+    from poring_dataset import mapcache
+    from poring_dataset.camera import load_indoor_table
+    from poring_dataset.projection import camera_file
+    from poring_dataset.timeline import Timeline
+
+    qa_export.KB_CLASSES = kb / "classes.json"
+    sheets = qa_export.Sheets(SPRITES, stems=qa_export.sprite_stems(SPRITE_NAMES))
+    tl = Timeline(events, mapcache.load(mapcache_dir, prere=True), snapshot_every=32)
+    camera = json.loads(camera_file("rdp").read_text())
+    indoor = load_indoor_table()
+    rects = client_layout.RECTS[layout]
+    changes = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "map_change")
+    gm = sorted(int(e["t_mono_ns"]) for e in events if e.get("gm_command"))
+    vanish, new = party_times(events)
+    return TruthStack(tl, sheets, camera, indoor, size, rects, changes, gm, vanish, new)
+
+
+def truth_row(stack: TruthStack, t: int, frame_id: int | None, offset_ms: float = OFFSET_MS,
+              map_name: str = MAP) -> dict[str, Any]:  # fmt: skip
+    """One capture time ``t``: every monster's predicted sprite box (unclipped), its Timeline
+    state and whether it is in view, at t - 1d (``truth``'s row)."""
+    from poring_dataset.camera import map_key
+    from poring_dataset.labels import ONE_SHOT, STATE_ACTION
+    from poring_dataset.render import Actor, MonsterAction, load_scene, predict_sprite
+
+    tl, sheets = stack.tl, stack.sheets
+    tw = t - int(offset_ms * 1e6)
+    world = tl.frame_world(tw)
+    row: dict[str, Any] = {"frame_id": frame_id, "t": t, "map": world.map,
+                           "self": world.self_pos,
+                           "flags": frame_flags(t, stack.changes, stack.gm, stack.vanish,
+                                                stack.new),
+                           "units": [], "players": 0}  # fmt: skip
+    if world.self_pos is None or not world.map or map_key(world.map) != map_name:
+        return row
+    scene = load_scene(stack.camera, world.map, world.self_pos, indoor_table=stack.indoor)
+    for ent in world.entities:
+        if ent.hidden:
+            continue
+        if ent.objtype == 0 and ent.gid != world.aid:
+            row["players"] += 1
+        if ent.objtype != 5:
+            continue
+        sh = sheets(ent.job)
+        st = tl.state(ent.gid, tw)
+        if sh is None or st is None:
+            row["units"].append({"gid": ent.gid, "job": ent.job, "box": None,
+                                 "state": None, "in_view": False})  # fmt: skip
+            continue
+        action = STATE_ACTION.get(st.state, MonsterAction.IDLE)
+        elapsed = st.elapsed_ms if action in ONE_SHOT else None
+        heading = st.facing if st.facing is not None else (ent.heading or 0)
+        pred = predict_sprite(Actor((float(ent.x), float(ent.y)), int(heading), action,
+                                    elapsed_ms=elapsed, duration_ms=st.duration_ms),
+                              sh, scene, K)  # fmt: skip
+        if pred is None:
+            continue
+        box = tuple(round(float(v), 1) for v in pred.box)
+        row["units"].append({"gid": ent.gid, "job": ent.job, "box": box, "state": st.state,
+                             "cell": (round(ent.x, 2), round(ent.y, 2)),
+                             "in_view": in_view(box, stack.size, stack.rects)})  # fmt: skip
+    return row
+
+
 def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
           offset_ms: float = OFFSET_MS, map_name: str = MAP) -> dict[str, Any]:  # fmt: skip
     """Per frame of a recorder session: every monster's predicted sprite box (unclipped), its
     Timeline state and whether it is in view, at the frame's capture time - 1d. Units are kept on
     ``map_name`` only (Amendment 10a: round 2's watch is on prt_fild08; the projection reads that
     map's GAT from the same GAT_DIR, nothing else changes)."""
-    import client_layout
     import map_labels as ml
-    import qa_export
 
-    from poring_dataset import mapcache
-    from poring_dataset.camera import load_indoor_table, map_key
-    from poring_dataset.labels import ONE_SHOT, STATE_ACTION
-    from poring_dataset.projection import camera_file
-    from poring_dataset.render import Actor, MonsterAction, load_scene, predict_sprite
-    from poring_dataset.timeline import Timeline
-
-    qa_export.KB_CLASSES = kb / "classes.json"
-    sheets = qa_export.Sheets(SPRITES, stems=qa_export.sprite_stems(SPRITE_NAMES))
     manifest = json.loads((session / "manifest.json").read_text())
     ml.check_recording(manifest)
     refs = png_index(session, manifest)
     events = _events(session)
-    tl = Timeline(events, mapcache.load(mapcache_dir, prere=True), snapshot_every=32)
-    camera = json.loads(camera_file("rdp").read_text())
-    indoor = load_indoor_table()
     size = (int(manifest["game_region"][2]), int(manifest["game_region"][3]))
-    rects = client_layout.RECTS[layout]
-    changes = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "map_change")
-    gm = sorted(int(e["t_mono_ns"]) for e in events if e.get("gm_command"))
-    vanish, new = party_times(events)
-    rows = []
-    for ref in refs:
-        t = int(ref.t_mono_ns)
-        tw = t - int(offset_ms * 1e6)
-        world = tl.frame_world(tw)
-        row: dict[str, Any] = {"frame_id": ref.frame_id, "t": t, "map": world.map,
-                               "self": world.self_pos,
-                               "flags": frame_flags(t, changes, gm, vanish, new),
-                               "units": [], "players": 0}  # fmt: skip
-        rows.append(row)
-        if world.self_pos is None or not world.map or map_key(world.map) != map_name:
-            continue
-        scene = load_scene(camera, world.map, world.self_pos, indoor_table=indoor)
-        for ent in world.entities:
-            if ent.hidden:
-                continue
-            if ent.objtype == 0 and ent.gid != world.aid:
-                row["players"] += 1
-            if ent.objtype != 5:
-                continue
-            sh = sheets(ent.job)
-            st = tl.state(ent.gid, tw)
-            if sh is None or st is None:
-                row["units"].append({"gid": ent.gid, "job": ent.job, "box": None,
-                                     "state": None, "in_view": False})  # fmt: skip
-                continue
-            action = STATE_ACTION.get(st.state, MonsterAction.IDLE)
-            elapsed = st.elapsed_ms if action in ONE_SHOT else None
-            heading = st.facing if st.facing is not None else (ent.heading or 0)
-            pred = predict_sprite(Actor((float(ent.x), float(ent.y)), int(heading), action,
-                                        elapsed_ms=elapsed, duration_ms=st.duration_ms),
-                                  sh, scene, K)  # fmt: skip
-            if pred is None:
-                continue
-            box = tuple(round(float(v), 1) for v in pred.box)
-            row["units"].append({"gid": ent.gid, "job": ent.job, "box": box, "state": st.state,
-                                 "cell": (round(ent.x, 2), round(ent.y, 2)),
-                                 "in_view": in_view(box, size, rects)})  # fmt: skip
+    stack = truth_stack(events, layout, size, kb=kb, mapcache_dir=mapcache_dir)
+    rows = [truth_row(stack, int(ref.t_mono_ns), ref.frame_id, offset_ms, map_name)
+            for ref in refs]  # fmt: skip
     return {"session": manifest["session_id"], "layout": layout, "offset_ms": offset_ms, "k": K,
             "size": size, "map": map_name, "frames": rows,
-            "missing_sheets": sheets.missing}  # fmt: skip
+            "missing_sheets": stack.sheets.missing}  # fmt: skip
 
 
 def summary(doc: dict[str, Any]) -> dict[str, Any]:
