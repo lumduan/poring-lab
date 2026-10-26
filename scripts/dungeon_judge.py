@@ -433,9 +433,9 @@ def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
     (pickup_result ok, which fires for EVERY gain) in [t0, t1] by its cause -- "picked" when our
     pickup_request came <= PICK_S before it ("staged" instead when that request's floor id is in
     ``staged``: staged_floor_ids), "stolen" when a Steal's SP fall did <= STEAL_S before it,
-    "snatched" when one of OUR attack acts (``attacks``: the Rogue's, dungeon@8) did <= SNATCH_S
-    before it (Snatcher steals inside the attack), else "other" (reported, e.g. a GM @item) -- per
-    item id."""
+    "snatched" when one of OUR attack acts (``attacks``: the Rogue's, dungeon@8; for a human demo
+    of the Rogue, own_hits) did <= SNATCH_S before it (Snatcher steals inside the attack), else
+    "other" (reported, e.g. a GM @item) -- per item id."""
     req = sorted((_t(e), int(e.get("floor_id") or 0)) for e in packets
                  if e.get("type") == "pickup_request")  # fmt: skip
     reqs = [t for t, _f in req]
@@ -460,6 +460,17 @@ def item_gains(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
             kind = "other"
         by[int(e.get("item_id") or 0)][kind] += int(e.get("amount") or 1)
     return {str(k): dict(v) for k, v in sorted(by.items())}
+
+
+def own_hits(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[int]:
+    """PURE (rogue-gef10.md Amendment L, 2026-10-26): the times of OUR acts that did damage (> 0)
+    to another unit, for item_gains' Snatcher rule when no runner event names the character (a
+    human demo: Batt's gef_fild10 Rogue). A miss, a pickup, a sit / stand, or an act on ourselves
+    is none of them."""
+    return sorted(_t(e) for e in packets if e.get("type") == "act"
+                  and int(e.get("src_gid") or -1) == aid
+                  and int(e.get("target_gid") or -1) != aid
+                  and e.get("kind") not in NOT_A_HIT and int(e.get("damage") or 0) > 0)  # fmt: skip
 
 
 STEAL_TARGET_S = 15.0  # dungeon@7: the robbed monster = the one our next attack hits within this
@@ -628,6 +639,10 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     atks = sorted(_t(e) for e in packets if e.get("type") == "act" and e.get("src_gid") == aid
                   and e.get("target_gid") != aid and e.get("action") in (0, 8, 10)
                   ) if rs.get("char") == "rogue" else []  # fmt: skip
+    if not rs and man.get("character") == "rogue":  # Amendment L: a human demo of the Rogue
+        atks = own_hits(packets, aid)
+        why["snatched"] = ("no runner events (a human demo): Snatcher = a gain <= SNATCH_S after "
+                           "our own act with damage > 0 (packets)")  # fmt: skip
     gains = item_gains(packets, w0, w1, st_falls, staged_floor_ids(packets), atks)
     n_stolen = sum(int(c.get("stolen", 0)) for c in gains.values())
     steal_ev = [e for e in ev if e.get("kind") == "steal"]

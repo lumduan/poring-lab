@@ -627,14 +627,16 @@ frames 5 Hz on the NAS; judged by `dungeon_judge.py row --live 898` plus the pac
 |---|---|---|
 | kills / h | **232.7** (58: Orc Lady 38, Orc Warrior 18, Poporing 2) | 42.6 (best run 60.5) |
 | items / h | **329** (82: Cyfar 47, Orcish Voucher 31, Iron 4) | 46 |
-| value / h at OC | **52,780 z** | 14,111 z |
+| value / h at OC | **52,780 z** ➡️ **102,084 z** once his 38 Snatcher gains count as income (the judge fix, [gef10-time-budget.md](gef10-time-budget.md) §8) | 14,111 z (its snatches counted) |
 | floor loot picked / dropped | **97.8 %** (44 / 45; 44 pickup clicks, all OK) | ~87 % |
 | Snatcher procs / h | 152 (38: each <= 1 s after his own hit; SP never moved) | 17 |
-| deaths / potions / wings | 0 / 1 / 0 (HP low 9 % once) | 2 deaths in 6.18 h |
+| deaths / potions / wings | 0 / 1 / 0 (HP low 9 % once ➡️ **22 %**: 476 / 2,146; the 9 % was the judge's Crusader MaxHP fallback for a human demo, gef10-time-budget.md §8) | 2 deaths in 6.18 h |
 
 - **His play:**
   - One clockwise loop along the map's ring from the Kafra: 1,894 cells in 14.1 min (134 cells
-    / min), 28 walk clicks / min.
+    / min), 28 walk clicks / min. ➡️ The same loop walked **twice** (833 cells; lap 1 8.9 min with
+    41 kills, lap 2 4.9 min): gef10-time-budget.md §7, waypoints in
+    `config/routes/gef_fild10-batt-loop.json`.
   - 62 attack clicks for 58 kills: one click, then auto-attack.
   - A kill every ~15 s (median 14.8 s). From the first hit to the death: median 5.3 s.
   - **No rest in the field.** At 14.1 min he entered in_orcs01 (the orc house) and sat with
@@ -645,7 +647,10 @@ frames 5 Hz on the NAS; judged by `dungeon_judge.py row --live 898` plus the pac
   kills / h AND >= 329 items / h, with floor loot >= 97.8 % and no death from a bug. Each version
   is judged against it, on at least two pooled runs.
 - The judge's Snatcher rule keys on the runner's events, so for a human demo it files Snatcher
-  gains as "other". Fixed next (packets: a gain <= 1 s after our own hit act).
+  gains as "other". Fixed next (packets: a gain <= 1 s after our own hit act). ➡️ FIXED
+  (`dungeon_judge.own_hits`): his demo reads picked 44 / snatched 38 / other 0.
+- ➡️ **Where the bot loses its time against this demo, ranked:** [gef10-time-budget.md](gef10-time-budget.md)
+  (rest 33 s / kill, stop-and-go walking 15, the defend-scan reaction 5.5, the loot pause 4.7, ...).
 
 **The work, in parallel:**
 - (a) dungeon@8.3, the restock fix;

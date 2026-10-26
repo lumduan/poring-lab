@@ -541,3 +541,65 @@ def test_steal_by_species_names_the_monster_our_next_attack_hits() -> None:
     # the 4.04 pilot: a stolen item and its SP fall share a packet batch, so the SAME t_mono_ns
     pk2 = [*pk, {"type": "pickup_result", "ok": True, "item_id": 907, "t_mono_ns": 30 * s}]
     assert dj.steal_by_species(pk2, [10 * s, 30 * s, 50 * s], me)["Bigfoot"]["stolen"] == 1
+
+
+def test_a_human_demo_of_the_rogue_files_snatcher_gains_by_its_own_damaging_acts() -> None:
+    """Amendment L (2026-10-26): a human demo has no runner events, so the runner's "char" cannot
+    name the Rogue. With the manifest's character "rogue", a gain with no pickup request and no
+    Steal, <= SNATCH_S after one of OUR acts with damage > 0, is "snatched" (income); a gain after
+    our MISS stays "other", a pickup still wins, and another character's demo snatches nothing."""
+    me, s = dj.AID, dj.NS
+    pk = [
+        appear(0.0, 7, 5),
+        # our hit (damage 120) at 10 s, a gain 0.3 s later: Snatcher
+        {"type": "act", "src_gid": me, "target_gid": 7, "action": 0, "kind": "normal",
+         "damage": 120, "t_mono_ns": 10 * s},
+        {"type": "pickup_result", "ok": True, "item_id": 7053, "amount": 1,
+         "t_mono_ns": 10 * s + 3 * s // 10},
+        # our MISS (damage 0) at 30 s, a gain 0.3 s later: not ours to claim
+        {"type": "act", "src_gid": me, "target_gid": 7, "action": 0, "kind": "normal",
+         "damage": 0, "t_mono_ns": 30 * s},
+        {"type": "pickup_result", "ok": True, "item_id": 931, "amount": 1,
+         "t_mono_ns": 30 * s + 3 * s // 10},
+        # a pickup inside a hit's second: picked, not snatched
+        {"type": "act", "src_gid": me, "target_gid": 7, "action": 8, "kind": "multi_hit",
+         "damage": 90, "t_mono_ns": 50 * s},
+        {"type": "pickup_request", "floor_id": 4, "t_mono_ns": 50 * s + s // 10},
+        {"type": "pickup_result", "ok": True, "item_id": 931, "amount": 1,
+         "t_mono_ns": 50 * s + 2 * s // 10},
+        # our sit act (not a hit) and a gain after it: other
+        {"type": "act", "src_gid": me, "target_gid": me, "action": 2, "kind": "sit",
+         "damage": 0, "t_mono_ns": 70 * s},
+        {"type": "pickup_result", "ok": True, "item_id": 998, "amount": 1,
+         "t_mono_ns": 70 * s + s // 2},
+    ]  # fmt: skip
+    assert dj.own_hits(pk) == [10 * s, 50 * s]
+    man = {"sid": "20261026T095021-demo-human-demo-test", "character": "rogue"}
+    r = dj.judge([], pk, None, man, map_name="gef_fild10", t0=0, t1=80 * s)
+    got = {it["item_id"]: (it["picked"], it["snatched"], it["other"]) for it in r["items"]}
+    assert got == {7053: (0, 1, 0), 931: (1, 0, 1), 998: (0, 0, 1)}
+    assert "snatched" in r["why"]
+    # another character's demo (or none named): no Snatcher, the gains stay "other"
+    for other in ({"sid": "x", "character": "crusader"}, {"sid": "x"}):
+        r2 = dj.judge([], pk, None, other, map_name="gef_fild10", t0=0, t1=80 * s)
+        got2 = {it["item_id"]: it["snatched"] for it in r2["items"]}
+        assert got2 == {7053: 0, 931: 0, 998: 0} and "snatched" not in r2["why"]
+    # a runner session keeps the runner's rule (run_start char rogue: our attack acts' actions)
+    ev_ = [ev(0, "run_start", strategy="B", seed=1, version="t", map="gef_fild10", char="rogue"),
+           ev(80, "run_end", reason="time_box", counts={})]  # fmt: skip
+    r3 = dj.judge(ev_, pk, None, {"sid": "y"}, map_name="gef_fild10")
+    got3 = {it["item_id"]: it["snatched"] for it in r3["items"]}
+    assert got3 == {7053: 1, 931: 1, 998: 0}  # the runner's rule counts the miss's act too
+
+
+HUMAN_GEF10 = "20261026T095021-demo-human-demo-gef10"
+
+
+@pytest.mark.skipif(not _have(HUMAN_GEF10), reason="Batt's gef_fild10 demo is not here")
+def test_real_snatcher_gains_in_batts_gef10_demo() -> None:
+    """The REAL case (Amendment L): Batt's 14.95-min demo (--live 898) gained 82 items; his 44
+    pickups are picked and the other 38 came <= 1 s after his own damaging hit (Snatcher), none
+    left as "other"."""
+    row = dj.row(HUMAN_GEF10, None, map_name="gef_fild10", live_s=898)
+    got = {it["item_id"]: (it["picked"], it["snatched"], it["other"]) for it in row["items"]}
+    assert got == {7053: (24, 23, 0), 931: (17, 14, 0), 998: (3, 1, 0)}
