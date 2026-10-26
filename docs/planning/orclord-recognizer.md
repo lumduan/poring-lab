@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, a CPU recognizer cheap enough for the runner (<= 60 ms per 1280 x 720 frame, niced) tells 'the Orc Lord (mob 1190) or its Orc Archers (1189 / 1473) are in view' on gef_fild10 within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of held-out hunting frames."
-status: "FLEE PROOF fp1c 2026-10-26 04:07-04:14 (12c): bar 1 NO VERDICT (3 / 6 trials had the party in view; 2 / 3 fled by the aura before any damage; trial 1 was hit first), bar 2 PASS (no death); the flee rule is NOT adopted. Earlier: ROUND 2 SCORED 2026-10-26 01:21-01:33 ICT (section 11): the aura rule alone (frozen v1 model) PASSES both bars by the letter -- recall 4 / 4 edge entries within 1.1 s (3 / 4 within 1.0 s; a one-sided 95 % lower bound of 47 %), false positives 0.56 per 10 min on 143 min of gef_fild10 hunting (all 8: our own lock-on magic circle, 0.080-0.100 against 0.08). Thin evidence: only 4 entries; archers alone are not seen. Round 1 (section 5) FAILED with both cues."
+status: "FLEE PROOF fp2 2026-10-26 11:20-11:27 (13a): bar 1 NO VERDICT again (3 / 8 with the Lord in view, 1 passed); trial 1: the Lord hit 0.97 s after entering view, the aura never fired, HP fell to 1; NOT adopted -- the clock schedule stays the protection. Earlier: FLEE PROOF fp1c 2026-10-26 04:07-04:14 (12c): bar 1 NO VERDICT (3 / 6 trials had the party in view; 2 / 3 fled by the aura before any damage; trial 1 was hit first), bar 2 PASS (no death); the flee rule is NOT adopted. Earlier: ROUND 2 SCORED 2026-10-26 01:21-01:33 ICT (section 11): the aura rule alone (frozen v1 model) PASSES both bars by the letter -- recall 4 / 4 edge entries within 1.1 s (3 / 4 within 1.0 s; a one-sided 95 % lower bound of 47 %), false positives 0.56 per 10 min on 143 min of gef_fild10 hunting (all 8: our own lock-on magic circle, 0.080-0.100 against 0.08). Thin evidence: only 4 entries; archers alone are not seen. Round 1 (section 5) FAILED with both cues."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, payf07-detector.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py]
-next_action: "Batt: whether a second flee proof is worth it (12c: a plan with the party in view in every trial, the OFF toggle out of its reach, the Lord's entry separated from the archers'). Until then --clear-map and Amendment E's schedule keep the natural Lord out of the runs."
+next_action: "Batt: the sight-based flee is not adopted (13a: the Lord can hit within 1 s of entering view). Keep --clear-map + the clock schedule. A third proof only if Batt wants it; it must heal at every trial start and stop after a near-death."
 title: "An Orc Lord recognizer for the Rogue's flee rule on gef_fild10 (pixels only, CPU, scored offline on held-out lattice cells)"
 date: 2026-10-25
 owner: Batt
@@ -732,3 +732,39 @@ From the same truth (`in_view` per species), in the 3 counted trials:
         --area /dev/shm/poring-lab-tmp/rogue/prt_fild08_area.npy --n 8 --seed 28 \
         --near 1 --toggle 25 --label fp2 \
         --model /dev/shm/poring-lab-tmp/orclord/model/orclord-v1.npz --sha256 43179452d01f8882c46669540b62d18a3b8e020ff685f2d765f41822c78ea1ff
+
+### 13a. RESULT: fp2 -- bar 1 NO VERDICT (3 / 8 trials had the Lord in view, 1 passed); trial 1 left the Rogue at 1-2 HP (2026-10-26 11:30 ICT from `date`)
+
+- **The run:** fp2, 11:20:06-11:27:01, flee@4, the plan as registered (seed 28, 8 trials, OFF at
+  25 cells, hops to 2). Every immunity toggle was read and verified; it ended "done". Recording
+  `20261026T112005-rdp-fp2` (in /dev/shm: `dataset_ship` refuses during SET hours, 09:30-17:00).
+- **Scored once** (11:30), `orclord_flee_score.py --count-by lord` (6191129), our AID 2000002:
+  - **counted 3 / 8, passed 1 / 3: bar 1 NO VERDICT (c < 4).**
+  - Bar 2 passes only nominally: no death, **but trial 1's HP fell to 1**.
+
+| trial | the Lord in view | the Lord's first hit | F2 (by) | passed |
+|---|---|---|---|---|
+| 1 | 13.3 s | **14.3 s** (with an archer: 3,347 damage in 2 acts) | 18.8 s (**hp**) | no |
+| 2, 3, 6, 7, 8 | never | - | 7.4-7.6 s (hp) | not counted |
+| 4 | 5.7 s | none | 7.6 s (**aura**) | yes |
+| 5 | 5.6 s | none | 7.6 s (hp) | no |
+
+(seconds after the verified OFF read)
+
+- **Trial 1, the finding that matters:**
+  - The Lord hit **0.97 s after entering view**. The aura rule never fired in its 5.4 s in view
+    (0.025 at F2; the threshold is 0.08).
+  - The HP backup flew at 1-2 HP.
+  - A rule keyed on sight cannot protect against a Lord that closes and hits within about a
+    second, even with a perfect recognizer: the press plus the teleport took ~0.2-0.4 s in fp1c.
+- **A procedure flaw (mine), which spoiled trials 2-8:**
+  - The proof never heals between trials. After trial 1, HP only regenerated naturally:
+    90 -> 178 -> ... -> 629 of 2,146.
+  - Each later trial began under the 50 % HP backup, which fired within ~7.5 s of the OFF.
+  - fp1c never took damage, so the flaw stayed hidden. A future proof must `@heal` at every
+    trial's start, and stop after a near-death.
+- **Conclusion (by section 13): not adopted.**
+  - The safety stays with `--clear-map` plus Amendment E's clock schedule, which keep the
+    natural Lord out of the runs.
+  - The recognizer is also not good enough to rely on: 1 aura positive in the 3 trials with the
+    Lord in view. A third proof is Batt's decision.
