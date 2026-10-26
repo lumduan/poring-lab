@@ -1380,3 +1380,35 @@ c9-c11 keep their registered base):
   - damage / kill and consumables / h: at most +10 %.
 - **Abort rule:** a patrol that stands > 60 s or logs a reached-waypoint order break in the live
   events ends the arm's run as a fault, reported as such.
+
+## Amendment AE (2026-10-26 23:43 ICT from `date`): the d-block judged -- THE LOOT TRIM PASSES; the walk block uses it
+
+| run | arm | kills / h | loot-step s / kill | floor loot | items / h | value / h at OC |
+|---|---|---|---|---|---|---|
+| d1 | T | 134.7 | 2.67 | 80.7 % | 149.7 | 43,289 |
+| d2 | V | 78.3 | 8.10 | 88.2 % | 96.7 | 29,108 |
+| d3 | T | 109.9 | 3.22 | 81.3 % | 123.2 | 36,683 |
+| d4 | V | 119.9 (72 kills) | 6.60 | 87.0 % | 141.6 | 40,512 |
+
+**Pooled** (2 runs per arm, 72 min each):
+
+| measure | T (trim) | V (v1) | bar (Amendment Z) | met? |
+|---|---|---|---|---|
+| **kills / h (primary)** | **122.3** | 99.1 | T - V >= +8 | **yes, +23.2** |
+| loot-step s / kill | 2.92 | 7.19 | T <= 3.5 | yes |
+| floor-loot completeness | 80.9 % | 87.5 % | within 8 points | yes (-6.6) |
+| items / h | 136.5 | 119.1 | not lower | yes |
+| value / h at OC | 39,988 | 34,811 | not lower | yes |
+| damage per kill cycle | 109.0 | 106.3 | at most +10 % | yes (+2.5 %) |
+| potions + wings / h | 27.5 | 23.3 | at most +10 % | **NO, +18 %** |
+
+- **One secondary bar fails as written.** Consumables per HOUR rose 18 %, because T fights more per
+  hour. Per kill they FELL about 4 % (0.225 against 0.235). This is reported as a failed
+  secondary, not re-read. A per-hour bar on a cost that scales with kills was a poor choice; future
+  pre-registrations state consumables per kill.
+- **The primary passes,** so Amendment AD's rule puts `--loot trim` in BOTH arms of the walk block
+  (`loot-e` = `--loot trim`).
+- **Ends:** no death after any time box. d3's end_escape fired, and the Fly Wing went first. d4's
+  minimum HP after its end was 1438.
+- **The clock:** D10 = d4's setup @killmonster2 at 23:05:28. e1 (L) >= 23:43:28, e2 (V) >= 00:21:28,
+  both ending by 01:05:28. D11 >= 01:16:28.
