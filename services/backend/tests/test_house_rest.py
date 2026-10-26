@@ -433,3 +433,21 @@ def test_the_real_rooms_when_the_local_data_is_there() -> None:
     assert rows["gef021"]["steps"]["corner_rule"]["orc02"] == 24
     for r_ in rows.values():
         assert min(r_["forbidden_cheb_from_click"].values()) >= hr.FORBIDDEN_MIN
+
+
+def test_the_multi_source_steps_are_the_nearest_sources_and_one_source_is_steps_from() -> None:
+    g = np.ones((20, 20), dtype=bool)
+    g[0:15, 10] = False  # a wall, open at the south end (y >= 15)
+    d = hr.steps_from_many(g, [(2, 2), (18, 2)])
+    assert d[2, 5] == 3 and d[2, 15] == 3  # each side: its own source
+    d1 = hr.steps_from_many(g, [(2, 2)])
+    assert (d1 == hr.steps_from(g, (2, 2))).all() and d1[2, 15] > 20  # around the wall
+    assert (hr.steps_from_many(g, [(10, 2)]) == -1).all()  # a source off the grid reaches nothing
+
+
+def test_rest_decisions_take_the_last_position_read_before_each_rest_go() -> None:
+    evs = [{"kind": "rest_go", "pct": 50},  # no position yet: skipped
+           {"kind": "hp_read", "pos": [5, 6]}, {"kind": "hp_read", "pos": None},
+           {"kind": "rest_go", "pct": 44}, {"kind": "hp_read", "pos": [7, 8]},
+           {"kind": "rest_go", "pct": None}]  # fmt: skip
+    assert hr.rest_decisions(evs) == [((5, 6), 44), ((7, 8), None)]

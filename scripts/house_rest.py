@@ -3,7 +3,9 @@
 (in_orcs01) instead of sitting in the field, as Batt did in his demo (2026-10-26 ~10:05, "I rest
 on this map because it is safer"). PURE planning only; dungeon_hunt.py drives it.
 
-    house_rest.py table [--kb DIR] [--gat-dir DIR] [--zones-root DIR]   the door / exit table (JSON)
+    house_rest.py table [--kb DIR] [--mapcache DIR]       the door / exit table (JSON)
+    house_rest.py steps SID [SID...] [--demo DIR]         route steps from each rest decision of
+                                                          the runs to the nearest sealed door
 
 THE GEOMETRY (static map knowledge, read at run time from data/kb/warps.json, the client GAT of
 in_orcs01 and the server's map cache; nothing of either is committed):
@@ -41,7 +43,7 @@ import argparse
 import dataclasses
 import json
 import sys
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -154,13 +156,21 @@ def steps_from(grid: Any, start: Cell, corner: bool = True, max_steps: int | Non
     """PURE: 8-connected BFS steps from ``start`` on ``grid`` (-1 = unreached); ``corner``: a
     diagonal step needs both side cells (rAthena's and hunt_core.astar's rule); without it the
     reach is a SUPERSET of the client's moves."""
+    return steps_from_many(grid, [start], corner, max_steps)
+
+
+def steps_from_many(grid: Any, starts: Sequence[Cell], corner: bool = True,
+                    max_steps: int | None = None) -> Any:  # fmt: skip
+    """PURE: ``steps_from`` from the NEAREST of several cells (a multi-source BFS): a door's
+    approach cells -> every cell's steps to the nearest of them (the grid is symmetric)."""
     g = np.asarray(grid, dtype=bool)
     h, w = g.shape
     d = np.full((h, w), -1, dtype=np.int32)
-    if not (0 <= start[0] < w and 0 <= start[1] < h) or not g[start[1], start[0]]:
-        return d
-    d[start[1], start[0]] = 0
-    q = deque([start])
+    q: deque[Cell] = deque()
+    for start in starts:
+        if 0 <= start[0] < w and 0 <= start[1] < h and g[start[1], start[0]]:
+            d[start[1], start[0]] = 0
+            q.append((int(start[0]), int(start[1])))
     while q:
         x, y = q.popleft()
         n = int(d[y, x])
@@ -473,6 +483,74 @@ def table(kb: Mapping[str, Any], walk_in: Any, npcs: Sequence[tuple[Cell, int]] 
     return rows
 
 
+def rest_decisions(events: Sequence[Mapping[str, Any]]) -> list[tuple[Cell, int | None]]:
+    """PURE: each ``rest_go`` of a dungeon_hunt run with our cell then (the last position read
+    before it) and its HP percent; a rest_go before any position read is skipped."""
+    out: list[tuple[Cell, int | None]] = []
+    pos: Cell | None = None
+    for e in events:
+        if e.get("kind") == "hp_read" and e.get("pos"):
+            pos = (int(e["pos"][0]), int(e["pos"][1]))
+        elif e.get("kind") == "rest_go" and pos is not None:
+            out.append((pos, e.get("pct")))
+    return out
+
+
+def _stats(xs: Sequence[float]) -> dict[str, float] | None:
+    if not xs:
+        return None
+    a = np.asarray(xs, dtype=float)
+    return {"n": len(a), "median": float(np.median(a)), "p75": float(np.percentile(a, 75)),
+            "p90": float(np.percentile(a, 90)), "max": float(a.max()),
+            "mean": round(float(a.mean()), 1)}  # fmt: skip
+
+
+def cmd_steps(sids: Sequence[str], demo: Path, kb: Mapping[str, Any], max_steps: int,
+              min_hp: int) -> dict[str, Any]:  # fmt: skip
+    """The estimate's walking side (gef10-house-rest.md section 6): the route-grid steps from
+    every rest decision of the runs ``sids`` to the nearest USABLE (sealed) door's approach cell,
+    and to any door's, on the grids dungeon_hunt.run builds (stand grid, zones, route grid minus
+    what the zones seal off). Reads the runs' events only."""
+    import map_zones as mz
+    from anim_region import stand_grid
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+    from poring_dataset import walkable as wk
+
+    gat = gatmod.parse((cam.GAT_DIR / f"{FIELD}.gat").read_bytes())
+    ok = stand_grid(FIELD, gat)
+    zones = mz.load(FIELD, shape=ok.shape)
+    okr = mz.route_grid(ok, zones)
+    okr = okr & ~mz.sealed_off(ok, okr)
+    both = wk.load_both(FIELD)[1]
+    walk_in = wk.load_both(HOUSE_MAP)[1]
+    fb = forbidden_warps(kb)
+    hs = houses(kb)
+    usable = {h.name for h in hs if usable_why(room_check(h, walk_in, fb)) is None}
+    dist = {h.name: steps_from_many(okr, approach_cells(h, okr, door_free(ok, both, h.door),
+                                                       zones)) for h in hs}  # fmt: skip
+    rows = []
+    for sid in sids:
+        evs = [json.loads(ln) for ln in (demo / sid / "events.jsonl").open()]
+        for here, pct in rest_decisions(evs):
+            got = {n: int(d[here[1], here[0]]) for n, d in dist.items() if d[here[1], here[0]] >= 0}
+            best_u = min(((v, n) for n, v in got.items() if n in usable), default=None)
+            best_a = min(((v, n) for n, v in got.items()), default=None)
+            rows.append({"sid": sid, "at": list(here), "pct": pct,
+                         "usable": None if best_u is None else list(best_u),
+                         "any": None if best_a is None else list(best_a)})  # fmt: skip
+    su = [r["usable"][0] for r in rows if r["usable"]]
+    qual = [r for r in rows if r["usable"] and r["usable"][0] <= max_steps
+            and (r["pct"] or 0) >= min_hp]  # fmt: skip
+    return {"usable": sorted(usable), "rows": rows, "steps_usable": _stats(su),
+            "steps_any": _stats([r["any"][0] for r in rows if r["any"]]),
+            "qualifying": len(qual), "of": len(rows),
+            "qualifying_steps": _stats([r["usable"][0] for r in qual]),
+            "doors": dict(sorted(Counter(r["usable"][1] for r in rows
+                                         if r["usable"]).items()))}  # fmt: skip
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
@@ -481,11 +559,21 @@ def main() -> int:
     t.add_argument("--kb", default=str(ROOT / "data" / "kb"))
     t.add_argument("--mapcache", default=None, help="the server map cache dir (default: the "
                    "package's _generated)")  # fmt: skip
+    s = sub.add_parser("steps", help="the route steps from each rest decision of the runs to the "
+                       "nearest sealed door (gef10-house-rest.md section 6)")  # fmt: skip
+    s.add_argument("sids", nargs="+")
+    s.add_argument("--kb", default=str(ROOT / "data" / "kb"))
+    s.add_argument("--demo", default="/dev/shm/poring-lab-demo")
+    s.add_argument("--max-steps", type=int, default=120)
+    s.add_argument("--min-hp", type=int, default=30, help="HP percent")
     a = ap.parse_args()
     from poring_dataset import mapcache
     from poring_dataset import walkable as wk
 
     kb = json.loads((Path(a.kb) / "warps.json").read_text())
+    if a.cmd == "steps":
+        print(json.dumps(cmd_steps(a.sids, Path(a.demo), kb, a.max_steps, a.min_hp), indent=1))
+        return 0
     mc = Path(a.mapcache) if a.mapcache else mapcache.GENERATED
     _gat, both = wk.load_both(HOUSE_MAP, mapcache_dir=mc)
     print(json.dumps(table(kb, both), indent=1))

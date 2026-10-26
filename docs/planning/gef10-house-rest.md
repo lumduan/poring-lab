@@ -23,7 +23,7 @@ this map because it is safer". This document designs the same move for the runne
 
 **What this is.** A design, the pure planning code (`scripts/house_rest.py`), its integration in
 `scripts/dungeon_hunt.py` behind `--rest house` (default `spot` = today's behaviour), the judge's
-hook, 19 tests, and an estimate. **Nothing ran live.** Every number is **measured** unless it is
+hook, 21 tests, and an estimate. **Nothing ran live.** Every number is **measured** unless it is
 marked **estimate**.
 
 ## 0. The answer in brief
@@ -268,8 +268,8 @@ His 5-Hz frames around his map change (packet at 0.00 s; the frames lag ~0.7 s):
 
 ## 6. What it would have saved (the 7 allowed runs, 4.20 h, 192 kills, 45.7 kills / h)
 
-**Measured** (`time_budget.py compare` over a2, a3, a4, a7, a8, a5b and b1; the events; the
-route-grid BFS):
+**Measured** (`time_budget.py compare` over a2, a3, a4, a7, a8, a5b and b1; their events;
+`house_rest.py steps` for the route steps):
 
 | measure | value |
 |---|---|
@@ -322,7 +322,7 @@ route-grid BFS):
   patrol passes within ~30 steps of a sealed door with HP < 80 %, rest there. That gives short
   detours and full rests in safety; Batt himself rested when his loop brought him to his door.
 
-## 7. Tests (`services/backend/tests/test_house_rest.py`, 19; synthetic grids)
+## 7. Tests (`services/backend/tests/test_house_rest.py`, 21; synthetic grids)
 
 - The door / exit pairing for all 5 houses (and a refusal when a door has 0 or 2 matching exits);
   the forbidden warps are orc01 and orc02.
@@ -355,6 +355,8 @@ route-grid BFS):
   a late change and a second entry stay bars. No house events = no new key.
 - One test reads the real local data when it is there (skipped in CI): the 3 sealed rooms, 24
   steps to orc01 / orc02 from gef022 / gef021, every click >= 10 from both.
+- The estimate's helpers: the multi-source steps (= one BFS per source, nearest wins) and the
+  rest decisions read from a run's events.
 - With them: test_dungeon_hunt, test_click_census (count unchanged, reason extended),
   test_walk_trust, test_map_zones, test_map_routes, test_cursor_unknown, test_dungeon_judge,
   test_time_budget and test_map_prep pass.
@@ -421,5 +423,6 @@ route-grid BFS):
     python3 scripts/grf_read.py extract /mnt/poring-thai-src/ro_thai/data.grf 'data\in_orcs01.gat' \
         --out /dev/shm/poring-lab-tmp/gat --decode-des
     python3 scripts/house_rest.py table          # the door / exit table (section 2), JSON
+    python3 scripts/house_rest.py steps <a2 a3 a4 a7 a8 a5b b1 sids>   # section 6's route steps
     python3 scripts/time_budget.py compare --target 20261026T095021-demo-human-demo-gef10 \
-        --live 898 <a2 a3 a4 a7 a8 a5b b1 sids> --json   # section 6's measured rows
+        --live 898 <a2 a3 a4 a7 a8 a5b b1 sids> --json   # section 6's time and damage rows
