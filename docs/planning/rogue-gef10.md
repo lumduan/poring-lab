@@ -1525,3 +1525,31 @@ count from packets. The two differ by 0-4 kills a run.
   are now also the judge's packet counts). Pooled potions + wings per kill: F 0.376 against V
   0.314, +20 % (was +23 %).
 - **No verdict changes.** The pooled kills / h always used the judge.
+
+## Amendment AI (2026-10-27 06:33 ICT from `date`): the confirmation run; g1's fault stop; the level held again
+
+- **g1** (05:50:33-05:52:34) **stopped fail-closed after ~1.2 min: "no input_ack within 3 s"**.
+  - The end path ran: the warp home at 05:52:30.
+  - The backend was healthy right after: ASSIST, no bot agents, no input refusals.
+  - The likely cause is my own. A guarded `measure:du` of `data/` (05:52:24-35, ~424 MB of files)
+    walked the shared disk while quant-postgres was stalling it, and the backend's input path
+    (its input log append) waited.
+  - **Rule kept from now on: no disk measurement while a run is live.**
+  - g1 is a fault, not a result.
+- **g1b** (seed 25565; setup @killmonster2 05:55:25, inside D13 = 05:51:16): the night's best
+  configuration (P2, the 9.1b cue, `--loot trim`, the default walk, dungeon@8.5 + the dead-end fix),
+  36 min:
+  - **80 kills, 133.3 kills / h**, 0 deaths, HP low 30.9 %;
+  - 16 potions and 4 Fly Wings;
+  - 74 items (123.3 / h: Cyfar 65.0, Orcish Voucher 45.0, Iron 6.7, Large Jellopy 3.3, Stem 1.7,
+    Sticky Mucus 1.7);
+  - **37,289 z / h at OC**, floor loot 89.7 %;
+  - minimum HP after the time box 1276.
+- **The best configuration over its 7 runs** (d1, d3, e2, e4, f2, f4, g1b): **484 kills in 4.2 h =
+  115.2 kills / h**, 0 deaths. Batt's demo is 232.7 kills / h.
+- **The level hold, applied at the end.** g1b levelled the Rogue to Base 64 (HP 2272). There is no
+  next setup to undo it, so the hold's own line (`@baselevelup -1`, then `@heal`) was typed at
+  06:33 through the identity check.
+  - The final frame shows Base 63, HP 2209 / 2209, SP 341 / 341, EXP 0, on the prt_fild08 stand.
+  - A client "up" icon (unspent status points) now shows at the lower right. The next pre-run
+    judges it against the UI gate.
