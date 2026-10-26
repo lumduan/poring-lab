@@ -587,13 +587,16 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
 
     # HP / SP
     mxs = series(packets, "max_hp")
-    mx = in_force(mxs, w0) or CHAR_MAX_HP.get(str(rs.get("char") or "crusader"), MAX_HP)
+    # a human demo has no run_start: its manifest names the character (2026-10-26, Batt's Rogue
+    # demo read against the Crusader's 5,260 MaxHP: "HP low 9 %" was 22 %, gef10-time-budget.md 8)
+    char = str(rs.get("char") or man.get("character") or "crusader")
+    mx = in_force(mxs, w0) or CHAR_MAX_HP.get(char, MAX_HP)
     hp = clip(series(packets, "hp"), w0, w1)
     hp_min = min((v for _t, v in hp), default=None)
     hp_pct = [v / (in_force(mxs, t) or mx) for t, v in hp]  # against the MaxHP in force then
     sp_raw = series(packets, "sp")
     sp_start = in_force(sp_raw, w0)
-    max_sp = CHAR_MAX_SP.get(str(rs.get("char") or "crusader"), MAX_SP)
+    max_sp = CHAR_MAX_SP.get(char, MAX_SP)
     if sp_start is None:
         sp_start = max_sp
         why["sp_start"] = f"no sp packet before the window: its start ASSUMED MaxSP {max_sp}"
