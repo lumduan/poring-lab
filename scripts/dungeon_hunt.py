@@ -200,6 +200,10 @@ LOCK_MAX_S = 25.0
 BURST_GAP_S, BURST_MAX, BURST_MAX_S = 0.6, 4, 3.0  # arm C: re-click until the lock arrow
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
+# --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
+# capped at this many cell HOVERS (cells out of view not counted), and no sweep. 80 of 84 pickups
+# of c5b-c7 came within the first 9 hovers; 1,180 of 1,379 loot-step seconds came after the last
+LOOT_TRIM_HOVERS = 9
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
@@ -1714,6 +1718,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return g_[y0_ : y0_ + 20, x0_ : x0_ + 24]
 
         loot_v2 = a.loot in ("v2", "rhythm")
+        loot_trim = a.loot == "trim"  # gef10-eyes-loot.md E1: v1 capped at LOOT_TRIM_HOVERS
         rhythm = a.loot == "rhythm"  # 4.02: v2's order with Batt's per-fight bounds
         fight_budget = LOOT_RHYTHM_BUDGET_S if rhythm else LOOT_FIGHT_BUDGET_S
         loot_used: dict[float, float] = {}  # loot v2: the fight (its ref's time) -> seconds used
@@ -1852,6 +1857,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             t_s = time.monotonic()
             hovered: set[Cell] = set()
             picks = 0
+            n_hov = 0  # cells actually hovered (in view); --loot trim caps this
             out_: dict[str, Any] = {"kind": "loot_step", "list_kills": len(lst)}
             if here is None:
                 ev({**out_, "end": "no_position"})
@@ -1863,13 +1869,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             out_["planned"] = len(plan)
 
             def visit(c: Cell, why: str) -> str:
-                nonlocal here, lock, mode, picks
+                nonlocal here, lock, mode, picks, n_hov
                 assert here is not None
                 rel = (c[0] - here[0], c[1] - here[1])
                 u, v = project(here, [rel])[0]
                 hovered.add(c)
                 if not in_view(u, v):
                     return "off"
+                n_hov += 1
                 res = hover(u, v)
                 if guard_tick():
                     return "escape"
@@ -1890,7 +1897,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 return "ok"
 
             end = "done"
-            while picks < LOOT_MAX_PICKS and len(hovered) < LOOT_MAX_HOVERS:
+            while picks < LOOT_MAX_PICKS and len(hovered) < LOOT_MAX_HOVERS and not (
+                    loot_trim and n_hov >= LOOT_TRIM_HOVERS):  # fmt: skip
                 todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))
                 if not todo or time.monotonic() - t_s > LOOT_MAX_S:
                     break
@@ -1903,7 +1911,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     break
             out_["list_hovered"] = len(hovered)
             sweep_n, changed = 0, []
-            if end == "done" and ref is not None and here is not None:
+            if end == "done" and ref is not None and here is not None and not loot_trim:
                 changed = changed_cells(ref, skip=hovered)  # 4.01 Amendment B: the shared helper
                 changed.sort(key=lambda dc: (cheb2(dc[1], here), -dc[0]))
                 for _diff, c in changed[:SWEEP_MAX]:
@@ -1917,8 +1925,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if got in ("fight", "escape"):
                         end = got
                         break
-            ev({**out_, "hovered": len(hovered), "picks": picks, "sweep_changed": len(changed),
-                "sweep_hovered": sweep_n, "end": end,
+            ev({**out_, "hovered": len(hovered), "hovers": n_hov, "trim": loot_trim, "picks": picks,
+                "sweep_changed": len(changed), "sweep_hovered": sweep_n, "end": end,
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
             return "fight" if end == "fight" else "done"
 
@@ -2839,11 +2847,12 @@ def main() -> int:
     )
     t.add_argument(
         "--loot",
-        choices=["v1", "v2", "rhythm"],
+        choices=["v1", "v2", "rhythm", "trim"],
         default="v1",
         help="the loot step: v1 (3.98's list + sweep), v2 (Batt decision 4: changed cells first, "
-        "a budget per fight, no re-hover of empty cells; 4.01) or rhythm (4.02: v2's order, 2.5 s "
-        "and 2 pickups per fight)",
+        "a budget per fight, no re-hover of empty cells; 4.01), rhythm (4.02: v2's order, 2.5 s "
+        "and 2 pickups per fight) or trim (gef10-eyes-loot.md E1: v1's list, nearest first, at "
+        "most LOOT_TRIM_HOVERS hovers, no sweep)",
     )
     t.add_argument(
         "--search",

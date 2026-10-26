@@ -636,3 +636,15 @@ def test_the_end_flies_first_when_still_in_a_fight_or_low() -> None:
     assert not dh.end_escape_needed(now, 99.9, calm, "hard_bar: unknown UI state {}")
     src = (Path(dh.__file__)).read_text()
     assert "if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):" in src
+
+
+def test_loot_trim_caps_v1_hovers_at_nine_and_never_sweeps() -> None:
+    """gef10-eyes-loot.md E1 (the idle study: 80 of 84 pickups within the first 9 hovers; Batt's
+    18:12:56 clip: ~10 s of hovers after the last pickup): v1's list and order, capped hovers."""
+    assert dh.LOOT_TRIM_HOVERS == 9 and dh.LOOT_MAX_HOVERS == 30
+    src = (Path(dh.__file__)).read_text()
+    assert 'loot_trim = a.loot == "trim"' in src
+    assert "loot_trim and n_hov >= LOOT_TRIM_HOVERS" in src
+    assert "and here is not None and not loot_trim:" in src  # no sweep
+    assert src.count("n_hov += 1") == 1  # an out-of-view cell is not a hover
+    assert '"trim"]' in src and 'default="v1"' in src  # OFF by default
