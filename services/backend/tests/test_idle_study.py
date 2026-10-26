@@ -17,6 +17,7 @@ import idle_study as st  # noqa: E402
 S = st.NS
 DEMO = Path("/dev/shm/poring-lab-demo")
 C7 = "20261026T170913-demo-dungeon-rogue-gef_fild10-patrol-P2-c7"
+C8 = "20261026T174709-demo-dungeon-rogue-gef_fild10-patrol-P2-c8"
 
 
 def ns(t: float) -> int:
@@ -222,3 +223,18 @@ def test_real_c7_when_banked() -> None:
     assert lo["trim"]["9"]["picks_lost"] == 3
     assert 250.0 < lo["trim"]["9"]["saved_s"] < 266.0  # measured 258.1 s
     assert 60.0 < r["by_cause"]["idle_inside_search"]["patrol_dead_end"]["s"] < 66.0  # 62.81 s
+
+
+def test_real_c8_the_rule_read_after_it_was_fixed_keeps_every_pickup() -> None:
+    """c8 ended after the TRIM rule (9 hovers, no sweep) was committed on c5b-c7 (760f439,
+    18:20:57): all 29 of its pickups came within the first 9 hovers, so the trim would have lost
+    none and saved 308.7 s (skipped where c8 is not banked)."""
+    if not (DEMO / C8 / "packets.jsonl.gz").exists():
+        pytest.skip(f"{C8} not banked here")
+    import time_budget as tb
+
+    e, pk, _man, t0, t1 = tb.load_window(C8, None)
+    lo = st.study(pk, e, t0, t1)["loot"]
+    assert (lo["steps"], lo["picks"], lo["picks_by_rank"]) == (56, 29, {"<=9": 29, ">9": 0})
+    assert lo["trim"]["9"]["picks_lost"] == 0
+    assert 300.0 < lo["trim"]["9"]["saved_s"] < 318.0  # measured 308.7 s
