@@ -682,3 +682,15 @@ def test_long_legs_continue_through_the_next_waypoint_and_stay_off_by_default() 
     # waypoint before the replan, or the replan routes back to it (oscillation at gef_fild10 wp 64)
     assert 'if patrol and near_end and wp_st["through"] is not None:' in src
     assert dh.WALK_AHEAD == 7
+
+
+def test_the_walk_timer_is_an_option_and_recorded_only_when_changed() -> None:
+    """gef10-idle-study.md 4a: decisions take ~0.9 s and fire every WALK_EVERY_S from their start,
+    so the Rogue stood after nearly every click; --walk-every shortens the timer (OFF = 1.2 s)."""
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True, "walk_ahead": dh.WALK_AHEAD,
+            "walk_through": False}  # fmt: skip
+    assert "walk_every" not in dh.fixes_of(dh.argparse.Namespace(**base, walk_every=1.2))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, walk_every=0.8))["walk_every"] == 0.8
+    src = (Path(dh.__file__)).read_text()
+    assert "and tick - last_walk >= a.walk_every:" in src and dh.WALK_EVERY_S == 1.2

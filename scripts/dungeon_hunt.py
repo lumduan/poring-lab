@@ -709,6 +709,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["walk_ahead"] = a.walk_ahead
     if getattr(a, "walk_through", False):
         out["walk_through"] = True
+    if getattr(a, "walk_every", WALK_EVERY_S) != WALK_EVERY_S:  # the walk timer (idle study 4a)
+        out["walk_every"] = a.walk_every
     return out
 
 
@@ -2670,7 +2672,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         "turn": walk_st.get("turn"),
                         "wp": None if not patrol else wp_st["i"]})  # fmt: skip
                 if mode in ("search", "rest") and here is not None and goal_path \
-                        and tick - last_walk >= WALK_EVERY_S:  # fmt: skip
+                        and tick - last_walk >= a.walk_every:  # fmt: skip
                     last_walk = tick
                     # the path from where we are now
                     if here in goal_path:
@@ -2966,6 +2968,14 @@ def main() -> int:
         default=WALK_AHEAD,
         help="the walk click's target, this many path cells ahead (default 7; the long legs of "
         "gef10-idle-study.md 6.1 use more, so the next click lands before the walk ends)",
+    )
+    t.add_argument(
+        "--walk-every",
+        type=float,
+        default=WALK_EVERY_S,
+        help="seconds between walk decisions, from a decision's START (default 1.2). One decision "
+        "takes ~0.9 s and a 5-6 cell path ~0.9 s, so at 1.2 s the Rogue stands before the next "
+        "click (gef10-idle-study.md 4a); a shorter timer re-clicks before the walk ends",
     )
     t.add_argument(
         "--walk-through",
