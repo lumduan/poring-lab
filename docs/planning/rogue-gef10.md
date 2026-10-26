@@ -1476,3 +1476,41 @@ c9-c11 keep their registered base):
   d3 109.9, e2 110.0 and e4 90.0 kills / h.
 - **The f-block (Amendment AF)** therefore runs on the DEFAULT legs (`legs-f` empty). The
   patrol dead-end fix is merged in its base (0047135, 02:34).
+
+## Amendment AH (2026-10-27 05:24 ICT from `date`): the f-block judged -- THE WALK TIMER FAILS; the confirmation run
+
+| run | arm | kills | kills / h | walk clicks / kill | potions + wings / kill | min HP after the time box |
+|---|---|---|---|---|---|---|
+| f1 | F | 66 | 105.0 | 13.6 | 0.455 | 1230 (one dead-end fly, the c7 pocket) |
+| f2 | V | 69 | 108.3 | 11.9 | 0.275 | 1074 (end_escape) |
+| f3 | F | 70 | 116.6 | 13.6 | 0.314 | 1263 (one dead-end fly) |
+| f4 | V | 73 | 119.9 | 10.9 | 0.342 | 1178 |
+
+**Pooled** (Amendment AF's bars):
+
+| measure | F (0.8 s) | V (1.2 s) | bar | met? |
+|---|---|---|---|---|
+| **kills / h (primary)** | 110.8 | 114.1 | F - V >= +6 | **NO, -3.3** |
+| idle_inside_search s / kill | 4.67 | 5.39 | F lower | yes |
+| walk clicks / kill | 13.6 | 11.4 | -- | higher |
+| search_walk s / kill | 10.65 | 9.62 | not higher | **no** |
+| damage per kill cycle | 134.0 | 110.6 | at most +10 % | **no, +21 %** |
+| potions + wings per kill | 0.38 | 0.31 | at most +10 % | **no, +23 %** |
+| hard bars / NPC-guard refusals | 0 / 0 | 0 / 0 | not more | yes |
+
+- **Not adopted.**
+- This is the SECOND "stand less" change to fail the same way (AG's long legs were the first). Each
+  cut standing inside the search as built, and the bot then walked more per kill and took more
+  damage. **The walk's stop-and-go is no longer the binding loss.**
+- What remains is SIGHT:
+  - approach_react 3.9 s / kill, and search_walk, against Batt (the 00:3x ranking on d1 / d3);
+  - Batt's 18:12:40 clip;
+  - the walk hover's 1-2 `walk_sword` finds per run.
+  That is round 2's detector and the chaser rule (gef10-eyes-loot.md E4 / E6).
+- **The patrol dead-end fix works live:** f1 and f3 each hit the c7 pocket (153,309) and flew after
+  one lap of route-less skips, instead of standing ~45 s.
+- **The night's best configuration** (P2, the 9.1b cue, `--loot trim`, the default walk, dungeon@8.5
+  + the dead-end fix) pooled over d1, d3, e2, e4, f2 and f4: **404 kills in 3.6 h = 112.2 kills / h**,
+  0 deaths.
+- **The confirmation run, g1** (D13 >= 05:39:58, seed 25564): that configuration, 36 min. A
+  MEASUREMENT for the morning report, not a comparison.
