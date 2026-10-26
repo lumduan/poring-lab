@@ -1259,3 +1259,41 @@ c9-c11 keep their registered base):
 - **Outside the measured window**, so no measured number changes. c11 runs 8.5. Its
   pre-registration (Amendment Y) is otherwise unchanged.
 - **Checks:** census and safety tests green; a unit test on c10's numbers.
+
+## Amendment AB (2026-10-26 20:40 ICT from `date`): c9-c11 judged; THE MISS CUE (9.1b) IS ADOPTED; the d-block runs with it
+
+| run | arm | base | kills / h | potions + wings / h | damage / cycle | reaction mean (median) | items / h | value / h at OC |
+|---|---|---|---|---|---|---|---|---|
+| c5b | P2 | 8.3 | 96.6 | 20.0 + 10.0 | 126 | 8.53 (8.40) | 81.6 | 31,445 |
+| c7 | P2 | 8.3 | 75.0 | 28.3 + 16.7 | 207 | 8.84 (8.65) | 98.3 | 24,352 |
+| c10 | P2 | 8.4 | 78.3 (+1 death after the time box) | 28.3 + 13.3 | 198 | 10.02 (11.69) | 91.6 | 27,823 |
+| c8 | P2 + 9.1b | 8.3 | 81.7 | 16.7 + 10.0 | 168 | 7.73 (6.56) | 78.3 | 24,490 |
+| c9 | P2 + 9.1b | 8.4 | 100.0 | 16.7 + 10.0 | 117 | 7.94 (6.90) | 126.6 | 37,925 |
+| c11 | P2 + 9.1b | 8.5 | 103.2 | 21.7 + 11.7 | 124 | 7.13 (6.01) | 116.6 | 40,506 |
+
+**Pooled** (3 runs each, 108 min each arm):
+
+| measure | P2 | P2 + 9.1b | change |
+|---|---|---|---|
+| kills / h | 83.3 | 95.0 | +14 % |
+| potions + wings / h | 38.9 | 28.9 | -26 % |
+| reaction when attacked first, mean | 9.08 s | 7.59 s | -16 % |
+| damage per kill cycle, kill-weighted | ~173 | ~134 | -23 % |
+| items / h | 90.6 | 107.2 | +18 % |
+
+- **Amendment Y's rule** was: adopted only if reaction AND consumables improve with kills / h not
+  lower. All three hold. **The cue (`--miss-cue`, rule 9.1b) is ADOPTED.**
+- Amendment V's prediction of damage -20 % or more holds pooled (-23 %). It had failed on c8 alone.
+- **The cue's honesty:** 0 false fires in 441 onsets (c6, c8, c9, c11); 0 loop engages under 9.1b.
+- **Base and caveats:**
+  - c5b, c7 and c8 ran 8.3: 10 Fly Wings, no stock guard. c7 hunted its last 7.5 min with none.
+    c9 and c10 ran 8.4, c11 ran 8.5 (the safe end, outside the window).
+  - On the 8.4+ runs alone, the cue arm also leads: c9 100.0 and c11 103.2 against c10's 78.3.
+  - The per-run spread is large (75.0-103.2 kills / h).
+
+**The d-block (Amendment Z), as its rule fixes it:**
+- the cue ON in both arms (`cue-d` = `--miss-cue`);
+- `--loot trim` merged at b60115c, OFF by default, chosen per run;
+- d1 (T) at >= 20:52:45, then d2 (V), d3 (T), d4 (V), on Amendment E's clock.
+- **The round-2 cache resume** (gef10-detector.md 13w) started at 20:39:19, right after c11. Its
+  CPU / NAS load overlaps the d-block, alternated T / V.
