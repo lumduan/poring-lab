@@ -101,9 +101,18 @@ arms "no Steal" (Snatcher Lv 10 alone) vs --steal). New:
   gef_fild10's natural Orc Lord (MVP, 2 h respawn) is absent from a scored run until the Orc Lord
   flee rule is proven (rogue-gef10.md Amendment A4); every monster respawns.
 
+--rest house (OFF by default; docs/planning/gef10-house-rest.md; gef_fild10 only): the rest walks
+to the nearest SEALED orc house (house_rest.py: a room of in_orcs01 from which no dungeon warp is
+walkable), makes ONE door click from a standstill on an approach cell, and -- once the pixels say
+in_orcs01 (a load gap, then no minimap readout and a dark frame) -- sits at once, never walks,
+stands at rest_done, makes ONE click on the room's own exit and expects the field's readout at
+that exit's return cell; then the patrol re-joins its loop. Its steps follow house_rest.Trip's
+closed table; anything unexpected STOPS the run (never a Fly Wing inside: in_orcs01 is
+noteleport). The default (--rest spot) is today's rest.
+
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
-                        [--walk-trust]
+                        [--walk-trust] [--rest spot|house]
     (dungeon@7: --steal = Batt's steal-first on every monster, SP permitting)
 """
 
@@ -294,6 +303,19 @@ WEIGHT_RED_MIN = 50  # Amendment I: red px on the weight line = the client's own
 PLANT_UP = 12  # px above a White Plant's cell point: its body (a small sprite)
 PLANT_NEAR, PLANT_HOVERS, PLANT_EVERY_S = 7, 16, 120.0  # the White Plant sweep (dungeon@4)
 WP_TOL = 2  # a patrol waypoint counts as reached within this many cells (map_routes.reached)
+# --rest house (docs/planning/gef10-house-rest.md; off by default): a house trip only when the
+# nearest sealed door's approach is at most HOUSE_MAX_STEPS route-grid steps away (41 of the 47
+# rest decisions of the 8.x runs a2-a8 / a5b / b1) and HP >= HOUSE_MIN_HP (B's potion line: a
+# lower HP does not walk 100 cells through orcs); else today's field rest
+HOUSE_MAX_STEPS = 120
+HOUSE_MIN_HP = 0.30
+HOUSE_WALK_MAX_S = 90.0  # the approach not reached in this long -> today's field rest
+HOUSE_STILL_S = 0.8  # the door click only from a standstill (the readout unchanged this long)
+HOUSE_DOOR_TRIES = 2  # door clicks with no load gap -> today's field rest
+HOUSE_REST_MAX_S = 600.0  # inside: stand and leave after this long even if not full
+HOUSE_READ_S = 1.0  # inside: one HP / readout check this often
+HOUSE_HP_FALL = 2  # inside: the HP percent falling this many points = damage inside: STOP
+HOUSE_UNREAD_S = 10.0  # inside: Basic Info unreadable this long = an unknown state: STOP
 
 
 # --- pure decisions ----------------------------------------------------------------------------
@@ -603,6 +625,106 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
         if fits(path[i]):
             return i, path[i]
     return None
+
+
+def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
+    """PURE: the run's recorded fixes (run_start, manifest); ``rest`` only when it is not the
+    default, so a default run's record is the one it was before --rest existed."""
+    out: dict[str, Any] = {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
+                           "ag_match": a.ag_match, "walk_trust": a.walk_trust,
+                           "npc_guard": getattr(a, "npc_guard", False)}  # fmt: skip
+    if getattr(a, "rest", "spot") != "spot":
+        out["rest"] = a.rest
+    return out
+
+
+def house_trip_why(frac: float | None, choice: tuple[Any, Cell, int] | None) -> str | None:
+    """PURE (--rest house): why NOT to walk to a house now (None = go). HP unread or under
+    HOUSE_MIN_HP (walking ~100 cells through orcs at that HP is worse than sitting), or no sealed
+    door's approach within HOUSE_MAX_STEPS route-grid steps (``choice``: house_rest.choose's)."""
+    if frac is None:
+        return "hp unread"
+    if frac < HOUSE_MIN_HP:
+        return f"hp {frac:.2f} < {HOUSE_MIN_HP}"
+    if choice is None:
+        return f"no sealed door within {HOUSE_MAX_STEPS} steps"
+    return None
+
+
+def still_since(hist: Sequence[tuple[float, Cell]], now: float) -> float:
+    """PURE: how long the position reads have shown the cell they show now (0 without reads):
+    ``hist`` = (time, cell) reads, oldest first. The door click waits for HOUSE_STILL_S."""
+    if not hist:
+        return 0.0
+    last = hist[-1][1]
+    t0 = hist[-1][0]
+    for t, c in reversed(hist):
+        if c != last:
+            break
+        t0 = t
+    return now - t0
+
+
+def house_setup(map_: str, kb_dir: Path, ok: Any, okr: Any, zones: Any,
+                cj: Mapping[str, Any], view: tuple[int, int], in_ui: Any,
+                ) -> tuple[list[Any], dict[str, set[Cell]], dict[str, tuple[float, float]],
+                           dict[str, Any]]:  # fmt: skip
+    """--rest house's start-up (gef10-house-rest.md section 4.1), fail closed: SystemExit unless
+    the map is gef_fild10 and at least one house passes every check -- its room SEALED
+    (house_rest.room_check / usable_why, on in_orcs01's client GAT AND server map cache), an
+    approach cell on the route grid ``okr``, and its exit click's pixel (the indoor camera of
+    ``cj`` + the GAT) inside the game ``view`` (w, h) and off the UI (``in_ui``). Returns (the
+    usable houses, their approach cells, their exit pixels, the run_start record). No input."""
+    import house_rest as hr
+
+    from poring_dataset import camera as cam
+    from poring_dataset import walkable as wk
+
+    if map_ != hr.FIELD:
+        raise SystemExit(f"--rest house refused: {map_} (only {hr.FIELD})")
+    try:
+        kbw = json.loads((kb_dir / "warps.json").read_text())
+        hs_all = hr.houses(kbw)
+        gat_in, both_in = wk.load_both(hr.HOUSE_MAP)
+        both_f = wk.load_both(map_)[1]
+        itab = cam.load_indoor_table()
+    except (ValueError, OSError) as e:  # MapSourceError / IndoorTableMissing / no pairing
+        raise SystemExit(f"--rest house refused: {e}") from None
+    icam = cam.map_camera(dict(cj), hr.HOUSE_MAP, itab)
+    if icam is None or not cam.is_indoor(hr.HOUSE_MAP, itab):
+        raise SystemExit(f"--rest house refused: no indoor camera for {hr.HOUSE_MAP}")
+    gw, gh = view
+    fb_ = hr.forbidden_warps(kbw)
+    refused: dict[str, str] = {}
+    houses_ok: list[Any] = []
+    house_ap: dict[str, set[Cell]] = {}
+    house_px: dict[str, tuple[float, float]] = {}
+    for h_ in hs_all:
+        chk = hr.room_check(h_, both_in, fb_)
+        why_h = hr.usable_why(chk)
+        ap_ = [] if why_h else hr.approach_cells(h_, okr, hr.door_free(ok, both_f, h_.door),
+                                                 zones)  # fmt: skip
+        if why_h is None and not ap_:
+            why_h = "no approach cell on the route grid"
+        px_ = None
+        if why_h is None:
+            px_ = hr.exit_point(icam, gat_in, h_, tuple(chk["click"]))
+            if not (30 <= px_[0] < gw - 30 and 30 <= px_[1] < gh - 30 and not in_ui(*px_)):
+                why_h = f"the exit click {px_} is off the game view"
+        if why_h is not None:
+            refused[h_.name] = why_h
+            continue
+        assert px_ is not None
+        houses_ok.append(h_)
+        house_ap[h_.name] = set(ap_)
+        house_px[h_.name] = px_
+    if not houses_ok:
+        raise SystemExit(f"--rest house refused: no usable house {refused}")
+    rec = {"usable": [h_.name for h_ in houses_ok], "refused": refused,
+           "exit_px": {k: [round(v[0], 1), round(v[1], 1)] for k, v in house_px.items()},
+           "approach_cells": {k: len(v) for k, v in house_ap.items()},
+           "max_steps": HOUSE_MAX_STEPS, "min_hp": HOUSE_MIN_HP}  # fmt: skip
+    return houses_ok, house_ap, house_px, rec
 
 
 # --- live ---------------------------------------------------------------------------------------
@@ -956,6 +1078,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     camera = cam.camera_from_json(cj["camera"])
     gx0, gy0, gw, gh = r.game_region()
     rng = np.random.default_rng(a.seed)
+    house_on = a.rest == "house"  # --rest house (docs/planning/gef10-house-rest.md; off by default)
+    house_rec: dict[str, Any] | None = None
+    house_ap: dict[str, set[Cell]] = {}  # usable house -> its approach cells (the door click's)
+    house_px: dict[str, tuple[float, float]] = {}  # usable house -> the exit click's pixel
+    houses_ok: list[Any] = []
+    if house_on:
+        import house_rest as hr
+
+        houses_ok, house_ap, house_px, house_rec = house_setup(
+            map_, kb, ok, okr, zones, cj, (gw, gh), loot1.in_ui
+        )
 
     def in_view(u: float, v: float) -> bool:
         return 30 <= u < gw - 30 and 30 <= v < gh - 30 and not loot1.in_ui(u, v)
@@ -1108,9 +1241,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
-            "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
-                      "ag_match": a.ag_match, "walk_trust": a.walk_trust,
-                      "npc_guard": a.npc_guard},
+            "fixes": fixes_of(a),
             "char": a.char, "steal": a.steal, "bank_tags": bank, "clear_map": a.clear_map,
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
@@ -1118,7 +1249,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "setup": typed, "stock": stock, "weight": w_, "weight_before": w0,
             "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
-            "params": strat, "rest_spots": spots})  # fmt: skip
+            "params": strat, "rest_spots": spots,
+            **({"house": house_rec} if house_on else {})})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
@@ -1162,6 +1294,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         loot_list: list[tuple[Cell, float]] = []  # Batt 11:5x: the GM's cell at EVERY kill
         fight_ref: dict[str, Any] | None = None  # the frame + our cell when the fight began
         t_end = time.monotonic() + a.minutes * 60.0
+        # --rest house (gef10-house-rest.md): the trip's closed transition table and its state
+        trip = hr.Trip() if house_on else None
+        hplan: dict[str, Any] | None = None  # the chosen house, its approach cell, the steps
+        house_fb = False  # this rest sits in the field (today's rule): no house in reach
+        house_tries = 0  # door clicks of this rest with no load gap
+        house_click_t = -1e9  # our last door / exit click (an expected load follows it)
+        gap_since: float | None = None  # on the field: Basic Info unread since (house mode only)
+        pos_hist: deque[tuple[float, Cell]] = deque(maxlen=32)  # position reads (house mode)
 
         def press(what: str, why: str) -> None:
             agent_raw.keys(keys_[what])
@@ -1712,6 +1852,193 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
             return "fight" if end == "fight" else "done"
 
+        # --- --rest house (docs/planning/gef10-house-rest.md; reached only with house_on) -----
+
+        def tadv(event: str) -> str:
+            """The trip's next state (house_rest.Trip's closed table); an event the table does not
+            allow in the current state STOPS the run (r.Stop, so run_end names it)."""
+            assert trip is not None
+            try:
+                nxt = trip.advance(event)
+            except hr.TripStop as e:
+                raise r.Stop(str(e)) from None
+            ev({"kind": "house_trip", "event": event, "state": nxt})
+            return nxt
+
+        def house_reads() -> tuple[float, int | None, int | None, Cell | None, float, Any]:
+            """ONE fresh frame: (time, HP %, SP %, the minimap readout, the frame's mean, frame)."""
+            img_ = frame()
+            xy_ = selfpos.read_minimap_xy(img_, digits)
+            return (time.monotonic(), hpp.read(img_, glyphs), hpp.read(img_, glyphs, hpp.SP_DY),
+                    None if xy_ is None else (int(xy_[0]), int(xy_[1])),
+                    float(np.asarray(img_).mean()), img_)  # fmt: skip
+
+        def taken_since(n0: int) -> bool:
+            with blt.lock:
+                return any(ln.get("type") == "taken" for ln in blt.lines[n0:])
+
+        def house_stop(img_: Any, why: str) -> None:
+            from PIL import Image
+
+            Image.fromarray(np.asarray(img_)[..., ::-1]).save(out / "stop-house.jpg", quality=90)
+            raise r.Stop(f"--rest house: {why}")
+
+        def house_wait(tr: Any, why: str, field_ok: bool) -> tuple[str, Cell | None]:
+            """Fresh reads into ``tr`` (house_rest.Transition) at READ_HZ until it decides. Before
+            any load gap we still stand on the field (``field_ok``): a hit there = "hit". A
+            "stop:" verdict STOPS the run (its frame kept)."""
+            with blt.lock:
+                n0 = len(blt.lines)
+            last: tuple[str, bool, bool] | None = None
+            while True:
+                t_, p_, _s, xy_, m_, img_ = house_reads()
+                got_ = tr.step(t_, p_ is not None, xy_, m_)
+                key = (got_, tr.gap_t0 is not None, tr.gap_t1 is not None)
+                if key != last:  # one record per change of the tracker's state
+                    ev({"kind": "house_read", "why": why, "state": got_, "hp": p_,
+                        "pos": None if xy_ is None else list(xy_), "mean": round(m_, 1),
+                        "gap": key[1], "loaded": key[2]})  # fmt: skip
+                    last = key
+                if got_ == "wait":
+                    if field_ok and tr.gap_t0 is None and tr.gap_t1 is None and taken_since(n0):
+                        return "hit", None
+                    time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - t_)))
+                    continue
+                if got_.startswith("stop:"):
+                    house_stop(img_, f"{why}: {got_[5:]}")
+                return got_, xy_
+
+        def plan_house(here_: Cell, frac_: float | None) -> dict[str, Any] | None:
+            """The house of this rest (house_rest.choose: the fewest route-grid steps to an
+            approach cell), or None = today's field rest (house_trip_why says why)."""
+            ch = None
+            if frac_ is not None and frac_ >= HOUSE_MIN_HP:
+                ch = hr.choose(here_, [(h_, sorted(house_ap[h_.name])) for h_ in houses_ok], okr,
+                               HOUSE_MAX_STEPS)  # fmt: skip
+            why_ = house_trip_why(frac_, ch)
+            ev({"kind": "house_plan", "at": list(here_), "pct": pct, "why_not": why_,
+                "house": None if ch is None else ch[0].name,
+                "approach": None if ch is None else list(ch[1]),
+                "steps": None if ch is None else ch[2]})  # fmt: skip
+            if why_ is not None or ch is None:
+                return None
+            return {"house": ch[0], "approach": ch[1], "steps": ch[2]}
+
+        def house_door(h: Any, here_: Cell) -> str:
+            """The ONE door click, from a standstill on one of the house's approach cells: the
+            door's centre (its own no-enter area is the only zone this click may enter), after a
+            cursor read that is not a SWORD (a monster on the door is engaged instead) nor the
+            no-entry ring. Then the expected load INTO the house (pixels). Returns "inside" /
+            "none" (no load gap) / "hit" (hit before any gap) / "fight" / "noentry" / "off"."""
+            nonlocal lock, mode, house_click_t
+            rel_ = (h.door.cell[0] - here_[0], h.door.cell[1] - here_[1])
+            u_, v_ = (float(x_) for x_ in project(here_, [rel_])[0])
+            if not in_view(u_, v_):
+                return "off"
+            res_ = hover(u_, v_)
+            if res_["verdict"] == "sword":
+                ev({"kind": "engage", "by": "house_door_sword", "name": None})
+                strike(u_, v_ - BODY_UP / 2, rel_, "walk_sword")
+                lock = {"t": time.monotonic(), "rel": rel_, "cell": list(h.door.cell)}
+                mode = "fight"
+                return "fight"
+            if res_["verdict"] == "noentry":
+                return "noentry"
+            assert trip is not None
+            tadv("door_click")
+            click_at(u_, v_, "house_door")
+            house_click_t = time.monotonic()
+            ev({"kind": "house_door", "house": h.name, "from": list(here_),
+                "door": list(h.door.cell), "u": round(u_, 1), "v": round(v_, 1),
+                "verdict": res_["verdict"], "arrival": list(h.arrival)})  # fmt: skip
+            got_, _xy = house_wait(hr.Transition("inside", house_click_t), "door", field_ok=True)
+            tadv(got_)  # inside / none / hit (anything else raised TripStop)
+            return got_
+
+        def house_inside(h: Any) -> str:
+            """In the house (the pixels said so): sit AT ONCE, never walk; rest until rest_done
+            (or HOUSE_REST_MAX_S); a minimap readout, damage, a falling HP, death or an unknown
+            UI state inside STOPS the run (nothing should touch us there). Never a Fly Wing,
+            never a potion (in_orcs01 is noteleport; nothing hits us). "done" / "time_box"."""
+            nonlocal sitting
+            assert trip is not None
+            press("sit", f"house {h.name}")
+            sitting = True
+            tadv("sat")
+            t_in = time.monotonic()
+            ev({"kind": "rest_start", "cell": list(h.arrival), "map": hr.HOUSE_MAP,
+                "house": h.name, "pct": pct, "sp_pct": spp, "spot": None, "fallback": False,
+                "why": "house"})  # fmt: skip
+            time.sleep(0.6)
+            cs_ = f0.client_state(agent_raw, screen)
+            if cs_["decision"]["do"] != "clear":
+                house_stop(cs_["frame"], f"unknown UI state inside {cs_['decision']}")
+            with blt.lock:
+                n0 = len(blt.lines)
+            best: int | None = None
+            unread: float | None = None
+            p_: int | None = None
+            s_: int | None = None
+            why_ = "full"
+            while True:
+                t_, p_, s_, xy_, _m, img_ = house_reads()
+                if r.is_state(screen, gv.DEAD_STATE):
+                    house_stop(img_, "dead inside the house")
+                if xy_ is not None:
+                    house_stop(img_, f"a minimap readout {list(xy_)} inside the house")
+                if taken_since(n0):
+                    house_stop(img_, "a hit on us inside the house")
+                if p_ is None:
+                    unread = t_ if unread is None else unread
+                    if t_ - unread > HOUSE_UNREAD_S:
+                        house_stop(img_, f"Basic Info unread {HOUSE_UNREAD_S:.0f} s inside")
+                else:
+                    unread = None
+                    best = p_ if best is None else max(best, p_)
+                    if p_ <= best - HOUSE_HP_FALL:
+                        house_stop(img_, f"HP fell {best} -> {p_} inside the house")
+                    if rest_done(strat, p_, s_):
+                        break
+                if t_ - t_in > HOUSE_REST_MAX_S:
+                    why_ = "max"
+                    break
+                if t_ >= t_end:
+                    ev({"kind": "house_time_box", "house": h.name, "pct": p_})
+                    return "time_box"
+                time.sleep(max(0.0, HOUSE_READ_S - (time.monotonic() - t_)))
+            press("stand", why_)
+            sitting = False
+            ev({"kind": "rest_end", "why": why_, "pct": p_, "sp_pct": s_, "map": hr.HOUSE_MAP,
+                "house": h.name})  # fmt: skip
+            tadv("done")
+            time.sleep(0.5)
+            return "done"
+
+        def house_leave(h: Any) -> tuple[Cell, bool]:
+            """Standing at the arrival cell: hover + ONE click on the house's own exit (its centre,
+            projected from the arrival by the indoor camera; house_px), then the expected load back
+            to the field at the exit's return cell. A SWORD or the no-entry ring at that point,
+            or no load after HOUSE_DOOR_TRIES clicks, STOPS the run. Returns (our cell, read)."""
+            nonlocal house_click_t
+            assert trip is not None
+            u_, v_ = house_px[h.name]
+            for k_ in range(HOUSE_DOOR_TRIES):
+                res_ = hover(u_, v_)
+                if res_["verdict"] in ("sword", "noentry"):
+                    house_stop(frame(), f"the exit point of {h.name} reads {res_['verdict']}")
+                tadv("exit_click")
+                click_at(u_, v_, "house_exit")
+                house_click_t = time.monotonic()
+                ev({"kind": "house_exit", "house": h.name, "u": round(u_, 1), "v": round(v_, 1),
+                    "try": k_ + 1, "verdict": res_["verdict"], "back": list(h.back)})  # fmt: skip
+                tr_ = hr.Transition("back", house_click_t, back=h.back)
+                got_, xy_ = house_wait(tr_, "exit", field_ok=False)
+                if got_ == "back":
+                    tadv("back")
+                    return (xy_, True) if xy_ is not None else (h.back, False)
+            house_stop(frame(), f"the exit of {h.name}: no load after {HOUSE_DOOR_TRIES} clicks")
+            raise AssertionError("unreachable")  # house_stop raised
+
         try:
             while time.monotonic() < t_end:
                 tick = time.monotonic()
@@ -1745,6 +2072,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         reason = "hard_bar: position jump (map change?)"
                         break
                     here, last_pos_t = p_, tick
+                    if house_on:
+                        pos_hist.append((tick, p_))
                 ev({"kind": "hp_read", "pct": pct, "sp_pct": spp, "dead": dead, "ag_on": ag_on,
                     "dark": dark, "pos": None if here is None else list(here)})  # fmt: skip
                 if dead:
@@ -1758,6 +2087,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         }
                     )
                     break
+                if house_on:  # gef10-house-rest.md: on the FIELD a load screen nobody asked for
+                    # (no door / exit click of ours, no Fly Wing) is a map change: a hard bar
+                    gap_since = None if pct is not None else (tick if gap_since is None
+                                                              else gap_since)  # fmt: skip
+                    if gap_since is not None and hr.gap_unexpected(
+                            tick - gap_since, gap_since - fly_at, gap_since - house_click_t,
+                            FLY_JUMP_S):  # fmt: skip
+                        ev({"kind": "house_gap", "s": round(tick - gap_since, 2),
+                            "since_fly_s": round(gap_since - fly_at, 1)})  # fmt: skip
+                        reason = "hard_bar: an unexpected load screen (map change?)"
+                        break
                 # the Battle Log's new lines (its own process; pixels only)
                 with blt.lock:
                     new = blt.lines[seen_lines:]
@@ -2012,12 +2352,20 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     rest_skip_t = tick
                     ev({"kind": "rest_skip", "why": "overweight", "share": round(w_share or 0, 4),
                         "pct": pct, "sp_pct": spp})  # fmt: skip
+                if trip is not None and trip.state == "walk" and mode not in ("rest", "after"):
+                    tadv("left_rest")  # a fight (or a Fly Wing) took the walk to the door
+                    hplan = None
                 if mode in ("after", "search") and frac is not None and not sitting \
                         and not overweight \
                         and tick - st.heal > 2.0 and rest_wanted(strat, frac, spf):  # fmt: skip
                     mode, goal_path = "rest", None
                     rest_since = tick
                     ev({"kind": "rest_go", "pct": pct, "sp_pct": spp})
+                    if trip is not None:  # --rest house: a new rest decides its house again
+                        if trip.state == "walk":
+                            tadv("left_rest")
+                        tadv("rest_wanted")
+                        hplan, house_fb, house_tries = None, False, 0
                 if mode == "after":
                     mode = "search"
                 # --- REST (B / C): to the nearest spot, sit until HP 100 %
@@ -2032,7 +2380,63 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             mode, goal_path = "search", None  # dungeon@4: back into the area
                         time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
                         continue
-                    if here is not None:
+                    if here is not None and trip is not None and not house_fb:
+                        # --rest house (gef10-house-rest.md): walk to the chosen house's approach
+                        # cell on the route grid, ONE door click from a standstill there, rest
+                        # inside, ONE exit click, back on the patrol; anything else -> field rest
+                        fb_why: str | None = None
+                        if hplan is None:
+                            hplan = plan_house(here, frac)
+                            if hplan is None:
+                                fb_why = "plan"
+                        if hplan is not None:
+                            h_ = hplan["house"]
+                            still_ = (pos is not None
+                                      and still_since(pos_hist, tick) >= HOUSE_STILL_S)  # fmt: skip
+                            if here in house_ap[h_.name] and still_:
+                                got_h = house_door(h_, here)
+                                if got_h == "inside":
+                                    end_h = house_inside(h_)
+                                    if end_h == "time_box":
+                                        continue  # the time box ended inside: run_end, warp home
+                                    cell_h, read_h = house_leave(h_)
+                                    here, last_pos_t, last_taken = cell_h, time.monotonic(), -1e9
+                                    pos_hist.clear()
+                                    loot_list, fight_ref, goal_path, lock = [], None, None, None
+                                    idle_pos, idle_since = None, time.monotonic()
+                                    mode, hplan, house_tries = "search", None, 0
+                                    tadv("resumed")
+                                    if patrol:  # re-join the loop AHEAD of the return cell
+                                        wp_st["i"] = None
+                                    ev({"kind": "house_back", "house": h_.name, "at": list(here),
+                                        "read": read_h, "expected": list(h_.back)})  # fmt: skip
+                                    continue
+                                if got_h == "none":
+                                    house_tries += 1
+                                    if house_tries >= HOUSE_DOOR_TRIES:
+                                        fb_why = "the door did not fire"
+                                elif got_h in ("noentry", "off"):
+                                    tadv("fallback")
+                                    hplan, house_fb = None, True
+                                    ev({"kind": "house_fallback", "why": f"door {got_h}"})
+                                if got_h in ("hit", "fight"):
+                                    hplan = None  # the fight first; the rest decides again
+                                    continue
+                            elif tick - rest_since > HOUSE_WALK_MAX_S:
+                                fb_why = "approach not reached"
+                            elif goal_path is None or goal_path[-1] != hplan["approach"]:
+                                goal_path = route(okr, carved, here, hplan["approach"])
+                                n_r = None if goal_path is None else len(goal_path)
+                                ev({"kind": "rest_route", "to": list(hplan["approach"]),
+                                    "house": h_.name, "len": n_r})  # fmt: skip
+                                if goal_path is None:
+                                    fb_why = "no route"
+                        if fb_why is not None:
+                            if trip.state == "walk":
+                                tadv("fallback")
+                            hplan, house_fb, goal_path = None, True, None
+                            ev({"kind": "house_fallback", "why": fb_why})
+                    if here is not None and not (trip is not None and hplan is not None):
                         spot = nearest_spot(spots, here)
                         at_spot = spot is not None and cheb2(spot, here) <= REST_NEAR
                         sit_why = rest_sit_why(spot, at_spot, tick - rest_since)
@@ -2301,8 +2705,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         print(f"packets not written: {exc!r}")
     man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
            "engage": a.engage, "search": a.search, "loot": a.loot, "strategy": a.strategy,
-           "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
-                     "ag_match": a.ag_match, "walk_trust": a.walk_trust},
+           "fixes": fixes_of(a),
            "seed": a.seed, "char": a.char, "map": map_, "steal": a.steal, "bank_tags": bank,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
@@ -2404,6 +2807,16 @@ def main() -> int:
         help="dungeon@9.0b (rogue-gef10.md Amendment P; OFF by default): no strike / Steal / loot "
         "click while our cell is within NPC_NO_FIGHT cells of an L3 NPC (c2: a strike opened the "
         "bulletin board's dialog)",
+    )
+    t.add_argument(
+        "--rest",
+        choices=["spot", "house"],
+        default="spot",
+        help="where a rest sits: spot (the default, as before: config/dungeon/MAP.json's rest "
+        "spots, else where it stands) or house (docs/planning/gef10-house-rest.md; OFF by "
+        "default, switched on by a pre-registration; gef_fild10 only): walk to the nearest SEALED "
+        "orc house, ONE click on its door, sit inside in_orcs01 at once, stand, ONE click on the "
+        "house's own exit; any unexpected map change stops the run",
     )
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "

@@ -385,6 +385,11 @@ the label.
 
 1. **Cut the damage per kill. It is the root of 57 % of the gap: rest plus around-rest.**
    - Rest off the field, as Batt did (in_orcs01), or only where no monster walks.
+     ➡️ **Designed and built since (2026-10-26, offline, PROPOSED):**
+     [gef10-house-rest.md](gef10-house-rest.md), `dungeon_hunt --rest house` (OFF by default).
+     Only 3 of the 5 houses are sealed rooms; Batt's door gef022 is refused, because its room
+     holds the orcsdun01 warp. Its estimate is +3 to +5 kills / h, because most of the sitting
+     pays for fight damage.
    - Answer an attacker within about 1 s.
    - Never stay in a defend loop that does not find the attacker. Bound it, then step away or
      strike at its packet-free pixel position.
