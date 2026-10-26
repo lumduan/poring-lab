@@ -1091,3 +1091,22 @@ the same bars, and Batt decides.
   Batt is asked whether to retry once after the SET session closes (17:05). Two recorders were
   also cut short by quant-postgres IO spikes during SET hours today (b1 at 9 min, w3 at 5 min).
 - Training (13u) waits for the cache.
+
+### 13w. The 20:05 retry REFUSED before any work; it resumes after c11 (2026-10-26 20:07 ICT from `date`)
+
+- **[20:05:09] `cache: FAILED rc=1`.** The guard saw 0.0 % capture stall and 0 s above 10 %.
+  - The cause: `/mnt/poring-lab-datasets/.framecache/v2orc-payf07-gef10-20261026 exists: pick
+    another --cache-id (or --resume it)`.
+  - The 12:10-12:16 build (13v) left `progress.json` and six shards (~2.5 GB). Nothing was read
+    or written at 20:05.
+- **The retry Batt approved (once, after 20:00) therefore has not run yet.** Its proper form is
+  `--resume` with the SAME arguments (`cache-args-r2.txt`). The tool:
+  - refuses different arguments;
+  - checks each recorded shard's size on the NAS;
+  - drops an incomplete session's shards.
+  This is the path built for a cache the IO guard paused (Batt, 2026-10-06).
+- **It starts the moment run c11 ends (~20:40).** c9 and c10 ran without the build's CPU load, so
+  starting during c11 would have loaded one arm of the c9-c11 comparison alone.
+- **Unchanged:**
+  - the IO guard (`--sustain 30 --spike 25`); one abort means stop and ask Batt;
+  - then the R2 check (Ollama `/api/ps`) and 13u's launch.
