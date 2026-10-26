@@ -127,11 +127,13 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.3"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
-# (Batt 2026-10-25, docs/planning/rogue-gef10.md)
+# (Batt 2026-10-25, docs/planning/rogue-gef10.md); @8.1 = a Fly Wing after 20 s without a position;
+# @8.2 = no stand toggle after a hit; @8.3 = the stock read from the HOTBAR (Amendment M: a stale DB
+# save left 4.05 a10 with 0 Fly Wings)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -213,8 +215,32 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
     "rogue": {"job": "rogue", "data": "thief", "max_hp": 2146, "max_sp": 336,
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
-              "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False},
+              "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
+              "hotbar_stock": True},  # dungeon@8.3: the stock is read from the hotbar
 }  # fmt: skip
+STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
+
+
+def stock_plan(counts: dict[int, int | None], targets: dict[int, int]) -> dict[int, int]:
+    """PURE (dungeon@8.3, rogue-gef10.md Amendment M): the amount of each item to add so that the
+    hotbar's count reaches its target. An unreadable count is a Stop (never a guess): 4.05 a10's
+    setup trusted a stale DB save, added no Fly Wing, and the Rogue hunted with none."""
+    out = {}
+    for item, want in targets.items():
+        have = counts.get(item)
+        if have is None:
+            raise ValueError(f"the hotbar count of item {item} is unreadable")
+        out[item] = max(0, want - have)
+    return out
+
+
+def hotbar_slot(key: str) -> int:
+    """PURE: the 1-row hotbar slot of an F-key (F1 = slot 0)."""
+    if len(key) == 2 and key[0] == "F" and key[1] in "123456789":
+        return int(key[1]) - 1
+    raise ValueError(f"not a row-1 hotbar key: {key!r}")
+
+
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
 # dungeon@7 (Batt ~16:0x: ONE Steal on every monster first, SP permitting)
 STEAL_SP = 10  # pinned pre-re skill_db TF_STEAL SpCost (every level)
@@ -954,22 +980,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             time.sleep(3.0)
             bench.close_chat(agent_raw, screen)
             cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
-        # Amendment I: the potions over the strategy's stock are DRUNK at the stand (its hotkey,
-        # paced; outside the measured window): carried weight is loot room before 50 %
-        drunk = 0
-        excess = inv.get(504, 0) - p_to
-        if excess > 0:
-            ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
-            r.activate_client(agent_raw, screen)
-            for _ in range(excess):
-                agent_raw.keys(keys_["potion"])
-                drunk += 1
-                time.sleep(0.35)
-            time.sleep(1.0)
-        setup.append(f"@warp {map_} {start[0]} {start[1]}")
-        if a.clear_map:  # dungeon@8, Amendment A4: the experimenter's step, never the bot's
-            setup.append("@killmonster2")
-        for cmd in setup:
+        typed: list[str] = []  # every setup line actually sent, in order (the run_start record)
+
+        def setup_line(cmd: str) -> None:
+            typed.append(cmd)
             # 4.04 Amendment A: @heal is idempotent -- chat_guard's skip (a refused 3rd @heal in a
             # row is not typed; the HP / SP are full after the pre-run's heal or the relog)
             got_ = cr.gm_line(agent_raw, screen, cmd, conf["job"], crk,
@@ -985,6 +999,62 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         raise r.Stop(f"dungeon@8: the identity did not read within {WARP_READY_S}"
                                      " s of the setup's @warp")  # fmt: skip
                     time.sleep(0.5)
+
+        stock: dict[str, Any] | None = None
+        true_potions = inv.get(504, 0)
+        if conf.get("hotbar_stock"):
+            # dungeon@8.3 (Amendment M): the DB lines above are a first guess only; the hotbar's
+            # drawn count is the truth -- read it on the stand, top up from it, read it again
+            import hotbar_count as hb
+
+            for cmd in setup:
+                setup_line(cmd)
+            bench.close_chat(agent_raw, screen)
+            try:
+                tpl = hb.load()
+            except OSError as exc:
+                raise r.Stop(f"dungeon@8.3: no hotbar digit templates ({exc})") from exc
+            slots = {STOCK_ITEMS[k]: hotbar_slot(keys_[k]) for k in STOCK_ITEMS}
+            targets = {504: p_to, 601: w_to}
+
+            def read_stock() -> dict[int, int | None]:
+                time.sleep(0.8)
+                g = hb.gray(np.asarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())))
+                return {item: hb.read_count(g, slot, tpl) for item, slot in slots.items()}
+
+            before = read_stock()
+            try:
+                add = stock_plan(before, targets)
+            except ValueError as exc:
+                raise r.Stop(f"dungeon@8.3: {exc} {before}") from exc
+            for item, n in add.items():
+                if n > 0:
+                    setup_line(f"@item {item} {n}")
+            bench.close_chat(agent_raw, screen)
+            after = read_stock()
+            short = {i: c for i, c in after.items() if c is None or c < targets[i]}
+            stock = {"before": before, "added": add, "after": after}
+            if short:
+                raise r.Stop(f"dungeon@8.3: the stock is short after the top-up {stock}")
+            true_potions = int(after[504] or 0)
+            setup = []  # the stand lines are typed; the map lines follow
+        # Amendment I: the potions over the strategy's stock are DRUNK at the stand (its hotkey,
+        # paced; outside the measured window): carried weight is loot room before 50 %
+        drunk = 0
+        excess = true_potions - p_to
+        if excess > 0:
+            ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
+            r.activate_client(agent_raw, screen)
+            for _ in range(excess):
+                agent_raw.keys(keys_["potion"])
+                drunk += 1
+                time.sleep(0.35)
+            time.sleep(1.0)
+        setup.append(f"@warp {map_} {start[0]} {start[1]}")
+        if a.clear_map:  # dungeon@8, Amendment A4: the experimenter's step, never the bot's
+            setup.append("@killmonster2")
+        for cmd in setup:
+            setup_line(cmd)
         bench.close_chat(agent_raw, screen)
         r.activate_client(agent_raw, screen)
         time.sleep(1.0)
@@ -1006,7 +1076,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
-            "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
+            "setup": typed, "stock": stock, "weight": w_, "weight_before": w0,
+            "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:

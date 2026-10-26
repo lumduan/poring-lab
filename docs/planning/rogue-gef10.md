@@ -654,3 +654,35 @@ frames 5 Hz on the NAS; judged by `dungeon_judge.py row --live 898` plus the pac
 - (c) YOLO round 2: the notice rule in C1, a NEW TEST (a9-a11, never read), T1, then the cache and
   training, plus the detector's recall on his demo frames;
 - (d) the flee proof's new pre-registration.
+
+## Amendment M (2026-10-26 10:40 ICT from `date`): dungeon@8.3, the stock read from the hotbar; run b1
+
+**Why not the DB:** rAthena writes the inventory to the DB only on its autosave (minutes) or on
+events such as a storage close. `@save` does not help:
+- it calls `chrif_save(sd, CSAVE_NORMAL)` without `CSAVE_INVENTORY` (rAthena master
+  `atcommand.cpp` / `chrif.cpp`, read 10:4x);
+- it would also move Batt's save point.
+
+**dungeon@8.3** (`scripts/hotbar_count.py` + the setup):
+- The DB lines are a first guess and are typed on the stand.
+- Then the setup reads the F1 / F2 counts the client DRAWS on the hotbar and adds what is
+  missing from that count (`stock_plan`).
+- It reads again and STOPS if a count is unreadable or below 10 / 10. An empty slot (no digit,
+  no icon) reads 0; an icon without a readable digit is unreadable.
+- Excess potions are drunk by the true count.
+- Rogue only (`hotbar_stock`).
+
+**The calibration and the positive case:**
+- Digit templates: on the safe stand, 10:32, F1's potions were drunk 9 -> 0 and the strip was
+  grabbed each time. The templates are the client's pixels, in `data/hotbar/` (gitignored).
+- **The reader was validated on 12 real frames from last night, none used for the cut: 24 / 24
+  slot reads right.** They include a5b's and a10's EMPTY slots (0 / 0), the case that killed a10.
+- The skill slot (F3) is not read: its dark frame enters the count box.
+
+**Run b1** (arm N, seed 25540, 36 min, `--clear-map`), the live proof of 8.3:
+- The setup's `stock` record must match the judged pre-run frame, and the run must start with
+  10 / 10.
+- The Orc Lord was cleared at 09:49:28 (Batt's demo prep). b1 must end <= 11:49:28; the next
+  cycle starts >= 12:00:28 (Amendment E).
+- b1's numbers are reported against Batt's bar (Amendment L). dungeon@9, modelled on his loop,
+  follows the time-budget analysis.

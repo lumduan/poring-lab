@@ -348,7 +348,8 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.2"  # .1 position-unread fly, .2 no stand toggle on a hit
+    assert dh.VERSION == "dungeon@8.3"  # .1 position-unread fly, .2 no stand toggle on a hit,
+    # .3 the stock read from the hotbar
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -526,3 +527,20 @@ def test_damage_while_sitting_never_presses_the_stand_toggle() -> None:
     block = src[i - 500 : i]
     assert "if sitting and (tick - last_taken <= FIGHT_TAKEN_S or hp_dropped(" in block
     assert 'press("stand"' not in block
+
+
+def test_the_stock_plan_tops_up_from_the_hotbar_and_refuses_an_unreadable_count() -> None:
+    """dungeon@8.3 (4.05 a10, 2026-10-26 05:45): the DB's last save still showed a9's Fly Wings,
+    so the setup added none; the hotbar showed an EMPTY slot (0). The plan adds from the drawn
+    count, and an unreadable count stops the setup instead of guessing."""
+    assert dh.stock_plan({504: 8, 601: 0}, {504: 10, 601: 10}) == {504: 2, 601: 10}
+    assert dh.stock_plan({504: 14, 601: 10}, {504: 10, 601: 10}) == {504: 0, 601: 0}
+    import pytest
+
+    with pytest.raises(ValueError):
+        dh.stock_plan({504: 10, 601: None}, {504: 10, 601: 10})
+    assert dh.hotbar_slot("F1") == 0 and dh.hotbar_slot("F2") == 1
+    with pytest.raises(ValueError):
+        dh.hotbar_slot("Insert")
+    assert dh.CHARS_CONF["rogue"]["hotbar_stock"] is True
+    assert {dh.CHARS_CONF["rogue"]["keys"][k] for k in dh.STOCK_ITEMS} == {"F1", "F2"}
