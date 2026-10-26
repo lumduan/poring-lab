@@ -23,6 +23,15 @@ screen; T2's pack has two strata per species (N / E: the key's ``samples``, blin
 
     map_labels.py engaged   PART... --offset-ms MS --o3h-tau T --out JSON   4h's selection (FIT)
 
+gef_fild10 ROUND 2 (docs/planning/gef10-round2.md, DRAFT 2026-10-26): ``check --c1-rule round2``
+adds ONE exclusion to C1, the PICKUP NOTICE: a standing label whose PREDICTED box overlaps (any
+area > 0) a notice that ``gef10_r2_measure.find_notices`` detects in that frame's top rows is not
+scored (reason ``notice``, counted per species like ``ui_or_edge``). The default ``--c1-rule
+round1`` is the frozen round-1 check, unchanged bit for bit (its rows file is byte-identical); the
+output's ``c1_rule`` records which ran. ``round2`` is gef_fild10's only, and it refuses round 1's
+spent TEST parts (the watch's cells 11-14, a7, a8). Round 2's TEST2 (a9, a10, a11) is refused by
+NAME by the measuring commands, ``labels`` and ``pack`` (``test2_suffixes``).
+
 A PART is a session directory, optionally restricted to the staged session's spots:
 ``DIR`` or ``DIR:spots=0-7``. The map's spec (MAPS) names its FIT and TEST parts; the measuring
 commands refuse TEST, and ``labels`` / ``pack`` refuse TEST too (the evaluation's TEST labels are a
@@ -127,9 +136,16 @@ class MapSpec:
     tmp: Path = Path("/dev/shm/poring-lab-tmp/payf07")
     plan: str = "docs/planning/payf07-detector.md"
     layouts: dict[str, str] = field(default_factory=dict)  # session id -> its layout (else hunt)
+    test2_suffixes: tuple[str, ...] = ()  # gef10 ROUND 2's TEST2 by NAME (gef10-round2.md)
 
     def is_test(self, sid: str, spots: frozenset[int] | None) -> bool:
-        """The part shares a frame with TEST: by the role table, or by the session's NAME."""
+        """The part shares a frame with TEST (round 1's, or round 2's TEST2): by the role table,
+        or by the session's NAME."""
+        return self.is_round1_test(sid, spots) or any(
+            sid.endswith(s) for s in self.test2_suffixes)  # fmt: skip
+
+    def is_round1_test(self, sid: str, spots: frozenset[int] | None) -> bool:
+        """Round 1's TEST (gef10: read once by T1, 13r; spent): the role table or the NAME."""
         return overlaps_role(sid, spots, self.test) or any(
             sid.endswith(s) for s in self.test_suffixes)  # fmt: skip
 
@@ -183,6 +199,9 @@ GEF10 = MapSpec(
     tmp=G10,
     plan="docs/planning/gef10-detector.md",
     layouts={GEF10_WATCH: "rows4"},  # Amendment A (2026-10-25 21:10:53): the watch's 4-row layout
+    # ROUND 2 (gef10-round2.md, DRAFT; Batt 2026-10-26 ~09:4x "do round 2 now"): TEST2 = a9, a10,
+    # a11, recorded after T1 and never read; refused from now like TEST
+    test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11"),
 )  # fmt: skip
 MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 
@@ -1308,6 +1327,89 @@ def cmd_engaged(a: argparse.Namespace) -> dict[str, Any]:
     }  # fmt: skip
 
 
+# --- gef10 ROUND 2: the pickup-notice exclusion in C1 (gef10-round2.md) ------------------------
+
+C1_RULES = {
+    "round1": "the frozen check (gef10-detector.md 5; payf07-detector.md 5): the static UI "
+              "rectangles only",
+    "round2": "round1 + NOTICE (gef10-round2.md): a standing label whose PREDICTED box overlaps "
+              "(area > 0) a pickup notice detected in that frame (gef10_r2_measure.find_notices "
+              "on its top rows) is not scored (reason 'notice'); gef_fild10 only",
+}  # fmt: skip
+NOTICE = "notice"  # round 2's exclusion reason (per species: "notice:<job>")
+NOTICE_NEAR_PX = 16.0  # REPORTED only: a scored box this close to a notice (C1's UI margin)
+
+
+def notice_hits(box: Sequence[float], notices: Sequence[Sequence[float]]) -> bool:
+    """PURE (round 2): ``box`` (x0, y0, x1, y1) overlaps a notice box by any area > 0."""
+    return any(min(box[2], n[2]) > max(box[0], n[0]) and min(box[3], n[3]) > max(box[1], n[1])
+               for n in notices)  # fmt: skip
+
+
+@dataclass
+class NoticeRule:
+    """Round 2's C1 exclusion as orc_labels_fix._check_rows' ``frame_rule``: the notices of the
+    frame's top rows (found once per frame read), every candidate whose PREDICTED box overlaps
+    one dropped as ``notice`` (standing ones and the under-model ones before their fit), the
+    frame's notices kept in ``last`` for the rows' REPORTED ``notice_near``."""
+
+    last: list[tuple[float, float, float, float]] = field(default_factory=list)
+
+    def __call__(self, bgr: npt.NDArray[np.uint8], cands: list[Any], under: list[Any] | None,
+                 dropped: Counter[str]) -> tuple[list[Any], list[Any] | None]:  # fmt: skip
+        import gef10_r2_measure as r2m
+
+        self.last = [tuple(float(v) for v in b)  # type: ignore[misc]
+                     for b in r2m.find_notices(bgr[: r2m.TOP_ROWS])]  # fmt: skip
+        if not self.last:
+            return cands, under
+        dropped["frame_with_notice"] += 1
+
+        def keep(cs: list[Any]) -> list[Any]:
+            out = []
+            for c in cs:
+                e, pred = c[0], c[3]
+                if notice_hits(pred.box, self.last):
+                    dropped[NOTICE] += 1
+                    dropped[f"{NOTICE}:{e.job}"] += 1
+                else:
+                    out.append(c)
+            return out
+
+        return keep(cands), None if under is None else keep(under)
+
+
+def _check_rows_round2(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[str],
+                                                        Counter[int]]:  # fmt: skip
+    """olf._check_rows with the job's NoticeRule; each scored row of a frame with a notice gets
+    ``notice_near`` (its box grown by 16 px touches one: REPORTED, not deciding)."""
+    rule: NoticeRule = olf._JOB["frame_rule"]
+    rule.last = []
+    rows, dropped, seen = olf._check_rows(ref)
+    if rule.last:
+        m = NOTICE_NEAR_PX
+        for r in rows:
+            b = r["box"]
+            r["notice_near"] = notice_hits((b[0] - m, b[1] - m, b[2] + m, b[3] + m), rule.last)
+    return rows, dropped, seen
+
+
+def c1_rule_refusals(spec: MapSpec, rule: str, parts: Sequence[str]) -> None:
+    """Round 2's guards, before anything is read: ``round2`` is gef_fild10's only and never reads
+    round 1's spent TEST (the watch's cells 11-14, a7, a8); TEST2 (a9-a11) is checked under
+    ``round2`` only (the round-1 rule would spend it)."""
+    if rule not in C1_RULES:
+        raise SystemExit(f"--c1-rule: {sorted(C1_RULES)}, not {rule!r}")
+    if rule == "round2" and spec.name != "gef_fild10":
+        raise SystemExit(f"--c1-rule round2: gef_fild10 only, not {spec.name}")
+    for part in parts:
+        path, spots = parse_part(part)
+        if rule == "round2" and spec.is_round1_test(path.name, spots):
+            raise SystemExit(f"{part}: round 1's TEST is spent (13r): round 2 never reads it")
+        if rule != "round2" and any(path.name.endswith(s) for s in spec.test2_suffixes):
+            raise SystemExit(f"{part}: round 2's TEST2: checked under --c1-rule round2 only")
+
+
 # --- 5: the check (C1 / C2 on the PREDICTION) -------------------------------------------------
 
 
@@ -1315,8 +1417,10 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
     params = load_params(a.params, spec)
     diag = bool(getattr(a, "fit_diagnostic", False))
+    c1_rule = str(getattr(a, "c1_rule", "round1"))
     if params.get("status") != "FROZEN" and not diag:
         raise SystemExit(f"{a.params}: {params.get('status')}: T1 runs on FROZEN parameters only")
+    c1_rule_refusals(spec, c1_rule, a.parts)
     if diag:  # gef10 13: C1 on FIT under PROPOSED parameters, a DIAGNOSTIC (never T1, never 3c)
         for part in a.parts:
             path, spots = parse_part(part)
@@ -1333,15 +1437,20 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
             raise SystemExit(f"{sess.name}: --fit-diagnostic reads FIT parts only")
         if overlaps_role(sess.sid, sess.spots, spec.fit) and not (a.allow_fit or diag):
             raise SystemExit(f"{sess.name}: a FIT part (the parameters' own data): --allow-fit")
+        c1_rule_refusals(spec, c1_rule, [sess.name])  # by the manifest's session id too
         refs = sess.candidates_at(off_ms)
         olf._JOB.update(sess=sess, occluders=occl, offset_ms=off_ms, anchors={},
                         facing_rule=sess.facing_rule("fix2"), occlusion="o3h",
                         tau=float(params["tau"]), o3h_tau=float(params["o3h_tau"]),
                         fit_px={int(k): int(v) for k, v in params["fit_px"].items()},
                         reader=read_png)  # fmt: skip
+        olf._JOB.pop("frame_rule", None)  # round1: orc_labels_fix._check_rows, unchanged
+        func = olf._check_rows
+        if c1_rule == "round2":
+            olf._JOB["frame_rule"], func = NoticeRule(), _check_rows_round2
         prow: list[dict[str, Any]] = []
         dropped: Counter[str] = Counter()
-        for r, d, _sn in olf.run_parallel(olf._check_rows, refs, a.workers):
+        for r, d, _sn in olf.run_parallel(func, refs, a.workers):
             prow += [{**x, "part": sess.name} for x in r]
             dropped.update(d)
         prow.sort(key=lambda r: (r["frame_id"], r["gid"]))
@@ -1356,11 +1465,28 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         }  # fmt: skip
         rows += prow
         dropped_all.update(dropped)
+    olf._JOB.pop("frame_rule", None)
     summ = t1_summary(rows, spec.species)
 
     def by_species(reason: str) -> dict[str, int]:
         return dict(sorted((k.split(":", 1)[1], v) for k, v in dropped_all.items()
                            if k.startswith(f"{reason}:")))  # fmt: skip
+
+    rule_doc: dict[str, Any] = {"name": c1_rule, "what": C1_RULES[c1_rule]}
+    if c1_rule == "round2":
+        import gef10_r2_measure as r2m
+
+        near = [r for r in rows if r.get("notice_near")]
+        rule_doc.update({
+            "detector": "scripts/gef10_r2_measure.py find_notices (gef10-round2-measure.md 2: "
+                        "587 / 595 positives, 0 / 8,156 false)",
+            "band_y0_y1_x0_x1": list(r2m.NOTICE_BAND), "top_rows_read": r2m.TOP_ROWS,
+            "overlap": "the predicted box and a notice box share any area > 0",
+            "excluded": dropped_all.get(NOTICE, 0), "excluded_by_species": by_species(NOTICE),
+            "frames_with_notice": dropped_all.get("frame_with_notice", 0),
+            "scored_rows_near_notice_16px": len(near),
+            "scored_rows_near_notice_bad": sum(1 for r in near if r.get("why_low") == "bad_label"),
+        })  # fmt: skip
 
     if a.rows is not None:
         a.rows.write_text(json.dumps(rows) + "\n")
@@ -1373,6 +1499,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "diagnostic": diag, "params_status": params.get("status"),
         "what": f"5: C1 / C2 on the {spec.labels} PREDICTION (fix 2 facing, 1d, no anchor, no "
                 "fit), o3h's under-box rule, 2b / 2c (engaged units excluded: E0)",
+        "c1_rule": rule_doc,
         "map": spec.name, "parts": a.parts, "checked_at": olf.now_ict(),
         "commit": olf.git_head(), "params": str(a.params),
         "params_sha256": olf.sha256_file(a.params), "offset_ms": off_ms,
@@ -1706,6 +1833,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="gef10 13: FIT parts only, PROPOSED parameters allowed (not T1, not 3c)",
     )
+    p.add_argument("--c1-rule", choices=sorted(C1_RULES), default="round1",
+                   help="round1: the frozen check; round2: + the pickup-notice exclusion "
+                        "(gef10-round2.md; gef_fild10 only)")  # fmt: skip
     p = sub.add_parser("labels")
     common(p)
     p.add_argument("--params", type=Path, required=True)
