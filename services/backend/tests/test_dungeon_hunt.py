@@ -544,3 +544,17 @@ def test_the_stock_plan_tops_up_from_the_hotbar_and_refuses_an_unreadable_count(
         dh.hotbar_slot("Insert")
     assert dh.CHARS_CONF["rogue"]["hotbar_stock"] is True
     assert {dh.CHARS_CONF["rogue"]["keys"][k] for k in dh.STOCK_ITEMS} == {"F1", "F2"}
+
+
+def test_the_npc_guard_refuses_fight_clicks_near_an_npc_only() -> None:
+    """dungeon@9.0b (c2, 2026-10-26 12:53): a strike beside gef_fild10's bulletin board (69,340)
+    opened its dialog. Fight clicks (strike / burst / Steal / loot) are refused within
+    NPC_NO_FIGHT cells of an NPC; walk clicks and an unknown position are not refused here."""
+    npcs = [(69, 340), (73, 340)]
+    assert dh.npc_guard_blocks((68, 337), npcs, "strike")  # where c2 stood
+    assert dh.npc_guard_blocks((77, 333), npcs, "loot")  # 7 / 4 cells: within 8
+    assert not dh.npc_guard_blocks((82, 330), npcs, "strike")  # 9 cells from the Kafra
+    assert not dh.npc_guard_blocks((68, 337), npcs, "walk")
+    assert not dh.npc_guard_blocks(None, npcs, "strike")
+    assert not dh.npc_guard_blocks((68, 337), [], "strike")
+    assert {"strike", "strike_burst", "steal", "loot"} == dh.NPC_GUARDED

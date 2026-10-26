@@ -237,6 +237,23 @@ def stock_plan(counts: dict[int, int | None], targets: dict[int, int]) -> dict[i
     return out
 
 
+NPC_NO_FIGHT = 8  # dungeon@9.0b (c2, 12:53): no fight click within this many cells of an NPC
+NPC_GUARDED = frozenset({"strike", "strike_burst", "steal", "loot"})
+
+
+def npc_guard_blocks(here: Cell | None, npcs: Sequence[Sequence[int]], why: str,
+                     radius: int = NPC_NO_FIGHT) -> bool:  # fmt: skip
+    """PURE (dungeon@9.0b, rogue-gef10.md Amendment P): a strike / Steal / loot click is refused
+    while OUR cell is within ``radius`` (Chebyshev) of an NPC. In c2 (2026-10-26 12:53) a strike on
+    a monster standing in front of gef_fild10's bulletin board landed on the board's sprite and
+    opened its dialog (a hard bar). NPC sprites stand at most ~5 cells tall, so a click from 8+
+    cells away cannot land on one. Walk clicks are not refused here (walk_trust has its own NPC
+    distance; the cursor gate reads an NPC as not-walkable)."""
+    if why not in NPC_GUARDED or here is None or not npcs:
+        return False
+    return min(max(abs(here[0] - int(n[0])), abs(here[1] - int(n[1]))) for n in npcs) <= radius
+
+
 def hotbar_slot(key: str) -> int:
     """PURE: the 1-row hotbar slot of an F-key (F1 = slot 0)."""
     if len(key) == 2 and key[0] == "F" and key[1] in "123456789":
@@ -906,6 +923,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     import walk_trust as wtr
 
     trust_npcs = trust_npcs_for(map_) if a.walk_trust else []  # --walk-trust (off by default)
+    guard_npcs = trust_npcs_for(map_) if a.npc_guard else []  # --npc-guard (off by default)
     spots = rest_spots_for(map_)  # dungeon@6: per map (orcsdun01's required, as before)
     for s_ in spots:
         if not okr[s_[1], s_[0]]:
@@ -1091,7 +1109,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
             "fixes": {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
-                      "ag_match": a.ag_match, "walk_trust": a.walk_trust},
+                      "ag_match": a.ag_match, "walk_trust": a.walk_trust,
+                      "npc_guard": a.npc_guard},
             "char": a.char, "steal": a.steal, "bank_tags": bank, "clear_map": a.clear_map,
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
@@ -1151,6 +1170,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         def click_at(u: float, v: float, why: str) -> None:
             """Every world click of this runner: FrameGuard refuses one off the game frame."""
+            if npc_guard_blocks(here, guard_npcs, why):  # dungeon@9.0b, --npc-guard
+                counts["npc_guard_refused"] += 1
+                ev({"kind": "npc_guard", "why": why, "at": None if here is None else list(here)})
+                return
             x, y = gx0 + round(u), gy0 + round(v)
             agent.move(x + 4, y + 3)
             time.sleep(0.02)
@@ -2373,6 +2396,14 @@ def main() -> int:
         "clicked when walk_trust.trust_why trusts its cell (route grid + the landing cells "
         "beyond it, the zones, >= NPC_MIN cells from every NPC, no fresh box near); SWORD still "
         "engages, NO-ENTRY (or an UNKNOWN with the ring's red) still carves",
+    )
+    t.add_argument(
+        "--npc-guard",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.0b (rogue-gef10.md Amendment P; OFF by default): no strike / Steal / loot "
+        "click while our cell is within NPC_NO_FIGHT cells of an L3 NPC (c2: a strike opened the "
+        "bulletin board's dialog)",
     )
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "

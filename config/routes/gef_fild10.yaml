@@ -15,6 +15,11 @@
 # - waypoint 0, his start 76,337, lies INSIDE the Kafra's no-enter area (npc-kafra-73-340: 73,340
 #   grown by 4), so no leg could reach it: moved to 80,333 (on the route grid, outside every zone, 7
 #   cells from the Kafra; legs 81 -> 0 and 0 -> 1 then route; docs/planning/gef10-cursor-unknown.md 7).
+# - 2026-10-26 13:0x (rogue-gef10.md Amendment P): c2 fought beside the bulletin board (69,340) at
+#   the loop's Kafra corner and a strike opened the board's dialog (a hard bar). The corner's two
+#   waypoints, 80,333 (7 cells from the Kafra) and 71,327 (outside the search area, 9 cells from the
+#   house door gef022), are DROPPED: the loop now closes 76,317 -> 88,337. Every waypoint is inside
+#   the search area and >= 12 cells from every L3 NPC.
 map: gef_fild10
 reviewed_by: "agent (delegated by batt, 2026-10-26)"
 reviewed: 2026-10-26
@@ -25,7 +30,6 @@ routes:
     kind: loop
     note: "Batt's clockwise ring of gef_fild10 from the Kafra (x east, y north): east along the north, down the east side, west along the south, north up the west side"
     waypoints:
-      - [80, 333]
       - [88, 337]
       - [100, 337]
       - [112, 337]
@@ -106,4 +110,3 @@ routes:
       - [84, 296]
       - [80, 307]
       - [76, 317]
-      - [71, 327]

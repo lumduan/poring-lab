@@ -778,3 +778,43 @@ Batt's bar):
 **Noted, not fixed:** `map_zones.segment_violates` misses axis-aligned straight walks through a
 no-enter area (gef10-cursor-unknown.md 8). No impact is found on this walk, whose targets come
 from the zoned route grid. Its own commit and tests later.
+
+## Amendment P (2026-10-26 13:01 ICT from `date`): c2's HARD BAR (the bulletin board), dungeon@9.0b; run c3
+
+**c2 (9.0, 12:44:31-12:53:54) stopped on a HARD BAR: an NPC dialog was open.**
+- The bulletin board at (69,340) beside the Kafra showed "[Orc Dungeon] Caution! ..."; the UI
+  gate found it and typed nothing.
+- **The cause, from c2's events:** a kill at -11.8 s, a scan, then a **strike** at -11.4 s on a
+  monster standing in front of the board. The strike never hit ("unlock: no hits"): the click
+  landed on the board's sprite.
+  - The Rogue stood at 68,337: inside the board's no-enter area and 5 cells from the house door
+    gef022 (63,337).
+  - The patrol's Kafra corner had brought the fights there. Waypoint 0 (80,333) was 7 cells from
+    the Kafra; waypoint 81 (71,327) was outside the search area, 9 cells from the door. The old
+    heading search stayed inside the area, whose 10-cell warp margin covers that corner.
+  - It was NOT `--walk-trust`: the dialog came from a strike click.
+- **The recovery (12:56):** the board's script (npc/pre-re/other/bulletin_boards.txt) is mes /
+  next x3 / close, no menu. When the parent read the dialog it already showed CLOSE (it had
+  advanced; possibly Batt). `ui_gate.ensure_clear` pressed its known Enter on CLOSE, then
+  `@warp` to the stand and `@heal`. The Orc Baby had hit the Rogue during the dialog: HP 22 %.
+- c2's own events: 198 walk clicks in 9.4 min (187 trusted), against ~5 / min before.
+- c2's recorder stopped after 74 s on the IO guard, so the judge's numbers for c2 cover about a
+  minute and are not used.
+
+**dungeon@9.0b = 9.0 + two safety changes:**
+1. **The route:** the Kafra corner's waypoints 80,333 and 71,327 are DROPPED. The loop closes
+   76,317 -> 88,337.
+   - `map_routes.py prove`: ok, 80 waypoints, 827 steps.
+   - Every waypoint is inside the search area and >= 15 cells from an L3 NPC; every walked leg
+     cell is >= 11.
+2. **`--npc-guard`** (new, OFF by default; this commit): no strike / burst / Steal / loot click
+   while OUR cell is within `NPC_NO_FIGHT` = 8 cells of an L3 NPC.
+   - NPC sprites stand <= ~5 cells tall.
+   - The refusal is logged (`npc_guard`) and counted.
+   - Tests pass; the click census is unchanged (the guard only refuses).
+
+**Run c3** (9.0b: `--search patrol --walk-trust --npc-guard`, seed 25543, 36 min):
+- it starts after this commit and ends <= 14:06:30 (D5 + 120);
+- the hard bars from the packets, plus `npc_guard` refusals, `walk_trusted`, kills / h;
+- its numbers are judged from the runner's own packets (its recorder may stop on the IO guard
+  during SET hours).
