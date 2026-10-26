@@ -2640,10 +2640,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             mode, goal_path = "fight", None
                         continue
                 # --- SEARCH: the heading walk (or dungeon@4's patrol route)
+                near_end = (here is not None and goal_path is not None and len(goal_path) >= 2
+                            and max(abs(goal_path[-1][0] - here[0]),
+                                    abs(goal_path[-1][1] - here[1])) <= 2)  # fmt: skip
                 if mode == "search" and here is not None and (
-                        goal_path is None or len(goal_path) < 2
-                        or max(abs(goal_path[-1][0] - here[0]),
-                               abs(goal_path[-1][1] - here[1])) <= 2):  # fmt: skip
+                        goal_path is None or len(goal_path) < 2 or near_end):  # fmt: skip
+                    if patrol and near_end and wp_st["through"] is not None:
+                        # --walk-through: the leg ran THROUGH its waypoint to the next one, whose
+                        # end we reached; the waypoint is passed (the offline sim: without this the
+                        # replan routed back to it and the walk oscillated at gef_fild10 wp 64)
+                        pass_waypoint(here)
                     if patrol:
                         goal = patrol_goal(here)
                     elif not area[here[1], here[0]]:  # dungeon@4: a rest spot outside the area

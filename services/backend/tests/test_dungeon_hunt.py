@@ -678,4 +678,7 @@ def test_long_legs_continue_through_the_next_waypoint_and_stay_off_by_default() 
     src = (Path(dh.__file__)).read_text()
     assert "walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)" in src
     assert "pass_waypoint(here)  # --walk-through: its waypoint is behind us now" in src
+    # the offline sim's bug (2026-10-26 21:2x): a through-leg ending NEAR its end must pass its
+    # waypoint before the replan, or the replan routes back to it (oscillation at gef_fild10 wp 64)
+    assert 'if patrol and near_end and wp_st["through"] is not None:' in src
     assert dh.WALK_AHEAD == 7
