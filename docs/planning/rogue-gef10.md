@@ -897,3 +897,41 @@ windows per kill falls by >= 50 %; the rest share does not rise.
 
 **The 17:01 ship:** it ships every recording in RAM at 17:01. c7's recording, still running then,
 is excluded and shipped after its run.
+
+## Amendment S (2026-10-26 14:51 ICT from `date`): dungeon@9.1 = 9.0b + `--miss-cue`; run c6
+
+**The cue** ([gef10-miss-cue.md](gef10-miss-cue.md); a subagent, merged; `scripts/miss_cue.py`):
+- The "Miss" of a monster's swing that misses us is drawn above the ATTACKER. For a melee orc
+  one cell away, that is within about +-50 px of our head. It appears ~0.7-0.8 s after the swing's
+  packet.
+- The detector: a pure-numpy NCC of a 282-instance mean template in a ROI around our head.
+  Threshold 0.60, fixed on TUNE before TEST. ~8 ms a read.
+- **TEST** (a7, a8, a5b, b1, c1, c2, c3):
+  - per-frame recall 58.7 %; per-EVENT recall 65.9 % (56 / 85);
+  - **0 of 4,207 negative frames** fired; 0 of 478 hard negatives;
+  - 36 / 36 audited fires showed a real Miss.
+- **Batt's 5 Hz demo:** per-event recall 86.1 %, the first fire a median 0.98 s after the swing.
+- **TEST2, the held-back set** (a9, a10, a11, w3; opened ONCE by the parent at 14:4x):
+  - per-frame recall 39.0 % (688 / 1,764);
+  - **0 of 2,979 negative frames** fired (49.8 min); 0 / 157 notices; 0 on potions / Steal /
+    Lucky / our attacks / hits on us;
+  - 1 of 166 "fight" frames, likely a real Miss with no packet (a known truth gap).
+- **Estimated gain** (packets of 10 runs): the reaction median 11.8 s -> ~6 s; ~28-32 % of all
+  damage avoided.
+
+**dungeon@9.1** (`--miss-cue`, d5793aa, OFF by default; the ONE change over 9.0b):
+- A Miss read in the HP loop counts as a swing at us. Within FIGHT_TAKEN_S (2.5 s) it starts a
+  fight like a hit, logged as an engage "by miss_cue".
+- It is NOT read while sitting: a miss never presses the stand toggle (8.2's lesson).
+
+**Run c6:** 9.1 = `--search patrol --walk-trust --npc-guard --miss-cue`, seed 25546, 36 min,
+at >= D6 + 76 = 15:34:15. It is compared with 9.0b's runs c3-c5. A6's `--rest house` is not
+included.
+
+**Measures:**
+- **primary:** the reaction time of engagements the monster opened (packets: its first swing at
+  us -> our first attack request); prediction median <= 8 s, against ~12 s;
+- damage per kill (prediction >= 20 % lower), the rest share, kills / h;
+- **false triggers:** an engage "by miss_cue" with no act on us within 3 s before. Bar: <= 1
+  per run;
+- the hard bars as always.
