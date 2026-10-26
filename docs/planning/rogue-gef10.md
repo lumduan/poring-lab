@@ -1338,3 +1338,45 @@ c9-c11 keep their registered base):
 - **The staged-items session (E3)** between two cycles, if the hunts leave a slot. Its icon cut
   and immune frames are judged on screenshots, as every pre-run frame is.
 - A report at ~07:00.
+
+## Amendment AD (2026-10-26 21:34 ICT from `date`): the LONG WALK LEGS block, pre-registered (gef10-idle-study.md 6.1)
+
+**The change** (OFF by default; both runner options are in 0b84336 + 39177a5):
+- `--walk-ahead 12`: the walk click aims 12 path cells ahead instead of 7.
+- `--walk-through`: a patrol leg continues along the route to the NEXT waypoint, so the click is
+  not capped at the current one.
+  - The waypoint is marked passed once it is behind us on the path, or when the leg's end is
+    reached.
+- **Why (the idle study):**
+  - idle inside search is 6.7 s per kill, 82 % of it the walk's stop-and-go;
+  - 52-56 % of the clicks were capped at the waypoint;
+  - the Rogue stood a median ~0.4 s after nearly every click (1,679 stops in c5b-c7).
+- **Its estimate (offline, before any run):** +3 cells gives +8.1 kills / h, +5 gives +11.1.
+- **The safety of the walk is unchanged:**
+  - the same walk_target `fits` (in view, no zone segment crossed: the axis-aligned fix included);
+  - walk-trust's landing cells and NPC distance;
+  - SWORD engages and NO-ENTRY carves as before;
+  - no new click path. Click census and safety tests are green.
+- **The offline check, `scripts/patrol_sim.py`** (committed, 16bc65e): the runner's own route /
+  through_path / walk_target on gef_fild10's loop, its patrol logic mirrored.
+  - Its first run FOUND A BUG: a through-leg that ended near its end replanned back to the waypoint
+    it had run through, and the walk oscillated at waypoint 64. Fixed in 39177a5.
+  - Every case (2-10 cells per decision) now finishes 2 laps with all 159 waypoint events in order,
+    with fewer clicks: 186 against 276 at 10 cells.
+
+**The block** (after the d-block's last run, d4):
+- **Arms:** L = `--walk-ahead 12 --walk-through` and V = the defaults, alternated L, V, L, V.
+  - Seeds 25556-25559, 36 min each, Amendment E's clock.
+- **Held constant:** P2, the cue ON (Amendment AB), the level hold at 63, base dungeon@8.5.
+  - The LOOT as the d-block's verdict leaves it: `--loot trim` in both arms if it passes Amendment
+    Z's bar, `--loot v1` in both if not. Recorded in the first L run's run_start.
+- **Primary:** kills / h from packets, pooled L against pooled V. **Bar: L - V >= +6.**
+  - That is about half the estimate, because the walk's share shrinks once the loot is trimmed.
+- **Secondary:**
+  - idle_inside_search s / kill: L lower;
+  - walk clicks per kill: L lower;
+  - search_walk s / kill: not higher;
+  - hard bars and NPC-guard refusals: not more;
+  - damage / kill and consumables / h: at most +10 %.
+- **Abort rule:** a patrol that stands > 60 s or logs a reached-waypoint order break in the live
+  events ends the arm's run as a fault, reported as such.
