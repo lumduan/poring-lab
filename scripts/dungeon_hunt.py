@@ -156,6 +156,12 @@ STRATEGIES: dict[str, dict[str, Any]] = {
           "rest_below": 0.60, "heal_below": None},
     "C": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.60, "heal_below": 0.60, "heal_until": 0.80, "heal_sp_min": 0.11},
+    # Batt 2026-10-26 ~14:5x (rogue-gef10.md Amendment T): "no sitting; keep HP above 20 % with
+    # White Potions and hunt continuously -- I want the rate per hour with no rest at all". A
+    # potion below 40 % (an Orc Warrior hits up to ~300 = 14 %: two hits from 40 % stay above
+    # 20 %), the Fly Wing only below 15 %, and 30 potions stocked (no sitting repays the damage)
+    "P": {"potion_below": 0.40, "fly_below": 0.15, "fly_rate": 200.0, "fly_rate_below": 0.25,
+          "rest_below": None, "heal_below": None, "potions_to": 30},
     # dungeon@4 (Batt 2026-10-22: decision 1 + 1b, and his demo's Heal rhythm)
     "H": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.80, "rest_sp_below": 0.30, "rest_until_sp": 0.40,

@@ -571,3 +571,10 @@ def test_the_miss_cue_starts_a_fight_like_a_hit_but_never_while_sitting() -> Non
     a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
                               rest="spot", npc_guard=False, miss_cue=True)  # fmt: skip
     assert dh.fixes_of(a)["miss_cue"] is True
+
+
+def test_batts_no_rest_strategy_never_sits_and_drinks_below_40() -> None:
+    """Batt 2026-10-26 ~14:5x: no sitting at all, HP kept above 20 % with White Potions."""
+    p = dh.STRATEGIES["P"]
+    assert not dh.rest_wanted(p, 0.21, 0.5) and not dh.rest_wanted(p, 0.05, 0.0)
+    assert p["potion_below"] == 0.40 and p["fly_below"] == 0.15 and p["potions_to"] == 30

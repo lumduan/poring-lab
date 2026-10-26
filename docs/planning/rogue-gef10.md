@@ -935,3 +935,33 @@ included.
 - **false triggers:** an engage "by miss_cue" with no act on us within 3 s before. Bar: <= 1
   per run;
 - the hard bars as always.
+
+## Amendment T (2026-10-26 14:53 ICT from `date`): Batt's NO-REST arm (strategy P); c5 becomes it
+
+**Batt (~14:5x, translated):** "Try the approach of not sitting to rest: keep HP above 20 % with
+White Potions and keep hunting continuously. I want to know the rate per hour with no sitting at
+all."
+
+**Strategy P** (this commit; on 9.0b's walk; the ONE change is the sustain rule):
+- `rest_below` None: **never sits**;
+- a White Potion below **40 %**: an Orc Warrior hits up to ~300 (14 %), so two hits from 40 % stay
+  above Batt's 20 %;
+- the Fly Wing only below 15 % (or on a fast drop below 25 %);
+- **30 potions stocked** (8.3's hotbar check tops up to 30). The carried weight stays under the
+  setup's 48 %.
+
+**c5 is this arm** (instead of 9.0b, at Batt's request):
+`--strategy P --search patrol --walk-trust --npc-guard`, seed 25545, 36 min, at >= D6 + 38 =
+14:56:15. It must end <= D6 + 120 = 16:18:15.
+
+**Measures:**
+- kills / h, items / h, value / h at OC, and the NET value (the potions' cost counted, the
+  judge's cost_h);
+- potions and wings used per hour;
+- deaths, the HP low, the rest share (expected 0);
+- the hard bars.
+
+It is compared with 9.0b's runs (c3, c4) and Batt's bar.
+
+**The rest of the plan shifts:** 9.1 (`--miss-cue`, Amendment S) and the door probe / 9.2
+(Amendment R) follow in the next cycles.
