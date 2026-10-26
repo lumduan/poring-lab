@@ -610,3 +610,47 @@ potions and 2 wings, and ended by the time box.
 - No runner, recorder or chain is running. a12 and a13 do not run (H3.4).
 - The bag was stored once more (03:52). Storage holds the night's loot for Batt's Overcharge
   merchant.
+
+## Amendment L (2026-10-26 10:28 ICT from `date`): Batt's demo is the bar; his decisions of the morning
+
+**Batt's decisions (2026-10-26 ~09:4x, on the overnight report):**
+1. The arm is **N** (no Steal): "focus on the kill speed per hour".
+2. **dungeon@8.3** (the restock fix, Amendment J) is approved; build it in parallel.
+3. **YOLO round 2** for this map: go. "If it is not accurate, you may train YOLO on the monsters."
+4. **A new Orc Lord flee proof:** test again.
+5. The Kafra trip comes later: "first, more items per hour".
+
+**Batt's human demo** (09:51:01-10:05:59, 14.95 min, `20261026T095021-demo-human-demo-gef10`;
+frames 5 Hz on the NAS; judged by `dungeon_judge.py row --live 898` plus the packets):
+
+| measure | Batt | the bot, all 11 runs (6.18 h) |
+|---|---|---|
+| kills / h | **232.7** (58: Orc Lady 38, Orc Warrior 18, Poporing 2) | 42.6 (best run 60.5) |
+| items / h | **329** (82: Cyfar 47, Orcish Voucher 31, Iron 4) | 46 |
+| value / h at OC | **52,780 z** | 14,111 z |
+| floor loot picked / dropped | **97.8 %** (44 / 45; 44 pickup clicks, all OK) | ~87 % |
+| Snatcher procs / h | 152 (38: each <= 1 s after his own hit; SP never moved) | 17 |
+| deaths / potions / wings | 0 / 1 / 0 (HP low 9 % once) | 2 deaths in 6.18 h |
+
+- **His play:**
+  - One clockwise loop along the map's ring from the Kafra: 1,894 cells in 14.1 min (134 cells
+    / min), 28 walk clicks / min.
+  - 62 attack clicks for 58 kills: one click, then auto-attack.
+  - A kill every ~15 s (median 14.8 s). From the first hit to the death: median 5.3 s.
+  - **No rest in the field.** At 14.1 min he entered in_orcs01 (the orc house) and sat with
+    `/sit`: "I rest on this map because it is safer".
+  - His only UI change: one chat-window drag (09:51:04), reversed by the parent at 10:26 from his
+    own input log.
+- **THE BAR (Batt: "at minimum equal, or better"):** the bot's pooled runs reach >= 232.7
+  kills / h AND >= 329 items / h, with floor loot >= 97.8 % and no death from a bug. Each version
+  is judged against it, on at least two pooled runs.
+- The judge's Snatcher rule keys on the runner's events, so for a human demo it files Snatcher
+  gains as "other". Fixed next (packets: a gain <= 1 s after our own hit act).
+
+**The work, in parallel:**
+- (a) dungeon@8.3, the restock fix;
+- (b) the demo's time budget vs the bot's (walk / fight / loot / rest / search), ranked by time
+  lost, to design dungeon@9 on his loop;
+- (c) YOLO round 2: the notice rule in C1, a NEW TEST (a9-a11, never read), T1, then the cache and
+  training, plus the detector's recall on his demo frames;
+- (d) the flee proof's new pre-registration.
