@@ -67,4 +67,4 @@ def test_staging_refuses_while_the_thief_holds_a_target_item() -> None:
     assert si.held_refusal([(907, 190), (504, 9), (604, 0)]) is None
     why = si.held_refusal([(604, 4), (757, 2), (907, 190)])
     assert why is not None and "{604: 4, 757: 2}" in why and "whole stacks" in why
-    assert si.VERSION == "stage@4"  # @3 added this refusal; @4: the Rogue + watch --spawn
+    assert si.VERSION == "stage@5"  # @3: this refusal; @4: the Rogue + watch --spawn; @5: per map
