@@ -709,8 +709,9 @@ def test_c1_rule_refusals() -> None:
 def test_round2_test2_is_refused_like_test_and_round1_test_is_unchanged() -> None:
     spec = ml.GEF10
     for sid in ("20261026T044312-rdp-rogue-a9", "20261026T052148-rdp-rogue-a10",
-                "20261026T055949-rdp-rogue-a11"):  # fmt: skip
+                "20261026T055949-rdp-rogue-a11", "20261026T120000-rdp-w3"):  # fmt: skip
         assert spec.is_test(sid, None) and not spec.is_round1_test(sid, None)
+    assert not spec.is_test("20261026T014529-rdp-w2", None)  # w2 stays TRAIN
     for sid in ("20261025T213953-rdp-rogue-a1", "20261026T002500-rdp-rogue-a6"):
         assert not spec.is_test(sid, None)  # a1 is not a11's prefix match, a6 stays TRAIN-able
     assert spec.is_round1_test("20261026T010738-rdp-rogue-a7", None)

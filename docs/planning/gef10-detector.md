@@ -961,3 +961,68 @@ methodology choices are the parent's, made on the FIT results above and nothing 
   - T2 again for the changed rule, two new labellers.
 - **The live hunting detector is unchanged** (v1 on the CPU). The scored A/B block does not use a
   detector of this map.
+
+### 13s. PRE-REGISTERED: ROUND 2 (the parent, 2026-10-26 11:07 ICT from `date`; BEFORE TEST2 is read and BEFORE w3 is recorded)
+
+**R2-0. The basis:**
+- Batt ~09:4x (rogue-gef10.md Amendment L, decision 3): "YOLO round 2: go; if it is not
+  accurate, you may train YOLO on the monsters". His play is the minimum bar.
+- **The live detector (v1) is not accurate on gef_fild10**
+  ([gef10-round2.md](gef10-round2.md), on Batt's demo, packet truth):
+  - recall 8.0 %: Orc Lady 1.4 %, Orc Warrior 8.8 %, Poporing 52.5 %;
+  - at 0-5 cells, 2.4 %;
+  - precision 18.7 %: 77.7 % of its boxes sit on scenery;
+  - in 64 % of the frames with a monster in view, it drew no monster box at all.
+
+**R2-1. Unchanged and frozen:**
+- the label rule gef10-o3h-e and `params.json` (sha256 `00ef6383...b0aac1`);
+- FIT (watch cells 0-10, pilot, pilot2) and TRAIN (a2, a4, w2), their label files;
+- T2's seed-31 pack and its PASS (13q);
+- the class list (26 classes, sha256 `66de5684...a7ff747c2`).
+- No other session joins TRAIN before the cache.
+
+**R2-2. Changed: C1 only.**
+- `map_labels.py check --c1-rule round2`, at commit 8261acf.
+- Round 1's C1, plus the pickup-notice exclusion: a predicted box overlapping a notice that
+  `gef10_r2_measure.find_notices` finds (any area) is excluded as `notice`.
+- The notice detector is validated at 587 / 595 positives and 0 / 8,156 false.
+- On FIT / TRAIN the rule excludes 0 of 527 rows (C1 8 / 527 before and after), and round 1
+  reproduces byte for byte.
+
+**R2-3. TEST2** (whole sessions; never read before this commit, the parent attests; refused by
+name by `labels` / `pack` / the cache):
+- a9 `20261026T044312-rdp-rogue-a9`, a10 `20261026T052148-rdp-rogue-a10`, a11
+  `20261026T055949-rdp-rogue-a11`;
+- **w3**: an IMMUNE lattice watch on gef_fild10 recorded AFTER this commit, as w2 was.
+  - `gef10-ow/w2.sh w3 41 33`: seed 41, 30-s dwells, @warp only, no spawn, no
+    `@killmonster2`, 33 min, a 1-fps recorder.
+  - Its name (`-rdp-w3`) is refused from this commit on.
+  - It is added because hunting runs give 22-67 scored rows each. At ~60 rows, a rule as good as
+    TRAIN's fails T1 about 8 % of the time (gef10-round2.md, the brittleness note). w2 gave 271.
+- A session that fails `check_recording` is dropped and reported, never replaced.
+
+**R2-4. T1 on TEST2, read ONCE, under round2:**
+- C1 pooled over the gef_fild10 species <= 0.050, unrounded (the bar unchanged);
+- **a verdict needs >= 100 scored rows** (fewer: NO VERDICT, not a fail);
+- C2 unchanged: a FAIL is a STOP;
+- reported: C1 per species and per session, the exclusions including `notice`, and the C1 per
+  SIGHTING beside the row C1 (not gating).
+
+**R2-5. T2 is NOT re-run.** The notice rule lives in `check` only. `labels`, the label files and
+`pack` do not use it, so the seed-31 pack is unchanged by construction: 0 of 2,413 kept TRAIN
+labels overlap a notice.
+
+**R2-6. If T1 passes with no C2 STOP:** the cache and training exactly as recorded:
+- `build_frame_cache.py --labels map` on the TRAIN label files, linked to
+  `v2orc-payf07-20261024`; a dry run first (the 02:5x dry run: 2,232 gef10 frames);
+- YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1;
+- init from payf07's epoch-1 `last.pt`;
+- hsv_s 0.2, scale 0.1, 10 epochs, close_mosaic 3;
+- WORKER=1, MID_CKPT=1, R1-R3, the IO guard, the 25 % VRAM cap;
+- outside 09:30-10:15 and 14:00-14:45 on weekdays.
+
+**R2-7. The evaluation:** gef10-eval.md's method on TEST2, with seed 35 (its amendment, same
+commit).
+
+**R2-8. If T1 fails or gives NO VERDICT,** nothing trains; it is reported, never re-run under
+the same bars, and Batt decides.

@@ -199,9 +199,10 @@ GEF10 = MapSpec(
     tmp=G10,
     plan="docs/planning/gef10-detector.md",
     layouts={GEF10_WATCH: "rows4"},  # Amendment A (2026-10-25 21:10:53): the watch's 4-row layout
-    # ROUND 2 (gef10-round2.md, DRAFT; Batt 2026-10-26 ~09:4x "do round 2 now"): TEST2 = a9, a10,
-    # a11, recorded after T1 and never read; refused from now like TEST
-    test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11"),
+    # ROUND 2 (gef10-detector.md 13s; Batt 2026-10-26 ~09:4x "do round 2 now"): TEST2 = a9, a10,
+    # a11 (recorded after round 1's T1, never read) + w3, an immune lattice watch recorded AFTER
+    # 13s's commit (its name is refused before it exists); all refused like TEST
+    test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11", "-rdp-w3"),
 )  # fmt: skip
 MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 

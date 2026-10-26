@@ -132,3 +132,16 @@ T1 failed at 03:16 (C1 5 / 61 = 8.2 % on TEST, bar 5 %; [gef10-detector.md 13r](
 By that plan's section 9, nothing of gef_fild10 trains this round. No cache was built and no model
 exists, so nothing above is scored. TEST (watch cells 11-14, a7, a8) has now been read by T1 and a
 look at its bad labels. A later round needs a NEW TEST and its own pre-registration.
+
+## AMENDMENT R2 (2026-10-26 11:07 ICT from `date`, BEFORE TEST2 is read and BEFORE any round-2 model exists): round 2 (gef10-detector.md 13s)
+
+- **TEST becomes TEST2:** a9, a10, a11 and the immune watch w3, recorded after 13s's commit.
+  Round 1's TEST is spent and is not used.
+- **The evaluation pack's seed is 35** (33 is this document's round-1 seed, never drawn). The
+  draw, the strata, the instructions (sha256 `247b7919...`), the two NEW blind labellers, Q1 / E1
+  / G1 / G2 and their bars, the position metric, conf 0.25 and the scored checkpoint are
+  unchanged.
+- `labels` refuses TEST2 by name. The step that makes TEST2's evaluation labels (after
+  training) passes TEST2 explicitly, and its command is recorded in this document then.
+- **Reported, deciding nothing:** the new model on Batt's demo (`detector_vs_packets.py`), beside
+  v1's numbers (gef10-round2.md: recall 8.0 %, precision 18.7 %).
