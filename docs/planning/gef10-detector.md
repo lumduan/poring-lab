@@ -1092,7 +1092,7 @@ the same bars, and Batt decides.
   also cut short by quant-postgres IO spikes during SET hours today (b1 at 9 min, w3 at 5 min).
 - Training (13u) waits for the cache.
 
-### 13w. The 20:05 retry REFUSED before any work; it resumes after c11 (2026-10-26 20:07 ICT from `date`)
+### 13w. The 20:05 retry REFUSED before any work; it resumes after c11 (2026-10-26 20:06 ICT from `date`)
 
 - **[20:05:09] `cache: FAILED rc=1`.** The guard saw 0.0 % capture stall and 0 s above 10 %.
   - The cause: `/mnt/poring-lab-datasets/.framecache/v2orc-payf07-gef10-20261026 exists: pick
