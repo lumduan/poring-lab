@@ -348,8 +348,8 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.3"  # .1 position-unread fly, .2 no stand toggle on a hit,
-    # .3 the stock read from the hotbar
+    assert dh.VERSION == "dungeon@8.4"  # .1 position-unread fly, .2 no stand toggle on a hit,
+    # .3 the stock read from the hotbar, .4 the stock guard in the run
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -605,3 +605,18 @@ def test_p2_flies_on_a_swarm_drain_below_half() -> None:
         st.hist.extend(hist[:-1])
         got = dh.sustain(st, 3.0, 0.43, 1.0, {**dh.STRATEGIES[name], "max_hp": 2146})
         assert (got[:1] == [("fly", got[0][1])] if got else False) is flies, (name, got)
+
+
+def test_a_stock_at_zero_ends_the_run_but_an_unread_count_never_does() -> None:
+    """dungeon@8.4 (Amendment Y: c7 used its 10th Fly Wing at 28.5 min and hunted on with no
+    escape): the hotbar count re-read after a press; 0 ends the run, None is retried."""
+    assert dh.stock_out({504: 12, 601: 0}) == 601
+    assert dh.stock_out({504: 0}) == 504
+    assert dh.stock_out({504: 3, 601: None}) is None
+    assert dh.stock_out({}) is None
+    assert dh.STRATEGIES["P2"]["wings_to"] == 20 and dh.STRATEGIES["P2"]["potions_to"] == 30
+    src = (Path(dh.__file__)).read_text()
+    assert "stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S" in src
+    assert 'reason = f"stock_out: item {out_item} reads 0 on the hotbar"' in src
+    assert 'w_to = int(strat.get("wings_to") or conf["wings_to"])' in src
+    assert dh.VERSION == "dungeon@8.4"

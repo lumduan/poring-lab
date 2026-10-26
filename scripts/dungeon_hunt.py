@@ -139,13 +139,15 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.3"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.4"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
 # (Batt 2026-10-25, docs/planning/rogue-gef10.md); @8.1 = a Fly Wing after 20 s without a position;
 # @8.2 = no stand toggle after a hit; @8.3 = the stock read from the HOTBAR (Amendment M: a stale DB
-# save left 4.05 a10 with 0 Fly Wings)
+# save left 4.05 a10 with 0 Fly Wings); @8.4 = the stock guard in the run (Amendment Y: c7 used its
+# 10th Fly Wing at 28.5 min and hunted 7.5 min with no escape): the hotbar count is re-read after
+# every potion / Fly Wing press, and a count of 0 ends the run ("stock_out")
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -165,8 +167,9 @@ STRATEGIES: dict[str, dict[str, Any]] = {
     # Amendment U (c5 under P died at 4.5 min to a SWARM: 8 orcs, ~200-250 HP/s, 3 potions eaten
     # within a second each, the last 37 % -> 0 in 0.8 s): P + the swarm escape -- a Fly Wing when
     # HP < 50 % AND dropping >= 150 HP/s over 2 s (c5 would have flown at ~43 %, 5 s before)
+    # Amendment Y: 20 Fly Wings (c7 used 10 in 28.5 min, 16.7 / h; was the char's 10)
     "P2": {"potion_below": 0.40, "fly_below": 0.20, "fly_rate": 150.0, "fly_rate_below": 0.50,
-           "rest_below": None, "heal_below": None, "potions_to": 30},
+           "rest_below": None, "heal_below": None, "potions_to": 30, "wings_to": 20},
     # dungeon@4 (Batt 2026-10-22: decision 1 + 1b, and his demo's Heal rhythm)
     "H": {"potion_below": 0.30, "fly_below": 0.20, "fly_rate": 200.0, "fly_rate_below": 0.40,
           "rest_below": 0.80, "rest_sp_below": 0.30, "rest_until_sp": 0.40,
@@ -185,6 +188,8 @@ SELF_PX = (640, 330)  # the drawn character's body (client px): Heal's target cl
 FOOT_PX = (641, 362)  # the camera's projection of our own cell
 BODY_UP = 26  # a monster's body above its cell's projected point (px): the hover point
 FIGHT_TAKEN_S = 2.5  # a hit on us within this long = in a fight
+STOCK_READ_S = 1.0  # dungeon@8.4: the hotbar count is re-read this long after a potion / wing
+STOCK_TRIES = 5  # an unreadable re-read (the teleport's dark frames) is retried, 1 s apart
 MISS_CUE_RULE = "9.1b"  # --miss-cue: only a Miss read AFTER the last fight's end starts a fight
 HP_DROP_PTS, HP_DROP_S = 2, 1.5  # the HP percent falling this much this fast = a hit unseen
 LOCK_NO_HIT_S = 3.5  # locked, but none of OUR hits in the log for this long -> scan again
@@ -636,6 +641,15 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
     for i in range(min(ahead, len(path) - 1), 0, -1):
         if fits(path[i]):
             return i, path[i]
+    return None
+
+
+def stock_out(counts: Mapping[int, int | None]) -> int | None:
+    """PURE (dungeon@8.4): the first item whose hotbar count reads 0, else None. An unreadable
+    count (None) is never 0: the run goes on and the re-read is retried."""
+    for item, n in counts.items():
+        if n == 0:
+            return item
     return None
 
 
@@ -1162,7 +1176,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "AND nameid IN (504, 601);")}  # fmt: skip
         setup = ["@heal"]
         p_to = int(strat.get("potions_to") or conf["potions_to"] or POTIONS_TO)
-        w_to = int(conf["wings_to"])
+        w_to = int(strat.get("wings_to") or conf["wings_to"])
         if inv.get(504, 0) < p_to:
             setup.append(f"@item 504 {p_to - inv.get(504, 0)}")
         if inv.get(601, 0) < w_to:
@@ -1203,6 +1217,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     time.sleep(0.5)
 
         stock: dict[str, Any] | None = None
+        stock_watch: tuple[Any, dict[int, int]] | None = None  # 8.4: (templates, item -> slot)
+        stock_due: dict[int, float] = {}  # 8.4: item -> when its count is re-read
+        stock_tries: dict[int, int] = {}
         true_potions = inv.get(504, 0)
         if conf.get("hotbar_stock"):
             # dungeon@8.3 (Amendment M): the DB lines above are a first guess only; the hotbar's
@@ -1240,6 +1257,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 raise r.Stop(f"dungeon@8.3: the stock is short after the top-up {stock}")
             true_potions = int(after[504] or 0)
             setup = []  # the stand lines are typed; the map lines follow
+            stock_watch = (tpl, slots)
         # Amendment I: the potions over the strategy's stock are DRUNK at the stand (its hotkey,
         # paced; outside the measured window): carried weight is loot room before 50 %
         drunk = 0
@@ -1340,6 +1358,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
+            if stock_watch is not None and what in STOCK_ITEMS:  # dungeon@8.4
+                stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S
+                stock_tries[STOCK_ITEMS[what]] = 0
 
         def click_at(u: float, v: float, why: str) -> None:
             """Every world click of this runner: FrameGuard refuses one off the game frame."""
@@ -2086,6 +2107,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 img = frame()
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
+                if stock_watch is not None and stock_due:  # dungeon@8.4: the stock after a press
+                    out_item = None
+                    for item_ in [i for i, t_ in stock_due.items() if tick >= t_]:
+                        n_ = hb.read_count(hb.gray(img), stock_watch[1][item_], stock_watch[0])
+                        stock_tries[item_] = stock_tries.get(item_, 0) + 1
+                        if n_ is None and stock_tries[item_] < STOCK_TRIES:
+                            stock_due[item_] = tick + STOCK_READ_S  # the teleport's dark frames
+                            continue
+                        del stock_due[item_]
+                        ev({"kind": "stock", "item": item_, "count": n_,
+                            "tries": stock_tries[item_]})  # fmt: skip
+                        if out_item is None and stock_out({item_: n_}) is not None:
+                            out_item = item_
+                    if out_item is not None:  # no escape (or no potion) left: end, warp home
+                        reason = f"stock_out: item {out_item} reads 0 on the hotbar"
+                        break
                 if miss_tpl is not None and not sitting and mode != "after":  # dungeon@9.1:
                     # a missed swing AT us (drawn above the attacker, beside us); 9.1b: not read
                     # on the tick after a fight's end, so a Miss still drawn goes to the loot step
