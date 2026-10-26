@@ -705,7 +705,20 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["miss_cue_rule"] = MISS_CUE_RULE
     if getattr(a, "rest", "spot") != "spot":
         out["rest"] = a.rest
+    if getattr(a, "walk_ahead", WALK_AHEAD) != WALK_AHEAD:  # the long legs (idle study 6.1)
+        out["walk_ahead"] = a.walk_ahead
+    if getattr(a, "walk_through", False):
+        out["walk_through"] = True
     return out
+
+
+def through_path(leg: Sequence[Cell], leg2: Sequence[Cell] | None) -> list[Cell]:
+    """PURE (--walk-through, gef10-idle-study.md 6.1): the leg to waypoint i continued along the
+    route to waypoint i + 1, so a walk click is not capped at waypoint i (52-56 % of c5b-c7's
+    clicks were: the Rogue stood ~0.4 s at nearly every click)."""
+    if not leg2 or len(leg2) < 2 or not leg or leg[-1] != leg2[0]:
+        return list(leg)
+    return [*leg, *leg2[1:]]
 
 
 def house_trip_why(frac: float | None, choice: tuple[Any, Cell, int] | None) -> str | None:
@@ -1433,7 +1446,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return a_[max(0, int(v) - ARROW_UP): max(0, int(v) - 10),
                       max(0, int(u) - 50): max(0, int(u) + 50), :3]  # fmt: skip
 
-        wp_st: dict[str, Any] = {"i": None, "last": None, "resume": False, "laps": 0, "fly": -1e9}
+        wp_st: dict[str, Any] = {"i": None, "last": None, "resume": False, "laps": 0, "fly": -1e9,
+                                 "through": None}  # --walk-through's waypoint  # fmt: skip
 
         def patrol_goal(h: Cell) -> Cell:
             """--search patrol: the waypoint to walk to (joins the loop at the nearest waypoint
@@ -1462,6 +1476,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def skip_waypoint(h: Cell) -> None:
             ev({"kind": "patrol", "event": "skip", "i": wp_st["i"], "at": list(h)})
             wp_st["last"], wp_st["i"] = wp_st["i"], mroutes.next_index(rt, wp_st["i"])
+
+        def pass_waypoint(h: Cell) -> None:
+            """--walk-through: the leg's waypoint is no longer ahead on the path (walked past, or
+            the re-route from our cell no longer goes through it): the next one is the goal."""
+            wp_st["last"], wp_st["i"] = wp_st["i"], mroutes.next_index(rt, wp_st["i"])
+            if wp_st["i"] == 0:
+                wp_st["laps"] += 1
+            wp_st["through"] = None
+            ev({"kind": "patrol", "event": "reached", "i": wp_st["last"], "next": wp_st["i"],
+                "laps": wp_st["laps"], "passed": True, "at": list(h)})  # fmt: skip
 
         plant_last: dict[int, float] = {}
 
@@ -2629,6 +2653,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     goal_path = None if goal is None else route(okr, carved, here, goal)
                     if patrol and goal is not None and goal_path is None:
                         skip_waypoint(here)  # carved off: the next waypoint ahead
+                    wp_st["through"] = None
+                    ni_ = None if not patrol else mroutes.next_index(rt, wp_st["i"])
+                    if a.walk_through and ni_ is not None and goal is not None and goal_path:
+                        ext_ = through_path(goal_path, route(okr, carved, goal, wps[ni_]))
+                        if len(ext_) > len(goal_path):  # a path's last waypoint: no extension
+                            goal_path, wp_st["through"] = ext_, goal
                     ev({"kind": "goal", "to": None if goal is None else list(goal),
                         "len": None if goal_path is None else len(goal_path),
                         "turn": walk_st.get("turn"),
@@ -2641,13 +2671,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         goal_path = goal_path[goal_path.index(here) :]
                     else:
                         goal_path = route(okr, carved, here, goal_path[-1])
+                    if wp_st["through"] is not None and (
+                            not goal_path or wp_st["through"] not in goal_path):  # fmt: skip
+                        pass_waypoint(here)  # --walk-through: its waypoint is behind us now
                     if goal_path and len(goal_path) >= 2:
 
                         def fits(c: Cell, h: Cell = here) -> bool:
                             u_, v_ = project(h, [(c[0] - h[0], c[1] - h[1])])[0]
                             return in_view(u_, v_) and mz.segment_violates(h, c, zones) is None
 
-                        wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else WALK_AHEAD, fits)
+                        wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)
                         if wt_ is not None:
                             _i, c = wt_
                             rel = (c[0] - here[0], c[1] - here[1])
@@ -2920,6 +2953,20 @@ def main() -> int:
         help="dungeon@8 (rogue-gef10.md Amendment A4): the setup types @killmonster2 "
         "after the warp to the map, so its MVP (gef_fild10's Orc Lord, 2 h "
         "respawn) is absent until the flee rule is proven; everything respawns",
+    )
+    t.add_argument(
+        "--walk-ahead",
+        type=int,
+        default=WALK_AHEAD,
+        help="the walk click's target, this many path cells ahead (default 7; the long legs of "
+        "gef10-idle-study.md 6.1 use more, so the next click lands before the walk ends)",
+    )
+    t.add_argument(
+        "--walk-through",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="--search patrol: continue a leg along the route to the NEXT waypoint, so the click "
+        "is not capped at the current one (gef10-idle-study.md 6.1; OFF by default)",
     )
     t.add_argument(
         "--walk-trust",

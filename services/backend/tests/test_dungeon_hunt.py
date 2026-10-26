@@ -659,3 +659,23 @@ def test_the_rogue_is_held_at_base_63() -> None:
     assert dh.CHARS_CONF["rogue"]["level_hold"] == 63 and dh.CHARS_CONF["rogue"]["max_hp"] == 2209
     src = (Path(dh.__file__)).read_text()
     assert 'setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]' in src
+
+
+def test_long_legs_continue_through_the_next_waypoint_and_stay_off_by_default() -> None:
+    """gef10-idle-study.md 6.1: 52-56 % of the walk clicks were capped at the waypoint and the
+    Rogue stood ~0.4 s at nearly every click. --walk-through continues the leg to waypoint i + 1
+    (its waypoint marked passed once it is behind us); --walk-ahead sets the click distance."""
+    leg, leg2 = [(0, 0), (1, 0), (2, 0)], [(2, 0), (3, 1), (4, 2)]
+    assert dh.through_path(leg, leg2) == [(0, 0), (1, 0), (2, 0), (3, 1), (4, 2)]
+    assert dh.through_path(leg, None) == leg and dh.through_path(leg, [(2, 0)]) == leg
+    assert dh.through_path(leg, [(9, 9), (3, 1)]) == leg  # not joined at the waypoint
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True}  # fmt: skip
+    off = dh.fixes_of(dh.argparse.Namespace(**base, walk_ahead=dh.WALK_AHEAD, walk_through=False))
+    assert "walk_ahead" not in off and "walk_through" not in off  # old records unchanged
+    on = dh.fixes_of(dh.argparse.Namespace(**base, walk_ahead=12, walk_through=True))
+    assert on["walk_ahead"] == 12 and on["walk_through"] is True
+    src = (Path(dh.__file__)).read_text()
+    assert "walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)" in src
+    assert "pass_waypoint(here)  # --walk-through: its waypoint is behind us now" in src
+    assert dh.WALK_AHEAD == 7
