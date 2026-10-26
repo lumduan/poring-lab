@@ -1026,3 +1026,32 @@ commit).
 
 **R2-8. If T1 fails or gives NO VERDICT,** nothing trains; it is reported, never re-run under
 the same bars, and Batt decides.
+
+### 13t. RESULT: round 2's T1 PASSES on TEST2 -- C1 3 / 159 = 1.9 % (bar 5 %, >= 100 rows), no C2 STOP (checked 2026-10-26 12:06:45 ICT; recorded 12:08)
+
+- **The run:** `map_labels.py check --map gef_fild10 --c1-rule round2` on a9, a10, a11 (NAS) and
+  w3 (`20261026T112924-rdp-w3`, in /dev/shm until 17:00), the FROZEN params (sha256
+  `00ef6383...b0aac1`, verified), commit 6a218c7. The first and only read of TEST2;
+  `t1r2/check.json` and `rows.json`.
+- **w3:** the watch ran its 33 min (11:29:26-12:02:52, 200 planned cells). Its recorder stopped
+  after 280 frames on the IO guard (quant-postgres 31.4 % at SET hours). It passed
+  `check_recording` and stayed in TEST2 as registered (never replaced).
+
+| TEST2 part | frames | scored | bad | C1 |
+|---|---|---|---|---|
+| a9 | 2,106 | 35 | 2 | 5.7 % |
+| a10 | 1,301 | 62 | 1 | 1.6 % |
+| a11 | 1,835 | 12 | 0 | 0 % |
+| w3 | 280 | 50 | 0 | 0 % |
+| **pooled** | | **159** | **3** | **1.9 %: PASS** |
+
+- **Per species:** Orc Lady 3 / 95, Poporing 0 / 48, Orc Warrior 0 / 16.
+- **C2:** Orc Lady PASS (median |dx|, |dy| 1, 1), Poporing PASS (0.5, 1), Orc Warrior NO_VERDICT
+  (16 < 20). No STOP.
+- **The notice rule:** 16 frames had a notice, and it excluded 0 scored rows.
+- **Reported, not gating:** C1 per SIGHTING 2 / 31 = 6.5 %. The 3 bad rows are two Orc Lady
+  sightings: a9 gid 110023774 (two frames) and a10 gid 110023727.
+- **Next (R2-6):** the cache with the dry-run arguments of 02:5x. That dry run returned rc 0 with
+  2,232 gef_fild10 frames; the nested link `v2orc-payf07-20261024` resolves (20 sessions, 22,546
+  frames, 31 shards); combined TRAIN 19,025 frames; no 3c refusal. It is built through
+  `guarded_build.py cache@6300=`, capped to end before 14:00. Then the training as recorded.
