@@ -1079,3 +1079,15 @@ the same bars, and Batt decides.
 - **Time:** ~(16,793 + 2,232) x 0.193 s ~ 1.0 h of training per epoch, about 10 h of running,
   but the duty cycle slows it under Frigate's load. payf07's single epoch took about 10 h of
   wall time.
+
+### 13v. The cache build ABORTED on the IO guard (2026-10-26 12:16 ICT; recorded 12:16)
+
+- `guarded_build.py cache@6300=`, the 13t arguments, started 12:10. The ow1 label file was
+  copied to a name the guard's argument check accepts (`...-rdp-ow1-spots0-10.json`); its sha256
+  is unchanged (`30030cc7...`).
+- **[12:16:00] ABORT cache: frigate full IO stall 35.6 % (spike above 25 %).** STOP VERIFIED
+  after 1 s: nothing of ours is left on the host or the GPU. No cache was written to completion.
+- **The standing rule (memory, 2026-10-02):** after ONE abort, stop and ask. **Not retried.**
+  Batt is asked whether to retry once after the SET session closes (17:05). Two recorders were
+  also cut short by quant-postgres IO spikes during SET hours today (b1 at 9 min, w3 at 5 min).
+- Training (13u) waits for the cache.
