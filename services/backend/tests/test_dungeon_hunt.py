@@ -558,3 +558,16 @@ def test_the_npc_guard_refuses_fight_clicks_near_an_npc_only() -> None:
     assert not dh.npc_guard_blocks(None, npcs, "strike")
     assert not dh.npc_guard_blocks((68, 337), [], "strike")
     assert {"strike", "strike_burst", "steal", "loot"} == dh.NPC_GUARDED
+
+
+def test_the_miss_cue_starts_a_fight_like_a_hit_but_never_while_sitting() -> None:
+    """dungeon@9.1 (docs/planning/gef10-miss-cue.md): the Miss drawn at our attacker is read in
+    the HP loop (not while sitting: no stand toggle on a miss, 8.2) and a swing within
+    FIGHT_TAKEN_S starts a fight; OFF by default and recorded in the run's fixes."""
+    src = (Path(dh.__file__)).read_text()
+    assert "if miss_tpl is not None and not sitting:" in src
+    assert "(hit_now or dropped or swing_now or near_ is not None)" in src
+    assert '"by": "miss_cue"' in src
+    a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                              rest="spot", npc_guard=False, miss_cue=True)  # fmt: skip
+    assert dh.fixes_of(a)["miss_cue"] is True

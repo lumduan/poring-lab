@@ -632,7 +632,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     default, so a default run's record is the one it was before --rest existed."""
     out: dict[str, Any] = {"plant_sweep": a.plant_sweep, "box_ignore": a.box_ignore,
                            "ag_match": a.ag_match, "walk_trust": a.walk_trust,
-                           "npc_guard": getattr(a, "npc_guard", False)}  # fmt: skip
+                           "npc_guard": getattr(a, "npc_guard", False),
+                           "miss_cue": getattr(a, "miss_cue", False)}  # fmt: skip
     if getattr(a, "rest", "spot") != "spot":
         out["rest"] = a.rest
     return out
@@ -1046,6 +1047,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
     trust_npcs = trust_npcs_for(map_) if a.walk_trust else []  # --walk-trust (off by default)
     guard_npcs = trust_npcs_for(map_) if a.npc_guard else []  # --npc-guard (off by default)
+    import miss_cue as mcue
+
+    miss_tpl = None
+    if a.miss_cue:  # dungeon@9.1 (docs/planning/gef10-miss-cue.md): the template, or no run
+        try:
+            miss_tpl = mcue.load_template()
+        except OSError as e:
+            raise SystemExit(f"dungeon@9.1 refused: no Miss-cue template ({e})") from None
     spots = rest_spots_for(map_)  # dungeon@6: per map (orcsdun01's required, as before)
     for s_ in spots:
         if not okr[s_[1], s_[0]]:
@@ -1267,6 +1276,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_pos_t = time.monotonic()
         seen_lines = 0
         last_taken = -1e9
+        last_swing = -1e9  # dungeon@9.1 (--miss-cue): the last Miss read at our attacker
         last_ours = -1e9
         kills_seen: list[float] = []
         mode = "search"
@@ -2049,9 +2059,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     loot_list, fight_ref = [], None
                     mode = "search"
                     here, last_taken = None, -1e9  # Amendment F: a new spot, the old hits gone
+                    last_swing = -1e9
                 img = frame()
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
+                if miss_tpl is not None and not sitting:  # dungeon@9.1: a missed swing AT us
+                    mc_ = mcue.read(img, miss_tpl)  # (drawn above the attacker, beside us)
+                    if mc_.score >= mcue.THRESHOLD:
+                        if tick - last_swing > 1.0:  # one record per swing, not per frame
+                            ev({"kind": "miss_cue", "score": round(mc_.score, 3), "x": mc_.x,
+                                "y": mc_.y})  # fmt: skip
+                        last_swing = tick
                 n_reads += 1
                 dark = sv.dark_screen(img)
                 ag_on = (sv.ag_present(img, ag_t, ag_m, a.ag_match)
@@ -2180,6 +2198,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ag_absent = None
                 # a fight?
                 hit_now = tick - last_taken < FIGHT_TAKEN_S
+                swing_now = tick - last_swing < FIGHT_TAKEN_S  # dungeon@9.1, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
                 if boxes is not None and mode != "fight" and not sitting:  # a box never
@@ -2196,7 +2215,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         return True
 
                     near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)
-                if (hit_now or dropped or near_ is not None) and mode != "fight":
+                if (hit_now or dropped or swing_now or near_ is not None) and mode != "fight":
                     # ONE engage event per fight, by what started it
                     box_fight.clear()
                     if taken_new is not None:
@@ -2206,6 +2225,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         ev({"kind": "engage", "by": "battle_log", "name": None, "late": True})
                     elif dropped:
                         ev({"kind": "engage", "by": "hp_drop", "name": None})
+                    elif swing_now:
+                        ev({"kind": "engage", "by": "miss_cue", "name": None})
                     else:
                         sp_e = (None if near_ is None else
                                 box_spot(here, ((near_[0] + near_[2]) / 2, near_[3])))  # fmt: skip
@@ -2567,6 +2588,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                         stalls_here.clear()
                                         loot_list, fight_ref = [], None
                                         here, last_taken, goal_path = None, -1e9, None
+                                        last_swing = (
+                                            -1e9
+                                        )  # dungeon@9.1: a jump, the old swings gone
                                         time.sleep(1.0)
                                         continue
                                     # monsters that only MISS write no log line: look around
@@ -2799,6 +2823,14 @@ def main() -> int:
         "clicked when walk_trust.trust_why trusts its cell (route grid + the landing cells "
         "beyond it, the zones, >= NPC_MIN cells from every NPC, no fresh box near); SWORD still "
         "engages, NO-ENTRY (or an UNKNOWN with the ring's red) still carves",
+    )
+    t.add_argument(
+        "--miss-cue",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.1 (docs/planning/gef10-miss-cue.md; OFF by default): a monster's missed "
+        "swing at us (the 'Miss' text drawn at the attacker beside us, miss_cue.read) starts a "
+        "fight like a hit does; ignored while sitting (no stand toggle on a miss)",
     )
     t.add_argument(
         "--npc-guard",
