@@ -1553,3 +1553,27 @@ count from packets. The two differ by 0-4 kills a run.
   - The final frame shows Base 63, HP 2209 / 2209, SP 341 / 341, EXP 0, on the prt_fild08 stand.
   - A client "up" icon (unspent status points) now shows at the lower right. The next pre-run
     judges it against the UI gate.
+
+## Amendment AJ (2026-10-28 13:32 ICT from `date`): Batt's decisions of 2026-10-28 ~13:2x -- recorders on RAM use the sustained IO rule; fit-first may share the GPU; /dev/shm cleaned
+
+- **The recorders (Batt: "use the new rule").** `record_session.py` (recorder v6) now picks its IO
+  rule from where it writes.
+  - A tmpfs sink (`--out /dev/shm/poring-lab-rec`, as every hunt run uses) stops only on 30 s of
+    stall above 30 % (`RAM_RULE`). It puts nothing on the disk shared with capture.
+  - Any other sink keeps the tolerant one-spike rule (`DISK_RULE`). The default sink,
+    `/home/batt/poring-lab-rec`, is the root disk.
+  - Each manifest records the rule as `guard_rule`.
+  - Why: 10 of the 11 hunt recorders of 10-26 were cut short by the host's own 1-5 s bursts
+    (gef10-detector.md 13x, 13y).
+  - This unblocks the staged-items session (approved, 68590b9) and round 3's frames.
+  - **Not changed:** `dataset_ship.py`'s guard. A ship reads RAM and writes the NAS, but Batt's
+    decision named the recorders only; the e4 / f3 ships wait for a quiet moment as before.
+- **fit-first (Batt: "top priority now; never touch or stop it; co-running is allowed").** The
+  training may share the GPU with fit-first's VTON worker. The R2 exception and its protections
+  are in gef10-detector.md 13z.
+- **/dev/shm (Batt: "please do it").** The two rm commands of the 10-27 morning report ran at
+  ~13:3x, after a fresh `rsync --dry-run --itemize-changes` comparison found every file identical
+  on the NAS:
+  - the 78 demo sessions (`scratch-archive/2026-10-26|27/demo-sessions/`);
+  - `poring-lab-tmp/shots` (69 files, `scratch-archive/2026-10-27/shots/`), re-created empty.
+  - `.ship.lock` was kept. /dev/shm went from 6.6 G to 5.9 G used.

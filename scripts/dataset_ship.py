@@ -223,7 +223,8 @@ Guard = Any  # guarded_build.Guard: breach() -> (cgroup, pct, rule) | None
 
 
 def load_guard() -> Guard:
-    """The quant IO guard, tolerant rule (the same as record_session.py)."""
+    """The quant IO guard, tolerant rule (record_session.py's DISK_RULE; its RAM_RULE, since
+    2026-10-28, applies to recordings only -- a ship keeps this rule)."""
     spec = importlib.util.spec_from_file_location(
         "guarded_build", ROOT / "scripts" / "guarded_build.py"
     )

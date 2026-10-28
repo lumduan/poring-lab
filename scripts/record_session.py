@@ -30,7 +30,8 @@
   line of anyone but the lab's own accounts replaced by an HMAC pseudonym (CLAUDE.md rule 9; the
   salt lives in data/dataset-pseudonym.salt, gitignored, never in a shard).
 * Safety: the capture-backend lock must say --backend (ADR-0009); the quant IO guard
-  (guarded_build's Guard, tolerant rule) stops the recording on a breach; a hard size cap.
+  (guarded_build's Guard) stops the recording on a breach -- the tolerant rule (DISK_RULE) on a
+  disk sink, sustained stall only (RAM_RULE) on a tmpfs sink (Batt 2026-10-28); a hard size cap.
 * Sink (ADR-0010): the VM's local disk, /home/batt/poring-lab-rec (never ./data: vision mounts it).
   It is a buffer on the disk shared with live capture, so it is capped -- refused at the start, and
   stopped cleanly mid-recording, when the filesystem has < --min-free-gb free or more than
@@ -69,7 +70,9 @@ from poring_dataset.timeline import session_events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
-RECORDER_VERSION = 5  # v5: h264 by default on console; v4: --format h264 + cpu; v3: bus ids (S2)
+# v6: the IO rule follows the sink (RAM: sustained only) + guard_rule; v5: h264 by default on
+# console; v4: --format h264 + cpu; v3: bus ids (S2)
+RECORDER_VERSION = 6
 H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
 H264_MAX_MB = 8192  # the client's size cap
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
@@ -125,14 +128,47 @@ class CpuMeter:
         return out
 
 
-def load_guard() -> Any:
+# The IO rule (Batt 2026-10-28 ~13:2x, gef10-detector.md 13y): a recording written to RAM puts
+# nothing on the disk shared with capture, so it stops only on SUSTAINED stall (above 30 % for
+# 30 s); the host's own 1-5 s bursts tripped the one-spike rule within minutes (10 of 11 hunt
+# recorders on 10-26). A recording on a disk keeps the tolerant rule (above 10 % for 30 s, or
+# above 25 % once).
+DISK_RULE: dict[str, Any] = {"threshold": 10.0, "sustain": 30.0, "spike": 25.0}
+RAM_RULE: dict[str, Any] = {"threshold": 30.0, "sustain": 30.0, "spike": None}
+
+
+def fs_type(path: Path, mounts: str | None = None) -> str:
+    """The filesystem type of the mount holding ``path`` (the longest mount-point prefix in
+    /proc/mounts); "" when none matches. ``path`` need not exist yet."""
+    text = Path("/proc/mounts").read_text() if mounts is None else mounts
+    target = str(path.resolve())
+    best, fstype = "", ""
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) < 3:
+            continue
+        mnt = f[1].replace("\\040", " ")
+        inside = target == mnt or target.startswith(mnt.rstrip("/") + "/")
+        if inside and len(mnt) >= len(best):
+            best, fstype = mnt, f[2]
+    return fstype
+
+
+def guard_rule(out: Path, mounts: str | None = None) -> dict[str, Any]:
+    """RAM_RULE when the recording root is on tmpfs, else DISK_RULE (fail safe: unknown = disk)."""
+    return RAM_RULE if fs_type(out, mounts) == "tmpfs" else DISK_RULE
+
+
+def load_guard(out: Path) -> Any:
     spec = importlib.util.spec_from_file_location(
         "guarded_build", ROOT / "scripts" / "guarded_build.py"
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.Guard(module.cgroup_paths(), 10.0, 10.0, sustain=30.0, spike=25.0)
+    rule = guard_rule(out)
+    return module.Guard(module.cgroup_paths(), rule["threshold"], 10.0, sustain=rule["sustain"],
+                        spike=rule["spike"])  # fmt: skip
 
 
 def parse_size(text: str) -> int:
@@ -228,7 +264,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         return record_h264(a, lock, config, chash, session_id, out, caps, unshipped)
     writer = ShardWriter(out, png_level=a.png_level)
     cpu = CpuMeter()
-    guard = load_guard()
+    guard = load_guard(a.out)
     gx, gy, gw, gh = r.game_region()
     period = 1.0 / a.fps
     screen = r.Screen()
@@ -298,7 +334,8 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "frame_sources": sources, "bytes": writer.bytes,
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
         "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
-        "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
+        "stop_reason": stop_reason, "guard": guard.summary(), "guard_rule": guard.describe(),
+        "packet_events": len(events),
         "packet_anchor": anchor, "pseudonymised": True, "freezes": freezes,
         "sink": {"root": str(a.out), **caps}, "format": "png", "cpu_cores": cpu_cores,
     }  # fmt: skip
@@ -347,7 +384,7 @@ def record_h264(
         raise r.Stop(f"{rec} does not exist (the S2 recording dir; compose.dev.yaml S2_REC_DIR)")
     for stale in rec.glob(f"*{session_id}*"):
         raise r.Stop(f"{stale} already exists")
-    guard = load_guard()
+    guard = load_guard(a.out)
     gx, gy, gw, gh = r.game_region()
     max_mb = a.max_bytes / 1e6
     part = rec / f".{session_id}.h264"
@@ -420,7 +457,8 @@ def record_h264(
         "game_region": [gx, gy, gw, gh], "idr_every_s": a.idr_every, "shards": [],
         "frames": summary.get("frames"), "bytes": size, "t0_mono_ns": t0, "t1_mono_ns": t1,
         "seconds": round(seconds, 1), "mb_per_min": round(size / 1e6 / max(seconds / 60, 1e-9), 1),
-        "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
+        "stop_reason": stop_reason, "guard": guard.summary(), "guard_rule": guard.describe(),
+        "packet_events": len(events),
         "packet_anchor": anchor, "pseudonymised": True,
         "freezes": h264_freezes(out / "stream.idx.csv"), "stream": summary, "check": check,
         "cpu_cores": cpu_cores, "sink": {"root": str(a.out), **caps},
