@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-detector.md, gef10-eval.md, gef10-idle-study.md, gef10-time-budget.md, gef10-miss-cue.md]
-next_action: "2026-10-28: E3 STARTED (rogue-gef10.md Amendment AK: icon set A, then session B; labels offline after). Earlier: E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
+next_action: "2026-10-28: E3 RAN 15:11-15:50 (rogue-gef10.md AK-AK-3): 18 of 22 spots, 112 staged floor items, 9-11 per class (Cyfar 9); stopped by its drop check (icon references carry the new-item glow: fix before any second session); labels wait for E5. Earlier: E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
 ---
 
 # gef_fild10: the bot's eyes and its loot step (plan, 2026-10-26 18:3x ICT)
@@ -85,6 +85,10 @@ next_action: "2026-10-28: E3 STARTED (rogue-gef10.md Amendment AK: icon set A, t
 
 - ➡️ **Run 2026-10-28** (Batt's go ~14:5x): pre-registered in rogue-gef10.md Amendment AK (two
   changes: the store step first, and immunity on / off by the judged toggle instead of a relog).
+- ➡️ **Result 2026-10-28** (rogue-gef10.md AK-3): 18 of 22 spots, 112 staged floor items (9-11 per
+  class; Cyfar 9, one short of the >= 10 target). The run stopped itself at spot 18 (two correct
+  items read 3.07 / 3.29 against the 3.0 icon bar: the references carry the new-item glow). A
+  Poporing may still carry <= 4 staged items (the extra kill was unobservable from one spot).
 
 
 - `scripts/stage_items.py` (built for pay_fild07). Here it uses the gef_fild10 drop set:

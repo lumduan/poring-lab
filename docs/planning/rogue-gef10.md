@@ -1672,3 +1672,55 @@ verdict; staged items are never income.
   check that the falls lived 60 s. An early vanish again -> one more `@killmonster2` >= 60 s
   later, at most two in all; then back to the stand, immunity OFF (judged), and report. The first
   extra kill's ICT time is recorded; the Orc Lord's D stays 15:49:15 unless a respawned Lord dies.
+
+### AK-3 (16:09 ICT from `date`): E3 result -- 18 of 22 spots, 112 staged floor items (9-11 per class); the extra kill unobservable; state restored
+
+**Yield** (`loot_truth.py` on the session's packets; staged falls before the first end kill):
+
+| class | falls | class | falls | class | falls |
+|---|---|---|---|---|---|
+| Axe | 10 | Iron | 10 | Orcish Voucher | 10 |
+| Cyfar | **9** | Large Jellopy | 10 | Rough Oridecon | 10 |
+| Garlet | 11 | Milk | 11 | Sticky Mucus | 10 |
+| Green Herb | 10 | Nursing Bottle | 11 | total | 112 |
+
+- The plan's target was >= 10 floor items per class: 10 of 11 classes meet it; Cyfar has 9.
+- Fates of the 112: 64 lived ~60 s in sight; 32 had no vanish seen (we warped on first); 16
+  vanished before 60 s (looted): spot 14 all six at 20.0-43.8 s, spot 15 all six at 0.8-4.2 s,
+  spot 18 four at 24.1-39.9 s.
+- The end pair: spot 18's four were looted AFTER the first kill (a Poporing respawns 5 s after
+  it), fell at the second kill and vanished again 7.1-8.9 s later.
+- **The extra `@killmonster2` (AK-2) at 16:00:20 ICT** from (89,121), immune, with a 3-min
+  recorder (`20261028T160008-rdp-stage-gef10-e3x`, 173 frames): no monster died in sight and no
+  item fell in sight. Whether it reached the carrier is NOT observable from one spot (sight
+  ~14 cells). **Residual:** a Poporing on gef_fild10 may still carry <= 4 staged items (Garlet,
+  Nursing Bottle, Milk, Green Herb). Each hunt cycle's setup `@killmonster2` (A4) makes such a
+  carrier drop them again; `dungeon_judge` cannot flag this set (its staged rule knows
+  pay_fild07's ids only).
+- **Labels are not made today.** `item_labels.py` covers prt_fild08 / orcsdun01 only, and the
+  at-our-feet rule is E5's pre-registration decision (gef10-eyes-loot.md E5). The frames and
+  packets are the input for it.
+
+**Safety, from the sniffer's events in the session's window (`packets.jsonl.gz`, keyed by
+`type`):** `npc_contact` 0, `attack_request` 0, `act` 0; `map_change` 55 = our 55 `@warp`
+targets, in order, all on gef_fild10, all `gm_command`. The extra kill's window: 0 / 0 / 0, one
+map change.
+- Positive control, the same reader on the 10-27 hunt e4: `attack_request` 30, `act` 549.
+- No NPC-contact positive case exists for this sniffer start (2026-10-25 19:09 ICT, self-test
+  code 5af7a1f9da66). That zero rests on the decoder's earlier §2a proofs.
+- (A first count keyed on `kind` showed attacks as "repeat" and `attack_request` 0 even for
+  e4; recounted by `type`.)
+
+**The stop's cause, for the fix:** `clear_loot`'s icon references carry the slot background
+and the client's pink new-item glow. A correct item reads 2.77-3.84 against the 3.0 bar
+depending on its slot and neighbours: the Nursing Bottle read 3.84 in slot 3 and 0.41 in slot 2
+of the same view. The Axe glow clears once its tab was the one shown when the inventory closed.
+Any second session needs a background-free match first (a code change: census + tests +
+pre-registration).
+
+**State at 16:04 (judged `rogue/e3x-immune-off.png`):** the Rogue on the prt_fild08 stand
+(268,107), immunity OFF, weight 610, HP / SP full, no dialog; `held` rc 0; the two staged
+copies (Cyfar 1, Voucher 1) are in storage, not income. The Orc Lord's D for the next cycle:
+15:49:15.
+
+**Ship:** after 17:00, chained (e4, f3, e3 5.0 GB, e3x 0.39 GB), one at a time.
