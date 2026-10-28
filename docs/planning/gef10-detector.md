@@ -1274,7 +1274,9 @@ the same bars, and Batt decides.
   1365657; nothing of ours touched it). The watch matched it by command line, saw it compute and
   set the 10 s step sleep ("DUTY a co-tenant computes: YIELDING"). That is the 13z-1 mechanism's
   live positive case on the real co-tenant.
-- **The 12-h step limit** (`execdev:vision@43200`, from 13:41:25) falls at ~01:41 on 10-29. The
+- **The 12-h step limit** (`execdev:vision@43200`, PER ATTEMPT: each resume is a new guarded step
+  with a fresh 12 h; ➡️ after the 16:07 abort below, the resumed attempt's limit is ~12 h after its
+  start, ~04:2x on 10-29, not ~01:41) would have fallen at ~01:41 on 10-29 for attempt 0. The
   guard then prints `FAILED rc=124`, not an ABORT, and train-day ends "TRAIN STOPPED: not a guard
   trip" (exit 2). No automatic resume: `RESUME=1` with the same arguments, by hand or by Batt's
   decision. `mid.pt` bounds the loss to ~7 min.
