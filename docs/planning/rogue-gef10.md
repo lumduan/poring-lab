@@ -1635,3 +1635,20 @@ NPC contact or a map change other than our own `@warp`s. A human lease stops it 
 
 **What it measures:** floor-item labels for round 3 (E5). It is not a scored run and has no
 verdict; staged items are never income.
+
+### AK-1 (15:06 ICT from `date`): the icon set's positive case failed on the Axe -- a test-procedure artifact; repeated under the run's conditions
+
+- Done so far: the store step (6 Etc stacks, weight 703 -> 610; `held` rc 0); `give --frames`
+  (11 lines, 14:57:53-14:58:41); the icons identified by the client's OWN item icons (the Thai
+  GRF's `texture/.../item/*.bmp`, extracted to /dev/shm, never committed: every slot's best match
+  3.9-20, the runner-up >= 44.9; by eye Iron and Large Jellopy had been swapped); `cut` wrote 11
+  icons, no clash.
+- `drop` returned rc 1 at 15:03:58: the 10 Etc / Use items dropped, the Axe (Eqp) did not.
+- **Cause (read from a diagnostic frame of the three tabs, `_bank_tabs`, nothing moved):** the
+  icons were cut with the client's pink new-item glow under them. Viewing the Eqp tab in
+  `give --frames` cleared the Axe's glow, so the same Axe now reads 3.11 against the 3.0 bar
+  (the cut frame 0.0). A run's items are always fresh: given with the inventory closed, then
+  `clear_loot`'s first view, as the 10 that passed.
+- **Not a re-cut.** The positive case is repeated under the run's own conditions: the stale Axe
+  goes to storage (the store step), `held` rc 0, then `give --map gef_fild10` WITHOUT `--frames`
+  and `drop --map gef_fild10`. rc 0 continues the plan; rc 1 stops the session and asks Batt.
