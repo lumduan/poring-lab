@@ -1165,20 +1165,22 @@ the same bars, and Batt decides.
     builder on the first such file.
 - **The guard rule:** `--threshold 30 --sustain 30`, with no spike rule. It stops on 30 s of
   sustained stall above 30 %; the host's own 1-5 s bursts do not trip it.
-  - In the 3 minutes before, with nothing of ours running, the 1-s samples showed 13 seconds above
-    25 %: quant-postgres max 60.0 %, cron capture 56.0 %, orderbook 42.8 %, ticker 49.0 %.
+  - In the 3 minutes before, with nothing of ours running, the 1-s samples showed 13 cgroup-seconds
+    above 25 % (summed over the cgroups): quant-postgres max 60.0 %, cron capture 56.0 %, orderbook 42.8 %, ticker 49.0 %.
 - **Result:** `[12:59:45] ALL STEPS OK (worst capture stall so far 22.7% on quant-postgres, 0s above
   30.0%)`.
   - It ran 12:56:19-12:59:45 (203.7 s). w2 kept 774 frames in 4 shards.
   - The cache now has 25 sessions and 24,778 frames (`progress.json`).
 - **Before vs during (1-s samples):**
 
-| window | dm-0 write MB/s mean / p95 | dm-0 read MB/s mean | quant-postgres stall mean / max | 1-s samples > 25 % (all cgroups) | builder files open for write on local disk |
+| window | dm-0 write MB/s mean / p95 | dm-0 read MB/s mean | quant-postgres stall mean / max | cgroup-seconds > 25 % (summed) | builder files open for write on local disk |
 |---|---|---|---|---|---|
 | OFF 12:52:21-12:55:46 | 1.09 / 1.97 | 2.82 | 4.5 / 60.0 | 13 | - |
 | ON 12:56:20-12:59:45 | 1.33 / 3.65 | 0.34 | 5.3 / 64.5 | 4 | 0 of 182 samples |
 
   - No sign that the job raised the capture stall.
+  - The write sensor sees the event it guards against: a positive case at 13:0x (a process
+    holding a file open for write under `data/`) was flagged, and a /dev/shm file was not.
   - The guard's figure (22.7 %) is a 10-s window rate; the probe's are 1-s samples. So the probe's
     maxima run higher.
 - **The old rule (`--spike 25` on the guard's 10-s windows) would not have tripped in these
@@ -1221,3 +1223,11 @@ the same bars, and Batt decides.
         HSV_S=0.2 CLOSE_MOSAIC=3 SCALE=0.1 IO_GUARD="--threshold 30 --sustain 30" \
         IO_RESUMES=20 IO_QUIET_MIN=0 scripts/runbooks/train-day.sh gef10-20261026 \
         v2orc-payf07-gef10-20261026 10 /dev/shm/poring-lab-tmp/train-gef10 2 1
+
+- **[13:02:08] attempt 0 REFUSED before any work:** `R2: another job of ours is on the GPU
+  (/work/venv-diag-headless/bin/python (6376 MiB))`.
+  - That process is fit-first's `fitfirst_vton_worker.session`, started 12:29:22 today.
+  - R2's check (`frigate_r3.prestart`) refuses ANY non-Frigate GPU job, fail closed. It is
+    not overridden.
+  - The runbook pauses 900 s and retries (an R2 trip counts toward IO_RESUMES 20). So it starts
+    by itself once the GPU is free, outside 14:00-14:45. Batt is told.
