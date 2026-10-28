@@ -1577,3 +1577,61 @@ count from packets. The two differ by 0-4 kills a run.
   - the 78 demo sessions (`scratch-archive/2026-10-26|27/demo-sessions/`);
   - `poring-lab-tmp/shots` (69 files, `scratch-archive/2026-10-27/shots/`), re-created empty.
   - `.ship.lock` was kept. /dev/shm went from 6.6 G to 5.9 G used.
+
+## Amendment AK (2026-10-28 14:55 ICT from `date`): the staged-items session (E3) starts, pre-registered -- Batt: "start now"
+
+Batt's go came at ~14:5x ("เริ่มได้เลย"). The plan is `gef10-eyes-loot.md` E3 (approved 2026-10-26,
+decision 2 above; the recorders' sustained IO rule since Amendment AJ). Nothing in the plan's
+recipe changes except the two points marked CHANGED, which today's state forces.
+
+**Beside it:** the gef10 detector training (gef10-detector.md 13z) on the GPU, and fit-first's VTON
+worker (never touched). This session uses no GPU. No hunt cycle is scheduled.
+
+**State at 14:52 (judged screenshot `shots/e3-pre-0.png`):** the Rogue Thief8fce on the prt_fild08
+stand (268,107), HP/SP full, weight 703 / 2430, no dialog or menu open; capture lock rdp, steady.
+`stage_items.py held --map gef_fild10` refuses (rc 1): the bag holds hunt loot of the set
+(Cyfar 42, Orcish Voucher 27, Iron 4, Large Jellopy 2, Sticky Mucus 1).
+
+**A. The icon set** (prt_fild08 stand, no immunity), as the plan:
+1. The store step (`@storage` through the identity check + a judged frame, then `store_run4.py`'s
+   path, `gm_state.store_loot`). Then `held --map gef_fild10` must return rc 0 (an empty store
+   step first if the DB has not saved).
+2. `give --map gef_fild10 --frames` (11 `@item` lines; one frame per inventory tab).
+3. Frames judged, the SPEC written, `cut ... --map gef_fild10` (its clash bars refuse a cut too
+   near the stock or another icon).
+4. `drop --map gef_fild10`: rc 0 (`all_and_only_the_set`) is the icon set's positive case; rc 1
+   stops the session for a re-cut.
+5. An empty store step (the DB catches up); `held` rc 0.
+
+**B. The session**, as the plan:
+6. The canopy: `canopy --map gef_fild10`; it must give 67,533 cells, sha256 `1c0aa910...bc0d1`,
+   else stop.
+7. **CHANGED: immunity by the toggle, judged, instead of a fresh login.** `immune-on` types
+   `@monsterignore` (a toggle). Its frame must show "You are now immune to attacks." over the
+   character (w2's proven frame, `gef10-ow/immune-on-w2.png`). If it shows "Returned to normal
+   state.", it is typed once more and judged again. The run starts only with `--immune-confirmed`
+   after that judgement.
+8. The recorder (`record_session.py --backend rdp --label stage-gef10-e3 --seconds 3300 --fps 1
+   --format png --out /dev/shm/poring-lab-rec --max-bytes 8G --min-free-gb 6
+   --max-unshipped-gb 12`; recorder v6, tmpfs -> RAM_RULE), then `run --map gef_fild10 --n 22
+   --seed 2610 --open <canopy> --immune-confirmed --label e3` (`--clear end`: the @killmonster2
+   pair 65 s apart). The recorder stops by PID >= 65 s after the run's last line.
+   - Unshipped beside it: e4 2.0 G + f3 1.9 G; this one ~6.3 G: 10.2 G < 12 G.
+9. **CHANGED: immunity off by the toggle, judged** ("Returned to normal state.", w2's
+   `immune-off-w2.png`), instead of a relog; then the character back to the prt_fild08 stand
+   (268,107) and a judged frame.
+   - The first end kill kills the natural Orc Lord if alive: `killmonster2_ict[0]` is the next
+     cycle's D.
+10. The ship waits for the end of SET hours (`dataset_ship` refuses), with e4 and f3 (after 17:00).
+
+**Stops:** any `r.Stop` (identity, UI gate, a settle timeout), a wrong drop (`names != want`), an
+NPC contact or a map change other than our own `@warp`s. A human lease stops it as designed.
+
+**Offline, after (from the packets, the plan's step 10 + safety):**
+- the staged floor ids that vanished before 60.0 s (looted), that they fell again at the first
+  end kill, and no early vanish after the second kill's falls;
+- npc_contact 0, attack_request 0, every map change one of our `@warp`s;
+- labels per class (target >= 40 labels from >= 10 floor items per class) by `item_labels.py`.
+
+**What it measures:** floor-item labels for round 3 (E5). It is not a scored run and has no
+verdict; staged items are never income.

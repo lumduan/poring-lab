@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-detector.md, gef10-eval.md, gef10-idle-study.md, gef10-time-budget.md, gef10-miss-cue.md]
-next_action: "E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
+next_action: "2026-10-28: E3 STARTED (rogue-gef10.md Amendment AK: icon set A, then session B; labels offline after). Earlier: E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
 ---
 
 # gef_fild10: the bot's eyes and its loot step (plan, 2026-10-26 18:3x ICT)
@@ -82,6 +82,10 @@ next_action: "E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 
 - A box under our own HP bar or a model counts as unsure. Only then a hover, on that cell alone.
 
 ### E3. THE STAGED-ITEMS SESSION (approved; D10's recipe)
+
+- ➡️ **Run 2026-10-28** (Batt's go ~14:5x): pre-registered in rogue-gef10.md Amendment AK (two
+  changes: the store step first, and immunity on / off by the judged toggle instead of a relog).
+
 
 - `scripts/stage_items.py` (built for pay_fild07). Here it uses the gef_fild10 drop set:
   - Cyfar, Orcish Voucher, Sticky Mucus, Milk, Garlet, Iron, Large Jellopy, Rough Oridecon, Green
