@@ -66,6 +66,13 @@ ports, quickstart) and `docs/adr/`.
      - **R1:** Ollama + vision VRAM ≤ 9 GiB combined.
      - **R2:** one model at a time. Never run qwen3-vl alongside training or eval; refuse to start
        while Ollama's `/api/ps` shows a loaded model.
+       **Co-tenant exception** (Batt 2026-10-28): fit-first's VTON worker is the TOP priority on the
+       GPU. Never touch or stop it. Our capped vision steps (guarded_build only; vlm_flag keeps plain
+       R2) may run beside it under three conditions, all in `frigate_r3.py`:
+       - at the start, the free VRAM covers our cap + 1 GiB;
+       - in the run, free VRAM below 1 GiB beside it stops our step (an R2 trip);
+       - while it computes, the training yields (10 s step sleep).
+       This is `CO_TENANTS`, matched by command line.
      - **R3:** stop if our job slows the Frigate detector by > 5 ms, measured like with like
        (Batt 2026-10-07, `docs/operations/r3-paired.md`).
        - The step's container is paused and unpaused in 3-min OFF/ON windows (60 s for short

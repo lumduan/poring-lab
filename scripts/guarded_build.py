@@ -1176,14 +1176,22 @@ def run_process(
     duty: "frigate_r3.DutyController | None" = None,
     exec_mode: bool = False,
     test_abort_cycles: int = 0,
+    cowatch: "frigate_r3.CoTenantWatch | None" = None,
 ) -> bool:
-    """Run one step under the IO guard (and R3 / the duty cycle for GPU steps). ``exec_mode``
+    """Run one step under the IO guard (and R3 / the duty cycle for GPU steps). ``cowatch`` (GPU
+    steps; frigate_r3's R2 co-tenant exception): a co-tenant short of VRAM stops the step as an R2
+    trip, and while it computes a duty-cycled step yields (YIELD_MS step sleep). ``exec_mode``
     (execdev:): ``container`` is the long-lived worker the command runs in -- R3 pauses it, a stop
     is verified in exec mode, and a normal end must leave it idle (settle_exec).
     ``test_abort_cycles``: TEST ONLY (--test-abort-after-cycles)."""
     log = log_path(label)
     seen: Any = None
     beat = 0.0
+    yielded = False
+
+    def yield_ms() -> int | None:
+        return frigate_r3.YIELD_MS if yielded else None
+
     if duty is not None:  # the container must find a level before its first batch
         frigate_r3.write_duty(DUTY_FILE, duty.level, -1.0)
         beat = time.time()
@@ -1208,6 +1216,15 @@ def run_process(
                     print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
                 abort(proc, label, container, gpu, host, exec_mode)
                 return False
+            cotrip = cowatch.vram_trip(time.monotonic()) if cowatch is not None else None
+            if cotrip:
+                # NB: "ABORT <step>: R2 co-tenant ..." -- train-day.sh treats it like an IO trip
+                # (a pause, then --resume); our share of the VRAM goes back to the co-tenant
+                print(f"[{ts()}] ABORT {label}: {cotrip} [{frigate_r3.stamp()}]", flush=True)
+                if duty is not None:
+                    print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
+                abort(proc, label, container, gpu, host, exec_mode)
+                return False
             if r3 is not None:
                 r3.poll()
                 if duty is not None:
@@ -1221,8 +1238,24 @@ def run_process(
                     else:
                         duty.tick(now)
                         load = -1.0
-                    if duty.level != before or now - beat >= frigate_r3.DUTY_HEARTBEAT_S:
-                        frigate_r3.write_duty(DUTY_FILE, duty.level, load, now)
+                    was = yielded
+                    yielded = cowatch is not None and cowatch.yielding(time.monotonic())
+                    if yielded != was:
+                        why_y = (
+                            "a co-tenant computes: YIELDING"
+                            if yielded
+                            else f"the co-tenant idle {frigate_r3.YIELD_HOLD_S:g} s: back to"
+                        )
+                        ms_y = (
+                            frigate_r3.YIELD_MS
+                            if yielded
+                            else frigate_r3.DUTY_LEVELS_MS[duty.level]
+                        )
+                        print(f"[{ts()}] DUTY {why_y} ({ms_y} ms step sleep) "
+                              f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+                    if (duty.level != before or yielded != was
+                            or now - beat >= frigate_r3.DUTY_HEARTBEAT_S):  # fmt: skip
+                        frigate_r3.write_duty(DUTY_FILE, duty.level, load, now, yield_ms())
                         beat = now
                     if duty.level != before:
                         ms = frigate_r3.DUTY_LEVELS_MS[duty.level]
@@ -1257,7 +1290,7 @@ def run_process(
                     # Only the infra rule (camera frame drops, HARD) stops at once, as before.
                     now = time.time()
                     duty.hold(now, True)
-                    frigate_r3.write_duty(DUTY_FILE, duty.level, -1.0, now)
+                    frigate_r3.write_duty(DUTY_FILE, duty.level, -1.0, now, yield_ms())
                     beat = now
                     r3.remeasure(now)
                     ms = frigate_r3.DUTY_LEVELS_MS[duty.level]
@@ -1586,10 +1619,14 @@ def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.PairedR3 | None":  # no
     """R2 + R3 before a GPU step: the PAIRED ON/OFF measurement to run beside the IO guard
     (docs/operations/r3-paired.md), or None after printing why the step is REFUSED. Its ON/OFF
     schedule starts once the step loads the GPU (run_process)."""
-    why = frigate_r3.prestart(None)
+    why = frigate_r3.prestart(None, co_tenants=frigate_r3.CO_TENANTS)
     if why:
         print(f"[{ts()}] REFUSED {step.label}: {why} [{frigate_r3.stamp()}]", flush=True)
         return None
+    tenants = ", ".join(t.decode() for t in frigate_r3.CO_TENANTS)
+    print(f"[{ts()}] R2 co-tenants (Batt 2026-10-28; never touched): {tenants} may stay on the "
+          f"GPU; beside one, stop below {frigate_r3.COTENANT_FLOOR_MIB} MiB free VRAM and yield "
+          f"({frigate_r3.YIELD_MS} ms step sleep) while it computes", flush=True)  # fmt: skip
     short = (step.seconds or 600) <= SHORT_STEP_S
     win, settle, _ = frigate_r3.SHORT_WIN if short else frigate_r3.TRAIN_WIN
     print(f"[{ts()}] R3 (paired): {win:g} s ON / {win:g} s OFF windows ({settle:g} s settle) by "
@@ -1711,16 +1748,21 @@ def main() -> int:
             r3 = gpu_rules(step, args.frigate_baseline)
             if r3 is None:
                 return 3
-            ok = run_process(
-                step.label,
-                run_cmd(step),
-                guard,
-                r3=r3,
-                container=container_name(step),
-                gpu=True,
-                duty=duty_for(step),
-                test_abort_cycles=args.test_abort_after_cycles,
-            )
+            cowatch = frigate_r3.CoTenantWatch().start()
+            try:
+                ok = run_process(
+                    step.label,
+                    run_cmd(step),
+                    guard,
+                    r3=r3,
+                    container=container_name(step),
+                    gpu=True,
+                    duty=duty_for(step),
+                    test_abort_cycles=args.test_abort_after_cycles,
+                    cowatch=cowatch,
+                )
+            finally:
+                cowatch.stop()
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "execdev":
@@ -1732,18 +1774,23 @@ def main() -> int:
             r3 = gpu_rules(step, args.frigate_baseline)
             if r3 is None:
                 return 3
-            ok = run_process(
-                step.label,
-                exec_cmd(step),
-                guard,
-                r3=r3,
-                container=WORKER,
-                gpu=True,
-                host=EXEC_HOST,
-                duty=duty_for(step),
-                exec_mode=True,
-                test_abort_cycles=args.test_abort_after_cycles,
-            )
+            cowatch = frigate_r3.CoTenantWatch().start()
+            try:
+                ok = run_process(
+                    step.label,
+                    exec_cmd(step),
+                    guard,
+                    r3=r3,
+                    container=WORKER,
+                    gpu=True,
+                    host=EXEC_HOST,
+                    duty=duty_for(step),
+                    exec_mode=True,
+                    test_abort_cycles=args.test_abort_after_cycles,
+                    cowatch=cowatch,
+                )
+            finally:
+                cowatch.stop()
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind in ("worker", "worker-stop"):

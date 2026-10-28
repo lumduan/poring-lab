@@ -572,3 +572,130 @@ def test_the_duty_hold_pins_the_slowest_level_until_released(fr: ModuleType) -> 
         t += fr.DUTY_DOWN_MIN_S_AFTER_ABORT + 1
         d.update(t, 5.0, False)
     assert d.level < fr.DUTY_FLOOR  # released: back down, one level at a time
+
+
+# The R2 CO-TENANT exception (Batt 2026-10-28 ~13:2x): fit-first's VTON worker is the top priority
+# on the GPU -- never touched, never stopped -- and our capped vision steps may run beside it.
+VTON = b"/work/venv-diag-headless/bin/python\0-s\0-m\0fitfirst_vton_worker.session\0"
+CMDS = {
+    3167486: VTON,
+    734616: b"frigate.detector:onnx\0",
+    4242: b"python\0-m\0poring_vision.train\0",
+}
+ROWS = [
+    (734616, "frigate.detector:onnx", 318),
+    (3167486, "/work/venv-diag-headless/bin/python", 6376),
+]
+
+
+def test_a_co_tenant_is_matched_by_its_command_line_not_its_bare_python_name(
+    fr: ModuleType,
+) -> None:
+    others, tenants = fr.split_cotenants(ROWS, fr.CO_TENANTS, lambda p: CMDS.get(p, b""))
+    assert tenants == [(3167486, "/work/venv-diag-headless/bin/python", 6376)]
+    assert others == [("frigate.detector:onnx", 318)]
+    # without the exception (vlm_flag's plain R2) nothing is a co-tenant
+    others, tenants = fr.split_cotenants(ROWS, (), lambda p: CMDS.get(p, b""))
+    assert tenants == [] and len(others) == 2
+    # a gone process (no cmdline) is never a co-tenant: it counts as a python job (fail closed)
+    _, tenants = fr.split_cotenants(ROWS, fr.CO_TENANTS, lambda p: b"")
+    assert tenants == []
+
+
+def test_prestart_lets_a_co_tenant_stay_only_with_vram_for_our_cap_and_headroom(
+    fr: ModuleType,
+) -> None:
+    fake = Fake()
+    cmd = lambda p: CMDS.get(p, b"")  # noqa: E731
+    total = 16311
+    cap = int(total * fr.VISION_CAP_FRACTION)
+    need = cap + fr.COTENANT_HEADROOM_MIB
+    ok = (total - need, total)  # exactly enough free
+    assert fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS, rows=ROWS, memory=ok,
+                       cmdline=cmd) is None  # fmt: skip
+    short = (total - need + 1, total)
+    why = fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS, rows=ROWS, memory=short,
+                      cmdline=cmd)  # fmt: skip
+    assert why.startswith("R2 co-tenant:") and f"< our cap {cap} + headroom" in why
+    assert "pid 3167486" in why
+    # plain R2 (no co_tenants, e.g. vlm_flag): the same python process is "another job"
+    assert fr.prestart(None, fetch=fake,
+                       apps=[("/work/venv-diag-headless/bin/python", 6376)]).startswith(
+        "R2: another job of ours")  # fmt: skip
+    # a python job of OURS beside the co-tenant is still refused
+    rows = [*ROWS, (4242, "python", 2000)]
+    assert fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS, rows=rows, memory=ok,
+                       cmdline=cmd).startswith("R2: another job of ours")  # fmt: skip
+    # Ollama still refuses first
+    fake.models = [{"name": "qwen3-vl:4b"}]
+    assert fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS, rows=ROWS, memory=ok,
+                       cmdline=cmd).startswith("R2: Ollama")  # fmt: skip
+
+
+def test_prestart_fails_closed_when_nvidia_smi_cannot_be_read(
+    fr: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Fake()
+    monkeypatch.setattr(fr, "gpu_apps", lambda: None)
+    assert fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS) == (
+        "R2: nvidia-smi unreadable (fail closed)")  # fmt: skip
+    monkeypatch.setattr(fr, "gpu_memory", lambda: None)
+    why = fr.prestart(None, fetch=fake, co_tenants=fr.CO_TENANTS, rows=ROWS,
+                      cmdline=lambda p: CMDS.get(p, b""))  # fmt: skip
+    assert why.startswith("R2 co-tenant: VRAM unreadable")
+
+
+def test_pmon_rows_say_whether_a_process_computes(fr: ModuleType) -> None:
+    """Real `nvidia-smi pmon -s u` rows (2026-10-28 13:2x): the VTON worker held 6376 MiB idle."""
+    assert fr.parse_pmon("# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    "
+                         "command ") is None  # fmt: skip
+    assert fr.parse_pmon("# Idx           #    C/G      %      %      %      %      %      %  "
+                         "  name ") is None  # fmt: skip
+    idle = "    0    3167486     C      -      -      -      -      -      -    python         "
+    busy = "    0    3167486     C     37     12      -      -      -      -    python         "
+    assert fr.parse_pmon(idle) == (3167486, False)
+    assert fr.parse_pmon(busy) == (3167486, True)
+    assert fr.parse_pmon("") is None
+
+
+def test_the_watch_yields_while_the_co_tenant_computes_and_30_s_after(fr: ModuleType) -> None:
+    w = fr.CoTenantWatch(fr.CO_TENANTS, cmdline=lambda p: CMDS.get(p, b""))
+    frigate_busy = "    0     734616     C     20      5      -      -      -      -    frigate"
+    w.feed(frigate_busy, 100.0)
+    assert not w.yielding(100.0)  # Frigate computing is not a co-tenant
+    w.feed("    0    3167486     C      -      -      -      -      -      -    python", 101.0)
+    assert not w.yielding(101.0)  # holding memory idle is not computing
+    w.feed("    0    3167486     C     55     20      -      -      -      -    python", 102.0)
+    assert w.yielding(102.0) and w.yielding(102.0 + fr.YIELD_HOLD_S)
+    assert not w.yielding(102.1 + fr.YIELD_HOLD_S)
+    assert w.busy_samples == 1
+
+
+def test_the_watch_trips_on_free_vram_beside_a_co_tenant_only(fr: ModuleType) -> None:
+    cmd = lambda p: CMDS.get(p, b"")  # noqa: E731
+    total = 16311
+    w = fr.CoTenantWatch(fr.CO_TENANTS, cmdline=cmd)
+    low = (total - fr.COTENANT_FLOOR_MIB + 1, total)
+    why = w.vram_trip(0.0, rows=ROWS, memory=low)
+    assert why.startswith("R2 co-tenant:") and "< the floor 1024 MiB" in why
+    assert w.vram_trip(1.0, rows=ROWS, memory=low) is None  # read at most every 10 s
+    w = fr.CoTenantWatch(fr.CO_TENANTS, cmdline=cmd)
+    assert w.vram_trip(0.0, rows=ROWS, memory=(total - 3000, total)) is None
+    w = fr.CoTenantWatch(fr.CO_TENANTS, cmdline=cmd)
+    no_tenant = [(734616, "frigate.detector:onnx", 318)]
+    assert w.vram_trip(0.0, rows=no_tenant, memory=(total - 10, total)) is None
+    tenants = [(3167486, "/work/venv-diag-headless/bin/python", 6376)]
+    assert fr.cotenant_vram(None, 1024, "the floor", tenants).startswith(
+        "R2 co-tenant: VRAM unreadable")  # fail closed  # fmt: skip
+    assert fr.cotenant_vram(None, 1024, "the floor", []) is None  # no co-tenant: plain R2 rules
+
+
+def test_the_duty_file_carries_the_yield_sleep(fr: ModuleType, tmp_path: Path) -> None:
+    f = tmp_path / "duty.json"
+    fr.write_duty(f, 1, 30.0, 1000.0)
+    assert json.loads(f.read_text())["sleep_ms"] == fr.DUTY_LEVELS_MS[1]
+    fr.write_duty(f, 1, 30.0, 1000.0, fr.YIELD_MS)
+    d = json.loads(f.read_text())
+    assert d["sleep_ms"] == 10_000 and d["level"] == 1
+    # the trainer accepts it (train.py read_duty: 0..10_000 ms, else its fallback)
+    assert fr.YIELD_MS <= 10_000

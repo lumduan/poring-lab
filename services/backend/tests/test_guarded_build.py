@@ -524,7 +524,9 @@ def test_a_vision_step_is_refused_before_it_starts_when_r2_or_r3_fail(
     monkeypatch.setattr(gb, "run_process", lambda *a, **k: record(ran, a[1]))
     monkeypatch.setattr(gb, "cgroup_paths", lambda: {})
     monkeypatch.setattr(gb, "Guard", lambda *a, **k: _FakeGuard())
-    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: "R2: Ollama has a model loaded (x)")
+    monkeypatch.setattr(
+        gb.frigate_r3, "prestart", lambda path, **k: "R2: Ollama has a model loaded (x)"
+    )
     step = "rundev:vision@60=python -m poring_vision.train --smoke"
     monkeypatch.setattr(gb.sys, "argv", ["guarded_build.py", step])
     assert gb.main() == 3
@@ -737,7 +739,7 @@ def test_vision_steps_get_the_paired_measurement_without_a_baseline_file(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seen: list[object] = []
-    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: seen.append(path))
+    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path, **k: seen.append(path))
     monkeypatch.setattr(gb.frigate_r3, "camera_reference", lambda: {"a": 5.0})
     train = gb.gpu_rules(
         gb.parse_step("rundev:vision@43200=python -m poring_vision.train --x"), Path("x")
@@ -1003,3 +1005,84 @@ def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(gb: ModuleT
     dump, count_vol, count_tar = gb.volume_cmds("db-th-data", dst)
     assert "--network none" in dump[2] and "--cap-drop ALL" in dump[2] and "/v:ro" in dump[2]
     assert dump[2].endswith("> " + dst) and "poring-lab_db-th-data" in count_vol[2]
+
+
+class _R3Quiet:
+    """A PairedR3 stand-in that never trips."""
+
+    started = True
+    last = None
+    mode = "measure"
+    result = ("pending", None, 0)
+
+    def poll(self) -> None:
+        pass
+
+    def tick(self) -> None:
+        return None
+
+    def summary(self) -> dict:
+        return {"verdict": "pending"}
+
+    def breach(self) -> None:
+        return None
+
+
+class _CoWatch:
+    """A CoTenantWatch stand-in: a scripted VRAM trip, and 'computing' until ``busy_until``."""
+
+    def __init__(self, trip: str | None = None, busy_until: float = 0.0) -> None:
+        self.trip, self.busy_until = trip, busy_until
+
+    def vram_trip(self, now: float) -> str | None:
+        return self.trip
+
+    def yielding(self, now: float) -> bool:
+        return time.monotonic() < self.busy_until
+
+
+def test_a_co_tenant_short_of_vram_stops_our_step_as_an_r2_trip(
+    gb: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Batt 2026-10-28: fit-first's VTON worker is the top priority. Free VRAM below the floor
+    beside it gives our share back: an ABORT that train-day.sh pauses and resumes like an IO trip
+    (not R3, not R3-HARD, not REFUSED)."""
+    t0 = time.monotonic()
+    trip = "R2 co-tenant: 900 MiB free < the floor 1024 MiB beside pid 1 python (6376 MiB)"
+    ok = gb.run_process("execdev:vision", ["sleep", "30"], _QuietGuard(), r3=_R3Quiet(),
+                        cowatch=_CoWatch(trip=trip))  # fmt: skip
+    out = capsys.readouterr().out
+    assert ok is False and time.monotonic() - t0 < 10
+    assert f"ABORT execdev:vision: {trip}" in out
+    assert "R3" not in out.split("ABORT")[1].split("\n")[0]  # train-day: an IO-like trip
+
+
+def test_our_training_yields_while_a_co_tenant_computes_then_walks_back(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:  # fmt: skip
+    import json as _json
+
+    import frigate_r3 as fr
+
+    duty_file = tmp_path / "duty.json"
+    monkeypatch.setattr(gb, "DUTY_FILE", duty_file)
+    duty = fr.DutyController(time.time(), start=1)
+    watch = _CoWatch(busy_until=time.monotonic() + 3.0)
+    seen: list[int] = []
+    real = fr.write_duty
+
+    def spy(path: Path, level: int, load: float, now: float | None = None,
+            sleep_ms: int | None = None) -> None:  # fmt: skip
+        real(path, level, load, now, sleep_ms)
+        seen.append(_json.loads(path.read_text())["sleep_ms"])
+
+    monkeypatch.setattr(gb.frigate_r3, "write_duty", spy)
+    ok = gb.run_process("rundev:vision", ["sleep", "7"], _QuietGuard(), r3=_R3Quiet(),
+                        duty=duty, cowatch=watch)  # fmt: skip
+    out = capsys.readouterr().out
+    assert ok is True
+    assert "DUTY a co-tenant computes: YIELDING (10000 ms step sleep)" in out
+    assert f"DUTY the co-tenant idle {fr.YIELD_HOLD_S:g} s: back to (200 ms step sleep)" in out
+    assert fr.YIELD_MS in seen and seen[-1] == fr.DUTY_LEVELS_MS[1]
+    assert seen.index(fr.YIELD_MS) < len(seen) - 1  # the yield came first, then the level

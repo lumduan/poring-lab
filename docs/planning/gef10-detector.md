@@ -1231,3 +1231,35 @@ the same bars, and Batt decides.
     not overridden.
   - The runbook pauses 900 s and retries (an R2 trip counts toward IO_RESUMES 20). So it starts
     by itself once the GPU is free, outside 14:00-14:45. Batt is told.
+
+### 13z-1. AMENDMENT before attempt 2: the R2 CO-TENANT exception (Batt 2026-10-28 ~13:2x; recorded 2026-10-28 13:41 ICT from `date`)
+
+- **Batt:** fit-first's VTON work is the TOP priority right now. Never touch it or stop it. Running
+  beside it IS allowed.
+- **The runbook was stopped by hand at 13:23:16**, while idle in its 900-s pause after attempt 1's
+  refusal (13:17:09). This kept a half-edited check from being picked up. Nothing of ours was on
+  the GPU.
+- **What changed** (`frigate_r3.py`; `guarded_build.py` vision steps only; vlm_flag keeps plain R2):
+  - **`CO_TENANTS = (b"fitfirst_vton_worker.session",)`**, matched by COMMAND LINE in
+    `/proc/<pid>/cmdline`. nvidia-smi names it only `/work/venv-diag-headless/bin/python`.
+  - **The start:** free VRAM >= our cap (25 % of the total = 4,077 MiB) + 1,024 MiB headroom,
+    else REFUSED as R2. If nvidia-smi is unreadable, refuse (fail closed). Any other python job
+    on the GPU is still refused.
+  - **In the run, `CoTenantWatch`:**
+    - It reads the free VRAM every 10 s. Below 1,024 MiB with a co-tenant present, our step stops:
+      `ABORT ...: R2 co-tenant ...`, verified stop. train-day pauses 15 min and `--resume`s from
+      `mid.pt`. Our share of the VRAM goes back to the co-tenant.
+    - An `nvidia-smi pmon -s u -d 1` reader marks the co-tenant as computing when its sm column is
+      not "-". While it computes, and for 30 s after, the duty file asks for **10,000 ms** per step
+      (train.py's own maximum). With batch 2 at ~0.39 s, our share of the GPU then falls to ~4 %.
+      After that the duty cycle's own level returns.
+- **Checks:**
+  - frigate_r3 / guarded_build / train_day tests: 139 passed (new: command-line matching,
+    headroom, fail-closed reads, pmon rows from the real idle VTON, the yield and its end, the
+    VRAM-trip ABORT); test_guards + vlm_flag green.
+  - **Live, read-only:** the co-tenant-rule prestart said go (plain R2 still refused). The VTON
+    worker was idle in pmon (sm "-", 6,376 MiB). memory (9,924, 16,311) MiB.
+  - **Positive case, live:** the watch pointed at Frigate's always-computing detectors (a
+    stand-in signature; nothing touched) saw 7 busy samples in 6 s and yielded. The pmon
+    subprocess was stopped afterwards.
+- **Not changed:** 13u's training settings, the IO rule (13z), R1, R3 and the duty cycle.

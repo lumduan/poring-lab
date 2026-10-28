@@ -6,6 +6,12 @@ The GPU is shared with Frigate (NVR: 16 cameras, 3 ONNX detectors) and Ollama (q
   R1  Ollama + vision VRAM <= 9 GiB combined (VISION_MAX_VRAM_FRACTION keeps vision under it).
   R2  One model at a time: refuse to start while Ollama has a model loaded (/api/ps); yield if one
       loads during our job.
+      CO-TENANT EXCEPTION (Batt 2026-10-28 ~13:2x): fit-first's VTON worker (CO_TENANTS) is the TOP
+      priority on this GPU -- never touched, never stopped -- and our capped vision steps may run
+      beside it (guarded_build only; vlm_flag keeps plain R2). The start needs our VRAM cap +
+      COTENANT_HEADROOM_MIB free; in the run, free VRAM below COTENANT_FLOOR_MIB beside it stops
+      our step (an R2 trip: our share goes back), and while it computes our training YIELDS (the
+      step sleep goes to YIELD_MS) until it has been idle for YIELD_HOLD_S (CoTenantWatch).
   R3  PAIRED (docs/operations/r3-paired.md, Batt 2026-10-07 ~12:35): our job is paused / resumed
       in alternating windows and stopped when the median load-matched ON-OFF detector delta is
       > 5 ms (PairedR3; guarded_build and vlm_flag). Stop HARD if any camera drops frames for 30 s
@@ -148,6 +154,169 @@ def our_gpu_jobs(apps: list[tuple[str, int]]) -> list[str]:
     return [f"{n} ({m} MiB)" for n, m in apps if "python" in Path(n).name]
 
 
+# The R2 co-tenant exception (Batt 2026-10-28 ~13:2x; header). A co-tenant is matched by its COMMAND
+# LINE (any uid: it runs in another project's container); its process name alone is a bare python.
+CO_TENANTS: tuple[bytes, ...] = (b"fitfirst_vton_worker.session",)
+VISION_CAP_FRACTION = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))  # train.py's cap
+COTENANT_HEADROOM_MIB = 1024  # the start: free VRAM >= our cap + this, beside a co-tenant
+COTENANT_FLOOR_MIB = 1024  # the run: free VRAM below this beside a co-tenant -> our step stops
+COTENANT_VRAM_EVERY_S = 10.0  # how often the run reads the free VRAM
+YIELD_MS = 10_000  # the step sleep while a co-tenant computes (train.py read_duty's maximum)
+YIELD_HOLD_S = 30.0  # ... until it has been idle this long
+
+
+def gpu_apps() -> list[tuple[int, str, int]] | None:
+    """[(pid, process name, MiB)] of the GPU's compute processes; None when nvidia-smi fails."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,process_name,used_memory",
+                              "--format=csv,noheader,nounits"], capture_output=True, text=True,
+                             timeout=10, check=True).stdout  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return None
+    rows = []
+    for line in out.splitlines():
+        pid, _, rest = line.partition(",")
+        name, _, mib = rest.rpartition(",")
+        if pid.strip().isdigit() and name:
+            rows.append((int(pid), name.strip(), int(mib.strip() or 0)))
+    return rows
+
+
+def gpu_memory() -> tuple[int, int] | None:
+    """(used, total) MiB of the GPU; None when nvidia-smi fails."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total",
+                              "--format=csv,noheader,nounits"], capture_output=True, text=True,
+                             timeout=10, check=True).stdout.split(",")  # fmt: skip
+        return int(out[0]), int(out[1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
+def read_cmdline(pid: int) -> bytes:
+    try:
+        return Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return b""
+
+
+def split_cotenants(
+    rows: Sequence[tuple[int, str, int]], signatures: Sequence[bytes],
+    cmdline: Callable[[int], bytes] = read_cmdline,
+) -> tuple[list[tuple[str, int]], list[tuple[int, str, int]]]:  # fmt: skip
+    """PURE but for ``cmdline``: (the other processes as (name, MiB), the co-tenants' rows)."""
+    others, tenants = [], []
+    for pid, name, mib in rows:
+        cmd = cmdline(pid) if signatures else b""
+        if cmd and any(sig in cmd for sig in signatures):
+            tenants.append((pid, name, mib))
+        else:
+            others.append((name, mib))
+    return others, tenants
+
+
+def cotenant_vram(memory: tuple[int, int] | None, need_free: int, what: str,
+                  tenants: Sequence[tuple[int, str, int]]) -> str | None:  # fmt: skip
+    """PURE: the refusal / trip reason when a co-tenant is on the GPU and the free VRAM is short
+    (or unreadable: fail closed); None when there is no co-tenant or the VRAM suffices."""
+    if not tenants:
+        return None
+    names = "; ".join(f"pid {p} {n} ({m} MiB)" for p, n, m in tenants)
+    if memory is None:
+        return f"R2 co-tenant: VRAM unreadable beside {names} (fail closed)"
+    used, total = memory
+    free = total - used
+    if free < need_free:
+        return f"R2 co-tenant: {free} MiB free < {what} {need_free} MiB beside {names}"
+    return None
+
+
+def parse_pmon(line: str) -> tuple[int, bool] | None:
+    """PURE: one `nvidia-smi pmon -s u` row -> (pid, computing); None for headers / junk. The sm
+    column is "-" while a process holds memory but runs no kernel."""
+    f = line.split()
+    if len(f) < 4 or line.lstrip().startswith("#") or not f[1].isdigit():
+        return None
+    return int(f[1]), f[3] not in ("-", "0")
+
+
+class CoTenantWatch:
+    """Beside a running vision step (guarded_build.run_process): whether a co-tenant COMPUTES (an
+    `nvidia-smi pmon -s u -d 1` reader thread, 1-s samples), and its VRAM trip, read every
+    COTENANT_VRAM_EVERY_S. ``feed``/``yielding``/``vram_trip`` are testable without nvidia-smi."""
+
+    def __init__(self, signatures: Sequence[bytes] = CO_TENANTS,
+                 cmdline: Callable[[int], bytes] = read_cmdline) -> None:  # fmt: skip
+        self.signatures, self.cmdline = tuple(signatures), cmdline
+        self.kind: dict[int, bool] = {}  # pid -> is a co-tenant (cmdline read once per pid)
+        self.last_busy: float | None = None
+        self.busy_samples = 0
+        self.next_vram = 0.0
+        self.proc: subprocess.Popen[str] | None = None
+
+    def is_tenant(self, pid: int) -> bool:
+        if pid not in self.kind:
+            cmd = self.cmdline(pid)
+            self.kind[pid] = bool(cmd) and any(sig in cmd for sig in self.signatures)
+        return self.kind[pid]
+
+    def feed(self, line: str, now: float) -> None:
+        row = parse_pmon(line)
+        if row is not None and row[1] and self.is_tenant(row[0]):
+            self.last_busy = now
+            self.busy_samples += 1
+
+    def yielding(self, now: float) -> bool:
+        return self.last_busy is not None and now - self.last_busy <= YIELD_HOLD_S
+
+    def vram_trip(self, now: float, rows: Sequence[tuple[int, str, int]] | None = None,
+                  memory: tuple[int, int] | None = None) -> str | None:  # fmt: skip
+        """At most every COTENANT_VRAM_EVERY_S: the R2 trip when a co-tenant is on the GPU and the
+        free VRAM is below COTENANT_FLOOR_MIB (nvidia-smi unreadable: fail closed)."""
+        if now < self.next_vram:
+            return None
+        self.next_vram = now + COTENANT_VRAM_EVERY_S
+        if rows is None:
+            got = gpu_apps()
+            if got is None:
+                return "R2 co-tenant: nvidia-smi unreadable (fail closed)"
+            rows = got
+        _, tenants = split_cotenants(rows, self.signatures, self.cmdline)
+        if not tenants:
+            return None
+        return cotenant_vram(memory if memory is not None else gpu_memory(),
+                             COTENANT_FLOOR_MIB, "the floor", tenants)  # fmt: skip
+
+    def start(self) -> CoTenantWatch:
+        import threading
+
+        try:
+            self.proc = subprocess.Popen(["nvidia-smi", "pmon", "-s", "u", "-d", "1"],
+                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         text=True)  # fmt: skip
+        except OSError:
+            self.proc = None
+            self.last_busy = float("inf")  # cannot see it: yield for the whole step (fail safe)
+            return self
+        proc = self.proc
+
+        def read() -> None:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                self.feed(line, time.monotonic())
+
+        threading.Thread(target=read, daemon=True).start()
+        return self
+
+    def stop(self) -> None:
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
 def load_baseline(
     path: Path, now: float | None = None, max_age: float = BASELINE_MAX_AGE_S
 ) -> tuple[dict[str, Any] | None, str]:
@@ -182,18 +351,36 @@ def frigate_answers(
 
 
 def prestart(path: Path | None = BASELINE, fetch: Fetch = fetch_json,
-             apps: list[tuple[str, int]] | None = None) -> str | None:  # fmt: skip
+             apps: list[tuple[str, int]] | None = None, co_tenants: Sequence[bytes] = (),
+             rows: list[tuple[int, str, int]] | None = None,
+             memory: tuple[int, int] | None = None,
+             cmdline: Callable[[int], bytes] = read_cmdline) -> str | None:  # fmt: skip
     """The checks before ANY GPU job of ours: the refusal reason, or None to go. ``path`` None:
-    no baseline file needed (the paired design measures its own OFF windows)."""
+    no baseline file needed (the paired design measures its own OFF windows). ``co_tenants``
+    (guarded_build's vision steps only): processes matching these command lines may stay on the
+    GPU, if the free VRAM covers our cap + COTENANT_HEADROOM_MIB (R2 co-tenant exception)."""
     models = ollama_models(fetch)
     if models:
         names = ", ".join(str(m["name"]) for m in models)
         return f"R2: Ollama has a model loaded ({names}); one model at a time"
-    if apps is None:
+    tenants: list[tuple[int, str, int]] = []
+    if apps is None and co_tenants:
+        got = gpu_apps() if rows is None else rows
+        if got is None:
+            return "R2: nvidia-smi unreadable (fail closed)"
+        apps, tenants = split_cotenants(got, co_tenants, cmdline)
+    elif apps is None:
         apps = gpu_state()[2]
     jobs = our_gpu_jobs(apps)
     if jobs:
         return f"R2: another job of ours is on the GPU ({'; '.join(jobs)})"
+    if tenants:
+        mem = gpu_memory() if memory is None else memory
+        cap = int((mem[1] if mem else 0) * VISION_CAP_FRACTION)
+        what = f"our cap {cap} + headroom {COTENANT_HEADROOM_MIB} ="
+        why = cotenant_vram(mem, cap + COTENANT_HEADROOM_MIB, what, tenants)
+        if why:
+            return why
     if not frigate_answers(fetch):
         return "R3: Frigate stats unreachable (3 tries; fail closed)"
     if path is not None:
@@ -819,13 +1006,16 @@ class DutyController:
                 "held": self.held}  # fmt: skip
 
 
-def write_duty(path: Path, level: int, load: float, now: float | None = None) -> None:
-    """The duty file the training container reads (read-only mount /lab-duty), atomically."""
+def write_duty(path: Path, level: int, load: float, now: float | None = None,
+               sleep_ms: int | None = None) -> None:  # fmt: skip
+    """The duty file the training container reads (read-only mount /lab-duty), atomically.
+    ``sleep_ms``: an explicit step sleep instead of the level's (the co-tenant yield, YIELD_MS)."""
     now = time.time() if now is None else now
+    ms = DUTY_LEVELS_MS[level] if sleep_ms is None else sleep_ms
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"level": level, "sleep_ms": DUTY_LEVELS_MS[level],
-                               "load": round(load, 1), "t_epoch": now}))  # fmt: skip
+    tmp.write_text(json.dumps({"level": level, "sleep_ms": ms, "load": round(load, 1),
+                               "t_epoch": now}))  # fmt: skip
     os.replace(tmp, path)
 
 
