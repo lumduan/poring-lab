@@ -1284,3 +1284,15 @@ the same bars, and Batt decides.
   15:43:49), quant-postgres stall rose to 42-50 % for 1-2 s. That is inside the sustained rule,
   and an infra suggestion (tmpfs for `mid.pt`), not a change. The probe's largest bursts (520 MB/s
   at 15:27:35, 445 MB/s at 15:39:27) are not ours.
+- **16:07:28, an R3-HARD abort** (recorded 16:14 ICT from `date`): camera cam-1-02-font-n dropped
+  frames for 30 s. At that moment the detectors were at 217.4 ms, five cameras were skipping
+  (cam-1-01-font-s, -02-font-n, -08-side-s, -09-font-room-s, -10-living-room), and the fleet load
+  was 14.2 detections/s.
+  - What else was on the GPU: fit-first's VTON had restarted at 16:05:34 and was computing.
+  - Ours had been yielding since 16:06:40 (one step per ~10 s).
+  - The stop was verified (our python gone from the GPU). train-day then waits for 15 quiet
+    minutes (16:07:37 on) and resumes at the slowest level, walking back up; 1 abort in 2 h.
+  - By 16:13 Frigate was back to inference ~28-30 ms, 29-35 detections/s, no camera skipping,
+    VTON idle.
+  - Attribution: not settled. Our share of the GPU was near zero in the drop window. The VTON's
+    start is the likelier cause; it is the top priority and is never touched.
