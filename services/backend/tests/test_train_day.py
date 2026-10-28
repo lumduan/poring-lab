@@ -300,3 +300,19 @@ def test_io_resumes_and_the_measured_quiet_gate_are_batts_option_a(tmp_path: Pat
     log, _, rc = run_rc(tmp_path / "r3", "latency,ok",
                         extra={"IO_QUIET_MIN": "10", "IO_QUIET": "false"})  # fmt: skip
     assert rc == 0 and "quiet minutes" not in log  # R3 keeps its 30-s pause
+
+
+def test_io_guard_sets_the_guard_rule_and_the_default_is_unchanged(tmp_path: Path) -> None:
+    """Batt 2026-10-28 ~12:5x ("we write little anyway"): IO_GUARD replaces the guard's IO rule
+    (gef10-detector.md 13y: the host's own 1-5 s bursts trip the one-spike rule within minutes).
+    The default stays --sustain 30 --spike 25; nothing else in the call changes."""
+    for d in ("default", "sustained"):
+        (tmp_path / d).mkdir()
+    _, plain, rc0 = run_rc(tmp_path / "default", "ok", extra=W1)
+    _, loose, rc1 = run_rc(tmp_path / "sustained", "ok",
+                           extra={**W1, "IO_GUARD": "--threshold 30 --sustain 30"})  # fmt: skip
+    assert rc0 == 0 and rc1 == 0 and len(plain) == 1 and len(loose) == 1
+    assert "args: --sustain 30 --spike 25 execdev:vision@43200=" in plain[0]
+    assert "args: --threshold 30 --sustain 30 execdev:vision@43200=" in loose[0]
+    assert "--spike" not in loose[0]
+    assert loose[0].replace("--threshold 30 --sustain 30", "--sustain 30 --spike 25") == plain[0]

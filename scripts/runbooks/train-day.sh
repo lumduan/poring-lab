@@ -21,6 +21,10 @@
 #   (IO_RESUMES; Batt 2026-10-26 ~20:5x, option (a): AUTO-RESUME after an IO trip once the capture
 #   cgroups have been QUIET for IO_QUIET_MIN minutes, measured by quiet_start.py -- set for the
 #   night as IO_RESUMES=20 IO_QUIET_MIN=10; the defaults keep the old behaviour)
+# - IO_GUARD (Batt 2026-10-28 ~12:5x: "we write little anyway"): the guard's IO rule. The default
+#   stays `--sustain 30 --spike 25`. `--threshold 30 --sustain 30` drops the one-spike rule, which the
+#   host's own 1-5 s bursts trip within minutes with nothing of ours running (gef10-detector.md 13y),
+#   and stops only on 30 s of sustained stall above 30 %.
 #   (unchanged).
 # - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
 #   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
@@ -61,6 +65,7 @@ QUIET=${QUIET:-python3 -S scripts/frigate_r3.py quiet --minutes 15 --max-wait-mi
 DROP_WINDOW_S=7200; DROP_MAX=3; CAP_LEVEL=3; CAP_S=3600; FLOOR=4
 IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for tests only
 IO_RESUMES=${IO_RESUMES:-3}; IO_QUIET_MIN=${IO_QUIET_MIN:-0}  # 0 = the fixed IO_PAUSE_S pause
+IO_GUARD=${IO_GUARD:---sustain 30 --spike 25}  # the IO rule (header); unquoted on use
 IO_QUIET=${IO_QUIET:-python3 scripts/runbooks/quiet_start.py --quiet-min $IO_QUIET_MIN --max-wait-h 2 -- true}
 MARKET_WINDOWS=${MARKET_WINDOWS:-"0930-1015 1400-1445"}  # ICT, CLAUDE.md rule 5
 SLEEP=${SLEEP:-sleep}  # overridable for tests only
@@ -123,7 +128,7 @@ while :; do
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
   w="$init$hyp"; [ "$extra" = "--resume" ] && w=""
-  $GUARD --sustain 30 --spike 25 \
+  $GUARD $IO_GUARD \
     "$KIND:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid$w $extra" \
     > "$out" 2>&1
   rc=$?

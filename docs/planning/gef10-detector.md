@@ -1144,3 +1144,80 @@ the same bars, and Batt decides.
   - (b) a night window, if quant's spikes are rarer then (not measured yet);
   - (c) a higher spike limit for jobs whose own disk IO is small.
   - The recorders' guard is the same question.
+  - ➡️ **SUPERSEDED: Batt chose (a) on 2026-10-26 ~20:5x** (rogue-gef10.md Amendment AC). Its quiet
+    gate never found a window all night (21:13-05:13; longest gap 5.7 min). Then, on 2026-10-28,
+    Batt approved running now on the grounds that our IO is small. The cache was DONE at 12:59
+    (13y).
+
+### 13y. The cache is DONE under a sustained-only IO rule (Batt 2026-10-28; recorded 2026-10-28 13:01 ICT from `date`)
+
+- **Batt, 2026-10-28 ~12:5x** (quant-postgres is running a long job): *"see whether we can do it
+  now, since we write little anyway"*.
+- **What the job touches.** Only the last train session (`20261026T014529-rdp-w2`, 24 of 25 done
+  before) was left.
+  - It reads its PNG shards from the NAS (NFS) and writes tar shards straight to the NAS.
+  - Labels, KB and params come from /dev/shm.
+  - Nothing is written to the root disk (`build_frame_cache.py` docstring).
+- **The probe** (scratch `io_probe.py`, 1-s samples), measuring three things:
+  - each capture cgroup's full stall;
+  - the root disk dm-0's read/write MB/s;
+  - the builder's open-for-write files outside /mnt and /dev. A watcher would have SIGINTed the
+    builder on the first such file.
+- **The guard rule:** `--threshold 30 --sustain 30`, with no spike rule. It stops on 30 s of
+  sustained stall above 30 %; the host's own 1-5 s bursts do not trip it.
+  - In the 3 minutes before, with nothing of ours running, the 1-s samples showed 13 seconds above
+    25 %: quant-postgres max 60.0 %, cron capture 56.0 %, orderbook 42.8 %, ticker 49.0 %.
+- **Result:** `[12:59:45] ALL STEPS OK (worst capture stall so far 22.7% on quant-postgres, 0s above
+  30.0%)`.
+  - It ran 12:56:19-12:59:45 (203.7 s). w2 kept 774 frames in 4 shards.
+  - The cache now has 25 sessions and 24,778 frames (`progress.json`).
+- **Before vs during (1-s samples):**
+
+| window | dm-0 write MB/s mean / p95 | dm-0 read MB/s mean | quant-postgres stall mean / max | 1-s samples > 25 % (all cgroups) | builder files open for write on local disk |
+|---|---|---|---|---|---|
+| OFF 12:52:21-12:55:46 | 1.09 / 1.97 | 2.82 | 4.5 / 60.0 | 13 | - |
+| ON 12:56:20-12:59:45 | 1.33 / 3.65 | 0.34 | 5.3 / 64.5 | 4 | 0 of 182 samples |
+
+  - No sign that the job raised the capture stall.
+  - The guard's figure (22.7 %) is a 10-s window rate; the probe's are 1-s samples. So the probe's
+    maxima run higher.
+- **The old rule (`--spike 25` on the guard's 10-s windows) would not have tripped in these
+  3.5 minutes either** (worst 22.7 %). That is luck of a quiet midday, not a property of the rule.
+- **The training (13u) follows at once, under the same IO rule: 13z.**
+
+### 13z. PRE-REGISTERED: the training launch (recorded 2026-10-28 13:01 ICT from `date`, BEFORE the launch)
+
+- **The settings are 13u's, unchanged:**
+  - the cache `v2orc-payf07-gef10-20261026` (13y);
+  - init from payf07's `last.pt` (sha256 re-checked at 13:0x: `b2c29120...`, matches);
+  - YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1;
+  - 10 epochs, close_mosaic 3, hsv_s 0.2, scale 0.1;
+  - WORKER=1, MID_CKPT=1, R1-R3 with the adaptive duty cycle, and the 25 % VRAM cap;
+  - the scored checkpoint is `last.pt` after the last COMPLETED epoch (gef10-eval.md).
+- **Changed: the IO rule only (Batt 2026-10-28, 13y).**
+  - `IO_GUARD="--threshold 30 --sustain 30"` (new knob in train-day.sh, default unchanged).
+  - `IO_RESUMES=20 IO_QUIET_MIN=0`: after an IO trip (now meaning 30 s of sustained stall), pause
+    15 min, then `--resume`.
+  - Option (a)'s measured-quiet gate is NOT used: its 25 %-per-second rule found no 10-minute
+    window all night (13x).
+- **What training writes locally:** checkpoints and logs under the worker's `/data/train/<run>`
+  (`data/`, the root disk) -- `mid.pt` every ~5 min and `last.pt` each epoch, a few MB each for
+  YOLO11n. It reads its shards from the NAS. The probe keeps logging dm-0 and the stalls until
+  13:52.
+- **Preconditions at launch:**
+  - the vision worker is up since 2026-10-24 19:53 UTC (no cold start);
+  - Ollama `/api/ps` shows no model (R2);
+  - outside 09:30-10:15 / 14:00-14:45. A run in progress continues through 14:00; the runbook
+    only refuses new starts and resumes inside a window.
+- **VRAM at launch:** 9,924 MiB of 16,311 MiB in use before ours.
+  - fit-first's `fitfirst_vton_worker.session` holds 6,376 MiB; Frigate's detectors and ffmpeg hold
+    the rest.
+  - R1 (Ollama + vision <= 9 GiB) holds: 0 + at most the 25 % cap.
+  - Expected total ~12.4 GiB (ours peaked at 2,510 MiB in v0).
+  - Infra observation only: fit-first's share is not covered by R1.
+- **The launch:**
+
+      WORKER=1 MID_CKPT=1 INIT_WEIGHTS=/datasets/archive/train/payf07-20261024/weights/last.pt \
+        HSV_S=0.2 CLOSE_MOSAIC=3 SCALE=0.1 IO_GUARD="--threshold 30 --sustain 30" \
+        IO_RESUMES=20 IO_QUIET_MIN=0 scripts/runbooks/train-day.sh gef10-20261026 \
+        v2orc-payf07-gef10-20261026 10 /dev/shm/poring-lab-tmp/train-gef10 2 1
