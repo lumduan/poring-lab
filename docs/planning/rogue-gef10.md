@@ -1652,3 +1652,23 @@ verdict; staged items are never income.
 - **Not a re-cut.** The positive case is repeated under the run's own conditions: the stale Axe
   goes to storage (the store step), `held` rc 0, then `give --map gef_fild10` WITHOUT `--frames`
   and `drop --map gef_fild10`. rc 0 continues the plan; rc 1 stops the session and asks Batt.
+
+### AK-2 (15:58 ICT from `date`): the session stopped at spot 18 by design; a carrier is left -- the plan's extra @killmonster2, pre-registered
+
+- `run` rc 1 at 15:50:33: spots 0-17 complete; at spot 18 (89,121) `clear_loot` dropped 4 of the
+  6 (Cyfar and Orcish Voucher read 3.07 / 3.29 against the 3.0 bar on the recorded frames: the cut
+  icons carry the slot background and its new-item glow, so a correct item's distance moves with
+  its neighbours). The run then typed the end pair (15:49:15, 15:50:28) as designed. Recorder:
+  2,227 frames, 5.0 GB, stopped by signal 15:51:46.
+- Afterwards: `@warp prt_fild08 268 107` while still immune, immunity OFF there (judged:
+  "Returned to normal state."), the two staged copies (Cyfar 1, Voucher 1) to storage by the store
+  step, `held` rc 0, weight 610 (judged frame).
+- **Packets (loot_truth.py):** 112 staged falls (9-11 per class); 16 vanished before 60 s (spots
+  14, 15, 18); spot 18's four items were looted AFTER the first end kill, fell again at the second
+  (15:50:28 + 0.1 s) and vanished again 7-9 s later. So a Poporing most likely carries Garlet,
+  Nursing Bottle, Milk and Green Herb (the plan's step 10 case).
+- **The cleanup, pre-registered (the plan's step 10):** immunity ON (judged), `@warp gef_fild10
+  89 121` (spot 18, vetted), a 3-min 1-fps recorder for the packets, `@killmonster2`, 70 s, then
+  check that the falls lived 60 s. An early vanish again -> one more `@killmonster2` >= 60 s
+  later, at most two in all; then back to the stand, immunity OFF (judged), and report. The first
+  extra kill's ICT time is recorded; the Orc Lord's D stays 15:49:15 unless a respawned Lord dies.
