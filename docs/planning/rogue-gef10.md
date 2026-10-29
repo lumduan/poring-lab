@@ -1825,7 +1825,7 @@ are re-read from the NAS copy under a 4 GB memory cap, to show what the masked r
   garlet 2.56, iron 2.15, large_jellopy 1.40, rough_oridecon 2.77, green_herb 4.36,
   nursing_bottle 1.12, axe 3.47; the stock (fly_wing, slot, white_potion) unknown and beyond 20.0.
 
-### AK-6 (11:27 ICT from `date`): RESULT -- e3b ran clean, 6 of 6 spots, 36 staged floor items; the masked rule dropped 47 of 47 in the field; E3 + e3b reach >= 10 per class (Cyfar 12)
+### AK-6 (11:26 ICT from `date`): RESULT -- e3b ran clean, 6 of 6 spots, 36 staged floor items; the masked rule dropped 47 of 47 in the field; E3 + e3b reach >= 10 per class (Cyfar 12)
 
 **Timeline (from the tools' own clock lines):**
 - 11:01:31-11:02:30 `give --map gef_fild10` (no frames): weight 610 -> 727.
