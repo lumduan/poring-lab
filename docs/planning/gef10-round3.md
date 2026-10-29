@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "The 148 staged floor items of E3 + e3b (gef10-eyes-loot.md E3), labelled by gef10-detector.md section 8's frozen-in-shape item rule (packets place each item; its own client sprite gives the box; the anchor and T_item measured on FIT), pass G2 on held-out TEST and a blind round on what trains, so round 3 can add floor-item class(es) to round 2's monster detector without losing its monster accuracy."
-status: "PROPOSED (2026-10-29 12:07 ICT from `date`): the split is fixed here BEFORE any frame of these sessions is read under the item rule; the item CLASSES wait for Batt (section 3). Nothing measured, frozen or trained."
+status: "PROPOSED (2026-10-29 12:07 ICT from `date`): the split fixed BEFORE any read; ITEM CLASSES DECIDED by Batt 2026-10-29 ~12:1x: option C, ONE pooled `item` class (section 3). Nothing measured, frozen or trained."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [gef10-eyes-loot.md, gef10-detector.md, gef10-eval.md, item-class.md, rogue-gef10.md, target-items.md]
-next_action: "Batt: the item classes (section 3, A / B / C). Meanwhile, offline and without touching the live work: the labeller for staged sessions (section 5). Frames are read only from the NAS copies after the 2026-10-30 03:05 ship."
+next_action: "Build section 5 offline (synthetic tests first): several staged sessions per map in map_labels, gef10_items label / g2 / pack, Route M. Frames are read only from the NAS copies after the 2026-10-30 03:05 ship; the GPU only after round 2's evaluation."
 title: "gef10 round 3 (E5): floor-item classes from the staged sessions, on top of round 2's monsters (PROPOSED pre-registration)"
 date: 2026-10-29
 owner: Batt
@@ -59,7 +59,15 @@ The staged sessions (immune Rogue, open ground, 1 fps PNG + packets):
   9-11 per class; TEST3 36, 3-4 per class, of which spots 0-1's 12 were looted within 0.3-6.2 s
   (below the 2.2 s settle: no label), leaving 24.
 
-## 3. OPEN, for Batt: the item classes
+## 3. The item classes: DECIDED -- option C, one pooled `item` class
+
+**Batt, 2026-10-29 ~12:1x:** "choose C". Round 3 adds ONE class, `item`, for every floor item
+id (the 11 staged ids and any other). Its bar: >= 40 kept labels from >= 10 floor items in TRAIN
+(112 staged floor items in E3), and the blind round's 40 crops at <= 3 per floor item. Cyfar /
+Orcish Voucher identity stays with the inventory icons (stage@6). Option A (a Cyfar + Voucher
+staging session) stays possible later without changing C's labels. The table below is the choice
+as it was put to Batt.
+
 
 The bars (gef10-detector.md section 7 / 8, unchanged): a class trains only with >= 40 kept labels
 from >= 10 floor items in TRAIN AND a blind round of 40 crops per class, AT MOST 3 PER FLOOR ITEM,
