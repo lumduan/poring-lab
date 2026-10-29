@@ -1824,3 +1824,56 @@ are re-read from the NAS copy under a 4 GB memory cap, to show what the masked r
   screen-cut references read cyfar 2.07, orcish_voucher 3.82, sticky_mucus 3.09, milk 1.61,
   garlet 2.56, iron 2.15, large_jellopy 1.40, rough_oridecon 2.77, green_herb 4.36,
   nursing_bottle 1.12, axe 3.47; the stock (fly_wing, slot, white_potion) unknown and beyond 20.0.
+
+### AK-6 (11:27 ICT from `date`): RESULT -- e3b ran clean, 6 of 6 spots, 36 staged floor items; the masked rule dropped 47 of 47 in the field; E3 + e3b reach >= 10 per class (Cyfar 12)
+
+**Timeline (from the tools' own clock lines):**
+- 11:01:31-11:02:30 `give --map gef_fild10` (no frames): weight 610 -> 727.
+- 11:02:47-11:03:51 **`drop` rc 0: `all_and_only_the_set` true** (the 11 dropped, nothing else;
+  `unknown` 126 = every other slot): the masked rule's positive case under the run's conditions.
+  A prt_fild08 Poring stood on that drop pile (`stage-drop-gef_fild10.png`): a prt_fild08 looter
+  may carry some of these 11 (no prt_fild08 hunt is scheduled; dungeon_judge's staged rule does
+  not know these ids).
+- `held` rc 1 at 11:04:12 (the DB's last save was mid-drop: 5 of the 11). The empty store step
+  (11:04:57 `@storage`, 11:05:20-11:05:39 `store_loot`: stored nothing, kept White Potion and Fly
+  Wing) did NOT force a save; the autosave did: `held` rc 0 at 11:07:21.
+- 11:07:50 `immune-on`, judged ("You are now immune to attacks.").
+- 11:08:11 recorder; 11:08:14-11:21:40 **`run` rc 0, reason "done", 6 spots**, every spot's drop
+  check passed (6 x 6 = 36 of 36). End kills 11:20:23 and 11:21:35 (72 s apart). **The Orc Lord's
+  next D: 11:20:23.** Recorder `20261029T110813-rdp-stage-gef10-e3b`: 795 frames, 1.77 GB, 943
+  packet events, stopped by PID 11:22:53.
+- 11:23:22 immunity off ("Returned to normal state.") ON gef_fild10 at spot 5: an Orc Lady was
+  beside the Rogue and hit twice (113, 102) before the warp at 11:23:46. **Procedure flaw:** warp
+  to the safe stand FIRST, then the toggle (AK step 7 and AK-5 step 7 had it the other way; E3's
+  spot 18 had no monster close). 11:24:32 `@heal`.
+
+**Yield** (`loot_truth.py` on the session's packets; deaths in sight 0):
+
+| class | e3b falls | E3 + e3b | class | e3b falls | E3 + e3b |
+|---|---|---|---|---|---|
+| Axe | 4 | 14 | Milk | 3 | 14 |
+| Cyfar | 3 | **12** | Nursing Bottle | 3 | 14 |
+| Garlet | 3 | 14 | Orcish Voucher | 4 | 14 |
+| Green Herb | 4 | 14 | Rough Oridecon | 3 | 13 |
+| Iron | 3 | 13 | Sticky Mucus | 3 | 13 |
+| Large Jellopy | 3 | 13 | total | 36 | 148 |
+
+- **Fates of the 36:** 18 lived 60.0 s in sight; 6 had no vanish seen (we warped on first);
+  **12 vanished 0.3-6.2 s after their own fall, all of spots 0 (99,287) and 1 (76,100)**: a
+  looter stood on the pile (as E3's spot 15). The end pair is map-wide; whether it reached those
+  looters is not observable from spot 5 (same caveat as AK-3).
+- **Success as pre-registered:** Cyfar >= 10 (12) and every class >= 10 (13-14) in E3 + e3b; no
+  stop. Labels per class (the plan's >= 40) are E5's count; the quick-looted items give few frames.
+
+**The masked rule in the field:** 11 (positive case) + 36 (run) = 47 staged items dropped, 0
+missed, 0 wrong; the stock (White Potion, Fly Wing) never dropped.
+
+**Safety, from the sniffer's events in the run window (`packets.jsonl.gz`, keyed by `type`):**
+`npc_contact` 0, `attack_request` 0, `act` 0; `map_change` 18 = 6 spots x 3 views, all on
+gef_fild10 at our warp cells. Positive control, the same reader on e4: `attack_request` 30,
+`act` 549. No NPC-contact positive case exists for this sniffer start (AK-3's caveat).
+
+**State at 11:24 (judged `rogue/e3b-healed.png`):** the prt_fild08 stand (268,107), immunity OFF,
+HP / SP full, weight 610, no dialog; the DB holds none of the set.
+
+**Ship:** e3b joins the 2026-10-30 03:05-04:25 chain (now five sessions, ~11 GB).
