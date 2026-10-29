@@ -100,12 +100,23 @@ follow without changing C's labels.
 an item under our own box or HP bar are EXCLUDED from the cache (not labelled empty). E3's (0, 0)
 views give no item labels. Its (3, 0) and (0, 3) views were planned for exactly this and do.
 
+## 4a. One detail fixed in code before any read (2026-10-29 12:4x)
+
+- `under_unit` (section 8: "any unit's predicted box over the item's box") uses the generic unit
+  box (60 px wide, 100 px up to 6 px down from the unit's anchor, at tw and tw - 0.5 s). That is
+  the box the FIT samples already use (`gef10_items.sample_reason`), and a superset of a unit's
+  predicted box. It is conservative: it excludes more frames, never fewer.
+- The label fit: +-6 px around the ANCHORED prediction (both its window and its render point
+  move by the anchor); `item_unfit` below T_item or at the search edge. G2 refits +-10 px (the
+  measurement radius), so an anchor error shows as an offset instead of hitting the edge.
+
 ## 5. What has to be built (offline, no GPU, no client)
 
-- `gef10_items.py label`: section 8's labels over a staged session's parts (`DIR:spots=`),
-  refusing TEST3 except in `g2`; writes under the 4 GB /dev/shm limit or to the root disk.
-- `gef10_items.py g2` and `pack` (the blind pack), mirroring item_labels.py's.
-- **Several staged sessions per map in `map_labels`.** Today a MapSpec has ONE `staged` session and
+- ✅ BUILT 2026-10-29: `gef10_items.py freeze / label / g2`. `label` refuses every TEST; `g2` reads
+  TEST3 only. Rows are small JSON, within rule 7's limits. Tests on synthetic data (68cfdf6 + this).
+- `gef10_items.py pack` (the blind pack, mirroring item_labels.py's: 40 crops at <= 3 per floor
+  item + 20 empty-floor negatives).
+- ✅ BUILT 2026-10-29 (68cfdf6): **several staged sessions per map in `map_labels`.** Today a MapSpec has ONE `staged` session and
   one `staged_kind`: GEF10's is the watch, one spot per map change. E3 and e3b are stage_items
   sessions, with one spot per first warp followed by drops (`spot_starts`, 3 views each). A
   per-session kind is needed so that `E3:spots=0-3` means stage_items spots. Round 2's behaviour

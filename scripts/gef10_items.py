@@ -6,6 +6,10 @@ before this was built).
     gef10_items.py sprites --out JSON                 the item sprites' native extents (1e)
     gef10_items.py measure PART... --offset-ms MS --out JSON
                                                       8's anchor and T_item, FIT parts only
+    ROUND 3 (docs/planning/gef10-round3.md, one pooled `item` class):
+    gef10_items.py freeze --measure JSON --rows JSON --out PARAMS     the anchor + T_item frozen
+    gef10_items.py label PART... --params PARAMS --offset-ms MS --out JSON   TRAIN labels
+    gef10_items.py g2 PART... --params PARAMS --offset-ms MS --out JSON      G2 on TEST3 only
 
 The rule (8): an item is LABELLED on a frame at t when its floor_item_appear + 2.2 s <= t < its
 vanish (item-class.md 8a's frozen D_APPEAR / D_GONE), on the monsters' candidate frames (our
@@ -28,6 +32,8 @@ refused (map_labels' GEF10 spec: watch cells 11-14, s7, s8).
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import hashlib
 import json
 import statistics
 import sys
@@ -46,7 +52,13 @@ import orc_camera_check as occ  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
 
-from poring_dataset.render import Actor, SpriteSheet, anchor_and_depth, predict_sprite  # noqa: E402
+from poring_dataset.render import (  # noqa: E402
+    Actor,
+    SpritePrediction,
+    SpriteSheet,
+    anchor_and_depth,
+    predict_sprite,
+)
 from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 
 Box = tuple[float, float, float, float]
@@ -302,6 +314,276 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
     }  # fmt: skip
 
 
+# --- ROUND 3 (gef10-round3.md): freeze, labels, G2 ----------------------------------------------
+LAYOUT_TEMPLATES = Path("/home/batt/docker/poring-lab/data/ui_anchors/layout")
+R_LABEL = 6  # 8: a label's fit, +-px around the ANCHORED prediction
+G2_BAR_PX = 3.0  # 8 / round3 4.3: the median |dx|, |dy| at the frozen anchor, on TEST3
+MIN_FIT_FLOOR_ITEMS = 4  # round3 4.1: the clean samples come from >= 4 floor items
+
+
+def anchored(p: SpritePrediction, anchor: Sequence[float]) -> SpritePrediction:
+    """PURE: the prediction moved by the item ANCHOR (its box = the fit's window, its anchor_px =
+    where the sprite is rendered)."""
+    dx, dy = float(anchor[0]), float(anchor[1])
+    b = p.box
+    return dataclasses.replace(p, box=(b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy),
+                               anchor_px=(p.anchor_px[0] + dx, p.anchor_px[1] + dy),
+                               mask=None, mask_origin=None)  # fmt: skip
+
+
+def label_reasons(boxes: Mapping[int, Box], phases: Sequence[str], me: tuple[float, float],
+                  units: Sequence[tuple[float, float]], size: tuple[int, int],
+                  rects: Sequence[tuple[int, int, int, int]]
+                  ) -> tuple[list[str], list[int]]:  # fmt: skip
+    """PURE (8's item exclusions; round3 1): the frame's exclusion reasons and the floor ids to
+    fit. ``boxes``: floor id -> the ANCHORED box of every item ON the floor (phase "on");
+    ``phases``: every nearby item's phase; ``rects``: UI windows (x, y, w, h). Wholly behind the UI
+    or off the region: not drawn, no label. ``under_unit`` uses the generic unit box at tw and
+    tw - 0.5 s (a superset of a unit's predicted box; round3 1)."""
+    why: list[str] = []
+    if "settling" in phases:
+        why.append("item_settling")
+    if "vanishing" in phases:
+        why.append("item_vanishing")
+    xyxy = [(float(x), float(y), float(x + w), float(y + h)) for x, y, w, h in rects]
+    vis: list[int] = []
+    for fid, b in boxes.items():
+        st = il.ui_status(b, xyxy, size)
+        if st == "hidden":
+            continue
+        if st != "clear":
+            why.append(st)
+            continue
+        vis.append(fid)
+    vb = [boxes[f] for f in vis]
+    if il.stacked(vb):
+        why.append("stacked")
+    if any(overlaps(b, self_box(me)) for b in vb):
+        why.append("under_self")
+    if any(overlaps(b, at(me, BAR)) for b in vb):
+        why.append("under_self_bar")
+    if any(overlaps(b, at(u, UNIT_BOX)) for b in vb for u in units):
+        why.append("under_unit")
+    return list(dict.fromkeys(why)), vis
+
+
+def freeze_params(measure: Mapping[str, Any], rows: Sequence[Mapping[str, Any]],
+                  r: int = R_MEASURE) -> dict[str, Any]:  # fmt: skip
+    """PURE (round3 4.1): the frozen anchor and T_item from a FIT measurement, or a STOP: >= 12
+    clean samples not at the search edge (8) from >= MIN_FIT_FLOOR_ITEMS floor items."""
+    pooled = measure.get("pooled") or {}
+    good = [x for x in rows if x.get("reason") is None and x.get("ncc") is not None
+            and not olf.at_edge(int(x["dx"]), int(x["dy"]), r)]  # fmt: skip
+    floor_ids = {(str(x.get("part")), int(x["floor_id"])) for x in good}
+    out = {"samples": len(good), "floor_items": len(floor_ids)}
+    if pooled.get("STOP") or pooled.get("anchor_px") is None:
+        return {**out, "STOP": pooled.get("STOP") or "no anchor"}
+    if len(floor_ids) < MIN_FIT_FLOOR_ITEMS:
+        return {**out, "STOP": f"{len(floor_ids)} floor items < {MIN_FIT_FLOOR_ITEMS}"}
+    return {**out, "anchor_px": list(pooled["anchor_px"]), "t_item": float(pooled["t_item"]),
+            "r_label": R_LABEL, "d_appear_s": 2.2, "d_gone_s": 0.6,
+            "sub_table": {"OX": OX, "OY": OY},
+            "class": "item (one pooled class, Batt C)"}  # fmt: skip
+
+
+def g2_summary(rows: Sequence[Mapping[str, Any]], bar: float = G2_BAR_PX) -> dict[str, Any]:
+    """PURE (round3 4.3): G2 = the median |dx|, |dy| of the TEST3 fits at the frozen anchor."""
+    fits = [x for x in rows if x.get("dx") is not None]
+    if not fits:
+        return {"n": 0, "verdict": "NO_DATA"}
+    mdx = statistics.median(abs(float(x["dx"])) for x in fits)
+    mdy = statistics.median(abs(float(x["dy"])) for x in fits)
+    return {"n": len(fits), "floor_items": len({(x.get("part"), x["floor_id"]) for x in fits}),
+            "median_abs_dx": mdx, "median_abs_dy": mdy,
+            "verdict": "PASS" if mdx <= bar and mdy <= bar else "STOP"}  # fmt: skip
+
+
+def check_role(spec: ml.MapSpec, sid: str, spots: frozenset[int] | None, role: str) -> None:
+    """PURE (round3 2): ``train`` refuses every TEST (round 1's, TEST2, TEST3); ``test3`` (G2)
+    reads TEST3 and nothing else."""
+    if role == "train" and spec.is_test(sid, spots):
+        raise SystemExit(f"{sid}: shares frames with a TEST: refused (gef10-round3.md 2)")
+    if role == "test3" and not any(sid.endswith(x) for x in spec.test3_suffixes):
+        raise SystemExit(f"{sid}: g2 reads TEST3 only (gef10-round3.md 2)")
+
+
+def load_params(path: Path) -> dict[str, Any]:
+    d = json.loads(path.read_text())
+    if d.get("STOP") or d.get("anchor_px") is None:
+        raise SystemExit(f"{path}: not frozen ({d.get('STOP')})")
+    return d
+
+
+def _setup(ref: qa_export.JpegRef) -> tuple[Any, str]:
+    """The frame's shared state for round 3, or (None, reason)."""
+    sess: ml.RecSession = olf._JOB["sess"]
+    floors: list[il.Floor] = olf._JOB["floors"]
+    t = ref.t_mono_ns
+    near = [(f, il.phase(f, t, D_APPEAR_NS, D_GONE_NS)) for f in floors
+            if f.t_a <= t < f.t_v + D_GONE_NS]  # fmt: skip
+    if not any(ph == "on" for _f, ph in near):
+        return None, "no_item"
+    tw = t - olf._JOB["offset_ns"]
+    world = sess.lab.timeline.frame_world(tw)
+    scene = sess.scene(world)
+    if scene is None:
+        return None, "no_scene"
+    bgr = ml.read_png(ref)
+    if not sess.layout_ok(bgr):
+        return None, "ui_layout_mismatch"
+    me = anchor_and_depth(scene, scene.player)[0]
+    units = []
+    for when in (tw, tw - UNIT_BACK_NS):
+        fw = world if when == tw else sess.lab.timeline.frame_world(when)
+        for e in fw.entities:
+            if e.objtype in occ.UNIT_OBJTYPES and not e.hidden:
+                units.append(anchor_and_depth(scene, (e.x, e.y))[0])
+    return (t, near, scene, bgr, me, units), "ok"
+
+
+def _preds(near: Sequence[tuple[il.Floor, str]], scene: Any, anchor: Sequence[float]
+           ) -> dict[int, tuple[il.Floor, SpriteSheet, SpritePrediction]]:  # fmt: skip
+    sheets: ItemSheets = olf._JOB["sheets"]
+    out = {}
+    for f, ph in near:
+        if ph != "on":
+            continue
+        sheet = sheets(f.item_id)
+        if sheet is None:
+            continue
+        p = predict_sprite(Actor(il.item_cell(f, OX, OY), 0, 0), sheet, scene, olf.K)
+        if p is not None:
+            out[f.floor_id] = (f, sheet, anchored(p, anchor))
+    return out
+
+
+def _label_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
+    st, why = _setup(ref)
+    if st is None:
+        return [], why
+    t, near, scene, bgr, me, units = st
+    sess: ml.RecSession = olf._JOB["sess"]
+    prm = olf._JOB["params"]
+    preds = _preds(near, scene, prm["anchor_px"])
+    if any(ph == "on" and f.floor_id not in preds for f, ph in near):
+        return [{"frame_id": ref.frame_id, "t": t, "status": "exclude",
+                 "reasons": ["item_untemplated"], "items": []}], "frame"  # fmt: skip
+    reasons, vis = label_reasons({k: v[2].box for k, v in preds.items()},
+                                 [ph for _f, ph in near], me, units, sess.lab.size,
+                                 sess.lab.ui_rects)  # fmt: skip
+    grey = bgr[:, :, :3].astype(float) @ label_check.GREY
+    valid = olf.valid_map(sess.lab.size, sess.lab.ui_rects)
+    occl: olf.Occluders = olf._JOB["occluders"]
+    items = []
+    for fid in vis:
+        f, sheet, p = preds[fid]
+        best = olf.best_fit(olf.fit_label_all(grey, valid, sheet, p, R_LABEL))
+        if best is None:
+            reasons.append("edge_partial")
+            continue
+        ncc, dx, dy = best[0], best[1], best[2]
+        unfit = ncc < float(prm["t_item"]) or olf.at_edge(dx, dy, R_LABEL)
+        b = p.box
+        items.append({"floor_id": f.floor_id, "item_id": f.item_id, "kind": f.kind,
+                      "box": [round(b[0] + dx, 2), round(b[1] + dy, 2), round(b[2] + dx, 2),
+                              round(b[3] + dy, 2)],
+                      "pred_box": [round(x, 2) for x in b], "ncc": round(ncc, 4), "dx": dx,
+                      "dy": dy, "unfit": unfit, "under_model": occl.hit(scene, b) is not None,
+                      "age_s": round((t - f.t_a) / NS, 2)})  # fmt: skip
+        if unfit:
+            reasons.append("item_unfit")
+    reasons = list(dict.fromkeys(reasons))
+    return [{"frame_id": ref.frame_id, "t": t, "status": "exclude" if reasons else "keep",
+             "reasons": reasons, "items": items, "me": [round(me[0], 1), round(me[1], 1)]}], \
+        "frame"  # fmt: skip
+
+
+def _g2_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
+    st, why = _setup(ref)
+    if st is None:
+        return [], why
+    t, near, scene, bgr, me, units = st
+    sess: ml.RecSession = olf._JOB["sess"]
+    occl: olf.Occluders = olf._JOB["occluders"]
+    preds = _preds(near, scene, olf._JOB["params"]["anchor_px"])
+    grey = bgr[:, :, :3].astype(float) @ label_check.GREY
+    valid = olf.valid_map(sess.lab.size, sess.lab.ui_rects)
+    rows = []
+    for fid, (f, sheet, p) in preds.items():
+        others = [q.box for g, (_f, _s, q) in preds.items() if g != fid]
+        why_s = sample_reason(p.box, me, units, others, sess.lab.size, sess.lab.ui_rects,
+                              occl.hit(scene, p.box) is not None, t - f.t_a,
+                              (f.t_v - t) if f.vanished else None)  # fmt: skip
+        row: dict[str, Any] = {"frame_id": ref.frame_id, "floor_id": f.floor_id,
+                               "item_id": f.item_id, "reason": why_s}  # fmt: skip
+        if why_s is None:
+            best = olf.best_fit(olf.fit_label_all(grey, valid, sheet, p, R_MEASURE))
+            if best is not None:
+                row.update({"ncc": round(best[0], 4), "dx": best[1], "dy": best[2]})
+        rows.append(row)
+    return rows, "items"
+
+
+def _run(a: argparse.Namespace, worker: Any, role: str) -> tuple[list[dict[str, Any]], dict]:
+    spec = ml.GEF10
+    prm = load_params(a.params)
+    occl = ml.occluders(spec)
+    sheets = ItemSheets()
+    rows: list[dict[str, Any]] = []
+    per_part: dict[str, Any] = {}
+    for part in a.parts:
+        sess = ml.RecSession.open(part, spec, a.layout_templates)
+        check_role(spec, sess.sid, sess.spots, role)
+        refs = sess.candidates_at(float(a.offset_ms))
+        floors = il.floor_items(sess.lab.timeline.events)
+        olf._JOB.update(sess=sess, floors=floors, sheets=sheets, occluders=occl, params=prm,
+                        offset_ns=int(float(a.offset_ms) * 1e6))  # fmt: skip
+        why: Counter[str] = Counter()
+        n0 = len(rows)
+        for r, w in olf.run_parallel(worker, refs, a.workers):
+            why[w] += 1
+            rows += [{**x, "part": sess.name} for x in r]
+        per_part[sess.name] = {"frames": len(sess.refs), "candidates": len(refs),
+                               "dropped": dict(sess.dropped), "floor_items": len(floors),
+                               "outcomes": dict(why), "rows": len(rows) - n0}  # fmt: skip
+    return rows, per_part
+
+
+def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
+    raw = a.measure.read_bytes()
+    out = freeze_params(json.loads(raw), json.loads(a.rows.read_text()))
+    return {**out, "what": "round3 4.1: the frozen item anchor and T_item",
+            "measure": str(a.measure), "measure_sha256": hashlib.sha256(raw).hexdigest(),
+            "frozen_at": olf.now_ict(), "commit": olf.git_head()}  # fmt: skip
+
+
+def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
+    rows, per_part = _run(a, _label_frame, "train")
+    if a.rows is not None:
+        a.rows.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    keep = [r for r in rows if r["status"] == "keep"]
+    labels = [(r["part"], it) for r in keep for it in r["items"]]
+    return {"what": "round3: TRAIN item labels (one pooled class)", "params": str(a.params),
+            "params_sha256": hashlib.sha256(a.params.read_bytes()).hexdigest(),
+            "labelled_at": olf.now_ict(), "commit": olf.git_head(),
+            "frames": len(rows), "kept_frames": len(keep), "kept_labels": len(labels),
+            "kept_floor_items": len({(p, it["floor_id"]) for p, it in labels}),
+            "kept_by_item_id": dict(Counter(str(it["item_id"]) for _p, it in labels)),
+            "reasons": dict(Counter(x for r in rows for x in r["reasons"])),
+            "per_part": per_part}  # fmt: skip
+
+
+def cmd_g2(a: argparse.Namespace) -> dict[str, Any]:
+    rows, per_part = _run(a, _g2_frame, "test3")
+    if a.rows is not None:
+        a.rows.write_text(json.dumps(rows) + "\n")
+    clean = [r for r in rows if r["reason"] is None]
+    return {"what": "round3 4.3: G2 on TEST3 at the frozen anchor", "params": str(a.params),
+            "checked_at": olf.now_ict(), "commit": olf.git_head(), "g2": g2_summary(clean),
+            "reasons": dict(Counter(str(r["reason"]) for r in rows)),
+            "per_part": per_part}  # fmt: skip
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -316,8 +598,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                    default=Path("/home/batt/docker/poring-lab/data/ui_anchors/layout"))  # fmt: skip
     p.add_argument("--rows", type=Path, default=None)
     p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("freeze")
+    p.add_argument("--measure", type=Path, required=True)
+    p.add_argument("--rows", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
+    for name in ("label", "g2"):
+        p = sub.add_parser(name)
+        p.add_argument("parts", nargs="+")
+        p.add_argument("--params", type=Path, required=True)
+        p.add_argument("--offset-ms", type=float, required=True)
+        p.add_argument("--workers", type=int, default=1)
+        p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
+        p.add_argument("--rows", type=Path, default=None)
+        p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
-    out = {"sprites": cmd_sprites, "measure": cmd_measure}[a.cmd](a)
+    out = {"sprites": cmd_sprites, "measure": cmd_measure, "freeze": cmd_freeze,
+           "label": cmd_label, "g2": cmd_g2}[a.cmd](a)  # fmt: skip
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1) + "\n")
     print(json.dumps(out, indent=1)[:6000])
