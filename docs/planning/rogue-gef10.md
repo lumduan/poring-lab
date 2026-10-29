@@ -1757,7 +1757,7 @@ recorded BEFORE any live step and before `cut-grf` writes anything. (AK-4's ship
 the four sessions now ship 2026-10-30 03:05-04:25 ICT, the window home-assistant-ops OS-036
 recommends, each first paged back out of swap at 8 MB/s under the quant IO guard.)
 
-**1. The fix (stage@6, code in this commit's predecessor set; tests below).**
+**1. The fix (stage@6, code in the same commit as this record, 26abd70; tests below).**
 - **Masked references from the client's own item icons:** the Thai GRF's item BMPs (resource
   names from `idnum2itemresnametable.txt`), extracted to /dev/shm (study use, never committed).
   Template = the BMP's grey (gm_state.to_gray's weights); the item = every non-magenta pixel;
@@ -1770,8 +1770,9 @@ recommends, each first paged back out of swap at 8 MB/s under the quant IO guard
   20.0 makes it "unknown" (never dropped). Plain references keep ICON_MATCH 3.0 exactly, so the
   hunts' loot steps (dungeon_hunt, store_loot) are unchanged.
 - **The FIT evidence (2026-10-29, the references at hand; no frame of the E3 recording was read
-  under this rule):** each item's screen-cut reference (slot background + glow) reads 1.1-3.8
-  against its own template; the White Potion 0.9, the Fly Wing 4.8; the nearest DIFFERENT item or
+  under this rule):** each item's screen-cut reference (slot background + glow) reads 1.1-4.4
+  against its own template (Green Herb 4.36; ➡️ corrected 11:01 from `date`, first written
+  1.1-3.8; `cut-grf`'s own printout); the White Potion 0.9, the Fly Wing 4.8; the nearest DIFFERENT item or
   the empty slot reads >= 30.8. (pay_fild07's `green_etc` reads 3.09 against Sticky Mucus: the
   same icon; it is not in this inventory's stock set.)
 - **The write gate (`cut-grf`, refused = nothing written = STOP):** every screen-cut reference
@@ -1819,3 +1820,7 @@ report, no retry.
 
 **After the session (diagnostic, not a gate):** once e3 ships (03:05 window), its spot-18 frames
 are re-read from the NAS copy under a 4 GB memory cap, to show what the masked rule reads there.
+- **11:00, step 1 done:** `cut-grf --map gef_fild10` rc 0, 11 masked references written; the
+  screen-cut references read cyfar 2.07, orcish_voucher 3.82, sticky_mucus 3.09, milk 1.61,
+  garlet 2.56, iron 2.15, large_jellopy 1.40, rough_oridecon 2.77, green_herb 4.36,
+  nursing_bottle 1.12, axe 3.47; the stock (fly_wing, slot, white_potion) unknown and beyond 20.0.
