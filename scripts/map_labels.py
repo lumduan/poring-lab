@@ -30,12 +30,26 @@ scored (reason ``notice``, counted per species like ``ui_or_edge``). The default
 round1`` is the frozen round-1 check, unchanged bit for bit (its rows file is byte-identical); the
 output's ``c1_rule`` records which ran. ``round2`` is gef_fild10's only, and it refuses round 1's
 spent TEST parts (the watch's cells 11-14, a7, a8). Round 2's TEST2 (a9, a10, a11) is refused by
-NAME by the measuring commands, ``labels`` and ``pack`` (``test2_suffixes``).
+NAME by the measuring commands, ``labels`` and ``pack`` (``test2_suffixes``), except under
+``--eval-test2`` below.
+
+TEST2's EVALUATION (docs/benchmarks/gef10-eval.md AMENDMENT R2-2, 2026-10-29 12:53 ICT, before
+TEST2's evaluation labels exist): ``--eval-test2`` is gef_fild10's only and reads TEST2 parts
+ONLY (a9, a10, a11, w3 by NAME); round 1's spent TEST and round 3's TEST3 stay refused. Without
+the flag both commands behave exactly as before.
+
+    map_labels.py labels PART --eval-test2 --params PARAMS(FROZEN) --classes JSON --out JSON
+    map_labels.py pack   LABELS.json... --eval-test2 --per-species 60 --seed 35 --min-fit T_h ...
+
+``labels --eval-test2`` needs the FROZEN parameters and records ``"eval_test2": true``; ``pack
+--eval-test2`` takes only such TEST2 label files, puts every map species with at least one kept
+label in the pool (no conditional tier), draws the first N of t2_order per species and stratum
+(N / E) and records ``per_species_target`` N and ``"eval_test2": true``.
 
 A PART is a session directory, optionally restricted to the staged session's spots:
 ``DIR`` or ``DIR:spots=0-7``. The map's spec (MAPS) names its FIT and TEST parts; the measuring
-commands refuse TEST, and ``labels`` / ``pack`` refuse TEST too (the evaluation's TEST labels are a
-later step).
+commands refuse TEST, and ``labels`` / ``pack`` refuse TEST too (TEST2's evaluation labels and
+pack: ``--eval-test2``).
 
 OFFLINE ONLY (ADR-0007: packets are ground truth for labels, never an agent input): the session's
 packets, its PNG tar shards (read-only, NAS), the decoded sprites, the map's RSW / RSM models and a
@@ -866,6 +880,39 @@ def refuse(sess: RecSession, role: str) -> None:
         raise SystemExit(f"{sess.name}: shares frames with TEST (3b): refused")
 
 
+EVAL_TEST2_MAP = "gef_fild10"  # gef10-eval.md AMENDMENT R2-2: --eval-test2's only map
+
+
+def eval_map_refusal(spec: MapSpec) -> str | None:
+    """PURE (AMENDMENT R2-2): why ``--eval-test2`` cannot run on ``spec``'s map, else None."""
+    if spec.name != EVAL_TEST2_MAP or not spec.test2_suffixes:
+        return f"--eval-test2 is {EVAL_TEST2_MAP}'s only, not {spec.name}'s"
+    return None
+
+
+def eval_test2_refusal(spec: MapSpec, sid: str, spots: frozenset[int] | None) -> str | None:
+    """PURE (gef10-eval.md AMENDMENT R2-2, ``--eval-test2``): why the part (session ``sid``,
+    ``spots``) is NOT a TEST2 part to label or pack for the evaluation, else None. gef_fild10
+    only; round 1's spent TEST (gef10-detector.md 13r) and round 3's TEST3 stay refused; the
+    session's NAME must end in a TEST2 suffix (a9, a10, a11, w3)."""
+    why = eval_map_refusal(spec)
+    if why is not None:
+        return why
+    if spec.is_round1_test(sid, spots):
+        return "round 1's TEST is spent (gef10-detector.md 13r)"
+    if any(sid.endswith(s) for s in spec.test3_suffixes):
+        return "round 3's TEST3 (gef10-round3.md 2)"
+    if not any(sid.endswith(s) for s in spec.test2_suffixes):
+        return f"not a TEST2 part (a name ending in {', '.join(spec.test2_suffixes)})"
+    return None
+
+
+def refuse_unless_test2(spec: MapSpec, sid: str, spots: frozenset[int] | None, name: str) -> None:
+    why = eval_test2_refusal(spec, sid, spots)
+    if why is not None:
+        raise SystemExit(f"{name}: {why}: refused (--eval-test2)")
+
+
 def occluders(spec: MapSpec) -> olf.Occluders:
     return olf.Occluders(spec.rsw, spec.models, spec.cells)
 
@@ -1627,11 +1674,24 @@ def count_labels(frames: Sequence[dict[str, Any]], species: Sequence[int],
 
 
 def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
+    """The kept labels of ONE part. TEST is refused; ``--eval-test2`` (gef10-eval.md AMENDMENT
+    R2-2) labels a TEST2 part instead, under FROZEN parameters, and refuses everything else."""
     spec = MAPS[a.map]
+    eval_test2 = bool(getattr(a, "eval_test2", False))
+    if eval_test2:  # the map and every part's NAME, before anything is read
+        for part in a.parts:
+            path, spots = parse_part(part)
+            refuse_unless_test2(spec, path.name, spots, part)
     params = load_params(a.params, spec)
+    if eval_test2 and params.get("status") != "FROZEN":
+        raise SystemExit(f"{a.params}: {params.get('status')}: --eval-test2 labels TEST2 under "
+                         "FROZEN parameters only")  # fmt: skip
     occl = frozen_occluders(params, spec)
     sess = RecSession.open(a.parts[0], spec, a.layout_templates)
-    refuse(sess, "not_test")
+    if eval_test2:  # by the manifest's session id too
+        refuse_unless_test2(spec, sess.sid, sess.spots, sess.name)
+    else:
+        refuse(sess, "not_test")
     classes = json.loads(a.classes.read_text())["monsters"]
     refs = sess.candidates_at(float(params["offset_ms"]))
     olf._JOB.update(sess=sess, labeler=labeler_for(sess, params, occl, "o3h"), classes=classes)
@@ -1644,6 +1704,9 @@ def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
         "params_sha256": olf.sha256_file(a.params), "frames_recorded": len(sess.refs),
         "candidates": len(refs), "candidate_drops": dict(sorted(sess.dropped.items())),
     }  # fmt: skip
+    if eval_test2:  # AMENDMENT R2-2: the evaluation's TEST2 labels, and the classes file used
+        out.update({"eval_test2": True, "classes": str(a.classes),
+                    "classes_sha256": olf.sha256_file(a.classes)})  # fmt: skip
     if spec.name == "pay_fild07":  # payf07 7: the Green Plant fallback, both ways
         gp = 1080
         out["counts_green_plant_class"] = count_labels(frames, spec.species)
@@ -1678,49 +1741,100 @@ def stratum_of(items: Sequence[dict[str, Any]], stratum: str | None) -> list[dic
     return [it for it in items if bool(it.get("engaged")) == (stratum == "E")]
 
 
+def strata_for(spec: MapSpec) -> tuple[str | None, ...]:
+    """gef10 6: N / E for a map that labels engaged units, else one stratum (None)."""
+    return ("N", "E") if spec.engaged_labels else (None,)
+
+
+def draw_strata(pool: dict[int, list[dict[str, Any]]], spec: MapSpec, seed: int,
+                species: Sequence[int], n: int
+                ) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:  # fmt: skip
+    """PURE (6): per species of ``species`` and stratum, the first ``n`` of t2_order, then one
+    seeded shuffle of the whole pack (``{salt}:{seed}:order``). Returns (chosen, per)."""
+    chosen: list[dict[str, Any]] = []
+    per: dict[str, dict[str, int]] = {}
+    for mob in species:
+        for st in strata_for(spec):
+            items = stratum_of(pool.get(mob, []), st)
+            pick = t2_order(items, seed, mob, spec.t2_salt, st)[:n]
+            per[str(mob) if st is None else f"{mob}:{st}"] = {"pool": len(items),
+                                                              "sampled": len(pick)}  # fmt: skip
+            chosen += [{**it, "stratum": st} for it in pick]
+    random.Random(f"{spec.t2_salt}:{seed}:order").shuffle(chosen)
+    return chosen, per
+
+
 def t2_sample(pool: dict[int, list[dict[str, Any]]], spec: MapSpec, seed: int
               ) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]], list[int]]:  # fmt: skip
     """PURE (6): T2's sample: the tier (a ``conditional`` species needs >= 30 kept labels -- in its
     N stratum for a map that labels engaged units), per species and stratum the first 30 of
     t2_order, then one seeded shuffle of the whole pack. Returns (chosen, per, tier)."""
-    strata: tuple[str | None, ...] = ("N", "E") if spec.engaged_labels else (None,)
+    first = strata_for(spec)[0]
     tier = [m for m in spec.species if m not in spec.conditional
-            or len(stratum_of(pool.get(m, []), strata[0])) >= T2_PER_SPECIES]  # fmt: skip
-    chosen: list[dict[str, Any]] = []
-    per: dict[str, dict[str, int]] = {}
-    for mob in tier:
-        for st in strata:
-            items = stratum_of(pool.get(mob, []), st)
-            pick = t2_order(items, seed, mob, spec.t2_salt, st)[:T2_PER_SPECIES]
-            per[str(mob) if st is None else f"{mob}:{st}"] = {"pool": len(items),
-                                                              "sampled": len(pick)}  # fmt: skip
-            chosen += [{**it, "stratum": st} for it in pick]
-    random.Random(f"{spec.t2_salt}:{seed}:order").shuffle(chosen)
+            or len(stratum_of(pool.get(m, []), first)) >= T2_PER_SPECIES]  # fmt: skip
+    chosen, per = draw_strata(pool, spec, seed, tier, T2_PER_SPECIES)
     return chosen, per, tier
 
 
-def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
-    import orc_label_sheets as ols
+Sample = tuple[list[dict[str, Any]], dict[str, dict[str, int]], list[int]]  # chosen, per, tier
 
-    spec = MAPS[a.map]
-    instr = a.instructions.read_bytes()
-    sha = hashlib.sha256(instr).hexdigest()
-    if sha != a.instructions_sha256:
-        raise SystemExit(f"{a.instructions}: sha256 {sha}, not the pre-registered one")
+
+def eval_test2_sample(pool: dict[int, list[dict[str, Any]]], spec: MapSpec, seed: int,
+                      per_species: int) -> Sample:  # fmt: skip
+    """PURE (gef10-eval.md AMENDMENT R2-2): the evaluation pack's draw. EVERY species of the map
+    with at least one kept label in the pool (no conditional tier: "fewer: all of them"), per
+    species and stratum (N / E) the first ``per_species`` of t2_order, then T2's one seeded shuffle
+    of the whole pack. Returns (chosen, per, the species drawn)."""
+    if per_species < 1:
+        raise SystemExit(f"--per-species {per_species}: at least 1")
+    species = [m for m in spec.species if pool.get(m)]
+    chosen, per = draw_strata(pool, spec, seed, species, per_species)
+    return chosen, per, species
+
+
+def eval_pack_refusals(spec: MapSpec, eval_test2: bool, per_species: int | None) -> None:
+    """AMENDMENT R2-2, before anything is read: ``--per-species`` only with ``--eval-test2``
+    (T2 draws 30); ``--eval-test2`` is gef_fild10's only and needs ``--per-species N >= 1``."""
+    if not eval_test2:
+        if per_species is not None:
+            raise SystemExit("--per-species: only with --eval-test2 (T2 draws "
+                             f"{T2_PER_SPECIES} per species and stratum)")  # fmt: skip
+        return
+    why = eval_map_refusal(spec)
+    if why is not None:
+        raise SystemExit(why)
+    if per_species is None or per_species < 1:
+        raise SystemExit("--eval-test2: --per-species N (N >= 1; the amendment draws 60)")
+
+
+def pack_pool(paths: Sequence[Path], spec: MapSpec, session_root: str, eval_test2: bool = False
+              ) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]], set[str],
+                         set[str]]:  # fmt: skip
+    """6: the pack's pool from label files: per species the kept labels, the files (sources),
+    their parameter sha256s and statuses. TEST label files are refused; under ``eval_test2``
+    (gef10-eval.md AMENDMENT R2-2) ONLY TEST2 label files made by ``labels --eval-test2`` are
+    taken, and every other file (FIT, TRAIN, round 1's TEST, TEST3) is refused."""
     pool: dict[int, list[dict[str, Any]]] = defaultdict(list)
     sources = []
     params_sha = set()
     statuses: set[str] = set()
-    for path in a.labels:
+    root = Path(session_root)
+    for path in paths:
         doc = json.loads(path.read_text())
         if doc.get("labels") != spec.labels:
             raise SystemExit(f"{path}: not {spec.labels} labels")
-        if spec.is_test(doc["session"], parse_part(doc["part"])[1]):
+        spots = parse_part(doc["part"])[1]
+        if eval_test2:
+            why = eval_test2_refusal(spec, doc["session"], spots)
+            if why is None and doc.get("eval_test2") is not True:
+                why = "not made by labels --eval-test2"
+            if why is not None:
+                raise SystemExit(f"{doc['part']}: {why}: not in the evaluation pack's pool")
+        elif spec.is_test(doc["session"], spots):
             raise SystemExit(f"{doc['part']}: TEST is not in T2's pool")
         params_sha.add(doc["params_sha256"])
         statuses.add(str(doc.get("params_status")))
         sources.append({"part": doc["part"], "file": str(path), "sha256": olf.sha256_file(path)})
-        root = Path(a.session_root)
         for f in doc["frames"]:
             for k in f.get("kept", []):
                 pool[int(k["mob"])].append({
@@ -1730,6 +1844,21 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
                     "engaged": bool(k.get("engaged")),
                     "ref": (str(root / doc["session"] / f["shard"]), f["offset"], f["size"]),
                 })  # fmt: skip
+    return pool, sources, params_sha, statuses
+
+
+def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
+    import orc_label_sheets as ols
+
+    spec = MAPS[a.map]
+    eval_test2 = bool(getattr(a, "eval_test2", False))
+    per_species: int | None = getattr(a, "per_species", None)
+    eval_pack_refusals(spec, eval_test2, per_species)
+    instr = a.instructions.read_bytes()
+    sha = hashlib.sha256(instr).hexdigest()
+    if sha != a.instructions_sha256:
+        raise SystemExit(f"{a.instructions}: sha256 {sha}, not the pre-registered one")
+    pool, sources, params_sha, statuses = pack_pool(a.labels, spec, a.session_root, eval_test2)
     if len(params_sha) != 1:
         raise SystemExit(f"the labels come from {len(params_sha)} parameter files")
     exclude: set[tuple[str, int, int]] = set()
@@ -1740,7 +1869,11 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     if a.min_fit is not None or exclude:
         for mob in list(pool):
             pool[mob], cut_by[str(mob)] = round2_pool(pool[mob], a.min_fit, exclude)
-    chosen, per, tier = t2_sample(pool, spec, a.seed)
+    if eval_test2:  # AMENDMENT R2-2: every species with a kept label, N per species and stratum
+        assert per_species is not None  # eval_pack_refusals
+        chosen, per, tier = eval_test2_sample(pool, spec, a.seed, per_species)
+    else:
+        chosen, per, tier = t2_sample(pool, spec, a.seed)
     pack, key_dir = a.pack_dir, a.key_dir
     if pack.resolve() == key_dir.resolve() or key_dir.resolve().is_relative_to(pack.resolve()):
         raise SystemExit("the key must live outside the pack")
@@ -1786,7 +1919,9 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         "box": "the green rectangle drawn just outside the label box",
         "questions": ols.QUESTIONS}, indent=1) + "\n")  # fmt: skip
     shutil.copyfile(a.instructions, pack / "instructions.txt")
-    key = {"labels": spec.labels, "seed": a.seed, "per_species_target": T2_PER_SPECIES,
+    target = per_species if eval_test2 else T2_PER_SPECIES
+    evaluation = {"eval_test2": True} if eval_test2 else {}  # AMENDMENT R2-2 only
+    key = {"labels": spec.labels, "seed": a.seed, "per_species_target": target,
            **({"candidates": ["N", "E"]} if spec.engaged_labels else {}),
            "letters": letters, "crops": key_crops, "tier_species": tier,
            "per_species": per, "sources": sources, "params_sha256": params_sha.pop(),
@@ -1795,12 +1930,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
            "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller",
            "min_fit": a.min_fit, "removed_from_pool": cut_by,
            "exclude_keys": [str(k) for k in (a.exclude_key or [])],
+           **evaluation,
            }  # fmt: skip
     (key_dir / "answer_key.json").write_text(json.dumps(key, indent=1) + "\n")
     return {"pack": str(pack), "key": str(key_dir / "answer_key.json"), "crops": len(names),
             "per_species": per, "tier_species": tier, "letters": len(letters),
             "params_status": key["params_status"], "removed_from_pool": cut_by,
-            "grids": len(grids)}  # fmt: skip
+            "grids": len(grids),
+            **({"per_species_target": target, **evaluation} if eval_test2 else {})}  # fmt: skip
 
 
 # --- CLI --------------------------------------------------------------------------------------
@@ -1865,9 +2002,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     common(p)
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--classes", type=Path, default=ROOT / "config/detector/classes-v2orc.json")
+    p.add_argument("--eval-test2", action="store_true",
+                   help="gef10-eval.md AMENDMENT R2-2: label ONE TEST2 part (gef_fild10, a9 / "
+                        "a10 / a11 / w3) under FROZEN parameters for the evaluation")  # fmt: skip
     p = sub.add_parser("pack")
     p.add_argument("--map", default="pay_fild07", choices=sorted(MAPS))
     p.add_argument("labels", nargs="+", type=Path)
+    p.add_argument("--eval-test2", action="store_true",
+                   help="gef10-eval.md AMENDMENT R2-2: the evaluation pack from TEST2 label "
+                        "files (labels --eval-test2) only; every species with a kept label, "
+                        "no conditional tier")  # fmt: skip
+    p.add_argument("--per-species", type=int, default=None,
+                   help="--eval-test2 only: the first N per species and stratum")  # fmt: skip
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--pack-dir", type=Path, required=True)
     p.add_argument("--key-dir", type=Path, required=True)

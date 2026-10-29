@@ -771,3 +771,339 @@ def test_round3_staged_sessions_have_their_own_kind() -> None:
     assert spec.is_fit(e3, frozenset({0, 3})) and not spec.is_fit(e3, frozenset({4}))
     assert not spec.is_fit(e3b, frozenset({0}))
     assert ml.PAYF07.staged_extra == {}
+
+
+# --- gef10-eval.md AMENDMENT R2-2: TEST2's evaluation labels and pack (--eval-test2) ------------
+# Session NAMES only: no frame, label or packet of TEST2 / TEST / TEST3 is read; every label
+# document below is synthetic.
+
+A9 = "20261026T044312-rdp-rogue-a9"
+A10 = "20261026T052148-rdp-rogue-a10"
+A11 = "20261026T055949-rdp-rogue-a11"
+W3 = "20261026T112924-rdp-w3"
+A7 = "20261026T010738-rdp-rogue-a7"
+A2 = "20261025T221059-rdp-rogue-a2"
+E3B = "20261029T110813-rdp-stage-gef10-e3b"
+PILOT = "20261025T200922-rdp-rogue-pilot"
+
+
+def _why(spec: Any, sid: str, spots: frozenset[int] | None = None) -> str:
+    why = ml.eval_test2_refusal(spec, sid, spots)
+    assert why is not None, sid
+    return why
+
+
+def test_eval_test2_refusal_accepts_test2_only() -> None:
+    gef = ml.GEF10
+    for sid in (A9, A10, A11, W3):
+        assert ml.eval_test2_refusal(gef, sid, None) is None
+    for sid, spots in ((A7, None), ("20261026T020202-rdp-rogue-a8", None),
+                       ("20261026T010101-rdp-rogue-s7", None), (ml.GEF10_WATCH, None),
+                       (ml.GEF10_WATCH, frozenset({11, 12})),
+                       (ml.GEF10_WATCH, frozenset({10, 11}))):  # fmt: skip
+        assert "round 1's TEST is spent" in _why(gef, sid, spots)
+    assert "TEST3" in _why(gef, E3B) and "TEST3" in _why(gef, E3B, frozenset({0}))
+    for sid, spots in ((A2, None), (PILOT, None), ("20261026T014529-rdp-w2", None),
+                       ("20261025T213953-rdp-rogue-a1", None),
+                       (ml.GEF10_WATCH, frozenset(range(11))),
+                       ("20261028T151136-rdp-stage-gef10-e3", frozenset({0}))):  # fmt: skip
+        assert "not a TEST2 part" in _why(gef, sid, spots)  # FIT, TRAIN (a1 is not a11)
+    assert "gef_fild10's only" in _why(ml.PAYF07, A9)
+
+
+def _labels_args(tmp_path: Path, part: str, status: str | None = "FROZEN",
+                 map_name: str = "gef_fild10", **flag: Any) -> Any:  # fmt: skip
+    import argparse
+    import json
+
+    params = tmp_path / "params.json"
+    labels = "gef10-o3h-e" if map_name == "gef_fild10" else ml.LABELS
+    params.write_text(json.dumps({"labels": labels, "map": map_name, "status": status,
+                                  "offset_ms": 120.0}))  # fmt: skip
+    classes = tmp_path / "classes.json"
+    classes.write_text(json.dumps({"monsters": [1273, 1023]}))
+    return argparse.Namespace(map=map_name, params=params, parts=[part], classes=classes,
+                              layout_templates=None, workers=1, **flag)  # fmt: skip
+
+
+def test_labels_eval_test2_refusals_before_anything_is_read(tmp_path: Path) -> None:
+    """Every refusal fires on the part's NAME or the parameters' status, before a session is
+    opened (the parts do not exist)."""
+    for part, match in ((f"/x/{A9}", "gef_fild10's only"),):
+        with pytest.raises(SystemExit, match=match):
+            ml.cmd_labels(_labels_args(tmp_path, part, map_name="pay_fild07", eval_test2=True))
+    for part, match in ((f"/x/{A2}", "not a TEST2 part"), (f"/x/{PILOT}", "not a TEST2 part"),
+                        (f"/x/{A7}", "spent"), (f"/x/{ml.GEF10_WATCH}:spots=11-14", "spent"),
+                        (f"/x/{E3B}", "TEST3")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.cmd_labels(_labels_args(tmp_path, part, eval_test2=True))
+    for status in ("PROPOSED_NOT_FROZEN: P1", None):
+        with pytest.raises(SystemExit, match="FROZEN parameters only"):
+            ml.cmd_labels(_labels_args(tmp_path, f"/x/{A9}", status=status, eval_test2=True))
+
+
+def _fake_session(monkeypatch: pytest.MonkeyPatch, sid: str) -> list[str]:
+    """cmd_labels' readers replaced: the session ``sid`` (as its manifest names it), two candidate
+    frames, the labeller's frames synthetic."""
+    from collections import Counter
+
+    opened: list[str] = []
+    sess = SimpleNamespace(sid=sid, spots=None, name=sid, refs=[1, 2, 3],
+                           dropped=Counter({"self_moving": 1}), spec=ml.GEF10,
+                           candidates_at=lambda off: [1, 2])  # fmt: skip
+
+    def fake_open(part: str, spec: Any, layout_templates: Any) -> Any:
+        opened.append(part)
+        return sess
+
+    monkeypatch.setattr(ml.RecSession, "open", staticmethod(fake_open))
+    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: "occluders")
+    monkeypatch.setattr(ml, "labeler_for", lambda *a, **k: "labeler")
+    frames = [_frame([1273], []), _frame([1023], [])]
+    monkeypatch.setattr(olf, "run_parallel", lambda func, refs, workers: frames)
+    return opened
+
+
+LABELS_KEYS = ["what", "labels", "params_status", "map", "part", "session", "labelled_at",
+               "commit", "params", "params_sha256", "frames_recorded", "candidates",
+               "candidate_drops", "counts", "counts_engaged", "frames"]  # fmt: skip
+
+
+def test_labels_eval_test2_accepts_a_test2_part_under_frozen_params(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for sid in (A9, A10, A11, W3):
+        opened = _fake_session(monkeypatch, sid)
+        a = _labels_args(tmp_path, f"/x/{sid}", eval_test2=True)
+        out = ml.cmd_labels(a)
+        assert opened == [f"/x/{sid}"]
+        assert out["eval_test2"] is True and out["session"] == sid
+        assert out["params_status"] == "FROZEN"
+        assert out["classes"] == str(a.classes)
+        assert out["classes_sha256"] == olf.sha256_file(a.classes)
+        assert out["counts"]["per_species"]["1273"]["kept"] == 1
+        assert list(out) == LABELS_KEYS[:13] + ["eval_test2", "classes", "classes_sha256"] + \
+            LABELS_KEYS[13:]  # fmt: skip
+    # the manifest's session id is checked too: a renamed TRAIN directory is refused
+    _fake_session(monkeypatch, A2)
+    with pytest.raises(SystemExit, match="not a TEST2 part"):
+        ml.cmd_labels(_labels_args(tmp_path, f"/x/{A9}", eval_test2=True))
+    olf._JOB.clear()
+
+
+def test_labels_without_the_flag_is_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                              ) -> None:  # fmt: skip
+    """No flag (or a namespace without the attribute): TEST2 is refused by NAME as before, a
+    TRAIN part labels under any status as before, and the output gains no key."""
+    _fake_session(monkeypatch, A9)
+    for flag in ({}, {"eval_test2": False}):
+        with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+            ml.cmd_labels(_labels_args(tmp_path, f"/x/{A9}", **flag))
+    _fake_session(monkeypatch, A2)
+    for flag in ({}, {"eval_test2": False}):
+        out = ml.cmd_labels(_labels_args(tmp_path, f"/x/{A2}", status="PROPOSED_NOT_FROZEN: P1",
+                                         **flag))  # fmt: skip
+        assert list(out) == LABELS_KEYS and out["session"] == A2
+    olf._JOB.clear()
+
+
+def test_eval_test2_flags_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake(name: str) -> Any:
+        def run(a: Any) -> Any:
+            seen[name] = (a.eval_test2, getattr(a, "per_species", "absent"))
+            raise SystemExit(0)
+
+        return run
+
+    monkeypatch.setattr(ml, "cmd_labels", fake("labels"))
+    monkeypatch.setattr(ml, "cmd_pack", fake("pack"))
+    lab = ["labels", f"/x/{A9}", "--map", "gef_fild10", "--params", "p", "--out", "o"]
+    pack = ["pack", "l.json", "--map", "gef_fild10", "--seed", "35", "--pack-dir", "pk",
+            "--key-dir", "k", "--instructions", "i", "--instructions-sha256", "h",
+            "--out", "o"]  # fmt: skip
+    flags = ["--eval-test2", "--per-species", "60"]
+    for argv, name, want in ((lab, "labels", (False, "absent")),
+                             (lab + ["--eval-test2"], "labels", (True, "absent")),
+                             (pack, "pack", (False, None)),
+                             (pack + flags, "pack", (True, 60))):  # fmt: skip
+        with pytest.raises(SystemExit):
+            ml.main(argv)
+        assert seen[name] == want
+
+
+def _pack_args(tmp_path: Path, labels: list[Path], **kw: Any) -> Any:
+    import argparse
+    import hashlib
+
+    instr = tmp_path / "instructions.txt"
+    instr.write_text("synthetic instructions\n")
+    base = {"map": "gef_fild10", "labels": labels, "seed": 35, "pack_dir": tmp_path / "pack",
+            "key_dir": tmp_path / "key", "instructions": instr,
+            "instructions_sha256": hashlib.sha256(instr.read_bytes()).hexdigest(),
+            "session_root": "/nas", "min_fit": None, "exclude_key": None}  # fmt: skip
+    return argparse.Namespace(**{**base, **kw})
+
+
+def test_pack_flag_refusals_before_anything_is_read(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.txt"
+    for kw, match in (({"eval_test2": False, "per_species": 60}, "only with --eval-test2"),
+                      ({"per_species": 60}, "only with --eval-test2"),
+                      ({"eval_test2": True, "per_species": 60, "map": "pay_fild07"},
+                       "gef_fild10's only"),
+                      ({"eval_test2": True, "per_species": None}, "--per-species N"),
+                      ({"eval_test2": True}, "--per-species N"),
+                      ({"eval_test2": True, "per_species": 0}, "--per-species N")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.cmd_pack(_pack_args(tmp_path, [], instructions=missing, **kw))
+    with pytest.raises(FileNotFoundError):  # no flag: on to the instructions, as before
+        ml.cmd_pack(_pack_args(tmp_path, [], instructions=missing))
+
+
+def _label_doc(tmp_path: Path, sid: str, kept: list[list[tuple[int, bool, float, bool]]],
+               part: str | None = None, eval_test2: bool = True,
+               params_sha: str = "f" * 64) -> Path:  # fmt: skip
+    """A synthetic label file: per frame, its kept labels as (mob, engaged, ncc, under)."""
+    import json
+
+    frames = [{"frame_id": i, "t": (i + 1) * S, "shard": "shard-000000.tar", "offset": 512 * i,
+               "size": 100, "spot": None,
+               "kept": [{"gid": 1000 + j, "mob": m, "box": [100.0, 100.0, 140.0, 160.0],
+                         "ncc": ncc, "under": under, "state": "idle", "engaged": eng}
+                        for j, (m, eng, ncc, under) in enumerate(ks)]}
+              for i, ks in enumerate(kept)]  # fmt: skip
+    doc = {"labels": "gef10-o3h-e", "session": sid, "part": part or sid,
+           "params_sha256": params_sha, "params_status": "FROZEN", "frames": frames,
+           **({"eval_test2": True} if eval_test2 else {})}  # fmt: skip
+    path = tmp_path / f"{(part or sid).replace(':', '_')}-{int(eval_test2)}.json"
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def test_pack_pool_eval_test2_takes_test2_label_files_only(tmp_path: Path) -> None:
+    one = [[(1273, False, 0.9, False)]]
+    good = [_label_doc(tmp_path, sid, one) for sid in (A9, A10, A11, W3)]
+    pool, sources, shas, statuses = ml.pack_pool(good, ml.GEF10, "/nas", eval_test2=True)
+    assert len(pool[1273]) == 4 and [s["part"] for s in sources] == [A9, A10, A11, W3]
+    assert pool[1273][0]["ref"] == (f"/nas/{A9}/shard-000000.tar", 0, 100)
+    assert shas == {"f" * 64} and statuses == {"FROZEN"}
+    for path, match in ((_label_doc(tmp_path, A2, one), "not a TEST2 part"),
+                        (_label_doc(tmp_path, PILOT, one), "not a TEST2 part"),
+                        (_label_doc(tmp_path, ml.GEF10_WATCH, one,
+                                    part=f"{ml.GEF10_WATCH}:spots=0-10"), "not a TEST2 part"),
+                        (_label_doc(tmp_path, A7, one), "spent"),
+                        (_label_doc(tmp_path, ml.GEF10_WATCH, one,
+                                    part=f"{ml.GEF10_WATCH}:spots=11-14"), "spent"),
+                        (_label_doc(tmp_path, E3B, one), "TEST3"),
+                        (_label_doc(tmp_path, A9, one, eval_test2=False),
+                         "not made by labels --eval-test2")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.pack_pool([good[0], path], ml.GEF10, "/nas", eval_test2=True)
+    # without the flag: TEST2 is refused like any TEST, TRAIN / FIT are taken (as before)
+    with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+        ml.pack_pool([good[0]], ml.GEF10, "/nas")
+    train = [_label_doc(tmp_path, A2, one, eval_test2=False), _label_doc(tmp_path, PILOT, one)]
+    assert len(ml.pack_pool(train, ml.GEF10, "/nas")[0][1273]) == 2
+
+
+def test_eval_test2_sample_every_species_n_per_stratum() -> None:
+    """No conditional tier: every map species with one kept label is drawn; per species and
+    stratum the first N of t2_order (salt gef10, the stratum in the seed), then T2's shuffle."""
+    pool = {1273: [_item(A9, f, 1, 1273, engaged=f % 3 == 0) for f in range(90)],  # N 60 / E 30
+            1023: [_item(A10, 5, 2, 1023)],  # one N label
+            1190: [_item(W3, f, 3, 1190, engaged=True) for f in range(4)],  # E only
+            1002: [_item(A9, f, 4, 1002) for f in range(9)]}  # not the map's  # fmt: skip
+    chosen, per, species = ml.eval_test2_sample(pool, ml.GEF10, 35, 60)
+    assert species == [1273, 1023, 1190]
+    assert per == {"1273:N": {"pool": 60, "sampled": 60}, "1273:E": {"pool": 30, "sampled": 30},
+                   "1023:N": {"pool": 1, "sampled": 1}, "1023:E": {"pool": 0, "sampled": 0},
+                   "1190:N": {"pool": 0, "sampled": 0},
+                   "1190:E": {"pool": 4, "sampled": 4}}  # fmt: skip
+    assert len(chosen) == 95 and all(c["mob"] != 1002 for c in chosen)
+    assert ml.t2_sample(pool, ml.GEF10, 35)[2] == [1273]  # T2's tier would drop 1023 and 1190
+    chosen2, per2, _ = ml.eval_test2_sample(pool, ml.GEF10, 35, 2)
+    assert {k: v["sampled"] for k, v in per2.items()} == {
+        "1273:N": 2, "1273:E": 2, "1023:N": 1, "1023:E": 0, "1190:N": 0, "1190:E": 2,
+    }  # fmt: skip
+    assert all(bool(c["engaged"]) == (c["stratum"] == "E") for c in chosen2)
+    want: list[dict[str, Any]] = []
+    for mob in (1273, 1023, 1190):
+        for st in ("N", "E"):
+            items = ml.stratum_of(pool[mob], st)
+            want += [{**it, "stratum": st} for it in ml.t2_order(items, 35, mob, "gef10", st)[:2]]
+    random.Random("gef10:35:order").shuffle(want)
+    assert chosen2 == want
+    with pytest.raises(SystemExit, match="at least 1"):
+        ml.eval_test2_sample(pool, ml.GEF10, 35, 0)
+
+
+KEY_KEYS = ["labels", "seed", "per_species_target", "candidates", "letters", "crops",
+            "tier_species", "per_species", "sources", "params_sha256", "params_status",
+            "instructions_sha256", "built_at", "commit", "note", "min_fit", "removed_from_pool",
+            "exclude_keys"]  # fmt: skip
+PACK_OUT_KEYS = ["pack", "key", "crops", "per_species", "tier_species", "letters",
+                 "params_status", "removed_from_pool", "grids"]  # fmt: skip
+
+
+def _pack_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cmd_pack's pixel readers replaced: a grey frame, no sprites, a stub reference sheet."""
+    import numpy as np
+    import orc_label_sheets as ols
+
+    monkeypatch.setattr(ml, "read_png", lambda ref: np.full((720, 1280, 3), 90, np.uint8))
+    monkeypatch.setattr(ml, "use_kb", lambda spec: None)
+    monkeypatch.setattr(ml.qa_export, "Sheets", lambda directory: lambda mob: None)
+    stub = np.zeros((8, 8, 3), np.uint8)
+    monkeypatch.setattr(ols, "reference_sheet", lambda sheets, letters, views="one": stub)
+
+
+def test_pack_eval_test2_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The evaluation pack from two synthetic TEST2 label files: the weak_fit floor as before,
+    every species with a kept label, N per species and stratum, the key's records."""
+    import json
+
+    _pack_fakes(monkeypatch)
+    a9 = [[(1273, False, 0.9, False), (1273, True, 0.9, False)] for _ in range(5)]
+    a9[0].append((1189, False, 0.5, False))  # weak fit, clear of a model: leaves the pool
+    a10 = [[(1023, False, 0.9, False)] for _ in range(3)]
+    a10[0].append((1686, True, 0.8, False))
+    labels = [_label_doc(tmp_path, A9, a9), _label_doc(tmp_path, A10, a10)]
+    a = _pack_args(tmp_path, labels, eval_test2=True, per_species=2, min_fit=0.636)
+    out = ml.cmd_pack(a)
+    key = json.loads((tmp_path / "key" / "answer_key.json").read_text())
+    assert key["eval_test2"] is True and key["per_species_target"] == 2 and key["seed"] == 35
+    assert list(key) == KEY_KEYS + ["eval_test2"]
+    assert key["tier_species"] == [1273, 1023, 1686]
+    assert {k: v["sampled"] for k, v in key["per_species"].items()} == {
+        "1273:N": 2, "1273:E": 2, "1023:N": 2, "1023:E": 0, "1686:N": 0, "1686:E": 1,
+    }  # fmt: skip
+    assert key["removed_from_pool"]["1189"] == {"weak_fit": 1, "judged_before": 0}
+    assert key["min_fit"] == 0.636 and key["params_status"] == ["FROZEN"]
+    assert len(key["crops"]) == 7 and out["crops"] == 7
+    assert all(c["samples"] == [c["stratum"]] and c["engaged"] == (c["stratum"] == "E")
+               for c in key["crops"].values())  # fmt: skip
+    assert {c["session"] for c in key["crops"].values()} == {A9, A10}
+    assert out["eval_test2"] is True and out["per_species_target"] == 2
+    assert list(out) == PACK_OUT_KEYS + ["per_species_target", "eval_test2"]
+    assert len(list((tmp_path / "pack" / "crops").iterdir())) == 7
+
+
+def test_pack_without_the_flag_is_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                            ) -> None:  # fmt: skip
+    """No flag: T2's tier (>= 30 N labels), 30 per species and stratum, the key's fields and the
+    output's exactly as before (no eval_test2, per_species_target 30)."""
+    import json
+
+    _pack_fakes(monkeypatch)
+    a2 = [[(1273, False, 0.9, False)] for _ in range(32)] + [[(1023, False, 0.9, False)]]
+    labels = [_label_doc(tmp_path, A2, a2, eval_test2=False)]
+    for flag in ({}, {"eval_test2": False, "per_species": None}):
+        out = ml.cmd_pack(_pack_args(tmp_path, labels, seed=31, **flag))
+        key = json.loads((tmp_path / "key" / "answer_key.json").read_text())
+        assert list(key) == KEY_KEYS and list(out) == PACK_OUT_KEYS
+        assert key["per_species_target"] == ml.T2_PER_SPECIES == 30
+        assert key["tier_species"] == [1273]  # 1023 has 1 N label (< 30): conditional
+        assert key["per_species"] == {"1273:N": {"pool": 32, "sampled": 30},
+                                      "1273:E": {"pool": 0, "sampled": 0}}  # fmt: skip
+        assert out["crops"] == 30
