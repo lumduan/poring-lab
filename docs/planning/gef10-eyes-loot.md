@@ -323,7 +323,7 @@ gef_fild10 on 2026-10-26).
   pre-registration is `gef10-round3.md`. The split is fixed there before any read: TEST3 = e3b
   (refused by name), FIT = E3 spots 0-3, TRAIN = E3. The at-our-feet rule is kept. **The item
   classes wait for Batt** (A: Cyfar + Voucher + pooled, needs one more staged session; C: one
-  pooled class, enough data now; recommended C). ➡️ **Batt chose C** (~12:1x): one pooled `item` class. Frames are read from the NAS after the
+  pooled class, enough data now; recommended C). ➡️ **Batt chose C** (~12:2x): one pooled `item` class. Frames are read from the NAS after the
   2026-10-30 ship; the GPU only after round 2's evaluation.
 
 - Round 2's classes, plus item classes from E3's labels, plus today's gef_fild10 runs as extra

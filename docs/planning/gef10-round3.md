@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "The 148 staged floor items of E3 + e3b (gef10-eyes-loot.md E3), labelled by gef10-detector.md section 8's frozen-in-shape item rule (packets place each item; its own client sprite gives the box; the anchor and T_item measured on FIT), pass G2 on held-out TEST and a blind round on what trains, so round 3 can add floor-item class(es) to round 2's monster detector without losing its monster accuracy."
-status: "PROPOSED (2026-10-29 12:07 ICT from `date`): the split fixed BEFORE any read; ITEM CLASSES DECIDED by Batt 2026-10-29 ~12:1x: option C, ONE pooled `item` class (section 3). Nothing measured, frozen or trained."
+status: "PROPOSED (2026-10-29 12:07 ICT from `date`): the split fixed BEFORE any read; ITEM CLASSES DECIDED by Batt 2026-10-29 ~12:2x: option C, ONE pooled `item` class (section 3). Nothing measured, frozen or trained."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -61,7 +61,7 @@ The staged sessions (immune Rogue, open ground, 1 fps PNG + packets):
 
 ## 3. The item classes: DECIDED -- option C, one pooled `item` class
 
-**Batt, 2026-10-29 ~12:1x:** "choose C". Round 3 adds ONE class, `item`, for every floor item
+**Batt, 2026-10-29 ~12:2x (received just before 12:22:33 from `date`):** "choose C". Round 3 adds ONE class, `item`, for every floor item
 id (the 11 staged ids and any other). Its bar: >= 40 kept labels from >= 10 floor items in TRAIN
 (112 staged floor items in E3), and the blind round's 40 crops at <= 3 per floor item. Cyfar /
 Orcish Voucher identity stays with the inventory icons (stage@6). Option A (a Cyfar + Voucher
