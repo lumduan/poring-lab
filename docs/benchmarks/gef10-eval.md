@@ -145,3 +145,66 @@ look at its bad labels. A later round needs a NEW TEST and its own pre-registrat
   training) passes TEST2 explicitly, and its command is recorded in this document then.
 - **Reported, deciding nothing:** the new model on Batt's demo (`detector_vs_packets.py`), beside
   v1's numbers (gef10-round2.md: recall 8.0 %, precision 18.7 %).
+
+## AMENDMENT R2-2 (2026-10-29 12:53 ICT from `date`, BEFORE TEST2's evaluation labels exist and BEFORE the training ends): the details the plan left open, and the tools it needs
+
+An inventory of the run (read-only, 2026-10-29 ~12:5x) found that none of the steps above runs
+end-to-end with today's code. The tools are built and tested before any of them reads TEST2. This
+amendment fixes, before that, every detail the plan did not state:
+
+- **TEST2's evaluation labels:** `map_labels.py labels --eval-test2`, a new flag:
+  - gef_fild10 only, and only parts whose name ends in a TEST2 suffix (a9, a10, a11, w3);
+  - round 1's TEST and round 3's TEST3 stay refused;
+  - the FROZEN round-2 `params.json` (gef10-detector.md 13n / 13s);
+  - `--classes config/detector/classes-v2orc-payf07.json`, the TRAIN labels' file;
+  - one part per run. The output records `"eval_test2": true`.
+- **The pool is the labels KEPT under gef10-o3h-e, which includes the weak_fit floor:**
+  `--min-fit 0.636` (T_h, the floor on EVERY label, as the cache and T2 applied it).
+- **The draw:** `map_labels.py pack --eval-test2 --per-species 60 --seed 35`:
+  - every species with at least one kept TEST2 label is in the pool (no conditional tier: "fewer:
+    all of them");
+  - per species and stratum (N / E), the first 60 by `t2_order`;
+  - T2's crop / reference-sheet format and the instructions (sha256 `247b7919...`), unchanged.
+- **The detections:** `poring_vision.predict_dir` with `last.pt` after the last completed epoch,
+  imgsz 1280, conf 0.25, ultralytics' NMS:
+  - on exactly the frames that carry a pack crop, read IN PLACE from the NAS shards (a new
+    `--refs` input; no extraction to /dev/shm or the disk, rule 7);
+  - the guarded step `execdev:vision` with `--threshold 30 --sustain 30` (the training's IO rule);
+  - R1-R3 and the 25 % VRAM cap; fit-first's VTON is a co-tenant and never touched.
+- **The scorer:** `scripts/eval_q1.py` (new, committed with a positive case before it scores):
+  - EVALUATED = both labellers answer q1 yes, q2 good and q3 = the label's species;
+  - Q1 (stratum N) and E1 (stratum E) per species, with the position metric
+    (`label_iou.match_position`);
+  - precision counts only class-s detections whose centre falls inside an evaluated crop's box of
+    that frame;
+  - the splits and the look-alike confusion as listed under "Reported".
+- **G1:** `gold_eval.py score` on the gold set from the NAS archive
+  (`archive/train/eval/gold/20261004T103815-console-s2-indoor-v2/`), v1's
+  `pred-v1png-20261008.json` and the new model in ONE command. Every species class is collapsed
+  to `monster` (a new `--collapse-species`; player, npc and warp are kept).
+- **G2:** a new `gold_eval.py score-cache` on the `v1png-20261008` cache's held-out session
+  054429:
+  - v1's labels, read from the shards in place;
+  - v1's `last.pt` and the new `last.pt` as two predictions in ONE command, so v1 is re-scored
+    first with the same command;
+  - species collapsed as G1.
+- **The latency:**
+  - the 200 frames are the first 200, by a seed-35 shuffle, of the TEST2 frames that carry a pack
+    crop;
+  - GPU: `predict_dir --timing` in the worker, per-frame ms, p50 / p95;
+  - CPU: the new model exported to ONNX by docs/operations/detector-cpu.md's recipe, run through
+    `UnitDetector` at nice 10 beside v1's `v1png-last-736x1280.onnx` on the same 200 frames,
+    p50 / p95. `unit_detector.py`'s 3-name mapping is generalised first, because the new model
+    has 26 classes.
+- **Reported, deciding nothing:**
+  - Batt's demo: `predict_dir` on its 5 Hz JPEGs (`human-demos/20261026T095021-...`), turned
+    into `detector_vs_packets.py`'s box rows (species collapsed to `monster`), beside v1's logged
+    numbers. The recorder's frame times, not live grab times.
+  - pay_fild07's TEST (seed 23) and orcsdun01's P1 (seed 3): NOT run. No labels or packs exist
+    for them, and building them is out of this evaluation's scope.
+- **Disclosure:** TEST2's frames were opened ONCE before this, by the parent, for the miss-cue
+  study (rogue-gef10.md Amendment S, the "Miss" cue's held-back set, 10-26 ~14:4x). That read the client's
+  "Miss" sprite, not monster labels. No detector parameter, label rule or setting of this run came
+  from it.
+- Unchanged: the model, Q1 / E1 / G1 / G2's bars, the strata, the two NEW blind labellers, the
+  verdict rule, and "Passing does NOT switch the live detector".
