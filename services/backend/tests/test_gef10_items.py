@@ -141,3 +141,22 @@ def test_train_refuses_every_test_and_g2_reads_only_test3() -> None:
     for sid in (e3, "20261026T050000-rdp-rogue-a9"):
         with pytest.raises(SystemExit):
             gi.check_role(spec, sid, None, "test3")
+
+
+def test_empty_cell_keeps_away_from_items_units_and_us() -> None:
+    import random
+
+    rng = random.Random(7)
+    me = (100.0, 100.0)
+    items = [(103.0, 100.0), (97.0, 96.0)]
+    units = [(100.0, 104.0)]
+    for _ in range(50):
+        c = gi.empty_cell(me, items, units, rng)
+        assert c is not None
+        assert max(abs(c[0] - me[0]), abs(c[1] - me[1])) > 1
+        assert all(max(abs(c[0] - x), abs(c[1] - y)) >= 3 for x, y in items)
+        assert all(max(abs(c[0] - x), abs(c[1] - y)) >= 2 for x, y in units)
+        assert abs(c[0] - me[0]) <= 8 and abs(c[1] - me[1]) <= 8
+    crowded = [(100.0 + dx, 100.0 + dy) for dx in range(-8, 9, 3) for dy in range(-8, 9, 3)]
+    assert gi.empty_cell(me, crowded, [], random.Random(1)) is None
+    assert gi.INSTRUCTIONS_SHA256.startswith("7d0a9704")

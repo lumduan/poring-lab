@@ -114,7 +114,7 @@ views give no item labels. Its (3, 0) and (0, 3) views were planned for exactly 
 
 - ✅ BUILT 2026-10-29: `gef10_items.py freeze / label / g2`. `label` refuses every TEST; `g2` reads
   TEST3 only. Rows are small JSON, within rule 7's limits. Tests on synthetic data (68cfdf6 + this).
-- `gef10_items.py pack` (the blind pack, mirroring item_labels.py's: 40 crops at <= 3 per floor
+- ✅ BUILT 2026-10-29: `gef10_items.py pack` (the blind pack, mirroring item_labels.py's: 40 crops at <= 3 per floor
   item + 20 empty-floor negatives).
 - ✅ BUILT 2026-10-29 (68cfdf6): **several staged sessions per map in `map_labels`.** Today a MapSpec has ONE `staged` session and
   one `staged_kind`: GEF10's is the watch, one spot per map change. E3 and e3b are stage_items

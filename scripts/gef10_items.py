@@ -10,6 +10,7 @@ before this was built).
     gef10_items.py freeze --measure JSON --rows JSON --out PARAMS     the anchor + T_item frozen
     gef10_items.py label PART... --params PARAMS --offset-ms MS --out JSON   TRAIN labels
     gef10_items.py g2 PART... --params PARAMS --offset-ms MS --out JSON      G2 on TEST3 only
+    gef10_items.py pack PART... --rows LABEL_ROWS --offset-ms MS --out JSON  the blind pack
 
 The rule (8): an item is LABELLED on a frame at t when its floor_item_appear + 2.2 s <= t < its
 vanish (item-class.md 8a's frozen D_APPEAR / D_GONE), on the monsters' candidate frames (our
@@ -35,12 +36,15 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import random
 import statistics
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -549,6 +553,103 @@ def _run(a: argparse.Namespace, worker: Any, role: str) -> tuple[list[dict[str, 
     return rows, per_part
 
 
+R3 = Path("/dev/shm/poring-lab-tmp/gef10-r3")  # client-derived crops: RAM, small (rule 7)
+BLIND_SEED = 33  # round3 4.4
+INSTRUCTIONS_SHA256 = "7d0a97041201f3d622f663115de9cb4d128afe4859706f388d1b35b3076e125c"
+NEG_ITEM_CELLS, NEG_UNIT_CELLS, NEG_SPAN = 3, 2, 8
+
+
+def empty_cell(me: tuple[float, float], items: Sequence[tuple[float, float]],
+               units: Sequence[tuple[float, float]], rng: random.Random,
+               span: int = NEG_SPAN) -> tuple[float, float] | None:  # fmt: skip
+    """PURE (item-class.md amendment A 1, as item_labels.empty_point): a random cell within
+    +-``span`` of ours, not ours or next to it, >= 3 cells (Chebyshev) from every floor item and
+    >= 2 from every unit; None after 200 tries."""
+
+    def cheb(a: tuple[float, float], b: tuple[float, float]) -> float:
+        return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+    for _ in range(200):
+        c = (me[0] + rng.randint(-span, span), me[1] + rng.randint(-span, span))
+        if cheb(c, me) <= 1 or any(cheb(c, x) < NEG_ITEM_CELLS for x in items):
+            continue
+        if any(cheb(c, u) < NEG_UNIT_CELLS for u in units):
+            continue
+        return c
+    return None
+
+
+def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
+    """round3 4.4: the blind pack -- 40 crops of KEPT TRAIN labels (<= 3 per floor item, by the
+    seed) + 20 empty-floor negatives in kept frames; item_labels' crop and instructions."""
+    from PIL import Image
+
+    if hashlib.sha256(il.INSTRUCTIONS.encode()).hexdigest() != INSTRUCTIONS_SHA256:
+        raise SystemExit("item_labels.INSTRUCTIONS changed: the blind round needs them as frozen")
+    spec = ml.GEF10
+    rows = [json.loads(x) for x in a.rows.read_text().splitlines() if x.strip()]
+    keep = [r for r in rows if r["status"] == "keep" and r["items"]]
+    cands = [{"sid": r["part"], "frame_id": r["frame_id"], "t": r["t"], **it}
+             for r in keep for it in r["items"]]  # fmt: skip
+    picks = il.draw_items(cands, il.BLIND_ITEMS, a.seed)
+    sessions = {}
+    for part in a.parts:
+        sess = ml.RecSession.open(part, spec, a.layout_templates)
+        check_role(spec, sess.sid, sess.spots, "train")
+        sessions[sess.name] = sess
+    off_ns = int(float(a.offset_ms) * 1e6)
+    sizes = [(c["box"][2] - c["box"][0], c["box"][3] - c["box"][1]) for c in cands]
+    mw = statistics.median(w for w, _h in sizes) if sizes else 16.0
+    mh = statistics.median(h for _w, h in sizes) if sizes else 16.0
+    rng = random.Random(a.seed * 1000 + 7)
+    order = list(keep)
+    rng.shuffle(order)
+    negs: list[dict[str, Any]] = []
+    for r in order:
+        if len(negs) >= il.BLIND_NEG:
+            break
+        sess = sessions[r["part"]]
+        t = int(r["t"])
+        world = sess.lab.timeline.frame_world(t - off_ns)
+        scene = sess.scene(world)
+        if scene is None or world.self_pos is None:
+            continue
+        floors = [il.item_cell(f, OX, OY) for f in il.floor_items(sess.lab.timeline.events)
+                  if f.t_a <= t < f.t_v]  # fmt: skip
+        units = [(float(e.x), float(e.y)) for e in world.entities
+                 if e.objtype in occ.UNIT_OBJTYPES and not e.hidden]  # fmt: skip
+        c = empty_cell(tuple(world.self_pos), floors, units, rng)
+        if c is None:
+            continue
+        u, v = anchor_and_depth(scene, c)[0]
+        box = (u - mw / 2, v - mh / 2, u + mw / 2, v + mh / 2)
+        me = anchor_and_depth(scene, scene.player)[0]
+        why, vis = label_reasons({0: box}, [], me, [], sess.lab.size, sess.lab.ui_rects)
+        if why or not vis:
+            continue
+        negs.append({"sid": r["part"], "frame_id": r["frame_id"], "t": t, "floor_id": None,
+                     "item_id": None, "box": [round(x, 2) for x in box]})  # fmt: skip
+    entries = [{"truth": "item", **x} for x in picks] + [{"truth": "none", **x} for x in negs]
+    random.Random(a.seed).shuffle(entries)
+    root, keyd = R3 / f"blind-pack-seed{a.seed}", R3 / f"answer-key-seed{a.seed}"
+    root.mkdir(parents=True, exist_ok=True)
+    keyd.mkdir(parents=True, exist_ok=True)
+    key: dict[str, Any] = {"seed": a.seed, "rows": str(a.rows), "crops": {}}
+    for i, e in enumerate(entries, 1):
+        cid = f"{i:03d}"
+        sess = sessions[e["sid"]]
+        ref = next(x for x in sess.refs if x.frame_id == e["frame_id"])
+        rgb = np.ascontiguousarray(ml.read_png(ref)[:, :, 2::-1])
+        Image.fromarray(il.crop_pair(rgb, e["box"])).save(root / f"crop-{cid}.png")
+        key["crops"][cid] = {k: v for k, v in e.items() if k != "pred_box"}
+    (root / "instructions.txt").write_text(il.INSTRUCTIONS)
+    (keyd / "answer_key.json").write_text(json.dumps(key, indent=1))
+    return {"what": "round3 4.4: the blind pack", "pack": str(root),
+            "key": str(keyd / "answer_key.json"), "kept_labels": len(cands),
+            "items": len(picks), "negatives": len(negs), "built_at": olf.now_ict(),
+            "commit": olf.git_head()}  # fmt: skip
+
+
 def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
     raw = a.measure.read_bytes()
     out = freeze_params(json.loads(raw), json.loads(a.rows.read_text()))
@@ -611,9 +712,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
         p.add_argument("--rows", type=Path, default=None)
         p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("pack")
+    p.add_argument("parts", nargs="+")
+    p.add_argument("--rows", type=Path, required=True, help="label's --rows (TRAIN)")
+    p.add_argument("--offset-ms", type=float, required=True)
+    p.add_argument("--seed", type=int, default=BLIND_SEED)
+    p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
+    p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     out = {"sprites": cmd_sprites, "measure": cmd_measure, "freeze": cmd_freeze,
-           "label": cmd_label, "g2": cmd_g2}[a.cmd](a)  # fmt: skip
+           "label": cmd_label, "g2": cmd_g2, "pack": cmd_pack}[a.cmd](a)  # fmt: skip
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1) + "\n")
     print(json.dumps(out, indent=1)[:6000])
