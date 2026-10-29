@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with payf07's o3h-all rule (fix 2 facing, 2b / 2c, the fit, o3h, the T_h floor on every label), re-measured on gef_fild10's own FIT data, PLUS a rule that LABELS monsters engaged in a fight with our character (drawn facing it, in the action the packets give), give per-species monster boxes for gef_fild10 (Orc Lady, Orc Warrior, Orc Baby, Poporing, Orc Lord, Orc Archer, the plants) that pass the training tier (T1: C1 <= 5 % on held-out TEST data; T2: every species in the tier passes a blind check, the engaged labels in their own stratum), and floor-item boxes from the items' own client sprites that pass their own geometric and blind checks, so ONE detector can be trained on payf07's 21 classes plus this map's monsters and items."
-status: "TRAINING (13z-13z-3): round 2's T1 PASSED on TEST2 2026-10-26 12:06 (13t, C1 1.9 %); the 10-epoch training on v2orc-payf07-gef10-20261026 runs since 2026-10-28 13:44; epoch 7 done 2026-10-29 09:18 (attempt 9 of train-day's auto-resumes). Round 1, SUPERSEDED by round 2: T1 FAILED 2026-10-26 03:16 ICT (13r): the monster tier failed, nothing of gef_fild10 trained in round 1. History: PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
+status: "TRAINED (13z-5): the 10-epoch training on v2orc-payf07-gef10-20261026 (from 2026-10-28 13:44) ENDED with epoch 10 of 10 on 2026-10-29 16:26; the scored checkpoint is last.pt sha256 ebfc7a9a...; its evaluation (gef10-eval.md R2-R2-3) started 2026-10-29 16:3x. Round 2's T1 PASSED on TEST2 2026-10-26 12:06 (13t, C1 1.9 %). Round 1, SUPERSEDED by round 2: T1 FAILED 2026-10-26 03:16 ICT (13r): the monster tier failed, nothing of gef_fild10 trained in round 1. History: PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [payf07-detector.md, orcsdun01-detector.md, labels-v2-plan.md, training-cost.md, target-items.md, item-class.md, rogue-gef10.md, gef10-prep.md, ../benchmarks/payf07-eval.md]
-next_action: "Finish the training (epochs 8-10; 13z-3: on the 12-h step limit the parent resumes ONCE with RESUME=1, Batt 2026-10-29), then score last.pt after the last completed epoch per gef10-eval.md. ➡️ The rest of this field is round 1's, SUPERSEDED by round 2 (13s-13t): T1 FAILED 2026-10-26 03:16 (13r: C1 5 / 61 = 8.2 % > 5 %; two a7 sightings: a pickup notice over an Orc Warrior, a Poporing beside a raised rock face). Nothing of gef_fild10 trains this round. Batt decides whether a round 2 (a popup rule + a raised-terrain rule, measured on FIT; a NEW TEST; T2 again) is worth it."
+next_action: "Score last.pt (epoch 10, sha256 ebfc7a9a..., 13z-5) per gef10-eval.md AMENDMENTS R2 / R2-2 / R2-3; the result goes in gef10-eval.md. Passing does not switch the live detector (Batt decides). ➡️ The rest of this field is round 1's, SUPERSEDED by round 2 (13s-13t): T1 FAILED 2026-10-26 03:16 (13r: C1 5 / 61 = 8.2 % > 5 %; two a7 sightings: a pickup notice over an Orc Warrior, a Poporing beside a raised rock face). Nothing of gef_fild10 trains this round. Batt decides whether a round 2 (a popup rule + a raised-terrain rule, measured on FIT; a NEW TEST; T2 again) is worth it."
 title: "A detector for gef_fild10's monsters and floor items: the facts, the split, the label rule (engaged units labelled), T1 / T2, the classes, the cache and training proposal, the evaluation plan (PROPOSED pre-registration)"
 date: 2026-10-25
 owner: Batt
@@ -1375,3 +1375,36 @@ the same bars, and Batt decides.
   (`systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0`), copies small crops out of big
   frames, and does not read large /dev/shm data in the day while it may sit in swap (reading
   swapped tmpfs pages is root-disk IO).
+
+### 13z-5. The training ENDED: epoch 10 of 10 completed; the scored checkpoint (recorded 2026-10-29 16:31 ICT from `date`)
+
+- **Attempts 10-13 after the OOM (train-day's own auto-resumes, no person needed):**
+
+  | attempt | start | end | why it ended |
+  |---|---|---|---|
+  | 10 | 10:53:14 | 12:39:23 | R3-HARD: cam-1-01-font-s dropped frames 31 s (fleet 87.5 det/s); 15 quiet minutes, then the slowest level |
+  | 11 | 13:25:16 | 13:29:17 | R3-HARD again, the same camera (fleet 87.7 det/s); 2 drop-aborts in 2 h, no cap |
+  | 12 | 13:45:45 | 15:02:09 | IO guard: quant-postgres full IO stall 73.0 % for 32 s; nothing else of ours ran |
+  | 13 | 15:17:17 | 16:27:01 | IO guard: quant-postgres 34.9 % for 31 s, AFTER epoch 10 ended (below) |
+
+  The camera's drops at fleet ~87 det/s match `frigate-camera-own-drops` (infra observation, no
+  action). IO trips used today: 7 of IO_RESUMES 20.
+- **Epoch 9** ended ~14:12 (mAP50 0.832, mAP50-95 0.636). **Epoch 10, the last,** ended 16:26:16
+  (`results.csv` row 10: P 0.889, R 0.837, mAP50 0.845, mAP50-95 0.648, on v1's val sessions;
+  PROGRESS only, val decides nothing).
+- **The run finished before the trip.** Ultralytics saved `last.pt` / `best.pt` (16:26:18-19) and
+  stripped them (read back offline at 16:2x without torch: `epoch` -1, `optimizer` None,
+  `train_metrics` = epoch 10's row in both). The IO abort at 16:27:01 cut only ultralytics' own
+  final validation of `best.pt` (at 254 / 811 batches), which scores nothing here.
+- **train-day was stopped by PID at 16:29:10** (4012827, and its `sleep 900`). Its attempt 14
+  (--resume at 16:42) would have resumed a finished, stripped run: ultralytics refuses that
+  ("nothing to resume"), which train-day reports as TRAIN STOPPED. No process of ours was left on
+  the GPU (nvidia-smi 16:29). The vision worker stays up for the evaluation.
+- **The 16:27 trip, attribution open:** our local-disk writes in the minute before were the four
+  checkpoint writes (~2 x 16 MB, then 2 x 5.5 MB stripped, 16:26:16-19) and the plots; the
+  validation reads came from the NAS (network). The stall window began ~16:26:30. Not attributed.
+- **THE SCORED CHECKPOINT (gef10-eval.md: `last.pt` after the LAST COMPLETED epoch):**
+  `data/train/gef10-20261026/weights/last.pt`, epoch 10 of the planned 10, 5,540,186 bytes,
+  sha256 `ebfc7a9a2475ff6117f429aefeaf66b369d5cbd2bed95cbd0db0f1a8de6cc0b6`. (`best.pt` holds
+  the same epoch, sha256 `8ffbd7cf...`; not used.) Container path:
+  `/data/train/gef10-20261026/weights/last.pt`.
