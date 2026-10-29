@@ -97,7 +97,11 @@ views give no item labels. Its (3, 0) and (0, 3) views were planned for exactly 
 - `gef10_items.py label`: section 8's labels over a staged session's parts (`DIR:spots=`),
   refusing TEST3 except in `g2`; writes under the 4 GB /dev/shm limit or to the root disk.
 - `gef10_items.py g2` and `pack` (the blind pack), mirroring item_labels.py's.
-- The staged sessions' spot starts (stage_items' `warp` events) in map_labels' staged-part logic.
+- **Several staged sessions per map in `map_labels`.** Today a MapSpec has ONE `staged` session and
+  one `staged_kind`: GEF10's is the watch, one spot per map change. E3 and e3b are stage_items
+  sessions, with one spot per first warp followed by drops (`spot_starts`, 3 views each). A
+  per-session kind is needed so that `E3:spots=0-3` means stage_items spots. Round 2's behaviour
+  stays pinned by its tests.
 - Route M for gef_fild10 in `build_frame_cache.py` (its `item_sessions` path, today
   prt_fild08 / orcsdun01).
 - Tests on synthetic data first; the real runs after the ship.
