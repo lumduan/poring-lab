@@ -1408,6 +1408,9 @@ the same bars, and Batt decides.
   sha256 `ebfc7a9a2475ff6117f429aefeaf66b369d5cbd2bed95cbd0db0f1a8de6cc0b6`. (`best.pt` holds
   the same epoch, sha256 `8ffbd7cf...`; not used.) Container path:
   `/data/train/gef10-20261026/weights/last.pt`.
+  ➡️ MOVED to the NAS 2026-10-29 17:06 (guarded `archive:`, sha256 read back):
+  `/mnt/poring-lab-datasets/archive/train/gef10-20261026/weights/last.pt` (container
+  `/datasets/archive/train/gef10-20261026/weights/last.pt`).
 - **➡️ EVALUATED 2026-10-29 17:04 (gef10-eval.md RESULT R2):** it does NOT pass. G1 fails on
   precision (monster P 0.867 < 0.882; v1 0.902). Q1 passes for Orc Lady, Orc Warrior and Poporing
   (recall 0.983, precision 1.000 each), and G2 passes. The live detector stays v1.

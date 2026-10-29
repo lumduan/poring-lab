@@ -169,3 +169,13 @@ db-th-data dump to the NAS then remove; the transcript to the NAS after the sess
 | (later) | the session transcript | `scratch-archive/` | after the session (Batt) | pending |
 
 - Not ours, unchanged: the root LV at the time of the moves read ~477 GiB used / 110 GiB free (df).
+
+## Moves -- 2026-10-29 17:06-17:07 ICT (the gef10 round-2 run, after its evaluation)
+
+| time | item | where | how | result |
+|---|---|---|---|---|
+| 17:06 | `data/train/gef10-20261026` (11 MB: weights, results, args) | `archive/train/gef10-20261026/` | guarded `archive:` (`--threshold 30 --sustain 30`) | verified + deleted; `last.pt` sha256 `ebfc7a9a...` read back on the NAS |
+| 17:07 | `data/train/eval/gef10-r2` (5.3 MB: predictions, refs, scores) | `archive/train/eval/gef10-r2/` | guarded `archive:` | verified + deleted; worst stall 3.1 % |
+
+- Left locally: the empty `data/train/eval/` directory. The CPU export of the same weights stays in
+  RAM (`/dev/shm/poring-lab-detector/model/gef10r2-last*`, ~16 MB).

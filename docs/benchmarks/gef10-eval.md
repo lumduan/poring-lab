@@ -432,4 +432,10 @@ either: that stays Batt's decision.
   latency / demo scores.
 - `/dev/shm/poring-lab-tmp/gef10-det/`: `labels-test2/`, `eval-r2/pack` (25 MB),
   `eval-r2-key/`, `eval-r2-answers/` (A.json, B.json) and `eval-r2-build.json`.
-- The NAS copy (same day): `scratch-archive/2026-10-29/gef10-eval-r2/` (below once it is made).
+- The NAS copy of the /dev/shm part (same day, 17:06): `scratch-archive/2026-10-29/gef10-eval-r2/`,
+  290 files, `checksums.sha256` verified on the NAS. The training's logs (train.log, attempts 0-13)
+  went to `scratch-archive/2026-10-29/train-gef10-run/` (19 files, verified).
+- ➡️ MOVED 17:06-17:07 (guarded `archive:`, verified): `data/train/eval/gef10-r2/` is now
+  `/mnt/poring-lab-datasets/archive/train/eval/gef10-r2/`, and the run (`data/train/gef10-20261026/`,
+  so the scored `last.pt`) is now `/mnt/poring-lab-datasets/archive/train/gef10-20261026/`
+  (container: `/datasets/archive/train/gef10-20261026/weights/last.pt`, the same sha256).
