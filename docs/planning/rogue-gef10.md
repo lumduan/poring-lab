@@ -1771,7 +1771,7 @@ recommends, each first paged back out of swap at 8 MB/s under the quant IO guard
   hunts' loot steps (dungeon_hunt, store_loot) are unchanged.
 - **The FIT evidence (2026-10-29, the references at hand; no frame of the E3 recording was read
   under this rule):** each item's screen-cut reference (slot background + glow) reads 1.1-4.4
-  against its own template (Green Herb 4.36; ➡️ corrected 11:01 from `date`, first written
+  against its own template (Green Herb 4.36; ➡️ corrected 10:59 from `date`, first written
   1.1-3.8; `cut-grf`'s own printout); the White Potion 0.9, the Fly Wing 4.8; the nearest DIFFERENT item or
   the empty slot reads >= 30.8. (pay_fild07's `green_etc` reads 3.09 against Sticky Mucus: the
   same icon; it is not in this inventory's stock set.)
@@ -1820,7 +1820,7 @@ report, no retry.
 
 **After the session (diagnostic, not a gate):** once e3 ships (03:05 window), its spot-18 frames
 are re-read from the NAS copy under a 4 GB memory cap, to show what the masked rule reads there.
-- **11:00, step 1 done:** `cut-grf --map gef_fild10` rc 0, 11 masked references written; the
+- **10:59, step 1 done:** `cut-grf --map gef_fild10` rc 0, 11 masked references written; the
   screen-cut references read cyfar 2.07, orcish_voucher 3.82, sticky_mucus 3.09, milk 1.61,
   garlet 2.56, iron 2.15, large_jellopy 1.40, rough_oridecon 2.77, green_herb 4.36,
   nursing_bottle 1.12, axe 3.47; the stock (fly_wing, slot, white_potion) unknown and beyond 20.0.
