@@ -2,7 +2,7 @@
 title: "Disk audit: poring-lab's footprint on the shared root disk"
 status: living
 created: 2026-10-21
-last_reviewed: 2026-10-22
+last_reviewed: 2026-10-29
 owner: poring-lab
 ---
 
@@ -19,6 +19,19 @@ footprint (CLAUDE.md "How we work").
   `/home/batt/poring-lab-shm-archive`, `~/.cache/poring-lab`), under the IO guard; a trip kills it.
 - `measure:docker-df` (`docker system df -v`) and `measure:buildx-du` (the lab builder, `default`).
 - Not ours: never walked. Only `df` and what `docker system df -v` shows.
+
+## Standing retention note: recordings on the local disk (added 2026-10-29)
+
+Since CLAUDE.md rule 7's size limits (Batt 2026-10-29), EVERY recording is written to
+`/home/batt/poring-lab-rec` (record_session's default `--out`, the tolerant DISK_RULE). /dev/shm
+keeps scratch items up to 1 GB, 4 GB in total.
+- **Retention:** until `dataset_ship.py ship` verifies the NAS copy, which then deletes the local
+  one. Ship in a quiet window: SET hours are refused, and quant's post-close jobs ran until ~19:00
+  on 10-28.
+- **Caps:** `record_session` refuses or stops below 140 GB free or above 20 GB unshipped (its
+  defaults).
+- The five /dev/shm sessions still waiting (e4, f3, e3, e3x, e3b; ~11 GB) ship 2026-10-30
+  03:05-04:25 (rogue-gef10.md AK-4).
 
 ## Audit 1 -- 2026-10-21 20:34-20:42 ICT
 

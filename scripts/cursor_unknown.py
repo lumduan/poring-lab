@@ -56,6 +56,7 @@ DATA = ROOT  # where data/ (L3, the cursor references) and the generated map cac
 DEMO = Path("/dev/shm/poring-lab-demo")
 NAS = Path("/mnt/poring-lab-datasets")
 REC_SHM = Path("/dev/shm/poring-lab-rec")
+REC_DISK = Path("/home/batt/poring-lab-rec")  # recordings go here since 2026-10-29 (rule 7)
 OUT = Path("/dev/shm/poring-lab-tmp/cursor-unknown")
 MAP = "gef_fild10"
 NS = 1_000_000_000
@@ -182,7 +183,7 @@ def session(tag: str) -> str:
 def recording(tag: str) -> Path:
     if refused_tag(tag):
         raise SystemExit(f"refused: {tag} is a TEST2 recording (gef10-eval.md amendment R2)")
-    for base in (REC_SHM, NAS):
+    for base in (REC_SHM, REC_DISK, NAS):
         if base.is_dir():
             hits = sorted(p for p in base.iterdir() if p.name.endswith(f"-rdp-rogue-{tag}"))
             if len(hits) == 1 and (hits[0] / "manifest.json").exists():

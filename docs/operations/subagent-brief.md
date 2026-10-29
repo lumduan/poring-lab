@@ -45,6 +45,11 @@ SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all 
   - scratch, test temp, caches: export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp;
     pytest -p no:cacheprovider --basetemp="$TMPDIR/pytest"; mypy --cache-dir=/dev/null;
     ruff --no-cache.
+  - /dev/shm is RAM, and its overflow becomes swap on the shared disk (CLAUDE.md rule 7, Batt
+    2026-10-29). Keep each scratch item at or under 1 GB. The lab's /dev/shm total stays at or under
+    4 GB, so check `df -h /dev/shm` before you write anything big. Anything larger, and any
+    recording, is the parent's call. Run analysis scripts under a memory cap without swap:
+      systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 <command>
 - Docker: never raw docker / docker compose (create, start, restart, build, pull, up). Only the
   guarded steps (scripts/guarded_build.py), and only when the brief says so. `docker exec` into
   frontend-dev for lint/typecheck is allowed.

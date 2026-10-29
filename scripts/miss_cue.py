@@ -69,6 +69,7 @@ OUT_DIR = ROOT / "data" / "miss_cue"  # client pixels: gitignored (/data/*), nev
 TEMPLATE = OUT_DIR / "template.npy"
 NAS = Path("/mnt/poring-lab-datasets")
 REC = Path("/dev/shm/poring-lab-rec")
+REC_DISK = Path("/home/batt/poring-lab-rec")  # recordings go here since 2026-10-29 (rule 7)
 DEMO = Path("/dev/shm/poring-lab-demo")
 CACHE = Path("/dev/shm/poring-lab-tmp/miss-cue")  # RAM: shard offset indexes
 AID = 2000002
@@ -323,8 +324,10 @@ def engagement_gain(eng: Mapping[str, Any], theirs: Sequence[tuple[int, int, int
 def rec_dir(sid: str) -> Path:
     if sid.rsplit("-", 1)[-1] in HELD_BACK and not _OPEN_HELD_BACK[0]:
         raise SystemExit(f"{sid}: held back for the detector's TEST2, never opened here")
-    d = REC / sid
-    return d if (d / "manifest.json").exists() else NAS / sid
+    for base in (REC, REC_DISK):
+        if (base / sid / "manifest.json").exists():
+            return base / sid
+    return NAS / sid
 
 
 def shard_index(sid: str) -> list[dict[str, Any]]:

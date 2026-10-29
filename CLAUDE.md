@@ -152,6 +152,18 @@ ports, quickstart) and `docs/adr/`.
      (`/mnt/poring-lab-datasets/scratch-archive/<date>/`) or are deleted, the SAME DAY their
      verdict is recorded. Only run-time inputs (GAT, sprites, calibrations, chat guard) and what a
      running job uses stay. Every report states /dev/shm usage.
+   - **Size limits** (Batt, 2026-10-29): `/dev/shm` stays off the root LV only while it fits in
+     RAM. Every swap file is on the root LV, so anything that overflows becomes random 4 KiB swap IO
+     on the disk shared with capture. On 10-19, reading 0.39 GiB back stalled quant-postgres to
+     52.8 %. On 10-29, a 24 GB scratch leak filled swap and the OOM killer took our training.
+     - A scratch item of up to 1 GB may go to `/dev/shm`. `/dev/shm` in total stays at or under
+       4 GB.
+     - Anything larger, and EVERY RECORDING, goes to the root disk as sequential files. Write it
+       paced or under the IO guard. For recordings that is `record_session.py`'s default `--out
+       /home/batt/poring-lab-rec`, with the tolerant DISK_RULE.
+     - Run-time environments that would be many-small-file trees on the shared disk stay in RAM
+       and count toward the 4 GB. Today that is `/dev/shm/poring-lab-detector` (its `.venv`,
+       ~1.5 GB).
 8. **Clipboard and file transfer are human-only** (ADR-0004):
    - never add a clipboard or file message to `AgentToBackend` / `InputEvent`;
    - never mount the `transfer` volume anywhere but desktop and backend;
@@ -592,7 +604,9 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
     local delete, all under the IO guard. Measure with `measure:du=<path>` (one path a step) and
     `measure:docker-df`.
   - Never park /dev/shm overflow on the local disk. The 10-19/20 shm archive (4.1 GB, with
-    symlinks back into /dev/shm) did exactly that; it was moved on 2026-10-21.
+    symlinks back into /dev/shm) did exactly that; it was moved on 2026-10-21. (➡️ This is about
+    LONG-TERM copies. Since 2026-10-29, rule 7's size limits send large ACTIVE scratch and every
+    recording to the root disk directly, as a working set until it is shipped to the NAS.)
   - **Every report states our local disk footprint** (and /dev/shm's).
 - **End-to-end playable demos are a REGULAR milestone** (Batt, 2026-10-15). They do not wait for
   every piece to be perfect.
