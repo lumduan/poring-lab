@@ -35,6 +35,12 @@ apart (a looter's loot drops even on a no-drop death, then expires):
     stage_items.py drop --map gef_fild10               LIVE: drop the given set (the icon proof)
     stage_items.py held --map gef_fild10               the DB's last save: none of the set held
     stage_items.py run --map gef_fild10 --n 22 --seed S --open CANOPY --immune-confirmed   LIVE
+
+stage@6 (rogue-gef10.md AK-5): the set's references become MASKED ones, built from the client's
+own item icons (the GRF's item BMPs, extracted to /dev/shm) and compared on the item's pixels
+only (gm_state.ICON_MATCH_MASKED), so the slot background and the new-item glow stop counting:
+
+    stage_items.py cut-grf --map gef_fild10 --table IDNUM2ITEMRESNAMETABLE --icons ITEM_BMP_DIR
 """
 
 from __future__ import annotations
@@ -57,10 +63,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@5"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
+VERSION = "stage@6"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
 # @4: the character is a ROGUE (job "rogue", data/thief) and watch --spawn (rogue-gef10 A4);
 # @5: per-MAP item sets (gef_fild10's drop set, gef10-eyes-loot.md E3): groups per spot, the map's
-# offsets, the 3 x 3 pile inside the area, @killmonster2 at the end, canopy / drop / held commands
+# offsets, the 3 x 3 pile inside the area, @killmonster2 at the end, canopy / drop / held commands;
+# @6: MASKED icon references from the client's own item icons (`cut-grf`, rogue-gef10.md AK-5)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -353,6 +360,99 @@ def cut(spec: Path, map_: str = "pay_fild07") -> dict[str, Any]:
         np.save(ms.icon_dir / f"loot-{name}.npy", crop)
     missing = [n for n in ms.items.values() if not (ms.icon_dir / f"loot-{n}.npy").exists()]
     return {"cut": list(crops), "dir": str(ms.icon_dir), "missing": missing,
+            "stock_refs": sorted(stock)}  # fmt: skip
+
+
+# --- stage@6: MASKED references from the client's item icons (rogue-gef10.md AK-5) -------------
+ICON_BMP_OFFSET = 3  # icon_crop's column c shows the item BMP's column c - 3, rows aligned:
+# measured 2026-10-29 for all 13 icons at hand (the 11 of gef_fild10's set, the White Potion, the
+# Fly Wing), each with a far worse second offset
+MIN_ITEM_PX = 40  # a masked reference compares at least this many item pixels
+
+
+def item_resnames(table_text: str, ids: Iterable[int]) -> dict[int, str]:
+    """PURE: item id -> the client's resource name, from idnum2itemresnametable.txt's text
+    ("id#name#" lines, already decoded)."""
+    want, out = set(ids), {}
+    for line in table_text.splitlines():
+        parts = line.split("#")
+        if len(parts) >= 2 and parts[0].strip().isdigit() and int(parts[0]) in want:
+            out[int(parts[0])] = parts[1].strip()
+    return out
+
+
+def bmp_template(rgb: Any, shape: tuple[int, int] = (16, 14),
+                 offset: int = ICON_BMP_OFFSET) -> tuple[Any, Any]:  # fmt: skip
+    """PURE: (grey template, item mask) in gm_state.icon_crop's geometry from a client item BMP
+    (RGB; pure magenta is transparent: not the item)."""
+    import gm_state
+
+    rgb = np.asarray(rgb)
+    trans = (rgb[..., 0] > 240) & (rgb[..., 1] < 15) & (rgb[..., 2] > 240)
+    grey = gm_state.to_gray(np.ascontiguousarray(rgb[..., ::-1]))
+    h, w = shape
+    t, item = np.zeros(shape, np.float32), np.zeros(shape, bool)
+    t[:, offset:] = grey[:h, : w - offset]
+    item[:, offset:] = ~trans[:h, : w - offset]
+    return t, item
+
+
+def masked_refusals(masked: dict[str, Any], screen: dict[str, Any],
+                    stock: dict[str, tuple[str, Any]]) -> list[str]:  # fmt: skip
+    """PURE (stage@6): why a masked set must NOT be written ([] = it may). Each item's
+    screen-cut reference (`cut`, run conditions: slot background, glow) must classify as that
+    item against the masked set (gm_state.classify_icon, as clear_loot does); every kept / empty
+    stock reference must classify "unknown" and lie beyond gm_state.ICON_AMBIGUOUS of every masked
+    reference; every masked reference needs MIN_ITEM_PX item pixels."""
+    import gm_state as gs
+
+    refs = {n: ("loot", m) for n, m in masked.items()}
+    why = []
+    for n, m in sorted(masked.items()):
+        px = int((~np.ma.getmaskarray(m)).sum())
+        if px < MIN_ITEM_PX:
+            why.append(f"{n}: {px} item pixels < {MIN_ITEM_PX}")
+        if n not in screen:
+            why.append(f"{n}: no screen-cut reference to prove it on (cut first)")
+            continue
+        kind, got, d = gs.classify_icon(screen[n], refs)
+        if (kind, got) != ("loot", n):
+            why.append(f"{n}: its screen reference reads {got or kind} ({d:.2f})")
+    for s, (_kind, ref) in sorted(stock.items()):
+        kind, got, d = gs.classify_icon(ref, refs)
+        near = min((gs.icon_distance(ref, m), n) for n, m in masked.items())
+        if kind != "unknown" or near[0] <= gs.ICON_AMBIGUOUS:
+            why.append(f"stock {s}: {near[1]} at {near[0]:.2f} (<= {gs.ICON_AMBIGUOUS})")
+    return why
+
+
+def cut_grf(map_: str, table: Path, icons: Path) -> dict[str, Any]:
+    """OFFLINE (stage@6): the map set's MASKED references (loot-<name>.npz: template + item
+    mask) from the client's item BMPs. Refused, nothing written, on any masked_refusals."""
+    import gm_state
+    from PIL import Image
+
+    ms = map_set(map_)
+    res = item_resnames(table.read_bytes().decode("cp949", "replace"), ms.items)
+    if missing := [ms.items[i] for i in ms.items if i not in res]:
+        raise SystemExit(f"stage_items cut-grf: no resource name for {missing} in {table}")
+    masked, screen = {}, {}
+    for iid, name in ms.items.items():
+        bmp = icons / f"{res[iid]}.bmp"
+        if not bmp.is_file():
+            raise SystemExit(f"stage_items cut-grf: {bmp} is missing (grf_read.py extract)")
+        t, item = bmp_template(np.asarray(Image.open(bmp).convert("RGB")))
+        masked[name] = np.ma.MaskedArray(t, mask=~item)
+        if (f := ms.icon_dir / f"loot-{name}.npy").exists():
+            screen[name] = np.load(f)
+    stock = {n: kr for n, kr in gm_state.load_loot_refs().items() if kr[0] in ("kept", "empty")}
+    if why := masked_refusals(masked, screen, stock):
+        raise SystemExit(f"stage_items cut-grf refused (nothing written): {why}")
+    own = {n: round(gm_state.icon_distance(screen[n], m), 2) for n, m in masked.items()}
+    for name, m in masked.items():
+        np.savez(ms.icon_dir / f"loot-{name}.npz", template=np.asarray(m.data, np.float32),
+                 item=~np.ma.getmaskarray(m))  # fmt: skip
+    return {"cut": sorted(masked), "dir": str(ms.icon_dir), "screen_ref_distance": own,
             "stock_refs": sorted(stock)}  # fmt: skip
 
 
@@ -742,6 +842,12 @@ def main() -> int:
     p = sub.add_parser("cut")
     p.add_argument("spec", type=Path)
     p.add_argument("--map", default="pay_fild07")
+    p = sub.add_parser("cut-grf")
+    p.add_argument("--map", required=True)
+    p.add_argument("--table", type=Path, required=True,
+                   help="the client's item resource-name table (in /dev/shm)")  # fmt: skip
+    p.add_argument("--icons", type=Path, required=True,
+                   help="the extracted item BMP directory (/dev/shm)")  # fmt: skip
     p = sub.add_parser("give")
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--frames", action="store_true",
@@ -804,6 +910,8 @@ def main() -> int:
                           "sha256": hashlib.sha256(mask.tobytes()).hexdigest()}))  # fmt: skip
     elif a.cmd == "cut":
         print(json.dumps(cut(a.spec, a.map)))
+    elif a.cmd == "cut-grf":
+        print(json.dumps(cut_grf(a.map, a.table, a.icons)))
     elif a.cmd == "give":
         give(a.map, a.frames)
     elif a.cmd == "drop":

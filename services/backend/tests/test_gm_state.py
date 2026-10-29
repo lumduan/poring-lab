@@ -399,3 +399,49 @@ def test_the_runner_rebuilds_the_hunting_state_before_a_run() -> None:
     src = (SCRIPTS / "hunt_flow.py").read_text()
     assert "gm_state.ensure_hunting(agent_raw, screen" in src
     assert 'why=f"hunt-flow@{version}:before"' in src
+
+
+def test_masked_references_ignore_the_background_and_glow_and_stay_strict(
+    gs: Any, tmp_path: Path
+) -> None:
+    """stage@6 (rogue-gef10.md AK-5): E3 stopped at spot 18 because screen-cut references held the
+    slot background and the pink new-item glow (a correct item read 3.07 / 3.29 > 3.0). A MASKED
+    reference (the client's own icon, its item pixels only) ignores everything off the item, keeps
+    a different item and an empty slot out, and is never fooled into a drop by two close masks."""
+    rng = np.random.default_rng(7)
+    shape = (gs.INV_ICON_BOX[3] - gs.INV_ICON_BOX[1], gs.INV_ICON_BOX[2] - gs.INV_ICON_BOX[0])
+    item = np.zeros(shape, bool)
+    item[2:14, 5:12] = True
+    t_cyfar = rng.uniform(40, 220, shape).astype(np.float32)
+    t_other = rng.uniform(40, 220, shape).astype(np.float32)
+    cyfar = np.ma.MaskedArray(t_cyfar, mask=~item)
+    # the E3 failure, reproduced: the slot background and the glow change off the item
+    seen = np.where(item, t_cyfar + 2.0, t_cyfar + 45.0).astype(np.float32)
+    plain = {"cyfar": ("loot", t_cyfar)}
+    assert gs.classify_icon(seen, plain)[0] == "unknown"  # the old reference misses it
+    masked = {"cyfar": ("loot", cyfar), "other": ("loot", np.ma.MaskedArray(t_other, mask=~item))}
+    kind, name, d = gs.classify_icon(seen, masked)
+    assert (kind, name) == ("loot", "cyfar") and abs(d - 2.0) < 1e-4
+    # the bar: a strong tint ON the item pixels is no longer this item
+    assert gs.classify_icon(np.where(item, t_cyfar + 11.0, t_cyfar), masked)[0] == "unknown"
+    assert gs.classify_icon(np.where(item, t_cyfar + 9.0, t_cyfar), masked)[:2] == ("loot", "cyfar")
+    # a different item, an empty slot: unknown, never dropped
+    assert gs.classify_icon(t_other + 60.0, masked)[0] == "unknown"
+    assert gs.classify_icon(np.full(shape, 30.0, np.float32), masked)[0] == "unknown"
+    # two masked references within ICON_AMBIGUOUS of one crop: unknown (fail safe)
+    twin = {
+        "cyfar": ("loot", cyfar),
+        "twin": ("loot", np.ma.MaskedArray(t_cyfar + 15.0, mask=~item)),
+    }
+    assert gs.classify_icon(seen, twin)[0] == "unknown"
+    # plain references keep their exact behaviour (ICON_MATCH 3.0)
+    assert gs.classify_icon(t_cyfar + 2.9, plain)[:2] == ("loot", "cyfar")
+    assert gs.classify_icon(t_cyfar + 3.1, plain)[0] == "unknown"
+    # load_loot_refs: a .npz is a masked reference and replaces the .npy of the same name
+    np.save(tmp_path / "loot-cyfar.npy", t_cyfar)
+    np.save(tmp_path / "loot-iron.npy", t_other)
+    np.savez(tmp_path / "loot-cyfar.npz", template=t_cyfar, item=item)
+    refs = gs.load_loot_refs(tmp_path)
+    assert isinstance(refs["cyfar"][1], np.ma.MaskedArray) and refs["cyfar"][0] == "loot"
+    assert not isinstance(refs["iron"][1], np.ma.MaskedArray)
+    assert gs.icon_distance(seen, refs["cyfar"][1]) == pytest.approx(2.0)

@@ -1749,3 +1749,73 @@ Batt, 2026-10-29 ~10:0x (translated), answering AK-3's report section 12:
    43 listed files byte-identical on the NAS (`scratch-archive/2026-10-28/`), the 35 `frames-s18`
    frames byte-identical inside the e3 recording, `icons-grf` re-extractable from the GRF. /dev/shm
    12 G -> 11 G used. Kept: the canopy, `icons-spec.json`, `ship4.sh` / `ship4.log`.
+
+## Amendment AK-5 (2026-10-29 10:59 ICT from `date`): PRE-REGISTERED -- the icon fix (stage@6) and the short second session (e3b)
+
+Batt's decision 2 (AK-4): fix the icon matcher, then run a short second session. This is
+recorded BEFORE any live step and before `cut-grf` writes anything. (AK-4's ship timing moved:
+the four sessions now ship 2026-10-30 03:05-04:25 ICT, the window home-assistant-ops OS-036
+recommends, each first paged back out of swap at 8 MB/s under the quant IO guard.)
+
+**1. The fix (stage@6, code in this commit's predecessor set; tests below).**
+- **Masked references from the client's own item icons:** the Thai GRF's item BMPs (resource
+  names from `idnum2itemresnametable.txt`), extracted to /dev/shm (study use, never committed).
+  Template = the BMP's grey (gm_state.to_gray's weights); the item = every non-magenta pixel;
+  placed at `ICON_BMP_OFFSET` 3 (icon_crop's column c = the BMP's column c - 3, rows aligned:
+  the best offset for all 13 icons measured, each runner-up offset >= 17.5 worse). Stored as
+  `loot-<name>.npz` (template + item mask) beside the screen-cut `.npy`, which they replace in
+  `gm_state.load_loot_refs`.
+- **The rule (gm_state.classify_icon):** mean |crop - template| over the item's pixels only;
+  a match within `ICON_MATCH_MASKED` 10.0; a second masked reference within `ICON_AMBIGUOUS`
+  20.0 makes it "unknown" (never dropped). Plain references keep ICON_MATCH 3.0 exactly, so the
+  hunts' loot steps (dungeon_hunt, store_loot) are unchanged.
+- **The FIT evidence (2026-10-29, the references at hand; no frame of the E3 recording was read
+  under this rule):** each item's screen-cut reference (slot background + glow) reads 1.1-3.8
+  against its own template; the White Potion 0.9, the Fly Wing 4.8; the nearest DIFFERENT item or
+  the empty slot reads >= 30.8. (pay_fild07's `green_etc` reads 3.09 against Sticky Mucus: the
+  same icon; it is not in this inventory's stock set.)
+- **The write gate (`cut-grf`, refused = nothing written = STOP):** every screen-cut reference
+  must classify as its own item through the same classify_icon; every kept / empty stock
+  reference (White Potion, Fly Wing, the empty slot) must classify "unknown" and lie beyond 20.0
+  of every template; >= 40 item pixels each.
+- **Checks done before this record:** the click census + targeted safety tests (click_census,
+  dungeon_hunt, gm_state, safety_signal_check, stage_items, stage_items_gef10, stage_items_run,
+  ui_gate): 118 passed. New tests: the E3 failure reproduced (background + glow change off the
+  item: the plain reference misses, the masked one matches at 2.0), the 10.0 bar both sides, a
+  different item and an empty slot "unknown", the ambiguity rule, `.npz` loading, the BMP
+  placement, the resname table, every refusal path of the write gate.
+
+**2. The steps, in order (any failure stops and asks Batt):**
+1. `cut-grf --map gef_fild10` (offline): its write gate passes, or STOP.
+2. A judged screenshot; /health ASSIST with no human lease. `held --map gef_fild10` rc 0.
+3. **The positive case under the run's conditions (AK-1):** `give --map gef_fild10` (no
+   `--frames`), then `drop --map gef_fild10`: rc 0 (`all_and_only_the_set`: the 11 dropped,
+   nothing else). rc 1 STOPS everything. Then an empty store step if the DB lags; `held` rc 0.
+4. The canopy: the existing `/dev/shm/.../gef_fild10-canopy.npy`, checked at 10:58: 67,533
+   cells, sha256 `1c0aa910...bc0d1` (AK's values).
+5. Immunity by the toggle, judged ("You are now immune to attacks."), as AK step 7.
+6. The recorder: `record_session.py --backend rdp --label stage-gef10-e3b --seconds 1500 --fps 1
+   --format png --out /dev/shm/poring-lab-rec --max-bytes 3G --min-free-gb 6
+   --max-unshipped-gb 13`, then **`run --map gef_fild10 --n 6 --seed 2611 --open <canopy>
+   --immune-confirmed --label e3b`** (`--clear end`). The plan (offline, 10:5x): spots
+   (99,287) (76,100) (299,189) (196,293) (123,171) (256,96); 36 floor items: Cyfar 3, Orcish
+   Voucher 4, Sticky Mucus 3, Milk 3, Garlet 3, Iron 3, Large Jellopy 3, Rough Oridecon 3,
+   Green Herb 4, Nursing Bottle 3, Axe 4. The recorder stops by PID >= 65 s after the run's last
+   line.
+7. Immunity off by the toggle, judged; the character back to the prt_fild08 stand (268,107);
+   a judged frame. The first end kill's ICT is the Orc Lord's next D.
+
+**Stops (as AK):** any `r.Stop` (identity, UI gate, a settle timeout), a wrong drop
+(`names != want`), an NPC contact or a map change other than our own `@warp`s; a human lease.
+
+**Offline, after:** the same readouts as AK-3 from the session's packets (falls per class,
+fates, early vanishes and the end pair; npc_contact / attack_request / act keyed by `type`, with
+e4 as the positive control; every map change one of our warps). The end pair also makes
+yesterday's possible carrier (<= 4 staged items, AK-3) drop them once more.
+
+**Success:** Cyfar >= 10 staged floor items in sight across E3 + e3b (9 + 3 planned) and every
+class >= 10; no stop. A stop by the drop check again means the masked rule failed in the field:
+report, no retry.
+
+**After the session (diagnostic, not a gate):** once e3 ships (03:05 window), its spot-18 frames
+are re-read from the NAS copy under a 4 GB memory cap, to show what the masked rule reads there.

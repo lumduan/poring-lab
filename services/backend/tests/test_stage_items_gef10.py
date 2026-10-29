@@ -181,3 +181,58 @@ def test_gef10_spots_are_open_ground_away_from_warps_npcs_and_zones(tmp_path: Pa
             for z in zones:
                 xs, ys = [q[0] for q in z["polygon"]], [q[1] for q in z["polygon"]]
                 assert not (min(xs) <= cx <= max(xs) and min(ys) <= cy <= max(ys)), z["id"]
+
+
+def _bmp(rng: np.random.Generator) -> np.ndarray:
+    """A synthetic 24 x 24 client item BMP: magenta (transparent) around a random item."""
+    rgb = np.zeros((24, 24, 3), np.uint8)
+    rgb[...] = (255, 0, 255)
+    rgb[1:20, 2:18] = rng.integers(20, 230, (19, 16, 3), dtype=np.uint8)
+    return rgb
+
+
+def test_bmp_template_puts_the_icon_3_px_right_and_masks_magenta() -> None:
+    """stage@6: icon_crop's column c shows the BMP's column c - 3 (measured 2026-10-29 on 13
+    icons); magenta is not the item."""
+    import gm_state as gs
+
+    rgb = _bmp(np.random.default_rng(3))
+    t, item = si.bmp_template(rgb)
+    assert t.shape == (16, 14) and item.shape == (16, 14)
+    assert not item[:, :3].any()  # left of the icon: the slot background
+    assert not item[0].any()  # BMP row 0 is magenta
+    assert item[1:16, 5:14].all()  # BMP cols 2.. sit at crop cols 5..
+    grey = gs.to_gray(np.ascontiguousarray(rgb[..., ::-1]))
+    assert np.allclose(t[:, 3:], grey[:16, :11])
+
+
+def test_item_resnames_reads_the_table() -> None:
+    text = "// comment\n7053#cyfar_res#\n931#voucher_res#\n999#other#\n"
+    assert si.item_resnames(text, [7053, 931, 1301]) == {7053: "cyfar_res", 931: "voucher_res"}
+
+
+def test_masked_refusals_prove_the_set_on_screen_refs_and_keep_the_stock_out() -> None:
+    """stage@6's write gate: each item's screen-cut reference (background + glow) must classify
+    as that item; a stock icon near any masked reference refuses the whole set."""
+    rng = np.random.default_rng(5)
+    masked, screen = {}, {}
+    for n in ("cyfar", "orcish_voucher"):
+        t, item = si.bmp_template(_bmp(rng))
+        masked[n] = np.ma.MaskedArray(t, mask=~item)
+        screen[n] = np.where(item, t + 2.5, t + 40.0).astype(np.float32)  # the glow, off the item
+    potion = rng.uniform(0, 255, (16, 14)).astype(np.float32)
+    stock = {"white_potion": ("kept", potion), "slot": ("empty", np.full((16, 14), 30.0))}
+    assert si.masked_refusals(masked, screen, stock) == []
+    # a screen ref that reads another item / nothing: refused
+    bad = dict(screen, cyfar=screen["orcish_voucher"])
+    assert any(w.startswith("cyfar:") for w in si.masked_refusals(masked, bad, stock))
+    # no screen ref to prove an item on: refused
+    assert any("no screen-cut" in w for w in si.masked_refusals(masked, {}, stock))
+    # a stock icon within ICON_AMBIGUOUS of a masked reference: refused
+    near = np.asarray(masked["cyfar"].data) + 12.0
+    stock2 = dict(stock, fly_wing=("kept", near))
+    assert any(w.startswith("stock fly_wing") for w in si.masked_refusals(masked, screen, stock2))
+    # too few item pixels: refused
+    tiny = np.ma.MaskedArray(np.zeros((16, 14), np.float32), mask=np.ones((16, 14), bool))
+    tiny.mask[5, 5] = False
+    assert any("item pixels" in w for w in si.masked_refusals({"x": tiny}, {"x": potion}, {}))

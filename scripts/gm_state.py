@@ -485,6 +485,12 @@ INV_TABS = {"etc": (10, 274), "use": (10, 165), "eqp": (10, 220)}  # each tab's 
 INV_ICON_BOX = (-16, -16, -2, 0)  # x0, y0, x1, y1 from a slot's centre: the icon, not its count
 ICON_MATCH = 3.0  # mean grey difference: the same icon reads 0.0-0.07 across frames, the
 # closest two different references (an empty slot, Fluff) 9.2 (2026-10-16 frames)
+# MASKED references (stage@6, rogue-gef10.md AK-5): the item's own client icon (GRF BMP), compared
+# on its ITEM pixels only, so the slot background and the pink new-item glow around it no longer
+# count (E3 stopped at spot 18 on 3.07 / 3.29 against screen-cut references that held both). Own
+# icons read 0.9-4.8 and any other item or an empty slot >= 30.8 on the 2026-10-29 references.
+ICON_MATCH_MASKED = 10.0
+ICON_AMBIGUOUS = 20.0  # a second masked reference this close -> "unknown" (never dropped)
 PROMPT_OK_BOX = (644, 312, 47, 23)  # client px: the quantity prompt's OK button (09:23 frame)
 PROMPT_MATCH = 12.0
 DROP_AT = (900, 470)  # client px: open ground right of the GM (the items land beside it)
@@ -518,17 +524,38 @@ def icon_crop(frame: Any, c: int, row: int) -> Any:
     return to_gray(frame)[y + y0 : y + y1, x + x0 : x + x1]
 
 
+def icon_distance(icon: Any, ref: Any) -> float:
+    """PURE: the mean grey difference; on a MASKED reference (np.ma.MaskedArray: masked =
+    not the item) over the item's own pixels only."""
+    a = np.asarray(icon, np.float32)
+    if isinstance(ref, np.ma.MaskedArray):
+        keep = ~np.ma.getmaskarray(ref)
+        return float(np.abs(a[keep] - np.asarray(ref.data, np.float32)[keep]).mean())
+    return float(np.abs(a - ref).mean())
+
+
 def classify_icon(icon: Any, refs: dict[str, tuple[str, Any]]) -> tuple[str, str, float]:
     """PURE: (kind, name, distance): kind "loot" | "kept" | "empty" from the nearest reference
-    within ICON_MATCH, else ("unknown", "", nearest distance). ``refs``: name -> (kind, icon)."""
+    within its bar (ICON_MATCH; ICON_MATCH_MASKED for a masked one, ranked by distance / bar),
+    else ("unknown", "", nearest distance). A masked match with a SECOND masked reference within
+    ICON_AMBIGUOUS is "unknown" too (fail safe: never dropped). ``refs``: name -> (kind, icon)."""
     best = ("unknown", "", float("inf"))
+    best_rank, best_bar, masked_ds = float("inf"), ICON_MATCH, []
     for name, (kind, ref) in refs.items():
         if ref.shape != icon.shape:
             continue
-        d = float(np.abs(icon.astype(np.float32) - ref).mean())
-        if d < best[2]:
-            best = (kind, name, d)
-    return best if best[2] <= ICON_MATCH else ("unknown", "", best[2])
+        d = icon_distance(icon, ref)
+        masked = isinstance(ref, np.ma.MaskedArray)
+        bar = ICON_MATCH_MASKED if masked else ICON_MATCH
+        if masked:
+            masked_ds.append(d)
+        if d / bar < best_rank:
+            best, best_rank, best_bar = (kind, name, d), d / bar, bar
+    if best[2] > best_bar:
+        return ("unknown", "", best[2])
+    if best_bar == ICON_MATCH_MASKED and sum(d <= ICON_AMBIGUOUS for d in masked_ds) > 1:
+        return ("unknown", "", best[2])
+    return best
 
 
 def next_loot(kinds: list[str]) -> int | None:
@@ -548,12 +575,20 @@ def tab_changed(before: list[Any], after: list[Any], i: int) -> bool:
 
 
 def load_loot_refs(d: Path = LOOT_DIR) -> dict[str, tuple[str, Any]]:
-    """name -> (kind, icon) from data/ui_anchors/gm_state/loot_icons/<kind>-<name>.npy."""
+    """name -> (kind, icon) from data/ui_anchors/gm_state/loot_icons/<kind>-<name>.npy. stage@6: a
+    <kind>-<name>.npz (``template`` grey, ``item`` bool: the item's own pixels) is a MASKED
+    reference and replaces a .npy of the same name."""
     out: dict[str, tuple[str, Any]] = {}
     for f in sorted(d.glob("*.npy")):
         kind, _, name = f.stem.partition("-")
         if kind in ("loot", "kept", "empty") and f.stem != "prompt_ok":
             out[name] = (kind, np.load(f))
+    for f in sorted(d.glob("*.npz")):
+        kind, _, name = f.stem.partition("-")
+        if kind in ("loot", "kept", "empty"):
+            with np.load(f) as z:
+                t, item = np.asarray(z["template"], np.float32), np.asarray(z["item"], bool)
+            out[name] = (kind, np.ma.MaskedArray(t, mask=~item))
     return out
 
 
