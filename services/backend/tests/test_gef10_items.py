@@ -160,3 +160,9 @@ def test_empty_cell_keeps_away_from_items_units_and_us() -> None:
     crowded = [(100.0 + dx, 100.0 + dy) for dx in range(-8, 9, 3) for dy in range(-8, 9, 3)]
     assert gi.empty_cell(me, crowded, [], random.Random(1)) is None
     assert gi.INSTRUCTIONS_SHA256.startswith("7d0a9704")
+
+
+def test_round3_blind_seed_is_section_8s() -> None:
+    """gef10-detector.md section 8 pre-registered the item blind round at seed 32 (never drawn);
+    33 is gef10-eval.md's round-1 pack seed and 35 round 2's."""
+    assert gi.BLIND_SEED == 32

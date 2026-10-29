@@ -554,7 +554,7 @@ def _run(a: argparse.Namespace, worker: Any, role: str) -> tuple[list[dict[str, 
 
 
 R3 = Path("/dev/shm/poring-lab-tmp/gef10-r3")  # client-derived crops: RAM, small (rule 7)
-BLIND_SEED = 33  # round3 4.4
+BLIND_SEED = 32  # round3 4.4: gef10-detector.md section 8's item blind seed (never drawn)
 INSTRUCTIONS_SHA256 = "7d0a97041201f3d622f663115de9cb4d128afe4859706f388d1b35b3076e125c"
 NEG_ITEM_CELLS, NEG_UNIT_CELLS, NEG_SPAN = 3, 2, 8
 

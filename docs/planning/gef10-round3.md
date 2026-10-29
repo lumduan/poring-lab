@@ -6,7 +6,7 @@ role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [gef10-eyes-loot.md, gef10-detector.md, gef10-eval.md, item-class.md, rogue-gef10.md, target-items.md]
+related: [gef10-eyes-loot.md, gef10-detector.md, ../benchmarks/gef10-eval.md, item-class.md, rogue-gef10.md, target-items.md]
 next_action: "Build section 5 offline (synthetic tests first): several staged sessions per map in map_labels, gef10_items label / g2 / pack, Route M. Frames are read only from the NAS copies after the 2026-10-30 03:05 ship; the GPU only after round 2's evaluation."
 title: "gef10 round 3 (E5): floor-item classes from the staged sessions, on top of round 2's monsters (PROPOSED pre-registration)"
 date: 2026-10-29
@@ -89,7 +89,9 @@ follow without changing C's labels.
    (round 2's FIT had 15 samples from ONE floor item; this adds the floor-item count), else STOP.
 2. **TRAIN labels** under the frozen anchor and T_item; the class bar of section 3.
 3. **G2 on TEST3:** the median |dx|, |dy| of the item fit at the frozen anchor <= 3 px, else STOP.
-4. **The blind round** (seed 33; item-class.md's instructions byte-identical, sha256
+4. **The blind round** (seed 32, section 8's own, never drawn; ➡️ corrected 12:41 from `date`:
+   first written seed 33, which is gef10-eval.md's round-1 pack seed; no pack was built;
+   item-class.md's instructions byte-identical, sha256
    `7d0a9704...e125c`): per class 40 item crops (at most 3 per floor item) + 20 negatives; two new
    blind labellers; >= 90 % good box and >= 95 % item-present right from EACH.
 5. **Route M in the cache** (both label sets whole); then round 3's training and evaluation get
@@ -114,7 +116,7 @@ views give no item labels. Its (3, 0) and (0, 3) views were planned for exactly 
 
 - ✅ BUILT 2026-10-29: `gef10_items.py freeze / label / g2`. `label` refuses every TEST; `g2` reads
   TEST3 only. Rows are small JSON, within rule 7's limits. Tests on synthetic data (68cfdf6 + this).
-- ✅ BUILT 2026-10-29: `gef10_items.py pack` (the blind pack, mirroring item_labels.py's: 40 crops at <= 3 per floor
+- ✅ BUILT 2026-10-29: `gef10_items.py pack` (seed 32; the blind pack, mirroring item_labels.py's: 40 crops at <= 3 per floor
   item + 20 empty-floor negatives).
 - ✅ BUILT 2026-10-29 (68cfdf6): **several staged sessions per map in `map_labels`.** Today a MapSpec has ONE `staged` session and
   one `staged_kind`: GEF10's is the watch, one spot per map change. E3 and e3b are stage_items
