@@ -1351,3 +1351,27 @@ the same bars, and Batt decides.
   and the 13z launch's arguments, outside 09:30-10:15 / 14:00-14:45. Any other "TRAIN STOPPED"
   (an unverified stop, the worker not ready) is still a stop for a person to look at. No setting
   changes.
+
+### 13z-4. Epoch 8, and attempt 9 ended by an OOM kill that OUR scratch script caused (recorded 2026-10-29 10:50 ICT from `date`)
+
+- **Epoch 8** ended at ~10:27 (`results.csv`: mAP50 0.827, mAP50-95 0.627; PROGRESS only),
+  68.7 min in attempt 9.
+- **10:35:36, the kernel OOM killer killed our training process** (PID 2201841 in
+  poring-lab-vision-worker-1, oom_score_adj 500: the designed victim). The guard logged it at
+  10:35:39 as `R3 frigate_unreachable: no fresh Frigate stats for 81 s`: Frigate was itself in D
+  state in the storm. train-day treated it as a trip and pauses 900 s (resume ~10:53 from
+  `mid.pt`, written ~10:3x).
+- **The cause was ours: a scratch analysis for E3's icon fix** (`icon_study.py`, nice 10, started
+  ~10:30). It kept every 16x14 icon crop as a numpy VIEW into a fresh 1280x720 float32 frame
+  (~3.7 MB each), so it held ~24 GB. The host went to swap full (30.6 of 30.7 GB), IO full stall
+  ~53 % (avg300), 64 tasks in D state. It was killed by PID at 10:42:07; by 10:43 IO full stall
+  was ~1.5 % and ~29 GB RAM available. A peer session (candy-closet) flagged it first.
+- **fit-first's VTON worker container (`fitfirst-vton-worker`) exited 137 at 10:38:20**
+  (SIGKILL; Docker's OOMKilled=false; the kernel's only OOM kill today was ours; its last log line
+  `claims blocked: watchdog_missing`). Not stopped by this session. It happened inside the memory
+  crisis we caused. It is NOT restarted by us (Batt 2026-10-28: never touch it); Batt was told at
+  once.
+- **The rule taken from it:** scratch analysis runs under a memory cap with no swap
+  (`systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0`), copies small crops out of big
+  frames, and does not read large /dev/shm data in the day while it may sit in swap (reading
+  swapped tmpfs pages is root-disk IO).
