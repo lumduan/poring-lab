@@ -208,3 +208,45 @@ amendment fixes, before that, every detail the plan did not state:
   from it.
 - Unchanged: the model, Q1 / E1 / G1 / G2's bars, the strata, the two NEW blind labellers, the
   verdict rule, and "Passing does NOT switch the live detector".
+
+## AMENDMENT R2-3 (2026-10-29 13:22 ICT from `date`, BEFORE TEST2's evaluation labels exist): how the built scorer reads the rules
+
+The tools of R2-2 are built and tested on non-TEST data:
+- `map_labels.py labels / pack --eval-test2` (ff86b81);
+- `predict_dir --refs / --glob / --timing` (c9ae15c);
+- `eval_q1.py` (d73ae62);
+- `gold_eval.py --collapse-species / --gold-dir / score-cache / refs` (1ff3f10);
+- `unit_detector` names (c038e40);
+- `detector_vs_packets.py --boxes / from-predict` (715ab66).
+
+Their positive cases, real data, none of it TEST:
+- G1 reproduced EXACTLY from the NAS gold dir: v1 83 / 9 / 17, P 0.902, R 0.830.
+- G2's 054429 truth: 1,077 frames, 4,186 boxes; its own labels as detections give 1.0 / 1.0.
+- Round 2's T2 pack (TRAIN labels):
+  - a perfect detector gives 1.0 / 1.0 for every species;
+  - a shifted detector gives recall 0;
+  - a wrong-class detector gives recall 0.
+
+Where the written rule needed a reading, it is fixed here:
+1. **Precision when a frame holds crops of both strata:**
+   - ONE position match per frame over all of its evaluated crops;
+   - a matched detection counts for its own crop's stratum only;
+   - an unmatched class-s detection counts against stratum X when its centre lies in an evaluated
+     X box;
+   - `strata_overlap` (frames with both) is reported.
+   With one stratum per frame this is the rule as written.
+2. **The verdict:** as written, Q1 (stratum N) for every species with a bar, plus G1 and G2.
+   E1's bar is reported on its own and does not enter the verdict.
+3. **No bar, no pass:** if no gef_fild10 species reaches 50 evaluated crops in Q1, then:
+   - Q1 has NO verdict (not a vacuous pass);
+   - the model's verdict is "not established";
+   - the numbers are reported.
+4. **Class names** come from the training cache's manifest: the KB's aegis names in lower case,
+   e.g. `orc_lady`, `ork_warrior`, `orc_baby`, `orc_lord`, `orc_archer`, `poporing`,
+   `green_plant`. Class list sha256 `66de5684...a7ff747c2`.
+5. **"Q1 split by TEST part"** is by TEST2 session (a9, a10, a11, w3) and by
+   under-a-model / clear / unknown. Round 1's watch cells 11-14 / a7 / a8 are spent.
+6. **The look-alike confusion:**
+   - a class-blind one-to-one position match per frame;
+   - for each evaluated crop, the class of the detection matched to it, if any;
+   - a player, npc or warp detection can appear there.
