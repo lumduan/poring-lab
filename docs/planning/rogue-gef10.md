@@ -727,6 +727,8 @@ bar):**
 3. **dungeon@9.1:** a quick loot click.
 4. **Then the detector-driven engagement,** once a gef10 model passes its evaluation: answer an
    attacker in about 1 s, target monsters at range.
+   ➡️ 2026-10-29 17:04 (gef10-eval.md RESULT R2): the round-2 model did NOT pass (G1 precision
+   0.867 < 0.882; Q1 and G2 passed). No gef10 model has passed yet. Batt decides the next step.
 5. **The rest policy last** (rest is downstream of damage).
 
 - Recordings stay in /dev/shm during SET hours (`dataset_ship` refuses 09:30-17:00 on

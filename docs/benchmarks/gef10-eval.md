@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A detector trained on v2orc + pay_fild07's cached data plus gef_fild10's TRAIN labels (gef10-o3h-e, frozen 2026-10-25 22:14) finds gef_fild10's species on held-out TEST data (recall and precision >= 0.80 for each species with >= 50 evaluated crops) without losing prt_fild08 (v1's gold set and held-out set no worse than v1)."
-status: "NOT RUN: T1 FAILED 2026-10-26 03:16 ICT (gef10-detector.md 13r), so no gef10 model is trained this round and this evaluation has nothing to score. Was: PRE-REGISTERED 2026-10-26 (BEFORE the cache is built and BEFORE any model with the gef10 classes exists)"
+status: "ROUND 2 SCORED 2026-10-29 17:04 ICT (RESULT R2): the gef10 round-2 model does NOT PASS. G1 FAILS on precision (monster P 0.867 < 0.882); Q1 PASSES for Orc Lady, Orc Warrior and Poporing (recall 0.983, precision 1.000 each); G2 PASSES; CPU p95 499 ms <= v1 x 1.10. Round 1: NOT RUN (T1 failed 2026-10-26 03:16). Pre-registered 2026-10-26; amendments R2 (10-26 11:07), R2-2 (10-29 12:53), R2-3 (10-29 13:22)."
 role: null
-verdict_date: null
+verdict_date: 2026-10-29
 verdict_ticket: null
 supersedes: null
 related: [../planning/gef10-detector.md, payf07-eval.md, v2orc-vs-v1.md, ../planning/rogue-gef10.md]
-next_action: "None this round (T1 failed, gef10-detector.md 13r). A round 2 would need its own TEST and its own evaluation pre-registration; this one is not reused with TEST read."
+next_action: "Batt decides what follows the G1 failure (RESULT R2): the live detector stays v1. Nothing here is re-scored: a new model or a reading of G1 needs its own pre-registration."
 ---
 
 # gef10: gef_fild10's species, without forgetting prt_fild08 (pre-registered 2026-10-26)
@@ -250,3 +250,186 @@ Where the written rule needed a reading, it is fixed here:
    - a class-blind one-to-one position match per frame;
    - for each evaluated crop, the class of the detection matched to it, if any;
    - a player, npc or warp detection can appear there.
+
+## RESULT R2 (scored 2026-10-29 17:04 ICT from `date`; the round-2 model, AMENDMENTS R2 / R2-2 / R2-3)
+
+**VERDICT: the gef10 round-2 model does NOT PASS. G1 FAILS on precision: monster P 0.867 < 0.882.**
+Q1 passes for every species with a bar (Orc Lady, Orc Warrior, Poporing), and G2 passes. Under
+"the verdict" above, all three must hold. Passing would not have switched the live detector
+either: that stays Batt's decision.
+
+### The scored model
+- `last.pt` after epoch 10 of 10, the last completed epoch, as planned (gef10-detector.md 13z-5):
+  `data/train/gef10-20261026/weights/last.pt`, sha256 `ebfc7a9a...6cc0b6`.
+- The training ended 2026-10-29 16:26. Nothing read TEST2 before that, except as disclosed in R2-2.
+- Detector settings: `predict_dir` in the vision worker, imgsz 1280, conf 0.25, ultralytics' NMS.
+  Every step was guarded (`execdev:vision`, `--threshold 30 --sustain 30`, R1-R3) and none tripped.
+  The worst capture stall was 13.7 %.
+
+### Q1 (stratum N; the verdict) and E1 (stratum E; reported)
+- **TEST2's evaluation labels:** the four parts were labelled under the FROZEN params
+  (00ef6383...) between 16:30:51 and 16:49:00. Every file records `eval_test2: true`.
+- **The pack (seed 35, `--min-fit 0.636`):** 245 crops in 13 grids.
+  - N: Orc Lady 60 (from a pool of 245), Orc Warrior 60 (pool 60), Poporing 60 (pool 138), Orc
+    Baby 0.
+  - E: Orc Lady 60 (pool 219), Orc Warrior 1, Poporing 2, Orc Baby 2.
+  - The weak_fit floor removed 264 / 49 / 27 / 7 labels (Lady / Warrior / Poporing / Baby).
+  - TEST2 has no Orc Lord and no Orc Archer label (by its schedule).
+- **Two NEW blind labellers:** A ran 16:52-16:56 and B 16:57-17:02. Each saw only the pack.
+  - B's `mkdir -p` listing showed that A.json existed. B reports never opening it.
+- **240 of 245 crops were EVALUATED.** Every species call of both labellers matched the label.
+  The 5 not evaluated:
+  - 135 and 162 (Orc Baby, E, a9, under a model): leaves only, a "Miss" above. A answered no, B
+    unsure. Both of TEST2's Orc Baby crops are therefore canopy-hidden.
+  - 093 (Orc Lady, N, w3): loose for both labellers.
+  - 062 and 153 (Orc Lady, E): "off" for B (the weapon or arm reaches past the box).
+- **Q1 (N, 179 evaluated; the bar is >= 50 evaluated, recall AND precision >= 0.80):**
+
+  | species | evaluated | matched | recall | precision | bar | result |
+  |---|---|---|---|---|---|---|
+  | Orc Lady (orc_lady) | 59 | 58 | 0.983 | 1.000 | yes | PASS |
+  | Orc Warrior (ork_warrior) | 60 | 59 | 0.983 | 1.000 | yes | PASS |
+  | Poporing (poporing) | 60 | 59 | 0.983 | 1.000 | yes | PASS |
+
+  - **By TEST2 part,** recall per species: a9 1.000 / 0.875 / 0.963; a10 0.963 / 1.000 / 1.000;
+    a11 1.000 / 1.000 / -; w3 1.000 / 1.000 / 1.000 (Lady / Warrior / Poporing). Every precision
+    is 1.000.
+  - **Under a model vs clear:** under 0.960 / 0.978 / 1.000 (25 / 46 / 25 crops); clear
+    1.000 / 1.000 / 0.971 (34 / 14 / 35).
+  - **Look-alikes (class-blind match):** no confusion. Each species' one miss is "none"; no other
+    orc, Poring or Orc Baby class was matched to any crop.
+- **E1 (E, 61 evaluated; reported, not in the verdict, R2-3 item 2):**
+  - Orc Lady: 58 evaluated, 58 matched, recall 1.000, precision 0.906 (6 unmatched orc_lady
+    detections inside the boxes), bar PASS. Under a model: 2 crops, precision 0.4. Clear: 56
+    crops, 0.949.
+  - Orc Warrior: 1 evaluated, matched as orc_lady (no bar).
+  - Poporing: 2 evaluated, 1 matched (no bar).
+  - `strata_overlap`: 0 frames.
+
+### G1 (v1's gold set, species collapsed, the position metric): FAIL
+
+| model | monster TP / FP / FN | P | R | bar P >= 0.882 AND R >= 0.810 |
+|---|---|---|---|---|
+| v1 (`pred-v1png-20261008.json`, re-scored in the same command) | 83 / 9 / 17 | 0.902 | 0.830 | (the reference) |
+| gef10 round 2 | 85 / 13 / 15 | **0.867** | 0.850 | **FAIL (P)** |
+
+- **NPC (reported):** v1 52 / 1 / 2; new 52 / 5 / 2 (P 0.981 vs 0.912).
+- **The 13 monster FPs (reported, deciding nothing)** are all class `poring`, conf 0.32-0.93.
+  - 11 are in two frames, 280 and 290. In those frames BOTH models also miss 5-6 hand boxes each
+    (v1's FN 6 / 6, the new model's 6 / 5).
+  - 8 of the 13 lie within 20 px of a v1 FP in the same frame.
+  - Outside frames 280 and 290 the new model has 2 FPs (conf 0.32 and 0.33).
+  - Two fewer FPs would have passed (85 / 96 = 0.885). The bar is applied as written.
+
+### G2 (v1's prt_fild08 held-out session 054429, 1,077 frames, 4,186 truth boxes): PASS
+
+| model | monster TP / FP / FN | P | R | bar (each >= v1 - 0.02) |
+|---|---|---|---|---|
+| v1 (re-scored first, same command) | 1833 / 719 / 735 | 0.718 | 0.714 | P >= 0.698, R >= 0.694 |
+| gef10 round 2 | 1817 / 742 / 751 | 0.710 | 0.708 | **PASS** |
+
+- NPC: v1 P 0.898 / R 0.900; new 0.894 / 0.900.
+- The new model also made 16 `player` detections; the truth has no player box.
+
+### Latency at imgsz 1280 (the same 200 frames: seed 35 over the pack's 238 frames)
+
+| path | v1 p50 / p95 ms | gef10 round 2 p50 / p95 ms |
+|---|---|---|
+| GPU (`predict_dir --timing`, the worker; wall time per predict call) | 23.0 / 34.7 | 25.1 / 40.8 |
+| CPU (ONNX 736 x 1280 through UnitDetector, 8 threads, nice 10, interleaved per frame) | 248.3 / 616.9 | 261.3 / 499.3 |
+
+- GPU max: 4.69 s / 4.88 s. In both runs that is the FIRST frame (CUDA warm-up); the next
+  frames peak at 52-55 ms.
+- CPU p95 499.3 <= v1's 616.9 x 1.10 = 678.6.
+- The CPU run read the frames in place from the NAS and took 145.6 s. On these gef_fild10 frames
+  v1 made 95 boxes and the new model 560 (at UnitDetector's own threshold).
+- The ONNX export (detector-cpu.md's recipe): `/dev/shm/poring-lab-detector/model/
+  gef10r2-last-736x1280.onnx` + `.names.json` (the 26 names in id order, sha256 `d263f379...`;
+  ids 21-25 = orc_lady, ork_warrior, orc_baby, orc_lord, orc_archer, as the class file).
+
+### Batt's demo (reported only, deciding nothing)
+- `predict_dir` on its 4,666 5 Hz JPEGs, scored by `detector_vs_packets.py score --boxes` (species
+  collapsed; the recorder's frame times; 4,237 captures scored).
+- **The new model:** recall 0.397 (1,727 / 4,355 truth boxes in view; one-to-one 0.378),
+  precision 0.577 (1,827 / 3,169).
+- **v1, logged live** (gef10-round2.md): recall 8.0 %, precision 18.7 %.
+- By our motion:
+  - while our character moved in the 500 ms before: recall 0.050 (n 999);
+  - still: 0.500 (n 3,356).
+- By state: walk 0.241, idle 0.416, attacking 0.417, hurt 0.528.
+- By distance: 0-5 cells 0.390, 6-10 0.300, 11-15 0.496.
+- First sight: 67 of 84 unit episodes detected, median delay 2.4 s (p90 4.4 s).
+- Precision by FP type: 1,126 FPs elsewhere, 130 within 16 px of a unit, 72 on a dying unit,
+  14 on our own character.
+- GPU wall time per frame: p50 72.6 ms, p95 99.2 ms (n 4,480 in the window). The max of 182 s is
+  one call that spanned an R3 pause of the worker.
+
+### For the bot to hunt gef_fild10 by sight (the numbers only; Batt decides)
+- Q1 passes for Orc Lady and Orc Warrior with their bars: YES.
+- The Orc Lord's bar exists and passes: NO. TEST2 has no Orc Lord label, so the bar does not
+  exist.
+- G1 and G2 hold: NO (G1 fails).
+- CPU p95 <= v1's x 1.10: YES (499.3 <= 678.6).
+
+### Not done, as R2-2 stated or as built
+- pay_fild07's TEST and orcsdun01's P1: not run (R2-2).
+- Per-species IoU >= 0.5 precision / recall and whole-frame mAP50 on TEST2 frames: NOT computed.
+  R2-2 built no tool for them, and they are "reported, deciding nothing".
+
+### The commands (as run)
+
+      W=/home/batt/docker/poring-lab; T=/dev/shm/poring-lab-tmp/gef10-det; E=$W/data/train/eval/gef10-r2
+      CAP="systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0"
+      GB="python3 scripts/guarded_build.py --threshold 30 --sustain 30"
+      # 1. TEST2's evaluation labels (16:30:51-16:49:00), one part per run, nice 19 ($T/label_test2.sh):
+      $CAP nice -n 19 python $W/scripts/map_labels.py labels --map gef_fild10 --eval-test2 \
+          /mnt/poring-lab-datasets/<part> --params $T/params.json \
+          --classes $W/config/detector/classes-v2orc-payf07.json --out $T/labels-test2/<part>.json
+      #    parts: 20261026T044312-rdp-rogue-a9, 20261026T052148-rdp-rogue-a10,
+      #           20261026T055949-rdp-rogue-a11, 20261026T112924-rdp-w3
+      # 2. the pack (16:50), seed 35:
+      $CAP nice -n 10 python $W/scripts/map_labels.py pack --map gef_fild10 --eval-test2 $T/labels-test2/*.json \
+          --per-species 60 --seed 35 --min-fit 0.636 --pack-dir $T/eval-r2/pack --key-dir $T/eval-r2-key \
+          --instructions $W/docs/planning/gef10-blind-instructions.txt \
+          --instructions-sha256 247b79197e47f732f4d1acf04bc6ed1ba2b7162c0c9fab26fe49cb5eab4b54b0 \
+          --out $T/eval-r2-build.json
+      # 3. refs (the pack's frames + the 200 latency frames):
+      $CAP python $W/scripts/eval_q1.py refs $T/eval-r2-key/answer_key.json --out $E/q1-refs.json \
+          --latency-200 35 --latency-out $E/latency-200-refs.json --labels-dir $T
+      # 4. detections (the worker, R1-R3, 25 % VRAM cap; imgsz 1280, conf 0.25 = predict_dir's defaults):
+      $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/gef10-20261026/weights/last.pt \
+          --refs /data/train/eval/gef10-r2/q1-refs.json --out /data/train/eval/gef10-r2/q1-pred-gef10r2.json"
+      # 5. G1 (16:33): the new model on the gold frames, then v1 and the new model in ONE score:
+      $GB "execdev:vision@900=python -m poring_vision.predict_dir --weights /data/train/gef10-20261026/weights/last.pt \
+          --images /datasets/archive/train/eval/gold/$S/frames --out /data/train/eval/gef10-r2/g1-pred-gef10r2.json"
+      python $W/scripts/gold_eval.py score $S --metric position --collapse-species --gold-dir $G \
+          $G/pred-v1png-20261008.json $E/g1-pred-gef10r2.json
+      #    S=20261004T103815-console-s2-indoor-v2; G=/mnt/poring-lab-datasets/archive/train/eval/gold/$S
+      # 6. G2 (16:33-16:38): refs, v1 then the new model, ONE score:
+      $CAP python $W/scripts/gold_eval.py refs --out $E/g2-refs.json
+      $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights <v1 | new>/last.pt \
+          --refs /data/train/eval/gef10-r2/g2-refs.json --out /data/train/eval/gef10-r2/g2-pred-<v1 | gef10r2>.json"
+      #    v1 = /datasets/archive/train/v1png-20261008/weights/last.pt
+      $CAP python $W/scripts/gold_eval.py score-cache --metric position $E/g2-pred-v1.json $E/g2-pred-gef10r2.json
+      # 7. latency, GPU: predict_dir --timing on latency-200-refs.json, v1 then the new model;
+      #    CPU: the ONNX export (detector-cpu.md's recipe, in /dev/shm/poring-lab-detector) + names sidecar, then
+      nice -n 10 python $W/scripts/eval_latency.py $E/latency-200-refs.json \
+          --model v1=$M/v1png-last-736x1280.onnx --model gef10r2=$M/gef10r2-last-736x1280.onnx --out $E/latency-cpu.json
+      # 8. Batt's demo (16:37-16:48, reported only):
+      $GB "execdev:vision@2400=python -m poring_vision.predict_dir --weights /data/train/gef10-20261026/weights/last.pt \
+          --images /datasets/human-demos/20261026T095021-demo-human-demo-gef10/frames --glob *.jpg --timing \
+          --out /data/train/eval/gef10-r2/demo-pred-gef10r2.json"
+      python $W/scripts/detector_vs_packets.py from-predict $E/demo-pred-gef10r2.json --out $E/demo-boxes-gef10r2.jsonl
+      $CAP nice -n 10 python $W/scripts/detector_vs_packets.py score $D --map gef_fild10 --layout hunt --window-s 898 \
+          --chat-rect 0,615,600,709 --boxes $E/demo-boxes-gef10r2.jsonl --out $E/demo-score-gef10r2.json
+      #    D=/mnt/poring-lab-datasets/scratch-archive/2026-10-26/demo-sessions/20261026T095021-demo-human-demo-gef10
+      # 9. Q1 / E1 after both labellers:
+      python $W/scripts/eval_q1.py score $T/eval-r2-key/answer_key.json A.json B.json $E/q1-pred-gef10r2.json \
+          --cache-manifest /mnt/poring-lab-datasets/.framecache/v2orc-payf07-gef10-20261026/manifest.json --out $E/q1-score.json
+
+### Where the outputs live (client-derived pixels stay off git)
+- `data/train/eval/gef10-r2/` (local, ~5 MB): the predictions, the refs, and the G1 / G2 / Q1 /
+  latency / demo scores.
+- `/dev/shm/poring-lab-tmp/gef10-det/`: `labels-test2/`, `eval-r2/pack` (25 MB),
+  `eval-r2-key/`, `eval-r2-answers/` (A.json, B.json) and `eval-r2-build.json`.
+- The NAS copy (same day): `scratch-archive/2026-10-29/gef10-eval-r2/` (below once it is made).
