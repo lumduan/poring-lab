@@ -1352,7 +1352,7 @@ the same bars, and Batt decides.
   (an unverified stop, the worker not ready) is still a stop for a person to look at. No setting
   changes.
 
-### 13z-4. Epoch 8, and attempt 9 ended by an OOM kill that OUR scratch script caused (recorded 2026-10-29 10:50 ICT from `date`)
+### 13z-4. Epoch 8, and attempt 9 ended by an OOM kill that OUR scratch script caused (recorded 2026-10-29 10:45 ICT from `date`)
 
 - **Epoch 8** ended at ~10:27 (`results.csv`: mAP50 0.827, mAP50-95 0.627; PROGRESS only),
   68.7 min in attempt 9.
