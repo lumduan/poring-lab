@@ -747,3 +747,27 @@ def test_round3_test3_is_refused_by_name() -> None:
     assert not spec.is_test("20261028T151136-rdp-stage-gef10-e3", None)
     assert not spec.is_round1_test("20261029T110813-rdp-stage-gef10-e3b", None)
     assert ml.PAYF07.test3_suffixes == ()
+
+
+def test_round3_staged_sessions_have_their_own_kind() -> None:
+    """gef10-round3.md 5: E3 / e3b are stage_items sessions (a spot = a first warp followed by
+    drops; the two view warps after it are not spots), the watch keeps one cell per map change;
+    any other session has no spots. E3's spots 0-3 are FIT for the item anchor."""
+    spec = ml.GEF10
+    e3, e3b = "20261028T151136-rdp-stage-gef10-e3", "20261029T110813-rdp-stage-gef10-e3b"
+    assert spec.staged_kind_of(spec.staged) == "watch"
+    assert spec.staged_kind_of(e3) == "items" and spec.staged_kind_of(e3b) == "items"
+    assert spec.staged_kind_of("20261027T015515-rdp-rogue-e4") is None
+    events = [
+        _ev("map_change", 10, map="gef_fild10.gat"), _ev("drop_request", 40),
+        _ev("map_change", 60, map="gef_fild10.gat"),  # view (3, 0): no drop
+        _ev("map_change", 70, map="gef_fild10.gat"),  # view (0, 3)
+        _ev("map_change", 90, map="gef_fild10.gat"), _ev("drop_request", 120),
+        _ev("map_change", 140, map="gef_fild10.gat"),
+    ]  # fmt: skip
+    assert ml.starts_of("items", "gef_fild10", events) == [10 * S, 90 * S]
+    assert ml.starts_of("watch", "gef_fild10", events) == [10 * S, 60 * S, 70 * S, 90 * S, 140 * S]
+    assert ml.staged_starts(spec, events) == ml.starts_of("watch", "gef_fild10", events)
+    assert spec.is_fit(e3, frozenset({0, 3})) and not spec.is_fit(e3, frozenset({4}))
+    assert not spec.is_fit(e3b, frozenset({0}))
+    assert ml.PAYF07.staged_extra == {}

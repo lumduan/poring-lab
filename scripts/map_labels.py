@@ -138,6 +138,15 @@ class MapSpec:
     layouts: dict[str, str] = field(default_factory=dict)  # session id -> its layout (else hunt)
     test2_suffixes: tuple[str, ...] = ()  # gef10 ROUND 2's TEST2 by NAME (gef10-round2.md)
     test3_suffixes: tuple[str, ...] = ()  # gef10 ROUND 3's TEST3 by NAME (gef10-round3.md 2)
+    # gef10 round 3 (gef10-round3.md 5): MORE staged sessions, each with its own kind ("items":
+    # stage_items' spots; "watch": one cell per map change); ``staged`` keeps ``staged_kind``
+    staged_extra: dict[str, str] = field(default_factory=dict)
+
+    def staged_kind_of(self, sid: str) -> str | None:
+        """The staged kind of session ``sid`` (its spots exist), or None (no spots)."""
+        if sid == self.staged:
+            return self.staged_kind
+        return self.staged_extra.get(sid)
 
     def is_test(self, sid: str, spots: frozenset[int] | None) -> bool:
         """The part shares a frame with TEST (round 1's, round 2's TEST2 or round 3's TEST3): by
@@ -183,7 +192,8 @@ GEF10 = MapSpec(
     staged=GEF10_WATCH,
     fit={GEF10_WATCH: frozenset(range(11)),
          "20261025T200922-rdp-rogue-pilot": None,
-         "20261025T203115-rdp-rogue-pilot2": None},
+         "20261025T203115-rdp-rogue-pilot2": None,
+         "20261028T151136-rdp-stage-gef10-e3": frozenset(range(4))},  # round 3: the item anchor
     test={GEF10_WATCH: frozenset(range(11, 15))},
     kb=G10 / "kb",
     sprites=G10 / "sprites-all",
@@ -205,8 +215,11 @@ GEF10 = MapSpec(
     # 13s's commit (its name is refused before it exists); all refused like TEST
     test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11", "-rdp-w3"),
     # ROUND 3 (gef10-round3.md 2, PROPOSED 2026-10-29 12:07, before any read): TEST3 = the staged
-    # session e3b, held out for the item rule's G2
+    # session e3b, held out for the item rule's G2; E3 and e3b are stage_items sessions (spots =
+    # a first warp followed by drops); FIT for the item anchor = E3's spots 0-3
     test3_suffixes=("-rdp-stage-gef10-e3b",),
+    staged_extra={"20261028T151136-rdp-stage-gef10-e3": "items",
+                  "20261029T110813-rdp-stage-gef10-e3b": "items"},
 )  # fmt: skip
 MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 
@@ -271,9 +284,14 @@ def cell_starts(events: Iterable[dict[str, Any]], map_name: str) -> list[int]:
                   and map_key(str(e.get("map") or "")) == map_name)  # fmt: skip
 
 
+def starts_of(kind: str, map_name: str, events: Iterable[dict[str, Any]]) -> list[int]:
+    """A staged session's spot (or cell) starts by ``kind``."""
+    return cell_starts(events, map_name) if kind == "watch" else spot_starts(events)
+
+
 def staged_starts(spec: MapSpec, events: Iterable[dict[str, Any]]) -> list[int]:
     """The staged session's spot (or cell) starts by its kind."""
-    return cell_starts(events, spec.name) if spec.staged_kind == "watch" else spot_starts(events)
+    return starts_of(spec.staged_kind, spec.name, events)
 
 
 def spot_of(t: int, starts: Sequence[int]) -> int | None:
@@ -752,9 +770,11 @@ class RecSession:
         occ.cache_compose()
         olf._speed_up()
         events = lab.timeline.events
-        starts = staged_starts(spec, events) if sid == spec.staged else []
-        if spots is not None and sid != spec.staged:
-            raise SystemExit(f"{sid}: spots exist only in the staged session {spec.staged}")
+        kind = spec.staged_kind_of(sid)
+        starts = starts_of(kind, spec.name, events) if kind is not None else []
+        if spots is not None and kind is None:
+            raise SystemExit(f"{sid}: spots exist only in a staged session ({spec.staged}, "
+                             f"{', '.join(sorted(spec.staged_extra))})")  # fmt: skip
         tm = client_layout.load_templates(layout_templates)
 
         def check(bgr: npt.NDArray[np.uint8]) -> bool:
