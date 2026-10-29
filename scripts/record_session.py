@@ -128,35 +128,11 @@ class CpuMeter:
         return out
 
 
-# The IO rule (Batt 2026-10-28 ~13:2x, gef10-detector.md 13y): a recording written to RAM puts
-# nothing on the disk shared with capture, so it stops only on SUSTAINED stall (above 30 % for
-# 30 s); the host's own 1-5 s bursts tripped the one-spike rule within minutes (10 of 11 hunt
-# recorders on 10-26). A recording on a disk keeps the tolerant rule (above 10 % for 30 s, or
-# above 25 % once).
-DISK_RULE: dict[str, Any] = {"threshold": 10.0, "sustain": 30.0, "spike": 25.0}
-RAM_RULE: dict[str, Any] = {"threshold": 30.0, "sustain": 30.0, "spike": None}
-
-
-def fs_type(path: Path, mounts: str | None = None) -> str:
-    """The filesystem type of the mount holding ``path`` (the longest mount-point prefix in
-    /proc/mounts); "" when none matches. ``path`` need not exist yet."""
-    text = Path("/proc/mounts").read_text() if mounts is None else mounts
-    target = str(path.resolve())
-    best, fstype = "", ""
-    for line in text.splitlines():
-        f = line.split()
-        if len(f) < 3:
-            continue
-        mnt = f[1].replace("\\040", " ")
-        inside = target == mnt or target.startswith(mnt.rstrip("/") + "/")
-        if inside and len(mnt) >= len(best):
-            best, fstype = mnt, f[2]
-    return fstype
-
-
-def guard_rule(out: Path, mounts: str | None = None) -> dict[str, Any]:
-    """RAM_RULE when the recording root is on tmpfs, else DISK_RULE (fail safe: unknown = disk)."""
-    return RAM_RULE if fs_type(out, mounts) == "tmpfs" else DISK_RULE
+# The IO rule by sink (Batt 2026-10-28, gef10-detector.md 13y): RAM_RULE on tmpfs, else DISK_RULE.
+# It lives in dataset_ship.py since 2026-10-29, because a ship follows the same rule by its
+# sessions' root (Batt 2026-10-29, rogue-gef10.md AK-4).
+DISK_RULE, RAM_RULE = dataset_ship.DISK_RULE, dataset_ship.RAM_RULE
+fs_type, guard_rule = dataset_ship.fs_type, dataset_ship.guard_rule
 
 
 def load_guard(out: Path) -> Any:

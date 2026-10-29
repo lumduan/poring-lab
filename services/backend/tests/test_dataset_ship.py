@@ -390,3 +390,93 @@ def test_a_sidecar_joins_a_shipped_session_and_is_never_replaced(
     with pytest.raises(ds.Refused):
         ds.add_sidecar(remote, bad)  # only packets.<kind>.jsonl.gz
     assert not list(remote.glob(".*.part"))
+
+
+MOUNTS = """\
+/dev/mapper/ubuntu--vg-ubuntu--lv / ext4 rw,relatime 0 0
+tmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0
+192.168.1.6:/mnt/tank-main/poring-lab/datasets /mnt/poring-lab-datasets nfs4 rw 0 0
+"""
+
+
+def test_the_ship_guard_rule_follows_the_sessions_root(
+    ds: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-10-29 (rogue-gef10.md AK-4): a ship from tmpfs stops only on sustained stall, like
+    a recorder on tmpfs; a ship from a disk keeps the tolerant one-spike rule; unknown = disk."""
+    assert ds.guard_rule(Path("/dev/shm/poring-lab-rec"), MOUNTS) == ds.RAM_RULE
+    assert ds.guard_rule(Path("/home/batt/poring-lab-rec"), MOUNTS) == ds.DISK_RULE
+    assert ds.guard_rule(Path("/dev/shm/poring-lab-rec"), "") == ds.DISK_RULE
+    assert ds.RAM_RULE == {"threshold": 30.0, "sustain": 30.0, "spike": None}
+    assert ds.DISK_RULE == {"threshold": 10.0, "sustain": 30.0, "spike": 25.0}
+    # load_guard builds guarded_build's Guard with that rule (no docker: cgroup ids come back empty)
+    monkeypatch.setattr(
+        ds.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="", returncode=1)
+    )
+    ram = ds.load_guard(Path("/dev/shm/poring-lab-rec"), MOUNTS)
+    disk = ds.load_guard(Path("/home/batt/poring-lab-rec"), MOUNTS)
+    assert ram.describe() == ">30.0% for 30s"
+    assert disk.describe() == ">10.0% for 30s or >25.0% once"
+    # record_session uses the same objects (one definition)
+    rs = load("record_session")
+    assert rs.guard_rule(Path("/dev/shm/x"), MOUNTS) == ds.RAM_RULE
+    assert rs.DISK_RULE == ds.DISK_RULE and rs.RAM_RULE == ds.RAM_RULE
+
+
+def test_cmd_ship_builds_its_guard_for_its_root_and_says_which_rule(
+    ds: ModuleType, dirs: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[Path] = []
+
+    class Quiet:
+        def describe(self) -> str:
+            return ">30.0% for 30s"
+
+        def breach(self) -> None:
+            return None
+
+    def factory(root: Path) -> Quiet:
+        seen.append(root)
+        return Quiet()
+
+    make_session(dirs.root, SID)
+    a = ds.parser().parse_args(ship_argv(dirs))
+    assert ds.cmd_ship(a, factory) == 0
+    assert seen == [dirs.root]
+    assert f"IO guard: >30.0% for 30s (sessions under {dirs.root})" in capsys.readouterr().err
+    assert not (dirs.root / SID).exists()
+
+
+def test_the_ram_rule_lets_a_ship_ride_out_the_10_28_spike_and_stops_on_sustained_stall(
+    ds: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Positive and negative case on one scripted capture cgroup: 10-28 17:04:54 cut the e4 ship on
+    a single 29.0 % quant-postgres second (the disk rule); the RAM rule rides that out and still
+    stops on 30 s above 30 %."""
+    gb: Any = load("guarded_build")
+    clock = {"t": 0.0}
+    monkeypatch.setattr(gb.time, "monotonic", lambda: clock["t"])
+
+    def run(rule: dict[str, Any], stall_pct: list[float]) -> object:
+        f = tmp_path / "io.pressure"
+        total = 0
+        f.write_text(f"some avg10=0 total=0\nfull avg10=0 avg60=0 avg300=0 total={total}\n")
+        clock["t"] = 0.0
+        g = gb.Guard({"quant-postgres": f}, rule["threshold"], 1.0, sustain=rule["sustain"],
+                     spike=rule["spike"])  # fmt: skip
+        g.breach()
+        for pct in stall_pct:
+            clock["t"] += 1.0
+            total += int(pct * 1e4)
+            f.write_text(f"some avg10=0 total=0\nfull avg10=0 avg60=0 avg300=0 total={total}\n")
+            hit = g.breach()
+            if hit:
+                return hit
+        return None
+
+    spike = [3.0] * 10 + [29.0] + [3.0] * 60
+    sustained = [3.0] * 5 + [35.0] * 40
+    assert run(ds.DISK_RULE, spike) is not None  # what cut the ship on 10-28
+    assert run(ds.RAM_RULE, spike) is None
+    hit = run(ds.RAM_RULE, sustained)
+    assert hit is not None and hit[0] == "quant-postgres" and "above 30.0% for" in hit[2]

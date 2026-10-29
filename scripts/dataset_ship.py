@@ -19,7 +19,9 @@ Where things live:
 ship, per session (one with a manifest.json: a finished recording), in this order:
   1. sha256 of every file except the manifest -> checksums.sha256 (sha256sum format);
   2. rsync -a --partial --timeout=60 --bwlimit to <dest>/<session_id>/, at ionice -c3, stopped by
-     the quant IO guard on a breach (a re-run resumes: --partial);
+     the quant IO guard on a breach (a re-run resumes: --partial). The guard's rule follows --root
+     (guard_rule, Batt 2026-10-29): above 30 % for 30 s only when the sessions are on tmpfs, the
+     tolerant rule (above 10 % for 30 s, or above 25 % once) on a disk;
   3. re-hash on the NAS: every file must match, and the manifest must arrive byte-identical;
   4. the NAS manifest gets storage: {nas_path, verified_at, files, bytes, checksums_sha256};
   5. one line appended to <dest>/INDEX.jsonl (where each session lives);
@@ -222,16 +224,50 @@ def verify(local: Path, remote: Path, sums: dict[str, str]) -> list[str]:
 Guard = Any  # guarded_build.Guard: breach() -> (cgroup, pct, rule) | None
 
 
-def load_guard() -> Guard:
-    """The quant IO guard, tolerant rule (record_session.py's DISK_RULE; its RAM_RULE, since
-    2026-10-28, applies to recordings only -- a ship keeps this rule)."""
+# The IO rule by where the data sits (Batt 2026-10-28 ~13:2x, gef10-detector.md 13y; moved here from
+# record_session.py 2026-10-29, which re-exports it): data in RAM puts nothing on the disk shared
+# with capture, so its job stops only on SUSTAINED stall (above 30 % for 30 s); the host's own
+# 1-5 s bursts tripped the one-spike rule within minutes (10 of 11 hunt recorders on 10-26). Data
+# on a disk keeps the tolerant rule (above 10 % for 30 s, or above 25 % once).
+# A ship follows its sessions' root (Batt 2026-10-29, rogue-gef10.md AK-4): on 10-28 a ship from
+# /dev/shm was cut at 17:04:54 by a 29.0 % quant-postgres spike under the one-spike rule.
+DISK_RULE: dict[str, Any] = {"threshold": 10.0, "sustain": 30.0, "spike": 25.0}
+RAM_RULE: dict[str, Any] = {"threshold": 30.0, "sustain": 30.0, "spike": None}
+
+
+def fs_type(path: Path, mounts: str | None = None) -> str:
+    """The filesystem type of the mount holding ``path`` (the longest mount-point prefix in
+    /proc/mounts); "" when none matches. ``path`` need not exist yet."""
+    text = Path("/proc/mounts").read_text() if mounts is None else mounts
+    target = str(path.resolve())
+    best, fstype = "", ""
+    for line in text.splitlines():
+        f = line.split()
+        if len(f) < 3:
+            continue
+        mnt = f[1].replace("\\040", " ")
+        inside = target == mnt or target.startswith(mnt.rstrip("/") + "/")
+        if inside and len(mnt) >= len(best):
+            best, fstype = mnt, f[2]
+    return fstype
+
+
+def guard_rule(root: Path, mounts: str | None = None) -> dict[str, Any]:
+    """RAM_RULE when ``root`` is on tmpfs, else DISK_RULE (fail safe: unknown = disk)."""
+    return RAM_RULE if fs_type(root, mounts) == "tmpfs" else DISK_RULE
+
+
+def load_guard(root: Path, mounts: str | None = None) -> Guard:
+    """The quant IO guard, with the rule for the sessions' root (guard_rule)."""
     spec = importlib.util.spec_from_file_location(
         "guarded_build", ROOT / "scripts" / "guarded_build.py"
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.Guard(module.cgroup_paths(), 10.0, 10.0, sustain=30.0, spike=25.0)
+    rule = guard_rule(root, mounts)
+    return module.Guard(module.cgroup_paths(), rule["threshold"], 10.0, sustain=rule["sustain"],
+                        spike=rule["spike"])  # fmt: skip
 
 
 def rsync_argv(src: Path, dst: Path, bwlimit: int) -> list[str]:
@@ -332,7 +368,7 @@ def resolve(root: Path, names: list[str]) -> list[Path]:
     return out
 
 
-def cmd_ship(a: argparse.Namespace, guard_factory: Callable[[], Guard | None]) -> int:
+def cmd_ship(a: argparse.Namespace, guard_factory: Callable[[Path], Guard | None]) -> int:
     if in_set_hours() and not a.force_market:
         raise Refused("SET hours (09:30-17:00 Bangkok, weekdays): not shipping (--force-market)")
     check_dest(a.dest, a.dest_is_dir_for_tests)
@@ -342,7 +378,9 @@ def cmd_ship(a: argparse.Namespace, guard_factory: Callable[[], Guard | None]) -
         return 0
     rc = 0
     with single_run(a.root):
-        guard = guard_factory()
+        guard = guard_factory(a.root)
+        if guard is not None:
+            print(f"IO guard: {guard.describe()} (sessions under {a.root})", file=sys.stderr)
         for session in todo:
             try:
                 print(json.dumps(ship_one(session, a.dest, bwlimit=a.bwlimit, guard=guard,
@@ -525,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
     try:
         if a.cmd == "ship":
-            return cmd_ship(a, (lambda: None) if a.no_io_guard else load_guard)
+            return cmd_ship(a, (lambda _root: None) if a.no_io_guard else load_guard)
         if a.cmd == "status":
             return cmd_status(a)
         if a.cmd == "prune":

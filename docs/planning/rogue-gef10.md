@@ -1724,3 +1724,28 @@ copies (Cyfar 1, Voucher 1) are in storage, not income. The Orc Lord's D for the
 15:49:15.
 
 **Ship:** after 17:00, chained (e4, f3, e3 5.0 GB, e3x 0.39 GB), one at a time.
+
+## Amendment AK-4 (2026-10-29 10:47 ICT from `date`): Batt's four decisions on E3's open items
+
+Batt, 2026-10-29 ~10:0x (translated), answering AK-3's report section 12:
+1. **Shipping: "switch to the sustained rule".** `dataset_ship.py`'s IO guard now follows the
+   sessions' root like a recorder: on tmpfs it stops only on stall above 30 % for 30 s (RAM_RULE);
+   on a disk it keeps the tolerant rule (above 10 % for 30 s, or above 25 % once); unknown = disk.
+   The rule now lives in `dataset_ship.py` (`DISK_RULE`, `RAM_RULE`, `fs_type`, `guard_rule`);
+   `record_session.py` re-binds the same objects. `ship` prints the rule it uses. Tests: the rule
+   by root, `load_guard`'s built Guard, `cmd_ship` passing its root, and the positive and negative
+   case on a scripted cgroup: 10-28's single 29.0 % quant-postgres second (which cut the e4 ship at
+   17:04:54) trips the disk rule and not the RAM rule; 30 s above 30 % trips the RAM rule.
+   - The four sessions (e4, f3, e3, e3x; 9.3 GB) ship after 17:00, one at a time, stopping at
+     the first failure (SET hours still refuse).
+   - Note (10:3x incident, gef10-detector.md 13z-4): these /dev/shm sessions sit partly in swap,
+     so the ship's read is swap-in IO on the root disk. The guard's sustained rule still stops it.
+2. **E3: "fix the icon matcher, then run a short second session".** The fix is pre-registered
+   (AK-5) BEFORE any live step: the rule, its bars, the offline check, the census and targeted
+   safety tests, then the `give` / `drop` positive case under run conditions, then the session.
+3. **Infra (mid.pt to tmpfs; telling the fit-first side about the VTON restart): "leave it, I'll
+   handle it".** Nothing is done here.
+4. **The /dev/shm rm lines: "please carry them out".** Done 2026-10-29 ~10:0x after a check: the
+   43 listed files byte-identical on the NAS (`scratch-archive/2026-10-28/`), the 35 `frames-s18`
+   frames byte-identical inside the e3 recording, `icons-grf` re-extractable from the GRF. /dev/shm
+   12 G -> 11 G used. Kept: the canopy, `icons-spec.json`, `ship4.sh` / `ship4.log`.
