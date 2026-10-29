@@ -70,3 +70,14 @@ def test_position_metric_centre_in_box_one_to_one(li: ModuleType) -> None:
     # a class mismatch never matches, even with the centre inside
     tp, fp, fn, _ = li.match_position([("npc", 0, 0, 10, 10)], [("monster", 2, 2, 8, 8)])
     assert (tp, fp, fn) == (0, 1, 1)
+
+
+def test_position_pairs_name_which_truth_matched_which_detection(li: ModuleType) -> None:
+    """eval_q1.py needs WHICH crop matched: position_pairs is match_position's own pairing."""
+    truth = [("m", 0, 0, 40, 40), ("m", 30, 0, 70, 40)]  # centres (20, 20) and (50, 20)
+    pred = [("m", 40, 10, 60, 30), ("m", 10, 10, 30, 30), ("n", 0, 0, 40, 40)]  # fmt: skip
+    pairs = li.position_pairs(truth, pred)
+    assert [(i, j) for _d, i, j in pairs] == [(0, 1), (1, 0)]  # nearest centre first
+    assert li.match_position(truth, pred) == (2, 1, 0, [0.0, 0.0])
+    assert li.centre_inside(("x", 40, 40, 40, 40), ("y", 0, 0, 40, 40))  # edges included
+    assert not li.centre_inside(("x", 41, 0, 41, 0), ("y", 0, 0, 40, 40))

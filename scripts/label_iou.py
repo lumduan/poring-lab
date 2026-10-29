@@ -121,30 +121,43 @@ def newest_run(config: dict[str, Any]) -> Path | None:
     return None if best is None else best[1]
 
 
-def match_position(truth: list[Box], predicted: list[Box]) -> tuple[int, int, int, list[float]]:
-    """POSITION-ONLY match (phase3-plan §5f): a pair is a candidate when the classes match and the
-    predicted box's CENTRE lies inside the truth box; one-to-one, greedily by ascending centre
-    distance. Returns (tp, fp, fn, the matched centre distances in px)."""
+def centre(b: Box) -> tuple[float, float]:
+    return (b[1] + b[3]) / 2.0, (b[2] + b[4]) / 2.0
 
-    def centre(b: Box) -> tuple[float, float]:
-        return (b[1] + b[3]) / 2.0, (b[2] + b[4]) / 2.0
 
+def centre_inside(p: Box, t: Box) -> bool:
+    """The predicted box's CENTRE lies inside the truth box (edges included); classes ignored."""
+    cx, cy = centre(p)
+    return t[1] <= cx <= t[3] and t[2] <= cy <= t[4]
+
+
+def position_pairs(truth: list[Box], predicted: list[Box]) -> list[tuple[float, int, int]]:
+    """The POSITION-ONLY match's pairs (phase3-plan §5f): a pair is a candidate when the classes
+    match and the predicted box's CENTRE lies inside the truth box; one-to-one, greedily by
+    ascending centre distance. Returns (centre distance px, truth index, predicted index) per
+    matched pair, in match order (scripts/eval_q1.py needs WHICH crop matched)."""
     pairs = []
     for i, t in enumerate(truth):
         for j, p in enumerate(predicted):
-            cx, cy = centre(p)
-            if t[0] == p[0] and t[1] <= cx <= t[3] and t[2] <= cy <= t[4]:
-                tx, ty = centre(t)
+            if t[0] == p[0] and centre_inside(p, t):
+                (cx, cy), (tx, ty) = centre(p), centre(t)
                 pairs.append((((cx - tx) ** 2 + (cy - ty) ** 2) ** 0.5, i, j))
     used_t: set[int] = set()
     used_p: set[int] = set()
-    dists: list[float] = []
+    out: list[tuple[float, int, int]] = []
     for dist, i, j in sorted(pairs):
         if i in used_t or j in used_p:
             continue
         used_t.add(i)
         used_p.add(j)
-        dists.append(dist)
+        out.append((dist, i, j))
+    return out
+
+
+def match_position(truth: list[Box], predicted: list[Box]) -> tuple[int, int, int, list[float]]:
+    """POSITION-ONLY match (phase3-plan §5f; the pairs are position_pairs'). Returns (tp, fp, fn,
+    the matched centre distances in px)."""
+    dists = [d for d, _i, _j in position_pairs(truth, predicted)]
     return len(dists), len(predicted) - len(dists), len(truth) - len(dists), dists
 
 
