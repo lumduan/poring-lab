@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with payf07's o3h-all rule (fix 2 facing, 2b / 2c, the fit, o3h, the T_h floor on every label), re-measured on gef_fild10's own FIT data, PLUS a rule that LABELS monsters engaged in a fight with our character (drawn facing it, in the action the packets give), give per-species monster boxes for gef_fild10 (Orc Lady, Orc Warrior, Orc Baby, Poporing, Orc Lord, Orc Archer, the plants) that pass the training tier (T1: C1 <= 5 % on held-out TEST data; T2: every species in the tier passes a blind check, the engaged labels in their own stratum), and floor-item boxes from the items' own client sprites that pass their own geometric and blind checks, so ONE detector can be trained on payf07's 21 classes plus this map's monsters and items."
-status: "T1 FAILED 2026-10-26 03:16 ICT (13r): the monster tier fails, nothing of gef_fild10 trains this round. History: PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
+status: "TRAINING (13z-13z-3): round 2's T1 PASSED on TEST2 2026-10-26 12:06 (13t, C1 1.9 %); the 10-epoch training on v2orc-payf07-gef10-20261026 runs since 2026-10-28 13:44; epoch 7 done 2026-10-29 09:18 (attempt 9 of train-day's auto-resumes). Round 1, SUPERSEDED by round 2: T1 FAILED 2026-10-26 03:16 ICT (13r): the monster tier failed, nothing of gef_fild10 trained in round 1. History: PROPOSED 2026-10-25 20:51:49 ICT (3e31b01); amendments A-D (21:10-21:42). FIT measured 21:03-22:00 (13): 1d STOPPED twice (<= 15 samples; proposal 120 ms), T_h 0.636 (after A: the watch's layout, B: crowded labels out of its set, C: exclusion facing_unknown), the engaged selection chose E2 (14 kept of 620), FIT C1 0.8 % (diagnostic), 142 FIT frames with a monster box under the proposal; floor items: 15 clean samples from ONE floor item. NOTHING FROZEN, no TEST read, nothing trained."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [payf07-detector.md, orcsdun01-detector.md, labels-v2-plan.md, training-cost.md, target-items.md, item-class.md, rogue-gef10.md, gef10-prep.md, ../benchmarks/payf07-eval.md]
-next_action: "T1 FAILED 2026-10-26 03:16 (13r: C1 5 / 61 = 8.2 % > 5 %; two a7 sightings: a pickup notice over an Orc Warrior, a Poporing beside a raised rock face). Nothing of gef_fild10 trains this round. Batt decides whether a round 2 (a popup rule + a raised-terrain rule, measured on FIT; a NEW TEST; T2 again) is worth it."
+next_action: "Finish the training (epochs 8-10; 13z-3: on the 12-h step limit the parent resumes ONCE with RESUME=1, Batt 2026-10-29), then score last.pt after the last completed epoch per gef10-eval.md. ➡️ The rest of this field is round 1's, SUPERSEDED by round 2 (13s-13t): T1 FAILED 2026-10-26 03:16 (13r: C1 5 / 61 = 8.2 % > 5 %; two a7 sightings: a pickup notice over an Orc Warrior, a Poporing beside a raised rock face). Nothing of gef_fild10 trains this round. Batt decides whether a round 2 (a popup rule + a raised-terrain rule, measured on FIT; a NEW TEST; T2 again) is worth it."
 title: "A detector for gef_fild10's monsters and floor items: the facts, the split, the label rule (engaged units labelled), T1 / T2, the classes, the cache and training proposal, the evaluation plan (PROPOSED pre-registration)"
 date: 2026-10-25
 owner: Batt
@@ -1276,10 +1276,12 @@ the same bars, and Batt decides.
   live positive case on the real co-tenant.
 - **The 12-h step limit** (`execdev:vision@43200`, PER ATTEMPT: each resume is a new guarded step
   with a fresh 12 h; ➡️ after the 16:07 abort below, the resumed attempt's limit is ~12 h after its
-  start, ~04:2x on 10-29, not ~01:41) would have fallen at ~01:41 on 10-29 for attempt 0. The
-  guard then prints `FAILED rc=124`, not an ABORT, and train-day ends "TRAIN STOPPED: not a guard
-  trip" (exit 2). No automatic resume: `RESUME=1` with the same arguments, by hand or by Batt's
-  decision. `mid.pt` bounds the loss to ~7 min.
+  start, ~04:2x on 10-29, not ~01:41; ➡️➡️ SUPERSEDED by 13z-3: nine attempts by 10-29 05:11, and
+  the running attempt 9's limit is ~17:11 on 10-29) would have fallen at ~01:41 on 10-29 for
+  attempt 0. The guard then prints `FAILED rc=124`, not an ABORT, and train-day ends "TRAIN
+  STOPPED: not a guard trip" (exit 2). No automatic resume: `RESUME=1` with the same arguments, by
+  hand or by Batt's decision (➡️ Batt 2026-10-29 ~09:5x, "continue training": the parent resumes
+  it by hand on that stop, 13z-3). `mid.pt` bounds the loss to ~7 min.
 - **Our disk footprint, measured** (the 2-h probe 13:45-15:45, NAS
   `scratch-archive/2026-10-28/train-gef10-io/`): `mid.pt` (42 MB, every ~7 min) and the epoch's
   `last.pt` / `best.pt` go to the root disk (`data/train`). After each mid write (15:37:02,
@@ -1298,3 +1300,54 @@ the same bars, and Batt decides.
     VTON idle.
   - Attribution: not settled. Our share of the GPU was near zero in the drop window. The VTON's
     start is the likelier cause; it is the top priority and is never touched.
+
+### 13z-3. The night 10-28/29: attempts 2-9, epochs 2-7, and Batt's go-ahead (recorded 2026-10-29 09:52 ICT from `date`)
+
+- **State at 09:52:** attempt 9 has run since 05:11:30 without a trip. Epoch 7 ended at 09:18
+  (`results.csv`), so epoch 8 of 10 is running. `mid.pt` was written at 09:48.
+- **Attempts since 13z-2** (train.log; every stop was verified by the guard, and train-day resumed
+  by itself each time):
+
+  | attempt | start (ICT) | end (ICT) | stop | train-day's path |
+  |---|---|---|---|---|
+  | 1 | 10-28 16:32:39 | 17:09:12 | IO: quant-postgres 58.7 % for 31 s | 900-s pause (IO trip 1 of 20) |
+  | 2 | 17:24:23 | 19:06:53 | IO: quant-ticker-engine 52.1 % for 31 s | 900-s pause (IO trip 2) |
+  | 3 | 19:22:01 | 20:19:38 | R3-HARD: cam-1-02-font-n drops 31 s; fleet 57.4 det/s, detectors 35.0 ms | 15 quiet min, slowest level (1 abort in 2 h) |
+  | 4 | 20:34:47 | 20:50:30 | R3-HARD: cam-1-01-font-s drops 32 s; fleet 39.7 det/s, 30.4 ms; 3 cameras skipping | 15 quiet min (2 aborts in 2 h, no cap) |
+  | 5 | 21:05:41 | 10-29 02:00:44 | R3-HARD: cam-1-02-font-n drops 32 s; fleet 1.4 det/s, 24.6 ms; 6+ cameras skipping | 15 quiet min (1 in 2 h) |
+  | 6 | 02:15:57 | 04:04:27 | R3-HARD: cam-1-07-font-room-n, camera_fps 0.0 and skipped 0.0 for 32 s; fleet 16.2 det/s, 26.7 ms; "skipping now: none" | 15 quiet min (1 in 2 h) |
+  | 7 | 04:19:36 | 04:40:38 | IO: quant-postgres 34.8 % for 31 s | 900-s pause (IO trip 3) |
+  | 8 | 04:55:43 | 04:56:27 | IO: quant-postgres 47.9 % for 30 s (40 s into the attempt, at 2,000 ms) | 900-s pause (IO trip 4) |
+  | 9 | 05:11:30 | running | -- | step limit ~17:11 on 10-29 |
+
+  - The rule of 3 frame-drop aborts in 2 h never fired, so there was no cap and no NOTIFY. IO
+    trips used: 4 of 20.
+  - **Two of the R3-HARD stops look camera-side, not load** (infra observation; the stop stays
+    absolute). At 02:00:44 the fleet load was 1.4 det/s and the detectors 24.6 ms, with six or more
+    cameras skipping at once, while ours had held the slowest level (2,000 ms) for most of
+    attempt 5 (14,327 s). At 04:04:27 cam-1-07-font-room-n's camera_fps was 0.0, which is a
+    stalled stream, not skipped frames. Read-only at 09:5x: all 16 cameras show skipped_fps 0.0,
+    cam-1-07 at 2.0 fps, detectors 27-30 ms.
+- **Validation per epoch (PROGRESS only; the verdict is gef10-eval.md's on `last.pt` after the last
+  completed epoch):**
+
+  | epoch | mAP50 | mAP50-95 | precision | recall |
+  |---|---|---|---|---|
+  | 1 | 0.796 | 0.569 | 0.843 | 0.805 |
+  | 2 | 0.809 | 0.589 | 0.833 | 0.823 |
+  | 3 | 0.815 | 0.614 | 0.883 | 0.830 |
+  | 4 | 0.823 | 0.612 | 0.886 | 0.837 |
+  | 5 | 0.816 | 0.625 | 0.870 | 0.838 |
+  | 6 | 0.827 | 0.625 | 0.882 | 0.834 |
+  | 7 | 0.826 | 0.630 | 0.868 | 0.844 |
+
+  Epochs 8-10 are the close_mosaic epochs (CLOSE_MOSAIC=3).
+- **Speed:** epoch 7 took 72.5 min in attempt 9 (`results.csv` time 10,289 -> 14,640.9 s), mostly
+  at the 100 ms level overnight. At that pace epochs 8-10 end ~13:00-14:00 today if nothing trips.
+  Daytime Frigate load and VTON yields can slow it; the step limit at ~17:11 is the backstop.
+- **Batt, 2026-10-29 ~09:5x: "เทรนต่อได้เลย" ("go ahead, continue the training").** The parent
+  reads this as the answer to the open question on the step limit: if attempt 9 ends `FAILED
+  rc=124` / "TRAIN STOPPED: not a guard trip", the parent resumes it ONCE by hand with `RESUME=1`
+  and the 13z launch's arguments, outside 09:30-10:15 / 14:00-14:45. Any other "TRAIN STOPPED"
+  (an unverified stop, the worker not ready) is still a stop for a person to look at. No setting
+  changes.
