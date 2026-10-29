@@ -100,7 +100,7 @@ follow without changing C's labels.
 an item under our own box or HP bar are EXCLUDED from the cache (not labelled empty). E3's (0, 0)
 views give no item labels. Its (3, 0) and (0, 3) views were planned for exactly this and do.
 
-## 4a. One detail fixed in code before any read (2026-10-29 12:4x)
+## 4a. One detail fixed in code before any read (2026-10-29 12:29 ICT from `date`)
 
 - `under_unit` (section 8: "any unit's predicted box over the item's box") uses the generic unit
   box (60 px wide, 100 px up to 6 px down from the unit's anchor, at tw and tw - 0.5 s). That is
