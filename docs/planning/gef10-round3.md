@@ -55,6 +55,10 @@ The staged sessions (immune Rogue, open ground, 1 fps PNG + packets):
 - **What was already read of E3, for the record:** the inventory crops of the drop checks
   (2026-10-28 frames-s18; 2026-10-29's icon study, killed at 10:42). No floor-item label, crop or
   fit was ever made from E3.
+- **The extra MONSTER sessions (E5's list), checked on the NAS at 12:44 from `date`:** b1, c1,
+  c3-c8 (and c2, c5b) as `/mnt/poring-lab-datasets/<id>-rdp-rogue-<tag>`, each with packets and
+  shards; Batt's gef10 demo as `human-demos/20261026T095021-demo-human-demo-gef10`. Nothing read
+  from them yet. They get round 2's frozen monster labeller unchanged.
 - **Expected yield, from the packets only** (rogue-gef10.md AK-3 / AK-6): TRAIN 112 floor items,
   9-11 per class; TEST3 36, 3-4 per class, of which spots 0-1's 12 were looted within 0.3-6.2 s
   (below the 2.2 s settle: no label), leaving 24.
