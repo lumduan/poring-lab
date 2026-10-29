@@ -2,7 +2,14 @@
 """THE LIVE DETECTOR AGAINST THE PACKET TRUTH, on a human demo (docs/planning/gef10-round2.md 4).
 
     detector_vs_packets.py score DEMO_DIR [--map gef_fild10] [--layout hunt] [--window-s 898]
-                                 --out JSON [--pairs PAIRS.json]
+                                 --out JSON [--pairs PAIRS.json] [--boxes BOXES.jsonl]
+    detector_vs_packets.py from-predict PRED.json --out BOXES.jsonl
+
+``from-predict`` (gef10-eval.md AMENDMENT R2-2) turns poring_vision.predict_dir's output on the
+demo's own frames (``frames/NNNNN-<t ns>.jpg``: the stem carries the capture time) into
+``boxes.jsonl`` rows, every species class collapsed to ``monster`` (player, npc, warp kept), so a
+NEW model is scored by ``score --boxes``. Those times are the recorder's frame times, not a live
+grab's; ``ms`` is predict_dir's per-frame wall time when it ran with --timing, else None.
 
 A human demo (scripts/human_demo.py) logs the CPU unit detector's boxes on fresh grabs
 (``boxes.jsonl``: {"t": capture CLOCK_MONOTONIC ns, "ms": inference ms, "boxes": [[x0, y0, x1,
@@ -182,6 +189,24 @@ def read_boxes(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+KEPT_CLASSES = ("player", "npc", "warp")  # every other class is a monster species
+
+
+def predict_rows(pred: dict[str, Any]) -> list[dict[str, Any]]:
+    """PURE: predict_dir's {"frames": {"NNNNN-<t ns>": [{cls, x1, y1, x2, y2, conf}]}} (and its
+    optional "timing_ms") -> boxes.jsonl rows in time order, species collapsed to ``monster``."""
+    per = ((pred.get("timing_ms") or {}).get("per_frame")) or {}
+    rows = []
+    for stem, dets in pred["frames"].items():
+        _n, sep, t = stem.partition("-")
+        if not sep or not t.isdigit():
+            raise SystemExit(f"{stem}: not a demo frame name (NNNNN-<t ns>)")
+        boxes = [[float(d["x1"]), float(d["y1"]), float(d["x2"]), float(d["y2"]), float(d["conf"]),
+                  d["cls"] if d["cls"] in KEPT_CLASSES else "monster"] for d in dets]  # fmt: skip
+        rows.append({"t": int(t), "ms": per.get(stem), "boxes": boxes})
+    return sorted(rows, key=lambda r: r["t"])
+
+
 def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     import gef10_items
     import mvp_watch_study as mws
@@ -194,7 +219,7 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     manifest = json.loads((demo / "manifest.json").read_text())
     t0 = int(manifest["t0_live_ns"])
     t1 = t0 + int(a.window_s * 1e9)
-    caps = read_boxes(demo / "boxes.jsonl")
+    caps = read_boxes(a.boxes if a.boxes is not None else demo / "boxes.jsonl")
     win = [c for c in caps if t0 <= int(c["t"]) <= t1]
     with gzip.open(demo / "packets.jsonl.gz", "rt") as fh:
         events = [json.loads(line) for line in fh]
@@ -280,7 +305,7 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
             "jobs": dict(Counter(str(r["job"]) for r in rs))}  # fmt: skip
     eps = episodes(unit_rows)
     delays = [e["delay_s"] for e in eps if e["delay_s"] is not None]
-    ms_all = [float(c["ms"]) for c in win]
+    ms_all = [float(c["ms"]) for c in win if c.get("ms") is not None]
     n_det = sum(verdicts.values())
     return {
         "what": "the live detector's monster boxes (boxes.jsonl) against the packet truth "
@@ -290,8 +315,10 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
                    "captures_in_window": len(win), "skipped": dict(skipped),
                    "captures_scored": len(win) - sum(skipped.values())},
         "offset_ms": mws.OFFSET_MS, "k": mws.K,
-        "latency_ms": {"n": len(ms_all), "median": percentile(ms_all, 50),
-                       "p95": percentile(ms_all, 95), "max": max(ms_all) if ms_all else None},
+        "boxes": str(a.boxes) if a.boxes is not None else "boxes.jsonl (the live detector)",
+        "latency_ms": {"n": len(ms_all), "median": percentile(ms_all, 50) if ms_all else None,
+                       "p95": percentile(ms_all, 95) if ms_all else None,
+                       "max": max(ms_all) if ms_all else None},
         "recall_all": tally(unit_rows),
         "per_species": per_species,
         "by_distance": {name: tally([r for r in unit_rows if dist_bin(r["dist"]) == name])
@@ -348,8 +375,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="X0,Y0,X1,Y1: the chat window where the demo had it (hunt layout)",
     )
+    p.add_argument(
+        "--boxes",
+        type=Path,
+        default=None,
+        help="boxes.jsonl rows to score (default: DEMO/boxes.jsonl, v1 live)",
+    )
+    p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("from-predict")
+    p.add_argument("pred", type=Path)
     p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
+    if a.cmd == "from-predict":
+        rows = predict_rows(json.loads(a.pred.read_text()))
+        a.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        print(json.dumps({"rows": len(rows), "out": str(a.out)}))
+        return 0
     out = cmd_score(a)
     pairs = out.pop("_pairs")
     if a.pairs is not None:

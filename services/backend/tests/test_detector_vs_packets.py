@@ -82,3 +82,23 @@ def test_episodes_cut_at_gaps_and_time_the_first_hit() -> None:
 def test_species_keys_and_percentiles() -> None:
     assert dv.species_key(1273) == "1273 Orc Lady" and dv.species_key(1190) == "other"
     assert dv.percentile([100.0, 200.0, 300.0], 50) == 200.0 and dv.percentile([], 95) is None
+
+
+def test_predict_rows_turn_a_new_models_output_into_box_rows() -> None:
+    """gef10-eval.md AMENDMENT R2-2: predict_dir on the demo's frames (NNNNN-<t ns>.jpg) ->
+    boxes.jsonl rows in time order; species collapsed to ``monster``; ms from --timing."""
+    pred = {
+        "frames": {
+            "00002-300": [{"cls": "orc_lady", "x1": 1, "y1": 2, "x2": 3, "y2": 4, "conf": 0.9}],
+            "00001-200": [{"cls": "player", "x1": 5, "y1": 6, "x2": 7, "y2": 8, "conf": 0.8},
+                          {"cls": "poporing", "x1": 9, "y1": 9, "x2": 11, "y2": 12, "conf": 0.3}],
+        },
+        "timing_ms": {"per_frame": {"00001-200": 21.5}},
+    }  # fmt: skip
+    rows = dv.predict_rows(pred)
+    assert [r["t"] for r in rows] == [200, 300]
+    assert rows[0]["boxes"] == [[5.0, 6.0, 7.0, 8.0, 0.8, "player"],
+                                [9.0, 9.0, 11.0, 12.0, 0.3, "monster"]]  # fmt: skip
+    assert rows[1]["boxes"][0][5] == "monster" and rows[0]["ms"] == 21.5 and rows[1]["ms"] is None
+    with pytest.raises(SystemExit):
+        dv.predict_rows({"frames": {"frame-x": []}})
