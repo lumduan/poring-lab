@@ -137,12 +137,13 @@ class MapSpec:
     plan: str = "docs/planning/payf07-detector.md"
     layouts: dict[str, str] = field(default_factory=dict)  # session id -> its layout (else hunt)
     test2_suffixes: tuple[str, ...] = ()  # gef10 ROUND 2's TEST2 by NAME (gef10-round2.md)
+    test3_suffixes: tuple[str, ...] = ()  # gef10 ROUND 3's TEST3 by NAME (gef10-round3.md 2)
 
     def is_test(self, sid: str, spots: frozenset[int] | None) -> bool:
-        """The part shares a frame with TEST (round 1's, or round 2's TEST2): by the role table,
-        or by the session's NAME."""
+        """The part shares a frame with TEST (round 1's, round 2's TEST2 or round 3's TEST3): by
+        the role table, or by the session's NAME."""
         return self.is_round1_test(sid, spots) or any(
-            sid.endswith(s) for s in self.test2_suffixes)  # fmt: skip
+            sid.endswith(s) for s in (*self.test2_suffixes, *self.test3_suffixes))  # fmt: skip
 
     def is_round1_test(self, sid: str, spots: frozenset[int] | None) -> bool:
         """Round 1's TEST (gef10: read once by T1, 13r; spent): the role table or the NAME."""
@@ -203,6 +204,9 @@ GEF10 = MapSpec(
     # a11 (recorded after round 1's T1, never read) + w3, an immune lattice watch recorded AFTER
     # 13s's commit (its name is refused before it exists); all refused like TEST
     test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11", "-rdp-w3"),
+    # ROUND 3 (gef10-round3.md 2, PROPOSED 2026-10-29 12:07, before any read): TEST3 = the staged
+    # session e3b, held out for the item rule's G2
+    test3_suffixes=("-rdp-stage-gef10-e3b",),
 )  # fmt: skip
 MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
 

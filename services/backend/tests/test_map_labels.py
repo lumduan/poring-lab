@@ -736,3 +736,14 @@ def test_check_c1_rule_flag_defaults_to_round1(monkeypatch: pytest.MonkeyPatch) 
         assert seen["rule"] == want
     with pytest.raises(SystemExit):
         ml.main(["check", "/x", "--params", "p", "--out", "o", "--c1-rule", "round3"])
+
+
+def test_round3_test3_is_refused_by_name() -> None:
+    """gef10-round3.md 2: e3b (the staged session of 2026-10-29) is TEST3, held out by NAME; E3
+    stays readable (TRAIN, its spots 0-3 also FIT under round 3)."""
+    spec = ml.GEF10
+    assert spec.is_test("20261029T110813-rdp-stage-gef10-e3b", None)
+    assert spec.is_test("20261029T110813-rdp-stage-gef10-e3b", frozenset({2}))
+    assert not spec.is_test("20261028T151136-rdp-stage-gef10-e3", None)
+    assert not spec.is_round1_test("20261029T110813-rdp-stage-gef10-e3b", None)
+    assert ml.PAYF07.test3_suffixes == ()

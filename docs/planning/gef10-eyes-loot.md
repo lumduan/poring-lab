@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-detector.md, gef10-eval.md, gef10-idle-study.md, gef10-time-budget.md, gef10-miss-cue.md]
-next_action: "2026-10-29: E3 COMPLETE with the short second session e3b (rogue-gef10.md AK-5/AK-6): the icon match fixed (stage@6 masked references), 6 of 6 spots, 36 staged floor items, no stop; E3 + e3b = 148 staged floor items, every class >= 10 (Cyfar 12). Next: E5 (labels; item_labels.py needs gef_fild10). Earlier, 2026-10-28: E3 RAN 15:11-15:50 (rogue-gef10.md AK-AK-3): 18 of 22 spots, 112 staged floor items, 9-11 per class (Cyfar 9); stopped by its drop check (icon references carry the new-item glow: fix before any second session); labels wait for E5. Earlier: E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
+next_action: "2026-10-29 12:1x: E5 STARTED (gef10-round3.md, PROPOSED; split fixed, TEST3 = e3b refused by name; the item classes wait for Batt: A or C). Before that, 2026-10-29: E3 COMPLETE with the short second session e3b (rogue-gef10.md AK-5/AK-6): the icon match fixed (stage@6 masked references), 6 of 6 spots, 36 staged floor items, no stop; E3 + e3b = 148 staged floor items, every class >= 10 (Cyfar 12). Next: E5 (labels; item_labels.py needs gef_fild10). Earlier, 2026-10-28: E3 RAN 15:11-15:50 (rogue-gef10.md AK-AK-3): 18 of 22 spots, 112 staged floor items, 9-11 per class (Cyfar 9); stopped by its drop check (icon references carry the new-item glow: fix before any second session); labels wait for E5. Earlier: E1 (loot trim) is pre-registered for the cycle after c11 (>= D8 + 131); the round-2 cache build retries at 20:05; the staged-items session (E3, approved) runs between cycles once E1 is judged; its offline prep is done (stage@5, 'E3 prep, offline': icon set A, then the ~47-min session B)."
 ---
 
 # gef_fild10: the bot's eyes and its loot step (plan, 2026-10-26 18:3x ICT)
@@ -318,6 +318,13 @@ gef_fild10 on 2026-10-26).
   goes live.
 
 ### E5. ROUND 3: MONSTERS + ITEMS (after E3)
+
+- ➡️ **Started 2026-10-29** (Batt: "go ahead, but do not affect the other work"): the PROPOSED
+  pre-registration is `gef10-round3.md`. The split is fixed there before any read: TEST3 = e3b
+  (refused by name), FIT = E3 spots 0-3, TRAIN = E3. The at-our-feet rule is kept. **The item
+  classes wait for Batt** (A: Cyfar + Voucher + pooled, needs one more staged session; C: one
+  pooled class, enough data now; recommended C). Frames are read from the NAS after the
+  2026-10-30 ship; the GPU only after round 2's evaluation.
 
 - Round 2's classes, plus item classes from E3's labels, plus today's gef_fild10 runs as extra
   monster data:
