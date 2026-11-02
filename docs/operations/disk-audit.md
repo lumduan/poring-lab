@@ -194,9 +194,15 @@ not chosen.
 | 10-30 03:05-03:35 | the five RAM sessions (e4, f3, e3, e3x, e3b: 49 files, 11,263,515,825 bytes) | `/mnt/poring-lab-datasets/<session>/` | the AK-4 chain: a guarded prefetch out of swap at 8 MB/s, then `dataset_ship.py ship` | all five rc 0, verified, local copies deleted; /dev/shm 13 G -> 2.2 G, swap 24 -> 15 GiB used |
 | 11-02 19:56 | 30 pytest temp dirs (115,544 KiB) | deleted | rm by name (nothing read) | done |
 | 11-02 19:56 | the CPU detector's `.venv` (1,528,904 KiB) | deleted | rm (nothing read); rebuild in detector-cpu.md | done; /dev/shm 2,154 -> 548 MiB |
-| 11-03 03:06 | `renewal-study`, `rogue-ab` (identical NAS copies: 10-24, 10-27) and 7 empty dirs | deleted | size + time re-checked, then rm | scheduled |
-| 11-03 03:06 | 31 scratch items (~0.31 GB) and the detector's `model/` (48 MB) | `scratch-archive/2026-11-03/<name>/`, sha256 lists in `_checksums/` | the night chain `/dev/shm/poring-lab-tmp/night-1103/` (self-test 5/5 PASS 11-02 20:01): a guarded prefetch at 8 MB/s, sha256 from the RAM side, `rsync --no-links`, `sha256sum -c` on the NAS copy, delete; stop at the first failure, no new item after 05:30 | scheduled |
+| 11-03 03:06 | `renewal-study`, `rogue-ab` (identical NAS copies: 10-24, 10-27) and 7 empty dirs | deleted | size + time re-checked, then rm | done 03:06:02-03:06:03 |
+| 11-03 03:06 | 31 scratch items (~0.31 GB) and the detector's `model/` (48 MB) | `scratch-archive/2026-11-03/<name>/`, sha256 lists in `_checksums/` | the night chain `/dev/shm/poring-lab-tmp/night-1103/` (self-test 5/5 PASS 11-02 20:01): a guarded prefetch at 8 MB/s, sha256 from the RAM side, `rsync --no-links`, `sha256sum -c` on the NAS copy, delete; stop at the first failure, no new item after 05:30 | done 03:06:03-03:08:34, rc 0: all 32 items verified (2,169 files; ~0.34 GB paged in), 0 guard trips; 68 symlinks not copied (`payf07/sprites-all/*.act`, `*.spr`: links to client sprites, targets untouched); `/dev/shm/poring-lab-detector` removed (empty) |
 
+| 11-03 03:09 | the chain's own dir (scripts, log, sums: 36 files) | `scratch-archive/2026-11-03/night-1103/` | the same method | done, verified |
+
+- **After it (11-03 03:09 ICT):** /dev/shm 193 MiB (13 G on 10-29); swap 10 GiB used (24 GiB on
+  10-29); nothing of ours on the GPU; `data/` 431,935,488 bytes (guarded `measure:du`, 0.0 %
+  stall), unchanged since 10-29. The root LV went 433 -> 454 GB used (74 % -> 78 %) over the
+  pause: not poring-lab's (nothing of ours wrote to it); attribution open (infra observation).
 - The guarded `archive:` step takes sources only under the repo, `/home/batt/poring-lab-shm-archive`
   and `~/.cache/poring-lab`, so /dev/shm scratch uses the night chain's method instead.
 - Kept in RAM (run-time inputs, ~0.25 GB): `gat/`, `sprites/`, `talk-cal/`, `hotbar-cal/`,

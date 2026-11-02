@@ -14,9 +14,9 @@ detector runs in its OWN environment, in RAM.
 **State (2026-11-02 19:56 ICT, from `date`): the environment is REMOVED for the pause.** Batt paused
 poring-lab on 2026-10-29 (fit-first and candy-closet hold the GPU for days) and approved the RAM
 cleanup on 2026-11-02. The `.venv` (1.5 GB) was deleted. The night chain of 2026-11-03 03:06 ICT
-archives `model/` to `/mnt/poring-lab-datasets/scratch-archive/2026-11-03/detector-model/` (sha256
-list in `_checksums/detector-model.sha256`); check its row in `disk-audit.md` (moves of 2026-11-03)
-before relying on that copy. Until the rebuild, every user fails closed (`DetectorUnavailable`).
+archived `model/` to `/mnt/poring-lab-datasets/scratch-archive/2026-11-03/detector-model/` (7 files,
+each verified by sha256 on the NAS 03:06:13; the list is `_checksums/detector-model.sha256`) and
+removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails closed (`DetectorUnavailable`).
 
 ## What it is
 - `scripts/detector_worker.py`: onnxruntime on CPU (8 threads), our own letterbox / decode / NMS:
