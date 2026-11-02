@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [gef10-eyes-loot.md, gef10-detector.md, ../benchmarks/gef10-eval.md, item-class.md, rogue-gef10.md, target-items.md]
-next_action: "Build section 5 offline (synthetic tests first): several staged sessions per map in map_labels, gef10_items label / g2 / pack, Route M. Frames are read only from the NAS copies after the 2026-10-30 03:05 ship; the GPU only after round 2's evaluation."
+next_action: "PAUSED by Batt 2026-10-29 (before 19:53 ICT): fit-first and candy-closet use the GPU heavily for 2-3 days; no poring-lab step until Batt says to resume (RAM cleanup approved 2026-11-02; docs/operations/disk-audit.md, the pause). On resume: the round-3 scratch (`gef10-det/`: params.json, grf/, items/, kb/, labels/) moves to the NAS in the 2026-11-03 night chain (`scratch-archive/2026-11-03/gef10-det/`): copy it back first. ➡️ The five sessions SHIPPED 2026-10-30 03:05-03:35. Then: Build section 5 offline (synthetic tests first): several staged sessions per map in map_labels, gef10_items label / g2 / pack, Route M. Frames are read only from the NAS copies after the 2026-10-30 03:05 ship; the GPU only after round 2's evaluation."
 title: "gef10 round 3 (E5): floor-item classes from the staged sessions, on top of round 2's monsters (PROPOSED pre-registration)"
 date: 2026-10-29
 owner: Batt
@@ -34,7 +34,8 @@ before any frame of the staged sessions is read under the item rule.
   the box, the ANCHOR and T_item measured on FIT (>= 12 clean samples, else STOP), the item
   exclusions, Route M (a cached frame needs the monster labels AND every floor item's label whole).
 - **Not affecting other work:** every read of these recordings happens from the NAS copies after
-  they ship (2026-10-30 03:05-04:25), under `systemd-run --user --scope -p MemoryMax=4G
+  they ship (2026-10-30 03:05-04:25; ➡️ SHIPPED 2026-10-30 03:05-03:35 ICT, all five verified on the
+  NAS), under `systemd-run --user --scope -p MemoryMax=4G
   -p MemorySwapMax=0`, outside 09:30-10:15 / 14:00-14:45. No live client step is part of this plan.
 
 ## 2. The data and the split (FIXED HERE, before any read)

@@ -7,7 +7,7 @@ verdict_date: 2026-10-26
 verdict_ticket: null
 supersedes: null
 related: [thief-payon.md, payf07-detector.md, payf07-prep.md, renewal-feasibility.md, ../demonstrations.md, ../../config/map_zones/README.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py]
-next_action: "Batt: pick the arm (the registered verdict keeps N; the sensitivity view favours S), and decide the next step (a Kafra trip needs his OK for the NPC contact; a second Orc Lord flee proof; a gef10 detector round 2). The parent: report the second block (a9-a11) when it ends."
+next_action: "PAUSED by Batt 2026-10-29 (before 19:53 ICT): fit-first and candy-closet use the GPU heavily for 2-3 days; no poring-lab step until Batt says to resume (RAM cleanup approved 2026-11-02; docs/operations/disk-audit.md, the pause). ➡️ Since the rest of this field was written (2026-10-26): Amendments AK-4 / AK-5 (the staged item sessions e3, e3x, e3b; all SHIPPED 2026-10-30 03:05-03:35) and gef10 round 2 (scored 2026-10-29 17:04, does not pass: gef10-eval.md RESULT R2). Written 2026-10-26: Batt: pick the arm (the registered verdict keeps N; the sensitivity view favours S), and decide the next step (a Kafra trip needs his OK for the NPC contact; a second Orc Lord flee proof; a gef10 detector round 2). The parent: report the second block (a9-a11) when it ends."
 title: "The Rogue on gef_fild10: Batt's build at the same effect, no Steal vs Steal first, loot kept for the Overcharge merchant (pre-registered)"
 date: 2026-10-25
 owner: Batt
@@ -1757,7 +1757,8 @@ Batt, 2026-10-29 ~10:0x (translated), answering AK-3's report section 12:
 Batt's decision 2 (AK-4): fix the icon matcher, then run a short second session. This is
 recorded BEFORE any live step and before `cut-grf` writes anything. (AK-4's ship timing moved:
 the four sessions now ship 2026-10-30 03:05-04:25 ICT, the window home-assistant-ops OS-036
-recommends, each first paged back out of swap at 8 MB/s under the quant IO guard.)
+recommends, each first paged back out of swap at 8 MB/s under the quant IO guard. ➡️ SHIPPED
+2026-10-30 03:05-03:35 ICT: all five verified on the NAS, local copies deleted.)
 
 **1. The fix (stage@6, code in the same commit as this record, 26abd70; tests below).**
 - **Masked references from the client's own item icons:** the Thai GRF's item BMPs (resource
@@ -1822,6 +1823,7 @@ report, no retry.
 
 **After the session (diagnostic, not a gate):** once e3 ships (03:05 window), its spot-18 frames
 are re-read from the NAS copy under a 4 GB memory cap, to show what the masked rule reads there.
+➡️ e3 SHIPPED 2026-10-30 03:05-03:29; this re-read has NOT run (poring-lab paused since 2026-10-29).
 - **10:59, step 1 done:** `cut-grf --map gef_fild10` rc 0, 11 masked references written; the
   screen-cut references read cyfar 2.07, orcish_voucher 3.82, sticky_mucus 3.09, milk 1.61,
   garlet 2.56, iron 2.15, large_jellopy 1.40, rough_oridecon 2.77, green_herb 4.36,
@@ -1878,4 +1880,5 @@ gef_fild10 at our warp cells. Positive control, the same reader on e4: `attack_r
 **State at 11:24 (judged `rogue/e3b-healed.png`):** the prt_fild08 stand (268,107), immunity OFF,
 HP / SP full, weight 610, no dialog; the DB holds none of the set.
 
-**Ship:** e3b joins the 2026-10-30 03:05-04:25 chain (now five sessions, ~11 GB).
+**Ship:** e3b joins the 2026-10-30 03:05-04:25 chain (now five sessions, ~11 GB). ➡️ SHIPPED
+2026-10-30 03:30-03:35 ICT (8 files, 1.77 GB); all five on the NAS (disk-audit.md, the pause).

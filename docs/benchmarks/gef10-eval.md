@@ -7,7 +7,7 @@ verdict_date: 2026-10-29
 verdict_ticket: null
 supersedes: null
 related: [../planning/gef10-detector.md, payf07-eval.md, v2orc-vs-v1.md, ../planning/rogue-gef10.md]
-next_action: "Batt decides what follows the G1 failure (RESULT R2): the live detector stays v1. Nothing here is re-scored: a new model or a reading of G1 needs its own pre-registration."
+next_action: "PAUSED by Batt 2026-10-29 (before 19:53 ICT): fit-first and candy-closet use the GPU heavily for 2-3 days; no poring-lab step until Batt says to resume (RAM cleanup approved 2026-11-02; docs/operations/disk-audit.md, the pause). Batt decides what follows the G1 failure (RESULT R2): the live detector stays v1. Nothing here is re-scored: a new model or a reading of G1 needs its own pre-registration."
 ---
 
 # gef10: gef_fild10's species, without forgetting prt_fild08 (pre-registered 2026-10-26)

@@ -2,7 +2,7 @@
 title: "Disk audit: poring-lab's footprint on the shared root disk"
 status: living
 created: 2026-10-21
-last_reviewed: 2026-10-29
+last_reviewed: 2026-11-02
 owner: poring-lab
 ---
 
@@ -31,7 +31,8 @@ keeps scratch items up to 1 GB, 4 GB in total.
 - **Caps:** `record_session` refuses or stops below 140 GB free or above 20 GB unshipped (its
   defaults).
 - The five /dev/shm sessions still waiting (e4, f3, e3, e3x, e3b; ~11 GB) ship 2026-10-30
-  03:05-04:25 (rogue-gef10.md AK-4).
+  03:05-04:25 (rogue-gef10.md AK-4). ➡️ SHIPPED 2026-10-30 03:05-03:35 ICT, all five verified on the
+  NAS and deleted locally (section "The pause" below).
 
 ## Audit 1 -- 2026-10-21 20:34-20:42 ICT
 
@@ -179,3 +180,28 @@ db-th-data dump to the NAS then remove; the transcript to the NAS after the sess
 
 - Left locally: the empty `data/train/eval/` directory. The CPU export of the same weights stays in
   RAM (`/dev/shm/poring-lab-detector/model/gef10r2-last*`, ~16 MB).
+
+## The pause -- RAM cleanup, 2026-10-29 to 2026-11-03 (times ICT, from `date`)
+
+Batt paused poring-lab on 2026-10-29 (before 19:53): fit-first and candy-closet use the GPU heavily for
+2-3 days. Batt approved the cleanup plan on 2026-11-02 ("ตามแผน"). The core lab containers stay up
+(rathena, db, backend, desktop, sniffer, gamestream, frontend-dev): stopping them was optional and
+not chosen.
+
+| when | item | where | how | result |
+|---|---|---|---|---|
+| 10-29 19:57 | the idle vision worker (1.6 GiB RAM, nothing on the GPU) | stopped | guarded `worker-stop:vision` | the guard ABORTED the step at 19:57:33 (quant-ticker-engine full IO stall 96.1 %; at 19:58:21, with nothing of ours running, quant-postgres 53 % and quant-ticker-engine 46 % full avg10), but the stop had been sent: the container exited 19:57:51 (code 143) and stays stopped. The image `poring-lab/vision:local` is KEPT (asked by home-assistant-ops, OS-039, answered 11-02 19:4x) |
+| 10-30 03:05-03:35 | the five RAM sessions (e4, f3, e3, e3x, e3b: 49 files, 11,263,515,825 bytes) | `/mnt/poring-lab-datasets/<session>/` | the AK-4 chain: a guarded prefetch out of swap at 8 MB/s, then `dataset_ship.py ship` | all five rc 0, verified, local copies deleted; /dev/shm 13 G -> 2.2 G, swap 24 -> 15 GiB used |
+| 11-02 19:56 | 30 pytest temp dirs (115,544 KiB) | deleted | rm by name (nothing read) | done |
+| 11-02 19:56 | the CPU detector's `.venv` (1,528,904 KiB) | deleted | rm (nothing read); rebuild in detector-cpu.md | done; /dev/shm 2,154 -> 548 MiB |
+| 11-03 03:06 | `renewal-study`, `rogue-ab` (identical NAS copies: 10-24, 10-27) and 7 empty dirs | deleted | size + time re-checked, then rm | scheduled |
+| 11-03 03:06 | 31 scratch items (~0.31 GB) and the detector's `model/` (48 MB) | `scratch-archive/2026-11-03/<name>/`, sha256 lists in `_checksums/` | the night chain `/dev/shm/poring-lab-tmp/night-1103/` (self-test 5/5 PASS 11-02 20:01): a guarded prefetch at 8 MB/s, sha256 from the RAM side, `rsync --no-links`, `sha256sum -c` on the NAS copy, delete; stop at the first failure, no new item after 05:30 | scheduled |
+
+- The guarded `archive:` step takes sources only under the repo, `/home/batt/poring-lab-shm-archive`
+  and `~/.cache/poring-lab`, so /dev/shm scratch uses the night chain's method instead.
+- Kept in RAM (run-time inputs, ~0.25 GB): `gat/`, `sprites/`, `talk-cal/`, `hotbar-cal/`,
+  `walk5-cal/`, the chat guard, the capture-backend flock, the human-demo stop marker, `stage-gef10/`
+  (round 3's canopy mask and icon spec, the prefetch helper), `poring-lab-{kb,pktgen,rathena-src}`
+  (cold copies in `/home/batt/poring-lab-shm-archive`), the Frigate R3 baseline, and the clean-room
+  and route state dirs (their locks).
+- Local disk: unchanged by the pause (data/ 412 MB on 10-29; nothing moved there).

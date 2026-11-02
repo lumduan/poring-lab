@@ -1,6 +1,6 @@
 ---
 doc_type: runbook
-status: ACTIVE
+status: "ACTIVE; the RAM environment was REMOVED 2026-11-02 19:56 ICT for the pause (rebuild below)"
 related: [../demonstrations.md, ../adr/0018-component-licensing.md]
 ---
 
@@ -10,6 +10,13 @@ related: [../demonstrations.md, ../adr/0018-component-licensing.md]
 detection on the click-decision frame (Batt's decision 3, "CPU is fine, R2"). The host `.venv` has
 no torch by design, and the vision container is refused while training holds the GPU (R2), so the
 detector runs in its OWN environment, in RAM.
+
+**State (2026-11-02 19:56 ICT, from `date`): the environment is REMOVED for the pause.** Batt paused
+poring-lab on 2026-10-29 (fit-first and candy-closet hold the GPU for days) and approved the RAM
+cleanup on 2026-11-02. The `.venv` (1.5 GB) was deleted. The night chain of 2026-11-03 03:06 ICT
+archives `model/` to `/mnt/poring-lab-datasets/scratch-archive/2026-11-03/detector-model/` (sha256
+list in `_checksums/detector-model.sha256`); check its row in `disk-audit.md` (moves of 2026-11-03)
+before relying on that copy. Until the rebuild, every user fails closed (`DetectorUnavailable`).
 
 ## What it is
 - `scripts/detector_worker.py`: onnxruntime on CPU (8 threads), our own letterbox / decode / NMS:
@@ -33,12 +40,20 @@ All of it lives in RAM; nothing touches the shared disk, the host `.venv` or `uv
     uv venv -q .venv --python 3.12
     uv pip install -q --python .venv/bin/python --index-url https://download.pytorch.org/whl/cpu torch torchvision
     uv pip install -q --python .venv/bin/python "ultralytics==8.4.165" onnx onnxslim onnxruntime opencv-python-headless
-    cp ~/docker/poring-lab/data/train/v1png-20261008/weights/last.pt model/v1png-last.pt     # LIVE (v1)
-    cp ~/docker/poring-lab/data/train/v0png-20261006/weights/best.pt model/v0png-best.pt     # rollback
+    N=/mnt/poring-lab-datasets/archive/train   # data/train moved to the NAS (2026-10-21, 2026-10-29)
+    cp $N/v1png-20261008/weights/last.pt model/v1png-last.pt     # LIVE (v1), sha256 03d53979...
+    cp $N/v0png-20261006/weights/best.pt model/v0png-best.pt     # rollback, sha256 b5966feb...
     cd model && for m in v1png-last v0png-best; do ../.venv/bin/python -c "from ultralytics import YOLO; import shutil; \
         shutil.move(YOLO('$m.pt').export(format='onnx', imgsz=(736, 1280), simplify=True, device='cpu'), \
         '$m-736x1280.onnx')"; done
     rm -rf /dev/shm/poring-lab-detector/uv-cache        # ~1.4 GB of RAM back
+
+➡️ The `cp` lines read `~/docker/poring-lab/data/train/...` until 2026-11-02; those folders are on the
+NAS now (both .pt sha256 checked there 2026-11-02 19:5x: v1 `03d53979...`, v0 `b5966feb...`).
+**Shortcut after the 2026-11-03 archive:** copy the exported files back instead of exporting again
+(`cp .../scratch-archive/2026-11-03/detector-model/* model/`, then `sha256sum -c` of
+`_checksums/detector-model.sha256` inside `model/`). It also holds round 2's CPU export
+(`gef10r2-last-736x1280.onnx` + `.names.json`). The venv is still installed as above.
 
 Check the export against the pre-registration (sha256 of the .pt is pinned there):
 
