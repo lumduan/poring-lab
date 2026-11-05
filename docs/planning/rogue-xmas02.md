@@ -421,3 +421,30 @@ at 8cbc09c 20:42:38 on the even stands; the odd stands scored once at 20:42:55):
   here** (three FAILs of the same bar): whether the round-3 reader is good enough for the runner
   is Batt's decision. Pilot p2 (4E/4F: "then, not a bar") measures it live.
 
+**Pilot p2 (session 20261105T223633-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p2; the pilot
+p1 command with `--minutes 15 --label xmas02-p2`; the round-3 reader with PosConfirm; the Rogue
+immune; 22:36:33-22:52:26; unrecorded):**
+
+| | pilot p1 (15:27) | pilot p2 (22:37) |
+|---|---|---|
+| ran | 4.5 min, stopped: "position unread for 30 s" | **15.0 min, its own time box** |
+| Fly Wings for an unread position | 3 | **0** |
+| Fly Wings for a dead end | 1 | 7 (28 / h) |
+| walk clicks (trusted) | 53 (32) | 275 (180) |
+| engagements / strikes | 2 / 2 | 6 / 5 + 9 burst clicks |
+| kills (judge) | 1 | 1 (4.0 / h) |
+| hard bars (packets) | pass | **pass**: 0 NPC contact, 0 non-monster attack; the 7 same-map changes are the Fly Wings |
+| fallback reads waiting for a 2nd read | - | 35 (`pos_light_unconfirmed`) |
+
+- The HP loop's reads held no position 10.4 % of the time (264 of 2,532: after the Fly Wings'
+  2.5 s settle, unconfirmed fallback reads, unread strips); none lasted long enough for an
+  escape.
+- **The next limit is the walk, not the position:** 7 dead ends in 15 min (each a Fly Wing to a
+  random cell, often inside the maze), and few engagements (the v1 detector's generic class on
+  this map's species is what X2 measures).
+- Session and judge archived (scratch-archive/2026-11-05/sessions/, sha256 checked).
+
+**X2's recording started 22:54:09** (`record_session.py --backend rdp --format png --fps 1 --label
+xmas02-x2 --seconds 1320 --out /home/batt/poring-lab-rec --max-bytes 3G`; the disk 131.8 GB free
+against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
+
