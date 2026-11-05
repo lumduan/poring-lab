@@ -16,6 +16,13 @@ The hunting layout (docs/client/rathena-client.md "The hunting layout"):
   (battle, EXP, item get/drop... lines; Batt's category set) so the combat log can be read;
   Regular Chat keeps the typed commands, and the /where fallback switches to it and back.
 The standard layout: 4 rows, the panel expanded, Regular Chat shown.
+➡️ SUPERSEDED FOR THE CHAT WINDOW on 2026-11-05 (Batt): the chat window has its own standard,
+docked at the bottom-left with 6 lines and ONE tab, Battle Log (scripts/chat_window.py, checked
+at every game entry and before every typed line). So both layouts now show Battle Log; a tab that
+is not in chat_window.TABS is REFUSED, never clicked (the empty tab strip is click-through: a
+click there walks). The tab row, the tab click points and the chat rectangle of ``ui_windows``
+follow chat_window.active(); RECTS keeps the RECORDED (frozen-layout) values for the offline
+tools that read older sessions.
 
 The run-time UI rectangles (route_preview.UI_WINDOWS and everything built on it) follow the
 SELECTED layout of this process (``select`` before the mask modules are imported; the runner does
@@ -51,19 +58,40 @@ RECTS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
     "hunt": ((0, 0, 220, 143), (230, 0, 520, 33), (750, 0, 828, 36), (1135, 14, 1266, 162),
              (0, 532, 600, 626), (0, 668, 50, 720), (1228, 668, 1280, 720)),
 }  # fmt: skip
-TARGET = {"standard": {"rows": 4, "panel": "expanded", "tab": "regular"},
+# the tab: Battle Log in both since 2026-11-05 (Batt: the one tab of the chat window's standard;
+# the standard layout showed Regular Chat before)
+TARGET = {"standard": {"rows": 4, "panel": "expanded", "tab": "battle"},
           "hunt": {"rows": 1, "panel": "collapsed", "tab": "battle"}}  # fmt: skip
 # template crops (x0, y0, x1, y1) and the click points of the client's own controls
 # the arrow's crop leaves out the red notice badge drawn right of it (x >= 117: v43 run 2's start)
-BOX = {"tabs": (2, 530, 160, 547), "arrow": (102, 133, 114, 144), "row1": (231, 3, 247, 22),
-       "row2": (232, 44, 246, 64), "row4": (232, 107, 246, 127)}  # fmt: skip
+BOX = {"arrow": (102, 133, 114, 144), "row1": (231, 3, 247, 22), "row2": (232, 44, 246, 64),
+       "row4": (232, 107, 246, 127)}  # fmt: skip
 ARROW_PX = (109, 138)
-TAB_PX = {"battle": (42, 538), "regular": (119, 538)}
 # The chat TABS are translucent (the ground shows through: a whole-strip template failed on v43
-# run 2's start); the SELECTED tab alone draws a white top border on row TAB_ROW over its span:
-# 253-255 grey vs 77-159 for the other, on every background seen. Its "distance" is 255 - that
-TAB_ROW = 529
+# run 2's start); the SELECTED tab alone draws a white top border on the tab row over its span:
+# 253-255 grey vs 77-159 for the other, on every background seen. Its "distance" is 255 - that.
+# The row is chat_window.active().tab_row (529 in the frozen layout, 582 in the 2026-11-05
+# standard); a tab's click point is 9 px below it
 TAB_SPAN = {"battle": (12, 72), "regular": (88, 150)}
+TAB_X = {"battle": 42, "regular": 119}
+CHAT_INDEX = 4  # the chat window's entry in a RECTS tuple (work_zone.WINDOW_NAMES order)
+
+
+def _chat() -> Any:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import chat_window
+
+    return chat_window
+
+
+def tab_row() -> int:
+    return int(_chat().active().tab_row)
+
+
+def tab_px(which: str) -> tuple[int, int]:
+    return (TAB_X[which], tab_row() + 9)
+
+
 MATCH = {"tabs": 25.0, "arrow": 15.0, "row": 10.0}
 OTHER_MIN = 25.0  # the arrow's other state must be at least this far
 
@@ -81,7 +109,11 @@ def active() -> str:
 
 
 def ui_windows(name: str | None = None) -> tuple[tuple[int, int, int, int], ...]:
-    return RECTS[name or active()]
+    """The LIVE windows of layout ``name``: RECTS with the chat window where
+    chat_window.active() puts it (the 2026-11-05 standard unless a replay selected "legacy")."""
+    rects = list(RECTS[name or active()])
+    rects[CHAT_INDEX] = _chat().active().rect
+    return tuple(rects)
 
 
 def _grey(img: Any, box: tuple[int, int, int, int]) -> Any:
@@ -124,8 +156,9 @@ def read(img_rgb: Any, tm: Mapping[str, Any]) -> dict[str, Any]:
     box = {"arrow_collapsed": "arrow", "arrow_expanded": "arrow", "row1": "row1", "row2": "row2",
            "row4": "row4"}  # fmt: skip
     d = {k: float(np.abs(_grey(img_rgb, BOX[b]) - tm[k]).mean()) for k, b in box.items()}
+    row = tab_row()
     for tab, (x0, x1) in TAB_SPAN.items():
-        d[f"tabs_{tab}"] = 255.0 - float(_grey(img_rgb, (x0, TAB_ROW, x1, TAB_ROW + 1)).mean())
+        d[f"tabs_{tab}"] = 255.0 - float(_grey(img_rgb, (x0, row, x1, row + 1)).mean())
     return {**decide(d), "dist": {k: round(v, 1) for k, v in d.items()}}
 
 
@@ -145,7 +178,8 @@ def next_step(state: Mapping[str, Any], name: str) -> str | None:
     if state["panel"] != t["panel"]:
         return "arrow"
     if state["tab"] != t["tab"]:
-        return f"tab:{t['tab']}"
+        # a tab the chat window does not have is never clicked (click-through strip: a walk)
+        return f"tab:{t['tab']}" if t["tab"] in _chat().TABS else "unknown"
     return None
 
 
@@ -206,18 +240,23 @@ def ensure(agent: Any, screen: Any, name: str, max_steps: int = 10) -> dict[str,
         elif step == "arrow":
             _ui_click(agent, *ARROW_PX)
         else:
-            _ui_click(agent, *TAB_PX[step.split(":", 1)[1]])
+            _ui_click(agent, *tab_px(step.split(":", 1)[1]))
         steps.append(step)
     raise LayoutError(f"layout {name} not reached in {max_steps} steps: {steps}")
 
 
 def select_tab(agent: Any, screen: Any, which: str) -> None:
-    """Show chat tab ``which`` ("battle" / "regular") and verify it; LayoutError if not."""
+    """Show chat tab ``which`` ("battle" / "regular") and verify it; LayoutError if not. A tab the
+    chat window's standard does not have (chat_window.TABS; Regular Chat is gone since
+    2026-11-05) is refused BEFORE any input: the empty tab strip passes a click to the world."""
+    if which not in _chat().TABS:
+        raise LayoutError(f"chat tab {which!r} is not in the chat window's standard "
+                          f"{_chat().TABS}: nothing clicked")  # fmt: skip
     tm = load_templates()
     for _ in range(2):
         if state_now(agent, screen, tm).get("tab") == which:
             return
-        _ui_click(agent, *TAB_PX[which])
+        _ui_click(agent, *tab_px(which))
     if state_now(agent, screen, tm).get("tab") != which:
         raise LayoutError(f"chat tab {which} not shown")
 

@@ -16034,6 +16034,59 @@ seed 24400, judged pre-run frame thief-pre-s-pilot.png). The time box ended it:
     adopted.
   - A second block (a9-a11, reported only) runs after the store.
 
+### 4.06 chat-window@1: the chat window's STANDARD place, size and padlock, checked at every game entry and before every typed line (pre-registered 2026-11-05 at this entry's commit time, BEFORE the live checks C1-C4; Batt ~11:2x ICT)
+
+**Why.** On 2026-11-04 a moved chat window refused every typed line of the guest demo (`chat_open`
+76-141 against <= 6). Batt, 2026-11-05 (verbatim): "เริ่มเกมมาให้ เช็คช่อง chat ก่อนเลย ว่าอยู่
+ตำแหน่งไหน โดยจะให้ลากไปวางชิดมุมซ้ายล่างสุดของจอ และเปิดให้มันแสดงประมาณ 6 บรรทัด ... ให้ค่านี้เป็น
+ค่าเริ่มต้นมาตรฐานไว้เลย ทำเป็นระบบเช็คก่อน เมื่อเข้า map ทุกครั้ง" ("at game start check the chat
+window first; drag it flush to the bottom-left corner, about 6 lines; make this the standard
+default; a check every time we enter a map"). His answers: he showed the resize live (F10); lock
+the padlock after docking; the chat window only.
+
+**What was built** (`scripts/chat_window.py`; docs/client/rathena-client.md "The chat window
+standard"): the standard (left 0, last row 719, 6 lines, padlock closed, one tab) and the frozen
+layout as ONE geometry for every reader; a pixel reader (the scrollbar's arrows, the white top
+border, the input bar; the padlock by two local templates); `ensure`, the client's own controls
+only (F10, the padlock click, Enter behind the UI gate, a drag of the white input bar), each step
+verified on a fresh read, an unreadable state or a step without effect stops with a frame. Hooks:
+`ro_agent.enter_game` (every game entry) and `ro_agent.open_chat` (before every typed line, after
+the UI gate). The typing path, client_layout, where_fix, chat_cue and battle_log's live crop follow
+the standard; replays of older sessions keep the frozen layout. Tests: `test_chat_window.py`
+(the geometry pins every old constant; synthetic windows of every size, open / closed input,
+moved, hidden, bar alone, obscured; a simulated client driven to the standard with no world
+press), the click census (+1, the padlock), the layout / chat_cue / open_chat tests updated.
+
+**Live checks** (the GM Valcd8bd6 on prt_fild08, immune; RDP; ASSIST with no lease; a judged
+screenshot before each; the agent's input only through ro_agent sessions):
+- **C1, the fast path:** `chat_window.py ensure` on the standard window. PASS: standard, 0 steps,
+  no input event of ours in the input log between its start and end.
+- **C2, the deliberate positive case:** with the client's own controls the agent makes the window
+  NON-standard like 11-04: padlock opened, the input closed, the window dragged ~80 px up and ~40 px
+  right, F10 x2 (12 lines). Then `chat_window.py ensure`. PASS, all of:
+  (a) the standard on a fresh read (left 0, bottom 719, 6 lines, padlock locked) within 14 steps;
+  (b) NO world press: every agent press in the input log of [staging start, ensure end] lies on the
+      padlock body or the white input bar; the sniffer shows 0 self_move_request, 0
+      attack_request, 0 npc_contact and no map change of the GM in that window
+      (`record_session.packets_for`); the GM's minimap cell is the same before and after;
+  (c) a judged screenshot after.
+- **C3, typing at the standard place:** one `/where` through ro_agent (UI gate, chat window check,
+  `chat_open` at (0, 699), the click into (300, 708)). PASS: the line reaches the server (a cs
+  chat event in the sniffer, which is also C2's visibility control) and the reply is shown.
+  where_fix's read of it (at the standard message area) is recorded; if the reply does NOT show
+  on the one Battle Log tab, that is recorded as a finding for Batt (the /where fallback of the
+  hunting runs needs it), not as a pass.
+- **C4, the game-entry hook:** the window made non-standard (F10 x1: 9 lines, padlock opened), then
+  the character-select round trip (Escape -> the game option window -> character select -> the
+  slot -> `enter_game`). PASS: enter_game's own check restores the standard (its log line names
+  enter_game) and the next read is standard.
+- Any stop, an unknown UI state, a map change or an NPC contact ends the checks (hard bars).
+
+**Not in scope:** the hotkey bar and Basic Info (Batt: the chat window only); the hunting
+runner's v43+ two-tab layout (Regular Chat is gone: `client_layout.select_tab("regular")` now
+refuses before any input); the S2 console path (the reader is proven on RDP only: a standard
+window passes there, nothing is fixed).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

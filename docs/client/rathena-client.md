@@ -399,6 +399,10 @@ Batt's order: "players do this; it uncovers play area". Changed only through the
 | menu icon panel | under Basic Info, to y 326 | collapsed: Basic Info ends at y 143; HP / SP / levels / weight stay | Basic Info's own arrow at (109, 138) (up = expanded, down = collapsed) |
 | chat window | one window, (0, 531)-(600, 626) | the same place; tabs "Battle Log, Regular Chat"; Battle Log shown | a click on a tab: Battle Log (42, 538), Regular Chat (119, 538) |
 
+➡️ **The chat window row is SUPERSEDED since 2026-11-05** (Batt): the chat window has its own
+standard, docked at the bottom-left with 6 lines, one tab (Battle Log), the padlock closed. See
+"The chat window standard" below. The other rows stand.
+
 - The UI covers 21.0 % of the game frame in the standard layout and 13.6 % in the hunting one: the
   play area goes from 79.0 % to 86.4 %.
 - The standard layout keeps the same chat window; only Regular Chat is shown there. The tab ORDER
@@ -450,6 +454,73 @@ the NAS `human-demos/`, his input log local only):**
 - Not used at run time any more: the "You got" chat cue (the fixed loot workflow does not read it).
   The badge `gm_state.BADGE_BOX` sits inside the icon panel: collapsed, it is not seen (the
   standard restore expands the panel first).
+
+## The chat window standard (2026-11-05, Batt; `scripts/chat_window.py`)
+
+Batt's order, 2026-11-05 ~11:2x: "at game start, check the chat window first; drag it flush to
+the bottom-left corner and make it show about 6 lines; make this the standard default; check it
+every time we enter a map". The day before, a moved chat window had refused every typed line of
+the guest demo (`chat_open` 76-141 against <= 6). His answers to the three questions: he showed
+the resize live (F10), the padlock is CLOSED after docking, and the check covers the chat window
+only (the hotkey bar and Basic Info stay as the scripts set them).
+
+**The standard (measured on Batt's setup 11:32, client px of the 1280 x 720 game region):**
+
+| what | value |
+|---|---|
+| place | docked: left edge x 0, last row y 719 (the client's bottom-left corner) |
+| size | 6 message lines: the message area's white top border at y 598, the selected tab's at 582 |
+| open input bar | white field y 700-716 (frame 696-719); `chat_open` box (0, 699, 570, 12); click into it at (300, 708) |
+| padlock | CLOSED; its body at x 580-594, y 589-594; click point (585, 591) |
+| tabs | one, Battle Log (Regular Chat is gone since 2026-11-04) |
+
+The frozen Phase 2 layout of every session before 2026-11-05 is the same window with 3 lines,
+95 px higher (last row y 624). One `Geometry` gives both and every reader's numbers
+(`chat_window.LEGACY` / `STANDARD`; `test_chat_window.py` pins each old constant).
+
+**The client's controls (Batt's demonstration 11:38, his input log + frames; then the agent's
+probes 11:44-11:46):**
+- **SIZE: F10**, or the round icon at the input bar's right end (its tooltip: "Change size(F10)").
+  One press: 3 -> 6 -> 9 -> 12 -> 15 lines -> the window HIDDEN -> the input bar alone -> 3. The
+  bottom stays put; each step moves the top by 42 px (3 lines of 14 px). F10 works with the
+  padlock closed (the agent's 7-press cycle, 11:45).
+- **PLACE:** a left drag on the WHITE INPUT BAR, only while the padlock is OPEN (Batt's tip,
+  2026-11-04). While the button is held the client draws the whole window dimmed (whites ~150).
+- **The input bar is drawn only while the chat input is OPEN.** With it closed (Enter), the message
+  area runs down to the bottom and the keyboard icon shows a red cross; the window's place and size
+  are the same.
+- **PADLOCK:** one click toggles it. Open: keyboard, settings, ">>", "+", "-", open padlock (x
+  517-594). Closed: keyboard, settings, closed padlock (x 553-590). "+" / "-" ADD / DELETE TABS
+  (2026-11-04): never clicked; the "-" ends at x 577.
+- The scrollbar (x 585-592) has an up arrow at top + 5..9 and a down arrow at bottom - 34..30, open
+  or closed input alike: the reader's anchors. The pointer or the size tooltip over them reads
+  "obscured", never a size.
+
+**The check** (`chat_window.ensure`), at every game entry (`ro_agent.enter_game`) and before every
+typed line (`ro_agent.open_chat`, after the UI gate, before the Enter):
+1. one read: standard -> nothing is sent;
+2. otherwise the pointer is parked and each step is read again on a fresh frame: F10 while the
+   window is hidden or the bar alone; then the place (open the padlock; open the input by Enter
+   behind the UI gate; drag the white bar to (300, 708)); then the size (F10 until 6 lines); then
+   the padlock closed;
+3. an unreadable state, a step without effect or more than 8 F10 presses stop with a saved frame
+   (`/dev/shm/poring-lab-tmp/chat-window/`); nothing is typed then.
+- RDP only: on another display path a standard window passes, but nothing is fixed (not proven).
+- Padlock templates: `data/ui_anchors/chat_window/padlock.npz` (client pixels, local only; cut
+  with `chat_window.py cut-padlock OPEN.png LOCKED.png`).
+
+    uv run python scripts/chat_window.py read      # no input
+    uv run python scripts/chat_window.py ensure    # reach the standard
+
+**What follows the standard** (`chat_window.active()`; `PORING_CHAT_GEOMETRY=legacy` for replays
+and judges of older sessions): ro_agent's `chat_open` box and `chat_input` click,
+client_layout's tab row / tab clicks / the live chat rectangle of `ui_windows()` (route_preview,
+loot1.in_ui, ui_mask), where_fix's and chat_cue's areas, battle_log's live crop (the newest 3 of
+the 6 lines; `replay` picks the geometry by the SID's date, `--chat` to override).
+**What does not (recorded sessions only, or not live):** `client_layout.RECTS` (the RECORDED
+layouts, read by the offline tools), mvp_watch's rectangles (study / proof scripts only),
+bench.py's fidelity crops, `poring_env.ui_anchors`' chat window spec (its template was cut with two
+tabs at (0, 531)), detector_vs_packets' and label_quality's copies.
 
 ## Server side (this repo)
 

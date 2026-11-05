@@ -127,6 +127,11 @@ ALLOWED = {
                                     "Basic Info's arrow and a chat TAB, two motions, each step "
                                     "verified on pixels (the chat's message area is "
                                     "click-through: only these solid elements)"),
+    "scripts/chat_window.py": (1, "UI only: the chat window's PADLOCK (Batt 2026-11-05: lock "
+                                  "after docking), at the window found on pixels, two motions "
+                                  "from the right (the '-' delete-tab icon is left of it); its "
+                                  "drag presses the WHITE INPUT BAR only (solid UI) and both are "
+                                  "verified on a fresh read; F10 is a key"),
 }  # fmt: skip
 
 

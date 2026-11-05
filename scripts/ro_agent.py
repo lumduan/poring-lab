@@ -348,6 +348,14 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
     meta = signature_path(state).with_suffix(".json")
     x, y, w, h = game_region()
+    if state == "chat_open":
+        # the open input bar of the chat window's STANDARD place (Batt 2026-11-05: docked at the
+        # bottom-left, 6 lines; chat_window.py). The template is the same bar: the saved box
+        # [0, 604, 570, 12] is the frozen layout's (chat_window.LEGACY), 95 px higher
+        import chat_window
+
+        dx, dy, bw, bh = chat_window.active().chat_open_box
+        return x + dx, y + dy, bw, bh
     if meta.exists():
         dx, dy, bw, bh = json.loads(meta.read_text())["box"]
         return x + dx, y + dy, bw, bh
@@ -1149,9 +1157,29 @@ def enter_game(agent: Agent, screen: Screen, which: str) -> None:
     for _ in range(20):
         if not black(screen):
             log(f"{which} in game: online=1 and drawing")
+            ensure_chat_window(agent, screen, f"enter_game:{which}")
             return
         time.sleep(1)
     raise Stop(f"{which}: online=1 but the game region stays black")
+
+
+CHAT_SETTLE_S = 8.0  # after a login the HUD draws a moment after the scene (no window yet: wait)
+
+
+def ensure_chat_window(agent: Agent, screen: Screen, why: str) -> None:
+    """THE CHAT WINDOW CHECK (Batt 2026-11-05: "check the chat window first, every time we enter
+    the game"): its standard place, size and padlock (chat_window.py), restored through the
+    client's own controls; a failure stops here, before anything is typed. On 11-04 a moved
+    window refused every typed line of the guest demo."""
+    import chat_window
+
+    end = time.monotonic() + CHAT_SETTLE_S
+    while chat_window.check(screen) is None and time.monotonic() < end:
+        time.sleep(0.5)  # the HUD not drawn yet; a hidden window stays None and ensure shows it
+    try:
+        chat_window.ensure(agent, screen, why=why)
+    except chat_window.ChatWindowError as exc:
+        raise Stop(str(exc)) from None
 
 
 def create_char(agent: Agent, screen: Screen, which: str) -> None:
@@ -1218,7 +1246,7 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
         "password": (597, 521),
         "login_button": (740, 523),
         "server_ok": (714, 555),
-        "chat_input": (300, 613),
+        # "chat_input": the chat window's standard place (chat_window.active().input_px, below)
         # character select / make (2026-10-05, the th client: the same kRO UI as the main one)
         "slot1": (231, 156),
         "char_name": (742, 354),
@@ -1229,6 +1257,10 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
 
 def layout(name: str) -> tuple[int, int]:
     _, _, w, h = game_region()
+    if name == "chat_input" and (w, h) == (1280, 720):
+        import chat_window  # the chat window's standard place (Batt 2026-11-05)
+
+        return at(*chat_window.active().input_px)
     try:
         dx, dy = LAYOUTS[(w, h)][name]
     except KeyError:
@@ -1257,6 +1289,9 @@ def open_chat(agent: Agent, screen: Screen) -> None:
     import ui_gate
 
     ui_gate.ensure_clear(agent, screen, why="open_chat")
+    # THE CHAT WINDOW CHECK (Batt 2026-11-05) before the Enter: a window moved or resized since the
+    # last line is put back first (one read and no input when it is in place)
+    ensure_chat_window(agent, screen, "open_chat")
     # Enter toggles an EMPTY input. The signature can miss an input that IS open (the blinking text
     # cursor, 2026-10-02): then the first Enter closed it -- so toggle up to twice.
     pressed: int | None = None

@@ -30,10 +30,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 CUES = ROOT / "data/ui_anchors/chat_cues.npz"
-# client px: the message lines only (the frozen layout). NOT where_fix's (0, 545, 640, 600): that
-# one holds the scrollbar's white arrows (x ~585) and the input box's white border (y ~595), which
-# a text mask reads as a newer "line" (the 2026-10-09 00:41 negative case, in demonstrations.md)
-CHAT_AREA = (0, 545, 570, 593)
+# client px: the message lines only, chat_window.active().cue_area: (0, 545, 570, 593) in the
+# frozen layout, (0, 598, 570, 688) in the chat window's 2026-11-05 standard. NOT where_fix's area:
+# that one holds the scrollbar's white arrows (x ~585) and the input box's white border, which a
+# text mask reads as a newer "line" (the 2026-10-09 00:41 negative case, in demonstrations.md)
 LINE_PITCH = 14
 PREFIX_PX = 48  # "<first word> <second word>" of the two cues, from the first ink column
 MATCH_IOU = 0.8  # the best shifted IoU a line's prefix must reach against a template
@@ -41,8 +41,15 @@ SHIFT = 1  # px: the template is tried at +-SHIFT in x and y
 CHANGED_PX = 40  # coloured text pixels that must differ for "a new line"
 
 
+def _area() -> tuple[int, int, int, int]:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import chat_window
+
+    return chat_window.active().cue_area
+
+
 def area_of(rgb: np.ndarray) -> np.ndarray:
-    x0, y0, x1, y1 = CHAT_AREA
+    x0, y0, x1, y1 = _area()
     return np.asarray(rgb)[y0:y1, x0:x1, :3].astype(np.int32)
 
 

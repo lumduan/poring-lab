@@ -28,7 +28,8 @@ import ro_agent as r  # noqa: E402
 
 TEMPLATES = r.ROOT / "data/where/chat_glyphs_rdp.npz"  # where@1 (strict colour, exact match)
 TEMPLATES_V2 = r.ROOT / "data/where/chat_glyphs_rdp_v2.npz"  # where@2 (yellowish, majority)
-CHAT_AREA = (0, 545, 640, 600)  # client px (x0, y0, x1, y1): the message area, frozen layout
+# the message area (client px x0, y0, x1, y1) is chat_window.active().message_area: (0, 545, 640,
+# 600) in the frozen layout, (0, 598, 640, 695) in the chat window's 2026-11-05 standard
 YELLOW = np.array([104, 252, 255])  # BGR
 COLOUR_TOL = 24
 LINE_PITCH = 14
@@ -347,7 +348,9 @@ def stable_area(screen: Any) -> Any:
     picture first and refines it, and a grab ~1 s after the text appeared lost pixels of it
     (2026-10-07 design probe). Two consecutive identical newest lines, or the last grab after
     STABLE_MAX_S."""
-    x0, y0, x1, y1 = CHAT_AREA
+    import chat_window
+
+    x0, y0, x1, y1 = chat_window.active().message_area
     gx, gy, _, _ = r.game_region()
     prev, area = None, None
     end = time.monotonic() + STABLE_MAX_S

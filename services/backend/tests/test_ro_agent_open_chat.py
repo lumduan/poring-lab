@@ -50,6 +50,12 @@ def gate(monkeypatch: pytest.MonkeyPatch) -> Gate:
 @pytest.fixture
 def r(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, gate: Gate) -> Any:
     mod = load()
+
+    # the chat window check (its own tests: test_chat_window.py) recorded in the gate's order
+    def chat_check(agent: Any, screen: Any, why: str) -> None:
+        gate.calls.append(f"chat_window:{why}")
+
+    monkeypatch.setattr(mod, "ensure_chat_window", chat_check)
     monkeypatch.setattr(mod.time, "sleep", lambda s: None)
     monkeypatch.setattr(mod, "is_state", lambda screen, st, after_ns=None: False)  # never at first
     monkeypatch.setattr(mod, "layout", lambda name: (10, 10))
@@ -101,3 +107,23 @@ def test_the_ui_gate_runs_before_any_key_and_its_stop_sends_none(r: Any, gate: G
     with pytest.raises(r.Stop, match="npc_dialog_open"):
         r.open_chat(a, Screen())
     assert gate.calls == ["open_chat"] and a.keys_sent == [] and a.clicks == []
+
+
+def test_the_chat_window_check_runs_after_the_gate_and_before_any_key(
+    r: Any, gate: Gate, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-05: the chat window is put back to its standard before anything is typed;
+    its stop (a window it cannot restore) sends no key."""
+    monkeypatch.setattr(r, "is_state", lambda screen, st, after_ns=None: True)  # already open
+    a = Agent()
+    r.open_chat(a, Screen())
+    assert gate.calls == ["open_chat", "chat_window:open_chat"] and a.keys_sent == []
+
+    def stop(agent: Any, screen: Any, why: str) -> None:
+        raise r.Stop("chat window: 'unknown' at ...")
+
+    monkeypatch.setattr(r, "ensure_chat_window", stop)
+    b = Agent()
+    with pytest.raises(r.Stop, match="chat window"):
+        r.open_chat(b, Screen())
+    assert b.keys_sent == [] and b.clicks == []

@@ -153,6 +153,10 @@ class Render:
     min_ink: int = MIN_INK
     min_glyph_w: int = 1
     colour_check: bool = False  # True: an event's "colour" must match the line's colour group
+    # the chat window's place (for_geometry): the crop's top / bottom rows and the tab-edge row
+    crop_y0: int = CROP[1]
+    crop_y1: int = CROP[3]
+    tab_edge_y: int = TAB_EDGE_Y
 
     @property
     def band_h(self) -> int:
@@ -162,11 +166,42 @@ class Render:
     def crop(self) -> tuple[int, int, int, int]:
         """The grab: the tab strip and every band."""
         last = self.line_y0 + self.line_pitch * self.n_lines + self.band_below
-        top = min(CROP[1], self.line_y0 - self.band_above)
-        return (0, top, max(CROP[2], self.text_x1), max(CROP[3], last))
+        top = min(self.crop_y0, self.line_y0 - self.band_above)
+        return (0, top, max(CROP[2], self.text_x1), max(self.crop_y1, last))
 
 
 EN_RENDER = Render()
+
+
+def for_geometry(render: Render, g: Any) -> Render:
+    """``render`` (its rows measured in the FROZEN layout, chat_window.LEGACY) moved to the chat
+    window ``g`` (a chat_window.Geometry): the bands to the NEWEST n_lines lines (the bottom
+    ones), the tab edge with the message area's top border, the crop with both (2026-11-05: the
+    standard docks the window at the bottom-left with 6 lines; chat_window.py)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import chat_window as cw
+
+    leg = cw.LEGACY
+    d_lines = g.line_y0(render.n_lines) - leg.line_y0(render.n_lines)
+    d_top = g.text_top - leg.text_top
+    return dataclasses.replace(render, line_y0=render.line_y0 + d_lines,
+                               crop_y0=render.crop_y0 + (g.battle_crop[1] - leg.battle_crop[1]),
+                               crop_y1=render.crop_y1 + (g.battle_crop[3] - leg.battle_crop[3]),
+                               tab_edge_y=render.tab_edge_y + d_top)  # fmt: skip
+
+
+CHAT_CUTOVER_SID = "20261105T12"  # sessions from here on: the chat window's 2026-11-05 standard
+
+
+def geometry_for_sid(sid: str, name: str | None = None) -> Any:
+    """The chat window a recorded session shows: ``name`` ("legacy" / "standard") when given, else
+    the frozen layout for every session before CHAT_CUTOVER_SID (by the SID's date prefix)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import chat_window as cw
+
+    if name:
+        return cw.GEOMETRIES[name]
+    return cw.LEGACY if sid[:11] < CHAT_CUTOVER_SID else cw.STANDARD
 
 
 # --- pixels -> ink --------------------------------------------------------------------------------
@@ -934,7 +969,8 @@ def tab_is_battle(crop_rgb: np.ndarray, render: Render = EN_RENDER) -> bool | No
     their fill tracks the scene behind them (dark grass: a template distance of 50 against the
     Battle Log template and 86 against Regular Chat); the border does not."""
     cx, cy = render.crop[0], render.crop[1]
-    row = luma(np.asarray(crop_rgb)[TAB_EDGE_Y - cy : TAB_EDGE_Y - cy + 1, :, :3])[0]
+    ey = render.tab_edge_y
+    row = luma(np.asarray(crop_rgb)[ey - cy : ey - cy + 1, :, :3])[0]
     edge = row > TAB_EDGE_LUMA
     fb = float(edge[BATTLE_SPAN[0] - cx : BATTLE_SPAN[1] - cx].mean())
     fr = float(edge[REGULAR_SPAN[0] - cx : REGULAR_SPAN[1] - cx].mean())
@@ -1207,7 +1243,9 @@ def pick_lang(spec: str | None, sample: Callable[[tuple[int, int, int, int]], li
 
 
 def replay(sid: str, frames_dir: Path | None = None, out: Path | None = None,
-           gl: Glyphs | None = None, lang: str | None = None) -> dict[str, Any]:  # fmt: skip
+           gl: Glyphs | None = None, lang: str | None = None,
+           chat: str | None = None) -> dict[str, Any]:  # fmt: skip
+    """``chat``: the chat window's geometry ("legacy" / "standard"); default by the SID's date."""
     frames_dir = frames_dir or RECORDINGS / sid / "frames"
     out = out or DEMO / sid / "battle_log.jsonl"
     files = frame_files(frames_dir)
@@ -1224,6 +1262,7 @@ def replay(sid: str, frames_dir: Path | None = None, out: Path | None = None,
     lg, auto = pick_lang(lang, sample)
     if gl is not None:
         lg = dataclasses.replace(lg, glyphs=gl, _cache={})
+    lg = dataclasses.replace(lg, render=for_geometry(lg.render, geometry_for_sid(sid, chat)))
     trace: list[dict[str, Any]] = []
     reader = Reader(lg, trace=trace)
     counts: dict[str, int] = {}
@@ -1282,6 +1321,11 @@ def live(out: Path, hz: float = 5.0, until_pid: int | None = None,
 
     try:
         lg, auto = pick_lang(lang, sample)
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import chat_window
+
+        # the chat window where this process reads it (the 2026-11-05 standard unless "legacy")
+        lg = dataclasses.replace(lg, render=for_geometry(lg.render, chat_window.active()))
         reader = Reader(lg)
         n = 0
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1420,6 +1464,8 @@ def main() -> int:
     rp.add_argument("--frames", type=Path, default=None)
     rp.add_argument("--out", type=Path, default=None)
     rp.add_argument("--lang", default=None, help=lang_help)
+    rp.add_argument("--chat", choices=("legacy", "standard"), default=None,
+                    help="the chat window's geometry (default: by the SID's date)")  # fmt: skip
     lv = sub.add_parser("live")
     lv.add_argument("--out", type=Path, required=True)
     lv.add_argument("--hz", type=float, default=5.0)
@@ -1447,7 +1493,7 @@ def main() -> int:
     a = ap.parse_args()
     os.nice(19 if a.cmd in ("replay", "clusters", "cut-names") else 10)
     if a.cmd == "replay":
-        print(json.dumps(replay(a.sid, a.frames, a.out, lang=a.lang)))
+        print(json.dumps(replay(a.sid, a.frames, a.out, lang=a.lang, chat=a.chat)))
     elif a.cmd == "live":
         print(json.dumps(live(a.out, a.hz, a.until_pid, lang=a.lang)))
     elif a.cmd == "formats-init":
