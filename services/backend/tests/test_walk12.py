@@ -159,7 +159,9 @@ def test_a_point_just_outside_the_margin_is_allowed(mods: Any) -> None:
     assert wz.in_work_zone(100.0, y1 + 12.5)
     assert wz.in_work_zone(640.0, 360.0)  # our own feet
     assert not wz.in_work_zone(-1.0, 360.0) and not wz.in_work_zone(640.0, 720.0)
-    assert not wz.in_work_zone(300.0, 525.0)  # the chat window's top margin (532 - 12)
+    # the chat window's top margin: its 2026-11-05 standard starts at y 585 (585 - 12 = 573; the
+    # frozen layout's was 532 - 12)
+    assert not wz.in_work_zone(300.0, 573.0) and wz.in_work_zone(300.0, 572.5)
 
 
 def test_zone_points_refuse_ui_pixels_and_keep_walk11s_order_otherwise(

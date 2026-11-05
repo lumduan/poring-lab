@@ -492,9 +492,17 @@ probes 11:44-11:46):**
 - **PADLOCK:** one click toggles it. Open: keyboard, settings, ">>", "+", "-", open padlock (x
   517-594). Closed: keyboard, settings, closed padlock (x 553-590). "+" / "-" ADD / DELETE TABS
   (2026-11-04): never clicked; the "-" ends at x 577.
-- The scrollbar (x 585-592) has an up arrow at top + 5..9 and a down arrow at bottom - 34..30, open
-  or closed input alike: the reader's anchors. The pointer or the size tooltip over them reads
-  "obscured", never a size.
+- **The reader's anchors are the window's FRAME** (2026-11-05 12:3x, after 4.06 C4's first attempt:
+  the client draws the scrollbar only once the log holds more lines than the window shows, so a
+  fresh login has none and the first reader, which needed its arrows, saw no window):
+  - the message area's white top border ends at x left + 592;
+  - the grey right border, column left + 596 (luma 129-154), runs to the bottom with the input
+    closed and to bottom - 24 with it open;
+  - the separator row bottom - 23 is uniform (luma ~139 closed, ~196 open), the input bar's white
+    frame below it when open.
+  - The pointer or the size tooltip over the border reads "obscured" (never a size). A closed
+    window whose bottom the scene hides (a grey scene continuing the border) reads "seen in part":
+    the check opens the input first (Enter behind the UI gate), and the bar gives the bottom.
 
 **The check** (`chat_window.ensure`), at every game entry (`ro_agent.enter_game`) and before every
 typed line (`ro_agent.open_chat`, after the UI gate, before the Enter):
@@ -517,8 +525,11 @@ and judges of older sessions): ro_agent's `chat_open` box and `chat_input` click
 client_layout's tab row / tab clicks / the live chat rectangle of `ui_windows()` (route_preview,
 loot1.in_ui, ui_mask), where_fix's and chat_cue's areas, battle_log's live crop (the newest 3 of
 the 6 lines; `replay` picks the geometry by the SID's date, `--chat` to override).
-**What does not (recorded sessions only, or not live):** `client_layout.RECTS` (the RECORDED
-layouts, read by the offline tools), mvp_watch's rectangles (study / proof scripts only),
+**Recorded frames** are read with the chat window of their session's date
+(`chat_window.for_sid(sid)`: the frozen layout before `20261105T12`): battle_log `replay`,
+qa_export / map_labels / item_labels' layout checks. **What does not follow (recorded sessions
+only, or not live):** `client_layout.RECTS` (the RECORDED layouts, read by the offline tools),
+mvp_watch's rectangles (study / proof scripts only),
 bench.py's fidelity crops, `poring_env.ui_anchors`' chat window spec (its template was cut with two
 tabs at (0, 531)), detector_vs_packets' and label_quality's copies.
 

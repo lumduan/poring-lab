@@ -132,6 +132,18 @@ GEOMETRIES = {"standard": STANDARD, "legacy": LEGACY}
 TABS = ("battle",)  # the standard's tabs (Batt 2026-11-05: Regular Chat is gone)
 
 
+CUTOVER_SID = "20261105T12"  # sessions recorded from here on show the 2026-11-05 standard
+
+
+def for_sid(sid: str, name: str | None = None) -> Geometry:
+    """The chat window a RECORDED session shows: ``name`` ("legacy" / "standard") when given,
+    else the frozen layout for every session before CUTOVER_SID (by the SID's date prefix).
+    Offline readers of recorded frames use this, never ``active()``."""
+    if name:
+        return GEOMETRIES[name]
+    return LEGACY if sid[:11] < CUTOVER_SID else STANDARD
+
+
 def select(name: str) -> None:
     """This process's chat geometry ("legacy" to replay or judge sessions before 2026-11-05)."""
     if name not in GEOMETRIES:
@@ -151,42 +163,49 @@ def luma(img_rgb: Any) -> np.ndarray:
     return a[..., 0] * 0.299 + a[..., 1] * 0.587 + a[..., 2] * 0.114
 
 
-# The scrollbar's arrows (x offsets from the window's left, measured 2026-11-05 11:4x): white
-# triangles in a black track, the up arrow at text_top + 5 .. + 9, the down arrow at
-# bottom - 34 .. - 30, open or closed input alike. (row offset, first bright x, last bright x)
-UP_ARROW = ((5, 588, 589), (6, 588, 589), (7, 587, 590), (8, 587, 590), (9, 586, 591))
-DOWN_ARROW = ((0, 586, 591), (1, 587, 590), (2, 587, 590), (3, 588, 589), (4, 588, 589))
-DOWN_TO_BOTTOM = 34
-ARROW_ON, ARROW_OFF = 150.0, 40.0
-TRACK_MAX = 25.0  # the scrollbar's black track (0-7 on clean frames)
+# The window's frame (x offsets from its left, measured 2026-11-05 11:4x-12:25 on three frames:
+# 6 lines with a scrollbar, input open / closed; 12 lines WITHOUT one, input closed). The client
+# draws the scrollbar only once the log holds more lines than the window shows (a fresh login:
+# none; 4.06 C4's first attempt stopped on that), so the reader never needs it:
+# - the message area's WHITE TOP BORDER (row text_top) ends at x left + 592;
+# - the RIGHT BORDER, column left + 596, luma 129-154, runs from text_top + 1 to the bottom with
+#   the input closed, to bottom - 24 with it open (then the input bar's frame: 206, 247...);
+# - the SEPARATOR row bottom - 23 is uniform (std ~4): luma ~139 closed, ~196 open; with the input
+#   open the bar's white frame rows follow (bottom - 22, - 21; 247-255).
+TOP_END = 592
+BORDER_X, BORDER_LO, BORDER_HI = 596, 115.0, 175.0
+SEP_STD = 12.0
+SEP_CLOSED = (115.0, 175.0)
+SEP_OPEN = (175.0, 225.0)
 
 
-def _arrow(lum: np.ndarray, y0: int, left: int, shape: tuple[tuple[int, int, int], ...]) -> bool:
-    h, w = lum.shape
-    for dy, a, b in shape:
-        y = y0 + dy
-        if not (0 <= y < h and left + a - 1 >= 0 and left + b + 1 < w):
-            return False
-        row = lum[y]
-        if row[left + a : left + b + 1].min() < ARROW_ON:
-            return False
-        if row[left + a - 1] > ARROW_OFF or row[left + b + 1] > ARROW_OFF:
-            return False
-    return True
+def _sep(lum: np.ndarray, y: int, left: int, band: tuple[float, float]) -> bool:
+    """Row ``y`` is the separator: uniform across the window, its luma in ``band``."""
+    if not 0 <= y < lum.shape[0]:
+        return False
+    row = lum[y, left + 5 : left + 590]
+    return (
+        bool(row.size) and float(row.std()) <= SEP_STD and band[0] <= float(row.mean()) <= band[1]
+    )
 
 
-def _track(lum: np.ndarray, y0: int, left: int, rows: int = 5) -> bool:
-    """The scrollbar's black track: ``rows`` rows at y0, x left + 585 .. 592."""
-    block = lum[max(y0, 0) : y0 + rows, left + 585 : left + 593]
-    return bool(block.size) and float(block.max()) <= TRACK_MAX
+def _border_run(lum: np.ndarray, y0: int, left: int) -> int | None:
+    """The last row of the right border's continuous run from ``y0``, None if it is not there."""
+    col = lum[:, left + BORDER_X]
+    ok = (col >= BORDER_LO) & (col <= BORDER_HI)
+    if y0 + 6 > len(col) or not ok[y0 : y0 + 6].all():
+        return None
+    off = np.flatnonzero(~ok[y0:])
+    return y0 + int(off[0]) - 1 if off.size else lum.shape[0] - 1
 
 
 def find(img_rgb: Any) -> dict[str, Any] | None:
     """The chat window on a game-region RGB frame: {"left", "text_top", "bottom", "lines",
     "input": "open" | "closed"}; {"lines": 0, ...} for the input bar alone; {"lines": None,
-    "obscured": True, ...} for a window whose scrollbar arrows something covers (the pointer, the
-    "Change size(F10)" tooltip): never a size to act on; None when no window is seen (hidden, or
-    the input bar alone with the input closed)."""
+    "obscured": True, ...} for a window seen in part (its top border and right border found, its
+    bottom not: the pointer over it, or a closed input whose bottom the scene hides): never a size
+    to act on; None when no window is seen (hidden, or the input bar alone with the input
+    closed)."""
     lum = luma(img_rgb)
     h, w = lum.shape
     white = lum >= WHITE
@@ -194,37 +213,33 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
     obscured: dict[str, Any] | None = None
     for y in np.nonzero(counts >= 450)[0]:
         y = int(y)
-        row = white[y]
-        # runs of white; the top border ends at left + 592 (the scrollbar's right edge)
-        edges = np.flatnonzero(np.diff(np.concatenate(([0], row.astype(np.int8), [0]))))
+        edges = np.flatnonzero(np.diff(np.concatenate(([0], white[y].astype(np.int8), [0]))))
         for s, e in zip(edges[0::2], edges[1::2], strict=True):
-            if e - s < 450:
+            left = int(e) - 1 - TOP_END
+            # the top border starts inside the window (x left + 3, or after the selected tab);
+            # the input bar's white rows run from its left edge to x left + 597: never a border
+            if e - s < 450 or left < 0 or s < left or left + BORDER_X >= w:
                 continue
-            left = int(e) - 1 - 592
-            if left < 0:
+            run_end = _border_run(lum, y + 2, left)
+            if run_end is None:
                 continue
-            if not _arrow(lum, y, left, UP_ARROW):
-                if _track(lum, y + 12, left) or _track(lum, y + 20, left):
-                    obscured = obscured or {"left": left, "text_top": y, "bottom": None}
-                continue
-            last_d = y + 37 + LINE_PITCH * max(SIZES) - DOWN_TO_BOTTOM
-            for d in range(y + 20, min(h - DOWN_TO_BOTTOM, last_d + 1)):
-                if not _arrow(lum, d, left, DOWN_ARROW):
-                    continue
-                bottom = d + DOWN_TO_BOTTOM
-                span = bottom - 37 - y
-                if span % LINE_PITCH or span // LINE_PITCH not in SIZES:
-                    continue
-                bar = white[bottom - BAR_ROWS[0] : bottom - BAR_ROWS[1] + 1,
-                            left + 110 : left + 560].mean()  # fmt: skip
-                inp = "open" if bar >= 0.85 else "closed"
-                return {"left": left, "text_top": y, "bottom": bottom,
-                        "lines": span // LINE_PITCH, "input": inp}  # fmt: skip
+            found: dict[str, Any] | None = None
+            sep = run_end + 1  # input OPEN: the border stops at the separator, the bar follows
+            if sep + 3 < h and _sep(lum, sep, left, SEP_OPEN) and \
+                    float(lum[sep + 1 : sep + 3, left + 5 : left + 590].mean()) >= 235:  # fmt: skip
+                found = {"bottom": sep + 23, "input": "open"}
+            elif _sep(lum, run_end - 23, left, SEP_CLOSED):  # CLOSED: the border runs to the bottom
+                found = {"bottom": run_end, "input": "closed"}
+            if found is not None:
+                span = found["bottom"] - 37 - y
+                if span % LINE_PITCH == 0 and span // LINE_PITCH in SIZES:
+                    return {"left": left, "text_top": y, "bottom": found["bottom"],
+                            "lines": span // LINE_PITCH, "input": found["input"]}  # fmt: skip
             obscured = obscured or {"left": left, "text_top": y, "bottom": None}
     if obscured is not None:
         return {**obscured, "lines": None, "input": None, "obscured": True}
     # the input bar alone (F10's last size): 17 white rows across the bar's message field; with a
-    # message area above it (the black track) but no top border found, it is "obscured" too
+    # message area above it (the right border) but no top border found, it is "obscured" too
     full = counts >= 450
     run = 0
     for y in range(h):
@@ -233,7 +248,8 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
             bottom = y + 3
             cols = np.flatnonzero(lum[bottom - 11] >= 180)
             left = int(cols[0]) if cols.size else 0
-            if _track(lum, bottom - 29, left, rows=3):  # the track's last black rows
+            above = lum[max(bottom - 30, 0) : bottom - 24, min(left + BORDER_X, w - 1)]
+            if above.size and bool(((above >= BORDER_LO) & (above <= BORDER_HI)).all()):
                 return {"left": left, "text_top": None, "bottom": bottom, "lines": None,
                         "input": "open", "obscured": True}  # fmt: skip
             return {"left": left, "text_top": None, "bottom": bottom, "lines": 0, "input": "open"}
@@ -300,7 +316,9 @@ def next_step(
     (Enter behind the UI gate: the drag handle is drawn only while the input is open), "drag",
     "unknown" (the padlock unread: the caller re-reads, never acts blind)."""
     if st is not None and st.get("obscured"):
-        return "unknown"
+        # seen in part with the input closed: open it (the bar shows the bottom); else re-read
+        return "open_input" if st.get("text_top") is not None and st.get("input") is None \
+            else "unknown"  # fmt: skip
     if st is None or not st.get("lines"):
         return "f10"
     placed = st.get("left") == g.left and st.get("bottom") == g.bottom

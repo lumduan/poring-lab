@@ -545,10 +545,13 @@ class Layout:
             root = MAIN / "data/ui_anchors/layout"
         self.tm = client_layout.load_templates(root)
 
-    def ok(self, rgb: Any) -> bool:
+    def ok(self, rgb: Any, sid: str) -> bool:
+        """The recorded frame shows the hunting layout (its chat window: chat_window.for_sid)."""
+        import chat_window
         import client_layout
 
-        return bool(client_layout.matches(client_layout.read(rgb, self.tm), "hunt"))
+        state = client_layout.read(rgb, self.tm, chat=chat_window.for_sid(sid))
+        return bool(client_layout.matches(state, "hunt"))
 
 
 # --- templates and NCC ---------------------------------------------------------------------------
@@ -1218,7 +1221,7 @@ def label_frame(
     if not vis and not (want_neg and rec.route_u and not rec.reasons):
         return rec if rec.reasons else None
     img = read_rgb(path)
-    if layout is not None and not layout.ok(img):
+    if layout is not None and not layout.ok(img, s.sid):
         rec.reasons.append("ui_layout_mismatch")
         return rec
     tau = float(mp["tau"])

@@ -197,9 +197,12 @@ def layout_check(manifest: dict[str, Any], templates: Path | None = None) -> Any
         raise SystemExit(f"{root}: the layout templates are not here (a human demo's frames are "
                          "usable only where their layout is read from pixels)")  # fmt: skip
     tm = client_layout.load_templates(root)
+    import chat_window  # the recorded frames show the chat window of their date
+
+    chat = chat_window.for_sid(session_id(manifest))
 
     def check(bgr: np.ndarray) -> bool:
-        state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm)
+        state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm, chat=chat)
         return bool(client_layout.matches(state, HUMAN_DEMO_LAYOUT))
 
     return check

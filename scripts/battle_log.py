@@ -190,18 +190,12 @@ def for_geometry(render: Render, g: Any) -> Render:
                                tab_edge_y=render.tab_edge_y + d_top)  # fmt: skip
 
 
-CHAT_CUTOVER_SID = "20261105T12"  # sessions from here on: the chat window's 2026-11-05 standard
-
-
 def geometry_for_sid(sid: str, name: str | None = None) -> Any:
-    """The chat window a recorded session shows: ``name`` ("legacy" / "standard") when given, else
-    the frozen layout for every session before CHAT_CUTOVER_SID (by the SID's date prefix)."""
+    """The chat window a recorded session shows (chat_window.for_sid)."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import chat_window as cw
 
-    if name:
-        return cw.GEOMETRIES[name]
-    return cw.LEGACY if sid[:11] < CHAT_CUTOVER_SID else cw.STANDARD
+    return cw.for_sid(sid, name)
 
 
 # --- pixels -> ink --------------------------------------------------------------------------------

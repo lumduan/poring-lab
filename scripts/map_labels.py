@@ -790,9 +790,12 @@ class RecSession:
             raise SystemExit(f"{sid}: spots exist only in a staged session ({spec.staged}, "
                              f"{', '.join(sorted(spec.staged_extra))})")  # fmt: skip
         tm = client_layout.load_templates(layout_templates)
+        import chat_window  # the recorded frames show the chat window of their date
+
+        chat = chat_window.for_sid(sid)
 
         def check(bgr: npt.NDArray[np.uint8]) -> bool:
-            state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm)
+            state = client_layout.read(np.ascontiguousarray(bgr[:, :, 2::-1]), tm, chat=chat)
             return layout_matches(state, layout)
 
         changes = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "map_change")

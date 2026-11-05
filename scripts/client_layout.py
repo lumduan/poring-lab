@@ -151,12 +151,14 @@ def decide(d: Mapping[str, float]) -> dict[str, Any]:
     return {"rows": rows, "panel": panel, "tab": tab}
 
 
-def read(img_rgb: Any, tm: Mapping[str, Any]) -> dict[str, Any]:
-    """The layout a game-region RGB frame shows (``decide`` on its template distances)."""
+def read(img_rgb: Any, tm: Mapping[str, Any], chat: Any = None) -> dict[str, Any]:
+    """The layout a game-region RGB frame shows (``decide`` on its template distances). ``chat``:
+    the chat window's geometry (chat_window.Geometry) of a RECORDED frame (chat_window.for_sid);
+    default this process's (chat_window.active())."""
     box = {"arrow_collapsed": "arrow", "arrow_expanded": "arrow", "row1": "row1", "row2": "row2",
            "row4": "row4"}  # fmt: skip
     d = {k: float(np.abs(_grey(img_rgb, BOX[b]) - tm[k]).mean()) for k, b in box.items()}
-    row = tab_row()
+    row = int(chat.tab_row) if chat is not None else tab_row()
     for tab, (x0, x1) in TAB_SPAN.items():
         d[f"tabs_{tab}"] = 255.0 - float(_grey(img_rgb, (x0, row, x1, row + 1)).mean())
     return {**decide(d), "dist": {k: round(v, 1) for k, v in d.items()}}

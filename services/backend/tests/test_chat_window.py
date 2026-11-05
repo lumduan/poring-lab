@@ -56,43 +56,72 @@ def test_the_process_geometry_is_the_standard_unless_a_replay_selects_legacy(
         cw.select("nope")
 
 
+def test_recorded_sessions_keep_the_chat_window_of_their_date() -> None:
+    """Offline readers of RECORDED frames (battle_log replay, qa_export / map_labels / item_labels'
+    layout checks) take the geometry by the session's date, never this process's."""
+    assert cw.for_sid("20261019T135848-human-ui-setup") == cw.LEGACY
+    assert cw.for_sid("20261105T091500-x") == cw.LEGACY  # before the cutover (12:xx)
+    assert cw.for_sid("20261105T130000-demo") == cw.STANDARD
+    assert cw.for_sid("20261019T135848-x", "standard") == cw.STANDARD  # an explicit override
+    import client_layout as cl
+
+    img = np.full((720, 1280, 3), 120, np.uint8)
+    img[cw.LEGACY.tab_row, 12:72] = 254  # Battle Log's border on the frozen layout's tab row
+    tm = {k: np.zeros_like(cl._grey(img, cl.BOX[b])) for k, b in (
+        ("arrow_collapsed", "arrow"), ("arrow_expanded", "arrow"), ("row1", "row1"),
+        ("row2", "row2"), ("row4", "row4"))}  # fmt: skip
+    assert cl.read(img, tm, chat=cw.LEGACY)["tab"] == "battle"
+    assert cl.read(img, tm, chat=cw.STANDARD)["tab"] is None  # read at the wrong row: unsure
+
+
 # --- synthetic windows, drawn as the client draws them ----------------------------------------
 
 
 def draw(g: cw.Geometry | None, *, input_open: bool = True, bar_only: bool = False,
-         cover_down_arrow: bool = False, cover_up_arrow: bool = False) -> np.ndarray:  # fmt: skip
+         scrollbar: bool = True, cover_border: bool = False) -> np.ndarray:  # fmt: skip
+    """A window as the client draws it (measured 2026-11-05): the message area's white top border
+    ending at left + 592, the grey right border at left + 596, the separator 23 rows above the
+    bottom, the white input bar while the input is open; the scrollbar only once the log
+    overflows (``scrollbar``)."""
     img = np.zeros((720, 1280, 3), np.uint8)
     img[...] = SCENE
     if g is None:
         return img
     x0, b = g.left, g.bottom
-    if bar_only or input_open:
-        img[b - 22 : b - 20, x0 : x0 + 597] = 255
-        img[b - 19 : b - 2, x0 : x0 + 597] = 247  # the white input bar
-        img[b - 2 : b, x0 : x0 + 597] = 255
     if bar_only:
+        img[b - 22 : b - 20, x0 : x0 + 598] = 255
+        img[b - 19 : b - 2, x0 : x0 + 598] = 247
+        img[b - 2 : b, x0 : x0 + 598] = 255
+        img[b, x0 : x0 + 598] = 196
         return img
     top = g.text_top
-    img[top + 1 : b - 23, x0 : x0 + 597] = 55  # the darkened message area
+    img[top + 1 : b + 1, x0 : x0 + 596] = 55  # the darkened message area
     img[top, x0 + 80 : x0 + 593] = 255  # the top border, not under the selected tab
-    img[top + 1 : b - 24, x0 + 585 : x0 + 593] = 0  # the scrollbar's black track
-    for dy, a, z in cw.UP_ARROW:
-        img[top + dy, x0 + a : x0 + z + 1] = 230
-    d = b - cw.DOWN_TO_BOTTOM
-    for dy, a, z in cw.DOWN_ARROW:
-        img[d + dy, x0 + a : x0 + z + 1] = 220
-    if cover_down_arrow:  # the "Change size(F10)" tooltip over the down arrow
-        img[d - 2 : d + 18, x0 + 587 : x0 + 690] = 200
-    if cover_up_arrow:  # the pointer at the padlock: its arrow reaches down over the up arrow
-        img[top - 7 : top + 11, x0 + 585 : x0 + 598] = 230
+    img[top + 1 : b + 1, x0 + 596] = 140  # the right border, to the bottom (input closed)
+    img[b - 23, x0 : x0 + 597] = 139  # the separator
+    if input_open:
+        img[b - 23, x0 : x0 + 598] = 196
+        img[b - 22 : b - 20, x0 : x0 + 598] = 255
+        img[b - 19 : b - 2, x0 : x0 + 598] = 247  # the white input bar
+        img[b - 2 : b, x0 : x0 + 598] = 255
+        img[b, x0 : x0 + 598] = 196
+    if scrollbar:
+        img[top + 1 : b - 24, x0 + 585 : x0 + 593] = 0
+        img[top + 5 : top + 10, x0 + 587 : x0 + 591] = 230
+        img[b - 34 : b - 29, x0 + 587 : x0 + 591] = 220
+    if cover_border:  # the pointer / the "Change size(F10)" tooltip over the right border
+        img[b - 40 : b - 26, x0 + 587 : x0 + 690] = 200
     return img
 
 
 @pytest.mark.parametrize("lines", cw.SIZES)
 @pytest.mark.parametrize("input_open", [True, False])
-def test_find_reads_every_size_open_or_closed(lines: int, input_open: bool) -> None:
+@pytest.mark.parametrize("scrollbar", [True, False])
+def test_find_reads_every_size_open_or_closed_with_or_without_a_scrollbar(
+    lines: int, input_open: bool, scrollbar: bool
+) -> None:
     g = cw.Geometry(lines, 719)
-    st = cw.find(draw(g, input_open=input_open))
+    st = cw.find(draw(g, input_open=input_open, scrollbar=scrollbar))
     assert st == {"left": 0, "text_top": g.text_top, "bottom": 719, "lines": lines,
                   "input": "open" if input_open else "closed"}  # fmt: skip
 
@@ -104,16 +133,27 @@ def test_find_reads_a_moved_window_and_the_states_without_a_message_area() -> No
     assert cw.find(draw(None)) is None  # hidden (F10's 6th step)
     bar = cw.find(draw(cw.STANDARD, bar_only=True))
     assert bar is not None and bar["lines"] == 0 and bar["bottom"] == 719
-    # a message area whose arrow is covered is "obscured", never the bar alone (no F10 on it)
-    for cover in ({"cover_down_arrow": True}, {"cover_up_arrow": True}):
-        ob = cw.find(draw(cw.STANDARD, **cover))
-        assert ob is not None and ob.get("obscured") and ob["lines"] is None, cover
-        assert cw.next_step(ob) == "unknown"  # read again after parking, never F10
+    # a window whose right border something covers is "obscured", never the bar alone (no F10)
+    for inp in (True, False):
+        ob = cw.find(draw(cw.STANDARD, input_open=inp, cover_border=True))
+        assert ob is not None and ob.get("obscured") and ob["lines"] is None, inp
+        assert cw.next_step(ob) in ("unknown", "open_input")  # never "f10"
 
 
-def test_white_scene_rows_without_the_scrollbar_are_no_window() -> None:
+def test_a_moved_closed_window_over_a_grey_scene_opens_the_input_first() -> None:
+    """With the input closed the window's bottom is where its right border ends; a grey scene
+    below it (in the border's luma band) hides that: "seen in part" -> open the input (behind the
+    UI gate), whose bar gives the bottom. Never a size or a drag on a guess."""
+    img = draw(cw.Geometry(12, 639, 40), input_open=False)
+    img[640:, 40 + 596] = 140  # the scene below continues the border's grey
+    st = cw.find(img)
+    assert st is not None and st.get("obscured") and st["text_top"] == cw.Geometry(12, 639).text_top
+    assert cw.next_step(st) == "open_input"
+
+
+def test_white_scene_rows_without_the_window_frame_are_no_window() -> None:
     img = draw(None)
-    img[300:303, 0:1280] = 255  # snow, a white wall: a long white row, but no arrows
+    img[300:303, 0:1280] = 255  # snow, a white wall: a long white row, but no right border
     assert cw.find(img) is None
 
 

@@ -16047,7 +16047,8 @@ the padlock after docking; the chat window only.
 **What was built** (`scripts/chat_window.py`; docs/client/rathena-client.md "The chat window
 standard"): the standard (left 0, last row 719, 6 lines, padlock closed, one tab) and the frozen
 layout as ONE geometry for every reader; a pixel reader (the scrollbar's arrows, the white top
-border, the input bar; the padlock by two local templates); `ensure`, the client's own controls
+border, the input bar; the padlock by two local templates; ➡️ the scrollbar was replaced by the
+window's frame in Amendment 1 below); `ensure`, the client's own controls
 only (F10, the padlock click, Enter behind the UI gate, a drag of the white input bar), each step
 verified on a fresh read, an unreadable state or a step without effect stops with a frame. Hooks:
 `ro_agent.enter_game` (every game entry) and `ro_agent.open_chat` (before every typed line, after
@@ -16086,6 +16087,56 @@ screenshot before each; the agent's input only through ro_agent sessions):
 runner's v43+ two-tab layout (Regular Chat is gone: `client_layout.select_tab("regular")` now
 refuses before any input); the S2 console path (the reader is proven on RDP only: a standard
 window passes there, nothing is fixed).
+
+**Results, first reader (8212fd1, pre-registered 12:16:29; times ICT from the clock):**
+- **C1 PASS** (12:18:55): standard, 0 steps; the input log holds no input of ours between its
+  start and end; the GM at 246,310.
+- **C2 PASS** (staged 12:19:27-12:19:40, fixed 12:20:11-12:20:26): staged to left 40 / bottom 639
+  / 12 lines / input closed / padlock open (judged screenshot). `ensure` reached the standard in 8
+  steps: open_input, drag, f10 x5 (12 -> 15 -> hidden -> bar -> 3 -> 6), lock. Every press in the
+  input log of [12:19:27, 12:20:26] was on the padlock body (585, 591), the white bar (the drags
+  from (300, 708) and from (340, 628), each the window's own bar point at that moment) or the
+  client's title bar (640, -15: activate_client before each key). The sniffer: 5 time_sync, 0
+  self_move_request, 0 attack_request, 0 npc_contact, no map change. The GM at 246,310 before and
+  after. Judged screenshot: docked, 6 lines, padlock closed, no dialog.
+- **C3 FAILED its bar** (12:21:15): the `/where` line was typed at the standard place (the click at
+  (300, 708), the six keys and Enter accepted, the input emptied), but (a) its reply is NOT shown
+  on the one Battle Log tab (where_fix: "no new chat line"), and (b) the bar's "cs chat event"
+  was wrong for /where: the client answers /where itself and sends no packet. FINDING for Batt:
+  with Regular Chat gone, /where (the hunting runs' position fallback) cannot be read.
+  - **C3b, supplementary (NOT pre-registered; recorded as such), 12:22:21:** one `@heal` GM line
+    through the same path. The sniffer shows the cs chat event "Valcd8bd6 : @heal" (gm_command)
+    and the server's reply event: the typed line reached the server exactly. The reply is not
+    shown on Battle Log either.
+- **C4 attempt 1 FAILED** (12:24:43-12:25:29): staged to 9 lines with the padlock open; Escape x2
+  (the first closes the open input, measured 2026-10-10), the game option window's first button
+  ("character select", screenshot-checked) at client (644, 481), character select showed
+  Valcd8bd6 selected; `enter_game` (12:25:06) -> in game 12:25:07 -> its chat window check read NO
+  window on every frame, pressed F10 8 times and stopped ("9 F10 presses without the standard
+  size", frame saved): nothing was typed. Cause: after a login the log held 2 lines, and the
+  client draws the scrollbar only once the log overflows the window; the reader needed the
+  scrollbar's arrows. The window was left at 12 lines, padlock open, input closed.
+
+**Amendment 1 (written BEFORE any re-run, at this amendment's commit time):** the reader's anchors
+become the window's FRAME (the white top border ending at x left + 592; the grey right border at
+left + 596 to the bottom (closed) or bottom - 24 (open); the uniform separator at bottom - 23 and
+the bar's white frame), measured on three real frames including C4's (12 lines, no scrollbar).
+A window seen in part with the input closed opens the input first (Enter behind the UI gate). The
+real frames of the day re-read: every clean frame exact (3 / 6 / 9 / 12 lines, open and closed,
+with and without a scrollbar, moved, docked, bar alone, hidden); the frames with Batt's pointer or
+the size tooltip read "obscured". Tests: synthetic windows with and without a scrollbar, a
+covered border, a moved closed window over a grey scene. Re-run, same bars as above: **C1, C2
+(re-staged) and C4 (from the state attempt 1 left: 12 lines, padlock open)**. C3 is not re-run
+(its finding stands; C3b covers the typing path).
+- Found by the full suite on 8212fd1 and fixed in the same amendment: the offline readers of
+  RECORDED frames now take the chat window of the session's date (`chat_window.for_sid`; the
+  frozen layout before 20261105T12): qa_export / map_labels / item_labels' layout checks read old
+  human demos with the new tab row (test_orc_labels_fix), and walk@12's work-zone test pinned the
+  frozen layout's chat margin (532 - 12; now 585 - 12). Failing on main before this work and NOT
+  touched here: test_guards (scripts/gold_eval.py imports poring_vision, since 1ff3f10,
+  2026-10-29), test_map_labels' gef10 case (its /dev/shm/poring-lab-tmp/gef10-det files were
+  archived in the pause's RAM cleanup), test_vision_worker x2 (a stub without the 2026-10-28
+  co_tenants argument).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
