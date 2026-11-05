@@ -79,14 +79,18 @@ OPAQUE_FLAT = 96.0  # the grey every other pixel takes in the fallback (any mid 
 #  * over a LIGHT cell (its scene median >= LIGHT_CELL_GREY) a HALF PAIR -- a pixel between the
 #    glyph shadow and HALF_SHADOW_MAX followed by one at least max(PAIR_MIN, PAIR_FRAC x the room
 #    between the floor and GLYPH_STROKE_MIN) above the floor, short of a stroke -- is a digit fading
-#    in or out, and the read is None ("half_shadow"). (Round 1 refused ANY such dark pixel in a
-#    light cell, and so the dark floor bands of xmas_dun02's mixed strips: X1b round 1's FAIL.)
+#    in or out, and the read is None ("half_shadow"). Round 1 refused ANY such dark pixel in a
+#    light cell, and so the dark floor bands of xmas_dun02's mixed strips (X1b round 1's FAIL);
+#    round 2 refused ONE half pair, and so a floor seam beside bright tiles at 7,224 (round 2's
+#    FAIL). Round 3 needs HALF_PAIRS_MIN in one cell: a blended stroke spans its rows, a seam
+#    crossing makes 1-2.
 #  * NOT guarded here: a digit changing over a mixed strip's DARK band can still be read as a third
 #    digit (synthetic: 48 of 1,620 such blends). So a "light" read is never used alone: its user
 #    confirms it with a second read (dungeon_hunt.PosConfirm), and the fallback is opt-in.
 OPAQUE_AFTER = frozenset({"no_glyph", "uncovered_ink"})
 LIGHT_CELL_GREY, HALF_SHADOW_MAX = 170.0, 170.0
 PAIR_MIN, PAIR_FRAC = 12.0, 0.5
+HALF_PAIRS_MIN = 3  # X1b round 3: so many in one light cell (a seam crossing makes 1-2)
 
 
 def _box() -> tuple[int, int, int, int]:
@@ -277,7 +281,7 @@ def _half_shadow(gray: Gray, glyphs: Sequence[Glyph], row: int, templates: Digit
         gap = max(PAIR_MIN, PAIR_FRAC * (GLYPH_STROKE_MIN - floor))
         a, b = cell[:, :-1], cell[:, 1:]
         half = (a > GLYPH_SHADOW_MAX) & (a <= HALF_SHADOW_MAX)
-        if bool((half & (b >= floor + gap) & (b < GLYPH_STROKE_MIN)).any()):
+        if int((half & (b >= floor + gap) & (b < GLYPH_STROKE_MIN)).sum()) >= HALF_PAIRS_MIN:
             return True
     return False
 

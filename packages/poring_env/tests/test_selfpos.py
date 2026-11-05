@@ -289,9 +289,13 @@ def test_a_pale_floor_is_read_by_the_opaque_glyph_fallback(
         assert got.xy == tuple(int(v) for v in text.split()) and got.mode == "light", (text, got)
 
 
-def test_a_digit_changing_over_a_pale_floor_is_none(templates: selfpos.DigitTemplates) -> None:
-    """Half a 6 and half an 8 over the pale floor: flattened, only their common strokes would
-    remain (a 6): the half shadows make it None instead -- never a guess."""
+def test_a_digit_changing_over_a_pale_floor_reads_none_or_one_of_its_values(
+    templates: selfpos.DigitTemplates,
+) -> None:
+    """Half a 6 and half an 8 over the pale floor: flattened, their common strokes remain. The
+    fallback reads None or one of the TWO true values (here the old one, 166: right for a walk);
+    a third digit is possible on other pairs (X1b round 3's synthetic blends: 20 of 1,080), which
+    is why a "light" read is only ever used once a second read confirms it (dungeon_hunt)."""
     rng = np.random.default_rng(4)
     floor = pale_floor(rng)
     six, eight = floor.copy(), floor.copy()
@@ -300,7 +304,22 @@ def test_a_digit_changing_over_a_pale_floor_is_none(templates: selfpos.DigitTemp
     assert selfpos.read_minimap(eight, templates, light=True).xy == (168, 368)
     blend = ((six.astype(np.uint16) + eight) // 2).astype(np.uint8)
     reading = selfpos.read_minimap(blend, templates, light=True)
-    assert reading.xy is None, reading
+    assert reading.xy in (None, (166, 368), (168, 368)), reading
+
+
+def test_many_half_pairs_in_a_light_cell_refuse_the_read(templates: selfpos.DigitTemplates) -> None:
+    """A digit fading out over the floor: its whole stroke half drawn (a pale half stroke beside a
+    half shadow on every row) is refused, not read."""
+    rng = np.random.default_rng(5)
+    frame = pale_floor(rng, 200, 210)
+    draw_text(frame, "77 77", rng, noise=0.0)
+    x, y, w, h = RECT
+    top, left = TEXT_Y + 1, TEXT_X + PITCH  # the x number's 2nd digit: half drawn on 9 rows
+    frame[top : top + 9, left + 2] = 120  # half shadows ...
+    frame[top : top + 9, left + 3] = 228  # ... before half strokes
+    base = selfpos.read_minimap(frame, templates, light=False)
+    got = selfpos.read_minimap(frame, templates, light=True)
+    assert base.xy is None and got.xy is None and got.mode == "light_failed", (base, got)
 
 
 def test_the_fallback_never_runs_after_an_ambiguous_base_read(

@@ -15,7 +15,8 @@ became "half a stroke" everywhere.
 collect (live, the Rogue -- or any character with @warp -- standing on ``--map``):
   * stands = the map's patrol-route waypoints (config/routes/<map>.yaml, reviewed; every one is on
     the route grid, so each is a checked stand cell), or with ``--cells midpoints`` the cell
-    halfway along each leg (fresh cells), every ``--every``-th one, in route order;
+    halfway along each leg, ``--cells quarters`` the cells a quarter and three quarters along
+    (fresh cells), every ``--every``-th one, in route order;
   * per stand: ``@warp <map> x y`` through crusader.gm_line (the identity check, the UI gate and
     the chat window check of every typed line), 1.5 s to land and the identity check passing
     again (the loading screen over; also before every typed line), then ``--per-stand`` grabs
@@ -79,11 +80,22 @@ def collect(a: argparse.Namespace) -> int:
     if routes is None or not routes.routes:
         raise SystemExit(f"no reviewed route for {a.map}: config/routes/{a.map}.yaml")
     wps = [(int(c[0]), int(c[1])) for c in routes.routes[0].waypoints]
+    legs = list(zip(wps, wps[1:] + wps[:1], strict=True))
+    mids = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1), (x2, y2) in legs]
     if a.cells == "midpoints":  # X1b round 2's FRESH cells: halfway along each leg of the loop
         # (every leg is a straight run on the route grid, xmas02-prep.md section 3, so each
         # midpoint is a route-grid cell; none is a waypoint)
-        legs = zip(wps, wps[1:] + wps[:1], strict=True)
-        wps = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1), (x2, y2) in legs]
+        wps = mids
+    elif a.cells == "quarters":  # round 3's FRESH cells: a quarter and three quarters along each
+        # leg, leaving out every cell used before (waypoints, midpoints) and repeats
+        used, out = set(wps) | set(mids), []
+        for (x1, y1), (x2, y2) in legs:
+            for f in (0.25, 0.75):
+                c = (round(x1 + f * (x2 - x1)), round(y1 + f * (y2 - y1)))
+                if c not in used:
+                    used.add(c)
+                    out.append(c)
+        wps = out
     stands = wps[:: a.every]
     first = a.start  # a resumed collection keeps the route's stand numbers (the split's parity)
     out: Path = a.out
@@ -289,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--per-stand", type=int, default=8)
     c.add_argument("--every", type=int, default=1)
     c.add_argument("--start", type=int, default=0, help="resume at this stand number")
-    c.add_argument("--cells", choices=["waypoints", "midpoints"], default="waypoints")
+    c.add_argument("--cells", choices=["waypoints", "midpoints", "quarters"], default="waypoints")
     c.add_argument("--job", default="rogue")
     c.add_argument("--char", default="thief", help="crusader.py's data dir for the identity check")
     c.add_argument("--no-clear", dest="clear", action="store_false")

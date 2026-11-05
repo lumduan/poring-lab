@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "X1b round 2 (4E): collect the fresh midpoint cells, score once, run R4 on T0's sessions; then pilot p2, then X2 (4A) on the 120 GB floor."
+next_action: "X1b round 3 (4F): collect the quarter cells, score once, re-run R4; then pilot p2, then X2 (4A) on the 120 GB floor."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -262,6 +262,27 @@ the runner stops on unread positions (pilot p1).
   Fly Wings, unconfirmed light reads (`run_end.pos_light_unconfirmed`), position-jump hard bars,
   against pilot p1.
 
+### 4F. X1b round 3 pre-registration (written BEFORE its data; round 2 FAILED, section 5)
+
+- **The design (frozen at this section's commit):** round 2's, with ONE change: a light cell is
+  refused only with at least **3** half pairs in it (`selfpos.HALF_PAIRS_MIN`), not one: a
+  blended stroke spans its rows, while a floor seam beside bright tiles makes 1-2 (round 2's
+  only miss, 7,224, had 2). Still opt-in; still confirmed by a second read in `dungeon_hunt`
+  (`PosConfirm`).
+- **Designed on:** rounds 1-2 (1,360 crops, all seen: every variant 1,360 / 1,360, 0 wrong) and
+  synthetic blends over pale and banded floors (1,080: a third digit read 37 times without the
+  guard, 20 at >= 3 pairs, 23 at >= 4, 39 at >= 6). The blend unit test now asks for None or one
+  of the two true values (it reads the old value, 166); a new test refuses a cell with a half
+  stroke on 9 rows (guard off: it reads).
+- **Data, FRESH:** `selfpos_light.py collect --map xmas_dun02 --cells quarters --out
+  /dev/shm/poring-lab-tmp/x1b-r3 --per-stand 8`: the cells a quarter and three quarters along
+  each leg, none used before (168 cells, ~1,344 crops), the same protocol and truth rule; scored
+  ONCE (`--split all`) after the whole collection.
+- **Bars:** R1-R3 of round 2 unchanged (0 wrong; >= 90 % exact on light strips with at least 24
+  such crops, else INCONCLUSIVE; dark strips >= the base reader, 0 wrong); **R4** re-run with the
+  new guard on T0's held-out sessions (T0's bars, 0 wrong fallback reads on standing frames).
+- **Then, not a bar:** pilot p2 (as 4E).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -346,4 +367,35 @@ at 8cbc09c 20:42:38 on the even stands; the odd stands scored once at 20:42:55):
   a dark floor band (~60-90) runs through light cells, and the guard took any 41-170 pixel in a
   light cell for a fading digit. No even stand had such a cell. The odd stands are spent as
   held-out data; round 2 (4E) gets fresh cells.
+
+**X1b round 2 (pre-registered 4E at 42d4e57 21:16:13):**
+- **R4 (T0's held-out sessions, `selfpos_eval.py --light`, 21:16-21:3x, CPU, nice 10, a 4 GB
+  scope): PASS.** Standing 99.36 % exact (2,317 / 2,332; bar 99 %), walking 99.70 % within one
+  cell (336 / 337; bar 97 %), 0 wrong on standing frames. The fallback never answered on these
+  sessions: every frame it ran on, it abstained (`light_failed`; 1,435 no-minimap frames, 15
+  standing, 194 excluded). The one wrong read is the BASE reader's, a walking frame of
+  outdoor-d 2 cells off (183,363 read 182,361).
+- **The fresh collection** (`--cells midpoints`): part 1, 21:16-21:21, 22 stands (176 crops, all
+  labelled), then STOPPED by the chat window check (the padlock undecided over the pink puzzle
+  floor, 5.8 / 12.0). Its end path's home warp then ran the check again: a false "seen in
+  part" read pressed Enter (the input closed) and "no window found" pressed F10 8 times, cycling
+  the window to 9 lines (the input log; nothing sent to chat). Restored by hand 21:24-21:27 (F10
+  x6, Enter behind the UI gate, each step judged on a frame). Fixed in 41d5174 (no F10 blind;
+  the window found over bright floors; the padlock's colour shape when grey ranks it first; the
+  collector's end path types nothing after a failure). No crop was scored before the
+  collection is complete. Part 2 resumes at stand 22 (21:37).- Part 2: 21:37-21:49, stands 22-84 (504 crops, all labelled), clean (the home warp typed).
+  **680 fresh crops at 85 midpoint cells, all labelled**, scored ONCE at 21:49:43:
+
+| fresh cells (85 midpoints, 680 crops) | n | base exact | new exact | none | wrong | bar |
+|---|---|---|---|---|---|---|
+| light strips (scene median >= 170) | 24 | 8 | 16 (66.7 %) | 8 | 0 | R2 >= 90 % (n >= 24): **FAIL** |
+| dark strips | 656 | 640 | 656 | 0 | 0 | R3: pass |
+| all | 680 | 648 (95.3 %) | 672 (98.8 %) | 8 | 0 | R1 0 wrong: pass |
+
+- R4 PASS (above). **Verdict: X1b round 2 FAILS (R2).**
+- Diagnosis (after the verdict): the 8 misses are ONE stand (7,224). There the opaque parse read
+  the TRUE digits ("7 224": 7 / 2 / 2 / 4, scores 0.11-0.21, margins 9.3-22.4) and the half-pair
+  guard refused them again: a floor seam (a dark line 103-119 beside tiles at 216-225) makes a
+  half pair in the "2" cell. Both rounds' failures are the light-cell guard refusing true reads
+  on textured floors; the opaque parse itself read every stand of both rounds.
 
