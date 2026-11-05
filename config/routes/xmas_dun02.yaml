@@ -1,0 +1,115 @@
+# xmas_dun02's PATROL ROUTE (map cells: x east, y north -- the minimap readout's, /where's and the
+# server's numbers). The format and the walking rules: README.md beside this file.
+#
+# DELEGATED REVIEW. The route IS Batt's technique; the agent only placed the waypoints. His order
+# of 2026-11-05 (~13:2x ICT, Thai, translated in docs/planning/rogue-xmas02.md section 0): "Go
+# train on map xmas_dun02 instead ... The map is a bit hard: it is hard to walk, many things block
+# the way, but there is a technique: walk along the edge of the map, going clockwise round and
+# round. If you meet the boss, run away."
+#
+# SOURCE: the edge loop of rogue-xmas02.md section 1 (a read-only pass over the server map cache;
+# client and server walkability agree exactly on this map, 50,183 cells): CLOCKWISE on a north-up
+# map -- north up the west edge, east along the north edge, south down the east edge (with its
+# 11-cell step west at y 156), west along the south edge, and the 2 + 4-cell step round the wall
+# end at (9-10, 22) back to the start: (7,21) -> (7,253) -> (251,253) -> (251,156) -> (240,156) ->
+# (240,23) -> (11,23) -> (11,21) -> (7,21). Every cell of those segments is walkable on the
+# runner's stand grid. The agent placed a waypoint on each corner and every <= 12 cells between
+# (each side split into ceil(length / 12) equal legs), so each leg is a straight run along the
+# edge: on the route grid its A* path is the straight segment itself (0 cells off it), never a
+# cut through the interior maze. The offline proof (check, prove, the per-leg path check):
+# docs/planning/xmas02-prep.md section 3.
+map: xmas_dun02
+reviewed_by: "agent (delegated by batt, 2026-11-05)"
+reviewed: 2026-11-05
+delegation: "Batt 2026-11-05 ~13:2x ICT (Thai, translated; rogue-xmas02.md section 0): 'Go train on map xmas_dun02 instead ... The map is a bit hard: it is hard to walk, many things block the way, but there is a technique: walk along the edge of the map, going clockwise round and round. If you meet the boss, run away.' His technique is the route; the agent only placed the waypoints on the edge loop"
+source: "Batt's order 2026-11-05 (the edge, clockwise) + the edge loop of docs/planning/rogue-xmas02.md section 1 (server map cache); waypoints placed by the agent: the 8 corners + every <= 12 cells along each side"
+routes:
+  - id: edge-loop
+    kind: loop
+    note: "Batt's technique: the map's edge, clockwise (x east, y north): north up the west side, east along the north, south down the east, west along the south"
+    waypoints:
+      - [7, 21]  # SW corner, the start
+      - [7, 33]
+      - [7, 44]
+      - [7, 56]
+      - [7, 67]
+      - [7, 79]
+      - [7, 91]
+      - [7, 102]
+      - [7, 114]
+      - [7, 125]
+      - [7, 137]
+      - [7, 149]
+      - [7, 160]
+      - [7, 172]
+      - [7, 183]
+      - [7, 195]
+      - [7, 207]
+      - [7, 218]
+      - [7, 230]
+      - [7, 241]
+      - [7, 253]  # NW corner
+      - [19, 253]
+      - [30, 253]
+      - [42, 253]
+      - [53, 253]
+      - [65, 253]
+      - [77, 253]
+      - [88, 253]
+      - [100, 253]
+      - [112, 253]
+      - [123, 253]
+      - [135, 253]
+      - [146, 253]
+      - [158, 253]
+      - [170, 253]
+      - [181, 253]
+      - [193, 253]
+      - [205, 253]
+      - [216, 253]
+      - [228, 253]
+      - [239, 253]
+      - [251, 253]  # NE corner
+      - [251, 242]
+      - [251, 231]
+      - [251, 221]
+      - [251, 210]
+      - [251, 199]
+      - [251, 188]
+      - [251, 178]
+      - [251, 167]
+      - [251, 156]  # the east step: west 11 cells
+      - [240, 156]  # the east step: south again
+      - [240, 145]
+      - [240, 134]
+      - [240, 123]
+      - [240, 112]
+      - [240, 101]
+      - [240, 90]
+      - [240, 78]
+      - [240, 67]
+      - [240, 56]
+      - [240, 45]
+      - [240, 34]
+      - [240, 23]  # SE corner
+      - [229, 23]
+      - [217, 23]
+      - [206, 23]
+      - [194, 23]
+      - [183, 23]
+      - [171, 23]
+      - [160, 23]
+      - [148, 23]
+      - [137, 23]
+      - [126, 23]
+      - [114, 23]
+      - [103, 23]
+      - [91, 23]
+      - [80, 23]
+      - [68, 23]
+      - [57, 23]
+      - [45, 23]
+      - [34, 23]
+      - [22, 23]
+      - [11, 23]  # the SW step: south 2 cells
+      - [11, 21]  # the SW step: west 4 cells, back to the start

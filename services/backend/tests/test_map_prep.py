@@ -221,3 +221,38 @@ def test_the_gef_fild10_geometry_covers_every_span_and_npc_plus_four() -> None:
         assert mz.in_no_enter(z, c), c
     for c in [(186, 179), (186, 159)]:  # the proposed START and FALLBACK stands (gef10-prep 5)
         assert not mz.in_no_enter(z, c)
+
+
+# --- the committed xmas_dun02 zones (Batt's order 2026-11-05 ~13:2x; xmas02-prep.md 2) ----------
+
+XMAS02_SPAN = (129, 130, 1, 1)  # data/kb/warps.json: xmas_dun2-2 -> xmas_dun01, the only warp
+XMAS02_ARRIVAL = (131, 130)  # from xmas_dun01 (npc/warps/dungeons/xmas_dun.txt:18): ONE step east
+XMAS02_DTS = (130, 123)  # the Kafra dungeon teleport's arrival (npc/kafras/dts_warper.txt)
+XMAS02_STANDS = [(7, 21), (114, 23)]  # START (the edge loop's waypoint 0) and FALLBACK (74)
+
+
+def test_the_xmas_dun02_zones_cite_batts_edge_order() -> None:
+    """The keep-out is the safety necessity of Batt's edge technique (rogue-xmas02.md 0)."""
+    z = mz.load("xmas_dun02", mz.ZONES_DIR, (260, 260))
+    assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-11-05)"
+    assert str(z.reviewed) == "2026-11-05"
+    data = yaml.safe_load((mz.ZONES_DIR / "xmas_dun02.yaml").read_text())
+    assert "walk along the edge of the map, going clockwise" in data["delegation"]
+
+
+def test_the_xmas_dun02_geometry_covers_the_exit_warp_plus_four() -> None:
+    z = mz.load("xmas_dun02", mz.ZONES_DIR, (260, 260))
+    assert z is not None and not z.no_cross
+    (item,) = z.no_enter
+    assert item.id == "warp-xmas_dun01"
+    x, y, sx, sy = XMAS02_SPAN
+    for cx in range(x - sx - 4, x + sx + 5):
+        for cy in range(y - sy - 4, y + sy + 5):
+            assert mz.in_polygon((cx, cy), item.polygon), (cx, cy)
+    # exactly the span + 4: the next ring outside is not in the area
+    for c in [(x - sx - 5, y), (x + sx + 5, y), (x, y - sy - 5), (x, y + sy + 5)]:
+        assert not mz.in_polygon(c, item.polygon), c
+    assert mz.in_no_enter(z, XMAS02_ARRIVAL)  # never stand one step from the trigger
+    assert not mz.in_no_enter(z, XMAS02_DTS)
+    for c in XMAS02_STANDS:
+        assert not mz.in_no_enter(z, c), c

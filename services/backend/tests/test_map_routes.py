@@ -436,3 +436,33 @@ def test_the_linters_provider_reads_the_file_through_the_loader(tmp_path: Path) 
     write(tmp_path, GOOD.replace("kind: loop", "kind: circle"))
     with pytest.raises(RoutesUnreadable, match="fix_map.yaml: route 'ring': kind 'circle'"):
         get("fix_map")
+
+
+# --- the committed xmas_dun02 edge loop (Batt's order 2026-11-05 ~13:2x; xmas02-prep.md 3) -------
+
+# rogue-xmas02.md section 1's edge loop, its corners in order
+XMAS02_CORNERS = [(7, 21), (7, 253), (251, 253), (251, 156), (240, 156), (240, 23), (11, 23),
+                  (11, 21)]  # fmt: skip
+
+
+def test_the_xmas_dun02_route_is_the_clockwise_edge_loop() -> None:
+    """Batt: "walk along the edge of the map, going clockwise round and round". The agent placed
+    the waypoints only: every corner of the edge loop, in order, and <= 12 cells between, each leg
+    a straight run along one side (the proof on the map: xmas02-prep.md 3)."""
+    r = mr.load("xmas_dun02", shape=(260, 260))
+    assert r is not None and r.reviewed_by == "agent (delegated by batt, 2026-11-05)"
+    assert r.delegation is not None and "going clockwise round and round" in r.delegation
+    (route_,) = r.routes
+    wps = [tuple(c) for c in route_.waypoints]
+    assert route_.kind == "loop" and len(wps) == 85 and wps[0] == (7, 21)
+    assert [c for c in wps if c in XMAS02_CORNERS] == XMAS02_CORNERS
+    # clockwise with y north: the shoelace sum is negative
+    area2 = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(wps, wps[1:] + wps[:1], strict=True))
+    assert area2 < 0
+    for i, j in route_.legs():
+        a, b = wps[i], wps[j]
+        assert (a[0] == b[0]) != (a[1] == b[1]), (a, b)  # one axis: a straight run
+        assert 1 <= mr.cheb(a, b) <= 12, (a, b)
+    assert sum(mr.cheb(wps[i], wps[j]) for i, j in route_.legs()) == 952  # the lap, in cells
+    zones = mz.load("xmas_dun02", shape=(260, 260))
+    assert zones is not None and not any(mz.in_no_enter(zones, c) for c in wps)

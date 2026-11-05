@@ -32,6 +32,11 @@ allows: static map knowledge used at plan time.
     "Delegate gef_fild10 zones"; no-enter areas around its 9 warp spans and its 5 script-NPC
     cells; docs/planning/gef10-prep.md section 4). An NPC without a touch area has no span: its
     cell is grown by 4 like a span of 0, which also covers the body the client draws north of it.
+  - `xmas_dun02.yaml` is the fifth (2026-11-05: one no-enter area around the map's only exit warp,
+    its span + 4; docs/planning/xmas02-prep.md section 2). Its `delegation:` cites Batt's order
+    of 2026-11-05 ~13:2x (the edge technique, rogue-xmas02.md section 0): the keep-out is that
+    technique's safety necessity. No separate "do you delegate this file" question was asked (the
+    parent's X1 brief, 2026-11-05, set these review fields).
 
 Check a file before a run:
 

@@ -6,7 +6,7 @@ role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [rogue-gef10.md, gef10-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
+related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
 next_action: "X0 setup (the stat commands go in with the 2026-11-05 14:45+ rathena recreate), then the offline prep X1, then the v1 measurement X2 (pre-registered in section 4 BEFORE its recording)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
@@ -93,6 +93,10 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
   - script-NPC cells (the exit warp only), the zones file, the edge loop as the route, start stands
     on the loop (outside the warp's trigger, walkable on the server cache);
   - the outdoor camera model (xmas_dun02 is not in indoorrswtable.txt); the species' sprites.
+  - ➡️ **DONE offline 2026-11-05 14:47-15:10 ICT: [xmas02-prep.md](xmas02-prep.md)** (the zones
+    and the edge-loop route committed and proved; the KB candidates in /dev/shm, NOT installed;
+    the runner needs a start stand on the loop and `level_hold` 99 before a run, section 5; X2's
+    open points, section 7, go into section 4 BEFORE its recording).
 - **X2, the v1 measurement (pre-registered, section 4):** a supervised recording of the Rogue on
   the edge loop with immunity ON (`@monsterignore`) and the MVP cleared, then v1 scored offline
   against packet labels.
