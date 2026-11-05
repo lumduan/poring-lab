@@ -3,7 +3,7 @@
 #
 # DELEGATED REVIEW. Batt's order of 2026-11-05 (~13:2x ICT, Thai, translated in
 # docs/planning/rogue-xmas02.md section 0) sends the Rogue to this map with ONE technique: walk the
-# map's EDGE clockwise, round and round. The agent only places the keep-out his technique needs:
+# map's EDGE clockwise, round and round. The agent only places the keep-out their technique needs:
 # the map's only exit warp sits in the middle of the maze, and a walk or click onto it is a map
 # change (a hard bar), so the edge loop and every chase off it must never reach it.
 #
@@ -21,7 +21,7 @@
 map: xmas_dun02
 reviewed_by: "agent (delegated by batt, 2026-11-05)"
 reviewed: 2026-11-05
-delegation: "Batt 2026-11-05 ~13:2x ICT (Thai, translated; rogue-xmas02.md section 0): 'Go train on map xmas_dun02 instead ... The map is a bit hard: it is hard to walk, many things block the way, but there is a technique: walk along the edge of the map, going clockwise round and round. If you meet the boss, run away.' His technique is the route; this keep-out around the only exit warp is its safety necessity (a map change is a hard bar); the agent only placed the area"
+delegation: "Batt 2026-11-05 ~13:2x ICT (Thai, translated; rogue-xmas02.md section 0): 'Go train on map xmas_dun02 instead ... The map is a bit hard: it is hard to walk, many things block the way, but there is a technique: walk along the edge of the map, going clockwise round and round. If you meet the boss, run away.' Their technique is the route; this keep-out around the only exit warp is its safety necessity (a map change is a hard bar); the agent only placed the area. Batt's answer on this delegation, 2026-11-05 ~19:0x ICT (Thai, translated): 'Try it first to see whether it works, but it does not need to hug the edge exactly' -- a trial go; a later revision may keep a cell or two off the edge"
 no_cross: []
 no_enter:
   - id: warp-xmas_dun01

@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (xmas02-prep.md, merged e777181, KB installed); pilot p1 15:27-15:32 STOPPED by the runner itself: the minimap position readout is NOT read over xmas_dun02's light floor tiles (section 5); X2's recording waits for root-disk room (Amendment B). Planned 2026-11-05 (Batt's order ~13:2x, his four answers ~14:0x ICT, section 0)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "X0 setup (the stat commands go in with the 2026-11-05 14:45+ rathena recreate), then the offline prep X1, then the v1 measurement X2 (pre-registered in section 4 BEFORE its recording)."
+next_action: "X1b: collect the light-strip crops (4D), design the reader on the even stands, score the odd ones once; then pilot p2, then X2 (4A) on the 120 GB floor."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -164,12 +164,69 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
   GB)" (`dataset_ship.MIN_FREE_BYTES`, the shared floor that protects the root disk of live
   capture; `df`: 614 G, 462 G used, 125 G available). The floor is not lowered and the recording is
   not moved to RAM (CLAUDE.md rule 7): **X2's recording waits** until Batt frees the root disk or
-  decides on the floor.
+  decides on the floor. ➡️ Batt decided a 120 GB floor at ~19:0x (Amendment C, 4C).
 - Instead, an **UNRECORDED 15-min pilot** of the runner on the loop (the same command as 4A with
   `--minutes 15 --label xmas02-p1`; the Rogue immune; the MVP cleared). It is not X2 and scores
   nothing: it checks that the runner works on this map (the edge loop walked clockwise, the
   engagements, the Battle Log reader on the docked 6-line window, Snatcher steals in the packets)
   and is reported with the runner's own events and the offline judge.
+
+### 4C. Amendment C (2026-11-05 ~20:2x ICT): Batt's answers to the 15:38 report
+
+Batt's answers (~19:0x ICT, Thai, translated), one per open decision of the report:
+1. **The disk:** "Clear it first, go ahead. How much space does a YOLO recording normally take, so
+   the floor can be set right?" The sizes (NAS manifests, 25 RDP PNG sessions 2026-10-25..10-29):
+   **7.0-8.4 GB per hour at 1 frame/s**, ~16 GB/h at 2 frames/s; X2 is >= 20 min with a 3 GB cap.
+   Batt then chose **a 120 GB floor** (was 140): `dataset_ship.MIN_FREE_BYTES`, ADR-0010
+   "Amendment 2026-11-05". The image clean-up is HA's (its 10:03 inventory, the owners' answers;
+   at most ~10 GB that night, and HA asks Batt directly before removing anything); poring-lab
+   removes nothing (rathena-build and vision stay: both are used).
+2. **The readout:** "yes" to a reader for light strips, with /where meanwhile (X1b below).
+3. **The route and the zone (delegated):** "Try it first to see whether it works, but it does not
+   need to hug the edge exactly." Recorded in both files' `delegation` (route sha256 now
+   `a3532a338f166844...`, zones `89ea7a9c98d5d62b...`); `reviewed_by` stays the delegation.
+4. **The 688 unspent status points:** "No need to add them; leave them as they are."
+5. **The second chat tab:** "Give it a name that says what it is for, in case we use it later",
+   then (asked how) "double-click the tab": renamed **"Chat"** at 20:03
+   (docs/client/rathena-client.md).
+6. **Port 8888's unauthenticated load routes on the LAN:** "yes" (accepted as documented).
+
+**X2's recording is no longer blocked by the disk** (129 GB free against the 120 GB floor; X2's
+cap is 3 GB). It still waits for X1b: the recording IS the first supervised patrol run (4A), and
+the runner stops on unread positions (pilot p1).
+
+### 4D. X1b pre-registration: a readout reader for light strips (written BEFORE its data)
+
+- **The cause** (pilot p1's frame `live1`, 15:32, the readout "79 93" over the pale floor): the
+  digits are drawn OPAQUE -- white strokes ~250 with a black drop shadow ~0 -- over a strip the
+  scene shows through. `selfpos.strip_background` takes the median of the pixels between the
+  shadow level (73.5) and the ink level (183.7), so a pale floor (~200) is left out and the
+  estimate came from the magnifier corner (137.9); every floor pixel then reads as half a stroke
+  and no digit template fits (`no_glyph`). Over the orange floor the same reader reads.
+- **Data:** `scripts/selfpos_light.py collect --map xmas_dun02 --out /dev/shm/poring-lab-tmp/x1b
+  --per-stand 8`: the Rogue (immune) is `@warp`ed to each of the edge loop's 85 waypoints in
+  order (`@killmonster2` at the first: a still scene, no aggressor), 8 grabs 0.35 s apart after
+  1.5 s; each grab keeps the readout rect (+2 px) and the base reader's answer. Then `truth`: the
+  sniffer's events of the window; a crop's true cell is the last own `map_change` before it, only
+  when it landed where it was sent and did not move after (standing frames only). Crops are
+  client-derived pixels: /dev/shm, archived to the NAS, never committed.
+- **The split:** EVEN stands are the fitting half: the light-strip design and any fitted numbers
+  use only them. ODD stands are HELD OUT: scored ONCE, after the design is committed.
+- **Bars on the held-out half (pooled over its crops):**
+  - **B1:** 0 wrong reads (a read that is not the truth), on light and dark strips alike.
+  - **B2:** >= 90 % exact on the light-strip crops (scene median >= 170, `selfpos_light.
+    LIGHT_STRIP`, the opaque glyph pixels left out).
+  - **B3:** on the dark-strip crops, exact >= the base reader's on the same crops, 0 wrong.
+  - **B4 (T0's guard):** `selfpos_eval.py` on T0's held-out sessions (outdoor-c, outdoor-d,
+    indoor-c) with the new reader still passes T0's pre-registered bars (>= 99 % exact standing,
+    >= 97 % within one cell walking), and its wrong reads do not rise above the base reader's.
+- **Reported beside the bars:** the base reader on the same crops (the baseline), the abstain
+  reasons, the scene-median distribution, and the even half's in-sample numbers (not a result).
+- **Then, not a bar:** pilot p2 (the pilot p1 command, 15 min, unrecorded): position-unread events
+  and Fly Wings against p1's.
+- **/where meanwhile:** no run happens before X1b is scored, so the /where fallback is built only if
+  X1b fails. It would be bounded anyway: the typing guard refuses a 4th identical line in a row,
+  and Batt's 2026-10-09 rule forbids filler lines to get past it.
 
 ## 5. Results
 
@@ -220,4 +277,5 @@ setup 15:27:21-15:27:50, the run to 15:32:2x):**
 - Next (not started): a readout reader for light strips (the digits keep their 1-px black drop
   shadow; a second template set or a shadow-based mode, calibrated on readout crops with the
   packets' positions as truth), or a /where fallback through the replies' tab; and X2's recording
-  once the root disk has >= 140 GB free.
+  once the root disk has >= 140 GB free. ➡️ SUPERSEDED by Amendment C (4C): the floor is 120 GB;
+  X2 waits for X1b instead (4D).

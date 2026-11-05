@@ -16186,6 +16186,7 @@ chat window at every game entry and before typing, and arrange the tabs correctl
   recorded one-tab frames (11:32, 12:22) read "battle | empty" -> "wrong" (the stop). Live 13:4x:
   `ensure` standard with 0 steps and tabs "ok"; `client_layout.select_tab("regular")` shows
   NewTab_2 (the standard layout's tab again; the hunting layout's stays Battle Log).
+  ➡️ 2026-11-05 20:03: NewTab_2 renamed "Chat" (Batt's decision; docs/client/rathena-client.md).
 - Immunity (the GM): 13:32:43 `immune-on --again` -> its screenshot showed "Returned to normal
   state." (immunity had been ON since 12:39 -> now OFF); 13:33:15 the next `--again` was SKIPPED by
   the typing guard (a 3rd identical line in a row) yet collect_v2 recorded it "sent" with a new

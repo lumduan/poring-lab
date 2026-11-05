@@ -1252,7 +1252,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")
         # the Battle Log reader (battle_log.py live) reads the SHOWN chat tab: since 2026-11-05 the
-        # window has two (Battle Log | NewTab_2, the replies'), and a client restart shows the first
+        # window has two (Battle Log | Chat, the replies'), and a client restart shows the first
         # while a typed line's check may leave the replies' shown -- so Battle Log is selected here
         import client_layout as cl_
 

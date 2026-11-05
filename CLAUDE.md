@@ -414,7 +414,8 @@ ports, quickstart) and `docs/adr/`.
     2026-11-05; `scripts/chat_window.py`, docs/client/rathena-client.md "The chat window standard").
     - `ro_agent.enter_game` and `ro_agent.open_chat` (after the UI gate) run it.
     - The standard: docked at the client's bottom-left (left 0, last row 719), 6 lines, the padlock
-      CLOSED, and two tabs IN ORDER: Battle Log | NewTab_2 (the tab of the replies to typed lines).
+      CLOSED, and two tabs IN ORDER: Battle Log | Chat (the tab of the replies to typed lines; the
+      client's NewTab_2, renamed by Batt's decision 2026-11-05).
     - A moved or resized window is put back only by the client's own controls: F10, the padlock,
       Enter behind the UI gate, a drag of the white input bar.
     - Missing or swapped tabs stop: nothing is typed.

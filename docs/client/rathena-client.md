@@ -472,13 +472,13 @@ only (the hotkey bar and Basic Info stay as the scripts set them).
 | size | 6 message lines: the message area's white top border at y 598, the selected tab's at 582 |
 | open input bar | white field y 700-716 (frame 696-719); `chat_open` box (0, 699, 570, 12); click into it at (300, 708) |
 | padlock | CLOSED; its body at x 580-594, y 589-594; click point (585, 591) |
-| tabs | two, IN ORDER: Battle Log, NewTab_2 (the replies' tab, added 2026-11-05 13:26; see below) |
+| tabs | two, IN ORDER: Battle Log, Chat (the replies' tab, added 2026-11-05 13:26 as NewTab_2, renamed 20:03; see below) |
 
 The frozen Phase 2 layout of every session before 2026-11-05 is the same window with 3 lines,
 95 px higher (last row y 624). One `Geometry` gives both and every reader's numbers
 (`chat_window.LEGACY` / `STANDARD`; `test_chat_window.py` pins each old constant).
 
-**The client's controls (Batt's demonstration 11:38, his input log + frames; then the agent's
+**The client's controls (Batt's demonstration 11:38, their input log + frames; then the agent's
 probes 11:44-11:46):**
 - **SIZE: F10**, or the round icon at the input bar's right end (its tooltip: "Change size(F10)").
   One press: 3 -> 6 -> 9 -> 12 -> 15 lines -> the window HIDDEN -> the input bar alone -> 3. The
@@ -525,12 +525,20 @@ correctly"):**
   there too (13:32 "Returned to normal state.").
 - The check reads the tab strip: each slot's label (text masks, both states; a lone tab is drawn
   wider with its label 5 px to the right) and the selected tab (its white top border). Battle Log
-  | NewTab_2 passes; a tab missing or swapped (read with confidence) STOPS typing; an unsure read
+  | Chat passes (Battle Log | NewTab_2 until the rename below); a tab missing or swapped (read with confidence) STOPS typing; an unsure read
   (a bright scene behind the translucent tabs) is read again with the pointer parked, then passes
   with a warning. It is NOT repaired automatically: the closed padlock hides "+" / "-", and the
   client names a new tab itself. To restore by hand: open the padlock, "+", set the categories
   above, close the padlock.
-- WHICH tab is shown is the layout's job: the standard layout shows NewTab_2 (`client_layout`
+- **Renamed "Chat" (2026-11-05 20:03, Batt: "give it a name that says what it is for"; the method
+  was Batt's answer, "double-click the tab"):** padlock open -> a double-click on the label (two
+  motions onto it first) -> the label becomes an edit field with the old name SELECTED (blue) ->
+  Backspace, "Chat" typed (the text went to the tab, the chat input stayed empty: checked on a
+  frame before any Enter) -> Enter closes the edit (nothing is sent) -> padlock closed. The label
+  templates were cut again (old ones: an old "NewTab_2" label now reads "unread", which passes
+  with a warning, not "wrong"). The name is not in the server's account settings (the web-server's
+  `user_configs` still holds `{"Type": 1}` afterwards): the client keeps it locally, like the tabs.
+- WHICH tab is shown is the layout's job: the standard layout shows Chat (`client_layout`
   key "regular"), the hunting layout Battle Log. Templates: `data/ui_anchors/chat_window/tabs.npz`
   (`chat_window.py cut-tabs REGULAR_SEL.png BATTLE_SEL.png`).
 

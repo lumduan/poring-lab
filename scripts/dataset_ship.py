@@ -10,7 +10,8 @@
 Where things live:
 * Local root (record_session.py's default --out): /home/batt/poring-lab-rec. It is on the disk
   shared with live capture, so it is a BUFFER, capped: recording refuses / stops when the
-  filesystem has < 140 GB free or > 20 GB of sessions are still unshipped (local_caps()).
+  filesystem has < 120 GB free or > 20 GB of sessions are still unshipped (local_caps()).
+  The floor was 140 GB until Batt's 2026-11-05 decision (a 1-fps PNG recording is 7.0-8.4 GB/h).
 * NAS root: /mnt/poring-lab-datasets (NFS, docs/operations/nas-sink.md). Written host-side only.
   It was never mounted into a container (an NFS hang must not freeze a lab service) until Batt's
   decision 4 (2026-10-04): vision alone mounts it READ-ONLY, soft (compose `datasets-nas`), for
@@ -66,7 +67,9 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_ROOT = Path("/home/batt/poring-lab-rec")
 NAS_ROOT = Path("/mnt/poring-lab-datasets")
-MIN_FREE_BYTES = 140 * 10**9
+# Batt 2026-11-05 (was 140 GB, ADR-0010 Amendment 2026-11-05): 120 GB stays free for the
+# other tenants of the root disk; a 1-fps PNG recording takes 7.0-8.4 GB/h and is shipped after.
+MIN_FREE_BYTES = 120 * 10**9
 MAX_UNSHIPPED_BYTES = 20 * 10**9
 BWLIMIT_KBPS = 40000  # rsync --bwlimit (KiB/s): ~40 MB/s, a fraction of the disk's throughput
 RETENTION_DAYS = 365

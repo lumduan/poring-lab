@@ -176,7 +176,7 @@ def test_a_tab_the_chat_window_does_not_have_is_refused_before_any_input(
         def __getattr__(self, name: str) -> object:
             raise AssertionError(f"input sent: {name}")
 
-    assert cw.TABS == ("battle", "regular")  # 2026-11-05 13:2x: Battle Log | NewTab_2
+    assert cw.TABS == ("battle", "regular")  # 2026-11-05: Battle Log | NewTab_2 ("Chat" 20:03)
     monkeypatch.setattr(cw, "TABS", ("battle",))  # the 11-04 state: the second tab missing
     with pytest.raises(cl.LayoutError, match="not in the chat window"):
         cl.select_tab(NoInput(), None, "regular")

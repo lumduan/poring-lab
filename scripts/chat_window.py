@@ -130,14 +130,16 @@ LEGACY = Geometry(lines=3, bottom=624)  # every session before 2026-11-05 (the f
 STANDARD = Geometry(lines=6, bottom=719)  # Batt 2026-11-05: docked bottom-left, six lines
 GEOMETRIES = {"standard": STANDARD, "legacy": LEGACY}
 # THE TABS, in order (Batt 2026-11-05 ~13:2x: "add the second tab back yourself ... and arrange the
-# tabs correctly"): Battle Log, then the client's "+" tab, NewTab_2 (the client names it; its
-# settings window has no name field), shown categories = the 10-19 complement of Battle Log's
+# tabs correctly"): Battle Log, then the client's "+" tab, named "Chat" since 2026-11-05 20:03
+# (Batt: a name that says what it is for; renamed by a double-click on its label with the padlock
+# open; the client called it NewTab_2, and its settings window has no name field), shown
+# categories = the 10-19 complement of Battle Log's
 # (Public, Public Chat, Whisper, Party Chat, Guild Chat, Party member's obtained item / abnormal
 # status, Party configuration, WOE Information, Quest information, Clan Chat, Display Call
 # messages): the replies to typed commands (/where, @ commands) land there. "regular" keeps the old
 # key (the 10-19 "Regular Chat" tab had that role).
 TABS = ("battle", "regular")
-TAB_NAMES = {"battle": "Battle Log", "regular": "NewTab_2"}
+TAB_NAMES = {"battle": "Battle Log", "regular": "Chat"}
 
 
 CUTOVER_SID = "20261105T12"  # sessions recorded from here on show the 2026-11-05 standard

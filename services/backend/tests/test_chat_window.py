@@ -42,6 +42,8 @@ def test_the_standard_is_docked_bottom_left_with_six_lines() -> None:
     assert g.rect == (0, 585, 600, 720)
     assert g.line_y0(3) == 646  # the NEWEST three of the six lines
     assert cw.TABS == ("battle", "regular")  # 13:2x: Battle Log | NewTab_2 (the replies)
+    # renamed "Chat" at 20:03 (Batt: a name that says what it is for)
+    assert cw.TAB_NAMES == {"battle": "Battle Log", "regular": "Chat"}
 
 
 def test_the_process_geometry_is_the_standard_unless_a_replay_selects_legacy(
@@ -364,7 +366,7 @@ def test_a_missing_or_swapped_tab_stops_before_anything_is_typed(sim: Any) -> No
     tabs swapped, read with confidence, stops with a frame; nothing is clicked on the tab strip."""
     for tabs in (("battle", "empty"), ("regular", "battle"), ("empty", "regular")):
         c = Client(tabs=tabs)
-        with pytest.raises(cw.ChatWindowError, match="tabs: expected Battle Log . NewTab_2"):
+        with pytest.raises(cw.ChatWindowError, match="tabs: expected Battle Log . Chat"):
             cw.ensure(sim(c), None, why="t")
         assert c.world == [] and c.log == [], tabs
 

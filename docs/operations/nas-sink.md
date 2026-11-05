@@ -223,7 +223,7 @@ weekdays; `ship` refuses then, unless `--force-market`), with quant-postgres 5 m
 
        uv run python scripts/record_session.py --backend rdp --label ship-test --seconds 30
 
-   It goes to `/home/batt/poring-lab-rec/<session>/`; the caps are 140 GB free and 20 GB unshipped.
+   It goes to `/home/batt/poring-lab-rec/<session>/`; the caps are 120 GB free (140 GB until Batt's 2026-11-05 decision) and 20 GB unshipped.
 2. `uv run python scripts/dataset_ship.py status` shows it `local  unshipped` and `nas …: mounted`.
 3. Ship it:
 

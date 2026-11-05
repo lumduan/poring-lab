@@ -49,6 +49,7 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 >
 > **Headroom.** The free-space floor stays 140 GB (Batt): with 152 GB free that is 12 GB, about
 > **5 h of H.264 per session before shipping**. The 20 GB unshipped cap alone would allow ~8 h.
+> ➡️ SUPERSEDED 2026-11-05: the floor is **120 GB** (Batt; see "Amendment 2026-11-05" below).
 >
 > **Determinism.** The bitstream is the dataset only while decoding is bit-identical.
 > - `scripts/dataset_check.py` decodes every frame on the HOST after shipping and compares each
@@ -166,7 +167,8 @@ record_session.py ──► /home/batt/poring-lab-rec/<session>/ ──► datas
 - It is on the disk shared with live capture, never `./data` (vision mounts it), never `/dev/shm`.
 - A **buffer, capped** (`dataset_ship.local_caps`). Recording **refuses to start**, and **stops
   cleanly** mid-run (`stop_reason: local_cap: …`, re-checked every 5 s), when either:
-  - the filesystem has **< 140 GB free** (`--min-free-gb`);
+  - the filesystem has **< 120 GB free** (`--min-free-gb`; 140 GB until 2026-11-05, see the
+    amendment below);
   - **> 20 GB** of sessions wait under the root, unshipped (`--max-unshipped-gb`). 20 GB is about
     40 min at the measured 489 MB/min.
 - The quant IO guard, `ionice -c3` and the per-session size cap are unchanged.
@@ -229,3 +231,19 @@ They cover:
 - `record_session` refuses before opening the screen when a cap is hit.
 
 **Verified live 2026-10-02 21:06:** the 30 s round-trip in `nas-sink.md` section 6 passed (see Status).
+
+## Amendment 2026-11-05: the free-space floor is 120 GB (Batt)
+
+- **Decision (Batt, 2026-11-05 ~19:0x ICT):** `dataset_ship.MIN_FREE_BYTES` goes from 140 GB to
+  **120 GB**. Recording still refuses to start, and stops cleanly mid-run, below the floor; the
+  20 GB unshipped cap, the IO guard and shipping after each session are unchanged.
+- **Why it came up:** the xmas_dun02 X2 recording (docs/planning/rogue-xmas02.md, Amendment B) was
+  refused at 134 GB free. The disk's other tenants take it down by about 0.9-1.4 GB/h on
+  2026-11-05 evening (HA's and our `df` readings), so freeing images alone (at most ~10 GB that
+  night, HA) would not have stayed above 140 GB.
+- **The sizes the decision used** (NAS manifests, 25 RDP PNG sessions, 2026-10-25..10-29):
+  - 1 frame/s, PNG level 1, 1280 x 720: **7.0-8.4 GB per hour** (120-140 MB/min);
+  - 2 frames/s: about 16 GB per hour;
+  - H.264 at IDR 1 s (this ADR's rates): about 2.5 GB per hour.
+  A session lives on the root disk only until it is shipped and verified, then it is deleted.
+

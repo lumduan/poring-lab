@@ -66,6 +66,17 @@ def index_lines(dest: Path) -> list[dict[str, Any]]:
 SID = "20261003T110000-rdp-calib"
 
 
+def test_the_free_space_floor_is_batts_120_gb(
+    ds: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-05 (ADR-0010 amendment): 120 GB stays free on the shared root disk (was 140)."""
+    assert ds.MIN_FREE_BYTES == 120 * 10**9
+    monkeypatch.setattr(ds, "free_bytes", lambda path: 119 * 10**9)
+    assert "floor 120 GB" in (ds.local_caps(tmp_path, unshipped=0) or "")
+    monkeypatch.setattr(ds, "free_bytes", lambda path: 121 * 10**9)
+    assert ds.local_caps(tmp_path, unshipped=0) is None
+
+
 def test_ship_verifies_then_deletes_the_local_copy(ds: ModuleType, dirs: SimpleNamespace) -> None:
     make_session(dirs.root, SID)
     assert ds.main(ship_argv(dirs)) == 0
@@ -242,7 +253,7 @@ def test_local_caps(ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.M
     # a running recording: measured once, then its own bytes added on top
     running = ds.local_caps(dirs.root, max_unshipped=10**6, unshipped=0, extra=2 * 10**6)
     assert "unshipped" in running
-    monkeypatch.setattr(ds, "free_bytes", lambda path: 139 * 10**9)
+    monkeypatch.setattr(ds, "free_bytes", lambda path: ds.MIN_FREE_BYTES - 10**9)
     assert "free" in ds.local_caps(dirs.root)
     # a root that doesn't exist yet: nothing unshipped, free space of its parent
     monkeypatch.setattr(ds, "free_bytes", lambda path: 200 * 10**9)
