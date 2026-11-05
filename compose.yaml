@@ -105,6 +105,11 @@ services:
       - "${HOST_LAN_IP:?}:6900:6900" # login
       - "${HOST_LAN_IP:?}:6121:6121" # char
       - "${HOST_LAN_IP:?}:5121:5121" # map
+      # rAthena's web-server (RATHENA_WEB_SERVER=true, Batt 2026-11-05: fix the client's "error
+      # when loading the data account settings"): the 2021 client loads / saves its account and
+      # character UI settings (and emblems) over HTTP at its AssistAddr = 192.168.1.13:8888.
+      # LAN only, like the game ports; its load routes are unauthenticated upstream.
+      - "${HOST_LAN_IP:?}:8888:8888" # web
     mem_limit: 1536m
     memswap_limit: 1536m
 

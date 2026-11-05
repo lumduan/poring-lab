@@ -980,7 +980,10 @@ def test_rathena_th_runs_one_at_a_time_with_rathena() -> None:
     th, rathena = services["rathena-th"], services["rathena"]
     ip = th["networks"]["default"]["ipv4_address"]
     assert ip == rathena["networks"]["default"]["ipv4_address"] == Settings().ingest_peer
-    assert lan_ports(th) == lan_ports(rathena) == ["6900:6900", "6121:6121", "5121:5121"]
+    assert lan_ports(th) == ["6900:6900", "6121:6121", "5121:5121"]
+    # + rathena's web-server (Batt 2026-11-05: the client's account settings; rathena only, on the
+    # LAN address like the game ports)
+    assert lan_ports(rathena) == [*lan_ports(th), "8888:8888"]
     # db-th is pinned HIGH: unpinned, it took rathena's .6 while rathena was down (2026-10-05)
     db_th_ip = services["db-th"]["networks"]["default"]["ipv4_address"]
     assert int(db_th_ip.rsplit(".", 1)[1]) >= 200 and db_th_ip != ip

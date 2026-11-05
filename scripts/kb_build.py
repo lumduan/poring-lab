@@ -67,6 +67,9 @@ SPAWNS = (
     # gef_fild10 (Batt 2026-10-25: the Rogue's field; docs/planning/gef10-prep.md). The pre-renewal
     # override, loaded by npc/pre-re/scripts_monsters.conf
     "npc/pre-re/mobs/fields/geffen.txt",
+    # xmas_dun02 (Batt 2026-11-05: the Rogue's steal map; docs/planning/rogue-xmas02.md), loaded by
+    # npc/pre-re/scripts_monsters.conf
+    "npc/pre-re/mobs/dungeons/xmas_dun.txt",
 )
 # Loaded by npc/pre-re/scripts_warps.conf (pre-renewal overrides) and npc/scripts_warps.conf
 WARPS = (
@@ -81,6 +84,7 @@ WARPS = (
     "npc/warps/fields/glastheim.txt",
     "npc/warps/dungeons/orcsdun.txt",  # orcsdun01 (see SPAWNS)
     "npc/pre-re/warps/fields/geffen_fild.txt",  # gef_fild10 (see SPAWNS; scripts_warps.conf)
+    "npc/warps/dungeons/xmas_dun.txt",  # xmas_dun02 (see SPAWNS; scripts_warps.conf)
 )
 DEFAULT_MAPS = ("prt_fild08", "iz_dun00", "iz_dun01")
 # 2026-10-08 (loot@1 P4). db/item_db.yml imports db/pre-re/item_db.yml in a pre-renewal build,

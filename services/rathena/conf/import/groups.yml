@@ -51,8 +51,15 @@
 #                  the clear stand, and moves the loot in (no Kafra NPC, no 130 z fee). Pinned
 #                  atcommand.cpp ACMD_FUNC(storage) -> storage_storageopen. Through the character's
 #                  name + job check like every group-20 line.
+#   str agi vit int dex luk   lab only (Batt, 2026-11-05 ~14:0x, his answer "Add @agi/@dex etc. to
+#                  group 20" for the ROGUE's base AGI 99 / DEX 99 on xmas_dun02, docs/planning/
+#                  rogue-xmas02.md): typed as @agi <+/-adjustment>; pinned atcommand.cpp:2948
+#                  ACMD_FUNC(param) (the six names, :11563-11568): the base stat moves to at most
+#                  pc_maxparameter (99), status points untouched. Through the character's name + job
+#                  check like every group-20 line.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
-# No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
+# No permissions beyond Player's otherwise: no zeny commands, no any_warp, no hide_session (the stat
+# commands: only the six above, since 2026-11-05).
 Header:
   Type: PLAYER_GROUP_DB
   Version: 1
@@ -85,3 +92,9 @@ Body:
       questskill: true
       refine: true
       storage: true
+      str: true
+      agi: true
+      vit: true
+      int: true
+      dex: true
+      luk: true
