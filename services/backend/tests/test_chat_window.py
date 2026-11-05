@@ -182,6 +182,22 @@ def test_a_moved_closed_window_over_a_grey_scene_opens_the_input_first() -> None
     assert cw.next_step(st) == "open_input"
 
 
+def test_a_bright_scene_continuing_the_top_border_does_not_move_the_window() -> None:
+    """2026-11-05 21:21, xmas_dun02's pink puzzle floor: the scene right of the window continued
+    the top border's white run (747 px), so its end no longer gave the window's left."""
+    g = cw.STANDARD
+    for input_open in (True, False):
+        img = draw(g, input_open=input_open)
+        img[g.text_top, 593:900] = 240  # the floor beyond the border, as bright (x 596: 230 live)
+        assert cw.find(img) == {
+            "left": 0,
+            "text_top": g.text_top,
+            "bottom": g.bottom,
+            "lines": 6,
+            "input": "open" if input_open else "closed",
+        }
+
+
 def test_white_scene_rows_without_the_window_frame_are_no_window() -> None:
     img = draw(None)
     img[300:303, 0:1280] = 255  # snow, a white wall: a long white row, but no right border
@@ -196,15 +212,19 @@ def test_padlock_decisions_need_a_match_and_a_margin() -> None:
     assert cw.padlock_state({"open": 12.0, "locked": 20.0}) is None  # no margin
 
 
-def test_the_colour_shape_decides_only_when_one_template_matches() -> None:
-    """2026-11-05 20:24, xmas_dun02's north edge: closed 5.8 / open 20.1 over a pink wall (margin
-    14.3 < 15) stopped the check; the icon's blue / white shape (IoU 0.507 vs 0.315) decides it."""
+def test_the_colour_shape_decides_only_with_greys_ranking() -> None:
+    """2026-11-05 xmas_dun02: closed 5.8 / open 20.1 over the north edge's pink wall (20:24) and
+    5.8 / 12.0 over the pink puzzle floor (21:21) stopped the check; the icon's blue / white
+    shape (IoU 0.51-0.53 vs 0.31) decides them, when grey ranks the same template first."""
     pink = {"open": 20.1, "locked": 5.8, "open_shape": 0.315, "locked_shape": 0.507}
     assert cw.padlock_state(pink) == "locked"
-    assert cw.padlock_state({**pink, "locked_shape": 0.40}) is None  # the shape not clear
-    assert cw.padlock_state({**pink, "open": 19.0}) is None  # both match by grey: no second say
+    puzzle = {"open": 12.0, "locked": 5.8, "open_shape": 0.312, "locked_shape": 0.532}
+    assert cw.padlock_state(puzzle) == "locked"
+    assert cw.padlock_state({**pink, "locked_shape": 0.44}) is None  # the shape not clear
+    assert cw.padlock_state({**puzzle, "open": 5.0}) is None  # grey ranks the other first
     assert cw.padlock_state({**pink, "open_shape": 0.6, "locked_shape": 0.3}) is None  # disagrees
-    flip = {"open": 6.0, "locked": 20.5, "open_shape": 0.58, "locked_shape": 0.30}
+    assert cw.padlock_state({**pink, "locked": 21.0, "open": 25.0}) is None  # nothing matches
+    flip = {"open": 6.0, "locked": 12.5, "open_shape": 0.58, "locked_shape": 0.30}
     assert cw.padlock_state(flip) == "open"
     assert cw.padlock_state({"open": 20.1, "locked": 5.8}) is None  # no shape: grey alone
 
@@ -407,10 +427,20 @@ def test_yesterdays_window_is_docked_sized_and_locked(sim: Any) -> None:
     assert c.gate == ["chat_window:t"]  # Enter only behind the UI gate
 
 
-def test_a_hidden_window_is_shown_by_f10_through_the_bar_alone(sim: Any) -> None:
+def test_no_window_found_is_never_answered_by_a_blind_f10(sim: Any) -> None:
+    """2026-11-05 21:21, xmas_dun02: over a bright floor the reader missed a standard window and
+    F10 cycled it to 9 lines. A first read without a window now STOPS (hidden, or not read)."""
     c = Client(size="hidden", input_open=True)
+    with pytest.raises(cw.ChatWindowError, match="no F10 blind"):
+        cw.ensure(sim(c), None, why="t")
+    assert c.log == [] and c.size == "hidden"
+
+
+def test_the_checks_own_cycle_goes_on_through_hidden_and_the_bar_alone(sim: Any) -> None:
+    """From the largest size its own F10 hides the window, then shows the bar alone: expected."""
+    c = Client(size=15, input_open=True)
     out = cw.ensure(sim(c), None, why="t")
-    assert out["steps"] == ["f10", "f10", "f10"] and c.size == 6 and c.world == []
+    assert out["steps"] == ["f10"] * 4 and c.size == 6 and c.world == []
 
 
 def test_a_step_without_effect_stops_with_a_frame(sim: Any) -> None:

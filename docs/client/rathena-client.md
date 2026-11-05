@@ -545,12 +545,25 @@ correctly"):**
 **The check** (`chat_window.ensure`), at every game entry (`ro_agent.enter_game`) and before every
 typed line (`ro_agent.open_chat`, after the UI gate, before the Enter):
 1. one read: standard -> nothing is sent;
-2. otherwise the pointer is parked and each step is read again on a fresh frame: F10 while the
-   window is hidden or the bar alone; then the place (open the padlock; open the input by Enter
-   behind the UI gate; drag the white bar to (300, 708)); then the size (F10 until 6 lines); then
-   the padlock closed;
+2. otherwise the pointer is parked and each step is read again on a fresh frame: F10 on the bar
+   alone; then the place (open the padlock; open the input by Enter behind the UI gate; drag the
+   white bar to (300, 708)); then the size (F10 until 6 lines); then the padlock closed;
 3. an unreadable state, a step without effect or more than 8 F10 presses stop with a saved frame
    (`/dev/shm/poring-lab-tmp/chat-window/`); nothing is typed then.
+4. ➡️ SINCE 2026-11-05 ~21:4x: **no window found STOPS** ("no F10 blind"). F10 on a frame without
+   a window only right after the check's own F10 from 15 lines (the cycle hides the window, then
+   shows the bar alone). Before, "not found" meant "hidden: press F10", and over xmas_dun02's
+   bright pink puzzle floor the reader missed a STANDARD window: the end path of the X1b
+   collection pressed Enter (a false "seen in part") and cycled F10 to 9 lines (21:21; restored
+   by hand, F10 x6 + Enter behind the UI gate, each step judged on a frame). A window hidden by a
+   person is now shown by a person (F10), or by the agent after a judged frame.
+- **Bright floors** (the same evening): the bright scene right of the window continued the white
+  top border's run (747 px instead of ~590), so the window's left came out wrong. `find` now tries
+  every left whose border starts 60-145 px into the window (after the selected tab: 68-81 Battle
+  Log, 133-141 Chat) and ends inside the run, a full match only. Of the day's 80 frames 78 read
+  as before and the 2 pink-floor frames read the standard window. The padlock's grey templates
+  come close over the same floors (closed 5.8 / open 12.0); the icon's colour shape decides when
+  grey ranks the same template first (all 63 frames with a window decide; none contradicts).
 - RDP only: on another display path a standard window passes, but nothing is fixed (not proven).
 - Padlock templates: `data/ui_anchors/chat_window/padlock.npz` (client pixels, local only; cut
   with `chat_window.py cut-padlock OPEN.png LOCKED.png`).

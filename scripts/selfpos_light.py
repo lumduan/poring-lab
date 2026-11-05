@@ -123,6 +123,9 @@ def collect(a: argparse.Namespace) -> int:
             cr.gm_line(agent, screen, cmd, a.job, a.char)
             return t
 
+        clean = False  # the home warp is typed only after a clean collection (2026-11-05 21:21:
+        # the end path's line after a refused one ran the chat window check again on the same
+        # unread state; with the then reader that pressed Enter and cycled F10)
         try:
             for i, (x, y) in enumerate(stands):
                 if i < first:
@@ -148,6 +151,7 @@ def collect(a: argparse.Namespace) -> int:
                 print(f"stand {i:3d} {x:3d},{y:3d}: base reader exact {ok}/{a.per_stand} "
                       f"({Counter(s['reason'] for s in samples[-a.per_stand:]).most_common(2)})",
                       flush=True)  # fmt: skip
+            clean = True
         finally:
             t1 = r.ns()
             np.savez_compressed(out / "crops.npz", crops=np.stack(crops) if crops else np.zeros(0))
@@ -157,7 +161,11 @@ def collect(a: argparse.Namespace) -> int:
             meta.update({"t1_mono_ns": t1, "samples": len(samples)})
             (out / "meta.json").write_text(json.dumps(meta, indent=1))
             home = dh.CLEAR_STAND
-            line(f"@warp {home[0]} {home[1]} {home[2]}")
+            if clean:
+                line(f"@warp {home[0]} {home[1]} {home[2]}")
+            else:
+                print("stopped: the home warp is NOT typed (the character stays where it is)",
+                      flush=True)  # fmt: skip
     print(f"collected {len(samples)} crops at {len(stands)} stands -> {out}")
     return 0
 

@@ -183,6 +183,9 @@ def luma(img_rgb: Any) -> np.ndarray:
 # - the SEPARATOR row bottom - 23 is uniform (std ~4): luma ~139 closed, ~196 open; with the input
 #   open the bar's white frame rows follow (bottom - 22, - 21; 247-255).
 TOP_END = 592
+# the top border STARTS this far right of the window's left: after the selected tab (55 frames of
+# 2026-11-05: 68-81 with Battle Log selected, 133-141 with the second tab)
+TOP_START = (60, 145)
 BORDER_X, BORDER_LO, BORDER_HI = 596, 115.0, 175.0
 SEP_STD = 12.0
 SEP_CLOSED = (115.0, 175.0)
@@ -225,27 +228,38 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
         y = int(y)
         edges = np.flatnonzero(np.diff(np.concatenate(([0], white[y].astype(np.int8), [0]))))
         for s, e in zip(edges[0::2], edges[1::2], strict=True):
-            left = int(e) - 1 - TOP_END
+            if e - s < 450:
+                continue
             # the top border starts inside the window (x left + 3, or after the selected tab);
             # the input bar's white rows run from its left edge to x left + 597: never a border
-            if e - s < 450 or left < 0 or s < left or left + BORDER_X >= w:
-                continue
-            run_end = _border_run(lum, y + 2, left)
-            if run_end is None:
-                continue
-            found: dict[str, Any] | None = None
-            sep = run_end + 1  # input OPEN: the border stops at the separator, the bar follows
-            if sep + 3 < h and _sep(lum, sep, left, SEP_OPEN) and \
-                    float(lum[sep + 1 : sep + 3, left + 5 : left + 590].mean()) >= 235:  # fmt: skip
-                found = {"bottom": sep + 23, "input": "open"}
-            elif _sep(lum, run_end - 23, left, SEP_CLOSED):  # CLOSED: the border runs to the bottom
-                found = {"bottom": run_end, "input": "closed"}
-            if found is not None:
-                span = found["bottom"] - 37 - y
-                if span % LINE_PITCH == 0 and span // LINE_PITCH in SIZES:
-                    return {"left": left, "text_top": y, "bottom": found["bottom"],
-                            "lines": span // LINE_PITCH, "input": found["input"]}  # fmt: skip
-            obscured = obscured or {"left": left, "text_top": y, "bottom": None}
+            left0 = int(e) - 1 - TOP_END
+            lefts = [left0] if left0 >= 0 and s >= left0 else []
+            # A BRIGHT SCENE right of the window continues the run (2026-11-05 21:21, xmas_dun02's
+            # pink floor: the top border row held 747 bright px, so e - 1 - TOP_END missed the
+            # window and the check F10-cycled it): every left whose border would START TOP_START
+            # before the run's start and END inside the run is tried too -- for a full match only
+            lefts += [x for x in range(int(s) - TOP_START[0], int(s) - TOP_START[1] - 1, -1)
+                      if x >= 0 and x != left0 and x + TOP_END <= e - 1]  # fmt: skip
+            for left in lefts:
+                if left + BORDER_X >= w:
+                    continue
+                run_end = _border_run(lum, y + 2, left)
+                if run_end is None:
+                    continue
+                found: dict[str, Any] | None = None
+                sep = run_end + 1  # input OPEN: the border stops at the separator, the bar follows
+                bar = sep + 3 < h and float(lum[sep + 1 : sep + 3, left + 5 : left + 590].mean())
+                if sep + 3 < h and _sep(lum, sep, left, SEP_OPEN) and bar >= 235:
+                    found = {"bottom": sep + 23, "input": "open"}
+                elif _sep(lum, run_end - 23, left, SEP_CLOSED):  # CLOSED: border to the bottom
+                    found = {"bottom": run_end, "input": "closed"}
+                if found is not None:
+                    span = found["bottom"] - 37 - y
+                    if span % LINE_PITCH == 0 and span // LINE_PITCH in SIZES:
+                        return {"left": left, "text_top": y, "bottom": found["bottom"],
+                                "lines": span // LINE_PITCH, "input": found["input"]}  # fmt: skip
+                if left == left0:
+                    obscured = obscured or {"left": left, "text_top": y, "bottom": None}
     if obscured is not None:
         return {**obscured, "lines": None, "input": None, "obscured": True}
     # the input bar alone (F10's last size): 17 white rows across the bar's message field; with a
@@ -269,14 +283,15 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)
 PADLOCK_MATCH, PADLOCK_MARGIN = 20.0, 15.0
 PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the white outline)
-# The SECOND OPINION (2026-11-05 20:24, X1b's collection on xmas_dun02's north edge: the closed
-# padlock over a bright pink wall read closed 5.8 / open 20.1 -- a margin of 14.3 < 15 -- and the
-# check stopped): when exactly ONE template matches (<= PADLOCK_MATCH, the other above it), the
-# icon's COLOUR shape decides -- the blue / white icon pixels (icon_mask), which no pink, orange or
-# grey scene passes, against each template's core: IoU own - other >= PADLOCK_SHAPE_MARGIN. On the
-# day's 55 frames (53 decided by grey): it agrees 52 times, abstains once (the Escape-dimmed
-# frame), never contradicts; the decided frames' shape margins are 0.206+ but for that one (0.005).
-PADLOCK_SHAPE_MARGIN = 0.10
+# The SECOND OPINION: the icon's COLOUR shape -- its blue / white pixels (icon_mask), which no
+# pink, orange or grey scene passes -- against each template's core (IoU). When grey alone cannot
+# decide, it decides if grey RANKS the same template first (within PADLOCK_MATCH) and the shape
+# agrees by PADLOCK_SHAPE_MARGIN. Why: xmas_dun02's bright floors bring the other template close
+# by grey (20:24, the north edge's pink wall: closed 5.8 / open 20.1; 21:21, the pink puzzle floor:
+# 5.8 / 12.0 and 0.0 / 14.2) while the shapes stay apart (0.51-0.56 vs 0.31-0.32). On the day's
+# 63 frames with a window: grey decides 60, every one of them with a shape margin >= 0.206 but
+# the Escape-dimmed frame (0.005); the second opinion contradicts none and decides the other 3.
+PADLOCK_SHAPE_MARGIN = 0.15
 
 
 def _padlock_crop(img_rgb: Any, left: int, text_top: int) -> np.ndarray:
@@ -323,7 +338,7 @@ def padlock_state(d: Mapping[str, float]) -> str | None:
         sk, so = d.get(f"{k}_shape"), d.get(f"{other}_shape")
         if sk is None or so is None:
             continue
-        if d[k] <= PADLOCK_MATCH < d[other] and sk - so >= PADLOCK_SHAPE_MARGIN:
+        if d[k] <= PADLOCK_MATCH and d[k] < d[other] and sk - so >= PADLOCK_SHAPE_MARGIN:
             return k
     return None
 
@@ -626,6 +641,7 @@ def ensure(agent: Any, screen: Any, *, why: str, g: Geometry | None = None, lock
     _park(agent)  # the pointer off the icon row and the bar, then judge again
     steps: list[str] = []
     f10s = 0
+    past_max = False  # the last F10 went past the largest size (hidden / bar alone expected next)
     last: tuple[Any, ...] | None = None
     for _ in range(max_steps):
         st = read(_grab_rgb(screen), tm, tt)
@@ -641,8 +657,19 @@ def ensure(agent: Any, screen: Any, *, why: str, g: Geometry | None = None, lock
             shot = _shot(screen, "unreadable" if step == "unknown" else "no-effect")
             raise ChatWindowError(f"chat window: {step!r} at {st} after {steps} (frame {shot})")
         last = key
+        if step == "f10" and (st is None or st.get("lines") is None) and not past_max:
+            # NO WINDOW FOUND is not "hidden" until shown (2026-11-05 21:21, xmas_dun02: the
+            # reader missed a standard window over a bright floor and F10 cycled it to 9 lines):
+            # F10 on a None only right after this check's own F10 from the largest size (the cycle
+            # then hides the window, then shows the bar alone); never blind
+            shot = _shot(screen, "no-window")
+            raise ChatWindowError(f"chat window: none found ({st}) after {steps}: hidden or not "
+                                  f"read; no F10 blind (frame {shot})")  # fmt: skip
         if step == "f10":
             f10s += 1
+            past_max = bool(st and st.get("lines") == max(SIZES)) or (
+                past_max and (st is None or not st.get("lines"))
+            )
             if f10s > len(SIZES) + 3:
                 shot = _shot(screen, "f10-cycle")
                 raise ChatWindowError(f"chat window: {f10s} F10 presses without the standard "
