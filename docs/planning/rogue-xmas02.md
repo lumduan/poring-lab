@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "X1b round 3 (4F): collect the quarter cells, score once, re-run R4; then pilot p2, then X2 (4A) on the 120 GB floor."
+next_action: "Batt: is the round-3 reader good enough (X1b failed its 90 % light-strip bar three times, 0 wrong reads)? Then: X2 scoring tooling (positive control first), the dead-end walk (7 Fly Wings / 15-20 min), the X4 steal decoders and boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -447,4 +447,23 @@ immune; 22:36:33-22:52:26; unrecorded):**
 **X2's recording started 22:54:09** (`record_session.py --backend rdp --format png --fps 1 --label
 xmas02-x2 --seconds 1320 --out /home/batt/poring-lab-rec --max-bytes 3G`; the disk 131.8 GB free
 against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
+
+**X2's recording (4A; session `20261105T225409-rdp-xmas02-x2`; the runner's
+20261105T225543-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-x2):**
+- The recorder: 22:54:09 + 22 min, **1,320 frames, 2.03 GB (92.2 MB/min), stop_reason duration**,
+  1,361 packet events. **Shipped 23:30-23:32** (`dataset_ship.py ship <session>`, the IO guard on):
+  9 files, 2,030,474,135 bytes, re-hashed on the NAS, local copy deleted
+  (`/mnt/poring-lab-datasets/20261105T225409-rdp-xmas02-x2`). Root disk 131.8 GB free before,
+  130.5 GB after (other tenants keep it moving).
+- The runner (4A's command, 20 min): ended by its time box, the home warp typed; the judge
+  (packets): **hard bars PASS** (0 NPC contact, 0 non-monster attack; the 7 same-map changes are
+  its Fly Wings), 0 deaths, 15 engagements, 11 strikes + 21 burst clicks, 2 kills, 7 Fly Wings
+  (5 dead ends, 2 position unread), 363 walk clicks (224 trusted); the HP loop's reads held no
+  position 12.6 % of the time; 44 fallback reads waited for a 2nd read.
+- **X2's scoring waits for its tooling** (4A: a CPU predictor for a recorder session + the scorer,
+  its positive control on a banked gef10 human demo first); the rule and the bar stay as
+  pre-registered.
+- Found while shipping: `dataset_ship.py status` walks every NAS session's tree (`tree_bytes`
+  over ~550 sessions): it sat > 12 min in NFS calls and was stopped by PID (read-only). Fixed:
+  the NAS sizes come from the manifests (a test that fails on the old code).
 

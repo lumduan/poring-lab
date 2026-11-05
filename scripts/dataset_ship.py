@@ -419,14 +419,19 @@ def cmd_status(a: argparse.Namespace) -> int:
         rows.append((s.name, "local", state, tree_bytes(s), ""))
     mounted = a.dest.is_dir() and (a.dest_is_dir_for_tests or os.path.ismount(a.dest))
     if mounted:
+        # NAS sizes come from each manifest's storage record, never a walk: tree_bytes() over the
+        # ~550 NAS sessions ran > 12 min in NFS calls on 2026-11-05 23:17 (CLAUDE.md rule 5: no
+        # filesystem walks outside the repo, a script's included); an unverified session shows "?"
         for s in sessions(a.dest):
             m = read_manifest(s) if finished(s) else {}
-            verified = m.get("storage", {}).get("verified_at")
+            storage = m.get("storage", {})
+            verified = storage.get("verified_at")
             state = f"verified {verified}" if verified else "UNVERIFIED"
             note = "pinned" if (s / PIN).exists() else ""
-            rows.append((s.name, "nas", state, tree_bytes(s), note))
+            rows.append((s.name, "nas", state, storage.get("bytes"), note))
     for name, where, state, size, note in rows:
-        print(f"{name:44} {where:5} {state:36} {human(size):>10} {note}".rstrip())
+        shown = "?" if size is None else human(size)
+        print(f"{name:44} {where:5} {state:36} {shown:>10} {note}".rstrip())
     pending = unshipped_bytes(a.root)
     print(
         f"local {a.root}: {human(pending)} unshipped (cap {human(a.max_unshipped)}), "

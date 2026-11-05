@@ -280,6 +280,24 @@ def test_status_lists_both_sides(
     assert "NOT mounted" in capsys.readouterr().out
 
 
+def test_status_never_walks_the_nas(
+    ds: ModuleType,
+    dirs: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-11-05 23:17: status walked ~550 NAS sessions (tree_bytes) for > 12 min in NFS calls.
+    NAS sizes come from the manifests' storage records; the local side may still be measured."""
+    make_session(dirs.dest, "20261001T000000-rdp-done")
+    walked: list[Path] = []
+    real = ds.tree_bytes
+    monkeypatch.setattr(ds, "tree_bytes", lambda path: walked.append(path) or real(path))
+    assert ds.main(["status", "--root", str(dirs.root), "--dest", str(dirs.dest),
+                    "--dest-is-dir-for-tests"]) == 0  # fmt: skip
+    assert not [w for w in walked if dirs.dest in w.parents]
+    assert "20261001T000000-rdp-done" in capsys.readouterr().out
+
+
 def test_record_session_refuses_before_touching_x_when_the_caps_are_hit(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
