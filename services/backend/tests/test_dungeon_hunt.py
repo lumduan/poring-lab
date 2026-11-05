@@ -708,3 +708,52 @@ def test_a_full_lap_of_routeless_skips_flies_at_once() -> None:
     assert 'wp_st["skips"] += 1  # route-less skips in a row (dead_end)' in src
     assert 'elif goal_path:\n                        wp_st["skips"] = 0' in src
     assert 'why_s = "dead_end" if patrol and dead_end(wp_st["skips"], len(wps)) else "idle"' in src
+
+
+def test_a_patrol_on_xmas_dun02_starts_on_the_loop_never_in_the_maze() -> None:
+    """Batt 2026-11-05: walk the EDGE clockwise. The search area's centre on xmas_dun02 is the maze
+    next to the only exit warp: a patrol starts at PATROL_START (on the loop), each cell on the
+    route grid and through the three stand-cell checks, else refused before any input."""
+    import pytest
+
+    assert dh.PATROL_START["xmas_dun02"] == ((7, 21), (114, 23))
+    okr = np.ones((260, 260), bool)
+    ok_check = lambda m, cells: None  # noqa: E731
+    assert dh.patrol_start("xmas_dun02", okr, ok_check) == (7, 21)
+    okr[21, 7] = False  # the start off the grid -> the fallback
+    assert dh.patrol_start("xmas_dun02", okr, ok_check) == (114, 23)
+    with pytest.raises(SystemExit, match="no patrol start"):
+        dh.patrol_start("xmas_dun02", okr, lambda m, cells: "in a warp span")
+    src = (Path(dh.__file__)).read_text()
+    assert "if patrol and map_ in PATROL_START:" in src
+    assert "start = patrol_start(map_, okr, map_prep.stand_check)" in src
+    assert '"max_hp": conf["max_hp"], "max_sp": conf.get("max_sp"),' in src
+
+
+def test_the_xmas_dun02_patrol_start_passes_on_the_real_map() -> None:
+    """The real grids (the client GAT in /dev/shm, the zones, the KB's warps): START passes."""
+    import pytest
+
+    gat = Path("/dev/shm/poring-lab-tmp/gat/data/xmas_dun02.gat")
+    if not gat.exists() or not (ROOT / "data/kb/warps.json").exists():
+        pytest.skip("xmas_dun02's GAT or the KB is not on this host")
+    import anim_region as ar
+    import map_prep
+    import map_routes as mroutes
+    import map_zones as mz
+
+    from poring_dataset import gat as gatmod
+
+    stand = np.asarray(ar.stand_grid("xmas_dun02", gatmod.parse(gat.read_bytes())), dtype=bool)
+    okr = mroutes.route_grid(stand, mz.load("xmas_dun02", shape=stand.shape))
+    assert dh.patrol_start("xmas_dun02", okr, map_prep.stand_check) == (7, 21)
+    assert not okr[130, 131]  # the arrival cell, one step from the exit warp: inside the zone
+
+
+def test_the_run_shows_the_battle_log_tab_before_its_reader_starts() -> None:
+    """2026-11-05: two chat tabs; battle_log.py live reads only a SHOWN Battle Log."""
+    src = (Path(dh.__file__)).read_text()
+    i_gate = src.index('ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")')
+    i_tab = src.index('cl_.select_tab(agent_raw, screen, "battle")')
+    i_reader = src.index('blt = hf.BattleLogTail(out / "battle_log_live.jsonl"')
+    assert i_gate < i_tab < i_reader

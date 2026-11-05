@@ -132,6 +132,32 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
 - **Decision:** pass -> X3 runs on v1; fail -> X5 (a species detector) before X3, and the report
   says which species failed and why (missed sprites, boxes merged, hallucination frames).
 
+### 4A. Amendment A to X2 (written BEFORE its recording, at this amendment's commit time; X1's findings, xmas02-prep.md section 7)
+
+- **The recording IS the first supervised patrol run** (unscored as a hunt; its frames and packets
+  are X2's data): `dungeon_hunt.py run --char rogue --map xmas_dun02 --strategy P2 --search patrol
+  --walk-trust --npc-guard --miss-cue --loot trim --clear-map --minutes 20 --seed 20261105 --label
+  xmas02-x2` (gef10's adopted settings, 10-26/27), the Rogue IMMUNE (its own @monsterignore of
+  2026-11-05 15:09, this login), the MVP cleared by `--clear-map`. Beside it `record_session.py
+  --backend rdp --format png --fps 1 --label xmas02-x2 --out /home/batt/poring-lab-rec --max-bytes
+  3G` (rule 7: a recording goes to the root disk; shipped to the NAS after).
+  - The runner now starts ON the loop (`PATROL_START`, (7,21) / (114,23)), selects the Battle Log
+    tab before its reader starts, and records its MaxHP / MaxSP in run_start.
+- **The bar, for a class-agnostic v1** (its classes are player / monster / npc, so a per-species
+  precision is undefined): **recall >= 0.80 for EACH of the four common species with >= 30 labels
+  (Myst Case, Cruiser, Cookie, Christmas Cookie; the species from the packets' mob ids), AND the
+  pooled precision of the "monster" class >= 0.80** (a monster box matched to any monster label).
+  Garm Baby, the MVP, the Goblins: reported only.
+- **The label rule:** `detector_vs_packets.score_capture`'s gef10 position rule (class-agnostic),
+  applied to the recorder's frames (their capture times, the packets' positions, the outdoor
+  camera, the GAT heights); boxes and labels inside the UI windows of the session's layout (the
+  hunting rows; the chat window of its date, `chat_window.for_sid`) are left out.
+- **The tooling is built AFTER the recording without changing this rule or bar** (no CPU tool yet
+  writes per-frame boxes for a recorder session; detector_vs_packets reads a human demo's dir).
+  Its positive control first: on a banked gef10 human demo it must give back detector_vs_packets'
+  own numbers for v1 before it scores X2.
+- Hallucination frames (Myst Case, the MVP) are counted and reported, not removed.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

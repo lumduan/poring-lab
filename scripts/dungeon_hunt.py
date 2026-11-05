@@ -229,6 +229,11 @@ FLY_JUMP_S = 15.0  # ... and a jump within this long after one is never a hard b
 JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop) ...
 WALK_S_PER_CELL, WALK_SLACK = 0.15, 5  # ... and larger than a walk could cover (Amendment J)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
+# xmas_dun02 (Batt 2026-11-05: walk the map's EDGE, clockwise; docs/planning/xmas02-prep.md 4): a
+# PATROL run starts ON the loop, (start, fallback), never at the search area's centre (there: the
+# maze, 11 cells from the only exit warp). The first cell that is on the route grid (walkable,
+# outside every zone) and passes the three stand-cell checks is used; none -> refused, no input
+PATROL_START: dict[str, tuple[Cell, Cell]] = {"xmas_dun02": ((7, 21), (114, 23))}
 WARP_READY_S = 20.0  # dungeon@8: after a setup @warp, Basic Info must read again within this
 POS_FLY_S, POS_FLY_MAX = 20.0, 3  # dungeon@8.1: no position read this long -> a Fly Wing (<= 3)
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
@@ -292,6 +297,21 @@ def npc_guard_blocks(here: Cell | None, npcs: Sequence[Sequence[int]], why: str,
     if why not in NPC_GUARDED or here is None or not npcs:
         return False
     return min(max(abs(here[0] - int(n[0])), abs(here[1] - int(n[1]))) for n in npcs) <= radius
+
+
+def patrol_start(map_: str, okr: Any, check: Any) -> Cell:
+    """The map's PATROL_START cell: the first of (start, fallback) on the route grid ``okr`` whose
+    three stand-cell checks pass (``check(map, [cell])`` -> None, else the refusal)."""
+    why: list[str] = []
+    for c in PATROL_START[map_]:
+        if not okr[c[1], c[0]]:
+            why.append(f"{c}: off the route grid (a wall or a zone)")
+            continue
+        if (refusal := check(map_, [c])) is not None:
+            why.append(f"{c}: {refusal}")
+            continue
+        return c
+    raise SystemExit(f"dungeon@4 refused: no patrol start for {map_} passes: {why}")
 
 
 def hotbar_slot(key: str) -> int:
@@ -1178,6 +1198,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if not okr[c_[1], c_[0]]:
                 raise SystemExit(f"dungeon@4 refused: waypoint {c_} is not on the route grid")
     start = hunt.start_cell(area, a.seed, near=hf.area_centre(area))
+    if patrol and map_ in PATROL_START:
+        import map_prep
+
+        start = patrol_start(map_, okr, map_prep.stand_check)
     cj = json.loads((ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     camera = cam.camera_from_json(cj["camera"])
@@ -1227,6 +1251,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")
+        # the Battle Log reader (battle_log.py live) reads the SHOWN chat tab: since 2026-11-05 the
+        # window has two (Battle Log | NewTab_2, the replies'), and a client restart shows the first
+        # while a typed line's check may leave the replies' shown -- so Battle Log is selected here
+        import client_layout as cl_
+
+        cl_.select_tab(agent_raw, screen, "battle")
         # the setup (the experimenter's restore, never a decision): full HP / SP, the stock topped
         # up against the DB's last save (an upper bound of what is carried), the weight checked
         name = json.loads((cr.data_dir(crk) / "char.json").read_text())["name"]
@@ -1357,6 +1387,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "wings_to": w_to,
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
             "level_db": level_db, "level_hold": conf.get("level_hold"),
+            # the judge's MaxHP / MaxSP when no packet gives them (2026-11-05: the Rogue at 99)
+            "max_hp": conf["max_hp"], "max_sp": conf.get("max_sp"),
             "setup": typed, "stock": stock, "weight": w_, "weight_before": w0,
             "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,

@@ -111,6 +111,21 @@ def test_sp_falls_with_a_maxsp_change_are_not_casts_gm_flagged_ones_still_count(
     assert r["hp_min"] == 300 and r["hp_min_pct"] == 0.75  # the MaxHP in force at the min
 
 
+def test_the_runs_own_max_hp_beats_the_character_table() -> None:
+    """2026-11-05: the Rogue went to Base 99 (MaxHP 5070). With no max_hp packet, a run_start that
+    names its max_hp is judged against it; an older run_start without one keeps the table."""
+    packets = [hp(0, 5070), sp(0, 530), hp(10, 2535)]  # no max_hp packet
+    start = [ev(1, "run_start", strategy="A", seed=1, version="t", minutes=45.0, map="xmas_dun02",
+                char="rogue", max_hp=5070, max_sp=530), ev(60, "run_end", reason="time_box",
+                                                            counts={})]  # fmt: skip
+    r = judge(start, packets)
+    assert r["hp_min"] == 2535 and r["hp_min_pct"] == 0.5
+    old = [ev(1, "run_start", strategy="A", seed=1, version="t", minutes=45.0, map="gef_fild10",
+              char="rogue"), ev(60, "run_end", reason="time_box", counts={})]  # fmt: skip
+    r_old = judge(old, [hp(0, 2146), sp(0, 336), hp(10, 1073)])
+    assert r_old["hp_min_pct"] == 0.5  # the table's 2146 (the Rogue before 2026-11-05)
+
+
 # --- events: strikes and their landing, rest spans, the sit cross-check --------------------------
 
 
