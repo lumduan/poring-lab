@@ -538,6 +538,10 @@ correctly"):**
   templates were cut again (old ones: an old "NewTab_2" label now reads "unread", which passes
   with a warning, not "wrong"). The name is not in the server's account settings (the web-server's
   `user_configs` still holds `{"Type": 1}` afterwards): the client keeps it locally, like the tabs.
+  - **It survives a client restart** (2026-11-06 06:38-06:39, Batt: "check it"): paced Alt+F4 ->
+    the desktop shortcut -> login -> the Rogue's card (already selected) -> Enter; the game-entry
+    check read the tabs `battle`, `regular` in order (scores 1.0 / 1.0, the other template 0.15 /
+    0.16), 6 lines, docked, padlock locked; the frame shows "Battle Log | Chat".
 - WHICH tab is shown is the layout's job: the standard layout shows Chat (`client_layout`
   key "regular"), the hunting layout Battle Log. Templates: `data/ui_anchors/chat_window/tabs.npz`
   (`chat_window.py cut-tabs REGULAR_SEL.png BATTLE_SEL.png`).

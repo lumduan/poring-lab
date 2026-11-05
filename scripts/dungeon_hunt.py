@@ -141,7 +141,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.5"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.6"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
@@ -151,7 +151,9 @@ VERSION = "dungeon@8.5"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 # 10th Fly Wing at 28.5 min and hunted 7.5 min with no escape): the hotbar count is re-read after
 # every potion / Fly Wing press, and a count of 0 ends the run ("stock_out"); @8.5 = a SAFE END
 # (Amendment AA: c10's time box ended it inside a 10-orc swarm and it died 0.96 s after run_end,
-# during the end warp's typing): under attack or below half HP at the end, a Fly Wing goes first
+# during the end warp's typing): under attack or below half HP at the end, a Fly Wing goes first;
+# @8.6 = the no-entry sign read by its RING (ring_score: xmas_dun02's orange floor passed the old
+# red count), a no-entry carves its one cell, and a dead end forgets the carves before it flies
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -335,7 +337,27 @@ ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike poin
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 AG_DIAG_MAX, AG_DIAG_GAP_S = 30, 5.0  # the Auto Guard icon diagnostic (Batt 2026-10-22, decision 7)
-NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
+NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop (the no-entry cue up to @8.5; logged only)
+# dungeon@8.6 (xmas_dun02, 2026-11-06): the no-entry sign is read by its RING, not by any red. The
+# old count (R >= 170, G and B <= 90 anywhere in the crop) also counts xmas_dun02's ORANGE floor
+# tiles (G 53-90): pilot p2 + X2 carved 254 of 894 walk decisions (28 %) as no-entry; their 5 x 5
+# carves sealed the edge loop (12 dead-end Fly Wings in 35 min). The ring (cursor@1's 1,170 ring
+# grabs on the NAS): PURE red (G and B <= 40) on a circle of radius 18 px centred (+4.5, +11.5) px
+# from the hotspot (fit |d - R| p95 0.93 px). Its score is the pure-red pixels within RING_BAND of
+# that circle at the best centre within +-RING_SHIFT px; pure red just OUTSIDE the circle (a red
+# carpet, a stocking) refuses it. Design data: cursor@1's ring grabs score >= 188 with 0 outside,
+# its 13,800 other grabs 0; X2's recorded frames: 6 rings 194-214 with 0 outside, the red scenery
+# <= 101, or >= 16 outside (docs/planning/rogue-xmas02.md 4G).
+RING_PURE_R, RING_PURE_GB = 170, 40  # the ring's red: R >= 170, G and B <= 40 (crops are BGR)
+RING_CX, RING_CY, RING_R = 4.5, 11.5, 18.0  # the circle's centre from the hotspot, its radius (px)
+# on the circle: |d - R| <= RING_BAND; just outside it: RING_GAP < d - R <= RING_OUTER
+RING_BAND, RING_GAP, RING_OUTER = 2.5, 3.5, 10.0
+RING_SHIFT = 3  # px searched around the expected centre (RDP rounding, the pointer's own pixel)
+RING_IN_MIN, RING_OUT_MAX = 120, 20
+RING_HALF = 40  # the ring crop: 80 x 80 around the hotspot (the circle reaches 32 px below it)
+RING_DIAG_MAX = 40  # crops kept (the session dir) where the ring and the old red count disagree
+NOENTRY_CARVE_R = 0  # dungeon@8.6: a no-entry names ONE cell (the stall carve keeps CARVE_R)
+UNCARVE_MIN_S = 60.0  # dungeon@8.6: a dead end forgets the carves first (once per this), then flies
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
 MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
 MR_AFTER_HIT_S = 0.3  # ... and while locked, ONE ring cell is read within this of our own hit
@@ -347,6 +369,14 @@ def dead_end(skips_in_row: int, n_waypoints: int) -> bool:
     end: no waypoint routes from our cell (c7: a whole-run carve sealed the pocket's only exit; it
     skipped 412 times and stood 45.8 s until the IDLE_MAX_S watchdog). Fly at once instead."""
     return n_waypoints > 0 and skips_in_row >= n_waypoints
+
+
+def dead_end_step(carved_n: int, since_uncarve_s: float) -> str:
+    """PURE (dungeon@8.6): what a dead end does. The carves are the run's own guesses on top of
+    the map data (a stall's 5 x 5, a no-entry's cell); while any exist and none were forgotten
+    within UNCARVE_MIN_S, the dead end forgets them and re-plans on the map's grid ("uncarve");
+    else the Fly Wing as before ("fly"). p2 / X2: the false no-entry carves sealed the loop."""
+    return "uncarve" if carved_n > 0 and since_uncarve_s >= UNCARVE_MIN_S else "fly"
 
 
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
@@ -670,6 +700,35 @@ def red_px(crop: Any) -> int:
     a = np.asarray(crop)[..., :3].astype(np.int16)
     b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
     return int(((r_ >= 170) & (g <= 90) & (b <= 90)).sum())
+
+
+def pure_red(crop: Any) -> Any:
+    """PURE (dungeon@8.6): the no-entry ring's own red in a BGR crop (a bool mask)."""
+    a = np.asarray(crop)[..., :3].astype(np.int16)
+    return (a[..., 2] >= RING_PURE_R) & (a[..., 1] <= RING_PURE_GB) & (a[..., 0] <= RING_PURE_GB)
+
+
+def ring_score(crop: Any, hx: float, hy: float) -> tuple[int, int, int, int]:
+    """PURE (dungeon@8.6): the no-entry ring in a BGR crop whose hotspot is pixel (hx, hy):
+    (on, out, dx, dy) -- the pure-red pixels on the ring's circle at the best centre within
+    +-RING_SHIFT px of the expected one, the pure-red pixels just outside that circle, the shift."""
+    ys, xs = np.nonzero(pure_red(crop))
+    best = (0, 0, 0, 0)
+    if len(xs) == 0:
+        return best
+    for dy in range(-RING_SHIFT, RING_SHIFT + 1):
+        for dx in range(-RING_SHIFT, RING_SHIFT + 1):
+            d = np.hypot(xs - (hx + RING_CX + dx), ys - (hy + RING_CY + dy))
+            on = int((np.abs(d - RING_R) <= RING_BAND).sum())
+            if on > best[0]:
+                out = int(((d > RING_R + RING_GAP) & (d <= RING_R + RING_OUTER)).sum())
+                best = (on, out, dx, dy)
+    return best
+
+
+def ring_seen(score: Sequence[int]) -> bool:
+    """PURE (dungeon@8.6): a ring_score is the no-entry sign."""
+    return score[0] >= RING_IN_MIN and score[1] <= RING_OUT_MAX
 
 
 def ring(r_: int) -> list[Cell]:
@@ -1466,6 +1525,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         walk_from: Cell | None = None
         stall = 0
         carved = np.zeros_like(okr, dtype=bool)  # Amendment C: cells the client would not walk to
+        last_uncarve = -1e9  # dungeon@8.6: when a dead end last forgot the carves (dead_end_step)
         idle_pos: Cell | None = None
         idle_since = time.monotonic()
         last_walk_click = time.monotonic()
@@ -1514,14 +1574,32 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             time.sleep(0.25)
             click_at(SELF_PX[0], SELF_PX[1], "heal_self")
 
+        n_ring_diag = [0]  # dungeon@8.6: ring-vs-red evidence crops kept
+
         def hover(u: float, v: float) -> dict[str, Any]:
             res = csw.check(agent, screen, sword_refs, gx0, gy0, u, v, wait_s=CURSOR_WAIT_S)
             # pilot 3 (12:0x): the client's NO-ENTRY cursor (its arrow inside a red ring) read
-            # "clear" over a cliff, and 4 walk clicks sent no request: the ring's red decides
-            red = red_px(csw.crop_at(screen, gx0, gy0, u, v))
-            res["red"] = red
-            if red >= NOENTRY_RED and res["verdict"] == "clear":
+            # "clear" over a cliff, and 4 walk clicks sent no request: the ring decides --
+            # dungeon@8.6: the RING itself (ring_score), not any red in the crop (the old count,
+            # logged beside it, read xmas_dun02's orange floor as the ring)
+            x_r, y_r = gx0 + round(u) - RING_HALF, gy0 + round(v) - RING_HALF
+            big = np.ascontiguousarray(
+                screen.grab(x_r, y_r, 2 * RING_HALF, 2 * RING_HALF)[1][..., :3])  # fmt: skip
+            h0 = RING_HALF - 32  # the old 64 x 64 crop inside it (csw.crop_at's)
+            red = red_px(big[h0 : h0 + 64, h0 : h0 + 64])
+            sc = ring_score(big, RING_HALF, RING_HALF)
+            seen = ring_seen(sc)
+            res.update(red=red, ring=list(sc), noentry_ring=seen)
+            if seen and res["verdict"] == "clear":
                 res["verdict"] = "noentry"
+            if (red >= NOENTRY_RED) != seen:
+                counts["ring_vs_red"] += 1
+                if n_ring_diag[0] < RING_DIAG_MAX:  # evidence crops for the judge's eye
+                    n_ring_diag[0] += 1
+                    from PIL import Image
+
+                    name_ = f"ring-{n_ring_diag[0]:03d}-red{red}-on{sc[0]}-out{sc[1]}.png"
+                    Image.fromarray(big[..., ::-1]).save(out / name_)
             return res
 
         def above(img: Any, u: float, v: float) -> Any:
@@ -2698,6 +2776,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 elif tick - max(idle_since, last_walk_click) > IDLE_MAX_S or (
                         patrol and dead_end(wp_st["skips"], len(wps))):  # fmt: skip
                     why_s = "dead_end" if patrol and dead_end(wp_st["skips"], len(wps)) else "idle"
+                    if why_s == "dead_end" and dead_end_step(
+                            int(carved.sum()), tick - last_uncarve) == "uncarve":  # fmt: skip
+                        # dungeon@8.6: the map's grid routes the loop; forget our own carves first
+                        ev({"kind": "uncarve", "at": None if here is None else list(here),
+                            "cells": int(carved.sum()), "why": why_s})  # fmt: skip
+                        counts["uncarve"] += 1
+                        carved[:] = False
+                        last_uncarve = tick
+                        wp_st["skips"] = 0
+                        idle_pos, idle_since, goal_path = None, tick, None
+                        continue
                     ev({"kind": "stuck", "at": None if here is None else list(here), "why": why_s})
                     press("fly", why_s)
                     fly_at = time.monotonic()
@@ -2790,10 +2879,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 tw_ = wtr.trust_why(here, c, route_ok=okr, carved=carved,
                                                     zones=zones, npcs=trust_npcs,
                                                     box_near=bx_)  # fmt: skip
-                            act_, why_w = wtr.decide(res["verdict"], int(res.get("red") or 0),
+                            # dungeon@8.6: the RING's score stands for the red (0 without
+                            # the ring), so walk_trust's "unknown + red" carve is the ring's too
+                            ring_on = int(res["ring"][0]) if res.get("noentry_ring") else 0
+                            act_, why_w = wtr.decide(res["verdict"], ring_on,
                                                      trusted=tw_ is None,
                                                      enabled=a.walk_trust,
-                                                     noentry_red=NOENTRY_RED)  # fmt: skip
+                                                     noentry_red=RING_IN_MIN)  # fmt: skip
                             if act_ == "click":
                                 stall = stall + 1 if walk_from == here else 0
                                 if walk_from != here:
@@ -2836,7 +2928,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 click_at(u, v, "walk")
                                 last_walk_click = tick
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
-                                         "clicked": True, "why": mode}  # fmt: skip
+                                         "clicked": True, "why": mode, "red": res.get("red"),
+                                         "ring": res.get("ring")}  # fmt: skip
                                 if why_w == "trusted":  # --walk-trust: an UNKNOWN read, clicked
                                     counts["walk_trusted"] += 1
                                     rec_w.update({"gate": "trusted", "red": res.get("red")})
@@ -2848,18 +2941,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 mode = "fight"
                             else:
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
-                                         "clicked": False, "why": why_w,
-                                         "red": res.get("red")}  # fmt: skip
+                                         "clicked": False, "why": why_w, "red": res.get("red"),
+                                         "ring": res.get("ring")}  # fmt: skip
                                 if a.walk_trust:
                                     rec_w["trust"] = tw_
                                 ev(rec_w)
                                 if act_ == "carve":
                                     # dungeon@4 (decision 5): the client calls it a wall -- the
                                     # target leaves the route grid at once and the walk re-plans
+                                    # (dungeon@8.6: that cell alone -- the ring names one cell)
                                     noentry_n += 1
-                                    carve(carved, c, CARVE_R)
+                                    carve(carved, c, NOENTRY_CARVE_R)
                                     ev({"kind": "noentry_carve", "at": list(here),
-                                        "to": list(c)})  # fmt: skip
+                                        "to": list(c), "r": NOENTRY_CARVE_R})  # fmt: skip
                                     if not patrol:
                                         turn_heading(walk_st)
                                     goal_path = None

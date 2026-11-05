@@ -348,8 +348,9 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.5"  # .1 position-unread fly, .2 no stand toggle on a hit,
-    # .3 the stock read from the hotbar, .4 the stock guard in the run, .5 the safe end
+    assert dh.VERSION == "dungeon@8.6"  # .1 position-unread fly, .2 no stand toggle on a hit,
+    # .3 the stock read from the hotbar, .4 the stock guard in the run, .5 the safe end, .6 the
+    # no-entry ring + one-cell no-entry carve + uncarve before a dead end's Fly Wing
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -698,6 +699,57 @@ def test_the_walk_timer_is_an_option_and_recorded_only_when_changed() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, walk_every=0.8))["walk_every"] == 0.8
     src = (Path(dh.__file__)).read_text()
     assert "and tick - last_walk >= a.walk_every:" in src and dh.WALK_EVERY_S == 1.2
+
+
+def _ring_crop(
+    floor_bgr: tuple[int, int, int], ring: bool, shift: tuple[int, int] = (0, 0)
+) -> np.ndarray:
+    """An 80 x 80 BGR cursor crop (hotspot at 40, 40): a floor, and the no-entry ring (pure red,
+    ~2 px wide, radius 18 at (+4.5, +11.5) from the hotspot, the slash through it) when asked."""
+    a = np.empty((80, 80, 3), np.uint8)
+    a[:] = floor_bgr
+    if ring:
+        yy, xx = np.mgrid[0:80, 0:80]
+        cx, cy = 40 + dh.RING_CX + shift[0], 40 + dh.RING_CY + shift[1]
+        d = np.hypot(xx - cx, yy - cy)
+        slash = (np.abs((xx - cx) + (yy - cy)) <= 1.5) & (d < dh.RING_R)
+        a[(np.abs(d - dh.RING_R) <= 1.0) | slash] = (10, 5, 235)
+    return a
+
+
+def test_dungeon86_the_no_entry_sign_is_read_by_its_ring_not_by_any_red() -> None:
+    """xmas_dun02 (p2 + X2): the old cue counted the ORANGE floor tiles (G 53-90) as the ring's red
+    and carved 254 of 894 walk decisions (28 %); the ring is pure red on a fixed circle."""
+    orange = (25, 80, 225)  # BGR: an xmas_dun02 floor tile (R 225, G 80, B 25)
+    floor = _ring_crop(orange, ring=False)
+    assert dh.red_px(floor[8:72, 8:72]) >= dh.NOENTRY_RED  # the old cue fires on the floor alone
+    assert not dh.ring_seen(dh.ring_score(floor, 40, 40))  # the ring rule does not
+    for bg in (orange, (0, 0, 0), (120, 140, 150)):  # on the floor, over the void, on stone
+        sc = dh.ring_score(_ring_crop(bg, ring=True), 40, 40)
+        assert dh.ring_seen(sc) and sc[1] == 0, (bg, sc)
+    sc = dh.ring_score(_ring_crop(orange, ring=True, shift=(2, -3)), 40, 40)
+    assert dh.ring_seen(sc) and (sc[2], sc[3]) == (2, -3)  # within RING_SHIFT
+    carpet = _ring_crop((10, 5, 235), ring=False)  # pure red everywhere (a red carpet, a stocking)
+    sc = dh.ring_score(carpet, 40, 40)
+    assert sc[0] >= dh.RING_IN_MIN and sc[1] > dh.RING_OUT_MAX and not dh.ring_seen(sc)
+    assert dh.ring_score(np.zeros((80, 80, 3), np.uint8), 40, 40) == (0, 0, 0, 0)
+
+
+def test_dungeon86_a_no_entry_carves_one_cell_and_a_dead_end_forgets_the_carves_first() -> None:
+    """p2 / X2's dead ends: 5 x 5 carves from false no-entry reads sealed the edge loop. A no-entry
+    now carves its cell alone; a dead end first forgets every carve (once a minute), then flies."""
+    m = np.zeros((10, 10), dtype=bool)
+    dh.carve(m, (4, 4), dh.NOENTRY_CARVE_R)
+    assert m.sum() == 1 and m[4, 4]
+    assert dh.dead_end_step(0, 1e9) == "fly"  # nothing to forget: the map itself has no route
+    assert dh.dead_end_step(7, dh.UNCARVE_MIN_S) == "uncarve"
+    assert dh.dead_end_step(7, dh.UNCARVE_MIN_S - 1) == "fly"  # forgot them under a minute ago
+    src = (Path(dh.__file__)).read_text()
+    assert "carve(carved, c, NOENTRY_CARVE_R)" in src and "carve(carved, c, CARVE_R)" in src
+    i_un, i_fly = src.index('counts["uncarve"] += 1'), src.index('press("fly", why_s)')
+    assert i_un < i_fly  # the uncarve branch runs before the dead end's Fly Wing
+    assert "noentry_red=RING_IN_MIN" in src and "noentry_red=NOENTRY_RED" not in src
+    assert dh.VERSION == "dungeon@8.6"
 
 
 def test_a_full_lap_of_routeless_skips_flies_at_once() -> None:

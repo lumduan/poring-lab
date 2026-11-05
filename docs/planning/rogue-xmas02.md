@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "Batt: is the round-3 reader good enough (X1b failed its 90 % light-strip bar three times, 0 wrong reads)? Then: X2 scoring tooling (positive control first), the dead-end walk (7 Fly Wings / 15-20 min), the X4 steal decoders and boss recognizer."
+next_action: "Pilot p3 (4G: dungeon@8.6, the no-entry ring) and its verdict; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -283,6 +283,85 @@ the runner stops on unread positions (pilot p1).
   new guard on T0's held-out sessions (T0's bars, 0 wrong fallback reads on standing frames).
 - **Then, not a bar:** pilot p2 (as 4E).
 
+### 4D'. Amendment D (2026-11-06 ~06:3x ICT): Batt's answers to the 23:47 report
+
+(Named 4D' because 4D is X1b's pre-registration.) Batt's answers (received at the session's
+start, `date` 06:24; Thai, translated):
+1. **The position reader:** "Use it like this, and try to make it better too." The round-3 reader
+   stays ON in the runner (opt-in + PosConfirm); improving it goes on with fresh cells (a later
+   round, pre-registered before its data).
+2. **The walk:** "Yes. It need not be exact: any number of cells, no limit, as long as it can walk.
+   But since we have the map data, why not make the waypoints in advance, so we know a route that
+   walks continuously, and after fighting a monster walk back to the waypoint and walk on?"
+   - **That is already how the runner walks:** the 85 waypoints were made in advance from the map
+     data (each leg a straight walkable run on the server map cache; xmas02-prep.md section 3),
+     every walk click follows an A* path on the map's grid, and after a fight the patrol resumes at
+     the next waypoint ahead (`resume_index`).
+   - **What broke it is the no-entry cue (4G):** the walk gate read xmas_dun02's ORANGE floor as
+     the client's red no-entry ring and cut 5 x 5 blocks out of that map grid, until no waypoint
+     routed and the runner flew. The fix keeps the map's route as the ground truth (4G).
+   - Moving the loop off the walls (allowed, "no limit") is held until pilot p3 says whether the
+     walk still jams with the fix: one change at a time.
+3. **The "Chat" tab name across a client restart:** "check it" -> checked 06:38-06:39: it SURVIVED
+   (section 5).
+
+### 4G. Pilot p3 pre-registration: the walk with the no-entry RING (written BEFORE its run)
+
+**The diagnosis (offline, design data, 2026-11-06 06:3x-06:5x):**
+- p2 + X2: 254 of 894 walk decisions (28.4 %) were no-entry carves (p2 138 / 414, X2 116 / 480;
+  p1 33 / 87), each a 5 x 5 block (`CARVE_R` 2) out of the route grid; 12 dead-end Fly Wings in
+  35 min. The first p2 dead end (96 s): carves from 12,28, then 891 route-less waypoint skips.
+- The picking model names the TARGET cell itself for 226 of p2 + X2's 254 no-entry hovers: the
+  client was not refusing a wall.
+- X2's recorded frames (1 fps, the nearest within 0.6 s of each hover; 101 of the refused hovers):
+  the cursor is a plain walk arrow over xmas_dun02's ORANGE floor tiles (R 177-255, G 53-90, B
+  8-40), which pass the old cue (R >= 170, G and B <= 90, >= 25 pixels anywhere in the 64 x 64
+  crop). 5 of them show the real ring.
+- The real ring is PURE red (its pixels G <= 11, B <= 18 at p95; the floor's G >= 53 at p5) on a
+  fixed circle: cursor@1's 1,170 ring grabs (the NAS's prontera / prt_church probe sessions of
+  2026-10-09, robust2's ring as the label) fit radius 18.0 px around (+4.5, +11.5) px from the
+  hotspot, |d - R| p95 0.93 px.
+
+**The change (dungeon@8.6, at this section's commit):**
+1. The no-entry cue is the RING (`ring_score` / `ring_seen`): pure-red pixels (R >= 170, G and B
+   <= 40) within 2.5 px of that circle, at the best centre within +-3 px, in an 80 x 80 crop at the
+   hotspot; a no-entry when >= 120 of them and <= 20 pure-red pixels just outside the circle
+   (3.5-10 px out: a red carpet or a stocking fills it). The old count is still logged (`red`)
+   beside the ring (`ring` = [on, out, dx, dy]) on every walk record, and up to 40 crops where the
+   two disagree are kept in the session dir.
+   - Design data: cursor@1's ring grabs score >= 188 with 0 outside; its 13,800 other grabs 0;
+     X2's frames: the 6 rings 194-214 with 0 outside; the red scenery (stockings, carpets) <= 101 on
+     the circle, or >= 16 outside it.
+2. A no-entry carves its ONE cell (`NOENTRY_CARVE_R` 0; the stall carve keeps 5 x 5).
+3. A dead end first forgets every carve and re-plans on the map's grid (`dead_end_step`: at most
+   once per 60 s); only a dead end with nothing to forget, or within 60 s of the last forget,
+   flies.
+- Tests: the ring on an orange floor, over the void and on stone; a 2 / -3 px shift; a red carpet
+  refused; the old cue firing on the orange floor alone (the positive case of the bug); the
+  one-cell carve; the forget-before-fly order. `walk_judge.py` (new) counts the walk; its positive
+  case on the real sessions: p2 7 dead-end Fly Wings and 138 / 414 carves, X2 5 + 2 and 116 / 480.
+
+**The run:** pilot p3, the p2 command with `--label xmas02-p3`: `dungeon_hunt.py run --char rogue
+--map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim
+--clear-map --minutes 15 --seed 20261105 --label xmas02-p3`; the round-3 reader with PosConfirm;
+the Rogue immune (`collect_v2.py immune-on`, read on its screenshot: the relog of 06:39 cleared
+it); a judged screenshot first; unrecorded. Judged once after the run by `walk_judge.py` and
+`dungeon_judge.py row`.
+
+**Bars (each against p2 + X2):**
+- **W1 (primary):** dead-end Fly Wings <= 2 in the 15 min (p2 7, X2 5 in 20).
+- **W2:** no-entry carves <= 10 % of the walk decisions (p2 33.3 %, X2 24.2 %).
+- **W3, the ring's live check:** of the clicks the old cue would have carved (red >= 25, no ring),
+  <= 10 % followed by a stall at their cell (a stall = a ring the rule may have missed); judged only
+  with >= 20 such clicks, else reported.
+- **W4:** the hard bars pass (packets: 0 NPC contact, 0 attack on a non-monster, no map change but
+  our own Fly Wings).
+- **Reported, not bars:** waypoints reached per minute (p2 2.07, X2 4.45), the forgets, the stalls,
+  engagements and kills, the kept crops judged by eye, position None share.
+- **A FAIL of W1-W3** leaves dungeon@8.6 un-adopted for the patrol (the runner's default stays
+  until a verdict) and is reported with its cause; the route offset (Amendment D 2) is the next
+  candidate.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -467,3 +546,10 @@ against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
   over ~550 sessions): it sat > 12 min in NFS calls and was stopped by PID (read-only). Fixed:
   the NAS sizes come from the manifests (a test that fails on the old code).
 
+**2026-11-06 (Amendment D, 4D'):**
+- **The "Chat" tab name survived a client restart** (06:38-06:39; judged screenshots before, at
+  character select and in game): the Rogue at prt_fild08 268,107 before, `ro_agent.close_client`
+  (paced Alt+F4), `launch_client`, `to_char_select gm` (Thief8fce's card was already the selected
+  one), `enter_game(..., char="Thief8fce")`; the game-entry chat check: left 0, last row 719, 6
+  lines, padlock locked, tabs battle | regular in order. Immunity (`@monsterignore`) does not
+  survive a relog: restored before the next run.
