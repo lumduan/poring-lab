@@ -250,13 +250,16 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
     # Loot is value now (his Overcharge merchant): never dropped; at 40 % the setup stops ("train
     # until the bag is full first", Batt 2026-10-25)
     # Batt 2026-10-26 ~20:5x: the Rogue levelled 62 -> 63 by hunting (max HP 2146 -> 2209); HOLD
-    # it at 63 ("ค้างไว้ที่ 63"): the setup lowers a higher DB level with @baselevelup -N
-    "rogue": {"job": "rogue", "data": "thief", "max_hp": 2209, "max_sp": 341,
+    # it at 63 ("ค้างไว้ที่ 63"): the setup lowers a higher DB level with @baselevelup -N.
+    # ➡️ Batt 2026-11-05 (xmas_dun02, docs/planning/rogue-xmas02.md): base AGI 99 + DEX 99, so Base
+    # 99 (@baselevelup 36, @agi 17, @dex 59 at 15:04); its status window 15:05: HP 5070, SP 530,
+    # HIT 205, FLEE 246+1, ASPD 176. The hold is 99 now (a higher level cannot exist)
+    "rogue": {"job": "rogue", "data": "thief", "max_hp": 5070, "max_sp": 530,
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
               "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
-              "level_hold": 63},
+              "level_hold": 99},
 }  # fmt: skip
 STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
 

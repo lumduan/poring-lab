@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "PLANNED 2026-11-05 (Batt's order ~13:2x and his four answers ~14:0x ICT, section 0). Nothing run yet."
+status: "X0 DONE 2026-11-05 15:05 (the Rogue at Base 99, AGI 99+8, DEX 99+7; section 5). X1 (the offline prep) running. Planned 2026-11-05 (Batt's order ~13:2x, his four answers ~14:0x ICT, section 0)."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -127,3 +127,21 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
   Garm Baby and the MVP are reported (too few to score).
 - **Decision:** pass -> X3 runs on v1; fail -> X5 (a species detector) before X3, and the report
   says which species failed and why (missed sprites, boxes merged, hallucination frames).
+
+## 5. Results
+
+**X0 (2026-11-05, ICT from `date`):**
+- 14:46-14:52: group 20's stat commands went live with the guarded `recreate:rathena,sniffer@240`
+  (the same step as the web-server; worst capture stall 9.3 %; the GM re-logged by itself).
+- 15:02-15:03: the switch to the Rogue: Escape -> the game option window -> character select ->
+  a click on the third card (Thief8fce; the side panel read Rogue, Lv 63, HP 2209, SP 341, AGI 82,
+  DEX 40; the login operator window first, the interlock being red at character select) ->
+  `ro_agent.enter_game(..., char="Thief8fce")` (new parameter; the chat window check ran) -> in
+  game on prt_fild08 215,159. The hotbar kept F1 White Potion x14, F2 Fly Wing x16, F3 Steal (the
+  web-server's account settings did not reset it). No red account-settings line.
+- 15:04: `@baselevelup 36`, `@agi 17`, `@dex 59`, each through crusader.gm_line's name + job check
+  (name 0 / job 0). Read back on the status window (15:05): **Base 99 / Job 50, HP 5070, SP 530,
+  AGI 99+8, DEX 99+7**, STR 1+6, VIT 1+6, INT 1+4, LUK 1+4; Atk 147+40, HIT 205, FLEE 246+1, ASPD
+  176; **688 status points unspent** (Batt asked for AGI / DEX only). The replies' tab showed
+  "Base level raised." and "Stat changed." x2.
+- `dungeon_hunt.py`: the Rogue's `level_hold` 63 -> 99, max HP / SP 5070 / 530 (tests updated).

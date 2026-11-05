@@ -395,7 +395,8 @@ def test_the_steal_cast_fall_scales_with_max_sp_and_keeps_the_thiefs_five() -> N
 def test_the_rogue_is_the_thiefs_character_with_its_own_job_and_numbers() -> None:
     rogue, thief = dh.CHARS_CONF["rogue"], dh.CHARS_CONF["thief"]
     assert rogue["job"] == "rogue" and rogue["data"] == "thief"
-    assert (rogue["max_hp"], rogue["max_sp"]) == (2209, 341)  # Base 63, held (2146 / 336 at 62)
+    # Base 99 since 2026-11-05 (xmas_dun02; 2209 / 341 at the held Base 63, 2146 / 336 at 62)
+    assert (rogue["max_hp"], rogue["max_sp"]) == (5070, 530)
     assert rogue["keys"] == thief["keys"] and rogue["keys"]["steal"] == "F3"
     assert rogue["clear_etc"] is False and "data" not in thief
     done = [((100, 100), 10.0)]
@@ -650,13 +651,16 @@ def test_loot_trim_caps_v1_hovers_at_nine_and_never_sweeps() -> None:
     assert '"trim"]' in src and 'default="v1"' in src  # OFF by default
 
 
-def test_the_rogue_is_held_at_base_63() -> None:
+def test_the_rogue_is_held_at_its_level() -> None:
     """Batt 2026-10-26 ~20:5x: hold the Rogue at 63 (it levelled 62 -> 63 by hunting): a higher DB
-    level is lowered by the setup, a lower one is never raised; the char conf carries Lv 63's HP."""
+    level is lowered by the setup, a lower one is never raised. Batt 2026-11-05 (xmas_dun02): base
+    AGI 99 + DEX 99 -> Base 99; the char conf carries Lv 99's HP / SP (its status window)."""
     assert dh.level_lines(63, 63) == [] and dh.level_lines(62, 63) == []
     assert dh.level_lines(65, 63) == ["@baselevelup -2"]
     assert dh.level_lines(70, None) == []
-    assert dh.CHARS_CONF["rogue"]["level_hold"] == 63 and dh.CHARS_CONF["rogue"]["max_hp"] == 2209
+    rogue = dh.CHARS_CONF["rogue"]
+    assert rogue["level_hold"] == 99 and rogue["max_hp"] == 5070 and rogue["max_sp"] == 530
+    assert dh.level_lines(99, 99) == []
     src = (Path(dh.__file__)).read_text()
     assert 'setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]' in src
 

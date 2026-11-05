@@ -1140,8 +1140,11 @@ def to_char_select(agent: Agent, screen: Screen, which: str) -> None:
     log("character select")
 
 
-def enter_game(agent: Agent, screen: Screen, which: str) -> None:
-    _, _, char = account(which)
+def enter_game(agent: Agent, screen: Screen, which: str, char: str | None = None) -> None:
+    """Enter the game from character select with the SELECTED slot (Enter). ``char``: the character
+    that slot holds when it is not the account's .env one (the GM account's Rogue / Crusader
+    slots; the caller clicked that slot first); it must be one of the account's characters."""
+    char = char or account(which)[2]
     if char not in account_chars(which):
         raise Stop(f"{which}: no character {char!r} yet: run `ro_agent.py create-char {which}`")
     ensure_window("login", "enter-game")  # covers the gap until the session is attested
