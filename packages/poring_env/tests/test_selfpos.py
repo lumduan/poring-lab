@@ -263,3 +263,47 @@ def test_a_digit_never_seen_in_training_is_never_read(
     frame = scene(rng)
     draw_text(frame, "162 368", rng)
     assert selfpos.read_minimap_xy(frame, partial) == (162, 368)
+
+
+def pale_floor(rng: np.random.Generator, lo: float = 200.0, hi: float = 228.0) -> np.ndarray:
+    """A game region whose readout strip shows a PALE floor (xmas_dun02's tiles: ~197-234)."""
+    frame = scene(rng, paving=False)
+    x, y, w, h = RECT
+    frame[y : y + h, x : x + w] = (lo + (hi - lo) * rng.random((h, w)))[..., None].astype(np.uint8)
+    return frame
+
+
+def test_a_pale_floor_is_read_by_the_opaque_glyph_fallback(
+    templates: selfpos.DigitTemplates,
+) -> None:
+    """2026-11-05, rogue-xmas02 X1b: the base reader takes a pale floor for half a stroke and reads
+    nothing; the fallback keeps only the opaque glyph pixels and reads it."""
+    for seed, text in ((1, "79 93"), (2, "7 230"), (3, "251 156")):
+        rng = np.random.default_rng(seed)
+        frame = pale_floor(rng)
+        draw_text(frame, text, rng, noise=2.0)
+        base = selfpos.read_minimap(frame, templates, light=False)
+        assert base.xy is None and base.reason in selfpos.OPAQUE_AFTER, (text, base.reason)
+        got = selfpos.read_minimap(frame, templates)
+        assert got.xy == tuple(int(v) for v in text.split()) and got.mode == "light", (text, got)
+
+
+def test_a_digit_changing_over_a_pale_floor_is_none(templates: selfpos.DigitTemplates) -> None:
+    """Half a 6 and half an 8 over the pale floor: flattened, only their common strokes would
+    remain (a 6): the half shadows make it None instead -- never a guess."""
+    rng = np.random.default_rng(4)
+    floor = pale_floor(rng)
+    six, eight = floor.copy(), floor.copy()
+    draw_text(six, "166 368", np.random.default_rng(1), noise=0)
+    draw_text(eight, "168 368", np.random.default_rng(1), noise=0)
+    assert selfpos.read_minimap_xy(eight, templates) == (168, 368)
+    blend = ((six.astype(np.uint16) + eight) // 2).astype(np.uint8)
+    reading = selfpos.read_minimap(blend, templates)
+    assert reading.xy is None, reading
+
+
+def test_the_fallback_never_runs_after_an_ambiguous_base_read(
+    templates: selfpos.DigitTemplates,
+) -> None:
+    for reason in ("ambiguous", "layout", "leading_zero", "rect_too_small", "no_templates"):
+        assert reason not in selfpos.OPAQUE_AFTER

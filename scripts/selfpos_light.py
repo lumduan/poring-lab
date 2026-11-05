@@ -16,9 +16,10 @@ collect (live, the Rogue -- or any character with @warp -- standing on ``--map``
   * stands = the map's patrol-route waypoints (config/routes/<map>.yaml, reviewed; every one is on
     the route grid, so each is a checked stand cell), every ``--every``-th one, in route order;
   * per stand: ``@warp <map> x y`` through crusader.gm_line (the identity check, the UI gate and
-    the chat window check of every typed line), 1.5 s to land, then ``--per-stand`` grabs 0.35 s
-    apart. Each grab keeps only the readout rect padded by 2 px (a few hundred bytes: crops.npz),
-    and the reader's answer on the full game region at that moment (samples.jsonl);
+    the chat window check of every typed line), 1.5 s to land and the identity check passing
+    again (the loading screen over; also before every typed line), then ``--per-stand`` grabs
+    0.35 s apart. Each grab keeps only the readout rect padded by 2 px (a few hundred bytes:
+    crops.npz), and the reader's answer on the full game region at that moment (samples.jsonl);
   * the end: ``@warp`` back to dungeon_hunt.CLEAR_STAND. No other input (no walking, no clicks).
 truth (offline ground truth, ADR-0007: it labels, never reaches a reader): the sniffer's events of
   the collection window (record_session.packets_for); a crop's true cell is the LAST own
@@ -55,6 +56,7 @@ from poring_env import selfpos as sp  # noqa: E402
 
 PAD = 2  # px of context around the readout rect in each crop
 LAND_S = 1.5  # after the typed @warp line, before the first grab (map load + camera settle)
+READY_S = 8.0  # at most this long for the identity check to pass again after a warp
 GRAB_GAP_S = 0.35
 LIGHT_STRIP = 170.0  # a strip whose scene median is this bright counts as "light" in the scores
 
@@ -76,6 +78,7 @@ def collect(a: argparse.Namespace) -> int:
     if routes is None or not routes.routes:
         raise SystemExit(f"no reviewed route for {a.map}: config/routes/{a.map}.yaml")
     stands = [(int(c[0]), int(c[1])) for c in routes.routes[0].waypoints][:: a.every]
+    first = a.start  # a resumed collection keeps the route's stand numbers (the split's parity)
     out: Path = a.out
     out.mkdir(parents=True, exist_ok=True)
     rx, ry, rw, rh = sp.default_rect()
@@ -84,32 +87,52 @@ def collect(a: argparse.Namespace) -> int:
     crops: list[np.ndarray] = []
     samples: list[dict[str, Any]] = []
     t0 = r.ns()
-    meta = {"map": a.map, "stands": len(stands), "per_stand": a.per_stand, "every": a.every,
+    meta = {"map": a.map, "stands": len(stands), "start": first, "per_stand": a.per_stand,
+            "every": a.every,
             "rect": [rx, ry, rw, rh], "pad": PAD, "t0_mono_ns": t0,
             "t0_wall": time.strftime("%Y-%m-%dT%H:%M:%S%z")}  # fmt: skip
     (out / "meta.json").write_text(json.dumps(meta, indent=1))
     gx, gy, gw, gh = r.game_region()
     with r.session("selfpos-light") as (agent, screen):
 
+        def ready(why: str) -> float:
+            """Wait (<= READY_S) until the identity check passes on a fresh frame: the map is drawn
+            again after a warp's loading screen (2026-11-05 20:17, the first collection: a check
+            1.5 s after the first warp onto xmas_dun02 read the loading screen and stopped)."""
+            t_s = time.monotonic()
+            while True:
+                got = cr.check(screen, a.job, a.char)
+                if got["ok"]:
+                    return time.monotonic() - t_s
+                if time.monotonic() - t_s > READY_S:
+                    raise r.Stop(f"{why}: the identity check did not pass within {READY_S} s "
+                                 f"({got}): nothing typed")  # fmt: skip
+                time.sleep(0.25)
+
         def line(cmd: str) -> int:
+            ready(cmd)
             t = r.ns()
             cr.gm_line(agent, screen, cmd, a.job, a.char)
             return t
 
         try:
             for i, (x, y) in enumerate(stands):
+                if i < first:
+                    continue
                 t_cmd = line(f"@warp {a.map} {x} {y}")
-                if i == 0 and a.clear:
-                    time.sleep(LAND_S)
-                    line("@killmonster2")  # a still scene behind the strip, and no aggressor
                 time.sleep(LAND_S)
+                if i == first and a.clear:
+                    line("@killmonster2")  # a still scene behind the strip, and no aggressor
+                    time.sleep(LAND_S)
+                landed_s = ready(f"stand {i}")  # the map drawn again before the first grab
                 for k in range(a.per_stand):
                     t_grab, img = screen.grab(gx, gy, gw, gh)
                     bgr = np.ascontiguousarray(np.asarray(img)[..., :3])
-                    reading = sp.read_minimap(bgr, templates)
+                    reading = sp.read_minimap(bgr, templates, light=False)  # the base reader
                     crops.append(bgr[y0c:y1c, x0c:x1c].copy())
                     samples.append({"i": len(samples), "stand": i, "sent": [x, y], "k": k,
                                     "t_cmd_ns": t_cmd, "t_grab_ns": int(t_grab),
+                                    "ready_s": round(landed_s, 2),
                                     "read": list(reading.xy) if reading.xy else None,
                                     "reason": reading.reason})  # fmt: skip
                     time.sleep(GRAB_GAP_S)
@@ -215,13 +238,26 @@ def score_rows(labelled: list[dict[str, Any]], crops: np.ndarray, pad: int, read
 
 
 def score(a: argparse.Namespace) -> int:
-    d: Path = a.dir
-    meta = json.loads((d / "meta.json").read_text())
-    labelled = [json.loads(x) for x in (d / "labelled.jsonl").read_text().splitlines() if x]
-    crops = np.load(d / "crops.npz")["crops"]
+    labelled: list[dict[str, Any]] = []
+    parts, pad = [], PAD
+    for d in a.dirs:  # a collection and its resumed parts: crop indices offset per part
+        meta = json.loads((d / "meta.json").read_text())
+        pad = int(meta["pad"])
+        off = sum(len(c) for c in parts)
+        parts.append(np.load(d / "crops.npz")["crops"])
+        for x in (d / "labelled.jsonl").read_text().splitlines():
+            if x:
+                s = json.loads(x)
+                labelled.append({**s, "i": s["i"] + off})
+    crops = np.concatenate(parts)
     templates = sp.load_digit_templates(a.templates)
-    res = score_rows(labelled, crops, int(meta["pad"]), lambda g: sp.read_rect(g, templates),
-                     a.split)  # fmt: skip
+    res = {
+        "split": a.split,
+        "base": score_rows(labelled, crops, pad,
+                           lambda g: sp.read_rect(g, templates, light=False), a.split),
+        "with_light": score_rows(labelled, crops, pad, lambda g: sp.read_rect(g, templates),
+                                 a.split),
+    }  # fmt: skip
     print(json.dumps(res, indent=1))
     return 0
 
@@ -235,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, required=True)
     c.add_argument("--per-stand", type=int, default=8)
     c.add_argument("--every", type=int, default=1)
+    c.add_argument("--start", type=int, default=0, help="resume at this stand number")
     c.add_argument("--job", default="rogue")
     c.add_argument("--char", default="thief", help="crusader.py's data dir for the identity check")
     c.add_argument("--no-clear", dest="clear", action="store_false")
@@ -242,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("dir", type=Path)
     t.add_argument("--gid", type=int, default=2000002, help="our block id (the GM account's AID)")
     s = sub.add_parser("score")
-    s.add_argument("dir", type=Path)
+    s.add_argument("dirs", type=Path, nargs="+")
     s.add_argument("--split", choices=["all", "even", "odd"], default="all")
     s.add_argument("--templates", type=Path, default=sp.DEFAULT_TEMPLATES)
     a = ap.parse_args(argv)

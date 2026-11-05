@@ -59,6 +59,27 @@ FORMAT_VERSION = 1
 MAX_DIGITS = 3  # RO maps are under 1000 cells a side
 NOT_PINNED = -1  # how text_left / number_gap = None is stored
 MIN_CONTRAST = 40.0  # strokes must stand this far above the strip, or nothing can be read
+# THE OPAQUE-GLYPH FALLBACK (2026-11-05, rogue-xmas02 X1b, designed on the even stands only):
+# the digits are drawn OPAQUE -- white strokes ~250, a black drop shadow ~0 -- whatever shows
+# through the strip. strip_background() keeps only the pixels between the shadow and ink levels, so
+# a pale floor (~200-216 on xmas_dun02) is left out and reads as half a stroke ("no_glyph"), and a
+# strip half bright, half dark gets one background that fits neither ("uncovered_ink"). When the
+# base read fails, the readout is parsed once more with every pixel that is neither a stroke
+# (>= GLYPH_STROKE_MIN) nor a shadow (<= GLYPH_SHADOW_MAX) flattened to OPAQUE_FLAT, and stroke
+# starts taken at those glyph levels; every other rule is the same. Even stands: base 72/96, the
+# fallback 96/96, 0 wrong; 225-230 as the stroke level fails on the palest floor, 232-240 do not.
+GLYPH_STROKE_MIN, GLYPH_SHADOW_MAX = 235.0, 40.0  # the opaque glyph pixels, on any strip
+OPAQUE_FLAT = 96.0  # the grey every other pixel takes in the fallback (any mid grey: it is 0)
+# Never a guess (the module's rule) holds in the fallback too:
+#  * it runs only after a base failure that weighed NO glyph evidence (OPAQUE_AFTER): an
+#    "ambiguous" or "layout" read stays None -- flattening a frame caught mid-change (half one
+#    digit, half the next: test_a_glyph_between_two_digits_is_ambiguous) would drop exactly the
+#    half-bright pixels that make it ambiguous and read the digits' intersection;
+#  * over a LIGHT cell (its scene median >= LIGHT_CELL_GREY) a pixel between the glyph shadow and
+#    HALF_SHADOW_MAX is a half shadow -- a digit fading in or out over the floor -- and the read
+#    is None ("half_shadow"): a pale floor has no such pixels.
+OPAQUE_AFTER = frozenset({"no_glyph", "uncovered_ink"})
+LIGHT_CELL_GREY, HALF_SHADOW_MAX = 170.0, 170.0
 
 
 def _box() -> tuple[int, int, int, int]:
@@ -156,6 +177,7 @@ class Reading:
     reason: str  # "ok", or why the readout was not read
     glyphs: tuple[Glyph, ...] = ()
     row: int | None = None  # the baseline (template top row) in rect pixels
+    mode: str = "base"  # "light": read by the light-strip fallback; "light_failed": tried, None
 
 
 def strip_background(gray: Gray, ink_level: float, shadow_level: float) -> float:
@@ -164,10 +186,13 @@ def strip_background(gray: Gray, ink_level: float, shadow_level: float) -> float
     return float(np.median(scene)) if scene.size else float(np.median(gray))
 
 
-def stroke_probability(gray: Gray, bright: float, ink_level: float, shadow_level: float) -> Gray:
-    """0 at this frame's strip background, 1 at a stroke; all 0 when strokes would not stand out
-    (``MIN_CONTRAST``): nothing is then read."""
-    bg = strip_background(gray, ink_level, shadow_level)
+def stroke_probability(
+    gray: Gray, bright: float, ink_level: float, shadow_level: float,
+    background: float | None = None,
+) -> Gray:  # fmt: skip
+    """0 at this frame's strip background (or ``background``), 1 at a stroke; all 0 when strokes
+    would not stand out (``MIN_CONTRAST``): nothing is then read."""
+    bg = strip_background(gray, ink_level, shadow_level) if background is None else background
     if bright - bg < MIN_CONTRAST:
         return np.zeros(gray.shape, np.float32)
     return np.asarray(np.clip((gray - bg) / (bright - bg), 0, 1), np.float32)
@@ -187,11 +212,17 @@ def score_maps(prob: Gray, templates: DigitTemplates) -> npt.NDArray[np.float64]
     return out
 
 
-def stroke_starts(gray: Gray, templates: DigitTemplates) -> npt.NDArray[np.bool_]:
+def stroke_starts(
+    gray: Gray, templates: DigitTemplates, *, opaque: bool = False
+) -> npt.NDArray[np.bool_]:
     """(rows, cols - 1): where a stroke starts -- a bright pixel right of its black drop shadow.
     Column j is pixel column j + 1. A bright scene showing through the strip (prontera's paving)
-    has no black pixel beside it; a glyph, or the cursor, always has."""
-    return (gray[:, 1:] >= templates.ink_level) & (gray[:, :-1] <= templates.shadow_level)
+    has no black pixel beside it; a glyph, or the cursor, always has. ``opaque`` (the light-strip
+    fallback): the glyph's own levels (GLYPH_STROKE_MIN / GLYPH_SHADOW_MAX), because a pale floor's
+    tile seams pass the calibrated ones (2026-11-05, xmas_dun02 7,114: "uncovered_ink")."""
+    ink, shadow = (GLYPH_STROKE_MIN, GLYPH_SHADOW_MAX) if opaque else (
+        templates.ink_level, templates.shadow_level)  # fmt: skip
+    return (gray[:, 1:] >= ink) & (gray[:, :-1] <= shadow)
 
 
 def first_stroke_max(templates: DigitTemplates) -> int:
@@ -211,9 +242,46 @@ def first_stroke_max(templates: DigitTemplates) -> int:
     return max(firsts) if firsts else int(templates.shape[1]) - 1
 
 
-def read_rect(gray: Gray, templates: DigitTemplates) -> Reading:  # noqa: PLR0911
-    """Parse the readout from its rect (grey, rect pixels). See the module docstring."""
-    prob = stroke_probability(gray, templates.bright, templates.ink_level, templates.shadow_level)
+def read_rect(gray: Gray, templates: DigitTemplates, *, light: bool = True) -> Reading:
+    """Parse the readout from its rect (grey, rect pixels). See the module docstring. When that
+    fails and ``light`` is on, the OPAQUE-GLYPH fallback parses it once more (see GLYPH_STROKE_MIN);
+    its answer has mode "light", a failed retry keeps the base reason with mode "light_failed"."""
+    base = _parse(gray, templates)
+    if base.xy is not None or not light or base.reason not in OPAQUE_AFTER:
+        return base
+    alt = _parse(gray, templates, opaque=True)
+    if alt.xy is None:
+        return replace(base, mode="light_failed")
+    return replace(alt, mode="light")
+
+
+def _half_shadow(gray: Gray, glyphs: Sequence[Glyph], row: int, templates: DigitTemplates) -> bool:
+    """A glyph cell over a light scene holding a pixel between the glyph shadow and
+    HALF_SHADOW_MAX: a digit half drawn (see OPAQUE_AFTER)."""
+    h, w = templates.shape
+    for g in glyphs:
+        cell = gray[row : row + h, g.x : g.x + w]
+        scene = cell[(cell > GLYPH_SHADOW_MAX) & (cell < GLYPH_STROKE_MIN)]
+        light = bool(scene.size) and float(np.median(scene)) >= LIGHT_CELL_GREY
+        if light and bool(((cell > GLYPH_SHADOW_MAX) & (cell <= HALF_SHADOW_MAX)).any()):
+            return True
+    return False
+
+
+def opaque_glyphs(gray: Gray) -> Gray:
+    """The rect with only the opaque glyph pixels kept (strokes, shadows); the rest OPAQUE_FLAT."""
+    keep = (gray >= GLYPH_STROKE_MIN) | (gray <= GLYPH_SHADOW_MAX)
+    return np.asarray(np.where(keep, gray, OPAQUE_FLAT), np.float32)
+
+
+def _parse(  # noqa: PLR0911
+    gray: Gray, templates: DigitTemplates, *, opaque: bool = False
+) -> Reading:
+    src = opaque_glyphs(gray) if opaque else gray
+    prob = stroke_probability(
+        src, templates.bright, templates.ink_level, templates.shadow_level,
+        OPAQUE_FLAT if opaque else None,
+    )  # fmt: skip
     scores = score_maps(prob, templates)
     if scores.shape[1] == 0:
         return Reading(None, "rect_too_small")
@@ -240,7 +308,8 @@ def read_rect(gray: Gray, templates: DigitTemplates) -> Reading:  # noqa: PLR091
     # nothing on the readout that looks like the start of a stroke may be left unexplained
     _, w = templates.shape
     r0, r1 = templates.stroke_rows
-    ink_cols = 1 + np.flatnonzero(stroke_starts(gray[row + r0 : row + r1], templates).any(axis=0))
+    starts = stroke_starts(gray[row + r0 : row + r1], templates, opaque=opaque)
+    ink_cols = 1 + np.flatnonzero(starts.any(axis=0))
     # ... where a digit could be: a whole glyph inside the rect starts its first stroke at most
     # first_stroke_max(templates) columns in, so a stroke start further right is the scene at the
     # rect's edge, never a hidden digit (2026-10-25, 4.05 s2: "292 62" over sunlit grass, its only
@@ -253,6 +322,8 @@ def read_rect(gray: Gray, templates: DigitTemplates) -> Reading:  # noqa: PLR091
         return Reading(None, "uncovered_ink", glyphs, row)
     if any(g.margin < templates.min_margin for g in glyphs):
         return Reading(None, "ambiguous", glyphs, row)
+    if opaque and _half_shadow(gray, glyphs, row, templates):
+        return Reading(None, "half_shadow", glyphs, row)
 
     numbers: list[list[Glyph]] = [[glyphs[0]]]
     for prev, g in zip(glyphs, glyphs[1:], strict=False):
@@ -280,14 +351,17 @@ def read_minimap(
     game_region_bgr: npt.NDArray[np.uint8],
     templates: DigitTemplates,
     rect: tuple[int, int, int, int] | None = None,
+    *,
+    light: bool = True,
 ) -> Reading:
     """The readout with its reason (evaluation, logs). ``rect``: game-region pixels (x, y, w, h);
-    default: the ``minimap_xy`` element at the minimap window's measured origin."""
+    default: the ``minimap_xy`` element at the minimap window's measured origin. ``light``: the
+    light-strip fallback (read_rect)."""
     x, y, w, h = default_rect() if rect is None else rect
     region = game_region_bgr[y : y + h, x : x + w]
     if region.shape[0] != h or region.shape[1] != w:
         return Reading(None, "rect_outside_frame")
-    return read_rect(to_gray(region), templates)
+    return read_rect(to_gray(region), templates, light=light)
 
 
 def read_minimap_xy(

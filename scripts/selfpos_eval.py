@@ -79,11 +79,18 @@ def read_session(
     t0 = time.monotonic()
     for fmeta, img in stream.frames(ids, verify=False, crop=True):
         reading = selfpos.read_minimap(img, templates)
+        # the base reader beside it (2026-11-05, X1b B4): the light-strip fallback only ever
+        # answers where the base read failed, so the base read is the same unless mode == light
+        base = (
+            reading if reading.mode == "base" else selfpos.read_minimap(img, templates, light=False)
+        )
         strips.append(img[ry : ry + rh, rx : rx + rw].copy())
         records.append({
             "session": session.name, "i": index[fmeta["frame_id"]], "frame_id": fmeta["frame_id"],
             "t_mono_ns": int(fmeta["t_mono_ns"]),
             "read": None if reading.xy is None else list(reading.xy), "reason": reading.reason,
+            "mode": reading.mode, "read_base": None if base.xy is None else list(base.xy),
+            "reason_base": base.reason,
             "glyphs": [[g.x, g.digit, round(g.score, 3), round(g.margin, 3)]
                        for g in reading.glyphs],
         })  # fmt: skip
