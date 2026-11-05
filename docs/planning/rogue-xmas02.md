@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 2026-11-05 15:05 (the Rogue at Base 99, AGI 99+8, DEX 99+7; section 5). X1 (the offline prep) running. Planned 2026-11-05 (Batt's order ~13:2x, his four answers ~14:0x ICT, section 0)."
+status: "X0 DONE 15:05; X1 DONE (xmas02-prep.md, merged e777181, KB installed); pilot p1 15:27-15:32 STOPPED by the runner itself: the minimap position readout is NOT read over xmas_dun02's light floor tiles (section 5); X2's recording waits for root-disk room (Amendment B). Planned 2026-11-05 (Batt's order ~13:2x, his four answers ~14:0x ICT, section 0)."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -197,3 +197,27 @@ padlock's shape). It STOPPED as designed: nothing else typed, no hunting input. 
 chat_window.padlock_distances (each template on its own icon pixels: 5.1 / 104.4 on that frame;
 all 41 real frames of the day decided, worst own 8.8, nearest other 29.8; a test). Attempt 2
 follows with the same command.
+
+**Pilot p1 attempt 2 (session 20261105T152721-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p1;
+setup 15:27:21-15:27:50, the run to 15:32:2x):**
+- The setup: @heal, `@warp xmas_dun02 7 21` (PATROL_START), `@killmonster2`; the Battle Log tab
+  selected; the chat window check passed at every typed line (the new padlock read).
+- **Ended by the runner itself: "position unread for 30 s"** (then my SIGINT cut its end path after
+  the home warp; the packets and the manifest were written afterwards from its first / last events,
+  `manifest.written_by` says so; 306 packet events).
+- The judge (`dungeon_judge.py row`, 4.5 min): 2 engagements (walk_sword), 2 strikes, both landed;
+  1 kill (a Cruiser); 4 Fly Wings (1 dead end at 34,30; 3 "pos_unread"); 53 walk clicks, 32 trusted;
+  33 no-entry carves; hard bars PASS (0 NPC contact, 0 non-monster attack; the 4 same-map changes
+  are the Fly Wings). Steals cannot be counted yet (0x09CB / 0x0110 are not decoded: X4).
+- The Battle Log reader works on the docked 6-line window: "[Myst Case] receives '185' damage
+  points", "Casts [...] skill" x4, "Skill has failed." (its first live positive case on the new
+  geometry).
+- **THE BLOCKER, the position:** `selfpos.read_minimap` reads the readout under the minimap only
+  over a darker strip. On xmas_dun02 the strip shows the floor through it: over the orange floor it
+  reads ("7 40", "268 107" at home), over the PALE floor tiles it reads nothing ("79 93" on screen:
+  `no_glyph`; `stroke_probability` gives 0 when the strokes do not stand out). Each unread position
+  sent the runner to a Fly Wing (a random cell, often inside the maze), and 30 s unread ended it.
+- Next (not started): a readout reader for light strips (the digits keep their 1-px black drop
+  shadow; a second template set or a shadow-based mode, calibrated on readout crops with the
+  packets' positions as truth), or a /where fallback through the replies' tab; and X2's recording
+  once the root disk has >= 140 GB free.
