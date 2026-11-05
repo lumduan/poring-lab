@@ -158,6 +158,19 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
   own numbers for v1 before it scores X2.
 - Hallucination frames (Myst Case, the MVP) are counted and reported, not removed.
 
+### 4B. Amendment B (2026-11-05 ~15:25, BEFORE the pilot below): the recorder is refused by its disk floor
+
+- 15:23 `record_session.py` refused: "only 134 GB free under /home/batt/poring-lab-rec (floor 140
+  GB)" (`dataset_ship.MIN_FREE_BYTES`, the shared floor that protects the root disk of live
+  capture; `df`: 614 G, 462 G used, 125 G available). The floor is not lowered and the recording is
+  not moved to RAM (CLAUDE.md rule 7): **X2's recording waits** until Batt frees the root disk or
+  decides on the floor.
+- Instead, an **UNRECORDED 15-min pilot** of the runner on the loop (the same command as 4A with
+  `--minutes 15 --label xmas02-p1`; the Rogue immune; the MVP cleared). It is not X2 and scores
+  nothing: it checks that the runner works on this map (the edge loop walked clockwise, the
+  engagements, the Battle Log reader on the docked 6-line window, Snatcher steals in the packets)
+  and is reported with the runner's own events and the offline judge.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
