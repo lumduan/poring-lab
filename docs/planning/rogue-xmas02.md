@@ -399,3 +399,25 @@ at 8cbc09c 20:42:38 on the even stands; the odd stands scored once at 20:42:55):
   half pair in the "2" cell. Both rounds' failures are the light-cell guard refusing true reads
   on textured floors; the opaque parse itself read every stand of both rounds.
 
+**X1b round 3 (pre-registered 4F at acabc38 22:02:50):**
+- R4 re-run (22:03-22:2x): **PASS**, identical to round 2 (standing 99.36 %, walking 99.70 %;
+  the fallback abstained on every frame it ran on; the one wrong read is the base reader's).
+- The fresh collection (`--cells quarters`, 22:03-22:34, clean, no stop): **1,344 crops at 168
+  cells, all labelled** (1,376 events); scored ONCE at 22:34:44:
+
+| fresh cells (168 quarter points, 1,344 crops) | n | base exact | new exact | none | wrong | bar |
+|---|---|---|---|---|---|---|
+| light strips (scene median >= 170) | 96 | 8 (8.3 %) | 80 (83.3 %) | 16 | 0 | R2 >= 90 %: **FAIL** |
+| dark strips | 1,248 | 1,206 | 1,248 | 0 | 0 | R3: pass |
+| all | 1,344 | 1,214 (90.3 %) | 1,328 (98.8 %) | 16 | 0 | R1 0 wrong: pass |
+
+- **Verdict: X1b round 3 FAILS (R2: 83.3 % < 90 %).** The 16 misses are two stands of the west
+  edge's textured pale floor, and at both the opaque parse read the TRUE digits: 7,221 refused by
+  the half-pair guard (>= 3 pairs from the floor's texture), 7,233 by `uncovered_ink` (a stroke
+  start in the floor left unexplained).
+- **The three rounds together (fresh cells each time, 0 wrong reads in 2,704 crops):** light strips
+  20.0 % -> 66.7 % -> 83.3 % (base 20.0 / 33.3 / 8.3 %), all crops 90.5 -> 98.8 -> 98.8 %; every
+  miss of rounds 2-3 is a check refusing a true read, never a misread. **The X1b iteration stops
+  here** (three FAILs of the same bar): whether the round-3 reader is good enough for the runner
+  is Batt's decision. Pilot p2 (4E/4F: "then, not a bar") measures it live.
+
