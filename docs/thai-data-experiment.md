@@ -159,7 +159,10 @@ Run on 2026-10-05 from 14:19 ICT (Batt moved it ahead of 17:00 while he was avai
 
 The values are all official (ADR-0016's known-forbidden list). The string is not in the exe.
 
-**The fix, client config only** (Batt: never patch the exe; rAthena's web auth stays off):
+**The fix, client config only** (Batt: never patch the exe; rAthena's web auth stays off).
+➡️ For the MAIN client the value changed on 2026-11-05 to `192.168.1.13:8888`, rAthena's own
+web-server (Batt: fix the red account-settings error; docs/client/rathena-client.md "The account
+settings"). The th client copy was removed on 2026-10-06.
 - the four kRO files are extracted from the th copy's own GRFs on the Dell;
 - only the `AssistAddr` constant is changed, to `127.0.0.1:3000`;
 - they are placed as loose files in `C:\RO-rAthena-th\client\data\luafiles514\lua files\service_korea\`

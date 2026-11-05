@@ -86,6 +86,8 @@ environments:
     # kro-assit.ragnarok.co.kr:3000 (Cloudflare: 104.18.20.108, 104.18.21.108 on 2026-10-05).
     # The th client overrides it with loose files (AssistAddr = 127.0.0.1:3000, client config only;
     # docs/thai-data-experiment.md section 4). The MAIN lab client got the same override 2026-10-05 16:23.
+    # Since 2026-11-05 the main client's AssistAddr is the lab's own rAthena web-server,
+    # 192.168.1.13:8888 (Batt: fix the account-settings error); this endpoint stays forbidden.
     status: forbidden
     adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
     server: {host: kro-assit.ragnarok.co.kr, ports: [3000]}

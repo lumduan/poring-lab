@@ -120,7 +120,7 @@ pending when that entry was written).
 | Item | State |
 |---|---|
 | `C:\RO-rAthena\` client: WARP-patched `PoringLab.exe`, dgVoodoo2, `DATA.INI`, `clientinfo.xml`/`sclientinfo.xml` → 192.168.1.13:6900, English UI text, `OptionInfo.lua`, HKCU Gravity keys | **LIVE** folder present; recipe in [rathena-client.md](../client/rathena-client.md) |
-| AssistAddr override: four `externalsettings_kr*.lub` per client → `127.0.0.1:3000` | record (ADR-0016; thai-data-experiment.md) |
+| AssistAddr override: four `externalsettings_kr*.lub` per client → `127.0.0.1:3000` ➡️ main client since 2026-11-05: → `192.168.1.13:8888` (rAthena's web-server; the originals kept in `C:\RO-rAthena\lub-backup-20261105\`) | record (ADR-0016; thai-data-experiment.md; rathena-client.md "The account settings") |
 | Equip-window placeholders: 16×16 BMPs `btn_e_change/off/on _a/b/c` in `data\texture\<ACP name>\basic_interface\`, both clients | record (memory only until now; installed 2026-10-05 evening, verified) |
 | Firewall group `poring-lab lab-only`: 12 outbound Block rules, one per lab exe in both client folders | **LIVE** all 12 present and enabled. ➡️ 2 since 18:55 (cleanup Part 2, below) |
 | "Ragnarok Offline" shortcut → `C:\RO-rAthena\PoringLab.cmd` | **LIVE** |
@@ -232,6 +232,9 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   - Firewall: 2 rules, both enabled Block. `AVC values: 0`. Caps Lock off.
   - The AssistAddr lubs and the Equip BMPs hash identical to the pre-reboot baseline
     (`externalsettings_kr*.lub` 477C1E90…, 301EA6CB…, 4B62906C…, 954EB544…; 9 × FA104C1C…).
+    ➡️ The lub baseline changed on 2026-11-05 14:55 (AssistAddr → 192.168.1.13:8888, Batt's
+    "fix it"): `_kr` 928E109D…, `_kr_qm` 64F26B9B…, `_kr_sak` F68D83BC…, `_kr_sak_qm` C9093422…
+    (each +3 bytes; the old four are the backups in `C:\RO-rAthena\lub-backup-20261105\`).
   - A watched GM login (`recover gm --retries 0`):
     - the interlock was GREEN `lab-rathena`;
     - the client's only remote was `192.168.1.13:5121`;

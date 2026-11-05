@@ -563,6 +563,46 @@ mvp_watch's rectangles (study / proof scripts only),
 bench.py's fidelity crops, `poring_env.ui_anchors`' chat window spec (its template was cut with two
 tabs at (0, 531)), detector_vs_packets' and label_quality's copies.
 
+## The account settings (rAthena's web-server, 2026-11-05)
+
+Batt, 2026-11-05: "fix" the red line the client printed at EVERY login: "There was an error when
+loading the data account settings. (Please restart to retry.)".
+
+**The cause** (a read-only research pass, file:line in the pinned rAthena e985006):
+- the 2021 client loads (and saves) its account and character UI settings over HTTP from the
+  address in `AssistAddr` (the four loose `externalsettings_kr*.lub`, client data; the server
+  never sends it); rAthena serves them from its **web-server** (`src/web`: `/userconfig/load|save`,
+  `/charconfig/load|save`, `/emblem/*`, `/MerchantStore/*`, `/party/*`; packetver > 20200300);
+- our 2026-10-05 override set `AssistAddr = 127.0.0.1:3000` (nothing listens there), and the
+  web-server was off (`RATHENA_WEB_SERVER=false`, port 8888 not published).
+
+**The fix (14:46-14:58):**
+- `RATHENA_WEB_SERVER=true` (`rotate_secrets.py set`, read back) and rathena publishes
+  `HOST_LAN_IP:8888` (compose.yaml); `guarded_build.py recreate:rathena,sniffer@240` (worst
+  capture stall 9.3 %; the GM re-logged in by itself). The web tables (`user_configs`,
+  `char_configs`, `guild_emblems`, `merchant_configs`) already existed (the bootstrap's web.sql).
+  The log: "The web-server is ready (Server is listening on the port 8888)"; a host POST
+  `/userconfig/load` (AID, WorldName) answers `{"Type": 1}`.
+- The four lubs in `C:\RO-rAthena\client\data\luafiles514\lua files\service_korea\`, from the
+  agent's non-elevated shell: Lua 5.1 bytecode (header `1B 4C 75 61 51 00 01 04 04 04 08 00`;
+  4-byte size_t); the one string constant `04 | 0F 00 00 00 | "127.0.0.1:3000" 00` became
+  `04 | 12 00 00 00 | "192.168.1.13:8888" 00` (+3 bytes), each file checked for exactly that
+  layout before it was written; the originals in `C:\RO-rAthena\lub-backup-20261105\`. New
+  hashes: `_kr` 928E109D…, `_kr_qm` 64F26B9B…, `_kr_sak` F68D83BC…, `_kr_sak_qm` C9093422…
+  (ADR-0019's baseline).
+- A client restart (`recover gm`): the login printed NO red line; the UI is unchanged (chat
+  window standard, both tabs, the 1-row bar with the Fly Wing, Basic Info collapsed); only the
+  SHOWN chat tab is the first one (Battle Log) after a restart.
+
+**What to know:**
+- Port 8888 is plain HTTP on the LAN like the game ports. Its load routes are unauthenticated
+  upstream (anyone on the LAN can read a row by account id, and a load inserts `{"Type":1}` for an
+  unknown one); saves need the login's web token. The sniffer does not capture it.
+- If the web-server exits, the entrypoint's `wait -n` stops the other servers too (Docker restarts
+  the set): the GM drops and re-logs as after any rathena restart.
+- **Rollback:** copy the four backups back over the lubs (the client then prints the red line
+  again) and/or set `RATHENA_WEB_SERVER=false` + remove the 8888 port + the guarded recreate.
+
 ## Server side (this repo)
 
 - PACKETVER 20211103 and **PRE-RENEWAL** (`RATHENA_PRERE=yes`).

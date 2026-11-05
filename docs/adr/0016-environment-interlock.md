@@ -130,7 +130,12 @@ What the layers did on 2026-10-05:
 
   All are recorded as known-forbidden (`official-ro-korea`, `official-ro-thai`).
 - The th client now carries loose overrides with `AssistAddr = 127.0.0.1:3000`. This is client
-  config only (Batt: never patch the exe; rAthena's web auth stays off). With them, login reaches
+  config only (Batt: never patch the exe; rAthena's web auth stays off).
+  ➡️ SUPERSEDED for the MAIN client on 2026-11-05 (Batt: fix the client's red "error when loading
+  the data account settings"): its four lubs now say `192.168.1.13:8888`, rAthena's own
+  web-server on the lab host (`RATHENA_WEB_SERVER=true`, published on `HOST_LAN_IP:8888`). The
+  official addresses stay known-forbidden and are never used; the address is still client config
+  (docs/client/rathena-client.md "The account settings"). With them, login reaches
   in game and the watcher stays silent (`docs/thai-data-experiment.md` section 4).
 - The MAIN lab client (`C:\RO-rAthena`) runs the same exe on the same kRO data. So it very likely
   made this call at every character select, though no trace remains to prove it: the DNS-Client

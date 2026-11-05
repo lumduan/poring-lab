@@ -57,7 +57,10 @@ standard Windows account, and no sleep or screen lock. See "Optional" below.
 - **The AssistAddr override, BEFORE the first login.** The 2021 exe on kRO data calls Gravity's
   `kro-assit.ragnarok.co.kr:3000` at character select.
   - Put loose `data\luafiles514\lua files\service_korea\externalsettings_kr*.lub` files next to
-    the client, with `AssistAddr = 127.0.0.1:3000`. The lab uses four.
+    the client, with `AssistAddr` = YOUR rAthena host's web-server, `<server LAN IP>:8888`, and run
+    the server with `RATHENA_WEB_SERVER=true` (the lab: `192.168.1.13:8888` since 2026-11-05). The
+    lab uses four. With `127.0.0.1:3000` (the lab's first override, 2026-10-05) nothing answers,
+    and the client prints "error when loading the data account settings" at every login.
   - This is client config, never an exe patch (ADR-0016, known-forbidden endpoints).
 - **Data fixes the client needs.** The lab added Equip-window placeholder textures: kRO data
   lacks the button images, and the missing files raise modal boxes that stop the game loop.

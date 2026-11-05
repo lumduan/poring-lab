@@ -427,7 +427,12 @@ ports, quickstart) and `docs/adr/`.
     `kro-assit.ragnarok.co.kr:3000`). Four loose `data\luafiles514\lua files\service_korea\
     externalsettings_kr*.lub` set it to `127.0.0.1:3000` (client config, never an exe patch; rAthena's
     web auth stays off). Both `C:\RO-rAthena` and `C:\RO-rAthena-th` have them
-    (docs/thai-data-experiment.md section 4; ADR-0016 known-forbidden endpoints);
+    (docs/thai-data-experiment.md section 4; ADR-0016 known-forbidden endpoints).
+    ➡️ SINCE 2026-11-05 (Batt: fix the red "error when loading the data account settings" at every
+    login): the main client's four lubs say `192.168.1.13:8888`, rAthena's own web-server
+    (`RATHENA_WEB_SERVER=true`, published on `HOST_LAN_IP:8888`; it serves the client's account /
+    character UI settings). Still client config only; the official address is never used
+    (docs/client/rathena-client.md "The account settings");
   - the Equip window (Alt+Q / its button) needs button textures the lab's kRO data lacks.
     Without them, modal "Resource File Loading fail" boxes stop the game loop, and the session
     times out at 60 s. Placeholder BMPs were installed in BOTH clients on 2026-10-05 (verified;

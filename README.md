@@ -101,6 +101,7 @@ To switch to the Thai-data server and back (stop needs no guard; start does):
 | `HOST_LAN_IP:6900` | rathena | login server | LAN |
 | `HOST_LAN_IP:6121` | rathena | char server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
+| `HOST_LAN_IP:8888` | rathena | web-server (`RATHENA_WEB_SERVER=true`): the client's account / character UI settings and emblems over HTTP, at its `AssistAddr` (2026-11-05). Its load routes are **unauthenticated** upstream | LAN |
 | `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
 | `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
