@@ -16138,6 +16138,39 @@ covered border, a moved closed window over a grey scene. Re-run, same bars as ab
   archived in the pause's RAM cleanup), test_vision_worker x2 (a stub without the 2026-10-28
   co_tenants argument).
 
+**Results, Amendment 1's reader (d778805, committed 12:36:15, before these runs):**
+- **C4 attempt 2 PASS** (12:36:57-12:38:11): from attempt 1's state (12 lines, padlock open, input
+  closed; judged screenshot). Escape once (the input was closed) -> the game option window
+  (screenshot-checked: its first button is the character select) -> the click at client (644,
+  481) 12:37:26 -> character select with Valcd8bd6 selected (screenshot), the interlock red 12:37:27
+  -> `enter_game` 12:37:55, in game 12:37:56 -> its own check: "chat window: standard after
+  ['f10' x5, 'lock'] (enter_game:gm)" at 12:38:10 (12 -> 15 -> hidden -> bar -> 3 -> 6). Every agent
+  press: the Enter of the login, the client's title bar before each F10, the padlock (585, 591).
+  The sniffer: the login's own char_selected / map_enter / map_change (the deliberate re-entry),
+  2 server chat lines, no self_move_request / attack_request / npc_contact. The next read standard;
+  judged screenshot: docked, 6 lines, padlock closed, the GM at 246,310.
+- **C1 re-run PASS** (12:40:18): standard, 0 steps, no input of ours in its window.
+- **C2 re-run PASS** (staged 12:40:34-12:40:47 to the same state as before; fixed
+  12:41:25-12:41:39): the staged window read "seen in part" (moved, input closed, the scene below
+  continuing the border's grey) -> `ensure`: open_input, drag, f10 x5, lock (8 steps). Presses:
+  the padlock body, the white bar (from (300, 708) while staging; from (340, 628), the moved
+  window's own bar point, in the fix), the title bar before each key. The sniffer: 6 time_sync, 0
+  self_move_request / attack_request / npc_contact, no map change. The GM at 246,310 before and
+  after; judged screenshot: docked, 6 lines, input open, padlock closed.
+
+**VERDICT:** the chat window check WORKS at every game entry and before every typed line (C1, C2,
+C4 pass on Amendment 1's reader; C2 also passed on the first). C3 FAILED its bar and stands as a
+FINDING: with Battle Log the only tab, the client's answers to typed commands are NOT shown (the
+/where reply; @heal's and @monsterignore's server answers are in the packets but not on screen).
+Consequences for Batt: (1) where_fix (the hunting runs' /where fallback) reads nothing; (2)
+collect_v2's immunity check is confirmed by READING its screenshot, which now cannot show the
+answer: the 12:39:34 @monsterignore (immunity back ON after the C4 re-logins, which clear it) was
+answered "You are now immune to attacks." in the packets, and its record was left "sent" (NOT
+confirmed by a screenshot that does not show the answer). A second tab for Regular Chat (or the
+system categories on Battle Log) is Batt's decision.
+- The full suite on d778805 (12:4x, niced, --ignore=services/vision): 4,278 passed, 59 skipped, 4
+  failed -- the four failures listed under Amendment 1, all failing on main before this work.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
