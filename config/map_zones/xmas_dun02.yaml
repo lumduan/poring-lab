@@ -1,0 +1,29 @@
+# xmas_dun02's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
+# the server's numbers). The format and what each kind does: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt's order of 2026-11-05 (~13:2x ICT, Thai, translated in
+# docs/planning/rogue-xmas02.md section 0) sends the Rogue to this map with ONE technique: walk the
+# map's EDGE clockwise, round and round. The agent only places the keep-out his technique needs:
+# the map's only exit warp sits in the middle of the maze, and a walk or click onto it is a map
+# change (a hard bar), so the edge loop and every chase off it must never reach it.
+#
+# WARP. The one span is data/kb/warps.json's (rAthena npc/warps/dungeons/xmas_dun.txt:19,
+# xmas_dun2-2 at 129,130, span 1,1 = the trigger cells x 128-130 y 129-131, to xmas_dun01). The
+# area is the span grown by 4 cells on every side, as orcsdun01.yaml, pay_fild07.yaml and
+# gef_fild10.yaml: a click made while the GM moves can land up to ~3 cells further along its walk
+# than the cell aimed at (frames lag the server ~0.5 s), so a destination just outside the area
+# still stops >= 1 cell short of the span. The arrival from xmas_dun01 (131,130) is inside: it is
+# ONE step from the trigger, so nothing may ever stand there. The Kafra dungeon-teleport arrival
+# (npc/kafras/dts_warper.txt, 130,123) lies 2 cells south of the area, outside it.
+#
+# The map has no script NPC (data/kb/npc_cells.json: 0) and no other warp.
+# The offline proof (check, prove): docs/planning/xmas02-prep.md section 2.
+map: xmas_dun02
+reviewed_by: "agent (delegated by batt, 2026-11-05)"
+reviewed: 2026-11-05
+delegation: "Batt 2026-11-05 ~13:2x ICT (Thai, translated; rogue-xmas02.md section 0): 'Go train on map xmas_dun02 instead ... The map is a bit hard: it is hard to walk, many things block the way, but there is a technique: walk along the edge of the map, going clockwise round and round. If you meet the boss, run away.' His technique is the route; this keep-out around the only exit warp is its safety necessity (a map change is a hard bar); the agent only placed the area"
+no_cross: []
+no_enter:
+  - id: warp-xmas_dun01
+    note: "the only exit warp xmas_dun2-2 to xmas_dun01 (129,130), span 1,1 = x 128-130 y 129-131, grown by 4: x 124-134 y 125-135; the arrival from xmas_dun01 (131,130) is inside"
+    polygon: [[124, 125], [134, 125], [134, 135], [124, 135]]
