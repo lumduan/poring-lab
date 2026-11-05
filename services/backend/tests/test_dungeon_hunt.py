@@ -757,3 +757,21 @@ def test_the_run_shows_the_battle_log_tab_before_its_reader_starts() -> None:
     i_tab = src.index('cl_.select_tab(agent_raw, screen, "battle")')
     i_reader = src.index('blt = hf.BattleLogTail(out / "battle_log_live.jsonl"')
     assert i_gate < i_tab < i_reader
+
+
+def test_a_light_strip_read_counts_only_when_a_second_read_agrees() -> None:
+    """X1b round 2: selfpos's opaque-glyph fallback (mode "light") is confirmed by the previous
+    read within CONFIRM_S and the walk's reach; base reads count as before."""
+    from types import SimpleNamespace as R
+
+    pc = dh.PosConfirm()
+    assert pc.accept(0.0, R(xy=(79, 93), mode="light")) is None  # nothing before it
+    assert pc.accept(0.3, R(xy=(79, 94), mode="light")) == (79, 94)  # 1 cell in 0.3 s: walkable
+    assert pc.accept(0.6, R(xy=(79, 84), mode="light")) is None  # 10 cells in 0.3 s: a misread
+    assert pc.accept(0.9, R(xy=(79, 95), mode="light")) is None  # its predecessor was the misread
+    assert pc.accept(1.2, R(xy=(79, 95), mode="light")) == (79, 95)
+    assert pc.accept(3.0, R(xy=(79, 96), mode="light")) is None  # 1.8 s since: too old to confirm
+    assert pc.accept(3.1, R(xy=(80, 96), mode="base")) == (80, 96)  # a base read: as before
+    assert pc.accept(3.4, R(xy=(80, 97), mode="light")) == (80, 97)  # confirmed by the base read
+    assert pc.accept(3.5, R(xy=None, mode="light_failed")) is None
+    assert pc.unconfirmed == 4  # at 0.0, 0.6, 0.9 and 3.0 s

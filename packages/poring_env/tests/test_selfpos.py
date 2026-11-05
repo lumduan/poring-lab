@@ -284,7 +284,8 @@ def test_a_pale_floor_is_read_by_the_opaque_glyph_fallback(
         draw_text(frame, text, rng, noise=2.0)
         base = selfpos.read_minimap(frame, templates, light=False)
         assert base.xy is None and base.reason in selfpos.OPAQUE_AFTER, (text, base.reason)
-        got = selfpos.read_minimap(frame, templates)
+        assert selfpos.read_minimap(frame, templates).xy is None  # the fallback is opt-in
+        got = selfpos.read_minimap(frame, templates, light=True)
         assert got.xy == tuple(int(v) for v in text.split()) and got.mode == "light", (text, got)
 
 
@@ -296,9 +297,9 @@ def test_a_digit_changing_over_a_pale_floor_is_none(templates: selfpos.DigitTemp
     six, eight = floor.copy(), floor.copy()
     draw_text(six, "166 368", np.random.default_rng(1), noise=0)
     draw_text(eight, "168 368", np.random.default_rng(1), noise=0)
-    assert selfpos.read_minimap_xy(eight, templates) == (168, 368)
+    assert selfpos.read_minimap(eight, templates, light=True).xy == (168, 368)
     blend = ((six.astype(np.uint16) + eight) // 2).astype(np.uint8)
-    reading = selfpos.read_minimap(blend, templates)
+    reading = selfpos.read_minimap(blend, templates, light=True)
     assert reading.xy is None, reading
 
 
@@ -307,3 +308,17 @@ def test_the_fallback_never_runs_after_an_ambiguous_base_read(
 ) -> None:
     for reason in ("ambiguous", "layout", "leading_zero", "rect_too_small", "no_templates"):
         assert reason not in selfpos.OPAQUE_AFTER
+
+
+def test_a_dark_floor_band_through_a_pale_floor_is_read(templates: selfpos.DigitTemplates) -> None:
+    """X1b round 1's FAIL (xmas_dun02 7,125): a dark floor band (~60-90) runs through light cells;
+    the round-1 guard took its pixels for half shadows. A band's edge is not a half pair."""
+    for seed, text in ((11, "7 125"), (12, "217 23"), (13, "7 241")):
+        rng = np.random.default_rng(seed)
+        frame = pale_floor(rng, 195, 215)
+        x, y, w, h = RECT
+        band = 55 + 40 * rng.random((h, 24))  # its left edge INSIDE the first digit's cell
+        frame[y : y + h, x + 11 : x + 35] = band[..., None].astype(np.uint8)
+        draw_text(frame, text, rng, noise=2.0)
+        got = selfpos.read_minimap(frame, templates, light=True)
+        assert got.xy == tuple(int(v) for v in text.split()), (text, got)

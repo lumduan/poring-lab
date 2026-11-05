@@ -66,7 +66,11 @@ def error(read: tuple[int, int], pos: tuple[float, float]) -> int:
 
 
 def read_session(
-    session: Path, n: int, templates: selfpos.DigitTemplates, cache: Path | None
+    session: Path,
+    n: int,
+    templates: selfpos.DigitTemplates,
+    cache: Path | None,
+    light: bool = False,
 ) -> list[dict[str, Any]]:
     """The reader over ``n`` frames spread over the session: one record per frame, no truth."""
     from poring_dataset.h264 import H264Session
@@ -78,12 +82,10 @@ def read_session(
     records, strips = [], []
     t0 = time.monotonic()
     for fmeta, img in stream.frames(ids, verify=False, crop=True):
-        reading = selfpos.read_minimap(img, templates)
-        # the base reader beside it (2026-11-05, X1b B4): the light-strip fallback only ever
-        # answers where the base read failed, so the base read is the same unless mode == light
-        base = (
-            reading if reading.mode == "base" else selfpos.read_minimap(img, templates, light=False)
-        )
+        reading = selfpos.read_minimap(img, templates, light=light)
+        # the base reader beside it (2026-11-05, X1b): the light-strip fallback only ever answers
+        # where the base read failed, so the base read is the same unless mode == light
+        base = reading if reading.mode == "base" else selfpos.read_minimap(img, templates)
         strips.append(img[ry : ry + rh, rx : rx + rw].copy())
         records.append({
             "session": session.name, "i": index[fmeta["frame_id"]], "frame_id": fmeta["frame_id"],
@@ -224,6 +226,11 @@ def main() -> int:
         action="store_true",
         help="the truth as first registered: walks on the straight fallback path",
     )
+    ap.add_argument(
+        "--light",
+        action="store_true",
+        help="X1b: the opaque-glyph fallback ON (each record keeps the base read too)",
+    )
     a = ap.parse_args()
     templates = selfpos.load_digit_templates(a.templates)
     trained = set(templates.meta.get("training_sessions", []))
@@ -242,7 +249,7 @@ def main() -> int:
     truth_info = {}
     for session in sessions:
         if a.reads is None:
-            recs = read_session(session, a.per_session, templates, a.cache)
+            recs = read_session(session, a.per_session, templates, a.cache, a.light)
         else:
             recs = [r for r in earlier if r["session"] == session.name]
         truth = cal.SessionTruth(session, maps, offset_ms="auto",

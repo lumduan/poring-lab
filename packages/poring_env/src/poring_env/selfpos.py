@@ -70,16 +70,23 @@ MIN_CONTRAST = 40.0  # strokes must stand this far above the strip, or nothing c
 # fallback 96/96, 0 wrong; 225-230 as the stroke level fails on the palest floor, 232-240 do not.
 GLYPH_STROKE_MIN, GLYPH_SHADOW_MAX = 235.0, 40.0  # the opaque glyph pixels, on any strip
 OPAQUE_FLAT = 96.0  # the grey every other pixel takes in the fallback (any mid grey: it is 0)
-# Never a guess (the module's rule) holds in the fallback too:
+# The fallback's guards (X1b round 2, designed on round 1's 680 crops, all seen, and synthetic
+# blends; validated on FRESH cells, rogue-xmas02.md 4E):
 #  * it runs only after a base failure that weighed NO glyph evidence (OPAQUE_AFTER): an
 #    "ambiguous" or "layout" read stays None -- flattening a frame caught mid-change (half one
 #    digit, half the next: test_a_glyph_between_two_digits_is_ambiguous) would drop exactly the
 #    half-bright pixels that make it ambiguous and read the digits' intersection;
-#  * over a LIGHT cell (its scene median >= LIGHT_CELL_GREY) a pixel between the glyph shadow and
-#    HALF_SHADOW_MAX is a half shadow -- a digit fading in or out over the floor -- and the read
-#    is None ("half_shadow"): a pale floor has no such pixels.
+#  * over a LIGHT cell (its scene median >= LIGHT_CELL_GREY) a HALF PAIR -- a pixel between the
+#    glyph shadow and HALF_SHADOW_MAX followed by one at least max(PAIR_MIN, PAIR_FRAC x the room
+#    between the floor and GLYPH_STROKE_MIN) above the floor, short of a stroke -- is a digit fading
+#    in or out, and the read is None ("half_shadow"). (Round 1 refused ANY such dark pixel in a
+#    light cell, and so the dark floor bands of xmas_dun02's mixed strips: X1b round 1's FAIL.)
+#  * NOT guarded here: a digit changing over a mixed strip's DARK band can still be read as a third
+#    digit (synthetic: 48 of 1,620 such blends). So a "light" read is never used alone: its user
+#    confirms it with a second read (dungeon_hunt.PosConfirm), and the fallback is opt-in.
 OPAQUE_AFTER = frozenset({"no_glyph", "uncovered_ink"})
 LIGHT_CELL_GREY, HALF_SHADOW_MAX = 170.0, 170.0
+PAIR_MIN, PAIR_FRAC = 12.0, 0.5
 
 
 def _box() -> tuple[int, int, int, int]:
@@ -242,10 +249,13 @@ def first_stroke_max(templates: DigitTemplates) -> int:
     return max(firsts) if firsts else int(templates.shape[1]) - 1
 
 
-def read_rect(gray: Gray, templates: DigitTemplates, *, light: bool = True) -> Reading:
+def read_rect(gray: Gray, templates: DigitTemplates, *, light: bool = False) -> Reading:
     """Parse the readout from its rect (grey, rect pixels). See the module docstring. When that
-    fails and ``light`` is on, the OPAQUE-GLYPH fallback parses it once more (see GLYPH_STROKE_MIN);
-    its answer has mode "light", a failed retry keeps the base reason with mode "light_failed"."""
+    fails and ``light`` is on (OPT-IN), the OPAQUE-GLYPH fallback parses it once more (see
+    GLYPH_STROKE_MIN); its answer has mode "light", a failed retry keeps the base reason with mode
+    "light_failed". A "light" read is NOT the base reader's never-a-guess answer: on a frame
+    caught while a digit changes over a mixed strip it can read a third digit (X1b round 2's
+    synthetic blends), so its user must CONFIRM it with a second read (dungeon_hunt.PosConfirm)."""
     base = _parse(gray, templates)
     if base.xy is not None or not light or base.reason not in OPAQUE_AFTER:
         return base
@@ -256,14 +266,18 @@ def read_rect(gray: Gray, templates: DigitTemplates, *, light: bool = True) -> R
 
 
 def _half_shadow(gray: Gray, glyphs: Sequence[Glyph], row: int, templates: DigitTemplates) -> bool:
-    """A glyph cell over a light scene holding a pixel between the glyph shadow and
-    HALF_SHADOW_MAX: a digit half drawn (see OPAQUE_AFTER)."""
+    """A glyph cell over a light scene with a HALF PAIR (see OPAQUE_AFTER): a digit half drawn."""
     h, w = templates.shape
     for g in glyphs:
         cell = gray[row : row + h, g.x : g.x + w]
         scene = cell[(cell > GLYPH_SHADOW_MAX) & (cell < GLYPH_STROKE_MIN)]
-        light = bool(scene.size) and float(np.median(scene)) >= LIGHT_CELL_GREY
-        if light and bool(((cell > GLYPH_SHADOW_MAX) & (cell <= HALF_SHADOW_MAX)).any()):
+        floor = float(np.median(scene)) if scene.size else 0.0
+        if floor < LIGHT_CELL_GREY:
+            continue
+        gap = max(PAIR_MIN, PAIR_FRAC * (GLYPH_STROKE_MIN - floor))
+        a, b = cell[:, :-1], cell[:, 1:]
+        half = (a > GLYPH_SHADOW_MAX) & (a <= HALF_SHADOW_MAX)
+        if bool((half & (b >= floor + gap) & (b < GLYPH_STROKE_MIN)).any()):
             return True
     return False
 
@@ -352,7 +366,7 @@ def read_minimap(
     templates: DigitTemplates,
     rect: tuple[int, int, int, int] | None = None,
     *,
-    light: bool = True,
+    light: bool = False,
 ) -> Reading:
     """The readout with its reason (evaluation, logs). ``rect``: game-region pixels (x, y, w, h);
     default: the ``minimap_xy`` element at the minimap window's measured origin. ``light``: the

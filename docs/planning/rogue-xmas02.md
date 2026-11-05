@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "X1b: collect the light-strip crops (4D), design the reader on the even stands, score the odd ones once; then pilot p2, then X2 (4A) on the 120 GB floor."
+next_action: "X1b round 2 (4E): collect the fresh midpoint cells, score once, run R4 on T0's sessions; then pilot p2, then X2 (4A) on the 120 GB floor."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -228,6 +228,40 @@ the runner stops on unread positions (pilot p1).
   X1b fails. It would be bounded anyway: the typing guard refuses a 4th identical line in a row,
   and Batt's 2026-10-09 rule forbids filler lines to get past it.
 
+### 4E. X1b round 2 pre-registration (written BEFORE its data; round 1 FAILED, section 5)
+
+- **The design (frozen at this section's commit):** `selfpos.read_rect(..., light=True)`:
+  - the opaque-glyph fallback of round 1 (after a base `no_glyph` / `uncovered_ink` only);
+  - its light-cell guard narrowed to a HALF PAIR: a pixel at 41-170 followed by one at least
+    max(12, 0.5 x (235 - the cell's floor)) above the floor and short of 235 (a digit fading in or
+    out), instead of ANY 41-170 pixel (round 1's guard took the dark floor bands of mixed strips
+    for that and refused the true reads);
+  - the fallback is OPT-IN (`light=False` stays every caller's default: hunt_flow, the walk tools
+    and T0's tools read exactly as before); only `dungeon_hunt` turns it on, and there a "light"
+    read is USED only when the previous read (any mode) at most 1.0 s earlier agrees within the
+    walk's reach (`dungeon_hunt.PosConfirm`): the synthetic blends show a digit changing over a
+    mixed strip's dark band can still be read as a third digit (48 of 1,620), and such a frame
+    lasts one codec frame.
+- **Designed on:** round 1's 680 crops (all now seen: 616 base, 680 with the fallback, 0 wrong,
+  in-sample) and synthetic sets (8 floors x 90 digit pairs x 2 places x 3 weights; still readouts
+  320/320; the round-1 guard reads none of three synthetic band-in-cell readouts, this one all).
+- **Data, FRESH:** `selfpos_light.py collect --map xmas_dun02 --cells midpoints --out
+  /dev/shm/poring-lab-tmp/x1b-r2 --per-stand 8`: the cell halfway along each of the edge loop's 85
+  legs (none is a waypoint), the same protocol and truth rule as round 1. ALL its crops are held
+  out (nothing is fitted on them); scored ONCE (`score ... --split all`).
+- **Bars (pooled over the fresh crops):**
+  - **R1:** 0 wrong reads, light-mode reads included, on light and dark strips.
+  - **R2:** >= 90 % exact on the light-strip crops (scene median >= 170), with at least 24 such
+    crops (3 stands); fewer = INCONCLUSIVE, not a pass.
+  - **R3:** dark-strip crops: exact >= the base reader's on the same crops, 0 wrong.
+  - **R4 (T0's guard, the fallback ON):** `selfpos_eval.py --light` on T0's held-out sessions
+    (outdoor-c, outdoor-d, indoor-c) still passes T0's bars (>= 99 % exact standing, >= 97 %
+    within one cell walking), and the fallback's own reads (mode "light") have 0 wrong on
+    STANDING frames; its walking-frame misreads are reported (PosConfirm's job, not a bar).
+- **Then, not a bar:** pilot p2 (15 min, unrecorded, the runner with PosConfirm): position-unread
+  Fly Wings, unconfirmed light reads (`run_end.pos_light_unconfirmed`), position-jump hard bars,
+  against pilot p1.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -279,3 +313,37 @@ setup 15:27:21-15:27:50, the run to 15:32:2x):**
   packets' positions as truth), or a /where fallback through the replies' tab; and X2's recording
   once the root disk has >= 140 GB free. ➡️ SUPERSEDED by Amendment C (4C): the floor is 120 GB;
   X2 waits for X1b instead (4D).
+
+**X1b round 1 (2026-11-05 20:16-20:43; pre-registered 4D at 7303972 20:16:03; the design frozen
+at 8cbc09c 20:42:38 on the even stands; the odd stands scored once at 20:42:55):**
+- The collection (`selfpos_light.py collect`, the Rogue immune): attempt 1 stopped at its 2nd line
+  (20:17: the identity check ran during the first warp's loading screen; the collector now waits
+  for the check to pass after each warp). Attempt 2 stopped by design at stand 23 (20:24: the
+  chat window check could not decide the padlock over the north edge's pink wall, closed 5.8 /
+  open 20.1, margin 14.3 < 15 -> fixed in b75de95, the colour shape as a second opinion; all 55
+  frames of the day decide). Resumed at stand 23 with the same stand numbers (`--start 23`,
+  20:29-20:41). **680 crops at 85 stands, all 680 labelled** (each warp landed where it was sent,
+  the Rogue stood still; 170 + 594 sniffer events). The collector's live log printed the BASE
+  reader's per-stand result for every stand, odd ones included; no odd crop was inspected or
+  scored by any candidate before the freeze.
+- The design, on the 43 even stands (344 crops) only: the OPAQUE-GLYPH fallback (after a base
+  `no_glyph` / `uncovered_ink`: every pixel that is neither a stroke >= 235 nor a shadow <= 40
+  flattened, stroke starts at those levels), guarded twice (never after `ambiguous` / `layout`; a
+  light cell with a half shadow 41-170 is None). Even stands: base 312/344, the fallback 344/344,
+  0 wrong.
+
+| held-out (42 odd stands, 336 crops) | n | base exact | new exact | none | wrong | bar |
+|---|---|---|---|---|---|---|
+| light strips (scene median >= 170) | 40 | 8 | 8 (20.0 %) | 32 | 0 | B2 >= 90 %: **FAIL** |
+| dark strips | 296 | 296 | 296 | 0 | 0 | B3: pass |
+| all | 336 | 304 | 304 | 32 | 0 | B1 0 wrong: pass |
+
+- **Verdict: X1b round 1 FAILS (B2).** B4 was not run (a failed design is not carried to T0's
+  sessions).
+- Diagnosis (after the verdict): on all 4 failing odd stands (7,125; 7,218; 7,241; 217,23) the
+  opaque parse READ the true digits (e.g. "7 125": 7 / 1 / 2 / 5, scores 0.10-0.27, margins
+  7.3-18.9 against 3.56 / 1.87) and the HALF-SHADOW guard refused them: those strips are mixed,
+  a dark floor band (~60-90) runs through light cells, and the guard took any 41-170 pixel in a
+  light cell for a fading digit. No even stand had such a cell. The odd stands are spent as
+  held-out data; round 2 (4E) gets fresh cells.
+

@@ -124,6 +124,7 @@ import contextlib
 import json
 import math
 import sys
+import threading
 import time
 from collections import Counter, deque
 from collections.abc import Mapping, Sequence
@@ -501,6 +502,43 @@ def overweight_red(frame_bgr: Any) -> bool:
     a = np.asarray(frame_bgr)[y : y + h, x : x + w, :3].astype(np.int16)
     b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
     return int(((r_ >= 150) & (g <= 90) & (b <= 90)).sum()) >= WEIGHT_RED_MIN
+
+
+CONFIRM_S = 1.0  # X1b round 2: a light-strip (fallback) read counts only when confirmed this soon
+
+
+class PosConfirm:
+    """The minimap readout as the runner uses it (rogue-xmas02 X1b round 2). A BASE read counts as
+    before. A read by selfpos's opaque-glyph fallback (mode "light": a pale or mixed strip) counts
+    only when the previous read of any mode, at most CONFIRM_S earlier, agrees within the walk's
+    reach (WALK_S_PER_CELL a cell, +1): a frame caught while a digit changes lasts one codec
+    frame, and two reads 0.3 s apart do not both catch it -- so a one-frame misread can never
+    move ``here`` (nor trip the position-jump hard bar). Thread-safe: the main thread's
+    read_here() and the HP-read loop share one."""
+
+    def __init__(self) -> None:
+        self.last: tuple[float, Cell] | None = None
+        self.unconfirmed = 0
+        self._lock = threading.Lock()
+
+    def accept(self, t: float, rd: Any) -> Cell | None:
+        if rd.xy is None:
+            return None
+        p_ = (int(rd.xy[0]), int(rd.xy[1]))
+        with self._lock:
+            prev, self.last = self.last, (t, p_)
+            if getattr(rd, "mode", "base") != "light":
+                return p_
+            dt = t - prev[0] if prev is not None else math.inf
+            if (
+                prev is not None
+                and dt <= CONFIRM_S
+                and max(abs(p_[0] - prev[1][0]), abs(p_[1] - prev[1][1]))
+                <= dt / WALK_S_PER_CELL + 1
+            ):
+                return p_
+            self.unconfirmed += 1
+            return None
 
 
 def is_jump(here: Cell, p_: Cell, since_s: float) -> bool:
@@ -1143,6 +1181,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     ag_t, ag_m = agz["template"], agz["mask"].astype(bool)
     sword_refs = csw.SwordRefs.load()
     digits = selfpos.load_digit_templates()
+    pos_ok = PosConfirm()  # X1b round 2: the fallback's reads need a second read's agreement
     gat = gatmod.parse((cam.GAT_DIR / f"{map_}.gat").read_bytes())
     ok = stand_grid(map_, gat)
     kb = ROOT / "data" / "kb"
@@ -1788,8 +1827,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return found
 
         def read_here() -> Cell | None:
-            xy = selfpos.read_minimap_xy(frame(), digits)
-            return None if xy is None else (int(xy[0]), int(xy[1]))
+            rd = selfpos.read_minimap(frame(), digits, light=True)  # X1b: opt-in, confirmed
+            return pos_ok.accept(time.monotonic(), rd)
 
         def grey(img_: Any) -> Any:
             return np.asarray(img_)[..., :3].astype(np.float32).mean(axis=2)
@@ -2032,10 +2071,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def house_reads() -> tuple[float, int | None, int | None, Cell | None, float, Any]:
             """ONE fresh frame: (time, HP %, SP %, the minimap readout, the frame's mean, frame)."""
             img_ = frame()
-            xy_ = selfpos.read_minimap_xy(img_, digits)
+            xy_ = pos_ok.accept(time.monotonic(), selfpos.read_minimap(img_, digits, light=True))
             return (time.monotonic(), hpp.read(img_, glyphs), hpp.read(img_, glyphs, hpp.SP_DY),
-                    None if xy_ is None else (int(xy_[0]), int(xy_[1])),
-                    float(np.asarray(img_).mean()), img_)  # fmt: skip
+                    xy_, float(np.asarray(img_).mean()), img_)  # fmt: skip
 
         def taken_since(n0: int) -> bool:
             with blt.lock:
@@ -2252,9 +2290,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # after a Fly Wing -- no read for FLY_SETTLE_S after one, and no jump bar for
                 # FLY_JUMP_S (a Fly Wing is a same-map teleport; packets judge map changes)
                 fresh = tick - fly_at >= FLY_SETTLE_S
-                pos = selfpos.read_minimap_xy(img, digits) if fresh else None
+                rd = selfpos.read_minimap(img, digits, light=True) if fresh else None
+                pos = pos_ok.accept(tick, rd) if rd is not None else None
                 if pos is not None:
-                    p_ = (int(pos[0]), int(pos[1]))
+                    p_ = pos
                     if (here is not None and is_jump(here, p_, tick - last_pos_t)
                             and tick - fly_at > FLY_JUMP_S):  # fmt: skip
                         ev({"kind": "jump", "from": list(here), "to": list(p_),
@@ -2872,7 +2911,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             reason = "stopped_by_parent"
             raise
         finally:
-            ev({"kind": "run_end", "reason": reason, "counts": dict(counts)})
+            ev({"kind": "run_end", "reason": reason, "counts": dict(counts),
+                "pos_light_unconfirmed": pos_ok.unconfirmed})  # fmt: skip
             blt.stop()
             if tags_log is not None:
                 tags_log.close()

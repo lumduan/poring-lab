@@ -14,7 +14,8 @@ became "half a stroke" everywhere.
 
 collect (live, the Rogue -- or any character with @warp -- standing on ``--map``):
   * stands = the map's patrol-route waypoints (config/routes/<map>.yaml, reviewed; every one is on
-    the route grid, so each is a checked stand cell), every ``--every``-th one, in route order;
+    the route grid, so each is a checked stand cell), or with ``--cells midpoints`` the cell
+    halfway along each leg (fresh cells), every ``--every``-th one, in route order;
   * per stand: ``@warp <map> x y`` through crusader.gm_line (the identity check, the UI gate and
     the chat window check of every typed line), 1.5 s to land and the identity check passing
     again (the loading screen over; also before every typed line), then ``--per-stand`` grabs
@@ -77,7 +78,13 @@ def collect(a: argparse.Namespace) -> int:
     routes = map_routes.load(a.map)
     if routes is None or not routes.routes:
         raise SystemExit(f"no reviewed route for {a.map}: config/routes/{a.map}.yaml")
-    stands = [(int(c[0]), int(c[1])) for c in routes.routes[0].waypoints][:: a.every]
+    wps = [(int(c[0]), int(c[1])) for c in routes.routes[0].waypoints]
+    if a.cells == "midpoints":  # X1b round 2's FRESH cells: halfway along each leg of the loop
+        # (every leg is a straight run on the route grid, xmas02-prep.md section 3, so each
+        # midpoint is a route-grid cell; none is a waypoint)
+        legs = zip(wps, wps[1:] + wps[:1], strict=True)
+        wps = [((x1 + x2) // 2, (y1 + y2) // 2) for (x1, y1), (x2, y2) in legs]
+    stands = wps[:: a.every]
     first = a.start  # a resumed collection keeps the route's stand numbers (the split's parity)
     out: Path = a.out
     out.mkdir(parents=True, exist_ok=True)
@@ -87,7 +94,8 @@ def collect(a: argparse.Namespace) -> int:
     crops: list[np.ndarray] = []
     samples: list[dict[str, Any]] = []
     t0 = r.ns()
-    meta = {"map": a.map, "stands": len(stands), "start": first, "per_stand": a.per_stand,
+    meta = {"map": a.map, "cells": a.cells, "stands": len(stands), "start": first,
+            "per_stand": a.per_stand,
             "every": a.every,
             "rect": [rx, ry, rw, rh], "pad": PAD, "t0_mono_ns": t0,
             "t0_wall": time.strftime("%Y-%m-%dT%H:%M:%S%z")}  # fmt: skip
@@ -255,7 +263,8 @@ def score(a: argparse.Namespace) -> int:
         "split": a.split,
         "base": score_rows(labelled, crops, pad,
                            lambda g: sp.read_rect(g, templates, light=False), a.split),
-        "with_light": score_rows(labelled, crops, pad, lambda g: sp.read_rect(g, templates),
+        "with_light": score_rows(labelled, crops, pad,
+                                 lambda g: sp.read_rect(g, templates, light=True),
                                  a.split),
     }  # fmt: skip
     print(json.dumps(res, indent=1))
@@ -272,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--per-stand", type=int, default=8)
     c.add_argument("--every", type=int, default=1)
     c.add_argument("--start", type=int, default=0, help="resume at this stand number")
+    c.add_argument("--cells", choices=["waypoints", "midpoints"], default="waypoints")
     c.add_argument("--job", default="rogue")
     c.add_argument("--char", default="thief", help="crusader.py's data dir for the identity check")
     c.add_argument("--no-clear", dest="clear", action="store_false")
