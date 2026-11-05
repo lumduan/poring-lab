@@ -16171,6 +16171,30 @@ system categories on Battle Log) is Batt's decision.
 - The full suite on d778805 (12:4x, niced, --ignore=services/vision): 4,278 passed, 59 skipped, 4
   failed -- the four failures listed under Amendment 1, all failing on main before this work.
 
+**Amendment 2: the tabs (Batt 2026-11-05 ~13:2x: "add the second tab back yourself ... check the
+chat window at every game entry and before typing, and arrange the tabs correctly"). Code in
+6176b08 (13:46:38); this text in the next commit.**
+- 13:25-13:30: the padlock opened, "+" -> the client's second tab **NewTab_2** (selected); its
+  message log settings set to the complement of Battle Log's categories (12 ON, the 9 battle ones
+  OFF; each step screenshot-checked); the settings closed.
+- 13:31: a `/where` through the normal path (the UI gate, the chat window check, which also closed
+  the padlock again): its answer "(prt_fild08) : 246, 310" is shown on NewTab_2; where_fix reads
+  (246, 310) with both its readers from the standard message area (the minimap: 246,310). C3's
+  finding is FIXED.
+- The check now reads the tabs (`read_tabs` / `tabs_verdict`, templates cut 13:4x from two live
+  frames): both frames read "battle | regular" (same label 1.00, the other 0.18-0.25); the day's
+  recorded one-tab frames (11:32, 12:22) read "battle | empty" -> "wrong" (the stop). Live 13:4x:
+  `ensure` standard with 0 steps and tabs "ok"; `client_layout.select_tab("regular")` shows
+  NewTab_2 (the standard layout's tab again; the hunting layout's stays Battle Log).
+- Immunity (the GM): 13:32:43 `immune-on --again` -> its screenshot showed "Returned to normal
+  state." (immunity had been ON since 12:39 -> now OFF); 13:33:15 the next `--again` was SKIPPED by
+  the typing guard (a 3rd identical line in a row) yet collect_v2 recorded it "sent" with a new
+  screenshot of the old answer. FIXED: `ro_agent.gm` returns whether it typed, collect_v2's
+  immune-on / immune-off refuse to record a skipped toggle (test). No filler line was typed to get
+  past the guard (Batt 2026-10-09). The GM is left with immunity OFF (idle on prt_fild08), its
+  record unconfirmed (fail closed).
+- CLAUDE.md "Driving Windows": the chat window rule added (Batt approved the line).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

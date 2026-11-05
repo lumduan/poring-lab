@@ -472,7 +472,7 @@ only (the hotkey bar and Basic Info stay as the scripts set them).
 | size | 6 message lines: the message area's white top border at y 598, the selected tab's at 582 |
 | open input bar | white field y 700-716 (frame 696-719); `chat_open` box (0, 699, 570, 12); click into it at (300, 708) |
 | padlock | CLOSED; its body at x 580-594, y 589-594; click point (585, 591) |
-| tabs | one, Battle Log (Regular Chat is gone since 2026-11-04) |
+| tabs | two, IN ORDER: Battle Log, NewTab_2 (the replies' tab, added 2026-11-05 13:26; see below) |
 
 The frozen Phase 2 layout of every session before 2026-11-05 is the same window with 3 lines,
 95 px higher (last row y 624). One `Geometry` gives both and every reader's numbers
@@ -503,6 +503,36 @@ probes 11:44-11:46):**
   - The pointer or the size tooltip over the border reads "obscured" (never a size). A closed
     window whose bottom the scene hides (a grey scene continuing the border) reads "seen in part":
     the check opens the input first (Enter behind the UI gate), and the bar gives the bottom.
+
+**The tabs (2026-11-05 13:2x, Batt: "add the second tab back yourself, and arrange the tabs
+correctly"):**
+- The Regular Chat tab was lost on 11-04 (a "-" click). With Battle Log alone, the replies to typed
+  lines (/where, @heal, @monsterignore) were NOT shown (4.06 C3): they are in categories Battle
+  Log leaves off.
+- Added back with the client's own "+" (padlock open, "+" at (563, 590)): the client names the new
+  tab **NewTab_2**, puts it SECOND and selects it. Its settings window (the settings icon at
+  (537, 590) while open; "NewTab_2 message log settings"; no name field; a scrolled list of 21
+  categories, all OFF for a new tab; the toggle at x 755, rows 20 px apart from y 329; the list's
+  down arrow (991, 468); close x (991, 308)) was set to the **complement of Battle Log's**:
+  - ON: Public, Public Chat, Whisper, Party Chat, Guild Chat, Party member's obtained item, Party
+    member's abnormal status, Party configuration, WOE Information, Quest information, Clan Chat,
+    Display Call messages;
+  - OFF (Battle Log's): Item get/drop, Equipment on/off, Abnormal status, Skill failure, Damaged
+    equipment, Battle message, Party member's battle message, Experience message, Battlefield
+    message.
+- Proven: a /where typed at 13:31 showed "(prt_fild08) : 246, 310" on NewTab_2, and where_fix read
+  (246, 310) with both readers from the standard message area; @monsterignore's answers showed
+  there too (13:32 "Returned to normal state.").
+- The check reads the tab strip: each slot's label (text masks, both states; a lone tab is drawn
+  wider with its label 5 px to the right) and the selected tab (its white top border). Battle Log
+  | NewTab_2 passes; a tab missing or swapped (read with confidence) STOPS typing; an unsure read
+  (a bright scene behind the translucent tabs) is read again with the pointer parked, then passes
+  with a warning. It is NOT repaired automatically: the closed padlock hides "+" / "-", and the
+  client names a new tab itself. To restore by hand: open the padlock, "+", set the categories
+  above, close the padlock.
+- WHICH tab is shown is the layout's job: the standard layout shows NewTab_2 (`client_layout`
+  key "regular"), the hunting layout Battle Log. Templates: `data/ui_anchors/chat_window/tabs.npz`
+  (`chat_window.py cut-tabs REGULAR_SEL.png BATTLE_SEL.png`).
 
 **The check** (`chat_window.ensure`), at every game entry (`ro_agent.enter_game`) and before every
 typed line (`ro_agent.open_chat`, after the UI gate, before the Enter):
