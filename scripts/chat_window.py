@@ -269,6 +269,14 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)
 PADLOCK_MATCH, PADLOCK_MARGIN = 20.0, 15.0
 PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the white outline)
+# The SECOND OPINION (2026-11-05 20:24, X1b's collection on xmas_dun02's north edge: the closed
+# padlock over a bright pink wall read closed 5.8 / open 20.1 -- a margin of 14.3 < 15 -- and the
+# check stopped): when exactly ONE template matches (<= PADLOCK_MATCH, the other above it), the
+# icon's COLOUR shape decides -- the blue / white icon pixels (icon_mask), which no pink, orange or
+# grey scene passes, against each template's core: IoU own - other >= PADLOCK_SHAPE_MARGIN. On the
+# day's 55 frames (53 decided by grey): it agrees 52 times, abstains once (the Escape-dimmed
+# frame), never contradicts; the decided frames' shape margins are 0.206+ but for that one (0.005).
+PADLOCK_SHAPE_MARGIN = 0.10
 
 
 def _padlock_crop(img_rgb: Any, left: int, text_top: int) -> np.ndarray:
@@ -291,21 +299,32 @@ def padlock_distances(
     xmas_dun02's west edge: over the black void the union mask -- which holds the OTHER state's
     shape, i.e. background -- read the closed padlock 31.6 / open 78.8 and stopped the run; its
     own core reads 5.1 / 104.4.)"""
-    cur = luma(_padlock_crop(img_rgb, int(st["left"]), int(st["text_top"])))
+    crop = _padlock_crop(img_rgb, int(st["left"]), int(st["text_top"]))
+    cur, icon = luma(crop), icon_mask(crop)
     out = {}
     for k in ("open", "locked"):
         core = tm[k] >= PADLOCK_CORE
         out[k] = round(float(np.abs(cur - tm[k])[core].mean()), 1)
+        union = int((icon | core).sum())
+        out[f"{k}_shape"] = round(float((icon & core).sum() / union), 3) if union else 0.0
     return out
 
 
 def padlock_state(d: Mapping[str, float]) -> str | None:
     """PURE: "open" / "locked" from the template distances, None when neither is clear (the
-    cursor over it, a frame still refining): the caller parks the pointer and reads again."""
+    cursor over it, a frame still refining): the caller parks the pointer and reads again. Grey
+    first (a match and a margin); else the colour shape's second opinion, only when exactly one
+    template matches by grey (PADLOCK_SHAPE_MARGIN)."""
     if d["open"] <= PADLOCK_MATCH and d["locked"] - d["open"] >= PADLOCK_MARGIN:
         return "open"
     if d["locked"] <= PADLOCK_MATCH and d["open"] - d["locked"] >= PADLOCK_MARGIN:
         return "locked"
+    for k, other in (("open", "locked"), ("locked", "open")):
+        sk, so = d.get(f"{k}_shape"), d.get(f"{other}_shape")
+        if sk is None or so is None:
+            continue
+        if d[k] <= PADLOCK_MATCH < d[other] and sk - so >= PADLOCK_SHAPE_MARGIN:
+            return k
     return None
 
 

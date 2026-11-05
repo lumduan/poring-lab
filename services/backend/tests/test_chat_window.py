@@ -196,6 +196,19 @@ def test_padlock_decisions_need_a_match_and_a_margin() -> None:
     assert cw.padlock_state({"open": 12.0, "locked": 20.0}) is None  # no margin
 
 
+def test_the_colour_shape_decides_only_when_one_template_matches() -> None:
+    """2026-11-05 20:24, xmas_dun02's north edge: closed 5.8 / open 20.1 over a pink wall (margin
+    14.3 < 15) stopped the check; the icon's blue / white shape (IoU 0.507 vs 0.315) decides it."""
+    pink = {"open": 20.1, "locked": 5.8, "open_shape": 0.315, "locked_shape": 0.507}
+    assert cw.padlock_state(pink) == "locked"
+    assert cw.padlock_state({**pink, "locked_shape": 0.40}) is None  # the shape not clear
+    assert cw.padlock_state({**pink, "open": 19.0}) is None  # both match by grey: no second say
+    assert cw.padlock_state({**pink, "open_shape": 0.6, "locked_shape": 0.3}) is None  # disagrees
+    flip = {"open": 6.0, "locked": 20.5, "open_shape": 0.58, "locked_shape": 0.30}
+    assert cw.padlock_state(flip) == "open"
+    assert cw.padlock_state({"open": 20.1, "locked": 5.8}) is None  # no shape: grey alone
+
+
 def test_the_padlock_read_ignores_the_scene_behind_the_icon_row() -> None:
     """2026-11-05 15:25: over xmas_dun02's black void the old union-mask read stopped the pilot;
     each template is now compared on its OWN icon pixels only, so the scene does not matter."""
