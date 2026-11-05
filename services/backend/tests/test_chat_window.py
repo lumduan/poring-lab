@@ -194,6 +194,25 @@ def test_padlock_decisions_need_a_match_and_a_margin() -> None:
     assert cw.padlock_state({"open": 12.0, "locked": 20.0}) is None  # no margin
 
 
+def test_the_padlock_read_ignores_the_scene_behind_the_icon_row() -> None:
+    """2026-11-05 15:25: over xmas_dun02's black void the old union-mask read stopped the pilot;
+    each template is now compared on its OWN icon pixels only, so the scene does not matter."""
+    x0, dy0, x1, dy1 = cw.PADLOCK_BOX
+    h, w = dy1 - dy0, x1 - x0
+    locked = np.full((h, w), 130.0, np.float32)  # grass behind
+    locked[3:10, 4:12] = 240.0  # the closed padlock's icon
+    opened = np.full((h, w), 130.0, np.float32)
+    opened[5:10, 2:9] = 240.0  # the open one: its body lower-left ...
+    opened[1:4, 10:16] = 240.0  # ... its shackle up-right
+    tm = {"open": opened, "locked": locked, "mask": np.ones((h, w), bool)}
+    st = {"left": 0, "text_top": 598}
+    for bg in (130, 10):  # grass, then the void
+        img = np.full((720, 1280, 3), bg, np.uint8)
+        img[598 + dy0 : 598 + dy1, x0:x1][3:10, 4:12] = 240
+        d = cw.padlock_distances(img, st, tm)
+        assert cw.padlock_state(d) == "locked", (bg, d)
+
+
 def _st(**over: Any) -> dict[str, Any]:
     base = {"left": 0, "text_top": 598, "bottom": 719, "lines": 6, "input": "open",
             "padlock": "locked"}  # fmt: skip

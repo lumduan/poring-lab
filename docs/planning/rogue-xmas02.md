@@ -188,3 +188,12 @@ pause (2026-11-02); it is rebuilt from the NAS before X2.
   176; **688 status points unspent** (Batt asked for AGI / DEX only). The replies' tab showed
   "Base level raised." and "Stat changed." x2.
 - `dungeon_hunt.py`: the Rogue's `level_hold` 63 -> 99, max HP / SP 5070 / 530 (tests updated).
+
+**Pilot p1 attempt 1 (15:24:36-15:25:21):** the setup ran (@heal, the stock topped up, `@warp
+xmas_dun02 7 21` = PATROL_START); before the next typed line (`@killmonster2`) the chat window
+check could not read the padlock (closed 31.6 / open 78.8 against <= 20): at the west edge the
+icon row lies over the black void, and the reader's union mask held background pixels (the open
+padlock's shape). It STOPPED as designed: nothing else typed, no hunting input. Fixed in
+chat_window.padlock_distances (each template on its own icon pixels: 5.1 / 104.4 on that frame;
+all 41 real frames of the day decided, worst own 8.8, nearest other 29.8; a test). Attempt 2
+follows with the same command.

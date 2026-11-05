@@ -266,6 +266,7 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
 
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)
 PADLOCK_MATCH, PADLOCK_MARGIN = 20.0, 15.0
+PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the white outline)
 
 
 def _padlock_crop(img_rgb: Any, left: int, text_top: int) -> np.ndarray:
@@ -283,10 +284,17 @@ def icon_mask(crop_rgb: Any) -> np.ndarray:
 def padlock_distances(
     img_rgb: Any, st: Mapping[str, Any], tm: Mapping[str, Any]
 ) -> dict[str, float]:
-    """Mean |grey| difference to each template over the pixels either template draws."""
+    """Mean |grey| difference to each template over THAT template's own bright icon pixels (luma
+    >= PADLOCK_CORE): the scene behind the icon row never enters. (2026-11-05 15:25, the pilot on
+    xmas_dun02's west edge: over the black void the union mask -- which holds the OTHER state's
+    shape, i.e. background -- read the closed padlock 31.6 / open 78.8 and stopped the run; its
+    own core reads 5.1 / 104.4.)"""
     cur = luma(_padlock_crop(img_rgb, int(st["left"]), int(st["text_top"])))
-    mask = tm["mask"]
-    return {k: round(float(np.abs(cur - tm[k])[mask].mean()), 1) for k in ("open", "locked")}
+    out = {}
+    for k in ("open", "locked"):
+        core = tm[k] >= PADLOCK_CORE
+        out[k] = round(float(np.abs(cur - tm[k])[core].mean()), 1)
+    return out
 
 
 def padlock_state(d: Mapping[str, float]) -> str | None:
