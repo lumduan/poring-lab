@@ -410,7 +410,15 @@ ports, quickstart) and `docs/adr/`.
     `data/ui_anchors`; console -> `data/ui_anchors/s2` ONLY while its `proof.json` (written only by
     the prove commands) says it is proven with the same bytes; else every typed line is refused.
     Never hand-edit `proof.json`; the live cut is `docs/operations/s2-gate-templates.md`;
-  - **every console line goes through `ro_agent.type_line`** (2026-10-04): Escape first (a
+  - **the CHAT WINDOW is checked at every game entry and before every typed line** (Batt
+    2026-11-05; `scripts/chat_window.py`, docs/client/rathena-client.md "The chat window standard").
+    - `ro_agent.enter_game` and `ro_agent.open_chat` (after the UI gate) run it.
+    - The standard: docked at the client's bottom-left (left 0, last row 719), 6 lines, the padlock
+      CLOSED, and two tabs IN ORDER: Battle Log | NewTab_2 (the tab of the replies to typed lines).
+    - A moved or resized window is put back only by the client's own controls: F10, the padlock,
+      Enter behind the UI gate, a drag of the white input bar.
+    - Missing or swapped tabs stop: nothing is typed.
+    - Never click the chat window's "+" / "-": they add / delete TABS (11-04);
     cut-off line had left a `>>` prompt that swallowed tscon), then `cls` + a proof bar of a
     fresh width it waits for. A marker of a fixed width proves nothing (a stale one passed);
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;

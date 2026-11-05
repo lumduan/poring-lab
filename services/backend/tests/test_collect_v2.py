@@ -271,6 +271,35 @@ def test_immune_on_never_toggles_a_confirmed_flag_off(cv: ModuleType) -> None:
     assert cv.immune_on_refusal(conf, {**MARK, "logincount": 8}, again=False) is None
 
 
+def test_a_toggle_the_typing_guard_skipped_is_never_recorded_as_sent(
+    cv: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """2026-11-05 13:33: `immune-on --again` was skipped by the typing guard (an identical repeat)
+    and still recorded "sent" with a screenshot of the PREVIOUS answer. ro_agent.gm now says
+    whether it typed; nothing typed -> rc 1, no screenshot, the record unchanged."""
+    import contextlib
+
+    import ro_agent as r
+
+    rec = {"marker": MARK, "state": "sent", "shot": "old.png"}
+    path = tmp_path / "immune.json"
+    path.write_text(json.dumps(rec))
+    monkeypatch.setattr(cv, "IMMUNE", path)
+    monkeypatch.setattr(cv, "gm_marker", lambda: MARK)
+    monkeypatch.setattr(r, "session", lambda *a, **k: contextlib.nullcontext((None, None)))
+    monkeypatch.setattr(r, "gm", lambda agent, screen, command: False)  # skipped as a repeat
+    shots: list[str] = []
+    monkeypatch.setattr(cv, "_shot", lambda screen, name: shots.append(name) or "new.png")
+    assert cv.cmd_immune_on(type("A", (), {"again": True})()) == 1
+    assert json.loads(path.read_text()) == rec and shots == []
+    assert '"typed": false' in capsys.readouterr().out
+    src = (SCRIPTS / "ro_agent.py").read_text()
+    assert "def gm(agent: Agent, screen: Screen, command: str) -> bool:" in src
+
+
 # --- the live driver's order, over fakes ----------------------------------------------------------
 
 

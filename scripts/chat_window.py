@@ -129,7 +129,15 @@ class Geometry:
 LEGACY = Geometry(lines=3, bottom=624)  # every session before 2026-11-05 (the frozen layout)
 STANDARD = Geometry(lines=6, bottom=719)  # Batt 2026-11-05: docked bottom-left, six lines
 GEOMETRIES = {"standard": STANDARD, "legacy": LEGACY}
-TABS = ("battle",)  # the standard's tabs (Batt 2026-11-05: Regular Chat is gone)
+# THE TABS, in order (Batt 2026-11-05 ~13:2x: "add the second tab back yourself ... and arrange the
+# tabs correctly"): Battle Log, then the client's "+" tab, NewTab_2 (the client names it; its
+# settings window has no name field), shown categories = the 10-19 complement of Battle Log's
+# (Public, Public Chat, Whisper, Party Chat, Guild Chat, Party member's obtained item / abnormal
+# status, Party configuration, WOE Information, Quest information, Clan Chat, Display Call
+# messages): the replies to typed commands (/where, @ commands) land there. "regular" keeps the old
+# key (the 10-19 "Regular Chat" tab had that role).
+TABS = ("battle", "regular")
+TAB_NAMES = {"battle": "Battle Log", "regular": "NewTab_2"}
 
 
 CUTOVER_SID = "20261105T12"  # sessions recorded from here on show the 2026-11-05 standard
@@ -291,13 +299,94 @@ def padlock_state(d: Mapping[str, float]) -> str | None:
     return None
 
 
-def read(img_rgb: Any, tm: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    """``find`` plus the padlock (``tm`` from load_templates; None leaves it unread)."""
+# The tab strip (measured 2026-11-05 13:3x, both tabs selected in turn): each label's white text in
+# its slot (x0, x1), rows tab_row + 3 .. + 16; a SELECTED tab draws its label 1 px higher and a
+# white top border on the tab row over its span (1.00 vs 0.00 for the other). Labels are matched as
+# masks of text pixels (luma >= 200), best of the shifts (dy +-1, dx TAB_DX), against both states'
+# masks: the same label 0.72-1.00, the other 0.18-0.19.
+TAB_SLOT_X = ((8, 68), (75, 140))
+TAB_LABEL_ROWS = (3, 16)
+TAB_BORDER_SPAN = {"battle": (12, 66), "regular": (80, 134)}
+TAB_TEXT, TAB_MATCH, TAB_OTHER_MAX, TAB_EMPTY_PX = 200.0, 0.6, 0.4, 25
+# x shifts tried: a LONE tab is drawn wider (x 3-82 vs 3-72) with its label centred 5 px further
+# right (the 11:3x frames, Battle Log alone)
+TAB_DX = tuple(range(-2, 7))
+TAB_TEMPLATES = ROOT / "data/ui_anchors/chat_window/tabs.npz"
+
+
+def _label_mask(lum: np.ndarray, x0: int, y0: int, w: int, h: int) -> np.ndarray:
+    if y0 < 0 or x0 < 0 or y0 + h > lum.shape[0] or x0 + w > lum.shape[1]:
+        return np.zeros((h, w), bool)
+    return lum[y0 : y0 + h, x0 : x0 + w] >= TAB_TEXT
+
+
+def _iou(a: np.ndarray, b: np.ndarray) -> float:
+    union = int((a | b).sum())
+    return int((a & b).sum()) / union if union else 0.0
+
+
+def read_tabs(img_rgb: Any, st: Mapping[str, Any], tt: Mapping[str, Any]) -> dict[str, Any]:
+    """The tab strip of the window ``st``: each slot's label ("battle" / "regular"), "empty" (no
+    label text: no tab there), or None (unsure: the pointer, a bright scene behind the translucent
+    tab); and the SELECTED tab (None when unsure)."""
+    lum = luma(img_rgb)
+    left, row = int(st["left"]), int(st["text_top"]) - 16
+    r0, r1 = TAB_LABEL_ROWS
+    slots: list[str | None] = []
+    scores: list[dict[str, float]] = []
+    for x0, x1 in TAB_SLOT_X:
+        bright = int(_label_mask(lum, left + x0, row + r0, x1 - x0, r1 - r0).sum())
+        best: dict[str, float] = {}
+        for name in TABS:
+            for state in ("sel", "unsel"):
+                t = tt[f"{name}_{state}"]
+                h, w = t.shape
+                for dy in (-1, 0, 1):
+                    for dx in TAB_DX:
+                        m = _label_mask(lum, left + x0 + dx, row + r0 + dy, w, h)
+                        best[name] = max(best.get(name, 0.0), _iou(m, t))
+        scores.append({k: round(v, 2) for k, v in best.items()})
+        top = max(best, key=lambda k: best[k])
+        if bright < TAB_EMPTY_PX:
+            slots.append("empty")
+        elif best[top] >= TAB_MATCH and all(v < TAB_OTHER_MAX for k, v in best.items() if k != top):
+            slots.append(top)
+        else:
+            slots.append(None)
+    sel = [
+        n
+        for n, (a, b) in TAB_BORDER_SPAN.items()
+        if row >= 0 and float((lum[row, left + a : left + b] >= TAB_TEXT).mean()) >= 0.8
+    ]
+    return {"slots": slots, "selected": sel[0] if len(sel) == 1 else None, "scores": scores}
+
+
+def tabs_verdict(tabs: Mapping[str, Any] | None) -> str:
+    """PURE: "ok" (the standard's tabs in order), "wrong" (a slot read with confidence as another
+    tab or as empty: a tab missing, an extra one, or swapped), "unread" (a slot unsure, none
+    wrong)."""
+    if not tabs:
+        return "unread"
+    slots = list(tabs["slots"])
+    if slots == list(TABS):
+        return "ok"
+    if any(s is not None and s != want for s, want in zip(slots, TABS, strict=True)):
+        return "wrong"
+    return "unread"
+
+
+def read(img_rgb: Any, tm: Mapping[str, Any] | None,
+         tt: Mapping[str, Any] | None = None) -> dict[str, Any] | None:  # fmt: skip
+    """``find`` plus the padlock (``tm`` from load_templates; None leaves it unread) and the tabs
+    (``tt`` from load_tab_templates; None leaves them unread)."""
     st = find(img_rgb)
     if st is None or not st["lines"] or tm is None:
         return st
     d = padlock_distances(img_rgb, st, tm)
-    return {**st, "padlock": padlock_state(d), "padlock_dist": d}
+    out = {**st, "padlock": padlock_state(d), "padlock_dist": d}
+    if tt is not None:
+        out["tabs"] = read_tabs(img_rgb, st, tt)
+    return out
 
 
 def is_standard(st: Mapping[str, Any] | None, g: Geometry = STANDARD, lock: bool = True) -> bool:
@@ -345,6 +434,40 @@ def load_templates(path: Path = TEMPLATES) -> dict[str, Any] | None:
         return None
     z = np.load(path)
     return {"open": z["open"], "locked": z["locked"], "mask": z["mask"].astype(bool)}
+
+
+def load_tab_templates(path: Path = TAB_TEMPLATES) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    z = np.load(path)
+    return {k: z[k].astype(bool) for k in z.files}
+
+
+def cut_tabs(
+    regular_sel_png: Path, battle_sel_png: Path, out: Path = TAB_TEMPLATES
+) -> dict[str, Any]:
+    """Design time: the label masks of both tabs in both states, from a frame with the second tab
+    selected and one with Battle Log selected (the pointer parked away from the tab strip)."""
+    r0, r1 = TAB_LABEL_ROWS
+    masks: dict[str, np.ndarray] = {}
+    for png, sel in ((regular_sel_png, "regular"), (battle_sel_png, "battle")):
+        img = _client(png)
+        st = find(img)
+        if not st or not st["lines"]:
+            raise SystemExit(f"{png}: no chat window found")
+        lum, row = luma(img), int(st["text_top"]) - 16
+        for name, (x0, x1) in zip(TABS, TAB_SLOT_X, strict=True):
+            key = f"{name}_{'sel' if name == sel else 'unsel'}"
+            masks[key] = _label_mask(lum, int(st["left"]) + x0, row + r0, x1 - x0, r1 - r0)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(out, **masks)
+    tt = load_tab_templates(out)
+    assert tt is not None
+    reads = {}
+    for png in (regular_sel_png, battle_sel_png):
+        img = _client(png)
+        reads[png.name] = read_tabs(img, find(img) or {}, tt)
+    return {"out": str(out), "px": {k: int(v.sum()) for k, v in masks.items()}, "reads": reads}
 
 
 def _client(png: Path) -> np.ndarray:
@@ -433,7 +556,7 @@ def _drag(agent: Any, st: Mapping[str, Any], g: Geometry) -> None:
 
 def check(screen: Any) -> dict[str, Any] | None:
     """Read only (no input): the window as the screen shows it now."""
-    return read(_grab_rgb(screen), load_templates())
+    return read(_grab_rgb(screen), load_templates(), load_tab_templates())
 
 
 def _backend() -> str:
@@ -457,13 +580,15 @@ def ensure(agent: Any, screen: Any, *, why: str, g: Geometry | None = None, lock
     an unreadable state or a step without effect (with a saved frame); never presses Enter
     except through the UI gate."""
     g = g or active()
-    tm = load_templates()
-    if tm is None:
-        raise ChatWindowError(f"no padlock templates ({TEMPLATES}): run `chat_window.py "
-                              "cut-padlock` first")  # fmt: skip
-    st = read(_grab_rgb(screen), tm)
+    tm, tt = load_templates(), load_tab_templates()
+    if tm is None or tt is None:
+        raise ChatWindowError(f"no padlock / tab templates ({TEMPLATES}, {TAB_TEMPLATES}): run "
+                              "`chat_window.py cut-padlock` and `cut-tabs` first")  # fmt: skip
+    st = read(_grab_rgb(screen), tm, tt)
     if is_standard(st, g, lock):
-        return {"standard": True, "steps": [], "state": st, "why": why}
+        if tabs_verdict(st.get("tabs") if st else None) == "ok":
+            return {"standard": True, "steps": [], "state": st, "why": why, "tabs": "ok"}
+        return _tabs_checked(agent, screen, st, tm, tt, [], why, parked=False)
     backend = _backend()
     if backend != "rdp":  # measured on RDP only: no fixing input on a path not proven
         raise ChatWindowError(f"chat window not standard ({st}) and the display path is "
@@ -474,14 +599,14 @@ def ensure(agent: Any, screen: Any, *, why: str, g: Geometry | None = None, lock
     f10s = 0
     last: tuple[Any, ...] | None = None
     for _ in range(max_steps):
-        st = read(_grab_rgb(screen), tm)
+        st = read(_grab_rgb(screen), tm, tt)
         step = next_step(st, g, lock)
         if step is None:
             if steps:
                 import ro_agent as r
 
                 r.log(f"chat window: standard after {steps} ({why})")
-            return {"standard": True, "steps": steps, "state": st, "why": why}
+            return _tabs_checked(agent, screen, st, tm, tt, steps, why, parked=True)
         key = _key(step, st)
         if step == "unknown" or (key == last and step != "f10"):
             shot = _shot(screen, "unreadable" if step == "unknown" else "no-effect")
@@ -520,6 +645,32 @@ def ensure(agent: Any, screen: Any, *, why: str, g: Geometry | None = None, lock
                           f"frame {shot})")  # fmt: skip
 
 
+def _tabs_checked(agent: Any, screen: Any, st: Any, tm: Mapping[str, Any], tt: Mapping[str, Any],
+                  steps: list[str], why: str, parked: bool) -> dict[str, Any]:  # fmt: skip
+    """The standard place / size / padlock reached: now the TABS (Batt 2026-11-05: "arrange the
+    tabs correctly"). "ok" passes; "unread" (the pointer, a bright scene behind the translucent
+    tabs) is read once more with the pointer parked, then passes WITH a warning (typing does not
+    depend on the tabs; the replies' tab is checked where a reply is read); "wrong" (a tab
+    missing, extra or swapped, read with confidence) STOPS: nothing is typed. Not repaired
+    automatically: the closed padlock hides "+" / "-", and the client names a new tab itself."""
+    verdict = tabs_verdict(st.get("tabs"))
+    if verdict == "unread" and not parked:
+        _park(agent)
+        st = read(_grab_rgb(screen), tm, tt)
+        verdict = tabs_verdict(st.get("tabs") if st else None)
+    if verdict == "wrong":
+        shot = _shot(screen, "tabs")
+        want = " | ".join(TAB_NAMES[t] for t in TABS)
+        raise ChatWindowError(f"chat window tabs: expected {want}, read {st['tabs']['slots']} "
+                              f"(frame {shot}); restore them (docs/client/rathena-client.md, "
+                              "\"The chat window standard\"): nothing typed")  # fmt: skip
+    if verdict == "unread":
+        import ro_agent as r
+
+        r.log(f"chat window: tabs unread {st['tabs'] if st else None} ({why}); typing goes on")
+    return {"standard": True, "steps": steps, "state": st, "why": why, "tabs": verdict}
+
+
 def _shot(screen: Any, tag: str) -> str:
     import ro_agent as r
 
@@ -536,10 +687,16 @@ def main() -> int:
     e = sub.add_parser("ensure")
     e.add_argument("--why", default="cli")
     e.add_argument("--no-lock", action="store_true")
+    t = sub.add_parser("cut-tabs")
+    t.add_argument("regular_sel_png", type=Path)
+    t.add_argument("battle_sel_png", type=Path)
     c = sub.add_parser("cut-padlock")
     c.add_argument("open_png", type=Path)
     c.add_argument("locked_png", type=Path)
     a = ap.parse_args()
+    if a.cmd == "cut-tabs":
+        print(json.dumps(cut_tabs(a.regular_sel_png, a.battle_sel_png), default=str))
+        return 0
     if a.cmd == "cut-padlock":
         print(json.dumps(cut_padlock(a.open_png, a.locked_png)))
         return 0
@@ -547,8 +704,9 @@ def main() -> int:
     import ro_agent as r
 
     if a.cmd == "read":
-        st = read(_grab_rgb(r.Screen()), load_templates())
-        print(json.dumps({"state": st, "standard": is_standard(st)}))
+        st = read(_grab_rgb(r.Screen()), load_templates(), load_tab_templates())
+        print(json.dumps({"state": st, "standard": is_standard(st),
+                          "tabs": tabs_verdict(st.get("tabs") if st else None)}))  # fmt: skip
         return 0
     with r.session("rule:chat-window") as (agent, screen):
         print(json.dumps(ensure(agent, screen, why=a.why, lock=not a.no_lock), default=str))

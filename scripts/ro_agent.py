@@ -1343,7 +1343,11 @@ def chat_line(agent: Agent, screen: Screen, text: str, *, reason: str | None = N
     return True
 
 
-def gm(agent: Agent, screen: Screen, command: str) -> None:
+def gm(agent: Agent, screen: Screen, command: str) -> bool:
+    """Type one GM line. True when typed; False when the typing guard skipped it as an identical
+    REPEAT (the only refusal that does not stop the caller): a caller that records the line as
+    sent must check this (2026-11-05: collect_v2 recorded an @monsterignore the guard had
+    skipped)."""
     if not command.startswith("@"):
         raise Stop("GM commands start with @")
     _, _, char = account("gm")
@@ -1366,8 +1370,9 @@ def gm(agent: Agent, screen: Screen, command: str) -> None:
         if exc.rule != "repeat":
             raise Stop(str(exc)) from None
         log(f"gm: {command} NOT typed ({exc})")
-        return
+        return False
     log(f"gm: {command}")
+    return True
 
 
 def say(agent: Agent, screen: Screen, which: str, text: str, thai_keys: bool) -> None:

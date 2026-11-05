@@ -17,11 +17,12 @@ The hunting layout (docs/client/rathena-client.md "The hunting layout"):
   Regular Chat keeps the typed commands, and the /where fallback switches to it and back.
 The standard layout: 4 rows, the panel expanded, Regular Chat shown.
 ➡️ SUPERSEDED FOR THE CHAT WINDOW on 2026-11-05 (Batt): the chat window has its own standard,
-docked at the bottom-left with 6 lines and ONE tab, Battle Log (scripts/chat_window.py, checked
-at every game entry and before every typed line). So both layouts now show Battle Log; a tab that
-is not in chat_window.TABS is REFUSED, never clicked (the empty tab strip is click-through: a
-click there walks). The tab row, the tab click points and the chat rectangle of ``ui_windows``
-follow chat_window.active(); RECTS keeps the RECORDED (frozen-layout) values for the offline
+docked at the bottom-left with 6 lines and two tabs, Battle Log | NewTab_2 (scripts/chat_window.py,
+checked at every game entry and before every typed line; NewTab_2 replaced the Regular Chat tab
+lost on 11-04 and keeps its role and key "regular"). A tab that is not in chat_window.TABS is
+REFUSED, never clicked (the empty tab strip is click-through: a click there walks). The tab
+row, the tab click points and the chat rectangle of ``ui_windows`` follow
+chat_window.active(); RECTS keeps the RECORDED (frozen-layout) values for the offline
 tools that read older sessions.
 
 The run-time UI rectangles (route_preview.UI_WINDOWS and everything built on it) follow the
@@ -58,9 +59,9 @@ RECTS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
     "hunt": ((0, 0, 220, 143), (230, 0, 520, 33), (750, 0, 828, 36), (1135, 14, 1266, 162),
              (0, 532, 600, 626), (0, 668, 50, 720), (1228, 668, 1280, 720)),
 }  # fmt: skip
-# the tab: Battle Log in both since 2026-11-05 (Batt: the one tab of the chat window's standard;
-# the standard layout showed Regular Chat before)
-TARGET = {"standard": {"rows": 4, "panel": "expanded", "tab": "battle"},
+# the tab: the standard layout shows the replies' tab ("regular": Regular Chat until 11-04, the
+# client's NewTab_2 since 2026-11-05 13:2x), the hunting layout Battle Log
+TARGET = {"standard": {"rows": 4, "panel": "expanded", "tab": "regular"},
           "hunt": {"rows": 1, "panel": "collapsed", "tab": "battle"}}  # fmt: skip
 # template crops (x0, y0, x1, y1) and the click points of the client's own controls
 # the arrow's crop leaves out the red notice badge drawn right of it (x >= 117: v43 run 2's start)
@@ -72,8 +73,10 @@ ARROW_PX = (109, 138)
 # 253-255 grey vs 77-159 for the other, on every background seen. Its "distance" is 255 - that.
 # The row is chat_window.active().tab_row (529 in the frozen layout, 582 in the 2026-11-05
 # standard); a tab's click point is 9 px below it
-TAB_SPAN = {"battle": (12, 72), "regular": (88, 150)}
-TAB_X = {"battle": 42, "regular": 119}
+# spans inside the selected tab's border for both tab sets: Battle Log 5-70; Regular Chat (until
+# 11-04) 74-~155; NewTab_2 (since 2026-11-05) 74-139. Clicks at a tab's middle in both
+TAB_SPAN = {"battle": (12, 66), "regular": (88, 134)}
+TAB_X = {"battle": 42, "regular": 106}
 CHAT_INDEX = 4  # the chat window's entry in a RECTS tuple (work_zone.WINDOW_NAMES order)
 
 

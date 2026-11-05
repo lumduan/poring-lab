@@ -540,6 +540,14 @@ def _shot(screen: Any, name: str) -> str:
     return str(r.to_png(screen.grab(gx, gy, gw, gh)[1], SHOTS / f"{int(time.time())}-{name}.png"))
 
 
+# 2026-11-05 13:33: an `immune-on --again` was skipped by the typing guard (the 3rd identical
+# @monsterignore in a row) yet recorded "sent" with a screenshot of the PREVIOUS answer
+NOT_TYPED = (
+    "the typing guard skipped @monsterignore as an identical repeat: nothing was sent and "
+    "the record is unchanged; a different line of a real need must come first (no filler)"
+)
+
+
 def cmd_immune_on(a: argparse.Namespace) -> int:
     import ro_agent as r
 
@@ -551,7 +559,10 @@ def cmd_immune_on(a: argparse.Namespace) -> int:
     with r.session("collect-v2-immune") as (agent, screen):
         import bench
 
-        r.gm(agent, screen, "@monsterignore")
+        typed = r.gm(agent, screen, "@monsterignore")
+        if not typed:  # the typing guard skipped an identical repeat: nothing was sent
+            print(json.dumps({"typed": False, "why": NOT_TYPED}))
+            return 1
         time.sleep(1.0)
         shot = _shot(screen, "immune-on")
         bench.close_chat(agent, screen)
@@ -589,7 +600,9 @@ def cmd_immune_off(a: argparse.Namespace) -> int:
     with r.session("collect-v2-immune") as (agent, screen):
         import bench
 
-        r.gm(agent, screen, "@monsterignore")
+        if not r.gm(agent, screen, "@monsterignore"):
+            print(json.dumps({"typed": False, "why": NOT_TYPED}))
+            return 1
         time.sleep(1.0)
         shot = _shot(screen, "immune-off")
         bench.close_chat(agent, screen)

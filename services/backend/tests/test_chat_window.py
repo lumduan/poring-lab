@@ -41,7 +41,7 @@ def test_the_standard_is_docked_bottom_left_with_six_lines() -> None:
     assert g.padlock_px == (585, 591)
     assert g.rect == (0, 585, 600, 720)
     assert g.line_y0(3) == 646  # the NEWEST three of the six lines
-    assert cw.TABS == ("battle",)
+    assert cw.TABS == ("battle", "regular")  # 13:2x: Battle Log | NewTab_2 (the replies)
 
 
 def test_the_process_geometry_is_the_standard_unless_a_replay_selects_legacy(
@@ -72,6 +72,35 @@ def test_recorded_sessions_keep_the_chat_window_of_their_date() -> None:
         ("row2", "row2"), ("row4", "row4"))}  # fmt: skip
     assert cl.read(img, tm, chat=cw.LEGACY)["tab"] == "battle"
     assert cl.read(img, tm, chat=cw.STANDARD)["tab"] is None  # read at the wrong row: unsure
+
+
+def test_tabs_verdict_needs_both_tabs_in_order() -> None:
+    v = cw.tabs_verdict
+    assert v({"slots": ["battle", "regular"]}) == "ok"
+    assert v({"slots": ["battle", "empty"]}) == "wrong"  # 11-04: the second tab deleted
+    assert v({"slots": ["regular", "battle"]}) == "wrong"  # swapped
+    assert v({"slots": ["battle", None]}) == "unread"
+    assert v({"slots": [None, None]}) == "unread" and v(None) == "unread"
+
+
+def test_read_tabs_on_synthetic_labels() -> None:
+    rng = np.random.default_rng(5)
+    tt = {f"{n}_{s}": rng.random((13, 60 if n == "battle" else 65)) > 0.7
+          for n in cw.TABS for s in ("sel", "unsel")}  # fmt: skip
+    g = cw.STANDARD
+    img = np.full((720, 1280, 3), 60, np.uint8)
+    row = g.tab_row
+    r0 = cw.TAB_LABEL_ROWS[0]
+    for name, (x0, _) in zip(cw.TABS, cw.TAB_SLOT_X, strict=True):
+        m = tt[f"{name}_unsel"]
+        img[row + r0 : row + r0 + m.shape[0], x0 : x0 + m.shape[1]][m] = 255
+    img[row, 80:134] = 255  # the second tab selected
+    st = {"left": 0, "text_top": g.text_top}
+    got = cw.read_tabs(img, st, tt)
+    assert got["slots"] == ["battle", "regular"] and got["selected"] == "regular"
+    img2 = img.copy()
+    img2[row + r0 : row + r0 + 13, 75:140] = 60  # the second tab gone
+    assert cw.read_tabs(img2, st, tt)["slots"] == ["battle", "empty"]
 
 
 # --- synthetic windows, drawn as the client draws them ----------------------------------------
@@ -199,9 +228,11 @@ class Client:
     CYCLE = (3, 6, 9, 12, 15, "hidden", "bar")
 
     def __init__(self, size: Any = 6, left: int = 0, bottom: int = 719, locked: bool = True,
-                 input_open: bool = True, effective: bool = True) -> None:  # fmt: skip
+                 input_open: bool = True, effective: bool = True,
+                 tabs: tuple[Any, ...] = ("battle", "regular")) -> None:  # fmt: skip
         self.size, self.left, self.bottom = size, left, bottom
         self.locked, self.input_open, self.effective = locked, input_open, effective
+        self.tabs = list(tabs)
         self.world: list[tuple[int, int]] = []
         self.log: list[str] = []
 
@@ -214,7 +245,8 @@ class Client:
         g = cw.Geometry(self.size, self.bottom, self.left)
         return {"left": self.left, "text_top": g.text_top, "bottom": self.bottom,
                 "lines": self.size, "input": "open" if self.input_open else "closed",
-                "padlock": "locked" if self.locked else "open"}  # fmt: skip
+                "padlock": "locked" if self.locked else "open",
+                "tabs": {"slots": list(self.tabs), "selected": "regular"}}  # fmt: skip
 
     def _geom(self) -> cw.Geometry | None:
         return (
@@ -277,8 +309,9 @@ def sim(monkeypatch: pytest.MonkeyPatch) -> Any:
 
     def make(client: Client) -> Agent:
         monkeypatch.setattr(cw, "_grab_rgb", lambda screen: client)
-        monkeypatch.setattr(cw, "read", lambda img, tm: img.state())
+        monkeypatch.setattr(cw, "read", lambda img, tm, tt=None: img.state())
         monkeypatch.setattr(cw, "load_templates", lambda path=cw.TEMPLATES: {"stub": True})
+        monkeypatch.setattr(cw, "load_tab_templates", lambda path=cw.TAB_TEMPLATES: {"stub": True})
         monkeypatch.setattr(cw, "_backend", lambda: "rdp")
         monkeypatch.setattr(cw, "_shot", lambda screen, tag: f"<{tag}>")
         monkeypatch.setattr(cw.time, "sleep", lambda s: None)
@@ -304,6 +337,25 @@ def test_a_standard_window_costs_one_read_and_no_input(sim: Any) -> None:
     agent = sim(c)
     out = cw.ensure(agent, None, why="t")
     assert out["standard"] and out["steps"] == [] and agent.moves == 0 and c.log == []
+    assert out["tabs"] == "ok"
+
+
+def test_a_missing_or_swapped_tab_stops_before_anything_is_typed(sim: Any) -> None:
+    """Batt 2026-11-05: "arrange the tabs correctly". A tab missing (11-04: the second one) or the
+    tabs swapped, read with confidence, stops with a frame; nothing is clicked on the tab strip."""
+    for tabs in (("battle", "empty"), ("regular", "battle"), ("empty", "regular")):
+        c = Client(tabs=tabs)
+        with pytest.raises(cw.ChatWindowError, match="tabs: expected Battle Log . NewTab_2"):
+            cw.ensure(sim(c), None, why="t")
+        assert c.world == [] and c.log == [], tabs
+
+
+def test_unread_tabs_are_read_again_parked_then_pass_with_a_warning(sim: Any) -> None:
+    c = Client(tabs=("battle", None))  # the second label unsure (a bright scene behind it)
+    agent = sim(c)
+    out = cw.ensure(agent, None, why="t")
+    assert out["standard"] and out["tabs"] == "unread" and agent.moves == 2  # one park
+    assert c.log == [] and c.world == []
 
 
 def test_yesterdays_window_is_docked_sized_and_locked(sim: Any) -> None:
@@ -311,7 +363,10 @@ def test_yesterdays_window_is_docked_sized_and_locked(sim: Any) -> None:
     c = Client(size=9, left=0, bottom=640, locked=True, input_open=False)
     agent = sim(c)
     out = cw.ensure(agent, None, why="t")
-    assert out["standard"] and c.state() == {**_st(), "input": "open"}
+    assert out["standard"] and {k: v for k, v in c.state().items() if k != "tabs"} == {
+        **_st(),
+        "input": "open",
+    }
     assert out["steps"] == ["unlock", "open_input", "drag", "f10", "f10", "f10", "f10", "f10",
                             "f10", "lock"]  # fmt: skip
     assert c.world == []  # no press ever reached the world

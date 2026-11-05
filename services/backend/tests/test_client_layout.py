@@ -34,11 +34,8 @@ def test_the_standard_rectangles_are_unchanged_and_the_hunting_ones_smaller() ->
 def test_decide_reads_each_part_and_says_unknown_otherwise() -> None:
     hunt = cl.decide(_d(tabs_battle=1.0, arrow_collapsed=2.0, row1=0.5))
     assert hunt == {"rows": 1, "panel": "collapsed", "tab": "battle"} and cl.matches(hunt, "hunt")
-    # since 2026-11-05 the standard layout shows Battle Log too (the chat window's one tab)
-    std = cl.decide(_d(tabs_battle=1.0, arrow_expanded=0.0, row1=0.5, row2=0.0, row4=0.0))
+    std = cl.decide(_d(tabs_regular=1.0, arrow_expanded=0.0, row1=0.5, row2=0.0, row4=0.0))
     assert cl.matches(std, "standard") and not cl.matches(std, "hunt")
-    old_std = cl.decide(_d(tabs_regular=1.0, arrow_expanded=0.0, row1=0.5, row2=0.0, row4=0.0))
-    assert not cl.matches(old_std, "standard")  # Regular Chat shown: not the standard any more
     assert cl.decide(_d(row1=95.0))["rows"] == 0  # hidden
     assert cl.decide(_d(row1=1.0, row2=1.0, row4=99.0))["rows"] == 2  # 2-3 rows: an F12 step
     assert cl.decide(_d(row1=1.0, row4=1.0))["rows"] is None  # row 4 without row 2: no sense
@@ -48,9 +45,9 @@ def test_decide_reads_each_part_and_says_unknown_otherwise() -> None:
 
 
 def test_next_step_walks_to_the_target_and_never_acts_blind() -> None:
-    st = {"rows": 4, "panel": "expanded", "tab": "battle"}
+    st = {"rows": 4, "panel": "expanded", "tab": "regular"}
     assert cl.next_step(st, "standard") is None
-    assert cl.next_step({**st, "tab": "regular"}, "standard") == "tab:battle"
+    assert cl.next_step({**st, "tab": "battle"}, "standard") == "tab:regular"
     assert cl.next_step(st, "hunt") == "f12"
     assert cl.next_step({**st, "rows": 1}, "hunt") == "arrow"
     assert cl.next_step({**st, "rows": 1, "panel": "collapsed", "tab": "regular"}, "hunt") == \
@@ -95,7 +92,7 @@ def test_read_on_frames_built_from_the_live_templates() -> None:
     hunt = cl.read(frame({"arrow_collapsed": "arrow", "row1": "row1"}, "battle"), tm)
     assert cl.matches(hunt, "hunt"), hunt
     std = cl.read(frame({"arrow_expanded": "arrow", "row1": "row1", "row2": "row2",
-                         "row4": "row4"}, "battle"), tm)  # fmt: skip
+                         "row4": "row4"}, "regular"), tm)  # fmt: skip
     assert cl.matches(std, "standard"), std
 
 
@@ -167,20 +164,20 @@ def test_the_layout_clicks_only_its_two_ui_controls_inside_the_ui_windows() -> N
     assert cl.ui_windows("standard") == rp.UI_WINDOWS  # this test process: the standard set
 
 
-def test_a_tab_the_chat_window_does_not_have_is_refused_before_any_input() -> None:
-    """2026-11-05: Regular Chat is gone; its old click point is the click-through tab strip (a
-    walk). select_tab refuses it with no input; ensure never plans a click on it."""
+def test_a_tab_the_chat_window_does_not_have_is_refused_before_any_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tab that is not in the chat window's standard (chat_window.TABS) is never clicked: its
+    place is the click-through tab strip (a walk; on 11-04 the second tab was gone for a day).
+    select_tab refuses it with no input; ensure never plans a click on it."""
+    import chat_window as cw
 
     class NoInput:
         def __getattr__(self, name: str) -> object:
             raise AssertionError(f"input sent: {name}")
 
+    assert cw.TABS == ("battle", "regular")  # 2026-11-05 13:2x: Battle Log | NewTab_2
+    monkeypatch.setattr(cw, "TABS", ("battle",))  # the 11-04 state: the second tab missing
     with pytest.raises(cl.LayoutError, match="not in the chat window"):
         cl.select_tab(NoInput(), None, "regular")
-    cl.TARGET["probe"] = {"rows": 1, "panel": "collapsed", "tab": "regular"}
-    try:
-        assert (
-            cl.next_step({"rows": 1, "panel": "collapsed", "tab": "battle"}, "probe") == "unknown"
-        )
-    finally:
-        del cl.TARGET["probe"]
+    assert cl.next_step({"rows": 4, "panel": "expanded", "tab": "battle"}, "standard") == "unknown"
