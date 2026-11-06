@@ -20,6 +20,9 @@ import orc_labels_fix as olf  # noqa: E402
 S = 1_000_000_000
 
 
+_NO_TERRAIN = SimpleNamespace(terrain=None)  # a frozen occluder set without 4f's terrain
+
+
 def test_parse_part() -> None:
     assert ml.parse_part("/x/sess") == (Path("/x/sess"), None)
     assert ml.parse_part("/x/sess:spots=0-7") == (Path("/x/sess"), frozenset(range(8)))
@@ -865,7 +868,7 @@ def _fake_session(monkeypatch: pytest.MonkeyPatch, sid: str, spec: Any = ml.GEF1
         return sess
 
     monkeypatch.setattr(ml.RecSession, "open", staticmethod(fake_open))
-    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: "occluders")
+    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: _NO_TERRAIN)
     monkeypatch.setattr(ml, "labeler_for", lambda *a, **k: "labeler")
     frames = [_frame([1273], []), _frame([1023], [])]
     monkeypatch.setattr(olf, "run_parallel", lambda func, refs, workers: frames)
@@ -1485,9 +1488,19 @@ def test_t2_the_label_stack_is_e0_with_amendments_b_and_c() -> None:
 def test_t2_freeze_fixes_e0_without_a_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                                 ) -> None:  # fmt: skip
     prov = {"rsw_sha256": "a5104e37", "model_files_sha256": {}}
-    monkeypatch.setattr(ml, "occluders", lambda spec: SimpleNamespace(provenance=lambda: prov))
+    occl = SimpleNamespace(provenance=lambda: prov, terrain=object())  # xmas_dun02: terrain on
+    monkeypatch.setattr(ml, "occluders", lambda spec: occl)
     th = tmp_path / "th.json"
-    th.write_text(json.dumps({"o3h_tau": 0.55, "offset_ms": 120.0, "offset_source": "D12"}))
+    th.write_text(
+        json.dumps(
+            {
+                "o3h_tau": 0.55,
+                "offset_ms": 120.0,
+                "offset_source": "D12",
+                "terrain": {"rule": "o3h", "rule_tau": 0.55},
+            }
+        )
+    )  # 4f: not adopted
     base = {"map": "xmas_dun02", "threshold": th, "offset": None, "proposed": False,
             "decision": "Amendment X (D12: 120 ms)"}  # fmt: skip
     out = ml.cmd_freeze(_ns(**base, engaged=None, engaged_variant=None))
@@ -1557,7 +1570,7 @@ def _check_fakes(monkeypatch: pytest.MonkeyPatch, sid: str, spec: Any) -> None:
                            dropped={}, candidates_at=lambda off: [1, 2],
                            facing_rule=lambda rule, variant=None: "rule")  # fmt: skip
     monkeypatch.setattr(ml.RecSession, "open", staticmethod(lambda p, spec, lt: sess))
-    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: "occluders")
+    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: _NO_TERRAIN)
     monkeypatch.setattr(olf, "run_parallel", lambda func, refs, workers: [])
 
 

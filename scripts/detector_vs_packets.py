@@ -25,6 +25,14 @@ the UI windows ... are left out"; the labels' own in-view rule, mirrored) and co
 the hallucination frames (our character under EFST_ILLUSION, rAthena's Hallucination icon 34, from
 the packets' status changes: counted, reported, never removed) and Amendment A's bar (BAR_4A).
 
+A MAP-SCOPED model (xmas02-detector.md 7, D1 / D2; tool gap T-6) writes its own class names into
+the rows (one per tier species). ``--classes LIST`` (``score`` and ``score-session``) collapses
+them to ``monster`` before anything is scored: ``recorder_boxes.class_collapse`` of the model's
+committed class list against its names in id order (``--names NAMES.json``, its sidecar; else the
+boxes' ``.meta.json`` ``names``, which ``recorder_boxes.py predict`` writes). The output then
+records ``class_collapse`` (the list, its sha256, the names, the boxes per class before). Without
+the flag nothing changes: v1's rows are scored as written.
+
 ``from-predict`` (gef10-eval.md AMENDMENT R2-2) turns poring_vision.predict_dir's output on the
 demo's own frames (``frames/NNNNN-<t ns>.jpg``: the stem carries the capture time) into
 ``boxes.jsonl`` rows, every species class collapsed to ``monster`` (player, npc, warp kept), so a
@@ -409,6 +417,39 @@ def read_boxes(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def collapse_classes(caps: list[dict[str, Any]], classes: Path | None, names: Path | None,
+                     boxes_meta: dict[str, Any] | None
+                     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:  # fmt: skip
+    """T-6: ``caps`` with a map-scoped model's species classes collapsed to ``monster`` (the
+    class list ``classes`` against the model's names: ``names``, else the boxes' meta), and the
+    provenance; ``classes`` None: the rows unchanged and no provenance (v1)."""
+    if classes is None:
+        if names is not None:
+            raise SystemExit("--names goes with --classes")
+        return caps, None
+    import hashlib
+
+    import recorder_boxes as rb
+    import unit_detector as ud
+
+    if names is not None:
+        model_names, source = ud.parse_names(json.loads(names.read_text()), str(names)), str(names)
+    elif boxes_meta is not None and boxes_meta.get("names"):
+        model_names, source = ud.parse_names(list(boxes_meta["names"])), "the boxes' .meta.json"
+    else:
+        raise SystemExit("--classes needs the model's names: --names NAMES.json, or the boxes' "
+                         ".meta.json (recorder_boxes.py predict)")  # fmt: skip
+    mapping = rb.class_collapse(json.loads(classes.read_text()), model_names)
+    out = rb.collapse_rows(caps, mapping)
+    sha = hashlib.sha256(classes.read_bytes()).hexdigest()
+    prov = {"classes": str(classes), "classes_sha256": sha, "names_from": source,
+            "names": list(model_names),
+            "to_monster": sorted(k for k, v in mapping.items() if v == rb.SCORED_CLASS),
+            "boxes_by_class_before": rb.class_counts(caps),
+            "boxes_by_class_after": rb.class_counts(out)}  # fmt: skip
+    return out, prov
+
+
 KEPT_CLASSES = ("player", "npc", "warp")  # every other class is a monster species
 
 
@@ -651,6 +692,8 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     t0 = int(manifest["t0_live_ns"])
     t1 = t0 + int(a.window_s * 1e9)
     caps = read_boxes(a.boxes if a.boxes is not None else demo / "boxes.jsonl")
+    caps, collapse = collapse_classes(caps, getattr(a, "classes", None),
+                                      getattr(a, "names", None), None)  # fmt: skip
     win = [c for c in caps if t0 <= int(c["t"]) <= t1]
     with gzip.open(demo / "packets.jsonl.gz", "rt") as fh:
         events = [json.loads(line) for line in fh]
@@ -673,6 +716,7 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
                    "captures_scored": len(win) - sum(skipped.values())},
         "boxes": str(a.boxes) if a.boxes is not None else "boxes.jsonl (the live detector)",
         **res["body"], **res["extra"], "sprites": str(a.sprites),
+        **({"class_collapse": collapse} if collapse is not None else {}),
         "_pairs": res["pairs"] if a.pairs is not None else None,
     }  # fmt: skip
 
@@ -737,10 +781,14 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
                 "boxes": None if a.boxes is None else str(a.boxes), "coverage": cov,
                 "boxes_meta": boxes_meta, "chat": {"rect": list(chat_rect), "chosen": chat_how},
                 "ui_rects": [list(r) for r in rects], "nested_ui_rects_dropped": dropped,
-                **inputs, "_pairs": None}  # fmt: skip
+                **inputs, "_pairs": None,
+                **({"class_collapse": collapse_classes([], a.classes, a.names, boxes_meta)[1]}
+                   if getattr(a, "classes", None) is not None else {})}  # fmt: skip
     if a.boxes is None:
         raise SystemExit("--boxes is required (only --preflight runs without it)")
     caps, coverage = session_captures(frames, read_boxes(a.boxes), a.allow_partial)
+    caps, collapse = collapse_classes(caps, getattr(a, "classes", None),
+                                      getattr(a, "names", None), boxes_meta)  # fmt: skip
     with gzip.open(session / "packets.jsonl.gz", "rt") as fh:
         events = [json.loads(line) for line in fh]
     size = (int(manifest["game_region"][2]), int(manifest["game_region"][3]))
@@ -765,8 +813,18 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
         "sprite_names": str(a.sprite_names), "projection_inputs": inputs,
         **body, **res["extra"],
         "bar_4a": bar_4a(body["per_species"], res["species"], res["tp"], res["n_det"]),
+        **({"class_collapse": collapse} if collapse is not None else {}),
         "_pairs": res["pairs"] if a.pairs is not None else None,
     }  # fmt: skip
+
+
+def collapse_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--classes", type=Path, default=None,
+                   help="a map-scoped model's class list: its species classes count as "
+                        "'monster' (T-6); default: the rows as written (v1)")  # fmt: skip
+    p.add_argument("--names", type=Path, default=None,
+                   help="--classes: the model's names in id order (.names.json); default: the "
+                        "boxes' .meta.json names")  # fmt: skip
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -807,6 +865,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="the client stems (default: mvp_watch_study.SPRITE_NAMES)",
     )
+    collapse_flags(p)
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("score-session", help="a recorder session (rogue-xmas02.md 4A)")
     p.add_argument("session", type=Path, help="record_session.py's dir (manifest + PNG shards)")
@@ -839,6 +898,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p.add_argument("--allow-partial", action="store_true", help="score frames that have rows")
     p.add_argument("--pairs", type=Path, default=None, help="every scored capture (by-eye)")
+    collapse_flags(p)
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("from-predict")
     p.add_argument("pred", type=Path)

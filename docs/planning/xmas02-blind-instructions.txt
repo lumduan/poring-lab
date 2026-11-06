@@ -1,0 +1,32 @@
+BLIND LABEL CHECK -- instructions for ONE labeller (work alone; another labeller does the same pack).
+
+Your pack is the directory PACK (given by the parent). Use ONLY these files:
+  PACK/reference.png    9 monster species, each under a LETTER (A-I), each drawn in SEVERAL
+                        views side by side (directions and animation frames). No names.
+  PACK/grids/grid_NN.png  the crops, 20 per grid, each under its number (#001 ...).
+  PACK/crops/NNN.png    the same crops one by one, enlarged (open one when a grid tile is too small).
+  PACK/pack.json        the list of crops and the three questions.
+Never open anything outside PACK (no answer key, no other directory, no repository file, no
+other labeller's answers). Do not guess from file names or order: they carry no class information.
+
+Every crop shows a GREEN rectangle drawn 1 px just OUTSIDE a label box. For EVERY crop answer:
+  Q1: is there a monster inside the green box?           yes / no / unsure
+  Q2: the box:  good  (tight around the monster)
+                loose (the monster is in it, with much background)
+                off   (cuts the monster or misses it)
+                n/a   (when Q1 is no)
+  Q3: which species is it?  one LETTER from reference.png, or none / unsure
+The game scene is the floor of a toy factory: orange and pale tiles, raised orange blocks and
+walls, conveyor belts, gears, cranes and boxes. Sprites may be partly hidden behind a raised
+block, a wall, a belt or a box, or stand next to other monsters or next to the player's own
+character (a red-haired rogue). The factory is also full of TOY MODELS that are scenery, not
+monsters: ducks, robots, clowns, rocking horses and Santa Porings. They never move, and some of
+them look like a species in reference.png. A box drawn around a toy model and no monster is "no"
+for Q1; when you cannot tell a toy from a monster, answer "unsure" and say why in the note.
+Two species in reference.png are the SAME figure and differ ONLY in COLOUR: one is dressed in
+pale green, the other in red. Compare the colours with reference.png, not only the shape. Judge
+the box against the ONE monster it is drawn around.
+
+Write ANSWERS (the path the parent gives you) as a JSON list, one object per crop, every crop:
+  [{"crop": "001", "q1": "yes", "q2": "good", "q3": "B", "note": ""}, ...]
+"note" is free text (what you saw when unsure, a second monster, a UI window, ...).

@@ -563,9 +563,10 @@ def summary(values: Sequence[float]) -> dict[str, Any]:
             "mean": round(statistics.fmean(values), 3)}  # fmt: skip
 
 
-def mann_whitney(a: Sequence[float], b: Sequence[float]) -> float | None:
+def mann_whitney(a: Sequence[float], b: Sequence[float], ndigits: int | None = 4) -> float | None:
     """PURE: the two-sided Mann-Whitney U p-value, normal approximation with average ranks for
-    ties (no scipy on the host); None under 3 values a side."""
+    ties (no scipy on the host), rounded to ``ndigits`` (None: unrounded, as a bar compares it:
+    xmas02-detector.md 4f); None under 3 values a side."""
     if len(a) < 3 or len(b) < 3:
         return None
     import math
@@ -590,7 +591,8 @@ def mann_whitney(a: Sequence[float], b: Sequence[float]) -> float | None:
     if sd == 0:
         return None
     z = (u - n1 * n2 / 2.0) / sd
-    return round(math.erfc(abs(z) / math.sqrt(2.0)), 4)
+    p = math.erfc(abs(z) / math.sqrt(2.0))
+    return p if ndigits is None else round(p, ndigits)
 
 
 def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:

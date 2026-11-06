@@ -63,6 +63,14 @@ tau, k and the fit radius stay 3c's frozen values.
   candidate keeps (S3 never changes C1). decide() gives any candidate's verdict from a frame's
   LabelFates (one pass for round 4's pack: orc_label_sheets.py --round4).
 
+4f's TERRAIN occluders (docs/planning/xmas02-detector.md 4f, D10; off unless a map_labels spec
+switches them on): ``TerrainOccluders`` (a GAT cell >= 10 altitude units above a label's own
+cell, south of it, its box from the label's floor to its top through rsw.project_points; the
+label is under terrain when its predicted box overlaps one), ``Occluders.under`` (a model first,
+then terrain), the rule ``o3h-t`` in decide() (an under-terrain label judged as o3h judges an
+under-model one, ``occluded_terrain``) and ``terrain_test`` (4f's FIT adoption test). Without
+terrain every path here is unchanged.
+
 C1 / C2 (the check) judge the PREDICTION, never the fitted box: C1 = label_check.score of the
 prediction at its projected position; C2 = its best-NCC offset within +-16 px. The standing rule,
 the bars and their summary are scripts/orc_camera_check.py's, unchanged.
@@ -251,6 +259,11 @@ class LabelFate:
     heading: int = 0
     facing_from: str = ""
     state: str = ""
+    # 4f (xmas02-detector.md): the predicted box overlaps a terrain occluder at the rule's step
+    # (o3h-t decides on it), and the largest such rise (the 5 / 20 report); False / None when
+    # the map has no terrain rule
+    terrain: bool = False
+    terrain_rise: float | None = None
 
 
 def decide(fates: Sequence[LabelFate], occlusion: str, stack: bool,
@@ -259,20 +272,24 @@ def decide(fates: Sequence[LabelFate], occlusion: str, stack: bool,
     """PURE: (kept, excluded (gid, mob, reason)) under one candidate (3i). The order: 1c's model
     test, then 2b / 2c, then the fit (an under-box failure is ``occluded_model``), then o3h's
     0.48 (``o3h_tau``: another map's own frozen value, payf07-detector.md 4e), then S3 among the
-    kept."""
-    if occlusion not in OCCLUSIONS:
-        raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
+    kept. ``o3h-t`` (xmas02-detector.md 4f) is o3h with a label under TERRAIN (and under no
+    model) judged exactly as one under a model, its exclusion named ``occluded_terrain``."""
+    if occlusion not in (*OCCLUSIONS, TERRAIN_OCCLUSION):
+        raise SystemExit(f"--occlusion {occlusion!r}: one of {(*OCCLUSIONS, TERRAIN_OCCLUSION)}")
+    gated = occlusion in ("o3h", TERRAIN_OCCLUSION)
     kept: list[LabelFate] = []
     out: list[tuple[int, int, str]] = []
     for f in fates:
+        terrain = occlusion == TERRAIN_OCCLUSION and f.terrain and not f.under
+        occluded = OCCLUDED if f.under else OCCLUDED_TERRAIN
         if f.under and occlusion == "1c":
             out.append((f.gid, f.mob, OCCLUDED))
         elif f.pre is not None:
             out.append((f.gid, f.mob, f.pre))
         elif f.fit is None or f.fail is not None:
-            out.append((f.gid, f.mob, OCCLUDED if f.under else (f.fail or "unfit")))
-        elif f.under and occlusion == "o3h" and f.fit[0] < o3h_tau:
-            out.append((f.gid, f.mob, OCCLUDED))
+            out.append((f.gid, f.mob, occluded if f.under or terrain else (f.fail or "unfit")))
+        elif (f.under or terrain) and gated and f.fit[0] < o3h_tau:
+            out.append((f.gid, f.mob, occluded))
         else:
             kept.append(f)
     if stack:
@@ -516,10 +533,14 @@ def now_ict() -> str:
 
 class Occluders:
     """Every RSW model of the map, placed (poring_dataset.rsw) once; its screen box per camera
-    position (cached: the GM stands still through a dwell)."""
+    position (cached: the GM stands still through a dwell). ``terrain`` (xmas02-detector.md 4f;
+    None unless a map's spec switches it on): the map's raised GAT cells as a second kind of
+    occluder, asked only through ``under`` / ``terrain_rise``; ``hit`` stays the models' alone."""
 
     def __init__(self, rsw_path: Path = RSW_PATH, model_dir: Path = MODEL_DIR,
-                 map_cells: tuple[int, int] = MAP_CELLS) -> None:  # fmt: skip
+                 map_cells: tuple[int, int] = MAP_CELLS,
+                 terrain: TerrainOccluders | None = None) -> None:  # fmt: skip
+        self.terrain = terrain
         self.rsw_path, self.model_dir = rsw_path, model_dir
         rsw = rswmod.parse_rsw(rsw_path.read_bytes())
         self.rsw = rsw
@@ -557,11 +578,182 @@ class Occluders:
                 return index
         return None
 
+    def terrain_rise(self, scene: Scene, box: Box, cell: tuple[float, float]) -> float | None:
+        """4f: TerrainOccluders.rise for a label at ``cell`` (None without terrain)."""
+        return None if self.terrain is None else self.terrain.rise(scene, box, cell)
+
+    def under(self, scene: Scene, box: Box, cell: tuple[float, float]) -> str | None:
+        """o3h's under-box test: "model" when a model's screen box overlaps ``box``, else
+        "terrain" when the map's terrain rule is on and a terrain occluder of the label at
+        ``cell`` overlaps it (4f, at its step), else None. Without terrain: ``hit``'s test."""
+        if self.hit(scene, box) is not None:
+            return "model"
+        if self.terrain is not None and self.terrain.hit(scene, box, cell):
+            return "terrain"
+        return None
+
     def provenance(self) -> dict[str, Any]:
-        return {"rsw": str(self.rsw_path), "rsw_sha256": sha256_file(self.rsw_path),
-                "rsw_version": list(self.rsw.version), "objects": self.rsw.objects,
-                "models": len(self.models), "model_dir": str(self.model_dir),
-                "model_files_sha256": dict(sorted(self.files.items()))}  # fmt: skip
+        out = {"rsw": str(self.rsw_path), "rsw_sha256": sha256_file(self.rsw_path),
+               "rsw_version": list(self.rsw.version), "objects": self.rsw.objects,
+               "models": len(self.models), "model_dir": str(self.model_dir),
+               "model_files_sha256": dict(sorted(self.files.items()))}  # fmt: skip
+        if self.terrain is not None:  # a map without the terrain rule keeps its provenance
+            out["terrain"] = self.terrain.provenance()
+        return out
+
+
+# --- 4f (xmas02-detector.md, D10): the map's raised GAT cells as occluders, "o3h-t" ----------
+
+TERRAIN_OCCLUSION = "o3h-t"  # o3h with the terrain occluders beside the models
+OCCLUDED_TERRAIN = "occluded_terrain"  # an under-terrain label o3h-t excludes (o3h's model rule)
+TERRAIN_STEP = 10.0  # 4f: >= 10 altitude units above the label's own cell (fixed by the plan)
+TERRAIN_REPORT_STEPS = (5.0, 20.0)  # 4f: REPORTED beside, never chosen from
+# The window searched: 24 rows south of the label, 8 columns either side of its own. On
+# xmas_dun02 it finds every hit a whole-map scan does (test_orc_labels_fix's real case): the
+# map's largest rise over a walkable cell is 64 units, which at the outdoor camera's ~45-degree
+# pitch hides the feet of a label at most ~13 cells behind it.
+TERRAIN_SOUTH, TERRAIN_SIDE = 24, 8
+TERRAIN_MAX_YAW_DEG = 5.0  # "south" means "nearer the camera" under the yaw-0 outdoor camera only
+# 4f's adoption test (FIT; fixed by the plan before any FIT frame): n >= 30, the median NCC lower
+# by >= 0.05 (the rows' NCC carry 4 decimals: compared at 4), the Mann-Whitney p < 0.01
+TERRAIN_MIN_N, TERRAIN_MIN_DROP, TERRAIN_MAX_P = 30, 0.05, 0.01
+_CORNERS = np.array([(dx, dy) for dx in (-0.5, 0.5) for dy in (-0.5, 0.5)], dtype=float)
+
+
+class TerrainOccluders:
+    """4f's TERRAIN occluders of a label: every GAT cell at least ``step`` altitude units above the
+    label's own cell (``Gat.altitude``: the mean of the 4 corners, UP positive, as the camera's
+    projection uses it), lying SOUTH of it (cell y < the label's y: nearer the yaw-0 outdoor
+    camera, whose eye is south of its target looking north), drawn as the box from the label's
+    floor (its own cell's altitude) to the cell's top: the cell's 8 corners (x +- 0.5, y +- 0.5,
+    at the floor and at the top) through ``rsw.project_points`` with the label's scene, their
+    screen box. The label is UNDER TERRAIN when its predicted box overlaps (any area > 0, as
+    ``rsw.overlaps``) any such cell's screen box.
+
+    Only the cells that can matter are searched: TERRAIN_SOUTH rows south x TERRAIN_SIDE columns
+    either side, those rising at least the lowest step asked (the plan's 10; 5 and 20 for the
+    report), projected in ONE call. The GAT is the one the scenes project with (camera.GAT_DIR /
+    <map>.gat). A scene without its GAT is refused (flat ground would leave every label "clear"),
+    and so is a camera turned off the outdoor yaw ("south" would not be "nearer the camera")."""
+
+    def __init__(self, gat_path: Path, step: float = TERRAIN_STEP,
+                 report_steps: Sequence[float] = TERRAIN_REPORT_STEPS,
+                 south: int = TERRAIN_SOUTH, side: int = TERRAIN_SIDE) -> None:  # fmt: skip
+        from poring_dataset import gat as gatmod
+
+        if not gat_path.exists():
+            raise SystemExit(f"{gat_path}: the map's GAT is not extracted (4f's terrain needs it)")
+        self.gat_path = gat_path
+        self.gat = gatmod.parse(gat_path.read_bytes())
+        self.alt = self.gat.altitude  # (height, width), up +
+        self.step = float(step)
+        self.report_steps = tuple(float(s) for s in report_steps)
+        self.lowest = min(self.step, *self.report_steps)
+        self.south, self.side = int(south), int(side)
+
+    def own_cell(self, cell: tuple[float, float]) -> tuple[int, int]:
+        """The label's own cell: its position rounded to the nearest cell (a cell's centre is its
+        integer position, rsw.to_cells' frame), clipped to the map."""
+        x = min(max(int(math.floor(float(cell[0]) + 0.5)), 0), self.gat.width - 1)
+        y = min(max(int(math.floor(float(cell[1]) + 0.5)), 0), self.gat.height - 1)
+        return x, y
+
+    def candidates(self, cell: tuple[float, float]) -> tuple[npt.NDArray[np.int64], float]:
+        """(the window's cells (n, 2) as (x, y), south of the label and rising at least the
+        lowest step; the label's floor altitude)."""
+        x, y = self.own_cell(cell)
+        floor = float(self.alt[y, x])
+        y0, x0 = max(0, y - self.south), max(0, x - self.side)
+        x1 = min(self.gat.width, x + self.side + 1)
+        ys, xs = np.nonzero(self.alt[y0:y, x0:x1] - floor >= self.lowest)
+        return np.c_[xs + x0, ys + y0].astype(np.int64), floor
+
+    def cell_boxes(self, scene: Scene, cells: npt.NDArray[np.int64],
+                   floor: float) -> npt.NDArray[np.float64]:  # fmt: skip
+        """(n, 4): each cell's screen box (x0, y0, x1, y1), from ``floor`` up to its top; NaN for
+        a cell with no corner in front of the camera."""
+        self.check_scene(scene)
+        n = len(cells)
+        if n == 0:
+            return np.zeros((0, 4))
+        xy = cells[:, None, :].astype(float) + _CORNERS[None, :, :]  # (n, 4, 2)
+        pts = np.concatenate([xy, xy], axis=1).reshape(-1, 2)  # 4 floor + 4 top corners a cell
+        top = self.alt[cells[:, 1], cells[:, 0]]
+        alt = np.c_[np.full((n, 4), floor), np.repeat(top[:, None], 4, axis=1)].reshape(-1)
+        uv, front = rswmod.project_points(scene, pts, alt)
+        uv = np.where(front[:, None], uv, np.nan).reshape(n, 8, 2)
+        out = np.full((n, 4), np.nan)
+        seen = front.reshape(n, 8).any(axis=1)
+        if seen.any():
+            p = uv[seen]
+            out[seen] = np.c_[np.nanmin(p[..., 0], 1), np.nanmin(p[..., 1], 1),
+                              np.nanmax(p[..., 0], 1), np.nanmax(p[..., 1], 1)]  # fmt: skip
+        return out
+
+    @staticmethod
+    def check_scene(scene: Scene) -> None:
+        """Fail closed: the scene's GAT (flat ground would call every label clear) and the
+        outdoor yaw ("south" is "nearer the camera" only there)."""
+        if scene.gat is None:
+            raise SystemExit("4f's terrain needs the scene's GAT (flat ground hides nothing)")
+        yaw = math.degrees(scene.camera.yaw)
+        if abs(yaw) > TERRAIN_MAX_YAW_DEG:
+            raise SystemExit(f"4f's terrain: camera yaw {yaw:.1f} degrees; 'south' is 'nearer "
+                             "the camera' only at the outdoor yaw 0")  # fmt: skip
+
+    def rise(self, scene: Scene, box: Box, cell: tuple[float, float]) -> float | None:
+        """The largest rise (altitude units above the label's own cell) among the cells south of
+        the label whose screen box overlaps ``box`` and that rise at least the lowest step asked;
+        None when none does. A label is under terrain at step s <=> rise >= s."""
+        self.check_scene(scene)
+        cells, floor = self.candidates(cell)
+        if len(cells) == 0:
+            return None
+        b = self.cell_boxes(scene, cells, floor)
+        hit = ((np.minimum(box[2], b[:, 2]) > np.maximum(box[0], b[:, 0]))
+               & (np.minimum(box[3], b[:, 3]) > np.maximum(box[1], b[:, 1])))  # fmt: skip
+        if not hit.any():  # a NaN box compares False: never a hit
+            return None
+        return float((self.alt[cells[hit, 1], cells[hit, 0]] - floor).max())
+
+    def hit(self, scene: Scene, box: Box, cell: tuple[float, float]) -> bool:
+        """Under terrain at the rule's step."""
+        r = self.rise(scene, box, cell)
+        return r is not None and r >= self.step
+
+    def provenance(self) -> dict[str, Any]:
+        return {"rule": "xmas02-detector.md 4f", "gat": str(self.gat_path),
+                "gat_sha256": sha256_file(self.gat_path), "step": self.step,
+                "report_steps": list(self.report_steps), "altitude": "Gat.altitude, up +",
+                "window_south_rows": self.south, "window_side_columns": self.side}  # fmt: skip
+
+
+def terrain_test(rows: Sequence[tuple[float, float | None]], step: float = TERRAIN_STEP,
+                 min_n: int = TERRAIN_MIN_N, min_drop: float = TERRAIN_MIN_DROP,
+                 max_p: float = TERRAIN_MAX_P) -> dict[str, Any]:  # fmt: skip
+    """PURE (4f's adoption test, FIT): ``rows`` = (fit NCC, terrain rise or None) of every label
+    of its population (clear of the models, not engaged, uncrowded, facing-known, the fit
+    passing); the under-terrain ones (rise >= ``step``) against the rest. ADOPT o3h-t when ALL
+    hold: n under terrain >= ``min_n``; their median NCC lower than the rest's by >= ``min_drop``
+    (at 4 decimals); the two-sided Mann-Whitney p (gef10_r2_measure.mann_whitney, the repo's
+    test, unrounded) < ``max_p``. Each condition is reported on its own."""
+    import gef10_r2_measure as r2m
+
+    under = [float(n) for n, r in rows if r is not None and r >= step]
+    rest = [float(n) for n, r in rows if r is None or r < step]
+    med_u = statistics.median(under) if under else None
+    med_r = statistics.median(rest) if rest else None
+    drop = None if med_u is None or med_r is None else round(med_r - med_u, 4)
+    p = r2m.mann_whitney(under, rest, ndigits=None)
+    cond = {"n_under": len(under) >= min_n,
+            "median_drop": drop is not None and drop >= min_drop,
+            "mann_whitney": p is not None and p < max_p}  # fmt: skip
+    return {"step": step, "n_under": len(under), "n_rest": len(rest),
+            "median_ncc_under": None if med_u is None else round(med_u, 4),
+            "median_ncc_rest": None if med_r is None else round(med_r, 4),
+            "median_drop": drop, "mann_whitney_p_two_sided": p, "conditions": cond,
+            "bars": {"min_n": min_n, "min_drop": min_drop, "max_p": max_p},
+            "adopt": all(cond.values())}  # fmt: skip
 
 
 # --- the session -----------------------------------------------------------------------------
@@ -708,7 +900,9 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
     """Section 3's STANDING labels at ``tw`` (idle >= 1 s, isolated 120 px, clear of the UI and the
     edges by the C2 margin), facing 1a (or ``facing_rule``'s: fix 2), anchor 1b; 1c's model
     overlap excluded, then fix 2's 2b / 2c (3f). With ``under_out`` (3i's o3 / o3h) a label under
-    a model box that 2b / 2c keep is put there instead of being dropped: its fit decides."""
+    a model box that 2b / 2c keep is put there instead of being dropped: its fit decides. With the
+    map's terrain rule on (Occluders.terrain, xmas02-detector.md 4f) a label under terrain is
+    "under" too (Occluders.under); without it the test is the models' alone, as before."""
     lab = sess.lab
     replay, world, states, rules = lab.timeline.at_world(tw)
     choice = facing_rule if facing_rule is not None else FacingRule.for_events("1a", ())
@@ -742,10 +936,12 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
         if not occ.clear_box(pred.box, lab.ui_rects, lab.size):
             dropped["ui_or_edge"] += 1
             continue
-        under = occluders is not None and occluders.hit(scene, pred.box) is not None
+        kind = None if occluders is None else occluders.under(scene, pred.box, (e.x, e.y))
+        under = kind is not None
         if under and under_out is None:
-            dropped["occluded_model"] += 1
-            dropped[f"occluded_model:{e.job}"] += 1
+            why_under = "occluded_model" if kind == "model" else OCCLUDED_TERRAIN
+            dropped[why_under] += 1
+            dropped[f"{why_under}:{e.job}"] += 1
             continue
         if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
             dropped[why] += 1
@@ -1069,6 +1265,12 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
         cands, under = frame_rule(bgr, cands, under, dropped)
         if not cands and not under:
             return [], dropped, seen
+    # 4f (xmas02-detector.md): with the map's terrain rule on, BOTH rules from one pass. A label
+    # under terrain and under no model is fitted as o3h-t judges it, and scored either way: o3h
+    # scores it as a clear label, o3h-t only when its fit passes (the row's ``o3h_t``)
+    terrain_on = getattr(occluders, "terrain", None) is not None
+    terrain_ok: dict[int, bool] = {}  # gid -> o3h-t keeps it (under terrain only)
+    model_kept: set[int] = set()
     if under:  # 3i's o3 / o3h: the fit's evidence decides an under-box label (C1 then scores
         grey = bgr[:, :, :3].astype(float) @ label_check.GREY  # the PREDICTION, as ever)
         valid = valid_map(sess.lab.size, sess.lab.ui_rects)
@@ -1079,14 +1281,22 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
             r = fit_px.get(int(e.job), 6)
             fit = fit_label(grey, valid, sheet, pred, r)
             ok = fit is not None and fit[0] >= tau and not at_edge(fit[1], fit[2], r)
-            if ok and occlusion == "o3h":
+            if ok and occlusion in ("o3h", TERRAIN_OCCLUSION):
                 ok = fit is not None and fit[0] >= float(_JOB.get("o3h_tau", O3H_TAU))
+            if terrain_on and occluders.hit(scene, pred.box) is None:  # under terrain only
+                terrain_ok[e.gid] = ok
+                why_t = "under_terrain_kept" if ok else OCCLUDED_TERRAIN
+                dropped[why_t] += 1
+                dropped[f"{why_t}:{e.job}"] += 1
+                cands.append(cand)
+                continue
             if not ok:
                 dropped["occluded_model"] += 1
                 dropped[f"occluded_model:{e.job}"] += 1
                 continue
             dropped["under_model_kept"] += 1
             dropped[f"under_model_kept:{e.job}"] += 1
+            model_kept.add(e.gid)
             cands.append(cand)
     if not cands:
         return [], dropped, seen
@@ -1108,6 +1318,10 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
                                "box": [round(v, 1) for v in pred.box], "c1": round(c1, 4),
                                "why_low": why, "heading": facing[0],
                                "facing_from": facing[1], "self_moving": self_moving}  # fmt: skip
+        if terrain_on:  # 4f: which occluder (o3h-t's order: a model first), o3h-t's verdict
+            row["under"] = ("terrain" if e.gid in terrain_ok else
+                            "model" if e.gid in model_kept else None)  # fmt: skip
+            row["o3h_t"] = terrain_ok.get(e.gid, True)
         bo = occ.best_offset(bgr, sheet, pred, SEARCH_PX)
         if bo is not None:
             row.update({"best": round(bo[0], 4), "dx": bo[1], "dy": bo[2], "motion": bo[3]})
@@ -1367,7 +1581,7 @@ class FixLabeler:
                  occluders: Occluders | None = None, rule: str = "1a",
                  occlusion: str = "1c", stack: bool = False, wing: bool = False,
                  fit_all: bool = False, map_name: str = MAP) -> None:  # fmt: skip
-        if occlusion not in OCCLUSIONS:
+        if occlusion not in (*OCCLUSIONS, TERRAIN_OCCLUSION):
             raise SystemExit(f"--occlusion {occlusion!r}: one of {OCCLUSIONS}")
         self.lab = lab
         self.map_name = map_name  # the map whose models the occluders are (payf07-detector.md)
@@ -1379,6 +1593,8 @@ class FixLabeler:
         self.offset_ns = int(float(params["offset_ms"]) * 1e6)
         self.anchors = anchors_of(params)
         self.occluders = occluders if occluders is not None else occluders_of(params)
+        if occlusion == TERRAIN_OCCLUSION and getattr(self.occluders, "terrain", None) is None:
+            raise SystemExit("o3h-t needs the map's terrain occluders (xmas02-detector.md 4f)")
         self.fit_px = {int(k): int(v) for k, v in params["fit_px"].items()}
         self.tau = float(params["tau"])
         self.valid = valid_map(lab.size, lab.ui_rects)
@@ -1455,17 +1671,26 @@ class FixLabeler:
             preds.append((e, st, sheet, pred, facing, why))
             unit_boxes.append((e.gid, pred.box))
         fit_under = self.fit_all or self.occlusion != "1c"
+        terrain: TerrainOccluders | None = getattr(self.occluders, "terrain", None)
         for e, st, sheet, pred, facing, why in preds:
             under = self.occluders.hit(scene, pred.box) is not None
+            # 4f: the terrain flags (REPORTED; o3h-t decides on them). A label under terrain
+            # only is fitted like any clear one; decide() judges it under o3h-t
+            tflags: dict[str, Any] = {}
+            if terrain is not None:
+                rise = terrain.rise(scene, pred.box, (e.x, e.y))
+                tflags = {"terrain": rise is not None and rise >= terrain.step,
+                          "terrain_rise": rise}  # fmt: skip
             if (under and not fit_under) or why is not None or grey is None:
                 if grey is None and not (under and self.occlusion == "1c") and why is None:
                     out.pending.append((e.gid, e.job, pred.box))  # no pixels: the fit's fate
                     continue
                 out.fates.append(LabelFate(e.gid, e.job, under, why, None, None,
                                            heading=facing[0], facing_from=facing[1],
-                                           state=st.state))  # fmt: skip
+                                           state=st.state, **tflags))  # fmt: skip
                 continue
-            out.fates.append(self.fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes))
+            f = self.fate(e, st, sheet, pred, facing, why, under, grey, unit_boxes)
+            out.fates.append(replace(f, **tflags) if tflags else f)
         kept, out.excluded = decide(out.fates, self.occlusion, self.stack, self.o3h_tau)
         out.kept = [self.label(f) for f in kept]
         return out

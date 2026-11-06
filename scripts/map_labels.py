@@ -67,6 +67,16 @@ session's rectangles are unchanged), minus a window lying wholly inside another 
 chat window holds notice_left whole; detector_vs_packets.nested_rects). The recorder path accepts
 ``recorder_version`` 5 or 6 (T-3: v6 changed only the IO-guard rule, e5d892f).
 
+xmas_dun02's TERRAIN candidate (docs/planning/xmas02-detector.md 4f, D10): a spec with
+``terrain=True`` adds orc_labels_fix.TerrainOccluders (the map's GAT: a cell >= 10 units above a
+label's own cell, south of it, drawn from the label's floor to its top) beside the RSW models.
+``threshold`` then reports o3h AND o3h-t (o3h-t's own T_h, clear of terrain too) and 4f's FIT
+adoption test (n >= 30 under terrain, median NCC lower by >= 0.05, Mann-Whitney p < 0.01; steps 5
+and 20 reported); ``freeze`` takes the rule the test chose (``occlusion`` o3h or o3h-t, its T_h,
+the GAT's sha256 among the occluders); ``check`` scores BOTH rules from one pass (the rows'
+``under`` / ``o3h_t``; the verdict is the frozen rule's); ``labels`` labels by the frozen rule.
+Every spec without the switch (pay_fild07, gef_fild10) runs exactly as before.
+
 A PART is a session directory, optionally restricted to the staged session's spots:
 ``DIR`` or ``DIR:spots=0-7``. The map's spec (MAPS) names its FIT and TEST parts; the measuring
 commands refuse TEST, and ``labels`` / ``pack`` refuse TEST too (TEST2's evaluation labels and
@@ -192,6 +202,10 @@ class MapSpec:
     t2_seed: int | None = None  # a pre-registered T2 seed (xmas02 6: 51); None: any
     eval_seed: int | None = None  # a pre-registered evaluation pack seed (xmas02 9: 53)
     eval_per_species: int | None = None  # ... and its N per species (xmas02 9: 60)
+    # xmas02-detector.md 4f (D10): the TERRAIN occluders (orc_labels_fix.TerrainOccluders, the
+    # map's GAT in camera.GAT_DIR) beside the models: ``threshold`` and ``check`` report o3h AND
+    # o3h-t, ``freeze`` takes the rule 4f's adoption test chose. Off: every rule as before
+    terrain: bool = False
 
     def staged_kind_of(self, sid: str) -> str | None:
         """The staged kind of session ``sid`` (its spots exist), or None (no spots)."""
@@ -312,6 +326,7 @@ XMAS02 = MapSpec(
     kb_classes=ROOT / "data" / "kb" / "classes.json",
     sprites=XD / "sprites" / "data" / "sprite" / "몬스터",
     labels="xmas02-o3h",  # 4: "xmas02-o3h-t" only if 4f's FIT test adopts terrain (T-4)
+    terrain=True,  # 4f (D10): o3h-t is reported beside o3h; freeze takes the rule 4f chose
     t2_salt="xmas02",
     test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),  # 3b: TEST by NAME
     conditional=(1515, 1607),  # D3: in T2's tier only with >= 30 kept labels
@@ -1067,7 +1082,57 @@ def refuse_unless_eval(spec: MapSpec, sid: str, spots: frozenset[int] | None, na
 
 
 def occluders(spec: MapSpec) -> olf.Occluders:
-    return olf.Occluders(spec.rsw, spec.models, spec.cells)
+    """The map's RSW models, and with ``spec.terrain`` its GAT's terrain occluders (4f)."""
+    terrain = None
+    if spec.terrain:
+        from poring_dataset.camera import GAT_DIR
+
+        terrain = olf.TerrainOccluders(GAT_DIR / f"{spec.name}.gat")
+    return olf.Occluders(spec.rsw, spec.models, spec.cells, terrain=terrain)
+
+
+def terrain_report(rows: Sequence[dict[str, Any]], alone: bool,
+                   t_h: float) -> dict[str, Any]:  # fmt: skip
+    """PURE (xmas02-detector.md 4f / 4e, FIT): from ``threshold``'s fates of the map's species,
+    o3h-t's T_h (the p5 of the clear kept labels that are also clear of terrain at the rule's
+    step), the adoption test at that step (orc_labels_fix.terrain_test) on 4e's own set (clear of
+    every model box, the fit passing, no 2b / 2c / engaged / facing_unknown, and ``alone``:
+    uncrowded), the same counts at the REPORTED steps (never chosen from), and the rule it
+    chooses: ``o3h-t`` when adopted (its T_h), else ``o3h`` (``t_h``, the models' set)."""
+    pop = [r for r in rows if not r["under"] and r["pre"] is None and r["fail"] is None
+           and not (alone and r.get("crowded"))]  # fmt: skip
+    pairs = [(float(r["ncc"]), r.get("terrain_rise")) for r in pop]
+    step = olf.TERRAIN_STEP
+    clear_t = [n for n, rise in pairs if rise is None or rise < step]
+    t_h_t = percentile(clear_t, T_H_PERCENTILE) if clear_t else None
+    test = olf.terrain_test(pairs, step)
+    adopt = bool(test["adopt"]) and t_h_t is not None
+    by_species: dict[str, dict[str, int]] = {}
+    for r in rows:
+        c = by_species.setdefault(str(r["mob"]), {"fates": 0, "under_terrain": 0,
+                                                  "under_terrain_only": 0})  # fmt: skip
+        c["fates"] += 1
+        c["under_terrain"] += bool(r.get("terrain"))
+        c["under_terrain_only"] += bool(r.get("terrain")) and not r["under"]
+    return {
+        "what": "4f: o3h-t (o3h with the GAT's raised cells south of a label as occluders) vs "
+                "o3h; the adoption test on 4e's set: under terrain vs the rest",
+        "step": step, "adoption_test": test,
+        "reported_steps": {str(s): olf.terrain_test(pairs, s) for s in olf.TERRAIN_REPORT_STEPS},
+        "o3h_t_tau": t_h_t, "o3h_tau": t_h,
+        "clear_kept_clear_of_terrain": len(clear_t),
+        "rule": olf.TERRAIN_OCCLUSION if adopt else "o3h",
+        "rule_tau": t_h_t if adopt else t_h,
+        "per_species": dict(sorted(by_species.items())),
+    }  # fmt: skip
+
+
+def scored_rows(rows: Sequence[dict[str, Any]], rule: str) -> list[dict[str, Any]]:
+    """PURE (4f): the check rows a rule SCORES. o3h scores every row; o3h-t drops a label under
+    terrain (and no model) whose fit failed (the row's ``o3h_t``). A map without terrain: all."""
+    if rule == "o3h":
+        return list(rows)
+    return [r for r in rows if r.get("o3h_t", True)]
 
 
 # --- 4b: 1d on FIT ----------------------------------------------------------------------------
@@ -1242,6 +1307,12 @@ def _fates_frame(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], str]:
             "box": None if f.raw is None else [round(v, 1) for v in f.raw],
             "crowded": getattr(fl, "crowded", {}).get(f.gid)}
             for f in ff.fates]  # fmt: skip
+    if getattr(fl.occluders, "terrain", None) is not None:  # 4f: o3h-t's evidence (REPORTED)
+        tf = {f.gid: f for f in ff.fates}
+        for row in rows:
+            f = tf[row["gid"]]
+            row.update(terrain=f.terrain, terrain_rise=None if f.terrain_rise is None
+                       else round(f.terrain_rise, 2))  # fmt: skip
     return rows, "labelled"
 
 
@@ -1367,6 +1438,7 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
                                               ).most_common(12)),
         "fates_by_part_species": {pt: dict(Counter(str(r["mob"]) for r in mine if r["part"] == pt))
                                   for pt in per_part},
+        **({"terrain": terrain_report(mine, alone, t_h)} if occl.terrain is not None else {}),
     }  # fmt: skip
 
 
@@ -1392,6 +1464,12 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
         status = "FROZEN"
         off_file = {"offset_file": str(a.offset), "offset_sha256": olf.sha256_file(a.offset)}
     occl = occluders(spec)
+    rule, rule_tau = "o3h", float(th["o3h_tau"])
+    if occl.terrain is not None:  # 4f: the rule the FIT adoption test chose, and its T_h
+        terr = th.get("terrain")
+        if terr is None:
+            raise SystemExit(f"{a.threshold}: no 4f terrain report (measured without terrain)")
+        rule, rule_tau = str(terr["rule"]), float(terr["rule_tau"])
     extra: dict[str, Any] = {}
     if spec.engaged_labels:  # gef10 4h / 4g: the engaged variant (4h's selection file) + D8
         if a.engaged is None:
@@ -1400,7 +1478,7 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
         variant = a.engaged_variant or sel["chosen"]
         if variant not in ENGAGED_VARIANTS:
             raise SystemExit(f"engaged variant {variant!r}: one of {ENGAGED_VARIANTS}")
-        if float(sel["t_h"]) != float(th["o3h_tau"]) or float(sel["offset_ms"]) != float(
+        if float(sel["t_h"]) != rule_tau or float(sel["offset_ms"]) != float(
                 th["offset_ms"]):  # fmt: skip
             raise SystemExit("the engaged selection must be measured at the same 1d and T_h")
         extra = {
@@ -1423,8 +1501,10 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
         "map_cells": list(spec.cells), "frozen_at": olf.now_ict(), "commit": olf.git_head(),
         "measured_on": off["parts"], "offset_ms": float(off["offset_ms"]), "anchors_px": {},
         "fit_px": {str(m): spec.fit_px for m in spec.species}, "tau": olf.TAU, "k": olf.K,
-        "search_px": olf.SEARCH_PX, "o3h_tau": float(th["o3h_tau"]), "facing_rule": "fix2",
-        "occlusion": "o3h", "occluders": occl.provenance(),
+        "search_px": olf.SEARCH_PX, "o3h_tau": rule_tau, "facing_rule": "fix2",
+        "occlusion": rule, "occluders": occl.provenance(),
+        **({"occlusion_chosen_by": "4f's adoption test (the threshold file's terrain.rule)"}
+           if occl.terrain is not None else {}),
         **off_file,
         "threshold_file": str(a.threshold), "threshold_sha256": olf.sha256_file(a.threshold),
     }  # fmt: skip
@@ -1443,6 +1523,9 @@ def frozen_occluders(params: dict[str, Any], spec: MapSpec) -> olf.Occluders:
     if prov["rsw_sha256"] != params["occluders"]["rsw_sha256"] or \
             occl.files != params["occluders"]["model_files_sha256"]:  # fmt: skip
         raise SystemExit("the RSW / RSM files differ from the frozen ones")
+    if (prov.get("terrain") or {}).get("gat_sha256") != \
+            (params["occluders"].get("terrain") or {}).get("gat_sha256"):  # fmt: skip
+        raise SystemExit("4f: the map's terrain (GAT) differs from the frozen one")
     return occl
 
 
@@ -1680,8 +1763,11 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
                 raise SystemExit(f"{part}: --fit-diagnostic reads FIT parts only")
     occl = frozen_occluders(params, spec)
     off_ms = float(params["offset_ms"])
+    rule = str(params.get("occlusion", "o3h"))  # 4f: o3h, or o3h-t when the FIT test adopted it
+    rules = ("o3h", olf.TERRAIN_OCCLUSION) if occl.terrain is not None else (rule,)
     rows: list[dict[str, Any]] = []
     per_part: dict[str, Any] = {}
+    terrain_parts: dict[str, Any] = {}
     dropped_all: Counter[str] = Counter()
     for part in a.parts:
         sess = RecSession.open(part, spec, a.layout_templates)
@@ -1692,7 +1778,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         c1_rule_refusals(spec, c1_rule, [sess.name])  # by the manifest's session id too
         refs = sess.candidates_at(off_ms)
         olf._JOB.update(sess=sess, occluders=occl, offset_ms=off_ms, anchors={},
-                        facing_rule=sess.facing_rule("fix2"), occlusion="o3h",
+                        facing_rule=sess.facing_rule("fix2"), occlusion=rule,
                         tau=float(params["tau"]), o3h_tau=float(params["o3h_tau"]),
                         fit_px={int(k): int(v) for k, v in params["fit_px"].items()},
                         reader=read_png)  # fmt: skip
@@ -1706,7 +1792,14 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
             prow += [{**x, "part": sess.name} for x in r]
             dropped.update(d)
         prow.sort(key=lambda r: (r["frame_id"], r["gid"]))
-        summ = t1_summary(prow, spec.species)
+        summ = t1_summary(scored_rows(prow, rule), spec.species)
+        if occl.terrain is not None:  # 4f: both rules, per part
+            terrain_parts[sess.name] = {}
+            for rl in rules:
+                ts = t1_summary(scored_rows(prow, rl), spec.species)
+                terrain_parts[sess.name][rl] = {"c1": ts["c1"]["pooled"],
+                                                "c1_ratio": ts["c1"]["ratio"],
+                                                "own_c1": own_c1_verdict(ts)}  # fmt: skip
         per_part[sess.name] = {
             "frames": len(sess.refs), "candidates": len(refs),
             "candidate_drops": dict(sorted(sess.dropped.items())),
@@ -1718,7 +1811,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         rows += prow
         dropped_all.update(dropped)
     olf._JOB.pop("frame_rule", None)
-    summ = t1_summary(rows, spec.species)
+    summ = t1_summary(scored_rows(rows, rule), spec.species)
 
     def by_species(reason: str) -> dict[str, int]:
         return dict(sorted((k.split(":", 1)[1], v) for k, v in dropped_all.items()
@@ -1769,6 +1862,16 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "facing_agreement": olf.agreement(rows),
         "self_moving_rows": motion.get(True, 0),
         "per_part": per_part,
+        **({"occlusion": rule, "terrain": {
+            "what": "4f: C1 / C2 under BOTH rules from one pass (the rows' 'under' / 'o3h_t'); "
+                    "the verdict above is the frozen rule's",
+            "frozen_rule": rule,
+            "rules": {rl: {k: v for k, v in t1_summary(scored_rows(rows, rl), spec.species).items()
+                           if k in ("c1", "T1", "c2_stop")} for rl in rules},
+            "rows_under_terrain_only": sum(1 for r in rows if r.get("under") == "terrain"),
+            "under_terrain_kept_by_species": by_species("under_terrain_kept"),
+            "occluded_terrain_by_species": by_species(olf.OCCLUDED_TERRAIN),
+            "per_part": terrain_parts}} if occl.terrain is not None else {}),
     }  # fmt: skip
 
 
@@ -1804,11 +1907,13 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
     frame_ex = frame_exclusions(world, scene, sess.lab.size, sess.spec.species, classes,
                                 world.aid, dying)  # fmt: skip
     under = {f.gid: f.under for f in ff.fates}
+    terrain = {f.gid: f.terrain for f in ff.fates}  # 4f (a map with the terrain rule only)
     kept = [{"gid": k.gid, "mob": k.mob, "box": [round(v, 1) for v in k.box],
              "ncc": k.ncc, "dx": k.dx, "dy": k.dy, "motion": k.motion, "heading": k.heading,
              "facing_from": k.facing_from, "state": k.state, "under": under.get(k.gid),
              **({"engaged": k.facing_from.startswith(ENGAGED_TAG)}
-                if sess.spec.engaged_labels else {})}
+                if sess.spec.engaged_labels else {}),
+             **({"terrain": terrain.get(k.gid)} if sess.spec.terrain else {})}
             for k in ff.kept]  # fmt: skip
     return {**row, "kept": kept, "excluded": [list(x) for x in ff.excluded],
             "hidden": ff.hidden, "excluded_frame": frame_ex,
@@ -1879,7 +1984,8 @@ def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
         refuse(sess, "not_test")
     classes = json.loads(a.classes.read_text())["monsters"]
     refs = sess.candidates_at(float(params["offset_ms"]))
-    olf._JOB.update(sess=sess, labeler=labeler_for(sess, params, occl, "o3h"), classes=classes)
+    rule = str(params.get("occlusion", "o3h"))  # 4f: o3h-t when the FIT test adopted it
+    olf._JOB.update(sess=sess, labeler=labeler_for(sess, params, occl, rule), classes=classes)
     frames = olf.run_parallel(_label_frame, refs, a.workers)
     out = {
         "what": f"the {spec.labels} labels (no pixels): kept fitted boxes per candidate frame",
