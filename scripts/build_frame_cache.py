@@ -149,7 +149,12 @@ MAP LABELS: recorder sessions labelled by scripts/map_labels.py (docs/planning/p
 - the join rule 3c: a session other than the staged one needs its OWN C1 (``map_labels.py
   check``'s per-part ``own_c1``) = ADDED under the same frozen PARAMS (--own-c1); a real build
   refuses it otherwise, a dry run reports it (``join_rule_3c``);
-- TRAIN only (3b / 3c): a labelled session in --val or --test is refused;
+- TRAIN (3b / 3c), and VAL for monitoring only (docs/planning/xmas02-detector.md D13 / 8, tool
+  gap T-7: a map-scoped model's VAL is its FIT watch, with no linked cache): a labelled session
+  in --val is written to the val split under the same frozen PARAMS and frame rule, never joins
+  TRAIN and needs no 3c (``join_rule_3c``: VAL_MONITOR); every own session (--train and --val)
+  has a label file and every label file names one; a labelled session in --test is refused, and
+  TEST parts stay refused by name / role whatever their split;
 - the image: the session's PNG frame (one seek), decoded, re-encoded as --image says;
 - ``--link-cache ID``: every session of the finished cache ``<out>/ID`` joins this one BY
   REFERENCE, in its own split (its manifest rows with shard paths ``../ID/<shard>``; nothing is
@@ -1207,6 +1212,7 @@ def map_rule(spec: Any) -> str:
 
 TAR_HEADER = 1024  # ShardSink's per-member allowance (its rotation rule)
 JOIN_ADDED = "ADDED"  # map_labels.own_c1_verdict's pass
+VAL_MONITOR = "VAL_MONITOR"  # T-7: a labelled VAL session (monitor only): 3c does not apply
 
 
 def map_frame(f: dict[str, Any], floor: float, index: dict[int, int]
@@ -1394,8 +1400,9 @@ def map_session(
     label files only). ``lab``: the session's label stack (map_labels.session_labeler)."""
     import map_labels as ml
 
-    if part != "train":
-        raise SystemExit(f"{sid}: labelled map sessions are TRAIN data only (3b / 3c)")
+    if part not in ("train", "val"):
+        raise SystemExit(f"{sid}: labelled map sessions are TRAIN data, or VAL to monitor "
+                         "(T-7); never TEST (3b / 3c)")  # fmt: skip
     path = dataset_session(sid, a)
     manifest = json.loads((path / "manifest.json").read_text())
     ml.check_recording(manifest)
@@ -1411,7 +1418,8 @@ def map_session(
     tally = MapTally()
     row: dict[str, Any] = {"split": part, "path": str(path), "format": "png",
                            "labels": map_rule(mli.spec),
-                           "join_rule_3c": join_verdict(sid, mli.spec.staged, mli.own),
+                           "join_rule_3c": VAL_MONITOR if part == "val"
+                           else join_verdict(sid, mli.spec.staged, mli.own),
                            "shards": []}  # fmt: skip
     w, h = V2_SIZE
     for f in mli.frames(sid):
@@ -1516,6 +1524,7 @@ def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabe
     """``--labels map --dry-run``: counts only (label files and packets; no image, no directory)."""
     names = classes.names(a.kb)
     total = MapTally()
+    val_total = MapTally()
     rows = {}
     for part, ids in split.items():
         for sid in ids:
@@ -1523,6 +1532,11 @@ def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabe
             row.pop("shards")
             rows[sid] = row
             print(json.dumps({"session": sid, **row}), flush=True)
+            if part == "val":  # T-7: monitor only, never in the TRAIN totals
+                val_total.seen += row["seen"]
+                val_total.kept += row["kept"]
+                val_total.boxes.update({int(k): v for k, v in row["boxes_by_class_id"].items()})
+                continue
             total.seen += row["seen"]
             total.kept += row["kept"]
             total.excluded.update(row["excluded"])
@@ -1537,11 +1551,20 @@ def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabe
                          for k, r in rows.items()},
         "map_total": {**{k: v for k, v in total.as_dict(a.shard_mb << 20).items()
                          if k not in ("est_bytes", "est_shards")},
-                      "est_bytes": sum(r["est_bytes"] for r in rows.values()),
-                      "est_shards": sum(r["est_shards"] for r in rows.values())},
-        "would_refuse_3c": sorted(k for k, r in rows.items()
-                                  if r["join_rule_3c"] not in ("STAGED_FIT", JOIN_ADDED)),
+                      "est_bytes": sum(r["est_bytes"] for r in rows.values()
+                                       if r["split"] == "train"),
+                      "est_shards": sum(r["est_shards"] for r in rows.values()
+                                        if r["split"] == "train")},
+        "would_refuse_3c": sorted(k for k, r in rows.items() if r["split"] == "train"
+                                  and r["join_rule_3c"] not in ("STAGED_FIT", JOIN_ADDED)),
     }  # fmt: skip
+    if split.get("val"):  # T-7: the labelled VAL (monitor only), beside the TRAIN totals
+        out["map_val_total"] = {
+            "sessions": list(split["val"]), "seen": val_total.seen, "kept": val_total.kept,
+            "boxes_by_class_id": {str(k): v for k, v in sorted(val_total.boxes.items())},
+            "est_bytes": sum(r["est_bytes"] for r in rows.values() if r["split"] == "val"),
+            "est_shards": sum(r["est_shards"] for r in rows.values() if r["split"] == "val"),
+        }  # fmt: skip
     if linked is not None:
         lsplit, lrows, lprov = linked
         per: dict[str, Any] = {}
@@ -1895,13 +1918,14 @@ def map_main(a: argparse.Namespace) -> int:
     names = classes.names(a.kb)  # fail closed: every listed species has a name
     mli = MapLabelInputs.from_args(a)
     own = {"train": list(a.train), "val": list(a.val), "test": list(a.test)}
-    if own["val"] or own["test"]:
-        raise SystemExit("--labels map: labelled map sessions are TRAIN only (3b / 3c); the "
-                         "linked cache brings its own val / test")  # fmt: skip
+    if own["test"]:
+        raise SystemExit("--labels map: a labelled map session is never TEST (3b / 3c); the "
+                         "linked cache brings its own test")  # fmt: skip
     labelled = set(mli.docs)
-    if sorted(set(own["train"]) ^ labelled):
-        raise SystemExit(f"--train and the label files must name the same sessions: "
-                         f"{sorted(set(own['train']) ^ labelled)}")  # fmt: skip
+    named = set(own["train"]) | set(own["val"])
+    if sorted(named ^ labelled):
+        raise SystemExit(f"--train / --val and the label files must name the same sessions: "
+                         f"{sorted(named ^ labelled)}")  # fmt: skip
     linked = linked_cache(a.out, a.link_cache, names) if a.link_cache else None
     split = {k: list(v) for k, v in own.items()}
     if linked is not None:
@@ -1945,10 +1969,10 @@ def map_main(a: argparse.Namespace) -> int:
     start = 1 + max((int(n[6:12]) for n in shards), default=-1)
     sink = ShardSink(directory, a.shard_mb << 20, start, shards)
     t0 = time.monotonic()
-    for sid in own["train"]:
+    for part, sid in [("train", s) for s in own["train"]] + [("val", s) for s in own["val"]]:
         if sid in sessions:
             continue
-        row = map_session(sid, "train", a, sink, classes, mli)
+        row = map_session(sid, part, a, sink, classes, mli)
         sink.close()  # a session owns its shards: complete, or absent after a resume
         sessions[sid] = row
         write_json(directory, "progress.json",
@@ -1969,7 +1993,8 @@ def map_main(a: argparse.Namespace) -> int:
         write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory),
                       "frames": sum(int(r.get("kept") or 0) for r in sessions.values()),
-                      "frames_written": sum(int(sessions[s]["kept"]) for s in own["train"]),
+                      "frames_written": sum(int(sessions[s]["kept"])
+                                            for s in own["train"] + own["val"]),
                       "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
     return 0
 

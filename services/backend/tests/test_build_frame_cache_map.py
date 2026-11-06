@@ -285,8 +285,8 @@ def test_map_session_writes_whole_frames_with_our_own_box(
     classes = bfc.SpeciesClasses.load(PAYF07_LIST)
     mli = bfc.MapLabelInputs.from_args(inputs(world["params"], [world["labels"]],
                                               [world["check"]]))  # fmt: skip
-    with pytest.raises(SystemExit):
-        bfc.map_session(SID, "val", opts(world), None, classes, mli)  # TRAIN only
+    with pytest.raises(SystemExit):  # TRAIN, or VAL to monitor (T-7); never TEST
+        bfc.map_session(SID, "test", opts(world), None, classes, mli)
     dry = bfc.map_session(SID, "train", opts(world), None, classes, mli)
     assert (dry["seen"], dry["kept"], dry["join_rule_3c"]) == (4, 2, "ADDED")
     assert dry["excluded"] == {"engaged": 1, "weak_fit": 1}
@@ -406,3 +406,77 @@ def test_link_and_split_gates(bfc: ModuleType, world: dict[str, Any]) -> None:
             bfc.main(refused)
     with pytest.raises(SystemExit):  # map options without --labels map
         bfc.main(["--labels", "v1", "--train", SID, "--map-labels", str(world["labels"])])
+
+
+# --- T-7: a labelled VAL session, monitor only (xmas02-detector.md D13 / 8) --------------------
+
+VAL = "20990101T000002-rdp-thief-synthetic-val"
+
+
+def val_world(bfc: ModuleType, w: dict[str, Any], tmp_path: Path) -> Path:
+    """A second labelled recorder session for VAL (no own C1: VAL needs none)."""
+    refs = recorder_session(w["datasets"], VAL, 4)
+    return label_doc(tmp_path, w["params"], VAL, session_frames(refs))
+
+
+def dry(bfc: ModuleType, capsys: pytest.CaptureFixture[str], argv_: list[str]) -> dict[str, Any]:
+    assert bfc.main(argv_) == 0
+    printed = capsys.readouterr().out
+    return dict(json.loads(printed[printed.index("\n{\n") + 1 :]))
+
+
+def test_a_labelled_val_session_monitors_without_a_link(
+    bfc: ModuleType, world: dict[str, Any], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """D13: the FIT watch is VAL, no linked cache. The dry run (nothing written) reads it under
+    the same frame rule, marks it VAL_MONITOR (no 3c: no own C1 is asked of it), keeps it out of
+    the TRAIN totals (which stay the train-only run's) and reports it beside them."""
+    val_lab = val_world(bfc, world, tmp_path)
+    base = argv(world, "--own-c1", str(world["check"]), "--dry-run")
+    train_only = dry(bfc, capsys, base)
+    assert "map_val_total" not in train_only
+    i = base.index("--map-labels") + 1
+    with_val = [*base[:i], str(world["labels"]), str(val_lab), *base[i + 1 :], "--val", VAL]
+    out = dry(bfc, capsys, with_val)
+    assert out["map_sessions"][VAL]["join_rule_3c"] == "VAL_MONITOR"
+    assert out["map_sessions"][SID] == train_only["map_sessions"][SID]
+    assert out["map_total"] == train_only["map_total"] and out["would_refuse_3c"] == []
+    assert out["map_val_total"] == {"sessions": [VAL], "seen": 4, "kept": 2,
+                                    "boxes_by_class_id": {"0": 2, "15": 1, "16": 1},
+                                    "est_bytes": out["map_sessions"][VAL]["est_bytes"],
+                                    "est_shards": 1}  # fmt: skip
+    assert not (world["out"]).exists()  # a dry run: no directory, no shard
+    classes = bfc.SpeciesClasses.load(PAYF07_LIST)
+    mli = bfc.MapLabelInputs.from_args(inputs(world["params"], [val_lab], []))
+    row = bfc.map_session(VAL, "val", opts(world), None, classes, mli)
+    assert row["split"] == "val" and row["join_rule_3c"] == "VAL_MONITOR"
+
+
+def test_val_keeps_every_refusal(bfc: ModuleType, world: dict[str, Any], tmp_path: Path) -> None:
+    """Still refused: a labelled session in --test; an UNLABELLED --val session; one session in
+    --train and --val; a VAL label file sharing frames with TEST (by role: T2; by spots: the
+    staged session's 8-11); the gold set in VAL; map_session on the test split."""
+    val_lab = val_world(bfc, world, tmp_path)
+    base = argv(world, "--own-c1", str(world["check"]), "--dry-run")
+    i = base.index("--map-labels") + 1
+
+    def with_labels(*labels: Path) -> list[str]:
+        return [*base[:i], *map(str, labels), *base[i + 1 :]]
+
+    t2 = label_doc(tmp_path, world["params"], T2, [], "t2-val")
+    s8 = label_doc(tmp_path, world["params"], f"{STAGED}:spots=8-11", [], "s8-val")
+    gold = label_doc(tmp_path, world["params"], bfc.GOLD, [], "gold-val")
+    for refused, why in (
+        ([*with_labels(world["labels"], val_lab), "--test", VAL], "never TEST"),
+        ([*base, "--val", VAL], "same sessions"),  # no label file for it
+        ([*with_labels(world["labels"]), "--val", SID], "two splits"),  # in train and val
+        ([*with_labels(world["labels"], t2), "--val", T2], "shares frames with TEST"),
+        ([*with_labels(world["labels"], s8), "--val", STAGED], "shares frames with TEST"),
+        ([*with_labels(world["labels"], gold), "--val", bfc.GOLD], "gold set"),
+    ):
+        with pytest.raises(SystemExit, match=why):
+            bfc.main(refused)
+    classes = bfc.SpeciesClasses.load(PAYF07_LIST)
+    mli = bfc.MapLabelInputs.from_args(inputs(world["params"], [val_lab], []))
+    with pytest.raises(SystemExit, match="never TEST"):
+        bfc.map_session(VAL, "test", opts(world), None, classes, mli)
