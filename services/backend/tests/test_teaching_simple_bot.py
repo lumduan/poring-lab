@@ -555,3 +555,15 @@ def test_the_mouse_test_verdicts() -> None:
     if sys.platform != "win32":
         assert sb.main(["--mouse-test"]) == 2  # Windows only, refused here
     sb.setup_logs(False)
+
+
+def test_the_default_threads_are_never_auto() -> None:
+    """--bench on the lab server (2026-11-06 21:47): onnxruntime's auto threads was the SLOWEST
+    setting (458 ms vs 145 ms with 8); the kit's default is half the logical CPUs, at most 8."""
+    assert sb.default_threads(64) == 8 and sb.default_threads(8) == 4 and sb.default_threads(4) == 2
+    assert sb.default_threads(1) == 1 and sb.default_threads(None) == 1
+    assert sb.parse_args(["--replay", "x"]).threads == -1  # -1 = the default above; 0 = auto
+    assert sb.percentile([5.0, 1.0, 3.0, 2.0, 4.0], 50) == 3.0
+    assert sb.percentile([5.0, 1.0, 3.0, 2.0, 4.0], 95) == 5.0
+    a = sb.parse_args(["--bench", "--model", "v1.onnx"])
+    assert a.bench and a.bench_threads == "1,2,4,8,0" and a.bench_runs == 30

@@ -111,6 +111,18 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 - `INFO` = ขั้นสำคัญ, `DEBUG` = รายละเอียด (สรุปลูปวินาทีละ 1 บรรทัด), `WARNING` = มีอะไรผิดปกติ
 - บรรทัด `no click at ...` บอกเหตุผลที่บอทไม่กด เช่น หน้าต่างเกมไม่ได้อยู่ด้านหน้า หรือจุดนั้นอยู่บนหน้าต่าง UI
 
+## เครื่องเราตรวจจับได้เร็วแค่ไหน (`--bench`)
+
+```powershell
+uv run simple_bot.py --bench --model v1.onnx
+```
+
+ไม่ต้องเปิดเกม บอทจะลองตรวจภาพตัวอย่างด้วยจำนวน CPU thread ต่าง ๆ แล้วบอกเวลาต่อภาพ (ms) และภาพต่อวินาที (fps)
+พร้อมบรรทัด `BENCH_JSON ...` ไว้ส่งให้ผู้สอนเทียบกับเครื่องอื่น
+- ค่าเริ่มต้นของบอทใช้ thread = ครึ่งหนึ่งของ CPU (ไม่เกิน 8) เพราะแบบ "auto" ของ onnxruntime ช้าที่สุดในเครื่องที่มีงานอื่นแย่ง CPU
+  (เครื่องแล็บ: auto 458 ms ต่อภาพ, 8 thread 145 ms, 16 thread 110 ms)
+- ถ้าผล bench บอกว่า thread จำนวนอื่นเร็วกว่า ใช้ `--threads N` ได้
+
 ## จอทุกขนาด หน้าต่างหรือเต็มจอ
 
 บอทปรับตามขนาดพื้นที่เกมเอง (พิมพ์บอกตอนเริ่ม เช่น `client area 1920 x 1080, windowed`)
@@ -291,6 +303,20 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
   network check, each click); `WARNING` = something is off.
 - A `no click at ...` line says why the bot did not click: the game window not in front, the
   point on a UI window, the network check.
+
+## How fast is detection on my PC? (`--bench`)
+
+```powershell
+uv run simple_bot.py --bench --model v1.onnx
+```
+
+No game needed: the model runs on the sample pictures with several CPU thread counts and prints
+the time per picture (ms) and pictures per second (fps), plus a `BENCH_JSON ...` line to send to
+your teacher to compare computers.
+- The default is half the logical CPUs (at most 8) threads, because onnxruntime's "auto" was the
+  slowest on a machine busy with other work (the lab server: auto 458 ms a picture, 8 threads
+  145 ms, 16 threads 110 ms).
+- If the bench says another count is faster on your PC, use `--threads N`.
 
 ## Any screen size, windowed or fullscreen
 

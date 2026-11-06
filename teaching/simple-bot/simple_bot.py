@@ -65,6 +65,7 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import random
 import sys
 import time
@@ -169,6 +170,11 @@ IOU = 0.5  # NMS: two boxes of one class overlapping by >= 50 % are the same obj
 # exception: access violation" (seen on a class PC, 2026-11-06). The fix: install the latest
 # "Microsoft Visual C++ Redistributable (x64)" once.
 CPP_RUNTIME_MIN = (14, 40)
+# CPU threads for the model. NOT onnxruntime's "auto" (one busy-waiting thread per physical core):
+# measured with --bench on the lab server (64 logical CPUs, busy with other work), auto was the
+# SLOWEST setting, 458 ms a frame, worse than 1 thread (437 ms); 8 threads 145 ms, 16 threads
+# 110 ms. The default is half the logical CPUs, at most 8; --threads N sets it, 0 = auto.
+MAX_DEFAULT_THREADS = 8
 LIVE_VIEW = "simple-bot view (q: quit)"  # the live bot view window's title
 BLACK_MEAN = 2.0  # a captured frame this dark (mean pixel 0..255) is "black": see run_live
 CPP_RUNTIME_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
@@ -1539,6 +1545,12 @@ def runtime_warning(version: tuple[int, ...] | None) -> str:
     return ""
 
 
+def default_threads(logical_cpus: int | None) -> int:
+    """PURE: the model's CPU threads when --threads is not given: half the logical CPUs (one per
+    physical core on most PCs), at least 1, at most MAX_DEFAULT_THREADS."""
+    return max(1, min(MAX_DEFAULT_THREADS, (logical_cpus or 2) // 2))
+
+
 def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
     """The detector the command line asked for: the YOLO model (needs --model) or the colour one.
 
@@ -1562,7 +1574,105 @@ def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
         if warning:
             print(warning, flush=True)
     say(f"loading the model {args.model} ...")
-    return OnnxDetector(Path(args.model), args.conf, IOU, args.threads)
+    threads = default_threads(os.cpu_count()) if args.threads < 0 else args.threads
+    LOG.info("model threads: %s (logical CPUs %s)", threads or "auto", os.cpu_count())
+    return OnnxDetector(Path(args.model), args.conf, IOU, threads)
+
+
+def cpu_name() -> str:
+    """The CPU's model name, as well as this OS tells it (for --bench's report)."""
+    import platform
+
+    if sys.platform.startswith("linux"):
+        try:
+            for line in Path("/proc/cpuinfo").read_text().splitlines():
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+        except OSError:
+            pass
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                 r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")  # fmt: skip
+            return str(winreg.QueryValueEx(key, "ProcessorNameString")[0]).strip()
+        except OSError:
+            pass
+    return platform.processor() or "unknown"
+
+
+def percentile(values: Sequence[float], q: float) -> float:
+    """PURE: the q-th percentile (0..100) of `values`, nearest-rank (no interpolation)."""
+    v = sorted(values)
+    if not v:
+        return float("nan")
+    k = max(0, min(len(v) - 1, math.ceil(q / 100 * len(v)) - 1))
+    return v[k]
+
+
+def run_bench(args: argparse.Namespace) -> int:
+    """--bench: HOW FAST IS DETECTION ON THIS COMPUTER? The model runs on the sample pictures with
+    several CPU thread counts; for each: the time to load it, then --bench-runs detections (the
+    first few are a warm-up and not counted), p50 / p95 / mean in ms and the frames per second.
+    No game, no input. Paste the printed table (or its JSON line) to compare computers."""
+    import platform
+
+    files = list_images(args.replay or ["samples"])
+    if not files:
+        raise SystemExit("--bench needs pictures: --replay DIR (default: samples)")
+    if args.detector != "onnx" or not args.model:
+        raise SystemExit("--bench times the model: give --model v1.onnx")
+    import onnxruntime as ort  # (before cv2: see make_detector)
+
+    ort_version, providers = ort.__version__, ort.get_available_providers()
+    import cv2
+
+    frames = [f for f in (cv2.imread(str(p)) for p in files[:20]) if f is not None]
+    threads = [int(t) for t in str(args.bench_threads).split(",")]
+    info = {
+        "cpu": cpu_name(),
+        "logical_cpus": os.cpu_count(),
+        "os": platform.platform(),
+        "python": sys.version.split()[0],
+        "onnxruntime": ort_version,
+        "providers": providers,
+        "model": str(args.model),
+        "frame": f"{frames[0].shape[1]} x {frames[0].shape[0]}",
+        "pictures": len(frames),
+    }
+    print("bench:", json.dumps(info), flush=True)
+    rows = []
+    for th in threads:
+        t0 = time.perf_counter()
+        det = OnnxDetector(Path(args.model), args.conf, IOU, th)
+        load_ms = (time.perf_counter() - t0) * 1e3
+        times, boxes = [], 0
+        for i in range(args.bench_runs + 3):
+            frame = frames[i % len(frames)]
+            t1 = time.perf_counter()
+            found = det.detect(frame)
+            if i >= 3:  # 3 warm-up runs: the first ones are slow everywhere
+                times.append((time.perf_counter() - t1) * 1e3)
+                boxes += len(found)
+        mean = sum(times) / len(times)
+        row = {
+            "threads": th or "auto",
+            "load_ms": round(load_ms),
+            "p50_ms": round(percentile(times, 50), 1),
+            "p95_ms": round(percentile(times, 95), 1),
+            "mean_ms": round(mean, 1),
+            "fps": round(1000 / mean, 2),
+            "boxes_per_frame": round(boxes / len(times), 2),
+        }
+        rows.append(row)
+        print(
+            f"  threads {str(row['threads']):>4}: p50 {row['p50_ms']:7.1f} ms   p95 "
+            f"{row['p95_ms']:7.1f} ms   {row['fps']:5.2f} fps   (load {row['load_ms']} ms)",
+            flush=True,
+        )
+    print("BENCH_JSON " + json.dumps({**info, "rows": rows}), flush=True)
+    return 0
 
 
 def run_replay(args: argparse.Namespace) -> int:
@@ -1903,7 +2013,24 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="onnx = the YOLO model; color = a rough HSV demo (Porings only)",
     )
     ap.add_argument("--conf", type=float, default=CONF, help="minimum box score (default 0.25)")
-    ap.add_argument("--threads", type=int, default=0, help="CPU threads for the model (0 = auto)")
+    ap.add_argument(
+        "--threads",
+        type=int,
+        default=-1,
+        help="CPU threads for the model (default: half the logical CPUs, at most 8; 0 = "
+        "onnxruntime's auto, which --bench found the slowest on a busy machine)",
+    )
+    ap.add_argument(
+        "--bench",
+        action="store_true",
+        help="time the model on the sample pictures, no game (--bench --model v1.onnx)",
+    )
+    ap.add_argument(
+        "--bench-threads", default="1,2,4,8,0", help="--bench: thread counts (0 = auto)"
+    )
+    ap.add_argument(
+        "--bench-runs", type=int, default=30, help="--bench: timed detections per setting"
+    )
     ap.add_argument("--title", default="Ragnarok", help="part of the client window's title")
     ap.add_argument(
         "--overlay",
@@ -1953,12 +2080,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     setup_logs(args.logs, args.log_file)
     mode = (
-        "replay" if args.replay else "mouse-test" if args.mouse_test else "act" if args.act
-        else "watch"
+        "bench" if args.bench else "replay" if args.replay else "mouse-test" if args.mouse_test
+        else "act" if args.act else "watch"
     )  # fmt: skip  # no mode given = --watch
     LOG.info("simple_bot %s: python %s on %s", mode, sys.version.split()[0], sys.platform)
     LOG.debug("options: %s", vars(args))
     try:
+        if args.bench:
+            return run_bench(args)
         if args.replay:
             return run_replay(args)
         why = live_refusal(mode)
