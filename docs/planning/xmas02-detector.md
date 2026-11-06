@@ -667,7 +667,7 @@ from the five label files (xw1 x 2, xw2, xw3 x 2), seed 51, salt xmas02, the ins
 Cruiser 1,277, Cookie 804, Christmas Cookie 707, **Garm Baby 38 and Christmas Goblin 88** (D3's
 conditional species reached the tier: >= 30 kept labels); 9 grid pages, the multi-view reference
 (9 letters). sha256: pack.json `a27af707...`, answer_key.json `bbc74039...`, reference.png
-`d389551c...`. Two NEW blind labeller agents (A, B) started ~18:01, each with ONLY the pack, the
+`d389551c...`. Two NEW blind labeller agents (A, B) started ~18:00, each with ONLY the pack, the
 instructions and its own answers path; the key stays outside the pack. Scored by
 `scripts/blind_score.py` against section 6's bars.
 
