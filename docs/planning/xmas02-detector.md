@@ -865,3 +865,28 @@ and time box as 2b / Amendment A say):**
   says so).
 - xw4 waits for xw2's and xw3's counts (2d's estimate: 2-3 TRAIN watches).
 
+
+### Amendment G (2026-11-06 17:3x ICT, before any TRAIN or TEST label file is written): FIT's results and the FREEZE
+
+FIT ran 17:12-17:27 (`map_labels.py offset` then `threshold`, CPU, nice 10, a 4 GB scope) on the two
+`*-rdp-xmas02-xw1` sessions as shipped to the NAS; files in `/dev/shm/poring-lab-tmp/xmas-det/fit/`.
+
+| step | result | file sha256 |
+|---|---|---|
+| 4b, 1d | **120 ms** (median 2.236 px at 120 and 130 ms; 200 samples, 53 units: Myst Case 121, Cruiser 35, Christmas Cookie 32, Cookie 12) | offset.json `54f85b2b2180eaaa...` |
+| 4e, o3h's T_h | **0.418** (the p5 of 1,459 kept labels clear of every model box; p50 0.788) | threshold.json `9c46923789440dab...` |
+| 4f, terrain | **ADOPTED at step 10:** n under terrain 96 (>= 30), median NCC 0.537 vs 0.794, drop **0.257** (>= 0.05), Mann-Whitney p **1.9e-18** (< 0.01); step 5 also passes (134, 0.215, 4.5e-20). **o3h-t's T_h 0.536** (its own set: 1,363 clear of terrain too) | (in threshold.json) |
+| 4i | E0 (D11, fixed) | |
+
+- Per tier species (clear kept): Myst Case 771 (p5 0.336), Cruiser 298 (0.398), Cookie 272 (0.592),
+  Christmas Cookie 253 (0.536); Garm Baby and the Goblin: no fate on FIT. Under a model box (fit
+  passed): 21.8 % pooled, most under `xmas_블럭성.rsm` (117) and `xmas_벨트02.rsm` (85).
+- **The FREEZE (mechanical by the pre-registered rules, nothing chosen by hand):**
+  `map_labels.py freeze --map xmas_dun02 --offset fit/offset.json --threshold fit/threshold.json
+  --out fit/params.json` at 17:32:03, commit c17761e: **labels `xmas02-o3h-t`, status FROZEN,
+  offset 120 ms, occlusion o3h-t, T_h 0.536, E0, dying_in_view on. params.json sha256
+  `d4cc0a5d9e530e382e31ea9c9ae1fc1087dd31c37577b43b307eff65994fdb6e`.**
+- **The rename (Amendment C):** the MapSpec's `labels` is `xmas02-o3h-t` (c17761e), and the freeze
+  now REFUSES a label name and a 4f rule apart (a test each way).
+- Next, in 2d's order (Amendment F): xw2's labels + its own C1 (3c) + its boxes per species; then
+  xw3; T1 on TEST (xw5 + xp1 + X2) after xp1 ships; the T2 pack (seed 51).
