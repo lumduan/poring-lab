@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, gef10-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../../config/map_zones/xmas_dun02.yaml, ../../config/routes/xmas_dun02.yaml, ../../scripts/map_prep.py, ../../scripts/dungeon_hunt.py]
-next_action: "The parent: install the KB candidates (section 8), re-run section 9's checks on the main checkout; the runner items of section 5 (rows 1, 11, 16-18 need code: the start stand on the loop and level_hold 63 -> 99 above all); amend the X2 pre-registration with section 7's open points BEFORE its recording."
+next_action: "X2's score (section 7, BUILT 2026-11-06 on feat/x2-score; its positive control passed): the parent runs the preflight, the CPU predictor (~11-12 min) and score-session at a time with no live run, after a by-eye check of the truth boxes on a few X2 frames. (Earlier: install the KB candidates, section 8; the runner items of section 5; the X2 amendment, done as rogue-xmas02.md 4A.)"
 title: "xmas_dun02 prep for the Rogue: KB, walkability, zones, the edge loop, stands, runner inputs, sprites, the X2 scoring path"
 date: 2026-11-05
 owner: Batt
@@ -343,6 +343,101 @@ X2 (rogue-xmas02.md section 4) scores the live v1 `monster` class per species on
 against packet labels, with Q1's bar (recall and precision >= 0.80 for each of the four common
 species with >= 30 labels).
 
+➡️ **BUILT 2026-11-06 07:49-08:29 ICT (from `date`), offline, on branch `feat/x2-score`; the
+items below marked ➡️ point here.** The rule and the bar are rogue-xmas02.md 4A's, unchanged. X2
+itself is NOT scored here: its predictor run and its score are the parent's.
+
+- **The predictor:** `scripts/recorder_boxes.py predict SRC --out BOXES.jsonl`.
+  - `unit_detector.UnitDetector` on every frame (the live v1 ONNX, conf 0.25, NMS 0.5), at nice
+    19 with 2 onnxruntime threads.
+  - It writes one `boxes.jsonl` row per frame, human_demo's row plus `frame_id`, keyed by the
+    frame's `t_mono_ns`. It is boxes.jsonl rather than predict_dir's JSON because the scorer
+    keys every capture by its packet-clock time, and one reader then serves the live boxes and
+    the CPU boxes.
+  - A recorder session's shards are STREAMED (tarfile `r|`): one read, nothing extracted. A cut
+    shard is reported: a short member, an unpaired member, or no end-of-archive marker.
+  - A frames dir (`NNNNN-<t ns>.jpg`) is read too; `--times` keeps only those capture times.
+  - `--resume` and `--max-frames` split a run. A sidecar `.meta.json` records the model sha256
+    and the settings, and says whether every frame has a row.
+  - `recorder_boxes.py compare A B` pairs two box files at their shared capture times.
+- **The scorer:** `detector_vs_packets.py score-session SESSION --boxes BOXES.jsonl --map
+  xmas_dun02 --sprites DIR --sprite-names JSON`.
+  - It shares ONE per-capture loop with `score` (`score_captures`).
+  - The captures are the session's frames, joined to the rows by capture time. A missing,
+    foreign or mismatched row is refused (`--allow-partial` scores what there is).
+  - The species: `SPECIES_BY_MAP` / `REPORTED_BY_MAP`.
+  - The chat window comes from the session's date (`chat_window.for_sid`; `--chat` overrides).
+  - The hunting rows' `notice_left` lies wholly inside the standard chat window. It is dropped,
+    because `covered_fraction` sums overlaps; the union of the windows is unchanged, and the
+    in-view changes this causes are counted (`nested_ui_rects`).
+  - Detections at least half behind the UI windows are left out (`--ui-boxes drop`, 4A) and
+    counted, with how many of them were true.
+  - Hallucination frames: our character under EFST_ILLUSION (34), from the status changes.
+    Counted and reported, never removed.
+  - `bar_4a` gives the verdict with exact integer edges. When no species reaches 30 labels it
+    says `NO_BAR`.
+  - Refused before any score: a missing GAT (load_scene would fall back to flat ground without a
+    word), the map missing from the map cache, or a scored species without a sprite.
+  - `--preflight` checks those inputs and stops.
+  - `mvp_watch_study.truth_stack` / `truth` take `sprites` / `sprite_names` (`--sprites`
+    / `--sprite-names`). Their old defaults still point at the gone gef10 dir.
+- **Its sprites need no extraction:** the X1 archive on the NAS
+  (`scratch-archive/2026-11-05/x1/sprites/data/sprite/몬스터/` + `x1/kb-sprites/monster_sprite_names.json`)
+  is read in place. Its 14 files, the names and the catalog were re-hashed against
+  `_checksums/x1.sha256` (16 / 16 OK, 08:28:51). The preflight on X2 (inputs only) passed:
+  - 1,320 frames indexed;
+  - all 7 species have a sheet;
+  - the GAT is `4cf9265fcce2fec4…` (section 1's);
+  - the chat window is (0, 585, 600, 720), `auto:standard`.
+- **X2's own frames** (33 frames, every 40th; pixels only, no detector, no truth):
+  - `chat_window.find` read the standard window on 32;
+  - `client_layout.read` read the hunting layout (1 row, collapsed, Battle Log) on 32;
+  - the 33rd read neither (no window at all);
+  - the shard index: frame ids 0-1319 contiguous, times unique, sorted and inside t0..t1, median
+    step 1,005 ms; all 8 shards end with their end-of-archive marker.
+
+**The positive control** (Batt's gef10 demo `20261026T095021-demo-human-demo-gef10`, its NAS
+archive; gef10's sprites from `scratch-archive/2026-11-03/gef10-prep`; the references are the
+2026-10-26 runs in `scratch-archive/2026-10-26/gef10-r2b/demo/`):
+
+| | what it proves | result |
+|---|---|---|
+| PC-1 | `score` (the shared loop, the sprite parameter) on the demo's LIVE boxes, `--chat-rect 0,615,600,709` | all 17 result keys IDENTICAL to `score-chat.json`: 2,476 captures scored (152 off the map), 2,584 in-view rows, recall 206 = **8.0 %** (one-to-one 7.8 %), precision 203 / 1,087 = **18.7 %**, per species, distance, state, motion, conf steps, first sight, latency |
+| PC-2 | `score-session` on a recorder-format session (ShardWriter, the demo's 2,628 in-window capture times, 1 x 1 PNGs) + the demo's packets + the live rows | `--chat` measured, `--ui-boxes keep`: the same 17 keys IDENTICAL to `score-chat.json`; `--chat auto` (legacy for a 10-26 SID): IDENTICAL to `score-hunt.json` (2,555 rows, 7.7 %); `--ui-boxes drop`: 47 live boxes left out (0 true) -> precision 203 / 1,040 = 19.5 %, recall unchanged |
+| PC-3 | the predictor against the LIVE detector, on the 491 demo captures whose time equals a recorded JPEG frame's (q80) | 213 pairs at IoU >= 0.5: 91.4 % of the 233 live boxes, 98.2 % of the 217 CPU boxes; median IoU 0.954; 468 / 491 captures with the same box set; scored on the 447 shared captures: recall 32 / 455 = 7.0 % live vs 29 / 455 = 6.4 % CPU, precision 17.4 % vs 17.5 % |
+| PC-4 | the shard stream + PNG decode: 40 of those frames' DECODED pixels re-written as PNG shards | 40 rows byte-identical to the frames-dir rows; a channel-reversed copy loses 40 % of the boxes (30 -> 18), so the colour order is the live one |
+| PC-5 | onnxruntime threads | 2 vs 8 threads: identical boxes on 12 frames |
+
+The model is `v1png-last-736x1280.onnx`, sha256 `32b448a1d197ded2…`, equal to the 2026-11-03 NAS
+copy of the detector environment. CPU: ~0.5 s a frame at 2 threads under CPUQuota 200 % (491
+frames 254 s; 40 PNG frames 22 s).
+
+**Not proven:**
+- v1 on LOSSLESS recorder frames against live boxes. No PNG session has live boxes at the same
+  capture times; the demo's frames are JPEG q80, the only reason PC-3 is not exact. X2's PNGs are
+  the bus frames losslessly, so the detector sees the live pixels; PC-4 and PC-5 show the path
+  adds nothing.
+- The truth projection on xmas_dun02 by eye. The outdoor camera and the GAT heights were checked
+  on gef_fild10 only (gef10-round2.md 2). Draw `--pairs` truth boxes on a few X2 frames before
+  reading the numbers.
+- The hallucination flag on a real Hallucination. None was ever decoded: X2's packets hold no
+  status change at all, and the demo held one (efst 622). So a 0 there says no EFST_ILLUSION
+  packet was seen, not that none was cast.
+
+**To score X2** (the parent; the predictor ~11-12 min on CPU, the score under 1 min):
+
+        W=<checkout>; X2=/mnt/poring-lab-datasets/20261105T225409-rdp-xmas02-x2; O=/dev/shm/poring-lab-tmp/x2-score
+        A=/mnt/poring-lab-datasets/scratch-archive/2026-11-05/x1
+        export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$W/scripts:$W/packages/poring_env/src:$W/packages/poring_dataset/src:$W/packages/poring_packets/src:$W/services/backend/src
+        CAP="systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -p CPUQuota=200% nice -n 19"
+        python=/home/batt/docker/poring-lab/.venv/bin/python; mkdir -p $O
+        $CAP $python $W/scripts/detector_vs_packets.py score-session $X2 --map xmas_dun02 \
+            --sprites "$A/sprites/data/sprite/몬스터" --sprite-names $A/kb-sprites/monster_sprite_names.json --preflight --out $O/x2-preflight.json
+        $CAP $python $W/scripts/recorder_boxes.py predict $X2 --out $O/x2-v1-boxes.jsonl      # [--max-frames 700, then --resume]
+        $CAP $python $W/scripts/detector_vs_packets.py score-session $X2 --boxes $O/x2-v1-boxes.jsonl --map xmas_dun02 \
+            --sprites "$A/sprites/data/sprite/몬스터" --sprite-names $A/kb-sprites/monster_sprite_names.json \
+            --pairs $O/x2-pairs.json --out $O/x2-score.json
+
 **What exists and works for xmas_dun02 as is:**
 - **The recorder:** `record_session.py`, PNG at 1 fps in tar shards to `/home/batt/poring-lab-rec`,
   `packets.jsonl.gz` beside them.
@@ -369,7 +464,8 @@ species with >= 30 labels).
   before X2.
 
 **What is MISSING or must be decided before X2's recording (none built here):**
-1. **A CPU predictor that saves boxes.** Nothing writes v1's per-frame CPU-ONNX boxes for a
+➡️ 1, 2 and 5 are BUILT, and 3 and 4 were DECIDED in rogue-xmas02.md 4A (block above).
+1. **A CPU predictor that saves boxes.** ➡️ BUILT: `recorder_boxes.py predict`. Nothing writes v1's per-frame CPU-ONNX boxes for a
    recorder session:
    - `eval_latency.py` runs UnitDetector over predict_dir-style refs but only COUNTS boxes;
    - `predict_dir` is the torch / GPU path (the vision worker, R1-R3);
@@ -380,7 +476,8 @@ species with >= 30 labels).
      `boxes.jsonl` rows keyed by `t_mono_ns`).
    - The alternative is to log boxes live during the recording, human_demo's way: a live-side
      change.
-2. **The scorer's per-map parts** (`detector_vs_packets.py score`):
+2. **The scorer's per-map parts** (`detector_vs_packets.py score`): ➡️ BUILT:
+   `score-session`, `SPECIES_BY_MAP` / `REPORTED_BY_MAP`, `--sprites` / `--sprite-names`.
    - `SPECIES` is gef_fild10's four (1273, 1023, 1031, 1686); everything else is `other`.
      xmas_dun02 needs 1249, 1248, 1246, 1265 (+ 1515, 1251, 1607 reported);
    - it reads a HUMAN-DEMO dir (manifest `t0_live_ns`, `boxes.jsonl`, `--window-s`), not a
@@ -391,7 +488,8 @@ species with >= 30 labels).
      `/dev/shm/poring-lab-tmp/gef10-prep/...`. That directory is GONE now, and it held gef10's
      species only. Point them at a merged sprite set holding the 7 stems of section 6 (or make
      them a parameter).
-3. **Per-species PRECISION for a class-agnostic detector is defined nowhere:**
+3. **Per-species PRECISION for a class-agnostic detector is defined nowhere:** ➡️ DECIDED in 4A:
+   the POOLED precision of the monster class.
    - X2's bar asks for it per species;
    - the scorer pools precision;
    - Q1's definition (class-s detections) needs a species class that v1 does not have.
@@ -399,7 +497,7 @@ species with >= 30 labels).
      counts for species s when its centre lies in an s box and in no other species' box; the
      detections that land in no box count against every species present in the frame, or are
      reported pooled.
-4. **Which label rule:**
+4. **Which label rule:** ➡️ DECIDED in 4A: (b), `score_capture`'s gef10 position rule.
    - **(a) the gef10 method proper**, which the pre-registration names (`map_labels.py labels`,
      the o3h rule with the RSW / RSM occluders). It needs:
      - an `XMAS02` `MapSpec` (`MAPS` has pay_fild07 and gef_fild10 only): cells 260 x 260, the
@@ -416,7 +514,8 @@ species with >= 30 labels).
    - Write the choice into the pre-registration before the recording.
    - `eval_q1.py` (Q1's scorer) is not usable as is: it needs the blind labellers' answers, and
      X2 has none.
-5. **The in-view rule's UI rectangles:** `client_layout.RECTS` (`hunt` and `standard`) still
+5. **The in-view rule's UI rectangles:** ➡️ BUILT: `score-session` takes the chat window of the
+   session's date, verified on X2's own frames. `client_layout.RECTS` (`hunt` and `standard`) still
    carry the LEGACY chat window (0,532,600,626).
    - Since 2026-11-05 the client shows the STANDARD one (6 lines, bottom 719:
      `chat_window.STANDARD`).
@@ -425,7 +524,7 @@ species with >= 30 labels).
    - Verify on the recording's own frames.
 - **Reported, deciding nothing:**
   - Hallucination: Myst Case and the MVP cast it, and its frames distort the picture. No tool
-    flags them;
+    flags them (➡️ `score-session` flags them from the status changes; not proven on a real one);
   - Myst Case teleports away when hit rudely: a label that ends without a death;
   - the 30-label minimum per species: at 1 fps over >= 20 min of a 127-monster map this is likely
     for the four common species. Unmeasured.
