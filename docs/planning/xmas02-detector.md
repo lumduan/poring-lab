@@ -1025,3 +1025,9 @@ PAUSED for Batt (one IO abort: stop and ask; Amendment D covers the recordings o
   of ours on the GPU (read back 18:43). The worker's cold start is the known IO burst (10-09), so
   this trip is most likely ours.
 - The cache, the labels, the params and the class list stand; only the GPU step waits.
+
+**The vision worker, attempt 2 (Batt ~20:3x: "let's get back to training our bot"; option (a) of the
+18:4x report: ONE retry with the same tolerant rule, nothing loosened):** `quiet_start.py
+--quiet-min 10 --limit 25 -- guarded_build.py --sustain 30 --spike 25 worker:vision@120` from
+20:32 (GPU 3,537 / 16,311 MiB, Frigate only; Ollama empty). A second trip stops and asks again
+(options b / c).
