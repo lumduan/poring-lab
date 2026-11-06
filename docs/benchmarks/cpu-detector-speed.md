@@ -81,3 +81,33 @@ timed detections after 3-6 warm-up runs.
 `/dev/shm/poring-lab-tmp/bench-server.txt` (the kit's BENCH_JSON line) and the scratch scripts
 `/dev/shm/poring-lab-tmp/bench/{spin,prod,prod2,ab,int8}.py` (archived to the NAS scratch-archive
 the same day).
+
+## 5. The GPU measurement (written 2026-11-07 ~06:3x ICT, BEFORE it runs; a measurement, no bar)
+
+Batt (~05:5x): "Compare: how much faster would the GPU be?" One guarded `execdev:vision` step in
+the vision worker (R1-R3, fit-first's VTON never touched), `poring_vision.bench_gpu`:
+
+    python3 scripts/quiet_start.py --quiet-min 10 --limit 25 -- \
+        python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 'execdev:vision@1080=python -m
+        poring_vision.bench_gpu --refs /datasets/archive/train/eval/xmas02/latency-200-refs.json
+        --weights v1=/datasets/archive/train/v1png-20261008/weights/last.pt
+        --weights xmas02=/datasets/archive/train/xmas02-20261106/weights/last.pt
+        --out /data/train/eval/gpu-bench/bench.json
+        --sustain-model xmas02 --no-sustain-half --sustain-s 600 --rate 10'
+    python3 scripts/guarded_build.py worker-stop:vision
+
+- **Phase A:** v1 and xmas02, each in FP32 and FP16. 10 warm-up predicts, then one predict per
+  frame of the 200 TEST frames of xmas02-eval.md's CPU latency run (the same frames as its
+  `latency-cpu.json`). Each is timed from the call to the boxes on the host, with ultralytics' split.
+  Plus the bare forward pass, 100 times.
+- **Phase B:** xmas02 FP32 (the heavier precision: if it passes R3, FP16 does) at 10 predicts a
+  second for 600 s. That is the load a GPU box watcher would put on the card. guarded_build's paired
+  R3 (60-s windows for a step this short) reports what it costs Frigate.
+- **Parity:** the boxes are kept and checked on the host against the CPU ONNX path (UnitDetector,
+  per-class NMS) on the same frames: monster boxes matched at IoU >= 0.7, per precision.
+- **The CPU side, at the same hour:** eval_latency's interleaved CPU run on the same 200 frames at
+  16 threads (host load recorded), so the ratio is like for like.
+- **Reported, not decided:** the speed-up, FP16's parity, R3's paired delta, the VRAM peak. Moving
+  the live detector to the GPU stays Batt's decision. A live GPU path would also need a frame route
+  from the host bot into the worker; that route is NOT measured here.
