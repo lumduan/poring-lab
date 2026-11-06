@@ -318,6 +318,25 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   a safe moment (no stream running), then a read-back from the agent's shell: service Running, the
   process up, no new 3033. A stream follows in the next S2 session.
 
+## One-off exceptions (each by Batt's word, logged BEFORE it runs, removed and read back after)
+
+### 2026-11-07: the teaching kit's `--bench`, once, on the lab PC
+- **Batt's word** (~05:5x ICT, answering "the only Windows this side can reach is the lab PC"):
+  "Lab PC, one-off". The question: does detection run faster on a PC next to the client than on
+  the bot server (docs/benchmarks/cpu-detector-speed.md)?
+- **What runs:** `simple_bot.py --bench --model v1.onnx` from the PUBLIC teaching-kit branch, pinned
+  at commit `35851e1` (GitHub's archive zip), with uv 0.11.33 (its release zip). It reads the kit's
+  20 sample pictures and times the model; it sends NO game input, opens no listener and reports
+  nothing anywhere (its output is read from the screen).
+- **Where:** everything in ONE folder, `$env:TEMP\pl-bench`: uv, the kit, uv's cache, its
+  downloaded Python. uv's cache, Python and tool directories are pointed there by variables set in
+  the agent's shell only, and nothing is added to PATH.
+- **The path:** the agent's own shell (`ro_agent.py open-terminal` / `console`), through the mux.
+- **The exit:** before deleting, a scan for reparse points under the folder. Then
+  `Remove-Item -Recurse -Force` on it, and a read-back: the folder, `%LOCALAPPDATA%\uv` and
+  `~\.local` absent (as they were before, recorded first). The shell variables are removed too.
+- **Result:** appended below after it runs.
+
 ## The `poring-lab watch` task: lab-only, and its retirement criteria (ACCEPTED, Batt 2026-10-06)
 
 **Why it exists:** the th client caught the 2021 exe calling Gravity's

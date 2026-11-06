@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The CPU latency of docs/benchmarks/gef10-eval.md (AMENDMENT R2-2): each ONNX model through
-``unit_detector.UnitDetector`` (the walk gate's CPU path: onnxruntime, 8 threads, 736 x 1280) at
-nice 10, on the SAME frames, p50 / p95 of the worker's inference ms.
+``unit_detector.UnitDetector`` (the walk gate's CPU path: onnxruntime, ``ud.THREADS`` threads: 16
+since 2026-11-07, 8 before; 736 x 1280) at nice 10, on the SAME frames, p50 / p95 of the worker's
+inference ms.
 
     M=/dev/shm/poring-lab-detector/model
     python scripts/eval_latency.py REFS.json --model v1=$M/v1png-last-736x1280.onnx \

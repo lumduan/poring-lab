@@ -87,7 +87,7 @@ the same day).
 Batt (~05:5x): "Compare: how much faster would the GPU be?" One guarded `execdev:vision` step in
 the vision worker (R1-R3, fit-first's VTON never touched), `poring_vision.bench_gpu`:
 
-    python3 scripts/quiet_start.py --quiet-min 10 --limit 25 -- \
+    python3 scripts/runbooks/quiet_start.py --quiet-min 10 --limit 25 -- \
         python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
     python3 scripts/guarded_build.py --sustain 30 --spike 25 'execdev:vision@1080=python -m
         poring_vision.bench_gpu --refs /datasets/archive/train/eval/xmas02/latency-200-refs.json
