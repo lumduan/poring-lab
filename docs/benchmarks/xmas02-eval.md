@@ -126,6 +126,19 @@ displaced.
    before it scores. Scored ONCE; the results go below this line, with nothing above it edited
    except by a clock-labelled amendment.
 
+## AMENDMENT 1 (2026-11-06 12:2x ICT, before any xmas_dun02 watch is complete, any label, cache or model): the scorer's fields
+
+The scorer was built after this document (`eval_q1.py` Q1c / E1c, merged c8e75e9). This states
+which of its fields decide, in the words of "The scores" above; no bar changes.
+- **Q1c's verdict precision is the field `precision`:** gef10's rule ported literally with the
+  classes collapsed. On the frames of species s's evaluated crops, every monster-class detection
+  whose centre lies inside ANY evaluated crop's box is in the denominator, so an unmatched box over
+  another species' evaluated crop counts against s too. `precision_own_boxes` (only the detections
+  inside s's own evaluated boxes) is REPORTED beside it and decides nothing.
+- **Bars apply to the tier species only** (plan D3: Myst Case, Cruiser, Cookie, Christmas Cookie,
+  or `cookie_any`). The pack draws every species with a kept TEST label (gef10's draw); a non-tier
+  species (Garm Baby, a Goblin) is reported with no bar whatever its count.
+
 ## RESULTS
 
 (none yet)

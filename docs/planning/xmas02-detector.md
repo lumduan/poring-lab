@@ -607,3 +607,37 @@ a person reads the frame) -> `--immune-confirmed`.
 
 **The other tool gaps (T-1-T-4, T-6-T-10)** are built offline in tmpfs worktrees (at most two
 subagents), each with tests and a positive case, before the FIT step reads xw1.
+
+### Amendment B (2026-11-06 12:2x ICT, before FIT reads anything): the label tools as built (T-1, T-2, T-3, T-8, T-9; merged c8e75e9)
+
+- **T-1:** `map_labels.session_ui_rects` takes the session's chat window (detector_vs_packets'
+  helpers): sessions from 2026-11-05 12:00 get the standard window (0, 585, 600, 720) and no
+  `notice_left`; older ones keep `RECTS` exactly (all 544 pre-cutover NAS session names: 1,088 /
+  1,088 (sid, layout) pairs identical; gef10 w2's rects identical old vs new code).
+- **T-2:** `MAPS["xmas_dun02"]` = this plan's spec (cells, the /dev/shm RSW / RSMs / sprites, the
+  tier and conditional species, Stormy Knight unchecked, walkers, fit +-6, no anchor, salt
+  `xmas02`, T2 seed 51, eval seed 53 / 60 per species, `dying_rule`). Roles BY NAME: FIT =
+  `*-rdp-xmas02-xw1` (any session of that name), TEST = `*-rdp-xmas02-xw5`, `*-rdp-xmas02-xp1`, X2.
+  offset / threshold / engaged / labels refuse a TEST part by its directory name BEFORE reading it;
+  pack and the cache refuse TEST label files. Checked on X2's real path: each refused before
+  reading.
+- **E0 (D11) is enforced, not just defaulted:** `engaged_fixed="E0"`, so the label stack keeps
+  Amendment C's `facing_unknown` and Amendment B's `crowded` flag (gef10's EngagedLabeler at E0);
+  freeze writes `engaged_variant` E0 and refuses any other.
+- **T-3:** `check_recording` accepts `recorder_version` 5 or 6 (X2's manifest now passes; it was
+  refused).
+- **T-8:** xmas_dun02's C1 always runs the pickup-notice rule (`round2`; `round1` refused). The
+  notice band was measured on gef_fild10; `check` records that (`notice_band_measured_on`).
+- **T-9:** `--eval-test` (labels and pack read only xw5, xp1, X2, under the FROZEN params, seed 53,
+  60 per species); `eval_q1` adds Q1c / E1c beside Q1 / E1 (gef10 round 2's archived evaluation
+  re-scored: every old key identical; Q1c 0.983 / 0.983 / 0.983 for its three species).
+- **The labels' name is `xmas02-o3h`;** it becomes `xmas02-o3h-t` only if 4f's FIT test adopts the
+  terrain occluders (T-4, the other branch), by the freeze.
+- **NOT built (4h), stated before FIT:** the frame exclusions `unlabelled_item` (a floor item in
+  view) and our character under Hallucination (EFST_ILLUSION). The immune watches make neither
+  happen by construction: no kill, so no drop; monsters ignore us, so no skill on us. The FIT
+  report counts both from the packets (floor-item appearances; EFST_ILLUSION on our unit). Any
+  count above zero on a watch is reported, and **these exclusions must exist before any HUNTING
+  session joins TRAIN** (3c).
+- **`cookie_any` (6's fallback)** would need the cache manifest to map two species to one class
+  (`eval_q1.class_map` refuses that today): built only if T2 triggers it, by its own amendment.
