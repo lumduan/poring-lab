@@ -35,6 +35,18 @@ SRC is either
 IoU, a pair at IoU >= --iou): how many boxes each side has, how many pair up, their IoU and score
 differences, and the frames whose box sets agree.
 
+A MAP-SCOPED model's rows (docs/planning/xmas02-detector.md 7, D1 / D2; tool gap T-6) carry its own
+class names (one per tier species, e.g. ``mystcase``, ``cookie_xmas``), while the scorer counts
+``monster`` only. ``class_collapse`` reads the model's committed CLASS LIST (the
+build_frame_cache ``--class-list`` format: ``fixed`` names at fixed ids, ``monster_first_id``, one
+class per entry of ``monsters``, optional ``appended``; plan 7's ``classes-xmas02.json`` is
+``{"fixed": {"player": 0}, "monster_first_id": 1, ...}``; an entry may be a LIST of mob ids, one
+merged class such as 6's ``cookie_any``) against the model's names in id order (its
+``.names.json`` sidecar, which ``predict``'s meta records as ``names``) and maps every monster
+class to ``monster``, keeping the others; ``collapse_rows`` applies it to rows (a class the model
+does not have fails). detector_vs_packets.py ``--classes`` scores through it; without the flag a
+row is scored as written (v1's ``player`` / ``monster`` / ``npc`` rows unchanged).
+
 Pixels in only (rule 1): no packets, no client, no input, no GPU. The process lowers itself to
 nice 19 before the worker starts (the worker inherits it); run it under the brief's cap as well:
 ``systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -p CPUQuota=200% nice -n 19``.
@@ -294,6 +306,65 @@ def cmd_predict(a: argparse.Namespace) -> dict[str, Any]:
                                 json.loads(prev.read_text())["run"]]  # fmt: skip
     prev.write_text(json.dumps(meta, indent=1) + "\n")
     return meta
+
+
+# --- a map-scoped model's classes, collapsed for the scorer (T-6) -------------------------------
+
+SCORED_CLASS = "monster"  # the class detector_vs_packets counts (detector_vs_packets.py:513)
+
+
+def class_collapse(classes: dict[str, Any], names: Sequence[str]) -> dict[str, str]:
+    """PURE: the model's class name -> the class the scorer counts. The class list's MONSTER
+    classes (ids ``monster_first_id`` .. + len(``monsters``)) become ``monster``; its ``fixed``
+    and ``appended`` classes keep their names. ``names``: the model's names in id order. Refused
+    (fail closed: the list is not this model's): ids that are not exactly 0..len(names)-1, a
+    repeated id, a fixed / appended name that is not the model's name at its id, a monster class
+    named like a fixed one, no ``player`` (our own box)."""
+    fixed = {str(k): int(v) for k, v in (classes.get("fixed") or {}).items()}
+    appended = {str(k): int(v) for k, v in (classes.get("appended") or {}).items()}
+    monsters = list(classes.get("monsters") or [])
+    first = int(classes["monster_first_id"])
+    mids = list(range(first, first + len(monsters)))
+    ids = [*fixed.values(), *mids, *appended.values()]
+    if "player" not in fixed:
+        raise SystemExit("the class list has no fixed 'player' class (our own box)")
+    if sorted(ids) != list(range(len(names))):
+        raise SystemExit(f"the class list's ids {sorted(ids)} are not the model's {len(names)} "
+                         f"class ids 0..{len(names) - 1}: not this model's list")  # fmt: skip
+    for name, cid in (*fixed.items(), *appended.items()):
+        if names[cid] != name:
+            raise SystemExit(f"class id {cid}: the list says {name!r}, the model {names[cid]!r}")
+    out = {names[cid]: names[cid] for cid in (*fixed.values(), *appended.values())}
+    for cid in mids:
+        if names[cid] in out:
+            raise SystemExit(f"monster class {cid} is named {names[cid]!r}, a kept class")
+        out[names[cid]] = SCORED_CLASS
+    return out
+
+
+def collapse_rows(rows: Iterable[dict[str, Any]], mapping: dict[str, str]
+                  ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: boxes.jsonl rows with each box's class (index 5) through ``mapping`` (new rows; the
+    input is untouched). A class outside the mapping fails: the rows are another model's."""
+    out = []
+    for r in rows:
+        boxes = []
+        for b in r["boxes"]:
+            if b[5] not in mapping:
+                raise SystemExit(f"row t={r.get('t')}: class {b[5]!r} is not one of the model's "
+                                 f"{sorted(mapping)}")  # fmt: skip
+            boxes.append([*b[:5], mapping[b[5]], *b[6:]])
+        out.append({**r, "boxes": boxes})
+    return out
+
+
+def class_counts(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """PURE: boxes per class name over ``rows``."""
+    c: dict[str, int] = {}
+    for r in rows:
+        for b in r["boxes"]:
+            c[str(b[5])] = c.get(str(b[5]), 0) + 1
+    return dict(sorted(c.items()))
 
 
 # --- comparing two box files ---------------------------------------------------------------------

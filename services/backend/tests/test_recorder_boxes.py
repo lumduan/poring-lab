@@ -216,3 +216,67 @@ def test_the_meta_sidecar_says_whether_every_frame_has_a_row(tmp_path: Path,
     rb.main(["predict", str(session), "--out", str(out), "--model", str(model), "--resume"])
     meta = json.loads((tmp_path / "o" / "boxes.jsonl.meta.json").read_text())
     assert meta["rows"] == 3 and meta["complete"] is True and len(meta["earlier_runs"]) == 1
+
+
+# --- a map-scoped model's classes collapsed for the scorer (xmas02-detector.md 7, T-6) ----------
+
+XMAS_LIST = {"fixed": {"player": 0}, "monster_first_id": 1,
+             "monsters": [1249, 1248, 1265, 1246]}  # plan 7's classes-xmas02.json  # fmt: skip
+XMAS_NAMES = ["player", "mystcase", "cruiser", "cookie", "cookie_xmas"]  # the KB's aegis, lower
+
+
+def species_rows() -> list[dict[str, Any]]:
+    return [{"t": T0, "frame_id": 0, "ms": 9.1,
+             "boxes": [[1.0, 2.0, 3.0, 4.0, 0.9, "player"], [5.0, 6.0, 7.0, 8.0, 0.8, "mystcase"]]},
+            {"t": T0 + 1, "frame_id": 1, "ms": 9.2,
+             "boxes": [[1.5, 2.0, 3.0, 4.0, 0.7, "cookie_xmas"],
+                       [9.0, 9.0, 9.5, 9.5, 0.3, "cookie"],
+                       [2.0, 2.0, 4.0, 4.0, 0.5, "cruiser"]]}]  # fmt: skip
+
+
+def test_a_map_scoped_models_species_count_as_monster() -> None:
+    """Plan 7's list (player 0, the four tier species 1-4): every species class -> ``monster``,
+    ``player`` kept; the rows' boxes otherwise unchanged and the input untouched; 6's merged
+    ``cookie_any`` (a list entry) is one monster class too; gef10's 26-class list keeps npc /
+    warp."""
+    m = rb.class_collapse(XMAS_LIST, XMAS_NAMES)
+    assert m == {"player": "player", "mystcase": "monster", "cruiser": "monster",
+                 "cookie": "monster", "cookie_xmas": "monster"}  # fmt: skip
+    rows = species_rows()
+    before = json.dumps(rows)
+    out = rb.collapse_rows(rows, m)
+    assert json.dumps(rows) == before  # the input is untouched
+    assert [[b[5] for b in r["boxes"]] for r in out] == [
+        ["player", "monster"],
+        ["monster", "monster", "monster"],
+    ]
+    assert [[b[:5] for b in r["boxes"]] for r in out] == [[b[:5] for b in r["boxes"]]
+                                                          for r in rows]  # fmt: skip
+    assert [(r["t"], r["frame_id"], r["ms"]) for r in out] == [(T0, 0, 9.1), (T0 + 1, 1, 9.2)]
+    assert rb.class_counts(out) == {"monster": 4, "player": 1}
+    assert rb.class_counts(rows) == {"cookie": 1, "cookie_xmas": 1, "cruiser": 1, "mystcase": 1,
+                                     "player": 1}  # fmt: skip
+    merged = {**XMAS_LIST, "monsters": [1249, 1248, [1265, 1246]]}
+    assert rb.class_collapse(merged, ["player", "mystcase", "cruiser", "cookie_any"])[
+        "cookie_any"] == "monster"  # fmt: skip
+    gef = json.loads((ROOT / "config/detector/classes-v2orc-payf07-gef10.json").read_text())
+    names = ["player", "npc", "warp"] + [f"m{j}" for j in gef["monsters"]]
+    g = rb.class_collapse(gef, names)
+    assert (g["npc"], g["warp"], g["m1273"]) == ("npc", "warp", "monster") and len(g) == 26
+
+
+def test_the_collapse_refuses_a_list_that_is_not_the_models() -> None:
+    v1 = ["player", "monster", "npc"]
+    bad = [
+        (XMAS_LIST, v1),  # v1's three names against a five-class list
+        (XMAS_LIST, ["mystcase", "player", "cruiser", "cookie", "cookie_xmas"]),  # player moved
+        ({**XMAS_LIST, "fixed": {"self": 0}}, ["self", *XMAS_NAMES[1:]]),  # no player
+        ({**XMAS_LIST, "fixed": {"player": 0, "npc": 1}}, XMAS_NAMES),  # ids 1 twice
+        (XMAS_LIST, ["player", "mystcase", "player2", "player", "cookie_xmas"]),  # repeats player
+    ]
+    for classes, names in bad:
+        with pytest.raises(SystemExit):
+            rb.class_collapse(classes, names)
+    with pytest.raises(SystemExit, match="not one of"):  # a row of another model
+        rb.collapse_rows([{"t": 1, "boxes": [[0, 0, 1, 1, 0.5, "orc_lady"]]}],
+                         rb.class_collapse(XMAS_LIST, XMAS_NAMES))  # fmt: skip

@@ -301,3 +301,137 @@ def test_the_projection_refuses_a_map_without_its_gat(tmp_path: Path, monkeypatc
     monkeypatch.setattr(camera, "GAT_DIR", tmp_path)
     with pytest.raises(SystemExit, match="GAT is not extracted"):
         dv.projection_inputs("xmas_dun02", tmp_path, tmp_path, tmp_path / "n.json", tmp_path)
+
+
+# --- T-6: a map-scoped model's species collapsed to monster (xmas02-detector.md 7) --------------
+
+
+def _session_with_boxes(tmp_path: Path, rows_cls: list[str], names: list[str] | None) -> Any:
+    """A synthetic recorder session (4 frames) and boxes rows whose one box per frame has the
+    class ``rows_cls[i]``; ``names``: the predictor's meta (None: no meta)."""
+    import gzip
+    import json
+
+    import numpy as np
+
+    from poring_dataset.shards import ShardWriter, write_manifest
+
+    session = tmp_path / "20261106T120000-rdp-xmas02-xw9"
+    w = ShardWriter(session)
+    ts = [10_000 + 1000 * i for i in range(4)]
+    for i, t in enumerate(ts):
+        w.add(i, t, np.zeros((2, 2, 3), np.uint8))
+    w.close()
+    write_manifest(session, {"session_id": session.name, "backend": "rdp", "format": "png",
+                             "recorder_version": 6, "game_region": [80, 77, 1280, 720],
+                             "server": "lab-rathena", "shards": w.shards, "frames": 4})  # fmt: skip
+    with gzip.open(session / "packets.jsonl.gz", "wt") as fh:
+        fh.write(json.dumps({"type": "map_change", "t_mono_ns": 1}) + "\n")
+    boxes = tmp_path / f"boxes-{len(list(tmp_path.iterdir()))}.jsonl"
+    boxes.write_text("".join(json.dumps({"t": t, "frame_id": i, "ms": 1.0,
+                                         "boxes": [[10, 10, 50, 80, 0.9, rows_cls[i]],
+                                                   [60, 10, 90, 80, 0.8, "player"]]}) + "\n"
+                             for i, t in enumerate(ts)))  # fmt: skip
+    if names is not None:
+        boxes.with_name(boxes.name + ".meta.json").write_text(json.dumps(
+            {"session_id": session.name, "names": names}))  # fmt: skip
+    return session, boxes
+
+
+def test_score_session_collapses_a_map_models_species_and_v1_is_unchanged(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """The species rows with --classes reach the scorer EXACTLY as v1's ``monster`` rows do (so
+    they score identically); v1's rows without the flag reach it as written and the output has
+    no class_collapse key; the names come from the boxes' meta or --names; v1's names against
+    the species list are refused."""
+    import json
+
+    seen: list[Any] = []
+
+    def fake(caps: Any, events: Any, size: Any, cfg: Any) -> dict[str, Any]:
+        seen.append(caps)
+        return {"body": {"per_species": {}}, "extra": {}, "skipped": dv.Counter(), "pairs": [],
+                "n_det": 0, "tp": 0, "species": dv.SPECIES_BY_MAP["xmas_dun02"]}  # fmt: skip
+
+    monkeypatch.setattr(dv, "score_captures", fake)
+    monkeypatch.setattr(dv, "projection_inputs", lambda *a: {"gat": "checked"})
+    classes = tmp_path / "classes-xmas02.json"
+    classes.write_text(json.dumps({"fixed": {"player": 0}, "monster_first_id": 1,
+                                   "monsters": [1249, 1248, 1265, 1246]}))  # fmt: skip
+    names = ["player", "mystcase", "cruiser", "cookie", "cookie_xmas"]
+    v1_session, v1_boxes = _session_with_boxes(tmp_path / "v1", ["monster"] * 4, None)
+    sp_session, sp_boxes = _session_with_boxes(
+        tmp_path / "sp", ["mystcase", "cruiser", "cookie", "cookie_xmas"], names
+    )
+
+    def run(session: Path, boxes: Path, *extra: str) -> dict[str, Any]:
+        out = tmp_path / "score.json"
+        argv = ["score-session", str(session), "--boxes", str(boxes), "--map", "xmas_dun02",
+                "--sprites", str(tmp_path), "--sprite-names", str(tmp_path / "n.json"),
+                "--out", str(out), *extra]  # fmt: skip
+        assert dv.main(argv) == 0
+        return dict(json.loads(out.read_text()))
+
+    v1 = run(v1_session, v1_boxes)
+    assert "class_collapse" not in v1
+    sp = run(sp_session, sp_boxes, "--classes", str(classes))
+    assert seen[0] == seen[1]  # the scorer gets the same rows: the same score
+    col = sp.pop("class_collapse")
+    assert col["names_from"] == "the boxes' .meta.json" and col["to_monster"] == sorted(names[1:])
+    assert col["boxes_by_class_after"] == {"monster": 4, "player": 4}
+    assert col["boxes_by_class_before"]["cookie_xmas"] == 1
+    for k in ("boxes", "boxes_meta", "session"):
+        sp.pop(k), v1.pop(k)
+    assert sp == v1  # nothing else differs
+    side = tmp_path / "model.names.json"
+    side.write_text(json.dumps(names))
+    sp_session2, sp_boxes2 = _session_with_boxes(tmp_path / "sp2", ["cookie"] * 4, None)
+    with pytest.raises(SystemExit, match="names"):  # no meta, no --names
+        run(sp_session2, sp_boxes2, "--classes", str(classes))
+    assert run(sp_session2, sp_boxes2, "--classes", str(classes), "--names",
+               str(side))["class_collapse"]["names_from"] == str(side)  # fmt: skip
+    v1_names = tmp_path / "v1.names.json"
+    v1_names.write_text(json.dumps(["player", "monster", "npc"]))
+    with pytest.raises(SystemExit):  # v1's names are not this list's model
+        run(v1_session, v1_boxes, "--classes", str(classes), "--names", str(v1_names))
+    with pytest.raises(SystemExit):  # --names alone
+        run(v1_session, v1_boxes, "--names", str(v1_names))
+    pre = run(sp_session, sp_boxes, "--classes", str(classes), "--preflight")
+    assert pre["preflight"] == "ok" and pre["class_collapse"]["to_monster"] == sorted(names[1:])
+
+
+GEF10R2 = Path("/mnt/poring-lab-datasets/archive/train/eval/gef10-r2")
+GEF10R2_NAMES = Path("/dev/shm/poring-lab-detector/model/gef10r2-last-736x1280.names.json")
+
+
+def test_real_gef10_round2_species_rows_collapse_to_the_published_rows() -> None:
+    """A REAL species-named model output (no map-scoped recorder_boxes output exists yet, and X2's
+    rows are TEST): gef10 round 2's 26-class predict_dir run on Batt's demo (gef10-eval.md, its
+    names sidecar d263f379..., the committed class list classes-v2orc-payf07-gef10.json). Its rows
+    WITH the model's names, collapsed through the class list, are exactly the published
+    demo-boxes-gef10r2.jsonl that from-predict wrote (the rows behind recall 0.397 / precision
+    0.577): the list-based collapse and from-predict's agree on every box."""
+    if not (GEF10R2 / "demo-pred-gef10r2.json").exists() or not GEF10R2_NAMES.exists():
+        pytest.skip("the gef10 round-2 predictions or the model's names are not here")
+    import hashlib
+    import json
+
+    import recorder_boxes as rb
+
+    assert hashlib.sha256(GEF10R2_NAMES.read_bytes()).hexdigest().startswith("d263f379")
+    pred = json.loads((GEF10R2 / "demo-pred-gef10r2.json").read_text())
+    per = ((pred.get("timing_ms") or {}).get("per_frame")) or {}
+    named = sorted(({"t": int(stem.partition("-")[2]), "ms": per.get(stem),
+                     "boxes": [[float(d["x1"]), float(d["y1"]), float(d["x2"]), float(d["y2"]),
+                                float(d["conf"]), d["cls"]] for d in dets]}
+                    for stem, dets in pred["frames"].items()), key=lambda r: r["t"])  # fmt: skip
+    classes = json.loads((ROOT / "config/detector/classes-v2orc-payf07-gef10.json").read_text())
+    mapping = rb.class_collapse(classes, json.loads(GEF10R2_NAMES.read_text()))
+    got = rb.collapse_rows(named, mapping)
+    published = dv.read_boxes(GEF10R2 / "demo-boxes-gef10r2.jsonl")
+    assert len(got) == len(published) == len(pred["frames"]) > 4000
+    assert got == published == dv.predict_rows(pred)
+    species = rb.class_counts(named)
+    assert sum(v for k, v in species.items() if k not in ("player", "npc", "warp")) == \
+        rb.class_counts(got)["monster"]  # fmt: skip
