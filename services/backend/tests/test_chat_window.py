@@ -475,3 +475,16 @@ def test_ro_agent_types_into_the_standard_place() -> None:
     assert 'ensure_chat_window(agent, screen, "open_chat")' in src  # before every typed line
     assert 'ensure_chat_window(agent, screen, f"enter_game:{which}")' in src  # every entry
     assert r.LAYOUTS[(1280, 720)].get("chat_input") is None  # derived, never a stale constant
+
+
+def test_a_window_seen_in_part_where_it_belongs_is_never_answered_by_a_key() -> None:
+    """2026-11-06 09:25 (hunt_flow v56 run 2's setup): the level-up notice icon covered the
+    standard window's bottom-left; "seen in part" -> Enter closed the open input, then the check
+    stopped. At the standard place a hidden bottom means a cover: stop, no key. A MOVED window
+    seen in part keeps its designed step (test_a_moved_closed_window_over_a_grey_scene_...)."""
+    g = cw.STANDARD
+    covered = {"left": g.left, "text_top": g.text_top, "bottom": None, "lines": None,
+               "input": None, "obscured": True}  # fmt: skip
+    assert cw.next_step(covered) == "unknown"
+    moved = {**covered, "left": 40, "text_top": cw.Geometry(12, 639).text_top}
+    assert cw.next_step(moved) == "open_input"

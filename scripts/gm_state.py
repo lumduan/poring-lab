@@ -283,6 +283,10 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str, out_dir: Path | None = No
     under WEIGHT_MAX. Off only where dropped items would spoil the measurement (loot@1)."""
     prof = PROFILES[profile]
     rec: dict[str, Any] = {"why": why, "t_ns": r.ns(), "restored": False, "profile": profile}
+    # 2026-11-06 09:25: the level-up notice icon covers the STANDARD chat window's bottom-left
+    # (docked at 719 since 11-05), so a restore line typed under it stopped the chat check: the
+    # notices go first (their known step), before any line is typed
+    rec["notices_first"] = clear_notices(agent, screen, why=f"{why}:first")
     got = check(screen, profile)
     if got["decision"] == "unstable":
         time.sleep(0.5)
@@ -444,6 +448,7 @@ def ensure_hunting(agent: Any, screen: Any, *, why: str, out_dir: Path | None = 
     """The hunt-flow state (Base Lv 70, Job Lv 1, STR 99), rebuilt when the level lines or the
     weight cap say otherwise, then ensure_fixed's hunt-flow restore (notices, loot, weight).
     Stop unless the weight then reads STR 99."""
+    notices_first = clear_notices(agent, screen, why=f"{why}:first")  # before any typed line
     got = check(screen, "hunt-flow")
     if got["decision"] == "unstable":
         time.sleep(0.5)
@@ -461,7 +466,7 @@ def ensure_hunting(agent: Any, screen: Any, *, why: str, out_dir: Path | None = 
     if not wt_ or str_of_weight_max(wt_[1]) != HUNT_STR:
         raise r.Stop(f"gm_state ({why}): the weight cap reads {wt_} after the hunting restore "
                      f"(STR {HUNT_STR} = {HUNT_WEIGHT_MAX}): a person first")  # fmt: skip
-    rec["hunting"] = {"before": pre, "rebuilt": rebuilt}
+    rec["hunting"] = {"before": pre, "rebuilt": rebuilt, "notices_first": notices_first}
     return rec
 
 

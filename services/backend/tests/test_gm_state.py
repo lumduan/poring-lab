@@ -445,3 +445,16 @@ def test_masked_references_ignore_the_background_and_glow_and_stay_strict(
     assert isinstance(refs["cyfar"][1], np.ma.MaskedArray) and refs["cyfar"][0] == "loot"
     assert not isinstance(refs["iron"][1], np.ma.MaskedArray)
     assert gs.icon_distance(seen, refs["cyfar"][1]) == pytest.approx(2.0)
+
+
+def test_the_notices_go_before_any_typed_restore_line(gs: Any) -> None:
+    """2026-11-06 09:25 (hunt_flow v56 run 2): the level-up notice icon covered the standard chat
+    window's bottom-left and the restore's first typed line stopped the chat check. Both restores
+    clear the notices (their known step, no typed line) before anything is typed."""
+    import inspect
+
+    fixed = inspect.getsource(gs.ensure_fixed)
+    assert fixed.index("clear_notices(") < fixed.index("r.gm(")
+    hunting = inspect.getsource(gs.ensure_hunting)
+    assert hunting.index("clear_notices(") < hunting.index("rebuild_hunting(")
+    assert "r.gm(" not in inspect.getsource(gs.clear_notices)  # the notice step types nothing

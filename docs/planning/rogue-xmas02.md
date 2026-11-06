@@ -821,3 +821,18 @@ its own time box; the live hard-bar monitor bound to its PID). K1 INCONCLUSIVE, 
   this login's; **K1 and K3 are judged on runs 1 + 2 POOLED** (the nudged arm <= 5 %, the off arm
   >= 15 %, each >= 15 clicks); K2 per run. If the pooled off arm is still under 15 %, the verdict is
   NO EFFECT SHOWN (v55 stays; the nudge is not adopted on this evidence).
+
+**hunt_flow v56, run 2 attempt 1 (session 20261106T092511-demo-hunt-flow56, 09:25:11): STOPPED in
+its setup after 10 s, by the chat-window check (no hunting; reported, not pooled).**
+- Run 1's kills left the client's level-up notice icon ("up", bottom-left), which now covers the
+  STANDARD chat window's bottom-left corner (docked at 719 since 11-05; the legacy window ended at
+  624 and never met it). The hunting restore types GM lines before clearing notices: the chat check
+  read the window "seen in part", took its designed step for that (Enter, the input open: it closed
+  it; nothing was sent), saw no effect and stopped. The runner's end path typed nothing after.
+- Fixed (tests; each new test fails on the old code or pins the order):
+  - `chat_window.next_step`: a window seen in part WHERE IT BELONGS (the standard's left and top
+    border) is "unknown" -> stop, never a key. Only a MOVED window seen in part keeps the
+    open-input step. (The same step began the 11-05 21:21 F10 cascade.)
+  - `gm_state.ensure_fixed` and `ensure_hunting`: the notices are cleared first (the status
+    window's chord, no typed line), before any restore line.
+- Run 2 attempt 2: the same command (seed 20261107), judged as run 2.

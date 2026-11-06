@@ -449,7 +449,13 @@ def next_step(
     (Enter behind the UI gate: the drag handle is drawn only while the input is open), "drag",
     "unknown" (the padlock unread: the caller re-reads, never acts blind)."""
     if st is not None and st.get("obscured"):
-        # seen in part with the input closed: open it (the bar shows the bottom); else re-read
+        # seen in part WHERE IT BELONGS (the standard's left and top border): something covers its
+        # bottom -- the level-up notice icon (2026-11-06 09:25, hunt_flow v56 run 2: an Enter
+        # here closed an open input) or the pointer -- never a key (11-05 21:21: a false "seen in
+        # part" Enter began the F10 cascade). A MOVED window seen in part with the input closed:
+        # open it (the bar shows the bottom); else re-read
+        if st.get("left") == g.left and st.get("text_top") == g.text_top:
+            return "unknown"
         return "open_input" if st.get("text_top") is not None and st.get("input") is None \
             else "unknown"  # fmt: skip
     if st is None or not st.get("lines"):
