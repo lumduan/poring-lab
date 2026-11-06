@@ -58,8 +58,10 @@ HOW TO READ THIS FILE: top to bottom follows the pipeline. Section 1 holds every
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ipaddress
 import json
+import logging
 import math
 import random
 import sys
@@ -74,6 +76,37 @@ import numpy as np
 # Only numpy and the standard library are imported up here. The heavy libraries (cv2 = OpenCV,
 # onnxruntime, mss, the win32 modules) are imported INSIDE the functions that need them ("lazy"
 # imports). So the pure logic can be imported and tested anywhere: no model, screen or Windows.
+
+
+# LOGS (--logs): what the bot is doing, step by step, each line with the time. Python's standard
+# `logging` module: every message has a LEVEL -- DEBUG (small details), INFO (the steps), WARNING
+# (something is off). Without --logs only warnings and errors show.
+LOG = logging.getLogger("simple_bot")
+LOG_EVERY_S = 1.0  # --logs: one summary line per second from the live loop (not every frame)
+
+
+def setup_logs(on: bool, file: str | None = None) -> None:
+    """Turn the logs on (--logs) and/or copy them into a file (--log-file, which implies --logs).
+    The lines look like:  14:03:07.512 INFO    window found: 'Ragnarok' (pid 4321)"""
+    LOG.handlers.clear()
+    LOG.propagate = False  # do not print every line twice through Python's root logger
+    LOG.setLevel(logging.DEBUG if (on or file) else logging.WARNING)
+    fmt = logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s", "%H:%M:%S")
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if file:
+        handlers.append(logging.FileHandler(file, encoding="utf-8"))
+    for h in handlers:
+        h.setFormatter(fmt)
+        LOG.addHandler(h)
+
+
+def say(msg: str) -> None:
+    """A progress line for the person at the screen: through the logs when --logs is on (so it also
+    lands in --log-file, with the time), else a plain print."""
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info(msg)
+    else:
+        print(msg, flush=True)
 
 
 # =================================================================================================
@@ -269,6 +302,7 @@ class ClientWindow:
         self.hwnd, self.title = found[0]
         # GetWindowThreadProcessId returns (thread id, process id): we want the process
         self.pid = int(win32process.GetWindowThreadProcessId(self.hwnd)[1])
+        LOG.info("window found: %r (hwnd %s, pid %s)", self.title, self.hwnd, self.pid)
 
     def rect(self) -> tuple[int, int, int, int]:
         """The CLIENT AREA (the game picture, without title bar and borders) on the screen:
@@ -442,11 +476,15 @@ class OnnxDetector:
         opts = ort.SessionOptions()
         if threads > 0:
             opts.intra_op_num_threads = threads
+        LOG.info("onnxruntime %s: creating the session for %s", ort.__version__, model)
+        t0 = time.perf_counter()
         self.sess = ort.InferenceSession(str(model), opts, providers=["CPUExecutionProvider"])
         inp = self.sess.get_inputs()[0]
         self.name = inp.name
         self.size = (int(inp.shape[2]), int(inp.shape[3]))  # (H, W) = (736, 1280) for v1
         self.conf, self.iou = conf, iou
+        LOG.info("model loaded in %.0f ms: input %s %s, conf %.2f", (time.perf_counter() - t0)
+                 * 1e3, self.name, list(inp.shape), conf)  # fmt: skip
 
     def detect(self, frame: np.ndarray) -> list[Box]:
         """A BGR picture (h, w, 3) -> the boxes found on it, in its own px."""
@@ -812,8 +850,11 @@ class SafetyGate:
         """(ok, why) of the local-server check, re-done when the last one is NET_CHECK_S old."""
         now = time.monotonic()
         if force or now - self.net_at >= NET_CHECK_S:
-            self.net_ok, self.net_why = check_connections(self.remotes())
+            remotes = self.remotes()
+            self.net_ok, self.net_why = check_connections(remotes)
             self.net_at = now
+            LOG.debug("network check: %s -> %s (%s)", sorted(set(remotes)) or "none",
+                      "ok" if self.net_ok else "REFUSED", self.net_why)  # fmt: skip
         return self.net_ok, self.net_why
 
     def stop_reason(self) -> str:
@@ -918,9 +959,11 @@ def click(
     4. ask the gate AGAIN (a lot can change in a third of a second), then press and release.
     Returns "" when it clicked, else why it did not."""
     if not clickable(pt):
+        LOG.info("no click at %s: on a UI window or the edge", pt)
         return f"refused {pt}: on a UI window or the edge"
     ok, why = gate.may_click()
     if not ok:
+        LOG.info("no click at %s: %s", pt, why)
         return why
     ax, ay = approach_point(pt, rng)
     mouse.move(origin[0] + ax, origin[1] + ay)
@@ -930,8 +973,11 @@ def click(
     ok, why = gate.may_click()
     stop = gate.stop_reason()
     if not ok or stop:
+        LOG.info("no click at %s (checked again just before pressing): %s", pt,
+                 why if not ok else stop)  # fmt: skip
         return why if not ok else stop
     mouse.press()
+    LOG.debug("clicked at client %s = screen %s", pt, (origin[0] + pt[0], origin[1] + pt[1]))
     return ""
 
 
@@ -1266,7 +1312,13 @@ def list_images(paths: Sequence[str]) -> list[Path]:
 
 
 def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
-    """The detector the command line asked for: the YOLO model (needs --model) or the colour one."""
+    """The detector the command line asked for: the YOLO model (needs --model) or the colour one.
+
+    CALL IT BEFORE `import cv2` (both run modes do). On Windows, onnxruntime needs a NEWER copy of
+    Microsoft's C++ runtime (msvcp140.dll) than the one OpenCV can bring into the program. Windows
+    loads a DLL only once per program, so whichever library comes first wins: OpenCV first can make
+    onnxruntime crash with NO message at all (a "native" crash, below Python). Model first is
+    safe."""
     if args.detector == "color":
         return ColorDetector()
     if not args.model:
@@ -1275,6 +1327,7 @@ def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
         )
     if not Path(args.model).is_file():
         raise SystemExit(f"--model {args.model}: no such file")
+    say(f"loading the model {args.model} ...")
     return OnnxDetector(Path(args.model), args.conf, IOU, args.threads)
 
 
@@ -1285,12 +1338,12 @@ def run_replay(args: argparse.Namespace) -> int:
     save it as a PNG (--save-dir). By default every picture is judged on its own by a fresh bot
     (what would it do if it saw THIS?); --sequence treats the pictures as one recording at --fps,
     so the state machine runs across them. --json writes every frame's boxes and decision."""
-    import cv2
-
     files = list_images(args.replay)
     if not files:
         raise SystemExit(f"no images (.png .jpg .jpeg .bmp) in {args.replay}")
-    det = make_detector(args)
+    det = make_detector(args)  # BEFORE cv2: see make_detector
+    import cv2
+
     show = not args.save_dir and not args.no_show
     out_dir = Path(args.save_dir) if args.save_dir else None
     if out_dir is not None:
@@ -1299,12 +1352,12 @@ def run_replay(args: argparse.Namespace) -> int:
     rows: list[dict[str, Any]] = []
     sums = {"read": 0.0, "detect": 0.0, "decide": 0.0}
     n_boxes = n_mon = 0
-    print(f"replay: {len(files)} image(s), detector {det.label}")
+    say(f"replay: {len(files)} image(s), detector {det.label}")
     for i, f in enumerate(files):
         t0 = time.perf_counter()
         frame = cv2.imread(str(f))  # a (h, w, 3) BGR picture, or None
         if frame is None:
-            print(f"  {f.name}: unreadable, skipped")
+            say(f"  {f.name}: unreadable, skipped")
             continue
         t1 = time.perf_counter()
         boxes = det.detect(frame)
@@ -1321,7 +1374,7 @@ def run_replay(args: argparse.Namespace) -> int:
         n_boxes, n_mon = n_boxes + len(boxes), n_mon + mon
         tgt = d.target
         target = f"target {tgt.cls} {tgt.score:.2f} at {tgt.hit_point}" if tgt else "no target"
-        print(
+        say(
             f"  [{i + 1}/{len(files)}] {f.name}: {len(boxes)} boxes ({mon} monster), detect "
             f"{ms['detect']:.0f} ms -> {d.state} ({d.note}), {target}, clicks {d.clicks}"
         )
@@ -1370,11 +1423,13 @@ def run_live(args: argparse.Namespace) -> int:
     The loop, as fast as the CPU allows:
         stop? -> capture -> detect -> decide -> [act: gate, clicks] -> draw (bot view, overlay)
     Returns the exit code: 0 = stopped normally, 3 = the safety gate stopped it."""
+    det = make_detector(args)  # BEFORE cv2: see make_detector
     import cv2
 
+    LOG.info("opencv %s, numpy %s", cv2.__version__, np.__version__)
     set_dpi_aware()
+    say(f"looking for the game window ('{args.title}' in its title) ...")
     window = ClientWindow(args.title)
-    det = make_detector(args)
     grabber = Grabber()
     rng = random.Random(args.seed)
     gate = SafetyGate(window, args.minutes)
@@ -1407,12 +1462,15 @@ def run_live(args: argparse.Namespace) -> int:
         f"{mode}: window {window.title!r} (pid {window.pid}), client area {w} x {h} at "
         f"({left}, {top}); stop: F12 / mouse to the top-left corner / q in the bot view"
     )
+    LOG.info("client area %d x %d at (%d, %d); the loop starts", w, h, left, top)
     t_prev, fps = time.perf_counter(), 0.0
+    frames, last_log, last_state = 0, 0.0, ""
     try:
         while True:
             reason = gate.stop_reason()
             if reason:
                 print(f"stopped: {reason}")
+                LOG.info("stopped: %s after %d frames", reason, frames)
                 return 0
             t0 = time.perf_counter()
             left, top, w, h = window.rect()  # the window may have moved
@@ -1426,6 +1484,7 @@ def run_live(args: argparse.Namespace) -> int:
                 ok, why = gate.check_network()
                 if not ok:  # the client left the local server: stop clicking at once
                     print(f"SAFETY STOP: {why}")
+                    LOG.warning("SAFETY STOP: %s", why)
                     return 3
                 for pt in d.clicks:
                     status = click(pt, (left, top), mouse, gate, rng)
@@ -1442,6 +1501,18 @@ def run_live(args: argparse.Namespace) -> int:
             now_fps = 1.0 / max(t4 - t_prev, 1e-3)
             fps = now_fps if fps == 0 else 0.8 * fps + 0.2 * now_fps  # smoothed: easier to read
             t_prev = t4
+            frames += 1
+            if d.state != last_state:  # every change of state, at once
+                LOG.info("state %s -> %s (%s)", last_state or "start", d.state, d.note)
+                last_state = d.state
+            if time.monotonic() - last_log >= LOG_EVERY_S:  # and a summary once a second
+                last_log = time.monotonic()
+                LOG.debug(
+                    "frame %d | %s: %s | boxes %d (monster %d) | target %s | clicks %s | "
+                    "ms %s | %.1f fps", frames, d.state, d.note, len(boxes),
+                    sum(b.cls == "monster" for b in boxes),
+                    f"{d.target.cls} {d.target.score:.2f}" if d.target else "none", d.clicks,
+                    {k: round(v) for k, v in ms.items()}, fps)  # fmt: skip
             hud = hud_text(mode, d, fps, ms, boxes)
             _, dropped = sort_boxes(boxes, decider.char, w, h)
             view = draw_scene(frame.copy(), boxes, dropped, d, decider.me)  # DRAW
@@ -1456,6 +1527,7 @@ def run_live(args: argparse.Namespace) -> int:
                 overlay.show(overlay_picture(w, h, boxes, dropped, d, decider.me, hud), left, top)
             if cv2.waitKey(1) & 0xFF in (ord("q"), 27):  # waitKey also lets the window redraw
                 print("stopped: q")
+                LOG.info("stopped: q after %d frames", frames)
                 return 0
     finally:  # whatever happened: remove our windows
         if overlay is not None:
@@ -1507,20 +1579,40 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     ap.add_argument("--fps", type=float, default=5.0, help="replay --sequence: frames per second")
     ap.add_argument("--seed", type=int, default=1, help="random seed (wander points)")
+    ap.add_argument(
+        "--logs",
+        action="store_true",
+        help="print what the bot does, step by step, with the time (where it is, why no click)",
+    )
+    ap.add_argument("--log-file", help="also write the logs to this file (implies --logs)")
     return ap.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Start here: read the command line, refuse what this machine cannot do, run the mode."""
+    import faulthandler
+
+    # If a library written in C/C++ crashes (a "native" crash), Python itself dies and normally
+    # prints NOTHING. faulthandler prints which Python line was running, so a crash is never silent.
+    # (skipped when stderr is not a real file: inside a test, some IDE consoles)
+    with contextlib.suppress(ValueError, OSError):
+        faulthandler.enable()
     args = parse_args(argv)
-    if args.replay:
-        return run_replay(args)
-    live = "act" if args.act else "watch"  # no mode given = --watch
-    why = live_refusal(live)
-    if why:
-        print(why, file=sys.stderr)
-        return 2
-    return run_live(args)
+    setup_logs(args.logs, args.log_file)
+    mode = "replay" if args.replay else "act" if args.act else "watch"  # no mode given = --watch
+    LOG.info("simple_bot %s: python %s on %s", mode, sys.version.split()[0], sys.platform)
+    LOG.debug("options: %s", vars(args))
+    try:
+        if args.replay:
+            return run_replay(args)
+        why = live_refusal(mode)
+        if why:
+            print(why, file=sys.stderr)
+            return 2
+        return run_live(args)
+    except Exception:  # a Python error: its full traceback goes to the logs (and the screen)
+        LOG.exception("simple_bot stopped on an error")
+        raise
 
 
 if __name__ == "__main__":
