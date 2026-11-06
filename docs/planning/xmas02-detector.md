@@ -641,3 +641,43 @@ subagents), each with tests and a positive case, before the FIT step reads xw1.
   session joins TRAIN** (3c).
 - **`cookie_any` (6's fallback)** would need the cache manifest to map two species to one class
   (`eval_q1.class_map` refuses that today): built only if T2 triggers it, by its own amendment.
+
+### Amendment C (2026-11-06 12:3x ICT, before FIT reads anything): the other tools as built (T-4, T-6, T-7, T-10; merged d31ed25)
+
+- **T-4, the terrain candidate:** `orc_labels_fix.TerrainOccluders` exactly as 4f fixes it (a GAT
+  cell >= 10 altitude units above the label's own cell, south of it, drawn from the label's floor
+  to its top through `rsw.project_points`; overlap by any area). It refuses an indoor camera (yaw
+  over 5 degrees: "south" no longer means "nearer the camera"). `MAPS["xmas_dun02"].terrain` is ON:
+  `threshold` reports o3h AND o3h-t (o3h-t's own T_h, clear of terrain too) and 4f's adoption test
+  on 4e's set (each condition reported apart; steps 5 and 20 reported); `freeze` takes the rule the
+  test chose (`occlusion`, its T_h, the GAT's sha256); `check` scores both rules from one pass; the
+  verdict is the frozen rule's. Every other map runs as before (the switch off).
+- **The geometric share (1c) did NOT reproduce as worded.** Every other 1c count reproduced exactly
+  (11,031 / 9,631 / 2,675 raised cells, 144 blocks, 14,034 raised walkable cells). "Walkable cells
+  with a >= 10 block 1-4 cells south in the same column" is 6,452 / 50,702 = **12.7 %** (8.4 % with
+  4f's relative rise; 12.3-19.0 % with +-1 column), not 10.9 %. With the real idle sprites and the
+  camera on each cell, the boxes under terrain at step 10 are 13.9 % (Myst Case), 13.8 % (Cruiser),
+  12.0 % (each cookie) of the 50,702 cells. No decision used 10.9 %; the screen share is FIT's to
+  measure (4f).
+- **The labels' name:** `xmas02-o3h`, and **renamed `xmas02-o3h-t` by the freeze's own amendment if
+  4f adopts terrain**, before any label file is written. The params' `occlusion` field records the
+  rule either way.
+- **T-6:** the species -> `monster` collapse is applied in the scorer (`detector_vs_packets score /
+  score-session --classes LIST`); the rows on disk keep the model's class names (species agreement
+  stays readable). Positive case: gef10 round 2's 26-class output on Batt's demo collapses exactly
+  to its published rows (4,666 rows, 8,488 boxes).
+- **T-7:** a labelled `--val` session (xw1, D13) is written to the val split under the frozen
+  params, `join_rule_3c` = `VAL_MONITOR` (no own C1, never trains); every refusal kept.
+- **T-10, the T2 instructions:** `docs/planning/xmas02-blind-instructions.txt`, **sha256
+  `dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed`**; the questions, answer
+  format and box drawing are gef10's. **One wording differs from section 6:** the colour pair is
+  described as "dressed in pale GREEN, the other in red", not "tan vs red". The rendered reference
+  shows Cookie (1265) in pale green clothes and Christmas Cookie (1246) in red, both with tan
+  faces; 1b's 44° "tan" hue was the mean over all idle pixels, skin included (pixels with green >
+  red: Cookie 44.4 %, Christmas Cookie 0 %). The instructions must describe what a labeller sees.
+  `scripts/reference_sheet.py --preset xmas_dun02` builds the multi-view sheet (9 species, the
+  pack's own letters); it was built once at seed 51 and looked at (every species rendered).
+- **Open before the cache (decided in the class-list amendment after T2):** the cache's
+  `SpeciesClasses` requires the fixed classes {player, npc, warp}, while section 7 lists only
+  `player` + the species. Either npc / warp stay as EMPTY fixed classes (the species then start at
+  id 3) or the loader takes a map-scoped fixed set. No class id is used before then.
