@@ -21,6 +21,8 @@ capture  ->  detect  ->  decide  ->  act
 ## สิ่งที่ต้องมี
 
 - PC Windows 10/11 หนึ่งเครื่อง
+- **Microsoft Visual C++ Redistributable (x64) รุ่นล่าสุด** ติดตั้งครั้งเดียว: https://aka.ms/vs/17/release/vc_redist.x64.exe
+  (onnxruntime ต้องใช้รุ่น 14.40 ขึ้นไป ถ้าเก่ากว่านี้ Python จะปิดไปพร้อมข้อความ `access violation`)
 - เซิร์ฟเวอร์ rAthena ของตัวเองที่รันบนเครื่องนี้ (local server) และ client Ragnarok ที่ต่อเข้าเซิร์ฟเวอร์นั้น
 - ตั้ง client เป็นแบบหน้าต่าง (windowed) ขนาดพื้นที่เกม 1280 x 720
 - ตัวละครยืนอยู่ที่ prt_fild08
@@ -137,12 +139,13 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 
 ## ปัญหาที่พบบ่อย
 
-- **รันแล้วจบไปเฉย ๆ ไม่มีข้อความอะไรเลย**: เวอร์ชันแรกของชุดนี้โหลด OpenCV ก่อนโมเดล บน Windows
-  ทำให้ onnxruntime ล่มเงียบ ๆ ได้ (DLL `msvcp140.dll` คนละรุ่น) แก้แล้ว: สั่ง `git pull` ให้ได้เวอร์ชันใหม่
-  แล้วรันใหม่พร้อม `--logs` จะเห็นว่าหยุดที่ขั้นไหน ถ้ายังจบเงียบ ๆ ให้
-  1. ดูรหัสจบ: `echo $LASTEXITCODE` (ค่า `-1073741819` = โปรแกรมภาษา C/C++ ล่ม)
-  2. ติดตั้ง Microsoft Visual C++ Redistributable (x64) รุ่นล่าสุด: https://aka.ms/vs/17/release/vc_redist.x64.exe
-  3. ลอง `--detector color` (ไม่ใช้ onnxruntime) ถ้าแบบนี้รันได้ แปลว่าปัญหาอยู่ที่ onnxruntime
+- **รันแล้วจบเฉย ๆ หรือขึ้น `Windows fatal exception: access violation` ตอนโหลดโมเดล**:
+  เครื่องมี Microsoft C++ runtime (`msvcp140.dll`) รุ่นเก่า onnxruntime ต้องใช้รุ่น 14.40 ขึ้นไป
+  (ตัวโปรแกรมจะเตือนก่อนโหลดโมเดลถ้าเจอรุ่นเก่า)
+  1. ติดตั้ง Microsoft Visual C++ Redistributable (x64) รุ่นล่าสุด: https://aka.ms/vs/17/release/vc_redist.x64.exe
+  2. รันใหม่พร้อม `--logs` จะเห็นว่าหยุดที่ขั้นไหน และรุ่นของ `msvcp140.dll`
+  3. ดูรหัสจบ: `echo $LASTEXITCODE` (ค่า `-1073741819` = โปรแกรมภาษา C/C++ ล่ม)
+  4. ระหว่างนี้ลอง `--detector color` ได้ (ไม่ใช้ onnxruntime)
 - **หาหน้าต่างเกมไม่เจอ / เจอหลายหน้าต่าง**: ใส่ชื่อหน้าต่างให้ตรงขึ้น เช่น `--title "Ragnarok"`
 - **บอทขยับเมาส์ไม่ได้**: ถ้า client รันแบบ "Run as administrator" ต้องเปิด PowerShell แบบ administrator ด้วย
 - **กรอบไม่ตรงตัว**: ตรวจว่าพื้นที่เกมเป็น 1280 x 720 และ Windows display scaling ไม่ได้ทำให้ขนาดเพี้ยน
@@ -171,6 +174,9 @@ The code is written to be read: every function says what it does, why, and its i
 ## What you need
 
 - one Windows 10/11 PC;
+- **the latest Microsoft Visual C++ Redistributable (x64)**, installed once:
+  https://aka.ms/vs/17/release/vc_redist.x64.exe (onnxruntime needs 14.40 or newer; with an older
+  one Python closes with `access violation`);
 - your OWN rAthena server running on that PC (a local server), and a Ragnarok client connected to
   it;
 - the client windowed, with a 1280 x 720 game area;
@@ -284,14 +290,14 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 
 ## Common problems
 
-- **It ends at once with NO message at all**: the kit's first version loaded OpenCV before the
-  model; on Windows that can crash onnxruntime silently (two versions of Microsoft's C++ runtime,
-  `msvcp140.dll`). Fixed: `git pull` the new version and run again with `--logs` to see the last
-  step reached. Still silent?
-  1. the exit code: `echo $LASTEXITCODE` (`-1073741819` = a crash inside C/C++ code);
-  2. install the latest Microsoft Visual C++ Redistributable (x64):
+- **It ends with no message, or with `Windows fatal exception: access violation` while loading
+  the model**: the PC has an old Microsoft C++ runtime (`msvcp140.dll`); onnxruntime needs 14.40 or
+  newer (the script warns before loading the model when it finds an older one).
+  1. install the latest Microsoft Visual C++ Redistributable (x64):
      https://aka.ms/vs/17/release/vc_redist.x64.exe;
-  3. try `--detector color` (no onnxruntime): if that runs, the problem is onnxruntime.
+  2. run again with `--logs`: the last step reached and the `msvcp140.dll` version;
+  3. the exit code: `echo $LASTEXITCODE` (`-1073741819` = a crash inside C/C++ code);
+  4. meanwhile `--detector color` runs without onnxruntime.
 - **The game window is not found / several windows match**: give its title, e.g.
   `--title "Ragnarok"`.
 - **The mouse does not move in the game**: if the client runs "as administrator", run PowerShell

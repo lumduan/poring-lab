@@ -141,6 +141,12 @@ EDGE_PX = 12  # never click this close to the client area's edge
 CLASS_NAMES = ("player", "monster", "npc")  # the model's class ids 0, 1, 2 in this order
 CONF = 0.25  # keep a box only if the model is at least 25 % sure
 IOU = 0.5  # NMS: two boxes of one class overlapping by >= 50 % are the same object
+# onnxruntime's Windows builds need Microsoft's C++ runtime (msvcp140.dll) 14.40 or newer (Visual
+# Studio 2022 17.10+). With an older one, `import onnxruntime` itself dies with "Windows fatal
+# exception: access violation" (seen on a class PC, 2026-11-06). The fix: install the latest
+# "Microsoft Visual C++ Redistributable (x64)" once.
+CPP_RUNTIME_MIN = (14, 40)
+CPP_RUNTIME_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 PAD_GREY = 114  # the letterbox padding colour YOLO models are trained with
 
 # The decide step's timings and distances
@@ -1311,14 +1317,44 @@ def list_images(paths: Sequence[str]) -> list[Path]:
     return out
 
 
+def cpp_runtime_version() -> tuple[int, ...] | None:
+    """Windows only: the file version of System32\\msvcp140.dll (Microsoft's C++ runtime, e.g.
+    (14, 42, 34433, 0)), or None when it cannot be read."""
+    import os
+
+    import win32api
+
+    path = os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "msvcp140.dll")
+    try:
+        info = win32api.GetFileVersionInfo(path, "\\")  # "\\" = the fixed version block
+    except Exception:  # pywin32 raises its own error type when the file is missing
+        return None
+    ms, ls = int(info["FileVersionMS"]), int(info["FileVersionLS"])  # two 32-bit halves
+    return (ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF)
+
+
+def runtime_warning(version: tuple[int, ...] | None) -> str:
+    """PURE: a warning when the C++ runtime is missing or older than CPP_RUNTIME_MIN, else ""."""
+    if version is None:
+        return (f"WARNING: Microsoft's C++ runtime (msvcp140.dll) was not found; if Python closes "
+                f"with 'access violation' next, install it: {CPP_RUNTIME_URL}")  # fmt: skip
+    if tuple(version[:2]) < CPP_RUNTIME_MIN:
+        have = ".".join(str(v) for v in version)
+        need = ".".join(str(v) for v in CPP_RUNTIME_MIN)
+        return (f"WARNING: Microsoft's C++ runtime (msvcp140.dll) is {have}, older than the "
+                f"{need} onnxruntime needs: if Python closes with 'access violation' next, install "
+                f"the latest one (once): {CPP_RUNTIME_URL}")  # fmt: skip
+    return ""
+
+
 def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
     """The detector the command line asked for: the YOLO model (needs --model) or the colour one.
 
-    CALL IT BEFORE `import cv2` (both run modes do). On Windows, onnxruntime needs a NEWER copy of
-    Microsoft's C++ runtime (msvcp140.dll) than the one OpenCV can bring into the program. Windows
-    loads a DLL only once per program, so whichever library comes first wins: OpenCV first can make
-    onnxruntime crash with NO message at all (a "native" crash, below Python). Model first is
-    safe."""
+    On Windows onnxruntime needs a NEW copy of Microsoft's C++ runtime, msvcp140.dll (see
+    CPP_RUNTIME_MIN): with an old one, its import dies with "access violation" and no Python error.
+    So the version is checked and warned about first. Windows also loads a DLL only once per
+    program, so the model is loaded BEFORE OpenCV (a precaution: no other library can bring an
+    older copy in first)."""
     if args.detector == "color":
         return ColorDetector()
     if not args.model:
@@ -1327,6 +1363,12 @@ def make_detector(args: argparse.Namespace) -> OnnxDetector | ColorDetector:
         )
     if not Path(args.model).is_file():
         raise SystemExit(f"--model {args.model}: no such file")
+    if sys.platform == "win32":  # warn BEFORE the import that crashes on an old runtime
+        version = cpp_runtime_version()
+        LOG.info("msvcp140.dll version: %s", version)
+        warning = runtime_warning(version)
+        if warning:
+            print(warning, flush=True)
     say(f"loading the model {args.model} ...")
     return OnnxDetector(Path(args.model), args.conf, IOU, args.threads)
 

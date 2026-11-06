@@ -376,3 +376,18 @@ def test_a_refused_live_mode_is_logged_with_its_mode(
     assert "simple_bot act: python" in text and "options:" in text
     assert "--act refused" in capsys.readouterr().err
     sb.setup_logs(False)
+
+
+def test_the_cpp_runtime_warning() -> None:
+    """2026-11-06 on a class PC: `import onnxruntime` died with "Windows fatal exception: access
+    violation" (faulthandler: onnxruntime/capi/_pybind_state.py line 32, the native module's load).
+    The kit warns BEFORE that import when msvcp140.dll is missing or older than 14.40."""
+    assert sb.CPP_RUNTIME_MIN == (14, 40)
+    assert sb.runtime_warning((14, 42, 34433, 0)) == ""
+    assert sb.runtime_warning((14, 40, 33810, 0)) == ""
+    old = sb.runtime_warning((14, 29, 30139, 0))
+    assert "14.29.30139.0" in old and "older than the 14.40" in old and sb.CPP_RUNTIME_URL in old
+    assert "not found" in sb.runtime_warning(None) and sb.CPP_RUNTIME_URL in sb.runtime_warning(
+        None
+    )
+    assert sb.runtime_warning((15, 0, 0, 0)) == ""
