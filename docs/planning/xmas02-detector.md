@@ -764,7 +764,7 @@ and time box as 2b / Amendment A say):**
             --recorder-state /dev/shm/poring-lab-tmp/xmas-det/rec-state-xw1.json
         # when the watch ends: SIGINT the recorder by its PID (it finalises the open part)
 
-### Amendment E (2026-11-06 14:5x ICT, before xp1 records): xp1's seed, size cap and recorder
+### Amendment E (2026-11-06 14:4x ICT, committed 14:46:25, before xp1 records): xp1's seed, size cap and recorder
 
 - **The seed: `--seed 2611066`** (the watch seeds' series, 2611061-2611065, plus one). 2b's "X2's 4A
   command with `--label xmas02-xp1`" would repeat X2's `--seed 20261105`; X2 and xp1 are both
