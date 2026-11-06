@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "Batt runs `uv run simple_bot.py --bench --model v1.onnx` on a Windows PC and sends the BENCH_JSON line; Batt decides whether the live bot's detector may move to the GPU (the biggest lever, a measurement first), and whether the live bot goes to 16 threads."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done); measure the GPU (how much faster) before the GPU decision; the Windows --bench runs ONCE on the lab PC, by the agent, as an ADR-0019 exception (Batt's choice). Results appended below."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt

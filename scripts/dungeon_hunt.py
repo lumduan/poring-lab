@@ -981,17 +981,23 @@ def house_setup(map_: str, kb_dir: Path, ok: Any, okr: Any, zones: Any,
 
 
 class BoxWatch:
-    """The THIRD trigger (Batt: "or a v1 box is near"): the v1 CPU detector on a fresh frame every
-    BOX_EVERY_S in its own thread (its worker process does the work), the monster boxes kept with
-    their grab time. orcsdun01 zero-shot (orcsdun01-dungeon-prep.md 1): within 3 cells recall
-    8-14 % pooled, precision 96-100 %: a box near us is believed, "no box" means nothing."""
+    """The THIRD trigger (Batt: "or a v1 box is near"): the CPU detector (v1, or the map's own
+    model: unit_detector.for_map, 2026-11-07) on a fresh frame every BOX_EVERY_S in its own
+    thread (its worker process does the work), the monster boxes kept with their grab time.
+    orcsdun01 zero-shot (orcsdun01-dungeon-prep.md 1): within 3 cells recall 8-14 % pooled,
+    precision 96-100 %: a box near us is believed, "no box" means nothing."""
 
-    def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any) -> None:
+    def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any,
+                 map_name: str | None = None) -> None:  # fmt: skip
         import threading
 
         import unit_detector
 
-        self.det = unit_detector.UnitDetector()
+        # Batt 2026-11-07 (T-11, xmas02-detector.md): a map with its own model gets it, its
+        # species collapsed to "monster" before NMS (unit_detector.for_map); else v1 as before
+        self.det = unit_detector.for_map(map_name)
+        self.model = {"onnx": self.det.model.name, "collapse": sorted(self.det.collapse),
+                      "threads": unit_detector.THREADS}  # fmt: skip
         # its OWN grab helper: ro_agent.Screen is one pipe, not thread-safe (pilot 3, 12:02: the
         # main loop's grab and this thread's interleaved and the pipe's framing broke)
         self.screen, self.region, self.r = r.Screen(), region, r
@@ -1532,7 +1538,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
         mr = a.engage == "melee_ring"  # Batt 13:4x: the CURSOR engages, the detector does not
-        boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r) if a.boxes and not mr else None
+        boxes = None
+        if a.boxes and not mr:
+            boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
+                             None if a.box_model == "v1" else a.map)  # fmt: skip
+            ev({"kind": "box_model", "choice": a.box_model, **boxes.model})
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
         ours_used = -2e9
@@ -3158,7 +3168,14 @@ def main() -> int:
         "--boxes",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="the v1 box watcher (the third trigger, 1 Hz in its own thread)",
+        help="the box watcher (the third trigger, 1 Hz in its own thread; --box-model)",
+    )
+    t.add_argument(
+        "--box-model",
+        choices=["map", "v1"],
+        default="map",
+        help="the box watcher's model (Batt 2026-11-07, T-11): map = the map's own model when "
+        "unit_detector.MAP_MODELS has one (xmas_dun02), else v1; v1 = v1 everywhere (rollback)",
     )
     t.add_argument(
         "--plant-sweep",

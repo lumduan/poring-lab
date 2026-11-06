@@ -9,6 +9,11 @@ letterbox, decoding and NMS here are our own, so no ultralytics code runs at dec
 Protocol (stdin/stdout, binary): per request an 8-byte header `<HH` height, width + `<I` 0, then
 height*width*3 BGR bytes; the reply is one JSON line:
 {"boxes": [[x0, y0, x1, y1, score, cls], ...], "ms": inference ms}. Pixels in only.
+
+argv: model conf iou [threads [groups]]. ``groups`` (optional, 2026-11-07) is a JSON list, one NMS
+group per class id: classes in one group are suppressed TOGETHER, so a map-scoped model's species
+(xmas02: cookie + cookie_xmas on one sprite, xmas02-eval.md RESULTS) give one box, not two. The
+box keeps its own class id. Without it every class is its own group, as before.
 """
 
 from __future__ import annotations
@@ -61,9 +66,10 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:
     return keep
 
 
-def decode(out: np.ndarray, s: float, left: int, top: int, conf: float,
-           iou: float) -> list[list[float]]:  # fmt: skip
-    """YOLO11 head (1, 4 + nc, N): centre-xywh + per-class scores -> boxes in the frame's pixels."""
+def decode(out: np.ndarray, s: float, left: int, top: int, conf: float, iou: float,
+           groups: list[int] | None = None) -> list[list[float]]:  # fmt: skip
+    """YOLO11 head (1, 4 + nc, N): centre-xywh + per-class scores -> boxes in the frame's pixels.
+    NMS runs per group of ``groups`` (one group id per class id), else per class."""
     p = out[0].T  # (N, 4 + nc)
     cls_scores = p[:, 4:]
     cls = cls_scores.argmax(1)
@@ -75,13 +81,15 @@ def decode(out: np.ndarray, s: float, left: int, top: int, conf: float,
     boxes = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], 1)
     boxes[:, [0, 2]] = (boxes[:, [0, 2]] - left) / s
     boxes[:, [1, 3]] = (boxes[:, [1, 3]] - top) / s
+    cm = cls[m]
+    grp = cm if groups is None else np.asarray(groups)[cm]
     out_rows: list[list[float]] = []
-    for c in np.unique(cls[m]):
-        idx = np.nonzero(cls[m] == c)[0]
+    for g in np.unique(grp):
+        idx = np.nonzero(grp == g)[0]
         for k in nms(boxes[idx], score[m][idx], iou):
             j = idx[k]
             out_rows.append([*(round(float(v), 1) for v in boxes[j]), round(float(score[m][j]), 3),
-                             int(c)])  # fmt: skip
+                             int(cm[j])])  # fmt: skip
     return out_rows
 
 
@@ -94,6 +102,10 @@ def main() -> int:
     sess = ort.InferenceSession(model, opts, providers=["CPUExecutionProvider"])
     name = sess.get_inputs()[0].name
     size = (int(sess.get_inputs()[0].shape[2]), int(sess.get_inputs()[0].shape[3]))
+    groups = json.loads(sys.argv[5]) if len(sys.argv) > 5 else None
+    nc = int(sess.get_outputs()[0].shape[1]) - 4
+    if groups is not None and (len(groups) != nc or not all(isinstance(g, int) for g in groups)):
+        raise SystemExit(f"groups: one int per class id ({nc}), got {groups!r}")
     inp, outp = sys.stdin.buffer, sys.stdout
     while True:
         head = inp.read(8)
@@ -105,7 +117,7 @@ def main() -> int:
         t = time.perf_counter()
         x, s, left, top = letterbox(img, size)
         out = sess.run(None, {name: x})[0]
-        boxes = decode(out, s, left, top, conf, iou)
+        boxes = decode(out, s, left, top, conf, iou, groups)
         reply: dict[str, Any] = {"boxes": boxes, "ms": round((time.perf_counter() - t) * 1000, 1)}
         outp.write(json.dumps(reply) + "\n")
         outp.flush()

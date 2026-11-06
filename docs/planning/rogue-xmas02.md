@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector PASSED its evaluation 2026-11-07 00:39 (xmas02-eval.md): Batt decides its deployment (T-11). Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
+next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector PASSED its evaluation 2026-11-07 00:39 (xmas02-eval.md) and is DEPLOYED in the box watcher by Batt's decision 2026-11-07 (xmas02-detector.md Amendment J; --box-model v1 = rollback); a pre-registered pilot of it next. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt

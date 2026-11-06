@@ -11,10 +11,20 @@ object {"0": name, ...} as a cache manifest / ultralytics writes them); else v1'
 (player, monster, npc), so v1's behaviour is unchanged. A class id beyond the names raises
 ClassNamesMismatch (a DetectorUnavailable: a rule that needs the detector must not click on a box
 it cannot name). gef10-eval.md AMENDMENT R2-2: a 26-class model needs its own names.
+
+A MAP-SCOPED model (Batt 2026-11-07: "use it" -- xmas02-eval.md PASSED) is chosen by map name:
+
+    det = for_map("xmas_dun02")     # its pinned ONNX (sha256 checked), species -> "monster"
+    det = for_map("prt_fild08")     # no entry: v1, as before
+
+``collapse`` renames classes (a species -> ``monster``) and the worker suppresses every class of one
+new name TOGETHER, before the boxes leave it: one box per sprite where per-class NMS gave a Cookie
+and a Christmas Cookie on the same one. ``Box.species`` keeps the model's own class name.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import struct
 import subprocess
@@ -34,7 +44,30 @@ MODEL = ENV / "model/v1png-last-736x1280.onnx"
 V0_MODEL = ENV / "model/v0png-best-736x1280.onnx"  # v0-PNG (2026-10-06, 30 epochs)
 WORKER = Path(__file__).resolve().parent / "detector_worker.py"
 NAMES = ("player", "monster", "npc")  # v1's (and v0's) classes, by id
-CONF, IOU, THREADS = 0.25, 0.5, 8
+# THREADS: 8 -> 16 by Batt's decision 2026-11-07 (docs/benchmarks/cpu-detector-speed.md 1: p50
+# 145 -> 110 ms on this host; onnxruntime's auto count is the slowest and is never used).
+CONF, IOU, THREADS = 0.25, 0.5, 16
+
+
+@dataclass(frozen=True)
+class MapModel:
+    """A map-scoped model: its ONNX in ENV/model, the file's sha256 (a different file fails
+    closed), and its classes renamed for the runner (species -> "monster")."""
+
+    onnx: str
+    sha256: str
+    collapse: Mapping[str, str]
+
+
+# xmas02-eval.md PASSED 2026-11-07 00:39 (Q1c 4/4, P4A still 0.946); deployed by Batt's decision
+# 2026-11-07 ("use it"). The ONNX's NAS copy: scratch-archive/2026-11-07/detector-model/.
+MAP_MODELS: dict[str, MapModel] = {
+    "xmas_dun02": MapModel(
+        "xmas02-last-736x1280.onnx",
+        "293dca922e3e7890e3f26f40f140ef9b3d7eec4799392152ff3be8d132cace13",
+        {s: "monster" for s in ("mystcase", "cruiser", "cookie", "cookie_xmas")},
+    ),
+}
 
 
 class DetectorUnavailable(RuntimeError):
@@ -84,6 +117,7 @@ class Box:
     y1: float
     score: float
     cls: str
+    species: str | None = None  # the model's own class name when ``collapse`` renamed it
 
     @property
     def foot(self) -> tuple[float, float]:
@@ -91,20 +125,35 @@ class Box:
         return ((self.x0 + self.x1) / 2, self.y1)
 
 
+def nms_groups(names: Sequence[str], collapse: Mapping[str, str]) -> list[int]:
+    """PURE: one NMS group per class id; classes renamed to the same name share one group."""
+    first: dict[str, int] = {}
+    return [first.setdefault(collapse.get(n, n), i) for i, n in enumerate(names)]
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 class UnitDetector:
     def __init__(self, model: Path = MODEL, conf: float = CONF, iou: float = IOU,
                  threads: int = THREADS, python: Path = PYTHON,
-                 names: Sequence[str] | None = None) -> None:  # fmt: skip
+                 names: Sequence[str] | None = None,
+                 collapse: Mapping[str, str] | None = None) -> None:  # fmt: skip
         if not python.exists() or not model.exists():
             raise DetectorUnavailable(
                 f"{python} / {model} missing (docs/operations/detector-cpu.md)"
             )
         self.model = model
         self.names = names_for(model, names)
-        self.proc = subprocess.Popen(
-            [str(python), str(WORKER), str(model), str(conf), str(iou), str(threads)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        )  # fmt: skip
+        self.collapse = dict(collapse or {})
+        unknown = sorted(set(self.collapse) - set(self.names))
+        if unknown:
+            raise ClassNamesMismatch(f"{model.name}: collapse names {unknown} are not its classes")
+        argv = [str(python), str(WORKER), str(model), str(conf), str(iou), str(threads)]
+        if self.collapse:
+            argv.append(json.dumps(nms_groups(self.names, self.collapse)))
+        self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.last_ms = 0.0
         # Batt 2026-10-09: every detection batch may be logged (class + score per box) so the walk
         # gate's refusals can be attributed to the boxes behind them, and hard negatives found.
@@ -122,7 +171,7 @@ class UnitDetector:
             raise DetectorUnavailable("the detector worker died")
         reply = json.loads(line)
         self.last_ms = float(reply["ms"])
-        boxes = [Box(*b[:5], self.name_of(int(b[5]))) for b in reply["boxes"]]
+        boxes = [self.box_of(b) for b in reply["boxes"]]
         if self.log_path is not None:
             row = {"t_ns": time.monotonic_ns(), "ms": self.last_ms, "h": h, "w": w,
                    "boxes": [[round(b.x0, 1), round(b.y0, 1), round(b.x1, 1), round(b.y1, 1),
@@ -130,6 +179,12 @@ class UnitDetector:
             with self.log_path.open("a") as fh:
                 fh.write(json.dumps(row) + "\n")
         return boxes
+
+    def box_of(self, b: Sequence[Any]) -> Box:
+        name = self.name_of(int(b[5]))
+        if name in self.collapse:
+            return Box(*b[:5], self.collapse[name], name)
+        return Box(*b[:5], name)
 
     def name_of(self, cid: int) -> str:
         if not 0 <= cid < len(self.names):
@@ -149,3 +204,19 @@ class UnitDetector:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+
+def for_map(map_name: str | None, *, env: Path = ENV, **kw: Any) -> UnitDetector:
+    """The detector for a map: its MAP_MODELS entry (the ONNX's sha256 must match, else
+    DetectorUnavailable), else v1 (``MODEL``). ``kw`` goes to UnitDetector (threads, python...)."""
+    spec = MAP_MODELS.get(map_name or "")
+    if spec is None:
+        return UnitDetector(**kw)
+    onnx = env / "model" / spec.onnx
+    if not onnx.exists():
+        raise DetectorUnavailable(f"{onnx} missing (docs/operations/detector-cpu.md)")
+    got = file_sha256(onnx)
+    if got != spec.sha256:
+        raise DetectorUnavailable(f"{onnx}: sha256 {got[:12]}... is not the deployed "
+                                  f"{spec.sha256[:12]}... ({map_name})")  # fmt: skip
+    return UnitDetector(model=onnx, collapse=spec.collapse, **kw)

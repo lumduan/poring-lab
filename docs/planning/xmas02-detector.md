@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "PASSED 2026-11-07 00:39 (xmas02-eval.md RESULTS). Batt decides the deployment on xmas_dun02 (T-11). Done: recordings, FIT + freeze, T1, TRAIN, T2, the classes, the cache, the training, the evaluation."
+next_action: "Amendment J (Batt 2026-11-07 ~05:5x): DEPLOYED on xmas_dun02 (T-11 built: for_map, species in one NMS group, 16 threads); next: measure the moving-capture gap on non-TEST sessions with a lag-checked truth, then a round 2 with moving frames in the labels (pre-registered before its cache)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -155,7 +155,7 @@ never re-run under the same bars.
 | T-8 | C1's notice rule (`--c1-rule round2`) is gef_fild10's only | generalised to this map | map_labels.py:26-34 |
 | T-9 | the evaluation's TEST labels and pack (`--eval-test2`) are gef_fild10's only; `eval_q1` scores classes as they are | a per-map eval flag and a collapsed-class score (Q1c) | map_labels.py:36-47 |
 | T-10 | T2 instructions + reference for this map | a new instructions file (its sha256 in an amendment before the pack) | 5 |
-| T-11 | (deployment, later) `BoxWatch` uses `UnitDetector()`'s default v1 and `cls == "monster"` | a model per map + the species collapsed; Batt's decision, after the evaluation | dungeon_hunt.py:992-1013 |
+| T-11 | (deployment, later) `BoxWatch` uses `UnitDetector()`'s default v1 and `cls == "monster"` | a model per map + the species collapsed; Batt's decision, after the evaluation. ➡️ BUILT 2026-11-07 (Amendment J): `unit_detector.for_map`, species -> `monster` in ONE NMS group | dungeon_hunt.py:992-1013 |
 
 Every tool gets tests and a positive case before it reads FIT; TEST stays refused by name.
 
@@ -1056,3 +1056,49 @@ up 20:50:55, settled 20:52:55 (idle, no CUDA context; worst stall 4.4 % on friga
 (init gef10 r2 `last.pt`, MID_CKPT, the sustained IO rule); R2 co-tenant rule armed (fit-first's VTON
 never touched), paired R3 (180 s ON / OFF), the duty cycle 2000 ms -> 100 ms by 20:58 (fleet 26.9
 det/s); 1,406 MiB on the GPU. The scored checkpoint: `last.pt` after the last completed epoch.
+
+### Amendment J (2026-11-07 ~06:0x ICT): Batt's answers to the 00:44 report
+
+Batt's words (Thai, translated), answering the report's to-do list:
+1. **Deploy:** "Use it, and train more too: it must see monsters while walking as well as when
+   standing still."
+2. **GPU or CPU, 8 or 16 threads:** "Compare: how much faster would the GPU be? And raising the CPU
+   to 16 threads is OK."
+3. **The Windows `--bench`:** "You may run it for me." Asked at ~05:5x which Windows: the only one
+   this side can reach is the lab PC, which ADR-0019 keeps clean. Batt chose the one-off on the lab
+   PC (an ADR-0019 exception, logged there): uv and the kit in one temporary folder, `--bench`
+   (no game input), then everything removed and checked.
+4. "The students' mouse problem: no need to follow it any more, close it."
+
+**What was built (T-11), before any live use:**
+- `unit_detector.THREADS` 8 -> 16 (every UnitDetector user; recorder_boxes and the HUD keep their
+  own counts).
+- `unit_detector.for_map(map)` with `MAP_MODELS["xmas_dun02"]`: the ONNX by name, its sha256 pinned
+  (`293dca92...`; a different file fails closed), the four species renamed `monster`.
+- `detector_worker.py`'s optional NMS groups: the renamed species are suppressed TOGETHER.
+  Positive case on 113 real X2 frames: 197 -> 184 monster boxes; the 13 dropped boxes all
+  overlapped a higher-scored box of another species (IoU > 0.5); 0 added; 0 doubles left
+  (docs/operations/detector-cpu.md "Map-scoped models").
+- `dungeon_hunt.py`: `BoxWatch` takes the map's model (`--box-model map`, the default; `--box-model
+  v1` = the rollback) and logs a `box_model` event.
+
+**"See monsters while walking as well as standing": what is known, and the order of the work.**
+- The P4A gap (still precision 0.946, moving ~0.22) has TWO possible causes, and the evaluation
+  cannot tell them apart:
+  - (a) the scorer's truth on moving captures. `detector_vs_packets` places the packet truth at
+    t - 120 ms (`mvp_watch_study.OFFSET_MS`, payf07's 1d) with our walk interpolated; the frames
+    lag the server by ~0.5 s while we walk (memory: frames lag the server), so the truth moves
+    ahead of the sprites;
+  - (b) the model itself. The label rule drops every frame where our character moved in the last
+    1 s (`map_labels.py` 4f, `self_moving`): **the model never trained on a frame taken while
+    walking** (scroll, codec smear while the camera moves).
+- The order:
+  1. **Measure first, on non-TEST sessions** (xw1 VAL, TRAIN parts): the moving captures' truth
+     re-timed by a sweep of the self / camera offset. A positive case: the still captures' scores
+     must not change. If the re-timed truth brings moving recall and precision to the still values,
+     cause (a) is the whole gap and the model needs no new data; the scorer is fixed instead.
+  2. **Otherwise a round 2:** moving frames admitted to the labels with the measured timing,
+     their fit checked as 4e does on FIT, the cache rebuilt, the model retrained. Its bar (moving
+     recall and precision within a fixed margin of still, on TEST) is pre-registered here before
+     its cache.
+

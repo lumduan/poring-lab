@@ -1,6 +1,6 @@
 ---
 doc_type: runbook
-status: "ACTIVE; the RAM environment was REMOVED 2026-11-02 19:56 ICT for the pause (rebuild below)"
+status: "ACTIVE: rebuilt 2026-11-05 15:07 ICT; since 2026-11-07 16 threads and a map-scoped model for xmas_dun02 (section 'Map-scoped models')"
 related: [../demonstrations.md, ../adr/0018-component-licensing.md]
 ---
 
@@ -11,6 +11,9 @@ detection on the click-decision frame (Batt's decision 3, "CPU is fine, R2"). Th
 no torch by design, and the vision container is refused while training holds the GPU (R2), so the
 detector runs in its OWN environment, in RAM.
 
+➡️ **REBUILT 2026-11-05 15:07 ICT** (the `.venv` and `model/` in `/dev/shm/poring-lab-detector`); the
+paragraph below is history.
+
 **State (2026-11-02 19:56 ICT, from `date`): the environment is REMOVED for the pause.** Batt paused
 poring-lab on 2026-10-29 (fit-first and candy-closet hold the GPU for days) and approved the RAM
 cleanup on 2026-11-02. The `.venv` (1.5 GB) was deleted. The night chain of 2026-11-03 03:06 ICT
@@ -19,8 +22,10 @@ each verified by sha256 on the NAS 03:06:13; the list is `_checksums/detector-mo
 removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails closed (`DetectorUnavailable`).
 
 ## What it is
-- `scripts/detector_worker.py`: onnxruntime on CPU (8 threads), our own letterbox / decode / NMS:
-  no ultralytics code at decision time.
+- `scripts/detector_worker.py`: onnxruntime on CPU (`unit_detector.THREADS`: **16 since 2026-11-07**,
+  Batt's decision after docs/benchmarks/cpu-detector-speed.md; 8 before), our own letterbox /
+  decode / NMS: no ultralytics code at decision time. An optional NMS-groups argument suppresses
+  several classes together (the map-scoped models below).
 - `scripts/unit_detector.py`: the host client (spawns the worker, frames over a pipe). It FAILS
   CLOSED: no environment or model raises `DetectorUnavailable`, and a rule must not click then.
 - **The model (since 2026-10-13, Batt decision 10): v1** (`data/train/v1png-20261008/weights/last.pt`,
@@ -31,6 +36,20 @@ removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails clos
 - **Before it:** v0-PNG (`data/train/v0png-20261006/weights/best.pt`, 30 epochs, mAP50 0.864), exported
   to ONNX with a 1280 x 736 input (~180 ms on 8 threads; the square 1280 input took ~500 ms). It stays
   in `model/` for a rollback (`unit_detector.V0_MODEL`). Classes: player / monster / npc (both models).
+
+## Map-scoped models (Batt 2026-11-07: "use it"; docs/planning/xmas02-detector.md T-11)
+- `unit_detector.for_map(map)` gives the map's own model when `MAP_MODELS` has one, else v1. The
+  ONNX's sha256 is pinned there: a different file fails closed (`DetectorUnavailable`).
+- **xmas_dun02:** `model/xmas02-last-736x1280.onnx` (sha256 `293dca92...`, from last.pt `5c5bb67a...`;
+  docs/benchmarks/xmas02-eval.md PASSED 2026-11-07 00:39) with its `.names.json` (player, npc, warp,
+  mystcase, cruiser, cookie, cookie_xmas).
+- Its four species are renamed `monster` and suppressed TOGETHER (one NMS group): per-class NMS
+  drew a Cookie AND a Christmas Cookie box on one sprite (13 of 964 boxes on X2). The positive case
+  on 113 real X2 frames (13 with a double, 100 random): 197 monster boxes -> 184; all 13 dropped
+  boxes overlapped a higher-scored box of another species at IoU > 0.5; 0 added; 0 doubles left.
+  `Box.species` keeps the model's class.
+- The user is `dungeon_hunt.py`'s box watcher (`--box-model map`, the default; `--box-model v1` is
+  the rollback). Every other user still calls `UnitDetector()`: v1.
 
 ## Rebuild after a host reboot (`/dev/shm` is wiped)
 All of it lives in RAM; nothing touches the shared disk, the host `.venv` or `uv.lock`.
@@ -54,6 +73,9 @@ NAS now (both .pt sha256 checked there 2026-11-02 19:5x: v1 `03d53979...`, v0 `b
 (`cp .../scratch-archive/2026-11-03/detector-model/* model/`, then `sha256sum -c` of
 `_checksums/detector-model.sha256` inside `model/`). It also holds round 2's CPU export
 (`gef10r2-last-736x1280.onnx` + `.names.json`). The venv is still installed as above.
+**The xmas_dun02 model** (2026-11-07): copy `scratch-archive/2026-11-07/detector-model/*` (its ONNX
+and `.names.json`; `_checksums/detector-model.sha256` there) into `model/`. `for_map` checks the
+ONNX's sha256 itself.
 
 Check the export against the pre-registration (sha256 of the .pt is pinned there):
 

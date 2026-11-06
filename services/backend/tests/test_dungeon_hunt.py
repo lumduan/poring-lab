@@ -868,3 +868,11 @@ def test_each_hp_read_logs_its_readout_outcome() -> None:
     assert dh.read_outcome(failed, None) == "light_failed:half_shadow"
     src = (Path(dh.__file__)).read_text()
     assert '"rd": rd_why})' in src and "rd_why = read_outcome(rd, pos)" in src
+
+
+def test_the_box_watcher_takes_the_maps_model_with_a_v1_rollback() -> None:
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert "self.det = unit_detector.for_map(map_name)" in src  # T-11 (Batt 2026-11-07)
+    assert 'None if a.box_model == "v1" else a.map' in src
+    assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model})' in src
+    assert '"--box-model",\n        choices=["map", "v1"],\n        default="map",' in src
