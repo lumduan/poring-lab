@@ -643,6 +643,24 @@ params, 17:39:53-17:45:14; t1.json sha256 `5c6b3bf5d8e0116f...`): PASS.**
   under_terrain_kept 30, unscored 16, facing_unknown 10, frame_with_notice 8.
 - TEST is not read again before the evaluation (section 9).
 
+**TRAIN by 2d / 3c (17:36-17:58; `map_labels.py labels` + `check --c1-rule round2`, the frozen
+params, `--classes` an EMPTY extra list: only the MapSpec's six species count as checked in 4g's
+whole-frame rule, no class decision before T2):**
+
+| session | own C1 (3c: <= 5 % on >= 50) | C2 | boxes in whole frames: Myst Case / Cruiser / Cookie / Christmas Cookie |
+|---|---|---|---|
+| xw2 `20261106T151122` | 2 / 695 = 0.29 % ADMITTED | PASS x4 | 691 / 373 / 221 / 143 |
+| xw3 `20261106T154241` | 0 / 307 = 0.00 % ADMITTED | PASS x4 | 260 / 197 / 82 / 104 |
+| xw3 `20261106T160700` | 1 / 228 = 0.44 % ADMITTED | PASS x4 | 289 / 99 / 30 / 53 |
+| **TRAIN total** | | | **1,240 / 669 / 333 / 300** |
+
+- **2d's stopping rule is MET after xw3: every tier species has >= 300 boxes in whole TRAIN frames**
+  (Christmas Cookie exactly 300). **xw4 is not recorded** (Amendment F). Garm Baby and the Goblin:
+  no kept label in a whole frame; Stormy Knight (1251, OUT) showed in xw3's first session (the
+  MVP's respawn after the 15:42 `@killmonster2`): its frames are `unchecked_species`, not whole.
+- FIT's labels (xw1, two sessions; for T2's pool and VAL): whole-frame boxes 582 / 244 / 226 / 233.
+- Next: the T2 pack (seed 51, salt xmas02, 30 per tier species) from xw1 + xw2 + xw3.
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
