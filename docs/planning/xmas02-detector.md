@@ -576,7 +576,7 @@ after the last busy poll. The script and its output: `/dev/shm/poring-lab-tmp/xm
 typed.** Prep 15:42:08 (`@killmonster2`, judged clean); seed 2611063, stands 0-24 (25 whole dwells,
 one part, no pause); **1,057 frames, 2,059,108,049 bytes (116.9 MB/min), 1,006 packet events**; the
 guard's worst 36.4 % on quant-postgres, 11 s above 30 %.
-- **Why:** at stand 25 (37,159) the padlock read closed 5.6 / open 19.7 by grey (margin 14.1 < 15)
+- **Why:** standing at stand 24 (37,159), before typing stand 25's `@warp`, the padlock read closed 5.6 / open 19.7 by grey (margin 14.1 < 15)
   and 0.366 / 0.229 by colour shape (margin 0.137 < 0.15): "unknown", the same on three read-only
   re-reads (a static floor). The frame shows the standard window (6 lines, docked, tabs Battle Log |
   Chat), nothing over it.
