@@ -517,7 +517,25 @@ Calendar: ~2 days if D0 is answered today; the weekend has no market windows.
 
 ## 12. RESULTS (appended below, clock-labelled; nothing above this line is edited after the pre-registration commit except by a labelled AMENDMENT)
 
-(none yet)
+**xw1, attempt 1 (2026-11-06; recorder session `20261106T115507-rdp-xmas02-xw1`, watch
+`20261106T115540-watch-xmas_dun02-xw1`): STOPPED by the recorder's IO guard after 5.5 min.**
+- Setup (11:50-11:55): the client restarted onto the Rogue (Thief8fce, Lv 99 / 50), the game-entry
+  chat check passed; the hunting layout read from pixels (`client_layout.py read`: 1 row, panel
+  collapsed, Battle Log); `stage_items.py immune-on` at 11:53:51, its frame read: "You are now
+  immune to attacks."; `@warp xmas_dun02 7 21`, `@killmonster2` ("All monsters killed!"); a judged
+  screenshot.
+- The recorder (Amendment A's command + `--seconds 1980`) started 11:55:07; the watch 11:55:40
+  (seed 2611061, `lattice-train.json`, 30-s dwells, ~42 s a stand).
+- **12:00: the recorder stopped itself: `io_guard: quant-ticker-engine 28.3% (spike above 25.0%)`**
+  (the tolerant DISK_RULE of a disk sink), after **328 frames, 662,527,701 bytes (121.4 MB/min),
+  248 packet events**. It warned "SET hours" at its start (plan 2b: best outside SET hours; gef10
+  13x: 10 of 11 recorders on 10-26 were cut by quant's own spikes).
+- The watch went on with nothing recording; it was stopped by SIGINT inside a dwell at 12:02:20
+  (stand 10 of its order; no line half-typed). The Rogue stays immune and idle at (93,148); the
+  frame judged clean.
+- **By the standing rule (one IO abort: stop and ask), recordings and shipping are PAUSED for
+  Batt.** The partial session (662.5 MB) stays on the root disk until shipped (`dataset_ship`
+  refuses SET hours anyway).
 
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
