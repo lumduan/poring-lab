@@ -62,3 +62,22 @@ def test_a_session_before_the_ring_logs_no_ring_reads() -> None:
            {"t_ns": 120 * S, "kind": "run_end"}]  # fmt: skip
     out = wj.judge(evs)
     assert out["ring_logged"] == 0 and out["red_only_clicks"] == 0 and out["carve_share"] == 1.0
+
+
+def test_the_move_requests_come_from_the_packets_when_given() -> None:
+    """p3: 124 of 456 walk clicks sent no self_move_request; 93 of 95 at (0, +7)."""
+    evs = [
+        {"t_ns": 0, "kind": "run_start"},
+        _walk(1, [13, 27], [13, 34], True),  # straight north: no request follows
+        _walk(3, [13, 27], [14, 34], True),  # aside: its request 2 ms before the log line
+        {**_walk(5, [14, 34], [15, 41], True), "dodge": "side+1"},
+        {"t_ns": 60 * S, "kind": "run_end"},
+    ]
+    pk = [{"t_mono_ns": 3 * S - 2_000_000, "type": "self_move_request", "x": 14, "y": 34},
+          {"t_mono_ns": 5 * S + 100_000_000, "type": "self_move_request", "x": 15, "y": 41},
+          {"t_mono_ns": 1 * S + 900_000_000, "type": "self_move", "x0": 1, "y0": 1}]  # fmt: skip
+    out = wj.judge(evs, pk)
+    assert out["unsent_clicks"] == 1 and out["unsent_share"] == round(1 / 3, 3)
+    assert out["column_clicks"] == 1 and out["column_unsent"] == 1
+    assert out["dodges"] == {"side+1": 1}
+    assert "unsent_clicks" not in wj.judge(evs)  # events alone: no move-request columns

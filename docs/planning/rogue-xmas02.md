@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G). p3 PASSED (0 dead-end Fly Wings, carves 6.3 %); its packets: straight-north clicks send no move request -> dungeon@8.7 (column_dodge) pre-registered as pilot p4 (4H)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "Pilot p3 (4G: dungeon@8.6, the no-entry ring) and its verdict; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
+next_action: "Pilot p4 (4H: dungeon@8.7, no click straight north) and its verdict; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -361,6 +361,33 @@ it); a judged screenshot first; unrecorded. Judged once after the run by `walk_j
 - **A FAIL of W1-W3** leaves dungeon@8.6 un-adopted for the patrol (the runner's default stays
   until a verdict) and is reported with its cause; the route offset (Amendment D 2) is the next
   candidate.
+
+### 4H. Pilot p4 pre-registration: no walk click straight north (written BEFORE its run)
+
+- **Why:** p3's packets (section 5): the client sent no move request for 93 of 95 walk clicks at
+  (0, +7) and 5 of 6 at (0, +6), but for 32 of 33 at (+-1, +7); on gef_fild10 (0, +7) 108 / 325
+  were unsent, (+-1, +7) 0 / 88, (0, +5) 0 / 24. Those clicks made p3's stalls (38) and forgets.
+- **The change (dungeon@8.7, at this section's commit; one change):** `column_dodge`: a walk
+  target straight north of us (our column, >= 6 cells up) moves one cell sideways (toward a later
+  path cell first) when that cell is on the route grid, not carved, in view and crosses no zone;
+  else 5 cells up in the same column; else unchanged. The hover reads the cell that is clicked;
+  the walk record carries `dodge`. Tests: both sides, the side toward the path, the one-cell
+  corridor's 5-up, nothing usable, every other target unchanged, the hover after the dodge.
+- **`walk_judge.py` now also reads the session's packets (offline):** unsent walk clicks and the
+  straight-north ones. Positive case on the real sessions: p3 124 unsent of 456, 100 straight
+  north of which 98 unsent; X2 49 / 363, 32 (31); p2 42 / 275, 32 (30).
+- **The run:** pilot p4, the p3 command with `--label xmas02-p4` (dungeon@8.7); the Rogue still
+  immune from its 06:59 `@monsterignore` (no relog since; read on the judged screenshot first);
+  unrecorded. Judged once after the run by `walk_judge.py` and `dungeon_judge.py row`.
+- **Bars (against p3):**
+  - **M1 (primary):** walk clicks without a move request <= 10 % (p3 27.2 %).
+  - **M2:** straight-north walk clicks (dx 0, dy >= 6) <= 2 (p3 100).
+  - **M3:** stalls <= 19 (p3 38).
+  - **M4:** 4G's bars still hold: dead-end Fly Wings <= 2, no-entry carves <= 10 % of the walk
+    decisions, hard bars pass.
+  - Reported: waypoints reached per minute (p3 5.27), the dodges by kind, forgets, engagements,
+    kills, position None share.
+- A FAIL keeps dungeon@8.6 as the patrol's runner, with the cause reported.
 
 ## 5. Results
 

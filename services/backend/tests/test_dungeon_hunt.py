@@ -348,9 +348,10 @@ def test_dungeon5_defaults_no_plant_sweep_box_spots_on_dungeon_icon_bar(monkeypa
     # dungeon@6 (2026-10-24) adds --char / --map / --steal / tag banking; a plain run is still
     # dungeon@5's: the Crusader on orcsdun01, no steal, tags banked only off orcsdun01; dungeon@7
     # changes only what --steal does
-    assert dh.VERSION == "dungeon@8.6"  # .1 position-unread fly, .2 no stand toggle on a hit,
+    assert dh.VERSION == "dungeon@8.7"  # .1 position-unread fly, .2 no stand toggle on a hit,
     # .3 the stock read from the hotbar, .4 the stock guard in the run, .5 the safe end, .6 the
-    # no-entry ring + one-cell no-entry carve + uncarve before a dead end's Fly Wing
+    # no-entry ring + one-cell no-entry carve + uncarve before a dead end's Fly Wing, .7 no walk
+    # click straight north (column_dodge)
     assert (a.char, a.map, a.steal, a.bank_tags) == ("crusader", "orcsdun01", False, None)
     assert a.clear_map is False  # dungeon@8: @killmonster2 only when asked (Amendment A4)
 
@@ -749,7 +750,30 @@ def test_dungeon86_a_no_entry_carves_one_cell_and_a_dead_end_forgets_the_carves_
     i_un, i_fly = src.index('counts["uncarve"] += 1'), src.index('press("fly", why_s)')
     assert i_un < i_fly  # the uncarve branch runs before the dead end's Fly Wing
     assert "noentry_red=RING_IN_MIN" in src and "noentry_red=NOENTRY_RED" not in src
-    assert dh.VERSION == "dungeon@8.6"
+
+
+def test_dungeon87_a_walk_target_straight_north_moves_one_cell_aside() -> None:
+    """p3's packets: no move request for 93 of 95 clicks at (0, +7), but for 32 of 33 at (+-1, +7);
+    gef_fild10 (0, +7) 108 / 325 unsent, (+-1, +7) 0 / 88, (0, +5) 0 / 24."""
+    here = (13, 27)
+    every = lambda c: True  # noqa: E731
+    assert dh.column_dodge(here, (13, 34), (14, 40), every) == ((14, 34), "side+1")
+    assert dh.column_dodge(here, (13, 34), (11, 40), every) == ((12, 34), "side-1")  # toward nxt
+    assert dh.column_dodge(here, (13, 34), None, every) == ((14, 34), "side+1")
+    no_east = lambda c: c != (14, 34)  # noqa: E731
+    assert dh.column_dodge(here, (13, 34), (14, 40), no_east) == ((12, 34), "side-1")
+    only_column = lambda c: c[0] == 13  # noqa: E731  # a one-cell corridor: 5 up is still sent
+    assert dh.column_dodge(here, (13, 34), (13, 40), only_column) == ((13, 32), "short")
+    assert dh.column_dodge(here, (13, 34), (13, 40), lambda c: False) == ((13, 34), "none")
+    for c in [(13, 32), (14, 34), (12, 34), (13, 20), (20, 27)]:  # 5 up, aside, south, east
+        assert dh.column_dodge(here, c, None, every) == (c, None)
+    assert dh.column_dodge(here, (13, 33), None, every)[1] == "side+1"  # 6 up: 5 / 6 unsent in p3
+    src = (Path(dh.__file__)).read_text()
+    assert "c, dodge = column_dodge(here, c, nxt_, usable)" in src
+    i_dodge = src.index("c, dodge = column_dodge(")
+    between = src[i_dodge : src.index("res = hover(u, v)\n", i_dodge)]
+    assert "rel = (c[0] - here[0], c[1] - here[1])" in between  # the hover reads the moved cell
+    assert dh.VERSION == "dungeon@8.7"
 
 
 def test_a_full_lap_of_routeless_skips_flies_at_once() -> None:

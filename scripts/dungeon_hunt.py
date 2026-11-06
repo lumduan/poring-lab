@@ -127,7 +127,7 @@ import sys
 import threading
 import time
 from collections import Counter, deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -141,7 +141,7 @@ DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
 MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
-VERSION = "dungeon@8.6"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
+VERSION = "dungeon@8.7"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep; @4 = 4.00's base;
 # @5 = @4 + Batt's decisions 4 / 6 / 7 of 2026-10-23 (4.01 Amendment A); @6 = @5 + --char / --map /
 # --steal / tag banking (2026-10-24; the defaults are @5's behaviour); @7 = --steal on every monster
 # (Batt 2026-10-24 ~16:0x, demonstrations 4.04); @8 = --char rogue + the Steal cast read per max SP
@@ -153,7 +153,8 @@ VERSION = "dungeon@8.6"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 # (Amendment AA: c10's time box ended it inside a 10-orc swarm and it died 0.96 s after run_end,
 # during the end warp's typing): under attack or below half HP at the end, a Fly Wing goes first;
 # @8.6 = the no-entry sign read by its RING (ring_score: xmas_dun02's orange floor passed the old
-# red count), a no-entry carves its one cell, and a dead end forgets the carves before it flies
+# red count), a no-entry carves its one cell, and a dead end forgets the carves before it flies;
+# @8.7 = no walk click straight north of us (column_dodge: the client sent no move request for them)
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
 
@@ -358,6 +359,7 @@ RING_HALF = 40  # the ring crop: 80 x 80 around the hotspot (the circle reaches 
 RING_DIAG_MAX = 40  # crops kept (the session dir) where the ring and the old red count disagree
 NOENTRY_CARVE_R = 0  # dungeon@8.6: a no-entry names ONE cell (the stall carve keeps CARVE_R)
 UNCARVE_MIN_S = 60.0  # dungeon@8.6: a dead end forgets the carves first (once per this), then flies
+COLUMN_DY_MIN = 6  # dungeon@8.7: a walk target >= this far STRAIGHT north moves (column_dodge)
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
 MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
 MR_AFTER_HIT_S = 0.3  # ... and while locked, ONE ring cell is read within this of our own hit
@@ -773,6 +775,27 @@ def rest_sit_why(spot: Cell | None, at_spot: bool, waited_s: float) -> str | Non
 
 def nearest_spot(spots: Sequence[Cell], here: Cell) -> Cell | None:
     return min(spots, key=lambda s: max(abs(s[0] - here[0]), abs(s[1] - here[1])), default=None)
+
+
+def column_dodge(here: Cell, c: Cell, nxt: Cell | None,
+                 usable: Callable[[Cell], bool]) -> tuple[Cell, str | None]:  # fmt: skip
+    """PURE (dungeon@8.7): a walk target STRAIGHT NORTH of us (our column, >= COLUMN_DY_MIN cells
+    up) is moved one cell sideways -- toward ``nxt`` (a later path cell) first -- or, with neither
+    side cell usable, to COLUMN_DY_MIN - 1 cells up; (target, why), why None = unchanged. p3: the
+    client sent no move request for 93 of 95 clicks at (0, +7) and 5 of 6 at (0, +6), but for 32 of
+    33 at (+-1, +7) (gef_fild10: (0, +7) 108 / 325 unsent, (+-1, +7) 0 / 88; (0, +5) 0 / 24)."""
+    dx, dy = c[0] - here[0], c[1] - here[1]
+    if dx != 0 or dy < COLUMN_DY_MIN:
+        return c, None
+    side = -1 if nxt is not None and nxt[0] < c[0] else 1
+    for s in (side, -side):
+        alt = (c[0] + s, c[1])
+        if usable(alt):
+            return alt, f"side{s:+d}"
+    short = (c[0], here[1] + COLUMN_DY_MIN - 1)
+    if usable(short):
+        return short, "short"
+    return c, "none"
 
 
 def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell] | None:
@@ -2869,6 +2892,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)
                         if wt_ is not None:
                             _i, c = wt_
+
+                            def usable(c_: Cell, h: Cell = here) -> bool:
+                                hh, ww = okr.shape
+                                return (0 <= c_[0] < ww and 0 <= c_[1] < hh
+                                        and bool(okr[c_[1], c_[0]]) and not carved[c_[1], c_[0]]
+                                        and fits(c_))  # fmt: skip
+
+                            # dungeon@8.7: never a click straight north of us (no move request)
+                            nxt_ = goal_path[min(_i + 3, len(goal_path) - 1)]
+                            c, dodge = column_dodge(here, c, nxt_, usable)
+                            if dodge is not None:
+                                counts["column_dodge"] += 1
                             rel = (c[0] - here[0], c[1] - here[1])
                             u, v = project(here, [rel])[0]
                             res = hover(u, v)
@@ -2930,6 +2965,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
                                          "clicked": True, "why": mode, "red": res.get("red"),
                                          "ring": res.get("ring")}  # fmt: skip
+                                if dodge is not None:
+                                    rec_w["dodge"] = dodge
                                 if why_w == "trusted":  # --walk-trust: an UNKNOWN read, clicked
                                     counts["walk_trusted"] += 1
                                     rec_w.update({"gate": "trusted", "red": res.get("red")})
@@ -2943,6 +2980,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
                                          "clicked": False, "why": why_w, "red": res.get("red"),
                                          "ring": res.get("ring")}  # fmt: skip
+                                if dodge is not None:
+                                    rec_w["dodge"] = dodge
                                 if a.walk_trust:
                                     rec_w["trust"] = tw_
                                 ev(rec_w)
