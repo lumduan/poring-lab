@@ -25,7 +25,7 @@ capture  ->  detect  ->  decide  ->  act
 - ตั้ง client เป็นแบบหน้าต่าง (windowed) ขนาดพื้นที่เกม 1280 x 720
 - ตัวละครยืนอยู่ที่ prt_fild08
 - ไฟล์ในชุดนี้: `simple_bot.py`, `v1.onnx` (โมเดล), โฟลเดอร์ `samples` (ภาพตัวอย่าง 20 ภาพ)
-- `v1.onnx` และโฟลเดอร์ `samples` ไม่อยู่ใน git (ไฟล์โมเดลและภาพจากเกมห้ามขึ้น GitHub) ขอจากผู้สอน แล้ววางไว้ในโฟลเดอร์เดียวกับ `simple_bot.py` ถ้ายังไม่มีโมเดล ลอง `--detector color` ได้ก่อน
+- `v1.onnx` และโฟลเดอร์ `samples` มาพร้อมกันเมื่อ clone branch `teaching-kit` จาก GitHub (`git clone --branch teaching-kit --single-branch https://github.com/lumduan/poring-lab.git simple-bot`) ถ้าได้ไฟล์มาทางอื่นแล้วไม่มีโมเดล ลอง `--detector color` ได้ก่อน
 
 ## ติดตั้ง uv (ครั้งเดียว)
 
@@ -146,9 +146,9 @@ The code is written to be read: every function says what it does, why, and its i
 - the client windowed, with a 1280 x 720 game area;
 - your character on prt_fild08;
 - this kit: `simple_bot.py`, `v1.onnx` (the model), `samples` (20 example frames).
-- `v1.onnx` and `samples` are NOT in git (model weights and game pictures never go to GitHub):
-  get them from your teacher and put them next to `simple_bot.py`. Without the model, try
-  `--detector color` first.
+- `v1.onnx` and `samples` come with a clone of the `teaching-kit` branch on GitHub
+  (`git clone --branch teaching-kit --single-branch https://github.com/lumduan/poring-lab.git simple-bot`).
+  Got the files another way and no model? Try `--detector color` first.
 
 ## Install uv (once)
 

@@ -1,5 +1,3 @@
-# The hand-out's model and sample frames are built OUTSIDE the repo by make_kit.py. Model weights
-# and client screenshots are never committed (CLAUDE.md rule 4).
-*.onnx
-samples/
+# The kit carries its model (v1.onnx) and samples/ in this branch only (Batt 2026-11-06).
 *.zip
+__pycache__/
