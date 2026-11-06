@@ -130,6 +130,13 @@ CHAR_X, CHAR_Y = 640, 360
 # A "player" box whose feet are this close to CHAR is OUR OWN character. (The lab's v1 model was
 # trained WITHOUT boxes on the bot's own character, so it rarely draws one; another model might.)
 SELF_RADIUS = 30.0
+# A WEAK "monster" box (score < SELF_MAX_SCORE) that COVERS our own feet point is most likely OUR
+# OWN character (or its HP bar), seen as a monster: a student's character looks different from the
+# lab's, and the v1 model never learned its own. A class PC clicked such a box (0.27) for seconds
+# and never moved (2026-11-06). A STRONG box there is a real monster fighting us (our samples: a
+# Poring at our feet, 0.88), so it stays a target.
+SELF_MARGIN = 4.0
+SELF_MAX_SCORE = 0.5
 
 # The client's UI windows as (x0, y0, x1, y1), measured on the lab's layout at 1280 x 720.
 # A monster behind a window cannot be clicked (the click lands on the window), so the bot drops
@@ -167,6 +174,7 @@ RECLICK_S = 1.0  # ATTACK clicks the target again this often while it stays
 TRACK_PX = 90.0  # the target in the next frame = the nearest monster within this of its last feet
 LOST_S = 1.5  # the target unseen this long = it died (or walked away): go LOOT
 ATTACK_GIVE_UP_S = 20.0  # hitting one target longer than this: give up, SEARCH again
+IGNORE_S = 15.0  # ... and ignore boxes at the given-up spot this long (else it re-targets at once)
 LOOT_GAP_S = 0.5  # LOOT clicks the dead monster's feet twice, this far apart
 LOOT_DONE_S = 0.8  # ... then waits this long for the pick-up walk before SEARCH
 
@@ -275,6 +283,13 @@ def clickable(pt: tuple[float, float], w: int = CLIENT_W, h: int = CLIENT_H) -> 
     x, y = pt
     inside = EDGE_PX <= x < w - EDGE_PX and EDGE_PX <= y < h - EDGE_PX
     return inside and not zone_at(x, y, zones_for(w, h))
+
+
+def on_self(b: Box, char: tuple[float, float] = (CHAR_X, CHAR_Y)) -> bool:
+    """Does box `b` cover our own feet point (with SELF_MARGIN px to spare)? Then it is drawn
+    around our own character, whatever class the model gave it."""
+    m = SELF_MARGIN
+    return b.x0 - m <= char[0] <= b.x1 + m and b.y0 - m <= char[1] <= b.y1 + m
 
 
 def is_self(b: Box, char: tuple[float, float] = (CHAR_X, CHAR_Y)) -> bool:
@@ -653,6 +668,8 @@ def sort_boxes(
         touching = next((o for o in others if overlaps(b, o)), None)  # the first one, or None
         if zone:
             dropped.append((b, f"under {zone}"))
+        elif on_self(b, char) and b.score < SELF_MAX_SCORE:  # our own character, most likely
+            dropped.append((b, "weak box on our own feet (ourselves?)"))
         elif not clickable(b.hit_point, w, h):
             dropped.append((b, "click point off limits"))
         elif touching is not None:
@@ -743,6 +760,8 @@ class Decider:
         self.me = (round(char[0]), round(char[1]))  # our feet as whole pixels (lines start here)
         self.w, self.h = w, h
         self.state = SEARCH
+        # given-up spots: (feet point, ignore until) -- see IGNORE_S
+        self.ignored: list[tuple[tuple[float, float], float]] = []
         self.wander_pt: tuple[int, int] | None = None  # SEARCH: the current walk target
         self.wander_due = 0.0  # SEARCH: when to pick a new one (s)
         self.target: Box | None = None  # ATTACK: the monster we are hitting
@@ -754,6 +773,10 @@ class Decider:
     def step(self, boxes: Sequence[Box], now: float) -> Decision:
         """One decision: the boxes seen now, the time now (s) -> what to do."""
         targets, _ = sort_boxes(boxes, self.char, self.w, self.h)
+        # forget given-up spots after IGNORE_S; skip boxes at the ones still remembered
+        self.ignored = [(pt, until) for pt, until in self.ignored if now < until]
+        targets = [b for b in targets
+                   if all(dist(b.foot, pt) > TRACK_PX for pt, _ in self.ignored)]  # fmt: skip
         if self.state == SEARCH:
             if targets:
                 return self._start_attack(min(targets, key=lambda b: dist(b.foot, self.char)), now)
@@ -796,6 +819,9 @@ class Decider:
             self.target, self.last_seen = b, now
             if now - self.attack_since > ATTACK_GIVE_UP_S:  # cannot reach it? try something else
                 self.state, self.wander_pt = SEARCH, None
+                # clicking it did nothing for 20 s (out of reach, or not a monster at all): leave
+                # that spot alone for a while, or the next frame would pick it again at once
+                self.ignored.append((b.foot, now + IGNORE_S))
                 return Decision(SEARCH, [], None, None, "gave up on this target")
             clicks = []
             if now - self.last_click >= RECLICK_S:
@@ -1555,11 +1581,24 @@ def run_live(args: argparse.Namespace) -> int:
     mouse: Mouse | None = None
     left, top, w, h = window.rect()
     full = window.fullscreen()
-    # FULLSCREEN: any other window shown over the game takes the focus (a fullscreen game often
-    # minimises then), so the bot view is OFF by default there: watch the logs instead (--logs).
-    show_view = args.view == "on" or (args.view == "auto" and not full)
-    shown = "on" if show_view else "OFF (fullscreen: the logs show what it does; --view on forces)"
-    say(f"client area {w} x {h}, {'FULLSCREEN' if full else 'windowed'}; bot view {shown}")
+    # THE OVERLAY (the default when windowed): the boxes and lines drawn straight over the game, by
+    # a window the mouse passes through and that never takes the focus. The separate "bot view"
+    # window is shown only when there is no overlay (or with --view on): a normal window takes the
+    # focus when it appears, and the bot clicks only while the GAME is in front.
+    # FULLSCREEN: nothing is drawn over the game (a fullscreen game often minimises when another
+    # window appears): watch the PowerShell window or the logs (--logs) instead.
+    overlay = None
+    if args.overlay == "on" or (args.overlay == "auto" and not full):
+        try:
+            overlay = Overlay(w, h)
+            say("overlay ON: the boxes and lines are drawn over the game")
+        except RuntimeError as e:
+            say(f"overlay off: {e}")
+    elif args.overlay == "auto":
+        say("overlay off: the game is fullscreen (--overlay on forces it)")
+    show_view = args.view == "on" or (args.view == "auto" and not full and overlay is None)
+    say(f"client area {w} x {h}, {'FULLSCREEN' if full else 'windowed'}; bot view window "
+        f"{'on' if show_view else 'off'}")  # fmt: skip
     if isinstance(det, OnnxDetector):
         x0, y0, x1, y1 = detect_window(w, h, det.size)
         say(f"the model looks at ({x0}, {y0})-({x1}, {y1}): {x1 - x0} x {y1 - y0} px around the "
@@ -1583,19 +1622,13 @@ def run_live(args: argparse.Namespace) -> int:
         mouse = Mouse()
         print("network check:", why)
         print("starting in 5 s: click the game window to put it in front ...", flush=True)
-        for _ in range(50):  # 5 s, keeping the bot view responsive
+        for _ in range(50):  # 5 s, keeping our windows responsive
+            if overlay is not None:
+                overlay.pump()
             if show_view:
                 cv2.waitKey(100)
             else:
                 time.sleep(0.1)
-    overlay = None
-    if args.overlay and full:
-        say("overlay off: the game is fullscreen (nothing can be drawn over it)")
-    elif args.overlay:
-        try:
-            overlay = Overlay(w, h)
-        except RuntimeError as e:
-            print(f"overlay off: {e}")
     decider = Decider(rng, char=char_for(w, h), w=w, h=h)
     mode = "ACT" if args.act else "WATCH (no input)"
     print(
@@ -1726,15 +1759,19 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     ap.add_argument("--title", default="Ragnarok", help="part of the client window's title")
     ap.add_argument(
         "--overlay",
-        action="store_true",
-        help="also draw over the game (Windows 10 2004+; invisible to capture)",
+        nargs="?",
+        const="on",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="draw the boxes and lines over the game (Windows 10 2004+, invisible to the capture); "
+        "auto = on when windowed, off when fullscreen",
     )
     ap.add_argument("--view-scale", type=float, default=0.75, help="size of the bot view window")
     ap.add_argument(
         "--view",
         choices=("auto", "on", "off"),
         default="auto",
-        help="live: the bot view window; auto = on when windowed, off when the game is fullscreen",
+        help="live: the separate bot view window; auto = only when there is no overlay",
     )
     ap.add_argument("--minutes", type=float, default=10.0, help="end a live run after this long")
     ap.add_argument("--save-dir", help="replay: save annotated PNGs here (no window)")
