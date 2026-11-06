@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "PROPOSED 2026-11-06 (pre-registration draft, written offline by a subagent; nothing recorded, labelled, frozen or trained). The decisions of section 0 are Batt's / the parent's, recorded as a clock-labelled amendment BEFORE the first FIT recording. Facts read for it: section 1a."
+status: "ACCEPTED 2026-11-06 ~10:45 by Batt ('go ahead, training may start, start the plan now'), recorded as Amendment A (section 13) before any recording: D0 answered by a 100 GB recorder floor, D1-D14 adopted as proposed; T-5 needs no new driver (stage_items.py watch + record_session.py), the lattice by watch_lattice.py (343 TRAIN-side + 88 TEST stands). Was: PROPOSED 2026-11-06 (pre-registration draft, written offline by a subagent)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "The parent / Batt: answer section 0 (D0 first: the root disk is ~4 GB above the recorder's 120 GB floor and loses ~0.7 GB/h), record the answers as Amendment A, build the tool gaps of 1f (offline, tested, positive cases), then the FIT watch xw1 (section 11)."
+next_action: "Record the FIT watch xw1 (Amendment A's command, the immune Rogue), ship it; meanwhile the tool gaps T-1-T-4 and T-6-T-10 (offline, tested, positive cases, tmpfs worktrees); then FIT (section 11 step 5)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -30,6 +30,9 @@ is a clock-labelled AMENDMENT committed BEFORE the step it changes. A failed tie
 never re-run under the same bars.
 
 ## 0. The decisions this proposal needs (Batt's / the parent's)
+
+> ➡️ ANSWERED 2026-11-06 ~10:45 (Batt): D0 by a 100 GB recorder floor; D1-D14 adopted as
+> proposed. Amendment A (section 13).
 
 | # | decision | proposed default | where |
 |---|---|---|---|
@@ -515,3 +518,74 @@ Calendar: ~2 days if D0 is answered today; the weekend has no market windows.
 ## 12. RESULTS (appended below, clock-labelled; nothing above this line is edited after the pre-registration commit except by a labelled AMENDMENT)
 
 (none yet)
+
+## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
+
+### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
+
+**Batt's words** (the reply to the 09:42 report, in this session before 10:49:46, the turn's first
+`date`): on the disk, "ปลดบล็อคเรื่องนี้เลย บอก HA ด้วย และฉันปรับเกณฑ์เพิ่มให้ด้วยเป็น 100gb จะได้ไม่ไปกวน
+HA บ่อย" (unblock this now, tell HA too; I set the margin to 100 GB so we don't bother HA often); on
+this plan, "ทำได้เลย เริ่มเทรนได้ เริ่มทำแผนเลย" (go ahead, training may start, start the plan now).
+
+- **D0 (the disk): ANSWERED by the floor.** `dataset_ship.MIN_FREE_BYTES` = 100 GB (8b46640,
+  ADR-0010 "Amendment 2026-11-06"). Root free 123.14 GB at 11:10 (`df -B1`): ~23 GB above the floor,
+  ~8 x one 30-min watch's ~3 GB. HA was told at 11:1x (information only). HA's own reading (its
+  message, 11:0x): ~1.28 GB/h lately, from quant's Postgres between the nightly retention runs
+  (~9.3 GB back at 21:07). Nothing else changes: one recording at a time on the root disk,
+  shipped and verified on the NAS, then deleted, before the next.
+- **D1-D14: ADOPTED as proposed** (one model for xmas_dun02 only; the four tier species, one
+  class each, collapsed for the runner; gef10 round 2's `last.pt`; no item class; immune lattice
+  watches + one patrol; FIT 30 min, TRAIN 3 x 30 min by 2d's rule, TEST xw5 + xp1 + X2; 3a's split;
+  4f's terrain test; E0; 1d 120 ms on a STOP; D13's training settings; D14's verdict).
+- **"Training may start"** is read as: the GPU steps run when the plan reaches them (after T1, T2,
+  the class list and the evaluation's own pre-registration, section 11 step 8), under R1-R3 and
+  the R2 co-tenant rule. It skips none of the steps before them.
+
+**T-5 resolved without a new driver (read 11:1x).** The watches that fed gef10 (w2) and payf07
+(watch-w1) ran `stage_items.py watch` (the immune character warps over a lattice file, 30-s
+dwells, typed `@warp` lines only through crusader.gm_line's name + job check, no world click)
+BESIDE the 1-fps recorder (`record_session.py`, PNG, the root-disk sink): exactly 2a's protocol.
+Its `CHAR` / `JOB` are the Rogue's (`thief` / `rogue`). `warp_watch.py` (its own 5-Hz JPEG
+recorder) is not used. Immunity: `stage_items.py immune-on` (@monsterignore on a FRESH login, then
+a person reads the frame) -> `--immune-confirmed`.
+
+**The lattice, by a committed tool (`scripts/watch_lattice.py`, tests), its rule fixed here:**
+- a stand = a stand-grid cell (client and server walkable, outside warp spans and touch areas),
+  outside the zones, in the main component, with a fully walkable 5 x 5 (`--min-clear 2`);
+- one stand per node of an 11-cell grid (nodes at 5 + 11 k), the nearest stand within 3 cells when
+  the node is not one;
+- the stands within |dx| <= 16, |dy| <= 12 of the exit warp (129,130) dropped (2a);
+- TEST by 3a ((x // 26 + 3 (y // 26)) mod 5 == 0);
+- all stands of both files pass the three stand-cell checks in ONE `check_warps` call.
+
+| | stands | blocks | file sha256 |
+|---|---|---|---|
+| TRAIN side (xw1 FIT, xw2-xw4, xw6-xw7) | 343 | 80 | `7305384271101c45a34944ed7c453913a8e7cf1dbb84283588002b5512bb62d3` |
+| TEST (xw5) | 88 | 20 | `98d3f0d4ec3b1574ba647a83cb51dbd2baa036c6418ab88f68ccd3fdaa7ef677` |
+| dropped (see the warp) | 5 | | |
+
+- From 26,386 stand cells; GAT sha256 `4cf9265fcce2fec4...`, zones `89ea7a9c...` (the 11-05
+  20:16 commit changed only that file's comments).
+- The plan's "~221 stands" (2a) was a scratch approximation with no snapping. At ~40 s a stand a
+  30-min watch uses ~45 of them, in its own seeded order (`watch_cells`: xw1 seed 2611061 ...
+  xw5 2611065), so more stands only spread the watches wider.
+- The files live in `/dev/shm/poring-lab-tmp/xmas-det/lattice/` (client-derived, never
+  committed); the command rebuilds them byte-identical (its sha256 above).
+
+**The command per watch (xw1 shown; the others change only the label, seed and lattice):**
+
+        uv run python scripts/record_session.py --backend rdp --format png --fps 1 \
+            --out /home/batt/poring-lab-rec --max-bytes 3G --label xmas02-xw1     # beside, then:
+        uv run python scripts/stage_items.py watch --map xmas_dun02 \
+            --lattice /dev/shm/poring-lab-tmp/xmas-det/lattice/lattice-train.json \
+            --seed 2611061 --label xw1 --max-minutes 30 --immune-confirmed
+
+- Before it: the Rogue switched to (client restart onto its card), `@killmonster2` (the MVP
+  cleared), `stage_items.py immune-on` + the frame read, a judged screenshot of the layout and the
+  standard chat window. After it: the recorder stopped, `dataset_ship.py ship`, the NAS copy
+  verified, the local copy deleted, BEFORE the next watch.
+- Not in 14:00-14:45 or 09:30-10:15 on weekdays.
+
+**The other tool gaps (T-1-T-4, T-6-T-10)** are built offline in tmpfs worktrees (at most two
+subagents), each with tests and a positive case, before the FIT step reads xw1.
