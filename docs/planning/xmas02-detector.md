@@ -661,6 +661,16 @@ whole-frame rule, no class decision before T2):**
 - FIT's labels (xw1, two sessions; for T2's pool and VAL): whole-frame boxes 582 / 244 / 226 / 233.
 - Next: the T2 pack (seed 51, salt xmas02, 30 per tier species) from xw1 + xw2 + xw3.
 
+**The T2 pack (section 6; built 17:59:10-17:59:34, BEFORE any answer exists):** `map_labels.py pack`
+from the five label files (xw1 x 2, xw2, xw3 x 2), seed 51, salt xmas02, the instructions file
+`dc48fb15...` (Amendment C). **180 crops: 30 per tier species**, from pools of Myst Case 2,707,
+Cruiser 1,277, Cookie 804, Christmas Cookie 707, **Garm Baby 38 and Christmas Goblin 88** (D3's
+conditional species reached the tier: >= 30 kept labels); 9 grid pages, the multi-view reference
+(9 letters). sha256: pack.json `a27af707...`, answer_key.json `bbc74039...`, reference.png
+`d389551c...`. Two NEW blind labeller agents (A, B) started ~18:01, each with ONLY the pack, the
+instructions and its own answers path; the key stays outside the pack. Scored by
+`scripts/blind_score.py` against section 6's bars.
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
