@@ -24,7 +24,7 @@ capture  ->  detect  ->  decide  ->  act
 - **Microsoft Visual C++ Redistributable (x64) รุ่นล่าสุด** ติดตั้งครั้งเดียว: https://aka.ms/vs/17/release/vc_redist.x64.exe
   (onnxruntime ต้องใช้รุ่น 14.40 ขึ้นไป ถ้าเก่ากว่านี้ Python จะปิดไปพร้อมข้อความ `access violation`)
 - เซิร์ฟเวอร์ rAthena ของตัวเองที่รันบนเครื่องนี้ (local server) และ client Ragnarok ที่ต่อเข้าเซิร์ฟเวอร์นั้น
-- ตั้ง client เป็นแบบหน้าต่าง (windowed) ขนาดพื้นที่เกม 1280 x 720
+- client ความละเอียดไหนก็ได้ แบบหน้าต่าง (windowed) ง่ายที่สุด เต็มจอก็ใช้ได้ (ดูหัวข้อ "จอทุกขนาด หน้าต่างหรือเต็มจอ")
 - ตัวละครยืนอยู่ที่ prt_fild08
 - ไฟล์ในชุดนี้: `simple_bot.py`, `v1.onnx` (โมเดล), โฟลเดอร์ `samples` (ภาพตัวอย่าง 20 ภาพ)
 - `v1.onnx` และโฟลเดอร์ `samples` มาพร้อมกันเมื่อ clone branch `teaching-kit` จาก GitHub (`git clone --branch teaching-kit --single-branch https://github.com/lumduan/poring-lab.git simple-bot`) ถ้าได้ไฟล์มาทางอื่นแล้วไม่มีโมเดล ลอง `--detector color` ได้ก่อน
@@ -102,6 +102,20 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 - `INFO` = ขั้นสำคัญ, `DEBUG` = รายละเอียด (สรุปลูปวินาทีละ 1 บรรทัด), `WARNING` = มีอะไรผิดปกติ
 - บรรทัด `no click at ...` บอกเหตุผลที่บอทไม่กด เช่น หน้าต่างเกมไม่ได้อยู่ด้านหน้า หรือจุดนั้นอยู่บนหน้าต่าง UI
 
+## จอทุกขนาด หน้าต่างหรือเต็มจอ
+
+บอทปรับตามขนาดพื้นที่เกมเอง (พิมพ์บอกตอนเริ่ม เช่น `client area 1920 x 1080, windowed`)
+
+- **ตัวละคร** อยู่กลางพื้นที่เกมเสมอ (RO วางกล้องไว้ที่ตัวละคร)
+- **หน้าต่าง UI** ขนาดเท่าเดิมทุกความละเอียด และติดมุมของมัน: มินิแมพติดขอบขวา หน้าต่างแชตติดขอบล่าง
+- **โมเดลดูภาพขนาดจริง** ไม่ย่อไม่ขยาย เพราะ RO วาดตัวละครและมอนสเตอร์ขนาดพิกเซลเท่าเดิมทุกความละเอียด
+  (จอใหญ่แค่เห็นโลกกว้างขึ้น) จอใหญ่กว่า 1280 x 736 โมเดลดูเฉพาะกรอบ 1280 x 736 รอบตัวละคร
+  (กรอบขาว "model area" ใน bot view) มอนที่ไกลกว่านั้นจะไม่เห็น ซึ่งบอทก็ตีแต่ตัวใกล้อยู่แล้ว
+- **เต็มจอ (fullscreen)**: หน้าต่าง bot view จะปิดเอง เพราะหน้าต่างอื่นที่โผล่ทับเกมจะแย่งโฟกัส
+  (เกมเต็มจอมักย่อตัวลงไป) ให้ดูข้อความในหน้าต่าง PowerShell หรือใช้ `--logs` แทน ถ้าอยากเปิดจริง ๆ ใช้ `--view on`
+- ถ้าขึ้นว่า **`the captured picture is BLACK`** แปลว่าเกมเป็นเต็มจอแบบ exclusive ซึ่งจับภาพหน้าจอไม่ได้:
+  เปิด Setup ของ client แล้วเลือกแบบหน้าต่าง (Windowed / Window mode) แล้วรันใหม่
+
 ## อ่านภาพ bot view
 
 | สิ่งที่เห็น | ความหมาย |
@@ -120,16 +134,16 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 
 | ขั้น | ทำอะไร |
 |---|---|
-| capture | หาหน้าต่างเกมจากชื่อ ("Ragnarok") แล้วจับภาพเฉพาะพื้นที่เกม 1280 x 720 ด้วย `mss` |
+| capture | หาหน้าต่างเกมจากชื่อ ("Ragnarok") แล้วจับภาพเฉพาะพื้นที่เกม (ขนาดไหนก็ได้) ด้วย `mss` |
 | detect | ย่อ/เติมขอบเทา (letterbox) ให้เป็น 1280 x 736 ส่งเข้าโมเดล YOLO (ONNX) แล้วแปลงผลเป็นกรอบ + NMS (ตัดกรอบซ้ำ) |
 | decide | state machine: SEARCH (ไม่เห็นมอน: เดินสุ่ม) -> ATTACK (ตีตัวที่ใกล้ที่สุด คลิกซ้ำทุก ~1 วินาที) -> LOOT (มอนหายไป > 1.5 วินาที = ตายแล้ว: คลิกที่เท้ามัน 2 ครั้งเพื่อเก็บของ) -> SEARCH |
 | act | ขยับเมาส์ 2 ครั้งก่อนกด (client ไม่รับคลิกที่ "กระโดด" ไปทีเดียว), ไม่คลิกบนหน้าต่าง UI, ไม่คลิกเดินตรงขึ้นเหนือในแนวเดียวกับตัวละคร (client จะไม่ส่งคำสั่งเดิน) |
 
 ## ข้อจำกัด
 
-- โมเดลฝึกจากภาพ client ของแล็บที่ 1280 x 720: client อื่น ความละเอียดอื่น หรือซูมกล้องต่างไป อาจหาเจอน้อยลง
+- โมเดลฝึกจากภาพ client ของแล็บ: client อื่น (sprite ต่างไป) หรือซูมกล้องต่างไป อาจหาเจอน้อยลง (ความละเอียดต่างไม่เป็นไร)
 - Creamy บินได้ (ภาพลอยเหนือพื้น) มักหาไม่เจอ
-- ตำแหน่งหน้าต่าง UI และตำแหน่งตัวละครเป็นค่าคงที่ในโค้ด (หมวด 1 ใน `simple_bot.py`): ถ้าจัดหน้าต่างต่างไป ให้วัดจากภาพหน้าจอแล้วแก้ค่า
+- ขนาดหน้าต่าง UI วัดจาก layout ของแล็บ (หมวด 1 ใน `simple_bot.py`): ถ้าจัดหน้าต่างต่างไป ให้วัดจากภาพหน้าจอแล้วแก้ค่า
 - บอทนี้ตั้งใจให้เรียบง่าย: ไม่มีแผนที่ ไม่เลี่ยงสิ่งกีดขวาง ไม่ดู HP
 
 ## ความปลอดภัย (สำคัญ)
@@ -151,7 +165,7 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
   4. ระหว่างนี้ลอง `--detector color` ได้ (ไม่ใช้ onnxruntime)
 - **หาหน้าต่างเกมไม่เจอ / เจอหลายหน้าต่าง**: ใส่ชื่อหน้าต่างให้ตรงขึ้น เช่น `--title "Ragnarok"`
 - **บอทขยับเมาส์ไม่ได้**: ถ้า client รันแบบ "Run as administrator" ต้องเปิด PowerShell แบบ administrator ด้วย
-- **กรอบไม่ตรงตัว**: ตรวจว่าพื้นที่เกมเป็น 1280 x 720 และ Windows display scaling ไม่ได้ทำให้ขนาดเพี้ยน
+- **กรอบไม่ตรงตัว / ไม่เจอมอนเลย**: ดูบรรทัด `client area ...` ตอนเริ่ม และกรอบ "model area" ใน bot view ถ้าเปิด `--logs` แล้ว `boxes 0` ตลอดทั้งที่มอนอยู่บนจอ ส่งภาพ bot view ให้ผู้สอนดู
 - **ช้า**: โมเดลรันบน CPU ราว 0.1-0.5 วินาทีต่อเฟรม ลอง `--threads 4` หรือปิดโปรแกรมอื่น
 
 ---
@@ -182,7 +196,8 @@ The code is written to be read: every function says what it does, why, and its i
   one Python closes with `access violation`);
 - your OWN rAthena server running on that PC (a local server), and a Ragnarok client connected to
   it;
-- the client windowed, with a 1280 x 720 game area;
+- the client at any resolution; windowed is easiest, fullscreen works too (see "Any screen size,
+  windowed or fullscreen");
 - your character on prt_fild08;
 - this kit: `simple_bot.py`, `v1.onnx` (the model), `samples` (20 example frames).
 - `v1.onnx` and `samples` come with a clone of the `teaching-kit` branch on GitHub
@@ -254,6 +269,23 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 - A `no click at ...` line says why the bot did not click: the game window not in front, the
   point on a UI window, the network check.
 
+## Any screen size, windowed or fullscreen
+
+The bot adapts to the game area's size (it says so at the start, e.g. `client area 1920 x 1080,
+windowed`):
+- **the character** stays at the centre (RO keeps its camera on it);
+- **the UI windows** keep their pixel size and stick to their corners: the minimap to the right
+  edge, the chat window to the bottom edge;
+- **the model sees native scale**, never shrunk or stretched: RO draws sprites at the same pixel
+  size at every resolution (a bigger screen only shows more of the world). On a screen bigger than
+  1280 x 736 the model looks at the 1280 x 736 around the character (the white "model area" box in
+  the bot view); monsters further out are not seen, and the bot only fights near itself anyway;
+- **fullscreen**: the bot view turns itself OFF, because any window shown over the game takes the
+  focus (a fullscreen game often minimises). Read the PowerShell window or `--logs` instead;
+  `--view on` forces the bot view.
+- **`the captured picture is BLACK`** means EXCLUSIVE fullscreen, which screenshots cannot see:
+  open the client's Setup, choose windowed (Windowed / Window mode), and run again.
+
 ## Reading the bot view
 
 | What you see | Meaning |
@@ -272,18 +304,18 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
 
 | Stage | What it does |
 |---|---|
-| capture | finds the client window by title ("Ragnarok") and copies its 1280 x 720 game area with `mss` |
+| capture | finds the client window by title ("Ragnarok") and copies its game area (any size) with `mss` |
 | detect | letterboxes the picture to 1280 x 736 (grey padding), runs the YOLO model (ONNX), turns its output into boxes, NMS removes duplicates |
 | decide | a state machine: SEARCH (no monster: wander) -> ATTACK (the nearest one, re-click ~every 1 s) -> LOOT (gone > 1.5 s = dead: click its feet twice to pick up) -> SEARCH |
 | act | two mouse motions before each press (the client ignores a "cold jump" click), never on a UI window, never a walk click straight north in the character's own column (the client sends no move for it) |
 
 ## Limits
 
-- The model was trained on the lab client's sprites at 1280 x 720: another client, resolution or
-  camera zoom can detect worse.
+- The model was trained on the lab client's sprites: another client (other sprites) or another
+  camera zoom can detect worse (another resolution is fine).
 - Creamy flies (its sprite floats above the ground) and is often missed.
-- The UI windows and the character's position are constants in the code (section 1 of
-  `simple_bot.py`): if your windows sit elsewhere, measure them on a screenshot and change them.
+- The UI windows' sizes were measured on the lab's layout (section 1 of `simple_bot.py`): if your
+  windows sit elsewhere, measure them on a screenshot and change them.
 - On purpose it stays simple: no map, no obstacle avoidance, no HP watching.
 
 ## Safety (important)
@@ -308,7 +340,8 @@ uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
   `--title "Ragnarok"`.
 - **The mouse does not move in the game**: if the client runs "as administrator", run PowerShell
   as administrator too.
-- **Boxes are off**: check that the game area is 1280 x 720 and that display scaling does not
-  change it.
+- **Boxes are off / no monster is ever found**: read the start's `client area ...` line and the
+  "model area" box in the bot view; with `--logs`, `boxes 0` all the time while monsters are on the
+  screen: send a bot view screenshot to your teacher.
 - **Slow**: the model runs on the CPU, ~0.1-0.5 s per frame; try `--threads 4` or close other
   programs.

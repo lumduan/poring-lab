@@ -48,8 +48,10 @@ loopback / private (LAN) addresses and only while the client window is in front.
 servers a bot breaks the terms of service, and their anti-cheat (GameGuard) blocks it anyway.
 
 THE MODEL: poring-lab's "v1" YOLO detector exported to ONNX (classes player, monster, npc). It was
-trained on the lab client's sprites at a 1280 x 720 client area: another client, resolution or
-zoom can detect worse. Creamy flies (its sprite floats) and is often missed.
+trained on the lab client's sprites (a 1280 x 720 client area). The bot ADAPTS to any client size,
+windowed or fullscreen: the character at the centre, the UI windows at their corners, the model at
+native scale around the character (zones_for, char_for, detect_window). Another client (other
+sprites) or another camera zoom can detect worse. Creamy flies (its sprite floats), often missed.
 
 HOW TO READ THIS FILE: top to bottom follows the pipeline. Section 1 holds every setting; sections
 2-7 are the stages; section 8 draws; section 9 runs it all.
@@ -114,7 +116,11 @@ def say(msg: str) -> None:
 #    Units: pixels (px) of the client area, x to the right, y DOWN; times in seconds (s).
 # =================================================================================================
 
-CLIENT_W, CLIENT_H = 1280, 720  # set the client to windowed 1280 x 720 (the model's training size)
+# The lab measured everything below on a 1280 x 720 client area (the model's training size). The
+# bot ADAPTS to any other size, windowed or fullscreen (layout_for, detect_window): RO keeps the
+# character at the centre and draws sprites and UI windows at the SAME pixel size at every
+# resolution; a bigger screen only shows more of the world.
+CLIENT_W, CLIENT_H = 1280, 720
 
 # The character's FEET. RO keeps your character at the centre of the client area, so this is a
 # constant, not a detection. To calibrate it for your client: stand still, take a screenshot of the
@@ -135,6 +141,9 @@ UI_ZONES: dict[str, tuple[int, int, int, int]] = {
     "minimap": (1128, 8, 1280, 165),  # top-right: the map and its coordinates line
     "chat": (0, 578, 602, 720),  # bottom-left: the chat window and its input bar
 }
+# How each UI window stays put when the client area has another size: it keeps its pixel size and
+# sticks to its corner ("tl" top-left, "tr" top-right, "bl" bottom-left). See zones_for.
+UI_ANCHORS = {"basic_info": "tl", "hotkey_bar": "tl", "minimap": "tr", "chat": "bl"}
 EDGE_PX = 12  # never click this close to the client area's edge
 
 # The detector (the v1 model)
@@ -147,6 +156,7 @@ IOU = 0.5  # NMS: two boxes of one class overlapping by >= 50 % are the same obj
 # "Microsoft Visual C++ Redistributable (x64)" once.
 CPP_RUNTIME_MIN = (14, 40)
 LIVE_VIEW = "simple-bot view (q: quit)"  # the live bot view window's title
+BLACK_MEAN = 2.0  # a captured frame this dark (mean pixel 0..255) is "black": see run_live
 CPP_RUNTIME_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 PAD_GREY = 114  # the letterbox padding colour YOLO models are trained with
 
@@ -240,12 +250,31 @@ def zone_at(x: float, y: float, zones: dict[str, tuple[int, int, int, int]] = UI
     return ""
 
 
+def zones_for(w: int, h: int) -> dict[str, tuple[int, int, int, int]]:
+    """PURE: the UI windows on a client area of w x h px. Each keeps the size measured at 1280 x 720
+    (UI_ZONES) and sticks to its corner (UI_ANCHORS): the minimap moves with the right edge, the
+    chat window with the bottom edge. At 1280 x 720 this is exactly UI_ZONES."""
+    out = {}
+    for name, (x0, y0, x1, y1) in UI_ZONES.items():
+        anchor = UI_ANCHORS.get(name, "tl")
+        dx = w - CLIENT_W if anchor[1] == "r" else 0  # right-anchored: shift with the width
+        dy = h - CLIENT_H if anchor[0] == "b" else 0  # bottom-anchored: shift with the height
+        out[name] = (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
+    return out
+
+
+def char_for(w: int, h: int) -> tuple[float, float]:
+    """PURE: our character's feet on a client area of w x h px: the centre, plus the small offset
+    measured at 1280 x 720 (CHAR_X, CHAR_Y). RO keeps the character at the centre at any size."""
+    return (w / 2 + (CHAR_X - CLIENT_W / 2), h / 2 + (CHAR_Y - CLIENT_H / 2))
+
+
 def clickable(pt: tuple[float, float], w: int = CLIENT_W, h: int = CLIENT_H) -> bool:
     """May the bot click point `pt` (px)? Only inside the client area (EDGE_PX away from its
     border) and never on a UI window. Every click passes this check, whatever chose it."""
     x, y = pt
     inside = EDGE_PX <= x < w - EDGE_PX and EDGE_PX <= y < h - EDGE_PX
-    return inside and not zone_at(x, y)
+    return inside and not zone_at(x, y, zones_for(w, h))
 
 
 def is_self(b: Box, char: tuple[float, float] = (CHAR_X, CHAR_Y)) -> bool:
@@ -320,6 +349,14 @@ class ClientWindow:
         left, top = win32gui.ClientToScreen(self.hwnd, (0, 0))  # its top-left on the screen
         return int(left), int(top), int(w), int(h)
 
+    def fullscreen(self) -> bool:
+        """True when the client area covers its WHOLE monitor (fullscreen, any resolution)."""
+        import win32api
+
+        monitor = win32api.GetMonitorInfo(win32api.MonitorFromWindow(self.hwnd, 2))["Monitor"]
+        left, top, w, h = self.rect()  # 2 = MONITOR_DEFAULTTONEAREST
+        return is_fullscreen((left, top, left + w, top + h), tuple(monitor))
+
     def alive(self) -> bool:
         """True while the window still exists (the client was not closed)."""
         import win32gui
@@ -332,6 +369,17 @@ class ClientWindow:
         import win32gui
 
         return bool(win32gui.GetForegroundWindow() == self.hwnd)
+
+
+def is_fullscreen(client: tuple[int, ...], monitor: tuple[int, ...]) -> bool:
+    """PURE: does the client area (x0, y0, x1, y1, screen px) cover the whole monitor rectangle?"""
+    return tuple(client) == tuple(monitor)
+
+
+def is_black(frame: np.ndarray) -> bool:
+    """PURE: is this captured frame (almost) black? An EXCLUSIVE fullscreen game draws straight to
+    the graphics card, and a screenshot of it can come back black: then the bot sees nothing."""
+    return float(frame.mean()) < BLACK_MEAN
 
 
 class Grabber:
@@ -357,7 +405,9 @@ class Grabber:
 # =================================================================================================
 
 
-def letterbox(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float, int, int]:
+def letterbox(
+    img: np.ndarray, size: tuple[int, int], upscale: bool = True
+) -> tuple[np.ndarray, float, int, int]:
     """Fit a picture into the model's input size without stretching it ("letterbox", like a wide
     film on a TV: the free space is filled with bars, here grey 114).
 
@@ -369,6 +419,8 @@ def letterbox(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float
     at the bottom. YOLO wants sizes that are multiples of 32, and 720 is not (736 = 23 x 32)."""
     h, w = img.shape[:2]
     s = min(size[0] / h, size[1] / w)  # the biggest scale that fits BOTH ways
+    if not upscale:  # (detect_window's pictures) never enlarge: sprites keep their real size
+        s = min(s, 1.0)
     nh, nw = round(h * s), round(w * s)  # the scaled picture's size (fits inside H x W)
     if (nh, nw) != (h, w):  # resize, nearest neighbour, in plain numpy (no OpenCV needed):
         ys = (np.arange(nh) / s).astype(int).clip(0, h - 1)  # for each new row: its source row
@@ -470,6 +522,19 @@ def decode(
     return result
 
 
+def detect_window(w: int, h: int, size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """PURE: the part of a w x h frame the model looks at, (x0, y0, x1, y1) in frame px.
+
+    NATIVE SCALE: RO draws its sprites at the same pixel size at every resolution, and the model
+    learned them at that size. So the picture is never shrunk or stretched: a frame that fits the
+    model's input (H, W) is used whole (letterbox only pads it); a bigger one (a 1920 x 1080 screen)
+    is cut to W x H around its CENTRE, where the character stands and the bot looks for targets.
+    Monsters further out are not seen: the bot only fights near itself anyway."""
+    mh, mw = size
+    x0, y0 = max(0, (w - mw) // 2), max(0, (h - mh) // 2)
+    return x0, y0, min(w, x0 + mw), min(h, y0 + mh)
+
+
 class OnnxDetector:
     """The v1 YOLO model, run on the CPU with onnxruntime (no GPU needed; ~0.1-0.5 s per frame,
     depending on the CPU). ONNX is a file format that many programs can run a trained model from."""
@@ -494,10 +559,14 @@ class OnnxDetector:
                  * 1e3, self.name, list(inp.shape), conf)  # fmt: skip
 
     def detect(self, frame: np.ndarray) -> list[Box]:
-        """A BGR picture (h, w, 3) -> the boxes found on it, in its own px."""
-        x, s, left, top = letterbox(frame, self.size)
+        """A BGR picture (h, w, 3) of ANY size -> the boxes found on it, in its own px.
+        The model looks at detect_window's part at native scale (no shrinking, no stretching)."""
+        x0, y0, x1, y1 = detect_window(frame.shape[1], frame.shape[0], self.size)
+        x, s, left, top = letterbox(frame[y0:y1, x0:x1], self.size, upscale=False)
         out = self.sess.run(None, {self.name: x})[0]  # the model's raw output, see `decode`
-        return decode(out, s, left, top, self.conf, self.iou)
+        boxes = decode(out, s, left, top, self.conf, self.iou)
+        # the boxes are in the cut-out's px: move them back by the cut-out's corner
+        return [Box(b.x0 + x0, b.y0 + y0, b.x1 + x0, b.y1 + y0, b.score, b.cls) for b in boxes]
 
 
 # =================================================================================================
@@ -580,7 +649,7 @@ def sort_boxes(
     for b in boxes:
         if b.cls != "monster":
             continue
-        zone = zone_at(*b.centre)
+        zone = zone_at(*b.centre, zones_for(w, h))
         touching = next((o for o in others if overlaps(b, o)), None)  # the first one, or None
         if zone:
             dropped.append((b, f"under {zone}"))
@@ -1004,6 +1073,7 @@ def draw_scene(
     dropped: Sequence[tuple[Box, str]],
     d: Decision,
     char: tuple[int, int],
+    area: tuple[int, int, int, int] | None = None,
 ) -> np.ndarray:
     """Draw what the bot sees and plans onto `img` (in place; also returned):
       - the UI zones (thin grey) where it never clicks;
@@ -1016,7 +1086,12 @@ def draw_scene(
     import cv2
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    for name, (x0, y0, x1, y1) in UI_ZONES.items():
+    if area is not None and area != (0, 0, img.shape[1], img.shape[0]):  # only when it is a part
+        cv2.rectangle(img, area[:2], (area[2] - 1, area[3] - 1), (255, 255, 255), 1, AA)
+        cv2.putText(
+            img, "model area", (area[0] + 4, area[1] + 14), font, 0.45, (255, 255, 255), 1, AA
+        )
+    for name, (x0, y0, x1, y1) in zones_for(img.shape[1], img.shape[0]).items():
         cv2.rectangle(img, (x0, y0), (x1 - 1, y1 - 1), (150, 150, 150), 1, AA)
         cv2.putText(img, f"UI: {name}", (x0 + 4, y1 - 6), font, 0.4, (150, 150, 150), 1, AA)
     gone = {id(b) for b, _ in dropped}
@@ -1407,7 +1482,7 @@ def run_replay(args: argparse.Namespace) -> int:
         t2 = time.perf_counter()
         h, w = frame.shape[:2]
         if not args.sequence:
-            decider = Decider(random.Random(args.seed + i), w=w, h=h)
+            decider = Decider(random.Random(args.seed + i), char=char_for(w, h), w=w, h=h)
         d = decider.step(boxes, i / args.fps)  # the "time" of frame i in a recording
         t3 = time.perf_counter()
         ms = {"read": (t1 - t0) * 1e3, "detect": (t2 - t1) * 1e3, "decide": (t3 - t2) * 1e3}
@@ -1434,7 +1509,8 @@ def run_replay(args: argparse.Namespace) -> int:
         if not show and out_dir is None:
             continue
         _, dropped = sort_boxes(boxes, decider.char, w, h)
-        pic = draw_scene(frame.copy(), boxes, dropped, d, decider.me)
+        area = detect_window(w, h, det.size) if isinstance(det, OnnxDetector) else None
+        pic = draw_scene(frame.copy(), boxes, dropped, d, decider.me, area)
         fps = 1000.0 / max(ms["read"] + ms["detect"] + ms["decide"], 1e-3)
         pic = with_hud_strip(pic, hud_text("REPLAY", d, fps, ms, boxes))
         if out_dir is not None:
@@ -1477,15 +1553,27 @@ def run_live(args: argparse.Namespace) -> int:
     rng = random.Random(args.seed)
     gate = SafetyGate(window, args.minutes)
     mouse: Mouse | None = None
-    # Open the bot view window NOW, before the countdown: a NEW window takes the focus (Windows puts
-    # it in front), and the bot clicks only while the GAME is in front. Opened after the countdown,
-    # it took the focus away right after the person clicked the game, and every click was refused
-    # ("client not in front", a class PC 2026-11-06). Opened first, the click on the game sticks.
-    first = np.zeros((120, 640, 3), np.uint8)
-    cv2.putText(first, "starting: click the GAME window to put it in front", (10, 65),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)  # fmt: skip
-    cv2.imshow(LIVE_VIEW, first)
-    cv2.waitKey(1)  # lets the window appear
+    left, top, w, h = window.rect()
+    full = window.fullscreen()
+    # FULLSCREEN: any other window shown over the game takes the focus (a fullscreen game often
+    # minimises then), so the bot view is OFF by default there: watch the logs instead (--logs).
+    show_view = args.view == "on" or (args.view == "auto" and not full)
+    shown = "on" if show_view else "OFF (fullscreen: the logs show what it does; --view on forces)"
+    say(f"client area {w} x {h}, {'FULLSCREEN' if full else 'windowed'}; bot view {shown}")
+    if isinstance(det, OnnxDetector):
+        x0, y0, x1, y1 = detect_window(w, h, det.size)
+        say(f"the model looks at ({x0}, {y0})-({x1}, {y1}): {x1 - x0} x {y1 - y0} px around the "
+            f"character, at native scale")  # fmt: skip
+    if show_view:
+        # Open the bot view window NOW, before the countdown: a NEW window takes the focus
+        # (Windows puts it in front), and the bot clicks only while the GAME is in front. Opened
+        # after the countdown, it took the focus away right after the person clicked the game, and
+        # every click was refused ("client not in front", a class PC 2026-11-06).
+        first = np.zeros((120, 640, 3), np.uint8)
+        cv2.putText(first, "starting: click the GAME window to put it in front", (10, 65),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)  # fmt: skip
+        cv2.imshow(LIVE_VIEW, first)
+        cv2.waitKey(1)  # lets the window appear
     if args.act:
         print(ACT_BANNER)
         ok, why = gate.check_network(force=True)
@@ -1496,28 +1584,29 @@ def run_live(args: argparse.Namespace) -> int:
         print("network check:", why)
         print("starting in 5 s: click the game window to put it in front ...", flush=True)
         for _ in range(50):  # 5 s, keeping the bot view responsive
-            cv2.waitKey(100)
+            if show_view:
+                cv2.waitKey(100)
+            else:
+                time.sleep(0.1)
     overlay = None
-    left, top, w, h = window.rect()
-    if (w, h) != (CLIENT_W, CLIENT_H):
-        print(
-            f"WARNING: the client area is {w} x {h}; the settings (character, UI windows) and "
-            f"the model expect {CLIENT_W} x {CLIENT_H}"
-        )
-    if args.overlay:
+    if args.overlay and full:
+        say("overlay off: the game is fullscreen (nothing can be drawn over it)")
+    elif args.overlay:
         try:
             overlay = Overlay(w, h)
         except RuntimeError as e:
             print(f"overlay off: {e}")
-    decider = Decider(rng, w=w, h=h)
+    decider = Decider(rng, char=char_for(w, h), w=w, h=h)
     mode = "ACT" if args.act else "WATCH (no input)"
     print(
         f"{mode}: window {window.title!r} (pid {window.pid}), client area {w} x {h} at "
-        f"({left}, {top}); stop: F12 / mouse to the top-left corner / q in the bot view"
+        f"({left}, {top}); stop: F12 / mouse to the top-left corner"
+        + (" / q in the bot view" if show_view else "")
     )
     LOG.info("client area %d x %d at (%d, %d); the loop starts", w, h, left, top)
     t_prev, fps = time.perf_counter(), 0.0
     frames, last_log, last_state = 0, 0.0, ""
+    blacks, black_said = 0, False  # black frames in a row (exclusive fullscreen), warned once
     front: bool | None = None  # is the game window in front? (said once each time it changes)
     try:
         while True:
@@ -1534,7 +1623,17 @@ def run_live(args: argparse.Namespace) -> int:
                     say("the game window is NOT in front: no clicks until you click the game")
             t0 = time.perf_counter()
             left, top, w, h = window.rect()  # the window may have moved
+            if (w, h) != (decider.w, decider.h):  # resized (or switched to fullscreen): re-plan
+                say(f"the client area is now {w} x {h}: the layout follows")
+                decider = Decider(rng, char=char_for(w, h), w=w, h=h)
             frame = grabber.grab(left, top, w, h)  # CAPTURE
+            blacks = blacks + 1 if is_black(frame) else 0
+            if blacks >= 3 and not black_said:
+                black_said = True
+                print("WARNING: the captured picture is BLACK: the game is probably in EXCLUSIVE "
+                      "fullscreen, which screenshots cannot see. Switch the client to windowed "
+                      "(its Setup: Windowed / Window mode) and run again.", flush=True)  # fmt: skip
+                LOG.warning("black capture for %d frames (exclusive fullscreen?)", blacks)
             t1 = time.perf_counter()
             boxes = det.detect(frame)  # DETECT
             t2 = time.perf_counter()
@@ -1575,16 +1674,19 @@ def run_live(args: argparse.Namespace) -> int:
                     {k: round(v) for k, v in ms.items()}, fps)  # fmt: skip
             hud = hud_text(mode, d, fps, ms, boxes)
             _, dropped = sort_boxes(boxes, decider.char, w, h)
-            view = draw_scene(frame.copy(), boxes, dropped, d, decider.me)  # DRAW
+            # the overlay's picture size is fixed when it is created: skip it while the client
+            # area has another size (resize the client back to make it reappear)
+            if overlay is not None and (w, h) == (overlay.w, overlay.h):
+                overlay.show(overlay_picture(w, h, boxes, dropped, d, decider.me, hud), left, top)
+            if not show_view:  # fullscreen: no window over the game (the logs tell the story)
+                continue
+            area = detect_window(w, h, det.size) if isinstance(det, OnnxDetector) else None
+            view = draw_scene(frame.copy(), boxes, dropped, d, decider.me, area)  # DRAW
             if args.view_scale != 1.0:
                 view = cv2.resize(
                     view, None, fx=args.view_scale, fy=args.view_scale, interpolation=cv2.INTER_AREA
                 )
             cv2.imshow(LIVE_VIEW, with_hud_strip(view, hud))
-            # the overlay's picture size is fixed when it is created: skip it while the client
-            # area has another size (resize the client back to make it reappear)
-            if overlay is not None and (w, h) == (overlay.w, overlay.h):
-                overlay.show(overlay_picture(w, h, boxes, dropped, d, decider.me, hud), left, top)
             if cv2.waitKey(1) & 0xFF in (ord("q"), 27):  # waitKey also lets the window redraw
                 print("stopped: q")
                 LOG.info("stopped: q after %d frames", frames)
@@ -1628,6 +1730,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="also draw over the game (Windows 10 2004+; invisible to capture)",
     )
     ap.add_argument("--view-scale", type=float, default=0.75, help="size of the bot view window")
+    ap.add_argument(
+        "--view",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="live: the bot view window; auto = on when windowed, off when the game is fullscreen",
+    )
     ap.add_argument("--minutes", type=float, default=10.0, help="end a live run after this long")
     ap.add_argument("--save-dir", help="replay: save annotated PNGs here (no window)")
     ap.add_argument("--no-show", action="store_true", help="replay: no window, no pictures")
