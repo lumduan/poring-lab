@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Batt decides how the vision worker may start (its cold start tripped the one-spike IO rule at 18:42:37, section 12); then the training per Amendment I (train-day.sh, 20 epochs), then the evaluation (xmas02-eval.md). Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache."
+next_action: "The training runs (from 20:53:17, 20 epochs, Amendment I); when it ends: worker-stop:vision, then the evaluation (xmas02-eval.md: TEST labels, the seed-53 pack + two labellers, Q1c, P4A, latency). Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1031,3 +1031,13 @@ PAUSED for Batt (one IO abort: stop and ask; Amendment D covers the recordings o
 --quiet-min 10 --limit 25 -- guarded_build.py --sustain 30 --spike 25 worker:vision@120` from
 20:32 (GPU 3,537 / 16,311 MiB, Frigate only; Ollama empty). A second trip stops and asks again
 (options b / c).
+
+**The worker, attempt 2: UP.** quiet_start waited 20:32:05-20:50:52 (10 quiet minutes), `worker:vision`
+up 20:50:55, settled 20:52:55 (idle, no CUDA context; worst stall 4.4 % on frigate).
+
+**THE TRAINING STARTED 20:53:17** (Amendment I's launch, verbatim; log
+`/dev/shm/poring-lab-tmp/train-xmas02/`): `execdev:vision` in the worker, `poring_vision.train --cache
+/datasets/.framecache/xmas02-o3h-t-20261106 --epochs 20 --batch 2 --workers 1 --name xmas02-20261106`
+(init gef10 r2 `last.pt`, MID_CKPT, the sustained IO rule); R2 co-tenant rule armed (fit-first's VTON
+never touched), paired R3 (180 s ON / OFF), the duty cycle 2000 ms -> 100 ms by 20:58 (fleet 26.9
+det/s); 1,406 MiB on the GPU. The scored checkpoint: `last.pt` after the last completed epoch.
