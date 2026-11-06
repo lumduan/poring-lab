@@ -497,6 +497,36 @@ Batt's words, translated (before 10:49:46, the turn's first `date`):
 (11:12). Attempts 1-3 stopped in setup before any hunting: nothing of theirs is pooled. K1 and K3
 are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
 
+### 4L. Pilot p6 pre-registration: the box watcher on the xmas_dun02 model (written BEFORE its run)
+
+- **Why:** Batt 2026-11-07 ~05:5x: "use it" (xmas02-detector.md Amendment J). With v1 the box
+  watcher saw nothing true here: p4's 8 and p5's 5 box engagements found no SWORD (X2: v1's precision
+  0.015), so the runner fought only what its walk cursor read; p4 1 kill, p5 0.
+- **The change (T-11, at 8d2ab43; the one change):** `BoxWatch` takes `unit_detector.for_map
+  ("xmas_dun02")`. That is the xmas02 ONNX (sha256 pinned), its four species collapsed to
+  `monster` in one NMS group, at 16 threads (Batt's decision, every UnitDetector). The rhythm
+  (BOX_EVERY_S 1.0, BOX_FRESH_S 1.5), the engagement rules and every walk rule are unchanged.
+  `--box-model v1` is the rollback.
+- **The run:** pilot p6, p4's command with `--label xmas02-p6`: `dungeon_hunt.py run --char rogue
+  --map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim
+  --clear-map --minutes 15 --seed 20261105 --label xmas02-p6`.
+  - The Rogue IMMUNE: `collect_v2.py immune-on`, then `immune-confirm` on its screenshot. This
+    login (150004) has no confirmed ON.
+  - A judged screenshot first; unrecorded.
+  - Judged once after the run by `dungeon_judge.py row` and `walk_judge.py`.
+- **Bars (against p4 / p5, the same command with v1):**
+  - **D1 (primary):** kills (packets) >= 10 in the 15 min (p4 1, p5 0).
+  - **D2:** box engagements that end as a box miss (no SWORD found) <= 50 % (p5 5 / 5).
+  - **D3:** the hard bars pass (0 NPC contact, 0 attack on a non-monster, no map change but the
+    setup's and the end's), and the walk holds: 0 dead-end Fly Wings, stalls <= 10 (p4 3, p5 4).
+  - Reported:
+    - engagements by kind, strikes and how many landed;
+    - the box watcher's frames;
+    - waypoints a minute;
+    - kills an hour, items picked / stolen.
+- A FAIL keeps the deployment as Batt decided. The cause is reported, and any change is
+  pre-registered before its own run (never tuned on this one).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
