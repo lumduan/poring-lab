@@ -559,6 +559,18 @@ after the last busy poll. The script and its output: `/dev/shm/poring-lab-tmp/xm
 - The end frame judged clean at (192,127), HP 100 % all along (immunity held).
 - **FIT = the two `*-rdp-xmas02-xw1` sessions: 42 whole dwells** (6 + 36), ~30 min of watch.
 
+**xw2 (TRAIN candidate, Amendment F; recorder session `20261106T151122-rdp-xmas02-xw2`, watch
+`20261106T151123-watch-xmas_dun02-xw2`): COMPLETE, one part, no pause.**
+- Prep 15:10:50: `@killmonster2`, the frame judged clean. Part 0 from 15:11:22; seed 2611062,
+  stands 0-42 (43 dwells, each recorded whole, no redo, no wait); the 30-min box ended it at
+  15:41:26; the end frame clean at (137,214), HP 100 %.
+- **1,804 frames, 3,910,784,149 bytes (130.1 MB/min), 1,417 packet events.**
+- **The guard: worst 79.5 % on quant-postgres, 79 s above 30 % in all, never 30 s in a row: no
+  stop.** Not attributed: our recorder writes ~2.2 MB/s sequentially, and quant's own bursts reached
+  47-68 % on 10-09 with nothing of ours running (host-disk notes). Reported to Batt as an infra
+  observation; the rule is Batt's (Amendment D).
+- xw3 started 15:42:39 (seed 2611063, session `20261106T154241-rdp-xmas02-xw3`).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
