@@ -542,9 +542,11 @@ immune; 22:36:33-22:52:26; unrecorded):**
 | hard bars (packets) | pass | **pass**: 0 NPC contact, 0 non-monster attack; the 7 same-map changes are the Fly Wings |
 | fallback reads waiting for a 2nd read | - | 35 (`pos_light_unconfirmed`) |
 
-- The HP loop's reads held no position 10.4 % of the time (264 of 2,532: after the Fly Wings'
+- ~~The HP loop's reads held no position 10.4 % of the time (264 of 2,532: after the Fly Wings'
   2.5 s settle, unconfirmed fallback reads, unread strips); none lasted long enough for an
-  escape.
+  escape.~~ ➡️ CORRECTED 2026-11-06: that count took in the 211 "quick" HP reads, which never
+  carry a position. The main reads with no position: **53 of 2,321 (2.3 %)**, all after a Fly Wing
+  (the field is the runner's last known cell, cleared by a Fly Wing; it is not a per-read result).
 - **The next limit is the walk, not the position:** 7 dead ends in 15 min (each a Fly Wing to a
   random cell, often inside the maze), and few engagements (the v1 detector's generic class on
   this map's species is what X2 measures).
@@ -564,8 +566,10 @@ against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
 - The runner (4A's command, 20 min): ended by its time box, the home warp typed; the judge
   (packets): **hard bars PASS** (0 NPC contact, 0 non-monster attack; the 7 same-map changes are
   its Fly Wings), 0 deaths, 15 engagements, 11 strikes + 21 burst clicks, 2 kills, 7 Fly Wings
-  (5 dead ends, 2 position unread), 363 walk clicks (224 trusted); the HP loop's reads held no
-  position 12.6 % of the time; 44 fallback reads waited for a 2nd read.
+  (5 dead ends, 2 position unread), 363 walk clicks (224 trusted); ~~the HP loop's reads held no
+  position 12.6 % of the time~~ (➡️ CORRECTED 2026-11-06: 138 of 3,244 main reads = 4.3 %; the
+  12.6 % took in the 310 quick reads, which carry no position); 44 fallback reads waited for a 2nd
+  read.
 - **X2's scoring waits for its tooling** (4A: a CPU predictor for a recorder session + the scorer,
   its positive control on a banked gef10 human demo first); the rule and the bar stay as
   pre-registered.
@@ -595,7 +599,7 @@ runner.**
 | waypoints reached (per min) | 31 (2.07) | 89 (4.45) | **79 (5.27)** | reported |
 | forgets (uncarve) / stalls | - / 15 | - / 18 | 2 / **38** | reported |
 | engagements / strikes (landed) / kills | 6 / 5 / 1 | 15 / 11 / 2 | 4 / 3 (2) / 3 | reported |
-| position None in the HP loop's reads | 10.4 % | 12.6 % | 17.2 % (337 / 1,957) | reported |
+| no position in the HP loop's main reads (the last known cell; cleared by a Fly Wing) | 53 / 2,321 = 2.3 % | 138 / 3,244 = 4.3 % | 0 / 1,620 = 0 % | reported |
 
 - **The 40 kept crops** (the ring and the old count disagreeing, of 196): walk arrows (most with the
   client's green walk marker) over the orange floor; scan hovers beside the Rogue, whose red outfit
@@ -619,3 +623,7 @@ runner.**
   - The client's own reason is not known (a hit box above the character is one guess). The
     measured way round it: aim one cell to the side, (+-1, +7) (p3 32 / 33 sent; p2 + p3 + X2
     44 / 46; gef_fild10 88 / 88).
+- ➡️ CORRECTED 2026-11-06 07:3x (this table's last row first said 10.4 % / 12.6 % / 17.2 %): those
+  counts took in the quick HP reads, which carry no position at all. The field is the runner's last
+  known cell, so it says when the runner had NO position (after a Fly Wing), not how often a read
+  failed; the per-read outcome is not logged yet.
