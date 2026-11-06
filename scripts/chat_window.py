@@ -291,7 +291,12 @@ PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the whit
 # 5.8 / 12.0 and 0.0 / 14.2) while the shapes stay apart (0.51-0.56 vs 0.31-0.32). On the day's
 # 63 frames with a window: grey decides 60, every one of them with a shape margin >= 0.206 but
 # the Escape-dimmed frame (0.005); the second opinion contradicts none and decides the other 3.
-PADLOCK_SHAPE_MARGIN = 0.15
+# 0.15 -> 0.10 on 2026-11-06 16:0x: the xw3 watch stopped at a stand (37,159) whose floor read
+# closed 5.6 / open 19.7, shapes 0.366 / 0.229 (margin 0.137), the same on three re-reads. Measured
+# then (xmas02-detector.md section 12): 153 recorded xmas_dun02 frames, all LOCKED (one per 30 of
+# today's watches): 151 locked, the 2 others that stand; 16 archived OPEN frames: shape margin
+# -0.28 .. -0.30 (the other side), grey margin >= 39.9; at 0.10 every frame reads its truth.
+PADLOCK_SHAPE_MARGIN = 0.10
 
 
 def _padlock_crop(img_rgb: Any, left: int, text_top: int) -> np.ndarray:

@@ -571,6 +571,24 @@ after the last busy poll. The script and its output: `/dev/shm/poring-lab-tmp/xm
   observation; the rule is Batt's (Amendment D).
 - xw3 started 15:42:39 (seed 2611063, session `20261106T154241-rdp-xmas02-xw3`).
 
+**xw3, part 1 (recorder session `20261106T154241-rdp-xmas02-xw3`, watch
+`20261106T154241-watch-xmas_dun02-xw3`): STOPPED at 16:00:17 by the chat-window check, nothing
+typed.** Prep 15:42:08 (`@killmonster2`, judged clean); seed 2611063, stands 0-24 (25 whole dwells,
+one part, no pause); **1,057 frames, 2,059,108,049 bytes (116.9 MB/min), 1,006 packet events**; the
+guard's worst 36.4 % on quant-postgres, 11 s above 30 %.
+- **Why:** at stand 25 (37,159) the padlock read closed 5.6 / open 19.7 by grey (margin 14.1 < 15)
+  and 0.366 / 0.229 by colour shape (margin 0.137 < 0.15): "unknown", the same on three read-only
+  re-reads (a static floor). The frame shows the standard window (6 lines, docked, tabs Battle Log |
+  Chat), nothing over it.
+- **Measured before changing anything (16:03, offline, `padlock-study/` in scratch):** 153 recorded
+  frames of today's watches (one per 30; the padlock LOCKED in all) read 151 locked + 2 unknown (that
+  stand); 35 archived 11-05 / 11-06 chat-window frames with a window read 17 open (grey margin
+  >= 39.9, shape margin -0.28 .. -0.30), 17 locked and the stop frame unknown.
+- **The reader's shape margin is 0.10 since (chat_window.PADLOCK_SHAPE_MARGIN, test with the real
+  readings):** every one of the 188 frames then reads its truth; only the 3 unknowns change (to
+  locked). The live re-read at the stand: locked. Grey's own rule is unchanged.
+- xw3 continues from stand 25 with the rest of its 30-min box (Amendment D's `--start-cell`).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0

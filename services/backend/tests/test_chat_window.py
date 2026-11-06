@@ -220,13 +220,33 @@ def test_the_colour_shape_decides_only_with_greys_ranking() -> None:
     assert cw.padlock_state(pink) == "locked"
     puzzle = {"open": 12.0, "locked": 5.8, "open_shape": 0.312, "locked_shape": 0.532}
     assert cw.padlock_state(puzzle) == "locked"
-    assert cw.padlock_state({**pink, "locked_shape": 0.44}) is None  # the shape not clear
+    assert cw.padlock_state({**pink, "locked_shape": 0.38}) is None  # the shape not clear (0.065)
     assert cw.padlock_state({**puzzle, "open": 5.0}) is None  # grey ranks the other first
     assert cw.padlock_state({**pink, "open_shape": 0.6, "locked_shape": 0.3}) is None  # disagrees
     assert cw.padlock_state({**pink, "locked": 21.0, "open": 25.0}) is None  # nothing matches
     flip = {"open": 6.0, "locked": 12.5, "open_shape": 0.58, "locked_shape": 0.30}
     assert cw.padlock_state(flip) == "open"
     assert cw.padlock_state({"open": 20.1, "locked": 5.8}) is None  # no shape: grey alone
+
+
+def test_the_xw3_stand_reads_locked_and_open_frames_stay_open() -> None:
+    """2026-11-06 16:00:15 (xw3, stand (37,159)): closed 5.6 / open 19.7, shapes 0.366 / 0.229 --
+    shape margin 0.137 under the old 0.15 -- stopped the watch, the same on three re-reads; the
+    margin is 0.10 since. The archived OPEN frames of 11-05 (their real readings, scratch-archive
+    2026-11-05 chat-1105 / tabs-1105) keep reading open: grey decides them by >= 39.9. A shape
+    margin under 0.10 still decides nothing."""
+    assert cw.PADLOCK_SHAPE_MARGIN == 0.10
+    xw3 = {"open": 19.7, "open_shape": 0.229, "locked": 5.6, "locked_shape": 0.366}
+    assert cw.padlock_state(xw3) == "locked"
+    opened = [
+        {"open": 4.4, "open_shape": 0.602, "locked": 50.4, "locked_shape": 0.302},  # 3 lines
+        {"open": 0.0, "open_shape": 0.578, "locked": 47.3, "locked_shape": 0.295},  # 6 lines
+        {"open": 3.3, "open_shape": 0.566, "locked": 55.0, "locked_shape": 0.284},  # 12 lines
+        {"open": 3.8, "open_shape": 0.59, "locked": 44.2, "locked_shape": 0.292},  # the "+" probe
+    ]
+    for d in opened:
+        assert cw.padlock_state(d) == "open"
+    assert cw.padlock_state({**xw3, "locked_shape": 0.32}) is None  # margin 0.091
 
 
 def test_the_padlock_read_ignores_the_scene_behind_the_icon_row() -> None:
