@@ -553,3 +553,42 @@ against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
   one), `enter_game(..., char="Thief8fce")`; the game-entry chat check: left 0, last row 719, 6
   lines, padlock locked, tabs battle | regular in order. Immunity (`@monsterignore`) does not
   survive a relog: restored before the next run.
+
+**Pilot p3 (4G; session 20261106T070011-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p3;
+dungeon@8.6 at 126a3b5, pre-registered 06:58:15; the run 07:00:11-07:15:58, ended by its own time
+box, the home warp typed; unrecorded). VERDICT: PASS, all four bars -> dungeon@8.6 is the patrol's
+runner.**
+
+| | p2 (dungeon@8.5) | X2 (8.5, 20 min) | **p3 (8.6)** | bar |
+|---|---|---|---|---|
+| W1 dead-end Fly Wings | 7 | 5 | **0** (no Fly Wing at all) | <= 2: PASS |
+| W2 no-entry carves / walk decisions | 138 / 414 = 33.3 % | 116 / 480 = 24.2 % | **31 / 489 = 6.3 %** | <= 10 %: PASS |
+| W3 clicks the old cue would have carved, then a stall | - | - | **6 / 125 = 4.8 %** | <= 10 % (>= 20): PASS |
+| W4 hard bars (packets) | pass | pass | **pass**: 0 NPC contact, 0 non-monster attack, 0 map change | PASS |
+| waypoints reached (per min) | 31 (2.07) | 89 (4.45) | **79 (5.27)** | reported |
+| forgets (uncarve) / stalls | - / 15 | - / 18 | 2 / **38** | reported |
+| engagements / strikes (landed) / kills | 6 / 5 / 1 | 15 / 11 / 2 | 4 / 3 (2) / 3 | reported |
+| position None in the HP loop's reads | 10.4 % | 12.6 % | 17.2 % (337 / 1,957) | reported |
+
+- **The 40 kept crops** (the ring and the old count disagreeing, of 196): walk arrows (most with the
+  client's green walk marker) over the orange floor; scan hovers beside the Rogue, whose red outfit
+  the old count also took for the ring; and 5 full rings drawn 20-30 px AWAY from the pointer
+  (circle fits at (-24.4, +14.5), (+7.5, -6.5), (+7.5, +31.6) instead of (+4.5, +11.5): the client's
+  cursor not yet redrawn at the new pointer, a known lag), which the +-3 px rule rightly does not
+  give to the hovered cell. No ring at the pointer was missed.
+- **THE NEXT LIMIT, found in p3's packets: clicks STRAIGHT NORTH send no move request.** Of p3's
+  456 walk clicks, 124 sent no `self_move_request` (the sniffer): 93 of the 95 clicks at (0, +7)
+  (the cell 7 straight north, client pixel (640, 204)) and 5 of 6 at (0, +6), against 1 of 33 at
+  (+-1, +7), 1 of 69 straight south and 24 of 253 elsewhere. The stalls (two clicks without moving
+  -> a 5 x 5 carve) and the forgets come from them: the west edge's 230-cell leg is all straight
+  north.
+  - The client draws a walk arrow with its green walk marker there, then the no-entry ring after the
+    click (X2's frames at the failed clicks), though every cell of those paths is plain type-0
+    floor, flat (x 13, y 26-35 at -8) on the client's own GAT.
+  - It is not this map: on gef_fild10 (the 9 patrol sessions of 2026-10-27) (0, +7) failed 108 /
+    325, (0, +6) 8 / 26, (0, +12) 14 / 42, while (+-1, +7) failed 0 / 88 and every other direction
+    23 / 6,090. Not a repeated pixel either (the same rate after an identical click). The guards of
+    our own click path refused nothing (no `refused` / `npc_refused` count).
+  - The client's own reason is not known (a hit box above the character is one guess). The
+    measured way round it: aim one cell to the side, (+-1, +7) (p3 32 / 33 sent; p2 + p3 + X2
+    44 / 46; gef_fild10 88 / 88).
