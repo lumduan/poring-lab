@@ -68,6 +68,7 @@ def test_the_precision_split_by_our_motion_counts_every_verdict_once() -> None:
     src = Path(dv.__file__).read_text()
     assert src.count('motion_verdicts["moving" if moving else "still"].update(vs)') == 1
     assert src.index("moving = before != row") < src.index('motion_verdicts["moving" if')
+    assert '"kept": [list(d) for d in dets],  # what ``verdicts`` index' in src  # P4A's draw
 
 
 def test_a_unit_with_no_detection_is_a_miss() -> None:

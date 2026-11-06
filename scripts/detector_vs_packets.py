@@ -613,6 +613,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
                               "moving": moving, "hallucination": hallucinating})  # fmt: skip
         if cfg.pairs:
             pairs.append({"t": t, "self": row["self"], "moving": moving, "dets": c["boxes"],
+                          "kept": [list(d) for d in dets],  # what ``verdicts`` index
                           "verdicts": vs, "units": scored, "dying": dying,
                           "self_box": sbox, "hallucination": hallucinating})  # fmt: skip
     per_species: dict[str, Any] = {}
