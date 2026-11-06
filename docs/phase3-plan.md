@@ -1814,7 +1814,7 @@ T3 does not run on the deployable path.~~ ➡️ **ACCEPTED 2026-10-04 (Batt, de
 | Leakage between train and test | split by session; the gold set never trained on |
 | The hover ground marker in frames | it is part of the scene, so the label check and the B5 rules treat it as non-entity |
 | SPR/ACT in `data.grf` encrypted beyond header-DES | `grf_read.py` refuses MIXCRYPT: that is a STOP and a report (C8), not a workaround |
-| Disk | H.264 ~2.5 GB/h; the 140 GB floor stays (➡️ 120 GB since Batt's 2026-11-05 decision, ADR-0010 amendment); ship after each session |
+| Disk | H.264 ~2.5 GB/h; the 140 GB floor stays (➡️ 120 GB since Batt's 2026-11-05 decision, ➡️ 100 GB since 2026-11-06; ADR-0010 amendments); ship after each session |
 | **The GM dies** (2026-10-04: a level-1 GM, max HP 40, killed twice by Porings its own walk clicks provoked, in p3-outdoor-b and p3-indoor-b; then it lay dead behind the restart menu) | the driver now re-enters its scene after 3 empty picks (a warp brought it back standing); M4/M7 need a GM that survives fights: §9 item 8 |
 | **The walk leaves the scene** (p3-outdoor-b walked into prt_fild08's gate to prontera) | outdoor targets stay south of the start row (2026-10-04); M0's warp list makes this general later |
 

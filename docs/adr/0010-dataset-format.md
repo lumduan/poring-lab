@@ -50,6 +50,7 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > **Headroom.** The free-space floor stays 140 GB (Batt): with 152 GB free that is 12 GB, about
 > **5 h of H.264 per session before shipping**. The 20 GB unshipped cap alone would allow ~8 h.
 > ➡️ SUPERSEDED 2026-11-05: the floor is **120 GB** (Batt; see "Amendment 2026-11-05" below).
+> ➡️ SUPERSEDED AGAIN 2026-11-06: the floor is **100 GB** (Batt; "Amendment 2026-11-06" below).
 >
 > **Determinism.** The bitstream is the dataset only while decoding is bit-identical.
 > - `scripts/dataset_check.py` decodes every frame on the HOST after shipping and compares each
@@ -234,6 +235,8 @@ They cover:
 
 ## Amendment 2026-11-05: the free-space floor is 120 GB (Batt)
 
+> ➡️ SUPERSEDED 2026-11-06: the floor is **100 GB** ("Amendment 2026-11-06" below).
+
 - **Decision (Batt, 2026-11-05 ~19:0x ICT):** `dataset_ship.MIN_FREE_BYTES` goes from 140 GB to
   **120 GB**. Recording still refuses to start, and stops cleanly mid-run, below the floor; the
   20 GB unshipped cap, the IO guard and shipping after each session are unchanged.
@@ -247,3 +250,18 @@ They cover:
   - H.264 at IDR 1 s (this ADR's rates): about 2.5 GB per hour.
   A session lives on the root disk only until it is shipped and verified, then it is deleted.
 
+
+## Amendment 2026-11-06: the free-space floor is 100 GB (Batt)
+
+- **Decision (Batt, 2026-11-06 ~10:45 ICT, answering the 09:42 report):** `dataset_ship.MIN_FREE_BYTES`
+  goes from 120 GB to **100 GB**: "unblock this now, tell HA too; I raise the margin to 100 GB so
+  we don't bother HA often" ("ปลดบล็อคเรื่องนี้เลย บอก HA ด้วย และฉันปรับเกณฑ์เพิ่มให้ด้วยเป็น
+  100gb จะได้ไม่ไปกวน HA บ่อย"). Everything else is unchanged: recording refuses to start, and
+  stops cleanly mid-run, below the floor; the 20 GB unshipped cap, the IO guard, and shipping +
+  deleting each session before the next.
+- **Why it came up:** the xmas_dun02 detector's data plan (docs/planning/xmas02-detector.md, D0)
+  needs about 3 GB of headroom per 30-min recording, and the root disk sat at 122.09 GB at 10:49
+  (123.14 at 09:42), falling ~1.0-1.3 GB/h. HA attributes the fall to quant's Postgres (crypto data
+  between the nightly retention runs; ~9.3 GB back at 21:07). HA was told the same day.
+- The floor is still DECIMAL GB (`100 * 10**9` bytes); `df -h` prints GiB, so measure with
+  `df -B1`.

@@ -66,14 +66,15 @@ def index_lines(dest: Path) -> list[dict[str, Any]]:
 SID = "20261003T110000-rdp-calib"
 
 
-def test_the_free_space_floor_is_batts_120_gb(
+def test_the_free_space_floor_is_batts_100_gb(
     ds: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Batt 2026-11-05 (ADR-0010 amendment): 120 GB stays free on the shared root disk (was 140)."""
-    assert ds.MIN_FREE_BYTES == 120 * 10**9
-    monkeypatch.setattr(ds, "free_bytes", lambda path: 119 * 10**9)
-    assert "floor 120 GB" in (ds.local_caps(tmp_path, unshipped=0) or "")
-    monkeypatch.setattr(ds, "free_bytes", lambda path: 121 * 10**9)
+    """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on the shared root disk
+    (120 GB since 11-05, 140 GB before)."""
+    assert ds.MIN_FREE_BYTES == 100 * 10**9
+    monkeypatch.setattr(ds, "free_bytes", lambda path: 99 * 10**9)
+    assert "floor 100 GB" in (ds.local_caps(tmp_path, unshipped=0) or "")
+    monkeypatch.setattr(ds, "free_bytes", lambda path: 101 * 10**9)
     assert ds.local_caps(tmp_path, unshipped=0) is None
 
 

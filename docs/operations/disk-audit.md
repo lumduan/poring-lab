@@ -28,8 +28,8 @@ keeps scratch items up to 1 GB, 4 GB in total.
 - **Retention:** until `dataset_ship.py ship` verifies the NAS copy, which then deletes the local
   one. Ship in a quiet window: SET hours are refused, and quant's post-close jobs ran until ~19:00
   on 10-28.
-- **Caps:** `record_session` refuses or stops below 120 GB free (140 GB until Batt's 2026-11-05
-  decision, ADR-0010 amendment) or above 20 GB unshipped (its defaults).
+- **Caps:** `record_session` refuses or stops below 100 GB free (Batt 2026-11-06; 120 GB from
+  2026-11-05, 140 GB before; ADR-0010 amendments) or above 20 GB unshipped (its defaults).
 - The five /dev/shm sessions still waiting (e4, f3, e3, e3x, e3b; ~11 GB) ship 2026-10-30
   03:05-04:25 (rogue-gef10.md AK-4). ➡️ SHIPPED 2026-10-30 03:05-03:35 ICT, all five verified on the
   NAS and deleted locally (section "The pause" below).
