@@ -608,6 +608,12 @@ worst 24.7 %. Nothing reads it before T1 (3b).
   dwells), xw2 (43), xw3 x 2 (43), xw5 (TEST, 43): **6 sessions, 15.46 GB**; root free 108.65 GB at
   16:51 (`df -B1`).
 
+**The 17:00 ships (Amendment D): all six sessions on the NAS, 17:00:52-17:10:55.** `dataset_ship.py
+ship`, one at a time (tolerant disk rule, no trip): each hashed, rsynced, RE-HASHED on the NAS,
+indexed in INDEX.jsonl, then deleted locally. xw1 663,096,484 + 3,278,294,658; xw2 3,913,919,075;
+xw3 2,060,931,443 + 1,606,432,755; xw5 3,938,302,466 bytes (the NAS manifests carry each
+`checksums_sha256`). The local root is empty; root free 123.75 GB at 17:11 (`df -B1`).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
