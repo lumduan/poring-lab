@@ -1788,3 +1788,29 @@ def test_v55_the_guard_on_v54_run4s_real_press() -> None:
         if hit is not None:
             named.append((c["kind"], round((contact - int(c["t"])) / 1e9, 2), hit))
     assert named == [("strike", 0.08, (175, 374))]  # that press, 80 ms before the contact; no other
+
+
+def test_v56_a_walk_click_in_the_gms_own_column_moves_aside_inside_its_cell() -> None:
+    """2026-11-06 (rogue-xmas02.md 4K): the client sent no move request for 275 of 439 walk clicks
+    within 4 px of the GM's column above it (v54 / v55), for 0 of 65 at 5-10 px aside."""
+    assert hf.column_nudge(640.4, True) == (hf.COL_U + hf.COL_NUDGE_PX, True)  # (0, +7)'s pixel
+    for u in (hf.COL_U - hf.COL_HALF, hf.COL_U, hf.COL_U + hf.COL_HALF):  # the whole band leaves it
+        x, inside = hf.column_nudge(u, True)
+        assert inside and abs(x - hf.COL_U) > hf.COL_HALF and not hf.column_nudge(x, True)[1]
+    assert hf.column_nudge(640.4, False) == (640.4, True)  # the A / B's off arm: counted, kept
+    assert hf.column_nudge(672.6, True) == (672.6, False)  # (+1, +7): untouched
+    assert hf.column_nudge(634.0, True) == (634.0, False)
+    assert 5 <= hf.COL_NUDGE_PX <= 10  # the measured band where 0 of 65 failed; < half a cell
+    p56, p55 = hf.PARAMS[56], hf.PARAMS[55]
+    assert p56["col_nudge"] and p56["col_nudge_ab"] and p56["loot_fast_scan_ab"] is False
+    assert {k: v for k, v in p56.items() if k not in ("col_nudge", "col_nudge_ab",
+                                                      "loot_fast_scan_ab")} == {
+        k: v for k, v in p55.items() if k != "loot_fast_scan_ab"}  # fmt: skip
+    assert "col_nudge" not in p55  # the adopted base is untouched
+    src = Path(hf.__file__).read_text()
+    i_def = src.index("def walk_click(")
+    i_nudge, i_zone = (
+        src.index("u, in_col = column_nudge(u, on_)", i_def),
+        src.index("zw_ = zone_why(", i_def),
+    )
+    assert i_nudge < i_zone  # the nudge comes first: every walk click passes it

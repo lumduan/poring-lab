@@ -319,6 +319,11 @@ VERSIONS = {
     "lands on a KB NPC's drawn sprite (FrameGuard refuses a press inside the NPC's projected "
     "sprite area; v54 run 4's strike clicked Bard#brising). The A / B unchanged: on odd k the "
     "fast scan, even k the base's pass. Base: v52 ADOPTED + the NPC sprite guard",
+    56: "NO WALK CLICK IN THE GM'S OWN SCREEN COLUMN (2026-11-06, Batt: ok with an A/B): the "
+    "client sends no move request for a click within 4 px of the GM's column above it (v54 / v55 "
+    "sessions: 275 of 439 at v 160-239, 0 of 65 at 5-10 px aside; dungeon_hunt p3 93 / 95 at "
+    "(0, +7)); such a click moves COL_NUDGE_PX sideways, inside the same cell. A / B per column "
+    "click: even ones nudged, odd ones as before. Base: v55 ADOPTED (fast scan on every k)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -633,9 +638,24 @@ PARAMS[54] = {**PARAMS[52], "loot_fast_scan": True, "loot_fast_scan_ab": True,
 # ➡️ ADOPTED 2026-10-22 04:32 by its rule (3.97, 549b797: P1 0.861, P2 -5.0 pts, G3 0 over 4 h).
 # The adopted base = v55 with "loot_fast_scan_ab" False (hunt_config.ADOPTED_VERSION 55).
 PARAMS[55] = {**PARAMS[54], "npc_px_guard": True}
+# 2026-11-06 (Batt: "ok", the fix of the other runners with an A/B first; rogue-xmas02.md 4K): the
+# client ignores a walk click in the GM's own screen column (|u - COL_U| <= 4 px; the reason is
+# not known). The base is v55 as ADOPTED (its fast scan on every k).
+PARAMS[56] = {**PARAMS[55], "loot_fast_scan_ab": False, "col_nudge": True, "col_nudge_ab": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
+
+COL_U, COL_HALF, COL_NUDGE_PX = 640.5, 5.0, 9.0  # v56: the GM's column, its dead band, the move
+
+
+def column_nudge(u: float, on: bool) -> tuple[float, bool]:
+    """PURE (v56): a walk click's x, put COL_NUDGE_PX east of the GM's column when it lies in the
+    column (|u - COL_U| <= COL_HALF) and ``on``; (x, in_column). The client sent no move request
+    for 275 of 439 such clicks above the GM in v54 / v55 (v 160-239), for 0 of 65 at 5-10 px aside;
+    a cell there is ~28-32 px wide around the column, so the moved click picks the same cell."""
+    inside = abs(u - COL_U) <= COL_HALF
+    return (COL_U + COL_NUDGE_PX if inside and on else u), inside
 
 
 def untrained_map(map_name: str) -> bool:
@@ -3145,6 +3165,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             cmd_hist: list[tuple[int, Cell]] = []  # v7 attempt 2: (t_ns, cell) we clicked
             ptr: list[tuple[float, float]] = [(gw / 2, gh / 2)]  # v8: where the pointer is
+            col_n = [0]  # v56: walk clicks in the GM's own screen column so far (the A / B)
 
             def rest_ptr() -> None:
                 """v26 / v28: the pointer to REST_PX. From v28 in TWO motions: the client draws
@@ -3181,6 +3202,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
                 nonlocal moving, click_from, click_cell, last_walk
+                if prm.get("col_nudge"):  # v56: never in the GM's own screen column (A / B)
+                    on_ = not prm.get("col_nudge_ab") or col_n[0] % 2 == 0
+                    u, in_col = column_nudge(u, on_)
+                    if in_col:
+                        col_n[0] += 1
+                        extra = {**(extra or {}), "col": "nudged" if on_ else "ab_off"}
                 # map traps: the ZONE gate first, before any read -- from the click's origin
                 # (seg[0], the lead) AND the GM's measured cell (a lead overshoot never exempts an
                 # area); inside a no-enter area only the way out passes (exit_ok); refused -> no

@@ -436,6 +436,36 @@ not spell out. Fixed here, before the score:
 - **Hallucination:** X2's packets hold no status_change event, so Hallucination frames cannot be
   flagged; reported as "not observable", never as "none cast".
 
+### 4K. hunt_flow v56: the GM's own screen column, an A / B (written BEFORE its run)
+
+- **Why (Amendment E 3, Batt "ok" with an A / B):** hunt_flow (the prt_fild08 runner; ADOPTED v55)
+  clicks the same dead pixels. Its 8 v54 / v55 sessions (2026-10-21/22, packets): walk clicks within
+  5 px of the GM's column (u 640.5) sent no move request 217 times of 784 (27.7 %); all other
+  walk clicks 17 of 9,055 (0.19 %). Above the GM (v 160-239) within 4 px: 275 of 439; 5-10 px
+  aside: 0 of 65. So the dead band is a few px wide, narrower than a cell.
+- **The change (v56 at this section's commit):** `PARAMS[56]` = v55 as ADOPTED (its fast scan on
+  every k) + `col_nudge`: a walk click within COL_HALF 5 px of the column is put COL_NUDGE_PX 9 px
+  east of it (inside the same cell, ~28-32 px wide there) -- in `walk_click`, before its zone
+  check, so every walk click passes it. The A / B (`col_nudge_ab`): the column clicks alternate,
+  even ones nudged ("nudged"), odd ones as before ("ab_off"); logged as `col` on the click.
+- **The judge:** `walk_judge.py <session>` on a hunt_flow session: `column_ab`, each arm's clicks
+  with no move request (`self_move_request` within -0.3 .. +0.6 s). Its positive case: the 8 v54 /
+  v55 sessions give "column" 217 / 784, "other" 17 / 9,055.
+- **The run:** `hunt_flow.py run --version 56 --minutes 30 --seed 20261106` on prt_fild08, the GM
+  (the client restarted onto the GM's card; the Rogue logs out), immune (`collect_v2.py immune-on`
+  + the screenshot read + `immune-confirm`), the hunting state rebuilt by the runner itself, a
+  judged screenshot first, the live hard-bar monitor (`hardbar_live.py watch 56 --pid`) beside
+  it; then `flow_judge.py bot` and `walk_judge.py`.
+- **Bars:**
+  - **K1 (primary):** "nudged" column clicks without a move request <= 5 %, AND "ab_off" >= 15 %
+    (the dead band showing in this run), each arm >= 15 clicks; else INCONCLUSIVE (a second run).
+  - **K2:** the hard bars (the monitor and flow_judge): 0 NPC contact, 0 map change, 0 unknown UI
+    stop, 0 damaging hit on a non-target other than a Creamy (Creamy hits counted apart).
+  - **K3:** the other walk clicks without a move request <= 1 % (no side effect).
+  - Reported, not bars (one run): kills / h, landing, seen per 10 min.
+- **Adoption:** K1-K3 pass -> v57 = v56 with `col_nudge_ab` off, `hunt_config.ADOPTED_VERSION`
+  57. A FAIL keeps v55.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

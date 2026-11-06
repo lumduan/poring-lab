@@ -155,6 +155,7 @@ PATTERNS: tuple[Pattern, ...] = (
         "gate",
         "gate: walk guard, risk gate, species identity, cursor SWORD, pointer rest, clearances",
     ),
+    _p(r"col_nudge", "gate", "gate: a walk click off the GM's own screen column (v56)"),
     _p(
         r"bg_check|freeze_guard|false_dead_fix|npc_px_guard",
         "safety",

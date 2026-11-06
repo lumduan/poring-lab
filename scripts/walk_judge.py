@@ -21,6 +21,10 @@ judge counts what the walk did:
   line), and those among the clicks STRAIGHT north (our column, >= 6 cells up: p3 sent none for
   93 of 95 at (0, +7)); the dodged targets (``dodge``, dungeon@8.7).
 
+A hunt_flow session (``clicks.jsonl``, rogue-xmas02.md 4K): its walk clicks in the GM's own screen
+column (|u - 640.5| <= 5 px) by arm (``col``: "nudged" / "ab_off"; none before v56), each with or
+without a move request in the packets -- ``column_ab``.
+
 Usage: ``walk_judge.py <session dir or events.jsonl> ...`` -> one JSON row per session.
 """
 
@@ -113,6 +117,31 @@ def judge(events: Iterable[Mapping[str, Any]],
     }
 
 
+COL_U, COL_HALF = 640.5, 5.0  # hunt_flow.COL_U / COL_HALF
+
+
+def column_ab(clicks: Iterable[Mapping[str, Any]],
+              packets: Iterable[Mapping[str, Any]]) -> dict[str, Any]:  # fmt: skip
+    """PURE: a hunt_flow session's walk clicks with a move request or not, by column arm: "nudged"
+    and "ab_off" (v56's A / B, logged in ``col``), "column" (in the column, no arm: before v56),
+    "other". {arm: {"clicks", "unsent", "unsent_share"}}."""
+    req = sorted(int(p["t_mono_ns"]) for p in packets if p.get("type") == "self_move_request")
+    out: dict[str, dict[str, Any]] = {}
+    for c in clicks:
+        if c.get("kind") != "walk":
+            continue
+        t = int(c["t"])
+        i = bisect.bisect_left(req, t - REQ_BEFORE_NS)
+        sent = i < len(req) and req[i] <= t + REQ_AFTER_NS + 100_000_000
+        arm = c.get("col") or ("column" if abs(float(c["u"]) - COL_U) <= COL_HALF else "other")
+        row = out.setdefault(str(arm), {"clicks": 0, "unsent": 0})
+        row["clicks"] += 1
+        row["unsent"] += 0 if sent else 1
+    for row in out.values():
+        row["unsent_share"] = round(row["unsent"] / row["clicks"], 3)
+    return out
+
+
 def load(p: Path) -> list[dict[str, Any]]:
     f = p / "events.jsonl" if p.is_dir() else p
     return [json.loads(line) for line in f.read_text().splitlines() if line.strip()]
@@ -132,6 +161,14 @@ def main(argv: list[str]) -> int:
         return 2
     for a in argv:
         p = Path(a)
+        if p.is_dir() and (p / "clicks.jsonl").exists():  # a hunt_flow session
+            clicks = [json.loads(x) for x in (p / "clicks.jsonl").read_text().splitlines() if x]
+            print(
+                json.dumps(
+                    {"session": p.name, "column_ab": column_ab(clicks, load_packets(p) or [])}
+                )
+            )
+            continue
         row = judge(load(p), load_packets(p))
         print(json.dumps({"session": (p if p.is_dir() else p.parent).name, **row}))
     return 0

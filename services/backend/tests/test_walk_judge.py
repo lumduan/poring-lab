@@ -81,3 +81,22 @@ def test_the_move_requests_come_from_the_packets_when_given() -> None:
     assert out["column_clicks"] == 1 and out["column_unsent"] == 1
     assert out["dodges"] == {"side+1": 1}
     assert "unsent_clicks" not in wj.judge(evs)  # events alone: no move-request columns
+
+
+def test_a_hunt_flow_sessions_column_clicks_are_counted_by_arm() -> None:
+    """4K: v56's A / B logs `col` on the walk clicks in the GM's own column; before v56 such a
+    click is "column" by its pixel. Positive case on the real v54 / v55 sessions (run before 4K's
+    commit, the 8 v54 / v55 sessions): "column" 217 of 784 unsent, "other" 17 of 9,055."""
+    clicks = [
+        {"t": 1 * S, "u": 649.5, "v": 204.0, "kind": "walk", "col": "nudged"},
+        {"t": 3 * S, "u": 640.4, "v": 204.0, "kind": "walk", "col": "ab_off"},
+        {"t": 5 * S, "u": 640.4, "v": 204.0, "kind": "walk"},  # before v56: by its pixel
+        {"t": 7 * S, "u": 845.5, "v": 361.7, "kind": "walk"},
+        {"t": 9 * S, "u": 600.0, "v": 300.0, "kind": "strike"},  # not a walk click
+    ]
+    pk = [{"t_mono_ns": 1 * S + 50_000_000, "type": "self_move_request"},
+          {"t_mono_ns": 7 * S + 550_000_000, "type": "self_move_request"}]  # fmt: skip
+    out = wj.column_ab(clicks, pk)
+    assert out["nudged"] == {"clicks": 1, "unsent": 0, "unsent_share": 0.0}
+    assert out["ab_off"]["unsent"] == 1 and out["column"]["unsent"] == 1
+    assert out["other"] == {"clicks": 1, "unsent": 0, "unsent_share": 0.0}  # +0.55 s: within
