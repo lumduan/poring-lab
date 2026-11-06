@@ -325,7 +325,9 @@ XMAS02 = MapSpec(
     kb=XD / "kb-sprites",  # the merged monster_sprite_names.json (Santa Poring's stem poring_)
     kb_classes=ROOT / "data" / "kb" / "classes.json",
     sprites=XD / "sprites" / "data" / "sprite" / "몬스터",
-    labels="xmas02-o3h",  # 4: "xmas02-o3h-t" only if 4f's FIT test adopts terrain (T-4)
+    # 4 / Amendment C: "xmas02-o3h", renamed "xmas02-o3h-t" because 4f's FIT test ADOPTED terrain
+    # (2026-11-06 17:27, xmas02-detector.md Amendment G); cmd_freeze refuses a name and a rule apart
+    labels="xmas02-o3h-t",
     terrain=True,  # 4f (D10): o3h-t is reported beside o3h; freeze takes the rule 4f chose
     t2_salt="xmas02",
     test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),  # 3b: TEST by NAME
@@ -1470,6 +1472,10 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
         if terr is None:
             raise SystemExit(f"{a.threshold}: no 4f terrain report (measured without terrain)")
         rule, rule_tau = str(terr["rule"]), float(terr["rule_tau"])
+        if (rule == "o3h-t") != spec.labels.endswith("-o3h-t"):  # Amendment C: the name says it
+            raise SystemExit(f"4f chose {rule}, but the labels are named {spec.labels!r}: the "
+                             "freeze's amendment renames them first (xmas02-detector.md "
+                             "Amendment C)")  # fmt: skip
     extra: dict[str, Any] = {}
     if spec.engaged_labels:  # gef10 4h / 4g: the engaged variant (4h's selection file) + D8
         if a.engaged is None:

@@ -341,13 +341,17 @@ def test_freeze_takes_the_rule_and_t_h_the_fit_test_chose(monkeypatch: pytest.Mo
     plain = ml.cmd_freeze(freeze_args(tmp_path, {}))
     assert plain["occlusion"] == "o3h" and plain["o3h_tau"] == 0.5
     assert "occlusion_chosen_by" not in plain and "terrain" not in plain["occluders"]
-    monkeypatch.setitem(ml.MAPS, "pay_fild07", dataclasses.replace(ml.PAYF07, terrain=True))
+    renamed = dataclasses.replace(ml.PAYF07, terrain=True, labels="payf07-o3h-t")
+    monkeypatch.setitem(ml.MAPS, "pay_fild07", renamed)  # Amendment C: o3h-t's name says so
     terr = {"terrain": {"rule": "o3h-t", "rule_tau": 0.55, "o3h_t_tau": 0.55}}
     got = ml.cmd_freeze(freeze_args(tmp_path, terr))
     assert got["occlusion"] == "o3h-t" and got["o3h_tau"] == 0.55
-    assert got["occluders"]["terrain"]["gat_sha256"] == "g" * 64
+    assert got["occluders"]["terrain"]["gat_sha256"] == "g" * 64 and got["labels"] == "payf07-o3h-t"
+    monkeypatch.setitem(ml.MAPS, "pay_fild07", dataclasses.replace(ml.PAYF07, terrain=True))
     kept = ml.cmd_freeze(freeze_args(tmp_path, {"terrain": {"rule": "o3h", "rule_tau": 0.5}}))
     assert kept["occlusion"] == "o3h" and kept["o3h_tau"] == 0.5
+    with pytest.raises(SystemExit, match="renames them first"):  # o3h-t under an o3h name
+        ml.cmd_freeze(freeze_args(tmp_path, terr))
     with pytest.raises(SystemExit, match="terrain"):
         ml.cmd_freeze(freeze_args(tmp_path, {}))
 

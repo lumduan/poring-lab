@@ -1240,7 +1240,7 @@ def test_t2_xmas02_spec() -> None:
     assert spec.species == (1249, 1248, 1265, 1246, 1515, 1607)  # 1b / D3; 1251 is OUT
     assert spec.conditional == (1515, 1607) and 1251 not in spec.species
     assert spec.walkers == (1249, 1248, 1265, 1246, 1515) and spec.fit_px == 6
-    assert spec.labels == "xmas02-o3h" and spec.t2_salt == "xmas02" and spec.t2_seed == 51
+    assert spec.labels == "xmas02-o3h-t" and spec.t2_salt == "xmas02" and spec.t2_seed == 51
     assert spec.dying_rule and not spec.engaged_labels and spec.engaged_fixed == "E0"
     assert spec.reference == (1251, 1002, 1062)  # 6: + Stormy Knight, Poring, Santa Poring
     assert len(list(spec.species) + list(spec.reference)) <= 12  # cmd_pack's reference cap
@@ -1331,7 +1331,7 @@ def test_t2_the_fit_name_passes_the_name_check(monkeypatch: pytest.MonkeyPatch) 
 
 def _xparams(tmp_path: Path, status: str | None = "FROZEN") -> Path:
     p = tmp_path / "xparams.json"
-    p.write_text(json.dumps({"labels": "xmas02-o3h", "map": "xmas_dun02", "status": status,
+    p.write_text(json.dumps({"labels": "xmas02-o3h-t", "map": "xmas_dun02", "status": status,
                              "offset_ms": 120.0, "o3h_tau": 0.5, "tau": olf.TAU,
                              "fit_px": {"1249": 6}, "anchors_px": {}}))  # fmt: skip
     return p
@@ -1369,7 +1369,7 @@ def _xdoc(tmp_path: Path, sid: str, mobs: list[int], flag: str | None = None,
                          "ncc": 0.9, "under": False, "state": "idle"}
                         for j, m in enumerate(mobs)]}
               for i in range(n)]  # fmt: skip
-    doc = {"labels": "xmas02-o3h", "map": "xmas_dun02", "session": sid, "part": sid,
+    doc = {"labels": "xmas02-o3h-t", "map": "xmas_dun02", "session": sid, "part": sid,
            "params_sha256": "e" * 64, "params_status": "FROZEN", "frames": frames,
            **({flag: True} if flag else {})}  # fmt: skip
     path = tmp_path / f"{sid}-{flag}.json"
@@ -1416,7 +1416,7 @@ def test_t2_the_cache_refuses_test_label_files(tmp_path: Path) -> None:
 
     mli = bfc.MapLabelInputs.from_args(args(doc(XW2)))
     assert mli.spec is ml.XMAS02 and list(mli.docs) == [XW2]
-    assert mli.provenance["rule"] == "xmas02-o3h-all"
+    assert mli.provenance["rule"] == "xmas02-o3h-t-all"
     for sid in XTEST:
         with pytest.raises(SystemExit, match="never cached"):
             bfc.MapLabelInputs.from_args(args(doc(XW2), doc(sid)))
@@ -1497,14 +1497,15 @@ def test_t2_freeze_fixes_e0_without_a_selection(tmp_path: Path, monkeypatch: pyt
                 "o3h_tau": 0.55,
                 "offset_ms": 120.0,
                 "offset_source": "D12",
-                "terrain": {"rule": "o3h", "rule_tau": 0.55},
+                "terrain": {"rule": "o3h-t", "rule_tau": 0.55},
             }
         )
-    )  # 4f: not adopted
+    )  # 4f: adopted (2026-11-06 17:27, Amendment G)
     base = {"map": "xmas_dun02", "threshold": th, "offset": None, "proposed": False,
             "decision": "Amendment X (D12: 120 ms)"}  # fmt: skip
     out = ml.cmd_freeze(_ns(**base, engaged=None, engaged_variant=None))
-    assert out["status"] == "FROZEN" and out["labels"] == "xmas02-o3h"
+    assert out["status"] == "FROZEN" and out["labels"] == "xmas02-o3h-t"
+    assert out["occlusion"] == "o3h-t" and out["o3h_tau"] == 0.55
     assert out["engaged_variant"] == "E0" and out["dying_in_view"] is True
     assert out["engaged_fixed_by"] == "docs/planning/xmas02-detector.md 4i (D11)"
     assert out["map_cells"] == [260, 260] and out["anchors_px"] == {}
@@ -1515,6 +1516,10 @@ def test_t2_freeze_fixes_e0_without_a_selection(tmp_path: Path, monkeypatch: pyt
                {"engaged": None, "engaged_variant": "E2"}):  # fmt: skip
         with pytest.raises(SystemExit, match="engaged units are E0"):
             ml.cmd_freeze(_ns(**base, **kw))
+    th.write_text(json.dumps({"o3h_tau": 0.55, "offset_ms": 120.0, "offset_source": "D12",
+                              "terrain": {"rule": "o3h", "rule_tau": 0.55}}))  # fmt: skip
+    with pytest.raises(SystemExit, match="named 'xmas02-o3h-t'"):  # a rule the name does not say
+        ml.cmd_freeze(_ns(**base, engaged=None, engaged_variant=None))
 
 
 # --- T-8: the pickup-notice rule on xmas_dun02 ------------------------------------------------
