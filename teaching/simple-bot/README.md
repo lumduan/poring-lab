@@ -63,8 +63,9 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
    uv run simple_bot.py --watch --model v1.onnx
    ```
 
-   จะมีหน้าต่าง "bot view" แสดงสิ่งที่บอทเห็นและแผนของมัน
-   เพิ่ม `--overlay` เพื่อวาดกรอบทับบนหน้าจอเกมเลย (Windows 10 เวอร์ชัน 2004 ขึ้นไป)
+   บอทวาดกรอบและเส้นทับบนหน้าจอเกมโดยตรง (overlay: เมาส์คลิกทะลุได้ และไม่แย่งโฟกัสจากเกม;
+   Windows 10 เวอร์ชัน 2004 ขึ้นไป) ถ้าอยากดูเป็นหน้าต่างแยก "bot view" ด้วย เพิ่ม `--view on`
+   ถ้าวาดทับไม่ได้ (Windows เก่า) บอทจะเปิดหน้าต่าง bot view แทนเอง
 
 3. **ให้บอทเล่นเอง**
 
@@ -72,10 +73,13 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
    uv run simple_bot.py --act --model v1.onnx
    ```
 
-   หน้าต่าง "bot view" เล็ก ๆ จะเปิดขึ้นก่อน จากนั้น **คลิกที่หน้าต่างเกม 1 ครั้งให้อยู่ด้านหน้า** (ภายใน 5 วินาที)
-   บอทจะคลิกเฉพาะตอนที่เกมอยู่ด้านหน้าเท่านั้น ดูข้อความในหน้าต่าง PowerShell:
-   `the game window is IN FRONT: the bot clicks` = เริ่มเล่นแล้ว
-   ถ้าเห็น `... NOT in front ...` ให้คลิกที่หน้าต่างเกมอีกครั้ง
+   **คลิกที่หน้าต่างเกม 1 ครั้งให้อยู่ด้านหน้า** (ภายใน 5 วินาที) บอทจะคลิกเฉพาะตอนที่เกมอยู่ด้านหน้าเท่านั้น
+   ดูข้อความในหน้าต่าง PowerShell: `the game window is IN FRONT: the bot clicks` = เริ่มเล่นแล้ว
+   ถ้าเห็น `... NOT in front ...` ให้คลิกที่หน้าต่างเกมอีกครั้ง (อย่าคลิกหน้าต่าง PowerShell ระหว่างเล่น)
+   - **log บอกว่า `clicked` แต่ตัวละครไม่ขยับ**: ถ้าเกมรันแบบ "Run as administrator" Windows จะทิ้งคลิกจาก
+     โปรแกรมที่ไม่ใช่ admin ไปเงียบ ๆ ให้เปิด PowerShell แบบ "Run as administrator" แล้วรันใหม่
+   - กรอบ "monster" คะแนนต่ำที่ทับเท้าตัวละครเราเอง บอทจะไม่ตี (มักเป็นตัวเราเองที่โมเดลเห็นผิด:
+     ขึ้นว่า `weak box on our own feet`) และถ้าตีอะไรนาน 20 วินาทีแล้วไม่เกิดอะไร จะเลิกแล้วไม่สนจุดนั้น 15 วินาที
    **หยุด: กด F12 หรือ ดันเมาส์ไปมุมซ้ายบนสุดของจอ** (หยุดเองหลัง 10 นาที; เปลี่ยนได้ด้วย `--minutes`)
 
 ## ดู log ว่าบอททำอะไรอยู่ (`--logs`)
@@ -237,8 +241,10 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
    uv run simple_bot.py --watch --model v1.onnx
    ```
 
-   A "bot view" window shows what the bot sees and plans. Add `--overlay` to draw over the game
-   itself (Windows 10 version 2004 or later).
+   The bot draws its boxes and lines straight over the game (the overlay: the mouse passes
+   through it and it never takes the focus; Windows 10 version 2004 or later). `--view on` also
+   opens a separate "bot view" window; where the overlay cannot work (older Windows), the bot
+   view opens by itself instead.
 
 3. **Let the bot play**
 
@@ -246,10 +252,16 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
    uv run simple_bot.py --act --model v1.onnx
    ```
 
-   A small "bot view" window opens first; then **click the game window once to put it in front**
-   (within the 5 s). The bot clicks only while the game is in front. The PowerShell window says
-   `the game window is IN FRONT: the bot clicks` when it starts, and `... NOT in front ...` when
-   you must click the game again.
+   **Click the game window once to put it in front** (within the 5 s). The bot clicks only while
+   the game is in front. The PowerShell window says `the game window is IN FRONT: the bot clicks`
+   when it starts, and `... NOT in front ...` when you must click the game again (do not click the
+   PowerShell window while it plays).
+   - **The log says `clicked` but the character does not move**: when the game runs "as
+     administrator", Windows silently drops clicks from a program that is not: open PowerShell
+     with "Run as administrator" and run again.
+   - A LOW-score "monster" box covering our own character's feet is never hit (usually our own
+     character seen wrongly: `weak box on our own feet`), and after 20 s of hitting something with
+     no result the bot gives up and leaves that spot alone for 15 s.
    **Stop: press F12, or push the mouse into the screen's top-left corner** (it also stops after
    10 minutes; change it with `--minutes`).
 

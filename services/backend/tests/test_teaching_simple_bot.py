@@ -454,3 +454,42 @@ def test_fullscreen_and_black_frames() -> None:
     assert not sb.is_black(np.full((720, 1280, 3), 40, np.uint8))
     a = sb.parse_args(["--act"])
     assert a.view == "auto" and sb.parse_args(["--watch", "--view", "on"]).view == "on"
+
+
+def test_a_monster_box_on_our_own_feet_is_dropped() -> None:
+    """2026-11-06, a class PC: a 0.27 "monster" box around the student's own character (the v1
+    model never learned it) was clicked again and again at (634, 381); the character never moved."""
+    char = (640.0, 360.0)
+    me = sb.Box(610, 325, 660, 405, 0.27, "monster")  # covers (640, 360): hit point (635, 381)
+    other = sb.Box(800, 300, 840, 345, 0.9, "monster")
+    assert me.hit_point == (635, 381) and sb.on_self(me, char) and not sb.on_self(other, char)
+    targets, dropped = sb.sort_boxes([me, other], char, 1280, 720)
+    assert targets == [other] and dropped == [(me, "weak box on our own feet (ourselves?)")]
+    assert sb.choose_target([me], char) is None
+    d = sb.Decider(random.Random(1), char=char).step([me], 0.0)
+    assert d.state == sb.SEARCH  # it wanders instead of hitting itself
+    # sample 14 (lab frames): a REAL Poring at our feet, 0.88, covers the point too: still a target
+    poring = sb.Box(621.0, 360.3, 661.6, 399.9, 0.882, "monster")
+    assert sb.on_self(poring, char) and sb.sort_boxes([poring], char, 1280, 720)[0] == [poring]
+
+
+def test_a_given_up_spot_is_left_alone_for_a_while() -> None:
+    """20 s of clicks with no result: the bot leaves that spot for IGNORE_S and wanders."""
+    char = (640.0, 360.0)
+    stuck = sb.Box(800, 300, 840, 345, 0.9, "monster")  # never dies, never moves
+    dec = sb.Decider(random.Random(1), char=char)
+    assert dec.step([stuck], 0.0).state == sb.ATTACK
+    assert dec.step([stuck], 10.0).state == sb.ATTACK
+    gave = dec.step([stuck], sb.ATTACK_GIVE_UP_S + 0.1)
+    assert gave.state == sb.SEARCH and gave.note == "gave up on this target"
+    d = dec.step([stuck], sb.ATTACK_GIVE_UP_S + 1.0)
+    assert d.state == sb.SEARCH and d.target is None  # ignored: it wanders
+    later = sb.ATTACK_GIVE_UP_S + 0.1 + sb.IGNORE_S + 0.1
+    assert dec.step([stuck], later).state == sb.ATTACK  # remembered no longer
+
+
+def test_the_overlay_is_the_default_and_the_flag_still_works() -> None:
+    a = sb.parse_args(["--act"])
+    assert a.overlay == "auto" and a.view == "auto"
+    assert sb.parse_args(["--watch", "--overlay"]).overlay == "on"  # the old flag form
+    assert sb.parse_args(["--watch", "--overlay", "off", "--view", "on"]).overlay == "off"
