@@ -447,3 +447,17 @@ def test_real_gef10_round2_species_rows_collapse_to_the_published_rows() -> None
     species = rb.class_counts(named)
     assert sum(v for k, v in species.items() if k not in ("player", "npc", "warp")) == \
         rb.class_counts(got)["monster"]  # fmt: skip
+
+
+def test_the_truth_offset_defaults_to_the_frozen_1d_and_is_reported() -> None:
+    """xmas02-detector.md Amendment J: the sweep's --truth-offset-ms; without it, 120 as before."""
+    import mvp_watch_study as mws
+
+    assert mws.OFFSET_MS == 120.0
+    cfg = dv.ScoreConfig("xmas_dun02", "hunt", Path("kb"), Path("mc"), Path("s"), Path("n"))
+    assert cfg.truth_offset_ms is None
+    src = (ROOT / "scripts" / "detector_vs_packets.py").read_text()
+    assert "offset_ms = mws.OFFSET_MS if cfg.truth_offset_ms is None else" in src
+    assert "row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name)" in src
+    assert '"offset_ms": offset_ms, "k": mws.K,' in src
+    assert "truth_offset_ms=a.truth_offset_ms" in src

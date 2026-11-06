@@ -491,6 +491,9 @@ class ScoreConfig:
     # before nested_rects (its in-view changes are counted)
     raw_rects: Sequence[tuple[int, int, int, int]] | None = None
     pairs: bool = False
+    # xmas02-detector.md Amendment J (2026-11-07): the truth's time offset (ms before the capture);
+    # None = mvp_watch_study.OFFSET_MS (payf07's frozen 1d, 120), as every earlier score
+    truth_offset_ms: float | None = None
 
 
 def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
@@ -520,7 +523,8 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
                              f"(names {cfg.sprite_names}): {stack.sheets.missing}")  # fmt: skip
     halluc = hallucination_spans(events)
     by_conf = {c: {"hit": 0, "n": 0, "tp": 0, "dets": 0} for c in CONF_STEPS}
-    off_ns = int(mws.OFFSET_MS * 1e6)
+    offset_ms = mws.OFFSET_MS if cfg.truth_offset_ms is None else float(cfg.truth_offset_ms)
+    off_ns = int(offset_ms * 1e6)
     skipped: Counter[str] = Counter()
     unit_rows: list[dict[str, Any]] = []
     verdicts: Counter[str] = Counter()
@@ -536,7 +540,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
     nested_changed = 0
     for c in caps:
         t = int(c["t"])
-        row = mws.truth_row(stack, t, None, mws.OFFSET_MS, cfg.map_name)
+        row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name)
         if not row["map"] or map_key(row["map"]) != cfg.map_name or row["self"] is None:
             skipped["off_map"] += 1
             continue
@@ -627,7 +631,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
     ms_all = [float(c["ms"]) for c in caps if c.get("ms") is not None]
     n_det = sum(verdicts.values())
     body = {
-        "offset_ms": mws.OFFSET_MS, "k": mws.K,
+        "offset_ms": offset_ms, "k": mws.K,
         "latency_ms": {"n": len(ms_all), "median": percentile(ms_all, 50) if ms_all else None,
                        "p95": percentile(ms_all, 95) if ms_all else None,
                        "max": max(ms_all) if ms_all else None},
@@ -807,7 +811,8 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
     cfg = ScoreConfig(a.map, a.layout, a.kb, a.mapcache_dir, a.sprites, a.sprite_names,
                       rects=rects, ui_boxes=a.ui_boxes, require_sheets=True,
                       raw_rects=raw if dropped else None,
-                      pairs=a.pairs is not None)  # fmt: skip
+                      pairs=a.pairs is not None,
+                      truth_offset_ms=a.truth_offset_ms)  # fmt: skip
     res = score_captures(caps, events, size, cfg)
     skipped = res["skipped"]
     body = res["body"]
@@ -910,6 +915,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p.add_argument("--allow-partial", action="store_true", help="score frames that have rows")
     p.add_argument("--pairs", type=Path, default=None, help="every scored capture (by-eye)")
+    p.add_argument(
+        "--truth-offset-ms",
+        type=float,
+        default=None,
+        help="the truth's time before each capture (default mvp_watch_study.OFFSET_MS, 120): "
+        "xmas02-detector.md Amendment J's sweep on non-TEST sessions",
+    )
     collapse_flags(p)
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("from-predict")
