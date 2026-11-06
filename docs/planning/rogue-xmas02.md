@@ -836,3 +836,24 @@ its setup after 10 s, by the chat-window check (no hunting; reported, not pooled
   - `gm_state.ensure_fixed` and `ensure_hunting`: the notices are cleared first (the status
     window's chord, no typed line), before any restore line.
 - Run 2 attempt 2: the same command (seed 20261107), judged as run 2.
+
+**hunt_flow v56, run 2 attempts 2 and 3: both STOPPED in setup, safely (no key); the A / B is
+PAUSED for Batt's answer.**
+- Attempt 2 (09:29:42): the chat check found the window seen in part where it belongs -> "unknown"
+  -> stop, NO key (the 09:29 fix working). The notice step did not help: `gm_state`'s notice
+  templates look for the level-up icon at the BOTTOM-RIGHT (ICON_BOX, measured 2026-10-09); this
+  "up" icon sits at the BOTTOM-LEFT, over the standard chat window's corner, and the status
+  window's chord (the documented step, tried once at 09:32 behind the UI gate) does NOT clear it.
+- A relog (the client restart path, no typing; 09:33-09:34) DID clear it. Attempt 3 (09:36:10,
+  immunity re-set 09:35): the restore's first line `@joblevelup -49` went through, and that level
+  change brought the icon straight back; the next line found the window covered -> stop, no key.
+- So since the 11-05 chat-window standard (docked at 719), EVERY GM level change puts this icon
+  over the window's corner, and the GM restores (several typed lines, each a level change) cannot
+  finish. Before 11-05 the window ended at 624 and never met it.
+- Not guessed: the icon's own handle is unknown (its clearing step is Batt's knowledge or a new
+  measurement). Options for Batt: (a) the icon's clearing step; (b) the chat check reads the
+  window with that corner masked (the window's other borders and rows are visible; a reader
+  change with its own positive case); (c) relog after each level change (slow).
+- State left: the GM at prt_fild08 48,195, Base 70 / Job 1 (hunting state), HP full, immune this
+  login, the chat input open and empty, the icon shown. route_previewd stopped by PID (09:39).
+  K1 stays INCONCLUSIVE on run 1; v55 stays the adopted version.
