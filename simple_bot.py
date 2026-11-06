@@ -146,6 +146,7 @@ IOU = 0.5  # NMS: two boxes of one class overlapping by >= 50 % are the same obj
 # exception: access violation" (seen on a class PC, 2026-11-06). The fix: install the latest
 # "Microsoft Visual C++ Redistributable (x64)" once.
 CPP_RUNTIME_MIN = (14, 40)
+LIVE_VIEW = "simple-bot view (q: quit)"  # the live bot view window's title
 CPP_RUNTIME_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 PAD_GREY = 114  # the letterbox padding colour YOLO models are trained with
 
@@ -1476,6 +1477,15 @@ def run_live(args: argparse.Namespace) -> int:
     rng = random.Random(args.seed)
     gate = SafetyGate(window, args.minutes)
     mouse: Mouse | None = None
+    # Open the bot view window NOW, before the countdown: a NEW window takes the focus (Windows puts
+    # it in front), and the bot clicks only while the GAME is in front. Opened after the countdown,
+    # it took the focus away right after the person clicked the game, and every click was refused
+    # ("client not in front", a class PC 2026-11-06). Opened first, the click on the game sticks.
+    first = np.zeros((120, 640, 3), np.uint8)
+    cv2.putText(first, "starting: click the GAME window to put it in front", (10, 65),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)  # fmt: skip
+    cv2.imshow(LIVE_VIEW, first)
+    cv2.waitKey(1)  # lets the window appear
     if args.act:
         print(ACT_BANNER)
         ok, why = gate.check_network(force=True)
@@ -1484,8 +1494,9 @@ def run_live(args: argparse.Namespace) -> int:
             return 3
         mouse = Mouse()
         print("network check:", why)
-        print("starting in 5 s: click the game window to put it in front ...")
-        time.sleep(5)
+        print("starting in 5 s: click the game window to put it in front ...", flush=True)
+        for _ in range(50):  # 5 s, keeping the bot view responsive
+            cv2.waitKey(100)
     overlay = None
     left, top, w, h = window.rect()
     if (w, h) != (CLIENT_W, CLIENT_H):
@@ -1507,6 +1518,7 @@ def run_live(args: argparse.Namespace) -> int:
     LOG.info("client area %d x %d at (%d, %d); the loop starts", w, h, left, top)
     t_prev, fps = time.perf_counter(), 0.0
     frames, last_log, last_state = 0, 0.0, ""
+    front: bool | None = None  # is the game window in front? (said once each time it changes)
     try:
         while True:
             reason = gate.stop_reason()
@@ -1514,6 +1526,12 @@ def run_live(args: argparse.Namespace) -> int:
                 print(f"stopped: {reason}")
                 LOG.info("stopped: %s after %d frames", reason, frames)
                 return 0
+            if mouse is not None and window.in_front() != front:
+                front = window.in_front()
+                if front:
+                    say("the game window is IN FRONT: the bot clicks")
+                else:
+                    say("the game window is NOT in front: no clicks until you click the game")
             t0 = time.perf_counter()
             left, top, w, h = window.rect()  # the window may have moved
             frame = grabber.grab(left, top, w, h)  # CAPTURE
@@ -1562,7 +1580,7 @@ def run_live(args: argparse.Namespace) -> int:
                 view = cv2.resize(
                     view, None, fx=args.view_scale, fy=args.view_scale, interpolation=cv2.INTER_AREA
                 )
-            cv2.imshow("simple-bot view (q: quit)", with_hud_strip(view, hud))
+            cv2.imshow(LIVE_VIEW, with_hud_strip(view, hud))
             # the overlay's picture size is fixed when it is created: skip it while the client
             # area has another size (resize the client back to make it reappear)
             if overlay is not None and (w, h) == (overlay.w, overlay.h):
