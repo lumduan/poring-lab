@@ -32,6 +32,15 @@
 * Safety: the capture-backend lock must say --backend (ADR-0009); the quant IO guard
   (guarded_build's Guard) stops the recording on a breach -- the tolerant rule (DISK_RULE) on a
   disk sink, sustained stall only (RAM_RULE) on a tmpfs sink (Batt 2026-10-28); a hard size cap.
+* PAUSE AND RESUME (Batt 2026-11-06 ~14:0x, xmas02-detector.md Amendment D; png only):
+  --io-rule sustained stops a part only on SUSTAINED stall (above 30 % for 30 s, no one-spike stop)
+  on any sink. --resume N: a part stopped by the IO guard, or by a market-open window (weekdays
+  09:30-10:15 and 14:00-14:45, CLAUDE.md rule 5), is followed by a NEW SESSION of the same label
+  once the disk is calm (every capture cgroup at or under CALM_PCT for CALM_S, at least
+  RESUME_MIN_S after the stop), at most N times and PAUSE_MAX_S of pauses in all; --seconds and
+  --max-bytes then budget the whole recording. --state-file (in /dev/shm) tells a watch beside it
+  whether frames are being banked (stage_items.py watch --recorder-state): JSON, re-written every
+  frame and every pause second (`beat_ns`).
 * Sink (ADR-0010): the VM's local disk, /home/batt/poring-lab-rec (never ./data: vision mounts it).
   It is a buffer on the disk shared with live capture, so it is capped -- refused at the start, and
   stopped cleanly mid-recording, when the filesystem has < --min-free-gb free or more than
@@ -40,6 +49,7 @@
 """
 
 import argparse
+import datetime as dt
 import gzip
 import hashlib
 import hmac
@@ -71,7 +81,9 @@ from poring_dataset.timeline import session_events  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
 # v6: the IO rule follows the sink (RAM: sustained only) + guard_rule; v5: h264 by default on
-# console; v4: --format h264 + cpu; v3: bus ids (S2)
+# console; v4: --format h264 + cpu; v3: bus ids (S2). Still 6 with --io-rule / --resume /
+# --state-file (Amendment D): they add manifest fields (io_rule, part) only; frames, shards and
+# packets are written as before.
 RECORDER_VERSION = 6
 H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
 H264_MAX_MB = 8192  # the client's size cap
@@ -87,6 +99,90 @@ STOP: dict[str, bool] = {"flag": False}
 
 def request_stop(*_: object) -> None:
     STOP["flag"] = True
+
+
+# --- pause and resume (Batt 2026-11-06, xmas02-detector.md Amendment D) ---------------------------
+# "Go ahead, I grant the relaxation; a retry system that comes back and runs on is fine too, with:
+# stop only when the disk is slow for 30 s straight, not for one spike."
+SUSTAINED_RULE: dict[str, Any] = {"threshold": 30.0, "sustain": 30.0, "spike": None}
+CALM_PCT = 10.0  # a resume waits until every capture cgroup's stall is at or under the tolerant
+CALM_S = 60.0  # base threshold, for this long without a break,
+RESUME_MIN_S = 120.0  # and at least this long after the stop
+PAUSE_MAX_S = 3600.0  # all the pauses of one recording together; then it ends
+CALM_WINDOW_S = 10.0  # the calm guard's averaging window (Guard's own)
+OPEN_WINDOWS = ((dt.time(9, 30), dt.time(10, 15)), (dt.time(14, 0), dt.time(14, 45)))
+RESUMABLE = ("io_guard:", "market_window")  # the stop reasons a part may be resumed after
+STATE: dict[str, Any] = {"path": None, "doc": {}}
+
+
+def in_open_window(when: dt.datetime | None = None) -> bool:
+    """A market-open window (CLAUDE.md rule 5: no disk-heavy step 09:30-10:15 or 14:00-14:45 ICT,
+    Monday to Friday)."""
+    t = (when or dataset_ship.now()).astimezone(dataset_ship.BANGKOK)
+    return t.weekday() < 5 and any(a <= t.time() < b for a, b in OPEN_WINDOWS)
+
+
+def io_rule(a: argparse.Namespace) -> dict[str, Any] | None:
+    """The IO rule a part runs under: --io-rule sustained, else None (the sink's: guard_rule)."""
+    return SUSTAINED_RULE if getattr(a, "io_rule", "auto") == "sustained" else None
+
+
+def _write_state() -> None:
+    path = STATE["path"]
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(STATE["doc"]) + "\n")
+    tmp.replace(path)
+
+
+def set_state(state: str, **fields: Any) -> None:
+    """The recorder's state for a watch beside it (--state-file): `state` (waiting | recording |
+    finishing | paused | ended), `since_ns` (when it began), `beat_ns`, `session` + `part` (kept
+    until changed), `reason`. A no-op without --state-file."""
+    if STATE["path"] is None:
+        return
+    now = r.ns()
+    keep = {k: STATE["doc"].get(k) for k in ("session", "part")}
+    STATE["doc"] = {**keep, "reason": None, **fields, "state": state, "since_ns": now,
+                    "beat_ns": now, "pid": os.getpid()}  # fmt: skip
+    _write_state()
+
+
+def beat() -> None:
+    """Re-write the state file with a fresh `beat_ns` (each frame and each pause second)."""
+    if STATE["path"] is None:
+        return
+    STATE["doc"]["beat_ns"] = r.ns()
+    _write_state()
+
+
+def wait_ready(first: bool, budget_s: float, *, guard_factory: Any = None, clock: Any = None,
+               sleep: Any = None, opening: Any = None) -> tuple[bool, float]:  # fmt: skip
+    """Before a part: outside the market-open windows and, before a RESUME (``first`` False), the
+    calm guard silent (every capture cgroup at or under CALM_PCT) for CALM_S without a break, at
+    least RESUME_MIN_S after the stop. Returns (ok, seconds waited); ok is False on a signal or when
+    ``budget_s`` runs out."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    opening = opening or in_open_window
+    t0 = clock()
+    g = None if first else (guard_factory or calm_guard)()
+    calm_since: float | None = None
+    while True:
+        now = clock()
+        if STOP["flag"] or now - t0 > budget_s:
+            return False, now - t0
+        hit = g.breach() if g is not None else None
+        busy = opening() or hit is not None or (g is not None and now - t0 < CALM_WINDOW_S)
+        if busy:
+            calm_since = None
+        elif calm_since is None:
+            calm_since = now
+        if calm_since is not None and (
+            first or (now - calm_since >= CALM_S and now - t0 >= RESUME_MIN_S)
+        ):
+            return True, now - t0
+        beat()
+        sleep(1.0)
 
 
 def rec_dir(out: Path) -> Path:
@@ -135,16 +231,28 @@ DISK_RULE, RAM_RULE = dataset_ship.DISK_RULE, dataset_ship.RAM_RULE
 fs_type, guard_rule = dataset_ship.fs_type, dataset_ship.guard_rule
 
 
-def load_guard(out: Path) -> Any:
+def _guarded_build() -> Any:
     spec = importlib.util.spec_from_file_location(
         "guarded_build", ROOT / "scripts" / "guarded_build.py"
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    rule = guard_rule(out)
+    return module
+
+
+def load_guard(out: Path, rule: dict[str, Any] | None = None) -> Any:
+    """The quant IO guard of a part: ``rule`` (--io-rule), else the sink's (guard_rule)."""
+    module = _guarded_build()
+    rule = rule or guard_rule(out)
     return module.Guard(module.cgroup_paths(), rule["threshold"], 10.0, sustain=rule["sustain"],
                         spike=rule["spike"])  # fmt: skip
+
+
+def calm_guard() -> Any:
+    """wait_ready's guard: a breach whenever any capture cgroup is above CALM_PCT (no sustain)."""
+    module = _guarded_build()
+    return module.Guard(module.cgroup_paths(), CALM_PCT, CALM_WINDOW_S, sustain=0.0, spike=None)
 
 
 def parse_size(text: str) -> int:
@@ -240,7 +348,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         return record_h264(a, lock, config, chash, session_id, out, caps, unshipped)
     writer = ShardWriter(out, png_level=a.png_level)
     cpu = CpuMeter()
-    guard = load_guard(a.out)
+    guard = load_guard(a.out, io_rule(a))
     gx, gy, gw, gh = r.game_region()
     period = 1.0 / a.fps
     screen = r.Screen()
@@ -252,10 +360,12 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     last_bus_id = -1
     sources: dict[str, int] = {}
     next_cap_check = time.monotonic() + CAP_CHECK_S
+    resume = getattr(a, "resume", 0) > 0
     try:
         with subprocess.Popen(["ionice", "-c3", "-p", str(os.getpid())]) as p:
             p.wait()
         next_t = time.monotonic()
+        set_state("recording", session=session_id, part=getattr(a, "part", 0))
         while time.monotonic() < t_end and not STOP["flag"]:
             t_cap, img, bus_id, source = screen.grab_meta(gx, gy, gw, gh)
             sources[source] = sources.get(source, 0) + 1
@@ -288,9 +398,14 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
                 if full:
                     stop_reason = f"local_cap: {full}"
                     break
+                if resume and in_open_window():
+                    stop_reason = "market_window: a market-open window began (CLAUDE.md rule 5)"
+                    break
+            beat()
             next_t += period
             time.sleep(max(0.0, next_t - time.monotonic()))
     finally:
+        set_state("finishing", reason=stop_reason)
         writer.close()
     if STOP["flag"] and stop_reason == "duration":
         stop_reason = "stopped by signal"
@@ -314,10 +429,51 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "packet_events": len(events),
         "packet_anchor": anchor, "pseudonymised": True, "freezes": freezes,
         "sink": {"root": str(a.out), **caps}, "format": "png", "cpu_cores": cpu_cores,
+        "io_rule": getattr(a, "io_rule", "auto"), "part": getattr(a, "part", 0),
     }  # fmt: skip
     write_manifest(out, manifest)
-    keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events", "cpu_cores")
+    keys = ("frames", "bytes", "seconds", "mb_per_min", "stop_reason", "packet_events", "cpu_cores")
     return {"dir": str(out), **{k: manifest[k] for k in keys}}
+
+
+def record_parts(a: argparse.Namespace, rec: Any = None) -> dict[str, Any]:
+    """--resume / --state-file (Amendment D): one recording as PARTS, each its own session of the
+    same label. A part stopped by the IO guard or a market-open window is followed by the next once
+    wait_ready says so, at most --resume times and PAUSE_MAX_S of pauses in all; --seconds and
+    --max-bytes budget the whole recording. Any other stop (its duration, the size or local cap, a
+    signal, a refusal) ends it. The state file ends "ended" whatever happens. ``rec``: the part
+    recorder (tests; default record)."""
+    if a.format != "png":
+        raise r.Stop("--resume / --state-file: png recordings only")
+    rec = rec or record
+    parts: list[dict[str, Any]] = []
+    left_s, left_b, paused_s, end = a.seconds, a.max_bytes, 0.0, "duration"
+    try:
+        while True:
+            set_state("waiting" if not parts else "paused", reason=None if not parts else end)
+            ok, waited = wait_ready(not parts, PAUSE_MAX_S - paused_s)
+            paused_s += waited
+            if not ok:
+                end = "stopped by signal" if STOP["flag"] else f"pause_cap: {PAUSE_MAX_S:.0f} s"
+                break
+            part = argparse.Namespace(**{**vars(a), "seconds": left_s, "max_bytes": left_b,
+                                         "part": len(parts)})  # fmt: skip
+            res = rec(part)
+            parts.append(res)
+            print(json.dumps({"part": len(parts) - 1, **res}), flush=True)
+            left_s -= res["seconds"]
+            left_b -= res["bytes"]
+            end = res["stop_reason"]
+            if (STOP["flag"] or not end.startswith(RESUMABLE) or len(parts) > a.resume
+                    or left_s <= 0 or left_b <= 0):  # fmt: skip
+                break
+    except r.Stop as exc:
+        end = f"refused: {exc}"
+    finally:
+        set_state("ended", reason=end)
+    return {"parts": len(parts), "sessions": [p["dir"] for p in parts], "end": end,
+            "paused_s": round(paused_s, 1), "frames": sum(p["frames"] for p in parts),
+            "bytes": sum(p["bytes"] for p in parts)}  # fmt: skip
 
 
 def write_control(directory: Path, text: str) -> None:
@@ -360,7 +516,7 @@ def record_h264(
         raise r.Stop(f"{rec} does not exist (the S2 recording dir; compose.dev.yaml S2_REC_DIR)")
     for stale in rec.glob(f"*{session_id}*"):
         raise r.Stop(f"{stale} already exists")
-    guard = load_guard(a.out)
+    guard = load_guard(a.out, io_rule(a))
     gx, gy, gw, gh = r.game_region()
     max_mb = a.max_bytes / 1e6
     part = rec / f".{session_id}.h264"
@@ -529,6 +685,20 @@ def main() -> int:
     )  # fmt: skip
     ap.add_argument("--out", type=Path, default=dataset_ship.LOCAL_ROOT)
     ap.add_argument(
+        "--io-rule", choices=["auto", "sustained"], default="auto",
+        help="auto: the sink's rule (disk: >10%% for 30 s or >25%% once); sustained: >30%% for "
+             "30 s only, on any sink (Batt 2026-11-06, Amendment D)",
+    )  # fmt: skip
+    ap.add_argument(
+        "--resume", type=int, default=0,
+        help="png: resume after an IO-guard or market-window stop as a new session of the same "
+             "label, at most N times (Amendment D); --seconds / --max-bytes budget all parts",
+    )  # fmt: skip
+    ap.add_argument(
+        "--state-file", type=Path, default=None,
+        help="png: the recorder's state (JSON, under /dev/shm) for a watch beside it",
+    )  # fmt: skip
+    ap.add_argument(
         "--max-bytes",
         type=parse_size,
         required=True,
@@ -558,6 +728,16 @@ def main() -> int:
     if str(a.out.resolve()).startswith(str((ROOT / "data").resolve())):
         raise r.Stop("never under ./data: vision mounts it (ADR-0010)")
     resolve_format(a)
+    if a.resume or a.state_file:
+        if a.resume < 0:
+            raise r.Stop("--resume: 0 or more")
+        if a.state_file is not None:
+            if not str(a.state_file.resolve()).startswith("/dev/shm/"):
+                raise r.Stop("--state-file: under /dev/shm (rule 7)")
+            STATE["path"] = a.state_file
+        out = record_parts(a)
+        print(json.dumps(out))
+        return 1 if out["end"].startswith("refused") else 0
     print(json.dumps(record(a)))
     return 0
 

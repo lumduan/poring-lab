@@ -58,7 +58,7 @@ def test_the_io_rule_follows_the_sink_ram_is_sustained_only_and_a_disk_keeps_the
     assert rs.guard_rule(Path("/mnt/poring-lab-datasets/x"), MOUNTS) == rs.DISK_RULE
     assert rs.guard_rule(Path("/dev/shm/x"), "") == rs.DISK_RULE  # unknown -> disk (fail safe)
     src = (SCRIPTS / "record_session.py").read_text()
-    assert src.count("guard = load_guard(a.out)") == 2  # png and h264
+    assert src.count("guard = load_guard(a.out, io_rule(a))") == 2  # png and h264
     assert src.count('"guard_rule": guard.describe(),') == 2
 
 

@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "ACCEPTED 2026-11-06 ~10:45 by Batt ('go ahead, training may start, start the plan now'), recorded as Amendment A (section 13) before any recording: D0 answered by a 100 GB recorder floor, D1-D14 adopted as proposed; T-5 needs no new driver (stage_items.py watch + record_session.py), the lattice by watch_lattice.py (343 TRAIN-side + 88 TEST stands). Was: PROPOSED 2026-11-06 (pre-registration draft, written offline by a subagent)."
+status: "RECORDING under Amendment D (Batt 2026-11-06 ~14:0x: daytime recording with the sustained-only IO rule + an automatic resume; xw1 attempt 1 was cut at 5.5 min by a one-spike trip, section 12). ACCEPTED 2026-11-06 ~10:45 by Batt ('go ahead, training may start, start the plan now'), recorded as Amendment A (section 13) before any recording: D0 answered by a 100 GB recorder floor, D1-D14 adopted as proposed; T-5 needs no new driver (stage_items.py watch + record_session.py), the lattice by watch_lattice.py (343 TRAIN-side + 88 TEST stands). Was: PROPOSED 2026-11-06 (pre-registration draft, written offline by a subagent)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Record the FIT watch xw1 (Amendment A's command, the immune Rogue), ship it; meanwhile the tool gaps T-1-T-4 and T-6-T-10 (offline, tested, positive cases, tmpfs worktrees); then FIT (section 11 step 5)."
+next_action: "Record the xw1 continuation (Amendment D's commands, from 14:45), then xw2 (and xw3 if the caps allow) before 17:00; from 17:00 ship each session (verified, deleted), then xw3-xw5 and xp1 each shipped before the next; then FIT (section 11 step 5). The tool gaps T-1-T-10 are built (Amendments B, C)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -681,3 +681,77 @@ subagents), each with tests and a positive case, before the FIT step reads xw1.
   `SpeciesClasses` requires the fixed classes {player, npc, warp}, while section 7 lists only
   `player` + the species. Either npc / warp stay as EMPTY fixed classes (the species then start at
   id 3) or the loader takes a map-scoped fixed set. No class id is used before then.
+
+### Amendment D (2026-11-06 14:2x ICT, before any further recording): Batt's answer on the IO guard; pause and resume
+
+**Batt's words** (the reply to the 13:5x summary of what waited on them, in this session after
+13:58:26, the turn's first `date`): "ทำต่อเลยได้นี้ ผ่อนผันให้ ทำระบบ retry ไว้กลับมารันต่อด้วยก็ได้
+ร่วมกับ หยุดเฉพาะตอนดิสก์ช้าต่อเนื่อง 30 วินาที ไม่หยุดเพราะกระตุกครั้งเดียว" (go ahead, I grant the
+relaxation; a retry system that comes back and runs on is fine too, together with: stop only when
+the disk is slow for 30 s straight, not for one spike). It picks option 2 of the 13:5x summary
+(daytime recording with a sustained-only guard) and adds the resume.
+
+- **The guard, for every xmas02 recording from now (the xw1 continuation, xw2-xw5, xp1):**
+  `record_session.py --io-rule sustained` stops a part only on stall above 30 % for 30 s, never on
+  one spike, on the root-disk sink and in SET hours too. Everything else on the disk stays: the
+  100 GB floor and the 20 GB unshipped cap (the recorder refuses at a start and stops mid-part),
+  one recorder at a time, and the market-open windows (09:30-10:15, 14:00-14:45 weekdays: the
+  recorder itself waits them out and ends a part when one begins).
+- **The resume (`--resume 6 --state-file /dev/shm/poring-lab-tmp/xmas-det/rec-state-<name>.json`):**
+  a part stopped by the IO guard or a market-open window is followed by a NEW SESSION of the same
+  label once the disk is calm: every capture cgroup at or under 10 % for 60 s without a break, at
+  least 120 s after the stop; at most 6 resumes and 1 h of pauses in all per recording.
+  `--seconds` / `--max-bytes` budget all the parts together. Any other stop (duration, size or
+  local cap, a refusal, the resume or pause cap) ends the recording.
+- **Each part is its own session.** The name rules (Amendment B: FIT = any `*-rdp-xmas02-xw1`, TEST
+  = any `*-rdp-xmas02-xw5` / `-xp1`) take every part, and the label tool picks frames from packets
+  (`map_labels.RecSession.candidate`: still, outside the GM windows, after the map change), not
+  from the watch's events, so a part needs nothing from the watch.
+- **The watch (stage_items.py, stage@7), `--recorder-state` = the same file:** a dwell waits until
+  the recorder banks frames; after ANY wait the stand is warped to again (a map change inside the
+  new part: its packets' anchor and the monsters on screen come fresh); a dwell the recorder did not
+  bank whole (a pause or a new part inside it) is dwelt again, at most 3 times, else the watch
+  stops; waits are outside the `--max-minutes` box; a recorder that ends, goes stale (no beat for
+  10 s) or never writes its state (120 s) stops the watch.
+- **The standing rule "after ONE IO abort: stop and ask"** is replaced, FOR THESE RECORDINGS ONLY,
+  by this bounded resume (Batt's answer). A recording that ends on its resume or pause cap, or any
+  stop of the watch other than its time box, still stops the chain and is reported to Batt.
+- **xw1:** attempt 1's session (`20261106T115507-rdp-xmas02-xw1`) stays FIT by its name. It holds 6
+  WHOLE dwells (stands 0-5 of seed 2611061's order; dwell 6 ended 2.4 s after the recorder
+  stopped, so it is not whole), 287.8 s from the recording's start to the end of dwell 5. **The
+  continuation:** the same seed and lattice, `--start-cell 6 --max-minutes 25`, so FIT holds ~30
+  min of watch in all, as 2b planned.
+- **`--max-bytes 5G` (was 3G):** attempt 1 wrote 121.4 MB/min, not 2b's 92.2: a 30-min part is
+  ~3.6 GB, over 3G. The unshipped cap (20 GB) and the floor are what protect the disk.
+- **Shipping, this afternoon:** `dataset_ship` refuses SET hours (09:30-17:00) by design, and a
+  ship reads the disk at up to ~40 MB/s, ~20x the recorder's write rate. Until 17:00 the sessions
+  stay on the root disk under the recorder's own caps (124.5 GB free at 13:58, `df -B1`; the
+  partial xw1 0.66 GB), and from 17:00 each is shipped, verified on the NAS and deleted. This
+  replaces 2b's and Amendment A's "shipped before the next" for the afternoon only; after the
+  17:00 ships, each recording is shipped before the next again.
+- **Not changed:** the label rule, the split, the seeds, the lattice files and their sha256, the
+  stands, the protocol (immune Rogue, `@killmonster2` before each watch, a judged screenshot), the
+  per-watch time box (30 min of watch), the TEST names.
+
+**Built and tested before this commit** (record_session.py + stage_items.py; tests
+`test_record_session_resume.py`, `test_stage_items_watch.py`): the market-open windows; the
+sustained rule does not stop on a scripted burst like xw1's 12:00 trip (its 10-s mean 29.9 %,
+over the 25 % spike line as xw1's 28.3 % was) and does stop on 30 s above 30 %; the calm wait (120 s when calm all along, 160 s when calm from 100 s,
+a burst resets it, the budget and a signal end it); the parts loop (budgets left, part indices,
+which stops resume, the resume cap, a refusal, h264 refused, the state file ends "ended"); the
+watch on a fake clock (a pause inside stand 1's dwell -> stand 1 warped to and dwelt again in part
+B, stands 0 and 2 once; a 10-min wait outside a 1-min box; `--start-cell`; a recorder that ends or
+never comes stops it; without `--recorder-state` the stage@6 lines exactly).
+
+**The commands (the xw1 continuation shown; the others change the label, seed, lattice, start cell
+and time box as 2b / Amendment A say):**
+
+        uv run python scripts/record_session.py --backend rdp --format png --fps 1 \
+            --out /home/batt/poring-lab-rec --max-bytes 5G --seconds 3000 --label xmas02-xw1 \
+            --io-rule sustained --resume 6 \
+            --state-file /dev/shm/poring-lab-tmp/xmas-det/rec-state-xw1.json     # first, then:
+        uv run python scripts/stage_items.py watch --map xmas_dun02 \
+            --lattice /dev/shm/poring-lab-tmp/xmas-det/lattice/lattice-train.json \
+            --seed 2611061 --label xw1b --start-cell 6 --max-minutes 25 --immune-confirmed \
+            --recorder-state /dev/shm/poring-lab-tmp/xmas-det/rec-state-xw1.json
+        # when the watch ends: SIGINT the recorder by its PID (it finalises the open part)

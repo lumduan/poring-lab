@@ -253,6 +253,9 @@ They cover:
 
 ## Amendment 2026-11-06: the free-space floor is 100 GB (Batt)
 
+> ➡️ For the xmas02 detector's recordings, "the IO guard" and "shipping + deleting each session
+> before the next" below changed the same afternoon: "Amendment 2026-11-06 (b)".
+
 - **Decision (Batt, 2026-11-06 ~10:45 ICT, answering the 09:42 report):** `dataset_ship.MIN_FREE_BYTES`
   goes from 120 GB to **100 GB**: "unblock this now, tell HA too; I raise the margin to 100 GB so
   we don't bother HA often" ("ปลดบล็อคเรื่องนี้เลย บอก HA ด้วย และฉันปรับเกณฑ์เพิ่มให้ด้วยเป็น
@@ -265,3 +268,28 @@ They cover:
   between the nightly retention runs; ~9.3 GB back at 21:07). HA was told the same day.
 - The floor is still DECIMAL GB (`100 * 10**9` bytes); `df -h` prints GiB, so measure with
   `df -B1`.
+
+## Amendment 2026-11-06 (b): a sustained-only IO rule and an automatic resume, for the xmas02 recordings (Batt)
+
+- **Decision (Batt, 2026-11-06 ~14:0x ICT):** "go ahead, I grant the relaxation; a retry system that
+  comes back and runs on is fine too, together with: stop only when the disk is slow for 30 s
+  straight, not for one spike" ("ทำต่อเลยได้นี้ ผ่อนผันให้ ทำระบบ retry ไว้กลับมารันต่อด้วยก็ได้
+  ร่วมกับ หยุดเฉพาะตอนดิสก์ช้าต่อเนื่อง 30 วินาที ไม่หยุดเพราะกระตุกครั้งเดียว"). It answered the
+  xw1 recording's stop at 12:00 (one 28.3 % quant-ticker-engine spike under the tolerant disk rule,
+  after 5.5 min; docs/planning/xmas02-detector.md section 12).
+- **What it changes, for the xmas02 detector's recordings only** (xmas02-detector.md Amendment D has
+  the commands and the protocol):
+  - `record_session.py --io-rule sustained`: a part stops only on stall above 30 % for 30 s, no
+    one-spike stop, on the root-disk sink and in SET hours. Without the option the sink's rule
+    applies, as before (gef10-detector.md 13y).
+  - `--resume N --state-file F`: a part stopped by the IO guard, or by a market-open window
+    (CLAUDE.md rule 5), is followed by a new session of the same label once every capture cgroup
+    is at or under 10 % for 60 s, at least 120 s after the stop; at most N resumes and 1 h of
+    pauses per recording. A watch beside it (`stage_items.py watch --recorder-state F`) dwells only
+    while frames are banked.
+  - Shipping waits for 17:00 (`dataset_ship` refuses SET hours, and a ship reads the disk at up to
+    ~40 MB/s), so on 2026-11-06 the afternoon's sessions stay on the root disk until then, under the
+    recorder's own floor (100 GB) and unshipped cap (20 GB).
+- **Unchanged:** the floor, the unshipped cap, the size cap per recording, one recorder at a time,
+  `ionice -c3`, and every other recording's IO rule.
+

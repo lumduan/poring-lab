@@ -63,11 +63,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@6"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
+VERSION = "stage@7"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
 # @4: the character is a ROGUE (job "rogue", data/thief) and watch --spawn (rogue-gef10 A4);
 # @5: per-MAP item sets (gef_fild10's drop set, gef10-eyes-loot.md E3): groups per spot, the map's
 # offsets, the 3 x 3 pile inside the area, @killmonster2 at the end, canopy / drop / held commands;
 # @6: MASKED icon references from the client's own item icons (`cut-grf`, rogue-gef10.md AK-5)
+# @7: watch --recorder-state / --start-cell: dwell only while a pausing recorder banks frames
+# (Batt 2026-11-06, xmas02-detector.md Amendment D)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -737,6 +739,70 @@ def run(a: argparse.Namespace) -> int:
 
 
 WATCH_DWELL_S = 30.0  # payf07-detector.md: still frames of monsters around an immune Thief
+# stage@7 (Batt 2026-11-06, xmas02-detector.md Amendment D): beside a pausing recorder
+# (record_session.py --resume --state-file) the watch dwells only while it banks frames.
+REC_BEAT_MAX_S = 10.0  # a recorder state older than this: the recorder is gone
+REC_START_MAX_S = 120.0  # no state file this long after the watch began: no recorder
+REC_WAIT_MAX_S = 3700.0  # one wait (the recorder's pauses are capped at 3600 s in all)
+REDO_MAX = 3  # a stand dwelt again at most this often when its dwell was not wholly recorded
+RAM_ROOT = "/dev/shm/"  # --recorder-state lives in RAM (rule 7)
+
+
+class RecorderGone(Exception):
+    """The recorder beside the watch ended, went stale or never came."""
+
+
+def rec_read(path: Path) -> dict[str, Any] | None:
+    """The recorder's state file (record_session.py --state-file), None when missing or torn."""
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+def rec_verdict(st: dict[str, Any] | None, now_ns: int, beat_max_s: float = REC_BEAT_MAX_S) -> str:
+    """PURE: "missing", "ended", "gone" (a stale beat), "recording" or "wait" (waiting, paused,
+    finishing: frames are not being banked)."""
+    if st is None:
+        return "missing"
+    if st.get("state") == "ended":
+        return "ended"
+    if now_ns - int(st.get("beat_ns") or 0) > beat_max_s * 1e9:
+        return "gone"
+    return "recording" if st.get("state") == "recording" else "wait"
+
+
+def rec_covered(before: dict[str, Any], after: dict[str, Any] | None, dwell_t0_ns: int,
+                now_ns: int) -> bool:  # fmt: skip
+    """PURE: the dwell that began at ``dwell_t0_ns`` was recorded whole: the recorder is still
+    recording, the SAME session as when it began, and has been since before it began."""
+    return (rec_verdict(after, now_ns) == "recording" and after is not None
+            and after.get("session") == before.get("session")
+            and int(after.get("since_ns") or 0) <= dwell_t0_ns)  # fmt: skip
+
+
+def wait_recorder(path: Path, started: float, *, clock: Any = None, sleep: Any = None,
+                  now_ns: Any = None) -> tuple[dict[str, Any], float]:  # fmt: skip
+    """Until the recorder banks frames: (its state, seconds waited). RecorderGone when it ended or
+    went stale, when no state file came within REC_START_MAX_S of ``started`` (the watch's start,
+    on ``clock``), or after REC_WAIT_MAX_S."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    now_ns = now_ns or time.monotonic_ns
+    t0 = clock()
+    while True:
+        st = rec_read(path)
+        v = rec_verdict(st, now_ns())
+        if v == "recording" and st is not None:
+            return st, clock() - t0
+        if v in ("ended", "gone"):
+            raise RecorderGone(f"the recorder is {v} ({(st or {}).get('reason')})")
+        if v == "missing" and clock() - started > REC_START_MAX_S:
+            raise RecorderGone(f"no recorder state at {path}")
+        if clock() - t0 > REC_WAIT_MAX_S:
+            raise RecorderGone(f"the recorder paused over {REC_WAIT_MAX_S:.0f} s")
+        sleep(1.0)
 
 
 def watch_cells(lattice: list[dict[str, Any]], seed: int, max_cells: int) -> list[tuple[int, int]]:
@@ -753,7 +819,14 @@ def watch(a: argparse.Namespace) -> int:
     """LIVE (payf07-detector.md, Elder Willow is the thinnest class): the IMMUNE Thief warps over a
     lattice of three-check stand cells and dwells WATCH_DWELL_S at each while the 1-fps recorder
     (started beside this tool) banks the frames. Typed @warp lines only, no world click; the same
-    recording path as the staged session, so its frames join TRAIN by the 3c rule."""
+    recording path as the staged session, so its frames join TRAIN by the 3c rule.
+
+    stage@7 (Amendment D): --recorder-state (record_session.py --state-file) makes each dwell wait
+    until the recorder banks frames; after any wait the stand is warped to AGAIN (a map change
+    inside the new part: its packets' anchor and the monsters on screen come fresh), and a dwell
+    the recorder did not bank whole (a pause or a new part inside it) is dwelt again, at most
+    REDO_MAX times. The time box counts watch time only, not the waits. --start-cell K begins at
+    the K-th stand of the seeded order (a watch continued after a stop)."""
     import bench
     import crusader as cr
     import ro_agent as r
@@ -762,6 +835,12 @@ def watch(a: argparse.Namespace) -> int:
     if not a.immune_confirmed:
         raise SystemExit("stage_items watch refused: --immune-confirmed (a person read the frame)")
     cells = watch_cells(json.loads(a.lattice.read_text()), a.seed, a.max_cells)
+    if not 0 <= a.start_cell < len(cells):
+        raise SystemExit(f"stage_items watch refused: --start-cell {a.start_cell} outside 0.."
+                         f"{len(cells) - 1}")  # fmt: skip
+    rec_path = a.recorder_state
+    if rec_path is not None and not str(rec_path.resolve()).startswith(RAM_ROOT):
+        raise SystemExit("stage_items watch refused: --recorder-state under /dev/shm")
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-watch-{a.map}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True)
@@ -773,38 +852,68 @@ def watch(a: argparse.Namespace) -> int:
 
     ev({"kind": "run_start", "version": VERSION, "what": "watch", "map": a.map, "seed": a.seed,
         "cells": cells, "dwell_s": a.dwell_s, "lattice": str(a.lattice),
-        "spawn": a.spawn, "spawn_n": a.spawn_n})  # fmt: skip
+        "spawn": a.spawn, "spawn_n": a.spawn_n, "start_cell": a.start_cell,
+        "recorder_state": str(rec_path) if rec_path else None})  # fmt: skip
     reason = "done"
-    t_end = time.monotonic() + a.max_minutes * 60
+    started = time.monotonic()
+    waited = 0.0  # seconds spent waiting for the recorder: outside the time box
+
+    def warp_to(k: int, x: int, y: int) -> float:
+        cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", JOB, CHAR)
+        settle = _settle(screen)
+        if a.spawn is not None:  # stage@4: the practice monster beside us (Amendment A4)
+            cr.gm_line(agent, screen, f"@monster {a.spawn} {a.spawn_n}", JOB, CHAR)
+            ev({"kind": "spawn", "i": k, "mob": a.spawn, "n": a.spawn_n})
+        bench.close_chat(agent, screen)
+        return settle
+
     with _session("watch") as (agent, screen):
         agent.wait_for_human()
         _check(screen)
         try:
             for k, (x, y) in enumerate(cells):
-                if time.monotonic() > t_end:
+                if k < a.start_cell:
+                    continue
+                if time.monotonic() - started - waited > a.max_minutes * 60:
                     reason = "time_box"
                     break
-                cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", JOB, CHAR)
-                settle = _settle(screen)
-                if a.spawn is not None:  # stage@4: the practice monster beside us (Amendment A4)
-                    cr.gm_line(agent, screen, f"@monster {a.spawn} {a.spawn_n}", JOB, CHAR)
-                    ev({"kind": "spawn", "i": k, "mob": a.spawn, "n": a.spawn_n})
-                bench.close_chat(agent, screen)
-                ev({"kind": "dwell", "i": k, "at": [x, y], "settle_s": settle, "s": a.dwell_s})
-                time.sleep(a.dwell_s)
+                settle = warp_to(k, x, y)
+                for attempt in range(REDO_MAX + 1):
+                    st0: dict[str, Any] = {}
+                    if rec_path is not None:
+                        st0, w = wait_recorder(rec_path, started)
+                        waited += w
+                        if w >= 1.0:  # the recorder paused: this stand again, inside the new part
+                            ev({"kind": "recorder_wait", "i": k, "s": round(w, 1),
+                                "session": st0.get("session")})  # fmt: skip
+                            settle = warp_to(k, x, y)
+                    t_dwell = r.ns()
+                    ev({"kind": "dwell", "i": k, "at": [x, y], "settle_s": settle,
+                        "s": a.dwell_s, "attempt": attempt,
+                        "rec_session": st0.get("session")})  # fmt: skip
+                    time.sleep(a.dwell_s)
+                    if rec_path is None or rec_covered(st0, rec_read(rec_path), t_dwell, r.ns()):
+                        break
+                    ev({"kind": "dwell_unrecorded", "i": k, "attempt": attempt,
+                        "recorder": rec_read(rec_path)})  # fmt: skip
+                else:
+                    raise r.Stop(f"stand {k} was not recorded whole in {REDO_MAX + 1} dwells")
                 if a.spawn is not None:  # it (and every monster here) dies, no drops; all respawn
                     cr.gm_line(agent, screen, "@killmonster2", JOB, CHAR)
                     ev({"kind": "killmonster2", "i": k})
                     bench.close_chat(agent, screen)
                 print(f"cell {k + 1}/{len(cells)} at {x},{y}", flush=True)
+        except RecorderGone as exc:
+            reason = f"recorder: {exc}"
         except r.Stop as exc:
             reason = f"stop: {exc}"
         finally:
             ui_gate.ensure_clear(agent, screen, why="watch-end")
             print(r.to_png(screen.full(), r.SHOTS / f"watch-end-{a.label}.png"), flush=True)
-    ev({"kind": "run_end", "reason": reason})
+    ev({"kind": "run_end", "reason": reason, "waited_s": round(waited, 1)})
     evf.close()
-    print(json.dumps({"sid": sid, "reason": reason, "cells": len(cells)}))
+    print(json.dumps({"sid": sid, "reason": reason, "cells": len(cells),
+                      "waited_s": round(waited, 1)}))  # fmt: skip
     return 0 if reason in ("done", "time_box") else 1
 
 
@@ -874,6 +983,19 @@ def main() -> int:
         "after the dwell by @killmonster2 (rogue-gef10.md Amendment A4)",
     )
     p.add_argument("--spawn-n", type=int, default=1)
+    p.add_argument(
+        "--start-cell",
+        type=int,
+        default=0,
+        help="stage@7: begin at this index of the seeded order (a continued watch)",
+    )
+    p.add_argument(
+        "--recorder-state",
+        type=Path,
+        default=None,
+        help="stage@7: record_session.py --state-file; dwell only while it banks "
+        "frames, re-dwell a stand it did not bank whole (Amendment D)",
+    )
     p = sub.add_parser("run")
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--n", type=int, default=12)
