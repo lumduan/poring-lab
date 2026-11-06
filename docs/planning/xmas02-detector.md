@@ -979,7 +979,7 @@ the key `bbc74039...`; answers-A sha256 `e80cb42a68d4986583ab...`, answers-B `0e
 open question answered without a code change), **3 Myst Case 1249, 4 Cruiser 1248, 5 Cookie 1265,
 6 Christmas Cookie 1246.** Section 7's ids shift by 2; the runner maps 3-6 to `monster` (T-11).
 
-### Amendment I (2026-11-06 18:2x ICT, before the worker or any GPU step): the training launch
+### Amendment I (2026-11-06 18:1x ICT, committed 18:18, before the worker or any GPU step): the training launch
 
 Section 8 as written (D4, D13; Amendment A: "training may start" = when the plan reaches it, under
 R1-R3 and the R2 co-tenant rule), with the inputs fixed by eval AMENDMENT 2:
@@ -987,7 +987,7 @@ R1-R3 and the R2 co-tenant rule), with the inputs fixed by eval AMENDMENT 2:
   dry run: TRAIN 1,986 frames, boxes Myst Case 1,083 / Cruiser 525 / Cookie 281 / Christmas
   Cookie 242; VAL 1,106 frames; xw2 + xw3 x 2 with `join_rule_3c` ADDED, xw1 x 2 VAL_MONITOR).
 - **Init:** gef10 round 2's `last.pt`, `/mnt/poring-lab-datasets/archive/train/gef10-20261026/weights/last.pt`,
-  sha256 `ebfc7a9a2475ff6117f4...` (read 18:2x); the class head starts fresh (7 classes).
+  sha256 `ebfc7a9a2475ff6117f4...` (read 18:17); the class head starts fresh (7 classes).
 - **The worker:** `quiet_start.py --quiet-min 10 --limit 25 -- python3 scripts/guarded_build.py
   --sustain 30 --spike 25 worker:vision@120` once the cache has finished (quiet_start measures the
   window and never starts in a market-open window).
@@ -1001,7 +1001,7 @@ R1-R3 and the R2 co-tenant rule), with the inputs fixed by eval AMENDMENT 2:
   (YOLO11n, seed 20261004, imgsz 1280, batch 2, workers 1, 20 epochs, close_mosaic 3, hsv_s 0.2,
   hsv_h 0.015 = the default, scale 0.1; the 25 % VRAM cap; the adaptive duty cycle; paired R3 with
   the absolute camera-drop stop.)
-- **At 18:2x (read-only):** GPU 3,537 / 16,311 MiB used (Frigate's three detectors + ffmpeg);
+- **At 18:17 (read-only):** GPU 3,537 / 16,311 MiB used (Frigate's three detectors + ffmpeg);
   fit-first's `fitfirst-vton-worker` container up and holding NO GPU memory; Ollama `/api/ps`
   empty. The guard re-checks R1 / R2 (and the co-tenant headroom) at every start.
 - **The scored checkpoint:** `last.pt` after the last COMPLETED epoch (eval doc). TEST is not read
