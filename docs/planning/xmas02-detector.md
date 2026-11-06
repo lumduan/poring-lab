@@ -630,6 +630,19 @@ xw3 2,060,931,443 + 1,606,432,755; xw5 3,938,302,466 bytes (the NAS manifests ca
 2 bad labels of 592 scored (0.34 %), under o3h 5 / 609 (0.82 %); C2 PASS for the four tier species
 (median |dx|, |dy| 1 px).
 
+**T1 on TEST (section 5; `map_labels.py check --c1-rule round2` on xw5 + xp1 + X2 with the frozen
+params, 17:39:53-17:45:14; t1.json sha256 `5c6b3bf5d8e0116f...`): PASS.**
+- **C1 pooled 7 bad of 607 scored = 1.15 %** (bar <= 5.0 % on >= 100 rows). Per species: Christmas
+  Cookie 4 / 127 (3.15 %), Cruiser 2 / 181 (1.10 %), Myst Case 1 / 133 (0.75 %), Cookie 0 / 166.
+  Per part: xw5 1 / 415 (0.24 %), xp1 2 / 45 (4.44 %), X2 4 / 147 (2.72 %).
+- **C2 PASS for the four** (median |dx|, |dy| 1 px; Cookie dy 1.5 px). No C2 stop.
+- Beside it, the same frames under o3h (not frozen): 26 / 650 = 4.0 %: the terrain rule 4f adopted
+  takes most of the bad labels out (occluded_terrain 59 + under_terrain_kept 30 dropped).
+- Exclusions: not_standing 1,158, frame_with_standing 559, ui_or_edge 332, crowded 194,
+  under_model_kept 112, ambiguous_view 62, occluded_terrain 59, occluded_model 51, next_move 44,
+  under_terrain_kept 30, unscored 16, facing_unknown 10, frame_with_notice 8.
+- TEST is not read again before the evaluation (section 9).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
