@@ -1,0 +1,5 @@
+# The hand-out's model and sample frames are built OUTSIDE the repo by make_kit.py. Model weights
+# and client screenshots are never committed (CLAUDE.md rule 4).
+*.onnx
+samples/
+*.zip
