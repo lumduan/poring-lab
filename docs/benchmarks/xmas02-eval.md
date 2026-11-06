@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A detector scoped to xmas_dun02, trained on immune lattice watches labelled under the frozen xmas02 rule (o3h or o3h-t), finds the map's four common species on held-out TEST data (Q1c: recall and precision >= 0.80 per species with >= 50 evaluated crops, classes collapsed) and boxes the runner's own patrol frames with precision >= 0.80 on still captures (P4A), where v1 saw 1 of 937 labels."
-status: "PRE-REGISTERED 2026-11-06; AMENDMENT 2 (the class list, params, TRAIN / VAL / TEST ids) before the cache. (Written before any xmas_dun02 watch is recorded, before the cache and before any model exists; the plan is docs/planning/xmas02-detector.md, ACCEPTED by Batt ~10:45, Amendment A). Nothing scored."
+status: "PRE-REGISTERED 2026-11-06; AMENDMENT 2 (the class list, params, TRAIN / VAL / TEST ids) before the cache; AMENDMENT 3 (the scored checkpoint after the 20 epochs, P4A's still precision, the commands) 2026-11-07 00:1x, before any TEST label. Nothing scored yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../planning/xmas02-detector.md, gef10-eval.md, payf07-eval.md, v2orc-vs-v1.md, ../planning/rogue-xmas02.md]
-next_action: "Nothing here runs until the training ends. Before the cache: an amendment records the class list (its sha256), the frozen params' sha256 and the TEST sessions' ids."
+next_action: "Amendment 3's commands in order: the TEST labels, the seed-53 pack and its two labellers, the refs, the Q1 detections, P4A, the latency, G1 / G2; then worker-stop:vision and the results."
 title: "xmas02: the xmas_dun02 detector's evaluation (pre-registered)"
 date: 2026-11-06
 owner: Batt
@@ -156,6 +156,103 @@ As "The run" step 1 requires, before the cache:
 - **TEST:** `20261106T162044-rdp-xmas02-xw5` (xw5), `20261106T171533-rdp-xmas02-xp1` (xp1),
   `20261105T225409-rdp-xmas02-x2` (X2). T1 read them once (plan section 12: PASS); nothing else
   reads them before the training ends.
+
+## AMENDMENT 3 (2026-11-07 00:1x ICT, after the training ended and BEFORE any TEST label, pack, prediction or score): the scored checkpoint, the P4A split, the commands
+
+**The training ended normally:** Amendment I's launch (xmas02-detector.md) ran 20:53:17-00:01:51
+ICT, rc 0, ONE attempt (no IO restart), **all 20 epochs completed**. Duty cycle: 100 ms for
+7,456 s, 200 ms 2,047 s, 400 ms 652 s, 800 ms 607 s, 2,000 ms 546 s (82 changes). The guard's
+worst capture stall 9.9 % (cron.service), 0 s above 30 %.
+- **The scored checkpoint:** `data/train/xmas02-20261106/weights/last.pt` after epoch 20, sha256
+  `5c5bb67a746b42014935700f449ecbf45525bbddf250fb21738eb6248a2b8b7b` (the plan's rule: the last
+  completed epoch; nothing ended early).
+- VAL (xw1, monitor only, D13; it decides nothing) at epoch 20: P 0.979, R 0.978, mAP50 0.993,
+  mAP50-95 0.910.
+- **The CPU export** (for P4A and the latency; detector-cpu.md's recipe, imgsz (736, 1280),
+  simplify, device cpu): the worker image has no `onnx`, so the export ran in a TEMPORARY RAM env
+  (`/dev/shm/poring-lab-tmp/onnx-export`, ultralytics 8.4.165 as the recipe; removed after the
+  export). `/dev/shm/poring-lab-detector/model/xmas02-last-736x1280.onnx` sha256 `293dca92...`, and
+  `.names.json` (the .pt's names in id order: player, npc, warp, mystcase, cruiser, cookie,
+  cookie_xmas) sha256 `af86aacc...`.
+
+**P4A's "still" precision, built (the scorer had the still / moving split for RECALL only).**
+`detector_vs_packets.py score-session` now also writes `precision_by_self_motion` (moving /
+still: detections, tp, precision), counted from the SAME verdicts as `precision`, after the UI
+drop, on the same 500 ms rule (`SELF_MOVE_NS`). Nothing else in the output changes.
+- **Positive case (a REAL session, before any new-model box exists):** v1's X2 rows of 2026-11-06
+  (x2-score.json) re-scored by the new code: every published field is IDENTICAL (precision 1 / 66,
+  each species' recall, the 4A verdict), and the new split is moving 1 / 40 + still 0 / 26 = 1 / 66,
+  equal to a count straight from the `--pairs` file.
+- **P4A** = (X2 still tp + xp1 still tp) / (X2 still detections + xp1 still detections), the new
+  model's rows, `--classes config/detector/classes-xmas02.json` with the export's names; >= 100
+  pooled still detections, else NO VERDICT.
+
+**The commands** (gef10-eval.md R2-2's, with this map's flags). Variables:
+
+      W=/home/batt/docker/poring-lab; F=/dev/shm/poring-lab-tmp/xmas-det/fit
+      T=/dev/shm/poring-lab-tmp/xmas-det/eval; E=$W/data/train/eval/xmas02
+      M=/dev/shm/poring-lab-detector/model; N=/mnt/poring-lab-datasets
+      CAP="systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0"
+      GB="python3 scripts/guarded_build.py --threshold 30 --sustain 30"
+
+1. **The TEST labels**, one part per run, nice 19: `--classes` is the TRAIN labels' file
+   (`classes-none.json`, "the same rule the TRAIN labels were cached under"); the T_h floor is part
+   of the rule (4a), so the pack takes no `--min-fit` (as T2's pack, `min_fit` null):
+
+        $CAP nice -n 19 uv run python scripts/map_labels.py labels --map xmas_dun02 --eval-test \
+            $N/<part> --params $F/params.json --classes $F/classes-none.json --out $T/labels-test/<part>.json
+        # parts: 20261106T162044-rdp-xmas02-xw5, 20261106T171533-rdp-xmas02-xp1, 20261105T225409-rdp-xmas02-x2
+
+2. **The pack**, seed 53, 60 per species (fewer: all), T2's instructions (sha256 `dc48fb15...`):
+
+        $CAP nice -n 10 uv run python scripts/map_labels.py pack --map xmas_dun02 --eval-test $T/labels-test/*.json \
+            --per-species 60 --seed 53 --pack-dir $T/pack --key-dir $T/key \
+            --instructions docs/planning/xmas02-blind-instructions.txt \
+            --instructions-sha256 dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed
+
+   **Two NEW blind labeller agents (C, D)**, each given ONLY the pack directory, the instructions
+   file inside it and its own answers path (`$T/answers/C.json`, `D.json`); the key directory is
+   never named to them; T2's brief otherwise.
+3. **The refs** (the pack's frames + the 200 latency frames, seed 53), read in place from the NAS:
+
+        $CAP uv run python scripts/eval_q1.py refs $T/key/answer_key.json --out $E/q1-refs.json \
+            --latency-200 53 --latency-out $E/latency-200-refs.json --labels-dir $T/labels-test
+
+4. **The Q1 detections** (the worker; R1-R3; imgsz 1280, conf 0.25 = predict_dir's defaults):
+
+        $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/xmas02-20261106/weights/last.pt \
+            --refs /data/train/eval/xmas02/q1-refs.json --out /data/train/eval/xmas02/q1-pred-xmas02.json"
+
+5. **Q1c / Q1s** after both labellers:
+
+        uv run python scripts/eval_q1.py score $T/key/answer_key.json $T/answers/C.json $T/answers/D.json \
+            $E/q1-pred-xmas02.json --cache-manifest $N/.framecache/xmas02-o3h-t-20261106/manifest.json --out $E/q1-score.json
+
+6. **P4A** (the CPU path, UnitDetector, nice 10, 8 threads), X2 and xp1, then one score each:
+
+        $CAP nice -n 10 uv run python scripts/recorder_boxes.py predict $N/<session> \
+            --model $M/xmas02-last-736x1280.onnx --threads 8 --out $E/p4a-<x2|xp1>-xmas02-boxes.jsonl
+        $CAP nice -n 19 uv run python scripts/detector_vs_packets.py score-session $N/<session> \
+            --boxes $E/p4a-<x2|xp1>-xmas02-boxes.jsonl --map xmas_dun02 --layout hunt --chat auto --ui-boxes drop \
+            --classes config/detector/classes-xmas02.json --names $M/xmas02-last-736x1280.names.json \
+            --sprites "$X1/sprites/data/sprite/몬스터" --sprite-names $X1/kb-sprites/monster_sprite_names.json \
+            --pairs $E/p4a-<x2|xp1>-xmas02-pairs.json --out $E/p4a-<x2|xp1>-xmas02.json
+        # X1=$N/scratch-archive/2026-11-05/x1 (X2's own sprite inputs). v1 beside it: X2 = the 11-06
+        # rows re-scored above; xp1 = the same two commands with $M/v1png-last-736x1280.onnx, no --classes.
+
+7. **The 30 false boxes by eye:** every still capture's non-tp verdict in the two new-model pairs
+   files, listed as (session, t, detection index) in sorted order, `random.Random(53).sample(.., 30)`
+   (all, if fewer), each drawn on its frame and judged: toy model, terrain, UI, our own character,
+   a real monster the truth missed, other.
+8. **CPU latency** (the 200 refs, interleaved, nice 10):
+
+        nice -n 10 uv run python scripts/eval_latency.py $E/latency-200-refs.json \
+            --model v1=$M/v1png-last-736x1280.onnx --model xmas02=$M/xmas02-last-736x1280.onnx --out $E/latency-cpu.json
+
+9. **G1 / G2** (information only, D1): gef10-eval.md's commands 5-6 with this model's `last.pt`;
+   v1's G1 file is the gold set's `pred-v1png-20261008.json`; v1's G2 file is gef10-r2's
+   `g2-pred-v1.json` if `gold_eval.py refs` writes byte-identical refs, else v1 is predicted again.
+10. Then `worker-stop:vision` (verified), and the results below.
 
 ## RESULTS
 

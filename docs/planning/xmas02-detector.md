@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "The training runs (from 20:53:17, 20 epochs, Amendment I); when it ends: worker-stop:vision, then the evaluation (xmas02-eval.md: TEST labels, the seed-53 pack + two labellers, Q1c, P4A, latency). Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache."
+next_action: "The evaluation (xmas02-eval.md AMENDMENT 3: TEST labels, the seed-53 pack + two labellers, Q1c, P4A, latency, G1 / G2), then worker-stop:vision. Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache, the training (20 epochs, 00:01:51)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -670,6 +670,14 @@ conditional species reached the tier: >= 30 kept labels); 9 grid pages, the mult
 `d389551c...`. Two NEW blind labeller agents (A, B) started ~18:00, each with ONLY the pack, the
 instructions and its own answers path; the key stays outside the pack. Scored by
 `scripts/blind_score.py` against section 6's bars.
+
+**The training (Amendment I): COMPLETE, 20:53:17-00:01:51 ICT (2026-11-07), rc 0, one attempt,
+all 20 epochs.** Duty cycle: 100 ms for 7,456 s, 200 ms 2,047 s, 400 ms 652 s, 800 ms 607 s,
+2,000 ms 546 s (82 changes); the guard's worst capture stall 9.9 % (cron.service), 0 s above 30 %.
+VAL (xw1, monitor only) at epoch 20: P 0.979, R 0.978, mAP50 0.993, mAP50-95 0.910 (1,106 frames,
+2,238 boxes). The scored checkpoint, `last.pt` after epoch 20, sha256 `5c5bb67a...`; its CPU
+export `xmas02-last-736x1280.onnx` `293dca92...`. The evaluation's commands:
+xmas02-eval.md AMENDMENT 3 (committed before any TEST label).
 
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 

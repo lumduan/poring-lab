@@ -201,6 +201,13 @@ def tally(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return {"n": n, "hit": h, "recall": rate(h, n), "hit_1to1": h1, "recall_1to1": rate(h1, n)}
 
 
+def precision_of(verdicts: Counter[str]) -> dict[str, Any]:
+    """PURE: the precision of a set of detection verdicts (``score_capture``'s: tp / dying /
+    self / near_unit / other). xmas02-eval.md P4A pools the STILL captures' counts of X2 + xp1."""
+    n, tp = sum(verdicts.values()), verdicts.get("tp", 0)
+    return {"detections": n, "tp": tp, "precision": rate(tp, n)}
+
+
 def species_key(job: int, names: dict[int, str] | None = None) -> str:
     table = SPECIES if names is None else names
     return f"{job} {table[job]}" if job in table else "other"
@@ -524,6 +531,8 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
     ui_left: Counter[str] = Counter()
     halluc_caps = 0
     halluc_verdicts: Counter[str] = Counter()
+    # xmas02-eval.md P4A: the precision on STILL captures (no move of ours in the 500 ms before)
+    motion_verdicts: dict[str, Counter[str]] = {"moving": Counter(), "still": Counter()}
     nested_changed = 0
     for c in caps:
         t = int(c["t"])
@@ -592,6 +601,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
                 det_species[species_key(int(hit[0]["job"]), names)] += 1
         before = stack.tl.frame_world(tw - SELF_MOVE_NS).self_pos
         moving = before != row["self"]
+        motion_verdicts["moving" if moving else "still"].update(vs)
         if scored:
             frames_any_view += 1
             if not dets:
@@ -628,6 +638,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
                      for s in sorted({str(r["state"]) for r in unit_rows})},
         "by_self_motion": {k: tally([r for r in unit_rows if r["moving"] is v])
                            for k, v in (("moving", True), ("still", False))},
+        "precision_by_self_motion": {k: precision_of(v) for k, v in motion_verdicts.items()},
         "precision": {"detections": n_det, "tp": verdicts.get("tp", 0),
                       "precision": rate(verdicts.get("tp", 0), n_det),
                       "fp_on_dying_unit": verdicts.get("dying", 0),

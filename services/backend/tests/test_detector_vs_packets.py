@@ -59,6 +59,17 @@ def test_precision_verdicts_tp_dying_self_other() -> None:
     assert rows == [] and verdicts == ["tp", "dying", "self", "other", "near_unit"]
 
 
+def test_the_precision_split_by_our_motion_counts_every_verdict_once() -> None:
+    """xmas02-eval.md P4A: precision on the STILL captures. Every verdict but tp counts against
+    it; an empty split has no precision (not zero)."""
+    still = dv.Counter(["tp", "tp", "tp", "dying", "self", "other", "near_unit"])
+    assert dv.precision_of(still) == {"detections": 7, "tp": 3, "precision": 0.429}
+    assert dv.precision_of(dv.Counter()) == {"detections": 0, "tp": 0, "precision": None}
+    src = Path(dv.__file__).read_text()
+    assert src.count('motion_verdicts["moving" if moving else "still"].update(vs)') == 1
+    assert src.index("moving = before != row") < src.index('motion_verdicts["moving" if')
+
+
 def test_a_unit_with_no_detection_is_a_miss() -> None:
     rows, verdicts = dv.score_capture([unit(1, (100, 100, 160, 180))], [])
     assert rows[0]["hit"] is False and rows[0]["hit_1to1"] is False and verdicts == []
