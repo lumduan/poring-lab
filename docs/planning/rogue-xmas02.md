@@ -589,7 +589,11 @@ against the 120 GB floor), the runner 22:55 (4A's command, 20 min).
   read.
 - **X2's scoring waits for its tooling** (4A: a CPU predictor for a recorder session + the scorer,
   its positive control on a banked gef10 human demo first); the rule and the bar stay as
-  pre-registered.
+  pre-registered. ➡️ 2026-11-06: the tooling is BUILT (`recorder_boxes.py predict`,
+  `detector_vs_packets.py score-session`; branch `feat/x2-score`). Its positive control passed:
+  `score` and `score-session` give back the 2026-10-26 reference exactly on Batt's gef10 demo
+  (recall 8.0 %, precision 18.7 %), and the CPU predictor matches the live boxes up to the demo's
+  JPEG frames (xmas02-prep.md 7). X2's own score waits for the parent.
 - Found while shipping: `dataset_ship.py status` walks every NAS session's tree (`tree_bytes`
   over ~550 sessions): it sat > 12 min in NFS calls and was stopped by PID (read-only). Fixed:
   the NAS sizes come from the manifests (a test that fails on the old code).
