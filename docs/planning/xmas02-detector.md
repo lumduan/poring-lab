@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Record the xw1 continuation (Amendment D's commands, from 14:45), then xw2 (and xw3 if the caps allow) before 17:00; from 17:00 ship each session (verified, deleted), then xw3-xw5 and xp1 each shipped before the next; then FIT (section 11 step 5). The tool gaps T-1-T-10 are built (Amendments B, C)."
+next_action: "Batt decides how the vision worker may start (its cold start tripped the one-spike IO rule at 18:42:37, section 12); then the training per Amendment I (train-day.sh, 20 epochs), then the evaluation (xmas02-eval.md). Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1012,3 +1012,16 @@ R1-R3 and the R2 co-tenant rule), with the inputs fixed by eval AMENDMENT 2:
 frames written** (TRAIN 1,986: xw2 1,034, xw3 543 + 409; VAL 1,106: xw1 183 + 923), 14 shards
 (~6.2 GB, each re-hashed from the NAS), 757.9 s; the guard's worst 4.9 % (quant-orderbook-engine),
 0 s above 30 %. The vision worker was started through `quiet_start` at 18:29.
+
+**The vision worker's start (Amendment I) ABORTED by the IO guard; the training has NOT started;
+PAUSED for Batt (one IO abort: stop and ask; Amendment D covers the recordings only).**
+- `quiet_start.py --quiet-min 10 --limit 25 -- guarded_build.py --sustain 30 --spike 25
+  worker:vision@120` began waiting at 18:29:08. Its 10-min clock restarted at 18:32:20-23
+  (cron.service 34.4-100 %, quant-orderbook-engine 99.8 %, quant-ticker-engine 99.8 %: nothing of
+  ours on the local disk then; the cache had ended 18:28:44, the scratch copy RAM -> NAS ran
+  18:30:16-18:30:39). Quiet from 18:32:24; it started ONCE at 18:42:24.
+- `worker:vision` up at 18:42:27 (worst 0.0 % then); **18:42:37 BREACH: quant-ticker-engine 32.8 %
+  (spike above 25.0 %) -> the worker stopped**; `poring-lab-vision-worker-1` Exited (143), nothing
+  of ours on the GPU (read back 18:43). The worker's cold start is the known IO burst (10-09), so
+  this trip is most likely ours.
+- The cache, the labels, the params and the class list stand; only the GPU step waits.
