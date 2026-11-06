@@ -47,6 +47,11 @@ ports, quickstart) and `docs/adr/`.
    - Client-derived data (GAT, sprites, anything read from a GRF) and knowledge-base data derived
      from rAthena (GPL) are generated locally at run time (`/dev/shm`, `data/`) and never committed
      (Batt, 2026-10-03). The pre-commit hook refuses map and sprite files even with `git add -f`.
+   - ONE scoped exception (Batt 2026-11-06, "put them in the branch, so others can clone it at
+     once"): the ORPHAN branch `teaching-kit` (the student kit, `teaching/simple-bot`) carries the
+     v1 detector's ONNX (`v1.onnx`) and 20 prt_fild08 sample frames from the lab server (our own
+     characters only). The repo is PUBLIC, so they are published. `main` and every other branch
+     still never carry model weights or client pictures.
    - Reusing open-source RO work: a permissive license means port with attribution; copyleft or
      unclear means ideas only, write our own. Read the LICENSE at the exact commit first and record
      it in `THIRD_PARTY.md`. Never open cheat or memory-patching repos.
