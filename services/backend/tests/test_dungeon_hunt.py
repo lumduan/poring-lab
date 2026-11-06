@@ -851,3 +851,20 @@ def test_a_light_strip_read_counts_only_when_a_second_read_agrees() -> None:
     assert pc.accept(3.4, R(xy=(80, 97), mode="light")) == (80, 97)  # confirmed by the base read
     assert pc.accept(3.5, R(xy=None, mode="light_failed")) is None
     assert pc.unconfirmed == 4  # at 0.0, 0.6, 0.9 and 3.0 s
+
+
+def test_each_hp_read_logs_its_readout_outcome() -> None:
+    """2026-11-06 (logging only): the HP read says why it has no new position -- the reader's live
+    failure reasons, for its next round."""
+    from poring_env import selfpos as sp
+
+    assert dh.read_outcome(None, None) == "settle"
+    assert dh.read_outcome(sp.Reading((7, 21), "ok"), (7, 21)) == "base"
+    light = sp.Reading((7, 21), "ok", mode="light")
+    assert dh.read_outcome(light, (7, 21)) == "light"
+    assert dh.read_outcome(light, None) == "unconfirmed"
+    assert dh.read_outcome(sp.Reading(None, "layout"), None) == "base:layout"
+    failed = sp.Reading(None, "no_glyph", mode="light_failed", light_reason="half_shadow")
+    assert dh.read_outcome(failed, None) == "light_failed:half_shadow"
+    src = (Path(dh.__file__)).read_text()
+    assert '"rd": rd_why})' in src and "rd_why = read_outcome(rd, pos)" in src

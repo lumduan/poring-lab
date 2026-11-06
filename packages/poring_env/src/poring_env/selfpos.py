@@ -189,6 +189,7 @@ class Reading:
     glyphs: tuple[Glyph, ...] = ()
     row: int | None = None  # the baseline (template top row) in rect pixels
     mode: str = "base"  # "light": read by the light-strip fallback; "light_failed": tried, None
+    light_reason: str | None = None  # "light_failed": the fallback's own refusal reason
 
 
 def strip_background(gray: Gray, ink_level: float, shadow_level: float) -> float:
@@ -265,7 +266,7 @@ def read_rect(gray: Gray, templates: DigitTemplates, *, light: bool = False) -> 
         return base
     alt = _parse(gray, templates, opaque=True)
     if alt.xy is None:
-        return replace(base, mode="light_failed")
+        return replace(base, mode="light_failed", light_reason=alt.reason)
     return replace(alt, mode="light")
 
 

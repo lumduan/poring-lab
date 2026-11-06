@@ -389,6 +389,23 @@ it); a judged screenshot first; unrecorded. Judged once after the run by `walk_j
     kills, position None share.
 - A FAIL keeps dungeon@8.6 as the patrol's runner, with the cause reported.
 
+### 4I. Run p5: the reader's live outcomes (a MEASUREMENT, no bar; written BEFORE its run)
+
+- **Why:** Batt (Amendment D 1): "use it, and try to make it better". Round 3's 16 misses were 2
+  cells x 8 crops: at 7,221 the fallback read all four digits right and the half-pair guard refused
+  them (an orange object's texture behind the digits); at 7,233 the floor itself reached 249
+  (strokes go down to 242), so the "2" lost its template match. Rounds 1-3 are design data now.
+  Which failure costs the runner positions LIVE is not known: the HP read logged only the last
+  known cell.
+- **The change (logging only, no behaviour change; at this section's commit):** every main HP read
+  logs `rd`, its readout outcome: `base` / `light` (accepted), `unconfirmed` (PosConfirm held a
+  light read back), `settle` (no read after a Fly Wing), or `<mode>:<reason>` for a failed read
+  (`light_failed:<the fallback's own reason>`, kept as `Reading.light_reason`).
+- **The run:** p5, the p4 command with `--label xmas02-p5` (dungeon@8.7 + this logging); the Rogue
+  immune; unrecorded. Reported: the outcomes' counts and where (cells) the failures sit; 4H's
+  walk numbers again (a second sample of dungeon@8.7, not a bar). The reader's next round is
+  designed from these counts and pre-registered before ITS data, on fresh cells.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

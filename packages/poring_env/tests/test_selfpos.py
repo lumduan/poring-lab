@@ -320,6 +320,7 @@ def test_many_half_pairs_in_a_light_cell_refuse_the_read(templates: selfpos.Digi
     base = selfpos.read_minimap(frame, templates, light=False)
     got = selfpos.read_minimap(frame, templates, light=True)
     assert base.xy is None and got.xy is None and got.mode == "light_failed", (base, got)
+    assert got.light_reason == "half_shadow" and got.reason == base.reason  # the base's reason kept
 
 
 def test_the_fallback_never_runs_after_an_ambiguous_base_read(

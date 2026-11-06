@@ -573,6 +573,19 @@ class PosConfirm:
             return None
 
 
+def read_outcome(rd: Any, pos: Cell | None) -> str:
+    """PURE (2026-11-06, logging only): this HP read's readout outcome -- "settle" (no read after a
+    Fly Wing), "base" / "light" (accepted), "unconfirmed" (a light read PosConfirm held back), or
+    "<mode>:<reason>" for a read that failed ("light_failed:<the fallback's reason>")."""
+    if rd is None:
+        return "settle"
+    if rd.xy is None:
+        mode = getattr(rd, "mode", "base")
+        why = getattr(rd, "light_reason", None) if mode == "light_failed" else None
+        return f"{mode}:{why or rd.reason}"
+    return str(getattr(rd, "mode", "base")) if pos is not None else "unconfirmed"
+
+
 def is_jump(here: Cell, p_: Cell, since_s: float) -> bool:
     """PURE (4.00 Amendment J, pi3 23:56: a plant strike 13 cells off walked the Crusader 21 cells
     while no position was read -- a false map-change bar, 0 other-map changes in the packets): a
@@ -2393,6 +2406,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 fresh = tick - fly_at >= FLY_SETTLE_S
                 rd = selfpos.read_minimap(img, digits, light=True) if fresh else None
                 pos = pos_ok.accept(tick, rd) if rd is not None else None
+                rd_why = read_outcome(rd, pos)
                 if pos is not None:
                     p_ = pos
                     if (here is not None and is_jump(here, p_, tick - last_pos_t)
@@ -2405,7 +2419,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if house_on:
                         pos_hist.append((tick, p_))
                 ev({"kind": "hp_read", "pct": pct, "sp_pct": spp, "dead": dead, "ag_on": ag_on,
-                    "dark": dark, "pos": None if here is None else list(here)})  # fmt: skip
+                    "dark": dark, "pos": None if here is None else list(here),
+                    "rd": rd_why})  # fmt: skip
                 if dead:
                     reason = "death"
                     ev(
