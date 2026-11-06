@@ -73,6 +73,30 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
    คลิกที่หน้าต่างเกมให้อยู่ด้านหน้า แล้วบอทจะเริ่มคลิก
    **หยุด: กด F12 หรือ ดันเมาส์ไปมุมซ้ายบนสุดของจอ** (หยุดเองหลัง 10 นาที; เปลี่ยนได้ด้วย `--minutes`)
 
+## ดู log ว่าบอททำอะไรอยู่ (`--logs`)
+
+เพิ่ม `--logs` ต่อท้ายคำสั่งไหนก็ได้ บอทจะพิมพ์ทีละขั้นพร้อมเวลา ว่าทำถึงไหนแล้วและติดตรงไหน
+ถ้าเพิ่ม `--log-file run.log` จะบันทึกลงไฟล์ด้วย (ส่งไฟล์นี้ให้ผู้สอนดูได้)
+
+```powershell
+uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
+```
+
+ตัวอย่างสิ่งที่เห็น:
+
+```text
+19:03:19.864 INFO    onnxruntime 1.31.1: creating the session for v1.onnx
+19:03:20.106 INFO    model loaded in 241 ms: input images [1, 3, 736, 1280], conf 0.25
+19:03:20.300 INFO    window found: 'Ragnarok' (hwnd 132456, pid 4321)
+19:03:20.410 DEBUG   network check: ['127.0.0.1'] -> ok (1 connection(s), all local)
+19:03:25.120 INFO    state start -> ATTACK (new target)
+19:03:25.130 DEBUG   frame 12 | ATTACK: new target | boxes 3 (monster 3) | target monster 0.83 | ...
+19:03:25.900 INFO    no click at (640, 700): on a UI window or the edge
+```
+
+- `INFO` = ขั้นสำคัญ, `DEBUG` = รายละเอียด (สรุปลูปวินาทีละ 1 บรรทัด), `WARNING` = มีอะไรผิดปกติ
+- บรรทัด `no click at ...` บอกเหตุผลที่บอทไม่กด เช่น หน้าต่างเกมไม่ได้อยู่ด้านหน้า หรือจุดนั้นอยู่บนหน้าต่าง UI
+
 ## อ่านภาพ bot view
 
 | สิ่งที่เห็น | ความหมาย |
@@ -113,6 +137,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 ## ปัญหาที่พบบ่อย
 
+- **รันแล้วจบไปเฉย ๆ ไม่มีข้อความอะไรเลย**: เวอร์ชันแรกของชุดนี้โหลด OpenCV ก่อนโมเดล บน Windows
+  ทำให้ onnxruntime ล่มเงียบ ๆ ได้ (DLL `msvcp140.dll` คนละรุ่น) แก้แล้ว: สั่ง `git pull` ให้ได้เวอร์ชันใหม่
+  แล้วรันใหม่พร้อม `--logs` จะเห็นว่าหยุดที่ขั้นไหน ถ้ายังจบเงียบ ๆ ให้
+  1. ดูรหัสจบ: `echo $LASTEXITCODE` (ค่า `-1073741819` = โปรแกรมภาษา C/C++ ล่ม)
+  2. ติดตั้ง Microsoft Visual C++ Redistributable (x64) รุ่นล่าสุด: https://aka.ms/vs/17/release/vc_redist.x64.exe
+  3. ลอง `--detector color` (ไม่ใช้ onnxruntime) ถ้าแบบนี้รันได้ แปลว่าปัญหาอยู่ที่ onnxruntime
 - **หาหน้าต่างเกมไม่เจอ / เจอหลายหน้าต่าง**: ใส่ชื่อหน้าต่างให้ตรงขึ้น เช่น `--title "Ragnarok"`
 - **บอทขยับเมาส์ไม่ได้**: ถ้า client รันแบบ "Run as administrator" ต้องเปิด PowerShell แบบ administrator ด้วย
 - **กรอบไม่ตรงตัว**: ตรวจว่าพื้นที่เกมเป็น 1280 x 720 และ Windows display scaling ไม่ได้ทำให้ขนาดเพี้ยน
@@ -196,6 +226,22 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
    **Stop: press F12, or push the mouse into the screen's top-left corner** (it also stops after
    10 minutes; change it with `--minutes`).
 
+## See what the bot is doing (`--logs`)
+
+Add `--logs` to any command: the bot prints each step with the time, so you see how far it got
+and where it is stuck. `--log-file run.log` also writes the lines to a file (send it to your
+teacher).
+
+```powershell
+uv run simple_bot.py --act --model v1.onnx --logs --log-file run.log
+```
+
+- `INFO` = the steps (the model loaded, the window found, every change of state, every click that
+  was NOT made and why); `DEBUG` = details (one summary line per second from the loop, each
+  network check, each click); `WARNING` = something is off.
+- A `no click at ...` line says why the bot did not click: the game window not in front, the
+  point on a UI window, the network check.
+
 ## Reading the bot view
 
 | What you see | Meaning |
@@ -238,6 +284,14 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
 
 ## Common problems
 
+- **It ends at once with NO message at all**: the kit's first version loaded OpenCV before the
+  model; on Windows that can crash onnxruntime silently (two versions of Microsoft's C++ runtime,
+  `msvcp140.dll`). Fixed: `git pull` the new version and run again with `--logs` to see the last
+  step reached. Still silent?
+  1. the exit code: `echo $LASTEXITCODE` (`-1073741819` = a crash inside C/C++ code);
+  2. install the latest Microsoft Visual C++ Redistributable (x64):
+     https://aka.ms/vs/17/release/vc_redist.x64.exe;
+  3. try `--detector color` (no onnxruntime): if that runs, the problem is onnxruntime.
 - **The game window is not found / several windows match**: give its title, e.g.
   `--title "Ragnarok"`.
 - **The mouse does not move in the game**: if the client runs "as administrator", run PowerShell

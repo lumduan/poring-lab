@@ -334,3 +334,45 @@ def test_make_kit_spreads_evenly_and_keeps_frames_with_two_monsters() -> None:
     picked = kit.pick_samples(rows, 5, 2)
     assert len(picked) == 5 and all(int(f[1:]) % 3 == 2 for f in picked)
     assert picked[0] == "f2" and picked[-1] != "f29"
+
+
+# --- --logs / --log-file (Batt 2026-11-06: "print logs, so I know where it is stuck") -------------
+
+
+def test_logs_are_off_by_default_and_on_with_logs_or_a_log_file(tmp_path: Path) -> None:
+    import logging
+
+    sb.setup_logs(False)
+    assert sb.LOG.level == logging.WARNING and len(sb.LOG.handlers) == 1  # warnings still show
+    sb.setup_logs(True)
+    assert sb.LOG.level == logging.DEBUG and not sb.LOG.propagate
+    log = tmp_path / "bot.log"
+    sb.setup_logs(False, str(log))  # a log file implies --logs
+    assert sb.LOG.level == logging.DEBUG and len(sb.LOG.handlers) == 2
+    sb.LOG.info("window found: %r (pid %s)", "Ragnarok", 4321)
+    for h in sb.LOG.handlers:
+        h.flush()
+    line = log.read_text(encoding="utf-8").strip()
+    assert line.endswith("INFO    window found: 'Ragnarok' (pid 4321)")
+    assert line[2] == ":" and line[8] == "."  # HH:MM:SS.mmm first
+    sb.setup_logs(False)
+
+
+def test_the_command_line_takes_logs_and_a_log_file() -> None:
+    a = sb.parse_args(["--watch", "--logs", "--log-file", "run.log"])
+    assert a.logs and a.log_file == "run.log"
+    b = sb.parse_args(["--act"])
+    assert not b.logs and b.log_file is None
+
+
+def test_a_refused_live_mode_is_logged_with_its_mode(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "act.log"
+    if sys.platform == "win32":
+        pytest.skip("the live modes run on Windows")
+    assert sb.main(["--act", "--log-file", str(log)]) == 2
+    text = log.read_text(encoding="utf-8")
+    assert "simple_bot act: python" in text and "options:" in text
+    assert "--act refused" in capsys.readouterr().err
+    sb.setup_logs(False)
