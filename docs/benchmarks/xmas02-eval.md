@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "A detector scoped to xmas_dun02, trained on immune lattice watches labelled under the frozen xmas02 rule (o3h or o3h-t), finds the map's four common species on held-out TEST data (Q1c: recall and precision >= 0.80 per species with >= 50 evaluated crops, classes collapsed) and boxes the runner's own patrol frames with precision >= 0.80 on still captures (P4A), where v1 saw 1 of 937 labels."
-status: "PRE-REGISTERED 2026-11-06 (written before any xmas_dun02 watch is recorded, before the cache and before any model exists; the plan is docs/planning/xmas02-detector.md, ACCEPTED by Batt ~10:45, Amendment A). Nothing scored."
+status: "PRE-REGISTERED 2026-11-06; AMENDMENT 2 (the class list, params, TRAIN / VAL / TEST ids) before the cache. (Written before any xmas_dun02 watch is recorded, before the cache and before any model exists; the plan is docs/planning/xmas02-detector.md, ACCEPTED by Batt ~10:45, Amendment A). Nothing scored."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -138,6 +138,24 @@ which of its fields decide, in the words of "The scores" above; no bar changes.
 - **Bars apply to the tier species only** (plan D3: Myst Case, Cruiser, Cookie, Christmas Cookie,
   or `cookie_any`). The pack draws every species with a kept TEST label (gef10's draw); a non-tier
   species (Garm Baby, a Goblin) is reported with no bar whatever its count.
+
+## AMENDMENT 2 (2026-11-06 18:1x ICT, before the cache): the run's fixed inputs
+
+As "The run" step 1 requires, before the cache:
+- **The class list:** `config/detector/classes-xmas02.json`, sha256 `9ab96672cd9d2b822c45b87c7f903c04900e304f0466018a7bbdfcdfc4e491be`:
+  0 player, 1 npc, 2 warp (empty), **3 Myst Case 1249, 4 Cruiser 1248, 5 Cookie 1265, 6 Christmas
+  Cookie 1246** (T2 passed the four; Garm Baby and the Christmas Goblin failed T2 and are not
+  classes: plan Amendment H). The model table's "0 player, 1 Myst Case ..." reads with the ids
+  shifted by 2. **The tier species with a bar (Q1c) are these four**; no `cookie_any`.
+- **The frozen label params:** `xmas02-o3h-t`, params.json sha256
+  `d4cc0a5d9e530e382e31ea9c9ae1fc1087dd31c37577b43b307eff65994fdb6e` (plan Amendment G: 1d 120 ms,
+  o3h-t, T_h 0.536, E0).
+- **TRAIN (admitted by 3c):** `20261106T151122-rdp-xmas02-xw2`, `20261106T154241-rdp-xmas02-xw3`,
+  `20261106T160700-rdp-xmas02-xw3`. **VAL (monitor only, D13):** `20261106T115507-rdp-xmas02-xw1`,
+  `20261106T144500-rdp-xmas02-xw1`.
+- **TEST:** `20261106T162044-rdp-xmas02-xw5` (xw5), `20261106T171533-rdp-xmas02-xp1` (xp1),
+  `20261105T225409-rdp-xmas02-x2` (X2). T1 read them once (plan section 12: PASS); nothing else
+  reads them before the training ends.
 
 ## RESULTS
 

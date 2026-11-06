@@ -947,3 +947,34 @@ FIT ran 17:12-17:27 (`map_labels.py offset` then `threshold`, CPU, nice 10, a 4 
   now REFUSES a label name and a 4f rule apart (a test each way).
 - Next, in 2d's order (Amendment F): xw2's labels + its own C1 (3c) + its boxes per species; then
   xw3; T1 on TEST (xw5 + xp1 + X2) after xp1 ships; the T2 pack (seed 51).
+
+### Amendment H (2026-11-06 18:1x ICT, before the cache): T2's result and the class list
+
+**T2 (section 6; the pack of 17:59, two NEW blind labellers A and B, scored by `blind_score.py` against
+the key `bbc74039...`; answers-A sha256 `e80cb42a68d4986583ab...`, answers-B `0e592639872e14a0af89...`):**
+
+| species | A good / species | B good / species | verdict |
+|---|---|---|---|
+| Myst Case 1249 | 100 % / 100 % | 100 % / 100 % | PASS |
+| Cruiser 1248 | 90.0 % / 96.7 % | 93.3 % / 96.7 % | PASS |
+| Cookie 1265 | 100 % / 100 % | 100 % / 96.7 % | PASS |
+| Christmas Cookie 1246 | 100 % / 100 % | 100 % / 100 % | PASS |
+| Garm Baby 1515 | 83.3 % / 100 % | 73.3 % / 86.7 % | FAIL (good < 90 %) |
+| Christmas Goblin 1607 | 86.7 % / 90.0 % | 83.3 % / 83.3 % | FAIL (good and species) |
+
+- Agreement: Q1 180 / 180, Q2 166, Q3 171; 158 crops good for both with the right species.
+- **The four core species pass; Cookie and Christmas Cookie are told apart** (species >= 96.7 % each
+  way), so 6's `cookie_any` fallback does not apply.
+- **Garm Baby and the Christmas Goblin (D3's conditional species, in the tier by >= 30 kept labels)
+  FAIL: by section 6's "any other failure" rule (gef10's D4 / D5) they are NOT classes and their
+  frames are excluded** (the cache's species reasons). Both labellers' "off" boxes sit in crowded
+  fights (the goblins' and Garm Baby's packs, the soldiers' thrown-hat frames).
+- Labeller notes, reported: A saw after answering that every species had 30 crops (the pack's
+  balance can hint; future packs could hide it); A extended two notes afterwards with no label
+  changed. B: Q2 has no rule for a small cut or a hidden body; both used notes.
+
+**The class list: `config/detector/classes-xmas02.json`, sha256
+`9ab96672cd9d2b822c45b87c7f903c04900e304f0466018a7bbdfcdfc4e491be`:** 0 player, 1 npc, 2 warp
+(EMPTY fixed classes: `build_frame_cache.SpeciesClasses` requires player / npc / warp, Amendment C's
+open question answered without a code change), **3 Myst Case 1249, 4 Cruiser 1248, 5 Cookie 1265,
+6 Christmas Cookie 1246.** Section 7's ids shift by 2; the runner maps 3-6 to `monster` (T-11).
