@@ -799,3 +799,4 @@ xmas_dun02's species.**
   false detections; it fought only what hit it or what the walk's cursor read as a SWORD. A
   detector for this map is needed: Batt approved the GPU for it (4E' 1); its plan is written and
   pre-registered before any GPU step.
+- ➡️ **The detector's plan: [xmas02-detector.md](xmas02-detector.md)** (PROPOSED 2026-11-06).
