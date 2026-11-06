@@ -111,3 +111,43 @@ the vision worker (R1-R3, fit-first's VTON never touched), `poring_vision.bench_
 - **Reported, not decided:** the speed-up, FP16's parity, R3's paired delta, the VRAM peak. Moving
   the live detector to the GPU stays Batt's decision. A live GPU path would also need a frame route
   from the host bot into the worker; that route is NOT measured here.
+
+## 6. The lab PC vs the server, same kit, same pictures (2026-11-07 06:30-06:48 ICT)
+
+Batt's one-off ADR-0019 exception (logged there before it ran): the teaching kit's `--bench`, pinned
+at commit `35851e1`, ran ONCE on the lab PC from the agent's shell. Its `v1.onnx` hashed `32b448a1...`
+there, the same file as the server's `v1png-last-736x1280.onnx`. Then the same commit ran on the
+server at 06:47:55. Both used the same 20 sample pictures and onnxruntime 1.31.1, and found 2.3
+boxes a picture.
+
+| threads | lab PC: i5-10500T, 6 cores / 12 logical, 31.7 GB, Windows 11, the RO client open | server: Xeon E5-2695 v4, 64 logical, load ~10 -> 24 |
+|---|---|---|
+| 1 | 237.5 / 242.7 ms (4.20 fps) | 464.5 / 685.7 ms (2.02 fps) |
+| 2 | 147.9 / 159.0 (6.69) | 262.3 / 285.9 (3.78) |
+| 4 | 116.8 / 126.7 (8.43) | 179.5 / 226.8 (5.53) |
+| 6 | 122.2 / 130.9 (8.15) | - |
+| 8 | 119.0 / 124.4 (8.43) | 138.2 / 171.2 (7.02) |
+| 12 | **95.5 / 99.2 (10.43)** | 119.2 / 140.3 (8.24) |
+| 16 | - | **110.3 / 123.5 (9.01)** |
+| auto | 122.4 / 134.2 (8.10) | 241.1 / 440.1 (3.46) |
+
+(p50 / p95 per picture, 30 timed detections after 3 warm-ups.)
+
+- **Batt's observation holds:** the boxes are slow on a PC next to the client too. The PC is about
+  twice as fast per thread (newer cores, higher clock), but at each machine's best the gap is ~13 %
+  (95.5 vs 110.3 ms). A CPU gives ~100 ms a picture either way, so the remote path is not the cause.
+- **On the PC, auto is not the slowest** (122 ms, its 6 physical cores, nothing else busy); on the
+  busy server it is (241 ms).
+- **The lab PC's C++ runtime is from 2016:** `msvcp140.dll` 14.00.24215.1 in System32, and no
+  `vcruntime140_1.dll` / `msvcp140_1.dll`. onnxruntime 1.31.1 failed to import ("DLL load failed").
+  - The kit's README says to install the Visual C++ Redistributable. That is a system install
+    (admin, UAC: Batt's), so it was not done.
+  - Instead the run took Microsoft's DLLs (14.51.36247, signatures Valid: Microsoft Windows Software
+    Compatibility Publisher) from the `msvc-runtime` wheel, put beside onnxruntime INSIDE the temporary
+    folder, and removed with it.
+  - A student PC with an old runtime fails the same way. The README's note names `access
+    violation`; this PC printed `DLL load failed ... The specified module could not be found`.
+- The server's numbers above ran from the RAM detector env. That env has no OpenCV, so the bench's
+  one `cv2.imread` was a stand-in returning the same JPEGs decoded once by Pillow; the timed code is
+  the kit's own.
+

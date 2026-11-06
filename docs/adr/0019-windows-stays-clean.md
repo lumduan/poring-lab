@@ -335,7 +335,22 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
 - **The exit:** before deleting, a scan for reparse points under the folder. Then
   `Remove-Item -Recurse -Force` on it, and a read-back: the folder, `%LOCALAPPDATA%\uv` and
   `~\.local` absent (as they were before, recorded first). The shell variables are removed too.
-- **Result:** appended below after it runs.
+- **Result (2026-11-07 06:26-06:46 ICT): RAN, REMOVED, READ BACK.**
+  - Before: Caps Lock off; uv absent; `%LOCALAPPDATA%\uv`, `~\.local` and the folder absent; C: free
+    327.9 GB. The PC: Intel i5-10500T, 12 logical CPUs, 31.7 GB.
+  - The first run failed to import onnxruntime: the PC's C++ runtime is 2016's (`msvcp140.dll`
+    14.00.24215.1; no `vcruntime140_1.dll` / `msvcp140_1.dll`).
+    - No system install was made (the redistributable needs admin: Batt's).
+    - The `msvc-runtime` wheel's DLLs (14.51.36247, Authenticode Valid, Microsoft) were put beside
+      onnxruntime inside the folder. The second run worked (results:
+      docs/benchmarks/cpu-detector-speed.md section 6).
+  - The cleanup found ONE reparse point: uv's junction `python\cpython-3.14` -> `python\cpython-3.14.6`,
+    inside the folder. The first delete line removed nothing: its guard compared the long path with
+    `$env:TEMP`'s 8.3 form. The junction itself was then deleted
+    (`[System.IO.Directory]::Delete`, not followed), then the folder.
+  - After, read back at 06:44:47: the folder, the junction, `%LOCALAPPDATA%\uv`, `%APPDATA%\uv` and
+    `~\.local` absent; no `UV_*` variable in the shell; C: free 327.9 GB. The shell was minimised;
+    the client in front, as before (screenshot judged).
 
 ## The `poring-lab watch` task: lab-only, and its retirement criteria (ACCEPTED, Batt 2026-10-06)
 
