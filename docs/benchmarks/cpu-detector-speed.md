@@ -82,7 +82,7 @@ timed detections after 3-6 warm-up runs.
 `/dev/shm/poring-lab-tmp/bench/{spin,prod,prod2,ab,int8}.py` (archived to the NAS scratch-archive
 the same day).
 
-## 5. The GPU measurement (written 2026-11-07 ~06:3x ICT, BEFORE it runs; a measurement, no bar)
+## 5. The GPU measurement (written 2026-11-07 06:16 ICT, BEFORE it runs; a measurement, no bar)
 
 Batt (~05:5x): "Compare: how much faster would the GPU be?" One guarded `execdev:vision` step in
 the vision worker (R1-R3, fit-first's VTON never touched), `poring_vision.bench_gpu`:
