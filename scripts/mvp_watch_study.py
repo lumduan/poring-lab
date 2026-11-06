@@ -200,9 +200,14 @@ class TruthStack:
 
 
 def truth_stack(events: list[dict[str, Any]], layout: str, size: tuple[int, int], *, kb: Path,
-                mapcache_dir: Path) -> TruthStack:  # fmt: skip
+                mapcache_dir: Path, sprites: Path = SPRITES,
+                sprite_names: Path = SPRITE_NAMES) -> TruthStack:  # fmt: skip
     """The projection stack of ``truth`` for a session's packets (also used at other capture
-    times than a recorder's frames: scripts/detector_vs_packets.py)."""
+    times than a recorder's frames: scripts/detector_vs_packets.py). ``sprites`` / ``sprite_names``:
+    the decoded monster sprites (sprite_catalog.py --work .../data/sprite/몬스터) and the client
+    stems (npc_sprites.py mob-names) of the session's map; the defaults are gef_fild10's prep
+    dir of 2026-10-25, which is GONE from /dev/shm (its NAS copy:
+    scratch-archive/2026-11-03/gef10-prep)."""
     import client_layout
     import qa_export
 
@@ -212,7 +217,7 @@ def truth_stack(events: list[dict[str, Any]], layout: str, size: tuple[int, int]
     from poring_dataset.timeline import Timeline
 
     qa_export.KB_CLASSES = kb / "classes.json"
-    sheets = qa_export.Sheets(SPRITES, stems=qa_export.sprite_stems(SPRITE_NAMES))
+    sheets = qa_export.Sheets(sprites, stems=qa_export.sprite_stems(sprite_names))
     tl = Timeline(events, mapcache.load(mapcache_dir, prere=True), snapshot_every=32)
     camera = json.loads(camera_file("rdp").read_text())
     indoor = load_indoor_table()
@@ -271,7 +276,8 @@ def truth_row(stack: TruthStack, t: int, frame_id: int | None, offset_ms: float 
 
 
 def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
-          offset_ms: float = OFFSET_MS, map_name: str = MAP) -> dict[str, Any]:  # fmt: skip
+          offset_ms: float = OFFSET_MS, map_name: str = MAP, sprites: Path = SPRITES,
+          sprite_names: Path = SPRITE_NAMES) -> dict[str, Any]:  # fmt: skip
     """Per frame of a recorder session: every monster's predicted sprite box (unclipped), its
     Timeline state and whether it is in view, at the frame's capture time - 1d. Units are kept on
     ``map_name`` only (Amendment 10a: round 2's watch is on prt_fild08; the projection reads that
@@ -283,7 +289,8 @@ def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
     refs = png_index(session, manifest)
     events = _events(session)
     size = (int(manifest["game_region"][2]), int(manifest["game_region"][3]))
-    stack = truth_stack(events, layout, size, kb=kb, mapcache_dir=mapcache_dir)
+    stack = truth_stack(events, layout, size, kb=kb, mapcache_dir=mapcache_dir, sprites=sprites,
+                        sprite_names=sprite_names)  # fmt: skip
     rows = [truth_row(stack, int(ref.t_mono_ns), ref.frame_id, offset_ms, map_name)
             for ref in refs]  # fmt: skip
     return {"session": manifest["session_id"], "layout": layout, "offset_ms": offset_ms, "k": K,
@@ -1013,6 +1020,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=MAIN / "packages/poring_dataset/src/poring_dataset/_generated",
     )
     p.add_argument("--map", default=MAP, help="keep units on this map (Amendment 10a)")
+    p.add_argument("--sprites", type=Path, default=SPRITES, help="the decoded monster sprites")
+    p.add_argument("--sprite-names", type=Path, default=SPRITE_NAMES, help="the client stems")
     p.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("entries")
     q.add_argument("--model", type=Path, required=True)
@@ -1039,7 +1048,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             q.add_argument("--supplement", nargs=2, action="append", metavar=("SESSION", "TRUTH"))
     a = ap.parse_args(argv)
     if a.cmd == "truth":
-        doc = truth(a.session, a.layout, kb=a.kb, mapcache_dir=a.mapcache_dir, map_name=a.map)
+        doc = truth(a.session, a.layout, kb=a.kb, mapcache_dir=a.mapcache_dir, map_name=a.map,
+                    sprites=a.sprites, sprite_names=a.sprite_names)  # fmt: skip
         doc["summary"] = summary(doc)
         a.out.write_text(json.dumps(doc) + "\n")
         print(json.dumps(doc["summary"], indent=1))
