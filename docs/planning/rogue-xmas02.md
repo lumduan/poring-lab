@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "The reader: its live failure reasons (per-read logging) for its next round; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
+next_action: "X2 scored (4J: the readings fixed first, the truth checked by eye); a detector plan for xmas_dun02 if it fails (Batt approved the GPU, 4E'); hunt_flow's straight-north nudge A/B (4K); then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -405,6 +405,36 @@ it); a judged screenshot first; unrecorded. Judged once after the run by `walk_j
   immune; unrecorded. Reported: the outcomes' counts and where (cells) the failures sit; 4H's
   walk numbers again (a second sample of dungeon@8.7, not a bar). The reader's next round is
   designed from these counts and pre-registered before ITS data, on fresh cells.
+
+### 4E'. Amendment E (2026-11-06 ~08:2x ICT): Batt's answers to the 08:12 report
+
+(Named 4E' because 4E is X1b round 2.) Batt's answers (Thai, translated):
+1. **A detector for this map on the GPU, if X2 shows v1 does not see its monsters:** "Go ahead,
+   approved." The GPU pause of 2026-10-29 is lifted FOR THIS (training a detector for
+   xmas_dun02); every GPU step keeps R1-R3 and the R2 co-tenant rule (fit-first's VTON stays the
+   top priority, never touched), through guarded_build only. The training plan is written and
+   pre-registered before any GPU step.
+2. **The reader:** "Why not look at the minimap? It shows the coordinates all the time." -> the
+   reader DOES read exactly those coordinates (the "268 107" under the minimap); what fails is the
+   machine read of white digits over a floor as bright as they are (4I, design notes). Answered in
+   the report, with the options (the runner never lacked a position in p3-p5).
+3. **The straight-north click fix for the other runners:** "ok", with an A/B test before use
+   (4K).
+
+### 4J. X2's scoring: the readings fixed BEFORE the score (written before any X2 box or truth is computed)
+
+The tooling (xmas02-prep.md 7, merged from feat/x2-score) needs three readings of 4A that 4A does
+not spell out. Fixed here, before the score:
+- **"Boxes inside the UI windows are left out"** = a detection at least half behind the session's
+  UI windows is left out (`--ui-boxes drop`), the labels' own in-view rule mirrored; the output
+  counts the boxes left out and how many of them were true. A window lying wholly inside another
+  (notice_left inside the standard chat window) is counted once.
+- **The truth is checked BY EYE before the score is read:** the predicted truth boxes (`--pairs`)
+  drawn on >= 10 X2 frames spread over the session. If they visibly miss the monsters' sprites
+  (the outdoor camera and the GAT heights were only ever checked on gef_fild10), the score is NOT
+  read (INVALID) and the projection is fixed first.
+- **Hallucination:** X2's packets hold no status_change event, so Hallucination frames cannot be
+  flagged; reported as "not observable", never as "none cast".
 
 ## 5. Results
 
