@@ -800,3 +800,24 @@ xmas_dun02's species.**
   detector for this map is needed: Batt approved the GPU for it (4E' 1); its plan is written and
   pre-registered before any GPU step.
 - ➡️ **The detector's plan: [xmas02-detector.md](xmas02-detector.md)** (PROPOSED 2026-11-06).
+
+**hunt_flow v56, run 1 (4K; session 20261106T085105-demo-hunt-flow56; v56 at 3f5c63b; the GM
+switched to by a client restart 08:48-08:49, immune confirmed 08:50:46; the run 08:51:05-09:21,
+its own time box; the live hard-bar monitor bound to its PID). K1 INCONCLUSIVE, K2 and K3 PASS.**
+
+| arm (walk clicks) | clicks | no move request | share | bar |
+|---|---|---|---|---|
+| "nudged" (in the GM's column, moved 9 px east) | 44 | 0 | 0.0 % | K1: <= 5 % |
+| "ab_off" (in the column, as before) | 44 | 6 | 13.6 % | K1: >= 15 % for the dead band to show |
+| other walk clicks | 530 | 1 | 0.2 % | K3: <= 1 % PASS |
+
+- K1 by its rule: the nudged arm meets its bar, but the off arm (13.6 %) is short of the 15 % the
+  rule asks for to show the dead band in this run -> **INCONCLUSIVE: a second run.**
+- K2 PASS: flow_judge's hard bars (0 NPC contact, 0 map change, no non-target job hit); the live
+  monitor never stopped the run (0 Creamy hits; its 94 attack requests all at targets).
+- Reported: 90 engagements, 85 kills (169.8 / h), hit rate 0.780, sight 37.0 per 10 min (windowed),
+  loot 69 / 104.
+- **Run 2 (fixed here, BEFORE it starts):** the same command with `--seed 20261107`, immunity as
+  this login's; **K1 and K3 are judged on runs 1 + 2 POOLED** (the nudged arm <= 5 %, the off arm
+  >= 15 %, each >= 15 clicks); K2 per run. If the pooled off arm is still under 15 %, the verdict is
+  NO EFFECT SHOWN (v55 stays; the nudge is not adopted on this evidence).
