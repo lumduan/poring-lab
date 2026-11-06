@@ -599,6 +599,15 @@ on" notes on the second tab's label, as on xw1). **xw3 = 43 whole dwells over tw
 **xw5 (TEST, `lattice-test.json`, seed 2611065) started 16:20:44** (session
 `20261106T162044-rdp-xmas02-xw5`); prep 16:20:22 judged clean.
 
+**xw5 (TEST; recorder session `20261106T162044-rdp-xmas02-xw5`, watch
+`20261106T162045-watch-xmas_dun02-xw5`): COMPLETE, one part, no pause.** Seed 2611065 over
+`lattice-test.json` (88 TEST stands), stands 0-42 (43 whole dwells); the 30-min box ended it at
+16:51:04; **1,819 frames, 3,935,165,749 bytes (129.8 MB/min), 1,028 packet events**; the guard's
+worst 24.7 %. Nothing reads it before T1 (3b).
+- **The afternoon's recordings (all on the root disk until the 17:00 ships):** xw1 x 2 (FIT, 42
+  dwells), xw2 (43), xw3 x 2 (43), xw5 (TEST, 43): **6 sessions, 15.46 GB**; root free 108.65 GB at
+  16:51 (`df -B1`).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
