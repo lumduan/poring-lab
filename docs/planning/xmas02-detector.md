@@ -1006,3 +1006,9 @@ R1-R3 and the R2 co-tenant rule), with the inputs fixed by eval AMENDMENT 2:
   empty. The guard re-checks R1 / R2 (and the co-tenant headroom) at every start.
 - **The scored checkpoint:** `last.pt` after the last COMPLETED epoch (eval doc). TEST is not read
   before the training ends. After it: `worker-stop:vision`.
+
+**The cache (Amendment I; `guarded_build.py --threshold 30 --sustain 30 cache@7200=...`,
+18:16:03-18:28:44): OK.** `/mnt/poring-lab-datasets/.framecache/xmas02-o3h-t-20261106`: **3,092
+frames written** (TRAIN 1,986: xw2 1,034, xw3 543 + 409; VAL 1,106: xw1 183 + 923), 14 shards
+(~6.2 GB, each re-hashed from the NAS), 757.9 s; the guard's worst 4.9 % (quant-orderbook-engine),
+0 s above 30 %. The vision worker was started through `quiet_start` at 18:29.
