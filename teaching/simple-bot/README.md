@@ -72,7 +72,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
    uv run simple_bot.py --act --model v1.onnx
    ```
 
-   คลิกที่หน้าต่างเกมให้อยู่ด้านหน้า แล้วบอทจะเริ่มคลิก
+   หน้าต่าง "bot view" เล็ก ๆ จะเปิดขึ้นก่อน จากนั้น **คลิกที่หน้าต่างเกม 1 ครั้งให้อยู่ด้านหน้า** (ภายใน 5 วินาที)
+   บอทจะคลิกเฉพาะตอนที่เกมอยู่ด้านหน้าเท่านั้น ดูข้อความในหน้าต่าง PowerShell:
+   `the game window is IN FRONT: the bot clicks` = เริ่มเล่นแล้ว
+   ถ้าเห็น `... NOT in front ...` ให้คลิกที่หน้าต่างเกมอีกครั้ง
    **หยุด: กด F12 หรือ ดันเมาส์ไปมุมซ้ายบนสุดของจอ** (หยุดเองหลัง 10 นาที; เปลี่ยนได้ด้วย `--minutes`)
 
 ## ดู log ว่าบอททำอะไรอยู่ (`--logs`)
@@ -228,7 +231,10 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
    uv run simple_bot.py --act --model v1.onnx
    ```
 
-   Click the game window to put it in front; the bot then starts clicking.
+   A small "bot view" window opens first; then **click the game window once to put it in front**
+   (within the 5 s). The bot clicks only while the game is in front. The PowerShell window says
+   `the game window is IN FRONT: the bot clicks` when it starts, and `... NOT in front ...` when
+   you must click the game again.
    **Stop: press F12, or push the mouse into the screen's top-left corner** (it also stops after
    10 minutes; change it with `--minutes`).
 
