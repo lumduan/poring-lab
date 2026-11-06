@@ -589,6 +589,16 @@ guard's worst 36.4 % on quant-postgres, 11 s above 30 %.
   locked). The live re-read at the stand: locked. Grey's own rule is unchanged.
 - xw3 continues from stand 25 with the rest of its 30-min box (Amendment D's `--start-cell`).
 
+**xw3, part 2 (recorder session `20261106T160700-rdp-xmas02-xw3`, watch
+`20261106T160701-watch-xmas_dun02-xw3b`): COMPLETE.** Prep 16:06:36 (`@killmonster2` typed past the
+check at the same stand, judged clean); `--start-cell 25 --max-minutes 12.5`; stands 25-42 (18 whole
+dwells, one part, no pause, no wait); **768 frames, 1,605,104,451 bytes (125.4 MB/min), 641 packet
+events**; the guard's worst 23.6 %. The chat check passed every line (three "tabs unread, typing goes
+on" notes on the second tab's label, as on xw1). **xw3 = 43 whole dwells over two sessions.**
+
+**xw5 (TEST, `lattice-test.json`, seed 2611065) started 16:20:44** (session
+`20261106T162044-rdp-xmas02-xw5`); prep 16:20:22 judged clean.
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
