@@ -38,6 +38,22 @@ Reported beside, deciding nothing: the split by session (the TEST part) and by u
 look-alike confusion (each evaluated crop's detection by a CLASS-BLIND position match: its class or
 "none"); why crops were not evaluated.
 
+Q1c / E1c, the COLLAPSED-class score (docs/planning/xmas02-detector.md 9, T-9: the verdict of a
+map-scoped model whose runner collapses its species to ``monster``), beside Q1 / E1 (unchanged):
+every detection of ANY of the manifest's monster classes is one class, ``monster:any`` (player,
+npc and warp are not); per frame ONE position match of those detections over all its evaluated
+crops (nearest centre first). Per stratum and species s:
+  * recall    = the evaluated s crops matched by any monster detection / the evaluated s crops;
+  * precision = those matches / (those matches + the UNMATCHED monster detections whose centre lies
+    inside ANY evaluated crop's box of that stratum): Q1's own rule (``numbers``, unchanged) with
+    the classes collapsed, so every species is charged every unmatched monster detection inside
+    an evaluated box (the gef10 rule: a class-s detection inside ANY evaluated box counts against
+    s; here every monster detection is "class s");
+  * REPORTED beside it, deciding nothing: ``precision_own_boxes`` (only the unmatched monster
+    detections inside an evaluated s crop's box; one inside the boxes of two species counts
+    against both) and ``pooled`` (all species' matches over the same unmatched detections);
+  * the bar as Q1's (>= 50 evaluated crops: recall >= 0.80 AND precision >= 0.80).
+
 The species <-> class map is EXPLICIT: ``--cache-manifest``, the manifest of the cache the model
 trained on (its ``names`` = the model's class names, its ``classes`` = the committed list's mob ids
 in id order; build_frame_cache.py SpeciesClasses). A detection class the manifest does not name
@@ -79,6 +95,13 @@ LOOK_ALIKE = {
     "baby_vs_other_orcs": (1686, 1273, 1023, 1190, 1189),
 }
 STRATUM_SCORE = {"N": "Q1", "E": "E1"}
+# xmas02-detector.md 9 / T-9: the collapsed-class score per stratum, and its one class (a name no
+# model class can have: the manifest's names are species names and FIXED)
+STRATUM_SCORE_C = {"N": "Q1c", "E": "E1c"}
+COLLAPSED = "monster:any"
+# REPORTED look-alike groups shown only when one of their species is a class (gef10's output keeps
+# its three groups exactly; xmas02 6: the two cookies differ ONLY in colour)
+LOOK_ALIKE_IF_CLASS = {"cookie_christmas_cookie": (1265, 1246)}
 
 
 def sha256_file(path: Path) -> str:
@@ -412,10 +435,68 @@ def confusion(key: Mapping[str, Any], crops: Sequence[str], species_cls: Mapping
     return {s: dict(sorted(v.items())) for s, v in sorted(out.items())}
 
 
+def collapsed_frames(frames: Mapping[str, Sequence[Mapping[str, Any]]],
+                     species_cls: Mapping[int, str]
+                     ) -> dict[str, list[dict[str, Any]]]:  # fmt: skip
+    """PURE (Q1c): the detections with every monster class (``species_cls``'s values) renamed
+    COLLAPSED; any other class (player, npc, warp) kept as it is."""
+    monster = {str(c) for c in species_cls.values()}
+    return {fk: [{**d, "cls": COLLAPSED if str(d["cls"]) in monster else str(d["cls"])}
+                 for d in ds]
+            for fk, ds in frames.items()}  # fmt: skip
+
+
+def collapsed_score(key: Mapping[str, Any], crops: Sequence[str],
+                    frames: Mapping[str, Sequence[Mapping[str, Any]]],
+                    species_cls: Mapping[int, str]) -> dict[str, Any]:  # fmt: skip
+    """PURE (xmas02-detector.md 9, T-9): Q1c / E1c per species (the classes COLLAPSED), pooled,
+    and split by session. A species the manifest does not list is ``not_a_class`` (its crops
+    keep the class ``unlisted:<mob>``, which no detection has), as in Q1."""
+    one = {m: COLLAPSED for m in species_cls}
+    rec, loose, _overlap = match_frames(key, crops, collapsed_frames(frames, species_cls), one)
+    out: dict[str, Any] = {}
+    for st, name in STRATUM_SCORE_C.items():
+        group = [c for c in crops if stratum_of(key["crops"][c]) == st]
+
+        def species_rows(g: Sequence[str], bar: bool) -> dict[str, dict[str, Any]]:
+            rows: dict[str, dict[str, Any]] = {}
+            for m in species_order(key, g):
+                row = numbers(key, g, m, one.get(m, f"unlisted:{m}"), rec, loose, bar)
+                mine = {c for c in g if int(key["crops"][c]["mob"]) == m}
+                own = sum(1 for d in loose if d["cls"] == COLLAPSED and d["crops"] & mine)
+                tp = int(row["matched"])
+                row.update({"unmatched_in_own_boxes": own,
+                            "precision_own_boxes": round(tp / (tp + own), 4) if tp + own
+                            else None})  # fmt: skip
+                rows[species_cls.get(m, f"unlisted:{m}")] = row
+            return rows
+
+        res = species_rows(group, True)
+        unlisted = {s: v for s, v in res.items() if s.startswith("unlisted:")}
+        scored = {s: v for s, v in res.items() if not s.startswith("unlisted:")}
+        barred = {s: v["pass"] for s, v in scored.items() if v["bar"]}
+        listed = [c for c in group if int(key["crops"][c]["mob"]) in one]
+        tp = sum(bool(rec[c]["matched"]) for c in listed)
+        fp = sum(1 for d in loose if d["cls"] == COLLAPSED and d["crops"] & set(group))
+        out[name] = {
+            "stratum": st, "evaluated_crops": len(group), "class": COLLAPSED,
+            "classes_collapsed": sorted({str(c) for c in species_cls.values()}),
+            "per_species": scored, "not_a_class": unlisted, "species_with_bar": sorted(barred),
+            "all_bars_pass": all(barred.values()) if barred else None,
+            "pooled": {"evaluated": len(listed), "matched": tp, "unmatched_in_boxes": fp,
+                       "recall": round(tp / len(listed), 4) if listed else None,
+                       "precision": round(tp / (tp + fp), 4) if tp + fp else None},
+            "split_session": {k: species_rows(g, False)
+                              for k, g in split_by(key, group, "session").items()},
+        }  # fmt: skip
+    return out
+
+
 def score(key: Mapping[str, Any], crops: Sequence[str],
           frames: Mapping[str, Sequence[Mapping[str, Any]]], species_cls: Mapping[int, str]
           ) -> dict[str, Any]:  # fmt: skip
-    """PURE: Q1 / E1 per species, the splits, the confusion and the look-alike groups."""
+    """PURE: Q1 / E1 per species, the splits, the confusion and the look-alike groups (and,
+    beside them, the collapsed-class Q1c / E1c: collapsed_score)."""
     rec, loose, overlap = match_frames(key, crops, frames, species_cls)
     out: dict[str, Any] = {}
     for st, name in STRATUM_SCORE.items():
@@ -437,10 +518,12 @@ def score(key: Mapping[str, Any], crops: Sequence[str],
             "look_alike": {
                 gname: {species_cls[m]: conf[species_cls[m]] for m in mobs
                         if m in species_cls and species_cls[m] in conf}
-                for gname, mobs in LOOK_ALIKE.items()
+                for gname, mobs in {**LOOK_ALIKE, **{g: ms for g, ms in LOOK_ALIKE_IF_CLASS.items()
+                                                     if any(m in species_cls for m in ms)}}.items()
             },
         }  # fmt: skip
     out["strata_overlap"] = overlap
+    out.update(collapsed_score(key, crops, frames, species_cls))
     return out
 
 
@@ -485,6 +568,8 @@ def cmd_score(a: argparse.Namespace) -> int:
         "evaluated_crops": len(crops), **why,
         "bar": {"min_evaluated_crops": BAR_MIN_CROPS, "recall": 0.80, "precision": 0.80},
         "q1_species_with_bar": q1["species_with_bar"], "q1_all_bars_pass": q1["all_bars_pass"],
+        "q1c_species_with_bar": res["Q1c"]["species_with_bar"],
+        "q1c_all_bars_pass": res["Q1c"]["all_bars_pass"],
         **res,
     }  # fmt: skip
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -495,7 +580,12 @@ def cmd_score(a: argparse.Namespace) -> int:
                       "E1": {s: [v["evaluated"], v["recall"], v["precision"], v["pass"]]
                              for s, v in res["E1"]["per_species"].items()},
                       "q1_species_with_bar": q1["species_with_bar"],
-                      "q1_all_bars_pass": q1["all_bars_pass"]}, indent=1))  # fmt: skip
+                      "q1_all_bars_pass": q1["all_bars_pass"],
+                      "Q1c": {s: [v["evaluated"], v["recall"], v["precision"], v["pass"]]
+                              for s, v in res["Q1c"]["per_species"].items()},
+                      "Q1c_pooled": res["Q1c"]["pooled"],
+                      "q1c_species_with_bar": res["Q1c"]["species_with_bar"],
+                      "q1c_all_bars_pass": res["Q1c"]["all_bars_pass"]}, indent=1))  # fmt: skip
     return 0
 
 

@@ -500,3 +500,188 @@ def test_t2_a_shifted_or_wrong_class_detector_scores_zero(t2: dict[str, Any]) ->
         for v in wrong[st]["per_species"].values():
             assert v["recall"] == 0.0 and v["matched"] == 0
     assert wrong["Q1"]["confusion"][t2["cls"][1190]] == {t2["cls"][1189]: 30}  # Lord seen as Archer
+
+
+# --- Q1c / E1c: the COLLAPSED-class score (docs/planning/xmas02-detector.md 9, T-9) -------------
+
+
+def test_q1c_any_monster_class_counts_for_recall() -> None:
+    """A crop detected in place as ANOTHER monster class: Q1 misses it, Q1c matches it; a
+    ``player`` box is not a monster."""
+    key = make_key([crop("S", 1, LADY, BOX), crop("S", 2, WARRIOR, BOX)])
+    res = run(key, {q.frame_key("S", 1): [det("archer_c", BOX)],
+                    q.frame_key("S", 2): [det("player", BOX)]})  # fmt: skip
+    assert res["Q1"]["per_species"]["lady_c"]["recall"] == 0.0
+    c = res["Q1c"]["per_species"]
+    lady = c["lady_c"]
+    assert (lady["matched"], lady["recall"], lady["precision"]) == (1, 1.0, 1.0)
+    assert (c["warrior_c"]["matched"], c["warrior_c"]["recall"]) == (0, 0.0)
+    assert c["warrior_c"]["precision"] is None  # the player box is no monster detection
+    assert c["lady_c"]["class"] == q.COLLAPSED == "monster:any"
+    assert res["Q1c"]["classes_collapsed"] == sorted(CLS.values())
+
+
+def test_q1c_precision_is_q1s_rule_with_the_classes_collapsed() -> None:
+    """Every unmatched MONSTER detection inside ANY evaluated box counts against every species
+    (Q1's ``numbers`` with one class); ``precision_own_boxes`` (reported) only those inside the
+    species' own boxes; a player box, a box outside every evaluated crop and one inside an
+    unevaluated crop are not scored."""
+    lady, warrior, unevaluated = BOX, [300.0, 100.0, 340.0, 160.0], [500.0, 100.0, 540.0, 160.0]
+    key = make_key([crop("S", 1, LADY, lady), crop("S", 1, WARRIOR, warrior),
+                    crop("S", 1, LORD, unevaluated)])  # fmt: skip
+    a = all_good(key)
+    a["003"]["q2"] = "off"  # the Orc Lord crop is NOT evaluated
+    frames = {q.frame_key("S", 1): [
+        det("lady_c", lady),  # matches the Orc Lady
+        det("lord_c", lady, dx=3),  # a second monster box on the Lady: against the Lady only
+        det("archer_c", warrior),  # matches the Orc Warrior (any monster class)
+        det("lady_c", unevaluated),  # inside a box that is not evaluated: not scored
+        det("warrior_c", [900, 600, 940, 660]),  # elsewhere: not scored
+        det("player", warrior, dx=2),  # not a monster class: not scored
+    ]}  # fmt: skip
+    crops, _ = q.evaluated(key, a, a)
+    res = q.score(key, crops, frames, CLS)
+    c = res["Q1c"]["per_species"]
+    assert (c["lady_c"]["matched"], c["lady_c"]["unmatched_in_boxes"]) == (1, 1)
+    assert (c["lady_c"]["recall"], c["lady_c"]["precision"]) == (1.0, 0.5)
+    assert (c["warrior_c"]["matched"], c["warrior_c"]["unmatched_in_boxes"]) == (1, 1)
+    assert (c["warrior_c"]["recall"], c["warrior_c"]["precision"]) == (1.0, 0.5)
+    own = {s: (v["unmatched_in_own_boxes"], v["precision_own_boxes"]) for s, v in c.items()}
+    assert own == {"lady_c": (1, 0.5), "warrior_c": (0, 1.0)}
+    assert "lord_c" not in c
+    assert res["Q1c"]["pooled"] == {"evaluated": 2, "matched": 2, "unmatched_in_boxes": 1,
+                                    "recall": 1.0, "precision": 0.6667}  # fmt: skip
+    # Q1 on the same frames is the class-aware rule, unchanged
+    q1 = res["Q1"]["per_species"]
+    assert (q1["lady_c"]["unmatched_in_boxes"], q1["warrior_c"]["matched"]) == (0, 0)
+
+
+def test_q1c_a_detection_in_two_species_boxes_counts_against_both() -> None:
+    """Overlapping crops of two species and ONE extra monster box centred in both: it is charged
+    to each species' precision, and once to the pooled one."""
+    a_box, b_box = [100.0, 100.0, 160.0, 160.0], [130.0, 100.0, 190.0, 160.0]
+    key = make_key([crop("S", 1, LADY, a_box), crop("S", 1, WARRIOR, b_box)])
+    frames = {q.frame_key("S", 1): [det("lady_c", [100, 100, 130, 160]),
+                                    det("warrior_c", [160, 100, 190, 160]),
+                                    det("lord_c", [135, 120, 155, 140])]}  # fmt: skip
+    res = run(key, frames)["Q1c"]
+    for s in ("lady_c", "warrior_c"):
+        v = res["per_species"][s]
+        assert (v["unmatched_in_boxes"], v["unmatched_in_own_boxes"]) == (1, 1)
+    assert (res["pooled"]["matched"], res["pooled"]["unmatched_in_boxes"]) == (2, 1)
+
+
+def test_q1c_bar_strata_and_a_species_without_a_class() -> None:
+    def case(n: int, hits: int, other: int) -> dict[str, Any]:
+        key = make_key([crop("S", i, LADY, BOX) for i in range(n)])
+        frames = {q.frame_key("S", i): ([det("archer_c", BOX)] if i < hits else [])
+                  + ([det("lord_c", BOX, dx=2)] if i < other else [])
+                  for i in range(n)}  # fmt: skip
+        return run(key, frames)
+
+    at = case(50, 40, 10)  # every match is another class: Q1 0, Q1c exactly the bar
+    lady = at["Q1c"]["per_species"]["lady_c"]
+    assert (lady["recall"], lady["precision"], lady["bar"], lady["pass"]) == (0.8, 0.8, True, True)
+    assert at["Q1c"]["all_bars_pass"] is True and at["Q1"]["all_bars_pass"] is False
+    assert case(50, 39, 0)["Q1c"]["per_species"]["lady_c"]["pass"] is False
+    few = case(49, 49, 0)["Q1c"]
+    assert few["species_with_bar"] == [] and few["all_bars_pass"] is None
+    blue = 1079
+    key = make_key([crop("S", 1, LADY, BOX, "E"), crop("S", 1, blue, [300, 100, 340, 160])])
+    key["letters"]["E"] = blue
+    crops, _ = q.evaluated(key, all_good(key), all_good(key))
+    frames = {q.frame_key("S", 1): [det("lady_c", BOX), det("lady_c", [300, 100, 340, 160])]}
+    res = q.score(key, crops, frames, CLS)
+    assert set(res["Q1c"]["not_a_class"]) == {"unlisted:1079"}
+    assert res["Q1c"]["not_a_class"]["unlisted:1079"]["matched"] == 0  # never matched
+    assert res["Q1c"]["per_species"] == {}  # the Lady is E: E1c's
+    assert res["E1c"]["per_species"]["lady_c"]["recall"] == 1.0
+    assert res["Q1c"]["pooled"]["evaluated"] == 0  # unlisted crops are not pooled
+
+
+def test_q1c_is_added_beside_q1_which_is_unchanged() -> None:
+    key = make_key([crop("S", 1, LADY, BOX), crop("S", 2, WARRIOR, BOX, "E")])
+    frames = {q.frame_key("S", 1): [det("lady_c", BOX)], q.frame_key("S", 2): []}
+    res = run(key, frames)
+    assert list(res) == ["Q1", "E1", "strata_overlap", "Q1c", "E1c"]
+    assert list(res["Q1"]["look_alike"]) == list(q.LOOK_ALIKE)  # gef10's groups only, as before
+    assert set(res["Q1c"]["split_session"]) == {"S"}
+
+
+def test_the_cookie_look_alike_group_shows_only_when_the_cookies_are_classes() -> None:
+    cookie, xcookie = 1265, 1246
+    manifest = {**MANIFEST, "names": {"0": "player", "1": "npc", "2": "warp", "3": "cookie",
+                                      "4": "cookie_xmas"},
+                "classes": {**MANIFEST["classes"], "monsters": [cookie, xcookie]}}  # fmt: skip
+    cls = q.class_map(manifest)
+    key = {"letters": {"A": cookie, "B": xcookie}, "tier_species": [cookie, xcookie],
+           "crops": {"001": crop("S", 1, cookie, BOX),
+                     "002": crop("S", 2, xcookie, BOX)}}  # fmt: skip
+    crops, _ = q.evaluated(key, all_good(key), all_good(key))
+    frames = {q.frame_key("S", 1): [det("cookie_xmas", BOX)],
+              q.frame_key("S", 2): [det("cookie_xmas", BOX)]}  # fmt: skip
+    res = q.score(key, crops, frames, cls)
+    assert res["Q1"]["look_alike"]["cookie_christmas_cookie"] == {
+        "cookie": {"cookie_xmas": 1}, "cookie_xmas": {"cookie_xmas": 1}}  # fmt: skip
+    assert res["Q1"]["per_species"]["cookie"]["recall"] == 0.0  # Q1s: the colour confusion
+    assert res["Q1c"]["per_species"]["cookie"]["recall"] == 1.0  # Q1c: the runner's view
+
+
+def test_score_cli_reports_q1c(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    key = make_key([crop("S", 1, LADY, BOX)])
+    (tmp_path / "key.json").write_text(json.dumps(key))
+    ans = list(all_good(key).values())
+    for who in ("A", "B"):
+        (tmp_path / f"{who}.json").write_text(json.dumps(ans))
+    (tmp_path / "m.json").write_text(json.dumps(MANIFEST))
+    pred = {"weights": "w.pt", "imgsz": 1280, "conf": 0.25,
+            "frames": {q.frame_key("S", 1): [det("warrior_c", BOX)]}}  # fmt: skip
+    (tmp_path / "p.json").write_text(json.dumps(pred))
+    out = tmp_path / "score.json"
+    argv = ["score", *(str(tmp_path / f) for f in ("key.json", "A.json", "B.json", "p.json")),
+            "--cache-manifest", str(tmp_path / "m.json"), "--out", str(out)]  # fmt: skip
+    assert q.main(argv) == 0
+    res = json.loads(out.read_text())
+    assert res["q1c_species_with_bar"] == [] and res["q1c_all_bars_pass"] is None
+    assert res["Q1c"]["per_species"]["lady_c"]["recall"] == 1.0
+    assert res["Q1"]["per_species"]["lady_c"]["recall"] == 0.0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["Q1c"]["lady_c"] == [1, 1.0, 1.0, None]
+    assert printed["Q1c_pooled"]["matched"] == 1
+
+
+# --- the POSITIVE CASE on real data: gef10 round 2's EVALUATION, re-scored (T-9 "unchanged") ----
+
+R2 = Path("/mnt/poring-lab-datasets/scratch-archive/2026-10-29/gef10-eval-r2")
+R2_KEY, R2_A, R2_B = (R2 / "eval-r2-key/answer_key.json", R2 / "eval-r2-answers/A.json",
+                      R2 / "eval-r2-answers/B.json")  # fmt: skip
+R2_DIR = Path("/mnt/poring-lab-datasets/archive/train/eval/gef10-r2")
+R2_PRED, R2_SCORE = R2_DIR / "q1-pred-gef10r2.json", R2_DIR / "q1-score.json"
+R2_REAL = all(p.exists() for p in (R2_KEY, R2_A, R2_B, R2_PRED, R2_SCORE, GEF10_MANIFEST))
+
+
+@pytest.mark.skipif(not R2_REAL, reason="gef10 round 2's archived evaluation is absent")
+def test_gef10_eval_r2_rescored_q1_unchanged_and_q1c(tmp_path: Path) -> None:
+    """gef10-eval.md RESULT R2's Q1 / E1 (archived 2026-10-29: key, answers, predictions, the
+    cache's manifest; sha256s as recorded), re-scored now: every key of the archived score is the
+    same but the input PATHS; the collapsed score is added beside it."""
+    out = tmp_path / "score.json"
+    assert q.main(["score", str(R2_KEY), str(R2_A), str(R2_B), str(R2_PRED),
+                   "--cache-manifest", str(GEF10_MANIFEST), "--out", str(out)]) == 0  # fmt: skip
+    new, old = json.loads(out.read_text()), json.loads(R2_SCORE.read_text())
+    assert new["key_sha256"] == old["key_sha256"]
+    assert new["pred"]["sha256"] == old["pred"]["sha256"]
+    assert [k for k in new if k not in old] == ["q1c_species_with_bar", "q1c_all_bars_pass",
+                                                "Q1c", "E1c"]  # fmt: skip
+    assert [k for k in old if old[k] != new[k]] == ["key", "answers", "pred"]  # the paths
+    assert {k: v for k, v in new["pred"].items() if k != "path"} == {
+        k: v for k, v in old["pred"].items() if k != "path"}  # fmt: skip
+    c = {s: (v["evaluated"], v["matched"], v["unmatched_in_boxes"], v["precision"],
+             v["unmatched_in_own_boxes"], v["pass"])
+         for s, v in new["Q1c"]["per_species"].items()}  # fmt: skip
+    assert c == {"orc_lady": (59, 58, 1, 0.9831, 0, True),
+                 "ork_warrior": (60, 59, 1, 0.9833, 1, True),
+                 "poporing": (60, 59, 1, 0.9833, 0, True)}  # fmt: skip
+    assert new["Q1c"]["pooled"] == {"evaluated": 179, "matched": 176, "unmatched_in_boxes": 1,
+                                    "recall": 0.9832, "precision": 0.9944}  # fmt: skip
+    assert new["q1c_all_bars_pass"] is True
