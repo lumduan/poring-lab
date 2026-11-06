@@ -4,7 +4,7 @@
 # runs (odd k / odd blocks). rules: every rule version's numbers, as a person would pick it.
 kind: hunt-config-index
 format: 1
-adopted: 55
+adopted: 56
 versions:
   1:
     strike: read@1
@@ -474,6 +474,15 @@ versions:
     engine: engine@55
     map_zones: true
     arms: [loot_race_ab, loot_fast_scan_ab]
+  56:
+    strike: arm_c@32
+    engage_on_the_way: on_the_way@19
+    dead: exp_line@48
+    loot: gm_fast_scan@54
+    search: heading_coverage@22
+    engine: engine@56
+    map_zones: true
+    arms: [loot_race_ab, col_nudge_ab]
 rules:
   strike:
     read@1: {}

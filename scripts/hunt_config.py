@@ -62,7 +62,12 @@ CONFIG_DIR = Path(__file__).resolve().parents[1] / "config" / "flows" / "hunt"
 # ➡️ v55 since 2026-10-22 04:32 (3.97 ADOPTED by its rule, 549b797): v55 with its live arm off
 # (`adopt`: "loot_fast_scan_ab" False) = v52 + the fast scan on every loot step + the NPC sprite
 # guard. The next version's PARAMS start from {**PARAMS[55], "loot_fast_scan_ab": False}.
-ADOPTED_VERSION = 55
+# ➡️ v56 since 2026-11-06 ~11:5x (rogue-xmas02.md 4K, ADOPTED by its rule on runs 1 + 2 pooled:
+# K1 nudged 0 / 74 unsent vs 21 / 73 off, K2 both runs, K3 1 / 1,274): v56 with its live arm off
+# (`adopt`: "col_nudge_ab" False) = v55 adopted + the walk-click nudge off the GM's own column on
+# EVERY such click. 4K's "v57 = v56 with col_nudge_ab off" is exactly this adoption; no PARAMS[57]
+# is made. The next version's PARAMS start from {**PARAMS[56], "col_nudge_ab": False}.
+ADOPTED_VERSION = 56
 # The last PARAMS version whose keys a person reviewed in `PATTERNS` (the table below was written
 # against v54, 2026-10-21): later keys are classified by their pattern only and listed for review.
 REVIEWED_THROUGH = 54

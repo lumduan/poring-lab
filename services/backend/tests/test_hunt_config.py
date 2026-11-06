@@ -122,11 +122,17 @@ def test_v51_and_v52_resolve_from_their_committed_configs_exactly() -> None:
         assert cfg["params_sha256"] == hcfg.params_sha256(P[v])
 
 
-def test_the_adopted_base_is_v55_with_its_arm_off() -> None:
+def test_the_adopted_base_is_v56_with_its_arm_off() -> None:
     """The plan's section 2: the base was v51 with loot_gm_one_pass_ab False; from 10-21 14:22, v52
-    = that + map_zones; since 10-22 04:32 (3.97 ADOPTED by its rule), v55 with loot_fast_scan_ab
-    False. Under blocks, adoption turns the live arm flags off (`adopt`)."""
-    assert hcfg.ADOPTED_VERSION == 55
+    = that + map_zones; from 10-22 04:32 (3.97 ADOPTED by its rule), v55 with loot_fast_scan_ab
+    False; since 2026-11-06 (rogue-xmas02.md 4K, runs 1 + 2 pooled), v56 with col_nudge_ab False.
+    Under blocks, adoption turns the live arm flags off (`adopt`)."""
+    assert hcfg.ADOPTED_VERSION == 56
+    adopted_v56 = hcfg.resolve(hcfg.adopt(hcfg.export(P, 56)))
+    assert hcfg.same(adopted_v56, {**P[56], "col_nudge_ab": False})
+    assert hcfg.export(P, 56)["experiment"]["col_nudge_ab"] is True  # the run's A / B, as run
+    assert hcfg.rule_ids(P, 56)["engine"] == "engine@56"  # the nudge is an engine gate
+    # the history: v55 as it was adopted (10-22 04:32 .. 11-06)
     adopted_v55 = hcfg.resolve(hcfg.adopt(hcfg.export(P, 55)))
     assert hcfg.same(adopted_v55, {**P[55], "loot_fast_scan_ab": False})
     assert all(P[55][k] == v for k, v in P[52].items())  # v55 only ADDS keys to v52 (v54 + guard)

@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G). p3 PASSED (0 dead-end Fly Wings, carves 6.3 %); its packets: straight-north clicks send no move request -> dungeon@8.7 (column_dodge) pre-registered as pilot p4 (4H). p4 PASSED: 215 waypoints in 15 min (p2 31), 0 Fly Wings, 3 stalls; the next limit is the fight. p5 (a measurement): the reader gives a position on 96.1 % of live reads (failures 1.4 %, unconfirmed 2.5 %, all on the west leg); 0 strikes from 5 box engagements. X2 SCORED: FAIL (v1 recall 0-0.5 % per species, precision 1.5 %): this map needs its own detector (GPU approved by Batt)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G). p3 PASSED (0 dead-end Fly Wings, carves 6.3 %); its packets: straight-north clicks send no move request -> dungeon@8.7 (column_dodge) pre-registered as pilot p4 (4H). p4 PASSED: 215 waypoints in 15 min (p2 31), 0 Fly Wings, 3 stalls; the next limit is the fight. p5 (a measurement): the reader gives a position on 96.1 % of live reads (failures 1.4 %, unconfirmed 2.5 %, all on the west leg); 0 strikes from 5 box engagements. X2 SCORED: FAIL (v1 recall 0-0.5 % per species, precision 1.5 %): this map needs its own detector (GPU approved by Batt). hunt_flow v56 run 1 K1 INCONCLUSIVE; run 2 blocked by the up icon until Batt's Alt+S / Alt+A answer (Amendment F, f91ab44); run 2 11:12 -> v56 ADOPTED on the pooled verdict (K1 0/74 vs 21/73, K2, K3). The detector plan ACCEPTED (xmas02-detector.md Amendment A)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "X2 FAILED (v1 sees 1 of 937 labels): the xmas_dun02 detector plan (Batt approved the GPU, 4E'), pre-registered before any GPU step; hunt_flow's straight-north nudge A/B (4K); then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
+next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector plan is ACCEPTED (xmas02-detector.md Amendment A): its FIT watch xw1 next; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -466,6 +466,37 @@ not spell out. Fixed here, before the score:
 - **Adoption:** K1-K3 pass -> v57 = v56 with `col_nudge_ab` off, `hunt_config.ADOPTED_VERSION`
   57. A FAIL keeps v55.
 
+### 4F'. Amendment F (2026-11-06 ~10:45 ICT): Batt's answers to the 09:42 report
+
+Batt's words, translated (before 10:49:46, the turn's first `date`):
+1. **The bottom-left "up" icon:** "I know: press Alt+S, the skill window comes up and the icon goes.
+   If it is the 'up' icon at the bottom-RIGHT, press Alt+A: the status window comes up and the icon
+   goes. Then close those windows with the same shortcut again. Test it too."
+   - Tested live 10:53 and 10:59 (Alt+S: the Skill Tree opened, the icon went at once; ui_gate
+     closed the tree by its own chord; the icon stayed gone). Note: the icon is drawn ON TOP when
+     it appears; a later focus on the chat window draws the window over it (dim, half covered).
+   - Built (f91ab44): gm_state's skill-point icon template SKILLUP_BOX (0, 676, 44, 44), cut 10:59,
+     held out on 18 frames of the morning (`gm_state.py notice-shares`: 9 / 9 with the icon at
+     share 1.000, 9 / 9 without at <= 0.481; bar 0.8); clear_notices opens each notice's OWN window
+     (skills for this icon; status for the badge and the bottom-right icon), one at a time;
+     `gm_line` clears a level line's notices before the next typed line.
+   - Live end-to-end 11:04-11:07: both icons made by GM lines (`@baselevelup 1`, `@joblevelup
+     1`), then `ensure_hunting`: the first step cleared both (skills, then status), the rebuild's
+     `@baselevelup -29` icon went by the status window, the restore's `@joblevelup -49` icon by the
+     skill window before `@heal`; the GM back at Base 70 / Job 1, weight 814 / 4970 (STR 99), no
+     notice.
+2. **The disk:** "unblock it now, tell HA too; I set the margin to 100 GB so we don't bother HA
+   often" -> the recorder floor is 100 GB (8b46640, ADR-0010 Amendment 2026-11-06); HA told
+   (SendMessage, information only).
+3. **The detector plan:** "go ahead, training may start, start the plan now" -> xmas02-detector.md
+   Amendment A (2caa8fa).
+
+**hunt_flow v56 run 2 resumes on this fix:** attempt 4 = 4K's command with `--seed 20261107`
+(as fixed in section 5 before attempt 1), the immunity of the 09:35 login (still confirmed:
+`collect_v2.py immune-status`), the hunting state as left by the 11:04 test, a judged screenshot
+(11:12). Attempts 1-3 stopped in setup before any hunting: nothing of theirs is pooled. K1 and K3
+are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -857,3 +888,29 @@ PAUSED for Batt's answer.**
 - State left: the GM at prt_fild08 48,195, Base 70 / Job 1 (hunting state), HP full, immune this
   login, the chat input open and empty, the icon shown. route_previewd stopped by PID (09:39).
   K1 stays INCONCLUSIVE on run 1; v55 stays the adopted version.
+
+**hunt_flow v56, run 2 (attempt 4; session 20261106T111229-demo-hunt-flow56; Amendment F's fix
+f91ab44; the run 11:12:29-11:42:3x, ended by its own time box, the end restore typed through the new
+notice step with no stop; the live hard-bar monitor bound to its PID, ended 11:46:53 "runner gone").
+POOLED VERDICT (runs 1 + 2, 4K / section 5's rule): K1 PASS, K2 PASS (both runs), K3 PASS -> v56
+ADOPTED.**
+
+| arm (walk clicks) | run 1 | run 2 | **pooled** | bar |
+|---|---|---|---|---|
+| "nudged" (in the GM's column, moved 9 px east), no move request | 0 / 44 | 0 / 30 | **0 / 74 = 0.0 %** | K1: <= 5 %, >= 15 clicks |
+| "ab_off" (in the column, as before), no move request | 6 / 44 | 15 / 29 | **21 / 73 = 28.8 %** | K1: >= 15 % (the dead band shows), >= 15 clicks |
+| other walk clicks, no move request | 1 / 530 | 0 / 744 | **1 / 1,274 = 0.08 %** | K3: <= 1 % |
+
+- **K2, run 2:** 0 NPC contact, 0 map change, no unknown-UI stop; the only non-target hit is ONE
+  Creamy (mob 1018; `hardbar_live`: 67 attack requests at targets + 1 at a Creamy), which K2
+  counts apart. (flow_judge's own `hard_bars.pass` reads false for that Creamy: it does not exempt
+  Creamy; the monitor and 4K do.) 2 attack requests outside any engagement window
+  (`unintended_attacks`), reported.
+- **Reported, not bars:** run 2: 73 engagements, 62 kills (flow_judge, packets; the runner's own
+  count 60 dead) = 123.9 / h, hit rate 0.722 (65 / 90), sight 36.0 per 10 min (windowed), loot 64 /
+  78 picked (82.1 %). Run 1: 85 kills (169.8 / h), sight 37.0, loot 69 / 104 (66.3 %). The kill
+  rates differ by seed and spawns, at the same sight; no bar was set on them.
+- **Adopted (4K's rule):** `hunt_config.ADOPTED_VERSION` 56 with its live arm off (`adopt`:
+  "col_nudge_ab" False) -- exactly 4K's "v57 = v56 with col_nudge_ab off", by the adoption
+  mechanism v55 used (3.97); no PARAMS[57] is made. `config/flows/hunt/v56.yaml` exported.
+  Every hunt_flow walk click inside the GM's column now moves 9 px east.
