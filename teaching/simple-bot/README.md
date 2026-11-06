@@ -76,10 +76,15 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
    **คลิกที่หน้าต่างเกม 1 ครั้งให้อยู่ด้านหน้า** (ภายใน 5 วินาที) บอทจะคลิกเฉพาะตอนที่เกมอยู่ด้านหน้าเท่านั้น
    ดูข้อความในหน้าต่าง PowerShell: `the game window is IN FRONT: the bot clicks` = เริ่มเล่นแล้ว
    ถ้าเห็น `... NOT in front ...` ให้คลิกที่หน้าต่างเกมอีกครั้ง (อย่าคลิกหน้าต่าง PowerShell ระหว่างเล่น)
-   - **log บอกว่า `clicked` แต่ตัวละครไม่ขยับ**: ถ้าเกมรันแบบ "Run as administrator" Windows จะทิ้งคลิกจาก
-     โปรแกรมที่ไม่ใช่ admin ไปเงียบ ๆ ให้เปิด PowerShell แบบ "Run as administrator" แล้วรันใหม่
-   - กรอบ "monster" คะแนนต่ำที่ทับเท้าตัวละครเราเอง บอทจะไม่ตี (มักเป็นตัวเราเองที่โมเดลเห็นผิด:
-     ขึ้นว่า `weak box on our own feet`) และถ้าตีอะไรนาน 20 วินาทีแล้วไม่เกิดอะไร จะเลิกแล้วไม่สนจุดนั้น 15 วินาที
+   - **เมาส์ไม่ไปตามที่บอทสั่ง (เส้นขึ้น แต่ตัวละครไม่เดิน)**: บอทจะเช็กตำแหน่งเมาส์ก่อนกดทุกครั้ง
+     ถ้าเมาส์ไม่ไป จะไม่กด แล้วขึ้นข้อความ `WINDOWS IS NOT LETTING THIS PROGRAM MOVE THE MOUSE` พร้อมสาเหตุ
+     ทดสอบด้วย `uv run simple_bot.py --mouse-test` (ขยับเมาส์เฉย ๆ ไม่คลิก) สาเหตุที่พบบ่อย:
+     1. เกมรันแบบ "Run as administrator": เปิด PowerShell แบบ "Run as administrator" แล้วรันใหม่
+     2. Windows อยู่ในเครื่องเสมือนหรือ remote desktop (เช่น Parallels บน Mac, AnyDesk) ที่ให้เมาส์จริงคุมเคอร์เซอร์:
+        ให้เครื่องเสมือนจับเมาส์ไว้ (Parallels: "Optimize for games") หรือใช้ PC Windows จริง
+   - กรอบ "monster" คะแนนต่ำ (ต่ำกว่า 0.5) ที่อยู่บนตัวละครเราเอง (ทับเท้าหรือแค่หัว) บอทจะไม่ตี
+     (ขึ้นว่า `weak box on our own character`) แลกกับการที่มอนจริงคะแนนต่ำที่ยืนชิดตัวจะถูกข้ามไปด้วย
+     และถ้าตีอะไรนาน 20 วินาทีแล้วไม่เกิดอะไร จะเลิกแล้วไม่สนจุดนั้น 15 วินาที
    **หยุด: กด F12 หรือ ดันเมาส์ไปมุมซ้ายบนสุดของจอ** (หยุดเองหลัง 10 นาที; เปลี่ยนได้ด้วย `--minutes`)
 
 ## ดู log ว่าบอททำอะไรอยู่ (`--logs`)
@@ -256,12 +261,18 @@ The first `uv run` downloads Python and the libraries (numpy, OpenCV, onnxruntim
    the game is in front. The PowerShell window says `the game window is IN FRONT: the bot clicks`
    when it starts, and `... NOT in front ...` when you must click the game again (do not click the
    PowerShell window while it plays).
-   - **The log says `clicked` but the character does not move**: when the game runs "as
-     administrator", Windows silently drops clicks from a program that is not: open PowerShell
-     with "Run as administrator" and run again.
-   - A LOW-score "monster" box covering our own character's feet is never hit (usually our own
-     character seen wrongly: `weak box on our own feet`), and after 20 s of hitting something with
-     no result the bot gives up and leaves that spot alone for 15 s.
+   - **The mouse does not go where the bot sends it (the line shows, the character stays)**: the
+     bot reads the cursor before every press; when it did not get there it does NOT press and
+     prints `WINDOWS IS NOT LETTING THIS PROGRAM MOVE THE MOUSE` with the causes. Test it with
+     `uv run simple_bot.py --mouse-test` (it moves the mouse, never clicks). The usual causes:
+     1. the game runs "as administrator": open PowerShell with "Run as administrator", run again;
+     2. Windows runs in a virtual machine or a remote desktop (Parallels on a Mac, AnyDesk ...)
+        whose cursor follows your real mouse: let the VM capture the mouse (Parallels: "Optimize
+        for games"), or use a real Windows PC.
+   - A LOW-score (< 0.5) "monster" box on our own character (over the feet, or only the head) is
+     never hit (`weak box on our own character`); the price: a weak real monster right next to us
+     is skipped too. After 20 s of hitting something with no result the bot gives up and leaves
+     that spot alone for 15 s.
    **Stop: press F12, or push the mouse into the screen's top-left corner** (it also stops after
    10 minutes; change it with `--minutes`).
 

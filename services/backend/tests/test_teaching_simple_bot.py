@@ -464,7 +464,7 @@ def test_a_monster_box_on_our_own_feet_is_dropped() -> None:
     other = sb.Box(800, 300, 840, 345, 0.9, "monster")
     assert me.hit_point == (635, 381) and sb.on_self(me, char) and not sb.on_self(other, char)
     targets, dropped = sb.sort_boxes([me, other], char, 1280, 720)
-    assert targets == [other] and dropped == [(me, "weak box on our own feet (ourselves?)")]
+    assert targets == [other] and dropped == [(me, "weak box on our own character (ourselves?)")]
     assert sb.choose_target([me], char) is None
     d = sb.Decider(random.Random(1), char=char).step([me], 0.0)
     assert d.state == sb.SEARCH  # it wanders instead of hitting itself
@@ -493,3 +493,65 @@ def test_the_overlay_is_the_default_and_the_flag_still_works() -> None:
     assert a.overlay == "auto" and a.view == "auto"
     assert sb.parse_args(["--watch", "--overlay"]).overlay == "on"  # the old flag form
     assert sb.parse_args(["--watch", "--overlay", "off", "--view", "on"]).overlay == "off"
+
+
+def test_a_weak_box_on_our_own_head_is_dropped_too() -> None:
+    """2026-11-06 20:03 (Batt's video): the model boxed only the character's HEAD (0.41), above
+    the feet, and the bot hit it for minutes while a real monster walked by."""
+    char = (640.0, 360.0)
+    head = sb.Box(622, 268, 660, 305, 0.41, "monster")  # centre (641, 286.5): 73 px above the feet
+    real = sb.Box(560, 120, 600, 160, 0.40, "monster")  # a real one up the screen
+    assert not (head.x0 <= char[0] <= head.x1 and head.y0 <= char[1] <= head.y1)  # feet uncovered
+    assert sb.on_self(head, char) and not sb.on_self(real, char)
+    targets, dropped = sb.sort_boxes([head, real], char, 1280, 720)
+    assert targets == [real] and dropped == [(head, "weak box on our own character (ourselves?)")]
+    strong_head = sb.Box(622, 268, 660, 305, 0.8, "monster")  # a strong box there: a real monster
+    assert sb.sort_boxes([strong_head], char, 1280, 720)[0] == [strong_head]
+
+
+class _Mouse:
+    def __init__(self, stuck_at: tuple[int, int] | None) -> None:
+        self.moves: list[tuple[int, int]] = []
+        self.presses = 0
+        self.stuck_at = stuck_at
+
+    def move(self, x: int, y: int) -> None:
+        self.moves.append((x, y))
+
+    def where(self) -> tuple[int, int]:
+        return self.stuck_at or self.moves[-1]
+
+    def press(self) -> None:
+        self.presses += 1
+
+
+class _Gate:
+    def may_click(self) -> tuple[bool, str]:
+        return True, "ok"
+
+    def stop_reason(self) -> str:
+        return ""
+
+
+def test_click_never_presses_where_the_cursor_did_not_go(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batt's videos: the overlay marked each click, yet the cursor stayed where the person left
+    it. Pressing there would click somewhere else, so the bot checks the cursor first."""
+    monkeypatch.setattr(sb.time, "sleep", lambda s: None)
+    ok_mouse = _Mouse(None)
+    assert sb.click((400, 300), (8, 31), ok_mouse, _Gate(), random.Random(1)) == ""
+    assert ok_mouse.presses == 1 and ok_mouse.moves[-1] == (408, 331)
+    stuck = _Mouse((1100, 700))
+    why = sb.click((400, 300), (8, 31), stuck, _Gate(), random.Random(1))
+    assert why.startswith(sb.MOUSE_BLOCKED) and "(408, 331)" in why and "(1100, 700)" in why
+    assert stuck.presses == 0
+
+
+def test_the_mouse_test_verdicts() -> None:
+    assert "virtual machine" in sb.mouse_test_verdict(False, None)
+    assert "virtual machine" in sb.mouse_test_verdict(False, False)
+    assert "administrator" in sb.mouse_test_verdict(True, False)
+    assert "moves everywhere" in sb.mouse_test_verdict(True, True)
+    assert "start the game" in sb.mouse_test_verdict(True, None)
+    if sys.platform != "win32":
+        assert sb.main(["--mouse-test"]) == 2  # Windows only, refused here
+    sb.setup_logs(False)

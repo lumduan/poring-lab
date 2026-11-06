@@ -137,6 +137,13 @@ SELF_RADIUS = 30.0
 # Poring at our feet, 0.88), so it stays a target.
 SELF_MARGIN = 4.0
 SELF_MAX_SCORE = 0.5
+# Our character's BODY on screen: a column SELF_COL_PX either side of the feet, SELF_HEIGHT_PX up
+# from them. The same class PC's model boxed only the character's HEAD (0.25-0.41) and the bot hit
+# it for minutes: a weak box whose centre lies in this column is ourselves too.
+SELF_COL_PX, SELF_HEIGHT_PX = 35.0, 110.0
+# After moving the mouse the bot reads where the cursor really is; further than this from the
+# target = Windows did not let it move the mouse, and it does NOT press (see click()).
+CURSOR_TOLERANCE_PX = 3
 
 # The client's UI windows as (x0, y0, x1, y1), measured on the lab's layout at 1280 x 720.
 # A monster behind a window cannot be clicked (the click lands on the window), so the bot drops
@@ -286,10 +293,14 @@ def clickable(pt: tuple[float, float], w: int = CLIENT_W, h: int = CLIENT_H) -> 
 
 
 def on_self(b: Box, char: tuple[float, float] = (CHAR_X, CHAR_Y)) -> bool:
-    """Does box `b` cover our own feet point (with SELF_MARGIN px to spare)? Then it is drawn
-    around our own character, whatever class the model gave it."""
+    """Is box `b` on our own character? It covers our feet point (with SELF_MARGIN px to spare),
+    or its centre lies on our body: SELF_COL_PX either side of the feet, up to SELF_HEIGHT_PX above
+    them (a box around our head only). Whatever class the model gave it."""
     m = SELF_MARGIN
-    return b.x0 - m <= char[0] <= b.x1 + m and b.y0 - m <= char[1] <= b.y1 + m
+    covers_feet = b.x0 - m <= char[0] <= b.x1 + m and b.y0 - m <= char[1] <= b.y1 + m
+    cx, cy = b.centre
+    on_body = abs(cx - char[0]) <= SELF_COL_PX and char[1] - SELF_HEIGHT_PX <= cy <= char[1] + m
+    return covers_feet or on_body
 
 
 def is_self(b: Box, char: tuple[float, float] = (CHAR_X, CHAR_Y)) -> bool:
@@ -669,7 +680,7 @@ def sort_boxes(
         if zone:
             dropped.append((b, f"under {zone}"))
         elif on_self(b, char) and b.score < SELF_MAX_SCORE:  # our own character, most likely
-            dropped.append((b, "weak box on our own feet (ourselves?)"))
+            dropped.append((b, "weak box on our own character (ourselves?)"))
         elif not clickable(b.hit_point, w, h):
             dropped.append((b, "click point off limits"))
         elif touching is not None:
@@ -1042,11 +1053,83 @@ class Mouse:
         ny = round((y - self.vy) * 65535 / max(self.vh - 1, 1))
         self._send(self.MOVE | self.ABSOLUTE | self.VIRTUALDESK, nx, ny)
 
+    def where(self) -> tuple[int, int]:
+        """Where the cursor REALLY is now (screen px): Windows may have refused our move."""
+        import win32api
+
+        x, y = win32api.GetCursorPos()
+        return int(x), int(y)
+
     def press(self) -> None:
         """A left click where the cursor is: button down, a short pause, button up."""
         self._send(self.LEFTDOWN)
         time.sleep(PRESS_S)
         self._send(self.LEFTUP)
+
+
+MOUSE_BLOCKED = "the mouse did not move"
+MOUSE_HELP = """
+WINDOWS IS NOT LETTING THIS PROGRAM MOVE THE MOUSE (the cursor stays where it was).
+The usual causes:
+  1. The game runs "as administrator". Windows then ignores mouse input from programs that are
+     not: close PowerShell, open it with "Run as administrator", and run the bot again.
+  2. Windows runs inside a virtual machine or a remote desktop (e.g. Parallels or VMware on a
+     Mac, AnyDesk, TeamViewer) whose cursor follows your real mouse. Let the virtual machine
+     capture the mouse (Parallels: "Optimize for games"), or run on a real Windows PC.
+Test it with:  uv run simple_bot.py --mouse-test
+"""
+
+
+def we_are_admin() -> bool:
+    """Windows: does THIS program run as administrator?"""
+    import ctypes
+
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def process_elevated(pid: int) -> bool | None:
+    """Windows: does process `pid` (the game) run as administrator ("elevated")? None when Windows
+    will not say: a normal program is not allowed to look into an elevated one's token."""
+    import ctypes
+    from ctypes import wintypes
+
+    k32, adv = ctypes.windll.kernel32, ctypes.windll.advapi32
+    proc = k32.OpenProcess(0x1000, False, pid)  # 0x1000 = PROCESS_QUERY_LIMITED_INFORMATION
+    if not proc:
+        return None
+    try:
+        tok = wintypes.HANDLE()
+        if not adv.OpenProcessToken(proc, 0x0008, ctypes.byref(tok)):  # 0x0008 = TOKEN_QUERY
+            return None
+        try:
+            elev, size = wintypes.DWORD(), wintypes.DWORD()
+            ok = adv.GetTokenInformation(
+                tok, 20, ctypes.byref(elev), ctypes.sizeof(elev), ctypes.byref(size)
+            )  # 20 = TokenElevation; fmt: skip
+            return bool(elev.value) if ok else None
+        finally:
+            k32.CloseHandle(tok)
+    finally:
+        k32.CloseHandle(proc)
+
+
+def mouse_test_verdict(desk_ok: bool, game_ok: bool | None) -> str:
+    """PURE: what --mouse-test's two rounds say. desk_ok: the moves worked with PowerShell in front;
+    game_ok: with the game in front (None = not tested: no game window)."""
+    if not desk_ok:
+        return (
+            "the mouse does NOT move even over the desktop: Windows runs in a virtual machine or "
+            "a remote desktop whose cursor follows your real mouse (cause 2 above)"
+        )
+    if game_ok is None:
+        return "the mouse moves over the desktop (start the game to test it there too)"
+    if not game_ok:
+        return ("the mouse moves over the desktop but NOT over the game: the game runs as "
+                "administrator; run PowerShell as administrator too (cause 1 above)")  # fmt: skip
+    return "the mouse moves everywhere: the bot can click (if it still does not, send the logs)"
 
 
 def click(
@@ -1078,6 +1161,13 @@ def click(
         LOG.info("no click at %s (checked again just before pressing): %s", pt,
                  why if not ok else stop)  # fmt: skip
         return why if not ok else stop
+    want = (origin[0] + pt[0], origin[1] + pt[1])
+    got = mouse.where()
+    if max(abs(got[0] - want[0]), abs(got[1] - want[1])) > CURSOR_TOLERANCE_PX:
+        # Windows did not let us move the mouse: pressing now would click wherever the cursor is
+        LOG.warning("the mouse did not move to screen %s: the cursor is at %s (no press)", want,
+                    got)  # fmt: skip
+        return f"{MOUSE_BLOCKED}: wanted {want}, the cursor is at {got}"
     mouse.press()
     LOG.debug("clicked at client %s = screen %s", pt, (origin[0] + pt[0], origin[1] + pt[1]))
     return ""
@@ -1562,6 +1652,48 @@ def run_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_mouse_test(args: argparse.Namespace) -> int:
+    """--mouse-test: can this program move the mouse? It MOVES the cursor to 4 points and reads
+    where it really went; it never presses a button. Round 1 with PowerShell in front, round 2 with
+    the GAME in front (click it during the countdown). Then it says what the result means."""
+    set_dpi_aware()
+    mouse = Mouse()
+
+    def round_(cx: int, cy: int, name: str) -> bool:
+        hits = 0
+        for dx, dy in ((-100, 0), (100, 0), (0, -80), (0, 80)):
+            want = (cx + dx, cy + dy)
+            mouse.move(*want)
+            time.sleep(0.3)
+            got = mouse.where()
+            ok = max(abs(got[0] - want[0]), abs(got[1] - want[1])) <= CURSOR_TOLERANCE_PX
+            hits += ok
+            say(
+                f"  {name}: moved to {want} -> the cursor is at {got} {'OK' if ok else 'NOT THERE'}"
+            )
+        return hits == 4
+
+    print("mouse test: the cursor will move by itself for a few seconds (no clicks)", flush=True)
+    sw, sh = mouse.user32.GetSystemMetrics(0), mouse.user32.GetSystemMetrics(1)  # primary screen
+    desk_ok = round_(sw // 2, sh // 2, "with PowerShell in front")
+    game_ok: bool | None = None
+    try:
+        window = ClientWindow(args.title)
+    except SystemExit as e:
+        say(f"no game window for round 2 ({e})")
+    else:
+        print("now CLICK THE GAME WINDOW (round 2 starts in 5 s) ...", flush=True)
+        time.sleep(5)
+        left, top, w, h = window.rect()
+        say(f"game in front: {window.in_front()}, game elevated: "
+            f"{process_elevated(window.pid)}, this program admin: {we_are_admin()}")  # fmt: skip
+        game_ok = round_(left + w // 2, top + h // 2, "with the game in front")
+    verdict = mouse_test_verdict(desk_ok, game_ok)
+    print(("" if desk_ok and game_ok is not False else MOUSE_HELP) + "RESULT: " + verdict,
+          flush=True)  # fmt: skip
+    return 0 if desk_ok and game_ok is not False else 4
+
+
 def run_live(args: argparse.Namespace) -> int:
     """WATCH (draw only, never any input) or ACT (also click, behind the safety gate).
 
@@ -1621,6 +1753,11 @@ def run_live(args: argparse.Namespace) -> int:
             return 3
         mouse = Mouse()
         print("network check:", why)
+        elevated = process_elevated(window.pid)
+        LOG.info("game elevated: %s, this program admin: %s", elevated, we_are_admin())
+        if elevated and not we_are_admin():
+            print("WARNING: the game runs as ADMINISTRATOR and this program does not: Windows will "
+                  "ignore its mouse. Run PowerShell as administrator.", flush=True)  # fmt: skip
         print("starting in 5 s: click the game window to put it in front ...", flush=True)
         for _ in range(50):  # 5 s, keeping our windows responsive
             if overlay is not None:
@@ -1640,6 +1777,7 @@ def run_live(args: argparse.Namespace) -> int:
     t_prev, fps = time.perf_counter(), 0.0
     frames, last_log, last_state = 0, 0.0, ""
     blacks, black_said = 0, False  # black frames in a row (exclusive fullscreen), warned once
+    blocked, blocked_said = 0, False  # clicks in a row whose mouse move Windows refused
     front: bool | None = None  # is the game window in front? (said once each time it changes)
     try:
         while True:
@@ -1680,6 +1818,11 @@ def run_live(args: argparse.Namespace) -> int:
                     return 3
                 for pt in d.clicks:
                     status = click(pt, (left, top), mouse, gate, rng)
+                    blocked = blocked + 1 if status.startswith(MOUSE_BLOCKED) else 0
+                    if blocked >= 3 and not blocked_said:
+                        blocked_said = True
+                        print(MOUSE_HELP, flush=True)
+                        LOG.warning("3 clicks in a row: Windows refused to move the mouse")
                     if status:
                         d.note += f" [no click: {status}]"
                         break
@@ -1743,6 +1886,11 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="live: capture the client, detect, decide, DRAW only (the default)",
     )
     mode.add_argument(
+        "--mouse-test",
+        action="store_true",
+        help="Windows: can this program move the mouse? (moves it, never clicks)",
+    )
+    mode.add_argument(
         "--act",
         action="store_true",
         help="live: also CLICK, behind the safety gate (Windows, local server only)",
@@ -1804,7 +1952,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         faulthandler.enable()
     args = parse_args(argv)
     setup_logs(args.logs, args.log_file)
-    mode = "replay" if args.replay else "act" if args.act else "watch"  # no mode given = --watch
+    mode = (
+        "replay" if args.replay else "mouse-test" if args.mouse_test else "act" if args.act
+        else "watch"
+    )  # fmt: skip  # no mode given = --watch
     LOG.info("simple_bot %s: python %s on %s", mode, sys.version.split()[0], sys.platform)
     LOG.debug("options: %s", vars(args))
     try:
@@ -1814,6 +1965,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if why:
             print(why, file=sys.stderr)
             return 2
+        if args.mouse_test:
+            return run_mouse_test(args)
         return run_live(args)
     except Exception:  # a Python error: its full traceback goes to the logs (and the screen)
         LOG.exception("simple_bot stopped on an error")
