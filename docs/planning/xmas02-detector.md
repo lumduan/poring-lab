@@ -763,3 +763,22 @@ and time box as 2b / Amendment A say):**
             --seed 2611061 --label xw1b --start-cell 6 --max-minutes 25 --immune-confirmed \
             --recorder-state /dev/shm/poring-lab-tmp/xmas-det/rec-state-xw1.json
         # when the watch ends: SIGINT the recorder by its PID (it finalises the open part)
+
+### Amendment E (2026-11-06 14:5x ICT, before xp1 records): xp1's seed, size cap and recorder
+
+- **The seed: `--seed 2611066`** (the watch seeds' series, 2611061-2611065, plus one). 2b's "X2's 4A
+  command with `--label xmas02-xp1`" would repeat X2's `--seed 20261105`; X2 and xp1 are both
+  TEST-P, so a different seed makes the second patrol a different draw of the runner's choices
+  instead of the same one twice. No TRAIN or FIT data depends on it.
+- **The command:** `dungeon_hunt.py run --char rogue --map xmas_dun02 --strategy P2 --search patrol
+  --walk-trust --npc-guard --miss-cue --loot trim --clear-map --minutes 20 --seed 2611066 --label
+  xmas02-xp1` (dungeon@8.7, the Rogue immune, the MVP cleared by `--clear-map`), the recorder
+  started first: `record_session.py --backend rdp --format png --fps 1 --out
+  /home/batt/poring-lab-rec --max-bytes 3G --seconds 1500 --label xmas02-xp1 --io-rule sustained
+  --resume 6 --state-file /dev/shm/poring-lab-tmp/xmas-det/rec-state-xp1.json`, SIGINT by its PID
+  when the runner ends.
+- **`--max-bytes 3G` (2b said 2G):** at attempt 1's measured 121.4 MB/min a 20-min patrol is ~2.4 GB.
+- **The runner does not wait for a recorder pause** (unlike the watch, Amendment D): frames during
+  a pause are simply not in TEST. P4A and X2's 4A numbers score the recorded parts only; the report
+  states the pause time.
+- Recorded after the 17:00 ships (outside SET hours), shipped before the next recording.
