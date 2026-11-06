@@ -689,3 +689,23 @@ dungeon@8.7 + the read logging at 7cdbe09; 07:46:24-08:01:5x, its own time box; 
 - **The fight:** 5 engagements, all by v1's box; the scans found no SWORD (5 box misses), so 0
   strikes and 0 kills. With p4's 13 engagements / 1 kill, the fight is the limit; X2's scoring
   (does v1 see these species) is being built (a subagent, feat/x2-score).
+
+**The reader's next round: design notes (2026-11-06 08:0x-08:1x; DESIGN DATA ONLY, nothing
+pre-registered, nothing changed in the reader):**
+- Round 3's two missed cells, read again with the current reader (rounds 1-3 = 1,704 crops with a
+  truth, all design data now): 1,688 exact, 16 None, 0 wrong.
+  - 7,221: the fallback parsed all four digits right (7 | 2 2 1); the half-pair guard refused it.
+    An orange object behind the digits gives many mid-grey pixels next to a 170-220 floor.
+  - 7,233: the floor itself reaches 222-249 and the "2"'s strokes go down to 242, so the floor
+    pixels >= 235 stay as "strokes", the "2" scores 7.25 against a 3.56 limit and its stroke starts
+    are left unexplained (`uncovered_ink`).
+- Tried: a stroke pixel kept only within 1-2 px of a dark (glyph outline) pixel. WORSE: 1,640 / 1,704
+  exact at 2 px, 1,542 at 1 px (the codec blurs the 1-px outline to ~80, so true strokes lose their
+  outline); synthetic blends unchanged (15-18 wrong of 1,350). Not adopted.
+- Left for the next round (each pre-registered on fresh cells, e.g. the west leg's x 8 / x 6
+  cells that dungeon@8.7's dodge now walks): the uncovered-ink check reads the ORIGINAL grey (not
+  the flattened one) in the fallback; a half-pair count that ignores pairs explained by the scene
+  around the cell; or no fallback guard at all with PosConfirm as the only gate (its live cost and
+  the blends' 37 / 1,080 single-read errors weighed first).
+- Live, the reader already gives a position on 96.1 % of reads (p5), and the walk no longer loses
+  its position; the fight is the larger limit now.
