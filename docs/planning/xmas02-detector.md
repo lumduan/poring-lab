@@ -614,6 +614,22 @@ indexed in INDEX.jsonl, then deleted locally. xw1 663,096,484 + 3,278,294,658; x
 xw3 2,060,931,443 + 1,606,432,755; xw5 3,938,302,466 bytes (the NAS manifests carry each
 `checksums_sha256`). The local root is empty; root free 123.75 GB at 17:11 (`df -B1`).
 
+**xp1 (TEST-P, Amendment E; recorder session `20261106T171533-rdp-xmas02-xp1`, runner
+`20261106T171539-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-xp1`): COMPLETE.**
+- Prep 17:14: the frame judged clean at (214,113) and `chat_window.py read` standard (the log's new
+  scrollbar changes nothing: locked 5.1 / open 69.1, tabs in order). The recorder 17:15:33, the
+  runner (dungeon@8.7, seed 2611066) 17:15:39-17:36:25, ended by its 20-min box, the home warp typed.
+- **The recorder: 1,252 frames, 1,920,691,249 bytes (after the ship), one part, no pause.**
+- **The judge (packets, `dungeon_judge.py row`): hard bars PASS** (0 NPC contact, 0 attack on a
+  non-monster or an unknown target, 0 other-map change; the 1 same-map change is its Fly Wing);
+  0 deaths; 13 engagements (9 box, 3 walk-sword, 1 stall scan), 4 strikes (1 landed) + 6 burst
+  clicks, 1 kill; 770 walk clicks (627 trusted), 143 column dodges.
+- **Shipped 17:36-17:38** (re-hashed on the NAS, local deleted); root free 124.00 GB at 17:38.
+
+**FIT's C1, a diagnostic (`check --allow-fit`, the frozen params; not T1's verdict):** under o3h-t
+2 bad labels of 592 scored (0.34 %), under o3h 5 / 609 (0.82 %); C2 PASS for the four tier species
+(median |dx|, |dy| 1 px).
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
