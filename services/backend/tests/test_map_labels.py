@@ -3,6 +3,7 @@ parts on SYNTHETIC packets / rows, and the orcsdun01 defaults it must not change
 
 from __future__ import annotations
 
+import json
 import random
 import sys
 from pathlib import Path
@@ -184,9 +185,15 @@ def test_check_recording_fails_closed() -> None:
     good = {"backend": "rdp", "recorder_version": 5, "format": "png", "session_id": "x",
             "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
     ml.check_recording(good)
-    for k, v in (("backend", "console"), ("format", "h264"), ("recorder_version", 4)):
-        with pytest.raises(SystemExit):
+    ml.check_recording({**good, "recorder_version": 6})  # T-3 (xmas02-detector.md 3c): v6 too
+    for k, v in (("backend", "console"), ("format", "h264"), ("recorder_version", 4),
+                 ("recorder_version", 7), ("recorder_version", None),
+                 ("game_region", [80, 77, 1440, 900]), ("server", "lab-rathena-th")):  # fmt: skip
+        with pytest.raises(SystemExit, match="not the recording path of 3c"):
             ml.check_recording({**good, k: v})
+    bare = {k: v for k, v in good.items() if k != "recorder_version"}
+    with pytest.raises(SystemExit, match="recorder_version"):
+        ml.check_recording(bare)
 
 
 def test_orcsdun01_defaults_unchanged() -> None:
@@ -700,7 +707,8 @@ def test_c1_rule_refusals() -> None:
                  f"/x/{ml.GEF10_WATCH}"):  # fmt: skip
         with pytest.raises(SystemExit, match="spent"):
             ml.c1_rule_refusals(gef, "round2", [part])
-    with pytest.raises(SystemExit, match="gef_fild10 only"):
+    # T-8 (xmas02-detector.md): round2 now also runs on xmas_dun02; still never on pay_fild07
+    with pytest.raises(SystemExit, match="gef_fild10 / xmas_dun02 only, not pay_fild07"):
         ml.c1_rule_refusals(pay, "round2", ["/x/20261024T173322-rdp-thief-s1"])
     with pytest.raises(SystemExit, match="c1-rule"):
         ml.c1_rule_refusals(gef, "round3", [])
@@ -842,14 +850,14 @@ def test_labels_eval_test2_refusals_before_anything_is_read(tmp_path: Path) -> N
             ml.cmd_labels(_labels_args(tmp_path, f"/x/{A9}", status=status, eval_test2=True))
 
 
-def _fake_session(monkeypatch: pytest.MonkeyPatch, sid: str) -> list[str]:
+def _fake_session(monkeypatch: pytest.MonkeyPatch, sid: str, spec: Any = ml.GEF10) -> list[str]:
     """cmd_labels' readers replaced: the session ``sid`` (as its manifest names it), two candidate
     frames, the labeller's frames synthetic."""
     from collections import Counter
 
     opened: list[str] = []
     sess = SimpleNamespace(sid=sid, spots=None, name=sid, refs=[1, 2, 3],
-                           dropped=Counter({"self_moving": 1}), spec=ml.GEF10,
+                           dropped=Counter({"self_moving": 1}), spec=spec,
                            candidates_at=lambda off: [1, 2])  # fmt: skip
 
     def fake_open(part: str, spec: Any, layout_templates: Any) -> Any:
@@ -1107,3 +1115,602 @@ def test_pack_without_the_flag_is_unchanged(tmp_path: Path, monkeypatch: pytest.
         assert key["per_species"] == {"1273:N": {"pool": 32, "sampled": 30},
                                       "1273:E": {"pool": 0, "sampled": 0}}  # fmt: skip
         assert out["crops"] == 30
+
+
+# --- xmas_dun02 (docs/planning/xmas02-detector.md; its tool gaps T-1, T-2, T-3, T-8, T-9) -------
+# Session NAMES only: no xmas_dun02 recording is read (X2 is TEST; the others do not exist yet).
+# The positive cases on real data read gef_fild10's w2 (a TRAIN session) and X2's MANIFEST only.
+
+X2 = ml.XMAS02_X2
+XW1 = "20261106T120000-rdp-xmas02-xw1"  # the names record_session gives `--label xmas02-xw1`
+XW2 = "20261106T130000-rdp-xmas02-xw2"
+XW5 = "20261106T140000-rdp-xmas02-xw5"
+XP1 = "20261106T150000-rdp-xmas02-xp1"
+XTEST = (XW5, XP1, X2)
+NAS = Path("/mnt/poring-lab-datasets")
+W2 = "20261026T014529-rdp-w2"  # gef_fild10's immune lattice watch (TRAIN)
+LEGACY_CHAT = (0, 532, 600, 626)
+STANDARD_CHAT = (0, 585, 600, 720)
+
+
+def _old_rects(layout: str) -> tuple[tuple[int, int, int, int], ...]:
+    """map_labels' rectangles BEFORE T-1: client_layout.RECTS of the layout, as they were."""
+    import client_layout
+
+    return tuple(tuple(r) for r in client_layout.RECTS[ml.LAYOUT_RECTS[layout]])
+
+
+def test_t1_older_sessions_keep_their_rectangles_exactly() -> None:
+    """Every session before the 2026-11-05 cutover (the maps' own role tables and names, the
+    gef10 TEST / TEST2 names): the rectangles are RECTS's, bit for bit, in both layouts; their chat
+    window is the legacy one (0, 532, 600, 626) and nothing is nested."""
+    sids = {s for spec in (ml.PAYF07, ml.GEF10) for s in (*spec.fit, *spec.test,
+                                                         *spec.staged_extra)}  # fmt: skip
+    sids |= {W2, A2, A7, A9, A10, A11, W3, E3B, PILOT, "20261105T115959-rdp-last-legacy"}
+    for sid in sorted(sids):
+        for layout in ("hunt", "rows4"):
+            got = ml.session_ui_rects(sid, layout)
+            assert got == _old_rects(layout), (sid, layout)
+            assert got[4] == LEGACY_CHAT
+
+
+def test_t1_sessions_from_the_cutover_use_the_standard_chat_window() -> None:
+    """From 20261105T12 on (X2, every xmas02 session): the 2026-11-05 standard chat window, and
+    notice_left (0, 668, 50, 720), which it holds whole, is dropped (covered_fraction sums)."""
+    for sid in ("20261105T120000-rdp-first-standard", X2, XW1, XW5):
+        for layout in ("hunt", "rows4"):
+            old = _old_rects(layout)
+            got = ml.session_ui_rects(sid, layout)
+            assert got == (*old[:4], STANDARD_CHAT, old[6]), (sid, layout)
+            assert (0, 668, 50, 720) not in got
+
+
+def test_t1_session_labeler_sets_the_sessions_rectangles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """session_labeler takes the session id from the MANIFEST (the frame cache calls it with
+    (path, spec) only) and writes the rectangles as (x, y, w, h)."""
+
+    class FakeLabeler:
+        def __init__(self, path: Path, *_a: Any, **_k: Any) -> None:
+            self.manifest = {"session_id": path.name}
+            self.ui_rects: Any = None
+            self.timeline = SimpleNamespace(events=[], maps={}, die_ms={}, default_die_ms=0)
+
+    monkeypatch.setattr(ml.qa_export, "Labeler", FakeLabeler)
+    monkeypatch.setattr(ml.qa_export, "Sheets", lambda directory: directory)
+    monkeypatch.setattr(ml, "use_kb", lambda spec: None)
+    monkeypatch.setattr(ml, "Timeline", lambda *a, **k: "timeline")
+
+    def xywh(rects: Any) -> tuple[tuple[int, int, int, int], ...]:
+        return tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in rects)
+
+    old = ml.session_labeler(Path("/x") / W2, ml.GEF10)
+    assert old.ui_rects == xywh(_old_rects("hunt")) and old.sheets == ml.GEF10.sprites
+    four = ml.session_labeler(Path("/x") / ml.GEF10_WATCH, ml.GEF10, "rows4")
+    assert four.ui_rects == xywh(_old_rects("rows4"))
+    new = ml.session_labeler(Path("/x") / XW1, ml.XMAS02)
+    assert new.ui_rects == xywh(ml.session_ui_rects(XW1)) and (0, 585, 600, 135) in new.ui_rects
+    assert len(new.ui_rects) == 6
+
+
+@pytest.mark.skipif(not (NAS / W2 / "packets.jsonl.gz").exists(), reason="the NAS is absent")
+def test_t1_positive_case_a_real_gef10_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A REAL gef_fild10 session (w2, TRAIN: manifest + packets, no frame): the label stack's
+    rectangles are RECTS's (the code before T-1) in both layouts, and its recording path passes."""
+    from dataclasses import replace
+
+    from poring_dataset import mapcache
+
+    kbs = (ROOT / "data" / "kb", Path("/home/batt/docker/poring-lab/data/kb"))
+    kb = next((p for p in kbs if (p / "classes.json").exists()), None)
+    if kb is None:
+        pytest.skip("data/kb is absent")
+    try:
+        mapcache.load(prere=True)
+    except mapcache.MapCacheError:
+        pytest.skip("the generated map cache is absent (a worktree's package sources)")
+    ml.check_recording(json.loads((NAS / W2 / "manifest.json").read_text()))
+    spec = replace(ml.GEF10, kb=kb)
+    for layout in ("hunt", "rows4"):
+        lab = ml.session_labeler(NAS / W2, spec, layout)
+        assert lab.ui_rects == tuple((x0, y0, x1 - x0, y1 - y0)
+                                     for x0, y0, x1, y1 in _old_rects(layout))  # fmt: skip
+
+
+X2_MANIFEST = NAS / X2 / "manifest.json"
+
+
+@pytest.mark.skipif(not X2_MANIFEST.exists(), reason="the NAS is absent")
+def test_t3_positive_case_x2s_manifest_passes() -> None:
+    """T-3's positive case: X2's manifest (recorder v6; ITS MANIFEST ONLY, X2 is TEST) is on the
+    recording path now; a v5 session (w2) still is; the same manifest at v5 / v7 shows the rule."""
+    m = json.loads(X2_MANIFEST.read_text())
+    assert m["recorder_version"] == 6 and m["session_id"] == X2
+    ml.check_recording(m)
+    ml.check_recording({**m, "recorder_version": 5})
+    with pytest.raises(SystemExit, match="recorder_version"):
+        ml.check_recording({**m, "recorder_version": 7})
+
+
+def test_t2_xmas02_spec() -> None:
+    spec = ml.MAPS["xmas_dun02"]
+    assert spec is ml.XMAS02 and spec.name == "xmas_dun02" and spec.cells == (260, 260)
+    assert spec.species == (1249, 1248, 1265, 1246, 1515, 1607)  # 1b / D3; 1251 is OUT
+    assert spec.conditional == (1515, 1607) and 1251 not in spec.species
+    assert spec.walkers == (1249, 1248, 1265, 1246, 1515) and spec.fit_px == 6
+    assert spec.labels == "xmas02-o3h" and spec.t2_salt == "xmas02" and spec.t2_seed == 51
+    assert spec.dying_rule and not spec.engaged_labels and spec.engaged_fixed == "E0"
+    assert spec.reference == (1251, 1002, 1062)  # 6: + Stormy Knight, Poring, Santa Poring
+    assert len(list(spec.species) + list(spec.reference)) <= 12  # cmd_pack's reference cap
+    x = Path("/dev/shm/poring-lab-tmp/xmas-det")
+    assert spec.rsw == x / "grf/data/xmas_dun02.rsw" and spec.models == x / "grf/data/model"
+    assert spec.kb == x / "kb-sprites" and spec.kb_classes == ROOT / "data/kb/classes.json"
+    assert spec.sprites == x / "sprites/data/sprite/몬스터"
+    assert spec.layouts == {} and spec.staged_kind_of(XW1) is None
+    assert spec.plan == "docs/planning/xmas02-detector.md"
+    assert ml.strata_for(spec) == (None,)  # one T2 stratum (E0: no engaged label)
+    # the older maps keep their KB layout and rules
+    assert ml.PAYF07.kb_classes is None and ml.GEF10.kb_classes is None
+    assert ml.PAYF07.engaged_fixed is None and ml.GEF10.engaged_fixed is None
+
+
+def test_t2_use_kb_reads_the_classes_from_data_kb(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ml.qa_export, "KB_CLASSES", None)
+    monkeypatch.setattr(ml.qa_export, "KB_SPRITE_NAMES", None)
+    ml.use_kb(ml.XMAS02)
+    assert ml.qa_export.KB_CLASSES == ROOT / "data/kb/classes.json"
+    assert ml.qa_export.KB_SPRITE_NAMES == ml.XD / "kb-sprites/monster_sprite_names.json"
+    ml.use_kb(ml.GEF10)  # unchanged: both from the map's KB directory
+    assert ml.qa_export.KB_CLASSES == ml.G10 / "kb/classes.json"
+    assert ml.qa_export.KB_SPRITE_NAMES == ml.G10 / "kb/monster_sprite_names.json"
+
+
+def test_t2_xmas02_roles_by_name() -> None:
+    """3b: FIT = xw1, TEST = xw5, xp1, X2 -- all by NAME; TRAIN (xw2-xw4, xw6, xw7) neither."""
+    spec = ml.XMAS02
+    assert spec.is_fit(XW1, None) and not spec.is_test(XW1, None) and spec.overlaps_fit(XW1, None)
+    for sid in XTEST:
+        assert spec.is_test(sid, None) and spec.is_round1_test(sid, None)
+        assert not spec.is_fit(sid, None) and not spec.overlaps_fit(sid, None)
+    for k in (2, 3, 4, 6, 7, 10, 11, 15, 51):
+        sid = f"20261106T16000{k % 10}-rdp-xmas02-xw{k}"
+        assert not spec.is_test(sid, None) and not spec.is_fit(sid, None), sid  # xw15 is not xw5
+    for sid in ("20261106T160000-rdp-xmas02-xp10", "20261106T160000-rdp-xmas02-x2",
+                "20261106T160000-rdp-xmas02-xw1b"):  # fmt: skip
+        assert not spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
+    # the other maps' names are nothing here, and xmas02's nothing there
+    assert not spec.is_test(A7, None) and not spec.is_fit(PILOT, None)
+    for sid in (XW1, *XTEST):
+        assert not ml.GEF10.is_test(sid, None) and not ml.GEF10.is_fit(sid, None)
+        assert not ml.PAYF07.is_test(sid, None) and not ml.PAYF07.is_fit(sid, None)
+    assert ml.GEF10.fit_suffixes == () and ml.GEF10.overlaps_fit(ml.GEF10_WATCH, None)
+
+
+def _ns(**kw: Any) -> Any:
+    import argparse
+
+    return argparse.Namespace(**kw)
+
+
+def test_t2_measuring_commands_refuse_test_by_name_before_reading() -> None:
+    """offset / threshold / engaged refuse a TEST (or non-FIT) part by its NAME before anything is
+    read: the paths do not exist, so a read would raise FileNotFoundError instead."""
+    common = {"map": "xmas_dun02", "layout_templates": None, "workers": 1}
+    for sid in (*XTEST, XW2):
+        with pytest.raises(SystemExit, match="not a FIT part"):
+            ml.cmd_offset(_ns(**common, parts=[f"/x/{sid}"], diagnostic=False))
+        with pytest.raises(SystemExit, match="not a FIT part"):
+            ml.cmd_threshold(_ns(**common, parts=[f"/x/{sid}"], offset=None,
+                                 proposed_offset_ms=120.0, proposal="P1"))  # fmt: skip
+    for sid in XTEST:  # 9b's diagnostic reads any non-TEST part, never TEST
+        with pytest.raises(SystemExit, match="shares frames with TEST"):
+            ml.cmd_offset(_ns(**common, parts=[f"/x/{sid}"], diagnostic=True))
+    with pytest.raises(SystemExit, match="does not label engaged units"):  # E0: no selection
+        ml.cmd_engaged(_ns(**common, parts=[f"/x/{XW1}"], variants=["E1"]))
+
+
+def test_t2_the_fit_name_passes_the_name_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """xw1 (FIT by NAME) gets past the refusals to the reading (a missing path: the open fails),
+    and the manifest's id is checked again after the open."""
+    monkeypatch.setattr(ml, "occluders", lambda spec: "occluders")
+    with pytest.raises(FileNotFoundError):
+        ml.cmd_offset(_ns(map="xmas_dun02", parts=[f"/nonexistent/{XW1}"], diagnostic=False,
+                          layout_templates=None, workers=1))  # fmt: skip
+    sess = SimpleNamespace(sid=X2, spots=None, name=X2, spec=ml.XMAS02)
+    monkeypatch.setattr(ml.RecSession, "open", staticmethod(lambda p, spec, lt: sess))
+    with pytest.raises(SystemExit, match="not a FIT part"):  # a renamed TEST directory
+        ml.cmd_offset(_ns(map="xmas_dun02", parts=[f"/x/{XW1}"], diagnostic=False,
+                          layout_templates=None, workers=1))  # fmt: skip
+
+
+def _xparams(tmp_path: Path, status: str | None = "FROZEN") -> Path:
+    p = tmp_path / "xparams.json"
+    p.write_text(json.dumps({"labels": "xmas02-o3h", "map": "xmas_dun02", "status": status,
+                             "offset_ms": 120.0, "o3h_tau": 0.5, "tau": olf.TAU,
+                             "fit_px": {"1249": 6}, "anchors_px": {}}))  # fmt: skip
+    return p
+
+
+def _xlabels_args(tmp_path: Path, part: str, status: str | None = "FROZEN", **flag: Any) -> Any:
+    classes = tmp_path / "classes.json"
+    classes.write_text(json.dumps({"monsters": [1249, 1248, 1265, 1246]}))
+    return _ns(map="xmas_dun02", params=_xparams(tmp_path, status), parts=[part],
+               classes=classes, layout_templates=None, workers=1, **flag)  # fmt: skip
+
+
+def test_t2_labels_refuse_test_by_name_and_label_fit_and_train(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for sid in XTEST:
+        with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+            ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{sid}"))
+    for sid in (XW1, XW2):  # FIT (VAL, T2's pool) and TRAIN are labelled
+        opened = _fake_session(monkeypatch, sid, ml.XMAS02)
+        out = ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{sid}", status="PROPOSED_NOT_FROZEN"))
+        assert opened == [f"/x/{sid}"] and out["map"] == "xmas_dun02"
+        assert list(out) == LABELS_KEYS and "eval_test" not in out
+    _fake_session(monkeypatch, X2, ml.XMAS02)  # a TEST directory renamed: the manifest's id
+    with pytest.raises(SystemExit, match="shares frames with TEST"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{XW2}"))
+    olf._JOB.clear()
+
+
+def _xdoc(tmp_path: Path, sid: str, mobs: list[int], flag: str | None = None,
+          n: int = 1) -> Path:  # fmt: skip
+    frames = [{"frame_id": i, "t": (i + 1) * S, "shard": "shard-000000.tar", "offset": 512 * i,
+               "size": 100, "spot": None,
+               "kept": [{"gid": 1000 + j, "mob": m, "box": [100.0, 100.0, 140.0, 160.0],
+                         "ncc": 0.9, "under": False, "state": "idle"}
+                        for j, m in enumerate(mobs)]}
+              for i in range(n)]  # fmt: skip
+    doc = {"labels": "xmas02-o3h", "map": "xmas_dun02", "session": sid, "part": sid,
+           "params_sha256": "e" * 64, "params_status": "FROZEN", "frames": frames,
+           **({flag: True} if flag else {})}  # fmt: skip
+    path = tmp_path / f"{sid}-{flag}.json"
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def test_t2_pack_refuses_test_and_any_seed_but_51(tmp_path: Path) -> None:
+    good = _xdoc(tmp_path, XW2, [1249])
+    pool, *_ = ml.pack_pool([good, _xdoc(tmp_path, XW1, [1248])], ml.XMAS02, "/nas")
+    assert sorted(pool) == [1248, 1249]
+    for sid in XTEST:
+        with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+            ml.pack_pool([good, _xdoc(tmp_path, sid, [1249])], ml.XMAS02, "/nas")
+    missing = tmp_path / "missing.txt"
+    for seed in (21, 50, 52, 53):
+        with pytest.raises(SystemExit, match="T2 seed is 51"):
+            ml.cmd_pack(_pack_args(tmp_path, [good], map="xmas_dun02", seed=seed,
+                                   instructions=missing))  # fmt: skip
+    with pytest.raises(FileNotFoundError):  # seed 51: on to the instructions
+        ml.cmd_pack(_pack_args(tmp_path, [good], map="xmas_dun02", seed=51, instructions=missing))
+    with pytest.raises(FileNotFoundError):  # gef10 / payf07 pin no seed (unchanged)
+        ml.cmd_pack(_pack_args(tmp_path, [good], seed=52, instructions=missing))
+
+
+def test_t2_the_cache_refuses_test_label_files(tmp_path: Path) -> None:
+    """build_frame_cache --labels map (MapLabelInputs): an xmas02 TEST label file is never cached;
+    a TRAIN one is taken (its join rule is the own-C1 check's)."""
+    import hashlib
+
+    import build_frame_cache as bfc
+
+    params = _xparams(tmp_path)
+    sha = hashlib.sha256(params.read_bytes()).hexdigest()
+
+    def args(*docs: Path) -> Any:
+        return _ns(map_params=params, map_params_sha256=sha, map_labels=list(docs), own_c1=None)
+
+    def doc(sid: str) -> Path:
+        p = _xdoc(tmp_path, sid, [1249])
+        d = json.loads(p.read_text())
+        p.write_text(json.dumps({**d, "params_sha256": sha}))
+        return p
+
+    mli = bfc.MapLabelInputs.from_args(args(doc(XW2)))
+    assert mli.spec is ml.XMAS02 and list(mli.docs) == [XW2]
+    assert mli.provenance["rule"] == "xmas02-o3h-all"
+    for sid in XTEST:
+        with pytest.raises(SystemExit, match="never cached"):
+            bfc.MapLabelInputs.from_args(args(doc(XW2), doc(sid)))
+
+
+def test_t2_frame_exclusions_stormy_knight_is_unchecked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """4h: Stormy Knight (OUT of the tier) makes its frame unchecked_species; Garm Baby and the
+    Goblin are the map's (conditional) species, labelled; Santa Poring's model is scenery."""
+    monkeypatch.setattr(ml, "anchor_and_depth", lambda scene, cell: ((cell[0], cell[1]), 0.0))
+
+    def ent(gid: int, job: int) -> Any:
+        return SimpleNamespace(gid=gid, objtype=5, job=job, x=50, y=50, hidden=False)
+
+    tier = [1249, 1248, 1265, 1246]
+    world = SimpleNamespace(entities=[ent(1, 1249), ent(2, 1515), ent(3, 1607)])
+    assert ml.frame_exclusions(world, None, (1280, 720), ml.XMAS02.species, tier, 9) == []
+    world.entities.append(ent(4, 1251))
+    got = ml.frame_exclusions(world, None, (1280, 720), ml.XMAS02.species, tier, 9)
+    assert got == ["unchecked_species:1251"]
+
+
+def test_t2_t2_sample_conditional_species_need_30_and_one_stratum() -> None:
+    pool = {1249: [_item(XW2, f, 1, 1249) for f in range(40)],
+            1515: [_item(XW2, f, 2, 1515) for f in range(29)],
+            1607: [_item(XW2, f, 3, 1607) for f in range(30)]}  # fmt: skip
+    chosen, per, tier = ml.t2_sample(pool, ml.XMAS02, 51)
+    assert tier == [1249, 1265, 1248, 1246, 1607] or tier == [1249, 1248, 1265, 1246, 1607]
+    assert 1515 not in tier and 1607 in tier  # D3: >= 30 kept labels
+    assert per["1249"] == {"pool": 40, "sampled": 30}
+    assert per["1607"] == {"pool": 30, "sampled": 30}
+    assert all(c["stratum"] is None for c in chosen) and len(chosen) == 60
+    want = ml.t2_order(pool[1249], 51, 1249, "xmas02")[:30]
+    assert {(c["frame_id"], c["gid"]) for c in chosen if c["mob"] == 1249} == {
+        (w["frame_id"], w["gid"]) for w in want}  # fmt: skip
+    order = sorted(pool[1249], key=lambda it: (it["session"], it["frame_id"], it["gid"]))
+    random.Random("xmas02:51:1249").shuffle(order)
+    assert ml.t2_order(pool[1249], 51, 1249, "xmas02") == order
+
+
+def _xsession(events: list[dict[str, Any]] | None = None) -> Any:
+    lab = SimpleNamespace(timeline=SimpleNamespace(events=events or []), size=(1280, 720),
+                          ui_rects=tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1
+                                         in ml.session_ui_rects(XW1)))  # fmt: skip
+    return ml.RecSession(Path("/x") / XW1, ml.XMAS02, None, lab, [], XW1, None)
+
+
+def test_t2_the_label_stack_is_e0_with_amendments_b_and_c() -> None:
+    """4a / 4i (D11): xmas02 runs gef10's stack (EngagedLabelRule / EngagedLabeler) at the FIXED
+    E0: 2d (facing_unknown) applies, engaged units are excluded, the crowded flag is recorded for
+    T_h's set (Amendment B); pay_fild07 keeps its plain rule."""
+    sess = _xsession()
+    rule = sess.facing_rule("fix2")
+    assert isinstance(rule, ml.EngagedLabelRule) and rule.variant == "E0"
+    params = {"offset_ms": 120.0, "fit_px": {"1249": 6}, "tau": olf.TAU, "anchors_px": {}}
+    fl = ml.labeler_for(sess, params, "occl", "o3h")
+    assert isinstance(fl, ml.EngagedLabeler) and fl.variant == "E0"
+    assert isinstance(fl.facing, ml.EngagedLabelRule) and fl.facing.variant == "E0"
+    assert ml.XMAS02.labels_engaged_rule() and ml.GEF10.labels_engaged_rule()
+    assert not ml.PAYF07.labels_engaged_rule()
+    pay = ml.RecSession(Path("/x/p"), ml.PAYF07, None, sess.lab, [], "p", None)
+    assert type(pay.facing_rule("fix2")) is ml.EngagedRule
+    assert type(ml.labeler_for(pay, params, "occl", "o3h")) is olf.FixLabeler
+    for v in ("E1", "E2", "E3"):  # never another variant on xmas02
+        with pytest.raises(SystemExit, match="its rule is E0"):
+            ml.labeler_for(sess, {**params, "engaged_variant": v}, "occl", "o3h")
+
+
+def test_t2_freeze_fixes_e0_without_a_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                ) -> None:  # fmt: skip
+    prov = {"rsw_sha256": "a5104e37", "model_files_sha256": {}}
+    monkeypatch.setattr(ml, "occluders", lambda spec: SimpleNamespace(provenance=lambda: prov))
+    th = tmp_path / "th.json"
+    th.write_text(json.dumps({"o3h_tau": 0.55, "offset_ms": 120.0, "offset_source": "D12"}))
+    base = {"map": "xmas_dun02", "threshold": th, "offset": None, "proposed": False,
+            "decision": "Amendment X (D12: 120 ms)"}  # fmt: skip
+    out = ml.cmd_freeze(_ns(**base, engaged=None, engaged_variant=None))
+    assert out["status"] == "FROZEN" and out["labels"] == "xmas02-o3h"
+    assert out["engaged_variant"] == "E0" and out["dying_in_view"] is True
+    assert out["engaged_fixed_by"] == "docs/planning/xmas02-detector.md 4i (D11)"
+    assert out["map_cells"] == [260, 260] and out["anchors_px"] == {}
+    assert out["fit_px"] == {str(m): 6 for m in ml.XMAS02.species}
+    again = ml.cmd_freeze(_ns(**base, engaged=None, engaged_variant="E0"))
+    assert again["engaged_variant"] == "E0"
+    for kw in ({"engaged": th, "engaged_variant": None},
+               {"engaged": None, "engaged_variant": "E2"}):  # fmt: skip
+        with pytest.raises(SystemExit, match="engaged units are E0"):
+            ml.cmd_freeze(_ns(**base, **kw))
+
+
+# --- T-8: the pickup-notice rule on xmas_dun02 ------------------------------------------------
+
+
+def test_t8_c1_rules_per_map() -> None:
+    """xmas_dun02 is checked under round2 ONLY (its C1 drops a label under a notice, 4h / 5); its
+    TEST is read by T1 (nothing is spent); gef_fild10 and pay_fild07 are as before."""
+    x = ml.XMAS02
+    ml.c1_rule_refusals(x, "round2", [f"/x/{s}" for s in (*XTEST, XW1, XW2)])
+    with pytest.raises(SystemExit, match=r"round1: gef_fild10 / pay_fild07 only, not xmas_dun02"):
+        ml.c1_rule_refusals(x, "round1", [f"/x/{XW5}"])
+    assert ml.GEF10.c1_rules == ("round1", "round2") and ml.PAYF07.c1_rules == ("round1",)
+    assert ml.GEF10.test_spent and not x.test_spent and not ml.PAYF07.test_spent
+    with pytest.raises(SystemExit, match="spent"):
+        ml.c1_rule_refusals(ml.GEF10, "round2", [f"/x/{A7}"])
+
+
+def test_t8_the_notice_band_lies_clear_of_the_standard_chat_window() -> None:
+    """The notice band (gef_fild10's, top centre) and the 2026-11-05 chat window never meet, so
+    the rule and the session's UI windows exclude different labels."""
+    import chat_window
+    import gef10_r2_measure as r2m
+
+    y0, y1, x0, x1 = r2m.NOTICE_BAND
+    cx0, cy0, cx1, cy1 = chat_window.STANDARD.rect
+    assert y1 < cy0 and (cx0, cy0, cx1, cy1) == STANDARD_CHAT
+
+
+def test_t8_a_myst_case_under_a_notice_is_excluded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The rule is the map's own species' too: a Myst Case box under the notice is ``notice``."""
+    frame = _ground()
+    _draw_notice(frame, 541, 76, 800, 106)
+    ref = _round2_job(monkeypatch, {1: (520.0, 28.0, 585.0, 118.0),
+                                    2: (300.0, 300.0, 360.0, 370.0)}, frame)  # fmt: skip
+    olf._JOB["frame_rule"] = ml.NoticeRule()
+    real = olf.standing_candidates  # the stub's units are job 1023: re-tag them as Myst Cases
+
+    def myst(*a: Any, **k: Any) -> Any:
+        world, scene, rules, cands = real(*a, **k)
+        for c in cands:
+            c[0].job = 1249
+        return world, scene, rules, cands
+
+    monkeypatch.setattr(olf, "standing_candidates", myst)
+    rows, dropped, _ = ml._check_rows_round2(ref)
+    assert [r["gid"] for r in rows] == [2] and dropped["notice:1249"] == 1
+    olf._JOB.clear()
+
+
+def _check_fakes(monkeypatch: pytest.MonkeyPatch, sid: str, spec: Any) -> None:
+    sess = SimpleNamespace(sid=sid, spots=None, name=sid, refs=[1, 2], spec=spec,
+                           dropped={}, candidates_at=lambda off: [1, 2],
+                           facing_rule=lambda rule, variant=None: "rule")  # fmt: skip
+    monkeypatch.setattr(ml.RecSession, "open", staticmethod(lambda p, spec, lt: sess))
+    monkeypatch.setattr(ml, "frozen_occluders", lambda params, spec: "occluders")
+    monkeypatch.setattr(olf, "run_parallel", lambda func, refs, workers: [])
+
+
+def test_t8_check_runs_round2_on_xmas02_and_records_where_the_band_was_measured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    params = _xparams(tmp_path)
+    _check_fakes(monkeypatch, XW5, ml.XMAS02)
+    a = _ns(map="xmas_dun02", params=params, parts=[f"/x/{XW5}"], c1_rule="round2",
+            allow_fit=False, fit_diagnostic=False, rows=None, layout_templates=None,
+            workers=1)  # fmt: skip
+    out = ml.cmd_check(a)
+    assert out["c1_rule"]["name"] == "round2" and out["T1"] == "NO_VERDICT"
+    assert out["c1_rule"]["notice_band_measured_on"] == "gef_fild10"
+    assert "xmas_dun02" in out["c1_rule"]["what"]
+    with pytest.raises(SystemExit, match="round1"):
+        ml.cmd_check(_ns(**{**vars(a), "c1_rule": "round1"}))
+    _check_fakes(monkeypatch, XW1, ml.XMAS02)  # FIT is the parameters' own data
+    with pytest.raises(SystemExit, match="--allow-fit"):
+        ml.cmd_check(_ns(**{**vars(a), "parts": [f"/x/{XW1}"]}))
+    olf._JOB.clear()
+
+
+def test_t8_gef10s_round2_record_gains_no_key(tmp_path: Path,
+                                              monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    params = tmp_path / "gparams.json"
+    params.write_text(json.dumps({"labels": "gef10-o3h-e", "map": "gef_fild10",
+                                  "status": "FROZEN", "offset_ms": 120.0, "tau": olf.TAU,
+                                  "o3h_tau": 0.636, "fit_px": {"1273": 6}}))  # fmt: skip
+    _check_fakes(monkeypatch, A9, ml.GEF10)
+    out = ml.cmd_check(_ns(map="gef_fild10", params=params, parts=[f"/x/{A9}"], c1_rule="round2",
+                           allow_fit=False, fit_diagnostic=False, rows=None,
+                           layout_templates=None, workers=1))  # fmt: skip
+    assert list(out["c1_rule"]) == ["name", "what", "detector", "band_y0_y1_x0_x1",
+                                    "top_rows_read", "overlap", "excluded",
+                                    "excluded_by_species", "frames_with_notice",
+                                    "scored_rows_near_notice_16px",
+                                    "scored_rows_near_notice_bad"]  # fmt: skip
+    olf._JOB.clear()
+
+
+# --- T-9: the per-map evaluation flag (--eval-test on xmas_dun02) -----------------------------
+
+
+def test_t9_eval_flags_are_per_map() -> None:
+    x = ml.XMAS02
+    for sid in XTEST:
+        assert ml.eval_part_refusal(x, sid, None, "eval_test") is None
+    for sid in (XW1, XW2, A9):
+        assert "not a TEST part" in str(ml.eval_part_refusal(x, sid, None, "eval_test"))
+    want2 = "--eval-test2 is gef_fild10's only, not xmas_dun02's"
+    assert ml.eval_part_refusal(x, X2, None, "eval_test2") == want2
+    want = "--eval-test is xmas_dun02's only, not gef_fild10's"
+    assert ml.eval_part_refusal(ml.GEF10, A9, None, "eval_test") == want
+    assert ml.eval_map_refusal(ml.PAYF07, "eval_test") is not None
+    assert ml.eval_test2_refusal(ml.GEF10, A9, None) is None  # gef10's rule, unchanged
+    assert x.eval_suffixes == x.test_suffixes and ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
+    with pytest.raises(SystemExit, match="one evaluation flag at a time"):
+        ml.eval_flag_of(_ns(eval_test=True, eval_test2=True))
+    assert ml.eval_flag_of(_ns()) is None and ml.eval_flag_of(_ns(eval_test=True)) == "eval_test"
+
+
+def test_t9_labels_eval_test_refusals_before_reading(tmp_path: Path) -> None:
+    for sid, match in ((XW1, "not a TEST part"), (XW2, "not a TEST part"),
+                       (A9, "not a TEST part")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{sid}", eval_test=True))
+    with pytest.raises(SystemExit, match="xmas_dun02's only"):
+        ml.cmd_labels(_labels_args(tmp_path, f"/x/{A9}", eval_test=True))  # on gef_fild10
+    with pytest.raises(SystemExit, match="gef_fild10's only"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{X2}", eval_test2=True))
+    for status in ("PROPOSED_NOT_FROZEN: P1", None):
+        with pytest.raises(SystemExit, match="--eval-test labels TEST under FROZEN parameters"):
+            ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{XW5}", status=status, eval_test=True))
+
+
+def test_t9_labels_eval_test_labels_a_test_part(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for sid in XTEST:
+        opened = _fake_session(monkeypatch, sid, ml.XMAS02)
+        a = _xlabels_args(tmp_path, f"/x/{sid}", eval_test=True)
+        out = ml.cmd_labels(a)
+        assert opened == [f"/x/{sid}"] and out["eval_test"] is True and out["session"] == sid
+        assert "eval_test2" not in out and out["classes_sha256"] == olf.sha256_file(a.classes)
+        assert list(out) == LABELS_KEYS[:13] + ["eval_test", "classes", "classes_sha256"] + \
+            LABELS_KEYS[13:]  # fmt: skip
+    _fake_session(monkeypatch, XW2, ml.XMAS02)  # TRAIN behind a TEST name: the manifest's id
+    with pytest.raises(SystemExit, match="not a TEST part"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{XW5}", eval_test=True))
+    olf._JOB.clear()
+
+
+def test_t9_pack_eval_test_refusals(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.txt"
+    for kw, match in (({"eval_test": True, "per_species": 30, "seed": 53}, "draws 60"),
+                      ({"eval_test": True, "per_species": None, "seed": 53}, "--per-species N"),
+                      ({"eval_test": True, "per_species": 60, "seed": 51}, "pack seed is 53"),
+                      ({"eval_test2": True, "per_species": 60, "seed": 53}, "gef_fild10's only"),
+                      ({"per_species": 60, "seed": 51}, "only with --eval-test2 / --eval-test"),
+                      ):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.cmd_pack(_pack_args(tmp_path, [], map="xmas_dun02", instructions=missing, **kw))
+    with pytest.raises(SystemExit, match="xmas_dun02's only"):  # on gef_fild10
+        ml.cmd_pack(_pack_args(tmp_path, [], eval_test=True, per_species=60, instructions=missing))
+    with pytest.raises(FileNotFoundError):  # the pre-registered draw: on to the instructions
+        ml.cmd_pack(_pack_args(tmp_path, [], map="xmas_dun02", eval_test=True, per_species=60,
+                               seed=53, instructions=missing))  # fmt: skip
+
+
+def test_t9_pack_pool_eval_test_takes_test_label_files_only(tmp_path: Path) -> None:
+    good = [_xdoc(tmp_path, sid, [1249], "eval_test") for sid in XTEST]
+    pool, sources, *_ = ml.pack_pool(good, ml.XMAS02, "/nas", eval_flag="eval_test")
+    assert len(pool[1249]) == 3 and [s["part"] for s in sources] == list(XTEST)
+    for path, match in ((_xdoc(tmp_path, XW1, [1249], "eval_test"), "not a TEST part"),
+                        (_xdoc(tmp_path, XW2, [1249], "eval_test"), "not a TEST part"),
+                        (_xdoc(tmp_path, X2, [1249]), "not made by labels --eval-test"),
+                        (_xdoc(tmp_path, XW5, [1249], "eval_test2"),
+                         "not made by labels --eval-test")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            ml.pack_pool([good[0], path], ml.XMAS02, "/nas", eval_flag="eval_test")
+
+
+def test_t9_pack_eval_test_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _pack_fakes(monkeypatch)
+    labels = [_xdoc(tmp_path, XW5, [1249, 1248], "eval_test", n=70),
+              _xdoc(tmp_path, X2, [1265, 1515], "eval_test", n=3)]  # fmt: skip
+    out = ml.cmd_pack(_pack_args(tmp_path, labels, map="xmas_dun02", eval_test=True,
+                                 per_species=60, seed=53, min_fit=0.5))  # fmt: skip
+    key = json.loads((tmp_path / "key" / "answer_key.json").read_text())
+    assert key["eval_test"] is True and key["seed"] == 53 and key["per_species_target"] == 60
+    assert "eval_test2" not in key and "candidates" not in key  # one stratum
+    assert list(key) == [k for k in KEY_KEYS if k != "candidates"] + ["eval_test"]
+    assert key["tier_species"] == [1249, 1248, 1265, 1515]  # every species with a kept label
+    assert {k: v["sampled"] for k, v in key["per_species"].items()} == {
+        "1249": 60, "1248": 60, "1265": 3, "1515": 3}  # fmt: skip
+    assert out["crops"] == 126 and out["eval_test"] is True and out["per_species_target"] == 60
+    assert all("stratum" not in c for c in key["crops"].values())
+
+
+def test_t9_eval_test_flag_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake(name: str) -> Any:
+        def run(a: Any) -> Any:
+            seen[name] = (a.eval_test, a.eval_test2)
+            raise SystemExit(0)
+
+        return run
+
+    monkeypatch.setattr(ml, "cmd_labels", fake("labels"))
+    monkeypatch.setattr(ml, "cmd_pack", fake("pack"))
+    lab = ["labels", f"/x/{XW5}", "--map", "xmas_dun02", "--params", "p", "--out", "o",
+           "--eval-test"]  # fmt: skip
+    pack = ["pack", "l.json", "--map", "xmas_dun02", "--seed", "53", "--pack-dir", "pk",
+            "--key-dir", "k", "--instructions", "i", "--instructions-sha256", "h", "--out", "o",
+            "--eval-test", "--per-species", "60"]  # fmt: skip
+    for argv, name in ((lab, "labels"), (pack, "pack")):
+        with pytest.raises(SystemExit):
+            ml.main(argv)
+        assert seen[name] == (True, False)
