@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "RECORDING under Amendment D (Batt 2026-11-06 ~14:0x: daytime recording with the sustained-only IO rule + an automatic resume; xw1 attempt 1 was cut at 5.5 min by a one-spike trip, section 12). ACCEPTED 2026-11-06 ~10:45 by Batt ('go ahead, training may start, start the plan now'), recorded as Amendment A (section 13) before any recording: D0 answered by a 100 GB recorder floor, D1-D14 adopted as proposed; T-5 needs no new driver (stage_items.py watch + record_session.py), the lattice by watch_lattice.py (343 TRAIN-side + 88 TEST stands). Was: PROPOSED 2026-11-06 (pre-registration draft, written offline by a subagent)."
+status: "EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "The evaluation (xmas02-eval.md AMENDMENT 3: TEST labels, the seed-53 pack + two labellers, Q1c, P4A, latency, G1 / G2), then worker-stop:vision. Done: recordings, ships, FIT + freeze, T1 PASS, TRAIN (2d met), T2 (four classes), the class list, the cache, the training (20 epochs, 00:01:51)."
+next_action: "PASSED 2026-11-07 00:39 (xmas02-eval.md RESULTS). Batt decides the deployment on xmas_dun02 (T-11). Done: recordings, FIT + freeze, T1, TRAIN, T2, the classes, the cache, the training, the evaluation."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -678,6 +678,13 @@ VAL (xw1, monitor only) at epoch 20: P 0.979, R 0.978, mAP50 0.993, mAP50-95 0.9
 2,238 boxes). The scored checkpoint, `last.pt` after epoch 20, sha256 `5c5bb67a...`; its CPU
 export `xmas02-last-736x1280.onnx` `293dca92...`. The evaluation's commands:
 xmas02-eval.md AMENDMENT 3 (committed before any TEST label).
+
+**THE EVALUATION (xmas02-eval.md, scored 2026-11-07 00:39 ICT): THE MODEL PASSES.** Q1c holds for
+all four tier species (evaluated / recall / precision: Myst Case 59 / 1.000 / 0.881, Cruiser 56 /
+0.982 / 0.873, Cookie 60 / 0.983 / 0.881, Christmas Cookie 58 / 0.983 / 0.877) and P4A holds (X2 +
+xp1 still captures 689 / 728 = 0.946; v1 0 / 63). CPU p95 270.0 ms vs v1's 272.9. Moving captures
+score ~0.22 (the ~0.5 s frame lag displaces the truth). Deploying it (T-11) is Batt's decision; the
+details, the double cookie boxes and G1 / G2 are in xmas02-eval.md RESULTS.
 
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 

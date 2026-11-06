@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector plan is ACCEPTED (xmas02-detector.md Amendment A): its FIT watch xw1 next; then the reader's next round (fresh cells), X2 scoring tooling (positive control first), the X4 steal decoders and boss recognizer."
+next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector PASSED its evaluation 2026-11-07 00:39 (xmas02-eval.md): Batt decides its deployment (T-11). Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -831,6 +831,7 @@ xmas_dun02's species.**
   detector for this map is needed: Batt approved the GPU for it (4E' 1); its plan is written and
   pre-registered before any GPU step.
 - ➡️ **The detector's plan: [xmas02-detector.md](xmas02-detector.md)** (PROPOSED 2026-11-06).
+  ➡️ **TRAINED AND PASSED 2026-11-07 00:39** ([xmas02-eval.md](../benchmarks/xmas02-eval.md) RESULTS): Q1c recall 0.98-1.00 per species, P4A still precision 0.946 on X2 + xp1, where v1 had 0 / 63; CPU p95 270 ms vs v1's 273. Not deployed: Batt's decision (T-11).
 
 **hunt_flow v56, run 1 (4K; session 20261106T085105-demo-hunt-flow56; v56 at 3f5c63b; the GM
 switched to by a client restart 08:48-08:49, immune confirmed 08:50:46; the run 08:51:05-09:21,

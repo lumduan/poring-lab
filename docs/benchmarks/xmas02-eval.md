@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A detector scoped to xmas_dun02, trained on immune lattice watches labelled under the frozen xmas02 rule (o3h or o3h-t), finds the map's four common species on held-out TEST data (Q1c: recall and precision >= 0.80 per species with >= 50 evaluated crops, classes collapsed) and boxes the runner's own patrol frames with precision >= 0.80 on still captures (P4A), where v1 saw 1 of 937 labels."
-status: "PRE-REGISTERED 2026-11-06; AMENDMENT 2 (the class list, params, TRAIN / VAL / TEST ids) before the cache; AMENDMENT 3 (the scored checkpoint after the 20 epochs, P4A's still precision, the commands) 2026-11-07 00:1x, before any TEST label. Nothing scored yet."
+status: "SCORED 2026-11-07 00:39 ICT: THE xmas02 MODEL PASSES (Q1c: all four tier species, recall 0.98-1.00, precision 0.87-0.88; P4A still precision 0.946 on 728 detections). Pre-registered 2026-11-06; Amendments 2 and 3 before the cache and before any TEST read."
 role: null
-verdict_date: null
+verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [../planning/xmas02-detector.md, gef10-eval.md, payf07-eval.md, v2orc-vs-v1.md, ../planning/rogue-xmas02.md]
-next_action: "Amendment 3's commands in order: the TEST labels, the seed-53 pack and its two labellers, the refs, the Q1 detections, P4A, the latency, G1 / G2; then worker-stop:vision and the results."
+next_action: "Batt decides whether to deploy it on xmas_dun02 (plan T-11: a model per map, species collapsed to monster; the double cookie boxes suggest class-agnostic NMS). Nothing switches the live detector until then."
 title: "xmas02: the xmas_dun02 detector's evaluation (pre-registered)"
 date: 2026-11-06
 owner: Batt
@@ -256,4 +256,120 @@ drop, on the same 500 ms rule (`SELF_MOVE_NS`). Nothing else in the output chang
 
 ## RESULTS
 
-(none yet)
+### VERDICT (2026-11-07 00:39 ICT): THE xmas02 MODEL PASSES -- Q1c holds for all four tier species and P4A holds
+
+| bar | result | pass |
+|---|---|---|
+| Q1c Myst Case (>= 50 evaluated: recall >= 0.80 AND precision >= 0.80) | 59 evaluated, recall 1.000, precision 0.881 | YES |
+| Q1c Cruiser | 56, recall 0.982, precision 0.873 | YES |
+| Q1c Cookie | 60, recall 0.983, precision 0.881 | YES |
+| Q1c Christmas Cookie | 58, recall 0.983, precision 0.877 | YES |
+| P4A (X2 + xp1 still captures: precision >= 0.80 with >= 100 detections) | 689 / 728 = 0.946 | YES |
+
+- **Passing does NOT switch the live detector** (above): deploying it on xmas_dun02 (plan T-11, the
+  species collapsed to `monster` for the runner) is Batt's decision.
+- Scored ONCE, with Amendment 3's commands. Two differences from them, both before any score:
+  - `map_labels.py pack` needs `--out` (gef10's had it; the amendment left it out): the first
+    call stopped on the argument error before reading anything; rerun with `--out $T/pack-build.json`.
+  - The pairs file now carries the kept boxes its verdicts index (e787b01, 00:18:25, output only;
+    v1's X2 re-score stayed identical), so step 7's draw could find the boxes.
+
+### The inputs as made
+- **TEST labels** (00:15:08-00:25:14, nice 19, `eval_test: true`, params `d4cc0a5d...` FROZEN):
+  xw5 1,147 kept (Christmas Cookie 127, Cruiser 440, Myst Case 285, Cookie 295; Garm Baby and the
+  Goblin 0), xp1 and X2 after it.
+- **The pack** (00:26:34, seed 53, salt xmas02, 60 per species): 240 crops, pools Myst Case 402,
+  Cruiser 534, Cookie 358, Christmas Cookie 290 (no other species had a kept TEST label); 12 grids;
+  the 9-letter multi-view reference. sha256: pack.json `46c13024...`, answer_key.json `fc9facb1...`,
+  reference.png `2cae63ad...`, instructions.txt `dc48fb15...` (T2's, byte-identical). The pack was
+  copied (sha256-checked) to `/dev/shm/poring-lab-tmp/blind-eval53/pack`, away from the key.
+- **Two NEW blind labellers C and D** (00:26:5x-00:33), each given only the pack, its instructions
+  and its answers path. C: q1 yes 240; q2 good 233, off 7. D: q1 yes 240; q2 good 237, loose 1, off
+  2. Neither marked any box as a toy model. Answers sha256 C `01808a2b...`, D `9c3817ba...` (in the
+  scorer's fields A, B). Scored as given; D's note that two of its "good" hat cases could be "off"
+  was not acted on (blind protocol).
+- **Evaluated** (both: yes / good / the label's species): 233 of 240 (C's q2 not good 7, D's 3).
+- **The Q1 detections** (00:27:38-00:28:20, the worker; 231 frames; imgsz 1280, conf 0.25):
+  `q1-pred-xmas02.json` sha256 `99ee7e1a...`. The worker was stopped at 00:28:41 (verified: exited,
+  nothing of ours on the GPU).
+
+### Q1c (VERDICT) and Q1s (reported)
+- **Q1c pooled:** 233 evaluated, 230 matched (recall 0.987), precision 0.966.
+- **Q1c's precision is lower than each species' recall because of 8 DOUBLE BOXES:** all 8 unmatched
+  detections inside the evaluated boxes are a `cookie` + `cookie_xmas` pair on ONE sprite (IoU > 0.5;
+  ultralytics' NMS is per class). Under Amendment 1's literal field every species' frame set counts
+  them. `precision_own_boxes`: Myst Case 0.983, Cruiser 1.000, Cookie 1.000, Christmas Cookie 0.891.
+- **Q1s (the classes agreeing):** Myst Case 59 / 59 (precision 0.983), Cruiser 55 / 56 (0.982),
+  Cookie 58 / 60 (0.879), Christmas Cookie 56 / 58 (1.000): every bar passes.
+- **The Cookie / Christmas Cookie confusion** (evaluated crops, the class each was seen as):
+  Cookie -> cookie 58, cruiser 1, none 1; Christmas Cookie -> cookie_xmas 51, **cookie 5**, mystcase
+  1, none 1. Cruiser -> cruiser 55, none 1. Myst Case -> mystcase 59.
+- **By TEST part** (Q1c: evaluated, recall, precision): xw5 Myst Case 41 / 1.000 / 0.891, Cruiser
+  45 / 0.978 / 0.898, Cookie 51 / 0.980 / 0.909, Christmas Cookie 25 / 1.000 / 0.833; X2 17 / 1.000 /
+  0.895, 9 / 1.000 / 0.818, 8 / 1.000 / 0.800, 27 / 0.963 / 0.929; xp1 1, 2, 1 and 6 crops (recall
+  1.000 each; too few to read).
+- **Under a model or terrain vs clear** (Q1s; the scorer splits Q1 only): under -- Myst Case 8 / 8,
+  Cruiser 13 / 13, Cookie 12 / 12 (precision 0.80), Christmas Cookie 11 / 11; clear -- 51 / 51,
+  42 / 43, 46 / 48, 45 / 47.
+
+### P4A (VERDICT): the runner's view on the patrol TEST (X2 + xp1), the CPU path
+The new model's rows (`recorder_boxes.py predict`, UnitDetector, 8 threads, nice 10), scored by
+4A's rule with 4J's readings (`--classes classes-xmas02.json`, UI boxes dropped, the session's
+chat window).
+
+| | X2 new | X2 v1 | xp1 new | xp1 v1 |
+|---|---|---|---|---|
+| captures scored | 1,159 | 1,159 | 1,232 | 1,232 |
+| **still precision** | **489 / 511 = 0.957** | 0 / 26 | **200 / 217 = 0.922** | 0 / 37 |
+| moving precision | 81 / 369 = 0.220 | 1 / 40 | 103 / 474 = 0.217 | 1 / 93 |
+| all-captures precision | 570 / 880 = 0.648 | 1 / 66 | 303 / 691 = 0.438 | 1 / 130 |
+| still recall | 482 / 558 = 0.864 | 0 / 558 | 198 / 265 = 0.747 | 0 / 265 |
+| moving recall | 79 / 379 = 0.208 | 1 / 379 | 102 / 505 = 0.202 | 1 / 505 |
+| first sightings detected | 77 / 94 (median 0.97 s, p90 3.0 s) | 1 / 94 | 85 / 111 (1.02 s, p90 4.0 s) | 1 / 111 |
+| monster in view, no detection at all | 57 / 604 captures | 569 / 604 | 47 / 482 | 442 / 482 |
+| UnitDetector ms per frame (p50 / p95) | 235 / 374 | (11-06: 2 threads) | 226 / 281 | 221 / 262 |
+
+- **P4A pooled still: 689 / 728 = 0.946 (>= 100 detections): PASS.**
+- **What the moving captures show:** the precision falls from ~0.94 to ~0.22 and the recall to
+  ~0.21 when we moved in the 500 ms before the capture. That is the truth's displacement the plan
+  named (frames lag the server ~0.5 s: memory frames-lag-server-half-second), not the detector:
+  the same boxes on still captures are right 94.6 % of the time. A moving truth needs the lag
+  model before it can score anything.
+- **X2's and xp1's 4A bar (reported, not a gate): FAIL for both models.** New model, recall per
+  species on all captures: X2 Myst Case 0.578, Cruiser 0.538, Cookie 0.477, Christmas Cookie 0.797;
+  xp1 0.363, 0.521, 0.250, 0.363 (precision 0.648 / 0.438). v1: 0.000-0.005 everywhere.
+- **The 30 false still boxes by eye** (step 7; the pool is all 39 = 728 - 689; seed 53; X2 15, xp1
+  15; the scorer's verdicts: 15 near a unit, 14 elsewhere, 1 on a dying unit):
+  - **23 sit on a REAL monster** the packet truth put >= 16 px away or did not have: Cookies,
+    Christmas Cookies, Cruisers (the toy soldiers with a sword and a tall hat), a Myst Case on a
+    belt, two in a fight with our Rogue;
+  - **4 on scenery toys:** the stacked red figures (twice, X2 at the same spot), a pile of presents,
+    a seated toy robot;
+  - **3 unsure:** our own Rogue behind a potted plant (its HP / SP bar shows), a sprite cut by the
+    frame's bottom edge, a gift box behind a raised block (a Myst Case or a scenery present).
+  - So most of P4A's 5.4 % "false" boxes are truth misses; the scenery share is about 4 in 30.
+- **Double boxes on the CPU path too:** cookie + cookie_xmas pairs (IoU > 0.5) on one sprite, X2
+  13 of 964 monster boxes, xp1 6 of 716. Collapsing the species BEFORE the NMS (class-agnostic)
+  would remove them for the runner; that is a deployment detail, decided by nobody yet.
+
+### CPU latency (reported; the runner needs p95 <= v1's x 1.10)
+- The 200 TEST frames (seed 53), UnitDetector, 8 threads, nice 10, interleaved (00:37:31-00:39:26,
+  load average ~12-16): **v1 p50 228.0 / p95 272.9 ms; xmas02 p50 230.5 / p95 270.0 ms. 270.0 <=
+  300.2: YES.** Boxes on these frames: v1 59, xmas02 540.
+
+### G1 / G2 (information only, D1: the model is map-scoped and never runs on prt_fild08)
+- **G1** (the 27 indoor gold frames, position metric, species collapsed): v1 monster 83 tp / 9 fp /
+  17 fn (P 0.902, R 0.830, as published); **xmas02 0 / 28 / 100 (P 0.000, R 0.000)** and npc 0 / 54.
+- **G2** (1,077 cached v1 frames; refs byte-identical to round 2's, so v1's file is round 2's and
+  its score reproduces round 2's exactly): v1 monster P 0.718 / R 0.714; **xmas02 P 0.147 / R
+  0.072.** Under the alternative (a single model everywhere) both would fail; the map-scoped plan
+  (D1) never asks it to.
+
+### Where the outputs live
+- `data/train/eval/xmas02/` (local, 2.8 MB): q1-refs, q1-pred, q1-score, latency-200-refs,
+  latency-cpu, the P4A boxes / pairs / scores (new and v1), g1 / g2 predictions and scores.
+- `/dev/shm/poring-lab-tmp/xmas-det/eval/` (labels-test, pack, key, fp30, logs) and
+  `/dev/shm/poring-lab-tmp/blind-eval53/` (the pack copy, answers C / D): to the NAS
+  `scratch-archive/2026-11-07/` today (rule 7).
+- The run `data/train/xmas02-20261106/` (the scored last.pt) and the eval folder: to the NAS
+  `archive/train/` by a guarded `archive:` step, as gef10's.
