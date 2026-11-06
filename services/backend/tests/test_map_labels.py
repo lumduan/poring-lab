@@ -1193,7 +1193,7 @@ def test_t1_session_labeler_sets_the_sessions_rectangles(monkeypatch: pytest.Mon
 
 
 @pytest.mark.skipif(not (NAS / W2 / "packets.jsonl.gz").exists(), reason="the NAS is absent")
-def test_t1_positive_case_a_real_gef10_session(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_t1_positive_case_a_real_gef10_session() -> None:
     """A REAL gef_fild10 session (w2, TRAIN: manifest + packets, no frame): the label stack's
     rectangles are RECTS's (the code before T-1) in both layouts, and its recording path passes."""
     from dataclasses import replace
@@ -1222,7 +1222,7 @@ X2_MANIFEST = NAS / X2 / "manifest.json"
 @pytest.mark.skipif(not X2_MANIFEST.exists(), reason="the NAS is absent")
 def test_t3_positive_case_x2s_manifest_passes() -> None:
     """T-3's positive case: X2's manifest (recorder v6; ITS MANIFEST ONLY, X2 is TEST) is on the
-    recording path now; a v5 session (w2) still is; the same manifest at v5 / v7 shows the rule."""
+    recording path now; the same manifest at v5 passes and at v7 is refused (the rule)."""
     m = json.loads(X2_MANIFEST.read_text())
     assert m["recorder_version"] == 6 and m["session_id"] == X2
     ml.check_recording(m)
@@ -1306,6 +1306,10 @@ def test_t2_measuring_commands_refuse_test_by_name_before_reading() -> None:
             ml.cmd_offset(_ns(**common, parts=[f"/x/{sid}"], diagnostic=True))
     with pytest.raises(SystemExit, match="does not label engaged units"):  # E0: no selection
         ml.cmd_engaged(_ns(**common, parts=[f"/x/{XW1}"], variants=["E1"]))
+    # gef_fild10's engaged selection refuses its TEST by NAME before reading too (new here)
+    for part in (f"/x/{A7}", f"/x/{A9}", f"/x/{ml.GEF10_WATCH}:spots=11"):
+        with pytest.raises(SystemExit, match="not a FIT part"):
+            ml.cmd_engaged(_ns(**{**common, "map": "gef_fild10"}, parts=[part], variants=["E1"]))
 
 
 def test_t2_the_fit_name_passes_the_name_check(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1436,8 +1440,9 @@ def test_t2_t2_sample_conditional_species_need_30_and_one_stratum() -> None:
             1515: [_item(XW2, f, 2, 1515) for f in range(29)],
             1607: [_item(XW2, f, 3, 1607) for f in range(30)]}  # fmt: skip
     chosen, per, tier = ml.t2_sample(pool, ml.XMAS02, 51)
-    assert tier == [1249, 1265, 1248, 1246, 1607] or tier == [1249, 1248, 1265, 1246, 1607]
-    assert 1515 not in tier and 1607 in tier  # D3: >= 30 kept labels
+    # the four common species are always the tier (in the spec's order); D3: a conditional one
+    # with >= 30 kept labels joins it (the Goblin's 30), one with 29 does not (Garm Baby)
+    assert tier == [1249, 1248, 1265, 1246, 1607]
     assert per["1249"] == {"pool": 40, "sampled": 30}
     assert per["1607"] == {"pool": 30, "sampled": 30}
     assert all(c["stratum"] is None for c in chosen) and len(chosen) == 60
