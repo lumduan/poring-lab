@@ -61,14 +61,15 @@ def test_the_notices_are_seen_only_when_shown(gs: Any) -> None:
     rng = np.random.default_rng(9)
     frame = rng.integers(60, 200, (720, 1280, 3)).astype(np.uint8)
     refs: dict[str, Any] = {}
-    for name, box in (("badge", gs.BADGE_BOX), ("levelup_icon", gs.ICON_BOX)):
+    for name, box in gs.NOTICE_BOXES:
         _x, _y, w, h = box
         refs[name] = rng.integers(0, 255, (h, w)).astype(np.float32)
         mask = np.zeros((h, w), bool)
         mask[2:12, 2:12] = True
         refs[f"{name}_mask"] = mask
     assert gs.notices(frame, refs) == []
-    for name, box in (("badge", gs.BADGE_BOX), ("levelup_icon", gs.ICON_BOX)):
+    assert [n for n, _b in gs.NOTICE_BOXES] == ["badge", "levelup_icon", "skillup_icon"]
+    for name, box in gs.NOTICE_BOXES:
         x, y, w, h = box
         shown = frame.copy()
         shown[y + 2 : y + 12, x + 2 : x + 12] = refs[name].astype(np.uint8)[2:12, 2:12, None]
@@ -105,6 +106,8 @@ def _gm_files(d: Path, seed: int) -> None:
         np.save(d / f"{name}.npy", rng.random((4, 4)).astype(np.float32))
     np.save(d / "badge_mask.npy", np.ones((4, 4), bool))
     np.save(d / "levelup_mask.npy", np.ones((4, 4), bool))
+    np.save(d / "skillup_icon.npy", rng.random((44, 44)).astype(np.float32))  # the RDP set's
+    np.save(d / "skillup_mask.npy", np.ones((44, 44), bool))
 
 
 def _prove(root: Path, *components: str) -> None:
@@ -133,8 +136,14 @@ def test_rdp_is_unchanged_and_needs_no_proof(lab: Any) -> None:
     _gm_files(lab.anchors / "gm_state", 1)
     assert gs.require_ready() == "rdp"
     assert np.array_equal(gs._template(), np.load(gs.TEMPLATE))
-    assert set(gs._notice_refs()) == {"badge", "badge_mask", "levelup_icon", "levelup_icon_mask"}
+    assert set(gs._notice_refs()) == {"badge", "badge_mask", "levelup_icon", "levelup_icon_mask",
+                                      "skillup_icon", "skillup_icon_mask"}  # fmt: skip
     assert not (lab.anchors / "proof.json").exists()
+    (lab.anchors / "gm_state" / "skillup_mask.npy").unlink()  # 2026-11-06: rdp needs the icon too
+    with pytest.raises(gs.r.Stop, match=r"skillup_mask\.npy"):
+        gs.require_ready()
+    with pytest.raises(gs.r.Stop, match="cut-skillup"):
+        gs._notice_refs()
 
 
 def test_console_needs_the_proven_s2_set(lab: Any) -> None:
@@ -154,6 +163,7 @@ def test_console_needs_the_proven_s2_set(lab: Any) -> None:
         gs._notice_refs()
     _prove(s2, "gm_notices")
     assert gs.require_ready() == "s2"
+    assert "skillup_icon" not in gs._notice_refs()  # no s2 cut of it: the chat check stops there
     np.save(s2 / "gm_state" / "badge.npy", np.zeros((4, 4), np.float32))  # edited after
     with pytest.raises(gs.r.Stop, match=r"gm_notices: stale since the proof"):
         gs._notice_refs()
@@ -454,7 +464,90 @@ def test_the_notices_go_before_any_typed_restore_line(gs: Any) -> None:
     import inspect
 
     fixed = inspect.getsource(gs.ensure_fixed)
-    assert fixed.index("clear_notices(") < fixed.index("r.gm(")
+    assert fixed.index("clear_notices(") < fixed.index("gm_line(")
+    assert "r.gm(" not in fixed  # every restore line goes through gm_line (below)
     hunting = inspect.getsource(gs.ensure_hunting)
     assert hunting.index("clear_notices(") < hunting.index("rebuild_hunting(")
     assert "r.gm(" not in inspect.getsource(gs.clear_notices)  # the notice step types nothing
+
+
+def test_the_notices_skip_a_notice_without_references(gs: Any) -> None:
+    """The s2 set has no skill-point icon cut: notices() reads the ones it has, no KeyError."""
+    frame = np.zeros((720, 1280, 3), np.uint8)
+    refs = {"badge": np.zeros((40, 39), np.float32), "badge_mask": np.ones((40, 39), bool)}
+    assert gs.notice_shares(frame, refs) == {"badge": 1.0}
+    assert gs.notices(frame, refs) == ["badge"]
+
+
+class _Rec:
+    def __init__(self) -> None:
+        self.log: list[tuple[str, ...]] = []
+
+    def chord(self, *keys: str) -> None:
+        self.log.append(("chord", *keys))
+
+
+def test_each_notice_is_cleared_by_its_own_window_one_at_a_time(
+    gs: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-06: Alt+S (the skill window) clears the bottom-left skill-point icon, Alt+A
+    (the status window) the bottom-right level-up icon (and the badge); each window is closed
+    by the gate before the next opens."""
+    import ui_gate
+
+    agent = _Rec()
+    shown = [["badge", "levelup_icon", "skillup_icon"]] * 2 + [[]] * 2  # before: both frames
+    monkeypatch.setattr(gs, "_notice_refs", lambda: {})
+    monkeypatch.setattr(gs, "_frames", lambda screen: ("a", "b"))
+    monkeypatch.setattr(gs, "notices", lambda frame, refs: shown.pop(0))
+    monkeypatch.setattr(gs.r, "activate_client", lambda agent, screen: None)
+    monkeypatch.setattr(gs.time, "sleep", lambda s: None)
+    chords = {"skills": ["AltLeft", "KeyS"], "status": ["AltLeft", "KeyA"]}
+    monkeypatch.setattr(ui_gate, "window_keys", lambda w: chords[w])
+    monkeypatch.setattr(ui_gate, "ensure_clear",
+                        lambda agent_, screen, why: agent_.log.append(("gate", why)))  # fmt: skip
+    out = gs.clear_notices(agent, None, why="t")
+    assert out == {"notices": ["badge", "levelup_icon", "skillup_icon"],
+                   "windows": ["skills", "status"], "cleared": True}  # fmt: skip
+    assert agent.log == [
+        ("chord", "AltLeft", "KeyS"),
+        ("gate", "t:clear-notices:skills"),
+        ("chord", "AltLeft", "KeyA"),
+        ("gate", "t:clear-notices:status"),
+    ]
+    shown[:] = [["skillup_icon"], ["skillup_icon"], [], ["skillup_icon"]]  # still there after
+    agent.log.clear()
+    with pytest.raises(gs.r.Stop, match=r"\['skillup_icon'\] did not clear after the skills"):
+        gs.clear_notices(agent, None, why="t")
+    assert [e[0] for e in agent.log] == ["chord", "gate"]
+
+
+def test_a_level_line_clears_its_notices_before_the_next_typed_line(
+    gs: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-06 09:37 (attempt 3): @joblevelup -49 put the icon over the chat window's corner
+    and the next line (@heal) stopped the chat check. A level line's notices go at once."""
+    log: list[str] = []
+    monkeypatch.setattr(gs.r, "gm", lambda agent, screen, cmd: log.append(f"type {cmd}"))
+    monkeypatch.setattr(gs.time, "sleep", lambda s: log.append(f"sleep {s}"))
+
+    def clear(agent: Any, screen: Any, why: str) -> dict[str, Any]:
+        log.append(f"clear {why}")
+        return {}
+
+    monkeypatch.setattr(gs, "clear_notices", clear)
+    for cmd in gs.PROFILES["hunt-flow"]["restore"] + gs.RESTORE:
+        gs.gm_line(None, None, cmd, why="w")
+    assert log == [
+        "type @joblevelup -49",
+        f"sleep {gs.NOTICE_APPEAR_S}",
+        "clear w:@joblevelup -49",
+        "type @heal",
+        "type @baselevelup -98",
+        f"sleep {gs.NOTICE_APPEAR_S}",
+        "clear w:@baselevelup -98",
+        "type @joblevelup -49",
+        f"sleep {gs.NOTICE_APPEAR_S}",
+        "clear w:@joblevelup -49",
+        "type @heal",
+    ]

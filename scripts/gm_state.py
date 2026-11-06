@@ -108,6 +108,23 @@ SETTLE_S = 2.0
 # badge (loot@1 P3 trial 0, 2026-10-09 16:55: stopped, nothing else typed).
 BADGE_BOX = (7, 145, 39, 40)  # x, y, w, h: the first shortcut icon, with the badge's corner
 ICON_BOX = (1235, 675, 45, 45)  # the level-up icon over the scene
+# The skill-point "up" icon bottom-LEFT, after a JOB level change. Since 11-05's docked chat window
+# it covers the window's bottom-left corner, so the chat check stopped the typed line after any
+# job level change (hunt_flow v56 run 2, 2026-11-06 09:25-09:37). Its known step is Batt's
+# (11-06 ~10:45): "Alt+S: the skill window comes up and the icon goes; close it with the same
+# chord" (checked live 10:53 and 10:59). Cut on RDP 11-06 10:59 (with / without, the same place);
+# held out on 18 frames of that morning (9 with it: share 1.000; 9 without: <= 0.481).
+# The client draws it ON TOP when it appears. A later focus on the chat window draws the window over
+# it (dimmed, its lower part under the input bar; 10:52): that look is NOT matched, and the chat
+# check then stops with no key. RDP set only: the s2 set has no cut of it.
+SKILLUP_BOX = (0, 676, 44, 44)
+NOTICE_BOXES = (("badge", BADGE_BOX), ("levelup_icon", ICON_BOX), ("skillup_icon", SKILLUP_BOX))
+SKILLUP_FILES = {"skillup_icon": "skillup_icon.npy", "skillup_icon_mask": "skillup_mask.npy"}
+# Each notice's own window (Batt 2026-11-06): the status window (Alt+A) clears the badge and the
+# level-up icon bottom-right, the skill window (Alt+S) the skill-point icon bottom-left
+NOTICE_WINDOW = {"badge": "status", "levelup_icon": "status", "skillup_icon": "skills"}
+LEVEL_LINES = ("@baselevelup", "@joblevelup")  # typed lines that raise a notice
+NOTICE_APPEAR_S = 1.5  # after such a line, before the notices are read (10:57: shown by 1.5 s)
 NOTICE_DIFF = 40.0  # gray levels
 NOTICE_SHARE = 0.8  # this share of a notice's own pixels matching its template = it is shown
 
@@ -206,6 +223,8 @@ def require_ready() -> str:
     _template(path)
     d = _template_path(path).parent
     missing = [f for f in NOTICE_FILES.values() if not (d / f).exists()]
+    if path == "rdp":
+        missing += _skillup_missing(d)
     if missing:
         raise r.Stop(f"gm_state: no notice references in {d} ({', '.join(missing)})")
     return path
@@ -232,16 +251,27 @@ def _weight(frames: tuple[Any, Any]) -> list[int] | None:
     return None if v is None else list(v)
 
 
-def notices(frame: Any, refs: dict[str, Any]) -> list[str]:
-    """PURE: which notices show ("badge", "levelup_icon"): each by its own pixels matching its
-    template (``refs[name]``, ``refs[name + "_mask"]``), whatever the scene behind."""
-    out = []
-    for name, box in (("badge", BADGE_BOX), ("levelup_icon", ICON_BOX)):
+def notice_shares(frame: Any, refs: dict[str, Any]) -> dict[str, float]:
+    """PURE: each notice that has references: the share of its own pixels (``refs[name +
+    "_mask"]``) matching its template (``refs[name]``), whatever the scene behind."""
+    out = {}
+    for name, box in NOTICE_BOXES:
+        if name not in refs:
+            continue  # the s2 set has no skill-point icon cut (RDP only, 2026-11-06)
         m = refs[f"{name}_mask"]
         near = np.abs(crop(frame, box) - refs[name]) < NOTICE_DIFF
-        if m.sum() and float((near & m).sum()) / float(m.sum()) >= NOTICE_SHARE:
-            out.append(name)
+        out[name] = float((near & m).sum()) / float(m.sum()) if m.sum() else 0.0
     return out
+
+
+def notices(frame: Any, refs: dict[str, Any]) -> list[str]:
+    """PURE: which notices show ("badge", "levelup_icon", "skillup_icon"): each by its own pixels
+    matching its template (notice_shares >= NOTICE_SHARE)."""
+    return [n for n, s in notice_shares(frame, refs).items() if s >= NOTICE_SHARE]
+
+
+def _skillup_missing(d: Path) -> list[str]:
+    return [f for f in SKILLUP_FILES.values() if not (d / f).exists()]
 
 
 def _notice_refs(path: str | None = None) -> dict[str, Any]:
@@ -250,14 +280,22 @@ def _notice_refs(path: str | None = None) -> dict[str, Any]:
     path = path if path is not None else _path()
     _require_proven(path, ui_sets.GM_NOTICES_NEEDS)
     d = _template_path(path).parent
-    return {"badge": np.load(d / "badge.npy"), "badge_mask": np.load(d / "badge_mask.npy"),
+    refs = {"badge": np.load(d / "badge.npy"), "badge_mask": np.load(d / "badge_mask.npy"),
             "levelup_icon": np.load(d / "levelup_icon.npy"),
             "levelup_icon_mask": np.load(d / "levelup_mask.npy")}  # fmt: skip
+    if path == "rdp":
+        missing = _skillup_missing(d)
+        if missing:
+            raise r.Stop(f"gm_state: no skill-point icon reference in {d} ({', '.join(missing)}): "
+                         "`gm_state.py cut-skillup` first")  # fmt: skip
+        refs.update({k: np.load(d / f) for k, f in SKILLUP_FILES.items()})
+    return refs
 
 
 def clear_notices(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
-    """The known step: open the status window by its chord, ui_gate closes it; then no notice
-    may show."""
+    """The known steps (Batt 2026-11-06): for each notice shown, its own window (NOTICE_WINDOW)
+    opened by its chord and closed by ui_gate, ONE window at a time (the skill tree opens over the
+    status window's place); then no notice may show."""
     import ui_gate
 
     refs = _notice_refs()
@@ -265,15 +303,28 @@ def clear_notices(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
     seen = sorted(set(notices(a, refs)) & set(notices(b, refs)))
     if not seen:
         return {"notices": [], "cleared": False}
-    r.activate_client(agent, screen)
-    agent.chord(*ui_gate.window_keys("status"))
-    time.sleep(1.2)
-    ui_gate.ensure_clear(agent, screen, why=f"{why}:clear-notices")
+    windows = sorted({NOTICE_WINDOW[n] for n in seen})
+    for w in windows:
+        r.activate_client(agent, screen)
+        agent.chord(*ui_gate.window_keys(w))
+        time.sleep(1.2)
+        ui_gate.ensure_clear(agent, screen, why=f"{why}:clear-notices:{w}")
     a, b = _frames(screen)
     left = sorted(set(notices(a, refs)) | set(notices(b, refs)))
     if left:
-        raise r.Stop(f"gm_state ({why}): the notices {left} did not clear after the status window")
-    return {"notices": seen, "cleared": True}
+        raise r.Stop(f"gm_state ({why}): the notices {left} did not clear after the "
+                     f"{' + '.join(windows)} window")  # fmt: skip
+    return {"notices": seen, "windows": windows, "cleared": True}
+
+
+def gm_line(agent: Any, screen: Any, cmd: str, *, why: str) -> dict[str, Any] | None:
+    """One typed restore line; a LEVEL line's notices are cleared before anything else is typed
+    (2026-11-06 09:37, attempt 3: @joblevelup -49's icon stopped the next line's chat check)."""
+    r.gm(agent, screen, cmd)
+    if not cmd.startswith(LEVEL_LINES):
+        return None
+    time.sleep(NOTICE_APPEAR_S)
+    return clear_notices(agent, screen, why=f"{why}:{cmd}")
 
 
 def ensure_fixed(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None,
@@ -293,8 +344,7 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str, out_dir: Path | None = No
         got = check(screen, profile)
     rec["before"] = got["dist"]
     if got["decision"] != "fixed":
-        for cmd in prof["restore"]:
-            r.gm(agent, screen, cmd)
+        rec["notices_between"] = [gm_line(agent, screen, cmd, why=why) for cmd in prof["restore"]]
         time.sleep(SETTLE_S)
         rec["restored"] = True
         got = check(screen, profile)
@@ -912,6 +962,29 @@ def cut_notices(with_png: Path, without_png: Path, root: Path) -> dict[str, Any]
             "with": with_png.name, "without": without_png.name}  # fmt: skip
 
 
+def cut_skillup(with_png: Path, without_png: Path, d: Path) -> dict[str, Any]:
+    """The skill-point icon's template and mask (RDP set, ``d`` = its gm_state dir) from a frame
+    WITH the icon and one WITHOUT it at the same place (cut_notice_refs' rule)."""
+    w, wo = _png(with_png), _png(without_png)
+    t = crop(w, SKILLUP_BOX)
+    m = np.abs(t - crop(wo, SKILLUP_BOX)) > NOTICE_DIFF
+    d.mkdir(parents=True, exist_ok=True)
+    np.save(d / SKILLUP_FILES["skillup_icon"], t)
+    np.save(d / SKILLUP_FILES["skillup_icon_mask"], m)
+    return {"cut": str(d), "mask_px": int(m.sum()), "of": int(m.size),
+            "with": [with_png.name, _sha(with_png)],
+            "without": [without_png.name, _sha(without_png)]}  # fmt: skip
+
+
+def frame_of_png(path: Path) -> Any:
+    """A saved client frame (1280 x 720), or a full-desktop shot cut to the game region."""
+    f = _png(path)
+    if f.shape[:2] != (720, 1280):
+        x, y, w, h = r.game_region()
+        f = f[y : y + h, x : x + w]
+    return np.ascontiguousarray(f)
+
+
 def bank_items(banks: list[Path], path: str) -> list[dict[str, Any]]:
     out = []
     for b in banks:
@@ -1053,6 +1126,17 @@ def main() -> int:
         return _main_s2(cmd)
     if cmd[:1] == ["cut-loot"] and len(cmd) == 2:
         print(json.dumps(cut_loot(Path(cmd[1]))))
+        return 0
+    if cmd[:1] == ["cut-skillup"] and len(cmd) == 3:  # cut-skillup WITH.png WITHOUT.png (RDP set)
+        print(json.dumps(cut_skillup(Path(cmd[1]), Path(cmd[2]), TEMPLATE.parent)))
+        return 0
+    if cmd[:1] == ["notice-shares"] and len(cmd) > 1:  # the verifier: each notice's share per PNG
+        refs = _notice_refs("rdp")
+        for p in cmd[1:]:
+            sh = notice_shares(frame_of_png(Path(p)), refs)
+            shown = [k for k, v in sh.items() if v >= NOTICE_SHARE]
+            print(json.dumps({"file": p, "shown": shown,
+                              "shares": {k: round(v, 3) for k, v in sh.items()}}))  # fmt: skip
         return 0
     if cmd[:1] == ["cut-hunt-flow"]:  # the Lv 70 / 1 level lines from the CURRENT frame
         screen = r.Screen()
