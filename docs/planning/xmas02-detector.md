@@ -545,6 +545,20 @@ quant-postgres went above 10 % at 22 s (13.6-16.4 %), the worst was **26.9 %** (
 the old one-spike rule at 25 %; the sustained rule needs 30 s above 30 %), and the wait released 60 s
 after the last busy poll. The script and its output: `/dev/shm/poring-lab-tmp/xmas-det/resume-check/`.
 
+**xw1, continuation (Amendment D; recorder session `20261106T144500-rdp-xmas02-xw1`, watch
+`20261106T144252-watch-xmas_dun02-xw1b`): COMPLETE, one part, no pause.**
+- Prep 14:42: `@killmonster2` ("All monsters killed!"), the frame judged clean (chat closed, no
+  dialog or notice icon, HP 100 %). The chain started 14:42:50; the recorder waited out the
+  market-open window and began part 0 at **14:45:00**; the watch had warped to stand 6 at 14:43:01,
+  waited 115.1 s, warped there AGAIN at 14:45:08 and dwelt (Amendment D's re-warp, live).
+- **Stands 6-41 of seed 2611061's order (36 dwells, each recorded whole in part 0, no redo)**; the
+  25-min box ended the watch at 15:10:16, the recorder ended on the SIGINT at 15:10:19.
+- **1,515 frames, 3,275,661,572 bytes (129.7 MB/min), 1,069 packet events.** The guard (`>30.0% for
+  30s`): worst **32.1 % on quant-postgres, 4 s above 30 %**: no stop; the old one-spike rule (25 %)
+  would have cut this part too.
+- The end frame judged clean at (192,127), HP 100 % all along (immunity held).
+- **FIT = the two `*-rdp-xmas02-xw1` sessions: 42 whole dwells** (6 + 36), ~30 min of watch.
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
@@ -782,3 +796,17 @@ and time box as 2b / Amendment A say):**
   a pause are simply not in TEST. P4A and X2's 4A numbers score the recorded parts only; the report
   states the pause time.
 - Recorded after the 17:00 ships (outside SET hours), shipped before the next recording.
+
+### Amendment F (2026-11-06 15:1x ICT, before xw3 records): recording ahead of FIT, and 2d's rule in order
+
+- Section 11 puts FIT (step 5) before xw2-xw4 (step 6). With the Windows session free this
+  afternoon, **xw2 (started 15:11:21) and xw3 are recorded BEFORE FIT**. Nothing reads them before
+  the freeze: FIT reads only the `*-rdp-xmas02-xw1` sessions (3b), so the order of recording changes
+  no parameter.
+- **2d's stopping rule is applied at labelling time, in the watches' order:** xw2 is labelled
+  (frozen params) and counted first, then xw3, then xw4; TRAIN admits watches in that order until
+  every tier species has >= 300 boxes in whole TRAIN frames (or 5 TRAIN watches). **A watch
+  recorded beyond the stop is not admitted to TRAIN** (it stays on the NAS, unused, and the report
+  says so).
+- xw4 waits for xw2's and xw3's counts (2d's estimate: 2-3 TRAIN watches).
+
