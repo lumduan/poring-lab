@@ -391,3 +391,66 @@ def test_the_cpp_runtime_warning() -> None:
         None
     )
     assert sb.runtime_warning((15, 0, 0, 0)) == ""
+
+
+# --- any screen size, windowed or fullscreen (Batt 2026-11-06: "our bot should be flexible") ------
+
+
+def test_the_layout_follows_the_client_size() -> None:
+    """At 1280 x 720 nothing changes; elsewhere the character stays at the centre and each UI window
+    keeps its size and sticks to its corner."""
+    assert sb.zones_for(1280, 720) == sb.UI_ZONES
+    assert sb.char_for(1280, 720) == (sb.CHAR_X, sb.CHAR_Y)
+    z = sb.zones_for(1920, 1080)
+    assert z["basic_info"] == sb.UI_ZONES["basic_info"]  # top-left: unchanged
+    assert z["hotkey_bar"] == sb.UI_ZONES["hotkey_bar"]
+    assert z["minimap"] == (1768, 8, 1920, 165)  # top-right: moved with the right edge
+    assert z["chat"] == (0, 938, 602, 1080)  # bottom-left: moved with the bottom edge
+    assert sb.char_for(1920, 1080) == (960.0, 540.0) and sb.char_for(1024, 768) == (512.0, 384.0)
+    # the same point is on the minimap at 1280 wide and free at 1920 wide
+    assert not sb.clickable((1200, 100), 1280, 720) and sb.clickable((1200, 100), 1920, 1080)
+    assert not sb.clickable((1800, 100), 1920, 1080)  # 1920's minimap
+    assert not sb.clickable((100, 1000), 1920, 1080) and sb.clickable((100, 650), 1920, 1080)
+
+
+def test_the_model_sees_native_scale_never_shrunk_or_stretched() -> None:
+    size = (736, 1280)
+    assert sb.detect_window(1280, 720, size) == (0, 0, 1280, 720)  # the lab size: whole
+    assert sb.detect_window(1920, 1080, size) == (320, 172, 1600, 908)  # bigger: the centre
+    assert sb.detect_window(1024, 768, size) == (0, 16, 1024, 752)  # taller: its middle rows
+    assert sb.detect_window(800, 600, size) == (0, 0, 800, 600)  # smaller: whole (padded)
+    x, s, left, top = sb.letterbox(np.zeros((600, 800, 3), np.uint8), size, upscale=False)
+    assert s == 1.0 and (left, top) == (240, 68) and x.shape == (1, 3, 736, 1280)
+    _, s_up, _, _ = sb.letterbox(np.zeros((600, 800, 3), np.uint8), size)  # the default enlarges
+    assert s_up > 1.0
+
+
+def test_detect_moves_the_boxes_back_from_the_cut_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    det = object.__new__(sb.OnnxDetector)  # no model file: the session and decode are stand-ins
+    det.size, det.name, det.conf, det.iou = (736, 1280), "images", 0.25, 0.5
+    seen: dict[str, object] = {}
+
+    class Sess:
+        def run(self, _out: object, feed: dict[str, np.ndarray]) -> list[np.ndarray]:
+            seen["shape"] = feed["images"].shape
+            return [np.zeros((1, 7, 1))]
+
+    det.sess = Sess()
+
+    def decode(out: object, s: float, left: int, top: int, conf: float, iou: float) -> list[object]:
+        seen["letterbox"] = (s, left, top)
+        return [sb.Box(10, 20, 30, 40, 0.9, "monster")]
+
+    monkeypatch.setattr(sb, "decode", decode)
+    (b,) = det.detect(np.zeros((1080, 1920, 3), np.uint8))
+    assert seen == {"shape": (1, 3, 736, 1280), "letterbox": (1.0, 0, 0)}
+    assert (b.x0, b.y0, b.x1, b.y1) == (330, 192, 350, 212)  # + the cut-out's corner (320, 172)
+
+
+def test_fullscreen_and_black_frames() -> None:
+    assert sb.is_fullscreen((0, 0, 1920, 1080), (0, 0, 1920, 1080))
+    assert not sb.is_fullscreen((8, 31, 1288, 751), (0, 0, 1920, 1080))
+    assert sb.is_black(np.zeros((720, 1280, 3), np.uint8))
+    assert not sb.is_black(np.full((720, 1280, 3), 40, np.uint8))
+    a = sb.parse_args(["--act"])
+    assert a.view == "auto" and sb.parse_args(["--watch", "--view", "on"]).view == "on"
