@@ -537,6 +537,14 @@ Calendar: ~2 days if D0 is answered today; the weekend has no market windows.
   Batt.** The partial session (662.5 MB) stays on the root disk until shipped (`dataset_ship`
   refuses SET hours anyway).
 
+**Amendment D's calm wait, live positive case (14:12:24-14:17, read-only, nothing recorded):**
+`record_session.wait_ready(first=False)` against the REAL capture cgroups (7: quant-postgres,
+-ticker-engine, -orderbook-engine, -marketdata-engine, -mongo, frigate, the capture-streaming-pro
+cron), the market-open window ignored for this check: **ok after 268.4 s** (269 polls, 57 busy).
+quant-postgres went above 10 % at 22 s (13.6-16.4 %), the worst was **26.9 %** (it would have tripped
+the old one-spike rule at 25 %; the sustained rule needs 30 s above 30 %), and the wait released 60 s
+after the last busy poll. The script and its output: `/dev/shm/poring-lab-tmp/xmas-det/resume-check/`.
+
 ## 13. AMENDMENTS (clock-labelled; each committed BEFORE the step it changes)
 
 ### Amendment A (2026-11-06 11:2x ICT, committed before xw1): Batt's answers to section 0
@@ -682,7 +690,7 @@ subagents), each with tests and a positive case, before the FIT step reads xw1.
   `player` + the species. Either npc / warp stay as EMPTY fixed classes (the species then start at
   id 3) or the loader takes a map-scoped fixed set. No class id is used before then.
 
-### Amendment D (2026-11-06 14:2x ICT, before any further recording): Batt's answer on the IO guard; pause and resume
+### Amendment D (2026-11-06 14:1x ICT, committed 14:15:52, before any further recording): Batt's answer on the IO guard; pause and resume
 
 **Batt's words** (the reply to the 13:5x summary of what waited on them, in this session after
 13:58:26, the turn's first `date`): "ทำต่อเลยได้นี้ ผ่อนผันให้ ทำระบบ retry ไว้กลับมารันต่อด้วยก็ได้
