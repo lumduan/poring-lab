@@ -28,13 +28,15 @@ adds ONE exclusion to C1, the PICKUP NOTICE: a standing label whose PREDICTED bo
 area > 0) a notice that ``gef10_r2_measure.find_notices`` detects in that frame's top rows is not
 scored (reason ``notice``, counted per species like ``ui_or_edge``). The default ``--c1-rule
 round1`` is the frozen round-1 check, unchanged bit for bit (its rows file is byte-identical); the
-output's ``c1_rule`` records which ran. ``round2`` is gef_fild10's only, and it refuses round 1's
-spent TEST parts (the watch's cells 11-14, a7, a8). Round 2's TEST2 (a9, a10, a11) is refused by
+output's ``c1_rule`` records which ran. ``round2`` was gef_fild10's only (➡️ since xmas02's T-8
+also xmas_dun02's, its only rule: below), and it refuses round 1's spent TEST parts (the watch's
+cells 11-14, a7, a8). Round 2's TEST2 (a9, a10, a11) is refused by
 NAME by the measuring commands, ``labels`` and ``pack`` (``test2_suffixes``), except under
 ``--eval-test2`` below.
 
 TEST2's EVALUATION (docs/benchmarks/gef10-eval.md AMENDMENT R2-2, 2026-10-29 12:53 ICT, before
-TEST2's evaluation labels exist): ``--eval-test2`` is gef_fild10's only and reads TEST2 parts
+TEST2's evaluation labels exist): ``--eval-test2`` is gef_fild10's only (xmas_dun02 has its own
+flag, ``--eval-test``: below) and reads TEST2 parts
 ONLY (a9, a10, a11, w3 by NAME); round 1's spent TEST and round 3's TEST3 stay refused. Without
 the flag both commands behave exactly as before.
 
@@ -45,6 +47,25 @@ the flag both commands behave exactly as before.
 --eval-test2`` takes only such TEST2 label files, puts every map species with at least one kept
 label in the pool (no conditional tier), draws the first N of t2_order per species and stratum
 (N / E) and records ``per_species_target`` N and ``"eval_test2": true``.
+
+xmas_dun02 (docs/planning/xmas02-detector.md, ACCEPTED 2026-11-06, Amendment A; its tool gaps
+T-1, T-2, T-3, T-8, T-9 of 1f): ``--map xmas_dun02``. FIT is xw1 and TEST is xw5, xp1 and X2, all
+by session NAME (the sessions are recorded after the plan: ``<stamp>-rdp-xmas02-xw1``); a part is
+refused by its NAME before anything of it is read. Engaged units are EXCLUDED (E0, D11) with
+gef10's Amendments B (``crowded``, T_h's set) and C (``facing_unknown``); ``dying_in_view`` (D8);
+one T2 stratum, seed 51, salt ``xmas02``. Its C1 always has the pickup-notice rule (``check
+--c1-rule round2``, 4h / 5; ``round1`` is refused there). Its evaluation reads TEST under its own
+flag, ``--eval-test`` (9: seed 53, 60 per species), and refuses everything else:
+
+    map_labels.py labels PART --map xmas_dun02 --eval-test --params PARAMS(FROZEN) --classes JSON
+    map_labels.py pack   LABELS.json... --map xmas_dun02 --eval-test --per-species 60 --seed 53 ...
+
+UI RECTANGLES (every map; T-1): the hunting (or 4-row) layout's windows with the chat window of
+the session's DATE (chat_window.for_sid: the 2026-11-05 standard (0, 585, 600, 720) from
+20261105T12 on, the legacy (0, 532, 600, 626) before -- RECTS's own value, so every older
+session's rectangles are unchanged), minus a window lying wholly inside another (the standard
+chat window holds notice_left whole; detector_vs_packets.nested_rects). The recorder path accepts
+``recorder_version`` 5 or 6 (T-3: v6 changed only the IO-guard rule, e5d892f).
 
 A PART is a session directory, optionally restricted to the staged session's spots:
 ``DIR`` or ``DIR:spots=0-7``. The map's spec (MAPS) names its FIT and TEST parts; the measuring
@@ -155,6 +176,22 @@ class MapSpec:
     # gef10 round 3 (gef10-round3.md 5): MORE staged sessions, each with its own kind ("items":
     # stage_items' spots; "watch": one cell per map change); ``staged`` keeps ``staged_kind``
     staged_extra: dict[str, str] = field(default_factory=dict)
+    # xmas02-detector.md 3b: FIT by session NAME too (its sessions are recorded after the plan)
+    fit_suffixes: tuple[str, ...] = ()
+    # xmas02 4a / 4i (D11): engaged units EXCLUDED by a FIXED variant (no FIT selection, no N / E
+    # strata), with gef10's Amendments B (crowded, T_h's set) and C (facing_unknown); None: the
+    # map's own rule (payf07: EngagedRule; gef10: engaged_labels and 4h's selection)
+    engaged_fixed: str | None = None
+    kb_classes: Path | None = None  # the KB's classes.json when it is not ``kb``'s (xmas02 11.3)
+    c1_rules: tuple[str, ...] = ("round1",)  # the C1 rules this map is checked under (T-8)
+    test_spent: bool = False  # gef10 13r: round 1's TEST was read once by T1 (round 2 never reads)
+    # the evaluation's flag (EVAL_FLAGS) and the TEST names it reads (gef10-eval.md R2-2: TEST2;
+    # xmas02 9: TEST); None: no evaluation labels or pack on this map
+    eval_flag: str | None = None
+    eval_suffixes: tuple[str, ...] = ()
+    t2_seed: int | None = None  # a pre-registered T2 seed (xmas02 6: 51); None: any
+    eval_seed: int | None = None  # a pre-registered evaluation pack seed (xmas02 9: 53)
+    eval_per_species: int | None = None  # ... and its N per species (xmas02 9: 60)
 
     def staged_kind_of(self, sid: str) -> str | None:
         """The staged kind of session ``sid`` (its spots exist), or None (no spots)."""
@@ -174,7 +211,20 @@ class MapSpec:
             sid.endswith(s) for s in self.test_suffixes)  # fmt: skip
 
     def is_fit(self, sid: str, spots: frozenset[int] | None) -> bool:
-        return inside_role(sid, spots, self.fit)
+        """Every frame of the part lies in FIT: by the role table, or the whole session by NAME."""
+        return inside_role(sid, spots, self.fit) or self.fit_by_name(sid)
+
+    def overlaps_fit(self, sid: str, spots: frozenset[int] | None) -> bool:
+        """The part shares a frame with FIT (the parameters' own data)."""
+        return overlaps_role(sid, spots, self.fit) or self.fit_by_name(sid)
+
+    def fit_by_name(self, sid: str) -> bool:
+        return any(sid.endswith(s) for s in self.fit_suffixes)
+
+    def labels_engaged_rule(self) -> bool:
+        """The label stack is gef10's EngagedLabeler / EngagedLabelRule (Amendments B and C):
+        a map that labels engaged units (4h), or one with a fixed engaged variant (xmas02 E0)."""
+        return self.engaged_labels or self.engaged_fixed is not None
 
 
 PAYF07 = MapSpec(
@@ -195,6 +245,8 @@ PAYF07 = MapSpec(
 )  # fmt: skip
 G10 = Path("/dev/shm/poring-lab-tmp/gef10-det")
 GEF10_WATCH = "20261025T195325-rdp-ow1"
+# ROUND 2's TEST2 by NAME (gef10-round2.md), also the parts --eval-test2 reads (R2-2)
+GEF10_TEST2 = ("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11", "-rdp-w3")
 GEF10 = MapSpec(
     name="gef_fild10",
     cells=(400, 400),
@@ -227,15 +279,57 @@ GEF10 = MapSpec(
     # ROUND 2 (gef10-detector.md 13s; Batt 2026-10-26 ~09:4x "do round 2 now"): TEST2 = a9, a10,
     # a11 (recorded after round 1's T1, never read) + w3, an immune lattice watch recorded AFTER
     # 13s's commit (its name is refused before it exists); all refused like TEST
-    test2_suffixes=("-rdp-rogue-a9", "-rdp-rogue-a10", "-rdp-rogue-a11", "-rdp-w3"),
+    test2_suffixes=GEF10_TEST2,
     # ROUND 3 (gef10-round3.md 2, PROPOSED 2026-10-29 12:07, before any read): TEST3 = the staged
     # session e3b, held out for the item rule's G2; E3 and e3b are stage_items sessions (spots =
     # a first warp followed by drops); FIT for the item anchor = E3's spots 0-3
     test3_suffixes=("-rdp-stage-gef10-e3b",),
     staged_extra={"20261028T151136-rdp-stage-gef10-e3": "items",
                   "20261029T110813-rdp-stage-gef10-e3b": "items"},
+    c1_rules=("round1", "round2"),  # round 2 (gef10-round2.md): + the pickup notice
+    test_spent=True,  # 13r: T1 read round 1's TEST once
+    eval_flag="eval_test2", eval_suffixes=GEF10_TEST2,  # gef10-eval.md AMENDMENT R2-2
 )  # fmt: skip
-MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10}
+# xmas_dun02 (docs/planning/xmas02-detector.md, ACCEPTED 2026-11-06 Amendment A): the client data
+# in /dev/shm (11.3: the RSW + its 37 RSMs, the sprites, the MERGED sprite-name table; data/kb's
+# classes.json); the GAT is camera.GAT_DIR's (X1's)
+XD = Path("/dev/shm/poring-lab-tmp/xmas-det")
+XMAS02_X2 = "20261105T225409-rdp-xmas02-x2"  # 2e (D8): TEST-P, refused for FIT and TRAIN
+XMAS02 = MapSpec(
+    name="xmas_dun02",
+    cells=(260, 260),
+    rsw=XD / "grf" / "data" / "xmas_dun02.rsw",
+    models=XD / "grf" / "data" / "model",
+    # 1b / D3: the tier (Myst Case, Cruiser, Cookie, Christmas Cookie) + Garm Baby and Christmas
+    # Goblin CONDITIONAL; Stormy Knight (1251) OUT: its frames are unchecked_species (4h)
+    species=(1249, 1248, 1265, 1246, 1515, 1607),
+    walkers=(1249, 1248, 1265, 1246, 1515),  # 4b: Garm Baby counts when seen
+    fit_px=6,  # 4c-4d: +-6 px for every species, no anchor (no species flies)
+    staged="",  # no staged session: every part is a whole session
+    fit={},  # 3b: FIT = xw1, by NAME (fit_suffixes)
+    test={XMAS02_X2: None},
+    kb=XD / "kb-sprites",  # the merged monster_sprite_names.json (Santa Poring's stem poring_)
+    kb_classes=ROOT / "data" / "kb" / "classes.json",
+    sprites=XD / "sprites" / "data" / "sprite" / "몬스터",
+    labels="xmas02-o3h",  # 4: "xmas02-o3h-t" only if 4f's FIT test adopts terrain (T-4)
+    t2_salt="xmas02",
+    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),  # 3b: TEST by NAME
+    conditional=(1515, 1607),  # D3: in T2's tier only with >= 30 kept labels
+    # 6: the multi-view reference beside the map's species: Stormy Knight, Poring, Santa Poring
+    reference=(1251, 1002, 1062),
+    dying_rule=True,  # D8 (gef10 4g)
+    tmp=XD,
+    plan="docs/planning/xmas02-detector.md",
+    fit_suffixes=("-rdp-xmas02-xw1",),
+    engaged_fixed="E0",  # D11
+    c1_rules=("round2",),  # 4h / 5: C1 always drops a label under a pickup notice (T-8)
+    eval_flag="eval_test",  # 9 (T-9): the evaluation reads TEST only
+    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),
+    t2_seed=51,
+    eval_seed=53,
+    eval_per_species=60,
+)  # fmt: skip
+MAPS = {"pay_fild07": PAYF07, "gef_fild10": GEF10, "xmas_dun02": XMAS02}
 
 
 # --- pure parts -------------------------------------------------------------------------------
@@ -707,11 +801,17 @@ def read_png(ref: qa_export.JpegRef) -> npt.NDArray[np.uint8]:
     return np.ascontiguousarray(rgb[:, :, ::-1])
 
 
+RECORDER_VERSIONS = (5, 6)  # T-3: v6 changed only the IO-guard rule and guard_rule (e5d892f)
+
+
 def check_recording(manifest: dict[str, Any]) -> None:
-    """3c's recording path (fail closed)."""
-    want = {"backend": "rdp", "recorder_version": 5, "format": "png",
+    """3c's recording path (fail closed): RDP PNG at 1280 x 720 on the lab server, recorder v5 or
+    v6 (xmas02-detector.md 3c / T-3; detector_vs_packets.SESSION_VERSIONS)."""
+    want = {"backend": "rdp", "format": "png",
             "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
     bad = {k: manifest.get(k) for k, v in want.items() if manifest.get(k) != v}
+    if manifest.get("recorder_version") not in RECORDER_VERSIONS:
+        bad["recorder_version"] = manifest.get("recorder_version")
     if bad:
         raise SystemExit(f"{manifest.get('session_id')}: not the recording path of 3c: {bad}")
 
@@ -732,19 +832,35 @@ def layout_matches(state: dict[str, Any], layout: str) -> bool:
 
 
 def use_kb(spec: MapSpec) -> None:
-    qa_export.KB_CLASSES = spec.kb / "classes.json"
+    qa_export.KB_CLASSES = spec.kb_classes or spec.kb / "classes.json"
     qa_export.KB_SPRITE_NAMES = spec.kb / "monster_sprite_names.json"
+
+
+Rect = tuple[int, int, int, int]
+
+
+def session_ui_rects(sid: str, layout: str = "hunt") -> tuple[Rect, ...]:
+    """T-1 (xmas02-detector.md 1f): the UI windows (x0, y0, x1, y1) of the RECORDED session
+    ``sid`` in ``layout``: client_layout.RECTS with the chat window of the session's date
+    (chat_window.for_sid: the 2026-11-05 standard (0, 585, 600, 720) from 20261105T12 on; the
+    legacy (0, 532, 600, 626), RECTS's own value, before -- so every older session's rectangles are
+    unchanged), minus a window lying wholly inside another (covered_fraction SUMS the windows'
+    overlaps: the standard chat window holds the hunting layout's notice_left whole). The same
+    rule as detector_vs_packets' score-session (chat_rect_for, session_rects, nested_rects)."""
+    import detector_vs_packets as dvp
+
+    chat_rect, _how = dvp.chat_rect_for(sid, "auto")
+    return dvp.nested_rects(dvp.session_rects(LAYOUT_RECTS[layout], chat_rect))[0]
 
 
 def session_labeler(path: Path, spec: MapSpec, layout: str = "hunt") -> qa_export.Labeler:
     """The recorder session's label stack (packets only, no pixel): the map's KB and sprites, the
-    hunting layout's UI rectangles, a finer Timeline. RecSession and the frame cache share it
-    (build_frame_cache.py --labels map: our own character's box from the same camera)."""
+    layout's UI rectangles with the chat window of the session's date (session_ui_rects), a finer
+    Timeline. RecSession and the frame cache share it (build_frame_cache.py --labels map: our own
+    character's box from the same camera)."""
     use_kb(spec)
     lab = qa_export.Labeler(path, str(olf.OLD_OFFSET_MS), labels="v1", k=olf.K)
-    import client_layout
-
-    rects = client_layout.RECTS[LAYOUT_RECTS[layout]]
+    rects = session_ui_rects(qa_export.session_id(lab.manifest), layout)
     lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in rects)
     lab.sheets = qa_export.Sheets(directory=spec.sprites)
     tl = lab.timeline
@@ -822,9 +938,9 @@ class RecSession:
         if aid is None and fights:
             raise SystemExit(f"{self.sid}: our character's id is unknown (Amendment B needs it)")
         times = engagement_times(events, int(aid)) if aid is not None else {}  # no fight: none
-        if self.spec.engaged_labels:
+        if self.spec.labels_engaged_rule():  # gef10 4h; xmas02's fixed E0 (Amendment C's 2d)
             return EngagedLabelRule(base.rule, base.moves, base.classes, times,
-                                    variant=variant or "E0")  # fmt: skip
+                                    variant=variant or self.spec.engaged_fixed or "E0")  # fmt: skip
         return EngagedRule(base.rule, base.moves, base.classes, times)
 
     def scene(self, world: Any) -> Any:
@@ -875,45 +991,79 @@ class RecSession:
         return out
 
 
+def role_refusal(spec: MapSpec, sid: str, spots: frozenset[int] | None, name: str,
+                 role: str) -> None:  # fmt: skip
+    if role == "fit" and not spec.is_fit(sid, spots):
+        raise SystemExit(f"{name}: not a FIT part ({spec.plan} 3b): refused")
+    if role == "not_test" and spec.is_test(sid, spots):
+        raise SystemExit(f"{name}: shares frames with TEST (3b): refused")
+
+
 def refuse(sess: RecSession, role: str) -> None:
-    spec = sess.spec
-    if role == "fit" and not spec.is_fit(sess.sid, sess.spots):
-        raise SystemExit(f"{sess.name}: not a FIT part ({spec.plan} 3b): refused")
-    if role == "not_test" and spec.is_test(sess.sid, sess.spots):
-        raise SystemExit(f"{sess.name}: shares frames with TEST (3b): refused")
+    """The part by the session id its MANIFEST names (after it is opened)."""
+    role_refusal(sess.spec, sess.sid, sess.spots, sess.name, role)
 
 
-EVAL_TEST2_MAP = "gef_fild10"  # gef10-eval.md AMENDMENT R2-2: --eval-test2's only map
+def refuse_part(spec: MapSpec, part: str, role: str) -> None:
+    """The part by its directory's NAME, BEFORE anything of it is read (xmas02 3b: TEST is never
+    opened by a command that refuses it); ``refuse`` checks the manifest's id after the open."""
+    path, spots = parse_part(part)
+    role_refusal(spec, path.name, spots, part, role)
 
 
-def eval_map_refusal(spec: MapSpec) -> str | None:
-    """PURE (AMENDMENT R2-2): why ``--eval-test2`` cannot run on ``spec``'s map, else None."""
-    if spec.name != EVAL_TEST2_MAP or not spec.test2_suffixes:
-        return f"--eval-test2 is {EVAL_TEST2_MAP}'s only, not {spec.name}'s"
+# T-9: one evaluation flag per map (MapSpec.eval_flag): its CLI spelling and the parts it reads
+EVAL_FLAGS = {"eval_test2": "--eval-test2", "eval_test": "--eval-test"}
+EVAL_NOUN = {"eval_test2": "TEST2", "eval_test": "TEST"}
+
+
+def eval_flag_of(a: argparse.Namespace) -> str | None:
+    """The evaluation flag a command was given (None: none); two at once are refused."""
+    on = [f for f in EVAL_FLAGS if getattr(a, f, False)]
+    if len(on) > 1:
+        raise SystemExit(f"one evaluation flag at a time, not {[EVAL_FLAGS[f] for f in on]}")
+    return on[0] if on else None
+
+
+def eval_map_refusal(spec: MapSpec, flag: str = "eval_test2") -> str | None:
+    """PURE (AMENDMENT R2-2; xmas02 9): why evaluation flag ``flag`` cannot run on ``spec``'s
+    map (another map's flag, or none), else None."""
+    if spec.eval_flag != flag or not spec.eval_suffixes:
+        owners = " / ".join(sorted(m.name for m in MAPS.values() if m.eval_flag == flag))
+        return f"{EVAL_FLAGS[flag]} is {owners}'s only, not {spec.name}'s"
+    return None
+
+
+def eval_part_refusal(spec: MapSpec, sid: str, spots: frozenset[int] | None,
+                      flag: str = "eval_test2") -> str | None:  # fmt: skip
+    """PURE: why the part (session ``sid``, ``spots``) is NOT one the map's evaluation (``flag``)
+    labels or packs, else None. gef_fild10 (``--eval-test2``, gef10-eval.md AMENDMENT R2-2): round
+    1's spent TEST (gef10-detector.md 13r) and round 3's TEST3 stay refused; the NAME must end in a
+    TEST2 suffix (a9, a10, a11, w3). xmas_dun02 (``--eval-test``, xmas02-detector.md 9): the NAME
+    must be one of TEST's (xw5, xp1, X2); FIT and TRAIN are refused."""
+    why = eval_map_refusal(spec, flag)
+    if why is not None:
+        return why
+    if spec.test_spent and spec.is_round1_test(sid, spots):
+        return "round 1's TEST is spent (gef10-detector.md 13r)"
+    if any(sid.endswith(s) for s in spec.test3_suffixes):
+        return "round 3's TEST3 (gef10-round3.md 2)"
+    if not any(sid.endswith(s) for s in spec.eval_suffixes):
+        return (f"not a {EVAL_NOUN[flag]} part (a name ending in "
+                f"{', '.join(spec.eval_suffixes)})")  # fmt: skip
     return None
 
 
 def eval_test2_refusal(spec: MapSpec, sid: str, spots: frozenset[int] | None) -> str | None:
-    """PURE (gef10-eval.md AMENDMENT R2-2, ``--eval-test2``): why the part (session ``sid``,
-    ``spots``) is NOT a TEST2 part to label or pack for the evaluation, else None. gef_fild10
-    only; round 1's spent TEST (gef10-detector.md 13r) and round 3's TEST3 stay refused; the
-    session's NAME must end in a TEST2 suffix (a9, a10, a11, w3)."""
-    why = eval_map_refusal(spec)
-    if why is not None:
-        return why
-    if spec.is_round1_test(sid, spots):
-        return "round 1's TEST is spent (gef10-detector.md 13r)"
-    if any(sid.endswith(s) for s in spec.test3_suffixes):
-        return "round 3's TEST3 (gef10-round3.md 2)"
-    if not any(sid.endswith(s) for s in spec.test2_suffixes):
-        return f"not a TEST2 part (a name ending in {', '.join(spec.test2_suffixes)})"
-    return None
+    """PURE (gef10-eval.md AMENDMENT R2-2, ``--eval-test2``): eval_part_refusal's gef_fild10
+    rule."""
+    return eval_part_refusal(spec, sid, spots, "eval_test2")
 
 
-def refuse_unless_test2(spec: MapSpec, sid: str, spots: frozenset[int] | None, name: str) -> None:
-    why = eval_test2_refusal(spec, sid, spots)
+def refuse_unless_eval(spec: MapSpec, sid: str, spots: frozenset[int] | None, name: str,
+                       flag: str = "eval_test2") -> None:  # fmt: skip
+    why = eval_part_refusal(spec, sid, spots, flag)
     if why is not None:
-        raise SystemExit(f"{name}: {why}: refused (--eval-test2)")
+        raise SystemExit(f"{name}: {why}: refused ({EVAL_FLAGS[flag]})")
 
 
 def occluders(spec: MapSpec) -> olf.Occluders:
@@ -965,9 +1115,12 @@ def cmd_offset(a: argparse.Namespace) -> dict[str, Any]:
     errs: dict[int, list[float]] = defaultdict(list)
     per_part: dict[str, Any] = {}
     samples: list[tuple[RecSession, qa_export.JpegRef, int, dict[int, float]]] = []
+    role = "not_test" if a.diagnostic else "fit"  # --diagnostic: any non-TEST part (9b)
+    for p in a.parts:  # by NAME before anything is read, then by the manifest's id
+        refuse_part(spec, p, role)
     sessions = [RecSession.open(p, spec, a.layout_templates) for p in a.parts]
-    for sess in sessions:  # --diagnostic: any non-TEST part, never frozen (9b)
-        refuse(sess, "not_test" if a.diagnostic else "fit")
+    for sess in sessions:  # never frozen (9b)
+        refuse(sess, role)
     for sess in sessions:  # the coarse sweep: still from the sweep's edge (1,000 ms) to t
         refs = sess.candidates_at(SWEEP_MAX_MS)
         olf._JOB.update(sess=sess, occluders=occl, walkers=spec.walkers, reader=read_png)
@@ -1046,13 +1199,17 @@ def labeler_for(sess: RecSession, params: dict[str, Any], occl: olf.Occluders,
                 occlusion: str, fit_all: bool = False,
                 variant: str | None = None) -> olf.FixLabeler:  # fmt: skip
     """The label stack: fix 2 + Amendment B; gef10 (4h): the engaged ``variant`` (else the
-    parameters' frozen ``engaged_variant``, else E0)."""
-    if not sess.spec.engaged_labels:
+    parameters' frozen ``engaged_variant``, else E0); xmas02: its fixed variant (E0, D11), on
+    gef10's stack (Amendments B and C)."""
+    if not sess.spec.labels_engaged_rule():
         fl = olf.FixLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
                             fit_all=fit_all, map_name=sess.spec.name)  # fmt: skip
         fl.facing = sess.facing_rule("fix2")  # Amendment B
         return fl
-    v = variant or str(params.get("engaged_variant") or "E0")
+    v = variant or str(params.get("engaged_variant") or sess.spec.engaged_fixed or "E0")
+    if sess.spec.engaged_fixed is not None and v != sess.spec.engaged_fixed:
+        raise SystemExit(f"{sess.spec.name}: engaged variant {v!r}; its rule is "
+                         f"{sess.spec.engaged_fixed} ({sess.spec.plan} 4i)")  # fmt: skip
     fl = EngagedLabeler(sess.lab, params, occl, rule="fix2", occlusion=occlusion,
                         fit_all=fit_all, map_name=sess.spec.name, variant=v)  # fmt: skip
     fl.facing = sess.facing_rule("fix2", v)
@@ -1109,6 +1266,8 @@ def provisional(offset: dict[str, Any], spec: MapSpec) -> dict[str, Any]:
 
 def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
+    for p in a.parts:  # by NAME before anything is read (then by the manifest's id)
+        refuse_part(spec, p, "fit")
     if (a.offset is None) == (a.proposed_offset_ms is None):
         raise SystemExit("one of --offset (a measured 1d) or --proposed-offset-ms (9b)")
     if a.offset is not None:
@@ -1139,8 +1298,8 @@ def cmd_threshold(a: argparse.Namespace) -> dict[str, Any]:
         a.rows.write_text(json.dumps(rows) + "\n")
     mine = [r for r in rows if r["mob"] in spec.species]
     # gef10 Amendment B (2026-10-25 21:24:48): T_h's set also leaves out labels whose predicted
-    # box touches another unit's (a map with engaged labels records it; payf07 records nothing)
-    alone = spec.engaged_labels
+    # box touches another unit's (gef10's label stack records it: gef10, xmas02; payf07 nothing)
+    alone = spec.labels_engaged_rule()
     clear = [r["ncc"] for r in mine if not r["under"] and r["pre"] is None and r["fail"] is None
              and not (alone and r.get("crowded"))]  # fmt: skip
     under = [r["ncc"] for r in mine if r["under"] and r["pre"] is None and r["fail"] is None]
@@ -1251,6 +1410,13 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
             "engaged_chosen_by_fit": sel["chosen"],
             "dying_in_view": spec.dying_rule,
         }
+    elif spec.engaged_fixed is not None:  # xmas02 4i (D11): a fixed variant, no FIT selection
+        if a.engaged is not None or a.engaged_variant not in (None, spec.engaged_fixed):
+            raise SystemExit(f"{spec.name}: engaged units are {spec.engaged_fixed} by "
+                             f"{spec.plan} 4i: no --engaged file, no other variant")  # fmt: skip
+        extra = {"engaged_variant": spec.engaged_fixed,
+                 "engaged_fixed_by": f"{spec.plan} 4i (D11)",
+                 "dying_in_view": spec.dying_rule}  # fmt: skip
     return {
         "labels": spec.labels, "status": status, "plan": f"{spec.plan} 4",
         "map": spec.name, **extra,
@@ -1339,6 +1505,8 @@ def cmd_engaged(a: argparse.Namespace) -> dict[str, Any]:
     spec = MAPS[a.map]
     if not spec.engaged_labels:
         raise SystemExit(f"{spec.name}: its rule does not label engaged units")
+    for p in a.parts:  # by NAME before anything is read (then by the manifest's id)
+        refuse_part(spec, p, "fit")
     for v in a.variants:
         if v not in ENGAGED_VARIANTS[1:]:
             raise SystemExit(f"--variants: E1 / E2 / E3, not {v!r}")
@@ -1409,8 +1577,13 @@ C1_RULES = {
               "rectangles only",
     "round2": "round1 + NOTICE (gef10-round2.md): a standing label whose PREDICTED box overlaps "
               "(area > 0) a pickup notice detected in that frame (gef10_r2_measure.find_notices "
-              "on its top rows) is not scored (reason 'notice'); gef_fild10 only",
+              "on its top rows) is not scored (reason 'notice'); the maps whose MapSpec.c1_rules "
+              "list it (gef_fild10; xmas_dun02, its only rule: xmas02-detector.md 4h / 5)",
 }  # fmt: skip
+# T-8 (xmas02-detector.md 4h / 5): round 2's notice rule on another map -- the notice band and the
+# detector are gef_fild10's (measured there: gef10-round2-measure.md 2), the UI windows the
+# session's (session_ui_rects: the 2026-11-05 chat window)
+NOTICE_MEASURED_ON = "gef_fild10"
 NOTICE = "notice"  # round 2's exclusion reason (per species: "notice:<job>")
 NOTICE_NEAR_PX = 16.0  # REPORTED only: a scored box this close to a notice (C1's UI margin)
 
@@ -1470,16 +1643,20 @@ def _check_rows_round2(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Co
 
 
 def c1_rule_refusals(spec: MapSpec, rule: str, parts: Sequence[str]) -> None:
-    """Round 2's guards, before anything is read: ``round2`` is gef_fild10's only and never reads
-    round 1's spent TEST (the watch's cells 11-14, a7, a8); TEST2 (a9-a11) is checked under
-    ``round2`` only (the round-1 rule would spend it)."""
+    """Round 2's guards, before anything is read: a map is checked only under the rules of its
+    MapSpec.c1_rules (T-8: ``round2`` on gef_fild10 and xmas_dun02 -- xmas_dun02's ONLY rule, its
+    C1 always drops a label under a notice; ``round1`` on pay_fild07 and gef_fild10); round 2
+    never reads gef_fild10's spent round-1 TEST (the watch's cells 11-14, a7, a8); TEST2 (a9-a11)
+    is checked under ``round2`` only (the round-1 rule would spend it)."""
     if rule not in C1_RULES:
         raise SystemExit(f"--c1-rule: {sorted(C1_RULES)}, not {rule!r}")
-    if rule == "round2" and spec.name != "gef_fild10":
-        raise SystemExit(f"--c1-rule round2: gef_fild10 only, not {spec.name}")
+    if rule not in spec.c1_rules:
+        owners = " / ".join(sorted(m.name for m in MAPS.values() if rule in m.c1_rules))
+        raise SystemExit(f"--c1-rule {rule}: {owners} only, not {spec.name} (its rules: "
+                         f"{', '.join(spec.c1_rules)})")  # fmt: skip
     for part in parts:
         path, spots = parse_part(part)
-        if rule == "round2" and spec.is_round1_test(path.name, spots):
+        if rule == "round2" and spec.test_spent and spec.is_round1_test(path.name, spots):
             raise SystemExit(f"{part}: round 1's TEST is spent (13r): round 2 never reads it")
         if rule != "round2" and any(path.name.endswith(s) for s in spec.test2_suffixes):
             raise SystemExit(f"{part}: round 2's TEST2: checked under --c1-rule round2 only")
@@ -1510,7 +1687,7 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         sess = RecSession.open(part, spec, a.layout_templates)
         if diag and not spec.is_fit(sess.sid, sess.spots):
             raise SystemExit(f"{sess.name}: --fit-diagnostic reads FIT parts only")
-        if overlaps_role(sess.sid, sess.spots, spec.fit) and not (a.allow_fit or diag):
+        if spec.overlaps_fit(sess.sid, sess.spots) and not (a.allow_fit or diag):
             raise SystemExit(f"{sess.name}: a FIT part (the parameters' own data): --allow-fit")
         c1_rule_refusals(spec, c1_rule, [sess.name])  # by the manifest's session id too
         refs = sess.candidates_at(off_ms)
@@ -1562,6 +1739,8 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
             "scored_rows_near_notice_16px": len(near),
             "scored_rows_near_notice_bad": sum(1 for r in near if r.get("why_low") == "bad_label"),
         })  # fmt: skip
+        if spec.name != NOTICE_MEASURED_ON:  # T-8: say where the band and detector were measured
+            rule_doc["notice_band_measured_on"] = NOTICE_MEASURED_ON
 
     if a.rows is not None:
         a.rows.write_text(json.dumps(rows) + "\n")
@@ -1677,22 +1856,25 @@ def count_labels(frames: Sequence[dict[str, Any]], species: Sequence[int],
 
 
 def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
-    """The kept labels of ONE part. TEST is refused; ``--eval-test2`` (gef10-eval.md AMENDMENT
-    R2-2) labels a TEST2 part instead, under FROZEN parameters, and refuses everything else."""
+    """The kept labels of ONE part. TEST is refused; the map's evaluation flag (``--eval-test2``:
+    gef10-eval.md AMENDMENT R2-2, TEST2; ``--eval-test``: xmas02-detector.md 9, TEST) labels such
+    a part instead, under FROZEN parameters, and refuses everything else."""
     spec = MAPS[a.map]
-    eval_test2 = bool(getattr(a, "eval_test2", False))
-    if eval_test2:  # the map and every part's NAME, before anything is read
-        for part in a.parts:
+    flag = eval_flag_of(a)
+    for part in a.parts:  # the map and every part's NAME, before anything is read
+        if flag is not None:
             path, spots = parse_part(part)
-            refuse_unless_test2(spec, path.name, spots, part)
+            refuse_unless_eval(spec, path.name, spots, part, flag)
+        else:
+            refuse_part(spec, part, "not_test")
     params = load_params(a.params, spec)
-    if eval_test2 and params.get("status") != "FROZEN":
-        raise SystemExit(f"{a.params}: {params.get('status')}: --eval-test2 labels TEST2 under "
-                         "FROZEN parameters only")  # fmt: skip
+    if flag is not None and params.get("status") != "FROZEN":
+        raise SystemExit(f"{a.params}: {params.get('status')}: {EVAL_FLAGS[flag]} labels "
+                         f"{EVAL_NOUN[flag]} under FROZEN parameters only")  # fmt: skip
     occl = frozen_occluders(params, spec)
     sess = RecSession.open(a.parts[0], spec, a.layout_templates)
-    if eval_test2:  # by the manifest's session id too
-        refuse_unless_test2(spec, sess.sid, sess.spots, sess.name)
+    if flag is not None:  # by the manifest's session id too
+        refuse_unless_eval(spec, sess.sid, sess.spots, sess.name, flag)
     else:
         refuse(sess, "not_test")
     classes = json.loads(a.classes.read_text())["monsters"]
@@ -1707,8 +1889,8 @@ def cmd_labels(a: argparse.Namespace) -> dict[str, Any]:
         "params_sha256": olf.sha256_file(a.params), "frames_recorded": len(sess.refs),
         "candidates": len(refs), "candidate_drops": dict(sorted(sess.dropped.items())),
     }  # fmt: skip
-    if eval_test2:  # AMENDMENT R2-2: the evaluation's TEST2 labels, and the classes file used
-        out.update({"eval_test2": True, "classes": str(a.classes),
+    if flag is not None:  # the evaluation's TEST2 / TEST labels, and the classes file used
+        out.update({flag: True, "classes": str(a.classes),
                     "classes_sha256": olf.sha256_file(a.classes)})  # fmt: skip
     if spec.name == "pay_fild07":  # payf07 7: the Green Plant fallback, both ways
         gp = 1080
@@ -1795,28 +1977,43 @@ def eval_test2_sample(pool: dict[int, list[dict[str, Any]]], spec: MapSpec, seed
     return chosen, per, species
 
 
-def eval_pack_refusals(spec: MapSpec, eval_test2: bool, per_species: int | None) -> None:
-    """AMENDMENT R2-2, before anything is read: ``--per-species`` only with ``--eval-test2``
-    (T2 draws 30); ``--eval-test2`` is gef_fild10's only and needs ``--per-species N >= 1``."""
-    if not eval_test2:
+def eval_pack_refusals(spec: MapSpec, flag: str | None, per_species: int | None,
+                       seed: int | None = None) -> None:  # fmt: skip
+    """AMENDMENT R2-2 / xmas02 6, 9, before anything is read: ``--per-species`` only with an
+    evaluation flag (T2 draws 30); the flag is the map's own (``--eval-test2`` gef_fild10's,
+    ``--eval-test`` xmas_dun02's) and needs ``--per-species N >= 1``; a map's PRE-REGISTERED seed
+    and N (MapSpec.t2_seed, eval_seed, eval_per_species: xmas02 51, 53, 60) are the only ones."""
+    if flag is None:
         if per_species is not None:
-            raise SystemExit("--per-species: only with --eval-test2 (T2 draws "
+            raise SystemExit("--per-species: only with --eval-test2 / --eval-test (T2 draws "
                              f"{T2_PER_SPECIES} per species and stratum)")  # fmt: skip
+        if seed is not None and spec.t2_seed is not None and seed != spec.t2_seed:
+            raise SystemExit(f"--seed {seed}: {spec.name}'s T2 seed is {spec.t2_seed} "
+                             f"({spec.plan} 6)")  # fmt: skip
         return
-    why = eval_map_refusal(spec)
+    why = eval_map_refusal(spec, flag)
     if why is not None:
         raise SystemExit(why)
     if per_species is None or per_species < 1:
-        raise SystemExit("--eval-test2: --per-species N (N >= 1; the amendment draws 60)")
+        raise SystemExit(f"{EVAL_FLAGS[flag]}: --per-species N (N >= 1; the amendment draws 60)")
+    if spec.eval_per_species is not None and per_species != spec.eval_per_species:
+        raise SystemExit(f"--per-species {per_species}: {spec.name}'s evaluation draws "
+                         f"{spec.eval_per_species} ({spec.plan} 9)")  # fmt: skip
+    if seed is not None and spec.eval_seed is not None and seed != spec.eval_seed:
+        raise SystemExit(f"--seed {seed}: {spec.name}'s evaluation pack seed is "
+                         f"{spec.eval_seed} ({spec.plan} 9)")  # fmt: skip
 
 
-def pack_pool(paths: Sequence[Path], spec: MapSpec, session_root: str, eval_test2: bool = False
+def pack_pool(paths: Sequence[Path], spec: MapSpec, session_root: str, eval_test2: bool = False,
+              eval_flag: str | None = None
               ) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]], set[str],
                          set[str]]:  # fmt: skip
     """6: the pack's pool from label files: per species the kept labels, the files (sources),
-    their parameter sha256s and statuses. TEST label files are refused; under ``eval_test2``
-    (gef10-eval.md AMENDMENT R2-2) ONLY TEST2 label files made by ``labels --eval-test2`` are
-    taken, and every other file (FIT, TRAIN, round 1's TEST, TEST3) is refused."""
+    their parameter sha256s and statuses. TEST label files are refused; under an evaluation flag
+    (``eval_test2``: gef10-eval.md AMENDMENT R2-2; ``eval_flag`` names any map's, xmas02's
+    ``eval_test``) ONLY the parts it reads, in label files made by ``labels`` with that flag, are
+    taken, and every other file (FIT, TRAIN, gef10's round 1 TEST and TEST3) is refused."""
+    flag = eval_flag or ("eval_test2" if eval_test2 else None)
     pool: dict[int, list[dict[str, Any]]] = defaultdict(list)
     sources = []
     params_sha = set()
@@ -1827,10 +2024,10 @@ def pack_pool(paths: Sequence[Path], spec: MapSpec, session_root: str, eval_test
         if doc.get("labels") != spec.labels:
             raise SystemExit(f"{path}: not {spec.labels} labels")
         spots = parse_part(doc["part"])[1]
-        if eval_test2:
-            why = eval_test2_refusal(spec, doc["session"], spots)
-            if why is None and doc.get("eval_test2") is not True:
-                why = "not made by labels --eval-test2"
+        if flag is not None:
+            why = eval_part_refusal(spec, doc["session"], spots, flag)
+            if why is None and doc.get(flag) is not True:
+                why = f"not made by labels {EVAL_FLAGS[flag]}"
             if why is not None:
                 raise SystemExit(f"{doc['part']}: {why}: not in the evaluation pack's pool")
         elif spec.is_test(doc["session"], spots):
@@ -1854,14 +2051,15 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     import orc_label_sheets as ols
 
     spec = MAPS[a.map]
-    eval_test2 = bool(getattr(a, "eval_test2", False))
+    flag = eval_flag_of(a)  # the map's evaluation flag (--eval-test2 / --eval-test), or None
     per_species: int | None = getattr(a, "per_species", None)
-    eval_pack_refusals(spec, eval_test2, per_species)
+    eval_pack_refusals(spec, flag, per_species, a.seed)
     instr = a.instructions.read_bytes()
     sha = hashlib.sha256(instr).hexdigest()
     if sha != a.instructions_sha256:
         raise SystemExit(f"{a.instructions}: sha256 {sha}, not the pre-registered one")
-    pool, sources, params_sha, statuses = pack_pool(a.labels, spec, a.session_root, eval_test2)
+    pool, sources, params_sha, statuses = pack_pool(a.labels, spec, a.session_root,
+                                                    eval_flag=flag)  # fmt: skip
     if len(params_sha) != 1:
         raise SystemExit(f"the labels come from {len(params_sha)} parameter files")
     exclude: set[tuple[str, int, int]] = set()
@@ -1872,7 +2070,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     if a.min_fit is not None or exclude:
         for mob in list(pool):
             pool[mob], cut_by[str(mob)] = round2_pool(pool[mob], a.min_fit, exclude)
-    if eval_test2:  # AMENDMENT R2-2: every species with a kept label, N per species and stratum
+    if flag is not None:  # R2-2 / xmas02 9: every species with a kept label, N per species
         assert per_species is not None  # eval_pack_refusals
         chosen, per, tier = eval_test2_sample(pool, spec, a.seed, per_species)
     else:
@@ -1922,8 +2120,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         "box": "the green rectangle drawn just outside the label box",
         "questions": ols.QUESTIONS}, indent=1) + "\n")  # fmt: skip
     shutil.copyfile(a.instructions, pack / "instructions.txt")
-    target = per_species if eval_test2 else T2_PER_SPECIES
-    evaluation = {"eval_test2": True} if eval_test2 else {}  # AMENDMENT R2-2 only
+    target = per_species if flag is not None else T2_PER_SPECIES
+    evaluation = {flag: True} if flag is not None else {}  # the evaluation's pack only
     key = {"labels": spec.labels, "seed": a.seed, "per_species_target": target,
            **({"candidates": ["N", "E"]} if spec.engaged_labels else {}),
            "letters": letters, "crops": key_crops, "tier_species": tier,
@@ -1940,7 +2138,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
             "per_species": per, "tier_species": tier, "letters": len(letters),
             "params_status": key["params_status"], "removed_from_pool": cut_by,
             "grids": len(grids),
-            **({"per_species_target": target, **evaluation} if eval_test2 else {})}  # fmt: skip
+            **({"per_species_target": target, **evaluation} if flag is not None else {}),
+            }  # fmt: skip
 
 
 # --- CLI --------------------------------------------------------------------------------------
@@ -2000,7 +2199,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p.add_argument("--c1-rule", choices=sorted(C1_RULES), default="round1",
                    help="round1: the frozen check; round2: + the pickup-notice exclusion "
-                        "(gef10-round2.md; gef_fild10 only)")  # fmt: skip
+                        "(gef10-round2.md; MapSpec.c1_rules: gef_fild10, and xmas_dun02 where "
+                        "it is the only rule)")  # fmt: skip
     p = sub.add_parser("labels")
     common(p)
     p.add_argument("--params", type=Path, required=True)
@@ -2008,6 +2208,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--eval-test2", action="store_true",
                    help="gef10-eval.md AMENDMENT R2-2: label ONE TEST2 part (gef_fild10, a9 / "
                         "a10 / a11 / w3) under FROZEN parameters for the evaluation")  # fmt: skip
+    p.add_argument("--eval-test", action="store_true",
+                   help="xmas02-detector.md 9: label ONE TEST part (xmas_dun02: xw5 / xp1 / X2) "
+                        "under FROZEN parameters for the evaluation")  # fmt: skip
     p = sub.add_parser("pack")
     p.add_argument("--map", default="pay_fild07", choices=sorted(MAPS))
     p.add_argument("labels", nargs="+", type=Path)
@@ -2015,8 +2218,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="gef10-eval.md AMENDMENT R2-2: the evaluation pack from TEST2 label "
                         "files (labels --eval-test2) only; every species with a kept label, "
                         "no conditional tier")  # fmt: skip
+    p.add_argument("--eval-test", action="store_true",
+                   help="xmas02-detector.md 9: the evaluation pack from TEST label files "
+                        "(labels --eval-test) only; seed 53, 60 per species")  # fmt: skip
     p.add_argument("--per-species", type=int, default=None,
-                   help="--eval-test2 only: the first N per species and stratum")  # fmt: skip
+                   help="--eval-test2 / --eval-test only: the first N per species and "
+                        "stratum")  # fmt: skip
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--pack-dir", type=Path, required=True)
     p.add_argument("--key-dir", type=Path, required=True)
