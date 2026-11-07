@@ -69,6 +69,11 @@ RUNTIME = ("poring-lab-kb", "poring-lab-rathena-src", "poring-lab-detector/model
            "poring-lab-tmp/stage-gef10", "poring-lab-tmp/xmas-det",
            "poring-lab-tmp/chat-guard.json")  # fmt: skip
 DETECTOR_PY = SHM / "poring-lab-detector" / ".venv" / "bin" / "python"
+# Generated at build time from the pinned rAthena / OpenKore sources, never committed and never
+# copied: each host generates its own (gen_packet_tables.py, gen_mapcache.py) and they must be
+# byte-identical to the source's. 2026-11-07: the map caches were missing on bot-server (9 tests).
+GENERATED = ("packages/poring_packets/src/poring_packets/_generated",
+             "packages/poring_dataset/src/poring_dataset/_generated")  # fmt: skip
 SKILLS = ("bilingual-report", "research-doc-metadata", "roadmap-format", "craft-prompt",
           "claude-code-restart")  # fmt: skip
 PREFACE_MARK = "# READ FIRST on bot-server"
@@ -305,6 +310,7 @@ def make_manifest(hash_data: bool) -> dict[str, Any]:
         | {"data": tree(REPO / "data", REPO, hash_data)},
         "cache": tree(HOME / ".cache" / "poring-lab", HOME / ".cache" / "poring-lab", True),
         "runtime": {n: runtime_tree(n) for n in RUNTIME},
+        "generated": {g: tree(REPO / g, REPO, True) for g in GENERATED},
         "db": db_counts(env), "db_checksums": db_checksums(env),
         "claude": claude_side(PROJECT_KEYS["source"]),
         "images": source_images(),
@@ -350,6 +356,12 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
         manifest["cache"],
         tree(HOME / ".cache" / "poring-lab", HOME / ".cache" / "poring-lab", True),
     )
+    for g in GENERATED:
+        rows += tree_rows(
+            f"generated ({g.split('/')[1]}, regenerate here, never copy)",
+            manifest.get("generated", {}).get(g, {}),
+            tree(REPO / g, REPO, True),
+        )
     for n in RUNTIME:
         rows += tree_rows(f"/dev/shm/{n}", manifest.get("runtime", {}).get(n, {}), runtime_tree(n))
     code, out = run(["loginctl", "show-user", getpass.getuser(), "-p", "Linger"])
