@@ -1144,3 +1144,40 @@ frozen L_self:**
   and evaluation (moving recall and precision within those margins of still on TEST, plus no
   regression on Q1c / P4A) are pre-registered as Amendment L BEFORE its cache.
 
+**K2 RESULT (xmw1 = `20261107T071639-rdp-xmas02-xmw1`, recorded 07:16:39-07:37:33 beside the runner,
+1,251 frames, 1.94 GB, one part, 0 pauses, shipped + verified 07:39; boxes: the deployed model, 8
+threads; scored 07:47). VERDICT: L_self does NOT stand (by eye 7 / 12 < 10). Per K2, nothing is
+adopted and the walking question goes back to Batt.**
+
+| camera offset (ms; monsters at 120) | moving P | moving R | moving F1 | still P | still R |
+|---|---|---|---|---|---|
+| 120 (every score so far) | 156 / 507 = 0.308 | 154 / 514 = 0.300 | 0.304 | 0.941 | 0.844 |
+| 240 | 0.483 | 0.470 | 0.476 | 0.941 | 0.844 |
+| 360 | 0.639 | 0.624 | 0.631 | 0.941 | 0.844 |
+| **480 (best F1: L_self by the rule)** | **364 / 507 = 0.718** | **361 / 508 = 0.711** | **0.715** | 0.941 | 0.844 |
+| 600 | 0.643 | 0.631 | 0.637 | 0.941 | 0.844 |
+| 720 | 0.523 | 0.512 | 0.517 | 0.953 | 0.855 |
+| 960 | 0.292 | 0.283 | 0.287 | 0.925 | 0.826 |
+| 1,200 | 0.154 | 0.154 | 0.154 | 0.816 | 0.745 |
+
+- The still captures do not change up to 600 ms (the control: the camera offset only matters
+  when we move).
+- **The by-eye check** (`scripts/truth_draw.py`, 12 of 374 moving captures, seed 71; red = camera at
+  120, green = at 480, yellow = the detections):
+  - the green truth sits on the sprite in 7 (walk-00, 01, 03, 04, 07, 08, 11);
+  - it is off in 5 (02, 05, 06, 09, 10). In 05 and 06 the sprite lies BETWEEN red and green (the
+    lag there is ~300 ms); in 09 even green is short of it (more than 480); in 02 and 10 green is
+    one to two cells off.
+- **What it means (the rule's own wording, "the camera is not the cause", is too strong):** the
+  camera's timing explains a large part of the walking gap (F1 0.30 -> 0.71 by the offset alone).
+  But it is not ONE constant: the lag differs from capture to capture by several hundred ms. So no
+  fixed offset gives a truth good enough to label walking frames or to score them. Every walking
+  number so far (P4A's moving ~0.22, xmw1's 0.30 at 120) measures this timing more than the model.
+- **K3 is not run** (it needs a standing L_self). xmw2 stays CHECK-walk by name, unread.
+- **Options for Batt** (the report): (a) a per-capture camera estimate instead of a constant (e.g.
+  the label tool's sprite fit with a search window wide enough for the residual, ~+-2 cells around
+  480, its fit floor deciding; or the frame's own minimap readout as the camera's position); (b)
+  skip the truth for walking frames and judge "sees while walking" by the live runner instead
+  (strikes and kills from box engagements, packets as the referee). Either is a new
+  pre-registration.
+
