@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "Batt 2026-11-07: immunity OFF on xmas_dun02 and Myst Cases stay targets (they matter for Steal). Pre-register pilot p9 (no immunity; the fight end on 2.0 s without a damage line after the first hit is a candidate, S1 follow-ups), then run it. S1 (4O): the locks were fights already over; 9 of 23 strikes were Myst Case teleports under immunity."
+next_action: "p9 (4P, 2026-11-07 15:43-16:14): no immunity -> 34.0 kills / h (p8 12.0), 0 Myst Case teleports (M1 PASS), 0 deaths; E1 (>= 40) and E2 still FAIL. Next: pre-register ONE runner change chosen on p9 numbers: the 9 strike clicks that started no attack (class D) or the 2.0-s fight end (S1). Immunity stays OFF on xmas_dun02 (Batt)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1248,3 +1248,46 @@ it is the map's important monster; what it gives to Steal sells for a high price
 pilot runs the Rogue NOT immune on xmas_dun02 and keeps Myst Cases as targets. Its pre-registration
 (next) states the bars, the death handling (the runner's potions, its Fly Wing escape, and what a
 death does to the run) and the Myst Case fights' count (by species from the packets).
+
+**Pilot p9 (4P, pre-registered 15:26:49; demo 20261107T154356-...-xmas02-p9; dungeon@8.9 with
+`--box-strike --box-now`, the GPU box watcher; immunity OFF from 15:43 (judged "Returned to normal
+state."), back ON at 16:15 (judged "You are now immune to attacks."); the run 15:43:51-16:14:47,
+its own time box). VERDICT: M1 PASSES (no Myst Case teleported), D1 and E3 PASS; E1 and E2 FAIL.
+Kills almost tripled: 34.0 an hour against 12.0.**
+
+| | p8 (immune, 30 min) | **p9 (NOT immune, 30 min)** | bar |
+|---|---|---|---|
+| E1 kills (packets) | 6 (12.0 / h) | **17 (34.0 / h)** | >= 40 / h: FAIL |
+| E2 box fights ending as a box miss | 22 / 34 = 64.7 % | **20 / 32 = 62.5 %** | <= 50 %: FAIL |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 9 | **pass / 0 / 9 (18 / h)** | PASS |
+| M1 Myst Case strikes ending in a teleport | 6 / 6 (p7 + p8: 9 / 9) | **0 / 6** | <= 20 %: PASS |
+| D1 deaths | (immune) | **0** (lowest HP 85 %, 0 potions) | PASS |
+| strikes / landed | 16 / 12 | 25 / 14 (2 request only) | reported |
+| waypoints reached (per min) | 359 (11.96) | 304 (10.13) | reported |
+
+- **By species (packets; the targets we hit that died):** Cruiser 6, Myst Case 4, Cookie 4,
+  Christmas Cookie 4. The judge counts 17 kills from the experience packets; 18 of the monsters
+  we hit died. Nothing we hit teleported.
+- **Strike classes (4O's scorer):** K 12, A 3, B 1, **D 9**. Nine strike clicks started no attack
+  (p8: 4); they are now the largest loss. The 3 A's are Myst Cases that died after the 3.5-s
+  unlock (no teleport).
+- **Damage taken:** 258 monster attacks, 14 landed (the Rogue's FLEE), 2,046 HP in all; 0 potions,
+  2 Fly Wings (position unread, not dead ends).
+- **Items an hour (all snatched by the Rogue; Steal casts are not decoded yet, X4):** Scell 5
+  (10.0 / h), Piece of Cake 2 (4.0 / h), Red Herb 1, Well-baked Cookie 1, Manacles 1 (2.0 / h
+  each). p8: 3 items.
+- **Engagements:** box 32, Battle Log (our hits on a monster that attacked) 8, the Miss cue 5, an HP
+  drop 1. Now the monsters fight back, so the other triggers start fights too.
+- **Walking sight (step 1):**
+  - 15 box fights started from a detection taken while walking: 2 strikes, 1 kill;
+  - 17 from a standing one: 19 strikes, 9 kills.
+- **The GPU path:** 1,816 detections, 911 by the GPU, 905 by the CPU (R3's measuring phase pauses
+  the worker half the time). G1 again 908 / 922 = 98.5 % outside the pauses. Request to boxes, p50:
+  GPU 92.5 ms vs CPU 318.5 ms.
+- **The reader:** 152 / 152 of our hits read (lag p50 419 ms, p95 877 ms); 17 experience packets,
+  0 experience lines.
+- **Decisions (as pre-registered):**
+  - M1 passes: immunity stays OFF for xmas_dun02 runs, and Myst Cases stay targets.
+  - E1 / E2 fail: 4P named the fight end (S1 follow-ups) as the next change. p9 now shows the 9
+    D-class clicks as the larger loss, so the next pre-registration chooses between the two on
+    these numbers.
