@@ -1,13 +1,13 @@
 ---
 doc_type: benchmark
 hypothesis: "The bot's slow boxes (2-4 frames a second) come from the model's CPU inference itself, not from the remote display path: Batt's local-PC run of the teaching kit showed 150-435 ms a frame too."
-status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). ➡️ 2026-11-07: the lab PC measured too (section 6: i5-10500T best 95.5 ms vs the server's 110.3, same kit and pictures); the GPU (section 7): ~22-24 ms a detection, ~8-9x the 16-thread CPU; its parity and Frigate cost not measured (an R3-HARD camera-drop abort)."
+status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). ➡️ 2026-11-07: the lab PC measured too (section 6: i5-10500T best 95.5 ms vs the server's 110.3, same kit and pictures); the GPU (sections 7-8): ~22-29 ms a detection, ~7-9x the 16-thread CPU; FP32 parity 1.000 with the CPU boxes; 360 MiB and ~10-19 % of the GPU at 10 Hz; R3 no verdict (2 unmatched pairs, -2.0 / +4.1 ms)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); the GPU measured (section 7: ~8-9x faster); Batt decides GPU vs CPU, and whether the parity + Frigate-cost run is retried."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); Batt 2026-11-07 ~09:2x: MOVE the live detector to the GPU after this report (section 8: how heavy); the move's design (a frame route from the host bot into the worker) is Batt's choice next."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt
@@ -214,4 +214,50 @@ Batt (~09:2x), answering section 7's decisions:
   - any relaxed drops.
 - Nothing is moved by this measurement. The move (a frame route from the host bot into the worker,
   then a pre-registered pilot) is designed after this report.
+
+### 8 RESULT (2026-11-07 10:00-10:18 ICT; section 8's plan, unchanged)
+
+- **The run:**
+  - The worker started at 10:00:27, with Frigate's IO left out of the gate (Batt's one-day exception,
+    bf29335).
+  - The bench: 10:02:36-10:14:58, rc 0, worst capture stall 5.0 %, no camera drop (no relaxed drop
+    needed). The worker stopped (verified) at 10:15:02.
+  - Then the CPU parity on the host.
+
+| model, precision | GPU call to boxes p50 / p95 | bare forward p50 / p95 | torch peak | parity: GPU monster boxes = CPU's (IoU >= 0.7) |
+|---|---|---|---|---|
+| v1 FP32 | 21.6 / 31.3 ms | 18.3 / 25.7 ms | 96 MiB | 49 / 49 = 1.000 (and 49 / 49 of the GPU's) |
+| v1 FP16 | 26.1 / 35.0 | 22.4 / 26.5 | 97 MiB | 48 / 49 = 0.980 (48 / 50) |
+| xmas02 FP32 | 29.2 / 43.7 | 19.6 / 26.3 | 106 MiB | 340 / 340 = 1.000 (340 / 340) |
+| xmas02 FP16 | 26.3 / 32.7 | 22.4 / 28.1 | 102 MiB | 340 / 340 = 1.000 |
+
+- **Parity:** in FP32 the GPU gives the CPU's boxes, one for one, for both models. FP16 lost one v1
+  box (and added one).
+- **Speed:** phase A again 22-29 ms a call (section 7: 22-24 ms; Frigate busier now, people at
+  home). FP16 is again not faster. The bare forward pass is 18-20 ms, so the call adds only
+  ~3-10 ms of pre / post work.
+- **Sustained at 10 Hz (xmas02 FP32, phase B: 3,354 calls in the 600 s, 3 across a pause):** p50
+  45.2 / p95 59.0 ms a call, slower than one at a time but still ~4-5x the CPU's.
+
+**How heavy (read-only nvidia-smi beside the step; ON = ours running, OFF = paused by R3):**
+| | ON | OFF |
+|---|---|---|
+| GPU-wide utilization (0.5 s samples), mean / p50 / p95 | 25.0 / 23 / 52 % | 21.2 / 15 / 73 % |
+| power, mean / p95 | 42.7 / 52.5 W | 40.4 / 62.1 W |
+| GPU memory used (whole card) | 3,894 MiB of 16,311 | 3,894 (ours stays loaded while paused); 3,529 before the step |
+| OUR process (pmon, 1 s): memory | 360 MiB | 360 MiB |
+| OUR process: SM % when sampled busy, mean / p50 / p95 | 17.8 / 19 / 33 % (151 of 262 samples) | - |
+
+- **Our process holds 360 MiB of GPU memory**: the card's 3,529 -> 3,894 MiB, about 2 % of it, far
+  inside R1's 9 GiB.
+- **It uses ~17-19 % of the GPU's compute when busy, ~10 % averaged over time, at 10 detections a
+  second.**
+- **The GPU-wide ON-OFF difference** (+3.8 points mean utilization, +2.3 W) UNDERSTATES our share:
+  Frigate's own load was lower in our ON windows (17.8-18.6 det/s) than in the OFF ones (26.4-26.5).
+- **R3, Frigate's detector:** 2 pairs, ON 27.59 vs OFF 29.63 ms (-2.04) and ON 30.70 vs OFF 26.61
+  ms (+4.10). Neither was kept (load not matched within +-20 %), so this is NO R3 verdict: a
+  short step cannot reach R3's 4 kept pairs on a day this variable. Both deltas are under the +5 ms
+  trip.
+- Files: `data/train/eval/gpu-bench/bench.json` (moved to the NAS), the samplers, the parity and
+  the logs: `scratch-archive/2026-11-07/gpu-bench2/`.
 
