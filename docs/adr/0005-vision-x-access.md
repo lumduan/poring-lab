@@ -6,8 +6,8 @@ role: null
 verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
-related: []
-next_action: CLOSED for the S2 path (vision S2-only + c2, acceptance 5/5 PASS 2026-10-04). Re-run services/vision/acceptance/adr0005.py after any change to vision's mounts, networks or the backend's listeners; RDP-mode vision stays unsupported.
+related: [../planning/gpu-live-detector.md, ../benchmarks/cpu-detector-speed.md]
+next_action: CLOSED for the S2 path (vision S2-only + c2, acceptance 5/5 PASS 2026-10-04). Re-run services/vision/acceptance/adr0005.py after any change to vision's mounts, networks or the backend's listeners; RDP-mode vision stays unsupported. AMENDMENT 2026-11-07 (Batt chose option A): the vision WORKER's detect socket, frames in and numbers out (section at the end); its acceptance re-run is row 6 plus rows 1-5 inside the worker.
 ---
 
 # ADR-0005: The vision container must not have full X access
@@ -16,6 +16,9 @@ next_action: CLOSED for the S2 path (vision S2-only + c2, acceptance 5/5 PASS 20
   Its acceptance test passes 5/5, run inside vision while S2 streamed (below). Proposed 2026-09-30.
   vision is no longer a Phase 4 blocker; it runs on the S2 path only, and an RDP-mode vision is
   not supported (it would need (c1)/(c3) and a new acceptance run).
+- ➡️ **Amended 2026-11-07 (Batt chose option A):** the vision WORKER also serves the host bot's
+  detections through ONE unix socket in a host RAM directory: frames in, numbers out, the host
+  as the only client. Still no X, no input path, no network. See the amendment at the end.
 - **Option (c2) in three lines** (for the record):
   - an internal Docker network (`agent`, 10.210.97.0/24, gateway isolated) holds only the backend
     and vision;
@@ -187,6 +190,51 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
 | 3 | `/internal/agent` works | PASS | PASS (first message `status`) |
 | 4 | `Env.grab()` on the bus, rising frame ids at ≥ AGENT_HZ | SKIP (no writer) | **PASS: 156 frames in 5 s (31.2/s), rising** |
 | 5 | network closed: the host's LAN/bridge/docker0 ports, the router, 1.1.1.1:443, external DNS | PASS | PASS |
+
+## Amendment (2026-11-07): the vision worker's detect socket (gpu-live-detector.md option A)
+
+- **Decision:** ACCEPTED by Batt, 2026-11-07, answering the GPU report's options ("เลือก A": pick
+  A) and "อนุมัติให้ใช้ gpu แทน cpu ในการ detect ของ bot ได้เลย" (approved: the bot's detection
+  may use the GPU instead of the CPU). The measurement behind it: docs/benchmarks/cpu-detector-speed.md
+  sections 7-8 (FP32 GPU boxes = CPU boxes; ~360 MiB; ~10-19 % of the GPU at 10 Hz).
+- **What changes:** the vision WORKER (`compose.vision-worker.yaml`; not the `vision` service)
+  gets ONE more bind mount, the host's RAM directory `/dev/shm/poring-lab-detect` at `/detect`,
+  read-write, so its detect server (`poring_vision.detect_server`) can create
+  `/detect/detect.sock`. `guarded_build.py worker:vision` creates that directory first, as the
+  host user, mode 0700 (a missing bind source would be created root-owned).
+- **Direction and content: frames in, numbers out.**
+  - The host bot (`scripts/unit_detector.GpuDetector`) is the ONLY client. It connects; vision
+    never initiates anything and still reaches no host, LAN or internet address (row 5).
+  - In: the letterboxed game-region frame (uint8 BGR at the model's input size), chosen and cut
+    by the host. Out: the model head's raw float32 output.
+  - The host decodes it with ITS OWN code, the same as its CPU worker's (letterbox, decode, NMS,
+    class names, species collapse: `scripts/detector_worker.py`). Vision runs only the forward
+    pass, in FP32, from weights it loads only by the pinned sha256.
+- **What vision still cannot do:** reach X (row 1), send input other than through
+  `/internal/agent` (rows 2-3), reach the network (row 5), see packet data. The socket carries no
+  input and no command: a reply is numbers of one fixed shape.
+- **The host side fails closed to the CPU detector** (unit tests in `test_unit_detector.py`):
+  - the directory must be the host user's, mode 0700, not a symlink;
+  - the socket is opened `O_PATH | O_NOFOLLOW` and must be a socket owned by the host user (a
+    symlink planted there is refused, never followed), then connected through `/proc/self/fd`;
+  - the hello must name the pinned weights (sha256), the model's input size and the output shape
+    (1, 4 + classes, anchors); a reply of any other shape, or with a non-finite value, is a failure;
+  - a timeout (250 ms), a refused connection or a bad reply gives the CPU's boxes for that frame
+    and the next 5 s; a wrong sha256 or an unsafe socket turns the GPU off for the whole run.
+- **Residual risks, accepted:**
+  - vision can write files into `/detect`. It is RAM, counted in rule 7's /dev/shm budget, and the
+    host reads nothing there but the socket;
+  - vision chooses the numbers, so the boxes: the same trust the bot already gives the model.
+    Every click still goes through the mux, the UI gate, and the hover verdict (a SWORD cursor)
+    before a strike.
+- **R1-R3 unchanged:** the detect server runs only as a guarded `execdev:vision` step (R2
+  pre-start, the paired R3 pause windows, the IO guard, a verified stop). A paused or stopped worker
+  means CPU boxes, never a blind bot.
+- **Acceptance:**
+  - `test_guards.py` pins the mount: the worker only, this exact host path, never the `vision`
+    service or any other container;
+  - the acceptance script gains row 6 (`/detect` is tmpfs and holds nothing but `detect.sock`) and
+    runs inside the worker after the change, rows 1-5 included.
 
 ## Tracking
 

@@ -1,19 +1,19 @@
 ---
 doc_type: design
 hypothesis: "The live box watcher's detection moved to the GPU (~22-45 ms a detection instead of ~200-340 ms on 16 CPU threads, the same boxes in FP32) cuts the grab-to-click time that made p7's box strikes miss walking monsters (rogue-xmas02.md 4M), within R1-R3 and without opening a new input or X path into vision."
-status: "PROPOSED 2026-11-07 (Batt ~09:2x: 'move it; before moving, report how heavy the GPU use is'). The report: docs/benchmarks/cpu-detector-speed.md sections 7-8. Batt picks the option below; nothing is built."
+status: "ACCEPTED 2026-11-07: Batt chose option A ('เลือก A') and approved the GPU for the bot's detection ('อนุมัติให้ใช้ gpu แทน cpu ในการ detect ของ bot ได้เลย'). ADR-0005 Amendment 2026-11-07. Being built (section 5); the pilot is pre-registered before its run."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/cpu-detector-speed.md, rogue-xmas02.md, ../adr/0005-vision-x-access.md, ../operations/vision-long-lived.md, ../operations/r3-paired.md, ../../scripts/unit_detector.py, ../../services/vision/src/poring_vision/bench_gpu.py]
-next_action: "Batt chooses A, B or C (section 3). Then the chosen option's ADR amendment (if any), the build with tests, and a pre-registered pilot against the CPU box watcher."
+next_action: "Build A (section 5), prove the live path's parity on the GPU, pre-register pilot p8 (rogue-xmas02.md 4N) and run it."
 title: "The live detector on the GPU: how the host bot's frames reach it (options)"
 date: 2026-11-07
 owner: Batt
 ---
 
-# The live detector on the GPU (PROPOSED, options)
+# The live detector on the GPU (ACCEPTED: option A)
 
 ## 1. What is measured (cpu-detector-speed.md sections 7-8)
 - **Speed:** 22-29 ms per detection on the RTX 5060 Ti (bare forward 18-20 ms). At 10 Hz it is
@@ -62,3 +62,11 @@ owner: Batt
 5. **A pre-registered pilot:** the CPU and GPU box watchers interleaved, together with the
    latency fix p7 asked for (a detection right after the settle, one hover). Measured: grab-to-hover
    time, SWORD share at the box, kills an hour; R3's delta on Frigate over the run.
+
+## 5. Decision and the build (2026-11-07)
+- **Batt:** option A ("เลือก A"); the bot's detection may use the GPU instead of the CPU
+  ("อนุมัติให้ใช้ gpu แทน cpu ในการ detect ของ bot ได้เลย"). ADR-0005 Amendment 2026-11-07.
+- **One change from section 4's sketch, for parity:** the host keeps the letterbox, the decoding
+  and the NMS (`scripts/detector_worker.py`'s own functions). The GPU server runs only the forward
+  pass and returns the head's raw output. So the CPU and GPU paths differ only in the forward
+  (ONNX on the CPU vs torch FP32 on the GPU), and the species collapse needs no second copy.
