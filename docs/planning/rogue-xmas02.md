@@ -1000,3 +1000,33 @@ stays (Batt's decision); the runner's box rule is the limit.**
   OUR position at the box's grab, not the current one. Both points belong to the next runner change
   (a strike at the box's own cell, the camera at the grab time), pre-registered before its run.
 
+**Pilot p7 (4M; demo 20261107T080933-...-xmas02-xmw3, recorder `20261107T080929-rdp-xmas02-xmw3`;
+dungeon@8.8 at 0056948, pre-registered 07:44:59; `--box-strike`; the Rogue immune since 06:58;
+08:09:29-08:30:19, its own time box). VERDICT: FAIL (E1, E2); E3 passes. `--box-strike` stays off.**
+
+| | p6 (no box strike, 15 min) | **p7 (box strike, 20 min)** | bar |
+|---|---|---|---|
+| E1 kills (packets) | 1 (4.0 / h) | **4 (12.0 / h)** | >= 40 / h: FAIL |
+| E2 box fights ending as a box miss | 16 / 19 = 84 % | **19 / 25 = 76 %** | <= 50 %: FAIL |
+| E3 hard bars / Fly Wings / stalls | pass / 0 / 5 | **pass / 0 / 3** | PASS |
+| strikes / landed | 10 / 4 | 7 / 7 (5 by box, 2 by scan) | reported |
+| waypoints (per min) | 203 (13.53) | 262 (13.10) | reported |
+
+- **`box_target` (25, one per box fight):** the box was fresh in all 25 (wait after the settle 301-1,204 ms; the
+  settle 0-219 ms); 7 found no box within 220 px; 18 hovered: 5 SWORD (all struck), the rest
+  "unknown" (20 hovers) or "clear" (6).
+- **Why so few SWORDs, from the packets (offline, `/dev/shm/.../p7/hover_check.py`, reported
+  only):** at each of the 18 hovered targets, the truth was projected at the event and 0.4-2.0 s
+  before it, with us standing still.
+  - 13 boxes MATCHED a monster's predicted sprite when grabbed (IoU >= 0.4, 1.2-1.6 s before the
+    event), and that monster was GONE from the hovered spot by the hover (IoU < 0.3, 100-200 px away).
+  - 4 monsters stood still the whole time; all of them were struck.
+  - **So the boxes are right and the time from grab to hover is too long.** The 1-a-second
+    rhythm plus a CPU detection makes the wait 0.3-1.2 s, then each hover takes 0.35 s, and a
+    wandering monster walks 2-5 cells in that time.
+- **What would cut it** (each a new pre-registration; none is tuned on this run):
+  - detection without the 1-s rhythm (a fresh detection right after the settle: ~0.1-0.25 s on 16
+    CPU threads, a few ms on the GPU if Batt moves it there);
+  - one hover instead of two;
+  - leading a walking box by its own motion between two fresh detections.
+
