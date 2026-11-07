@@ -150,6 +150,15 @@
   - the 10 walks cut mid-way: 6 on the exact cell, all ≤ 1 cell off.
 - The port stays in git history only (2a0404a..the removal commit); nothing imports it.
 
+## GPL-3.0 material in the repository (labelled 2026-11-07, ADR-0018's publication checklist)
+The repository is public, so these are distributed under the GPL-3.0, like rAthena itself
+(https://github.com/rathena/rathena, the ref pinned in `services/rathena`):
+
+| File | What | Where |
+|---|---|---|
+| `services/rathena/patches/0001-thai-trim-chars.patch` | a 19-line change to rAthena's `TRIM_CHARS` (Thai names), the same as upstream PR #9990 | the tree; applied at image build |
+| `packages/poring_dataset/src/poring_dataset/paths.py` | the literal port of rAthena's `src/map/path.cpp` A* (the closed section below) | git history only: 2a0404a .. d384d1e (2026-10-02 .. 10-04) |
+
 ## Runtime dependencies with licence obligations (2026-10-04, ADR-0018)
 Batt's decision (2026-10-04): the lab trains and runs YOLO with ultralytics, which is AGPL-3.0. The
 consequences are recorded in [ADR-0018](docs/adr/0018-component-licensing.md):

@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Keep the import boundary (test_guards) green; before the repository is published, re-run the publication checklist below.
+next_action: Keep the import boundary (test_guards) green (GREEN again since d436cc6, route A). The repository IS PUBLIC; the publication checklist was re-run 2026-11-07 (section at the end). Open for Batt: whether to rewrite history to drop the removed GPL port (paths.py).
 ---
 
 # ADR-0018: Component licensing (AGPL-3.0 where ultralytics is imported, Apache-2.0 elsewhere)
@@ -51,6 +51,9 @@ next_action: Keep the import boundary (test_guards) green; before the repository
   be offered under AGPL-3.0. Today the repository is private and nothing is distributed, so there
   is no obligation yet. The licence files are in place now, so publication does not need a
   relicensing step.
+  ➡️ **SUPERSEDED: the repository is PUBLIC** (GitHub reports `PUBLIC`, checked 2026-11-07; it
+  became public for the teaching kit, Batt 2026-11-06). The obligations now apply; the checklist
+  was re-run 2026-11-07 (the section at the end).
 - **Trained weights.** Models trained with ultralytics or from its weights are treated as
   AGPL-3.0, following Ultralytics' stated terms. They live in `data/` (gitignored) and are not
   published with the repository.
@@ -69,3 +72,37 @@ next_action: Keep the import boundary (test_guards) green; before the repository
 3. Every port in THIRD_PARTY.md has its attribution, and the licences in this ADR still match the
    pinned dependency versions.
 4. No secrets: `.env` is never committed, and the credentials were rotated (2026-10-01).
+
+## Publication checklist re-run (2026-11-07, Batt: "ok"; read-only)
+Run on an anonymous `git clone --mirror` of the PUBLIC repository into RAM (26 MB: 5 branches, 2,029
+commits, 1,229 paths ever committed): what anyone can download, with no read of the shared disk.
+
+1. **Client-derived or RO-copyrighted files: none outside the approved exception.** No GRF / GPF /
+   GAT / RSW / GND / SPR / ACT / PAL / BMP / LUB file, no client exe or dll, no packet capture, no
+   `.env`, nothing under `data/` but its README, in any commit. Images: 4 Blockly UI images (the
+   Blockly package, Apache-2.0, already in THIRD_PARTY.md) and the teaching kit's 20 sample frames
+   (Batt's scoped exception, 2026-11-06). The largest blob ever is the kit's `v1.onnx` (10.8 MB).
+2. **GPL (rAthena) material: two pieces, now labelled GPL-3.0 in THIRD_PARTY.md.**
+   - `services/rathena/patches/0001-thai-trim-chars.patch` (19 lines): a change to rAthena, the same
+     as upstream PR #9990.
+   - `packages/poring_dataset/src/poring_dataset/paths.py`, in history only (added 2a0404a
+     2026-10-02, removed d384d1e 2026-10-04): the literal port of rAthena's `path.cpp`. Public
+     history distributes it, so it is GPL-3.0 there.
+   - No rAthena db, knowledge base or table copy in any commit. `tables.lock.json` (packet ids and
+     lengths where rAthena and OpenKore disagree) and `mapcache.lock.json` (rAthena file names,
+     sizes, sha256) are protocol facts and checksums.
+   - Not done, Batt's decision: rewriting history to drop `paths.py` (`git filter-repo` + a force
+     push). It would change every commit SHA from 2026-10-02 on, and every document that cites one.
+3. **Attributions:** every port the code names (nostalro-client, korangar, RagLite) has its row; the
+   licensed dependencies' versions in THIRD_PARTY.md equal the pins (ultralytics 8.4.165, -thop
+   2.2.1, -platform 0.1.70, torch 2.14.0+cu130 / torchvision 0.29.0+cu130 in `uv.lock`; blockly
+   13.3.0, @xyflow/react 12.12.0 in `package.json`).
+4. **Secrets:** `.env` was never committed on any branch. No private key, GitHub / AWS / Slack /
+   OpenAI-style token in any diff (one fake key, body `AAA`, in a test fixture). The
+   password-like lines are code: the secret generators of `rotate_secrets.py`, test values.
+- **The teaching kit** (`teaching-kit` 8377220) now states its licences in `NOTICE.md` with both
+  licence texts: `simple_bot.py` Apache-2.0, `v1.onnx` AGPL-3.0 (its source: `services/vision` at
+  05b8cff), the sample frames not ours to license. `teaching/simple-bot/make_kit.py` carries them
+  into every kit it builds.
+- **The import boundary:** GREEN again since d436cc6 (route A: `gold_eval.py` reads frame-cache
+  shards with its own reader; the parity with the trainer's reader is tested on the vision side).

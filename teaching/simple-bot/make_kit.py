@@ -5,7 +5,8 @@
         python3 teaching/simple-bot/make_kit.py
 
 It writes /dev/shm/poring-lab-tmp/teaching-kit/ (and teaching-kit.zip beside it):
-    simple_bot.py, README.md   copied from this folder
+    simple_bot.py, README.md   copied from this folder, with NOTICE.md (which licence covers what)
+    LICENSE, LICENSE-AGPL-3.0.txt   the repository's Apache-2.0 text and vision's AGPL-3.0 text
     v1.onnx                    the lab's v1 detector (/dev/shm/poring-lab-detector/model/...)
     samples/                   ~20 prt_fild08 frames from a hunt recording, each with >= 2 monster
                                boxes, + SOURCE.txt naming the recording and the frames
@@ -38,6 +39,11 @@ FRAMES = Path(
     "/mnt/poring-lab-datasets/hunt-recordings/20261106T111229-demo-hunt-flow56/frames"
 )  # prt_fild08, 2026-11-06 11:12, 9,156 game-region JPEGs at 1280 x 720
 SPREAD, KEEP, MIN_MONSTERS = 200, 20, 2
+# the kit's licences (NOTICE.md): simple_bot.py Apache-2.0, v1.onnx AGPL-3.0 (ADR-0018)
+LICENCES = (
+    (HERE.parents[1] / "LICENSE", "LICENSE"),
+    (HERE.parents[1] / "services" / "vision" / "LICENSE", "LICENSE-AGPL-3.0.txt"),
+)
 SHM = Path("/dev/shm")
 SHM_LIMIT = 4 * 10**9  # the lab's /dev/shm total stays at or under 4 GB (rule 7)
 
@@ -96,8 +102,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         shutil.rmtree(out)
     (out / "samples").mkdir(parents=True)
-    for name in ("simple_bot.py", "README.md"):
+    for name in ("simple_bot.py", "README.md", "NOTICE.md"):
         shutil.copy2(HERE / name, out / name)
+    for src, name in LICENCES:  # NOTICE.md says which file is under which (Batt 2026-11-07)
+        shutil.copy2(src, out / name)
     shutil.copy2(args.model, out / "v1.onnx")
 
     frames = sorted(n for n in os.listdir(args.frames) if n.lower().endswith(".jpg"))  # one dir

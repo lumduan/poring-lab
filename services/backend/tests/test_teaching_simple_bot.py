@@ -567,3 +567,22 @@ def test_the_default_threads_are_never_auto() -> None:
     assert sb.percentile([5.0, 1.0, 3.0, 2.0, 4.0], 95) == 5.0
     a = sb.parse_args(["--bench", "--model", "v1.onnx"])
     assert a.bench and a.bench_threads == "1,2,4,8,0" and a.bench_runs == 30
+
+
+def test_the_kit_carries_its_licences() -> None:
+    """Batt 2026-11-07: the public kit states its licences -- simple_bot.py Apache-2.0, v1.onnx
+    AGPL-3.0 (trained with Ultralytics, ADR-0018), the samples not ours to license."""
+    kit = ROOT / "teaching" / "simple-bot"
+    spec = importlib.util.spec_from_file_location("make_kit_lic", kit / "make_kit.py")
+    assert spec and spec.loader
+    mk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mk)
+    assert [(src.read_text()[:120].split()[0:2], name) for src, name in mk.LICENCES] == [
+        (["Apache", "License"], "LICENSE"),
+        (["GNU", "AFFERO"], "LICENSE-AGPL-3.0.txt"),
+    ]
+    notice = (kit / "NOTICE.md").read_text()
+    for must in ("Apache-2.0", "AGPL-3.0", "`v1.onnx`", "`samples/*.jpg`", "05b8cff"):
+        assert must in notice, must
+    readme = (kit / "README.md").read_text()
+    assert readme.count("NOTICE.md") == 2  # the Thai and the English file lists
