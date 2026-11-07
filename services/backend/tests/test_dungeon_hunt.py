@@ -946,12 +946,13 @@ def test_the_box_flags_that_cannot_work_are_refused() -> None:
     assert dh.box_flags_refused(True, False, "ab") == "--box-detector ab needs --box-now"
     assert dh.box_flags_refused(True, True, "ab") is None
     assert dh.box_flags_refused(False, False, "gpu") is None  # the GPU without the strike: fine
-    assert dh.box_flags_refused(False, False, "cpu") is None  # today's default
+    assert dh.box_flags_refused(False, False, "cpu") is None  # the CPU-only rollback
 
 
 def test_the_box_flags_default_to_todays_behaviour() -> None:
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
-    assert '"--box-detector",\n        choices=["cpu", "gpu", "ab"],\n        default="cpu",' in src
+    # the GPU by default since pilot p8 passed G1 / G2 (rogue-xmas02.md 4N; the CPU behind it)
+    assert '"--box-detector",\n        choices=["cpu", "gpu", "ab"],\n        default="gpu",' in src
     flag = '"--box-now",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
     assert flag in src
     assert '"cpu" if a.box_detector == "cpu" else "gpu")' in src

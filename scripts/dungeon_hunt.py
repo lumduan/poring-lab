@@ -3383,11 +3383,12 @@ def main() -> int:
     t.add_argument(
         "--box-detector",
         choices=["cpu", "gpu", "ab"],
-        default="cpu",
+        default="gpu",
         help="dungeon@8.9 (gpu-live-detector.md option A, Batt 2026-11-07): the box watcher's "
-        "detections on the CPU (the default until a pilot passes), on the vision worker's GPU "
-        "detect server with the CPU behind it (gpu), or ab: the GPU in the background and each "
-        "box target's fresh detection alternating GPU / CPU (the pilot's arms; needs --box-now)",
+        "detections on the vision worker's GPU detect server with the CPU behind it (gpu, the "
+        "DEFAULT since pilot p8 passed G1 / G2, rogue-xmas02.md 4N: without a detect-server step "
+        "the CPU serves), on the CPU only (cpu), or ab: the GPU in the background and each box "
+        "target's fresh detection alternating GPU / CPU (the pilot's arms; needs --box-now)",
     )
     t.add_argument(
         "--box-now",

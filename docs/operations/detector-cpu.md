@@ -1,6 +1,6 @@
 ---
 doc_type: runbook
-status: "ACTIVE: rebuilt 2026-11-05 15:07 ICT; since 2026-11-07 16 threads and a map-scoped model for xmas_dun02 (section 'Map-scoped models')"
+status: "ACTIVE: rebuilt 2026-11-05 15:07 ICT; since 2026-11-07 16 threads and a map-scoped model for xmas_dun02 (section 'Map-scoped models'); since 2026-11-07 13:4x the box watcher uses the GPU's detect server first, this detector behind it (section 'The GPU path')"
 related: [../demonstrations.md, ../adr/0018-component-licensing.md]
 ---
 
@@ -50,6 +50,28 @@ removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails clos
   `Box.species` keeps the model's class.
 - The user is `dungeon_hunt.py`'s box watcher (`--box-model map`, the default; `--box-model v1` is
   the rollback). Every other user still calls `UnitDetector()`: v1.
+
+## The GPU path (Batt 2026-11-07, option A; ADR-0005 Amendment 2026-11-07)
+- `unit_detector.for_map_gpu(map)` = this CPU detector behind the vision worker's GPU detect server
+  (`poring_vision.detect_server`): the SAME model's forward pass on the GPU (pinned `.pt` sha256s,
+  `GPU_WEIGHTS`), decoded on the host by this worker's own code. Parity on 200 frames: 1.000, the
+  largest box difference 0.1 px (docs/planning/gpu-live-detector.md 6a).
+- Any failure gives this detector's boxes: no server (the socket is absent), R3's pause window, a
+  250-ms timeout, a bad reply. The GPU is retried every 5 s. A wrong sha256 or an unsafe socket
+  turns it off for the run.
+- **To use it beside a run** (`dungeon_hunt.py`'s default `--box-detector gpu`; `cpu` = rollback):
+
+      python3 scripts/runbooks/quiet_start.py --quiet-min 10 --limit 25 -- \
+          python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+      eval "$(.venv/bin/python scripts/unit_detector.py serve-cmd --seconds <run + 10 min>)"
+      ... the runner, once /dev/shm/poring-lab-detect/detect.sock exists ...
+      python3 scripts/guarded_build.py worker-stop:vision
+
+  The step ends at its time box with `FAILED rc=124` (that is `timeout` ending a server); read
+  the line before it for the verified stop. A step over 20 min uses R3's 180-s windows: until 4
+  load-matched pairs pass, the worker is paused half the time and the CPU serves then.
+- Each GPU-path detection is logged in the session's `detections.jsonl` (wall time, path,
+  preference, reason).
 
 ## Rebuild after a host reboot (`/dev/shm` is wiped)
 All of it lives in RAM; nothing touches the shared disk, the host `.venv` or `uv.lock`.

@@ -181,11 +181,15 @@ ports, quickstart) and `docs/adr/`.
    - Vision has NO X access (ADR-0005 closed on the S2 path, Batt 2026-10-04: vision S2-only +
      option c2):
      - no `x11-unix` mount; it reads the frame bus only;
+       ➡️ ADR-0005 Amendment 2026-11-07 (Batt chose gpu-live-detector.md option A): the vision
+       WORKER also serves the host bot's detections through ONE unix socket, the host's
+       `/dev/shm/poring-lab-detect` at `/detect` (the worker only). Frames in, numbers out; the
+       host is the only client and fails closed to the CPU detector;
      - it lives ONLY on the internal `agent` network (10.210.97.0/24, `gateway_mode_ipv4:
        isolated`);
      - the backend refuses that network on every listener but `:8001` (`AgentNetworkGuard`).
 
-     Keep all three (`test_guards.py`). The acceptance test is
+     Keep all of them (`test_guards.py`). The acceptance test is
      `services/vision/acceptance/adr0005.py`. Host scripts take the backend's address by the
      DEFAULT network's name (`scripts/backend_addr.py`).
 

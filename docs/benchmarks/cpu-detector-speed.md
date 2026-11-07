@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); Batt 2026-11-07 ~09:2x: MOVE the live detector to the GPU after this report (section 8: how heavy); the move's design (a frame route from the host bot into the worker) is Batt's choice next."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); Batt 2026-11-07 ~09:2x: MOVE the live detector to the GPU after this report (section 8: how heavy). ➡️ DONE 2026-11-07: Batt chose option A; built, proven and live (docs/planning/gpu-live-detector.md sections 5-7)."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt

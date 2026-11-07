@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "Pilot p8 (4N, dungeon@8.9: a detection on demand + one hover, the GPU vs CPU arms) after gpu-live-detector.md section 6 passes. p6 (4L) and p7 (4M) FAILED E1 / E2 (section 5): the boxes are right, the grab-to-hover time too long. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
+next_action: "p8 (4N, 2026-11-07 12:56-13:27) FAILED E1 (12.0 kills / h) and E2 (64.7 % box misses); G1 / G2 PASSED, so the box watcher runs on the GPU by default (the CPU behind it). Every lock ended 'no hits' (16 / 16; p7 7 / 7): read the packets of p7 + p8 (do our attacks reach the locked target?) before the next runner change is pre-registered. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1082,3 +1082,47 @@ dungeon@8.8 at 0056948, pre-registered 07:44:59; `--box-strike`; the Rogue immun
   - one hover instead of two;
   - leading a walking box by its own motion between two fresh detections.
 
+
+**Pilot p8 (4N; demo 20261107T125651-...-xmas02-p8; dungeon@8.9 at 61a04ca + the detection log
+12437f8, pre-registered 12:30:32; `--box-strike --box-now --box-detector ab`; the Rogue immune
+(judged 12:52:29: "You are now immune to attacks."); the detect server beside it as one guarded
+step 12:56:10-13:36:14; the run 12:56:47-13:27:38, its own time box). VERDICT: E1 and E2 FAIL; E3
+PASSES; G1 and G2 PASS. `--box-strike --box-now` stay off; `--box-detector gpu` becomes the
+default (the follow-up commit).**
+
+| | p7 (20 min) | **p8 (30 min)** | bar |
+|---|---|---|---|
+| E1 kills (packets) | 4 (12.0 / h) | **6 (12.0 / h)** | >= 40 / h: FAIL |
+| E2 box fights ending as a box miss | 19 / 25 = 76 % | **22 / 34 = 64.7 %** | <= 50 %: FAIL |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 3 | **pass / 0 / 9 (18 / h)** | PASS (<= 39 / h) |
+| G1 GPU-asked detections served by the GPU, outside R3's OFF windows | - | **1,063 / 1,079 = 98.5 %** | >= 90 %: PASS |
+| G2 the box target's request -> boxes, p50 | - | **GPU-served 94 ms vs CPU-served 305 ms** | <= 100 and <= half: PASS |
+| strikes / landed | 7 / 7 | 16 / 12 (box 10, walk_sword 3, scan 3) | reported |
+| waypoints reached (per min) | 262 (13.10) | 359 (11.96) | reported |
+
+- **The box targets (34, one per box fight), per path that served the fresh detection** (too few
+  for a verdict, as pre-registered):
+
+  | served by | targets | a box within 220 px | hovered | SWORD | struck | struck / hovered | request -> boxes p50 | hover from the grab p50 |
+  |---|---|---|---|---|---|---|---|---|
+  | GPU | 11 | 9 | 9 | 4 | 4 | 0.444 | 94 ms | 94 ms |
+  | CPU | 23 | 18 | 18 | 6 | 6 | 0.333 | 305 ms | 305 ms |
+
+  By the assigned arm: GPU 17 targets, 5 struck of 13 hovered (0.385); CPU 17, 5 of 14 (0.357).
+  Six of the GPU arm's 17 fell back to the CPU in R3's OFF windows (`down`).
+- **The GPU live:** the box watcher made 1,820 detections, 1,065 by the GPU (the server counted
+  the same 1,065) and 755 by the CPU (738 fallbacks, 17 the CPU arm's). Fallback reasons: R3's
+  OFF windows (`down` within the 5-s retry; 118 `BlockingIOError`, a paused server's full backlog;
+  12 `TimeoutError`). The watcher never died; the GPU was never turned off.
+- **R3 over the run: PASS**, the first verdict for our GPU detector. 4 kept pairs, median ON-OFF
+  delta -0.50 ms (+0.21, -1.54, -0.93, -0.06 ms; the trip is +5); then monitoring (27 min ON). No
+  relaxed camera drops. Worst capture stall 12.0 %.
+- **How heavy:** our process 336 MiB; GPU-wide utilization 15.8 % unpaused vs 12.5 % paused, power
+  33.2 vs 32.6 W (confounded by Frigate's own load).
+- **Why the kills did not rise (reported only, not tuned on this run):** every lock ended "no
+  hits": 16 / 16 in p8 and 7 / 7 in p7. The runner read none of OUR hits in the Battle Log within
+  LOCK_NO_HIT_S (3.5 s) after a strike and let the target go. Twelve strikes landed (the lock
+  arrow or damage), and the packets count 6 kills. So the time from grab to hover is now short
+  (94 ms on the GPU), and the next limit is staying on the target after the strike. The packets
+  can tell whether our attacks reached it (attack requests vs damage to it) before any change is
+  pre-registered.

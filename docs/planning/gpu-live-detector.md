@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "The live box watcher's detection moved to the GPU (~22-45 ms a detection instead of ~200-340 ms on 16 CPU threads, the same boxes in FP32) cuts the grab-to-click time that made p7's box strikes miss walking monsters (rogue-xmas02.md 4M), within R1-R3 and without opening a new input or X path into vision."
-status: "ACCEPTED 2026-11-07: Batt chose option A ('เลือก A') and approved the GPU for the bot's detection ('อนุมัติให้ใช้ gpu แทน cpu ในการ detect ของ bot ได้เลย'). ADR-0005 Amendment 2026-11-07. Being built (section 5); the pilot is pre-registered before its run."
+status: "LIVE 2026-11-07: Batt chose option A ('เลือก A') and approved the GPU for the bot's detection ('อนุมัติให้ใช้ gpu แทน cpu ในการ detect ของ bot ได้เลย'). ADR-0005 Amendment 2026-11-07. Built 61a04ca; the live path PASSED (section 6a: parity 1.000, the fallback in R3's pauses); pilot p8 PASSED G1 / G2 and R3 (section 7: 98.5 % GPU-served outside the pauses, 94 vs 305 ms, R3 median -0.50 ms over 4 kept pairs), so dungeon_hunt's box watcher uses the GPU by default (the CPU behind it)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/cpu-detector-speed.md, rogue-xmas02.md, ../adr/0005-vision-x-access.md, ../operations/vision-long-lived.md, ../operations/r3-paired.md, ../../scripts/unit_detector.py, ../../services/vision/src/poring_vision/bench_gpu.py]
-next_action: "Build A (section 5), prove the live path's parity on the GPU, pre-register pilot p8 (rogue-xmas02.md 4N) and run it."
+next_action: "Run the detect server as a guarded execdev step beside every dungeon_hunt run that should use the GPU (docs/operations/detector-cpu.md 'The GPU path'). Possible later work: the server's forward is 37-38 ms vs ultralytics' 22-29 (section 6a)."
 title: "The live detector on the GPU: how the host bot's frames reach it (options)"
 date: 2026-11-07
 owner: Batt
@@ -153,3 +153,19 @@ detect server on the GPU, the host's `GpuDetector`, the deployed models.
   (quant-ticker-engine), 0 s above the step's 30 %.
 - Scratch: `/dev/shm/poring-lab-tmp/gpu-live/` (parity.json, the logs, the GPU sampler), to the
   NAS today.
+
+## 7. Pilot p8 on the GPU (rogue-xmas02.md 4N; 2026-11-07 12:56-13:36 ICT): G1, G2 and R3 PASS
+- **G1:** of the detections that asked for the GPU outside R3's OFF windows, the GPU served 1,063
+  / 1,079 (98.5 %; bar 90 %). The 16 others: 15 `down` (the 5-s retry gap after an unpause), 1
+  `BlockingIOError`. Inside the OFF windows 2 / 724 (the pause edges).
+- **G2:** the box target's fresh detection, request to boxes, p50 94 ms when the GPU served it vs
+  305 ms when the CPU did (bar <= 100 and <= half).
+- **R3 over the run: PASS** (4 kept pairs, median -0.50 ms; then 27-min monitoring). No relaxed
+  camera drops; worst capture stall 12.0 %. During R3's measuring phase the worker was paused
+  half the time (180-s windows), so ~41 % of the run's detections were the CPU's: by design.
+- **How heavy, live (1 Hz + the box targets' requests):** 336 MiB; GPU-wide utilization 15.8 %
+  unpaused vs 12.5 % paused, power +0.6 W (confounded).
+- **Decision (pre-registered):** `dungeon_hunt.py --box-detector gpu` is the default; `cpu` is
+  the rollback. Without a detect-server step the CPU serves alone (the socket is absent: no time
+  lost).
+- p8's own runner bars (E1 kills, E2 box misses) FAILED: rogue-xmas02.md section 5.
