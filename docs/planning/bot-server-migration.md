@@ -258,3 +258,25 @@ as Batt prefers:
     the next speed-up.
 - **For comparison, ubuntu-docker's RTX path:** 49-52 ms a call, but paused half the time while
   R3 measures (p9: 911 GPU / 905 CPU detections).
+
+## 15. Training on the Arc with the lab's own trainer (2026-11-07 17:04-17:25, a smoke; still running)
+- `python -m poring_vision.train --smoke` (200 frames a training session, 100 for validation, 3
+  epochs) on the REAL xmas02 frame cache, read from the NAS
+  (`/mnt/poring-lab-datasets/.framecache/xmas02-o3h-t-20261106`; 600 training and 200
+  validation frames), `PORING_ACCEL=xpu`, batch 4, imgsz 1280, 0 data-loader workers.
+- **Two fixes it needed:**
+  - **FP32, not mixed precision:** the A380 has no float64, and AMP's GradScaler computes in
+    float64 (`RuntimeError: Required aspect fp64 is not supported`). Intel's FP64 emulation
+    (`OverrideDefaultFP64Settings=1 IGC_EnableDPEmulation=1`) failed the same call with a Level
+    Zero error. `accel.amp_ok()` turns AMP off where there is no float64 (a9d549b).
+  - **The device layer** (ADR-0022, 516c2f3): `device=xpu` all through.
+- **Measured:**
+  - training: 1.6-1.7 s an iteration (4 frames), 4.1 GB of GPU memory, epoch 1 in 4 min 21 s
+    (~2.4 frames a second);
+  - validation: ~40 s a batch, 25 batches = ~16 min. It is the slow part: an early, barely
+    trained model leaves NMS thousands of candidates, most likely on bot-server's slow CPU.
+- **Next for a real run there:**
+  - data-loader workers (the PNG decode on 8 cores, not in the training loop);
+  - validation less often, or at the end;
+  - then BF16 autocast, which needs no GradScaler and so no float64.
+  - A like-for-like comparison with the 5060 Ti was not run: Batt chose Intel first.
