@@ -27,6 +27,7 @@ capture  ->  detect  ->  decide  ->  act
 - client ความละเอียดไหนก็ได้ แบบหน้าต่าง (windowed) ง่ายที่สุด เต็มจอก็ใช้ได้ (ดูหัวข้อ "จอทุกขนาด หน้าต่างหรือเต็มจอ")
 - ตัวละครยืนอยู่ที่ prt_fild08
 - ไฟล์ในชุดนี้: `simple_bot.py`, `v1.onnx` (โมเดล), โฟลเดอร์ `samples` (ภาพตัวอย่าง 20 ภาพ)
+- ไลเซนส์: `simple_bot.py` เป็น Apache-2.0, `v1.onnx` เป็น AGPL-3.0, ภาพใน `samples` ไม่ได้อยู่ใต้ไลเซนส์ของเรา (รายละเอียดใน `NOTICE.md`)
 - `v1.onnx` และโฟลเดอร์ `samples` มาพร้อมกันเมื่อ clone branch `teaching-kit` จาก GitHub (`git clone --branch teaching-kit --single-branch https://github.com/lumduan/poring-lab.git simple-bot`) ถ้าได้ไฟล์มาทางอื่นแล้วไม่มีโมเดล ลอง `--detector color` ได้ก่อน
 
 ## ติดตั้ง uv (ครั้งเดียว)
@@ -221,6 +222,8 @@ The code is written to be read: every function says what it does, why, and its i
   windowed or fullscreen");
 - your character on prt_fild08;
 - this kit: `simple_bot.py`, `v1.onnx` (the model), `samples` (20 example frames).
+- licences: `simple_bot.py` is Apache-2.0, `v1.onnx` is AGPL-3.0, and the `samples` pictures are
+  not ours to license (details in `NOTICE.md`).
 - `v1.onnx` and `samples` come with a clone of the `teaching-kit` branch on GitHub
   (`git clone --branch teaching-kit --single-branch https://github.com/lumduan/poring-lab.git simple-bot`).
   Got the files another way and no model? Try `--detector color` first.
