@@ -86,6 +86,8 @@ ports, quickstart) and `docs/adr/`.
          load (±20 % detections/s) count.
        - The trip is the median paired delta > 5 ms over ≥ 4 pairs.
        - Long runs are monitored at 27 min ON / 3 min OFF.
+       - ➡️ 2026-11-07 09:00-24:00 ICT ONLY (Batt): camera drops are logged, not a stop
+         (`frigate_r3.DROPS_RELAXED`, docs/operations/r3-paired.md); absolute again after it.
        - Stop HARD if any camera drops frames (`skipped_fps`) for 30 s: ABSOLUTE, no baseline,
          IMMEDIATE. The abort logs the fleet detection load.
        - Training never stops for load (Batt, 2026-10-07): the ADAPTIVE DUTY CYCLE sets the step

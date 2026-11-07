@@ -699,3 +699,36 @@ def test_the_duty_file_carries_the_yield_sleep(fr: ModuleType, tmp_path: Path) -
     assert d["sleep_ms"] == 10_000 and d["level"] == 1
     # the trainer accepts it (train.py read_duty: 0..10_000 ms, else its fallback)
     assert fr.YIELD_MS <= 10_000
+
+
+def test_batts_one_day_drop_relaxation_logs_inside_its_window_and_stops_outside(
+    fr: ModuleType,
+) -> None:
+    """Batt 2026-11-07: camera drops are logged, not a stop, ONLY on 2026-11-07 09:00-24:00 ICT."""
+    t0, t1 = fr.DROPS_RELAXED
+    assert fr.drops_relaxed(t0) and fr.drops_relaxed(t1 - 1) and not fr.drops_relaxed(t1)
+    assert not fr.drops_relaxed(t0 - 1) and t1 - t0 == 15 * 3600
+
+    def run(start: float) -> tuple[Any, Any]:
+        holder: dict[str, Any] = {}
+        sim = Sim(fr, lambda: holder["g"].phase, 28.0)
+        sim.t = start
+        sim.cams = {"a": (5.0, 0.3)}
+        g = fr.PairedR3(short=False, fetch=sim, now=start)
+        holder["g"] = g
+        hit = None
+        while hit is None and sim.t < start + 120:
+            sim.t += 5
+            g.tick(sim.t)
+            g.poll(sim.t)
+            hit = g.breach(sim.t)
+        return hit, g
+
+    hit, g = run(t0 + 3600)  # inside: never a stop, the episode recorded once
+    assert hit is None
+    rec = g.summary()["relaxed_drops"]["a"]
+    assert rec["episodes"] == 1 and rec["seconds"] >= fr.DROP_S
+    hit, _g = run(t1 + 60)  # the next day: absolute again
+    assert hit is not None and hit[0] == "drops" and hit[2] is True
+    hit, _g = run(t0 - 3 * 3600)  # before Batt's answer: absolute
+    assert hit is not None and hit[0] == "drops" and hit[2] is True

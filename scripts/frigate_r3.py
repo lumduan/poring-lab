@@ -77,6 +77,14 @@ DELTA_MS = 5.0  # R3: +5 ms over the baseline median
 LAT_WINDOW_S = 60.0  # ... as a rolling 60 s median of distinct updates
 LAT_MIN_UPDATES = 3
 DROP_S = 30.0  # R3: a camera dropping frames for 30 s -> HARD stop
+# Batt 2026-11-07 ~09:2x ICT, a ONE-DAY relaxation (docs/operations/r3-paired.md, "2026-11-07"):
+# "you may run continuously; today people are home and there is a lot of motion, but nothing needs
+# detecting for safety; a camera dropping now and then is fine". Inside this window a camera drop
+# does NOT stop a paired step: it is printed once per camera episode and counted in the summary
+# (relaxed_drops). The paired latency trip, Frigate unreachable and R2 stay. Only that day, from
+# the answer's hour; before or after the window the stop is absolute again (drops_relaxed).
+DROPS_RELAXED = (datetime(2026, 11, 7, 9, 0, tzinfo=ICT).timestamp(),
+                 datetime(2026, 11, 8, 0, 0, tzinfo=ICT).timestamp())  # fmt: skip
 DROP_MIN_UPDATES = 2
 CAM_FPS_FLOOR = 0.5  # camera_fps below half its baseline median also counts as dropping
 UNREACHABLE_S = 60.0  # no fresh Frigate update for 60 s -> fail closed (pause)
@@ -86,6 +94,11 @@ ACTIVITY_BAND = (0.5, 2.0)  # ... outside [0.5x, 2x] of the baseline's -> re-mea
 OLLAMA_POLL_S = 15.0
 
 Fetch = Callable[[str], dict[str, Any] | None]
+
+
+def drops_relaxed(now: float) -> bool:
+    """PURE: Batt's one-day relaxation of the camera-drop stop holds at ``now`` (epoch s)."""
+    return DROPS_RELAXED[0] <= now < DROPS_RELAXED[1]
 
 
 def stamp(t: float | None = None) -> str:
@@ -671,6 +684,7 @@ class PairedR3:
         self.seen: Any = None
         self.last_fresh = now
         self.bad_since: dict[str, tuple[float, int]] = {}
+        self.relaxed: dict[str, dict[str, Any]] = {}  # camera -> the relaxed drop episode
         self.cam_ref = dict(cam_ref or {})
         self.off_fps: dict[str, list[float]] = {}
         self.last_ollama = -1e18
@@ -705,10 +719,24 @@ class PairedR3:
             self.windows.append({"phase": "on", "t0": now, "samples": []})
             self.started = True
 
+    def note_relaxed(self, cam: str, since: float, now: float, msg: str) -> None:
+        """DROPS_RELAXED: one record (and one printed line) per camera drop episode."""
+        ep = self.relaxed.get(cam)
+        if ep is None or ep["since"] != since:
+            done = 0.0 if ep is None else ep["done_s"] + (ep["last"] - ep["since"])
+            self.relaxed[cam] = ep = {"since": since, "last": now, "done_s": done,
+                                      "episodes": (ep["episodes"] + 1) if ep else 1}  # fmt: skip
+            print(f"[{stamp(now)}] R3 drops RELAXED (Batt 2026-11-07, not a stop): {msg}",
+                  flush=True)  # fmt: skip
+        ep["last"] = now
+
     def summary(self) -> dict[str, Any]:
         state, med, n = self.result
         return {"mode": self.mode, "verdict": state, "median_delta_ms": med, "kept_pairs": n,
-                "remeasures": self.remeasures, "pairs": self.pairs()}  # fmt: skip
+                "remeasures": self.remeasures, "pairs": self.pairs(),
+                "relaxed_drops": {c: {"episodes": e["episodes"],
+                                      "seconds": round(e["done_s"] + e["last"] - e["since"], 1)}
+                                  for c, e in self.relaxed.items()}}  # fmt: skip
 
     def tick(self, now: float | None = None) -> str | None:
         now = time.time() if now is None else now
@@ -770,9 +798,13 @@ class PairedR3:
         for cam, (since, n) in sorted(self.bad_since.items()):
             if n >= DROP_MIN_UPDATES and now - since >= DROP_S:
                 fps, sk = self.last["cameras"][cam] if self.last else (0.0, 0.0)
-                return ("drops", f"camera {cam} dropping frames for {now - since:.0f} s "
-                        f"(skipped_fps {sk}, camera_fps {fps}); {fleet_load(self.last)}",
-                        True)  # fmt: skip
+                msg = (f"camera {cam} dropping frames for {now - since:.0f} s "
+                       f"(skipped_fps {sk}, camera_fps {fps}); "
+                       f"{fleet_load(self.last)}")  # fmt: skip
+                if drops_relaxed(now):  # Batt 2026-11-07: logged, not a stop
+                    self.note_relaxed(cam, since, now, msg)
+                    continue
+                return ("drops", msg, True)
         if now - self.last_fresh > UNREACHABLE_S:
             quiet = now - self.last_fresh
             return ("frigate_unreachable", f"no fresh Frigate stats for {quiet:.0f} s", False)

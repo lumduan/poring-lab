@@ -243,6 +243,23 @@ minutes only (capped as before). `quiet --max-load N` stays available as an expl
   09:30-10:15 or 14:00-14:45 ICT; one due inside a window waits until it ends (+1 min). That day's
   two IO aborts (14:17:57, 14:37:24) followed auto-resumes at 14:12 and 14:33.
 
+## 2026-11-07: a ONE-DAY relaxation of the camera-drop stop (Batt, ~09:2x ICT)
+
+- **Batt's words** (Thai, translated), answering "cam-1-01-font-s dropped by itself again; every
+  drop stops our GPU work at once": "You may run continuously. Today people are home and there is a
+  lot of motion, but there is nothing that needs detecting for safety. A camera dropping now and
+  then is fine."
+- **What changes:** `frigate_r3.DROPS_RELAXED` = 2026-11-07 09:00 to 2026-11-08 00:00 ICT.
+  - Inside it, a camera dropping frames for 30 s does NOT stop a paired step (`PairedR3.breach`).
+  - It is printed once per camera episode ("R3 drops RELAXED ...") and counted in the R3 summary
+    (`relaxed_drops`: episodes and seconds per camera).
+- **What does not change:** the paired latency trip (+5 ms), Frigate unreachable, R2 (Ollama, the
+  co-tenant floor), the VRAM cap and every IO guard.
+- **The exit:** before or after the window the stop is absolute again, with no code change.
+  Tested: inside, outside, the day after.
+- **Why it was asked for:** at 09:16:34 an R3-HARD drop of cam-1-01-font-s ended the GPU
+  measurement while our container was paused (docs/benchmarks/cpu-detector-speed.md section 7).
+
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
 > ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.
 > The resume now starts at L4.
