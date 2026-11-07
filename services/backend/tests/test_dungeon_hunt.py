@@ -876,3 +876,56 @@ def test_the_box_watcher_takes_the_maps_model_with_a_v1_rollback() -> None:
     assert 'None if a.box_model == "v1" else a.map' in src
     assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model})' in src
     assert '"--box-model",\n        choices=["map", "v1"],\n        default="map",' in src
+
+
+def test_box_strike_hovers_the_box_centre_then_its_body_point() -> None:
+    """dungeon@8.8 (rogue-xmas02.md 4M): the box itself, not the 8 cells around us."""
+    assert dh.box_hover_points([600.0, 200.0, 660.0, 320.0]) == [
+        (630.0, 260.0),
+        (630.0, 320.0 - dh.BODY_UP),
+    ]
+
+
+def test_box_strike_waits_for_our_walk_to_end() -> None:
+    assert dh.settle_left(10.0, 10.0) == dh.BOX_SETTLE_S
+    assert abs(dh.settle_left(10.0, 10.5) - (dh.BOX_SETTLE_S - 0.5)) < 1e-9
+    assert dh.settle_left(10.0, 12.0) == 0.0
+    # a 7-cell path at 150 ms a cell (1.05 s) has ended by then; ~6 cells of reach
+    assert dh.BOX_SETTLE_S >= 7 * 0.150 and dh.BOX_TARGET_PX > dh.BOX_NEAR_PX
+
+
+def test_wait_fresh_needs_a_grab_after_the_settle() -> None:
+    import threading
+    import time
+
+    bw = dh.BoxWatch.__new__(dh.BoxWatch)
+    bw.lock = threading.Lock()
+    bw.last = (time.monotonic() - 5.0, [])
+    since = time.monotonic()
+    assert bw.wait_fresh(since, 0.15) is False  # only an older grab: no
+
+    def later() -> None:
+        time.sleep(0.1)
+        with bw.lock:
+            bw.last = (time.monotonic(), [])
+
+    th = threading.Thread(target=later)
+    th.start()
+    assert bw.wait_fresh(since, 1.0) is True
+    th.join()
+
+
+def test_box_strike_is_wired_once_per_box_fight_and_off_by_default() -> None:
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert (
+        '"--box-strike",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
+        in src
+    )
+    assert 'and box_fight.get("box") is not None\n' in src
+    assert 'and not box_fight.get("tried")\n' in src
+    assert 'box_fight["tried"] = True  # dungeon@8.8: once per box fight' in src
+    assert 'strike(u_b, v_b, rel_b, "box")' in src
+    # the ring scan still follows when the box target finds no SWORD
+    i_box = src.index("got_b = box_target()")
+    i_ring = src.index('found = scan("defend", ring(1), "sword")', i_box)
+    assert i_box < i_ring

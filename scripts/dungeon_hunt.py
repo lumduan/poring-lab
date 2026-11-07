@@ -388,6 +388,13 @@ BOX_IGNORE_AFTER, BOX_SPOT_R = 2, 1  # dungeon@5 (decision 4): misses within 1 c
 BOX_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-12, 13) for dy in range(-10, 11)]
 SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
+# dungeon@8.8 (rogue-xmas02.md 4M, after p6: 16 of 19 box fights scanned only the 8 cells around
+# us while the boxed monster stood 1.5-3.5 cells away, seen on a camera that was still walking):
+# a box fight first waits for our walk to end, takes a box grabbed AFTER that (a still camera),
+# and hovers THAT box; a SWORD there is the strike. Else the ring scan, as before. --box-strike.
+BOX_SETTLE_S = 1.2  # after our last walk click: a 7-cell path at 150 ms a cell has ended
+BOX_TARGET_WAIT_S = 1.8  # the wait for a box grabbed after the settle (rhythm 1 s + a detection)
+BOX_TARGET_PX = 220.0  # that box's foot within this of our cell's point (~6 cells)
 CALM_S = 2.0  # dungeon@4: no hit on us for this long = between fights (H's calm Heal)
 REGEN_STOP = 0.50  # Amendment I: at this weight share the server gives NO natural HP / SP regen
 WEIGHT_RED_MIN = 50  # Amendment I: red px on the weight line = the client's own >= 50 % colour
@@ -1024,6 +1031,18 @@ class BoxWatch:
                 self.n += 1
             self.halt.wait(max(0.0, BOX_EVERY_S - (time.monotonic() - t)))
 
+    def wait_fresh(self, since: float, timeout: float) -> bool:
+        """dungeon@8.8: wait until the watcher holds boxes from a grab started at or after
+        ``since`` (a still camera after our walk ended); False after ``timeout``."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            with self.lock:
+                t = self.last[0]
+            if t >= since:
+                return True
+            time.sleep(0.05)
+        return False
+
     def near(self, px: Sequence[float], max_px: float, fresh_s: float,
              skip: Any = None) -> tuple[float, ...] | None:  # fmt: skip
         """The nearest fresh monster box whose foot is within ``max_px`` of ``px``; a box whose
@@ -1050,6 +1069,19 @@ class BoxWatch:
         self.th.join(timeout=3)
         with contextlib.suppress(Exception):
             self.screen.proc.terminate()
+
+
+def box_hover_points(box: Sequence[float]) -> list[tuple[float, float]]:
+    """PURE (dungeon@8.8): where a box target is hovered, in order: the box's centre (on the
+    sprite for any height), then its foot raised by BODY_UP (the defend scan's body point)."""
+    x0, y0, x1, y1 = (float(v) for v in box[:4])
+    cx = (x0 + x1) / 2
+    return [(cx, (y0 + y1) / 2), (cx, y1 - BODY_UP)]
+
+
+def settle_left(last_walk_click: float, now: float, settle_s: float = BOX_SETTLE_S) -> float:
+    """PURE (dungeon@8.8): how long until our last walk has surely ended (0 when it has)."""
+    return max(0.0, settle_s - (now - last_walk_click))
 
 
 def first_item(kinds: Sequence[str]) -> int | None:
@@ -1920,6 +1952,45 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
             return True
 
+        def box_target() -> tuple[Cell, tuple[float, float]] | None:
+            """dungeon@8.8 (rogue-xmas02.md 4M): our walk ends (BOX_SETTLE_S after the last walk
+            click), then a box grabbed after that, the nearest to our cell's point within
+            BOX_TARGET_PX, is hovered at its box_hover_points; the first SWORD is returned as
+            (its cell relative to us, the hover point) for the strike. None: the ring scan."""
+            assert boxes is not None
+            t_0 = time.monotonic()
+            time.sleep(settle_left(last_walk_click, t_0))
+            t_set = time.monotonic()
+            fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)
+            rec: dict[str, Any] = {"kind": "box_target", "fresh": fresh,
+                                   "settle_ms": round((t_set - t_0) * 1e3),
+                                   "wait_ms": round((time.monotonic() - t_set) * 1e3)}  # fmt: skip
+            near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
+                      else None)  # fmt: skip
+            if near_b is None:
+                ev({**rec, "box": None, "verdicts": [], "struck": False})
+                return None
+            foot = ((near_b[0] + near_b[2]) / 2, near_b[3])
+            rec.update(
+                box=[round(x_, 1) for x_ in near_b],
+                d_px=round(math.hypot(foot[0] - FOOT_PX[0], foot[1] - FOOT_PX[1])),
+            )
+            verdicts: list[str] = []
+            for u_, v_ in box_hover_points(near_b):
+                if not in_view(u_, v_):
+                    verdicts.append("off")
+                    continue
+                res_ = hover(u_, v_)
+                verdicts.append(str(res_["verdict"]))
+                if res_["verdict"] == "sword":
+                    sp_ = box_spot(here, foot)
+                    rel_ = (0, 0) if sp_ is None or here is None else \
+                        (sp_[0] - here[0], sp_[1] - here[1])  # fmt: skip
+                    ev({**rec, "verdicts": verdicts, "struck": True, "rel": list(rel_)})
+                    return rel_, (u_, v_)
+            ev({**rec, "verdicts": verdicts, "struck": False})
+            return None
+
         def scan(purpose: str, cells: Sequence[Cell], stop_on: str
                  ) -> tuple[Cell, Any, dict[str, Any]] | None:  # fmt: skip
             """Hover each cell's point (defend: the body above it; loot: the cell); the first
@@ -2570,7 +2641,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         ev({"kind": "engage", "by": "box", "name": None,
                             "box": [round(x_, 1) for x_ in near_ or ()],
                             "spot": None if sp_e is None else list(sp_e)})  # fmt: skip
-                        box_fight.update({"spot": sp_e, "n0": n_strike[0]})
+                        box_fight.update(
+                            {
+                                "spot": sp_e,
+                                "n0": n_strike[0],
+                                "box": None if near_ is None else list(near_),
+                            }
+                        )
                     if sitting:  # dungeon@8.2: the SERVER stood us up (pc_damage -> pc_setstand,
                         # pinned pc.cpp); a stand press here is a TOGGLE and sat us back down
                         # (4.05 a6: then every potion / Fly Wing was refused while sitting)
@@ -2669,6 +2746,21 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ev({"kind": "handoff", "from_kill_ms": None if not kills_seen else
                                 round((t_h - kills_seen[-1]) * 1e3), "cell": list(q["cell"]),
                                 "queue_left": len(queue)})  # fmt: skip
+                    if (
+                        lock is None
+                        and a.box_strike
+                        and boxes is not None
+                        and box_fight.get("box") is not None
+                        and not box_fight.get("tried")
+                    ):
+                        box_fight["tried"] = True  # dungeon@8.8: once per box fight
+                        got_b = box_target()
+                        if got_b is not None:
+                            rel_b, (u_b, v_b) = got_b
+                            strike(u_b, v_b, rel_b, "box")
+                            lock = {"t": time.monotonic(), "rel": rel_b,
+                                    "cell": None if here is None else
+                                    [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
                     if lock is None:
                         found = scan("defend", ring(1), "sword")
                         if found is None and not quiet:  # ring 2 only while hits still come
@@ -3176,6 +3268,14 @@ def main() -> int:
         default="map",
         help="the box watcher's model (Batt 2026-11-07, T-11): map = the map's own model when "
         "unit_detector.MAP_MODELS has one (xmas_dun02), else v1; v1 = v1 everywhere (rollback)",
+    )
+    t.add_argument(
+        "--box-strike",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@8.8 (rogue-xmas02.md 4M; OFF by default, switched on by a pre-registration): "
+        "a box fight first waits for our walk to end, then hovers a box grabbed after that and "
+        "strikes on its SWORD; else the ring scan as before",
     )
     t.add_argument(
         "--plant-sweep",
