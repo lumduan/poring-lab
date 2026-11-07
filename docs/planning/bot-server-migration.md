@@ -200,9 +200,36 @@ as Batt prefers:
 | SSD health | | PLEXTOR PX-128M5S: SMART PASSED, 0 reallocated, 0 uncorrectable, 5,911 power-on hours, ~10.8 TB written | fine as the system disk; keep the data on the NAS |
 | RAM | containers in use ~0.6 GB (docker stats 14:4x; the compose caps of 12.8 GB are LIMITS) + training a few GB + scratch <= 4 GB; the CPU detector's 1.5 GB RAM env is not needed (the Arc) | 14.5 GiB usable | **enough** (~6-11 GB at the peak) |
 | GPU | the detector + training | Arc A380 5.65 GiB, no sharing rules | **enough** (today's card gives us a 25 % cap, ~4 GB) |
-| CPU | xfreerdp's software decode: ~4.5 cores at 30 fps (progressive) on the old host's faster cores; AVCthin ~1 core (lossy); the S2 stream ~1 core | 8 cores at 1.7 GHz, no turbo | **the one real question.** Estimated (not measured) ~7-8 of the 8 cores for progressive RDP, ~2 for AVCthin or S2. Needs a short test window: stop this host's RDP (one session only), decode from bot-server, measure |
+| CPU | xfreerdp's software decode: ~4.5 cores at 30 fps (progressive) on the old host's faster cores; AVCthin ~1 core (lossy); the S2 stream ~1 core | 8 cores at 1.7 GHz, no turbo | **the one real question.** ➡️ Section 13: per core 1.33x slower; estimated in motion ~6 of 8 cores (progressive), ~1.3 (AVCthin, the lab's image), ~1.3 (S2); measured once the stack runs there |
 | network | the game stream + NAS reads (training can fill the link: 114 MB/s measured) | one 1 GbE port in use (3 free) | enough if training reads are throttled, or a second cable for NAS traffic |
 
 - **So no new disk is needed.** The useful additions are a second network cable, and possibly a
   faster CPU only if the RDP test shows progressive decode does not fit (or the bot uses AVCthin /
   S2).
+
+## 13. The game-stream decode on bot-server (the test window, Batt "do it first"; 2026-11-07 16:38-16:46)
+- **Per core** (openssl, one thread): ubuntu-docker's E5-2695 v4 is 1.33x bot-server's E5-2609 v4
+  (SHA-256 286 vs 214 MB/s; AES-128-GCM 2,747 vs 2,074 MB/s).
+- **The idle scene** (the immune Rogue standing on prt_fild08; nothing moves the camera):
+  - ubuntu-docker's RDP client used 0.34 cores (p95 0.42);
+  - bot-server's own client (FreeRDP 3.32.1 from Ubuntu 26.04, the lab's arguments, progressive,
+    1440 x 900) used 0.10 cores (p95 0.12), the whole machine 98.7 % idle.
+  - The connection from 192.168.1.228 works: RDP is not filtered, and the pinned certificate
+    matched.
+- **AVCthin is impossible with Ubuntu's FreeRDP:** it is built without H.264 (`WITH_GFX_H264=OFF`,
+  no FFmpeg, no OpenH264), so `/gfx:AVC444` fails to parse. The lab's desktop image (Debian
+  trixie-backports 3.32.1) has it: use that image on bot-server.
+- **In motion: NOT measured.** Moving the camera needs input, and from bot-server that would
+  bypass the mux (rule 3). It is measured once the stack (backend + mux) runs on bot-server.
+  - Estimate from ubuntu-docker's measured in-motion numbers x 1.33: progressive ~6 of 8 cores,
+    AVCthin ~1.3, S2 ~1.3.
+- **What the window did to the lab:**
+  - three short RDP gaps on ubuntu-docker: 16:41:01-16:41:0x, 16:42:57-16:43:27,
+    16:44:36-16:46:09;
+  - the Windows session was on bot-server's client only 16:44:38-16:45:52;
+  - the session returned (16:46: one client, the frame bus writing, the game on screen).
+  - `supervisorctl stop rdp` does NOT stop the running `xfreerdp3`: the client must be ended
+    itself (TERM by its pid in the desktop container) before another connects.
+  - The first attempt's automatic restore started the loop while the old client still ran.
+    Windows moved the session to the new client and the old one exited (one client 5 s later),
+    but for those seconds two clients overlapped.
