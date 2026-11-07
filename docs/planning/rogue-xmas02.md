@@ -1291,3 +1291,9 @@ Kills almost tripled: 34.0 an hour against 12.0.**
   - E1 / E2 fail: 4P named the fight end (S1 follow-ups) as the next change. p9 now shows the 9
     D-class clicks as the larger loss, so the next pre-registration chooses between the two on
     these numbers.
+
+**Batt (2026-11-07 ~16:3x, answering the 16:25 report):** "Yes [the no-attack clicks next, not
+immune]. It still does not see monsters well -- I watched the bot play." And: focus on moving to
+bot-server first. So the next runner change waits behind the move. The no-attack clicks (class D,
+9 of 25) and sight (walking-started box fights strike 2 of 15) are its two candidates; sight is
+also what a detector trained on bot-server can improve (xmas02-detector.md Amendment L).
