@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: Batt's call on a declared-permission mode for servers that cannot be packet-verified (an ADR proposal, section 3a); the OpenVINO host environment (the detect server now runs in the Intel worker)."
+next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: the OpenVINO host environment (the detect server now runs in the Intel worker); building ADR-0023's learner mode (decided by Batt the same night, not built)."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -208,8 +208,10 @@ RDP; the client stayed closed until the firewall was changed.
   worker (then `serve-cmd --backend openvino` should print that step), or a host venv.
 - bot-server's backend stays HUMAN at a boot (by design); ASSIST is Batt's.
 - Batt's design point (2026-11-07 ~21:5x): servers that permit bots but cannot be packet-verified
-  (a community server, a class server a teacher hosts) can never be green today; a
-  "declared by a person" attestation mode was proposed (an ADR for Batt; nothing changed).
+  (a community server, a class server a teacher hosts) can never be green today. ➡️ DECIDED by
+  Batt ~22:1x: [ADR-0023](../adr/0023-learner-mode.md) learner mode (a person-declared permission,
+  nothing on a learner's Windows but the remote program, the Windows host entered on the console);
+  not built yet.
 
 ## 4. Phase C: clean VM 103 (only after Phase B's check passes; Batt's order)
 The exact list, inventoried read-only 2026-11-07 ~22:0x ICT. Nothing here runs before Batt's go.
