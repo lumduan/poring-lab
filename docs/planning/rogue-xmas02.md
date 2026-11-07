@@ -1190,3 +1190,12 @@ unlock; the runner could not see it end.**
      kills that way too: ~4 s back per fight;
   3. the 4 clicks that started no attack (class D);
   4. walking-triggered box fights (2 strikes of 11 engagements).
+- **Two follow-up looks (14:4x, exploratory; nothing changed):**
+  - The lock arrow is NOT a "target gone" cue here: on p7's 1-fps recording
+    (20261107T080929-rdp-xmas02-xmw3), `hunt_flow.arrow_blobs` in a 520 x 380 px box around us
+    found as many white arrow-like blobs after the target died or teleported (0-6 a frame) as
+    while it lived (0-4): the floor's toys and the damage numbers make them.
+  - Our hits while the target lived (19 fights, the packets): every 0.47 s (p95 0.48, longest gap
+    0.94 s); the first hit at most 1.41 s after the click. With the reader's lag (p95 0.86 s), "no
+    damage line for 2.0 s AFTER the first hit" would end a fight ~2 s sooner than today's 3.5 s
+    and would have cut none of these 19. A candidate for the next pre-registration.
