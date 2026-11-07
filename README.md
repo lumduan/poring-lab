@@ -141,7 +141,7 @@ scripts/dev.sh logs -f frontend-dev           # dev server output
 scripts/dev.sh stop frontend-dev              # console off
 ```
 
-Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
+Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-07 cutover, docs/planning/bot-server-cutover.md). What it gives you:
 - **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
 - **Input:** click the screen to give it keyboard focus. That focus lives in a hidden textarea, so
   ⌘V pastes your clipboard into Windows (ADR-0004). Leaving it, or hiding the tab, releases
@@ -179,13 +179,13 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
 
 **Workstation alternative:** run the console on your own machine against this backend.
 1. Add your browser's origin to the backend allowlist in `.env`:
-   `FRONTEND_ORIGINS=http://192.168.1.13:3000,http://localhost:3000`
+   `FRONTEND_ORIGINS=http://192.168.1.228:3000,http://localhost:3000`
 2. Apply it: `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:backend@30`.
 3. Run the console:
 
 ```bash
 cd services/frontend && corepack pnpm install
-BACKEND_PUBLIC_URL=http://192.168.1.13:8000 corepack pnpm dev    # open http://localhost:3000
+BACKEND_PUBLIC_URL=http://192.168.1.228:8000 corepack pnpm dev    # open http://localhost:3000
 ```
 
 `FRONTEND_ORIGINS` is the backend's WebSocket Origin allowlist: comma-separated, and unknown origins are

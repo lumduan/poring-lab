@@ -1,13 +1,13 @@
 ---
 doc_type: runbook
 hypothesis: null
-status: "ACTIVE 2026-11-07: the agent's knowledge copied to bot-server (Batt: 'before moving, transfer the Claude Code agent's knowledge ... including the whole poring-lab conversation history'), re-synced by scripts/agent_sync.py (19:08, again 20:0x ICT; the check's agent rows PASS: see bot-server-cutover.md's status). Batt then decided the WHOLE lab moves (~17:4x: rathena too): docs/planning/bot-server-cutover.md."
+status: "ACTIVE. 2026-11-07 21:57 ICT: THE LAB RUNS ON BOT-SERVER (bot-server-cutover.md 3a). The agent of record is bot-server's from the final agent push of that night (agent_sync.py after the last memory write on ubuntu-docker); from then on ubuntu-docker's agent writes no memory and its project folder goes in Phase C (C11)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../planning/bot-server-migration.md, nas-sink.md, subagent-brief.md, ../../CLAUDE.md]
-next_action: "At the cutover (bot-server-cutover.md Phase B): a fresh manifest, scripts/agent_sync.py, migration_check.py check --phase final PASS; then the agent on bot-server becomes the lab's agent. Until then the memory of record is ubuntu-docker's."
+next_action: "On bot-server: start Claude Code in /home/bot/docker/poring-lab; read this file, the cutover doc's 3a / 4 and the memory index first. Batt decides Phase C."
 title: "Handover: the poring-lab agent's knowledge on bot-server"
 date: 2026-11-07
 owner: Batt

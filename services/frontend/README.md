@@ -6,7 +6,7 @@ FPS / latency panel. See the repository `README.md` for the whole system.
 
 ```bash
 corepack pnpm install
-BACKEND_PUBLIC_URL=http://192.168.1.13:8000 corepack pnpm dev   # unset: ws://<page host>:8000
+BACKEND_PUBLIC_URL=http://192.168.1.228:8000 corepack pnpm dev   # unset: ws://<page host>:8000
 corepack pnpm lint && corepack pnpm typecheck && corepack pnpm build
 ```
 

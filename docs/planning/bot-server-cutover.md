@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE (19:3x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the RAM runtime pushed (and bot-server's logind made to keep /dev/shm), the db move rehearsed (18/18 CHECKSUM TABLE equal), the generated tables regenerated there byte-identical, the full test suite green on BOTH hosts (VM 103 4,596 / bot-server 4,597 passed, 0 failed), the prep check PASS 43 / FAIL 0 / SKIP 1 at 20:0x (the db rows wait for the cutover). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
+status: "PHASE B DONE 2026-11-07 21:57 ICT (Batt's window 20:33-21:57): the lab RUNS ON BOT-SERVER -- the Windows session, rathena with the moved db (18/18 CHECKSUM TABLE equal at the restore), the interlock green from bot-server's own sniffer, a 5-min xmas_dun02 smoke hunt (hard bars PASS, 302/302 detections by the Arc via OpenVINO). The final check and the agent push follow (section 3a); Phase C (clean VM 103) waits for Batt's go on the shown list."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "A cutover window with Batt (Phase B, about an hour): the UAC prompt on Windows (step 3), the Settings page entry (step 7), the gamestream-state choice (pipe copy or re-pair), gh auth login (step 10)."
+next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: Batt's call on a declared-permission mode for servers that cannot be packet-verified (an ADR proposal, section 3a); the OpenVINO host environment (the detect server now runs in the Intel worker)."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -172,8 +172,62 @@ prep check (PASS 43 / FAIL 0 / SKIP 1, 20:0x ICT).
 from `$bk`), the two firewall lines with .13, start VM 103's rathena + sniffer. After step 4: the
 same, plus bot-server's `WIN_HOST=` empty and a recreate of its desktop, then VM 103's stack started.
 
+### 3a. As run (2026-11-07, times ICT from `date`)
+The runbook above, with ONE deliberate reorder: Batt had not reached VM 103's console 16 min after
+the call for the UAC, so the session was handed to bot-server FIRST and every action of Batt's
+(ASSIST, the UAC, the Settings entry) happened on bot-server's console in one place. Safe because
+the firewall rules found (step 2's read-only inventory: exactly 4 name the lab host) never touch
+RDP; the client stayed closed until the firewall was changed.
+
+| Time | Step |
+|---|---|
+| 20:33 | judged screenshot; the client closed by its own Alt+F4 (`ro_agent close`) |
+| 20:34 | VM 103 rathena + sniffer stopped (the game frozen) |
+| 20:38-20:46 | Windows, standard shell: read-only counts first (each lub's length-prefixed `192.168.1.13:8888` once, clientinfo / sclientinfo `>192.168.1.13<` once, labwatch.ps1 once), every enabled firewall rule naming the host (4); then the byte-exact Latin-1 swap with ORDINAL counting (.NET's culture-sensitive IndexOf can skip NULs). New sha256 prefixes: `_kr` 445315FBFFBC, `_kr_qm` B387A0217653, `_kr_sak` 3FF20052EE2E, `_kr_sak_qm` E695EC50F2D6, clientinfo / sclientinfo 4AB5CCAD4EE4, labwatch.ps1 C03F3A7856F4. Backups in `C:\RO-rAthena\move-backup-20261107\`, their hashes = the 11-05 baseline. The watch task restarted (pid 11568). |
+| 20:47 | `db_move.py`: dump (6,280,911 bytes, 185 rows) -> restore on bot-server: counts AND 18/18 CHECKSUM TABLE equal |
+| 20:51 | Sunshine's pairing key: `docker exec` tar, container -> SSH pipe -> container (never a file); deterministic tar digests equal (05a694da...); owner desk, modes kept |
+| 21:03-21:04 | VM 103: `supervisorctl stop rdp`; the client ended by its container pid (`sh -c kill`: the desktop image has no `ps`/`kill` binary); ZERO clients by `docker top`. (A first "0" came from the missing `ps`, not a check.) VM 103's gamestream, frontend-dev, backend, desktop stopped; its db kept for the manifest |
+| 21:05 | `voldump:captures` (340 files) and `captures-th` (6) to `/mnt/poring-lab-datasets/archive/captures/`, counts verified |
+| 21:07 | settings / state / data / ~/.cache / the RAM runtime synced (today's input log by `--append`: bot-server's copy was a byte prefix); dry run: 0 left |
+| 21:07-21:10 | bot-server `WIN_HOST=192.168.1.169` (`rotate_secrets.py set`, read back); backend, desktop, gamestream recreated; its RDP shows the Windows desktop; gamestream holding |
+| 21:27-21:32 | Batt: ASSIST, the Admin terminal + UAC on bot-server's console; the agent typed 3 lines: `lab-only` ranges -> everything but .228 and loopback, Sunshine's 2 rules -> .228; read back: exactly 4 rules name the host, all .228 |
+| 21:36-21:37 | Batt closed the Admin console; Settings: lab-rathena (and lab-rathena-th) .228:6900/6121/5121 confirmed, .13 removed (audited, from 192.168.110.55) |
+| 21:38-21:41 | smoke: the client launched, the GM account logged in through .228 (login, char, map; the web-server's `/userconfig/load` served = the lubs work); the interlock GREEN (`lab-rathena`, AID 2000002, attested from bot-server's sniffer). `recover gm` itself stopped "never came online=1": it waits for the .env GM character while the client entered its remembered Rogue slot (VM 103 behaves the same) |
+| 21:44 | a GM line (`@where`, as the Rogue through crusader.py): UI gate + chat window + server answer |
+| 21:46-21:48 | the Intel vision worker (`worker:vision`); the detect server IN the worker on OpenVINO / the Arc, the pinned xmas02 ONNX from the NAS (293dca92...); immunity OFF (toggled twice: it resets at a login; judged on the answer) |
+| 21:49-21:54 | `dungeon_hunt.py run ... --minutes 5 --label cutover-smoke` (p9's flags): 4 kills, 0 deaths, loot completeness 1.0, hard bars PASS (0 other-map changes, 0 NPC contacts, 0 non-monster attacks); **302 / 302 detections served by the Arc**, 0 CPU fallbacks |
+| 21:57 | immunity back ON (judged), the Rogue at its rest spot prt_fild08 268,107 |
+
+**Found on the way (fixed or recorded):**
+- `host_profile.drm_pids` failed closed on ANY unreadable process of ours, and over SSH the
+  sshd-session / systemd --user / sd-pam are non-dumpable: `worker:vision` said "GPU
+  unverifiable". Fixed (92fa93c): only an unreadable process running our code counts.
+- The OpenVINO detect server was designed as a HOST process on bot-server with the Arc test's
+  venv in `~/survey`, which went with Batt's approved cleanup; no host environment there has
+  OpenVINO now. It ran IN the Intel worker instead (the image has it). To settle: keep it in the
+  worker (then `serve-cmd --backend openvino` should print that step), or a host venv.
+- bot-server's backend stays HUMAN at a boot (by design); ASSIST is Batt's.
+- Batt's design point (2026-11-07 ~21:5x): servers that permit bots but cannot be packet-verified
+  (a community server, a class server a teacher hosts) can never be green today; a
+  "declared by a person" attestation mode was proposed (an ADR for Batt; nothing changed).
+
 ## 4. Phase C: clean VM 103 (only after Phase B's check passes; Batt's order)
-The poring-lab containers, images, volumes and build cache; the repo directory; `/dev/shm/poring-lab-*`;
-`~/.cache/poring-lab`; `~/poring-lab-rec`; the NAS mount units (Batt's sudo); the agent's project
-folder in `~/.claude`. The exact list is shown before it runs; the global CLAUDE.md keeps its
-bot-server section.
+The exact list, inventoried read-only 2026-11-07 ~22:0x ICT. Nothing here runs before Batt's go.
+Deletes on VM 103's shared disk go one at a time under the IO guard (weekend / off-market).
+
+| # | What | Size | Why it is safe |
+|---|---|---|---|
+| C1 | containers: sniffer, rathena, backend, gamestream, desktop, frontend-dev, vision-worker (stopped), db (still up: stopped after the final manifest) | - | the lab runs on bot-server |
+| C2 | images: poring-lab/vision (10.3 GB), gamestream (1.35), desktop (0.86), rathena-build (0.60), rathena:pv20211103-prere-yes (0.41), backend (0.42), sniffer (0.28); mariadb:11.8.9 (0.46), node:24.17.0-slim (0.33) | ~15.0 GB | rebuilt on bot-server; no other project's compose / Dockerfile names the two base images (top-level files checked). NOT node:24.22.0-trixie-slim: not ours |
+| C3 | volumes: db-data (moved: 18/18 CHECKSUM TABLE equal), captures + captures-th (on the NAS archive, counts verified), gamestream-state (piped, digests equal; deleting it leaves ONE copy of the pairing key, on bot-server), x11-unix; tmpfs / NFS definitions: transfer, framebus, s2-input, datasets-nas | ~0.27 GB | see each |
+| C4 | networks poring-lab_default (10.210.96.0/24), poring-lab_agent (10.210.97.0/24) | - | frees the pins on VM 103 |
+| C5 | build cache of the default builder | up to 31.9 GB, SHARED | other projects build with it too: Batt's judgement (all, or none) |
+| C6 | /home/batt/docker/poring-lab (repo, .venv, data, .env with secrets, .claude/settings.local.json) | 1.1 GB | bot-server has the repo (git), data (checked), .env |
+| C7 | /dev/shm/poring-lab-* (12 items) | ~380 MB | the run-time inputs are on bot-server (sha256-checked) |
+| C8 | ~/.cache/poring-lab (fingerprints), ~/poring-lab-rec (empty), 2 stale `tail -F` watchers of old /dev/shm logs | small | copied / unused |
+| C9 | the NAS automounts on VM 103 (/mnt/poring-lab-datasets, -locale-packs, -thai-src: fstab + units) | - | Batt's sudo |
+| C10 | NAS exports 7, 8, 9: drop 192.168.1.13 (bot-server keeps .228) | - | the allowed midclt rule; Frigate read before/after |
+| C11 | the agent: ~/.claude/projects/-home-batt-docker-poring-lab (history + memory) | ~5.7 GB | LAST, after this session ends (it writes there until then): one command for Batt, or the next VM 103 session |
+
+**Kept:** the global CLAUDE.md's bot-server section; ~/.claude/skills (global, other projects use
+them); the NAS archive copies.
