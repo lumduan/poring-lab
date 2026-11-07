@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "PHASE B DONE 2026-11-07 21:57 ICT (Batt's window 20:33-21:57): the lab RUNS ON BOT-SERVER -- the Windows session, rathena with the moved db (18/18 CHECKSUM TABLE equal at the restore), the interlock green from bot-server's own sniffer, a 5-min xmas_dun02 smoke hunt (hard bars PASS, 302/302 detections by the Arc via OpenVINO). The final check and the agent push follow (section 3a); Phase C (clean VM 103) waits for Batt's go on the shown list."
+status: "DONE 2026-11-07. Phase B 20:33-21:57 ICT (the lab runs on bot-server); Phase C on Batt's go ~22:3x ICT ('delete all'): C1-C5 (containers, networks, volumes, 9 images, the shared build cache; VM 103 +33.8 GB free), C7, C8, C10 (the NAS exports admit only .228) done; C6 (this repo) at the session's end; C9 (VM 103's automount lines) is Batt's sudo; C11 (the agent) by the armed post-session handoff (section 4a)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: building ADR-0023's learner mode (decided by Batt the same night, not built)."
+next_action: "On bot-server: read ~/poring-lab-vm103-handoff.log (or ...FAILED.log) to confirm C11; Batt runs C9's sudo line on VM 103. Then: ADR-0023's plan (Batt: after the move), the Arc training speed, p10."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -234,3 +234,17 @@ Deletes on VM 103's shared disk go one at a time under the IO guard (weekend / o
 
 **Kept:** the global CLAUDE.md's bot-server section; ~/.claude/skills (global, other projects use
 them); the NAS archive copies.
+
+### 4a. As run (2026-11-07 ~22:3x ICT, Batt: "delete all")
+| # | Result |
+|---|---|
+| C1-C5 | `docker rm` (8 + the worker), `network rm` (2), `volume rm` (9), `rmi` one image at a time smallest first (9), `buildx prune --builder default --all` (31.93 GB): each under guarded_build's IO guard (30 % for 30 s), worst 6.5 % (quant-ticker, the cache prune). VM 103 root 135.4 -> 169.2 GB free. 0 poring-lab containers / images / volumes / networks left. |
+| C7 | /dev/shm/poring-lab-* removed (RAM) |
+| C8 | 2 stale `tail -F` watchers (checked by pid), ~/.cache/poring-lab, ~/poring-lab-rec (an empty lock + a 5-byte S2 `control` file) |
+| C9 | Batt's sudo on VM 103 (stop the 3 automount units, drop fstab lines 23-26 with a backup, daemon-reload, rmdir the 3 mount points) |
+| C10 | NAS exports 7 / 8 / 9: hosts [192.168.1.228] only (the allowed midclt rule; the NAS's zsh needs the JSON double-quoted: the first try changed nothing); Frigate unchanged before / after (started 2026-11-02 08:06:28Z, 0 restarts) |
+| C6 | the repo, last in the session, under the IO guard |
+| C11 | `/dev/shm/poring-decom/handoff.sh`, a user unit (`poring-lab-handoff`) waiting for the session's Claude Code (pid 118211): it pushes the final memory + history, VERIFIES every file on bot-server (memory by sha256, transcripts at least as long; the dry run: 493 files, 0 bad), and only then deletes the agent folder, its file history and the harness temp; its log goes to bot-server (`~/poring-lab-vm103-handoff.log`, or `.FAILED.log` with nothing deleted) |
+
+Also: the OpenVINO detect server is official IN the Intel worker (`serve-cmd --backend openvino`,
+the ONNX on the NAS's archive/models), proven on bot-server: listening with v1 + xmas02.
