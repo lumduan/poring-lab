@@ -139,3 +139,17 @@ def test_the_openvino_backend_runs_the_pinned_onnx(
     assert x[0, 0].max() == 1.0 and x[0, 2].max() == 0.0  # the CPU worker's RGB order and scale
     with pytest.raises(SystemExit, match="sha256"):
         ds.OvNet(str(onnx), "0" * 64, "GPU")
+
+
+def test_mixed_precision_only_where_the_scaler_can_run() -> None:
+    """2026-11-07: the Arc A380 has no float64 and AMP's GradScaler needs it: FP32 there."""
+    nvidia = accel.select("cuda", fake_torch(cuda=True))
+    assert nvidia.has_fp64() and nvidia.amp_ok()
+    arc = fake_torch(xpu=True)
+    arc.xpu.get_device_properties = lambda i: NS(total_memory=6 * 2**30, has_fp64=False)
+    acc = accel.select("xpu", arc)
+    assert acc.has_fp64() is False and acc.amp_ok() is False
+    big = fake_torch(xpu=True)
+    big.xpu.get_device_properties = lambda i: NS(total_memory=24 * 2**30, has_fp64=True)
+    assert accel.select("xpu", big).amp_ok() is True
+    assert accel.select("cpu", fake_torch()).amp_ok() is False

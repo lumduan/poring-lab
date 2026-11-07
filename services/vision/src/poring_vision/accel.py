@@ -76,6 +76,20 @@ class Accel:
             return 0
         return int(self._call("device_count", default=1))
 
+    def has_fp64(self) -> bool:
+        """Does the device run float64? Intel's Arc A-series does not (2026-11-07: AMP's
+        GradScaler computes its inverse scale in float64 and crashed there; Intel's FP64
+        emulation failed the same call with a Level Zero error)."""
+        if self.kind == "xpu":
+            props = self._call("get_device_properties", self.index)
+            return bool(getattr(props, "has_fp64", True))
+        return self.kind != "mps"  # MPS has no float64 either
+
+    def amp_ok(self) -> bool:
+        """May training use mixed precision (FP16 autocast + GradScaler)? Not on the CPU, and not
+        where the scaler's float64 cannot run (then the training is FP32)."""
+        return self.kind in ("cuda", "xpu") and self.has_fp64()
+
     def cap(self, fraction: float) -> bool:
         """Cap this process's device memory (a SHARED host's rule R1); False when the backend has
         no per-process cap (logged; a dedicated host needs none)."""

@@ -277,7 +277,8 @@ def main() -> int:  # noqa: PLR0915
         "model": str(a.weights), "data": "shards", "imgsz": a.imgsz,
         "epochs": 3 if a.smoke else a.epochs, "batch": a.batch, "workers": a.workers,
         "project": str(a.project), "name": name, "exist_ok": True, "plots": False,
-        "device": acc.ultralytics_device, "seed": a.seed, "cache": False, "amp": True,
+        "device": acc.ultralytics_device, "seed": a.seed, "cache": False,
+        "amp": acc.amp_ok(),  # FP16 + GradScaler; FP32 where the device has no float64 (Arc)
         "verbose": False,
     }  # fmt: skip
     if a.close_mosaic is not None:
@@ -348,7 +349,8 @@ def main() -> int:  # noqa: PLR0915
         "step_sleep_ms": a.step_sleep_ms,
         "metrics": {k: round(float(v), 4) for k, v in (trainer.metrics or {}).items()},
         "ap50_per_class": per_class,
-        "accelerator": accel.describe(acc), "peak_vram_mib": acc.peak_mib(),
+        "accelerator": accel.describe(acc), "amp": overrides["amp"],
+        "peak_vram_mib": acc.peak_mib(),
         "cap_mib": None if acc.total_mib() is None else round(acc.total_mib() * fraction, 1),
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
