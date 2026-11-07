@@ -606,6 +606,34 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   - A FAIL keeps that default off; the cause is reported, and any next change is pre-registered
     before its own run.
 
+### 4O. Offline study S1 (p7 + p8): why every lock ends "no hits", and walking sight (written BEFORE it is read)
+
+- **Why:** p7 and p8 ended every lock "no hits" (7 / 7, 16 / 16; section 5), while the packets
+  count kills (4, 6). Batt 2026-11-07 ("ได้"): study it offline before any runner change.
+  Amendment L of xmas02-detector.md (Batt delegated): walking sight is judged from the live runs.
+- **Data, read only:** the two sessions' `events.jsonl`, `packets.jsonl.gz` (offline ground
+  truth), `battle_log_live.jsonl`, and p8's `detections.jsonl`; one clock (`t_mono_ns`). The
+  scorer is committed as `scripts/lock_study.py` with a test, before its numbers are reported.
+- **Per strike (p7 7, p8 16):** the target = the `target_gid` of our first `attack_request` within
+  2 s after the strike's first click (none: class D). Measured from the click: the first request,
+  our first damage act on that target, the runner's unlock, the target's vanish (died or out of
+  sight). Each strike gets ONE class, first match wins:
+  - **K** the target died before the unlock (a kill);
+  - **A** we hit it before the unlock, yet the runner saw "no hits" (the reader or its use);
+  - **B** our first hit came only after the unlock (the 3.5-s rule cut an approach);
+  - **C** requests but no hit on it within 25 s (it walked off, or we could not reach it);
+  - **D** no attack request after the click.
+- **The reader:** of our damage acts in both runs, the share with a Battle Log damage line in
+  [act, act + 2.0 s], and the lag p50 / p95; experience-gain packets vs the reader's experience
+  lines (the runner counts kills from those lines).
+- **Walking sight, first step (p8):** each box engagement's triggering detection, classed by
+  whether we were walking at its grab (a `self_move` of ours within the 1.0 s before); per class:
+  engagements, strikes, kills of the struck target. Monsters in reach that were never boxed need
+  the truth projected on screen: a second step, pre-registered on its own.
+- **Use:** descriptive, no bar. The class counts name the next runner change (A: the reader, B: the
+  lock timer while closing in, C: the target choice, D: the strike click), pre-registered before
+  its own run. Nothing live changes from this study.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
