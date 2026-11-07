@@ -1102,7 +1102,7 @@ Batt's words (Thai, translated), answering the report's to-do list:
      recall and precision within a fixed margin of still, on TEST) is pre-registered here before
      its cache.
 
-### Amendment K (2026-11-07 07:1x ICT, before any walking frame is recorded): the walking data and the timing measurement
+### Amendment K (2026-11-07 07:0x ICT, committed 07:09:00, before any walking frame is recorded): the walking data and the timing measurement
 
 **What 07:00 showed (xw1, FIT; the deployed model at 16 threads, `--truth-offset-ms` sweep):** xw1 holds
 NO moving capture. The lattice watch moves between stands by `@warp`, and so did TRAIN (xw2, xw3).
