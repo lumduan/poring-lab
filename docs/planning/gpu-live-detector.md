@@ -70,3 +70,49 @@ owner: Batt
   and the NMS (`scripts/detector_worker.py`'s own functions). The GPU server runs only the forward
   pass and returns the head's raw output. So the CPU and GPU paths differ only in the forward
   (ONNX on the CPU vs torch FP32 on the GPU), and the species collapse needs no second copy.
+
+## 6. The live path's positive case (pre-registered BEFORE it runs, 2026-11-07)
+The build (61a04ca) is unit-tested with a stand-in net. This run proves the real path: the worker's
+detect server on the GPU, the host's `GpuDetector`, the deployed models.
+
+- **Steps (Saturday: no market-window rule):**
+  1. The worker, through quiet_start (today Frigate's IO is left out of the start's gate,
+     `io_baseline.FRIGATE_IO_IGNORED`; quant still gates):
+
+         python3 scripts/runbooks/quiet_start.py --quiet-min 10 --limit 25 -- \
+             python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+
+  2. ADR-0005's acceptance inside the worker, after the mount change (the ADR's own rule):
+
+         python3 scripts/guarded_build.py --threshold 30 --sustain 30 \
+             'execdev:vision@180=python /opt/acceptance/adr0005.py'
+
+  3. The detect server for 900 s (a short step: R3's 60 s ON / OFF windows), the command
+     `scripts/unit_detector.py serve-cmd --seconds 900` prints, and beside it, once it listens,
+     under the scratch memory cap:
+
+         systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
+             .venv/bin/python scripts/gpu_live_parity.py \
+             --refs /mnt/poring-lab-datasets/archive/train/eval/xmas02/latency-200-refs.json \
+             --out /dev/shm/poring-lab-tmp/gpu-live/parity.json --soak-s 300 --soak-hz 2
+
+     The 200 frames are this morning's (section 8 of the benchmark), read from the NAS.
+- **Bars:**
+  - **P1 parity (the deciding bar):** for each deployed model (v1 for prt_fild08, xmas02 with
+    its species collapse for xmas_dun02), matched / CPU boxes >= 0.99 AND matched / GPU boxes
+    >= 0.99, one to one at IoU >= 0.7 with the same class and species. Expected 1.000: this
+    morning's FP32 parity with ultralytics' own pre- and post-processing was 1.000, and now
+    only the forward differs.
+  - **P2 served:** every frame gets GPU boxes within 240 s (an R3 OFF window is 60 s).
+  - **P3 the fallback, live:** in the 300 s soak at 2 Hz, every call returns boxes. Calls during
+    R3's OFF windows are the CPU's, each with its reason, and after each `R3 unpause` the GPU
+    serves again within 6 s (GPU_RETRY_S 5 s + one call). If no OFF window falls in the soak, P3
+    is reported as not exercised.
+  - **P4 speed:** the GPU call on the host's clock (the frame to the decoded boxes, socket
+    included) p50 <= 60 ms (the benchmark's call: 22-29 ms).
+  - **Acceptance:** rows 1, 2, 3, 5 and 6 PASS; row 4 SKIPs without an S2 stream (as on
+    2026-10-04 09:4x).
+- **Reported beside them:** our process's GPU memory, R3's pairs (a verdict is unlikely in 15
+  min), any relaxed camera drops, the worst capture stall.
+- **A FAIL of P1 or the acceptance:** no live run on the GPU; the cause is found first. A FAIL of
+  P3 or P4: reported, and the pilot waits for a fix.
