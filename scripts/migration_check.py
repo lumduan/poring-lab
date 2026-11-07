@@ -373,6 +373,23 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
     rows += docker_rows(phase)
     code, imgs = run(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}"])
     rows += image_rows(manifest.get("images", []), imgs.split())
+    rows += db_rows(manifest, env, phase)
+    rows.append(row("GPU: the Intel render node usable", os.access("/dev/dri/renderD128", os.R_OK
+                    | os.W_OK), "/dev/dri/renderD128"))  # fmt: skip
+    for m in NAS_MOUNTS:
+        try:
+            ok_m = bool(os.listdir(m))
+        except OSError as exc:
+            ok_m, m = False, f"{m}: {exc}"
+        rows.append(row(f"NAS: {m.split(':')[0]} readable", ok_m, m))
+    rows += claude_rows(manifest["claude"], claude_side(PROJECT_KEYS["target"]))
+    return rows
+
+
+def db_rows(manifest: Mapping[str, Any], env: Mapping[str, str], phase: str) -> list[Row]:
+    """The db rows: at the final phase, the exact row counts and CHECKSUM TABLE of the key tables
+    against the manifest; a manifest made with the source db unreadable FAILS them (no crash)."""
+    rows: list[Row] = []
     if phase == "final":
         have = db_counts(env)
         want = manifest["db"]
@@ -383,21 +400,15 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
         have_s, want_s = db_checksums(env), manifest.get("db_checksums")
         ok_s = isinstance(have_s, dict) and isinstance(want_s, dict) and bool(want_s) \
             and have_s == want_s  # fmt: skip
-        diff = sorted(t for t in (want_s or {}) if isinstance(have_s, dict)
-                      and have_s.get(t) != (want_s or {}).get(t))  # fmt: skip
-        detail = f"{len(want_s or {})} tables" if ok_s else f"differ {diff or have_s}"[:200]
+        if not isinstance(want_s, dict):  # the source db was unreadable at the manifest
+            detail = f"the manifest has no checksums: {want_s}"[:200]
+        else:
+            diff = sorted(t for t in want_s if isinstance(have_s, dict)
+                          and have_s.get(t) != want_s.get(t))  # fmt: skip
+            detail = f"{len(want_s)} tables" if ok_s else f"differ {diff or have_s}"[:200]
         rows.append(row("db: every key table's CHECKSUM TABLE equal (the content)", ok_s, detail))
     else:
         rows.append(row("db: row counts (at the cutover)", None, "phase prep"))
-    rows.append(row("GPU: the Intel render node usable", os.access("/dev/dri/renderD128", os.R_OK
-                    | os.W_OK), "/dev/dri/renderD128"))  # fmt: skip
-    for m in NAS_MOUNTS:
-        try:
-            ok_m = bool(os.listdir(m))
-        except OSError as exc:
-            ok_m, m = False, f"{m}: {exc}"
-        rows.append(row(f"NAS: {m.split(':')[0]} readable", ok_m, m))
-    rows += claude_rows(manifest["claude"], claude_side(PROJECT_KEYS["target"]))
     return rows
 
 

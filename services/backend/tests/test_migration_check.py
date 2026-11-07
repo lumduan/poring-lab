@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import migration_check as mc  # noqa: E402
@@ -101,3 +103,20 @@ def test_the_agent_must_arrive_whole() -> None:
     no_preface = {**tgt, "claude_md": "Batt's rules\n"}
     assert status(mc.claude_rows(src, no_preface))[
         "agent: Batt's CLAUDE.md verbatim under the bot-server preface"] == "FAIL"  # fmt: skip
+
+
+def test_a_manifest_with_an_unreadable_db_fails_the_db_rows_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-11-07: after the cutover the source db was stopped, the manifest said "db unreadable",
+    and the checksum row crashed on that text instead of failing."""
+    monkeypatch.setattr(mc, "db_counts", lambda env: {"login": 4})
+    monkeypatch.setattr(mc, "db_checksums", lambda env: {"login": "1"})
+    manifest = {"db": "db unreadable (rc 1)", "db_checksums": "db unreadable (rc 1)"}
+    s = {r["item"]: (r["status"], r["detail"]) for r in mc.db_rows(manifest, {}, "final")}
+    assert s["db: every key table's exact row count equal"][0] == "FAIL"
+    st, detail = s["db: every key table's CHECKSUM TABLE equal (the content)"]
+    assert st == "FAIL" and "no checksums" in detail
+    good = {"db": {"login": 4}, "db_checksums": {"login": "1"}}
+    assert {r["status"] for r in mc.db_rows(good, {}, "final")} == {"PASS"}
+    assert [r["status"] for r in mc.db_rows(good, {}, "prep")] == ["SKIP"]
