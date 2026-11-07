@@ -439,7 +439,7 @@ def test_lint_reads_the_patrol_routes_through_the_provider(zclient: Any) -> None
 def test_the_catalogue_carries_the_hunt_blocks_rule_versions(zclient: Any) -> None:
     doc = zclient.get("/flows/catalogue", headers=_hdr(zclient)).json()
     hr = doc["hunt_rules"]
-    assert doc["hunt_rules_error"] is None and hr["adopted"] == 55  # 52 until 3.97
+    assert doc["hunt_rules_error"] is None and hr["adopted"] == 56  # 4K (11-06); 55, 52 before
     assert [g["name"] for g in hr["groups"]] == ["engage", "dead_loot", "search", "stop"]
     assert hr["evidence"]["badges"] == ["one path (RDP), prt_fild08"]
 

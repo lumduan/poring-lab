@@ -51,7 +51,8 @@ def test_groups_are_the_registrys_with_the_adopted_rule_as_default() -> None:
         "engage_source": "detector",  # an OPTION: the registry's default (absent = detector)
         "search_route": "heading",  # an OPTION too (absent = heading: today's heading search)
     }  # fmt: skip
-    assert doc["adopted"] == 55 and doc["groups"][-1]["params"] == []  # 52 until 3.97 (10-22 04:32)
+    # 56 since 4K (c1df25c, 11-06); 55 from 3.97, 52 until 3.97 (10-22 04:32)
+    assert doc["adopted"] == 56 and doc["groups"][-1]["params"] == []
 
 
 def test_engage_source_is_an_option_in_the_engage_group_with_no_version_or_badge() -> None:
@@ -96,8 +97,8 @@ def test_search_route_is_an_option_in_the_search_group_with_no_version_or_badge(
 
 def test_each_rule_version_carries_its_numbers_and_the_versions_that_hold_it() -> None:
     doc = rules_doc(index(), evidence())
-    fast = choice(doc, "loot", "gm_fast_scan@54")  # the adopted base's since 3.97 (v55)
-    assert fast["adopted"] and fast["known"] and fast["versions"] == [54, 55]
+    fast = choice(doc, "loot", "gm_fast_scan@54")  # the adopted base's since 3.97 (v55; v56 too)
+    assert fast["adopted"] and fast["known"] and fast["versions"] == [54, 55, 56]
     assert fast["values"]["loot_fast_scan"] is True and fast["values"]["loot_gm_one_pass"] is True
     one = choice(doc, "loot", "gm_scan_one_pass@51")  # v52's, adopted until 3.97
     assert not one["adopted"] and one["known"] and one["versions"] == [51, 52]

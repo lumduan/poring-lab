@@ -489,10 +489,16 @@ def test_count_engaged_and_box_geometry() -> None:
     assert ml.box_geometry([]) == {"n": 0}
 
 
-def test_freeze_needs_the_engaged_selection_at_the_same_offset_and_t_h(tmp_path: Path) -> None:
+def test_freeze_needs_the_engaged_selection_at_the_same_offset_and_t_h(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import argparse
     import json
+    import types
 
+    # The rule under test reads no client data: gef10's occluders (no terrain) without the map's
+    # RSW, which lived in /dev/shm until its scratch was archived (2026-11-03).
+    monkeypatch.setattr(ml, "occluders", lambda spec: types.SimpleNamespace(terrain=None))
     th = tmp_path / "th.json"
     th.write_text(json.dumps({"o3h_tau": 0.5, "offset_ms": 120.0, "offset_source": "P1"}))
     base = {"map": "gef_fild10", "threshold": th, "offset": None, "proposed": True,

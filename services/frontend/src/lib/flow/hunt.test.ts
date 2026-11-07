@@ -14,7 +14,7 @@ import { action, canonical, clone, type Flow, lit } from "./ir.ts";
 import { fixture } from "./testkit.ts";
 
 const RULES = JSON.parse(readFileSync(new URL("./fixtures/hunt_rules.json", import.meta.url), "utf8")) as HuntRules;
-const ADOPTED = { strike: "arm_c@32", engage_on_the_way: "on_the_way@19", dead: "exp_line@48", loot: "gm_fast_scan@54", search: "heading_coverage@22" }; // the adopted base v55 (3.97; v52 until 10-22 04:32)
+const ADOPTED = { strike: "arm_c@32", engage_on_the_way: "on_the_way@19", dead: "exp_line@48", loot: "gm_fast_scan@54", search: "heading_coverage@22" }; // the adopted base v56 (4K, 11-06: the same rule choices as v55 of 3.97; v52 until 10-22 04:32)
 // engage_source and search_route (Batt 2026-10-22): OPTIONS, not required; absent = detector /
 // heading, so the IR above (written before them) is a detector hunt searching by heading and its
 // dropdowns show "detector" and "heading"
@@ -116,7 +116,7 @@ test("badges: the adopted base, the D8 hunting evidence, the versions that hold 
   const loot = params(RULES).find((p) => p.name === "loot")!;
   const [fast, one, v50] = loot.choices;
   // 3.97's D8 row (2026-10-22, written by the agent on Batt's delegation, decision 7): ◆ too
-  assert.equal(badgeText(fast, RULES.adopted), "★ adopted base v55 · ◆ RDP prt_fild08 (3.97) · in v54..v55 (2)");
+  assert.equal(badgeText(fast, RULES.adopted), "★ adopted base v56 · ◆ RDP prt_fild08 (3.97) · in v54..v56 (3)");
   assert.equal(badgeText(one, RULES.adopted), "◆ RDP prt_fild08 (3.92) · in v51..v52 (2)");
   assert.equal(badgeText(v50, RULES.adopted), "◆ RDP prt_fild08 (3.91) · in v50");
   assert.deepEqual(RULES.evidence.badges, ["one path (RDP), prt_fild08"]);

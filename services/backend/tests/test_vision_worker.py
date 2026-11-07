@@ -514,7 +514,9 @@ def test_execdev_keeps_every_rundev_prestart_refusal(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(gb, "worker_not_ready", lambda name=None: None)
-    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: "R2: Ollama has a model loaded")
+    monkeypatch.setattr(
+        gb.frigate_r3, "prestart", lambda path, **kw: "R2: Ollama has a model loaded"
+    )
     monkeypatch.setattr(gb, "run_process", lambda *a, **k: pytest.fail("nothing runs"))
     assert _main(gb, monkeypatch, STEP) == 3
     assert "REFUSED execdev:vision: R2: Ollama" in capsys.readouterr().out
@@ -524,7 +526,7 @@ def test_execdev_runs_in_the_worker_with_r3_the_duty_cycle_and_exec_mode(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(gb, "worker_not_ready", lambda name=None: None)
-    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: None)
+    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path, **kw: None)
     monkeypatch.setattr(gb.frigate_r3, "camera_reference", lambda: {})
     seen: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
