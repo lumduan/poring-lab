@@ -199,6 +199,10 @@ ports, quickstart) and `docs/adr/`.
      DEFAULT network's name (`scripts/backend_addr.py`).
 
 9. **Environment allowlist** (ADR-0006). Automation (BOT/ASSIST) may act only on the sanctioned
+   ➡️ **ADR-0023 (Batt 2026-11-07, DECIDED, NOT BUILT): learner mode.** A person may DECLARE a
+   server owner's permission on the Settings page (shown "declared by a person, not verified";
+   research counts only packet-verified sessions); a learner's Windows gets only the remote program;
+   the Windows host becomes a console setting. Until it is built, the rules below stand as written.
    environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
    data stays local and pseudonymized.
    - **The interlock is built** (ADR-0016 ACCEPTED 2026-10-04): a LOGIC interlock driven by

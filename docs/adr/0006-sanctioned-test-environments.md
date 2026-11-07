@@ -25,6 +25,8 @@ next_action: Batt records the community server's bot/AI-testing permission (docs
   person-confirmed exe-scoped firewall rule set instead of a sniffer. Nothing changes until Batt
   accepts it.
 
+> ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED, NOT BUILT):** a person may DECLARE a server owner's permission on the Settings page; the bot may then act there, shown as "declared by a person, not verified", and research counts only packet-verified sessions. For the community server, "no agent automation" becomes "none until a person declares permission". Until the build lands, this record stands as written.
+
 ## Context
 poring-lab needs two kinds of environment that no single server provides:
 

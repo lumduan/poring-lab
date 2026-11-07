@@ -12,6 +12,8 @@ next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED 
 
 # ADR-0019: Windows stays clean
 
+> ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED, NOT BUILT):** reaffirmed and extended to LEARNERS: their Windows gets only the remote program (and the game); the lab-only pieces never belong to a learner's setup. The Windows host becomes a setting a person enters on the bot server's console. Until the build lands, this record stands as written.
+
 - **Status:** ACCEPTED (Batt, 2026-10-06). It is a design principle, and it binds every later
   proposal.
 - **Prompted by:** the Part B design (ADR-0013's 2026-10-06 amendment), which would have put a
