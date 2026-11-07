@@ -35,14 +35,16 @@ G1 (gef10-eval.md R2-2), v1 and the new model in one command:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import struct
 import sys
+import tarfile
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import Any
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -57,7 +59,6 @@ OUT = ROOT / "data" / "train" / "eval" / "gold"
 CACHE = NAS / ".framecache" / "v1png-20261008"
 G2_SESSION = "20261004T054429-console-s2-outdoor"
 KEEP = ("player", "npc", "warp")  # every other class is a monster species
-SHARDS_PY = ROOT / "services" / "vision" / "src" / "poring_vision" / "shards.py"
 
 
 def handcheck_path(session: str, datasets: Path = NAS) -> Path:
@@ -134,21 +135,56 @@ def score(session: str, preds: list[Path], metric: str = "iou", *, collapse_spec
 # --- G2: a frame cache's held-out session ----------------------------------------------------
 
 
-def shards_module() -> ModuleType:
-    """poring_vision.shards (pure tarfile + numpy), the reader the trainer uses; loaded by path
-    when the vision package is not importable (the host's uv env)."""
-    try:
-        import poring_vision.shards as mod
-    except ImportError:
-        name = "poring_vision_shards_g2"
-        if name in sys.modules:
-            return sys.modules[name]
-        spec = importlib.util.spec_from_file_location(name, SHARDS_PY)
-        assert spec and spec.loader
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[name] = mod  # dataclasses look their module up while the class is built
-        spec.loader.exec_module(mod)
-    return mod
+# The frame cache's tar shards (scripts/build_frame_cache.py writes them): per frame <key>.png or
+# <key>.jpg, <key>.txt (YOLO lines: cls cx cy w h, normalised) and <key>.json ({"session": ...}).
+# gold_eval reads them with its OWN reader: this Apache-2.0 script imports nothing of the AGPL
+# vision component (ADR-0018; Batt 2026-11-07 chose route A: until then it imported
+# poring_vision.shards). services/vision/tests/test_gold_eval_reader.py checks that this reader and
+# the trainer's (poring_vision.shards.index_shard) agree on the same shard.
+CACHE_IMAGE_EXTS = ("png", "jpg")
+
+
+@dataclass(frozen=True)
+class CacheSample:
+    key: str
+    shard: Path
+    offset: int  # the image's first byte inside the shard
+    size: int
+    labels: Any  # (n, 5) float32: cls cx cy w h, normalised
+    session: str
+
+
+def yolo_rows(text: str) -> Any:
+    """PURE: YOLO detection lines -> an (n, 5) float32 array (n may be 0)."""
+    rows = [line.split() for line in text.splitlines() if line.strip()]
+    arr = np.asarray(rows, dtype=np.float32) if rows else np.zeros((0, 5), np.float32)
+    if arr.ndim != 2 or arr.shape[1] != 5:
+        raise ValueError(f"not YOLO detection lines: shape {arr.shape}")
+    return arr
+
+
+def index_cache_shard(path: Path) -> list[CacheSample]:
+    """Every frame of a cache shard, in member order: the image's offset and size inside the tar
+    (a read is one seek), its labels and its session. Only the small label members are read."""
+    images: dict[str, tuple[int, int]] = {}
+    labels: dict[str, Any] = {}
+    sessions: dict[str, str] = {}
+    with tarfile.open(path, "r") as tar:
+        for m in tar:
+            key, _, ext = m.name.rpartition(".")
+            if ext in CACHE_IMAGE_EXTS:
+                images[key] = (m.offset_data, m.size)
+            elif ext in ("txt", "json"):
+                fh = tar.extractfile(m)
+                assert fh is not None
+                text = fh.read().decode()
+                if ext == "txt":
+                    labels[key] = yolo_rows(text)
+                else:
+                    sessions[key] = str(json.loads(text).get("session", ""))
+    empty = np.zeros((0, 5), np.float32)
+    return [CacheSample(key, path, off, size, labels.get(key, empty), sessions.get(key, ""))
+            for key, (off, size) in images.items()]  # fmt: skip
 
 
 def png_size(head: bytes) -> tuple[int, int]:
@@ -180,8 +216,7 @@ def cache_samples(cache: Path, session: str, split: str = "test"
     if session not in json.loads((cache / "split.json").read_text())[split]:
         raise SystemExit(f"{session} is not in {cache.name}'s {split} split")
     row = manifest["sessions"][session]
-    sh = shards_module()
-    samples = [s for shard in row["shards"] for s in sh.index_shard(cache / shard)
+    samples = [s for shard in row["shards"] for s in index_cache_shard(cache / shard)
                if s.session == session]  # fmt: skip
     if len(samples) != int(row["kept"]) or len({s.key for s in samples}) != len(samples):
         raise SystemExit(f"{session}: {len(samples)} samples in its shards, the manifest kept "
