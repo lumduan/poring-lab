@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "hunt_flow v56 ADOPTED (4K pooled, 11-06 ~11:5x). The xmas_dun02 detector PASSED its evaluation 2026-11-07 00:39 (xmas02-eval.md) and is DEPLOYED in the box watcher by Batt's decision 2026-11-07 (xmas02-detector.md Amendment J; --box-model v1 = rollback); a pre-registered pilot of it next. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
+next_action: "Pilot p8 (4N, dungeon@8.9: a detection on demand + one hover, the GPU vs CPU arms) after gpu-live-detector.md section 6 passes. p6 (4L) and p7 (4M) FAILED E1 / E2 (section 5): the boxes are right, the grab-to-hover time too long. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -555,6 +555,56 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
     - items stolen / picked.
 - A FAIL keeps `--box-strike` off (the runner's default). The cause is reported, and any next change
   is pre-registered before its own run.
+
+### 4N. Pilot p8 pre-registration: dungeon@8.9, a detection on demand + the GPU (written BEFORE its run)
+
+- **Why:** p7 (section 5) failed E1 / E2 because the boxes were right but old by the hover. 13 of
+  18 boxed monsters had walked 100-200 px away; a box still sat on its monster 72 % of the time
+  at the grab, 50 % 0.4 s later and 28 % from 0.8 s on. The wait was the 1-s rhythm plus a
+  200-340 ms CPU detection, then two hovers of ~0.35 s each.
+- **The change (dungeon@8.9 at 61a04ca; flags, the defaults unchanged):**
+  - `--box-now`: after the settle the box target asks the watcher for a detection NOW
+    (`BoxWatch.fresh_now`: its grab starts after the request), and hovers ONCE, at the box
+    centre;
+  - `--box-detector ab`: the watcher's background detections run on the GPU's detect server
+    (gpu-live-detector.md option A, Batt 2026-11-07: "เลือก A", the GPU may replace the CPU),
+    the CPU behind it. The box target's fresh detection ALTERNATES by box-target index: even =
+    GPU, odd = CPU (`box_arm`).
+- **The run:** pilot p8 = p7's command (the xmw chain's runner line) with `--box-now
+  --box-detector ab --minutes 30 --label xmas02-p8`:
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p8 \
+          --box-strike --box-now --box-detector ab
+
+  - Beside it, the detect server as ONE guarded long step (`unit_detector.py serve-cmd
+    --seconds 2700`): R2 pre-start, R3's paired 180-s windows by `docker pause` (the GPU arm
+    falls back to the CPU in OFF windows: logged per detection), the IO guard
+    (`--threshold 30 --sustain 30`), a verified stop. Started first, the runner once it listens.
+  - No recorder: the GPU step's IO guard stays quiet. The Rogue immune (checked by the toggle and
+    its answer), a judged screenshot first. Judged once after the run by `dungeon_judge.py row`
+    and `walk_judge.py`, and the box targets from `events.jsonl`.
+  - It runs only if section 6 of gpu-live-detector.md passes P1 (parity) and the acceptance.
+- **Bars (against p7, per hour where lengths differ):**
+  - **E1 (primary, as 4M):** kills (packets) >= 40 / h (p7 12.0 / h).
+  - **E2:** box fights ending as a box miss <= 50 % (p7 76 %).
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h (4M's 13 in 20 min).
+  - **G1 (the GPU live):** the box watcher returns boxes to the end (no dead watcher). Of the
+    detections asked of the GPU while the worker was NOT paused (outside R3's OFF windows, by the
+    step's `R3 pause` / `R3 unpause` lines), >= 90 % are the GPU's.
+  - **G2 (the latency):** the box targets' fresh detection, request to boxes
+    (`boxes_after_ms`), p50 <= 100 ms when the GPU served it, and at most half the p50 of those
+    the CPU served.
+  - Reported per arm and per path (assigned and as served; too few for a verdict): fresh
+    detections, a box found, the hover's verdicts (SWORD share), struck, `hover_from_grab_ms`,
+    `det_ms`; R3's pairs and verdict over the run; the fallback reasons; relaxed drops.
+- **Decisions:**
+  - E1-E3 PASS: `--box-strike --box-now` become the runner's defaults (a follow-up commit).
+  - G1 + G2 PASS: `--box-detector gpu` becomes the default for runs beside a detect-server
+    step (the CPU behind it whenever none runs).
+  - A FAIL keeps that default off; the cause is reported, and any next change is pre-registered
+    before its own run.
 
 ## 5. Results
 
