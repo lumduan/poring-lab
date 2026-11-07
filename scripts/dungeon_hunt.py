@@ -995,22 +995,37 @@ class BoxWatch:
     precision 96-100 %: a box near us is believed, "no box" means nothing."""
 
     def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any,
-                 map_name: str | None = None) -> None:  # fmt: skip
+                 map_name: str | None = None, detector: str = "cpu") -> None:  # fmt: skip
         import threading
 
         import unit_detector
 
         # Batt 2026-11-07 (T-11, xmas02-detector.md): a map with its own model gets it, its
         # species collapsed to "monster" before NMS (unit_detector.for_map); else v1 as before
-        self.det = unit_detector.for_map(map_name)
+        if detector == "cpu":
+            self.det: Any = unit_detector.for_map(map_name)
+        else:  # dungeon@8.9 (gpu-live-detector.md option A; Batt 2026-11-07): the SAME model's
+            # forward pass on the GPU's detect server, the CPU detector behind it (any failure)
+            self.det = unit_detector.for_map_gpu(map_name)
+        self.gpu = detector != "cpu"
         self.model = {"onnx": self.det.model.name, "collapse": sorted(self.det.collapse),
-                      "threads": unit_detector.THREADS}  # fmt: skip
+                      "threads": unit_detector.THREADS, "detector": detector}  # fmt: skip
+        if self.gpu:
+            self.model.update(gpu_weights=self.det.weights, gpu_sha256=self.det.info()["sha256"])
         # its OWN grab helper: ro_agent.Screen is one pipe, not thread-safe (pilot 3, 12:02: the
         # main loop's grab and this thread's interleaved and the pipe's framing broke)
         self.screen, self.region, self.r = r.Screen(), region, r
         del screen
         self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
         self.last: tuple[float, list[Any]] = (0.0, [])
+        # dungeon@8.9 (--box-now): a detection on demand. kick() numbers the request; the loop's
+        # next detection takes it (its grab starts after the kick) and records the number
+        self.kick_ev = threading.Event()
+        self.kick_seq = 0
+        self.kick_prefer: str | None = None
+        self.meta: dict[str, Any] = {"kick": 0}
+        self.paths: Counter[str] = Counter()  # which path gave each detection
         self.halt = threading.Event()
         self.n = 0
         self.n_self = 0
@@ -1020,16 +1035,51 @@ class BoxWatch:
 
     def _loop(self) -> None:
         while not self.halt.is_set():
-            t = time.monotonic()
+            with self.lock:  # the grab time and the kick it serves, together (fresh_now)
+                t = time.monotonic()
+                seq, prefer = self.kick_seq, self.kick_prefer
+                self.kick_prefer = None
             try:
                 img = np.ascontiguousarray(self.screen.grab(*self.region)[1][..., :3])
-                got = [b for b in self.det.detect(img) if b.cls == "monster"]
+                raw = self.det.detect(img, prefer=prefer or "gpu") if self.gpu else \
+                    self.det.detect(img)  # fmt: skip
+                got = [b for b in raw if b.cls == "monster"]
             except Exception:  # noqa: BLE001 -- a dead worker ends the watcher, not the run
                 return
-            with self.lock:
+            path = str(getattr(self.det, "last_path", "")) or "cpu"
+            with self.cond:
                 self.last = (t, got)
+                self.meta = {"kick": seq, "t": t, "t_done": time.monotonic(), "path": path,
+                             "ms": self.det.last_ms, "prefer": prefer,
+                             "reason": getattr(self.det, "last_reason", None)}  # fmt: skip
                 self.n += 1
-            self.halt.wait(max(0.0, BOX_EVERY_S - (time.monotonic() - t)))
+                self.paths[path] += 1
+                self.cond.notify_all()
+            self.kick_ev.wait(max(0.0, BOX_EVERY_S - (time.monotonic() - t)))
+            self.kick_ev.clear()
+
+    def kick(self, prefer: str) -> int:
+        """Ask for a detection NOW by ``prefer``'s path ("gpu" / "cpu"); its request number."""
+        with self.lock:
+            self.kick_seq += 1
+            self.kick_prefer = prefer
+            seq = self.kick_seq
+        self.kick_ev.set()
+        return seq
+
+    def fresh_now(self, prefer: str, timeout: float) -> dict[str, Any] | None:
+        """dungeon@8.9 (rogue-xmas02.md 4N): a detection whose grab starts after this call, by
+        ``prefer``'s path, instead of the 1-s rhythm's next one; its meta (grab and done times,
+        the path that served, its ms), or None after ``timeout``."""
+        seq = self.kick(prefer)
+        end = time.monotonic() + timeout
+        with self.cond:
+            while int(self.meta.get("kick", 0)) < seq:
+                left = end - time.monotonic()
+                if left <= 0:
+                    return None
+                self.cond.wait(left)
+            return dict(self.meta)
 
     def wait_fresh(self, since: float, timeout: float) -> bool:
         """dungeon@8.8: wait until the watcher holds boxes from a grab started at or after
@@ -1066,9 +1116,29 @@ class BoxWatch:
 
     def stop(self) -> None:
         self.halt.set()
+        self.kick_ev.set()
         self.th.join(timeout=3)
         with contextlib.suppress(Exception):
             self.screen.proc.terminate()
+
+
+def box_flags_refused(box_strike: bool, box_now: bool, detector: str) -> str | None:
+    """PURE (dungeon@8.9): --box-now changes the box strike (it needs --box-strike), and the ab
+    arms differ only in the box target's fresh detection (they need --box-now)."""
+    if box_now and not box_strike:
+        return "--box-now needs --box-strike"
+    if detector == "ab" and not box_now:
+        return "--box-detector ab needs --box-now"
+    return None
+
+
+def box_arm(mode: str, k: int) -> str:
+    """PURE (dungeon@8.9): which path the ``k``-th box target's fresh detection takes: the
+    --box-detector's own, or with "ab" (the pilot's arms, rogue-xmas02.md 4N) the GPU for even k
+    and the CPU for odd k."""
+    if mode == "ab":
+        return "gpu" if k % 2 == 0 else "cpu"
+    return mode
 
 
 def box_hover_points(box: Sequence[float]) -> list[tuple[float, float]]:
@@ -1292,6 +1362,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
+    why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
+    if why_box:
+        raise SystemExit(f"dungeon@8.9 refused: {why_box}")
     import nametag
 
     tag_tpl = nametag.load_templates(nametag.map_dir(ROOT, map_) / "templates.npz")
@@ -1573,7 +1646,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         boxes = None
         if a.boxes and not mr:
             boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
-                             None if a.box_model == "v1" else a.map)  # fmt: skip
+                             None if a.box_model == "v1" else a.map,
+                             "cpu" if a.box_detector == "cpu" else "gpu")  # fmt: skip
             ev({"kind": "box_model", "choice": a.box_model, **boxes.model})
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
@@ -1761,6 +1835,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
+        n_box_target = [0]  # dungeon@8.9: box targets so far (box_arm alternates by it)
         box_spots = (
             BoxSpots(after=a.box_ignore) if a.box_ignore > 0 else None
         )  # NOT `spots`: the rest spots (4.01 Amendment C)
@@ -1961,10 +2036,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             t_0 = time.monotonic()
             time.sleep(settle_left(last_walk_click, t_0))
             t_set = time.monotonic()
-            fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)
+            meta: dict[str, Any] | None = None
+            arm = None
+            if a.box_now:  # dungeon@8.9: a detection now, not the rhythm's next (rogue 4N)
+                arm = box_arm(a.box_detector, n_box_target[0])
+                n_box_target[0] += 1
+                meta = boxes.fresh_now(arm, BOX_TARGET_WAIT_S)
+                fresh = meta is not None
+            else:
+                fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)
             rec: dict[str, Any] = {"kind": "box_target", "fresh": fresh,
                                    "settle_ms": round((t_set - t_0) * 1e3),
                                    "wait_ms": round((time.monotonic() - t_set) * 1e3)}  # fmt: skip
+            if a.box_now:
+                rec["arm"] = arm
+            if meta is not None:
+                rec.update(path=meta["path"], det_ms=meta["ms"], gpu_reason=meta["reason"],
+                           grab_after_ms=round((meta["t"] - t_set) * 1e3),
+                           boxes_after_ms=round((meta["t_done"] - t_set) * 1e3))  # fmt: skip
             near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
                       else None)  # fmt: skip
             if near_b is None:
@@ -1976,11 +2065,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 d_px=round(math.hypot(foot[0] - FOOT_PX[0], foot[1] - FOOT_PX[1])),
             )
             verdicts: list[str] = []
-            for u_, v_ in box_hover_points(near_b):
+            points = box_hover_points(near_b)
+            for u_, v_ in points[:1] if a.box_now else points:  # dungeon@8.9: ONE hover
                 if not in_view(u_, v_):
                     verdicts.append("off")
                     continue
+                t_h = time.monotonic()
                 res_ = hover(u_, v_)
+                if meta is not None and "hover_from_grab_ms" not in rec:
+                    rec["hover_from_grab_ms"] = round((t_h - meta["t"]) * 1e3)
+                    rec["verdict_from_grab_ms"] = round((time.monotonic() - meta["t"]) * 1e3)
                 verdicts.append(str(res_["verdict"]))
                 if res_["verdict"] == "sword":
                     sp_ = box_spot(here, foot)
@@ -3170,7 +3264,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if boxes is not None:
                 boxes.stop()
                 ev({"kind": "box_watch", "frames": boxes.n, "self_boxes_skipped": boxes.n_self,
-                    "spot_boxes_skipped": boxes.n_skip,
+                    "spot_boxes_skipped": boxes.n_skip, "paths": dict(boxes.paths),
+                    "gpu": boxes.det.info() if boxes.gpu else None,
                     "spots_ignored": [list(c) for c in (box_spots.misses if box_spots else {})
                                       if box_spots and box_spots.ignored(c)]})  # fmt: skip
             if sitting:
@@ -3282,6 +3377,23 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@4's White Plant cursor sweep (dungeon@5: OFF, Batt decision 6)",
+    )
+    t.add_argument(
+        "--box-detector",
+        choices=["cpu", "gpu", "ab"],
+        default="cpu",
+        help="dungeon@8.9 (gpu-live-detector.md option A, Batt 2026-11-07): the box watcher's "
+        "detections on the CPU (the default until a pilot passes), on the vision worker's GPU "
+        "detect server with the CPU behind it (gpu), or ab: the GPU in the background and each "
+        "box target's fresh detection alternating GPU / CPU (the pilot's arms; needs --box-now)",
+    )
+    t.add_argument(
+        "--box-now",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@8.9 (rogue-xmas02.md 4N; needs --box-strike): after the settle the box "
+        "target asks for a detection NOW instead of waiting for the 1-s rhythm, and hovers ONCE "
+        "(the box centre)",
     )
     t.add_argument(
         "--box-ignore",

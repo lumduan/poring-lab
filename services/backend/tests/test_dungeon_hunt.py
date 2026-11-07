@@ -872,7 +872,8 @@ def test_each_hp_read_logs_its_readout_outcome() -> None:
 
 def test_the_box_watcher_takes_the_maps_model_with_a_v1_rollback() -> None:
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
-    assert "self.det = unit_detector.for_map(map_name)" in src  # T-11 (Batt 2026-11-07)
+    assert "self.det: Any = unit_detector.for_map(map_name)" in src  # T-11 (Batt 2026-11-07)
+    assert "self.det = unit_detector.for_map_gpu(map_name)" in src  # dungeon@8.9, same model
     assert 'None if a.box_model == "v1" else a.map' in src
     assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model})' in src
     assert '"--box-model",\n        choices=["map", "v1"],\n        default="map",' in src
@@ -929,3 +930,95 @@ def test_box_strike_is_wired_once_per_box_fight_and_off_by_default() -> None:
     i_box = src.index("got_b = box_target()")
     i_ring = src.index('found = scan("defend", ring(1), "sword")', i_box)
     assert i_box < i_ring
+
+
+# --- dungeon@8.9: the GPU box watcher and the box target's detection on demand (rogue 4N) ------
+
+
+def test_the_ab_arms_alternate_by_box_target_and_the_others_keep_their_path() -> None:
+    assert [dh.box_arm("ab", k) for k in range(5)] == ["gpu", "cpu", "gpu", "cpu", "gpu"]
+    assert {dh.box_arm("gpu", k) for k in range(4)} == {"gpu"}
+    assert {dh.box_arm("cpu", k) for k in range(4)} == {"cpu"}
+
+
+def test_the_box_flags_that_cannot_work_are_refused() -> None:
+    assert dh.box_flags_refused(False, True, "cpu") == "--box-now needs --box-strike"
+    assert dh.box_flags_refused(True, False, "ab") == "--box-detector ab needs --box-now"
+    assert dh.box_flags_refused(True, True, "ab") is None
+    assert dh.box_flags_refused(False, False, "gpu") is None  # the GPU without the strike: fine
+    assert dh.box_flags_refused(False, False, "cpu") is None  # today's default
+
+
+def test_the_box_flags_default_to_todays_behaviour() -> None:
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert '"--box-detector",\n        choices=["cpu", "gpu", "ab"],\n        default="cpu",' in src
+    flag = '"--box-now",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
+    assert flag in src
+    assert '"cpu" if a.box_detector == "cpu" else "gpu")' in src
+    assert "for u_, v_ in points[:1] if a.box_now else points:  # dungeon@8.9: ONE hover" in src
+    assert "meta = boxes.fresh_now(arm, BOX_TARGET_WAIT_S)" in src
+    # without --box-now the box target is dungeon@8.8's, unchanged
+    assert "fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)" in src
+
+
+class _FakeDet:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, str]] = []
+        self.last_path, self.last_ms, self.last_reason = "", 0.0, None
+
+    def detect(self, img: object, prefer: str = "gpu") -> list[object]:
+        self.calls.append((__import__("time").monotonic(), prefer))
+        self.last_path, self.last_ms = prefer, 1.0
+        return []
+
+
+class _FakeScreen:
+    def grab(self, *region: int) -> tuple[None, object]:
+        return None, np.zeros((4, 6, 4), np.uint8)
+
+
+def _watch(gpu: bool = True) -> dh.BoxWatch:
+    import threading
+    from collections import Counter
+
+    bw = dh.BoxWatch.__new__(dh.BoxWatch)
+    bw.det, bw.gpu, bw.screen, bw.region = _FakeDet(), gpu, _FakeScreen(), (0, 0, 6, 4)
+    bw.lock = threading.Lock()
+    bw.cond = threading.Condition(bw.lock)
+    bw.last, bw.meta, bw.paths = (0.0, []), {"kick": 0}, Counter()
+    bw.kick_ev, bw.kick_seq, bw.kick_prefer = threading.Event(), 0, None
+    bw.halt, bw.n, bw.n_self, bw.n_skip = threading.Event(), 0, 0, 0
+    bw.th = threading.Thread(target=bw._loop, daemon=True)
+    bw.th.start()
+    return bw
+
+
+def test_fresh_now_serves_a_kick_at_once_by_the_asked_path() -> None:
+    import time
+
+    bw = _watch()
+    try:
+        t0 = time.monotonic()
+        while bw.n < 1 and time.monotonic() - t0 < 2:
+            time.sleep(0.01)
+        assert bw.det.calls[0][1] == "gpu"  # the background: the GPU
+        t_call = time.monotonic()
+        meta = bw.fresh_now("cpu", 1.0)
+        assert meta is not None and meta["path"] == "cpu" and meta["prefer"] == "cpu"
+        assert meta["t"] >= t_call  # its grab started after the request
+        assert time.monotonic() - t_call < 0.5 < dh.BOX_EVERY_S  # not the 1-s rhythm's next
+        meta2 = bw.fresh_now("gpu", 1.0)
+        assert meta2 is not None and meta2["path"] == "gpu" and meta2["kick"] == meta["kick"] + 1
+        assert bw.paths["cpu"] == 1 and bw.paths["gpu"] >= 2
+    finally:
+        bw.stop()
+
+
+def test_fresh_now_gives_up_after_its_timeout() -> None:
+    import threading
+
+    bw = dh.BoxWatch.__new__(dh.BoxWatch)  # no loop: nothing ever serves the kick
+    bw.lock = threading.Lock()
+    bw.cond = threading.Condition(bw.lock)
+    bw.meta, bw.kick_ev, bw.kick_seq, bw.kick_prefer = {"kick": 0}, threading.Event(), 0, None
+    assert bw.fresh_now("gpu", 0.1) is None

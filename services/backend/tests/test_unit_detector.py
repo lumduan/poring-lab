@@ -199,3 +199,330 @@ def test_the_worker_suppresses_a_group_together() -> None:
     assert sorted(int(r[5]) for r in per_class) == [4, 5, 6]  # the double box
     assert sorted(int(r[5]) for r in grouped) == [4, 5]  # one box, its own (higher) class
     assert [r for r in grouped if r[5] == 5] == [r for r in per_class if r[5] == 5]
+
+
+# --- the GPU path (gpu-live-detector.md option A; ADR-0005 Amendment 2026-11-07) ---------------
+# The host may not import poring_vision (ADR-0018), so a stand-in speaks the detect server's
+# protocol here; services/vision/tests/test_detect_server.py runs the real server against this
+# same client.
+import os  # noqa: E402
+import socket  # noqa: E402
+import struct  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+
+import detector_worker as dw  # noqa: E402
+
+N_ANCH = 19320  # 736 x 1280 at strides 8 / 16 / 32
+
+
+def head_out(nc: int, boxes: list[tuple[float, float, float, float, int, float]]) -> np.ndarray:
+    """A raw head output (1, 4 + nc, N): each (cx, cy, w, h, class, score) in CANVAS pixels."""
+    out = np.zeros((1, 4 + nc, N_ANCH), np.float32)
+    for k, (cx, cy, w, h, c, sc) in enumerate(boxes):
+        out[0, :4, k] = (cx, cy, w, h)
+        out[0, 4 + c, k] = sc
+    return out
+
+
+class FakeServer:
+    """The detect server's protocol: hello, then per frame a JSON line + float32 bytes. ``mode``:
+    ok | silent (accepts, never answers: a paused worker) | silent_frames | wrong_sha | bad_shape
+    | nan | close_after_one."""
+
+    def __init__(self, path: Path, out: np.ndarray, mode: str = "ok",
+                 weights: str = "v1") -> None:  # fmt: skip
+        self.path, self.out, self.mode, self.weights = path, out, mode, weights
+        self.conns = 0
+        self.frames = 0
+        self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.srv.bind(str(path))
+        self.srv.listen(4)
+        self.srv.settimeout(0.2)
+        self.halt = threading.Event()
+        self.held: list[socket.socket] = []
+        self.th = threading.Thread(target=self.loop, daemon=True)
+        self.th.start()
+
+    def loop(self) -> None:
+        while not self.halt.is_set():
+            try:
+                c, _ = self.srv.accept()
+            except TimeoutError:
+                continue
+            self.conns += 1
+            if self.mode == "silent":
+                self.held.append(c)
+                continue
+            try:
+                self.serve(c)
+            except OSError:
+                pass
+            finally:
+                c.close()
+
+    def serve(self, c: socket.socket) -> None:
+        c.settimeout(5)
+        f = c.makefile("rb")
+        doc = json.loads(f.readline())
+        sha = ud.GPU_WEIGHTS[self.weights].sha256
+        if self.mode == "wrong_sha":
+            sha = "0" * 64
+        c.sendall(json.dumps({"ok": True, "model": doc["model"], "sha256": sha,
+                              "imgsz": [736, 1280], "shape": list(self.out.shape)}).encode()
+                  + b"\n")  # fmt: skip
+        while True:
+            head = f.read(8)
+            if len(head) < 8:
+                return
+            h, w, _ = struct.unpack("<HHI", head)
+            f.read(h * w * 3)
+            self.frames += 1
+            if self.mode == "silent_frames":
+                time.sleep(1.0)
+                return
+            out = self.out
+            if self.mode == "bad_shape":
+                out = out[:, :, :100]
+            if self.mode == "nan":
+                out = out.copy()
+                out[0, 0, 0] = np.nan
+            c.sendall(json.dumps({"shape": list(out.shape), "ms": 1.0}).encode() + b"\n"
+                      + np.ascontiguousarray(out, "<f4").tobytes())  # fmt: skip
+            if self.mode == "close_after_one":
+                return
+
+    def stop(self) -> None:
+        self.halt.set()
+        self.th.join(timeout=2)
+        self.srv.close()
+        for c in self.held:
+            c.close()
+
+
+@pytest.fixture
+def private(tmp_path: Path) -> Path:
+    d = tmp_path / "gd"
+    d.mkdir(mode=0o700)
+    d.chmod(0o700)
+    return d
+
+
+def gpu_det(model: Path, sock: Path, names: object = None, collapse: object = None,
+            **kw: object) -> ud.GpuDetector:  # fmt: skip
+    cpu = ud.UnitDetector(model=model, python=Path(sys.executable), names=names,  # type: ignore[arg-type]
+                          collapse=collapse)  # type: ignore[arg-type]  # fmt: skip
+    return ud.GpuDetector(cpu, kw.pop("weights", "v1"), socket_path=sock,  # type: ignore[arg-type]
+                          **kw)  # type: ignore[arg-type]  # fmt: skip
+
+
+FRAME = np.zeros((720, 1280, 3), np.uint8)
+# one monster box, centre (100, 58) in the canvas = (100, 50) in the frame (8 px of top padding)
+ONE_MONSTER = head_out(3, [(100.0, 58.0, 20.0, 30.0, 1, 0.9)])
+
+
+def test_anchors_of_the_deployed_input() -> None:
+    assert ud.anchors((736, 1280)) == N_ANCH
+    assert ud.IMGSZ == (736, 1280)
+
+
+def test_letterbox_is_pad_canvas_then_to_input_as_before() -> None:
+    img = np.random.default_rng(3).integers(0, 255, (720, 1280, 3), dtype=np.uint8)
+    x, s, left, top = dw.letterbox(img, (736, 1280))
+    canvas = np.full((736, 1280, 3), 114, np.uint8)
+    canvas[8:728] = img
+    old = canvas[..., ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+    assert (s, left, top) == (1.0, 0, 8) and np.array_equal(x, old)
+    c2, *_ = dw.pad_canvas(img, (736, 1280))
+    assert np.array_equal(c2, canvas)
+
+
+def test_gpu_boxes_are_decoded_by_the_cpu_workers_own_code(worker: Path, tmp_path: Path,
+                                                         private: Path) -> None:  # fmt: skip
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER)
+    try:
+        with gpu_det(model_answering(tmp_path, [0]), sock) as det:
+            boxes = det.detect(FRAME)
+            assert det.last_path == "gpu" and det.counts == {"gpu": 1}
+            assert boxes == [ud.Box(90.0, 35.0, 110.0, 65.0, 0.9, "monster")]
+            assert det.detect(FRAME) == boxes and srv.conns == 1  # one connection, kept
+    finally:
+        srv.stop()
+
+
+def test_no_server_gives_the_cpus_boxes_and_retries_later(worker: Path, tmp_path: Path,
+                                                         private: Path) -> None:  # fmt: skip
+    now = [100.0]
+    with gpu_det(model_answering(tmp_path, [1]), private / "detect.sock",
+                 clock=lambda: now[0]) as det:  # fmt: skip
+        assert det.detect(FRAME) == [ud.Box(1.0, 2.0, 3.0, 4.0, 0.9, "monster")]
+        assert det.last_path == "cpu" and det.counts == {"fallback": 1}
+        assert det.reasons == {"FileNotFoundError": 1}
+        det.detect(FRAME)
+        assert det.last_reason == "down"  # not retried within GPU_RETRY_S
+        assert det.reasons == {"FileNotFoundError": 1}
+        now[0] += ud.GPU_RETRY_S
+        srv = FakeServer(private / "detect.sock", ONE_MONSTER)
+        try:
+            det.detect(FRAME)
+            assert det.last_path == "gpu"  # back on the GPU after the retry time
+        finally:
+            srv.stop()
+
+
+@pytest.mark.parametrize("mode", ["silent", "silent_frames"])
+def test_a_paused_or_stuck_server_times_out_to_the_cpu(
+    worker: Path, tmp_path: Path, private: Path, mode: str
+) -> None:
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER, mode=mode)
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock, call_s=0.1, hello_s=0.1) as det:
+            t = time.monotonic()
+            boxes = det.detect(FRAME)
+            assert time.monotonic() - t < 0.8
+            assert det.last_path == "cpu" and boxes[0].x0 == 1.0
+            assert det.reasons == {"TimeoutError": 1} and det.disabled is None
+    finally:
+        srv.stop()
+
+
+@pytest.mark.parametrize("mode", ["bad_shape", "nan"])
+def test_a_reply_of_another_shape_or_not_finite_is_refused(
+    worker: Path, tmp_path: Path, private: Path, mode: str
+) -> None:
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER, mode=mode)
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            assert det.detect(FRAME)[0].x0 == 1.0 and det.last_path == "cpu"
+            assert det.reasons == {"GpuUnavailable": 1}
+    finally:
+        srv.stop()
+
+
+def test_other_weights_turn_the_gpu_off_for_the_run(worker: Path, tmp_path: Path,
+                                                    private: Path) -> None:  # fmt: skip
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER, mode="wrong_sha")
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock, clock=lambda: 1e9) as det:
+            det.detect(FRAME)
+            assert det.disabled is not None and "sha256" in det.disabled
+            det.detect(FRAME)
+            assert det.last_reason == "disabled" and srv.conns == 1
+    finally:
+        srv.stop()
+
+
+def test_a_symlink_in_the_directory_is_refused_never_followed(worker: Path, tmp_path: Path,
+                                                              private: Path) -> None:  # fmt: skip
+    real = tmp_path / "elsewhere.sock"
+    srv = FakeServer(real, ONE_MONSTER)
+    try:
+        (private / "detect.sock").symlink_to(real)
+        with gpu_det(model_answering(tmp_path, [1]), private / "detect.sock") as det:
+            assert det.detect(FRAME)[0].x0 == 1.0
+            assert det.disabled is not None and "not a socket of ours" in det.disabled
+            time.sleep(0.3)
+            assert srv.conns == 0  # never connected through the link
+    finally:
+        srv.stop()
+
+
+def test_a_directory_others_can_write_is_refused(worker: Path, tmp_path: Path,
+                                                 private: Path) -> None:  # fmt: skip
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER)
+    try:
+        private.chmod(0o777)
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            det.detect(FRAME)
+            assert det.last_path == "cpu" and "private directory" in str(det.disabled)
+            assert srv.conns == 0
+    finally:
+        private.chmod(0o700)
+        srv.stop()
+
+
+def test_prefer_cpu_forces_the_cpu(worker: Path, tmp_path: Path, private: Path) -> None:
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER)
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            det.detect(FRAME, prefer="cpu")
+            assert det.last_path == "cpu" and det.counts == {"cpu": 1} and srv.conns == 0
+    finally:
+        srv.stop()
+
+
+def test_a_connection_the_server_closed_is_reopened_once(worker: Path, tmp_path: Path,
+                                                         private: Path) -> None:  # fmt: skip
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER, mode="close_after_one")
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            det.detect(FRAME)
+            time.sleep(0.1)
+            det.detect(FRAME)
+            assert det.counts == {"gpu": 2} and srv.conns == 2 and det.reasons == {}
+    finally:
+        srv.stop()
+
+
+def test_the_species_collapse_holds_on_the_gpu_path(worker: Path, tmp_path: Path,
+                                                    private: Path) -> None:  # fmt: skip
+    # a cookie and a christmas cookie on one sprite: per class NMS keeps both, the collapse one
+    out = head_out(7, [(100.0, 58.0, 20.0, 30.0, 5, 0.9), (101.0, 58.0, 20.0, 30.0, 6, 0.8)])
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, out, weights="xmas02")
+    try:
+        collapse = ud.MAP_MODELS["xmas_dun02"].collapse
+        with gpu_det(model_answering(tmp_path, [1]), sock, names=XMAS02, collapse=collapse,
+                     weights="xmas02") as det:  # fmt: skip
+            boxes = det.detect(FRAME)
+            assert [(b.cls, b.species) for b in boxes] == [("monster", "cookie")]
+    finally:
+        srv.stop()
+
+
+def test_each_batch_is_logged_with_its_path(worker: Path, tmp_path: Path, private: Path) -> None:
+    with gpu_det(model_answering(tmp_path, [1]), private / "detect.sock") as det:
+        det.log_path = tmp_path / "det.jsonl"
+        det.detect(FRAME)
+        row = json.loads(det.log_path.read_text())
+        assert row["path"] == "cpu" and row["boxes"] == [[1.0, 2.0, 3.0, 4.0, 0.9, "monster"]]
+
+
+def test_for_map_gpu_takes_the_maps_own_weights(
+    worker: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "model").mkdir()
+    onnx = tmp_path / "model" / "x-736x1280.onnx"
+    onnx.write_text("[1]")
+    monkeypatch.setitem(ud.MAP_MODELS, "test_map", ud.MapModel(
+        onnx.name, ud.file_sha256(onnx), {}, gpu="xmas02"))  # fmt: skip
+    monkeypatch.setitem(ud.MAP_MODELS, "cpu_only", ud.MapModel(onnx.name, ud.file_sha256(onnx), {}))
+    py = Path(sys.executable)
+    with ud.for_map_gpu("test_map", env=tmp_path, python=py) as det:
+        assert det.weights == "xmas02"
+    with ud.for_map_gpu("cpu_only", env=tmp_path, python=py) as det:
+        assert det.disabled == "no GPU weights"
+        det.detect(FRAME)
+        assert det.last_path == "cpu"
+    with pytest.raises(ud.DetectorUnavailable):
+        ud.for_map_gpu("prt_fild08", env=tmp_path, python=py, model=onnx)
+
+
+def test_the_deployed_gpu_weights_and_the_server_step() -> None:
+    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02"
+    assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
+    assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")
+    step = ud.serve_step(1800)
+    assert step.startswith("execdev:vision@1800=python -m poring_vision.detect_server ")
+    assert "--socket /detect/detect.sock" in step
+    for name, w in ud.GPU_WEIGHTS.items():
+        assert f"--model {name}={w.path}={w.sha256}" in step
+    assert str(ud.GPU_SOCKET) == "/dev/shm/poring-lab-detect/detect.sock"
+    assert os.path.basename(ud.SERVER_SOCKET) == ud.GPU_SOCKET.name

@@ -12,7 +12,9 @@ one it reports SKIP and the test exits 3 (rows 1-3 + 5 still decide the rest).
      -- with and without a forged Origin;
   3. /internal/agent works (the mux is the one way in);
   4. Env.grab() on the bus: frames with rising frame_ids at >= the agent's rate;
-  5. the network is closed: the agent gateway's host ports and the LAN are unreachable.
+  5. the network is closed: the agent gateway's host ports and the LAN are unreachable;
+  6. (Amendment 2026-11-07, the worker only) /detect, the detect server's socket directory, is
+     RAM (tmpfs) and holds nothing but detect.sock. SKIP where it is not mounted.
 """
 
 import json
@@ -147,6 +149,20 @@ def row5_closed_network() -> tuple[str, str]:
     return ("FAIL" if reached else "PASS"), (f"reached {reached}" if reached else "all closed")
 
 
+def row6_detect_dir(path: str = "/detect") -> tuple[str, str]:
+    if not os.path.isdir(path):
+        return "SKIP", f"no {path} (only the vision worker mounts it)"
+    fs = None
+    with open("/proc/self/mountinfo") as fh:
+        for line in fh:
+            parts = line.split()
+            if len(parts) > 4 and parts[4] == path and "-" in parts:
+                fs = parts[parts.index("-") + 1]
+    entries = sorted(os.listdir(path))
+    ok = fs == "tmpfs" and all(e == "detect.sock" for e in entries)
+    return ("PASS" if ok else "FAIL"), f"filesystem {fs}, entries {entries}"
+
+
 def main() -> int:
     rows = {
         "1 no X": row1_no_x(),
@@ -154,6 +170,7 @@ def main() -> int:
         "3 /internal/agent works": row3_internal_agent(),
         "4 Env.grab on the bus": row4_grab_bus(),
         "5 network closed": row5_closed_network(),
+        "6 detect directory": row6_detect_dir(),
     }
     print(json.dumps({k: {"verdict": v[0], "detail": v[1]} for k, v in rows.items()}, indent=1))
     verdicts = [v[0] for v in rows.values()]

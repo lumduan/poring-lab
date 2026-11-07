@@ -16,7 +16,12 @@
 #   - entrypoint `sleep infinity`: IDLE. It never imports torch, so it holds NO CUDA context;
 #   - restart "no": it starts only through the guarded step (never after a reboot or a crash: that
 #     would be an unmeasured cold start);
-#   - no build (never a 5 GB rebuild by accident), pull_policy never, no depends_on.
+#   - no build (never a 5 GB rebuild by accident), pull_policy never, no depends_on;
+#   - ADR-0005 Amendment 2026-11-07 (Batt chose gpu-live-detector.md option A): ONE more mount,
+#     the host RAM directory /dev/shm/poring-lab-detect at /detect, read-write, for the detect
+#     server's socket (poring_vision.detect_server). Frames in, numbers out; the host bot is the
+#     only client. guarded_build's worker:vision creates the directory first (ours, mode 0700).
+#     The worker ONLY: never the vision service or any other container.
 services:
   vision-worker:
     profiles: [vision-worker]
@@ -48,6 +53,7 @@ services:
       - datasets-nas:/datasets:ro
       - ./services/vision/src:/opt/vision-src:ro
       - ./state/train-duty:/lab-duty:ro
+      - /dev/shm/poring-lab-detect:/detect
     networks: [agent]
     deploy:
       resources:

@@ -29,9 +29,11 @@ import numpy as np
 NAMES = ("player", "monster", "npc")  # the v0 label set (poring_dataset.labels.CLASSES)
 
 
-def letterbox(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float, int, int]:
-    """BGR (h, w, 3) -> (1, 3, H, W) float32 RGB in 0..1, grey 114 padding; the scale and the
-    (left, top) padding, to map boxes back. `size` = the model's (H, W)."""
+def pad_canvas(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float, int, int]:
+    """BGR (h, w, 3) -> the model's (H, W, 3) uint8 BGR canvas, grey 114 padding; the scale and
+    the (left, top) padding, to map boxes back. `size` = the model's (H, W). The GPU path
+    (unit_detector.GpuDetector, 2026-11-07) sends this canvas; the forward's input is
+    ``to_input(canvas)``, on either side."""
     h, w = img.shape[:2]
     s = min(size[0] / h, size[1] / w)
     nh, nw = round(h * s), round(w * s)
@@ -42,8 +44,20 @@ def letterbox(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float
     top, left = (size[0] - nh) // 2, (size[1] - nw) // 2
     canvas = np.full((size[0], size[1], 3), 114, np.uint8)
     canvas[top : top + nh, left : left + nw] = img
+    return canvas, s, left, top
+
+
+def to_input(canvas: np.ndarray) -> np.ndarray:
+    """The canvas -> (1, 3, H, W) float32 RGB in 0..1 (the GPU server does the same on the card)."""
     x = canvas[..., ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
-    return np.ascontiguousarray(x), s, left, top
+    return np.ascontiguousarray(x)
+
+
+def letterbox(img: np.ndarray, size: tuple[int, int]) -> tuple[np.ndarray, float, int, int]:
+    """BGR (h, w, 3) -> (1, 3, H, W) float32 RGB in 0..1, grey 114 padding; the scale and the
+    (left, top) padding, to map boxes back. `size` = the model's (H, W)."""
+    canvas, s, left, top = pad_canvas(img, size)
+    return to_input(canvas), s, left, top
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:

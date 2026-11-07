@@ -94,8 +94,10 @@ On a breach:
                 vision-worker`, then watch the IO guard for <seconds> (default 120; a breach stops
                 it) and check it is IDLE (docker-init + `sleep infinity`) with nothing of ours on
                 the GPU. The same image, mounts, limits and network as a rundev: run
-                (tests/test_guards.py); its entrypoint never imports torch, so it holds no CUDA
-                context. It is the day's ONE cold start: run it through
+                (tests/test_guards.py), plus ONE mount: /dev/shm/poring-lab-detect at /detect,
+                the detect server's socket (ADR-0005 Amendment 2026-11-07), created first as
+                ours, mode 0700 (else REFUSED). Its entrypoint never imports torch, so it holds
+                no CUDA context. It is the day's ONE cold start: run it through
                 scripts/runbooks/quiet_start.py (a measured quiet window). Already up and idle:
                 nothing is started. Busy, paused or unreadable: REFUSED (rc 3).
   execdev:vision[@<seconds>]=<command>
@@ -104,13 +106,13 @@ On a breach:
                 timeout bounds the process: a killed `docker exec` client never stops what it
                 started (the Docker API cannot signal an exec). Everything of rundev: holds: the
                 same R2/R3 pre-start refusals, the PairedR3 ON/OFF windows (docker pause / unpause
-                of the WORKER), the IO guard, the duty file. REFUSED (rc 3) unless the worker is
-                up, unpaused, IDLE (one job at a time) and started from THIS checkout (its source,
-                duty and data mounts): `REFUSED execdev:vision: WORKER down ...` / `... WORKER not
+                of the WORKER), the IO guard, the duty file. REFUSED (rc 3) unless the worker is up,
+                unpaused, IDLE (one job at a time) and started from THIS checkout (its source, duty,
+                data and detect mounts): `REFUSED execdev:vision: WORKER down ...` / `... WORKER not
                 ready ...`. A stop is verified in EXEC MODE (verify_stop): the worker idle again,
-                nothing of ours on the GPU, no client left on the host; escalation SIGINT -> kill
-                -9 -> docker kill of the worker (`WORKER KILLED`), else STOP-UNVERIFIED. A normal
-                end is checked the same way: a client that ended while the worker is still busy is
+                nothing of ours on the GPU, no client left on the host; escalation SIGINT -> kill -9
+                -> docker kill of the worker (`WORKER KILLED`), else STOP-UNVERIFIED. A normal end
+                is checked the same way: a client that ended while the worker is still busy is
                 stopped.
   worker-stop:vision
                 `docker compose ... stop vision-worker`, then checks it is down with nothing of ours
@@ -177,6 +179,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -410,12 +413,17 @@ EXEC_KILL_AFTER_S = 30  # the inner timeout's SIGKILL, this long after its SIGTE
 EXEC_SETTLE_S = 10  # after the client ends: orphaned children get this long to exit by themselves
 # The step's host-side processes: the outer `timeout` and the `docker exec` client (cmdline bytes).
 EXEC_HOST = b"docker\x00exec\x00" + WORKER.encode() + b"\x00"
-# The worker must run THIS checkout's source, duty file and data dir (container path -> host path):
+# The worker must run THIS checkout's source, duty file, data dir and the detect directory
+# (container path -> host path):
 # the duty file guarded_build writes and the results it reads are this checkout's.
+# ADR-0005 Amendment 2026-11-07: the detect server's socket directory (RAM), the host's only
+# GPU-detector route (scripts/unit_detector.GpuDetector); created here, ours, mode 0700.
+DETECT_DIR = Path("/dev/shm/poring-lab-detect")
 WORKER_MOUNTS = {
     "/opt/vision-src": REPO / "services" / "vision" / "src",
     "/lab-duty": REPO / "state" / "train-duty",
     "/data": REPO / "data",
+    "/detect": DETECT_DIR,
 }
 WORKER_STATES = {"running": "running", "paused": "paused", "created": "stopped",
                  "exited": "stopped", "dead": "stopped"}  # fmt: skip
@@ -430,6 +438,21 @@ def exec_cmd(step: Step) -> list[str]:
         "timeout", str(seconds + EXEC_GRACE_S), "docker", "exec", WORKER,
         "timeout", f"--kill-after={EXEC_KILL_AFTER_S}", str(seconds), *step.command,
     ]  # fmt: skip
+
+
+def ensure_detect_dir(path: Path = DETECT_DIR) -> str | None:
+    """The worker's /detect source must exist BEFORE the start (docker would create a missing bind
+    source root-owned): a directory of ours, mode 0700, not a symlink. None when it is, else why
+    not (the start is refused)."""
+    try:
+        path.mkdir(mode=0o700, exist_ok=True)
+        st = path.lstat()
+    except OSError as exc:
+        return f"{path}: {exc}"
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        return f"{path}: not a directory of ours (mode {oct(st.st_mode)}, uid {st.st_uid})"
+    path.chmod(0o700)
+    return None
 
 
 def worker_start_cmd() -> list[str]:
@@ -1536,6 +1559,10 @@ def run_worker(seconds: float, guard: Guard) -> int:
         return 0
     if state not in ("stopped", "absent"):
         print(f"[{ts()}] REFUSED {label}: {WORKER} is {state}: a person must look", flush=True)
+        return 3
+    why = ensure_detect_dir()
+    if why is not None:
+        print(f"[{ts()}] REFUSED {label}: the detect directory: {why}", flush=True)
         return 3
     if not run_process(label, worker_start_cmd(), guard):
         return 1

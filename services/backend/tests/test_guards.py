@@ -846,7 +846,8 @@ def test_the_vision_worker_is_exactly_a_rundev_vision_container() -> None:
     (R1's VRAM cap, bus-only frames, offline), limits (mem == memswap, oom_score_adj 500, no CPU
     change), GPU and network (agent only, ADR-0005). The only differences: an IDLE entrypoint (it
     never imports torch: no CUDA context), restart "no" (it starts only through the guarded step,
-    never after a reboot: an unmeasured cold start), no build / pull / depends_on."""
+    never after a reboot: an unmeasured cold start), no build / pull / depends_on, and ONE more
+    mount, the detect server's socket directory (ADR-0005 Amendment 2026-11-07)."""
     services = compose("compose.vision-worker.yaml")["services"]
     assert list(services) == ["vision-worker"]
     worker = services["vision-worker"]
@@ -855,7 +856,7 @@ def test_the_vision_worker_is_exactly_a_rundev_vision_container() -> None:
     assert set(worker) == WORKER_KEYS, set(worker) ^ WORKER_KEYS
     assert worker["image"] == base["image"] == "poring-lab/vision:local"
     assert worker["environment"] == {**base["environment"], **dev["environment"]}
-    assert worker["volumes"] == [*base["volumes"], *dev["volumes"]]
+    assert worker["volumes"] == [*base["volumes"], *dev["volumes"], DETECT_MOUNT]
     assert worker["networks"] == base["networks"] == ["agent"]
     assert worker["deploy"] == base["deploy"]
     for key in ("mem_limit", "memswap_limit", "shm_size", "oom_score_adj", "init", "logging",
@@ -870,6 +871,53 @@ def test_the_vision_worker_is_exactly_a_rundev_vision_container() -> None:
     assert worker["profiles"] == ["vision-worker"]
     assert "./state/train-duty:/lab-duty:ro" in worker["volumes"]
     assert "./services/vision/src:/opt/vision-src:ro" in worker["volumes"]
+
+
+DETECT_MOUNT = "/dev/shm/poring-lab-detect:/detect"  # ADR-0005 Amendment 2026-11-07
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["compose.yaml", "compose.dev.yaml", "compose.vision-dev.yaml", "compose.vision-worker.yaml"],
+)
+def test_the_detect_socket_directory_is_the_workers_alone(name: str) -> None:
+    """ADR-0005 Amendment 2026-11-07 (Batt chose gpu-live-detector.md option A): the host RAM
+    directory of the detect server's socket is mounted in the vision WORKER only, read-write (the
+    server creates the socket), at /detect; never in the vision service or any other container,
+    and no other host /dev/shm path reaches the worker."""
+    for svc, spec in compose(name)["services"].items():
+        vols = [v for v in (spec or {}).get("volumes", []) if isinstance(v, str)]
+        detect = [v for v in vols if "poring-lab-detect" in v or v.split(":")[1:2] == ["/detect"]]
+        if svc == "vision-worker":
+            assert detect == [DETECT_MOUNT], (name, detect)
+            assert [v for v in vols if v.startswith("/dev/shm")] == [DETECT_MOUNT]
+        else:
+            assert detect == [], (name, svc, detect)
+
+
+def test_the_guard_creates_the_detect_directory_private_before_the_start(
+    tmp_path: Path,
+) -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "guarded_build_detect", ROOT / "scripts" / "guarded_build.py"
+    )
+    assert spec and spec.loader
+    gb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gb)
+    assert str(gb.DETECT_DIR) == "/dev/shm/poring-lab-detect"
+    assert gb.WORKER_MOUNTS["/detect"] == gb.DETECT_DIR
+    d = tmp_path / "detect"
+    assert gb.ensure_detect_dir(d) is None
+    assert d.is_dir() and (d.stat().st_mode & 0o777) == 0o700
+    d.chmod(0o755)
+    assert gb.ensure_detect_dir(d) is None and (d.stat().st_mode & 0o777) == 0o700
+    d.rmdir()
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    d.symlink_to(target)
+    assert "not a directory of ours" in str(gb.ensure_detect_dir(d))
 
 
 def test_the_vision_worker_is_named_where_the_guard_looks_for_it() -> None:
@@ -890,7 +938,8 @@ def test_the_vision_worker_is_named_where_the_guard_looks_for_it() -> None:
     assert gb.WORKER_SERVICE in compose("compose.vision-worker.yaml")["services"]
     assert gb.VISION_WORKER[:4] == ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml"]
     worker = compose("compose.vision-worker.yaml")["services"]["vision-worker"]
-    binds = {v.split(":")[1]: v.split(":")[0] for v in worker["volumes"] if v.startswith("./")}
+    binds = {v.split(":")[1]: v.split(":")[0] for v in worker["volumes"]
+             if v.startswith(("./", "/"))}  # fmt: skip
     for dst, src in gb.WORKER_MOUNTS.items():
         assert (ROOT / binds[dst]).resolve() == src.resolve(), dst
 
