@@ -494,6 +494,8 @@ class ScoreConfig:
     # xmas02-detector.md Amendment J (2026-11-07): the truth's time offset (ms before the capture);
     # None = mvp_watch_study.OFFSET_MS (payf07's frozen 1d, 120), as every earlier score
     truth_offset_ms: float | None = None
+    # ... and the camera's own (our position at t - self_offset_ms; monsters stay at the offset)
+    self_offset_ms: float | None = None
 
 
 def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
@@ -540,8 +542,9 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
     nested_changed = 0
     for c in caps:
         t = int(c["t"])
-        row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name)
-        if not row["map"] or map_key(row["map"]) != cfg.map_name or row["self"] is None:
+        row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name, cfg.self_offset_ms)
+        if not row["map"] or map_key(row["map"]) != cfg.map_name or row["self"] is None or \
+                row["camera"] is None:  # fmt: skip
             skipped["off_map"] += 1
             continue
         if any(f in row["flags"] for f in SKIP_FLAGS):
@@ -551,8 +554,8 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
         aid = stack.tl.frame_world(tw).aid
         hallucinating = aid is not None and in_spans(halluc.get(int(aid), ()), tw)
         halluc_caps += hallucinating
-        scene = load_scene(stack.camera, row["map"], row["self"], indoor_table=stack.indoor)
-        me = anchor_and_depth(scene, (float(row["self"][0]), float(row["self"][1])))[0]
+        scene = load_scene(stack.camera, row["map"], row["camera"], indoor_table=stack.indoor)
+        me = anchor_and_depth(scene, (float(row["camera"][0]), float(row["camera"][1])))[0]
         sbox = gef10_items.self_box(me)
         dying: list[Box] = []
         for st in stack.tl.states(tw):
@@ -631,7 +634,7 @@ def score_captures(caps: Sequence[dict[str, Any]], events: list[dict[str, Any]],
     ms_all = [float(c["ms"]) for c in caps if c.get("ms") is not None]
     n_det = sum(verdicts.values())
     body = {
-        "offset_ms": offset_ms, "k": mws.K,
+        "offset_ms": offset_ms, "self_offset_ms": cfg.self_offset_ms, "k": mws.K,
         "latency_ms": {"n": len(ms_all), "median": percentile(ms_all, 50) if ms_all else None,
                        "p95": percentile(ms_all, 95) if ms_all else None,
                        "max": max(ms_all) if ms_all else None},
@@ -812,7 +815,8 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
                       rects=rects, ui_boxes=a.ui_boxes, require_sheets=True,
                       raw_rects=raw if dropped else None,
                       pairs=a.pairs is not None,
-                      truth_offset_ms=a.truth_offset_ms)  # fmt: skip
+                      truth_offset_ms=a.truth_offset_ms,
+                      self_offset_ms=a.self_offset_ms)  # fmt: skip
     res = score_captures(caps, events, size, cfg)
     skipped = res["skipped"]
     body = res["body"]
@@ -921,6 +925,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="the truth's time before each capture (default mvp_watch_study.OFFSET_MS, 120): "
         "xmas02-detector.md Amendment J's sweep on non-TEST sessions",
+    )
+    p.add_argument(
+        "--self-offset-ms",
+        type=float,
+        default=None,
+        help="the CAMERA's (our own position's) time before each capture; the monsters stay at "
+        "--truth-offset-ms (default: the camera at that offset too, as before)",
     )
     collapse_flags(p)
     p.add_argument("--out", type=Path, required=True)

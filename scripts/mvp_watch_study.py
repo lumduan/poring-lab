@@ -229,9 +229,15 @@ def truth_stack(events: list[dict[str, Any]], layout: str, size: tuple[int, int]
 
 
 def truth_row(stack: TruthStack, t: int, frame_id: int | None, offset_ms: float = OFFSET_MS,
-              map_name: str = MAP) -> dict[str, Any]:  # fmt: skip
+              map_name: str = MAP,
+              self_offset_ms: float | None = None) -> dict[str, Any]:  # fmt: skip
     """One capture time ``t``: every monster's predicted sprite box (unclipped), its Timeline
-    state and whether it is in view, at t - 1d (``truth``'s row)."""
+    state and whether it is in view, at t - 1d (``truth``'s row).
+
+    ``self_offset_ms`` (xmas02-detector.md Amendment J, 2026-11-07): the CAMERA (our own position,
+    which the view is centred on) is taken at t - self_offset_ms instead of t - 1d; the monsters
+    stay at t - 1d. ``row["self"]`` stays at t - 1d (the motion split reads it); ``row["camera"]``
+    is the position the scene was built on. None: the camera at t - 1d, as before."""
     from poring_dataset.camera import map_key
     from poring_dataset.labels import ONE_SHOT, STATE_ACTION
     from poring_dataset.render import Actor, MonsterAction, load_scene, predict_sprite
@@ -239,14 +245,19 @@ def truth_row(stack: TruthStack, t: int, frame_id: int | None, offset_ms: float 
     tl, sheets = stack.tl, stack.sheets
     tw = t - int(offset_ms * 1e6)
     world = tl.frame_world(tw)
+    camera = world.self_pos
+    if self_offset_ms is not None:
+        cam = tl.frame_world(t - int(self_offset_ms * 1e6))
+        camera = cam.self_pos if cam.map == world.map else None
     row: dict[str, Any] = {"frame_id": frame_id, "t": t, "map": world.map,
-                           "self": world.self_pos,
+                           "self": world.self_pos, "camera": camera,
                            "flags": frame_flags(t, stack.changes, stack.gm, stack.vanish,
                                                 stack.new),
                            "units": [], "players": 0}  # fmt: skip
-    if world.self_pos is None or not world.map or map_key(world.map) != map_name:
+    if world.self_pos is None or camera is None or not world.map or \
+            map_key(world.map) != map_name:  # fmt: skip
         return row
-    scene = load_scene(stack.camera, world.map, world.self_pos, indoor_table=stack.indoor)
+    scene = load_scene(stack.camera, world.map, camera, indoor_table=stack.indoor)
     for ent in world.entities:
         if ent.hidden:
             continue

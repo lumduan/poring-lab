@@ -458,6 +458,25 @@ def test_the_truth_offset_defaults_to_the_frozen_1d_and_is_reported() -> None:
     assert cfg.truth_offset_ms is None
     src = (ROOT / "scripts" / "detector_vs_packets.py").read_text()
     assert "offset_ms = mws.OFFSET_MS if cfg.truth_offset_ms is None else" in src
-    assert "row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name)" in src
-    assert '"offset_ms": offset_ms, "k": mws.K,' in src
+    assert "row = mws.truth_row(stack, t, None, offset_ms, cfg.map_name, cfg.self_offset_ms)" in src
+    assert '"offset_ms": offset_ms, "self_offset_ms": cfg.self_offset_ms, "k": mws.K,' in src
     assert "truth_offset_ms=a.truth_offset_ms" in src
+
+
+def test_the_camera_offset_is_separate_and_off_by_default() -> None:
+    """Amendment J: --self-offset-ms moves only the scene's centre (our position); None: as
+    before."""
+    import inspect
+
+    import mvp_watch_study as mws
+
+    assert inspect.signature(mws.truth_row).parameters["self_offset_ms"].default is None
+    assert dv.ScoreConfig("m", "hunt", Path("k"), Path("c"), Path("s"), Path("n")).self_offset_ms \
+        is None  # fmt: skip
+    src = (ROOT / "scripts" / "mvp_watch_study.py").read_text()
+    assert "scene = load_scene(stack.camera, world.map, camera, indoor_table=stack.indoor)" in src
+    assert '"self": world.self_pos, "camera": camera,' in src
+    dsrc = (ROOT / "scripts" / "detector_vs_packets.py").read_text()
+    assert "mws.truth_row(stack, t, None, offset_ms, cfg.map_name, cfg.self_offset_ms)" in dsrc
+    assert 'scene = load_scene(stack.camera, row["map"], row["camera"]' in dsrc
+    assert 'moving = before != row["self"]' in dsrc  # the split still reads OUR position
