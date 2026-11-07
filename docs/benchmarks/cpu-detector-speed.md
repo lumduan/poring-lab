@@ -1,13 +1,13 @@
 ---
 doc_type: benchmark
 hypothesis: "The bot's slow boxes (2-4 frames a second) come from the model's CPU inference itself, not from the remote display path: Batt's local-PC run of the teaching kit showed 150-435 ms a frame too."
-status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). The Windows side waits for Batt's --bench output."
+status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). ➡️ 2026-11-07: the lab PC measured too (section 6: i5-10500T best 95.5 ms vs the server's 110.3, same kit and pictures); the GPU measurement (section 5) waits for the worker's quiet window."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done); measure the GPU (how much faster) before the GPU decision; the Windows --bench runs ONCE on the lab PC, by the agent, as an ADR-0019 exception (Batt's choice). Results appended below."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); the GPU measurement (section 5) runs when the vision worker gets its quiet window, then Batt decides GPU vs CPU."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt
