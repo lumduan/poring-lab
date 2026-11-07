@@ -52,6 +52,11 @@ removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails clos
   the rollback). Every other user still calls `UnitDetector()`: v1.
 
 ## The GPU path (Batt 2026-11-07, option A; ADR-0005 Amendment 2026-11-07)
+- ➡️ On bot-server (the Intel Arc, since the 2026-11-07 cutover) the detect server runs on
+  OpenVINO IN the Intel vision worker: `worker:vision@60`, then the step that
+  `.venv/bin/python scripts/unit_detector.py serve-cmd --backend openvino --seconds <run + 10 min>`
+  prints (the pinned ONNX files from the NAS's `archive/models/`). The CUDA `.pt` path below is
+  ubuntu-docker's.
 - `unit_detector.for_map_gpu(map)` = this CPU detector behind the vision worker's GPU detect server
   (`poring_vision.detect_server`): the SAME model's forward pass on the GPU (pinned `.pt` sha256s,
   `GPU_WEIGHTS`), decoded on the host by this worker's own code. Parity on 200 frames: 1.000, the

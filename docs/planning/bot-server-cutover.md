@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: the OpenVINO host environment (the detect server now runs in the Intel worker); building ADR-0023's learner mode (decided by Batt the same night, not built)."
+next_action: "Batt: the go for Phase C (the deletion list in section 4). The agent of record is bot-server's from the final agent push (section 3a). Open: building ADR-0023's learner mode (decided by Batt the same night, not built)."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -204,8 +204,9 @@ RDP; the client stayed closed until the firewall was changed.
   unverifiable". Fixed (92fa93c): only an unreadable process running our code counts.
 - The OpenVINO detect server was designed as a HOST process on bot-server with the Arc test's
   venv in `~/survey`, which went with Batt's approved cleanup; no host environment there has
-  OpenVINO now. It ran IN the Intel worker instead (the image has it). To settle: keep it in the
-  worker (then `serve-cmd --backend openvino` should print that step), or a host venv.
+  OpenVINO now. It ran IN the Intel worker instead (the image has it). ➡️ SETTLED by Batt (~22:3x):
+  the worker. `unit_detector.py serve-cmd --backend openvino --seconds N` prints that guarded
+  step; the two pinned ONNX files live on the NAS in `archive/models/` (SHA256SUMS beside them).
 - bot-server's backend stays HUMAN at a boot (by design); ASSIST is Batt's.
 - Batt's design point (2026-11-07 ~21:5x): servers that permit bots but cannot be packet-verified
   (a community server, a class server a teacher hosts) can never be green today. ➡️ DECIDED by

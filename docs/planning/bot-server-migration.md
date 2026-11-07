@@ -238,7 +238,9 @@ as Batt prefers:
 - **What ran, all on bot-server:**
   - `poring_vision.detect_server --backend openvino --device GPU` with the two DEPLOYED ONNX files
     by their pinned sha256 (`unit_detector.py serve-cmd --backend openvino`), as a plain host
-    process;
+    process; ➡️ SUPERSEDED 2026-11-07 after the cutover (Batt): it runs IN the Intel vision worker
+    (a guarded `execdev:` step, the ONNX from the NAS's `archive/models`): the host venv was in
+    ~/survey, removed with Batt's approval;
   - the bot's own client (`unit_detector.GpuDetector` through `scripts/gpu_live_parity.py`)
     against it, the CPU detector beside it;
   - this morning's 200 frames, from the NAS mount.

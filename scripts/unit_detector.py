@@ -539,16 +539,22 @@ def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
     return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
 
 
-def serve_openvino(device: str = "GPU", env: Path = ENV, socket_path: Path = GPU_SOCKET,
-                   models: Sequence[str] = tuple(GPU_WEIGHTS)) -> list[str]:  # fmt: skip
-    """PURE: the detect server on OpenVINO (ADR-0022; bot-server's Intel Arc), as an argv for a
-    host process: the DEPLOYED ONNX files in ``env``/model, each by its pinned sha256."""
-    argv = ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
-            "--device", device, "--socket", str(socket_path)]  # fmt: skip
+# The deployed ONNX files on the NAS, read-only in the vision worker (/datasets): the OpenVINO
+# detect server runs IN the Intel worker (Batt 2026-11-07, after the cutover: the image has OpenVINO
+# and the Arc; no host environment on bot-server does). SHA256SUMS beside them.
+NAS_MODELS = "/datasets/archive/models"
+
+
+def serve_step_openvino(seconds: int, device: str = "GPU",
+                        models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:  # fmt: skip
+    """PURE: the guarded worker step running the detect server on OpenVINO (ADR-0022; bot-server's
+    Intel Arc): the deployed ONNX of each model from NAS_MODELS, by its pinned sha256."""
+    parts = ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
+             "--device", device, "--socket", SERVER_SOCKET]  # fmt: skip
     for m in models:
         w = GPU_WEIGHTS[m]
-        argv += ["--model", f"{m}={env / 'model' / w.onnx}={w.onnx_sha256}"]
-    return argv
+        parts += ["--model", f"{m}={NAS_MODELS}/{w.onnx}={w.onnx_sha256}"]
+    return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -559,17 +565,16 @@ def main(argv: list[str] | None = None) -> int:
     sc = sub.add_parser("serve-cmd", help="print the guarded_build command for the detect server")
     sc.add_argument("--seconds", type=int, default=0)
     sc.add_argument("--backend", choices=["torch", "openvino"], default="torch",
-                    help="torch: the guarded execdev step (ubuntu-docker's NVIDIA); openvino: a "
-                    "host process (ADR-0022)")  # fmt: skip
+                    help="torch: the CUDA build (NVIDIA); openvino: the Intel worker (ADR-0022); "
+                    "both a guarded execdev step in the vision worker")  # fmt: skip
     sc.add_argument("--device", default="GPU", help="openvino's device")
     a = ap.parse_args(argv)
-    if a.cmd == "serve-cmd" and a.backend == "openvino":
-        print(" ".join(serve_openvino(a.device)))
-    elif a.cmd == "serve-cmd":
+    if a.cmd == "serve-cmd":
         if a.seconds <= 0:
             ap.error("--seconds is needed for the guarded step")
-        print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 "
-              f"'{serve_step(a.seconds)}'")  # fmt: skip
+        step = (serve_step_openvino(a.seconds, a.device) if a.backend == "openvino"
+                else serve_step(a.seconds))  # fmt: skip
+        print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")
     return 0
 
 

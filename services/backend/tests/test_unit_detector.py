@@ -556,9 +556,18 @@ def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
         srv.stop()
 
 
-def test_the_openvino_serve_command_pins_each_onnx(tmp_path: Path) -> None:
-    argv = ud.serve_openvino("GPU", env=tmp_path, socket_path=tmp_path / "d.sock")
-    assert argv[:8] == ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
-                        "--device", "GPU", "--socket"]  # fmt: skip
+def test_the_openvino_serve_step_runs_in_the_worker_and_pins_each_onnx(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Batt 2026-11-07: the OpenVINO server runs IN the Intel worker (a guarded execdev step), the
+    deployed ONNX from the NAS (read-only /datasets), each by its pinned sha256."""
+    step = ud.serve_step_openvino(900)
+    assert step.startswith("execdev:vision@900=python -m poring_vision.detect_server --backend "
+                           "openvino --device GPU --socket /detect/detect.sock")  # fmt: skip
     for name, w in ud.GPU_WEIGHTS.items():
-        assert f"{name}={tmp_path / 'model' / w.onnx}={w.onnx_sha256}" in argv
+        assert f"--model {name}={ud.NAS_MODELS}/{w.onnx}={w.onnx_sha256}" in step
+    assert ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900"]) == 0
+    assert capsys.readouterr().out.strip() == (
+        f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")  # fmt: skip
+    with pytest.raises(SystemExit):
+        ud.main(["serve-cmd", "--backend", "openvino"])  # a time box is required
