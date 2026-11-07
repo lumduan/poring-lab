@@ -25,6 +25,8 @@ def test_env_is_compared_by_salted_hashes_never_values() -> None:
     assert set(s.values()) == {"PASS"}
     s2 = status(mc.env_rows(want, {**tgt, "DB_PASSWORD": "other"}, "salt", "prep"))
     assert s2["env: the values equal (salted hashes)"] == "FAIL"
+    nothing = status(mc.env_rows(want, {}, "salt", "prep"))  # an empty target proves nothing
+    assert nothing["env: the values equal (salted hashes)"] == "FAIL"
 
 
 def test_win_host_empty_before_the_cutover_and_set_after() -> None:

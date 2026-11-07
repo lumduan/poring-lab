@@ -92,7 +92,7 @@ def env_rows(want: Mapping[str, str], have: Mapping[str, str], salt: str,
     same = [k for k in want if k in have and k not in ENV_DIFFERS
             and salted(salt, have[k]) == want[k]]  # fmt: skip
     differ = sorted(k for k in want if k in have and k not in ENV_DIFFERS and k not in same)
-    rows.append(row("env: the values equal (salted hashes)", not differ,
+    rows.append(row("env: the values equal (salted hashes)", not differ and bool(same),
                     f"differ: {differ}" if differ else f"{len(same)} equal"))  # fmt: skip
     rows.append(row("env: HOST_LAN_IP is the target's", have.get("HOST_LAN_IP") == TARGET_IP,
                     f"HOST_LAN_IP={have.get('HOST_LAN_IP')!r}"))  # fmt: skip
