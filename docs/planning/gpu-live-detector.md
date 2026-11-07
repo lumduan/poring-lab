@@ -116,3 +116,40 @@ detect server on the GPU, the host's `GpuDetector`, the deployed models.
   min), any relaxed camera drops, the worst capture stall.
 - **A FAIL of P1 or the acceptance:** no live run on the GPU; the cause is found first. A FAIL of
   P3 or P4: reported, and the pilot waits for a fix.
+
+### 6a. RESULT (2026-11-07 12:26-12:55 ICT): PASS (P1-P4 and the acceptance); pilot p8 may run
+- **The worker:** quiet_start waited 12:26:38-12:36:38 (10 quiet minutes; Frigate left out of the
+  start's gate today), then started it 12:36:39-12:38:44: idle, no CUDA context, worst capture
+  stall 0.3 %. The new mount read back: `/detect <- /dev/shm/poring-lab-detect (rw)`, the
+  directory `drwx------ batt`.
+- **ADR-0005 acceptance inside the worker (12:39:0x):** rows 1 (no X), 2 (the public listener
+  refused, with and without a forged Origin: all 403), 3 (`/internal/agent` works), 5 (the
+  network closed) and **6 (`/detect` is tmpfs, empty)** PASS; row 4 SKIP (no S2 stream), so the
+  script exits 3 as designed (guarded_build prints `FAILED rc=3` for it).
+- **The detect server:** 12:39:56-12:55:01, listening from 12:40:2x with both pinned weights
+  (`v1 03d539796183`, `xmas02 5c5bb67a746b`). The socket was `srw------- batt`, removed at the
+  end. It ended at its 900 s time box (`rc=124`: `timeout` ends a server this way); the stop was
+  verified (the worker idle, nothing of ours on the GPU).
+
+| bar | result | verdict |
+|---|---|---|
+| P1 parity, v1 | 59 CPU / 59 GPU boxes, 59 matched (1.000 / 1.000), largest coordinate difference 0.1 px | PASS |
+| P1 parity, xmas02 (collapsed) | 533 / 533, 533 matched (1.000 / 1.000), 0.1 px | PASS |
+| P2 served | 0 of 400 frames unserved (51 fallbacks while paused, each retried) | PASS |
+| P3 the fallback, live | soak 12:44:09-12:49:08, 599 calls at 2 Hz, every one with boxes. Outside OFF windows 339 / 354 by the GPU (95.8 %); inside them 243 / 245 by the CPU. The GPU served again 3.5 s and 4.1 s after the two unpauses (bar 6 s) | PASS |
+| P4 speed | the GPU call on the host's clock p50 51.8 / 49.1 ms, p95 72.1 / 64.1 ms (v1 / xmas02; bar p50 <= 60) | PASS |
+
+- **The fallbacks' reasons (soak):** 233 `down` (inside the 5-s retry gap: no time lost), 18
+  `BlockingIOError` (a paused server's full backlog refuses the connect at once), 7
+  `TimeoutError` (250 ms lost, then the CPU). A fallback call took 245 ms p50 and 752 ms at most
+  (a timeout, then a CPU detection).
+- **Where the time goes:** the server's own forward (the canvas to the GPU, the forward, the output
+  back) is 37-38 ms p50. That is slower than this morning's ultralytics predict (22-29 ms);
+  the socket and the host's decode add ~11 ms. It still beats 16 CPU threads (194-339 ms) by
+  4-7x. Shortening it is possible later work, not a blocker.
+- **How heavy:** our process held 336 MiB with both models; the card went 3,529 -> 3,870 MiB.
+- **R3:** 2 pairs, neither kept (Frigate's load 14.0 vs 22.0 and 10.5 vs 15.7 detections/s),
+  deltas -0.35 / -0.36 ms: no verdict. No relaxed camera drops. Worst capture stall 22.4 %
+  (quant-ticker-engine), 0 s above the step's 30 %.
+- Scratch: `/dev/shm/poring-lab-tmp/gpu-live/` (parity.json, the logs, the GPU sampler), to the
+  NAS today.
