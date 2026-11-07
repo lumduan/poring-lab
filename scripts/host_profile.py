@@ -76,9 +76,24 @@ def files(*base: str, overlay: tuple[str, ...] = ()) -> list[str]:
     return [arg for name in (*base, *overlay) for arg in ("-f", name)]
 
 
+def ours_unreadable(d: Path) -> bool:
+    """An fdinfo we may not read, of a process of our uid: does it matter? Non-dumpable processes
+    (systemd --user, sd-pam, the SSH session itself) are unreadable by design and never hold our
+    GPU work; one whose command line names our code (`poring`) does matter. A command line we
+    cannot read matters too (fail closed)."""
+    try:
+        return b"poring" in (d / "cmdline").read_bytes()
+    except FileNotFoundError:
+        return False
+    except PermissionError:
+        return True
+
+
 def drm_pids(proc: Path = Path("/proc"), uid: int | None = None) -> list[int] | None:
     """Every process holding a DRM (GPU) file: its fdinfo has a `drm-driver:` line (i915, xe,
-    amdgpu). None when a process of OUR uid cannot be read: the answer would be unverifiable."""
+    amdgpu). None when one of OUR processes running our code cannot be read: the answer would be
+    unverifiable (2026-11-07: failing on ANY unreadable own process made it unanswerable over
+    SSH, whose sshd-session is non-dumpable)."""
     me = os.getuid() if uid is None else uid
     out: list[int] = []
     for d in proc.iterdir():
@@ -90,7 +105,7 @@ def drm_pids(proc: Path = Path("/proc"), uid: int | None = None) -> list[int] | 
         except FileNotFoundError:
             continue  # the process ended
         except PermissionError:
-            if owner == me:
+            if owner == me and ours_unreadable(d):
                 return None
             continue
         for fd in fds:
@@ -99,7 +114,7 @@ def drm_pids(proc: Path = Path("/proc"), uid: int | None = None) -> list[int] | 
             except FileNotFoundError:
                 continue
             except PermissionError:
-                if owner == me:
+                if owner == me and ours_unreadable(d):
                     return None
                 break
             if "\ndrm-driver:" in f"\n{text}":

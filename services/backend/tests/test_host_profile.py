@@ -107,12 +107,18 @@ def test_drm_holders_are_found_and_unreadable_own_processes_are_unverifiable(
         for i, text in enumerate(infos):
             (proc / pid / "fdinfo" / str(i)).write_text(text)
     (proc / "self").mkdir()
+    (proc / "13" / "cmdline").write_bytes(b"python\0-m\0poring_vision.detect_server\0")
+    (proc / "14" / "fdinfo").mkdir(parents=True)
+    (proc / "14" / "cmdline").write_bytes(b"sshd-session: bot@notty\0")
     assert hp.drm_pids(proc) == [12]
-    (proc / "13" / "fdinfo").chmod(0)
+    (proc / "14" / "fdinfo").chmod(0)  # the SSH session: non-dumpable, never our GPU work
     try:
-        if os.access(proc / "13" / "fdinfo", os.R_OK):
+        if os.access(proc / "14" / "fdinfo", os.R_OK):
             pytest.skip("running as root: permissions are not enforced")
-        assert hp.drm_pids(proc) is None  # ours and unreadable: the answer is unverifiable
+        assert hp.drm_pids(proc) == [12]  # skipped: it does not run our code
+        (proc / "13" / "fdinfo").chmod(0)
+        assert hp.drm_pids(proc) is None  # OUR code and unreadable: the answer is unverifiable
         assert hp.drm_pids(proc, uid=os.getuid() + 1) == [12]  # someone else's: skipped
     finally:
         (proc / "13" / "fdinfo").chmod(0o755)
+        (proc / "14" / "fdinfo").chmod(0o755)
