@@ -72,6 +72,8 @@ train and run at full speed without touching this machine's GPU again."
   - ubuntu-docker mounts them by fstab automount (`soft,vers=4.2,timeo=150,retrans=3,noatime`).
   - bot-server has `nfs-common`. Its address is not in the exports yet: Batt's step
     (bot-server-migration.md 9).
+- **The tools:** `scripts/bot_server_sudo.sh` (a root script on bot-server, the password on
+  stdin) and `scripts/guarded_copy.py` (a copy under the IO guard).
 - **sudo on bot-server:**
   - the password is `BOT_SERVER_SUDO_PASSWORD` in `.env`, passed to `sudo -S` on stdin only;
   - root is fine there (Batt: a sandbox);
