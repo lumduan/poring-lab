@@ -70,8 +70,10 @@ train and run at full speed without touching this machine's GPU again."
   - The poring-lab NFS exports: id 7 (datasets, rw), 8 (locale-packs, rw), 9 (thai-client-data,
     ro).
   - ubuntu-docker mounts them by fstab automount (`soft,vers=4.2,timeo=150,retrans=3,noatime`).
-  - bot-server has `nfs-common`. Its address is not in the exports yet: Batt's step
-    (bot-server-migration.md 9).
+  - bot-server has `nfs-common`. ➡️ Since 2026-11-07 15:23, export 7 (datasets) admits
+    192.168.1.228. bot-server mounts it at `/mnt/poring-lab-datasets` with the same options, as an
+    fstab automount (114 MB/s read; bot-server-migration.md 11). Exports 8 and 9 still admit
+    .13 only.
 - **The tools:** `scripts/bot_server_sudo.sh` (a root script on bot-server, the password on
   stdin) and `scripts/guarded_copy.py` (a copy under the IO guard).
 - **sudo on bot-server:**
