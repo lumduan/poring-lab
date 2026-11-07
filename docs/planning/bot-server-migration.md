@@ -233,3 +233,28 @@ as Batt prefers:
   - The first attempt's automatic restore started the loop while the old client still ran.
     Windows moved the session to the new client and the old one exited (one client 5 s later),
     but for those seconds two clients overlapped.
+
+## 14. The live detector on the Arc, the real code (ADR-0022; 2026-11-07 16:56-17:02)
+- **What ran, all on bot-server:**
+  - `poring_vision.detect_server --backend openvino --device GPU` with the two DEPLOYED ONNX files
+    by their pinned sha256 (`unit_detector.py serve-cmd --backend openvino`), as a plain host
+    process;
+  - the bot's own client (`unit_detector.GpuDetector` through `scripts/gpu_live_parity.py`)
+    against it, the CPU detector beside it;
+  - this morning's 200 frames, from the NAS mount.
+- **Result:**
+
+  | | v1 | xmas02 (collapsed) |
+  |---|---|---|
+  | boxes, CPU vs the Arc | 59 / 59 matched (1.000 / 1.000) | 533 / 533 (1.000 / 1.000) |
+  | largest coordinate difference | 0.0 px | 0.0 px |
+  | call, frame to decoded boxes (bot-server's clock), p50 / p95 | 60.1 / 68.6 ms | 59.1 / 65.9 ms |
+
+  - The 60-s soak at 2 Hz: 120 / 120 calls by the GPU (no pause windows on a dedicated host),
+    p50 61.5 ms.
+  - Inside the server a call is 53.9 ms against OpenVINO's 20 ms forward. The rest is most likely
+    the numpy float conversion on bot-server's slower CPU and the 11 MB copy to the card without
+    Resizable BAR. A uint8 input with the conversion on the GPU (OpenVINO's pre-processing) is
+    the next speed-up.
+- **For comparison, ubuntu-docker's RTX path:** 49-52 ms a call, but paused half the time while
+  R3 measures (p9: 911 GPU / 905 CPU detections).
