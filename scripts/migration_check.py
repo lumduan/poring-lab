@@ -217,6 +217,24 @@ def db_counts(env: Mapping[str, str]) -> dict[str, int] | str:
     return counts
 
 
+def db_checksums(env: Mapping[str, str]) -> dict[str, str] | str:
+    """CHECKSUM TABLE of the same key tables: equal data on the same MariaDB (11.8.9 on both hosts)
+    gives equal checksums, so a restore is proven by content, not only by its row counts."""
+    db = env.get("DB_NAME", "ragnarok")
+    sql = "CHECKSUM TABLE " + ", ".join(f"`{db}`.`{t}`" for t in DB_TABLES)
+    cnf = f"[client]\nuser=root\npassword={env.get('DB_ROOT_PASSWORD', '')}\n"
+    code, out = run(["docker", "exec", "-i", "poring-lab-db-1", "mariadb",
+                     "--defaults-extra-file=/dev/stdin", "-N", "-e", sql], stdin=cnf)  # fmt: skip
+    if code != 0:
+        return f"db unreadable (rc {code}): {out.strip()[:120]}"
+    sums: dict[str, str] = {}
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 2:
+            sums[parts[0].split(".", 1)[-1]] = parts[1].strip()
+    return sums
+
+
 def count(d: Path) -> int:
     return len(list(d.glob("*"))) if d.exists() else 0
 
@@ -287,7 +305,8 @@ def make_manifest(hash_data: bool) -> dict[str, Any]:
         | {"data": tree(REPO / "data", REPO, hash_data)},
         "cache": tree(HOME / ".cache" / "poring-lab", HOME / ".cache" / "poring-lab", True),
         "runtime": {n: runtime_tree(n) for n in RUNTIME},
-        "db": db_counts(env), "claude": claude_side(PROJECT_KEYS["source"]),
+        "db": db_counts(env), "db_checksums": db_checksums(env),
+        "claude": claude_side(PROJECT_KEYS["source"]),
         "images": source_images(),
     }  # fmt: skip
 
@@ -349,6 +368,13 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
         rows.append(row("db: every key table's exact row count equal", ok,
                         f"{sum(want.values())} rows in {len(want)} tables" if ok and
                         isinstance(want, dict) else f"have {have} want {want}"[:200]))  # fmt: skip
+        have_s, want_s = db_checksums(env), manifest.get("db_checksums")
+        ok_s = isinstance(have_s, dict) and isinstance(want_s, dict) and bool(want_s) \
+            and have_s == want_s  # fmt: skip
+        diff = sorted(t for t in (want_s or {}) if isinstance(have_s, dict)
+                      and have_s.get(t) != (want_s or {}).get(t))  # fmt: skip
+        detail = f"{len(want_s or {})} tables" if ok_s else f"differ {diff or have_s}"[:200]
+        rows.append(row("db: every key table's CHECKSUM TABLE equal (the content)", ok_s, detail))
     else:
         rows.append(row("db: row counts (at the cutover)", None, "phase prep"))
     rows.append(row("GPU: the Intel render node usable", os.access("/dev/dri/renderD128", os.R_OK
