@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Moving our GPU work (training first, then the live detector) to the dedicated bot-server (192.168.1.228, Intel Arc A380) stops our jobs from touching the shared host's GPU (Frigate) and disk (quant capture), without moving the live loop."
-status: "SURVEYED 2026-11-07 14:18-14:50 ICT (a read-only survey plus user-space test installs on bot-server). The CPU is measured; the Arc is NOT, because user `bot` lacks the render group. Recommended shape: A (GPU offload). Batt decides (section 7). Sudo there: section 8 (the password is in .env; Batt sets it)."
+status: "A1 APPROVED 2026-11-07 (Batt: 'move it; that is why this machine exists'). The Arc A380 test PASSED 15:05-15:09 ICT (section 9): OpenVINO FP32 boxes = CPU boxes, 41-42 ms a call; PyTorch XPU + ultralytics train. Waiting on Batt: the NFS export for .228 and the DHCP reservation (section 10). The agent's knowledge is on bot-server (docs/operations/bot-server-handover.md)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [gpu-live-detector.md, endpoints-as-config.md, ../benchmarks/cpu-detector-speed.md, ../adr/0005-vision-x-access.md, ../operations/nas-sink.md]
-next_action: "Batt sets user bot's password on bot-server to .env's BOT_SERVER_SUDO_PASSWORD (section 8); then an agent, with sudo: bot into render + video, the Intel runtime system-wide, the staged GPU test (/home/bot/survey/scripts/gpu_run.sh, ~5-10 min: OpenVINO on the Arc vs the CPU boxes, PyTorch XPU training), nfs-common and a read-only NFS mount try. Its numbers decide A1 / A2."
+next_action: "Batt: add 192.168.1.228 to NFS export 7 and reserve .228 in DHCP. Then the agent: the read-only datasets mount on bot-server, an XPU device path in poring_vision (train.py / gpu.py), a trainer runner for a host that is not shared, and a first training run there pre-registered against the RTX 5060 Ti."
 title: "Moving the bot's GPU work to bot-server: survey and options"
 date: 2026-11-07
 owner: Batt
@@ -136,3 +136,40 @@ owner: Batt
   never on an argv, in a log or in a report.
 - Root on bot-server is allowed (a sandbox). Still out of bounds: other machines, the NAS's
   configuration, the router, and network changes that reach beyond bot-server.
+
+## 9. The Arc A380 test (2026-11-07 15:04-15:09 ICT): PASS
+- **Enabled first (with sudo, Batt's password from .env):** `bot` into render + video; the Intel
+  compute runtime system-wide (intel-opencl-icd / libze-intel-gpu1 26.05.37020.3, libze1 1.28.2,
+  clinfo, intel-gpu-tools) and nfs-common (2.8.5). OpenCL lists "Intel(R) Arc(TM) A380
+  Graphics" (it warns that Resizable BAR is absent).
+- **Inference, OpenVINO 2026.4.1 on the Arc** (the same 50 frames and our own decode; p50 / p95
+  ms; the "call" is letterbox + forward + decode, the decode on bot-server's CPU):
+
+  | | v1 call | v1 forward | xmas02 call | xmas02 forward | boxes vs the CPU |
+  |---|---|---|---|---|---|
+  | FP32 | 42.2 / 45.8 | 20.1 / 21.4 | 41.3 / 46.8 | 19.6 / 20.7 | 15 / 15 and 137 / 137, 0.0 px |
+  | FP16 | 35.5 / 41.0 | 15.5 / 18.6 | 35.0 / 40.8 | 15.1 / 18.0 | 15 / 15 and 137 / 137, <= 1.0 px |
+
+  - The compiled model loads in 1.41 s from its cache.
+  - For comparison: the RTX 5060 Ti's bare forward is ~18-20 ms, and its live socket call 49-52
+    ms (gpu-live-detector.md 6a). bot-server's own CPU: 111-115 ms (section 2).
+- **Training:**
+  - PyTorch 2.15.0+xpu sees the card (5.65 GiB). A YOLO11n forward + backward at batch 4 on
+    736 x 1280 takes 513 ms (AMP 515 ms), with 2.0 GiB allocated (AMP 1.1).
+  - ultralytics 8.4.165 trains with `device="xpu"` (trainer device `xpu:0`): 2 epochs of 16
+    synthetic 1280-px images at batch 4 in 78.3 s, 4.12 GB of GPU memory shown.
+  - How that compares with the 5060 Ti on a real cache is not measured: the first real run is
+    pre-registered against it.
+
+## 10. Batt's decisions (2026-11-07 ~15:0x, answering the 14:53 report)
+- **A1, training on bot-server: APPROVED**, and later the whole lab ("that is why this machine
+  exists ... once the GPU test passes, we train and run fully without touching that machine's
+  GPU").
+- **Before the move, transfer the agent's knowledge, the whole history included:** done,
+  docs/operations/bot-server-handover.md.
+- **Waiting on Batt** (the agent cannot do these):
+  - the NFS export: the agent's `midclt call sharing.nfs.update 7` (adding 192.168.1.228 to the
+    datasets export's hosts) was DENIED by Claude Code's auto-mode classifier at 15:0x. Nothing
+    changed on the NAS: its "before" reading was export 7 = `["192.168.1.13"]`, Frigate started
+    2026-10-13T03:48:02Z with 0 restarts. Batt runs it, or allows it;
+  - the DHCP reservation for 192.168.1.228: the agent has no access to the router.

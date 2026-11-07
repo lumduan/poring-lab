@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "S1 (4O, 2026-11-07): the locks are not missed hits -- 9 of 23 strikes killed (then ~4 s of idle lock: the client shows no exp line, the runner never sees a kill), 9 were Myst Cases that TELEPORTED (rude-attacked by an immune Rogue, most likely), 4 clicks started no attack; walking-triggered box fights strike 18 % vs 48 % standing. Batt decides immunity on xmas_dun02; then pre-register the next runner change (fight end + kill from pixels, Myst Case handling)."
+next_action: "Batt 2026-11-07: immunity OFF on xmas_dun02 and Myst Cases stay targets (they matter for Steal). Pre-register pilot p9 (no immunity; the fight end on 2.0 s without a damage line after the first hit is a candidate, S1 follow-ups), then run it. S1 (4O): the locks were fights already over; 9 of 23 strikes were Myst Case teleports under immunity."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1199,3 +1199,9 @@ unlock; the runner could not see it end.**
     0.94 s); the first hit at most 1.41 s after the click. With the reader's lag (p95 0.86 s), "no
     damage line for 2.0 s AFTER the first hit" would end a fight ~2 s sooner than today's 3.5 s
     and would have cut none of these 19. A candidate for the next pre-registration.
+
+**Batt's decisions on S1 (2026-11-07 ~15:0x ICT):** "Turn immunity OFF, and do not skip Myst Case:
+it is the map's important monster; what it gives to Steal sells for a high price." So the next
+pilot runs the Rogue NOT immune on xmas_dun02 and keeps Myst Cases as targets. Its pre-registration
+(next) states the bars, the death handling (the runner's potions, its Fly Wing escape, and what a
+death does to the run) and the Myst Case fights' count (by species from the packets).

@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Keep the import boundary (test_guards) green (GREEN again since d436cc6, route A). The repository IS PUBLIC; the publication checklist was re-run 2026-11-07 (section at the end). Open for Batt: whether to rewrite history to drop the removed GPL port (paths.py).
+next_action: Keep the import boundary (test_guards) green (GREEN again since d436cc6, route A). The repository IS PUBLIC; the publication checklist was re-run 2026-11-07 (section at the end). The removed GPL port stays in history, labelled (Batt 2026-11-07).
 ---
 
 # ADR-0018: Component licensing (AGPL-3.0 where ultralytics is imported, Apache-2.0 elsewhere)
@@ -93,6 +93,7 @@ commits, 1,229 paths ever committed): what anyone can download, with no read of 
      sizes, sha256) are protocol facts and checksums.
    - Not done, Batt's decision: rewriting history to drop `paths.py` (`git filter-repo` + a force
      push). It would change every commit SHA from 2026-10-02 on, and every document that cites one.
+     ➡️ **DECIDED 2026-11-07 (Batt: "do as recommended"): keep the history, labelled GPL-3.0.**
 3. **Attributions:** every port the code names (nostalro-client, korangar, RagLite) has its row; the
    licensed dependencies' versions in THIRD_PARTY.md equal the pins (ultralytics 8.4.165, -thop
    2.2.1, -platform 0.1.70, torch 2.14.0+cu130 / torchvision 0.29.0+cu130 in `uv.lock`; blockly
