@@ -1,13 +1,13 @@
 ---
 doc_type: benchmark
 hypothesis: "The bot's slow boxes (2-4 frames a second) come from the model's CPU inference itself, not from the remote display path: Batt's local-PC run of the teaching kit showed 150-435 ms a frame too."
-status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). ➡️ 2026-11-07: the lab PC measured too (section 6: i5-10500T best 95.5 ms vs the server's 110.3, same kit and pictures); the GPU measurement (section 5) waits for the worker's quiet window."
+status: "MEASURED 2026-11-06 21:47-21:56 ICT on the lab server (Xeon E5-2695 v4, 64 logical CPUs) while the xmas02 training ran beside it (load average 10 -> 38). ➡️ 2026-11-07: the lab PC measured too (section 6: i5-10500T best 95.5 ms vs the server's 110.3, same kit and pictures); the GPU (section 7): ~22-24 ms a detection, ~8-9x the 16-thread CPU; its parity and Frigate cost not measured (an R3-HARD camera-drop abort)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); the GPU measurement (section 5) runs when the vision worker gets its quiet window, then Batt decides GPU vs CPU."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); the GPU measured (section 7: ~8-9x faster); Batt decides GPU vs CPU, and whether the parity + Frigate-cost run is retried."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt
@@ -150,4 +150,39 @@ boxes a picture.
 - The server's numbers above ran from the RAM detector env. That env has no OpenCV, so the bench's
   one `cv2.imread` was a stand-in returning the same JPEGs decoded once by Pillow; the timed code is
   the kit's own.
+
+## 7. The GPU measurement: RESULT (2026-11-07 09:08-09:17 ICT; section 5's plan, unchanged)
+
+The vision worker started at 09:06:03, through quiet_start (it had waited since 06:17:51: Frigate's
+own bursts restarted the 10-min clock 172 times). Its start's worst capture stall was 2.9 %.
+`execdev:vision` ran from 09:08:27.
+
+**Phase A finished; phase B was ABORTED at 09:16:34 by R3-HARD.** Camera cam-1-01-font-s dropped
+frames for 32 s (skipped_fps 2.9; five cameras skipping; fleet 90.1 detections/s). Our container had
+been PAUSED (R3's OFF window) since 09:15:34, so the GPU held nothing of ours when the drop happened.
+The same camera named all four hard aborts of 2026-10-25 and kept dropping after our stop then
+(memory: cam-1-01-font-s drops on its own). The stop was VERIFIED at 09:16:37, and the worker stopped
+(guarded `worker-stop:vision`) at 09:17:30. Not retried: the stop is absolute; a retry is Batt's call.
+
+| model, precision | GPU: call to boxes, p50 / p95 (n 200, 0 paused) | of which inference p50 | CPU 16 threads, same frames, 06:18 |
+|---|---|---|---|
+| v1 FP32 | **21.8 / 28.0 ms** | 16.6 ms | 194.2 / 237.7 ms |
+| v1 FP16 | 24.1 / 32.0 ms | 19.2 ms | - |
+| xmas02 FP32 | **24.0 / 31.0 ms** | 17.5 ms | 212.0 / 338.6 ms |
+| xmas02 FP16 | 27.5 / 31.9 ms | 20.7 ms | - |
+
+- **The GPU is ~8-9x faster at p50 and ~8-11x at p95** than 16 CPU threads on this server: ~22-24 ms a
+  detection instead of ~194-212 ms. The CPU was measured at load 14-23, the GPU beside Frigate's
+  three detectors.
+- **FP16 is no faster** for a model this small: the call is dominated by the fixed costs. The
+  preprocess (~3 ms) and the postprocess (1-2.5 ms) are inside the wall time.
+- **Not measured (lost to the abort; the file is written only at the end):**
+  - the bare forward pass;
+  - the parity of the GPU boxes with the CPU's (`scripts/gpu_parity.py` waits for a full run);
+  - phase B's cost to Frigate. One R3 pair only, not kept (load 8.8 vs 6.1 det/s): ON 26.96 vs OFF
+    23.03 ms.
+- **Not in these numbers:** a live GPU path also needs the frame route from the host bot into the
+  worker (section 5). Even so, it would cut p7's grab-to-hover time (rogue-xmas02.md) by ~0.2-0.3 s
+  a detection.
+- The printed phase A lines and the step's log: `scratch-archive/2026-11-07/gpu-bench/`.
 
