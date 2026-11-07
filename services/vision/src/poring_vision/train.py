@@ -187,15 +187,16 @@ def main() -> int:  # noqa: PLR0915
         raise SystemExit("--trace / --die-after-batches need --mid-ckpt")
     t0 = time.monotonic()
 
+    from poring_vision import accel
     from poring_vision.gpu import configure_gpu
 
     fraction = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))
-    device = configure_gpu(fraction)
+    acc = accel.current()  # any vendor (ADR-0022): $PORING_ACCEL, else the first available
+    device = configure_gpu(fraction, acc)
     if device is None:
         raise SystemExit("no GPU: training needs the card (the cap is set first)")
 
     import cv2
-    import torch
     import ultralytics.data.base as ul_base
     from ultralytics.data.dataset import YOLODataset
     from ultralytics.models.yolo.detect import DetectionTrainer
@@ -276,7 +277,8 @@ def main() -> int:  # noqa: PLR0915
         "model": str(a.weights), "data": "shards", "imgsz": a.imgsz,
         "epochs": 3 if a.smoke else a.epochs, "batch": a.batch, "workers": a.workers,
         "project": str(a.project), "name": name, "exist_ok": True, "plots": False,
-        "device": 0, "seed": a.seed, "cache": False, "amp": True, "verbose": False,
+        "device": acc.ultralytics_device, "seed": a.seed, "cache": False, "amp": True,
+        "verbose": False,
     }  # fmt: skip
     if a.close_mosaic is not None:
         overrides["close_mosaic"] = a.close_mosaic
@@ -287,7 +289,7 @@ def main() -> int:  # noqa: PLR0915
         n = len(splits["train"])
         nb = -(-n // a.batch)
         run = {"n": n, "nb": nb, "batch": a.batch,
-               "workers": effective_workers(a.workers, nb, torch.cuda.device_count())}  # fmt: skip
+               "workers": effective_workers(a.workers, nb, acc.device_count())}  # fmt: skip
         if a.close_mosaic is not None:  # else the checkpoint's own value is used
             run["close_mosaic"] = a.close_mosaic
         overrides["resume"] = str(resume_checkpoint(a, run_dir, overrides["epochs"], run))
@@ -346,8 +348,8 @@ def main() -> int:  # noqa: PLR0915
         "step_sleep_ms": a.step_sleep_ms,
         "metrics": {k: round(float(v), 4) for k, v in (trainer.metrics or {}).items()},
         "ap50_per_class": per_class,
-        "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 2**20, 1),
-        "cap_mib": round(torch.cuda.get_device_properties(0).total_memory * fraction / 2**20, 1),
+        "accelerator": accel.describe(acc), "peak_vram_mib": acc.peak_mib(),
+        "cap_mib": None if acc.total_mib() is None else round(acc.total_mib() * fraction, 1),
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
     print(json.dumps(summary), flush=True)
@@ -401,8 +403,11 @@ def evaluate(
 ) -> int:
     """Validate saved weights on one split (or some of its sessions) through ultralytics' own
     validator: its dataset is our ShardDataset, its data dict ours (no files, nothing written)."""
-    import torch
     import ultralytics.engine.validator as ul_validator
+
+    from poring_vision import accel
+
+    acc = accel.current()  # main() configured it already (configure_gpu)
     from ultralytics import YOLO
     from ultralytics.models.yolo.detect import DetectionValidator
     from ultralytics.utils import colorstr
@@ -422,7 +427,7 @@ def evaluate(
     DetectionValidator.build_dataset = build_dataset
     model = YOLO(str(a.eval))
     metrics = model.val(data="shards", imgsz=a.imgsz, batch=a.batch, workers=a.workers,
-                        device=0, plots=False, split="val", verbose=False,
+                        device=acc.ultralytics_device, plots=False, split="val", verbose=False,
                         project=str(a.project), name="eval", exist_ok=True)  # fmt: skip
     box = metrics.box
     per_class = {names.get(int(c), str(c)): {"ap50": round(float(box.ap50[j]), 4),
@@ -434,8 +439,8 @@ def evaluate(
         "mAP50-95": round(float(box.map), 4), "precision": round(float(box.mp), 4),
         "recall": round(float(box.mr), 4), "per_class": per_class,
         "inference_ms_per_image": round(float(metrics.speed.get("inference", 0.0)), 2),
-        "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 2**20, 1),
-        "cap_mib": round(torch.cuda.get_device_properties(0).total_memory * fraction / 2**20, 1),
+        "accelerator": accel.describe(acc), "peak_vram_mib": acc.peak_mib(),
+        "cap_mib": None if acc.total_mib() is None else round(acc.total_mib() * fraction, 1),
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
     print(json.dumps(summary), flush=True)

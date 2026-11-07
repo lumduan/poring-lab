@@ -1,32 +1,32 @@
-"""GPU setup for a container that SHARES the card with Frigate (NVR) and Ollama."""
+"""GPU setup: this host's accelerator, any vendor (ADR-0022), capped when the host is shared."""
+
+from __future__ import annotations
 
 import logging
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 
-def configure_gpu(max_vram_fraction: float) -> str | None:
-    """Cap this process's VRAM and log what the torch build supports. Returns a device string, or
-    None when CUDA is unavailable (the loop still runs; detection would fall back to CPU)."""
-    import torch
+def configure_gpu(max_vram_fraction: float, acc: Any = None) -> str | None:
+    """Pick the host's accelerator (``accel.current()``: $PORING_ACCEL, else the first of CUDA, XPU,
+    MPS), cap this process's device memory at ``max_vram_fraction`` (R1 on a SHARED host: the GPU
+    there also runs Frigate's detectors), and log what it is. Returns torch's device string
+    ("cuda:0", "xpu:0", "mps"), or None when only the CPU is there."""
+    from poring_vision import accel
 
-    if not torch.cuda.is_available():
-        log.warning("CUDA unavailable (torch %s); running without a GPU", torch.__version__)
+    acc = acc if acc is not None else accel.current()
+    if acc.kind == "cpu":
+        log.warning("no accelerator (%s); running without a GPU", accel.describe(acc))
         return None
-    # Hard cap so a runaway allocation can never starve Frigate's detectors on the same card.
-    torch.cuda.set_per_process_memory_fraction(max_vram_fraction, 0)
-    major, minor = torch.cuda.get_device_capability(0)
-    arch = f"sm_{major}{minor}"
-    arches = torch.cuda.get_arch_list()
-    log.info(
-        "GPU %s (%s), torch %s CUDA %s, arch list %s, VRAM cap %.0f%%",
-        torch.cuda.get_device_name(0),
-        arch,
-        torch.__version__,
-        torch.version.cuda,
-        arches,
-        max_vram_fraction * 100,
-    )
-    if arch not in arches:
-        log.error("this torch build has no %s kernels -- expect 'no kernel image' errors", arch)
-    return "cuda:0"
+    capped = acc.cap(max_vram_fraction)
+    log.info("accelerator %s, memory cap %s", accel.describe(acc),
+             f"{max_vram_fraction * 100:.0f}%" if capped else "none")  # fmt: skip
+    t = acc.torch
+    if acc.kind == "cuda" and not getattr(getattr(t, "version", None), "hip", None):
+        # NVIDIA: this torch build must carry the card's architecture (cu126 had no sm_120)
+        major, minor = t.cuda.get_device_capability(acc.index)
+        arch = f"sm_{major}{minor}"
+        if arch not in t.cuda.get_arch_list():
+            log.error("this torch build has no %s kernels -- expect 'no kernel image' errors", arch)
+    return str(acc.device)

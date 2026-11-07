@@ -40,6 +40,7 @@ from typing import Any
 
 import numpy as np
 
+from poring_vision import accel
 from poring_vision.resume import (
     MID_META_KEYS,
     MID_VERSION,
@@ -300,7 +301,8 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                 "buf": list(self._poring_buf), "rng": {
                     "python": random.getstate(), "numpy": np.random.get_state(),
                     "torch": torch.get_rng_state(),
-                    "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []},
+                    # the key keeps its old name; it holds the device RNG of any vendor (ADR-0022)
+                    "cuda": accel.current().rng_state()},
                 "state_sha256": sha,
                 **{k: v for k, v in state.items() if k != "ema"},  # the EMA: the module below
             }  # fmt: skip
@@ -429,8 +431,7 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                 random.setstate(res["rng"]["python"])
                 np.random.set_state(res["rng"]["numpy"])
                 torch.set_rng_state(res["rng"]["torch"])
-                if res["rng"]["cuda"] and torch.cuda.is_available():
-                    torch.cuda.set_rng_state_all(res["rng"]["cuda"])
+                accel.current().set_rng_state(res["rng"]["cuda"])
             self._poring_buf = list(res["buf"]) if res is not None else []  # poring
             # poring: the epoch whose first batch an uninterrupted run starts on a fresh worker
             # (close_mosaic's reset): its buffer is empty there, not carried over

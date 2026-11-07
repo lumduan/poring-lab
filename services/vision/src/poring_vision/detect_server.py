@@ -5,6 +5,8 @@ Amendment 2026-11-07: Batt "เลือก A" and "อนุมัติให�
         --model v1=/datasets/archive/train/v1png-20261008/weights/last.pt=<sha256> \\
         --model xmas02=/datasets/archive/train/xmas02-20261106/weights/last.pt=<sha256> \\
         [--imgsz 736 1280] [--max-hz 10]
+    python -m poring_vision.detect_server --backend openvino --device GPU --socket SOCK \\
+        --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # any vendor (ADR-0022)
 
 It runs only as a guarded ``execdev:vision`` step inside the long-lived worker (R1-R3: the VRAM
 cap, the paired pause windows, the IO guard). ``scripts/unit_detector.py serve-cmd`` prints the
@@ -86,8 +88,41 @@ def file_sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def to_input(canvas: np.ndarray) -> np.ndarray:
+    """The canvas -> (1, 3, H, W) float32 RGB in 0..1: scripts/detector_worker.to_input's formula
+    (the host's CPU path), so an ONNX here sees exactly what the CPU worker feeds it."""
+    x = canvas[..., ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+    return np.ascontiguousarray(x)
+
+
+class OvNet:
+    """The DEPLOYED ONNX itself on OpenVINO (ADR-0022: Intel's GPU or any OpenVINO device), FP32 by
+    default: the same file as the host's CPU detector, so only the forward differs."""
+
+    def __init__(self, path: str, sha256: str, device: str = "GPU",
+                 imgsz: tuple[int, int] = IMGSZ, precision: str = "f32") -> None:  # fmt: skip
+        got = file_sha256(path)
+        if got != sha256:
+            raise SystemExit(f"{path}: sha256 {got[:12]}... is not the pinned {sha256[:12]}...")
+        import openvino as ov
+
+        self.sha256 = sha256
+        core = ov.Core()
+        cfg = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": precision}
+        self.compiled = core.compile_model(core.read_model(path), device, cfg)
+        self.req = self.compiled.create_infer_request()
+        y = self.forward(np.full((*imgsz, 3), 114, np.uint8))
+        self.shape = (int(y.shape[0]), int(y.shape[1]), int(y.shape[2]))
+
+    def forward(self, canvas: np.ndarray) -> np.ndarray:
+        self.req.infer({0: to_input(canvas)})
+        out = self.req.get_output_tensor(0).data
+        return np.ascontiguousarray(out, dtype="<f4")
+
+
 class TorchNet:
-    """One YOLO checkpoint's fused model on the GPU, FP32 (bench_gpu's forward)."""
+    """One YOLO checkpoint's fused model on the host's torch accelerator (any vendor, ADR-0022),
+    FP32 (bench_gpu's forward)."""
 
     def __init__(self, path: str, sha256: str, device: str,
                  imgsz: tuple[int, int] = IMGSZ) -> None:  # fmt: skip
@@ -97,7 +132,10 @@ class TorchNet:
         import torch
         from ultralytics import YOLO
 
+        from poring_vision import accel
+
         self.torch, self.device, self.sha256 = torch, device, sha256
+        self.acc = accel.current()
         self.net = YOLO(path).model.fuse().to(device).eval()
         with torch.inference_mode():
             for _ in range(5):  # warm the kernels; the shape comes from the first call
@@ -114,7 +152,7 @@ class TorchNet:
     def forward(self, canvas: np.ndarray) -> np.ndarray:
         with self.torch.inference_mode():
             y = self._run(canvas)
-            self.torch.cuda.synchronize()
+            self.acc.synchronize()
         return np.ascontiguousarray(y.float().cpu().numpy(), dtype="<f4")
 
 
@@ -281,16 +319,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", action="append", required=True, help="NAME=PATH=SHA256")
     ap.add_argument("--imgsz", type=int, nargs=2, default=list(IMGSZ))
     ap.add_argument("--max-hz", type=float, default=MAX_HZ)
+    ap.add_argument("--backend", choices=["torch", "openvino"], default="torch",
+                    help="torch: the .pt on the torch accelerator; openvino: the ONNX")  # fmt: skip
+    ap.add_argument("--device", default="GPU", help="--backend openvino's device (GPU, CPU, ...)")
     a = ap.parse_args(argv)
     models = parse_models(a.model)
     imgsz = (int(a.imgsz[0]), int(a.imgsz[1]))
+    nets: dict[str, Net]
+    if a.backend == "openvino":
+        nets = {name: OvNet(path, sha, a.device, imgsz) for name, (path, sha) in models.items()}
+    else:
+        from poring_vision.gpu import configure_gpu
 
-    from poring_vision.gpu import configure_gpu
-
-    device = configure_gpu(float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")))
-    if device is None:
-        raise SystemExit("no GPU: nothing to serve (the host's CPU detector serves alone)")
-    nets = {name: TorchNet(path, sha, device, imgsz) for name, (path, sha) in models.items()}
+        device = configure_gpu(float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")))
+        if device is None:
+            raise SystemExit("no GPU: nothing to serve (the host's CPU detector serves alone)")
+        nets = {name: TorchNet(path, sha, device, imgsz) for name, (path, sha) in models.items()}
     srv = Server(a.socket, nets, imgsz, a.max_hz)
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: srv.stop.set())

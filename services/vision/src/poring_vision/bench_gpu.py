@@ -8,7 +8,8 @@
 
 Phase A, per model and precision (FP32, FP16): ``--warmup`` predicts, then one predict per frame
 of ``--refs`` (predict_dir's tar-shard refs, decoded to BGR before the clock starts), each timed
-from the call to the boxes on the host (``torch.cuda.synchronize``), with ultralytics' own split
+from the call to the boxes on the host (the accelerator's synchronize, any vendor: ADR-0022),
+with ultralytics' own split
 (preprocess / inference / postprocess). The boxes are kept (``--keep-boxes``) so the host can check
 them against the CPU ONNX path. Also the bare forward pass on one fixed 1 x 3 x 736 x 1280 tensor.
 Phase B (optional): one model at ``--rate`` predicts a second for ``--sustain-s``, the live load a
@@ -100,7 +101,10 @@ def main(argv: list[str] | None = None) -> int:
     import torch
     from ultralytics import YOLO
 
-    sync = torch.cuda.synchronize
+    from poring_vision import accel
+
+    acc = accel.current()
+    sync = acc.synchronize
     frames: list[tuple[str, Any]] = []
     for key, ref in load_refs(a.refs).items():
         img = cv2.imdecode(np.frombuffer(read_ref(ref), np.uint8), cv2.IMREAD_COLOR)
@@ -109,8 +113,8 @@ def main(argv: list[str] | None = None) -> int:
         frames.append((key, img))
     out: dict[str, Any] = {
         "what": "bench_gpu (Batt 2026-11-07): detection time on the GPU, per model and precision",
-        "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
-        "cuda": torch.version.cuda, "imgsz": list(IMGSZ), "conf": CONF, "iou": IOU,
+        "gpu": acc.name(), "accelerator": accel.describe(acc), "torch": torch.__version__,
+        "imgsz": list(IMGSZ), "conf": CONF, "iou": IOU,
         "frames": len(frames), "refs": str(a.refs), "started": time.strftime("%FT%T%z"),
         "vram_fraction": float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")),
         "runs": {}, "forward": {},
@@ -125,11 +129,11 @@ def main(argv: list[str] | None = None) -> int:
 
             def call(img: Any, model: Any = model, half: bool = half) -> Any:
                 return model.predict(img, imgsz=list(IMGSZ), conf=CONF, iou=IOU, half=half,
-                                     device=0, verbose=False)[0]  # fmt: skip
+                                     device=acc.ultralytics_device, verbose=False)[0]  # fmt: skip
 
             for _k, img in frames[: a.warmup]:
                 timed(lambda img=img: call(img), sync)
-            torch.cuda.reset_peak_memory_stats(0)
+            acc.reset_peak()
             walls: list[float] = []
             speeds: list[dict[str, float]] = []
             boxes: dict[str, list[list[Any]]] = {}
@@ -143,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                                    names[int(c)]] for xy, c, p in zip(
                         b.xyxy.tolist(), b.cls.tolist(), b.conf.tolist(), strict=True)]  # fmt: skip
             out["runs"][tag] = {**summarise(walls, speeds), "per_frame_ms": walls,
-                                "peak_vram_mib": round(torch.cuda.max_memory_allocated(0) / 2**20),
+                                "peak_vram_mib": acc.peak_allocated_mib(),
                                 **({"boxes": boxes} if a.keep_boxes else {})}  # fmt: skip
             brief = {k: v for k, v in out["runs"][tag].items()
                      if k.endswith("_ms") and k != "per_frame_ms"}  # fmt: skip
@@ -159,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
                 fw = [timed(lambda net=net, x=x: net(x), sync)[1] for _ in range(a.forward_n)]
             out["forward"][tag] = timing_summary(split_paused(fw)[0])
             del model, net
-            torch.cuda.empty_cache()
+            acc.empty_cache()
     if a.sustain_model is not None and a.sustain_s > 0:
         model = YOLO(weights[a.sustain_model])
         half = bool(a.sustain_half)
@@ -170,9 +174,9 @@ def main(argv: list[str] | None = None) -> int:
         while time.monotonic() < t_end:
             t = time.monotonic()
             img = frames[i % len(frames)][1]
-            _r, ms = timed(lambda img=img: model.predict(img, imgsz=list(IMGSZ), conf=CONF,
-                                                         iou=IOU, half=half, device=0,
-                                                         verbose=False), sync)  # fmt: skip
+            _r, ms = timed(lambda img=img, dev=acc.ultralytics_device: model.predict(
+                img, imgsz=list(IMGSZ), conf=CONF, iou=IOU, half=half, device=dev,
+                verbose=False), sync)  # fmt: skip
             walls.append(round(ms, 3))
             i += 1
             time.sleep(max(0.0, period - (time.monotonic() - t)))

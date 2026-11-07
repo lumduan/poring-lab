@@ -528,3 +528,37 @@ def test_the_deployed_gpu_weights_and_the_server_step() -> None:
         assert f"--model {name}={w.path}={w.sha256}" in step
     assert str(ud.GPU_SOCKET) == "/dev/shm/poring-lab-detect/detect.sock"
     assert os.path.basename(ud.SERVER_SOCKET) == ud.GPU_SOCKET.name
+
+
+def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
+    worker: Path, tmp_path: Path, private: Path
+) -> None:
+    """ADR-0022: a vendor-neutral backend runs the ONNX itself; its pinned sha256 is accepted, any
+    other is refused (the GPU turns off for the run)."""
+    sock = private / "detect.sock"
+
+    srv = FakeServer(sock, ONE_MONSTER)
+    try:
+        pinned = ud.GPU_WEIGHTS["v1"]
+        assert pinned.onnx == "v1png-last-736x1280.onnx" and pinned.onnx_sha256.startswith(
+            "32b448a1"
+        )
+        assert ud.GPU_WEIGHTS["xmas02"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            det.spec = ud.GpuWeights(pinned.path, "b" * 64, pinned.onnx, pinned.sha256)
+            det.detect(FRAME)  # the server says the .pt sha; it is the "onnx" pin here: accepted
+            assert det.last_path == "gpu"
+            det._drop()
+            det.spec = ud.GpuWeights(pinned.path, "b" * 64, pinned.onnx, "c" * 64)
+            det.detect(FRAME)  # neither pin: refused
+            assert det.disabled is not None and "sha256 in" in det.disabled
+    finally:
+        srv.stop()
+
+
+def test_the_openvino_serve_command_pins_each_onnx(tmp_path: Path) -> None:
+    argv = ud.serve_openvino("GPU", env=tmp_path, socket_path=tmp_path / "d.sock")
+    assert argv[:8] == ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
+                        "--device", "GPU", "--socket"]  # fmt: skip
+    for name, w in ud.GPU_WEIGHTS.items():
+        assert f"{name}={tmp_path / 'model' / w.onnx}={w.onnx_sha256}" in argv

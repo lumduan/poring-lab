@@ -94,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--timing", action="store_true", help="per-frame wall ms + p50 / p95")
     a = ap.parse_args(argv)
 
+    from poring_vision import accel
     from poring_vision.gpu import configure_gpu
 
     device = configure_gpu(float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")))
@@ -108,7 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     speed: dict[str, dict[str, float]] = {}
     for key, image in inputs(a):
         t0 = time.perf_counter()
-        result = model.predict(image, imgsz=a.imgsz, conf=a.conf, verbose=False)[0]
+        result = model.predict(
+            image,
+            imgsz=a.imgsz,
+            conf=a.conf,
+            verbose=False,
+            device=accel.current().ultralytics_device,
+        )[0]  # ADR-0022
         if a.timing:
             ms[key] = round((time.perf_counter() - t0) * 1000.0, 3)
             speed[key] = {k: round(float(v), 3) for k, v in (result.speed or {}).items()}

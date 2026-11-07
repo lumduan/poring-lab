@@ -30,7 +30,8 @@ class YoloDetector:
     """TODO(detection): not implemented in the scaffold.
 
     Intent: load ultralytics YOLO weights from ``/data/weights/<name>.pt`` (gitignored), run
-    them on ``cuda:0`` in half precision over ``frame.bgr()`` (BGR, the ultralytics convention,
+    them on the host's accelerator (``accel.current()``, any vendor: ADR-0022) in half
+    precision over ``frame.bgr()`` (BGR, the ultralytics convention,
     no copy), and map each result to a ``Box`` with corners normalized by the frame size.
     Dataset capture, labelling and training live elsewhere (also TODO); this class only does
     inference. Import torch/ultralytics lazily inside ``__init__`` so the loop stays importable

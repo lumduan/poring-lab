@@ -260,19 +260,27 @@ LINE_MAX = 512
 
 @dataclass(frozen=True)
 class GpuWeights:
-    """A checkpoint the GPU server loads (its path INSIDE the vision worker; the NAS, read-only)
-    and its sha256: the training run the CPU ONNX was exported from (parity, FP32:
-    cpu-detector-speed.md 8, v1 49 / 49, xmas02 340 / 340 monster boxes)."""
+    """What the GPU server may load for a model name, each by its pinned sha256:
+    - the torch checkpoint (``path`` INSIDE the vision worker, the NAS, read-only): the training
+      run the CPU ONNX was exported from (parity, FP32: cpu-detector-speed.md 8);
+    - the deployed ONNX itself (``onnx`` in ENV/model, ``onnx_sha256``): what a vendor-neutral
+      backend runs (OpenVINO, onnxruntime: ADR-0022), the very file the CPU worker runs."""
 
     path: str
     sha256: str
+    onnx: str = ""
+    onnx_sha256: str = ""
 
 
 GPU_WEIGHTS: dict[str, GpuWeights] = {
     "v1": GpuWeights("/datasets/archive/train/v1png-20261008/weights/last.pt",
-                     "03d539796183179d3085b23cdfe3ac4bd85754308931287bb25839ed268258ca"),
+                     "03d539796183179d3085b23cdfe3ac4bd85754308931287bb25839ed268258ca",
+                     "v1png-last-736x1280.onnx",
+                     "32b448a1d197ded289f53ca9cb306f536ebfc0eb701ebdeaa94ab9e7800a3ba4"),
     "xmas02": GpuWeights("/datasets/archive/train/xmas02-20261106/weights/last.pt",
-                         "5c5bb67a746b42014935700f449ecbf45525bbddf250fb21738eb6248a2b8b7b"),
+                         "5c5bb67a746b42014935700f449ecbf45525bbddf250fb21738eb6248a2b8b7b",
+                         "xmas02-last-736x1280.onnx",
+                         "293dca922e3e7890e3f26f40f140ef9b3d7eec4799392152ff3be8d132cace13"),
 }  # fmt: skip
 
 
@@ -429,11 +437,14 @@ class GpuDetector:
         except BaseException:
             self._drop()
             raise
-        want = {"ok": True, "model": self.weights, "sha256": self.spec.sha256,
-                "imgsz": list(IMGSZ), "shape": list(self.shape)}  # fmt: skip
-        if doc != want:
+        want = {"ok": True, "model": self.weights, "imgsz": list(IMGSZ),
+                "shape": list(self.shape)}  # fmt: skip
+        # the pinned torch checkpoint, or the pinned deployed ONNX (a vendor-neutral backend)
+        shas = {self.spec.sha256, self.spec.onnx_sha256} - {""}
+        got = {k: v for k, v in doc.items() if k != "sha256"} if isinstance(doc, dict) else doc
+        if got != want or not isinstance(doc, dict) or doc.get("sha256") not in shas:
             self._drop()
-            raise GpuRefused(f"hello {str(doc)[:200]} is not {want}")
+            raise GpuRefused(f"hello {str(doc)[:200]} is not {want} with a sha256 in {shas}")
 
     def _exchange(self, canvas: np.ndarray) -> np.ndarray:
         deadline = time.monotonic() + self.call_s
@@ -528,15 +539,35 @@ def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
     return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
 
 
+def serve_openvino(device: str = "GPU", env: Path = ENV, socket_path: Path = GPU_SOCKET,
+                   models: Sequence[str] = tuple(GPU_WEIGHTS)) -> list[str]:  # fmt: skip
+    """PURE: the detect server on OpenVINO (ADR-0022; bot-server's Intel Arc), as an argv for a
+    host process: the DEPLOYED ONNX files in ``env``/model, each by its pinned sha256."""
+    argv = ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
+            "--device", device, "--socket", str(socket_path)]  # fmt: skip
+    for m in models:
+        w = GPU_WEIGHTS[m]
+        argv += ["--model", f"{m}={env / 'model' / w.onnx}={w.onnx_sha256}"]
+    return argv
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
     ap = argparse.ArgumentParser(description="the detect server's guarded step (GPU path)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sc = sub.add_parser("serve-cmd", help="print the guarded_build command for the detect server")
-    sc.add_argument("--seconds", type=int, required=True)
+    sc.add_argument("--seconds", type=int, default=0)
+    sc.add_argument("--backend", choices=["torch", "openvino"], default="torch",
+                    help="torch: the guarded execdev step (ubuntu-docker's NVIDIA); openvino: a "
+                    "host process (ADR-0022)")  # fmt: skip
+    sc.add_argument("--device", default="GPU", help="openvino's device")
     a = ap.parse_args(argv)
-    if a.cmd == "serve-cmd":
+    if a.cmd == "serve-cmd" and a.backend == "openvino":
+        print(" ".join(serve_openvino(a.device)))
+    elif a.cmd == "serve-cmd":
+        if a.seconds <= 0:
+            ap.error("--seconds is needed for the guarded step")
         print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 "
               f"'{serve_step(a.seconds)}'")  # fmt: skip
     return 0
