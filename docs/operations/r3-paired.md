@@ -259,6 +259,15 @@ minutes only (capped as before). `quiet --max-load N` stays available as an expl
   Tested: inside, outside, the day after.
 - **Why it was asked for:** at 09:16:34 an R3-HARD drop of cam-1-01-font-s ended the GPU
   measurement while our container was paused (docs/benchmarks/cpu-detector-speed.md section 7).
+- **And the worker's START (Batt ~09:4x, asked: "can the worker's start also ignore Frigate's IO
+  stall for today, still guarding every quant cgroup?" -> "Ignore Frigate today"):**
+  - `io_baseline.FRIGATE_IO_IGNORED`, the same window.
+  - For a `worker:vision` start only, Frigate's IO stall neither gates `runbooks/quiet_start.py`
+    nor aborts that step's guard. Each prints that it left Frigate out.
+  - Every quant cgroup and cron's capture still gate and abort as before. Every other step
+    (execdev, cache, archive ...) watches Frigate as always.
+  - Why: Frigate's own bursts (25-41 %) restarted quiet_start's 10-min clock 170+ times that
+    morning; the window opened once in ~3 h.
 
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
 > ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.

@@ -49,3 +49,22 @@ def test_market_windows_only_on_weekdays(qs: ModuleType) -> None:
     mon = datetime(2026, 10, 12, 9 - 7, 45, tzinfo=UTC)
     assert not qs.in_market(sat) and not qs.in_market(sun)
     assert qs.in_market(mon)
+
+
+def test_batts_one_day_frigate_exclusion_is_a_worker_start_on_that_day_only() -> None:
+    """Batt 2026-11-07: a worker:vision START leaves Frigate's IO stall out, that day only; the
+    quant cgroups and cron's capture always stay watched."""
+    import io_baseline as iob
+
+    t0, t1 = iob.FRIGATE_IO_IGNORED
+    start = ["python3", "scripts/guarded_build.py", "--sustain", "30", "worker:vision@120"]
+    assert iob.frigate_io_ignored(start, t0 + 60) and iob.frigate_io_ignored(start, t1 - 1)
+    assert not iob.frigate_io_ignored(start, t1) and not iob.frigate_io_ignored(start, t0 - 1)
+    assert not iob.frigate_io_ignored(["execdev:vision@600=python -m x"], t0 + 60)
+    assert not iob.frigate_io_ignored(["worker-stop:vision"], t0 + 60)
+    root = Path(__file__).resolve().parents[3]
+    qs = (root / "scripts/runbooks/quiet_start.py").read_text()
+    assert 'watched = [w for w in watched if w != "frigate"]' in qs
+    gb = (root / "scripts/guarded_build.py").read_text()
+    assert 'if all(s.kind == "worker" for s in steps) and io_baseline.frigate_io_ignored(' in gb
+    assert 'paths.pop("frigate", None)' in gb

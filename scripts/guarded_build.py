@@ -191,6 +191,7 @@ from poring_backend.mode_restore import RESTORE_NAME, format_marker  # noqa: E40
 
 sys.path.insert(0, str(REPO / "scripts"))
 import frigate_r3  # noqa: E402
+import io_baseline  # noqa: E402
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 BACKEND = "poring-lab-backend-1"
@@ -1731,9 +1732,14 @@ def main() -> int:
     if (why := sniffer_code_gate(steps)) is not None:
         print(why, flush=True)
         return 2
-    guard = Guard(
-        cgroup_paths(), args.threshold, args.window, sustain=args.sustain, spike=args.spike
-    )
+    paths = cgroup_paths()
+    if all(s.kind == "worker" for s in steps) and io_baseline.frigate_io_ignored(
+        args.steps, time.time()
+    ):  # Batt 2026-11-07: that day, a worker:vision start leaves Frigate's IO stall out
+        paths.pop("frigate", None)
+        print(f"[{ts()}] frigate's IO stall is NOT watched for this worker:vision start (Batt "
+              "2026-11-07, io_baseline.FRIGATE_IO_IGNORED)", flush=True)  # fmt: skip
+    guard = Guard(paths, args.threshold, args.window, sustain=args.sustain, spike=args.spike)
     print(f"[{ts()}] rule: abort if {guard.describe()}", flush=True)
     print(f"[{ts()}] watching: {', '.join(guard.paths)}", flush=True)
     for step in steps:

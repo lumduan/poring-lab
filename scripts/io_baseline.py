@@ -18,7 +18,8 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -34,6 +35,21 @@ CAPTURE = [
 # vision-worker: option A's long-lived vision container (docs/operations/vision-long-lived.md)
 LAB = ["desktop", "backend", "frontend-dev", "frontend", "rathena", "db", "vision", "vision-worker"]
 CRON = ("cron.service", Path("/sys/fs/cgroup/system.slice/cron.service/io.pressure"))
+# Batt 2026-11-07 ~09:4x ICT (asked: "can the worker's start also ignore Frigate's IO stall for
+# today, still guarding every quant cgroup?" -> "Ignore Frigate today"): for a `worker:vision`
+# START only, and only inside this window, Frigate's IO stall neither gates runbooks/quiet_start.py
+# nor aborts guarded_build's guard for that step. Every quant cgroup and cron's capture still do.
+# docs/operations/r3-paired.md "2026-11-07". Outside the window: unchanged, no code change needed.
+_ICT = timezone(timedelta(hours=7))
+FRIGATE_IO_IGNORED = (datetime(2026, 11, 7, 9, 0, tzinfo=_ICT).timestamp(),
+                      datetime(2026, 11, 8, 0, 0, tzinfo=_ICT).timestamp())  # fmt: skip
+
+
+def frigate_io_ignored(command: Sequence[str], now: float) -> bool:
+    """PURE: Frigate's IO stall is left out for this command at ``now`` (epoch s): a worker:vision
+    start, inside FRIGATE_IO_IGNORED."""
+    starts = any(str(a).startswith("worker:vision") for a in command)
+    return starts and FRIGATE_IO_IGNORED[0] <= now < FRIGATE_IO_IGNORED[1]
 
 
 def resolve() -> dict[str, Path]:

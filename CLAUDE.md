@@ -113,6 +113,8 @@ ports, quickstart) and `docs/adr/`.
      aborts when capture IO stall exceeds 10%. The host has one shared virtual disk: on 2026-09-29
      an unguarded parallel build pushed capture IO stall from ≤4% to 82–88%. The torch vision
      image (~5 GB of writes) needs an operator-chosen window.
+     ➡️ 2026-11-07 09:00-24:00 ICT ONLY (Batt): a `worker:vision` start leaves Frigate's IO stall
+     out of quiet_start and its guard (`io_baseline.FRIGATE_IO_IGNORED`); quant still gates.
    - **No whole-file reads of session transcripts or big local files** (a grep over the ~330 MB
      transcript loaded the shared disk twice, 2026-10-02/03). The second hook,
      `scripts/hooks/guard_bigread.py`, refuses grep/rg/cat/awk/sed/sort/… on any `*.jsonl` under

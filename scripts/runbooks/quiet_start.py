@@ -76,12 +76,17 @@ def main() -> int:
     last_resolve = -1e9
     deadline = time.monotonic() + a.max_wait_h * 3600
     worst: tuple[float, str] = (0.0, "")
+    watched = list(WATCHED)
     with a.log.open("a") as fh:
+        if iob.frigate_io_ignored(cmd, time.time()):  # Batt 2026-11-07: that day only
+            watched = [w for w in watched if w != "frigate"]
+            log("frigate's IO stall is NOT watched for this worker:vision start (Batt 2026-11-07, "
+                "io_baseline.FRIGATE_IO_IGNORED)", fh)  # fmt: skip
         log(f"waiting for {a.quiet_min:g} quiet min (no capture cgroup > {a.limit:g} %): {cmd}", fh)
         while time.monotonic() < deadline:
             now = time.monotonic()
             if now - last_resolve > 60:
-                paths = {k: v for k, v in iob.resolve().items() if k in WATCHED}
+                paths = {k: v for k, v in iob.resolve().items() if k in watched}
                 last_resolve = now
             peak, who = 0.0, ""
             for name, path in paths.items():
