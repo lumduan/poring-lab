@@ -42,3 +42,24 @@ def test_deletes_stay_inside_memory_and_the_skills_and_transcripts_only_grow() -
     assert tails.index("--exclude=/memory/") < tails.index("--include=*/")  # first match wins
     assert "--exclude=*.jsonl" in rest and "--exclude=/memory/" in rest
     assert all("--bwlimit=15000" in cmd for cmd in steps.values())
+
+
+def test_runtime_items_are_mirrored_inside_their_own_directory_only() -> None:
+    import runtime_sync as rs
+
+    d = rs.item_copy("poring-lab-tmp/gat", True)
+    assert d[-2:] == ["/dev/shm/poring-lab-tmp/gat/", f"{rs.REMOTE}:/dev/shm/poring-lab-tmp/gat/"]
+    assert "--delete" in d and "--mkpath" in d
+    f = rs.item_copy("poring-lab-tmp/chat-guard.json", False)
+    assert "--delete" not in f and f[-1] == f"{rs.REMOTE}:/dev/shm/poring-lab-tmp/chat-guard.json"
+
+
+def test_the_detector_pins_are_refused_unless_name_equals_version() -> None:
+    import runtime_sync as rs
+
+    cmd = rs.detector_env_cmd(["onnxruntime==1.31.1", "numpy==2.5.4"])
+    assert "uv pip install -q --python .venv/bin/python numpy==2.5.4 onnxruntime==1.31.1" in cmd
+    assert cmd.startswith("set -e;") and 'rm -rf "$D/uv-cache"' in cmd
+    for bad in (["numpy; rm -rf ~"], ["numpy>=2"], []):
+        with pytest.raises(SystemExit, match="refused"):
+            rs.detector_env_cmd(bad)

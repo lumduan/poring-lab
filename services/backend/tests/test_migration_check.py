@@ -53,6 +53,21 @@ def test_trees_need_every_file_with_the_same_size_and_hash() -> None:
         == {"t: every file arrived, the same": "FAIL"}  # fmt: skip
     assert status(mc.tree_rows("t", want, {"a": {"size": 3, "sha256": "x"}})) \
         == {"t: every file arrived, the same": "FAIL"}  # fmt: skip
+    empty = mc.tree_rows("t", {}, {"a": {"size": 3}})  # an empty source proves nothing
+    assert status(empty) == {"t: every file arrived, the same": "FAIL"}
+
+
+def test_a_runtime_item_is_a_directory_or_one_file_hashed(tmp_path: Path) -> None:
+    (tmp_path / "poring-lab-tmp" / "gat" / "data").mkdir(parents=True)
+    (tmp_path / "poring-lab-tmp" / "gat" / "data" / "m.gat").write_bytes(b"GRAT")
+    (tmp_path / "poring-lab-tmp" / "chat-guard.json").write_text("{}")
+    d = mc.runtime_tree("poring-lab-tmp/gat", tmp_path)
+    assert list(d) == ["poring-lab-tmp/gat/data/m.gat"] and d[next(iter(d))]["sha256"]
+    f = mc.runtime_tree("poring-lab-tmp/chat-guard.json", tmp_path)
+    assert f == {"poring-lab-tmp/chat-guard.json": {"size": 2, "sha256": mc.sha256_file(
+        tmp_path / "poring-lab-tmp" / "chat-guard.json")}}  # fmt: skip
+    assert mc.runtime_tree("poring-lab-tmp/absent", tmp_path) == {}
+    assert "poring-lab-tmp/chat-guard.json" in mc.RUNTIME and "poring-lab-pktgen" not in mc.RUNTIME
 
 
 def test_networks_must_be_pinned_off_the_home_ranges() -> None:

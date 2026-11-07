@@ -56,6 +56,18 @@ DB_TABLES = ("login", "char", "inventory", "cart_inventory", "storage", "skill",
              "guild", "global_acc_reg_num", "global_acc_reg_str", "char_reg_num", "char_reg_str",
              "acc_reg_num", "acc_reg_str", "mail", "hotkey", "quest", "chatlog")  # fmt: skip
 NAS_MOUNTS = ("/mnt/poring-lab-datasets", "/mnt/poring-locale-packs", "/mnt/poring-thai-src")
+# The RAM run-time inputs (CLAUDE.md rule 7: the GAT maps, sprites, calibrations, the chat guard;
+# the KB, the rathena source it reads, the detector's models), file by file with sha256 (RAM).
+# scripts/runtime_sync.py pushes them RAM to RAM. Not here: scratch, logs, locks, test leftovers,
+# VM 103's own state (Frigate's baseline, the clean room), and the packet-table generator's cache
+# (bot-server generates its own table: byte-identical, 2026-11-07).
+SHM = Path("/dev/shm")
+RUNTIME = ("poring-lab-kb", "poring-lab-rathena-src", "poring-lab-detector/model",
+           "poring-lab-tmp/gat", "poring-lab-tmp/sprites", "poring-lab-tmp/hotbar-cal",
+           "poring-lab-tmp/talk-cal", "poring-lab-tmp/walk5-cal", "poring-lab-tmp/collect-v2",
+           "poring-lab-tmp/stage-gef10", "poring-lab-tmp/xmas-det",
+           "poring-lab-tmp/chat-guard.json")  # fmt: skip
+DETECTOR_PY = SHM / "poring-lab-detector" / ".venv" / "bin" / "python"
 SKILLS = ("bilingual-report", "research-doc-metadata", "roadmap-format", "craft-prompt",
           "claude-code-restart")  # fmt: skip
 PREFACE_MARK = "# READ FIRST on bot-server"
@@ -123,8 +135,8 @@ def tree_rows(name: str, want: Mapping[str, Mapping[str, Any]],
         want[f]["size"] != have[f]["size"]
         or (want[f].get("sha256") and have[f].get("sha256")
             and want[f]["sha256"] != have[f]["sha256"])))  # fmt: skip
-    ok = not missing and not wrong
-    detail = (f"{len(want)} files" if ok else
+    ok = bool(want) and not missing and not wrong  # an empty source item proves nothing
+    detail = (f"{len(want)} files" if ok else "the source has no file here" if not want else
               f"missing {len(missing)} {missing[:3]}; differ {len(wrong)} {wrong[:3]}")  # fmt: skip
     return [row(f"{name}: every file arrived, the same", ok, detail)]
 
@@ -175,6 +187,14 @@ def tree(root: Path, rel_to: Path, hash_files: bool, skip: Sequence[str] = ()) -
             rec["sha256"] = sha256_file(p)
         out[rel] = rec
     return out
+
+
+def runtime_tree(name: str, shm: Path = SHM) -> dict[str, Any]:
+    """One RUNTIME item (a directory or a single file), keyed relative to /dev/shm, hashed."""
+    root = shm / name
+    if root.is_file() and not root.is_symlink():
+        return {name: {"size": root.stat().st_size, "sha256": sha256_file(root)}}
+    return tree(root, shm, True)
 
 
 def db_counts(env: Mapping[str, str]) -> dict[str, int] | str:
@@ -265,6 +285,7 @@ def make_manifest(hash_data: bool) -> dict[str, Any]:
         "trees": {t: tree(REPO / t, REPO, True, SKIP_STATE) for t in SMALL_TREES}
         | {"data": tree(REPO / "data", REPO, hash_data)},
         "cache": tree(HOME / ".cache" / "poring-lab", HOME / ".cache" / "poring-lab", True),
+        "runtime": {n: runtime_tree(n) for n in RUNTIME},
         "db": db_counts(env), "claude": claude_side(PROJECT_KEYS["source"]),
         "images": source_images(),
     }  # fmt: skip
@@ -309,6 +330,11 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
         manifest["cache"],
         tree(HOME / ".cache" / "poring-lab", HOME / ".cache" / "poring-lab", True),
     )
+    for n in RUNTIME:
+        rows += tree_rows(f"/dev/shm/{n}", manifest.get("runtime", {}).get(n, {}), runtime_tree(n))
+    code, _ = run([str(DETECTOR_PY), "-c", "import onnxruntime, numpy"])
+    rows.append(row("runtime: the CPU detector's environment imports onnxruntime", code == 0,
+                    str(DETECTOR_PY)))  # fmt: skip
     rows += docker_rows(phase)
     code, imgs = run(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}"])
     rows += image_rows(manifest.get("images", []), imgs.split())
