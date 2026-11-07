@@ -1005,6 +1005,13 @@ def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(gb: ModuleT
     dump, count_vol, count_tar = gb.volume_cmds("db-th-data", dst)
     assert "--network none" in dump[2] and "--cap-drop ALL" in dump[2] and "/v:ro" in dump[2]
     assert dump[2].endswith("> " + dst) and "poring-lab_db-th-data" in count_vol[2]
+    # the bot-server cutover (2026-11-07): the captures may be DUMPED to the NAS, never removed
+    cap = "/mnt/poring-lab-datasets/archive/captures/captures-20261107.tar.gz"
+    assert gb.parse_step(f"voldump:captures={cap}").services == ["captures"]
+    with pytest.raises(ValueError):
+        gb.parse_step(f"volrm:captures={cap}")
+    dump, _, _ = gb.volume_cmds("captures", cap)
+    assert "--user 65534:65534" in dump[2] and "poring-lab_captures:/v:ro" in dump[2]
 
 
 class _R3Quiet:

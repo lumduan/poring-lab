@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE but the RAM runtime (19:1x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the prep check PASS 27 / FAIL 0 / SKIP 1 (the db rows wait for the dump). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
+status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE (19:3x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the RAM runtime pushed (and bot-server's logind made to keep /dev/shm), the db move rehearsed (18/18 CHECKSUM TABLE equal), the prep check PASS 41 / FAIL 0 / SKIP 1 (the db rows wait for the cutover). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "A cutover window with Batt (Phase B): the UAC prompts on Windows, the Settings page entry, and the gamestream-state choice (pipe copy or re-pair). Before it: the RAM runtime on bot-server (Phase A 7)."
+next_action: "A cutover window with Batt (Phase B, about an hour): the UAC prompt on Windows (step 3), the Settings page entry (step 7), the gamestream-state choice (pipe copy or re-pair), gh auth login (step 10)."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -72,30 +72,96 @@ owner: Batt
    dump over it.
 6. ✅ `scripts/migration_check.py`: a fresh manifest on VM 103, `scripts/agent_sync.py` (the
    rehearsal, 19:08), `check --phase prep` on bot-server: PASS 27, FAIL 0, SKIP 1 (the db rows).
-7. ⏳ The RAM runtime on bot-server (`/dev/shm`, gone at every reboot there too): the CPU
-   detector's environment and its models, `poring-lab-kb`, `poring-lab-rathena-src`, the GAT
-   maps, the sprites, the calibrations (walk5-cal, talk-cal, hotbar-cal), the chat guard. The
-   after-reboot procedure rebuilds what it can from the NAS GRF (mounted there); the calibrations
-   are copied RAM to RAM. Not yet in the check: a row for it is due with the copy.
+7. ✅ The RAM runtime on bot-server (`/dev/shm`, gone at every reboot there too), 19:15-19:20
+   ICT: `scripts/runtime_sync.py` pushes `migration_check.RUNTIME` RAM to RAM (the KB, the rathena
+   source, the detector's models, the GAT maps, the sprites, the calibrations, the chat guard;
+   2,277 files) and builds the CPU detector's environment there with VM 103's exact package set
+   (onnxruntime 1.31.1, numpy 2.5.4). The check hashes every file.
+   - 🔴 **Found on the way:** bot-server's logind deleted ALL of `bot`'s `/dev/shm` whenever its
+     last login session ended (the default `RemoveIPC=yes`): the first push was gone a minute
+     later, and so was the Arc test's detector environment earlier. Fixed 19:17 ICT (the sandbox,
+     Batt's root grant): `loginctl enable-linger bot` + `/etc/systemd/logind.conf.d/
+     poring-lab-keep-shm.conf` (`RemoveIPC=no`, for the next logind start). Proven: a marker
+     written by one SSH session survived its end; the check has a row for it (`Linger=yes`).
+   - After a bot-server reboot: run `runtime_sync.py` again while VM 103 still has the files, or
+     rebuild from the NAS (the after-reboot steps; the GRF is mounted there).
 
-## 3. Phase B: the cutover (a window with Batt)
-1. VM 103: the runner idle, the RDP loop stopped and its client ended; the lab's containers
-   stopped.
-2. The final sync: db dump, captures, transfer, settings, state, data; the agent by
-   `migration_check.py manifest` here, then `scripts/agent_sync.py` (handover doc section 4).
-3. bot-server: `WIN_HOST` set, the full stack up.
-4. **Windows** (the agent through the mux; UAC prompts are Batt's: the agent never approves
-   them):
-   - the client's server address (clientinfo) -> 192.168.1.228;
-   - the four AssistAddr lubs -> 192.168.1.228:8888;
-   - the "poring-lab lab-only" firewall group: each exe rule's allowed remote address .13 ->
-     .228 (elevated);
-   - Sunshine's two inbound rules -> .228 (elevated);
-   - the "poring-lab watch" task checked for .13.
-5. **Batt on the Settings page:** the lab server's environment entry .13 -> .228 (a person's act:
-   the agent never confirms environment entries).
-6. The check: `migration_check.py check` PASS; then a live smoke (login, a walk, a short hunt).
-7. GitHub from bot-server: `gh auth login` by Batt, so the agent there can push.
+## 3. Phase B: the cutover (a window with Batt, about an hour)
+The order keeps ONE Windows session (ADR-0001) and keeps VM 103's mux alive while the Windows side
+still needs typing. Every Windows line is typed by the agent through VM 103's mux in ASSIST; the
+elevated ones only after Batt opens the elevated console and answers UAC (the agent never does).
+Times are written from `date` as they happen.
+
+**Rehearsed already (2026-11-07):** the db move (`db_move.py`: 18 / 18 `CHECKSUM TABLE` equal, 185
+rows, 19:26-19:29 ICT), the agent push (`agent_sync.py`), the RAM runtime (`runtime_sync.py`), the
+prep check (PASS 41 / FAIL 0 / SKIP 1).
+
+1. **Freeze the game on VM 103.** Runner idle, `/health` no lease. The client closed by its own
+   paced Alt+F4 (rathena saves the characters); then `scripts/dev.sh --profile sniffer stop sniffer
+   rathena`.
+2. **Windows, standard user** (the agent's `poring-lab shell`; each file backed up first to
+   `C:\RO-rAthena\move-backup-<date>\`, changed only if the old text occurs EXACTLY as expected,
+   read back by sha256). A byte-exact swap through Latin-1 (codepage 28591: one byte = one char):
+
+        $bk = "C:\RO-rAthena\move-backup-$(Get-Date -f yyyyMMdd)"; New-Item -ItemType Directory -Force $bk | Out-Null
+        $L1 = [Text.Encoding]::GetEncoding(28591)
+        function Swap($f, $o, $n, $want) { $s = $L1.GetString([IO.File]::ReadAllBytes($f)); $c = ([regex]::Matches($s, [regex]::Escape($o))).Count; if ($c -ne $want) { "REFUSED $f : $c x"; return }; Copy-Item $f $bk; [IO.File]::WriteAllBytes($f, $L1.GetBytes($s.Replace($o, $n))); "{0} {1}" -f (Get-FileHash $f).Hash.Substring(0, 12), $f }
+
+   - `data\clientinfo.xml`, `data\sclientinfo.xml` (in `C:\RO-rAthena\client\`): `>192.168.1.13<`
+     -> `>192.168.1.228<`, once each.
+   - The four AssistAddr lubs (`data\luafiles514\lua files\service_korea\externalsettings_kr.lub`,
+     `_kr_qm`, `_kr_sak`, `_kr_sak_qm`): Lua 5.1 bytecode, so the string constant's 4-byte length
+     changes with it (rathena-client.md, the account settings): `04 12 00 00 00
+     "192.168.1.13:8888" 00` -> `04 13 00 00 00 "192.168.1.228:8888" 00`, once each:
+
+        $o = -join ([char[]](4, 0x12, 0, 0, 0)) + '192.168.1.13:8888' + [char]0
+        $n = -join ([char[]](4, 0x13, 0, 0, 0)) + '192.168.1.228:8888' + [char]0
+
+   - `%USERPROFILE%\poring-lab-watch\labwatch.ps1` (the LAB-ONLY watch): `192.168.1.13` ->
+     `192.168.1.228`, the count read first (read-only) and passed as `$want`; then
+     `Stop-ScheduledTask 'poring-lab watch'; Start-ScheduledTask 'poring-lab watch'` and its log's
+     next `alive` line.
+3. **Windows, elevated** (Batt opens the console, UAC is Batt's; the agent types only these):
+
+        Get-NetFirewallRule -Group 'poring-lab lab-only' | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress '0.0.0.0-126.255.255.255','128.0.0.0-192.168.1.227','192.168.1.229-255.255.255.255','::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'
+        $exe = 'C:\Program Files\Sunshine\sunshine.exe'; Get-NetFirewallApplicationFilter -Program $exe | Get-NetFirewallRule | Set-NetFirewallRule -RemoteAddress 192.168.1.228
+        Get-NetFirewallRule -Group 'poring-lab lab-only' | % { '{0} {1} {2}' -f $_.DisplayName, $_.Enabled, (($_ | Get-NetFirewallAddressFilter).RemoteAddress -join ',') }
+        Get-NetFirewallApplicationFilter -Program $exe | Get-NetFirewallRule | % { '{0} {1} {2}' -f $_.DisplayName, $_.Enabled, (($_ | Get-NetFirewallAddressFilter).RemoteAddress -join ',') }
+
+   (The ranges are ADR-0016's with the lab host moved: everything but .228 and loopback.) Batt
+   closes the console; the agent reads both back again from its standard shell.
+4. **Hand the session over (never two).** VM 103: end the RDP client by its pid inside the desktop
+   container and see ZERO xfreerdp3 BEFORE anything else (`supervisorctl stop rdp` alone leaves
+   it running); stop gamestream, backend, frontend-dev, desktop (stop, not remove: Phase C).
+5. **The data, VM 103 -> bot-server:**
+   - `db_move.py dump` (VM 103's db still up), then stop VM 103's db; scp the dump; on
+     bot-server stop rathena + sniffer, `db_move.py restore`, start them (guarded); delete both
+     dump copies once the check's db rows pass;
+   - `guarded_build.py voldump:captures=/mnt/poring-lab-datasets/archive/captures/captures-<date>.tar.gz`
+     (and `captures-th`): the packet captures to the NAS archive, file count verified; bot-server's
+     sniffer starts its own volume (long-term = the NAS, 2026-10-21). `transfer` is a tmpfs
+     (nothing to move); `framebus`, `s2-input`, `x11-unix`, `datasets-nas` are recreated;
+   - `settings/`, `state/` (the capture lock, the variant, the duty level excluded), `data/` by
+     rsync; `scripts/runtime_sync.py --items-only` (the chat guard and the calibrations as they are
+     now); `~/.cache/poring-lab`;
+   - `gamestream-state` (Sunshine's pairing key): **Batt's choice**, volume to volume through a
+     pipe (the key never lands as a file), or a fresh pairing with Sunshine's PIN;
+   - the agent: `migration_check.py manifest`, copy it, then `scripts/agent_sync.py`.
+6. **bot-server takes the session:** `rotate_secrets.py set WIN_HOST=192.168.1.169` (read back),
+   then a guarded `recreate:desktop` (and gamestream): the RDP loop connects.
+7. **Batt:** the Settings page (http://192.168.1.228:3000): the lab server's environment entry .13 ->
+   .228 (a person's act: the agent never confirms environment entries); then ASSIST.
+8. **The smoke** (agent): a judged screenshot; the client launched and logged in (the interlock
+   green on the sniffer's attestation from .228; the UI gate; the chat window standard); `/where`;
+   a short walk; a 5-min hunt on xmas_dun02 with the GPU box path (the Arc's detect server).
+9. **The check:** `migration_check.py check --manifest <M> --phase final` PASS (WIN_HOST set, the
+   containers up, db counts AND checksums). Then `config/environments.yaml`'s lab host -> .228
+   (the seed's suggestion; the store is Batt's) and the docs, committed.
+10. **GitHub:** Batt runs `gh auth login` on bot-server, so its agent can push.
+
+**Rollback** before step 4: the backups back (the same `Swap` with old and new exchanged, or a copy
+from `$bk`), the two firewall lines with .13, start VM 103's rathena + sniffer. After step 4: the
+same, plus bot-server's `WIN_HOST=` empty and a recreate of its desktop, then VM 103's stack started.
 
 ## 4. Phase C: clean VM 103 (only after Phase B's check passes; Batt's order)
 The poring-lab containers, images, volumes and build cache; the repo directory; `/dev/shm/poring-lab-*`;

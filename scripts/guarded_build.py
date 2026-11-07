@@ -142,7 +142,8 @@ On a breach:
                 or a failed check stops before the delete. One item per step.
   voldump:<volume>=<dst.tar.gz> | volrm:<volume>=<dst.tar.gz>
                 a STOPPED volume to the NAS, then removed (Batt, 2026-10-22, decision 7: "db-th-data
-                dump to the NAS then remove"). Only VOLUME_ALLOWED volumes (db-th-data). voldump:
+                dump to the NAS then remove"). Only VOLUME_ALLOWED volumes (db-th-data); voldump:
+                also the captures (VOLUME_DUMP: the bot-server cutover, never volrm). voldump:
                 refused while any container that mounts it runs, or when <dst> (under
                 NAS_ARCHIVE_ROOT, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
                 network-less container of the volume's own image as its owner (cap-drop ALL),
@@ -254,6 +255,14 @@ MEASURE_FIXED = {
 # voldump: / volrm: (Batt 2026-10-22, decision 7): volume -> (the service that mounts it, its image,
 # the files' owner); the image is local (pull_policy never); the owner reads without DAC_OVERRIDE
 VOLUME_ALLOWED = {"db-th-data": ("db-th", "mariadb:11.8.9", "999:999")}
+# voldump: ONLY (never volrm:): the sniffer's packet captures, to the NAS archive at the bot-server
+# cutover (Batt 2026-11-07, the whole move; long-term = the NAS only, 2026-10-21). Root-owned 0644
+# files: read as nobody, cap-drop ALL, network none, read-only.
+VOLUME_DUMP = {
+    **VOLUME_ALLOWED,
+    "captures": ("sniffer", "poring-lab/sniffer:local", "65534:65534"),
+    "captures-th": ("sniffer-th", "poring-lab/sniffer:local", "65534:65534"),
+}
 COMPOSE_PROJECT = "poring-lab"
 REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
 CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
@@ -355,8 +364,9 @@ def parse_step(step: str) -> Step:
     if kind in ("voldump", "volrm"):
         name, eq, dst_s = arg.partition("=")
         dst = Path(dst_s)
-        if name not in VOLUME_ALLOWED:
-            raise ValueError(f"{step}: only {', '.join(sorted(VOLUME_ALLOWED))}")
+        allowed = VOLUME_DUMP if kind == "voldump" else VOLUME_ALLOWED
+        if name not in allowed:
+            raise ValueError(f"{step}: only {', '.join(sorted(allowed))}")
         if not eq or not dst.is_absolute() or ".." in dst.parts or not dst.name.endswith(".tar.gz"):
             raise ValueError(f"{step}: expected {kind}:<volume>=<abs dst>.tar.gz")
         if NAS_ARCHIVE_ROOT not in dst.parents:
@@ -927,7 +937,7 @@ def archive_cmds(step: Step) -> tuple[list[str], list[str], list[str]]:
 
 def volume_cmds(name: str, dst: str) -> tuple[list[str], list[str], list[str]]:
     """PURE: voldump's dump (stdout -> dst), its volume file count, and its archive file count."""
-    _svc, image, owner = VOLUME_ALLOWED[name]
+    _svc, image, owner = VOLUME_DUMP[name]
     vol = f"{COMPOSE_PROJECT}_{name}"
     one_off = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--user", owner,
                "-v", f"{vol}:/v:ro", "--entrypoint"]  # fmt: skip
@@ -952,7 +962,7 @@ def _last_int(label: str) -> int | None:
 
 def run_volume(step: Step, guard: "Guard") -> bool:
     name, dst = step.services[0], Path(step.command[0])
-    svc, _image, _owner = VOLUME_ALLOWED[name]
+    svc, _image, _owner = VOLUME_DUMP[name]
     vol = f"{COMPOSE_PROJECT}_{name}"
     running = subprocess.run(["docker", "ps", "-q", "--filter", f"volume={vol}"],
                              capture_output=True, text=True).stdout.strip()  # fmt: skip
