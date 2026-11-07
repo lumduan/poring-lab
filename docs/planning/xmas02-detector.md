@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment J (Batt 2026-11-07 ~05:5x): DEPLOYED on xmas_dun02 (T-11 built: for_map, species in one NMS group, 16 threads); next: measure the moving-capture gap on non-TEST sessions with a lag-checked truth, then a round 2 with moving frames in the labels (pre-registered before its cache)."
+next_action: "DEPLOYED (Amendment J). The walking gap (Amendment K): on xmw1 the camera offset lifts moving F1 0.30 -> 0.71 (480 ms) but L_self did NOT stand by eye (7/12): the walking lag varies per capture. Batt chooses: (a) a per-capture camera estimate (sprite fit / minimap) for walking labels and scores, or (b) judging walking sight live (box strikes and kills). xmw2 (CHECK) and xmw3 (TRAIN) are recorded and unread."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
