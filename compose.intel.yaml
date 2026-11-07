@@ -1,0 +1,22 @@
+# ADR-0022: the Intel overlay for the vision service (bot-server's Arc A380). Never used on VM 103.
+# guarded_build adds it LAST, after compose.yaml (and compose.vision-dev.yaml for rundev:), when
+# the host profile is dedicated-intel (LAB_HOST_PROFILE in .env; scripts/host_profile.py).
+# Exactly three things change, and tests/test_guards.py pins them (everything else -- the agent
+# network only, no X, mem == memswap, oom_score_adj, the mounts -- is compose.yaml's):
+#   - the image: poring-lab/vision-intel:local from services/vision/Dockerfile.intel;
+#   - the GPU: the DRM render node and the render group, instead of the NVIDIA reservation;
+#   - PORING_ACCEL=xpu, and no VRAM cap by default: the host is dedicated (Batt 2026-11-07).
+services:
+  vision:
+    build:
+      context: .
+      dockerfile: services/vision/Dockerfile.intel
+    image: poring-lab/vision-intel:local
+    deploy: !reset {}
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    environment:
+      PORING_ACCEL: xpu
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}

@@ -1,0 +1,18 @@
+# The Intel vision image (ADR-0022; bot-server's Arc A380): the same packages as the lock's
+# poring-vision, with PyTorch's XPU build instead of cu130 and OpenVINO for the live detector.
+# Compiled to requirements-intel.txt by scripts/gen_intel_requirements.sh: every package the lock
+# also has is held at the lock's version (lock-constraints), so only the torch stack differs.
+# These versions are the ones proven on the Arc on 2026-11-07 (docs/planning/bot-server-migration.md
+# sections 14-15): torch 2.15.0+xpu, torchvision 0.29.2+xpu, openvino 2026.4.1.
+torch==2.15.0+xpu
+torchvision==0.29.2+xpu
+ultralytics==8.4.165
+# ultralytics' GUI opencv-python is excluded (as at the workspace root); the headless build instead.
+opencv-python-headless==4.14.0.94
+openvino==2026.4.1
+# poring-env[x11,remote] (installed --no-deps from the workspace):
+pydantic
+numpy
+mss
+python-xlib
+websockets

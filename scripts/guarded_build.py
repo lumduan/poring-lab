@@ -194,6 +194,7 @@ from poring_backend.mode_restore import RESTORE_NAME, format_marker  # noqa: E40
 
 sys.path.insert(0, str(REPO / "scripts"))
 import frigate_r3  # noqa: E402
+import host_profile  # noqa: E402
 import io_baseline  # noqa: E402
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
@@ -385,7 +386,15 @@ def parse_step(step: str) -> Step:
     raise ValueError(f"unknown step {step}")
 
 
-VISION_DEV = ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml"]  # rundev: the overlay
+# ADR-0022: this host's profile (LAB_HOST_PROFILE; unset = shared-nvidia, VM 103). Its compose
+# overlay comes LAST on every command that creates or builds vision; shared-nvidia has none, so
+# VM 103's commands are exactly what they were.
+PROFILE = host_profile.current()
+VISION_DEV = host_profile.files("compose.yaml", "compose.vision-dev.yaml",
+                                overlay=PROFILE.vision_overlay)  # rundev: the overlay  # fmt: skip
+# run: and build:/pull:/target: take compose's default file set unless the profile adds an overlay
+VISION_FILES = (host_profile.files("compose.yaml", overlay=PROFILE.vision_overlay)
+                if PROFILE.vision_overlay else [])  # fmt: skip
 
 
 def container_name(step: Step) -> str:
@@ -396,7 +405,7 @@ def container_name(step: Step) -> str:
 def run_cmd(step: Step) -> list[str]:
     svc = step.services[0]
     seconds = str(int(step.seconds or 600))
-    files = VISION_DEV if step.kind == "rundev" else []
+    files = VISION_DEV if step.kind == "rundev" else VISION_FILES
     return [
         "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
         "--name", container_name(step), "--no-deps", svc, *step.command,
@@ -406,8 +415,9 @@ def run_cmd(step: Step) -> list[str]:
 # --- OPTION A: the long-lived vision worker (docs/operations/vision-long-lived.md) ---------------
 WORKER_SERVICE = "vision-worker"
 WORKER = "poring-lab-vision-worker-1"  # compose's name for the ONE worker container
-VISION_WORKER = ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", "--profile",
-                 WORKER_SERVICE]  # fmt: skip
+VISION_WORKER = [*host_profile.files("compose.yaml", "compose.vision-worker.yaml",
+                                     overlay=PROFILE.worker_overlay),
+                 "--profile", WORKER_SERVICE]  # fmt: skip
 EXEC_GRACE_S = 60  # the docker exec client outlives the inner timeout by this much
 EXEC_KILL_AFTER_S = 30  # the inner timeout's SIGKILL, this long after its SIGTERM
 EXEC_SETTLE_S = 10  # after the client ends: orphaned children get this long to exit by themselves
@@ -656,7 +666,10 @@ def own_pids(pattern: bytes, pids: list[int] | None = None) -> list[int]:
 
 
 def gpu_pids() -> list[int] | None:
-    """Every compute process on the GPU (nvidia-smi), or None when nvidia-smi does not answer."""
+    """Every compute process on the GPU (nvidia-smi; on an Intel / AMD host the DRM file holders,
+    host_profile.drm_pids), or None when that cannot be answered."""
+    if PROFILE.gpu_lister == "drm-fdinfo":
+        return host_profile.drm_pids()
     try:
         query = ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"]
         out = subprocess.run(query, capture_output=True, text=True, timeout=15, check=True).stdout
@@ -1030,7 +1043,7 @@ def log_path(label: str) -> Path:
 def target_build_cmd(service: str, stage: str, image: str) -> list[str]:
     """`docker build --target` with the build args compose would pass for <service>."""
     cfg = json.loads(subprocess.run(
-        ["docker", "compose", *ALL, "config", "--format", "json"],
+        ["docker", "compose", *VISION_FILES, *ALL, "config", "--format", "json"],
         cwd=REPO, capture_output=True, text=True, check=True,
     ).stdout)  # fmt: skip
     build = cfg["services"][service]["build"]
@@ -1090,6 +1103,8 @@ class Guard:
         self._last = time.monotonic()
 
     def describe(self) -> str:
+        if not self.paths:
+            return "nothing: no capture service on this host (a dedicated host, ADR-0022)"
         rule = f">{self.threshold}%"
         if self.sustain:
             rule += f" for {self.sustain:.0f}s"
@@ -1100,6 +1115,8 @@ class Guard:
     def breach(self) -> tuple[str, float, str] | None:
         now = time.monotonic()
         dt, self._last = now - self._last, now
+        if not self.paths:
+            return None
         self.samples.append((now, {k: full_total_us(p) for k, p in self.paths.items()}))
         while self.samples and now - self.samples[0][0] > self.window:
             self.samples.popleft()
@@ -1664,6 +1681,43 @@ def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.PairedR3 | None":  # no
     return frigate_r3.PairedR3(short=short, cam_ref=frigate_r3.camera_reference(), started=False)
 
 
+GpuGuards = tuple[
+    "frigate_r3.PairedR3 | None", "frigate_r3.CoTenantWatch | None",
+    "frigate_r3.DutyController | None",
+]  # fmt: skip
+
+
+def gpu_guards(step: Step, baseline: Path, profile: host_profile.HostProfile | None = None
+               ) -> GpuGuards | None:  # fmt: skip
+    """The rules a GPU step runs under on THIS host: (R3, the R2 co-tenant watch, the duty cycle),
+    or None when the step is refused. A shared host (VM 103) gets all three, exactly as before; a
+    DEDICATED host none (ADR-0022 decision 3, Batt 2026-11-07: "use it fully, no limits like this
+    machine": no Frigate, no Ollama, no co-tenant there)."""
+    prof = PROFILE if profile is None else profile
+    if not prof.shared:
+        print(f"[{ts()}] {step.label}: host profile {prof.name} is DEDICATED: R1-R3, the co-tenant "
+              "watch and the duty cycle do not apply here (ADR-0022)", flush=True)  # fmt: skip
+        return None, None, None
+    r3 = gpu_rules(step, baseline)
+    if r3 is None:
+        return None
+    return r3, frigate_r3.CoTenantWatch().start(), duty_for(step)
+
+
+def dedicated_refusal(found: list[str], profile: host_profile.HostProfile | None = None
+                      ) -> str | None:  # fmt: skip
+    """A host DECLARED dedicated must not run what the shared rules protect: any capture service
+    (quant, Frigate) found there means the declaration is wrong, and every step is refused."""
+    prof = PROFILE if profile is None else profile
+    hit = sorted(n for n in found if n in CONTAINERS)
+    if prof.shared or not hit:
+        return None
+    return (
+        f"REFUSED: host profile {prof.name} says DEDICATED, but {', '.join(hit)} run here: "
+        "the shared rules protect them. Fix LAB_HOST_PROFILE (ADR-0022)."
+    )
+
+
 def our_gpu_mib() -> int:
     """MiB on the GPU held by OUR processes (uid + poring_vision in the command line)."""
     try:
@@ -1760,6 +1814,11 @@ def main() -> int:
         print(why, flush=True)
         return 2
     paths = cgroup_paths()
+    if (why := dedicated_refusal(list(paths))) is not None:
+        print(why, flush=True)
+        return 2
+    if not PROFILE.shared:  # nothing of the shared host's to protect here (ADR-0022)
+        paths = {}
     if all(s.kind == "worker" for s in steps) and io_baseline.frigate_io_ignored(
         args.steps, time.time()
     ):  # Batt 2026-11-07: that day, a worker:vision start leaves Frigate's IO stall out
@@ -1771,17 +1830,19 @@ def main() -> int:
     print(f"[{ts()}] watching: {', '.join(guard.paths)}", flush=True)
     for step in steps:
         if step.kind == "build":
-            cmd = ["docker", "compose", *ALL, "build", "--progress=plain", *step.services]
+            cmd = ["docker", "compose", *VISION_FILES, *ALL, "build", "--progress=plain",
+                   *step.services]  # fmt: skip
             ok = run_process(step.label, cmd, guard, env=build_env())
         elif step.kind == "pull":
-            ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
+            ok = run_process(step.label, ["docker", "compose", *VISION_FILES, *ALL, "pull",
+                                          *step.services], guard)  # fmt: skip
         elif step.kind == "target":
             ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
         elif step.kind in ("run", "rundev"):
-            r3 = gpu_rules(step, args.frigate_baseline)
-            if r3 is None:
+            rules = gpu_guards(step, args.frigate_baseline)
+            if rules is None:
                 return 3
-            cowatch = frigate_r3.CoTenantWatch().start()
+            r3, cowatch, duty = rules
             try:
                 ok = run_process(
                     step.label,
@@ -1790,12 +1851,13 @@ def main() -> int:
                     r3=r3,
                     container=container_name(step),
                     gpu=True,
-                    duty=duty_for(step),
+                    duty=duty,
                     test_abort_cycles=args.test_abort_after_cycles,
                     cowatch=cowatch,
                 )
             finally:
-                cowatch.stop()
+                if cowatch is not None:
+                    cowatch.stop()
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "execdev":
@@ -1804,10 +1866,10 @@ def main() -> int:
                 print(f"[{ts()}] REFUSED {step.label}: WORKER {why} [{frigate_r3.stamp()}]",
                       flush=True)  # fmt: skip
                 return 3
-            r3 = gpu_rules(step, args.frigate_baseline)
-            if r3 is None:
+            rules = gpu_guards(step, args.frigate_baseline)
+            if rules is None:
                 return 3
-            cowatch = frigate_r3.CoTenantWatch().start()
+            r3, cowatch, duty = rules
             try:
                 ok = run_process(
                     step.label,
@@ -1817,13 +1879,14 @@ def main() -> int:
                     container=WORKER,
                     gpu=True,
                     host=EXEC_HOST,
-                    duty=duty_for(step),
+                    duty=duty,
                     exec_mode=True,
                     test_abort_cycles=args.test_abort_after_cycles,
                     cowatch=cowatch,
                 )
             finally:
-                cowatch.stop()
+                if cowatch is not None:
+                    cowatch.stop()
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind in ("worker", "worker-stop"):

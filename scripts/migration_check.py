@@ -47,7 +47,9 @@ HOME = Path.home()
 SOURCE_HOST, TARGET_HOST, TARGET_IP = "ubuntu-docker", "bot-server", "192.168.1.228"
 PROJECT_KEYS = {"source": "-home-batt-docker-poring-lab", "target": "-home-bot-docker-poring-lab"}
 # .env keys allowed (expected) to differ on the target
-ENV_DIFFERS = {"HOST_LAN_IP": "the target's own address", "WIN_HOST": "empty until the cutover"}
+ENV_DIFFERS = {"HOST_LAN_IP": "the target's own address", "WIN_HOST": "empty until the cutover",
+               "VISION_MAX_VRAM_FRACTION": "1.0: nothing else on the target's GPU"}  # fmt: skip
+TARGET_PROFILE = "dedicated-intel"  # ADR-0022: scripts/host_profile.py
 SMALL_TREES = ("settings", "state")
 SKIP_STATE = ("state/train-duty",)  # the duty level: written by the running guard, not moved
 DB_TABLES = ("login", "char", "inventory", "cart_inventory", "storage", "skill", "party",
@@ -96,6 +98,12 @@ def env_rows(want: Mapping[str, str], have: Mapping[str, str], salt: str,
                     f"differ: {differ}" if differ else f"{len(same)} equal"))  # fmt: skip
     rows.append(row("env: HOST_LAN_IP is the target's", have.get("HOST_LAN_IP") == TARGET_IP,
                     f"HOST_LAN_IP={have.get('HOST_LAN_IP')!r}"))  # fmt: skip
+    prof = have.get("LAB_HOST_PROFILE")
+    rows.append(row(f"env: LAB_HOST_PROFILE={TARGET_PROFILE} (ADR-0022)", prof == TARGET_PROFILE,
+                    f"LAB_HOST_PROFILE={prof!r}"))  # fmt: skip
+    cap = have.get("VISION_MAX_VRAM_FRACTION")
+    rows.append(row("env: VISION_MAX_VRAM_FRACTION=1.0 (a dedicated GPU)", cap == "1.0",
+                    f"VISION_MAX_VRAM_FRACTION={cap!r}"))  # fmt: skip
     win = have.get("WIN_HOST", "")
     if phase == "prep":
         rows.append(row("env: WIN_HOST EMPTY before the cutover (ADR-0001: one session)",

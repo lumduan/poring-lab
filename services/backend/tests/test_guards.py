@@ -1090,3 +1090,68 @@ def test_every_uv_image_copies_every_workspace_member_pyproject() -> None:
         text = (ROOT / "services" / name / "Dockerfile").read_text()
         for m in members:
             assert f"COPY {m}/pyproject.toml {m}/" in text, (name, m)
+
+
+# --- ADR-0022: the Intel vision image and its overlays (bot-server's Arc A380) --------------------
+INTEL_OVERLAYS = {
+    "compose.intel.yaml": "vision",
+    "compose.vision-worker.intel.yaml": "vision-worker",
+}
+
+
+@pytest.mark.parametrize(("name", "svc"), INTEL_OVERLAYS.items())
+def test_the_intel_overlays_change_only_the_image_the_gpu_and_the_accelerator(
+    name: str, svc: str
+) -> None:
+    """Everything that isolates vision (the agent network only, no X, the mounts, mem == memswap,
+    oom_score_adj) stays compose.yaml's / the worker file's: an overlay may set only these keys."""
+    services = compose(name)["services"]
+    assert list(services) == [svc]
+    spec = services[svc]
+    keys = {"image", "deploy", "devices", "group_add", "environment"}
+    assert set(spec) == (keys | {"build"} if svc == "vision" else keys)
+    assert spec["image"] == "poring-lab/vision-intel:local"
+    assert spec["deploy"] == {}  # `!reset {}`: no NVIDIA reservation
+    assert spec["devices"] == ["/dev/dri:/dev/dri"]
+    assert spec["group_add"] == ["${RENDER_GID:-991}"]
+    assert spec["environment"] == {
+        "PORING_ACCEL": "xpu", "VISION_MAX_VRAM_FRACTION": "${VISION_MAX_VRAM_FRACTION:-1.0}",
+    }  # fmt: skip
+    if svc == "vision":
+        assert spec["build"] == {"context": ".", "dockerfile": "services/vision/Dockerfile.intel"}
+    assert "!reset {}" in (ROOT / name).read_text()
+
+
+def test_the_intel_image_never_gets_the_packet_or_dataset_package() -> None:
+    """ADR-0007 / ADR-0010, as for the CUDA image -- here not even their pyproject.toml (no uv
+    workspace in this image): only poring_env and services/vision are copied."""
+    text = (ROOT / "services" / "vision" / "Dockerfile.intel").read_text()
+    copies = [line for line in text.splitlines() if line.startswith("COPY")]
+    assert not [c for c in copies if "poring_packets" in c or "poring_dataset" in c]
+    assert "COPY packages/poring_env packages/poring_env" in copies
+    assert "COPY services/vision services/vision" in copies
+    assert "--require-hashes --no-deps -r /opt/requirements-intel.txt" in text
+    assert "useradd --uid 1000" in text and "\nUSER agent\n" in text
+    assert "PORING_ACCEL=xpu" in text
+
+
+def _pins(text: str) -> dict[str, str]:
+    pin = re.compile(r"^([A-Za-z0-9_.-]+)==([^ ;\\\n]+)", re.M)
+    return {m[1].lower(): m[2] for m in pin.finditer(text)}
+
+
+def test_the_intel_requirements_hold_the_locks_versions_but_the_torch_stack() -> None:
+    """scripts/gen_intel_requirements.sh: every package uv.lock also has is at the lock's version,
+    so the Intel image differs from the CUDA one only where it must. A lock bump without a re-run
+    of the generator fails here."""
+    import tomllib
+
+    lock = {p["name"]: p["version"] for p in
+            tomllib.loads((ROOT / "uv.lock").read_text())["package"] if "version" in p}  # fmt: skip
+    req = _pins((ROOT / "services" / "vision" / "requirements-intel.txt").read_text())
+    assert req["torch"] == "2.15.0+xpu" and req["torchvision"] == "0.29.2+xpu"
+    assert req["openvino"] == "2026.4.1" and "opencv-python" not in req
+    assert not [n for n in req if n.startswith(("nvidia-cu", "nvidia-cudnn", "nvidia-nccl"))]
+    differ = {n: (v, lock[n]) for n, v in req.items()
+              if n in lock and n not in ("torch", "torchvision") and v != lock[n]}  # fmt: skip
+    assert differ == {}
