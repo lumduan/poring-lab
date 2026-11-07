@@ -173,3 +173,36 @@ owner: Batt
     changed on the NAS: its "before" reading was export 7 = `["192.168.1.13"]`, Frigate started
     2026-10-13T03:48:02Z with 0 restarts. Batt runs it, or allows it;
   - the DHCP reservation for 192.168.1.228: the agent has no access to the router.
+
+## 11. The NAS and the router (2026-11-07 15:2x)
+- **DHCP:** Batt reserved 192.168.1.228 for bot-server (eno1, MAC 98:f2:b3:ee:99:f2).
+- **NFS export 7 (datasets) now admits 192.168.1.13 AND 192.168.1.228** (15:23:4x). Batt asked for
+  a permission rule. It is `.claude/settings.local.json` (gitignored), which allows only
+  `ssh -o BatchMode=yes root@192.168.1.6 'midclt call sharing.nfs.update 7 ...`.
+  - Read before and after: Frigate started 2026-10-13T03:48:02Z with 0 restarts, unchanged;
+    exports 8 and 9 unchanged; this host's mount still lists.
+  - The export's comment still says "VM 103 only": a second update to fix it was refused by the
+    auto-mode classifier (it was not the allowed form). Cosmetic, left as it is.
+- **bot-server mounts it** at the same path and with the same options as this host (an fstab
+  automount: `nfsvers=4.2,soft,timeo=150,retrans=3,noatime,rw`; `/etc/fstab.bak-20261107` kept).
+  `bot` (uid 1000) sees the files as its own. Reading one 256 MB recording shard ran at 114 MB/s,
+  the 1 GbE line rate.
+
+## 12. Is bot-server big enough for poring-lab alone? (Batt's question, 2026-11-07 15:2x)
+➡️ **This CORRECTS section 4's row B ("NOT on this hardware") and the 14:53 report.** That verdict
+applied the OLD host's rules: recordings on the local disk with a 100 GB floor, compose memory
+LIMITS as if they were use. Measured against poring-lab's real use, with the NAS holding the bulk,
+as Batt prefers:
+
+| | poring-lab needs | bot-server has | verdict |
+|---|---|---|---|
+| disk | OS ~8.5 GB + images ~15 GB (today 14.7 GB with the CUDA vision image) + repo / env ~2 GB + the agent's history 5.6 GB + `data/` 0.46 GB = **~32 GB**; recordings (7-8 GB / h) and datasets on the NAS | 122 GB (92 GB free now; the survey's 8.4 GiB can go) | **enough**. The 100 GB floor protected the OLD host's shared disk; here a recording can go to the NAS as it is made (~2.2 MB/s, 2 % of the link) or to a small local buffer |
+| SSD health | | PLEXTOR PX-128M5S: SMART PASSED, 0 reallocated, 0 uncorrectable, 5,911 power-on hours, ~10.8 TB written | fine as the system disk; keep the data on the NAS |
+| RAM | containers in use ~0.6 GB (docker stats 14:4x; the compose caps of 12.8 GB are LIMITS) + training a few GB + scratch <= 4 GB; the CPU detector's 1.5 GB RAM env is not needed (the Arc) | 14.5 GiB usable | **enough** (~6-11 GB at the peak) |
+| GPU | the detector + training | Arc A380 5.65 GiB, no sharing rules | **enough** (today's card gives us a 25 % cap, ~4 GB) |
+| CPU | xfreerdp's software decode: ~4.5 cores at 30 fps (progressive) on the old host's faster cores; AVCthin ~1 core (lossy); the S2 stream ~1 core | 8 cores at 1.7 GHz, no turbo | **the one real question.** Estimated (not measured) ~7-8 of the 8 cores for progressive RDP, ~2 for AVCthin or S2. Needs a short test window: stop this host's RDP (one session only), decode from bot-server, measure |
+| network | the game stream + NAS reads (training can fill the link: 114 MB/s measured) | one 1 GbE port in use (3 free) | enough if training reads are throttled, or a second cable for NAS traffic |
+
+- **So no new disk is needed.** The useful additions are a second network cable, and possibly a
+  faster CPU only if the RDP test shows progressive decode does not fit (or the bot uses AVCthin /
+  S2).

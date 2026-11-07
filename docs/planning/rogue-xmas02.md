@@ -634,6 +634,49 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   lock timer while closing in, C: the target choice, D: the strike click), pre-registered before
   its own run. Nothing live changes from this study.
 
+### 4P. Pilot p9 pre-registration: the Rogue NOT immune, Myst Cases kept (written BEFORE its run)
+
+- **Why:** S1 (4O): 9 of 23 strikes in p7 + p8 hit Myst Cases that TELEPORTED after 2-4 hits
+  (rAthena: AL_TELEPORT, idle, on `rudeattacked`; most likely because the immune Rogue cannot be
+  targeted). Batt 2026-11-07 ~15:2x: "turn immunity off, and do not skip Myst Case: it is the map's
+  important monster; what is stolen from it sells high."
+- **The one change against p8: no immunity.** The runner is p8's dungeon@8.9 with
+  `--box-strike --box-now` and the GPU box watcher (`--box-detector gpu`, the default since p8's
+  G1 / G2). p8's ab arms are not repeated: G2 already measured them. Nothing else changes; the
+  2.0-s fight end (S1 follow-ups) is NOT in this run.
+- **The run:**
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p9 --box-strike --box-now
+
+  - Before it: immunity toggled OFF with `crusader.py --char thief gm --job rogue
+    '@monsterignore'`, judged by the answer over the character on a screenshot ("Returned to
+    normal state." = now off), then a judged screenshot of the client.
+  - Beside it: the detect server as one guarded `execdev:vision` step (2400 s), started first.
+  - After it: immunity back ON (toggled and judged), the Rogue's resting state as before.
+  - P2 keeps the Rogue alive by itself: a White Potion below 40 % HP, a Fly Wing below 20 % or
+    under fast damage; 30 potions and 19 Fly Wings in stock. A death is a RESULT (the run stops,
+    the cause recorded), never retried.
+- **Bars (E1-E3 as 4M / 4N, per hour):**
+  - **E1 (primary):** kills (packets) >= 40 / h (p7 and p8: 12.0 / h).
+  - **E2:** box fights ending as a box miss <= 50 % (p8 64.7 %).
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h.
+  - **M1 (the hypothesis):** of the strikes on Myst Cases, <= 20 % end with the Myst Case
+    teleporting (vanish reason 3 after our hits). p7 + p8 under immunity: 9 / 9.
+  - **D1:** 0 deaths.
+  - Reported:
+    - the S1 classes (`scripts/lock_study.py`);
+    - kills and teleports by species (packets);
+    - damage taken and potions drunk;
+    - items per hour (the judge's items: snatched / picked);
+    - R3 over the detect-server step.
+- **Decisions:**
+  - M1 passes: immunity stays off for xmas_dun02 runs (Batt's direction), Myst Cases stay targets;
+  - E1 / E2 still fail: the next change is the fight end (S1 follow-ups), pre-registered on its
+    own;
+  - a death, or D1 failing: the next run's survival is studied before any other change.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
