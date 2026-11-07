@@ -1021,6 +1021,8 @@ dungeon@8.8 at 0056948, pre-registered 07:44:59; `--box-strike`; the Rogue immun
   - 13 boxes MATCHED a monster's predicted sprite when grabbed (IoU >= 0.4, 1.2-1.6 s before the
     event), and that monster was GONE from the hovered spot by the hover (IoU < 0.3, 100-200 px away).
   - 4 monsters stood still the whole time; all of them were struck.
+  - The box still on a monster (IoU >= 0.4) as time passes: 13 / 18 at about the grab (1.6 s
+    before the event), 9 / 18 0.4 s later, 5 / 18 from 0.8 s later on (only the idle monsters).
   - **So the boxes are right and the time from grab to hover is too long.** The 1-a-second
     rhythm plus a CPU detection makes the wait 0.3-1.2 s, then each hover takes 0.35 s, and a
     wandering monster walks 2-5 cells in that time.
