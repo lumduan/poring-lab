@@ -11,6 +11,12 @@ import websockets.sync.client as _ws_client
 
 from poring_backend.clipboard import ConvertRequest, OwnerChanged, OwnershipLost, SelectionEvent
 
+# THE TESTS DO NOT DEPEND ON THE HOST (2026-11-07): scripts/guarded_build.py reads this host's
+# profile (LAB_HOST_PROFILE, else the repo's .env) at import. bot-server's .env says
+# dedicated-intel, which made 7 tests of the shared host's rules (R3, the overlays) fail there.
+# Every test sees the default profile; test_host_profile.py sets the others itself.
+os.environ["LAB_HOST_PROFILE"] = "shared-nvidia"
+
 # NO TEST EVER REACHES THE LIVE BACKEND (2026-10-09). test_walk12's operator_hud.enable() built a
 # real ro_agent.Agent and opened /internal/agent links ("operator-hud" hellos in the live input log)
 # while scored client runs were going: no input was sent, but a test must not touch the live
