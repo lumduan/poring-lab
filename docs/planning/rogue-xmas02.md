@@ -527,6 +527,35 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
 - A FAIL keeps the deployment as Batt decided. The cause is reported, and any change is
   pre-registered before its own run (never tuned on this one).
 
+### 4M. Pilot p7 pre-registration: dungeon@8.8, the box strike (written BEFORE its run)
+
+- **Why:** p6 (section 5) failed D1 / D2. 16 of 19 box fights hovered only the 8 cells around
+  us (the defend ring), while the boxed monster stood 1.5-3.5 cells away (box feet 48-108 px). The
+  boxes came from a camera still walking (~6 cells a second, boxes kept up to 1.5 s).
+- **The change (dungeon@8.8 at 0056948; the one change, `--box-strike`, off by default):** a
+  box-started fight first waits until our walk has ended (BOX_SETTLE_S 1.2 s after the last walk
+  click), then for a box GRABBED AFTER that (`BoxWatch.wait_fresh`, <= 1.8 s). It takes the nearest
+  one within BOX_TARGET_PX 220 (~6 cells) and hovers its centre, then its body point (foot -
+  BODY_UP). A SWORD there is the strike (`by: box`) and the lock; otherwise the ring scan runs as
+  before. Once per box fight; a `box_target` event logs it.
+- **The run:** pilot p7 = the xmw3 recording (xmas02-detector.md Amendment K: TRAIN-walk; a runner
+  change between sessions does not change a session's role). p6's command with `--box-strike
+  --minutes 20 --label xmas02-xmw3`, the recorder beside it (Amendment K's chain), the Rogue
+  immune (toggled and judged first), a judged screenshot first. Judged once after the run by
+  `dungeon_judge.py row` and `walk_judge.py`.
+- **Bars (against p6, the same command without `--box-strike`; per hour, the runs' lengths differ):**
+  - **E1 (primary):** kills (packets) >= 40 / h (p6 4.0 / h, p4 4.0 / h).
+  - **E2:** box fights ending as a box miss <= 50 % (p6 84 %).
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 13 (p6 5 in 15 min).
+  - Reported:
+    - `box_target` outcomes: fresh / no box / no SWORD / struck, the settle and wait times, the
+      distances;
+    - strikes by kind and how many landed;
+    - waypoints a minute;
+    - items stolen / picked.
+- A FAIL keeps `--box-strike` off (the runner's default). The cause is reported, and any next change
+  is pre-registered before its own run.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
