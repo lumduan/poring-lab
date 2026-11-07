@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Moving our GPU work (training first, then the live detector) to the dedicated bot-server (192.168.1.228, Intel Arc A380) stops our jobs from touching the shared host's GPU (Frigate) and disk (quant capture), without moving the live loop."
-status: "SURVEYED 2026-11-07 14:18-14:50 ICT (a read-only survey plus user-space test installs on bot-server). The CPU is measured; the Arc is NOT, because user `bot` lacks the render group. Recommended shape: A (GPU offload). Batt decides (section 7)."
+status: "SURVEYED 2026-11-07 14:18-14:50 ICT (a read-only survey plus user-space test installs on bot-server). The CPU is measured; the Arc is NOT, because user `bot` lacks the render group. Recommended shape: A (GPU offload). Batt decides (section 7). Sudo there: section 8 (the password is in .env; Batt sets it)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [gpu-live-detector.md, endpoints-as-config.md, ../benchmarks/cpu-detector-speed.md, ../adr/0005-vision-x-access.md, ../operations/nas-sink.md]
-next_action: "Batt: add `bot` to the render and video groups on bot-server (or grant agents sudo there). Then an agent runs the staged GPU test (/home/bot/survey/scripts/gpu_run.sh, ~5-10 min): OpenVINO on the Arc vs the CPU boxes, PyTorch XPU training. Its numbers decide A1 / A2."
+next_action: "Batt sets user bot's password on bot-server to .env's BOT_SERVER_SUDO_PASSWORD (section 8); then an agent, with sudo: bot into render + video, the Intel runtime system-wide, the staged GPU test (/home/bot/survey/scripts/gpu_run.sh, ~5-10 min: OpenVINO on the Arc vs the CPU boxes, PyTorch XPU training), nfs-common and a read-only NFS mount try. Its numbers decide A1 / A2."
 title: "Moving the bot's GPU work to bot-server: survey and options"
 date: 2026-11-07
 owner: Batt
@@ -123,3 +123,16 @@ owner: Batt
    protect .13's Frigate and quant capture; the NAS stays shared).
 6. Shape B only with more RAM, a bigger disk and a faster CPU: wanted, and when?
 7. A `pci=realloc` trial for Resizable BAR (a bootloader change and a reboot of bot-server).
+
+## 8. Sudo on bot-server (Batt, 2026-11-07 ~14:5x)
+- Batt: "If a password blocks you, make a new one and put it in .env; I will set it there, and you
+  may use it." And: "Don't worry about root: I made this machine a sandbox already; it does not
+  touch my work."
+- The password is generated into `.env` as `BOT_SERVER_SUDO_PASSWORD` (`scripts/rotate_secrets.py
+  rotate BOT_SERVER_SUDO_PASSWORD`: 24 alphanumerics, mode 600, gitignored, never printed).
+- Batt sets it on bot-server as user `bot`'s password (`sudo passwd bot`, with the value read
+  from `.env` in their own terminal, never in an agent's session).
+- Agents use it only as `sudo -S` input on stdin over ssh, read from `.env` inside the command,
+  never on an argv, in a log or in a report.
+- Root on bot-server is allowed (a sandbox). Still out of bounds: other machines, the NAS's
+  configuration, the router, and network changes that reach beyond bot-server.

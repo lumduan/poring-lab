@@ -14,6 +14,9 @@ Known variables and their generators:
     RATHENA_TEST_PASSWORD           16 alphanumerics (rathena's entrypoint rule).
     WIN_LAB_PASSWORD                20 alphanumerics, at least one upper, lower and digit
                                     (Windows complexity).
+    BOT_SERVER_SUDO_PASSWORD        24 alphanumerics, upper + lower + digit: user `bot`'s password
+                                    on bot-server (192.168.1.228). Batt sets it there by hand
+                                    (2026-11-07); agents pass it to `sudo -S` on stdin only.
     The Thai-data experiment's rathena-th + db-th (2026-10-05), FIRST-TIME ONLY (refused once its
     db-th container exists: rotating a live database's password is not implemented for it):
     DB_TH_PASSWORD, DB_TH_ROOT_PASSWORD hex32; RATHENA_TH_SERVER_USER srv_+hex8,
@@ -63,6 +66,9 @@ GENERATORS: dict[str, Callable[[], str]] = {
     "RATHENA_SERVER_PASSWORD": lambda: secrets.token_hex(16)[:23],
     "RATHENA_TEST_PASSWORD": lambda: _alnum(16),
     "WIN_LAB_PASSWORD": lambda: _complex(20),
+    # bot-server (192.168.1.228, docs/planning/bot-server-migration.md): Batt 2026-11-07 sets this
+    # as user `bot`'s password there by hand, and agents may use it for sudo (sudo -S, on stdin)
+    "BOT_SERVER_SUDO_PASSWORD": lambda: _complex(24),
     # rathena-th / db-th (first-time only, see TH_FIRST_TIME)
     "DB_TH_PASSWORD": lambda: secrets.token_hex(16),
     "DB_TH_ROOT_PASSWORD": lambda: secrets.token_hex(16),

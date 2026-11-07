@@ -36,6 +36,7 @@ def test_rewrite_replaces_in_place_keeps_comments_and_appends_missing(rs: Module
         ("RATHENA_SERVER_PASSWORD", r"[0-9a-f]{23}"),  # <= 23: char/map 24-byte buffers
         ("RATHENA_TEST_PASSWORD", r"[A-Za-z0-9]{16}"),  # entrypoint: 8-32 of [A-Za-z0-9]
         ("WIN_LAB_PASSWORD", r"(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z0-9]{20}"),
+        ("BOT_SERVER_SUDO_PASSWORD", r"(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z0-9]{24}"),
         ("DB_TH_PASSWORD", r"[0-9a-f]{32}"),
         ("RATHENA_TH_SERVER_USER", r"srv_[0-9a-f]{8}"),  # entrypoint: 4-23 characters
         ("RATHENA_TH_SERVER_PASSWORD", r"[0-9a-f]{23}"),
