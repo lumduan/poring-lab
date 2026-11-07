@@ -64,3 +64,17 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
 - The NVIDIA-only checks (`check_gpu.py` sm_120, nvidia-smi in R3) become the NVIDIA case of the
   host profile. R3 stays exactly as it is on ubuntu-docker.
 - AMD is designed in but unproven: no host here has an AMD GPU.
+
+## Implementation (2026-11-07)
+- Decision 3, the host profile: `scripts/host_profile.py`, named by `LAB_HOST_PROFILE` in `.env`.
+  Unset means `shared-nvidia` (ubuntu-docker), so a host is dedicated only by declaration.
+  guarded_build adds the profile's compose overlay last, and on a DEDICATED host skips R1-R3, the
+  R2 co-tenant watch and the duty cycle, and idles the IO guard. It refuses every step on a
+  declared-dedicated host where a capture service runs (`dedicated_refusal`). VM 103's commands
+  are unchanged (`test_host_profile.py`).
+- Decision 4, the Intel image: `services/vision/Dockerfile.intel` + `requirements-intel.txt`
+  (scripts/gen_intel_requirements.sh: every package the lock also has at the lock's version, by
+  hash), selected by `compose.intel.yaml` / `compose.vision-worker.intel.yaml` (the image, the DRM
+  render node and render group, `PORING_ACCEL=xpu`; nothing else, `test_guards.py`). Built on
+  bot-server 2026-11-07 (11.8 GB); a guarded `run:vision` there saw the A380 (torch 2.15.0+xpu),
+  ran a matmul, OpenVINO listed `GPU`, and an ultralytics forward ran on xpu.

@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Moving our GPU work (training first, then the live detector) to the dedicated bot-server (192.168.1.228, Intel Arc A380) stops our jobs from touching the shared host's GPU (Frigate) and disk (quant capture), without moving the live loop."
-status: "A1 APPROVED 2026-11-07 (Batt: 'move it; that is why this machine exists'). The Arc A380 test PASSED 15:05-15:09 ICT (section 9): OpenVINO FP32 boxes = CPU boxes, 41-42 ms a call; PyTorch XPU + ultralytics train. Waiting on Batt: the NFS export for .228 and the DHCP reservation (section 10). The agent's knowledge is on bot-server (docs/operations/bot-server-handover.md)."
+status: "A1 APPROVED 2026-11-07 (Batt: 'move it; that is why this machine exists'). The Arc A380 test PASSED 15:05-15:09 ICT (section 9); the NFS exports (7, 8, 9) and the DHCP reservation are done; the XPU path is in poring_vision (ADR-0022) and trained on the Arc (section 15). ➡️ SUPERSEDED in scope ~17:4x ICT: Batt moves the WHOLE lab, the live loop included (rathena, the Windows side); the hypothesis's 'without moving the live loop' no longer holds. The move itself: bot-server-cutover.md. This doc keeps the survey and the measurements (sections 0-15, each dated)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [gpu-live-detector.md, endpoints-as-config.md, ../benchmarks/cpu-detector-speed.md, ../adr/0005-vision-x-access.md, ../operations/nas-sink.md]
-next_action: "Batt: add 192.168.1.228 to NFS export 7 and reserve .228 in DHCP. Then the agent: the read-only datasets mount on bot-server, an XPU device path in poring_vision (train.py / gpu.py), a trainer runner for a host that is not shared, and a first training run there pre-registered against the RTX 5060 Ti."
+next_action: "The cutover: docs/planning/bot-server-cutover.md (its status says the phase). Here, after the move: the training speed on the Arc (data-loader workers, validation frequency, BF16; section 15)."
 title: "Moving the bot's GPU work to bot-server: survey and options"
 date: 2026-11-07
 owner: Batt

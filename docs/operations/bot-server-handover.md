@@ -1,13 +1,13 @@
 ---
 doc_type: runbook
 hypothesis: null
-status: "ACTIVE 2026-11-07: the agent's knowledge copied to bot-server (Batt: 'before moving, transfer the Claude Code agent's knowledge ... including the whole poring-lab conversation history'). The lab itself still runs on ubuntu-docker; the full move follows docs/planning/bot-server-migration.md."
+status: "ACTIVE 2026-11-07: the agent's knowledge copied to bot-server (Batt: 'before moving, transfer the Claude Code agent's knowledge ... including the whole poring-lab conversation history'), re-synced 19:08 ICT by scripts/agent_sync.py (the prep check PASS 27 / FAIL 0). Batt then decided the WHOLE lab moves (~17:4x: rathena too): docs/planning/bot-server-cutover.md."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../planning/bot-server-migration.md, nas-sink.md, subagent-brief.md, ../../CLAUDE.md]
-next_action: "At the cutover: re-sync the memory and the growing transcript (section 4), then the agent on bot-server becomes the lab's agent. Until then the memory of record is ubuntu-docker's."
+next_action: "At the cutover (bot-server-cutover.md Phase B): a fresh manifest, scripts/agent_sync.py, migration_check.py check --phase final PASS; then the agent on bot-server becomes the lab's agent. Until then the memory of record is ubuntu-docker's."
 title: "Handover: the poring-lab agent's knowledge on bot-server"
 date: 2026-11-07
 owner: Batt
@@ -72,10 +72,14 @@ train and run at full speed without touching this machine's GPU again."
   - ubuntu-docker mounts them by fstab automount (`soft,vers=4.2,timeo=150,retrans=3,noatime`).
   - bot-server has `nfs-common`. ➡️ Since 2026-11-07 15:23, export 7 (datasets) admits
     192.168.1.228. bot-server mounts it at `/mnt/poring-lab-datasets` with the same options, as an
-    fstab automount (114 MB/s read; bot-server-migration.md 11). Exports 8 and 9 still admit
-    .13 only.
+    fstab automount (114 MB/s read; bot-server-migration.md 11). ~~Exports 8 and 9 still admit
+    .13 only.~~ ➡️ SUPERSEDED ~17:4x the same day: 8 and 9 admit .228 too (Batt extended the
+    rule), mounted at `/mnt/poring-locale-packs` and `/mnt/poring-thai-src`.
 - **The tools:** `scripts/bot_server_sudo.sh` (a root script on bot-server, the password on
-  stdin) and `scripts/guarded_copy.py` (a copy under the IO guard).
+  stdin), `scripts/guarded_copy.py` (a copy under the IO guard), `scripts/agent_sync.py` (the
+  agent's push: memory, history, skills, CLAUDE.md under the preface in
+  `bot-server-claude-preface.md`), `scripts/migration_check.py` (manifest here, check there) and
+  `scripts/host_profile.py` (`LAB_HOST_PROFILE=dedicated-intel` there, ADR-0022).
 - **sudo on bot-server:**
   - the password is `BOT_SERVER_SUDO_PASSWORD` in `.env`, passed to `sudo -S` on stdin only;
   - root is fine there (Batt: a sandbox);
@@ -85,13 +89,18 @@ train and run at full speed without touching this machine's GPU again."
 ## 3. What bot-server is for now
 - **Training moves there first** (Batt 2026-11-07: "move it; that is why this machine exists").
   The Arc A380 test passed (bot-server-migration.md 9).
-- **The live lab stays on ubuntu-docker until the full move:** rathena, the RDP / S2 path, the mux
-  and the runner. The full move waits on the hardware limits (a 128 GB disk, 15 GiB RAM, a 1.7 GHz
-  CPU) and on Batt's Windows / NAS / router steps (bot-server-migration.md 4, 5).
+- ~~The live lab stays on ubuntu-docker until the full move ... waits on the hardware limits~~
+  ➡️ SUPERSEDED 2026-11-07 ~17:4x: Batt decided the WHOLE lab moves, rathena and the Windows side
+  included, and corrected the sizing (bot-server-migration.md 12: the disk and RAM suffice with
+  the NAS). The plan, its phases and their state: `docs/planning/bot-server-cutover.md`.
 
-## 4. At the cutover (later)
-1. Re-sync from ubuntu-docker: the memory folder (overwrite), and the transcript with `rsync
-   --append` (only the new tail) under the IO guard.
-2. Move `.env`, `settings/`, `state/` and the needed `data/`, by the plan in
-   bot-server-migration.md.
-3. From then on, bot-server's memory is the record; ubuntu-docker's agent stops writing it.
+## 4. At the cutover
+The cutover doc's Phase B is the procedure. The agent's part:
+1. `python3 scripts/migration_check.py manifest --out <M>` on ubuntu-docker, copied to
+   bot-server (mode 600).
+2. `python3 scripts/agent_sync.py` on ubuntu-docker: the memory made identical, every transcript's
+   new tail (`--append`), the skills, CLAUDE.md rebuilt (preface + Batt's text verbatim), read
+   back. No memory is written between 1 and 3.
+3. `python3 scripts/migration_check.py check --manifest <M> --phase final` on bot-server: PASS.
+4. From then on, bot-server's memory is the record; ubuntu-docker's agent stops writing it.
+Rehearsed 2026-11-07 19:08 ICT (phase prep): every agent row PASS.

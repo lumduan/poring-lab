@@ -56,6 +56,11 @@ ports, quickstart) and `docs/adr/`.
      unclear means ideas only, write our own. Read the LICENSE at the exact commit first and record
      it in `THIRD_PARTY.md`. Never open cheat or memory-patching repos.
 5. **This host is shared with live 24/7 capture services, Frigate (NVR) and Ollama.**
+   - ➡️ This rule describes ubuntu-docker (VM 103), host profile `shared-nvidia` (the default).
+     bot-server declares `LAB_HOST_PROFILE=dedicated-intel` (ADR-0022, Batt 2026-11-07: "no limits
+     like this machine"): there guarded_build skips R1-R3 and idles the IO guard, and refuses if a
+     capture service ever appears (`scripts/host_profile.py`). Rule 6's pinned subnets and every
+     other rule bind on both hosts.
    - Every lab container keeps `mem_limit` equal to `memswap_limit` (no swap) and `oom_score_adj: 500`.
    - CPU: desktop keeps `cpu_shares: 64` (cgroup v2 weight 12 vs the quant containers' 100) and `cpus: 8`,
      backend `cpu_shares: 256`. xfreerdp 3.15's software decode took 7-15 cores in motion, and 8 was the

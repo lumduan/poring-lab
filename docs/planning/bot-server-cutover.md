@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A (prepare bot-server) under way; Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after scripts/migration_check.py passes."
+status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE but the RAM runtime (19:1x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the prep check PASS 27 / FAIL 0 / SKIP 1 (the db rows wait for the dump). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Phase A: bot-server's .env (HOST_LAN_IP .228, WIN_HOST EMPTY until the cutover), the images built there, the Intel vision image + host profile, migration_check.py with a source manifest. Then a cutover window with Batt."
+next_action: "A cutover window with Batt (Phase B): the UAC prompts on Windows, the Settings page entry, and the gamestream-state choice (pipe copy or re-pair). Before it: the RAM runtime on bot-server (Phase A 7)."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -50,20 +50,39 @@ owner: Batt
 | NAS mounts | - | done on bot-server (7, 8, 9) |
 
 ## 2. Phase A: prepare bot-server (no effect on the live lab)
-1. Docker with the address pools set first (done 17:4x).
-2. `.env` there (`HOST_LAN_IP=192.168.1.228`, `WIN_HOST=`), `data/` pre-copied, the fingerprints.
-3. The images built there; the Intel vision image and its compose override (`/dev/dri`, the
-   render group) instead of the NVIDIA reservation (ADR-0022).
-4. A host profile: bot-server is DEDICATED. No Frigate, so no R1-R3; no quant capture, so the IO
-   guard has nothing to protect.
-5. The stack started there WITHOUT the desktop's RDP and without the S2 stream. rathena, db,
-   sniffer and backend can run beside VM 103's lab: the Windows client still points at .13.
-6. `scripts/migration_check.py`: `manifest` on VM 103, `check` on bot-server.
+1. ✅ Docker with the address pools set first (17:4x ICT).
+2. ✅ `.env` there (`HOST_LAN_IP=192.168.1.228`, `WIN_HOST=`, and since 18:1x
+   `LAB_HOST_PROFILE=dedicated-intel`, `RENDER_GID=991`, `VISION_MAX_VRAM_FRACTION=1.0`), `data/`
+   pre-copied, the fingerprints.
+3. ✅ The images built there, 18:18-18:47 ICT: desktop, backend, frontend, gamestream, sniffer,
+   rathena (+ its build stage), and the INTEL vision image (`Dockerfile.intel`, 11.8 GB) with its
+   overlays (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`; ADR-0022 Implementation).
+   The sniffer needs the packet length table, which is generated, never copied: it was generated
+   there (`scripts/gen_packet_tables.py`) and is byte-identical to VM 103's (sha256 0e523cc6...).
+   A guarded `run:vision` saw the A380 (torch 2.15.0+xpu), OpenVINO listed `GPU`, an ultralytics
+   forward ran on xpu.
+4. ✅ The host profile (`scripts/host_profile.py`): bot-server is DEDICATED. guarded_build skips
+   R1-R3 there and its IO guard watches nothing ("no capture service on this host"); it refuses
+   if a capture service ever appears.
+5. ✅ The stack started there 18:48-19:04 ICT through guarded_build (dev mode, as on VM 103): db,
+   rathena, backend, desktop (Xvfb only: `WIN_HOST` empty), sniffer, frontend-dev; NOT gamestream.
+   All healthy; the networks pinned 10.210.96.0/24 + 10.210.97.0/24 and the VLAN route via the
+   router; rathena advertises 192.168.1.228:6121 / :5121; the sniffer's self-test PASS; the mux
+   boots HUMAN. Its db is a FRESH one (the entrypoint's bootstrap): the cutover restores VM 103's
+   dump over it.
+6. ✅ `scripts/migration_check.py`: a fresh manifest on VM 103, `scripts/agent_sync.py` (the
+   rehearsal, 19:08), `check --phase prep` on bot-server: PASS 27, FAIL 0, SKIP 1 (the db rows).
+7. ⏳ The RAM runtime on bot-server (`/dev/shm`, gone at every reboot there too): the CPU
+   detector's environment and its models, `poring-lab-kb`, `poring-lab-rathena-src`, the GAT
+   maps, the sprites, the calibrations (walk5-cal, talk-cal, hotbar-cal), the chat guard. The
+   after-reboot procedure rebuilds what it can from the NAS GRF (mounted there); the calibrations
+   are copied RAM to RAM. Not yet in the check: a row for it is due with the copy.
 
 ## 3. Phase B: the cutover (a window with Batt)
 1. VM 103: the runner idle, the RDP loop stopped and its client ended; the lab's containers
    stopped.
-2. The final sync: db dump, captures, transfer, settings, state, data, the agent's history.
+2. The final sync: db dump, captures, transfer, settings, state, data; the agent by
+   `migration_check.py manifest` here, then `scripts/agent_sync.py` (handover doc section 4).
 3. bot-server: `WIN_HOST` set, the full stack up.
 4. **Windows** (the agent through the mux; UAC prompts are Batt's: the agent never approves
    them):
