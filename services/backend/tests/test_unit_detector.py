@@ -493,6 +493,8 @@ def test_each_batch_is_logged_with_its_path(worker: Path, tmp_path: Path, privat
         det.detect(FRAME)
         row = json.loads(det.log_path.read_text())
         assert row["path"] == "cpu" and row["boxes"] == [[1.0, 2.0, 3.0, 4.0, 0.9, "monster"]]
+        assert row["prefer"] == "gpu" and row["reason"].startswith("FileNotFoundError")
+        assert abs(row["t_wall"] - time.time()) < 60  # the wall clock: R3's log lines
 
 
 def test_for_map_gpu_takes_the_maps_own_weights(

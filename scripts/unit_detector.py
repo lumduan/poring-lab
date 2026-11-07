@@ -368,8 +368,9 @@ class GpuDetector:
             self.last_path = "gpu"
             self.counts["gpu"] += 1
         if self.log_path is not None:
-            row = {"t_ns": time.monotonic_ns(), "ms": self.last_ms, "path": self.last_path,
-                   "h": a.shape[0], "w": a.shape[1],
+            row = {"t_ns": time.monotonic_ns(), "t_wall": round(time.time(), 3),
+                   "ms": self.last_ms, "path": self.last_path, "prefer": prefer,
+                   "reason": self.last_reason, "h": a.shape[0], "w": a.shape[1],
                    "boxes": [[round(b.x0, 1), round(b.y0, 1), round(b.x1, 1), round(b.y1, 1),
                               round(b.score, 3), b.cls] for b in boxes]}  # fmt: skip
             with self.log_path.open("a") as fh:

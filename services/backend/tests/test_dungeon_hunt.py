@@ -957,6 +957,7 @@ def test_the_box_flags_default_to_todays_behaviour() -> None:
     assert '"cpu" if a.box_detector == "cpu" else "gpu")' in src
     assert "for u_, v_ in points[:1] if a.box_now else points:  # dungeon@8.9: ONE hover" in src
     assert "meta = boxes.fresh_now(arm, BOX_TARGET_WAIT_S)" in src
+    assert 'boxes.det.log_path = out / "detections.jsonl"' in src  # each GPU-path detection
     # without --box-now the box target is dungeon@8.8's, unchanged
     assert "fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)" in src
 

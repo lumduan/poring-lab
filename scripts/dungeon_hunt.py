@@ -1649,6 +1649,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                              None if a.box_model == "v1" else a.map,
                              "cpu" if a.box_detector == "cpu" else "gpu")  # fmt: skip
             ev({"kind": "box_model", "choice": a.box_model, **boxes.model})
+            if boxes.gpu:  # dungeon@8.9: each detection's path + wall time (R3's windows, 4N G1)
+                boxes.det.log_path = out / "detections.jsonl"
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
         ours_used = -2e9
