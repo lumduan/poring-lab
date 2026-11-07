@@ -945,3 +945,29 @@ ADOPTED.**
   "col_nudge_ab" False) -- exactly 4K's "v57 = v56 with col_nudge_ab off", by the adoption
   mechanism v55 used (3.97); no PARAMS[57] is made. `config/flows/hunt/v56.yaml` exported.
   Every hunt_flow walk click inside the GM's column now moves 9 px east.
+
+**Pilot p6 (4L; session 20261107T065911-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p6; T-11 at
+8d2ab43, pre-registered 06:54:56; the Rogue immune, toggled and judged 06:57-06:58; the run
+06:59:11-07:15:02, its own time box; unrecorded). VERDICT: FAIL (D1, D2); D3 passes. The deployment
+stays (Batt's decision); the runner's box rule is the limit.**
+
+| | p4 (v1) | p5 (v1) | **p6 (xmas02)** | bar |
+|---|---|---|---|---|
+| D1 kills (packets) | 1 | 0 | **1** (4.0 / h) | >= 10: FAIL |
+| D2 box engagements ending as a box miss | 8 box | 5 / 5 | **16 / 19 = 84 %** | <= 50 %: FAIL |
+| D3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 3 | pass / 0 / 4 | **pass (0 NPC contact, 0 non-monster attack, 0 map change) / 0 / 5** | PASS |
+| engagements | 13 (8 box) | 5 (5 box) | 23 (19 box, 4 walk SWORD) | reported |
+| strikes / landed | 6 / 2 | 0 / 0 | 10 / 4 (6 from a scan, 4 walk SWORD) | reported |
+| waypoints (per min) | 215 (14.32) | 218 (14.53) | 203 (13.53) | reported |
+| box watcher | v1 | v1 | 900 frames (1 / s), 4 own-character boxes skipped, 1 spot ignored | reported |
+
+- **The model sees the monsters; the runner does not go to them.** A box engagement (a box foot
+  within BOX_NEAR_PX 110 of our cell) starts the DEFEND scan: the 8 cells AROUND US. The 19 box feet
+  lay 48-108 px from our cell's point (~1.5-3.5 cells): 16 of them beyond the ring, so no SWORD.
+  The 3 that led to a strike lay at 82, 89 and 104 px. The Rogue is immune, so a monster never comes
+  to the ring by itself.
+- **While walking, the box is also stale on the map:** BoxWatch keeps a box for up to BOX_FRESH_S
+  1.5 s, and the Rogue walks ~6 cells a second (150 ms a cell). A box's spot must be placed with
+  OUR position at the box's grab, not the current one. Both points belong to the next runner change
+  (a strike at the box's own cell, the camera at the grab time), pre-registered before its run.
+
