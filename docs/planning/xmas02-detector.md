@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "DEPLOYED (Amendment J). The walking gap (Amendment K): on xmw1 the camera offset lifts moving F1 0.30 -> 0.71 (480 ms) but L_self did NOT stand by eye (7/12): the walking lag varies per capture. Batt chooses: (a) a per-capture camera estimate (sprite fit / minimap) for walking labels and scores, or (b) judging walking sight live (box strikes and kills). xmw2 (CHECK) and xmw3 (TRAIN) are recorded and unread."
+next_action: "Amendment L (2026-11-07 14:2x, Batt delegated): option (b) -- walking sight is judged by the live runner with the packets as the referee; the first step is offline, inside the p7 + p8 study (rogue-xmas02.md). (a), a per-capture camera estimate, is the fallback. DEPLOYED (Amendment J) and on the GPU path since 2026-11-07."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1181,3 +1181,22 @@ adopted and the walking question goes back to Batt.**
   (strikes and kills from box engagements, packets as the referee). Either is a new
   pre-registration.
 
+
+### Amendment L (2026-11-07 14:2x ICT): Batt delegates the walking choice; (b) chosen
+- **Batt** (answering the 13:42 report, item 4): "เอาที่เดินได้สะดวก เลือกเองได้เลย" (take
+  whichever works easily for walking; choose yourself).
+- **Chosen: (b)**, judge "sees while walking" by the live runner, packets as the referee, NOT by a
+  per-frame truth. Why:
+  - the GPU path (docs/planning/gpu-live-detector.md, live since 2026-11-07) makes detections
+    cheap, so live runs already carry many walking detections with their wall times
+    (`detections.jsonl`) beside the packets;
+  - (a) needs a per-capture camera estimate that has not been shown to work (K2's by-eye check
+    gave 7 / 12 even at the best constant);
+  - the runner's own outcome (a box -> a strike -> a kill) is what Batt asked for: the bot seeing
+    monsters while it walks, not a frame score.
+- **(a) stays the fallback** if (b) shows that walking sight is what limits kills.
+- **First step, offline, folded into the "no hits" study of p7 + p8** (rogue-xmas02.md section 5,
+  Batt "ได้" 2026-11-07): for monsters within reach in the packets while we walked, did the box
+  watcher box them before we stopped, and which of those boxes became strikes and kills. Its
+  measures and bars are pre-registered before it is read; no live run and no training follow
+  until then.
