@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p8 (4N, 2026-11-07 12:56-13:27) FAILED E1 (12.0 kills / h) and E2 (64.7 % box misses); G1 / G2 PASSED, so the box watcher runs on the GPU by default (the CPU behind it). Every lock ended 'no hits' (16 / 16; p7 7 / 7): read the packets of p7 + p8 (do our attacks reach the locked target?) before the next runner change is pre-registered. Then the reader's next round (fresh cells), the X4 steal decoders and the boss recognizer."
+next_action: "S1 (4O, 2026-11-07): the locks are not missed hits -- 9 of 23 strikes killed (then ~4 s of idle lock: the client shows no exp line, the runner never sees a kill), 9 were Myst Cases that TELEPORTED (rude-attacked by an immune Rogue, most likely), 4 clicks started no attack; walking-triggered box fights strike 18 % vs 48 % standing. Batt decides immunity on xmas_dun02; then pre-register the next runner change (fight end + kill from pixels, Myst Case handling)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1154,3 +1154,39 @@ default (the follow-up commit).**
   (94 ms on the GPU), and the next limit is staying on the target after the strike. The packets
   can tell whether our attacks reached it (attack requests vs damage to it) before any change is
   pre-registered.
+
+**Offline study S1 (4O, pre-registered 14:29:41; scorer `scripts/lock_study.py` 4618413, run
+14:3x on p7 + p8): the "no hits" locks are NOT missed hits. Every fight already ended before the
+unlock; the runner could not see it end.**
+
+| class (4O) | p7 | p8 | pooled | what happened |
+|---|---|---|---|---|
+| K the target died before the unlock | 4 | 5 | **9** | Cruiser 3, Christmas Cookie 4, Cookie 2; died 1.1-6.2 s after the click, after 2-11 hits |
+| A hit, then gone before the unlock | 3 | 7 | **10** | **9 Myst Cases TELEPORTED** (vanish reason 3, 1.3-2.3 s after the click, after 2-4 of our hits); 1 Cruiser walked out of sight (12.8 s) |
+| B first hit after the unlock | 0 | 0 | 0 | |
+| C requests, never a hit | 0 | 0 | 0 | |
+| D no attack request after the click | 0 | 4 | **4** | the click started no attack |
+
+- **Why the Myst Cases teleport:** rAthena's pre-re mob skills give Myst Case (1249) ONE teleport
+  rule, `AL_TELEPORT` in its idle state on `rudeattacked` at 100 %; Cruiser, Cookie and Christmas
+  Cookie have none. A rude attack is a hit by an attacker the monster cannot target or reach, and
+  the Rogue is immune (`@monsterignore`): monsters ignore it. So most likely the immunity itself
+  makes every Myst Case teleport at its first hits (not yet tested without immunity). 9 of 23
+  strikes, and 0 Myst Case kills, in the two pilots.
+- **The dead time:** after each of the 19 K / A targets was gone, the lock stayed ~3.7-4.6 s more
+  until LOCK_NO_HIT_S (3.5 s) ended it "no hits", ~4 s per fight.
+- **The reader is not the problem for hits:** it saw 48 / 50 (96 %) and 64 / 66 (97 %) of our hits,
+  lag p50 429 / 443 ms, p95 806 / 863 ms. But **experience: 4 and 6 gains in the packets, 0 lines
+  read**: this client's Battle Log shows no experience line, so the runner's kill count (from
+  those lines) stays 0 and its "quiet kill" fight end never fires.
+- **Walking sight, step 1 (p8; Amendment L of xmas02-detector.md):** of 34 box engagements, 11
+  started from a detection grabbed while we walked (a `self_move` within 1.0 s before it): 2
+  strikes, 1 kill (18 % strikes per engagement). The 23 from a standing grab gave 11 strikes, 4
+  kills (48 %). Seeing while walking does limit the box fights.
+- **What it names (each a new pre-registration; nothing changed live):**
+  1. immunity on xmas_dun02 (Batt's decision): it seems to cost every Myst Case fight;
+     or skip Myst Case targets (the map model names the species, `Box.species`);
+  2. end a fight when its target is gone, from pixels (the lock arrow or the box gone), and count
+     kills that way too: ~4 s back per fight;
+  3. the 4 clicks that started no attack (class D);
+  4. walking-triggered box fights (2 strikes of 11 engagements).
