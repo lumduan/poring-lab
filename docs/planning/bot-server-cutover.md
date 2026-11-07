@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE (19:3x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the RAM runtime pushed (and bot-server's logind made to keep /dev/shm), the db move rehearsed (18/18 CHECKSUM TABLE equal), the prep check PASS 41 / FAIL 0 / SKIP 1 (the db rows wait for the cutover). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
+status: "IN PROGRESS 2026-11-07. Batt approved the whole move ('move rathena too, and do the Windows side for me'), Docker on bot-server, and the NAS exports. Phase A DONE (19:3x ICT): every image built there (vision as the Intel image), the stack up beside VM 103's (no RDP, no stream), the RAM runtime pushed (and bot-server's logind made to keep /dev/shm), the db move rehearsed (18/18 CHECKSUM TABLE equal), the generated tables regenerated there byte-identical, the full test suite green on BOTH hosts (VM 103 4,596 / bot-server 4,597 passed, 0 failed), the prep check PASS 43 / FAIL 0 / SKIP 1 at 20:0x (the db rows wait for the cutover). Phase B (cutover) needs Batt for UAC on Windows and the Settings page; Phase C (clean VM 103) only after the final check passes. The agent of record is still ubuntu-docker's."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -72,6 +72,15 @@ owner: Batt
    dump over it.
 6. ✅ `scripts/migration_check.py`: a fresh manifest on VM 103, `scripts/agent_sync.py` (the
    rehearsal, 19:08), `check --phase prep` on bot-server: PASS 27, FAIL 0, SKIP 1 (the db rows).
+   ➡️ Grown since: the runtime rows (item 7), the generated tables (item 8): PASS 43 / FAIL 0 /
+   SKIP 1 at 20:0x ICT.
+8. ✅ The generated tables and the full suite: bot-server's first full run (4,576 passed, 12
+   failed) found the server map caches (`poring_dataset/_generated`, build-time output like the
+   packet table) never generated there: `scripts/gen_mapcache.py` there, all four byte-identical
+   to VM 103's and the lock; the check compares both `_generated` trees now. 3 more failures were
+   the run's launch (a shell `&` ignores SIGINT; they pass in the foreground), and the backend tests
+   now pin the default host profile (bot-server's .env made 7 fail before). Then BOTH hosts green:
+   VM 103 4,596 passed / 60 skipped; bot-server 4,597 passed / 59 skipped (20:10 ICT).
 7. ✅ The RAM runtime on bot-server (`/dev/shm`, gone at every reboot there too), 19:15-19:20
    ICT: `scripts/runtime_sync.py` pushes `migration_check.RUNTIME` RAM to RAM (the KB, the rathena
    source, the detector's models, the GAT maps, the sprites, the calibrations, the chat guard;
@@ -94,7 +103,7 @@ Times are written from `date` as they happen.
 
 **Rehearsed already (2026-11-07):** the db move (`db_move.py`: 18 / 18 `CHECKSUM TABLE` equal, 185
 rows, 19:26-19:29 ICT), the agent push (`agent_sync.py`), the RAM runtime (`runtime_sync.py`), the
-prep check (PASS 41 / FAIL 0 / SKIP 1).
+prep check (PASS 43 / FAIL 0 / SKIP 1, 20:0x ICT).
 
 1. **Freeze the game on VM 103.** Runner idle, `/health` no lease. The client closed by its own
    paced Alt+F4 (rathena saves the characters); then `scripts/dev.sh --profile sniffer stop sniffer

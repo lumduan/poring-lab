@@ -1,7 +1,7 @@
 ---
 doc_type: runbook
 hypothesis: null
-status: "ACTIVE 2026-11-07: the agent's knowledge copied to bot-server (Batt: 'before moving, transfer the Claude Code agent's knowledge ... including the whole poring-lab conversation history'), re-synced 19:08 ICT by scripts/agent_sync.py (the prep check PASS 27 / FAIL 0). Batt then decided the WHOLE lab moves (~17:4x: rathena too): docs/planning/bot-server-cutover.md."
+status: "ACTIVE 2026-11-07: the agent's knowledge copied to bot-server (Batt: 'before moving, transfer the Claude Code agent's knowledge ... including the whole poring-lab conversation history'), re-synced by scripts/agent_sync.py (19:08, again 20:0x ICT; the check's agent rows PASS: see bot-server-cutover.md's status). Batt then decided the WHOLE lab moves (~17:4x: rathena too): docs/planning/bot-server-cutover.md."
 role: null
 verdict_date: null
 verdict_ticket: null
