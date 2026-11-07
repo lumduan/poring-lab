@@ -259,7 +259,7 @@ as Batt prefers:
 - **For comparison, ubuntu-docker's RTX path:** 49-52 ms a call, but paused half the time while
   R3 measures (p9: 911 GPU / 905 CPU detections).
 
-## 15. Training on the Arc with the lab's own trainer (2026-11-07 17:04-17:25, a smoke; still running)
+## 15. Training on the Arc with the lab's own trainer (2026-11-07 17:07-17:28, a smoke; stopped after epoch 1)
 - `python -m poring_vision.train --smoke` (200 frames a training session, 100 for validation, 3
   epochs) on the REAL xmas02 frame cache, read from the NAS
   (`/mnt/poring-lab-datasets/.framecache/xmas02-o3h-t-20261106`; 600 training and 200
@@ -274,7 +274,12 @@ as Batt prefers:
   - training: 1.6-1.7 s an iteration (4 frames), 4.1 GB of GPU memory, epoch 1 in 4 min 21 s
     (~2.4 frames a second);
   - validation: ~40 s a batch, 25 batches = ~16 min. It is the slow part: an early, barely
-    trained model leaves NMS thousands of candidates, most likely on bot-server's slow CPU.
+    trained model leaves NMS thousands of candidates, most likely on bot-server's slow CPU;
+  - epoch 1's validation (200 frames, 334 objects): P 0.924, R 0.068, mAP50 0.071, mAP50-95
+    0.044. Low, as expected after one epoch on 600 frames: the point is that the whole loop runs
+    on the Arc.
+  - Stopped at 17:28 by its PID: epochs 2-3 would have hit the run's 40-min cap mid-validation.
+    Epoch 1's weights stay on bot-server, smoke only.
 - **Next for a real run there:**
   - data-loader workers (the PNG decode on 8 cores, not in the training loop);
   - validation less often, or at the end;
