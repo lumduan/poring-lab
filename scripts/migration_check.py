@@ -29,6 +29,7 @@ pushed there (scp) and checked there.
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
 import ipaddress
 import json
@@ -332,6 +333,9 @@ def check(manifest: Mapping[str, Any], phase: str) -> list[Row]:
     )
     for n in RUNTIME:
         rows += tree_rows(f"/dev/shm/{n}", manifest.get("runtime", {}).get(n, {}), runtime_tree(n))
+    code, out = run(["loginctl", "show-user", getpass.getuser(), "-p", "Linger"])
+    rows.append(row("runtime: /dev/shm kept at logout (lingering; logind RemoveIPC)",
+                    out.strip() == "Linger=yes", out.strip()[:60]))  # fmt: skip
     code, _ = run([str(DETECTOR_PY), "-c", "import onnxruntime, numpy"])
     rows.append(row("runtime: the CPU detector's environment imports onnxruntime", code == 0,
                     str(DETECTOR_PY)))  # fmt: skip
