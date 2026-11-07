@@ -1102,3 +1102,45 @@ Batt's words (Thai, translated), answering the report's to-do list:
      recall and precision within a fixed margin of still, on TEST) is pre-registered here before
      its cache.
 
+### Amendment K (2026-11-07 07:1x ICT, before any walking frame is recorded): the walking data and the timing measurement
+
+**What 07:00 showed (xw1, FIT; the deployed model at 16 threads, `--truth-offset-ms` sweep):** xw1 holds
+NO moving capture. The lattice watch moves between stands by `@warp`, and so did TRAIN (xw2, xw3).
+So the round-1 model never saw a frame taken while the camera follows our walk, and no non-TEST
+session on this map holds one (X2 and xp1, the walking ones, are TEST). On xw1's still captures the
+global offset is best at the frozen 120 ms (P 0.978 / R 0.916) and falls as it grows (250: 0.973 /
+0.907; 400: 0.930 / 0.867; 550: 0.871 / 0.811; 700: 0.795 / 0.739; 900: 0.720 / 0.669). If walking
+captures need more delay, it is the CAMERA's (our own walk), not the scene's: hence
+`--self-offset-ms` (faffeca; 120 reproduces the default score in every field).
+
+**K1. New sessions, by name (the same recorder rules as Amendment D: PNG, 1 fps, rdp, the sustained
+IO rule, the bounded resume, the 100 GB floor, the unshipped cap, shipped the same day):**
+- **FIT-walk = any `*-rdp-xmas02-xmw1`:** the ONLY session where the walking timing is measured.
+- **CHECK-walk = any `*-rdp-xmas02-xmw2`:** read once by K3's check, then TRAIN.
+- **TRAIN-walk = any `*-rdp-xmas02-xmw3`** (and further `xmw<n>`, n >= 3, by this rule).
+- **TEST stays X2, xp1 and xw5**, by name, untouched until a round-2 evaluation (its own
+  pre-registration).
+- Each is recorded beside the deployed runner on its patrol (rogue-xmas02.md's p4 command with its
+  own `--label xmas02-xmw<n>`, `--minutes 20`, the Rogue immune, `--clear-map`): mostly walking,
+  some fights, as the bot really plays. A runner version change between sessions does not change a
+  session's role.
+
+**K2. The timing, on xmw1 only:** the deployed model's boxes (`recorder_boxes.py predict`, 16
+threads) scored by `score-session` at the frozen 120 ms for the monsters, with the camera swept:
+`--self-offset-ms` 120, 240, ..., 1200 (10 values).
+- **L_self** = the value with the best F1 of the MOVING captures (precision and recall pooled), the
+  smaller one on a tie within 0.005.
+- A by-eye check before it is used: 12 moving captures (`random.Random(71)`), the truth drawn at
+  120 and at L_self. L_self stands only if its boxes sit on the sprites in at least 10 of the 12.
+  Otherwise the camera is not the cause, nothing is adopted, and it goes back to Batt.
+
+**K3. The question "does the current model already see walking monsters?", on xmw2 (CHECK) at the
+frozen L_self:**
+- **YES** if moving recall >= still recall - 0.10 AND moving precision >= still precision - 0.05
+  (>= 100 moving detections). The gap was the scorer's timing. The detector needs no walking data,
+  and the walking timing goes into the scorer.
+- **NO** otherwise: a round 2 with moving frames in the labels. map_labels admits a self-moving
+  frame with the camera at L_self and the same fit floor (T_h) on every label. Its cache, training
+  and evaluation (moving recall and precision within those margins of still on TEST, plus no
+  regression on Q1c / P4A) are pre-registered as Amendment L BEFORE its cache.
+
