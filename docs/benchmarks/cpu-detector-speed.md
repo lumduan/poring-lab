@@ -186,3 +186,32 @@ The same camera named all four hard aborts of 2026-10-25 and kept dropping after
   a detection.
 - The printed phase A lines and the step's log: `scratch-archive/2026-11-07/gpu-bench/`.
 
+## 8. The rerun for what section 7 lost, and "how heavy" (written 2026-11-07 09:3x ICT, BEFORE it runs)
+
+Batt (~09:2x), answering section 7's decisions:
+1. "Move it [the live detector to the GPU]. Before moving, report how heavy the GPU use is."
+2. "Measure it [the parity and the Frigate cost] now."
+3. Camera drops are acceptable today: the one-day R3 relaxation (docs/operations/r3-paired.md,
+   1346168).
+
+- **The worker:** the same quiet_start start as section 5 (unchanged: its cold start is the IO
+  burst).
+- **The bench:** section 5's command, unchanged, with one exception: the step's IO guard is
+  `--threshold 30 --sustain 30` with no spike. That is the 2026-10-28 rule for small-local-IO jobs:
+  the bench reads its 200 frames from the NAS and writes one JSON. With `--spike 25`, one of
+  Frigate's own bursts (25-41 % this morning) would end it.
+- **"How heavy", read-only beside the step:**
+  - `nvidia-smi` every 0.5 s: GPU-wide utilization, memory used, power;
+  - `nvidia-smi pmon` every 1 s: our process's SM % and its memory.
+- **Reported:**
+  - our process's peak and typical memory (with torch's own peak);
+  - our SM % and the GPU-wide utilization, phase B ON windows vs OFF (paused) windows: the cost of
+    a 10 Hz detector;
+  - the power delta;
+  - R3's paired ON-OFF delta of Frigate's detector (the trip is +5 ms);
+  - the parity (`scripts/gpu_parity.py`): monster boxes matched at IoU >= 0.7, per precision;
+  - the forward pass;
+  - any relaxed drops.
+- Nothing is moved by this measurement. The move (a frame route from the host bot into the worker,
+  then a pre-registered pilot) is designed after this report.
+
