@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 1 (17:14-17:52): no candidate (hevc444-q20 failed S2, CPU 21.9 ms). Round 2 (18:53-19:47): the GPU colour conversion FIXED (round 1 wrote BT.601 limited); vpp-hevc444-q20 passes S2 (8.7 ms) and every bar but Q3 SSIM on xmas_dun02 (0.978 vs 0.9915); still no candidate (section 8.2). Diagnosis 8.3 (no GPU): not a filter -- the GPU 4:4:4 conversion writes neutral chroma one level low, black decodes (0, 1, 0), SSIM's dark windows magnify it. Round 3 PRE-REGISTERED (amendment 6.7, 2026-11-08 20:32:43 ICT; NOT RUN): 4 one-change GPU paths (scaling mode fast / default, BGRX upload, 10-bit 4:4:4). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
-next_action: "The parent: run round 3 (section 7.3) when the Arc is free, then record 8.4. If it gives a candidate: stage 2 (one side-by-side recording, section 9), Batt's go."
+next_action: "Batt: stage 2 (section 9) -- one side-by-side recording, PNG + vpp-hevc444-10-q20 of the same session; then the ADR-0010 amendment (lossy recordings)."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -905,6 +905,44 @@ exactly.
   - the controls' own SSIM, printed.
 - **What this changes:** the target is a GPU 4:4:4 path whose neutral chroma comes out at mid
   (6.7's arms), not a "no-filter" path.
+
+
+### 8.4 Round 3's results (run 2026-11-08: sample 20:42, the container 20:43-20:50, score 21:22-21:42 ICT)
+**VERDICT: VALID (V1 PASS), CANDIDATE `vpp-hevc444-10-q20`.** Three GPU-converted arms now pass
+every bar (`vpp-hevc444-q20-dflt`, `vpp-hevc444-q20-bgr0`, `vpp-hevc444-10-q20`); the rule (6.5.3)
+picks the smallest, the 10-bit one. Results: `data/bench/gpu-rec/20261108-recbench-r3.json`; the
+small outputs on the NAS `scratch-archive/2026-11-08/recbench-r3/`.
+
+The conversion alone (controls; xmas_dun02 / gef_fild10):
+
+| control | PSNR | SSIM | black kept | SSIM in dark windows |
+|---|---|---|---|---|
+| `ctl-yuv444` (swscale, CPU) | 50.4 / 48.8 | 0.9994 / 0.9996 | 1.0 / 1.0 | 0.9997 / 0.9991 |
+| `gctl-vpp444` (round 2's path: scale_vaapi's default `hq` mode) | 46.5 / 46.6 | 0.9872 / 0.9997 | **0.0 / 0.0** | **0.959** / 0.997 |
+| `gctl-vpp444-fast` | 46.3 / 46.6 | 0.9884 / 0.9997 | 0.0 / 0.0 | 0.960 / 0.997 |
+| `gctl-vpp444-dflt` (`mode=default`) | 54.5 / 53.2 | 0.9996 / 0.9998 | 1.0 / 1.0 | 0.9998 / 0.9995 |
+| `gctl-vpp444-bgr0` (a BGRX upload) | 54.4 / 53.1 | 0.9996 / 0.9998 | 1.0 / 1.0 | 0.9998 / 0.9995 |
+| `gctl-vpp444-10` (10-bit xv30) | 60.0 / 69.4 | 0.99999 / 1.0 | 1.0 / 1.0 | 1.0 / 1.0 |
+
+- 8.3's diagnosis CONFIRMED: round 2's path turned black into (0, 1, 0) (black kept 0.0) and lost
+  its SSIM in dark windows only; `mode=default`, a BGRX upload and 10 bits each keep black, and
+  convert closer to the source than swscale does.
+
+The candidate (graded on the same bars as rounds 1-2):
+
+| | PNG today | JPEG q95 (the cache) | **vpp-hevc444-10-q20** |
+|---|---|---|---|
+| CPU a frame (median of 3 passes 8.5-9.0) | encode 89 / 159 ms | - | **8.7 ms** (S2 PASS) |
+| encode speed | - | - | **279 fps** |
+| bytes vs PNG, xmas / gef | 1 | 0.21 / 0.23 | **0.15 / 0.21** (1.74 GB / h at 1 fps; PNG 8.4) |
+| PSNR mean (min), xmas / gef | lossless | 32.9 / 33.7 | **44.3 (42.7) / 40.4 (39.8)** |
+| SSIM mean (min), xmas / gef | 1 | 0.9935 / 0.9922 | **0.9947 (0.9909) / 0.9922 (0.9916)** |
+| detector boxes vs PNG, xmas (166) | - | - | **166 / 166, p95 0.3 px** (gef 16 / 17: P underpowered) |
+
+- **Next (section 9, Batt's go): stage 2**, one side-by-side recording (PNG and this encode of the
+  same session), then an ADR-0010 amendment (the recordings stop being lossless) -- Batt's
+  decision. `mode=default` 8-bit is the fallback if 10-bit HEVC Main 4:4:4 10 is refused by a
+  reader.
 
 ## 9. The staged plan (question 5)
 
