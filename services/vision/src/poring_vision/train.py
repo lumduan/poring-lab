@@ -67,6 +67,17 @@ DUTY_REPORT_EVERY = 500
 PAUSE_GAP_S = 30.0  # a batch longer than this was frozen by an R3 OFF window (docker pause)
 
 
+# bot-server-migration.md 17b (2026-11-08): on the Arc with the worker's 11g cap, 2 data-loader
+# workers = 1.36 s / it against 1.86 with none (4 and 8: no faster, more memory). Elsewhere 0, as
+# before (VM 103's 6g worker could not hold any).
+DEFAULT_WORKERS = {"xpu": 2}
+
+
+def default_workers(kind: str) -> int:
+    """PURE: the data-loader workers when --workers is not given, by accelerator kind."""
+    return DEFAULT_WORKERS.get(kind, 0)
+
+
 def read_duty(path: Path, now: float) -> int:
     """The step sleep (ms) the host asks for, or the slowest level when it cannot be trusted."""
     try:
@@ -155,7 +166,8 @@ def main() -> int:  # noqa: PLR0915
     ap.add_argument("--imgsz", type=int, default=1280)
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--batch", type=int, default=4)
-    ap.add_argument("--workers", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=None,
+                    help="data-loader workers; default by accelerator")  # fmt: skip
     ap.add_argument("--project", type=Path, default=Path("/data/train"))
     ap.add_argument("--name", default=None)
     ap.add_argument("--resume", action="store_true")
@@ -192,6 +204,8 @@ def main() -> int:  # noqa: PLR0915
 
     fraction = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))
     acc = accel.current()  # any vendor (ADR-0022): $PORING_ACCEL, else the first available
+    if a.workers is None:
+        a.workers = default_workers(acc.kind)
     device = configure_gpu(fraction, acc)
     if device is None:
         raise SystemExit("no GPU: training needs the card (the cap is set first)")

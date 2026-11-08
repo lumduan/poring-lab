@@ -27,3 +27,11 @@ def test_scale_is_opt_in_bounded_and_independent_of_hsv_s() -> None:
     for bad in (-0.1, 0.95):
         with pytest.raises(SystemExit):
             hyp_overrides(SimpleNamespace(hsv_s=None, scale=bad))
+
+
+def test_the_data_loader_workers_default_by_accelerator() -> None:
+    """bot-server-migration.md 17b: 2 on the Arc (xpu), 0 elsewhere as before."""
+    from poring_vision import train
+
+    assert train.default_workers("xpu") == 2
+    assert train.default_workers("cuda") == 0 and train.default_workers("cpu") == 0
