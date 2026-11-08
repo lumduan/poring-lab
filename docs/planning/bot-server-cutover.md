@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "DONE 2026-11-07. Phase B 20:33-21:57 ICT (the lab runs on bot-server); Phase C on Batt's go ~22:3x ICT ('delete all'): C1-C5 (containers, networks, volumes, 9 images, the shared build cache; VM 103 +33.8 GB free), C7, C8, C10 (the NAS exports admit only .228) done; C6 (this repo) at the session's end; C9 (VM 103's automount lines) is Batt's sudo; C11 (the agent) by the armed post-session handoff (section 4a). ➡️ 2026-11-08: C11 DONE 09:36:43 ICT (verified, all three deleted; its log was lost, see 4a) and C9 DONE (Batt 09:34:33-35, verified by HA); one leftover, ~/poring-lab-private (next_action)."
+status: "DONE 2026-11-07. Phase B 20:33-21:57 ICT (the lab runs on bot-server); Phase C on Batt's go ~22:3x ICT ('delete all'): C1-C5 (containers, networks, volumes, 9 images, the shared build cache; VM 103 +33.8 GB free), C7, C8, C10 (the NAS exports admit only .228) done; C6 (this repo) at the session's end; C9 (VM 103's automount lines) is Batt's sudo; C11 (the agent) by the armed post-session handoff (section 4a). ➡️ 2026-11-08: C11 DONE 09:36:43 ICT (verified, all three deleted; its log was lost, see 4a) and C9 DONE (Batt 09:34:33-35, verified by HA); the leftover ~/poring-lab-private moved here 10:23 (4a). PHASE C COMPLETE."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "Phase C is complete except one leftover, IN PROGRESS: ~/poring-lab-private moves from VM 103 to bot-server (Batt 11-08: move, then HA deletes it; HA copies, sha256 checked on bot-server gates the delete; poring-lab re-verifies here). Then: ADR-0023's plan (Batt: after the move), the Arc training speed, p10."
+next_action: "Phase C COMPLETE (2026-11-08 10:23 ICT: the last leftover, ~/poring-lab-private, moved to bot-server and deleted on VM 103). Next: ADR-0023's plan (Batt: after the move), the Arc training speed, p10. Note: bot-server has no Ollama, so VLM steps cannot run until one exists here."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -274,7 +274,10 @@ are in bot:~/poring-lab-vm103-handoff-check-20261108-1008.txt, sha256 6e312b64..
   holds the study-only local decoder that grf_read.py loads for `--decode-mixcrypt`; it is never in
   the repo. bot-server lacks it, so after a reboot there the mixcrypt sprite re-extraction would
   refuse. Neither the migration check nor the C list covered it. ➡️ Batt 11-08: MOVE it here, then HA deletes it
-  on VM 103 (the delete is gated on a sha256 check run on bot-server; `__pycache__/` is not copied).
+  on VM 103. **DONE 10:23:32 ICT:** HA rsynced 5 files (8,458 B, `--chmod=go-rwx`;
+  `__pycache__/` not copied); `sha256sum -c` on bot-server: 5 x OK; then it deleted VM 103's copy.
+  Re-verified here against the sums in HA's message, and `grf_read.load_mixcrypt()` loads it
+  (bot-server-handover.md 1).
 - Not ours: VM 103's Ollama container (poring-lab only called it from host scripts, last on
   11-07). On Batt's GO, HA removed it at 10:19:50-53 ICT: the container, the image and the volume
   with qwen3-vl:4b (+12.70 GB on VM 103).

@@ -47,6 +47,20 @@ train and run at full speed without touching this machine's GPU again."
 - the lab's secrets and run-time state: `.env`, `settings/`, `state/`, `data/`. They move at the
   cutover (bot-server-migration.md).
 
+➡️ **2026-11-08 additions** (the C11 follow-up, bot-server-cutover.md 4a):
+- **The history's final push** came from the C11 handoff at 09:36:40 ICT; VM 103's copy is
+  deleted. bot-server's Claude Code cleanup (default `cleanupPeriodDays` 30) then pruned the
+  session's tool-results older than 30 days: 22 at the copy above, 17 now. Batt's fix:
+  - `~/.claude/settings.json` sets `cleanupPeriodDays: 365`;
+  - a NAS copy at `archive/agent-history/20261108-vm103-session-5aab5193/` (489 files,
+    SHA256SUMS, README).
+- **`~/poring-lab-private/`** (5 files, mode 700; `__pycache__` not copied) MOVED from VM 103.
+  - It holds the study-only decoder that `scripts/grf_read.py` loads for `--decode-mixcrypt`
+    (never in the repo; Batt 2026-10-05).
+  - The 11-07 copy and the migration check had missed it. HA (VM 103's agent) moved it on Batt's
+    order: sha256 checked on bot-server, then deleted on VM 103 at 10:23:32 ICT.
+  - Re-verified here, and `grf_read.load_mixcrypt()` loads it.
+
 ## 2. Where the knowledge is, and how to use it on bot-server
 - **Start here:** the repo's `CLAUDE.md` (the lab's rules), the memory index (`MEMORY.md`, loaded
   automatically), `docs/planning/bot-server-migration.md` and this file.
