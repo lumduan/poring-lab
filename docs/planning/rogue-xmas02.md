@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "On xmas_dun02 (Toy Factory 2F, the lab's pre-renewal server), the Rogue at Base 99 with base AGI 99 / DEX 99 and the gef10 skills, walking the map's EDGE clockwise (Batt's technique) and fighting plain melee so Snatcher steals on its own, gains stolen items per hour that are worth more than at its current build; and the live v1 detector's generic 'monster' class sees this map's species well enough (Q1's bar, section 4) that no new detector is needed first."
-status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G). p3 PASSED (0 dead-end Fly Wings, carves 6.3 %); its packets: straight-north clicks send no move request -> dungeon@8.7 (column_dodge) pre-registered as pilot p4 (4H). p4 PASSED: 215 waypoints in 15 min (p2 31), 0 Fly Wings, 3 stalls; the next limit is the fight. p5 (a measurement): the reader gives a position on 96.1 % of live reads (failures 1.4 %, unconfirmed 2.5 %, all on the west leg); 0 strikes from 5 box engagements. X2 SCORED: FAIL (v1 recall 0-0.5 % per species, precision 1.5 %): this map needs its own detector (GPU approved by Batt). hunt_flow v56 run 1 K1 INCONCLUSIVE; run 2 blocked by the up icon until Batt's Alt+S / Alt+A answer (Amendment F, f91ab44); run 2 11:12 -> v56 ADOPTED on the pooled verdict (K1 0/74 vs 21/73, K2, K3). The detector plan ACCEPTED (xmas02-detector.md Amendment A)."
+status: "X0 DONE 15:05; X1 DONE (merged e777181); pilot p1 15:27-15:32 STOPPED by the runner (the minimap readout is not read over the light floor, section 5); Amendment C (~20:2x): Batt's answers -- the recorder floor is 120 GB (X2 no longer blocked by the disk), the route on trial, the 2nd chat tab renamed Chat, 688 points left; X1b (a light-strip readout reader) pre-registered 4D, its data next. Planned 2026-11-05 (Batt's order ~13:2x, the four answers ~14:0x ICT, section 0). X1b round 1 (20:16-20:43) FAILED B2 (light strips 8/40: the guard refused true reads on mixed strips); round 2 pre-registered 4E (fresh cells). Round 2 (21:49, fresh midpoints) FAILED R2 (light 16/24; the guard refused a seam); round 3 pre-registered 4F (fresh quarter cells). Round 3 FAILED R2 (light 83.3 %, 0 wrong); the iteration stopped. Pilot p2 22:37: 15 min clean, 0 position-unread Fly Wings. X2 RECORDED 22:54 (1,320 frames, 2.03 GB, shipped + verified); its scoring waits for the tooling. 2026-11-06 (Amendment D, Batt): the reader stays ON and improves; the Chat tab name SURVIVED a client restart (06:39); the dead ends = the no-entry cue reading the orange floor (4G); dungeon@8.6 (the ring) pre-registered as pilot p3 (4G). p3 PASSED (0 dead-end Fly Wings, carves 6.3 %); its packets: straight-north clicks send no move request -> dungeon@8.7 (column_dodge) pre-registered as pilot p4 (4H). p4 PASSED: 215 waypoints in 15 min (p2 31), 0 Fly Wings, 3 stalls; the next limit is the fight. p5 (a measurement): the reader gives a position on 96.1 % of live reads (failures 1.4 %, unconfirmed 2.5 %, all on the west leg); 0 strikes from 5 box engagements. X2 SCORED: FAIL (v1 recall 0-0.5 % per species, precision 1.5 %): this map needs its own detector (GPU approved by Batt). hunt_flow v56 run 1 K1 INCONCLUSIVE; run 2 blocked by the up icon until Batt's Alt+S / Alt+A answer (Amendment F, f91ab44); run 2 11:12 -> v56 ADOPTED on the pooled verdict (K1 0/74 vs 21/73, K2, K3). The detector plan ACCEPTED (xmas02-detector.md Amendment A). 2026-11-08/09 (Amendments G-K): the live GPU detector (p13r PASS); p16 --engage-screen ADOPTED with the boss guard (Batt); p18 DIED to the MVP -> the MVP schedule (Amendment K); the night p17-p27: the walk-refusal finding (the server ignores > 17-step or > 14-step-detour clicks) -> --reach-check ADOPTED after p27 (9.12b); quick-drop, far-single, far-single+far-approach, box-every 0.25, kill-gap NOT adopted (section 5)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "The night (2026-11-09): p21 far flags OFF, p22 box-every OFF, p23 --reach-check (stuck 133 -> 0 s; R1 2 fails -> off), p24 --kill-gap (after-kill 6.5 -> 1.96 s; E1 / K3 fail -> off; fixes 9.13b/c). Next: the MVP look 02:53, p25 --reach-check replicated (4AG), p26 --kill-gap 9.13c, then the far mechanism."
+next_action: "2026-11-09 05:0x: --reach-check (9.12b) JOINED THE BASE (p27: every bar; stuck 1.3 s vs 110-209 s). Next: the far mechanism on this base (draft 4AJ: --far-single --far-approach); --kill-gap with the quiet-kill 3-s block lifted; the MVP schedule stays (Amendment K) unless Batt disables its spawn."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2607,3 +2607,38 @@ full: no harm). The bag was cleared (`clear-bag`, Batt's standing rule: worn gea
 been cleared after p17 (520 at 22:47): ~76 weight a run over p18-p26. The detect server of attempt
 1 served idle until its time box (04:33:10); attempt 2 starts after it, 25 min, ending before the
 MVP's window (05:05).
+
+**Pilot p27 attempt 2 (4AI; 04:33:52-04:59:44, 25 min; immunity OFF at 04:33:29 and ON at
+04:59:56, both judged on the Chat tab; the base + `--reach-check` 9.12b, `"reach_check": [17, 14,
+"9.12b"]`). VERDICT: U1, U2, E1, D1, R1, E3, deaths ALL PASS. `--reach-check` (9.12b) JOINS THE
+BASE (4AI's rule).**
+
+| | p16 (base) | p23 (9.12) | p25 (9.12) | **p27 (9.12b)** | bar |
+|---|---|---|---|---|---|
+| U1 stuck time | 133.9 s | 0 s | 43.3 s | **1.3 s** (4 of 436 requests ignored; one span of 3) | <= 30 s: PASS |
+| U2 class-D box strikes begun ignored | 14 | 2 | 5 | **0** | <= 3: PASS |
+| E1 kills | 44 (87.9 / h) | 36 (86.4 / h) | 41 (98.2 / h) | **44 (105.4 / h)** | >= 80 / h: PASS |
+| R1 own-body class D | 2 | 2 | 0 | **1** (12 own-body strikes) | <= 1: PASS |
+| D1 GPU call p50 / p95 | 20.6 ms | 20.5 / 21.9 | 20.6 / 21.9 | **20.7 / 22.1 ms; 100 %** | PASS |
+| E3 | | | | **pass (NPC 0); 4 Fly Wings = 3 boss-guard escapes (Garm Baby) + 1 `pos_unread` escape, no dead end; 1 stall** | PASS |
+| deaths; lowest HP | | | | **0; 68.5 %** | PASS |
+| reach_skip events | | 34 | 50 | **42** | reported |
+| class D at 0-1 / 2-6 / 7-8 / 9+; F1 share | | 7/21, 3/26, 7/17, 12/14; 38.6 % | 3/21, 6/28, 14/30, 21/23; 50.6 % | **6/24, 5/34, 8/23, 13/16; 35.6 %** | reported |
+| time held on class D | 494.8 s | 208.8 s | 307.0 s | **237.8 s** (32) | reported |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.766; 18.8 | 0.745; 22.0 | **0.657; 26.8** (67) | reported |
+| after the kill p50; no-kill fights | 6.50 s | 6.51 s | 6.55 s | **6.49 s; 49 (587.1 s)** | reported |
+
+- **The record across the three reach-check runs is reported together:** p23 failed R1 (2), p25
+  failed U1 / U2 (the raised-floor cell error 9.12b fixes), p27 passed every bar. The stuck time
+  of the base (p16-p26 without the check: 110-209 s a run) is gone.
+- **What is left (the next work):** the far misses on reachable targets (9+ cells 13 of 16; the
+  far mechanism, draft 4AJ, is the fix to test ON this base), and the 6.5 s after each kill (the
+  kill-gap rule works; the quiet-kill 3-s block must let the next box target through first).
+- **Items (snatched):** Scell 6, Zargon 6, Well-baked Cookie 3, Candy 2, Piece of Cake 1, Old Blue
+  Box 1, Iron 1, Manacles 1, Nursing Bottle 1.
+
+**The night's base (2026-11-09 05:0x, by the pre-registered rules):** p16's flags (`--engage-screen`
+with the boss guard; `--self-recheck --still-strike`; the box path on the GPU detector) **+
+`--reach-check` (9.12b)**. Not adopted tonight, each by its own rule: `--quick-drop` (p17),
+`--far-single` alone (p19 / p20), `--far-single --far-approach` (p21), `--box-every 0.25` (p22),
+`--kill-gap` (p24, p26). Built, not run: `--skip-own-cells` (weighed against p23's data, section 5).
