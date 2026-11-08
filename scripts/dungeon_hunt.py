@@ -284,7 +284,10 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
               "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
-              "level_hold": 99},
+              "level_hold": 99,
+              # Batt 2026-11-08 (p11 refused at 40.7 %): the Rogue runs on up to WEIGHT_MAX
+              # (48 %) without dropping her Etc tab (it holds Batt's target items)
+              "etc_hold_max": 0.48},
 }  # fmt: skip
 STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
 
@@ -787,6 +790,16 @@ def walked_now(shifts: Sequence[tuple[float, float]], px: float = WALK_STOP_PX,
                n: int = WALK_STOP_N) -> bool:  # fmt: skip
     """PURE (--walk-stop): the last ``n`` scene shifts since the click are all >= ``px``."""
     return len(shifts) >= n and all(math.hypot(dx, dy) >= px for dx, dy in shifts[-n:])
+
+
+def etc_hold_refused(share: float | None, red: bool, conf: Mapping[str, Any]) -> str | None:
+    """PURE (dungeon@6; Batt 2026-11-08): why a character that never drops its Etc tab must not
+    start, or None. Its own ``etc_hold_max`` (the Rogue: 0.48) replaces CLEAR_AT; an unread
+    weight or the red (>= 50 %) line always refuses."""
+    limit = float(conf.get("etc_hold_max", CLEAR_AT))
+    if share is None or red:
+        return "unread or red (>= 50 %)"
+    return f"at or over {limit}" if share >= limit else None
 
 
 def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
@@ -1568,13 +1581,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         cleared: dict[str, Any] | None = None
         if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT or (w0 is None and red0):
             if not conf["clear_etc"]:  # dungeon@6: the Thief's Etc tab holds Batt's target items
-                raise r.Stop(f"dungeon@6: weight {w0} at or over {CLEAR_AT} for the {a.char}: "
-                             "the setup never drops its Etc tab (a person first)")  # fmt: skip
-            cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                       f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
-            time.sleep(3.0)
-            bench.close_chat(agent_raw, screen)
-            cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
+                hold = etc_hold_refused(gm_state.weight_share(w0), red0, conf)
+                if hold is not None:
+                    raise r.Stop(f"dungeon@6: weight {w0} {hold} for the {a.char}: "
+                                 "the setup never drops its Etc tab (a person first)")  # fmt: skip
+            else:
+                cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
+                           f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
+                time.sleep(3.0)
+                bench.close_chat(agent_raw, screen)
+                cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
         typed: list[str] = []  # every setup line actually sent, in order (the run_start record)
 
         def setup_line(cmd: str) -> None:

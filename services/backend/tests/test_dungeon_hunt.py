@@ -1085,3 +1085,14 @@ def test_self_recheck_box_holds_the_own_body_points_of_p9_and_p10() -> None:
     # only the defend scan, only a sword, only on our own sprite; a failed second read goes on
     assert 'and purpose == "defend"' in src and "in_self_box(u, v_, *self_uv())" in src
     assert 'if res2["verdict"] != "sword":' in src and 'verdicts["self_transient"] += 1' in src
+
+
+def test_the_rogue_holds_her_etc_tab_up_to_48_percent() -> None:
+    """Batt 2026-11-08 (p11 refused at 40.7 %): the Rogue starts below 48 % without a drop; every
+    other non-dropping character keeps CLEAR_AT; an unread weight or the red line refuses."""
+    rogue, thief = dh.CHARS_CONF["rogue"], dh.CHARS_CONF["thief"]
+    assert rogue["etc_hold_max"] == 0.48 == dh.WEIGHT_MAX and not rogue["clear_etc"]
+    assert dh.etc_hold_refused(989 / 2430, False, rogue) is None  # the 11-08 refusal, now a start
+    assert dh.etc_hold_refused(0.48, False, rogue) == "at or over 0.48"
+    assert dh.etc_hold_refused(0.41, False, thief) == f"at or over {dh.CLEAR_AT}"
+    assert dh.etc_hold_refused(None, False, rogue) and dh.etc_hold_refused(0.30, True, rogue)

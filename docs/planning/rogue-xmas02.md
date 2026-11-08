@@ -806,6 +806,16 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   - R1 fails: the recall pairs show whether the second read still sees the transient sword
     (then a longer wait, or a different point);
   - E1 failing names the next change: the far-target strikes (option b), then sight (c).
+- ➡️ **Before the run (2026-11-08 12:35 ICT), two setup notes; the hunt itself is unchanged:**
+  - The first start (12:07:20) refused at setup:
+    - the Rogue's weight was 989 / 2430 = 40.7 %, at or over CLEAR_AT 40 %, and she never drops
+      her Etc tab;
+    - Batt chose "allow the Rogue up to 48 %": `CHARS_CONF["rogue"]["etc_hold_max"] = 0.48`
+      (WEIGHT_MAX), `etc_hold_refused`, tested;
+    - immunity had been toggled OFF for it, and was put back ON (judged) while waiting.
+  - The detector's GPU conversion passed its parity run meanwhile (bot-server-migration.md 16a)
+    and became the default. As promised above, this run's detect server is started with
+    `--ov-preproc cpu`: the same detector as p9 / p10.
 
 ## 5. Results
 
