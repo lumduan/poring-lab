@@ -1225,23 +1225,33 @@ def settle_left(last_walk_click: float, now: float, settle_s: float = BOX_SETTLE
 
 
 def first_item(kinds: Sequence[str]) -> int | None:
-    """PURE: the first slot of the ETC tab that is not empty -- every Etc item is loot for the
-    Crusader (potions and Fly Wings live in Use, the gear in Eqp)."""
+    """PURE: the first slot of a tab that is not empty -- every Etc item is loot for the Crusader
+    (potions and Fly Wings live in Use, the gear in Eqp); clear-bag empties any tab this way."""
     return next((i for i, k in enumerate(kinds) if k != "empty"), None)
 
 
 def clear_etc(agent: Any, screen: Any, *, why: str, max_drops: int = 40) -> dict[str, Any]:
-    """Drop every stack of the inventory's ETC tab by gm_state.clear_loot's own known path (the
-    tab label, two motions; a drag onto open ground; Enter on the quantity prompt matched to its
-    OK button first; the tab must change after each drop), r.Stop on anything unexpected."""
+    """Drop every stack of the inventory's ETC tab (clear_tab)."""
+    return clear_tab(agent, screen, tab="etc", why=why, max_drops=max_drops)
+
+
+def clear_tab(agent: Any, screen: Any, *, tab: str, why: str,
+              max_drops: int = 40) -> dict[str, Any]:  # fmt: skip
+    """Drop every stack of the inventory tab ``tab`` (gm_state.INV_TABS: etc / use / eqp) by
+    gm_state.clear_loot's own known path (the tab label, two motions; a drag onto open ground;
+    Enter on the quantity prompt matched to its OK button first; the tab must change after each
+    drop), r.Stop on anything unexpected. Equipped items are not in the inventory's list, so
+    the Eqp tab holds only what is NOT worn."""
     import gm_state as gs
     import ro_agent as r
     import ui_gate
 
+    if tab not in gs.INV_TABS:
+        raise ValueError(f"tab {tab!r}: one of {sorted(gs.INV_TABS)}")
     refs = gs.load_loot_refs()
     ok_ref = np.load(gs.LOOT_DIR / "prompt_ok.npy")
     region = r.game_region()
-    out: dict[str, Any] = {"dropped": 0}
+    out: dict[str, Any] = {"tab": tab, "dropped": 0}
 
     def frame() -> Any:
         return np.ascontiguousarray(r.grab_after(screen, region, r.ns())[..., :3])
@@ -1257,23 +1267,24 @@ def clear_etc(agent: Any, screen: Any, *, why: str, max_drops: int = 40) -> dict
 
     # the chord is a TOGGLE (11:5x: a run of this opened on an open inventory, CLOSED it, and its
     # tab click and drag went to the field): start clear, open, and READ it open before a click
-    ui_gate.ensure_clear(agent, screen, why=f"{why}:etc-start")
+    ui_gate.ensure_clear(agent, screen, why=f"{why}:{tab}-start")
     r.activate_client(agent, screen)
     agent.chord(*ui_gate.window_keys("inventory"))
     time.sleep(1.0)
     try:
         if not inv_open():
-            raise r.Stop(f"clear_etc ({why}): the inventory did not read open after its chord")
-        gs._tab(agent, screen, "etc")
+            raise r.Stop(f"clear_tab ({why}): the inventory did not read open after its chord")
+        gs._tab(agent, screen, tab)
         fails = 0
         n = gs.INV_COLS * gs.INV_ROWS
         while out["dropped"] < max_drops:
             if not inv_open():
-                raise r.Stop(f"clear_etc ({why}): the inventory closed during the drops")
+                raise r.Stop(f"clear_tab ({why}): the inventory closed during the drops")
             f = frame()
             crops = [gs.icon_crop(f, c % gs.INV_COLS, c // gs.INV_COLS) for c in range(n)]
             i = first_item([gs.classify_icon(c, refs)[0] for c in crops])
             if i is None:
+                out["empty"] = True  # every slot of the tab read empty
                 break
             cx, cy = gs.slot_centre(i % gs.INV_COLS, i // gs.INV_COLS)
             x1, y1 = r.at(cx, cy)
@@ -1291,20 +1302,122 @@ def clear_etc(agent: Any, screen: Any, *, why: str, max_drops: int = 40) -> dict
                 time.sleep(1.0)
                 f2 = frame()
                 if prompt_shown(f2):
-                    raise r.Stop(f"clear_etc ({why}): the quantity prompt stayed open")
+                    raise r.Stop(f"clear_tab ({why}): the quantity prompt stayed open")
             after = [gs.icon_crop(f2, c % gs.INV_COLS, c // gs.INV_COLS) for c in range(n)]
             if not gs.tab_changed(crops, after, i):
                 fails += 1
                 if fails >= 2:
-                    raise r.Stop(f"clear_etc ({why}): slot {i} did not drop twice")
+                    raise r.Stop(f"clear_tab ({why}): slot {i} did not drop twice")
                 continue
             out["dropped"] += 1
     finally:
         r.activate_client(agent, screen)
         agent.chord(*ui_gate.window_keys("inventory"))
         time.sleep(1.0)
-        ui_gate.ensure_clear(agent, screen, why=f"{why}:etc")
+        ui_gate.ensure_clear(agent, screen, why=f"{why}:{tab}")
     return out
+
+
+BAG_TABS = ("etc", "use", "eqp")  # clear-bag's order: the loot first, the worn gear never listed
+
+
+def bag_restock(tabs: Sequence[str], before: dict[int, int | None],
+                targets: dict[int, int]) -> dict[int, int]:  # fmt: skip
+    """PURE (clear-bag): what to add so the hotbar's stock reaches ``targets``. The Use tab was
+    just emptied AND read empty, so its stock is 0 whatever the hotbar draws (an empty slot's
+    count may not read); otherwise stock_plan's rule (an unreadable count is a ValueError)."""
+    if "use" in tabs:
+        return dict(targets)
+    return stock_plan(before, targets)
+
+
+def clear_bag(a: argparse.Namespace) -> int:
+    """LIVE (Batt 2026-11-08: "drop everything first; keep only what is needed: potions, 10 is
+    enough, and the wings; drop everything else except what is worn"): on the clear stand, empty
+    the inventory tabs (clear_tab, every stack), then restock the character's run stock
+    (``potions_to`` White Potions, ``wings_to`` Fly Wings: the same @item lines as a run's setup)
+    and read the hotbar's counts back. The worn gear is not in the inventory's list."""
+    import bench
+    import crusader as cr
+    import gm_state
+    import hotbar_count as hb
+    import ro_agent as r
+    import ui_gate
+
+    conf = CHARS_CONF[a.char]
+    crk = conf.get("data", a.char)
+    keys_ = conf["keys"]
+    tabs = [t.strip() for t in a.tabs.split(",") if t.strip()]
+    if not tabs or any(t not in BAG_TABS for t in tabs):
+        raise SystemExit(f"--tabs {a.tabs!r}: from {list(BAG_TABS)}")
+    p_to = int(conf["potions_to"] or POTIONS_TO)
+    w_to = int(conf["wings_to"])
+    targets = {STOCK_ITEMS["potion"]: p_to, STOCK_ITEMS["fly"]: w_to}
+    out_dir = Path(a.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rec: dict[str, Any] = {"char": a.char, "tabs": tabs, "targets": targets,
+                           "t0": time.strftime("%FT%T%z")}  # fmt: skip
+    region = r.game_region()
+
+    def shot(name: str) -> None:  # the evidence frame (BGR grab -> an RGB PNG in out_dir)
+        from PIL import Image
+
+        f = np.asarray(r.grab_after(screen, region, r.ns()))[..., :3]
+        Image.fromarray(np.ascontiguousarray(f[..., ::-1])).save(out_dir / f"{name}.png")
+
+    with r.session("rule:dungeon-clear-bag") as (agent, screen):
+        agent.wait_for_human()
+        got = cr.check(screen, conf["job"], crk)
+        if not got["ok"]:
+            raise r.Stop(f"identity {got}")
+        ui_gate.ensure_clear(agent, screen, why="clear-bag")
+        cr.gm_line(agent, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} {CLEAR_STAND[2]}",
+                   conf["job"], crk)  # fmt: skip
+        t_w = time.monotonic()
+        time.sleep(3.0)
+        while not cr.check(screen, conf["job"], crk)["ok"]:
+            if time.monotonic() - t_w > WARP_READY_S:
+                raise r.Stop(f"clear-bag: the identity did not read within {WARP_READY_S} s")
+            time.sleep(0.5)
+        bench.close_chat(agent, screen)
+        rec["weight_before"] = gm_state._weight(gm_state._frames(screen))
+        shot("before")
+        rec["cleared"] = {}
+        for tab in tabs:
+            rec["cleared"][tab] = clear_tab(agent, screen, tab=tab, why=f"clear-bag:{tab}")
+            if not rec["cleared"][tab].get("empty"):
+                raise r.Stop(f"clear-bag: the {tab} tab did not read empty {rec['cleared'][tab]}")
+        rec["weight_cleared"] = gm_state._weight(gm_state._frames(screen))
+        tpl = hb.load()
+        slots = {STOCK_ITEMS[k]: hotbar_slot(keys_[k]) for k in STOCK_ITEMS}
+        gx0, gy0, gw, gh = region
+
+        def read_stock() -> dict[int, int | None]:
+            time.sleep(0.8)
+            g = hb.gray(np.asarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())))
+            return {item: hb.read_count(g, slot, tpl) for item, slot in slots.items()}
+
+        before = read_stock()
+        try:
+            add = bag_restock(tabs, before, targets)
+        except ValueError as exc:
+            raise r.Stop(f"clear-bag: {exc} {before}") from exc
+        for item, n in add.items():
+            if n > 0:
+                cr.gm_line(agent, screen, f"@item {item} {n}", conf["job"], crk)
+                time.sleep(0.8)
+        bench.close_chat(agent, screen)
+        after = read_stock()
+        rec["stock"] = {"before": before, "added": add, "after": after}
+        rec["weight_after"] = gm_state._weight(gm_state._frames(screen))
+        shot("after")
+        rec["t1"] = time.strftime("%FT%T%z")
+        (out_dir / "clear-bag.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
+        print(json.dumps(rec, default=str))
+        short = {i: c for i, c in after.items() if c is None or c < targets[i]}
+        if short:
+            raise r.Stop(f"clear-bag: the stock is short after the restock {rec['stock']}")
+    return 0
 
 
 def load_rest_spots(path: Path = REST_FILE) -> list[Cell]:
@@ -3679,7 +3792,14 @@ def main() -> int:
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "
                    "orcsdun01)")  # fmt: skip
+    cb = sub.add_parser("clear-bag", help="LIVE: empty the inventory tabs on the clear stand, "
+                        "then restock the run stock (Batt 2026-11-08)")  # fmt: skip
+    cb.add_argument("--char", required=True, choices=sorted(CHARS_CONF))
+    cb.add_argument("--tabs", default=",".join(BAG_TABS))
+    cb.add_argument("--out", required=True, help="the evidence directory (/dev/shm)")
     a = ap.parse_args()
+    if a.cmd == "clear-bag":
+        return clear_bag(a)
     if a.cmd == "run" and a.ag_match is None:
         import survive as sv
 

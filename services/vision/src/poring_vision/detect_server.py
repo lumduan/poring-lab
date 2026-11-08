@@ -254,7 +254,8 @@ class BadMessage(Exception):
     """The client broke the protocol: the connection closes."""
 
 
-def recv_exact(conn: socket.socket, n: int) -> bytes:
+def recv_exact(conn: socket.socket, n: int) -> bytearray:
+    """Exactly ``n`` bytes, received in place (2026-11-08: no copy of the 2.8 MB canvas)."""
     buf = bytearray(n)
     view, got = memoryview(buf), 0
     while got < n:
@@ -262,7 +263,7 @@ def recv_exact(conn: socket.socket, n: int) -> bytes:
         if k == 0:
             raise EOFError
         got += k
-    return bytes(buf)
+    return buf
 
 
 def recv_line(conn: socket.socket, limit: int = HELLO_MAX) -> bytes:
@@ -359,7 +360,8 @@ class Server:
                 ms = (time.perf_counter() - t) * 1000.0
                 self.last_fwd = self.clock()
                 head = {"shape": list(y.shape), "ms": round(ms, 2)}
-                conn.sendall(json.dumps(head).encode() + b"\n" + y.tobytes())
+                conn.sendall(json.dumps(head).encode() + b"\n")
+                conn.sendall(memoryview(np.ascontiguousarray(y, dtype="<f4")).cast("B"))
                 self.ms.append(ms)
                 self.n["frames"] += 1
                 self.stats()

@@ -881,6 +881,30 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
     target's own motion);
   - F2 fails: the wait loses real targets, so its cap or the retarget is revisited.
 
+### 4S'. Amendment G (2026-11-08 ~15:4x ICT): Batt's answers to the 15:04 report
+
+Batt's words, translated (before 15:43:36, the turn's first `date`):
+1. **`--still-strike`:** "on" -> ADOPTED: it stays ON for xmas_dun02 runs (4S's decision rule
+   asked for F1 + F2; F1 failed 6 > 3, so this is Batt's call on the run as a whole: kills 58.0 /
+   h, far strikes that attacked 14 -> 23, no far click while walking).
+2. **p13's one change:** "do 3" (the GPU detector with the conversion on the card) and "I focus
+   on switching to the detector that converts on the card: make it fast" -> the detector path
+   is profiled and sped up first (bot-server-migration.md 19: the card's clock floor, FP16, the
+   host's decode and copies), each part box-parity checked, then p13 (4T) runs on it.
+3. **The Rogue's weight (44.6 %):** "drop everything first, keep only what is needed: potions
+   are hardly used, 10 bottles are enough, and the wings; drop everything else except what she
+   wears" -> `dungeon_hunt.py clear-bag --char rogue` (new): every stack of the Etc, Use and Eqp
+   tabs dropped on the clear stand (clear_etc's known path, generalised as clear_tab; worn gear
+   is not in the inventory's list), then the run stock restocked by the run setup's own lines
+   (`potions_to` 10 White Potions, `wings_to` 10 Fly Wings) and read back from the hotbar.
+   The DB's last save before it (15:5x, read-only): White Potion 30, Fly Wing 19, Red Potion 5,
+   Candy 5, Well-baked Cookie 9, Piece of Cake 10, Scell 25, Zargon 18, Iron 1, Manacle 4, one
+   unidentified headgear (2251, not worn); worn: 1222 +8, 2103, 2224, 2335, 2405, 2505, 2608 x 2.
+4. **The media probe's build cache (~1 GB):** "keep it for now" -> kept (docs/operations/
+   disk-audit.md).
+5. **GPU-encoded recordings:** "interested, and I think it is the faster way too" -> a design
+   (docs/planning/gpu-recording.md, a subagent) with a bench pre-registered before its numbers.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

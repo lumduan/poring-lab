@@ -1130,3 +1130,17 @@ def test_still_strike_waits_for_a_still_scene_and_carries_the_point_the_right_wa
     # the box path's detection comes after the still scene
     i_still = src.index("still_b, waited_b, _sh = wait_still()")
     assert i_still < src.index("t_set = time.monotonic()")
+
+
+def test_clear_bag_restocks_the_run_stock_after_emptying_use() -> None:
+    """clear-bag (Batt 2026-11-08): with the Use tab just emptied AND read empty, the restock is
+    the whole run stock whatever the hotbar draws; without it, stock_plan's rule holds."""
+    import pytest
+
+    targets = {504: 10, 601: 10}
+    assert dh.bag_restock(["etc", "use", "eqp"], {504: None, 601: None}, targets) == targets
+    assert dh.bag_restock(["etc"], {504: 4, 601: 10}, targets) == {504: 6, 601: 0}
+    with pytest.raises(ValueError):
+        dh.bag_restock(["etc", "eqp"], {504: None, 601: 3}, targets)
+    assert dh.BAG_TABS == ("etc", "use", "eqp")
+    assert dh.CHARS_CONF["rogue"]["potions_to"] == 10 and dh.CHARS_CONF["rogue"]["wings_to"] == 10

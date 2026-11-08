@@ -533,3 +533,15 @@ as Batt prefers:
   - **P2:** every soak call served by the GPU.
   - **Decision:** fast16 passes P1 + P2 -> `OV_PRECISION` / `OV_PRECISION_DEFAULT` become f16, and
     p13 (rogue-xmas02.md 4T) runs on it. fast16 fails P1 while fast32 passes -> p13 runs fast32.
+- ➡️ **Amendment (2026-11-08 16:2x ICT, BEFORE its run): a third arm, `final`.** The code moved
+  during the arms (file times, `stat`):
+  - `scripts/unit_detector.py` 16:17:28: the client keeps its canvas between calls (only the
+    frame's own rows are rewritten) and receives the reply's body straight into its array.
+    fast16's harness started after it; fast32's before it.
+  - `detect_server.py` 16:17:40, 5 s AFTER the fast16 server had started (16:17:35): the
+    server's receive in place (no `bytes()` copy of the 2.8 MB canvas) and its reply sent in two
+    parts (no concatenated copy).
+  - Both are byte-identical plumbing. The client's own time against a fake server went 4.8 / 6.8
+    -> 3.7 / 4.2 ms (3 / 12 classes).
+  - So `final` = fast16's flags on the final code, the same harness and the same bars, BEFORE
+    p13. p13 runs on it.

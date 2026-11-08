@@ -222,3 +222,10 @@ not chosen.
   (cold copies in `/home/batt/poring-lab-shm-archive`), the Frigate R3 baseline, and the clean-room
   and route state dirs (their locks).
 - Local disk: unchanged by the pause (data/ 412 MB on 10-29; nothing moved there).
+
+## bot-server retention notes (from 2026-11-08)
+- The audit above describes VM 103 (ubuntu-docker). The lab left it on 2026-11-07; bot-server's
+  root disk is the bot's alone (122.2 GB; 81.8 GB free at 2026-11-08 15:43 ICT, `df -B1`).
+- `poring-lab/media-probe:local` (225 MB) and its apt build cache (~1 GB in the lab builder):
+  **KEEP** (Batt 2026-11-08 ~15:4x, "keep it for now"): re-measuring with real streams and the
+  GPU-recording bench (docs/planning/gpu-recording.md) reuse them. Prune = Batt's call.

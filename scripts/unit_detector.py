@@ -365,6 +365,10 @@ class GpuDetector:
         self.reasons: Counter[str] = Counter()  # why the GPU did not serve
         self.log_path: Path | None = None
         cpu.log_path = None  # this class logs each batch itself, with its path
+        # 2026-11-08 (bot-server-migration.md 19): the canvas is kept between calls -- a frame of
+        # the canvas's width rewrites only its own rows, the grey padding is never touched -- and
+        # the reply's body is received straight into its array (no intermediate copies)
+        self._canvas: np.ndarray | None = None
 
     def detect(self, img: Any, prefer: str = "gpu") -> list[Box]:
         a = np.ascontiguousarray(np.asarray(img)[..., :3], dtype=np.uint8)
@@ -397,7 +401,7 @@ class GpuDetector:
             self.last_reason = "down"
             return None
         t = time.perf_counter()
-        canvas, s, left, top = dw.pad_canvas(a, IMGSZ)
+        canvas, s, left, top = self._pad(a)
         try:
             out = self._call(canvas)
         except GpuRefused as exc:
@@ -415,6 +419,21 @@ class GpuDetector:
         rows = dw.decode(out, s, left, top, self.conf, self.iou, self.groups)
         self.last_ms = round((time.perf_counter() - t) * 1000.0, 1)
         return rows
+
+    def _pad(self, a: np.ndarray) -> tuple[np.ndarray, float, int, int]:
+        """detector_worker.pad_canvas's canvas, the same bytes: for a frame of the canvas's width
+        and at most its rows (scale 1, the lab's 1280 x 720) the kept canvas's own rows are
+        rewritten; any other frame goes through pad_canvas itself."""
+        h, w = a.shape[:2]
+        if w != IMGSZ[1] or h > IMGSZ[0]:
+            return dw.pad_canvas(a, IMGSZ)
+        if self._canvas is None:
+            self._canvas = np.full((IMGSZ[0], IMGSZ[1], 3), 114, np.uint8)
+        top = (IMGSZ[0] - h) // 2
+        self._canvas[:top] = 114
+        self._canvas[top + h :] = 114
+        self._canvas[top : top + h] = a
+        return self._canvas, 1.0, 0, top
 
     def _call(self, canvas: np.ndarray) -> np.ndarray:
         fresh = self.sock is None
@@ -457,8 +476,8 @@ class GpuDetector:
         head = json.loads(self._line(deadline))
         if not isinstance(head, dict) or head.get("shape") != list(self.shape):
             raise GpuUnavailable(f"reply {str(head)[:120]}: the shape must be {list(self.shape)}")
-        n = int(np.prod(self.shape)) * 4
-        out = np.frombuffer(self._exact(n, deadline), "<f4").reshape(self.shape)
+        out = np.empty(self.shape, "<f4")
+        self._exact_into(memoryview(out).cast("B"), deadline)
         if not np.isfinite(out).all():
             raise GpuUnavailable("a non-finite value in the reply")
         ms = head.get("ms")
@@ -494,12 +513,20 @@ class GpuDetector:
         del self.buf[: i + 1]
         return line
 
-    def _exact(self, n: int, deadline: float) -> bytes:
-        while len(self.buf) < n:
-            self._fill(deadline)
-        data = bytes(self.buf[:n])
-        del self.buf[:n]
-        return data
+    def _exact_into(self, view: memoryview, deadline: float) -> None:
+        """Fill ``view`` (the reply's body) from what is buffered, then straight from the
+        socket."""
+        assert self.sock is not None
+        n = len(view)
+        got = min(n, len(self.buf))
+        view[:got] = self.buf[:got]
+        del self.buf[:got]
+        while got < n:
+            self.sock.settimeout(self._left(deadline))
+            k = self.sock.recv_into(view[got:], n - got)
+            if not k:
+                raise GpuClosed("the server closed the connection")
+            got += k
 
     def _drop(self) -> None:
         if self.sock is not None:
