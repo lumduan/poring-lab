@@ -1,0 +1,26 @@
+# poring-lab on bot-server: hold the Arc's GPU clock FLOOR at its highest clock (RP0).
+#
+# Why (docs/planning/bot-server-migration.md 19, measured 2026-11-08): the live detector asks the
+# card a few times a second. Between calls the GuC firmware (SLPC) clocks the card down to its
+# efficient clock (~600-800 MHz), so each forward ran at that clock: 29 ms instead of 16 (FP32),
+# 17 instead of 10 (FP16). With the floor at RP0 the forward runs at 2450 MHz from its first
+# instruction. Idle cost: none measured (16.1 W at floor 300 and at 2450: the card sits in RC6,
+# power-gated, 99.9 % of the time between calls).
+#
+# Install (root; bot-server is the bot's sandbox, Batt 2026-11-07):
+#     install -m 644 scripts/host/poring-lab-gpu-clock.service /etc/systemd/system/
+#     systemctl daemon-reload && systemctl enable --now poring-lab-gpu-clock.service
+# Undo: systemctl disable --now poring-lab-gpu-clock.service (ExecStop puts the floor back at RPn).
+# Check: cat /sys/class/drm/card*/gt_min_freq_mhz; the detect server's start line ("gpu_clock").
+[Unit]
+Description=poring-lab: the Arc's GPU clock floor at RP0 (detector latency)
+After=systemd-modules-load.service systemd-udevd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/bash /usr/local/libexec/poring-lab-gpu-clock.sh start
+ExecStop=/usr/bin/bash /usr/local/libexec/poring-lab-gpu-clock.sh stop
+
+[Install]
+WantedBy=multi-user.target

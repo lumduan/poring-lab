@@ -6,7 +6,8 @@ xmas02 with its species collapsed).
 
     gpu_live_parity.py --refs REFS.json --out OUT.json [--maps prt_fild08,xmas_dun02]
                        [--wait-s 240] [--soak-s 300 --soak-hz 2]
-                       [--server-log STEP.log [--expect-ov-preproc cpu|gpu]]
+                       [--server-log STEP.log [--expect-ov-preproc cpu|gpu]
+                                              [--expect-ov-precision f32|f16]]
 
 PARITY, per map: each frame's CPU boxes (``det.cpu.detect``) and GPU boxes (``det.detect`` with
 ``last_path == "gpu"``; a fallback -- an R3 pause window, a timeout -- is logged with its reason
@@ -17,7 +18,8 @@ times (host clock, the frame to the decoded boxes, socket included) and the serv
 times (each reply's "ms": with --ov-preproc cpu that includes its numpy input conversion).
 THE SERVER: the hello carries no mode (the client compares it exactly), so ``--server-log`` (the
 guarded step's log, $TMPDIR/poring-guarded-execdev-vision.log) gives the server's start line, which
-is recorded; ``--expect-ov-preproc`` refuses to run (rc 2) unless that line names the mode.
+is recorded; ``--expect-ov-preproc`` / ``--expect-ov-precision`` refuse to run (rc 2) unless that
+line names the mode.
 SOAK: the last map's detector at ``--soak-hz`` for ``--soak-s``, the live bot's way (the GPU,
 falling back by itself): each call's time, path and reason, so R3's OFF windows show as fallbacks
 and the ON windows as the GPU again.
@@ -103,18 +105,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="the detect server's step log: its start line is recorded")  # fmt: skip
     ap.add_argument("--expect-ov-preproc", choices=["cpu", "gpu"], default=None,
                     help="refuse unless the server's start line names this mode")  # fmt: skip
+    ap.add_argument("--expect-ov-precision", choices=["f32", "f16"], default=None,
+                    help="refuse unless the server's start line names this precision")  # fmt: skip
     a = ap.parse_args(argv)
-    if a.expect_ov_preproc is not None and a.server_log is None:
-        ap.error("--expect-ov-preproc needs --server-log")
+    expect = {k: v for k, v in (("ov_preproc", a.expect_ov_preproc),
+                                ("precision", a.expect_ov_precision)) if v is not None}  # fmt: skip
+    if expect and a.server_log is None:
+        ap.error("--expect-ov-preproc / --expect-ov-precision need --server-log")
     server = server_start(a.server_log) if a.server_log is not None else None
     print(json.dumps({"server": server}), flush=True)
-    if a.expect_ov_preproc is not None and (
-        server is None or server.get("ov_preproc") != a.expect_ov_preproc
-    ):
-        print(f"REFUSED: the server's start line {server} does not say ov_preproc "
-              f"{a.expect_ov_preproc!r} (start the step first, or read its log)",
-              file=sys.stderr)  # fmt: skip
-        return 2
+    for key, want in expect.items():
+        if server is None or server.get(key) != want:
+            print(f"REFUSED: the server's start line {server} does not say {key} {want!r} "
+                  "(start the step first, or read its log)", file=sys.stderr)  # fmt: skip
+            return 2
     import numpy as np
     import unit_detector as ud
     from PIL import Image

@@ -7,7 +7,7 @@ Amendment 2026-11-07: Batt "เลือก A" and "อนุมัติให�
         [--imgsz 736 1280] [--max-hz 10]
     python -m poring_vision.detect_server --backend openvino --device GPU --socket SOCK \\
         --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # any vendor (ADR-0022)
-        [--ov-preproc cpu|gpu]
+        [--ov-preproc cpu|gpu] [--ov-precision f32|f16]
 
 ``--ov-preproc`` (OpenVINO only; Batt 2026-11-08 "we use the GPU for detection"): where the canvas
 becomes the model's input (BGR -> RGB, HWC -> CHW, float32 / 255). ``cpu`` (the default until its
@@ -24,7 +24,8 @@ step with the pinned weights.
 FRAMES IN, NUMBERS OUT through ONE unix socket in the host RAM directory only the worker mounts
 (``/detect``). The host (``scripts/unit_detector.GpuDetector``) is the only client and does the
 letterbox, the decoding, the NMS and the class names with the same code as its CPU worker; this
-process runs only the model's forward pass, FP32, and returns the head's raw output. No input, no
+process runs only the model's forward pass (FP32; OpenVINO may run --ov-precision f16) and returns
+the head's raw output. No input, no
 X, no network, no packet data.
 
 Protocol, one client at a time, per connection:
@@ -69,7 +70,17 @@ HELLO_MAX = 512
 STATS_EVERY_S = 60.0
 OV_PREPROC = ("cpu", "gpu")
 OV_PREPROC_DEFAULT = "gpu"  # since its parity run, 2026-11-08 (bot-server-migration.md 16a)
-OV_PRECISION = "f32"  # the 11-07 parity's FP32 (boxes 0.0 px from the CPU's); --ov-preproc keeps it
+OV_PRECISIONS = ("f32", "f16")
+# --ov-precision: OpenVINO's INFERENCE_PRECISION_HINT. f32 is the 11-07 parity's (boxes 0.0 px from
+# the CPU's). f16 is OpenVINO's own GPU default and the Arc's XMX units' type: 15.6 -> 9.9 ms a
+# forward back to back on bot-server (bot-server-migration.md 19); it goes live only after its own
+# box parity run.
+OV_PRECISION = "f32"
+# The card's clock floor, for the start and stats lines: at the bot's pace (a call every 0.1-0.5 s)
+# the Arc's firmware clocks down between calls, 2450 -> ~800 MHz, and a forward takes 29 instead of
+# 16 ms (bot-server-migration.md 19). The host keeps the floor at RP0
+# (scripts/host/poring-lab-gpu-clock.service).
+GPU_CLOCK_GLOB = "/sys/class/drm/card*/gt_{}_freq_mhz"
 
 # --ov-preproc gpu: to_input's formula as OpenVINO pre-processing, compiled INTO the model so it
 # runs on the device. The tensor is the canvas as it arrives (PPP_TENSOR: u8, NHWC, BGR). OpenVINO
@@ -124,6 +135,23 @@ def to_input(canvas: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(x)
 
 
+def gpu_clock(pattern: str = GPU_CLOCK_GLOB) -> dict[str, int] | None:
+    """The first card's clock settings (MHz) as sysfs shows them -- min (the floor), RP0 (its
+    highest), act (now) -- or None where no card's files are visible."""
+    import glob
+
+    for d in sorted(glob.glob(pattern.format("min"))):
+        out: dict[str, int] = {}
+        for key in ("min", "RP0", "act"):
+            try:
+                out[key] = int(Path(d.replace("_min_", f"_{key}_")).read_text().strip())
+            except (OSError, ValueError):
+                break
+        else:
+            return out
+    return None
+
+
 def with_device_preproc(ov: Any, model: Any) -> Any:
     """``model`` (one input, NCHW float32 RGB in 0..1) -> the same model taking the canvas as it
     arrives (PPP_TENSOR), with PPP_STEPS compiled in: --ov-preproc gpu."""
@@ -160,12 +188,14 @@ class OvNet:
                  preproc: str = OV_PREPROC_DEFAULT) -> None:  # fmt: skip
         if preproc not in OV_PREPROC:
             raise SystemExit(f"--ov-preproc {preproc!r}: one of {list(OV_PREPROC)}")
+        if precision not in OV_PRECISIONS:
+            raise SystemExit(f"--ov-precision {precision!r}: one of {list(OV_PRECISIONS)}")
         got = file_sha256(path)
         if got != sha256:
             raise SystemExit(f"{path}: sha256 {got[:12]}... is not the pinned {sha256[:12]}...")
         import openvino as ov
 
-        self.sha256, self.preproc = sha256, preproc
+        self.sha256, self.preproc, self.precision = sha256, preproc, precision
         core = ov.Core()
         cfg = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": precision}
         model = core.read_model(path)
@@ -266,6 +296,7 @@ class Server:
         self.ms: list[float] = []
         self.n = {"conn": 0, "frames": 0, "closed": 0, "gone": 0, "bad": 0}
         self.t_stats = clock()
+        self.clock_now: Callable[[], dict[str, int] | None] = gpu_clock
 
     def bind(self) -> socket.socket:
         with contextlib.suppress(FileNotFoundError):
@@ -285,7 +316,8 @@ class Server:
         self.log(json.dumps({"detect_server": "listening", "t": time.strftime("%FT%T%z"),
                              "socket": str(self.path),
                              "models": {k: n.sha256[:12] for k, n in self.nets.items()},
-                             "imgsz": list(self.imgsz), **self.mode}))  # fmt: skip
+                             "imgsz": list(self.imgsz), **self.mode,
+                             "gpu_clock": self.clock_now()}))  # fmt: skip
         try:
             while not self.stop.is_set():
                 self.stats()
@@ -375,7 +407,8 @@ class Server:
         ms = sorted(self.ms)
         p = (lambda q: round(ms[min(len(ms) - 1, int(q * len(ms)))], 2)) if ms else None
         row = {"detect_server": "stats", "t": time.strftime("%FT%T%z"),
-               "ov_preproc": self.mode.get("ov_preproc"), **self.n,
+               "ov_preproc": self.mode.get("ov_preproc"),
+               "precision": self.mode.get("precision"), "gpu_clock": self.clock_now(), **self.n,
                "ms_p50": p(0.5) if p else None, "ms_p95": p(0.95) if p else None,
                "ms_mean": round(statistics.fmean(ms), 2) if ms else None}  # fmt: skip
         self.log(json.dumps(row))
@@ -395,17 +428,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
                     help="--backend openvino: where the canvas becomes the model's input, "
                     f"cpu (numpy) or gpu (in the model); default {OV_PREPROC_DEFAULT}")  # fmt: skip
+    ap.add_argument("--ov-precision", choices=list(OV_PRECISIONS), default=None,
+                    help="--backend openvino: the inference precision hint; default "
+                    f"{OV_PRECISION}")  # fmt: skip
     a = ap.parse_args(argv)
     if a.backend != "openvino" and a.ov_preproc is not None:
         ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
+    if a.backend != "openvino" and a.ov_precision is not None:
+        ap.error("--ov-precision is --backend openvino's (torch runs FP32)")
     models = parse_models(a.model)
     imgsz = (int(a.imgsz[0]), int(a.imgsz[1]))
     nets: dict[str, Net]
     if a.backend == "openvino":
         preproc = a.ov_preproc or OV_PREPROC_DEFAULT
+        precision = a.ov_precision or OV_PRECISION
         mode = {"backend": "openvino", "device": a.device, "ov_preproc": preproc,
-                "precision": OV_PRECISION}  # fmt: skip
-        nets = {name: OvNet(path, sha, a.device, imgsz, OV_PRECISION, preproc)
+                "precision": precision}  # fmt: skip
+        nets = {name: OvNet(path, sha, a.device, imgsz, precision, preproc)
                 for name, (path, sha) in models.items()}  # fmt: skip
     else:
         from poring_vision.gpu import configure_gpu

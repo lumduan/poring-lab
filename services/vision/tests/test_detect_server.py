@@ -470,6 +470,39 @@ def test_main_takes_ov_preproc_and_records_the_mode(monkeypatch: pytest.MonkeyPa
     assert len(rec.nets) == 3  # nothing loaded for either
 
 
+def test_main_takes_ov_precision_and_records_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--ov-precision (bot-server-migration.md 19): the hint reaches every OvNet and the start
+    line; f32 stays the default; torch refuses it."""
+    sha = "ab" * 32
+    base = ["--socket", "/detect/detect.sock", "--model", f"v1=/m/v1.onnx={sha}",
+            "--backend", "openvino"]  # fmt: skip
+    rec = Recorded(monkeypatch)
+    assert ds.main([*base, "--ov-precision", "f16"]) == 0
+    assert ds.main(base) == 0
+    assert [n[4] for n in rec.nets] == ["f16", "f32"]
+    assert [s["mode"]["precision"] for s in rec.servers] == ["f16", "f32"]  # type: ignore[index]
+    torch = ["--socket", "/s", "--model", f"v1=/m/v1.pt={sha}", "--ov-precision", "f16"]
+    for bad in ([*base, "--ov-precision", "bf16"], torch):
+        with pytest.raises(SystemExit):
+            ds.main(bad)
+    assert len(rec.nets) == 2
+    step = ud.serve_step_openvino(600, ov_precision="f16")
+    assert ds.main(step.split("=", 1)[1].split()[3:]) == 0  # serve-cmd's step, parsed here
+    assert [n[4] for n in rec.nets[2:]] == ["f16", "f16"]  # v1 + xmas02
+
+
+def test_gpu_clock_reads_the_cards_floor(tmp_path: Path) -> None:
+    card = tmp_path / "card1"
+    card.mkdir()
+    for key, v in (("min", 2450), ("RP0", 2450), ("act", 0)):
+        (card / f"gt_{key}_freq_mhz").write_text(f"{v}\n")
+    pattern = str(tmp_path / "card*" / "gt_{}_freq_mhz")
+    assert ds.gpu_clock(pattern) == {"min": 2450, "RP0": 2450, "act": 0}
+    (card / "gt_act_freq_mhz").unlink()
+    assert ds.gpu_clock(pattern) is None  # a card without all three files
+    assert ds.gpu_clock(str(tmp_path / "none*" / "gt_{}_freq_mhz")) is None
+
+
 def test_the_openvino_serve_step_passes_ov_preproc_to_the_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -503,5 +536,7 @@ def test_the_start_and_stats_lines_name_the_mode(tmp_path: Path) -> None:
     start, *rest = (json.loads(x) for x in lines)
     assert start["detect_server"] == "listening" and start["t"]
     assert {k: start[k] for k in mode} == mode
+    assert "gpu_clock" in start  # the card's clock floor (or None where sysfs shows no card)
     stats = [r for r in rest if r["detect_server"] == "stats"]
     assert stats and all(r["ov_preproc"] == "gpu" for r in stats)
+    assert all(r["precision"] == "f32" and "gpu_clock" in r for r in stats)

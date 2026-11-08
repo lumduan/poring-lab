@@ -84,25 +84,28 @@ def decode(out: np.ndarray, s: float, left: int, top: int, conf: float, iou: flo
            groups: list[int] | None = None) -> list[list[float]]:  # fmt: skip
     """YOLO11 head (1, 4 + nc, N): centre-xywh + per-class scores -> boxes in the frame's pixels.
     NMS runs per group of ``groups`` (one group id per class id), else per class."""
-    p = out[0].T  # (N, 4 + nc)
-    cls_scores = p[:, 4:]
-    cls = cls_scores.argmax(1)
-    score = cls_scores.max(1)
-    m = score >= conf
-    if not m.any():
+    # The best class score per anchor over the head's CONTIGUOUS rows, then only the anchors at or
+    # above ``conf`` are gathered (2026-11-08, bot-server-migration.md 19: the transposed view's
+    # strided max / argmax over all N anchors was ~2-3 ms of the GPU path's host time). Same values:
+    # max is exact, and argmax over the class axis returns the first maximum either way.
+    o = out[0]  # (4 + nc, N)
+    score_all = o[4:].max(0)
+    keep = np.nonzero(score_all >= conf)[0]
+    if not len(keep):
         return []
-    cx, cy, w, h = p[m, 0], p[m, 1], p[m, 2], p[m, 3]
+    cm = o[4:, keep].argmax(0)
+    score = score_all[keep]
+    cx, cy, w, h = o[0, keep], o[1, keep], o[2, keep], o[3, keep]
     boxes = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], 1)
     boxes[:, [0, 2]] = (boxes[:, [0, 2]] - left) / s
     boxes[:, [1, 3]] = (boxes[:, [1, 3]] - top) / s
-    cm = cls[m]
     grp = cm if groups is None else np.asarray(groups)[cm]
     out_rows: list[list[float]] = []
     for g in np.unique(grp):
         idx = np.nonzero(grp == g)[0]
-        for k in nms(boxes[idx], score[m][idx], iou):
+        for k in nms(boxes[idx], score[idx], iou):
             j = idx[k]
-            out_rows.append([*(round(float(v), 1) for v in boxes[j]), round(float(score[m][j]), 3),
+            out_rows.append([*(round(float(v), 1) for v in boxes[j]), round(float(score[j]), 3),
                              int(cm[j])])  # fmt: skip
     return out_rows
 

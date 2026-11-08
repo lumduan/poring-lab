@@ -556,17 +556,25 @@ NAS_MODELS = "/datasets/archive/models"
 # default moves to gpu with detect_server.OV_PREPROC_DEFAULT, after its parity run.
 OV_PREPROC = ("cpu", "gpu")
 OV_PREPROC_DEFAULT = "gpu"  # 2026-11-08: parity PASS (bot-server-migration.md 16a)
+# The server's inference precision (detect_server --ov-precision): f32, or f16 (the Arc's XMX type,
+# bot-server-migration.md 19). Always printed, like the conversion.
+OV_PRECISIONS = ("f32", "f16")
+OV_PRECISION_DEFAULT = "f32"
 
 
 def serve_step_openvino(seconds: int, device: str = "GPU",
                         models: Sequence[str] = tuple(GPU_WEIGHTS),
-                        ov_preproc: str = OV_PREPROC_DEFAULT) -> str:  # fmt: skip
+                        ov_preproc: str = OV_PREPROC_DEFAULT,
+                        ov_precision: str = OV_PRECISION_DEFAULT) -> str:  # fmt: skip
     """PURE: the guarded worker step running the detect server on OpenVINO (ADR-0022; bot-server's
     Intel Arc): the deployed ONNX of each model from NAS_MODELS, by its pinned sha256."""
     if ov_preproc not in OV_PREPROC:
         raise ValueError(f"ov_preproc {ov_preproc!r}: one of {list(OV_PREPROC)}")
+    if ov_precision not in OV_PRECISIONS:
+        raise ValueError(f"ov_precision {ov_precision!r}: one of {list(OV_PRECISIONS)}")
     parts = ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
-             "--device", device, "--socket", SERVER_SOCKET, "--ov-preproc", ov_preproc]  # fmt: skip
+             "--device", device, "--socket", SERVER_SOCKET, "--ov-preproc", ov_preproc,
+             "--ov-precision", ov_precision]  # fmt: skip
     for m in models:
         w = GPU_WEIGHTS[m]
         parts += ["--model", f"{m}={NAS_MODELS}/{w.onnx}={w.onnx_sha256}"]
@@ -587,14 +595,20 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
                     help="--backend openvino: the server's input conversion, cpu (numpy) or gpu "
                     "(compiled into the model); default " + OV_PREPROC_DEFAULT)  # fmt: skip
+    sc.add_argument("--ov-precision", choices=list(OV_PRECISIONS), default=None,
+                    help="--backend openvino: the server's inference precision; default "
+                    + OV_PRECISION_DEFAULT)  # fmt: skip
     a = ap.parse_args(argv)
     if a.cmd == "serve-cmd":
         if a.seconds <= 0:
             ap.error("--seconds is needed for the guarded step")
         if a.backend != "openvino" and a.ov_preproc is not None:
             ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
+        if a.backend != "openvino" and a.ov_precision is not None:
+            ap.error("--ov-precision is --backend openvino's (torch runs FP32)")
         step = (serve_step_openvino(a.seconds, a.device,
-                                    ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT)
+                                    ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT,
+                                    ov_precision=a.ov_precision or OV_PRECISION_DEFAULT)
                 if a.backend == "openvino" else serve_step(a.seconds))  # fmt: skip
         print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")
     return 0

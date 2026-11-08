@@ -65,4 +65,9 @@ def test_a_server_in_another_mode_is_refused_before_any_work(
     assert glp.main([*base, "--server-log", str(log), "--expect-ov-preproc", "cpu"]) == 2
     with pytest.raises(SystemExit):
         glp.main([*base, "--expect-ov-preproc", "gpu"])  # it needs the log
+    log = step_log(tmp_path, {**START, "ov_preproc": "gpu", "precision": "f32"})
+    assert glp.main([*base, "--server-log", str(log), "--expect-ov-precision", "f16"]) == 2
+    assert "precision 'f16'" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        glp.main([*base, "--expect-ov-precision", "f16"])  # it needs the log
     assert not (tmp_path / "o.json").exists()

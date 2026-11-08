@@ -479,3 +479,57 @@ as Batt prefers:
 - Found by the subagent: compose in a git worktree has no `.env` (it interpolates `:?` variables
   and host_profile reads it). A guarded compose step from a worktree needs the main `.env`
   linked in (gitignored, removed after).
+
+## 19. A faster detector forward: the card's clock and FP16 (Batt 2026-11-08: "switch to the detector that converts on the card, and make it fast")
+- **The profile** (`python -m poring_vision.detect_bench`, new, in the Intel worker by a guarded
+  `execdev:` step, 20 real frames of the xmas_dun02 recording, both deployed ONNX; 15:53-15:56
+  and 15:59-16:01 ICT; `data/train/eval/detect-bench/20261108-{a,b-min2450}.json`):
+
+  | forward (ms, p50), xmas02 / v1 | back to back | paced 10 Hz | paced 2 Hz | clock while it runs |
+  |---|---|---|---|---|
+  | live today: conversion on the card, FP32 | 15.7 / 15.6 | 21.1 / 28.2 | 29.7 / 29.4 | 2450 back to back, ~800 paced |
+  | the same, FP16 | 9.9 / 10.0 | 17.2 / 17.1 | 17.1 / 17.1 | 600 paced |
+  | the old numpy conversion, FP32 (p12's) | 39.3 / 38.9 | 46.8 / 46.4 | 54.4 / 54.4 | - |
+  | **clock floor at RP0 (2450 MHz)**: FP32 | 15.7 / 15.6 | 16.4 / 16.3 | 16.3 / 16.2 | 2450 |
+  | **clock floor at RP0**: FP16 | 10.0 / 9.9 | 10.9 / 10.8 | **10.9 / 10.8** | 2450 |
+
+  - **The clock is the biggest part.** The live bot asks a few times a second. Between calls the
+    GuC firmware (SLPC) clocks the Arc down to ~600-800 MHz (its efficient clock, RP1 600), and
+    the forward runs at that clock: 29 ms instead of 16. The 16a parity soak at 2 Hz saw exactly
+    this (29.7 ms).
+  - **FP16** (OpenVINO's own GPU default; the Arc's XMX units run only f16 / bf16 / int8): 16 ->
+    10 ms at full clock. Its raw head against FP32 on these 20 frames: box columns within 0.45 px,
+    best scores within 0.017, and no anchor crosses the 0.25 threshold (0 of 194).
+  - **Idle cost of the floor: none measured.** The card's energy counter over 20 s idle: 16.1 W at
+    floor 300 and 16.1 W at floor 2450. Between calls it sits in RC6 (power-gated) 99.9 % of the
+    time; the floor only sets the clock it wakes at.
+  - **The host's share** (a fake server, no GPU; `scripts/unit_detector.GpuDetector`'s own
+    steps): letterbox 0.7 ms, send 1.0, the reply 0.6-1.4, the decode 2.5-3.7 (its strided
+    max / argmax over all 19,320 anchors), 5-7 ms in all.
+- **Changes (code, this section's commit):**
+  - `detect_server --ov-precision f32|f16` and `unit_detector.py serve-cmd --ov-precision`
+    (the step always names it); f32 stays the default until the parity below passes. The start
+    and stats lines record the precision and the card's clock (`gpu_clock`: min / RP0 / act).
+  - `detector_worker.decode`: the best class score over the head's contiguous rows, then only the
+    anchors at or above conf are gathered. Identical output on 300 random heads (ties and exact
+    threshold scores included); 4.9 -> 3.3 ms (3 classes), 5.6 -> 3.0 ms (12). The CPU worker uses
+    the same function.
+  - `gpu_live_parity.py --expect-ov-precision`.
+  - The clock floor: `scripts/host/poring-lab-gpu-clock.{service,sh}` (a oneshot unit: floor :=
+    RP0 at boot, RPn on stop). NOT installed: the agent's install of a root systemd unit was
+    refused by the session's permission check, so it is Batt's to install. Until then the floor
+    is set at RUN TIME (`rps_min_freq_mhz` := 2450, 2026-11-08 16:0x ICT by sudo; a reboot resets
+    it to 300). The detect server's start line shows which is in force.
+- **Pre-registered BEFORE the run (this commit): the box parity of the fast path.**
+  - Arms, each a 360-s detect server step (verified stop), the floor at 2450 for both:
+    `fast32` (conversion on the card, FP32) and `fast16` (the same, FP16).
+  - The harness as in 16a: `gpu_live_parity.py`, the same 200 frames
+    (`archive/train/eval/xmas02/latency-200-refs.json`) + a 60-s soak at 2 Hz,
+    `--expect-ov-preproc gpu --expect-ov-precision <arm>`.
+  - **P1 (the deciding bar), per arm and map:** matched / CPU boxes AND matched / GPU boxes >=
+    0.999, the largest coordinate difference of a matched pair <= 1.0 px (16a's bar).
+  - **S1 (speed):** the bot's call (host clock, the frame to the decoded boxes) p50 <= 25 ms on
+    both maps (16a: 38.6 / 41.9).
+  - **P2:** every soak call served by the GPU.
+  - **Decision:** fast16 passes P1 + P2 -> `OV_PRECISION` / `OV_PRECISION_DEFAULT` become f16, and
+    p13 (rogue-xmas02.md 4T) runs on it. fast16 fails P1 while fast32 passes -> p13 runs fast32.
