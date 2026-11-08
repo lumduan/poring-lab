@@ -1333,6 +1333,23 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** K1 + E1 + K3 pass with no regression bar failing -> `--kill-gap` joins the base;
   otherwise off (studied).
 
+### 4AG. Pilot p25 pre-registration: --reach-check REPLICATED (written BEFORE its run, 2026-11-09 02:39 ICT)
+
+- **Why (p23, section 5):** `--reach-check` removed the stuck time (U1 133.9 / 132.9 / 133.1 s ->
+  0 s), U2 (2) and E1 (86.4 / h) passed, and R1 failed at 2 own-body class D (the base p16's own
+  count). All 7 own-body strikes came from the DEFEND SCAN's points on her sprite (cells (0, +-1)),
+  a path `--reach-check` does not touch; 5 of the 7 were good (K). `--skip-own-cells` was weighed
+  and NOT paired: it would drop those 5 good strikes with the 2 bad ones.
+- **The run:** the base (p16's flags, `--engage-screen` + the boss guard; `--kill-gap` OFF by 4AF's
+  rule (p24)) with `--label xmas02-p25 --reach-check`, 25 min -- 4AE's
+  change, replicated.
+- **Bars:** 4AE's, on p25 ALONE and unchanged: **U1** stuck time <= 30 s; **U2** class-D box
+  strikes begun ignored <= 3; **E1** kills >= 80 / h; **D1** the GPU call p95 <= 35 ms; **R1**
+  own-body class D <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths**
+  0. Reported beside p23's: everything 4AE reported, and R1 pooled over p23 + p25.
+- **Decisions:** every bar passes on p25 -> `--reach-check` joins the base (the report names p23's
+  R1 failure beside it); otherwise it stays off.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2456,3 +2473,35 @@ tab; the base + `--reach-check`, f0d6c75b). VERDICT: U1, U2, E1, D1, E3, deaths 
   fix for those (a later pilot).
 - **Items (snatched):** Scell 6, Well-baked Cookie 3, Candy 2, Pearl 2, Zargon 2, Red Herb 1,
   Piece of Cake 1, Iron 1, Manacles 1.
+
+**Pilot p24 (4AF; 02:11:45-02:37:32, 25 min; immunity OFF at 02:11:23 and ON at 02:37:46, both
+judged on the Chat tab; the base + `--kill-gap`, 9.13 = 1f8dc88e's rule, 2 hits). VERDICT: K1, D1,
+R1, E3, deaths PASS; E1 FAILS (74.3 / h), K3 FAILS (62.2 %). `--kill-gap` stays OFF (4AF's rule).**
+
+| | p16 (base) | p21 / p23 | **p24 (+ kill-gap)** | bar |
+|---|---|---|---|---|
+| K1 after the kill p50 (`fight_time.py`) | 6.50 s | 6.46 / 6.51 s | **1.96 s** (26 kill fights, 101.1 s in all) | <= 3.0 s: PASS |
+| E1 kills | 44 (87.9 / h) | 108.0 / 86.4 per h | **31 (74.3 / h)** | >= 80 / h: FAIL |
+| K3 inferred kills within 3 s after a death of ours | - | - | **28 of 45 (62.2 %)** | >= 70 %: FAIL |
+| fights; no-kill fights (time) | 116; 79 (814.4 s) | 92; 50 (434.1 s) / 67; 38 (416.5 s) | **183; 157 (784.1 s)** | reported |
+| R1 own-body class D | 2 | 0 / 2 | **1** (7 own-body strikes) | <= 1: PASS |
+| D1 GPU call p50 / p95 | 20.6 ms | | **20.6 / 21.9 ms; 100 %** | PASS |
+| E3 / deaths / lowest HP | | | **pass (NPC 0); 1 Fly Wing = the boss guard's escape (Garm Baby, 24.9 min), not a dead end; 1 stall / 0 / 53.9 %** | PASS |
+| stuck time (walk_refusals.py); class D begun ignored | 133.9 s; 14 | 132.9 s / 0 s | **121.3 s; 12** (no `--reach-check`) | reported |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.804 / 0.766 | **0.585; 21.2** (53) | reported |
+
+- **What the rule did:** after a real kill the fight ended 1.96 s after the death (6.5 s before):
+  the kill-gap unlock, then the quiet-kill end with no scan. Two side effects cost more than it
+  saved:
+  1. **False kills (17 of 45):** 10 were short contacts -- 2-4 of our hits, then the target walked
+     off ALIVE (our acts stopped 2.2-2.7 s before the inference); 3 were reader gaps while we still
+     hit; 2 had no hit of ours in 3 s; 2 others. Real inferred kills took 3-22 hits (median 15).
+  2. **Spurious box misses:** the quiet-kill rule (end any fight within 3 s after a kill: pilot 4's,
+     for the loot step) also closed a NEW box fight engaged in those 3 s, before the box path
+     looked -- and booked it as a box miss. At 02:17 14 of the first 15 box misses were such, and
+     10 spots went ignored; 183 fights in all.
+- **Fixed for a re-test (not run yet):** 9.13b (7ed2d7d8): a quiet-kill end before the box path
+  looked is no box miss; 9.13c (9436a75b): 5 of our hits before the gap (on p24: 27 of 28 real
+  kills kept, 3 of 17 false ones; share 0.90).
+- **Items (snatched):** Scell 14, Zargon 4, Manacles 3, Red Herb 2, Pearl 2, Iron 2, Piece of
+  Cake 1, Pinafore 1.
