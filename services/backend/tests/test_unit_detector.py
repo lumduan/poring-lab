@@ -577,9 +577,10 @@ def test_serve_cmd_passes_ov_preproc_and_keeps_the_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Batt 2026-11-08: the canvas's conversion on the GPU (detect_server --ov-preproc). The step
-    always names the mode; the default stays cpu until the parity run."""
-    assert ud.OV_PREPROC_DEFAULT == "cpu"
-    assert " --ov-preproc cpu --model " in ud.serve_step_openvino(900)
+    always names the mode; the default is gpu since the 11-08 parity run (boxes 1.000)."""
+    assert ud.OV_PREPROC_DEFAULT == "gpu"
+    assert " --ov-preproc gpu --model " in ud.serve_step_openvino(900)
+    assert " --ov-preproc cpu --model " in ud.serve_step_openvino(900, ov_preproc="cpu")
     gpu = ud.serve_step_openvino(900, ov_preproc="gpu")
     assert " --socket /detect/detect.sock --ov-preproc gpu --model " in gpu
     assert ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900",

@@ -260,6 +260,7 @@ as Batt prefers:
     the next speed-up.
     ➡️ MEASURED 2026-11-08 (section 16): the CPU conversion is 17-18 ms a frame, the copy
     3.5 ms. So the conversion, not the missing Resizable BAR, is the slow part.
+    ➡️ DONE 2026-11-08 (section 16a): the conversion runs on the card, ~20 ms off each call.
 - **For comparison, ubuntu-docker's RTX path:** 49-52 ms a call, but paused half the time while
   R3 measures (p9: 911 GPU / 905 CPU detections).
 
@@ -341,6 +342,33 @@ as Batt prefers:
   - Batt decides.
 
 
+
+### 16a. The conversion on the card: PASS, now the default (2026-11-08 12:12-12:24 ICT; Batt "do it, and make it work")
+- **What:** `detect_server --ov-preproc gpu` (6f95b327, a subagent's build).
+  - OpenVINO's PrePostProcessor compiles the conversion into the model: u8 NHWC BGR in, then f32,
+    RGB, /255, NCHW, all on the card. The CPU's 17-ms `to_input` is gone.
+  - FP32, as before.
+  - The wire, the hello and the torch backend are unchanged.
+- **Parity** (`gpu_live_parity.py`, 200 frames from the NAS + a 60-s soak at 2 Hz; each server
+  step on its own 360-s time box, verified stop), cpu -> gpu:
+
+  | | v1 (prt_fild08) | xmas02 (xmas_dun02) | soak |
+  |---|---|---|---|
+  | boxes vs the CPU detector | 59 / 59 -> 59 / 59, 0.0 px | 533 / 533 -> 533 / 533, 0.0 -> 0.1 px | 120 / 120 by the GPU |
+  | the server's own call, p50 / p95 | 48.4 / 52.3 -> **28.6 / 30.3 ms** | 48.4 / 53.1 -> **29.2 / 30.4** | 55.5 / 56.8 -> **29.7 / 29.9** |
+  | the bot's call (host), p50 / p95 | 61.4 / 67.4 -> **41.9 / 47.8 ms** | 58.4 / 64.3 -> **38.6 / 44.5** | 63.0 / 64.7 -> **37.4 / 37.8** |
+
+- **The bar** (of_cpu and of_gpu >= 0.999, <= 1.0 px) passes on both maps: ~20 ms (~34 %) off
+  every detection.
+- `OV_PREPROC_DEFAULT = "gpu"` in detect_server.py and unit_detector.py. `--ov-preproc cpu`
+  stays available.
+- Pilot p11 (rogue-xmas02.md 4R, pre-registered before this) runs with `--ov-preproc cpu`, as its
+  pre-registration promised no detector change.
+- Found on the way: SIGINT to a running `execdev:` guarded_build does NOT stop the job in the
+  worker (a KeyboardInterrupt in its wait; the server kept running). `worker-stop` then refuses
+  a busy worker. Ended by `docker stop` of the worker and verified by `worker-stop:vision`.
+  Use a time box (`--seconds`) instead.
+
 ## 17. Training speed on the Arc: plan (written BEFORE the runs, 2026-11-08 10:42 ICT)
 - **Why:** section 15's smoke did 1.6-1.7 s an iteration (batch 4). Section 9's bare forward +
   backward is 513 ms. Section 16 shows the copies cost ~10 ms, so the gap is the CPU: with
@@ -394,3 +422,18 @@ as Batt prefers:
   - Not changed: CLAUDE.md rule 5, "raise the limit consciously".
 - The tool is `python -m poring_vision.bar_bench --only-yolo --yolo ... --mem-probe GB`; its
   results are in `data/train/eval/speed/`.
+
+### 17b. With the worker's cap at 11g (Batt 2026-11-08 "raise it"; d98a1f98), 11:58-12:06 ICT
+| `--workers` | s / iteration (median, batches 11-60) | the worker's memory peak |
+|---|---|---|
+| 0 (17a, the 6g cap) | 1.86 | 5.63 GiB |
+| **2** | **1.36** | 5.66 GiB |
+| 4 | 1.36 | 6.23 GiB |
+| 8 | 1.41 | 7.42 GiB |
+
+- No OOM kill at 11g (the kernel log 11:58-12:06).
+- **27 % faster** (1.86 -> 1.36 s), and nothing more past 2 workers: the data pipeline no longer
+  limits. The rest is the training step on the main process: the bare forward + backward is
+  ~0.5 s (sections 9 and 17a), so loss, optimizer and the trainer's own work take ~0.8 s. A
+  profile of that is the next step if training speed matters more.
+- **Default for Arc runs: `--workers 2`** (the same speed as 4, the least memory).

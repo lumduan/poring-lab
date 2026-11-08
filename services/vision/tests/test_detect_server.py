@@ -405,8 +405,8 @@ def test_cpu_preproc_is_the_server_as_before(
     fake = FakeOv()
     fake.install(monkeypatch)
     path, sha = pinned_onnx(tmp_path)
-    net = ds.OvNet(path, sha, "GPU")  # the default
-    assert net.preproc == ds.OV_PREPROC_DEFAULT == "cpu"
+    net = ds.OvNet(path, sha, "GPU", preproc="cpu")  # the old path, still selectable
+    assert net.preproc == "cpu" and ds.OV_PREPROC_DEFAULT == "gpu"
     fp32 = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": "f32"}
     assert fake.calls == [("read_model", path), ("compile_model", "model", "GPU", fp32)]
     canvas = np.random.default_rng(2).integers(0, 256, (736, 1280, 3), dtype=np.uint8)
@@ -456,17 +456,18 @@ def test_main_takes_ov_preproc_and_records_the_mode(monkeypatch: pytest.MonkeyPa
             "--backend", "openvino"]  # fmt: skip
     rec = Recorded(monkeypatch)
     assert ds.main([*base, "--ov-preproc", "gpu"]) == 0
-    assert ds.main(base) == 0  # the default: cpu
-    assert [n[5] for n in rec.nets] == ["gpu", "cpu"] and {n[4] for n in rec.nets} == {"f32"}
+    assert ds.main(base) == 0  # the default: gpu (since the 11-08 parity run)
+    assert ds.main([*base, "--ov-preproc", "cpu"]) == 0
+    assert [n[5] for n in rec.nets] == ["gpu", "gpu", "cpu"] and {n[4] for n in rec.nets} == {"f32"}
     assert [s["mode"] for s in rec.servers] == [
         {"backend": "openvino", "device": "GPU", "ov_preproc": m, "precision": "f32"}
-        for m in ("gpu", "cpu")
+        for m in ("gpu", "gpu", "cpu")
     ]
     torch = ["--socket", "/s", "--model", f"v1=/m/v1.pt={sha}", "--ov-preproc", "gpu"]
     for bad in ([*base, "--ov-preproc", "npu"], torch):
         with pytest.raises(SystemExit):  # an unknown mode; the mode on the torch backend
             ds.main(bad)
-    assert len(rec.nets) == 2  # nothing loaded for either
+    assert len(rec.nets) == 3  # nothing loaded for either
 
 
 def test_the_openvino_serve_step_passes_ov_preproc_to_the_server(
@@ -483,7 +484,7 @@ def test_the_openvino_serve_step_passes_ov_preproc_to_the_server(
     assert [n[0] for n in rec.nets[:2]] == [f"{ud.NAS_MODELS}/{w.onnx}"
                                             for w in ud.GPU_WEIGHTS.values()]  # fmt: skip
     assert [s["mode"]["ov_preproc"] for s in rec.servers] == ["gpu", "cpu"]  # type: ignore[index]
-    assert "--ov-preproc cpu" in ud.serve_step_openvino(600)  # the default, unchanged
+    assert "--ov-preproc gpu" in ud.serve_step_openvino(600)  # the default since the parity run
 
 
 def test_the_start_and_stats_lines_name_the_mode(tmp_path: Path) -> None:

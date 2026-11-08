@@ -68,7 +68,7 @@ MSG_S = 5.0  # a started message must arrive whole within this
 HELLO_MAX = 512
 STATS_EVERY_S = 60.0
 OV_PREPROC = ("cpu", "gpu")
-OV_PREPROC_DEFAULT = "cpu"  # gpu after its parity run vs the CPU detector (and serve-cmd's with it)
+OV_PREPROC_DEFAULT = "gpu"  # since its parity run, 2026-11-08 (bot-server-migration.md 16a)
 OV_PRECISION = "f32"  # the 11-07 parity's FP32 (boxes 0.0 px from the CPU's); --ov-preproc keeps it
 
 # --ov-preproc gpu: to_input's formula as OpenVINO pre-processing, compiled INTO the model so it

@@ -555,7 +555,7 @@ NAS_MODELS = "/datasets/archive/models"
 # cpu = numpy, gpu = compiled into the model. Always printed, so the step says what it runs. The
 # default moves to gpu with detect_server.OV_PREPROC_DEFAULT, after its parity run.
 OV_PREPROC = ("cpu", "gpu")
-OV_PREPROC_DEFAULT = "cpu"
+OV_PREPROC_DEFAULT = "gpu"  # 2026-11-08: parity PASS (bot-server-migration.md 16a)
 
 
 def serve_step_openvino(seconds: int, device: str = "GPU",
