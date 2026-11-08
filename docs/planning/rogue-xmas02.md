@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p14 (4V) done 2026-11-08 19:35: --lead-strike NOT adopted (M1 inconclusive, E1 32.0 / h and R1 failed; 2 of its 3 led strikes still missed). Batt's clip: the stand-still is the 7-s no-hit lock after a missed strike + the ring scan, and the walk engages boxes within ~3 cells only. Batt decides p15."
+next_action: "p15 (4W, --quick-drop) pre-registered 2026-11-08 20:0x; then p16 = the patrol engages any monster box on screen, nearest first (Amendment I)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1039,6 +1039,53 @@ Batt's words, translated (before 18:06:52, the turn's first `date`):
     timing (LEAD_T_S) or the click's own lag is studied before reuse;
   - M3 fails: the led point misses the sprite (the velocity or the lead is wrong) -> studied;
   - M2 fails: the extra detection costs standing targets -> studied before reuse.
+
+### 4V'. Amendment I (2026-11-08 ~19:5x ICT): Batt's answers to the 19:48 report
+
+Batt's words, translated (before 19:53:09, the turn's first `date`):
+1. **p15 / p16 (his clip):** "do (a) first, then (b); and 6 cells is still too few: try striking
+   within the range seen on the screen, ordered by the nearest monster" -> p15 = (a) the quick
+   give-up (4W); p16 = (b) the patrol engages any monster box on the screen, nearest first
+   (pre-registered after p15).
+2. **`--lead-strike`:** "stop using it" -> dropped (off; p14's code stays, behind its flag).
+3. **Recordings:** "try round 3" -> the GPU scaling / processing step (gpu-recording.md; its
+   amendment before its run).
+
+### 4W. Pilot p15 pre-registration: --quick-drop, a strike that does not connect is given up (written BEFORE its run, 2026-11-08 20:0x ICT)
+
+- **Why:** Amendment I item 1, (a). Batt's clip: a missed strike held the Rogue ~7 s (the burst's
+  3.0 s, then 3.5 s without hits of ours) while a Myst Case stood in view.
+- **The measurement behind the numbers (p12-p14, 106 good strikes K / A, 36 class D):**
+  - the arrow or our damage line shows by 2.0 s after the click in all but 6 good strikes; by
+    1.5 s (Batt's "~1.5 s") in all but 23 (22 %), so the give-up is 2.0 s;
+  - after an arrow, our first VISIBLE hit (the packet + the Battle Log reader's ~0.5 s) comes
+    within 2.0 s in 57 of 58;
+  - class-D strikes held 4.3-12.3 s (arrow-ended) and ~7 s (no arrow).
+- **The one change against p13r: `--quick-drop` (dungeon@9.6, behind its flag):**
+  - no arrow and no damage `QUICK_ARROW_S` (2.0 s) after the click: no lock;
+  - an arrow, but no hit of ours `QUICK_HIT_S` (2.0 s) after it: the lock drops ("quick");
+  - after either: the box path runs again (the nearest box within BOX_TARGET_PX), at most
+    `QUICK_RETRY` (2) times a fight, then the ring scan as before. Each drop is logged.
+- **Kept from p13r:** the fast detector, `--self-recheck`, `--still-strike`; `--lead-strike` OFF;
+  the 10-potion stock; the same map, route, seed and flags.
+- **The run:** 4U's command with `--label xmas02-p15 --quick-drop`; the same before / beside /
+  after steps.
+- **Bars:**
+  - **Q1 (the hypothesis):** the time held on class-D strikes (`quick_drop_study.py`, committed
+    with this; its positive case is p13r: 7 D, median 7.22 s, total 49.2 s): median <= 3.0 s AND
+    total <= 25 s.
+  - **Q2 (no cost):** quick drops of a strike that started an attack (K / A by packets) <= 3.
+  - **E1:** kills >= 40 / h (p13r 44.0). **D1:** live detector p50 <= 35 ms. **R1:** own-body
+    class D <= 1. **F3:** far clicks while walking <= 2. **E3:** hard bars pass, 0 dead-end Fly
+    Wings, stalls <= 39 / h. **Deaths:** 0.
+  - Reported: the supply and kills per monster seen (p13r 0.611), the drops by why and the
+    re-armed box targets, class D by path.
+- **Decisions:**
+  - Q1 + Q2 pass and no regression bar fails: `--quick-drop` stays ON; p16 (Amendment I's (b))
+    builds on it;
+  - Q1 fails: the drops do not shorten the held time (the ring scan or the re-armed box path
+    takes it) -> studied;
+  - Q2 fails: the give-up is too early for good strikes -> the threshold is studied before reuse.
 
 ## 5. Results
 

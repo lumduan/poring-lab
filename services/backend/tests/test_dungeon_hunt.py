@@ -1197,3 +1197,26 @@ def test_lead_strike_matches_the_sprite_and_leads_a_walker_only() -> None:
     assert 'lead_rec["why"] = "not_still"' in src  # a scrolling scene: no lead
     assert 'points = [lp["point"], now_pt] if lp["walking"] else [now_pt]' in src
     assert "n_hover = 2  # the led point, then the sprite's current point once" in src
+
+
+def test_quick_drop_gives_up_a_strike_that_does_not_connect() -> None:
+    """dungeon@9.6 (rogue-xmas02.md 4W, pilot p15; Batt: "give it up and go for a new monster at
+    once"): no arrow / damage 2.0 s after the click -> no lock; an arrow but no hit of ours 2.0 s
+    after it -> the lock drops; then the box path again, twice a fight at most."""
+    assert (dh.QUICK_ARROW_S, dh.QUICK_HIT_S, dh.QUICK_RETRY) == (2.0, 2.0, 2)
+    # the arrow at 10.6 s, the click at 10.0 s, none of our hits since
+    assert not dh.quick_no_hit(10.6, -1e9, 10.0, 12.5)  # 1.9 s after the arrow: still waiting
+    assert dh.quick_no_hit(10.6, -1e9, 10.0, 12.7)  # 2.1 s: drop
+    assert not dh.quick_no_hit(10.6, 11.2, 10.0, 13.0)  # a hit of ours after the click: kept
+    assert not dh.quick_no_hit(None, -1e9, 10.0, 20.0)  # no arrow (a damage end): the old rule
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "quick_drop" not in dh.fixes_of(dh.argparse.Namespace(**base, quick_drop=False))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, quick_drop=True))["quick_drop"] == [
+        2.0, 2.0, 2]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert "burst_s = QUICK_ARROW_S if quick else BURST_MAX_S" in src
+    assert "while time.monotonic() - t_c < burst_s:" in src
+    assert 'quick_rearm("no_arrow")' in src and 'quick_rearm("no_hit")' in src
+    assert 'box_fight["tried"] = False' in src and "if n_ >= QUICK_RETRY:" in src

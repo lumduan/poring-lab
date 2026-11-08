@@ -235,6 +235,16 @@ STILL_PX, STILL_N, STILL_MAX_S = 2.0, 3, 1.5
 # (p13: the hover -> verdict 232 ms + the second detection ~45 ms + the stream ~70 ms), the lead
 # at most LEAD_MAX_PX. No SWORD there -> its current point once (the fallback).
 LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25.0, 0.35, 64.0
+# --quick-drop (dungeon@9.6, rogue-xmas02.md 4W, pilot p15; Batt 2026-11-08 ~19:5x: "a strike that
+# does not connect within ~1.5 s: give it up and go for a new monster at once"): a missed strike
+# held us ~7 s (the burst's 3.0 s, then LOCK_NO_HIT_S 3.5 s without our hits; p12 / p13 / p13r
+# 49-89 s a run). Measured on p12-p14's 106 good strikes (K / A): the arrow or our damage line
+# shows by 2.0 s in all but 6 (by 1.5 s: all but 23 -- hence 2.0, not 1.5), and after an arrow our
+# first VISIBLE hit (the packet + the reader's ~0.5 s) comes within 2.0 s in 57 of 58. So: no arrow
+# and no damage QUICK_ARROW_S after the click -> no lock; an arrow but no hit of ours QUICK_HIT_S
+# after it -> the lock drops; after either, the box path runs again (the nearest box), at most
+# QUICK_RETRY times a fight, before the ring scan.
+QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -1015,7 +1025,16 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["still_strike"] = [STILL_PX, STILL_N, STILL_MAX_S]
     if getattr(a, "lead_strike", False):  # dungeon@9.5 (rogue-xmas02.md 4V)
         out["lead_strike"] = [LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX]
+    if getattr(a, "quick_drop", False):  # dungeon@9.6 (rogue-xmas02.md 4W)
+        out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
     return out
+
+
+def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: float,
+                 hit_s: float = QUICK_HIT_S) -> bool:  # fmt: skip
+    """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
+    our hits was seen since its click for ``hit_s`` after the arrow."""
+    return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
 
 
 def through_path(leg: Sequence[Cell], leg2: Sequence[Cell] | None) -> list[Cell]:
@@ -2118,6 +2137,23 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     "ignored": box_spots.ignored(sp_)})  # fmt: skip
             box_fight.clear()
 
+        last_strike: dict[str, Any] = {}  # --quick-drop: the last strike's click and arrow times
+
+        def quick_rearm(why: str) -> None:
+            """--quick-drop (dungeon@9.6): after a dropped strike the box path runs again (it takes
+            the nearest box), at most QUICK_RETRY times a fight; then the ring scan as before."""
+            if boxes is None or not a.box_strike:
+                return
+            n_ = int(box_fight.get("quick_n", 0))
+            ev({"kind": "quick_drop", "why": why, "rearm": n_ < QUICK_RETRY, "n": n_ + 1})
+            counts[f"quick_drop_{why}"] += 1
+            if n_ >= QUICK_RETRY:
+                return
+            box_fight["quick_n"] = n_ + 1
+            box_fight["tried"] = False
+            if box_fight.get("box") is None:
+                box_fight["box"] = []  # any box: box_target takes the nearest itself
+
         n_ag_diag, ag_diag_t = [0], [-1e9]
 
         steal_done: list[tuple[Cell, float]] = []  # dungeon@6: targets stolen from / given up
@@ -2261,7 +2297,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             t_c = time.monotonic()
             n, arrow, dmg = 1, None, None
             cur = ref
-            while time.monotonic() - t_c < BURST_MAX_S:
+            quick = bool(getattr(a, "quick_drop", False))
+            burst_s = QUICK_ARROW_S if quick else BURST_MAX_S
+            while time.monotonic() - t_c < burst_s:
                 time.sleep(0.06)
                 cur = frame()
                 if hf.arrow_new(above(ref, u, v), above(cur, u, v)):
@@ -2303,6 +2341,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if walked is not None:
                 time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
                 return False  # the click hit the ground: no lock (the caller scans again)
+            last_strike.clear()
+            last_strike.update(t_click=t_c, arrow_t=None if arrow is None else t_c + arrow)
+            if quick and arrow is None and dmg is None and not escaped[0]:
+                quick_rearm("no_arrow")  # dungeon@9.6: nothing connected: no lock, the next box
+                return False
             return True
 
         def box_target() -> tuple[Cell, tuple[float, float]] | None:
@@ -3162,6 +3205,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ev({"kind": "unlock", "why": "no hits" if since <= LOCK_MAX_S
                                 else "max", "s": round(since, 1)})  # fmt: skip
                             lock = None
+                        elif getattr(a, "quick_drop", False) and last_strike and quick_no_hit(
+                                last_strike.get("arrow_t"), last_ours, last_strike["t_click"],
+                                tick):  # fmt: skip
+                            ev({"kind": "unlock", "why": "quick", "s": round(since, 1)})
+                            lock = None
+                            last_strike.clear()
+                            quick_rearm("no_hit")
                     quiet = tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick)
                     if lock is None and quiet and kills_seen and kills_seen[-1] > tick - 3.0:
                         # pilot 4: after a kill with no hit for 2.5 s, rings 1 + 2 took 8.6 s to
@@ -3775,6 +3825,14 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--quick-drop",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.6 (rogue-xmas02.md 4W, pilot p15; OFF by default): a strike with no arrow "
+        "and no damage 2.0 s after its click takes no lock, and a lock whose arrow brought no hit "
+        "of ours in 2.0 s drops; then the box path runs again (nearest box), twice a fight at most",
     )
     t.add_argument(
         "--lead-strike",
