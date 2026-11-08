@@ -7,6 +7,15 @@ Amendment 2026-11-07: Batt "เลือก A" and "อนุมัติให�
         [--imgsz 736 1280] [--max-hz 10]
     python -m poring_vision.detect_server --backend openvino --device GPU --socket SOCK \\
         --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # any vendor (ADR-0022)
+        [--ov-preproc cpu|gpu]
+
+``--ov-preproc`` (OpenVINO only; Batt 2026-11-08 "we use the GPU for detection"): where the canvas
+becomes the model's input (BGR -> RGB, HWC -> CHW, float32 / 255). ``cpu`` (the default until its
+parity run passes): ``to_input`` in numpy, then the 11.3 MB float32 tensor goes to the device.
+``gpu``: the same formula as OpenVINO pre-processing steps compiled INTO the model (PPP_STEPS), so
+the 2.8 MB uint8 canvas goes to the device and is converted there (bot-server-migration.md 16: the
+CPU conversion is 17.3 ms a frame on bot-server's Xeon). The wire is the same either way; the mode
+is in the start line and every stats line. TorchNet always converts on the card.
 
 It runs only as a guarded ``execdev:vision`` step inside the long-lived worker (R1-R3: the VRAM
 cap, the paired pause windows, the IO guard). ``scripts/unit_detector.py serve-cmd`` prints the
@@ -58,6 +67,26 @@ IDLE_S = 60.0  # a connection silent this long is closed (the client reconnects 
 MSG_S = 5.0  # a started message must arrive whole within this
 HELLO_MAX = 512
 STATS_EVERY_S = 60.0
+OV_PREPROC = ("cpu", "gpu")
+OV_PREPROC_DEFAULT = "cpu"  # gpu after its parity run vs the CPU detector (and serve-cmd's with it)
+OV_PRECISION = "f32"  # the 11-07 parity's FP32 (boxes 0.0 px from the CPU's); --ov-preproc keeps it
+
+# --ov-preproc gpu: to_input's formula as OpenVINO pre-processing, compiled INTO the model so it
+# runs on the device. The tensor is the canvas as it arrives (PPP_TENSOR: u8, NHWC, BGR). OpenVINO
+# runs PPP_STEPS in this order on that NHWC tensor, THEN its implicit layout conversion to the
+# model's NCHW (openvino 2026.4.1, preprocess_impls.cpp InputInfoImpl::build: the user's steps
+# first, then create_implicit_steps; scale needs a real type, so the conversion comes first).
+# Against to_input (flip the u8 channels, transpose, float32, / 255): the flip and the transpose
+# only move elements and u8 -> f32 is exact, so they commute with each other and with the one
+# arithmetic step, the same f32 division by 255. The device's compiler may turn that division into
+# a multiply by 1/255 or fold it into the first convolution: float rounding, nothing more.
+PPP_TENSOR = ("u8", "NHWC", "BGR")  # element type, layout, colour format
+PPP_MODEL_LAYOUT = "NCHW"
+PPP_STEPS: tuple[tuple[str, str | float], ...] = (
+    ("convert_element_type", "f32"),  # u8 -> f32 (op Convert): exact
+    ("convert_color", "RGB"),  # BGR -> RGB: a Gather of the C axis, reversed (exact)
+    ("scale", 255.0),  # op Divide by 255.0, in f32: to_input's `/ 255.0`
+)
 
 
 class Net(Protocol):
@@ -95,27 +124,62 @@ def to_input(canvas: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(x)
 
 
+def with_device_preproc(ov: Any, model: Any) -> Any:
+    """``model`` (one input, NCHW float32 RGB in 0..1) -> the same model taking the canvas as it
+    arrives (PPP_TENSOR), with PPP_STEPS compiled in: --ov-preproc gpu."""
+    from openvino.preprocess import ColorFormat, PrePostProcessor
+
+    ppp = PrePostProcessor(model)
+    inp = ppp.input()
+    elem, layout, colour = PPP_TENSOR
+    tensor = inp.tensor()
+    tensor.set_element_type(getattr(ov.Type, elem))
+    tensor.set_layout(ov.Layout(layout))
+    tensor.set_color_format(getattr(ColorFormat, colour))
+    inp.model().set_layout(ov.Layout(PPP_MODEL_LAYOUT))
+    pre = inp.preprocess()
+    for op, arg in PPP_STEPS:
+        if op == "convert_element_type":
+            pre.convert_element_type(getattr(ov.Type, str(arg)))
+        elif op == "convert_color":
+            pre.convert_color(getattr(ColorFormat, str(arg)))
+        elif op == "scale":
+            pre.scale(float(arg))
+        else:  # pragma: no cover -- PPP_STEPS is a constant
+            raise ValueError(f"pre-processing step {op!r}")
+    return ppp.build()
+
+
 class OvNet:
     """The DEPLOYED ONNX itself on OpenVINO (ADR-0022: Intel's GPU or any OpenVINO device), FP32 by
-    default: the same file as the host's CPU detector, so only the forward differs."""
+    default: the same file as the host's CPU detector, so only the forward differs. ``preproc``:
+    where the canvas becomes the input (module docstring, --ov-preproc)."""
 
     def __init__(self, path: str, sha256: str, device: str = "GPU",
-                 imgsz: tuple[int, int] = IMGSZ, precision: str = "f32") -> None:  # fmt: skip
+                 imgsz: tuple[int, int] = IMGSZ, precision: str = OV_PRECISION,
+                 preproc: str = OV_PREPROC_DEFAULT) -> None:  # fmt: skip
+        if preproc not in OV_PREPROC:
+            raise SystemExit(f"--ov-preproc {preproc!r}: one of {list(OV_PREPROC)}")
         got = file_sha256(path)
         if got != sha256:
             raise SystemExit(f"{path}: sha256 {got[:12]}... is not the pinned {sha256[:12]}...")
         import openvino as ov
 
-        self.sha256 = sha256
+        self.sha256, self.preproc = sha256, preproc
         core = ov.Core()
         cfg = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": precision}
-        self.compiled = core.compile_model(core.read_model(path), device, cfg)
+        model = core.read_model(path)
+        if preproc == "gpu":
+            model = with_device_preproc(ov, model)
+        self.compiled = core.compile_model(model, device, cfg)
         self.req = self.compiled.create_infer_request()
         y = self.forward(np.full((*imgsz, 3), 114, np.uint8))
         self.shape = (int(y.shape[0]), int(y.shape[1]), int(y.shape[2]))
 
     def forward(self, canvas: np.ndarray) -> np.ndarray:
-        self.req.infer({0: to_input(canvas)})
+        # gpu: the uint8 BGR canvas itself, (1, H, W, 3); the device converts it (PPP_STEPS)
+        x = canvas[None] if self.preproc == "gpu" else to_input(canvas)
+        self.req.infer({0: x})
         out = self.req.get_output_tensor(0).data
         return np.ascontiguousarray(out, dtype="<f4")
 
@@ -189,8 +253,12 @@ class Server:
     def __init__(self, path: Path, nets: Mapping[str, Net], imgsz: tuple[int, int] = IMGSZ,
                  max_hz: float = MAX_HZ, log: Callable[[str], None] = print,
                  clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep) -> None:  # fmt: skip
+                 sleep: Callable[[float], None] = time.sleep,
+                 mode: Mapping[str, Any] | None = None) -> None:  # fmt: skip
+        """``mode``: how the nets run (backend, device, ov_preproc, precision), for the start line;
+        ``ov_preproc`` is in every stats line too."""
         self.path, self.nets, self.imgsz = path, dict(nets), imgsz
+        self.mode = dict(mode or {})
         self.min_gap = 1.0 / max_hz
         self.log, self.clock, self.sleep = log, clock, sleep
         self.stop = threading.Event()
@@ -214,9 +282,10 @@ class Server:
 
     def serve(self) -> None:
         srv = self.bind()
-        self.log(json.dumps({"detect_server": "listening", "socket": str(self.path),
+        self.log(json.dumps({"detect_server": "listening", "t": time.strftime("%FT%T%z"),
+                             "socket": str(self.path),
                              "models": {k: n.sha256[:12] for k, n in self.nets.items()},
-                             "imgsz": list(self.imgsz)}))  # fmt: skip
+                             "imgsz": list(self.imgsz), **self.mode}))  # fmt: skip
         try:
             while not self.stop.is_set():
                 self.stats()
@@ -305,7 +374,8 @@ class Server:
         self.t_stats = now
         ms = sorted(self.ms)
         p = (lambda q: round(ms[min(len(ms) - 1, int(q * len(ms)))], 2)) if ms else None
-        row = {"detect_server": "stats", "t": time.strftime("%FT%T%z"), **self.n,
+        row = {"detect_server": "stats", "t": time.strftime("%FT%T%z"),
+               "ov_preproc": self.mode.get("ov_preproc"), **self.n,
                "ms_p50": p(0.5) if p else None, "ms_p95": p(0.95) if p else None,
                "ms_mean": round(statistics.fmean(ms), 2) if ms else None}  # fmt: skip
         self.log(json.dumps(row))
@@ -322,20 +392,30 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--backend", choices=["torch", "openvino"], default="torch",
                     help="torch: the .pt on the torch accelerator; openvino: the ONNX")  # fmt: skip
     ap.add_argument("--device", default="GPU", help="--backend openvino's device (GPU, CPU, ...)")
+    ap.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
+                    help="--backend openvino: where the canvas becomes the model's input, "
+                    f"cpu (numpy) or gpu (in the model); default {OV_PREPROC_DEFAULT}")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.backend != "openvino" and a.ov_preproc is not None:
+        ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
     models = parse_models(a.model)
     imgsz = (int(a.imgsz[0]), int(a.imgsz[1]))
     nets: dict[str, Net]
     if a.backend == "openvino":
-        nets = {name: OvNet(path, sha, a.device, imgsz) for name, (path, sha) in models.items()}
+        preproc = a.ov_preproc or OV_PREPROC_DEFAULT
+        mode = {"backend": "openvino", "device": a.device, "ov_preproc": preproc,
+                "precision": OV_PRECISION}  # fmt: skip
+        nets = {name: OvNet(path, sha, a.device, imgsz, OV_PRECISION, preproc)
+                for name, (path, sha) in models.items()}  # fmt: skip
     else:
         from poring_vision.gpu import configure_gpu
 
         device = configure_gpu(float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")))
         if device is None:
             raise SystemExit("no GPU: nothing to serve (the host's CPU detector serves alone)")
+        mode = {"backend": "torch", "device": str(device), "ov_preproc": None, "precision": "f32"}
         nets = {name: TorchNet(path, sha, device, imgsz) for name, (path, sha) in models.items()}
-    srv = Server(a.socket, nets, imgsz, a.max_hz)
+    srv = Server(a.socket, nets, imgsz, a.max_hz, mode=mode)
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: srv.stop.set())
     srv.serve()

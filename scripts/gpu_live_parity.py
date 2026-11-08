@@ -6,13 +6,18 @@ xmas02 with its species collapsed).
 
     gpu_live_parity.py --refs REFS.json --out OUT.json [--maps prt_fild08,xmas_dun02]
                        [--wait-s 240] [--soak-s 300 --soak-hz 2]
+                       [--server-log STEP.log [--expect-ov-preproc cpu|gpu]]
 
 PARITY, per map: each frame's CPU boxes (``det.cpu.detect``) and GPU boxes (``det.detect`` with
 ``last_path == "gpu"``; a fallback -- an R3 pause window, a timeout -- is logged with its reason
 and the frame is tried again every second, up to ``--wait-s``). Boxes match one to one at IoU >=
 ``--iou`` (0.7) with the SAME class and species, greedy from the best pair. Reported: matched /
 CPU boxes, matched / GPU boxes, the largest coordinate difference of a matched pair, the GPU call
-times (host clock, the frame to the decoded boxes, socket included).
+times (host clock, the frame to the decoded boxes, socket included) and the server's own forward
+times (each reply's "ms": with --ov-preproc cpu that includes its numpy input conversion).
+THE SERVER: the hello carries no mode (the client compares it exactly), so ``--server-log`` (the
+guarded step's log, $TMPDIR/poring-guarded-execdev-vision.log) gives the server's start line, which
+is recorded; ``--expect-ov-preproc`` refuses to run (rc 2) unless that line names the mode.
 SOAK: the last map's detector at ``--soak-hz`` for ``--soak-s``, the live bot's way (the GPU,
 falling back by itself): each call's time, path and reason, so R3's OFF windows show as fallbacks
 and the ON windows as the GPU again.
@@ -62,6 +67,23 @@ def rows(boxes: Sequence[Any]) -> list[list[Any]]:
     return [[b.x0, b.y0, b.x1, b.y1, b.score, b.cls, b.species] for b in boxes]
 
 
+def server_start(log: Path, limit: int = 1 << 20) -> dict[str, Any] | None:
+    """The detect server's start line ({"detect_server": "listening", ...}) in the first ``limit``
+    bytes of its step's log (guarded_build rewrites the log for each step, and the server prints
+    the line once, at its start); the last one there, or None."""
+    with log.open("rb") as fh:
+        head = fh.read(limit)
+    found = None
+    for line in head.splitlines():
+        try:
+            doc = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(doc, dict) and doc.get("detect_server") == "listening":
+            found = doc
+    return found
+
+
 def pct(vals: Sequence[float], q: float) -> float | None:
     s = sorted(vals)
     return round(s[min(len(s) - 1, int(q * len(s)))], 2) if s else None
@@ -77,7 +99,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wait-s", type=float, default=240.0)
     ap.add_argument("--soak-s", type=float, default=300.0)
     ap.add_argument("--soak-hz", type=float, default=2.0)
+    ap.add_argument("--server-log", type=Path, default=None,
+                    help="the detect server's step log: its start line is recorded")  # fmt: skip
+    ap.add_argument("--expect-ov-preproc", choices=["cpu", "gpu"], default=None,
+                    help="refuse unless the server's start line names this mode")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.expect_ov_preproc is not None and a.server_log is None:
+        ap.error("--expect-ov-preproc needs --server-log")
+    server = server_start(a.server_log) if a.server_log is not None else None
+    print(json.dumps({"server": server}), flush=True)
+    if a.expect_ov_preproc is not None and (
+        server is None or server.get("ov_preproc") != a.expect_ov_preproc
+    ):
+        print(f"REFUSED: the server's start line {server} does not say ov_preproc "
+              f"{a.expect_ov_preproc!r} (start the step first, or read its log)",
+              file=sys.stderr)  # fmt: skip
+        return 2
     import numpy as np
     import unit_detector as ud
     from PIL import Image
@@ -90,13 +127,15 @@ def main(argv: list[str] | None = None) -> int:
             data = fh.read(int(ref["size"]))
         frames.append((key, np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))[..., ::-1]))
     out: dict[str, Any] = {"refs": str(a.refs), "frames": len(frames), "iou": a.iou,
-                           "started": time.strftime("%FT%T%z"), "maps": {}}  # fmt: skip
+                           "started": time.strftime("%FT%T%z"), "server": server,
+                           "maps": {}}  # fmt: skip
     det = None
     for map_name in a.maps.split(","):
         det = ud.for_map_gpu(map_name)
         n_c = n_g = n_m = 0
         worst = 0.0
         ms: list[float] = []
+        srv_ms: list[float] = []
         falls: list[dict[str, Any]] = []
         unserved = 0
         for key, img in frames:
@@ -107,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
                 got = det.detect(img)
                 if det.last_path == "gpu":
                     ms.append(det.last_ms)
+                    if det.last_server_ms is not None:
+                        srv_ms.append(det.last_server_ms)
                     break
                 falls.append({"t": round(time.time(), 1), "key": key,
                               "reason": det.last_reason,
@@ -129,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
             "of_gpu": round(n_m / n_g, 4) if n_g else None, "max_coord_diff_px": round(worst, 2),
             "gpu_ms_p50": pct(ms, 0.5), "gpu_ms_p95": pct(ms, 0.95),
             "gpu_ms_mean": round(statistics.fmean(ms), 2) if ms else None,
+            "server_ms_p50": pct(srv_ms, 0.5), "server_ms_p95": pct(srv_ms, 0.95),
             "unserved_frames": unserved, "fallbacks": len(falls),
             "fallback_reasons": dict(Counter(str(f["reason"]).split(":")[0] for f in falls)),
             "fallback_log": falls[:200], "detector": det.info(),
@@ -147,17 +189,20 @@ def main(argv: list[str] | None = None) -> int:
             t0 = time.monotonic()
             det.detect(frames[i % len(frames)][1])
             calls.append({"t": round(time.time(), 2), "path": det.last_path, "ms": det.last_ms,
+                          "server_ms": det.last_server_ms,
                           "wall_ms": round((time.monotonic() - t0) * 1e3, 1),
                           "reason": det.last_reason})  # fmt: skip
             i += 1
             time.sleep(max(0.0, period - (time.monotonic() - t0)))
         gpu_ms = [c["ms"] for c in calls if c["path"] == "gpu"]
+        srv = [c["server_ms"] for c in calls if c["path"] == "gpu" and c["server_ms"] is not None]
         wall_fb = [c["wall_ms"] for c in calls if c["path"] == "cpu"]
         out["soak"] = {"hz": a.soak_hz, "seconds": a.soak_s, "calls": len(calls),
                        "paths": dict(Counter(c["path"] for c in calls)),
                        "reasons": dict(Counter(str(c["reason"]).split(":")[0] for c in calls
                                                if c["path"] == "cpu")),
                        "gpu_ms_p50": pct(gpu_ms, 0.5), "gpu_ms_p95": pct(gpu_ms, 0.95),
+                       "server_ms_p50": pct(srv, 0.5), "server_ms_p95": pct(srv, 0.95),
                        "fallback_wall_ms_p50": pct(wall_fb, 0.5),
                        "fallback_wall_ms_max": max(wall_fb) if wall_fb else None,
                        "log": calls}  # fmt: skip

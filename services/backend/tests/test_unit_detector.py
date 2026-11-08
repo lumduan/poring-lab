@@ -571,3 +571,41 @@ def test_the_openvino_serve_step_runs_in_the_worker_and_pins_each_onnx(
         f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")  # fmt: skip
     with pytest.raises(SystemExit):
         ud.main(["serve-cmd", "--backend", "openvino"])  # a time box is required
+
+
+def test_serve_cmd_passes_ov_preproc_and_keeps_the_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Batt 2026-11-08: the canvas's conversion on the GPU (detect_server --ov-preproc). The step
+    always names the mode; the default stays cpu until the parity run."""
+    assert ud.OV_PREPROC_DEFAULT == "cpu"
+    assert " --ov-preproc cpu --model " in ud.serve_step_openvino(900)
+    gpu = ud.serve_step_openvino(900, ov_preproc="gpu")
+    assert " --socket /detect/detect.sock --ov-preproc gpu --model " in gpu
+    assert ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900",
+                    "--ov-preproc", "gpu"]) == 0  # fmt: skip
+    assert capsys.readouterr().out.strip() == (
+        f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{gpu}'")  # fmt: skip
+    assert ud.main(["serve-cmd", "--seconds", "900"]) == 0  # torch: no such flag in its step
+    assert "--ov-preproc" not in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # torch converts on the card: the flag is refused there
+        ud.main(["serve-cmd", "--seconds", "900", "--ov-preproc", "gpu"])
+    with pytest.raises(SystemExit):
+        ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900", "--ov-preproc", "npu"])
+    with pytest.raises(ValueError):
+        ud.serve_step_openvino(900, ov_preproc="npu")
+
+
+def test_the_servers_own_forward_time_is_kept_per_gpu_call(worker: Path, tmp_path: Path,
+                                                           private: Path) -> None:  # fmt: skip
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER)
+    try:
+        with gpu_det(model_answering(tmp_path, [0]), sock) as det:
+            assert det.last_server_ms is None
+            det.detect(FRAME)
+            assert det.last_path == "gpu" and det.last_server_ms == 1.0  # the reply's "ms"
+            det.detect(FRAME, prefer="cpu")
+            assert det.last_path == "cpu" and det.last_server_ms is None
+    finally:
+        srv.stop()

@@ -334,7 +334,8 @@ class GpuDetector:
     """The GPU's forward pass with the CPU detector behind it: the same ``detect`` -> [Box] as
     UnitDetector. ``detect(img, prefer="cpu")`` forces the CPU for that call (a pilot's CPU arm).
     ``last_path`` says which path gave the last boxes, ``last_ms`` its time (GPU: the call from
-    the canvas to the decoded boxes, on the host's clock), ``last_reason`` why the GPU did not.
+    the canvas to the decoded boxes, on the host's clock; ``last_server_ms`` the server's own
+    forward, from its reply), ``last_reason`` why the GPU did not.
     ``weights`` None: the model has no GPU checkpoint, so the CPU serves alone."""
 
     def __init__(self, cpu: UnitDetector, weights: str | None = "v1", *,
@@ -358,6 +359,7 @@ class GpuDetector:
         self.disabled: str | None = None if weights is not None else "no GPU weights"
         self.last_path = ""
         self.last_ms = 0.0
+        self.last_server_ms: float | None = None  # the reply's "ms": the server's forward
         self.last_reason: str | None = None
         self.counts: Counter[str] = Counter()  # gpu / cpu (asked) / fallback
         self.reasons: Counter[str] = Counter()  # why the GPU did not serve
@@ -370,6 +372,7 @@ class GpuDetector:
         if rows is None:
             boxes = self.cpu.detect(a)
             self.last_path, self.last_ms = "cpu", self.cpu.last_ms
+            self.last_server_ms = None
             self.counts["cpu" if prefer == "cpu" else "fallback"] += 1
         else:
             boxes = [self.cpu.box_of(b) for b in rows]
@@ -386,7 +389,7 @@ class GpuDetector:
         return boxes
 
     def _gpu(self, a: np.ndarray) -> list[list[float]] | None:
-        self.last_reason = None
+        self.last_reason, self.last_server_ms = None, None
         if self.disabled is not None:
             self.last_reason = "disabled"
             return None
@@ -458,6 +461,9 @@ class GpuDetector:
         out = np.frombuffer(self._exact(n, deadline), "<f4").reshape(self.shape)
         if not np.isfinite(out).all():
             raise GpuUnavailable("a non-finite value in the reply")
+        ms = head.get("ms")
+        ok_ms = isinstance(ms, (int, float)) and not isinstance(ms, bool)
+        self.last_server_ms = float(ms) if ok_ms else None
         return out
 
     def _left(self, deadline: float) -> float:
@@ -545,12 +551,22 @@ def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
 NAS_MODELS = "/datasets/archive/models"
 
 
+# Where the OpenVINO server turns the canvas into the model's input (detect_server --ov-preproc):
+# cpu = numpy, gpu = compiled into the model. Always printed, so the step says what it runs. The
+# default moves to gpu with detect_server.OV_PREPROC_DEFAULT, after its parity run.
+OV_PREPROC = ("cpu", "gpu")
+OV_PREPROC_DEFAULT = "cpu"
+
+
 def serve_step_openvino(seconds: int, device: str = "GPU",
-                        models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:  # fmt: skip
+                        models: Sequence[str] = tuple(GPU_WEIGHTS),
+                        ov_preproc: str = OV_PREPROC_DEFAULT) -> str:  # fmt: skip
     """PURE: the guarded worker step running the detect server on OpenVINO (ADR-0022; bot-server's
     Intel Arc): the deployed ONNX of each model from NAS_MODELS, by its pinned sha256."""
+    if ov_preproc not in OV_PREPROC:
+        raise ValueError(f"ov_preproc {ov_preproc!r}: one of {list(OV_PREPROC)}")
     parts = ["python", "-m", "poring_vision.detect_server", "--backend", "openvino",
-             "--device", device, "--socket", SERVER_SOCKET]  # fmt: skip
+             "--device", device, "--socket", SERVER_SOCKET, "--ov-preproc", ov_preproc]  # fmt: skip
     for m in models:
         w = GPU_WEIGHTS[m]
         parts += ["--model", f"{m}={NAS_MODELS}/{w.onnx}={w.onnx_sha256}"]
@@ -568,12 +584,18 @@ def main(argv: list[str] | None = None) -> int:
                     help="torch: the CUDA build (NVIDIA); openvino: the Intel worker (ADR-0022); "
                     "both a guarded execdev step in the vision worker")  # fmt: skip
     sc.add_argument("--device", default="GPU", help="openvino's device")
+    sc.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
+                    help="--backend openvino: the server's input conversion, cpu (numpy) or gpu "
+                    "(compiled into the model); default " + OV_PREPROC_DEFAULT)  # fmt: skip
     a = ap.parse_args(argv)
     if a.cmd == "serve-cmd":
         if a.seconds <= 0:
             ap.error("--seconds is needed for the guarded step")
-        step = (serve_step_openvino(a.seconds, a.device) if a.backend == "openvino"
-                else serve_step(a.seconds))  # fmt: skip
+        if a.backend != "openvino" and a.ov_preproc is not None:
+            ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
+        step = (serve_step_openvino(a.seconds, a.device,
+                                    ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT)
+                if a.backend == "openvino" else serve_step(a.seconds))  # fmt: skip
         print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")
     return 0
 
