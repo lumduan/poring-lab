@@ -1142,6 +1142,32 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** Q1 + Q2 + E1 pass with no regression bar failing -> `--quick-drop` joins the
   base; Q1 fails -> off (studied); Q2 or E1 fails -> off.
 
+### 4Z'. Amendment K (2026-11-08 23:20 ICT): p18 died to the MVP -- the boss is avoided by SCHEDULE
+
+- **What happened (p18, 22:52:36-23:16:54, `--far-single`):** at 23:16:52 the MVP Stormy Knight
+  (1251) with its summons Garm Baby and Christmas Goblin hit the Rogue: [Stormy Knight] 1170, then
+  5912 damage 0.4 s later (more than her 66 % HP); dead at 23:16:54. The Battle Log READ the boss
+  ("Stormv ?night", which boss_of fits) 1.5 s before the end, but the reader's ~0.5 s lag cannot beat
+  two hits 0.4 s apart: a reactive guard cannot save her from this boss.
+- **Why the MVP was alive mid-run:** every run's setup `@killmonster2` kills the MVP only when it is
+  ALIVE; it then respawns 60-70 min later (KB: delay 3,600,000 + 600,000 ms). p17's setup (22:12)
+  had reset its timer; it came back at ~23:12-23:22, inside p18. p10-p17 never met it (packets).
+- **Afterwards:** she is alive on the clear stand (the runner's `@warp`), HP 678 / 5070, bag 637 /
+  2430; the setup's `@heal` restores her before the next run.
+- **p18 is INVALID** as the test of `--far-single` (an environmental kill, not the change); it is
+  repeated.
+- **The schedule from now (the boss PREVENTED, not reacted to):**
+  1. The experimenter (immunity ON) warps into xmas_dun02, types `@mobsearch Stormy Knight` and
+     reads the reply on a screenshot; if the MVP is alive, `@killmonster2` at once: its respawn
+     window is then known, [T + 60, T + 70] min.
+  2. Two pilots of **25 min** each fit before T + 60 (setup + run + aftercare ~27 min each); the
+     time box goes from 30 to 25 min for every pilot from p19 on (rates stay per hour).
+  3. Then wait for the respawn (polling `@mobsearch` from T + 60), kill it, and repeat.
+  4. The boss guard (Battle Log -> Fly Wing) stays as the backstop for the summons and Garm Baby
+     (a regular spawn too, 30-min respawn, ~600-900 a hit: survivable, the guard acts).
+- **For Batt (a decision, not taken here):** on the lab server the MVP spawn on xmas_dun02 could be
+  disabled (as the MVP tombs were, bdb2f1c4); then the schedule constraint goes away.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
