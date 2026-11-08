@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p15 (4W, --quick-drop) pre-registered 2026-11-08 20:0x; then p16 = the patrol engages any monster box on screen, nearest first (Amendment I)."
+next_action: "p15 (4W, --quick-drop) pre-registered 2026-11-08 19:57; then p16 = the patrol engages any monster box on screen, nearest first (Amendment I)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1051,7 +1051,7 @@ Batt's words, translated (before 19:53:09, the turn's first `date`):
 3. **Recordings:** "try round 3" -> the GPU scaling / processing step (gpu-recording.md; its
    amendment before its run).
 
-### 4W. Pilot p15 pre-registration: --quick-drop, a strike that does not connect is given up (written BEFORE its run, 2026-11-08 20:0x ICT)
+### 4W. Pilot p15 pre-registration: --quick-drop, a strike that does not connect is given up (written BEFORE its run, 2026-11-08 19:57 ICT)
 
 - **Why:** Amendment I item 1, (a). Batt's clip: a missed strike held the Rogue ~7 s (the burst's
   3.0 s, then 3.5 s without hits of ours) while a Myst Case stood in view.
