@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p12 (4S) done 2026-11-08 14:44: E1 58.0 / h PASS (best so far), F2 23, F3 0 walking clicks, R1 0; F1 FAIL (6 far D, all standing: 3 box targets that moved). Batt: keep --still-strike ON (recommended)? Next candidates: aim for the target's motion (far box), (a2) the recheck on E / W cells (7 near D)."
+next_action: "p13 (4T) done 2026-11-08 17:04: the fast detector D1 20.6 ms (p12 64.7) and D2 45 ms PASS; E1 FAIL 34.0 / h, explained by 38 % fewer monsters in sight (kills per sighting 0.55 vs 0.58). Batt: keep the fast path live (recommended)? Next candidates: aim for the target's motion (far box), (a2) the recheck on E / W cells; p14 carries 10 potions (potions_win)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -900,6 +900,13 @@ Batt's words, translated (before 15:43:36, the turn's first `date`):
    The DB's last save before it (15:5x, read-only): White Potion 30, Fly Wing 19, Red Potion 5,
    Candy 5, Well-baked Cookie 9, Piece of Cake 10, Scell 25, Zargon 18, Iron 1, Manacle 4, one
    unidentified headgear (2251, not worn); worn: 1222 +8, 2103, 2224, 2335, 2405, 2505, 2608 x 2.
+   - Done 16:30:34-16:32:25: Etc 4 stacks, Use 6, Eqp 1 dropped, each tab read empty; weight
+     1084 -> 320 (the worn gear) -> 520 / 2430 after the restock; the hotbar read 10 / 10.
+   - ➡️ A gap found at p13's start (16:33:42): the run's setup topped the stock back up to the
+     STRATEGY's (P2: `@item 504 30`, `@item 601 20`), which outranked the Rogue's own 10. So
+     p13 carried p12's stock (30 potions). Fixed after p13's start (`potions_win`, tested): from
+     p14 on her setup keeps 10 White Potions; the Fly Wings stay at the strategy's 20. The bag is
+     cleared again after p13.
 4. **The media probe's build cache (~1 GB):** "keep it for now" -> kept (docs/operations/
    disk-audit.md).
 5. **GPU-encoded recordings:** "interested, and I think it is the faster way too" -> a design
@@ -1729,3 +1736,45 @@ PASS; F1 FAILS. Kills 58.0 / h, the best so far.**
     click's aim, for the target's own motion.
   - 4S named "stays ON" only for F1 + F2 passing. With E1 at 58.0 / h, F2 at 23 and no click
     while walking, keeping `--still-strike` ON is **Batt's call** (recommended).
+
+**Pilot p13 (4T; 16:33:30-17:04:29, its own time box; the bag cleared 16:30-16:32; immunity OFF
+at 16:32:54, judged "Returned to normal state."; back ON, judged "You are now immune to
+attacks." at 17:04:46; the detect server `final`: the conversion on the card, FP32, the clock floor 2450 in
+its start line). VERDICT: D1, D2, R1, F3, E3 and deaths PASS; E1 FAILS (34.0 / h). The run met
+38 % fewer monsters; kills per monster seen are p12's.**
+
+| | p12 | **p13** | bar |
+|---|---|---|---|
+| D1 the live detector's call, p50 / p95 | 64.7 / 68.3 ms (1,811 calls, all GPU) | **20.6 / 22.1 ms** (1,810, all GPU) | <= 35 ms, >= 99 % GPU: PASS |
+| D2 the box path: boxes after the grab, p50 | 89 ms | **45 ms** | <= 65 ms: PASS |
+| the sword verdict after the grab, p50 (reported) | 319 ms | **277 ms** | |
+| E1 kills (packets) | 29 (58.0 / h) | **17 (34.0 / h)** | >= 40 / h: **FAIL** |
+| R1 own-body class-D strikes | 0 | **1** (5 own-body strikes, 4 attacked; 4 transient swords rejected) | <= 1: PASS |
+| F3 far strikes clicked while walking | 0 | **0** | <= 2: PASS |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 2 | **pass / 0 / 1** | PASS |
+| deaths | 0 | **0** (lowest HP 91.2 %, 0 potions) | PASS |
+| far class-D strikes (reported; F1's bar 3) | 6 of 29 far | **4** of 16 far | |
+| class D share (reported) | 28 % (13 / 46) | **31 %** (9 / 29) | |
+
+- **Why E1 failed (studied as 4T's rule asks; packets, offline):**
+  - monsters in sight (distinct `entity_appear`, objtype 5, in the run's window): p12 50
+    (16.7 / 10 min), **p13 31 (10.3 / 10 min)**; Cruisers 19 -> 7, Myst Cases 21 -> 16;
+  - kills per monster seen: p12 0.58, **p13 0.55**; strikes per monster seen 0.92 vs 0.94;
+    engagements 61 -> 32;
+  - the patrol walked MORE (526 waypoints vs 414) for fewer meetings.
+  - So the supply of monsters fell; what the bot did with each one did not. The detector
+    cannot change which monsters the server shows. Not proven: why fewer appeared (both runs
+    started with `@killmonster2`; p12 ran 1 h 50 min earlier).
+- **Box path:** 20 box targets (p12 26), 13 struck; the boxes reach the bot 44 ms sooner
+  (89 -> 45) and the verdict 42 ms sooner (319 -> 277). The far class-D strikes fell 6 -> 4,
+  but of fewer far strikes (16 vs 29): 25 % vs 21 %, no better.
+- **Reader:** 162 / 162 of our hits read. **Items (snatched):** Scell 2, Red Herb 1, Candy 1,
+  Well-baked Cookie 1, Piece of Cake 1, Zargon 1 (7; 14 / h).
+- **The stock:** the setup added P2's 30 potions / 20 Fly Wings over the cleared bag (Amendment G
+  item 3's gap; fixed for p14 by `potions_win`); none was used.
+- **Decisions (as pre-registered):**
+  - D1 + D2 pass; a regression bar (E1) failed, so it was studied: explained by the monster
+    supply (kills per sighting unchanged), not by the detector. Keeping the fast path as the live
+    detector is **Batt's call** (recommended: same boxes, ~3 x faster, every other bar passes).
+  - After the run the bag was cleared again (17:05:56-17:07:26: Etc 2, Use 6; weight 942 -> 520,
+    10 / 10 on the hotbar).

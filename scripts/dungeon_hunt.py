@@ -294,7 +294,11 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
               "level_hold": 99,
               # Batt 2026-11-08 (p11 refused at 40.7 %): the Rogue runs on up to WEIGHT_MAX
               # (48 %) without dropping her Etc tab (it holds Batt's target items)
-              "etc_hold_max": 0.48},
+              "etc_hold_max": 0.48,
+              # Batt 2026-11-08 ~15:4x (rogue-xmas02.md Amendment G): "potions are hardly used, 10
+              # bottles are enough" -> HER potions_to (10) outranks the strategy's (P2: 30); the
+              # Fly Wings still follow the strategy (P2: 20). p13's setup (16:33) still added 30.
+              "potions_win": True},
 }  # fmt: skip
 STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
 
@@ -342,6 +346,14 @@ def patrol_start(map_: str, okr: Any, check: Any) -> Cell:
             continue
         return c
     raise SystemExit(f"dungeon@4 refused: no patrol start for {map_} passes: {why}")
+
+
+def potions_target(strat: Mapping[str, Any], conf: Mapping[str, Any]) -> int:
+    """PURE: the run's White Potion stock: the strategy's, else the character's, else POTIONS_TO;
+    a character with ``potions_win`` (the Rogue, Batt 2026-11-08) keeps her own."""
+    if conf.get("potions_win") and conf.get("potions_to"):
+        return int(conf["potions_to"])
+    return int(strat.get("potions_to") or conf["potions_to"] or POTIONS_TO)
 
 
 def hotbar_slot(key: str) -> int:
@@ -1695,7 +1707,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "AND nameid IN (504, 601);")}  # fmt: skip
         level_db = int(r.db_query(f"SELECT base_level FROM `char` WHERE char_id = {cid};")[0][0])
         setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]  # the hold, then heal
-        p_to = int(strat.get("potions_to") or conf["potions_to"] or POTIONS_TO)
+        p_to = potions_target(strat, conf)
         w_to = int(strat.get("wings_to") or conf["wings_to"])
         if inv.get(504, 0) < p_to:
             setup.append(f"@item 504 {p_to - inv.get(504, 0)}")

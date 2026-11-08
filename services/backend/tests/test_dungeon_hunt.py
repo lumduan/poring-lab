@@ -1144,3 +1144,12 @@ def test_clear_bag_restocks_the_run_stock_after_emptying_use() -> None:
         dh.bag_restock(["etc", "eqp"], {504: None, 601: 3}, targets)
     assert dh.BAG_TABS == ("etc", "use", "eqp")
     assert dh.CHARS_CONF["rogue"]["potions_to"] == 10 and dh.CHARS_CONF["rogue"]["wings_to"] == 10
+
+
+def test_the_rogues_own_potion_stock_outranks_the_strategy() -> None:
+    """Batt 2026-11-08 (Amendment G): 10 White Potions are enough for the Rogue; P2 asks 30."""
+    p2 = dh.STRATEGIES["P2"]
+    assert dh.potions_target(p2, dh.CHARS_CONF["rogue"]) == 10
+    assert dh.potions_target(p2, dh.CHARS_CONF["thief"]) == 30  # unchanged: the strategy's
+    assert dh.potions_target(p2, dh.CHARS_CONF["crusader"]) == 30
+    assert dh.potions_target({}, dh.CHARS_CONF["crusader"]) == dh.POTIONS_TO
