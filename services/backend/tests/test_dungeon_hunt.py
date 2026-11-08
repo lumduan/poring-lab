@@ -1220,3 +1220,44 @@ def test_quick_drop_gives_up_a_strike_that_does_not_connect() -> None:
     assert "while time.monotonic() - t_c < burst_s:" in src
     assert 'quick_rearm("no_arrow")' in src and 'quick_rearm("no_hit")' in src
     assert 'box_fight["tried"] = False' in src and "if n_ >= QUICK_RETRY:" in src
+
+
+def test_engage_screen_takes_any_box_in_view_nearest_first() -> None:
+    """dungeon@9.7 (rogue-xmas02.md 4X, pilot p16; Batt: "strike within what the screen shows,
+    the nearest monster first"): both the patrol's trigger and the box path take any box whose
+    body point is in view; BoxWatch.near orders by distance; off by default."""
+    assert dh.BOX_SCREEN_PX >= 2000.0  # beyond any distance on the 1280 x 720 region
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "engage_screen" not in dh.fixes_of(dh.argparse.Namespace(**base, engage_screen=False))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, engage_screen=True))["engage_screen"] == [
+        dh.BOX_SCREEN_PX]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert "return skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)" in src
+    assert "near_ = boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_FRESH_S, skip_s)" in src
+    assert "near_b = (boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_TARGET_WAIT_S + 1.0," in src
+    # the default paths are unchanged
+    assert "near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)" in src
+    assert "near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh" in src
+
+
+def test_box_watch_near_orders_by_distance_and_skips() -> None:
+    """BoxWatch.near (the order --engage-screen relies on): the nearest foot within max_px; a
+    box ``skip`` refuses is passed over; our own sprite's box never counts."""
+
+    class B:
+        def __init__(self, x0: float, y0: float, x1: float, y1: float) -> None:
+            self.x0, self.y0, self.x1, self.y1 = x0, y0, x1, y1
+
+    w = dh.BoxWatch.__new__(dh.BoxWatch)
+    import threading
+    import time
+
+    w.lock = threading.Lock()
+    w.n_self = w.n_skip = 0
+    far, near = B(100, 100, 140, 160), B(500, 250, 540, 310)  # feet (120, 160) and (520, 310)
+    w.last = (time.monotonic(), [far, near])
+    assert w.near(dh.FOOT_PX, dh.BOX_SCREEN_PX, 5.0) == (500, 250, 540, 310)
+    assert w.near(dh.FOOT_PX, dh.BOX_SCREEN_PX, 5.0, lambda f: f[0] > 400) == (100, 100, 140, 160)
+    assert w.near(dh.FOOT_PX, dh.BOX_NEAR_PX, 5.0) is None  # both beyond ~3 cells

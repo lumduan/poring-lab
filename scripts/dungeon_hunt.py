@@ -245,6 +245,12 @@ LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25
 # after it -> the lock drops; after either, the box path runs again (the nearest box), at most
 # QUICK_RETRY times a fight, before the ring scan.
 QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
+# --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
+# still too few: strike within what the screen shows, the nearest monster first"): the patrol
+# engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
+# (~6); with the flag both take ANY monster box on the screen whose body point is in view (not
+# under a UI window), the nearest to our feet first (BoxWatch.near already orders by distance).
+BOX_SCREEN_PX = 4000.0  # beyond any distance on the 1280 x 720 game region
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -1027,6 +1033,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["lead_strike"] = [LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX]
     if getattr(a, "quick_drop", False):  # dungeon@9.6 (rogue-xmas02.md 4W)
         out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
+    if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
+        out["engage_screen"] = [BOX_SCREEN_PX]
     return out
 
 
@@ -2381,8 +2389,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 rec.update(path=meta["path"], det_ms=meta["ms"], gpu_reason=meta["reason"],
                            grab_after_ms=round((meta["t"] - t_set) * 1e3),
                            boxes_after_ms=round((meta["t_done"] - t_set) * 1e3))  # fmt: skip
-            near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
-                      else None)  # fmt: skip
+            if getattr(a, "engage_screen", False):  # dungeon@9.7: the nearest box on screen
+                near_b = (boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_TARGET_WAIT_S + 1.0,
+                                     lambda f: not in_view(f[0], f[1] - BODY_UP))
+                          if fresh else None)  # fmt: skip
+            else:
+                near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
+                          else None)  # fmt: skip
             if near_b is None:
                 ev({**rec, "box": None, "verdicts": [], "struck": False})
                 return None
@@ -3137,7 +3150,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             ev({"kind": "box_ignored", "spot": list(sp_)})
                         return True
 
-                    near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)
+                    if getattr(a, "engage_screen", False):  # dungeon@9.7: any box on the screen
+
+                        def skip_s(foot: Sequence[float]) -> bool:
+                            return skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)
+
+                        near_ = boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_FRESH_S, skip_s)
+                    else:
+                        near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)
                 if (hit_now or dropped or swing_now or near_ is not None) and mode != "fight":
                     # ONE engage event per fight, by what started it
                     box_fight.clear()
@@ -3825,6 +3845,14 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--engage-screen",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.7 (rogue-xmas02.md 4X, pilot p16; OFF by default): the patrol engages ANY "
+        "monster box on the screen (its body point in view), and the box path takes the nearest "
+        "one on the screen, not only within ~3 / ~6 cells",
     )
     t.add_argument(
         "--quick-drop",
