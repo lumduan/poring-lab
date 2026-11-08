@@ -1425,10 +1425,21 @@ def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:
             "rest": "spot", "npc_guard": True, "miss_cue": True,
             "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
     assert "kill_gap" not in dh.fixes_of(dh.argparse.Namespace(**base))
-    assert dh.fixes_of(dh.argparse.Namespace(**base, kill_gap=True))["kill_gap"] == [1.5, 2]
+    assert dh.fixes_of(dh.argparse.Namespace(**base, kill_gap=True))["kill_gap"] == [
+        1.5, 2, "9.13b"]  # fmt: skip
     src = Path(dh.__file__).read_text()
     assert 'if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):' in src
     assert 'ev({"kind": "kill", "by": "hit_gap"' in src
     assert "ours_ticks.append(tick)" in src
     # the quiet-kill end the exp line used (pilot 4) is what ends the fight after it
     assert 'ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})' in src
+
+
+def test_kill_gap_quiet_end_before_the_box_path_looked_is_no_miss() -> None:
+    """dungeon@9.13b: with --kill-gap, a box fight the quiet-kill rule closes before box_target ran
+    is not booked as a box miss (p24: 14 of 15 misses, 10 spots ignored); without it, unchanged."""
+    assert dh.kill_gap_no_miss(True, {"spot": (1, 2), "n0": 3})
+    assert not dh.kill_gap_no_miss(True, {"spot": (1, 2), "n0": 3, "tried": True})
+    assert not dh.kill_gap_no_miss(False, {"spot": (1, 2), "n0": 3})  # the default path
+    src = Path(dh.__file__).read_text()
+    assert 'if kill_gap_no_miss(getattr(a, "kill_gap", False), box_fight):' in src

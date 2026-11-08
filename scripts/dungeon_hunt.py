@@ -1081,7 +1081,7 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
     if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
-        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS]
+        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13b"]  # b: kill_gap_no_miss (after p24)
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
     return out
@@ -1167,6 +1167,13 @@ def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GA
     """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
     landed on this lock and none for ``gap_s`` since the last."""
     return hits_on_lock >= min_hits and since_last_hit > gap_s
+
+
+def kill_gap_no_miss(kill_gap: bool, box_fight: Mapping[str, Any]) -> bool:
+    """PURE (dungeon@9.13b, --kill-gap): a box-engaged fight the quiet-kill rule closes BEFORE the
+    box path looked (``tried`` unset) is no box miss. p24: 14 of its first 15 box misses were such
+    fights (a box engaged within 3 s after a kill), and 10 spots went ignored."""
+    return kill_gap and not box_fight.get("tried")
 
 
 def through_path(leg: Sequence[Cell], leg2: Sequence[Cell] | None) -> list[Cell]:
@@ -3480,7 +3487,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         # find nobody -- end the fight; the loot step's hovers still see a SWORD
                         mode, swing_floor = "after", tick
                         ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
-                        box_fight_done()
+                        if kill_gap_no_miss(getattr(a, "kill_gap", False), box_fight):
+                            box_fight.clear()  # dungeon@9.13b: never looked at -> not a miss
+                        else:
+                            box_fight_done()
                         continue
                     if mr and lock is not None and here is not None and last_ours != ours_used \
                             and tick - last_ours <= MR_AFTER_HIT_S:  # fmt: skip
