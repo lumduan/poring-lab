@@ -22,7 +22,10 @@
 # round trip alone (bar V1). An arm may DECLARE a limited range instead (its color_range field, tv:
 # the stream's tag and the host's inverse follow it). vpp / gctl arms convert on the GPU with
 # scale_vaapi and the arm's own options (its vpp field); gctl downloads the GPU's YUV planes raw
-# (round 2, doc 6.6). Every ffmpeg runs with -nostdin; its log goes to /out/logs.
+# (round 2, doc 6.6). Round 3 (doc 6.7): the upload field names the software format uploaded before
+# scale_vaapi ("-" = bgra, rounds 1 and 2's; bgr0 = the same bytes without alpha), and the timing
+# input is declared in it; a 10-bit arm uploads BGRA and writes xv30 (VA's Y410). Every ffmpeg runs
+# with -nostdin; its log goes to /out/logs.
 set -euo pipefail
 
 IN=${RECBENCH_IN:-/in}   # the overrides exist for the host-side stub test only (test_gpu_rec_bench);
@@ -90,14 +93,14 @@ timed() { # NAME NOTE -- ffmpeg arguments
 # first that encodes is used, and remembered for the timing pass ($OUT/logs/fmt-<arm>).
 encode_run() {
   local name=$1 mode=$2 codec=$3 sws=$4 frames=$5 ext=$6 mux=$7 args=$8 s=$9 r=${10} fps=${11}
-  local vpp=${12} crange=${13}
+  local vpp=${12} crange=${13} up=${14}
   local sw rc=1
   local -a alts
   IFS='|' read -r -a alts <<<"$sws"
   for sw in "${alts[@]}"; do
     rc=0
     encode_fmt "$name" "$mode" "$codec" "$sw" "$frames" "$ext" "$mux" "$args" "$s" "$r" "$fps" \
-      "$vpp" "$crange" || rc=$?
+      "$vpp" "$crange" "$up" || rc=$?
     if ((rc == 0)); then
       echo "$sw" >"$OUT/logs/fmt-$name"
       [[ "$sw" == "${alts[0]}" ]] || say "NOTE $name: upload format $sw, not ${alts[0]}"
@@ -110,7 +113,9 @@ encode_run() {
 
 encode_fmt() {
   local name=$1 mode=$2 codec=$3 sw=$4 frames=$5 ext=$6 mux=$7 args=$8 s=$9 r=${10} fps=${11}
-  local vpp=${12} crange=${13}
+  local vpp=${12} crange=${13} up=${14}
+  local upf=bgra # what is uploaded before scale_vaapi (vpp / gctl): the arm's upload, "-" = bgra
+  [[ "$up" == "-" ]] || upf=$up
   local dir="$OUT/enc/$s/$name" in="$IN/$s/$r/%06d.png" log="$OUT/logs/e-$s-$name-$r.log"
   local out="$dir/$r.$ext" lim=() rc=0
   mkdir -p "$dir"
@@ -123,13 +128,13 @@ encode_fmt() {
       "${FF[@]}" "${src[@]}" -vf "$CONV,format=$sw" "${lim[@]}" -f rawvideo -pix_fmt "$sw" \
         "$out" >"$log" 2>&1 || rc=$? ;;
     gctl)
-      # the GPU's conversion alone: BGRA up, scale_vaapi, the YUV planes down, raw
+      # the GPU's conversion alone: BGRA (or the arm's upload) up, scale_vaapi, the planes down, raw
       "${FF[@]}" "${HW[@]}" "${src[@]}" \
-        -vf "format=bgra,hwupload,scale_vaapi=$vpp:format=$sw,hwdownload,format=$sw" "${lim[@]}" \
+        -vf "format=$upf,hwupload,scale_vaapi=$vpp:format=$sw,hwdownload,format=$sw" "${lim[@]}" \
         -f rawvideo -pix_fmt "$sw" "$out" >"$log" 2>&1 || rc=$? ;;
     vpp)
       # shellcheck disable=SC2086 # $args is the arm's option list, split on purpose
-      "${FF[@]}" "${HW[@]}" "${src[@]}" -vf "format=bgra,hwupload,scale_vaapi=$vpp:format=$sw" \
+      "${FF[@]}" "${HW[@]}" "${src[@]}" -vf "format=$upf,hwupload,scale_vaapi=$vpp:format=$sw" \
         "${lim[@]}" -fps_mode passthrough -c:v "$codec" -low_power 1 $args "${TAGS[@]}" \
         -f "$mux" "$out" >"$log" 2>&1 || rc=$? ;;
     *)
@@ -175,7 +180,7 @@ say "samples: ${SAMPLES[*]} (ref: ${REFS[*]})"
 
 # --- 1. every arm on every sample it names, in the table's order -----------------------------------
 while IFS=$'\t' read -r -u 3 name mode codec sw dl plane prof samples timing ext mux frames vpp \
-  crange args; do
+  crange up args; do
   [[ -z "$name" || "$name" == \#* ]] && continue
   for s in "${SAMPLES[@]}"; do
     kind=$(cat "$IN/$s/kind")
@@ -191,7 +196,7 @@ while IFS=$'\t' read -r -u 3 name mode codec sw dl plane prof samples timing ext
         continue
       fi
       encode_run "$name" "$mode" "$codec" "$sw" "$frames" "$ext" "$mux" "$args" "$s" "$r" \
-        "$(cat "$IN/$s/fps")" "$vpp" "$crange" || true
+        "$(cat "$IN/$s/fps")" "$vpp" "$crange" "$up" || true
       if [[ ("$mode" == intra || "$mode" == vpp) && "$kind" == ref && -s "$OUT/enc/$s/$name/$r.$ext" ]]; then
         md5_run "$name" "$dl" "$plane" "$ext" "$s" "$r"
       fi
@@ -214,27 +219,34 @@ timed conv_nv12 "swscale BGRA -> NV12 (BT.709 full) only" -- "${RAWIN[@]}" -vf "
 timed conv_yuv444p "swscale BGRA -> YUV 4:4:4 only" -- "${RAWIN[@]}" -vf "$CONV,format=yuv444p" \
   -f null - || true
 # one encode timing pass of one arm: PASS of TREPS (the scorer grades the median of the passes)
-enc_timed() { # NAME MODE CODEC SW VPP CRANGE MUX ARGS PASS
-  local name=$1 mode=$2 codec=$3 sw=$4 vpp=$5 crange=$6 mux=$7 args=$8 pass=$9
-  local vf="$CONV,format=$sw,hwupload" note
-  [[ "$mode" == vpp ]] && vf="format=bgra,hwupload,scale_vaapi=$vpp:format=$sw"
+enc_timed() { # NAME MODE CODEC SW VPP CRANGE MUX ARGS PASS UP
+  local name=$1 mode=$2 codec=$3 sw=$4 vpp=$5 crange=$6 mux=$7 args=$8 pass=$9 up=${10}
+  local vf="$CONV,format=$sw,hwupload" note pf=bgra
+  local -a rin=("${RAWIN[@]}")
+  if [[ "$mode" == vpp ]]; then
+    # the same raw bytes DECLARED as the arm's upload format (bgr0: BGRA's bytes, the alpha byte
+    # ignored -- what the recorder would hand over), so no CPU conversion is timed for it
+    [[ "$up" == "-" ]] || pf=$up
+    rin=(-stream_loop "$TLOOPS" -f rawvideo -pix_fmt "$pf" -s "$SIZE" -r 30 -i "$RAW")
+    vf="format=$pf,hwupload,scale_vaapi=$vpp:format=$sw"
+  fi
   note="$codec $args, $vf"
   ((TREPS == 1)) || note="$note (pass $pass/$TREPS)"
   tags "$crange"
   # shellcheck disable=SC2086
-  timed "enc_$name" "$note" -- "${HW[@]}" "${RAWIN[@]}" -vf "$vf" -fps_mode passthrough \
+  timed "enc_$name" "$note" -- "${HW[@]}" "${rin[@]}" -vf "$vf" -fps_mode passthrough \
     -c:v "$codec" -low_power 1 $args "${TAGS[@]}" -f "$mux" /dev/null || true
 }
 # pass 1 of every timed arm (with its decode timings), then passes 2..TREPS round-robin over the
 # arms, so a first-arm warm-up or a drift in the host's load does not land on one arm alone
 for ((pass = 1; pass <= TREPS; pass++)); do
   while IFS=$'\t' read -r -u 3 name mode codec sw dl plane prof samples timing ext mux frames vpp \
-    crange args; do
+    crange up args; do
     [[ -z "$name" || "$name" == \#* || "$timing" != 1 ]] && continue
     has_profile "$prof" || continue
     [[ -s "$OUT/logs/fmt-$name" ]] || continue # it never encoded in the quality pass
     sw=$(cat "$OUT/logs/fmt-$name")
-    enc_timed "$name" "$mode" "$codec" "$sw" "$vpp" "$crange" "$mux" "$args" "$pass"
+    enc_timed "$name" "$mode" "$codec" "$sw" "$vpp" "$crange" "$mux" "$args" "$pass" "$up"
     ((pass == 1)) || continue
     f="$OUT/enc/$TS/$name/r0.$ext"
     [[ -s "$f" ]] || continue

@@ -4,6 +4,7 @@ decode tests use a tiny libx264 (CPU) stream made here."""
 
 import hashlib
 import importlib.util
+import os
 import re
 import sys
 from pathlib import Path
@@ -15,6 +16,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "scripts"
+# the real scores (gitignored, local only): data/ of this checkout, or GPU_REC_SCORES (a worktree
+# reads the main checkout's, never a copy)
+SCORES = Path(os.environ.get("GPU_REC_SCORES") or ROOT / "data" / "bench" / "gpu-rec")
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +53,7 @@ def test_the_ram_budget_follows_rule_7(gb: ModuleType) -> None:
     assert why is not None and "4.0 GB" in why  # 2.5 + 0.8 + the 1.2 GB out cap > 4
 
 
-@pytest.mark.parametrize("rnd", [1, 2])
+@pytest.mark.parametrize("rnd", [1, 2, 3])
 def test_the_arm_table_is_what_recbench_sh_reads(gb: ModuleType, rnd: int) -> None:
     arms = gb.round_arms(rnd)
     text = gb.arms_tsv(arms)
@@ -72,8 +76,13 @@ def test_the_arm_table_is_what_recbench_sh_reads(gb: ModuleType, rnd: int) -> No
             want = "out_range=full" if arm.color_range == "pc" else "out_range=limited"
             assert want in arm.vpp.split(":") and "out_color_matrix=bt709" in arm.vpp.split(":")
         if arm.mode == "gctl":
-            assert arm.codec == arm.mux == "rawvideo" and arm.frames == 10 and not arm.timing
-            assert arm.va_profile == "-" and arm.plane_fmt in ("yuv420p", "yuv444p")
+            assert arm.codec == arm.mux == "rawvideo" and arm.frames in (5, 10) and not arm.timing
+            assert arm.va_profile == "-" and arm.plane_fmt in ("yuv420p", "yuv444p", "yuv444p10le")
+        # the upload format: BGRA ("-") unless a vpp / gctl arm names another (round 3)
+        assert arm.upload in ("-", "bgr0") and (arm.upload == "-" or arm.mode in ("vpp", "gctl"))
+        if arm.mode in ("vpp", "gctl"):  # every alternative written at the planes' bit depth
+            assert {gb.plane_depth(f) for f in arm.sw_fmt.split("|")} == {
+                gb.plane_depth(arm.plane_fmt)}, arm.name  # fmt: skip
         if arm.mode not in gb.CONTROL_MODES:
             assert arm.va_profile.startswith("VAProfile") and arm.ext in gb.DECODERS
             assert "-low_power" not in arm.args  # recbench.sh adds it (VDEnc only, section 18)
@@ -100,6 +109,7 @@ def test_round_1_is_the_original_table_unchanged(gb: ModuleType) -> None:
     assert gb.arms_tsv() == gb.arms_tsv(gb.round_arms(1))  # the default is round 1's table
     for arm in gb.round_arms(1):
         assert arm.color_range == "pc" and gb.arm_color(arm) == gb.COLOR  # the same inverse
+        assert arm.upload == "-"  # BGRA uploaded, as recbench.sh hard-coded before round 3
         assert arm.vpp == ("out_color_matrix=bt709:out_range=full"
                            if arm.name == "vpp-hevc420-q20" else "-")  # fmt: skip
     assert gb.TIMING_REPS[1] == 1  # one timing pass, as in round 1
@@ -112,6 +122,46 @@ def test_round_1_is_the_original_table_unchanged(gb: ModuleType) -> None:
     assert (r2.codec, r2.args, r2.va_profile, r2.sw_fmt) == (r1.codec, r1.args, r1.va_profile,
                                                             r1.sw_fmt)  # fmt: skip
     assert gb.arm_by_name("gctl-vpp420-r1").vpp == gb.arm_by_name("vpp-hevc420-q20").vpp
+
+
+def _changed(a: Any, b: Any) -> set[str]:
+    return {k for k in a.__dataclass_fields__ if getattr(a, k) != getattr(b, k)}
+
+
+def test_round_3_changes_one_thing_per_arm_and_keeps_its_references(gb: ModuleType) -> None:
+    """Doc 6.7: each new arm is round 2's GPU path with ONE change, so a change in what it writes
+    for neutral grey has one cause; round 2's references run again unchanged (round 3 stands on
+    its own); round 2's own arms all uploaded BGRA."""
+    r3 = gb.ROUNDS[3]
+    assert {"ctl-yuv444", "gctl-vpp444", "gctl-vpp444-tv", "hevc444-q20",
+            "vpp-hevc444-q20"} <= set(r3) and len(set(r3)) == len(r3)  # fmt: skip
+    assert r3[0] == "ctl-yuv444" and r3[-1] == "gctl-vpp444-tv"  # V1 first; the skippable last
+    assert gb.TIMING_REPS[3] == 3
+    assert all(a.upload == "-" for a in gb.round_arms(2))
+    ctl, cand = gb.arm_by_name("gctl-vpp444"), gb.arm_by_name("vpp-hevc444-q20")
+    assert gb.VPP_FAST.removeprefix(gb.VPP_FULL) == ":mode=fast"
+    assert gb.VPP_MDEF.removeprefix(gb.VPP_FULL) == ":mode=default"
+    ten = {"name", "sw_fmt", "plane_fmt"}
+    for name, base, want in (
+        ("gctl-vpp444-fast", ctl, {"name", "vpp", "frames"}),
+        ("gctl-vpp444-dflt", ctl, {"name", "vpp", "frames"}),
+        ("gctl-vpp444-bgr0", ctl, {"name", "upload", "frames"}),
+        ("gctl-vpp444-10", ctl, ten | {"frames"}),
+        ("vpp-hevc444-q20-fast", cand, {"name", "vpp"}),
+        ("vpp-hevc444-q20-dflt", cand, {"name", "vpp"}),
+        ("vpp-hevc444-q20-bgr0", cand, {"name", "upload"}),
+        ("vpp-hevc444-10-q20", cand, ten | {"dl_fmt", "va_profile"}),
+    ):  # fmt: skip
+        a = gb.arm_by_name(name)
+        assert name in r3 and _changed(a, base) == want, (name, _changed(a, base))
+        if a.mode == "gctl":
+            assert a.frames == 5 < ctl.frames  # its first 5 frames are gctl-vpp444's (OUT_CAP)
+    assert gb.arm_by_name("vpp-hevc444-10-q20").va_profile == gb.HEVC444_10
+    assert gb.arm_by_name("vpp-hevc444-10-q20").args == cand.args  # the same -qp 20
+    # graded: the five candidates and the CPU reference
+    assert [n for n in r3 if gb.arm_by_name(n).mode in gb.GRADED_MODES] == [
+        "hevc444-q20", "vpp-hevc444-q20", "vpp-hevc444-q20-fast", "vpp-hevc444-q20-dflt",
+        "vpp-hevc444-q20-bgr0", "vpp-hevc444-10-q20"]  # fmt: skip
 
 
 def test_the_doc_preregisters_every_bar_with_its_value(gb: ModuleType) -> None:
@@ -299,6 +349,52 @@ def test_the_gpu_control_path_inverts_exactly_like_the_ctl_path(
         gctl = [gb.to_bgr(VideoFrame.from_ndarray(gb.planar_array(p), format=fmt))
                 for p in gb.raw_planes(raw.read_bytes(), fmt, w, h)]  # fmt: skip
         assert all(np.array_equal(a, b) for a, b in zip(ctl, gctl, strict=True)), fmt
+        # yuv_frame (round 3's builder) is exactly that from_ndarray path at 8 bits
+        assert all(np.array_equal(gb.to_bgr(gb.yuv_frame(p, fmt)), c) for p, c in zip(
+            gb.raw_planes(raw.read_bytes(), fmt, w, h), ctl, strict=True)), fmt  # fmt: skip
+
+
+def test_raw_planes_reads_xv30_as_swscale_and_the_bit_layout_write_it(gb: ModuleType) -> None:
+    """Round 3's 10-bit control downloads XV30 (VA's Y410): known 10-bit planes packed by swscale
+    itself, and packed by hand from ffmpeg's layout ((msb) 2 X, 10 V, 10 Y, 10 U (lsb)), come back
+    exactly as uint16 planes."""
+    rng = np.random.default_rng(12)
+    w, h = 32, 16
+    planes = tuple(rng.integers(0, 1024, (h, w), dtype=np.uint16) for _ in range(3))
+    data = _packed_bytes(gb.yuv_frame(planes, "yuv444p10le").reformat(format="xv30le"), (4,))
+    y, u, v = (p.astype(np.uint32) for p in planes)
+    by_hand = (u | (y << 10) | (v << 20) | (3 << 30)).astype("<u4").tobytes()  # X bits set: ignored
+    for raw in (data, by_hand, data + by_hand):
+        got = gb.raw_planes(raw, "xv30", w, h)
+        assert len(got) == len(raw) // gb.raw_frame_bytes("xv30", w, h) >= 1
+        for frame in got:
+            assert all(a.dtype == np.uint16 and np.array_equal(a, b)
+                       for a, b in zip(frame, planes, strict=True))  # fmt: skip
+    assert gb.raw_frame_bytes("xv30", w, h) == w * h * 4
+    assert gb.plane_depth("xv30") == gb.plane_depth("yuv444p10le") == 10
+    assert gb.plane_depth("yuv444p") == gb.plane_depth("vuyx") == gb.plane_depth("nv12") == 8
+
+
+def test_ten_bit_planes_keep_two_bytes_a_sample_and_invert_like_eight(gb: ModuleType) -> None:
+    """frame_planes of a yuv444p10le frame is ffmpeg's framemd5 layout (2 little-endian bytes a
+    sample: D1 / D2 for the 10-bit arm), the 8-bit layout unchanged; and 10-bit planes that hold
+    exactly an 8-bit conversion x 4 invert to the same picture within a level."""
+    rng = np.random.default_rng(13)
+    h, w = 16, 24
+    p10 = tuple(rng.integers(0, 1024, (h, w), dtype=np.uint16) for _ in range(3))
+    f10 = gb.yuv_frame(p10, "yuv444p10le")
+    assert f10.format.name == "yuv444p10le"
+    assert gb.planar_bytes(gb.frame_planes(f10)) == b"".join(p.astype("<u2").tobytes() for p in p10)
+    p8 = tuple(rng.integers(0, 256, (h, w), dtype=np.uint8) for _ in range(3))
+    assert gb.planar_bytes(gb.frame_planes(gb.yuv_frame(p8, "yuv444p"))) == b"".join(
+        p.tobytes() for p in p8)  # fmt: skip
+    img = _scene(rng, 48, 32)
+    sw = tuple(np.array(p) for p in gb.frame_planes(_yuv(img, "yuv444p", gb.COLOR)))
+    a = gb.to_bgr(gb.yuv_frame(sw, "yuv444p"))
+    b = gb.to_bgr(gb.yuv_frame(tuple(p.astype(np.uint16) * 4 for p in sw), "yuv444p10le"))
+    assert int(np.abs(a.astype(int) - b).max()) <= 1
+    with pytest.raises(ValueError):
+        gb.yuv_frame(p8, "nv12")
 
 
 def _scene(rng: np.random.Generator, w: int = 160, h: int = 96) -> np.ndarray:
@@ -357,20 +453,95 @@ def test_plane_diff_is_signed_per_plane(gb: ModuleType) -> None:
         gb.plane_diff(a, [b[0], b[0], b[0]])
 
 
-def _x265_444(path: Path, frames: list[np.ndarray], color: tuple[str, str], tag: str) -> None:
+def test_ssim_parts_split_dark_windows_and_black_is_counted(gb: ModuleType) -> None:
+    """Doc 8.3's mechanism as a number: black decoded as (0, 1, 0) keeps 1 - 0.587^2 / (0.587^2
+    + C1) = 0.9497 of a black window's SSIM (C1 = 6.5) and nothing of its black pixels; the split
+    adds up to ssim_luma's own mean."""
+    ref = np.zeros((720, 1280, 3), np.uint8)
+    ref[:, 640:] = 128
+    ref[::7, 640:] = 200  # texture in the grey half: its windows are not flat
+    tinted = ref.copy()
+    tinted[:, :640, 1] = 1  # every black pixel decoded (0, 1, 0)
+    sp = gb.ssim_parts(ref, tinted)
+    assert sp["mean"] == gb.ssim_luma(ref, tinted)
+    assert sp["dark_n"] + sp["rest_n"] == (720 - 7) * (1280 - 7)
+    assert sp["dark_n"] == (720 - 7) * (640 - 7)  # only the windows wholly inside the black half
+    c1 = (0.01 * 255) ** 2
+    assert sp["dark_sum"] / sp["dark_n"] == pytest.approx(1 - 0.587**2 / (0.587**2 + c1), abs=1e-6)
+    assert sp["rest_sum"] / sp["rest_n"] > 0.999
+    assert gb.black_counts(ref, tinted) == (720 * 640, 0)
+    assert gb.black_counts(ref, ref) == (720 * 640, 720 * 640)
+    s = gb.summarise([gb.frame_metrics(ref, tinted), gb.frame_metrics(ref, ref)])
+    assert s["dark_share"] == pytest.approx(633 / 1273, abs=1e-4)
+    assert s["ssim_dark"] == pytest.approx((0.94968 + 1) / 2, abs=1e-4) and s["black_keep"] == 0.5
+    assert s["ssim_mean"] == round((sp["mean"] + 1.0) / 2, 5)  # the graded SSIM, unchanged
+    old = {k: v for k, v in gb.frame_metrics(ref, ref).items() if k not in ("ssim_split", "black")}
+    assert "dark_share" not in gb.summarise([old])  # a row without them: not reported
+
+
+def _neutral_scene(rng: np.random.Generator) -> np.ndarray:
+    img = _scene(rng)
+    img[:16, :32] = 0  # black
+    img[16:32, :32] = 77  # grey
+    img[32:48, :32] = 255  # white
+    return img
+
+
+def test_neutral_counts_see_round_2s_grey_and_nothing_in_swscales(gb: ModuleType) -> None:
+    """swscale writes every neutral pixel's chroma exactly mid (the known-good case); round 2's
+    GPU defect as doc 8.3 infers it -- U and V one level low wherever the original is grey --
+    reads as a number, decodes black as (0, 1, 0), and reads the same at 10 bits."""
+    rng = np.random.default_rng(14)
+    img = _neutral_scene(rng)
+    neutral = (img[..., 0] == img[..., 1]) & (img[..., 1] == img[..., 2])
+    sw = tuple(np.array(p) for p in gb.frame_planes(_yuv(img, "yuv444p", gb.COLOR)))
+    good = gb.neutral_summary([gb.neutral_counts(img, sw)])
+    assert good["neutral_px"] == int(neutral.sum()) >= 3 * 16 * 32 and good["black_px"] >= 16 * 32
+    assert good["uv_mid"] == good["black_uv_mid"] == 1.0
+    assert good["u_mean_err"] == good["v_mean_err"] == good["black_y_mean_err"] == 0.0
+    low = (sw[0], sw[1] - neutral, sw[2] - neutral)  # uint8 minus bool: one level down
+    bad = gb.neutral_summary([gb.neutral_counts(img, low), gb.neutral_counts(img, low)])
+    assert bad["uv_mid"] == bad["black_uv_mid"] == 0.0
+    assert bad["u_mean_err"] == bad["v_mean_err"] == -1.0 and bad["neutral_px"] == 2 * int(
+        neutral.sum())  # fmt: skip
+    dec = gb.to_bgr(gb.yuv_frame(low, "yuv444p"))
+    assert (dec[:16, :32] == (0, 1, 0)).all()  # B, G, R: the green black
+    assert gb.black_counts(img, dec)[1] == 0
+    s10 = tuple(p.astype(np.uint16) * 4 for p in sw)  # 10 bits, the same values
+    assert gb.neutral_summary([gb.neutral_counts(img, s10, depth=10)]) == good
+
+    def u_low(n: int) -> dict[str, Any]:  # U n 10-bit codes low on every neutral pixel
+        planes = (s10[0], s10[1] - n * neutral.astype(np.uint16), s10[2])
+        return gb.neutral_summary([gb.neutral_counts(img, planes, depth=10)])
+
+    assert u_low(1)["u_mean_err"] == -0.25 and u_low(1)["uv_mid"] == 1.0  # 511: still at mid
+    assert u_low(2)["u_mean_err"] == -0.5 and u_low(2)["uv_mid"] == 0.0  # half a level: not
+    assert u_low(2)["v_mean_err"] == 0.0
+    tv = tuple(np.array(p) for p in gb.frame_planes(_yuv(img, "yuv444p", ("ITU709", "MPEG"))))
+    lim = gb.neutral_summary([gb.neutral_counts(img, tv, limited=True)])
+    assert lim["black_y_mean_err"] == 0.0 and lim["uv_mid"] == 1.0  # black at 16, read so
+    assert gb.neutral_summary([gb.neutral_counts(img, tv)])["black_y_mean_err"] == 16.0
+    with pytest.raises(ValueError):  # 4:2:0 chroma is not per pixel
+        gb.neutral_counts(img, gb.frame_planes(_yuv(img, "yuv420p", gb.COLOR)))
+    assert gb.neutral_summary([])["uv_mid"] is None
+
+
+def _x265_444(path: Path, frames: list[np.ndarray], color: tuple[str, str], tag: str,
+              pix_fmt: str = "yuv444p") -> None:  # fmt: skip
     """An all-intra HEVC 4:4:4 stream from libx265 (CPU), converted with ``color`` and tagged
-    ``tag`` (pc | tv): the stand-in for a vpp-hevc444 arm."""
+    ``tag`` (pc | tv): the stand-in for a vpp-hevc444 arm (``pix_fmt`` yuv444p10le: the 10-bit
+    one, round 3)."""
     import av
 
     with av.open(str(path), "w", format="hevc") as out:
         st = out.add_stream("libx265", rate=1, options={
             "x265-params": "keyint=1:min-keyint=1:scenecut=0:qp=16:log-level=error",
             "preset": "ultrafast"})  # fmt: skip
-        st.width, st.height, st.pix_fmt = frames[0].shape[1], frames[0].shape[0], "yuv444p"
+        st.width, st.height, st.pix_fmt = frames[0].shape[1], frames[0].shape[0], pix_fmt
         st.codec_context.color_range = 2 if tag == "pc" else 1
         st.codec_context.colorspace = 1  # BT.709
         for img in frames:
-            vf = _yuv(img, "yuv444p", color)
+            vf = _yuv(img, pix_fmt, color)
             vf.color_range = 2 if tag == "pc" else 1
             vf.colorspace = 1
             for pkt in st.encode(vf):
@@ -466,7 +637,8 @@ def test_the_verdict_picks_the_smallest_arm_that_passes_every_bar(gb: ModuleType
     assert v["arms"]["hevc444-q20"]["samples"]["s1"]["status"] == "not run"
 
 
-R1_SCORE = ROOT / "data" / "bench" / "gpu-rec" / "20261108-recbench.json"  # gitignored, local
+R1_SCORE = SCORES / "20261108-recbench.json"
+R2_SCORE = SCORES / "20261108-recbench-r2.json"
 
 
 @pytest.mark.skipif(not R1_SCORE.exists(), reason="round 1's score lives in data/ (local only)")
@@ -478,6 +650,43 @@ def test_round_1_score_gives_the_same_verdict_and_rates_today(gb: ModuleType) ->
     score = json.loads(R1_SCORE.read_text())
     assert "round" not in score  # round 1 predates rounds: it is read as round 1
     assert gb.verdict(score) == score["verdict"] and gb.rates(score) == score["rates"]
+
+
+@pytest.mark.skipif(not R2_SCORE.exists(), reason="round 2's score lives in data/ (local only)")
+def test_round_2_score_gives_the_same_verdict_rates_and_controls_today(gb: ModuleType) -> None:
+    """Section 8.2's numbers stay reproducible with round 3's code, and section 8.3's PROVEN facts
+    are round 2's own numbers: the GPU 4:4:4 conversion ALONE already lost SSIM on xmas_dun02
+    (its quality summary had it; nothing printed it), its Y never above swscale's."""
+    import json
+
+    score = json.loads(R2_SCORE.read_text())
+    assert score["round"] == 2
+    assert gb.verdict(score) == score["verdict"] and gb.rates(score) == score["rates"]
+    today = gb.controls_summary(score)
+    for s, arms in score["controls"].items():
+        for name, c in arms.items():
+            assert {k: today[s][name][k] for k in c} == c, (s, name)  # every key it recorded
+    x, g = today["xmas_dun02"], today["gef_fild10"]
+    assert (x["ctl-yuv444"]["ssim_mean"], x["gctl-vpp444"]["ssim_mean"]) == (0.99942, 0.98719)
+    assert (x["ctl-yuv444"]["ssim_min"], x["gctl-vpp444"]["ssim_min"]) == (0.99915, 0.98213)
+    assert (g["ctl-yuv444"]["ssim_mean"], g["gctl-vpp444"]["ssim_mean"]) == (0.99963, 0.99973)
+    for c in (x["gctl-vpp444"], g["gctl-vpp444"]):  # one-sided: mean == -mean_abs, at most 2
+        y = c["vs_swscale_Y"]
+        assert y["mean"] == -y["mean_abs"] < 0 and y["max_abs"] == 2
+        assert c["vs_swscale_U"]["max_abs"] == c["vs_swscale_V"]["max_abs"] == 1
+    assert x["gctl-vpp444"]["vs_swscale_U"]["mean"] == -0.397  # chroma low on the dark map only
+    assert g["gctl-vpp444"]["vs_swscale_U"]["mean"] == -0.041
+    assert x["gctl-vpp420"]["vs_swscale_Y"]["max_abs"] == 1  # the 4:2:0 path: near exact
+    assert x["gctl-vpp444-tv"]["ssim_mean"] == 0.99919 and x["gctl-vpp444-tv"]["offset"] < 16
+    assert x["gctl-vpp444"]["neutral"] is None  # round 2 did not measure it: round 3 does
+    arm = score["verdict"]["arms"]["vpp-hevc444-q20"]
+    fails = {smp: sorted(b for b, r in bars.items() if isinstance(r, dict)
+                         and r["result"] == "FAIL")
+             for smp, bars in arm["samples"].items()}  # fmt: skip
+    assert fails == {"gef_fild10": [], "xmas_dun02": ["Q3"]}
+    assert gb.ssim_summary(score)["vpp-hevc444-q20"]["xmas_dun02"] == {
+        "ssim_mean": 0.97765, "ssim_min": 0.9692, "ssim_dark": None, "ssim_rest": None,
+        "dark_share": None, "black_keep": None}  # fmt: skip
 
 
 def test_the_verdict_needs_the_colour_round_trip_first(gb: ModuleType) -> None:
@@ -588,7 +797,9 @@ def test_the_colour_convention_round_trips(gb: ModuleType, tmp_path: Path) -> No
 # --- end to end without the GPU or the NAS: sample -> (stand-in container outputs) -> score ------
 
 
-def _png_session(datasets: Path, sid: str, n: int) -> list[np.ndarray]:
+def _png_session(datasets: Path, sid: str, n: int, dark: bool = False) -> list[np.ndarray]:
+    """A 1280 x 720 PNG session; ``dark`` paints a pure black and a grey block after the noise
+    (round 3's neutral pixels and dark windows)."""
     from poring_dataset.shards import ShardWriter, write_manifest
 
     rng = np.random.default_rng(11)
@@ -600,6 +811,9 @@ def _png_session(datasets: Path, sid: str, n: int) -> list[np.ndarray]:
     for i in range(n):
         img = np.roll(base, 4 * i, axis=1)
         img = np.clip(img.astype(int) + rng.integers(-3, 4, img.shape), 0, 255).astype(np.uint8)
+        if dark:
+            img[300:500, 700:1000] = 0
+            img[500:560, 700:1000] = 90
         w.add(i, 1_000 + i, img, t_wall="t")
         frames.append(img)
     w.close()
@@ -855,6 +1069,116 @@ def test_round_2_sample_then_score_end_to_end(gb: ModuleType, tmp_path: Path,
     assert gb.verdict(score) == v and gb.main(["verdict", str(res)]) == 0
 
 
+def test_round_3_sample_then_score_end_to_end(gb: ModuleType, tmp_path: Path,
+                                              monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """Round 3 on stand-ins: ``sample --round 3``, then what recbench.sh would write -- round 2's
+    control as doc 8.3 infers the GPU wrote it (neutral chroma one level low), the mode / BGRX
+    controls exact, the 10-bit control as swscale packs XV30, the tv control limited; the 8-bit
+    candidates and the 10-bit one from libx265 (CPU) -- then ``score``: the neutral measure names
+    the defect and only it, the 10-bit stream is decoded and graded like the others, every graded
+    arm reports its dark-window SSIM, the verdict grades round 3's arms only."""
+    import json
+
+    datasets, root = tmp_path / "nas", tmp_path / "root"
+    frames = _png_session(datasets, "S-png", 8, dark=True)
+    monkeypatch.setattr(gb, "shm_used", lambda: 0)
+    assert gb.main(["sample", "--session", "S-png:test_map", "--runs", "2", "--run-len", "2",
+                    "--root", str(root), "--datasets", str(datasets),
+                    "--round", "3"]) == 0  # fmt: skip
+    assert (root / "in" / "arms.tsv").read_text() == gb.arms_tsv(gb.round_arms(3))
+    assert (root / "in" / "round").read_text() == "3\n"
+    assert (root / "in" / "timing_reps").read_text() == "3\n"
+    out = root / "out"
+    full, tv = gb.COLOR, ("ITU709", "MPEG")
+
+    def low_grey(img: np.ndarray) -> bytes:  # round 2's GPU 4:4:4 conversion, as 8.3 infers it
+        p = tuple(np.array(x) for x in gb.frame_planes(_yuv(img, "yuv444p", full)))
+        grey = (img[..., 0] == img[..., 1]) & (img[..., 1] == img[..., 2])
+        return _packed_bytes(gb.yuv_frame((p[0], p[1] - grey, p[2] - grey), "yuv444p")
+                             .reformat(format="vuyx"), (4,))  # fmt: skip
+
+    def packed(img: np.ndarray, fmt: str, color: tuple[str, str]) -> bytes:
+        if fmt == "xv30":
+            return _packed_bytes(_yuv(img, "yuv444p10le", color).reformat(format="xv30le"), (4,))
+        return _packed_bytes(_yuv(img, fmt, color), BPP[fmt])
+
+    raw = {  # arm -> (the format recbench.sh would report, the stand-in's bytes for one frame)
+        "ctl-yuv444": ("yuv444p", lambda i: packed(i, "yuv444p", full)),
+        "gctl-vpp444": ("vuyx", low_grey),
+        "gctl-vpp444-fast": ("vuyx", lambda i: packed(i, "vuyx", full)),
+        "gctl-vpp444-dflt": ("vuyx", lambda i: packed(i, "vuyx", full)),
+        "gctl-vpp444-bgr0": ("vuyx", lambda i: packed(i, "vuyx", full)),
+        "gctl-vpp444-10": ("xv30", lambda i: packed(i, "xv30", full)),
+        "gctl-vpp444-tv": ("vuyx", lambda i: packed(i, "vuyx", tv)),
+    }
+    streams = {n: "yuv444p" for n in ("vpp-hevc444-q20", "vpp-hevc444-q20-fast",
+                                      "vpp-hevc444-q20-dflt", "vpp-hevc444-q20-bgr0")}  # fmt: skip
+    streams["vpp-hevc444-10-q20"] = "yuv444p10le"
+    status, timing = [], []
+    for r, idx in (("r0", (1, 2)), ("r1", (5, 6))):
+        for arm, (fmt, make) in raw.items():
+            d = out / "enc" / "test_map" / arm
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{r}.yuv").write_bytes(b"".join(make(frames[i]) for i in idx))
+            status.append(f"{arm}\ttest_map\t{r}\tok\t0\t{fmt}")
+        for arm, pix in streams.items():
+            d = out / "enc" / "test_map" / arm
+            d.mkdir(parents=True, exist_ok=True)
+            _x265_444(d / f"{r}.hevc", [frames[i] for i in idx], full, "pc", pix_fmt=pix)
+            md5 = out / "md5" / "test_map" / arm
+            md5.mkdir(parents=True, exist_ok=True)
+            got = gb.decode_stream(d / f"{r}.hevc", "hevc", gb.arm_by_name(arm).plane_fmt,
+                                   alone=False)["md5"]  # fmt: skip
+            lines = "".join(f"0, {i}, {i}, 1, 2764800, {h}\n" for i, h in enumerate(got))
+            for side in ("va", "sw"):
+                (md5 / f"{r}.{side}.md5").write_text("#hash: MD5\n" + lines)
+            status.append(f"{arm}\ttest_map\t{r}\tok\t0\t{gb.arm_by_name(arm).sw_fmt}")
+        status.append(f"hevc444-q20\ttest_map\t{r}\tunavailable\t0\t-")
+    for p in (1, 2, 3):
+        timing += [f"enc_{a}\t600\t2.0\t4.0\t1.0\tok\tpass {p}" for a in streams]
+    (out / "status.tsv").write_text("\n".join(status) + "\n")
+    (out / "timing.tsv").write_text("\n".join(timing) + "\n")
+    res = tmp_path / "score.json"
+    assert gb.main(["score", "--root", str(root), "--out", str(res), "--no-detector"]) == 0
+    score = json.loads(res.read_text())
+    assert score["round"] == 3 and score["arms"] == list(gb.ROUNDS[3])
+    s = score["samples"]["test_map"]
+    assert set(s["arms"]) == set(gb.ROUNDS[3]) | {gb.JPEG_ARM}
+    c = score["controls"]["test_map"]
+    assert set(c) == set(raw)
+    for name in ("ctl-yuv444", "gctl-vpp444-fast", "gctl-vpp444-dflt", "gctl-vpp444-bgr0",
+                 "gctl-vpp444-10", "gctl-vpp444-tv"):  # fmt: skip
+        n = c[name]["neutral"]
+        assert n["uv_mid"] == n["black_uv_mid"] == 1.0, (name, n)  # neutral grey kept
+        assert abs(n["u_mean_err"]) < 0.5 and abs(n["v_mean_err"]) < 0.5, (name, n)
+        assert n["black_y_mean_err"] == 0.0 and c[name]["black_keep"] == 1.0, (name, n)
+        assert n["neutral_px"] >= 4 * 260 * 300  # the black and grey blocks, 4 frames
+    d = c["gctl-vpp444"]  # the defect: a number, not a guess
+    assert d["neutral"]["uv_mid"] == 0.0 and d["neutral"]["u_mean_err"] == -1.0
+    assert d["black_keep"] == 0.0 and d["ssim_dark"] < c["ctl-yuv444"]["ssim_dark"] - 0.01
+    assert d["fit"] == "bt709-full" and d["vs_swscale_U"]["max_abs"] == 1  # within 1, like r2's
+    assert d["ssim_rest"] == pytest.approx(c["ctl-yuv444"]["ssim_rest"], abs=1e-3)
+    assert c["ctl-yuv444"]["dark_share"] > 0.03
+    ten = c["gctl-vpp444-10"]
+    assert ten["fit"] == "bt709-full" and ten["vs_swscale_Y"] is None  # no 8-bit twin compare
+    assert ten["psnr_mean"] >= c["ctl-yuv444"]["psnr_mean"] - 0.5  # read like V1, at 10 bits
+    assert s["arms"]["gctl-vpp444-10"]["formats"] == ["xv30"]
+    assert c["gctl-vpp444-tv"]["declared"] == "bt709-limited"
+    for arm in streams:
+        a = s["arms"][arm]
+        assert a["status"] == "ok" and a["vui_ok"], (arm, a.get("vui"))
+        assert a["quality"]["psnr_mean"] > 38 and a["d1"] == {"frames": 4, "alone_identical": 4}
+        assert a["d2"] == {"compared": 4, "va_eq_sw": 4, "host_eq_sw": 4}, arm
+        assert set(score["ssim"][arm]["test_map"]) == set(gb.SSIM_KEYS)
+        assert score["ssim"][arm]["test_map"]["dark_share"] > 0.03
+    v = score["verdict"]
+    assert v["valid"] and v["candidate"] is None  # no detector run: P is NA
+    assert set(v["arms"]) == {n for n in gb.ROUNDS[3] if gb.arm_by_name(n).mode in gb.GRADED_MODES}
+    assert v["arms"]["vpp-hevc444-10-q20"]["samples"]["test_map"]["D2"]["result"] == "PASS"
+    assert v["arms"]["vpp-hevc444-10-q20"]["samples"]["test_map"]["S2"]["value"][0] == 8.333
+    assert gb.verdict(score) == v and gb.main(["verdict", str(res)]) == 0
+
+
 # --- recbench.sh's control flow, with stub ffmpeg / vainfo (the real ones run only in phase 2) ---
 
 STUB_FFMPEG = r"""#!/usr/bin/env bash
@@ -1059,3 +1383,84 @@ def test_recbench_sh_round_2_runs_the_gpu_controls_and_times_three_passes(
     bad = subprocess.run(["bash", str(script)], env={**env, "RECBENCH_OUT": str(out2)},
                          capture_output=True, text=True, timeout=60, check=False)  # fmt: skip
     assert bad.returncode != 0 and "timing_reps" in bad.stdout
+
+
+def test_recbench_sh_round_3_uploads_as_declared_and_keeps_round_2s_commands(
+    gb: ModuleType, tmp_path: Path
+) -> None:
+    """Round 3's container side: the BGRX arm uploads bgr0 in the quality pass AND is timed on the
+    same raw bytes declared bgr0 (no CPU conversion timed); the mode arms pass scale_vaapi's mode;
+    the 10-bit arm writes XV30 and is checked by D2 in yuv444p10le; and round 2's own arms run
+    exactly round 2's commands (BGRA uploaded, the raw input declared bgra)."""
+    import os
+    import subprocess
+
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    vainfo = STUB_VAINFO.replace(":\tVAEntrypointVLD", ":\tVAEntrypointEncSliceLP").replace(
+        "X\n", "      VAProfileHEVCMain444_10         :\tVAEntrypointEncSliceLP\nX\n")  # fmt: skip
+    for name, body in (("ffmpeg", STUB_FFMPEG), ("vainfo", vainfo)):
+        (stub / name).write_text(body)
+        (stub / name).chmod(0o755)
+    ind, out = tmp_path / "in", tmp_path / "out"
+    out.mkdir()
+    for r in ("r0", "r1"):
+        (ind / "xmas_dun02" / r).mkdir(parents=True)
+        for i in range(3):
+            (ind / "xmas_dun02" / r / f"{i:06d}.png").write_bytes(b"png")
+    for f, v in (("kind", "ref"), ("fps", "1"), ("size", "1280x720"), ("map", "m")):
+        (ind / "xmas_dun02" / f).write_text(v + "\n")
+    (ind / "arms.tsv").write_text(gb.arms_tsv(gb.round_arms(3)))
+    (ind / "round").write_text("3\n")
+    (ind / "timing_reps").write_text(f"{gb.TIMING_REPS[3]}\n")
+    env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}", "RECBENCH_IN": str(ind),
+           "RECBENCH_OUT": str(out), "TMPDIR": str(tmp_path),
+           "STUB_LOG": str(tmp_path / "log")}  # fmt: skip
+    r = subprocess.run(["bash", str(ROOT / "services" / "media-probe" / "recbench.sh")], env=env,
+                       capture_output=True, text=True, timeout=120, check=False)  # fmt: skip
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    rows = gb.parse_tsv((out / "status.tsv").read_text(), gb.STATUS_FIELDS)
+    assert {(x["arm"], x["run"], x["status"]) for x in rows} == {
+        (a, run, "ok") for a in gb.ROUNDS[3] for run in ("r0", "r1")}  # fmt: skip
+    log = (tmp_path / "log").read_text().splitlines()
+
+    def lines(arm: str, ext: str) -> list[str]:  # the quality pass's command for run r0
+        return [ln for ln in log if f"/{arm}/r0.{ext}" in ln and "-benchmark" not in ln
+                and "framemd5" not in ln]  # fmt: skip
+
+    def timed(arm: str) -> list[str]:  # its timing passes
+        return [ln for ln in log if "-benchmark" in ln and "/dev/null" in ln
+                and gb.arm_by_name(arm).vpp in ln or ("-benchmark" in ln and arm == "hevc444-q20"
+                and "-c:v hevc_vaapi" in ln and "scale_vaapi" not in ln)]  # fmt: skip
+
+    bgr0 = lines("gctl-vpp444-bgr0", "yuv")
+    assert len(bgr0) == 1
+    assert f"format=bgr0,hwupload,scale_vaapi={gb.VPP_FULL}:format=vuyx" in bgr0[0]
+    q = lines("vpp-hevc444-q20-bgr0", "hevc")
+    assert len(q) == 1 and "format=bgr0,hwupload,scale_vaapi=" in q[0] and "-c:v hevc_vaapi" in q[0]
+    t = [ln for ln in log if "-benchmark" in ln and "format=bgr0,hwupload" in ln]
+    assert len(t) == 3 and all("-pix_fmt bgr0" in ln and "-pix_fmt bgra" not in ln for ln in t)
+    fast = lines("vpp-hevc444-q20-fast", "hevc")
+    assert len(fast) == 1 and f"scale_vaapi={gb.VPP_FULL}:mode=fast:format=vuyx" in fast[0]
+    assert f"scale_vaapi={gb.VPP_FULL}:mode=default:format=vuyx" in lines(
+        "gctl-vpp444-dflt", "yuv")[0]  # fmt: skip
+    ten = lines("gctl-vpp444-10", "yuv")
+    assert len(ten) == 1 and "format=xv30,hwdownload,format=xv30" in ten[0]
+    assert "-pix_fmt xv30" in ten[0] and "-frames:v 5" in ten[0]
+    enc10 = lines("vpp-hevc444-10-q20", "hevc")
+    assert len(enc10) == 1 and f"scale_vaapi={gb.VPP_FULL}:format=xv30" in enc10[0]
+    md5 = [ln for ln in log if "/vpp-hevc444-10-q20/r0.va.md5" in ln]
+    assert md5 and "hwdownload,format=xv30,format=yuv444p10le" in md5[0]
+    # round 2's arms: round 2's commands, unchanged
+    r2 = lines("vpp-hevc444-q20", "hevc")
+    assert len(r2) == 1 and f"format=bgra,hwupload,scale_vaapi={gb.VPP_FULL}:format=vuyx" in r2[0]
+    assert "-frames:v 10" in lines("gctl-vpp444", "yuv")[0]
+    t2 = [ln for ln in log if "-benchmark" in ln
+          and f"format=bgra,hwupload,scale_vaapi={gb.VPP_FULL}:format=vuyx " in ln]  # fmt: skip
+    assert len(t2) == 3 and all("-pix_fmt bgra" in ln for ln in t2)  # vpp-hevc444-q20 x 3
+    cpu = [ln for ln in log if "-benchmark" in ln and "accurate_rnd,format=vuyx,hwupload" in ln]
+    assert len(cpu) == 3 and all("-pix_fmt bgra" in ln for ln in cpu)  # hevc444-q20 x 3
+    enc = [x["name"] for x in gb.parse_tsv((out / "timing.tsv").read_text(), gb.TIMING_FIELDS)
+           if x["name"].startswith("enc_")]  # fmt: skip
+    graded = [f"enc_{n}" for n in gb.ROUNDS[3] if gb.arm_by_name(n).timing]
+    assert enc == graded * 3 and len(graded) == 6

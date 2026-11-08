@@ -5,7 +5,7 @@ VDEnc) record the lab's frames as well as today's 1-fps lossless PNG, for less?
 
     gpu_rec_bench.py sample --session SID:MAP [--session SID:MAP ...] [--motion SID]
                             [--runs 2] [--run-len 50] [--motion-len 150] [--motion-start-s 300]
-                            [--root /dev/shm/poring-lab-recbench] [--datasets DIR] [--round 1|2]
+                            [--root /dev/shm/poring-lab-recbench] [--datasets DIR] [--round 1|2|3]
     (the container side: the guarded one-shot service media-recbench, recbench.sh; the doc's
      section 7 has the exact commands)
     gpu_rec_bench.py score --root ROOT --out OUT.json [--det-threads 8] [--no-detector]
@@ -14,8 +14,14 @@ VDEnc) record the lab's frames as well as today's 1-fps lossless PNG, for less?
 ROUNDS: round 1 (section 8's run) is the original arm table; round 2 (doc 6.6, Batt 2026-11-08
 "try fixing the colours too") re-runs its references and adds the GPU-side colour conversion done
 right: four GPU colour controls (gctl: the conversion alone, with a luma fingerprint of the
-convention it actually used) and two 4:4:4 candidates. ``sample --round N`` writes that round's
-arms; ``score`` and ``verdict`` read it back (a score without one is round 1's).
+convention it actually used) and two 4:4:4 candidates. Round 3 (doc 6.7, Batt 2026-11-08 "try
+round 3"; diagnosis 8.3: round 2's GPU 4:4:4 conversion writes NEUTRAL chroma one level low, which
+tints black, and SSIM's dark windows magnify it) varies ONE thing of that path per arm: the VPP's
+scaling mode, the upload format (BGRX), or a 10-bit 4:4:4 surface and encode. ``sample --round N``
+writes that round's arms; ``score`` and ``verdict`` read it back (a score without one is round
+1's). Every round's controls and arms also report, never grade: the SSIM of DARK windows apart
+from the rest, the share of black pixels decoded black, and what a 4:4:4 conversion wrote for
+neutral pixels (neutral_counts).
 
 THREE PARTS, one source of truth for the arms (ARMS, below):
   * ``sample`` (host): REAL lab frames, read-only from the NAS. Each ``--session`` is an RDP PNG
@@ -99,8 +105,10 @@ class Arm:
     graded). ``samples``: ref (the PNG sessions), motion (the 30 / 10 / 5 fps clips) or all.
     ``frames``: 0 = every frame of a run, else at most that many. ``vpp``: scale_vaapi's options
     (vpp / gctl only). ``color_range``: the DECLARED range, pc (full) or tv (limited): the stream's
-    tag and the scorer's inverse conversion (the matrix is always BT.709). ``args``: the encoder's
-    own options, appended as written (last in the tsv, so a shell ``read`` gives it the rest)."""
+    tag and the scorer's inverse conversion (the matrix is always BT.709). ``upload``: the software
+    format uploaded to the GPU before scale_vaapi (vpp / gctl; round 3): "-" is BGRA, rounds 1 and
+    2's; bgr0 is the same bytes declared BGRX (no alpha). ``args``: the encoder's own options,
+    appended as written (last in the tsv, so a shell ``read`` gives it the rest)."""
 
     name: str
     mode: str
@@ -116,6 +124,7 @@ class Arm:
     frames: int
     vpp: str = field(default="-", kw_only=True)
     color_range: str = field(default="pc", kw_only=True)
+    upload: str = field(default="-", kw_only=True)
     args: str = ""
 
     def tsv(self) -> str:
@@ -126,6 +135,7 @@ _I = "-g 1 -bf 0"  # every frame an IDR (vaapi_encode: gop 1, idr_interval 0)
 _G = "-g 30 -bf 0"  # an IDR every 30 frames: 30 s at 1 fps, 1 s at 30 fps
 H264, HEVC, AV1 = "VAProfileH264High", "VAProfileHEVCMain", "VAProfileAV1Profile0"
 HEVC444 = "VAProfileHEVCMain444"
+HEVC444_10 = "VAProfileHEVCMain444_10"  # vainfo lists it with EncSliceLP and VLD (round 2's)
 # scale_vaapi's colour options (doc 8.1 / 6.6). Round 1 named the matrix and the range only; the
 # output frame's primaries stayed "unknown" (the encode log: "vaapi(pc, bt709/unknown/unknown)").
 # ffmpeg 8's vaapi_vpp passes VAProcColorStandardExplicit when the driver lists it, and iHD's
@@ -135,6 +145,11 @@ VPP_R1 = "out_color_matrix=bt709:out_range=full"  # round 1's exact options (vpp
 _P709 = "out_color_primaries=bt709:out_color_transfer=bt709"
 VPP_FULL = f"{VPP_R1}:{_P709}"
 VPP_TV = f"out_color_matrix=bt709:out_range=limited:{_P709}"
+# round 3 (doc 6.7): scale_vaapi's scaling mode (help-scale_vaapi.txt: default hq = 512; fast =
+# 256; default = 0, the driver's choice). Round 2 ran hq without naming it. At 1:1 the mode may
+# still choose which VPP engine converts, and the engines round differently (doc 8.3)
+VPP_FAST = f"{VPP_FULL}:mode=fast"
+VPP_MDEF = f"{VPP_FULL}:mode=default"
 _Q444 = f"-profile:v rext -rc_mode CQP -qp 20 {_I} -aud 1"  # hevc444-q20's encoder options
 ARMS: tuple[Arm, ...] = (
     Arm("ctl-yuv444", "ctl", "rawvideo", "yuv444p", "-", "yuv444p", "-", "ref", 0, "yuv",
@@ -186,6 +201,30 @@ ARMS: tuple[Arm, ...] = (
         "hevc", "hevc", 0, _Q444, vpp=VPP_FULL),
     Arm("vpp-hevc444-q20-tv", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444, "ref",
         1, "hevc", "hevc", 0, _Q444, vpp=VPP_TV, color_range="tv"),
+    # --- round 3 (doc 6.7, PRE-REGISTERED before its run): round 2's GPU 4:4:4 path with ONE thing
+    # changed per arm, so a change in its neutral grey (doc 8.3) has one cause
+    # the controls (never graded): the conversion alone, downloaded raw, the first 5 frames of
+    # each run (gctl-vpp444's first 5: a 4:4:4 raw run of 10 is 36.9 MB, and OUT_CAP holds round
+    # 3 only with these at 5, doc 6.7)
+    Arm("gctl-vpp444-fast", "gctl", "rawvideo", "vuyx|vuya", "-", "yuv444p", "-", "ref", 0, "yuv",
+        "rawvideo", 5, "", vpp=VPP_FAST),
+    Arm("gctl-vpp444-dflt", "gctl", "rawvideo", "vuyx|vuya", "-", "yuv444p", "-", "ref", 0, "yuv",
+        "rawvideo", 5, "", vpp=VPP_MDEF),
+    Arm("gctl-vpp444-bgr0", "gctl", "rawvideo", "vuyx|vuya", "-", "yuv444p", "-", "ref", 0, "yuv",
+        "rawvideo", 5, "", vpp=VPP_FULL, upload="bgr0"),
+    Arm("gctl-vpp444-10", "gctl", "rawvideo", "xv30", "-", "yuv444p10le", "-", "ref", 0, "yuv",
+        "rawvideo", 5, "", vpp=VPP_FULL),
+    # the candidates: vpp-hevc444-q20's encoder options, the same one change each
+    Arm("vpp-hevc444-q20-fast", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444,
+        "ref", 1, "hevc", "hevc", 0, _Q444, vpp=VPP_FAST),
+    Arm("vpp-hevc444-q20-dflt", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444,
+        "ref", 1, "hevc", "hevc", 0, _Q444, vpp=VPP_MDEF),
+    Arm("vpp-hevc444-q20-bgr0", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444,
+        "ref", 1, "hevc", "hevc", 0, _Q444, vpp=VPP_FULL, upload="bgr0"),
+    # 10-bit 4:4:4 (XV30 = VA's Y410) into HEVC Main 4:4:4 10. The same -qp 20: HEVC's QP_Y gives
+    # the same step RELATIVE to the sample range at any bit depth (the decoder adds QpBdOffset)
+    Arm("vpp-hevc444-10-q20", "vpp", "hevc_vaapi", "xv30", "xv30", "yuv444p10le", HEVC444_10,
+        "ref", 1, "hevc", "hevc", 0, _Q444, vpp=VPP_FULL),
 )  # fmt: skip
 GRADED_MODES = ("intra", "vpp", "gop")
 CANDIDATE_MODES = ("intra", "vpp")
@@ -202,9 +241,16 @@ ROUNDS: dict[int, tuple[str, ...]] = {
         "x-hevc444-q1", "x-av1-g1"),
     2: ("ctl-yuv444", "ctl-yuv420", "gctl-vpp420-r1", "gctl-vpp420", "gctl-vpp444",
         "gctl-vpp444-tv", "hevc444-q20", "vpp-hevc444-q20", "vpp-hevc444-q20-tv"),
+    # round 3 re-runs round 2's references (V1, the swscale twin, round 2's control and candidate)
+    # so it stands on its own (doc 6.7); round 2's tv control LAST, for its black: the one arm the
+    # container's out cap may skip if the 10-bit stream is far larger than expected
+    3: ("ctl-yuv444", "gctl-vpp444", "gctl-vpp444-fast", "gctl-vpp444-dflt", "gctl-vpp444-bgr0",
+        "gctl-vpp444-10", "hevc444-q20", "vpp-hevc444-q20", "vpp-hevc444-q20-fast",
+        "vpp-hevc444-q20-dflt", "vpp-hevc444-q20-bgr0", "vpp-hevc444-10-q20",
+        "gctl-vpp444-tv"),
 }  # fmt: skip
-# the encode timing pass: passes per arm (round 2 grades S2 / S3 on their MEDIAN, doc 6.6)
-TIMING_REPS = {1: 1, 2: 3}
+# the encode timing pass: passes per arm (rounds 2 and 3 grade S2 / S3 on their MEDIAN, doc 6.6)
+TIMING_REPS = {1: 1, 2: 3, 3: 3}
 
 
 def arm_by_name(name: str) -> Arm:
@@ -315,9 +361,10 @@ def _box_sum(x: npt.NDArray[np.float64], w: int) -> npt.NDArray[np.float64]:
     return s[w:, w:] - s[:-w, w:] - s[w:, :-w] + s[:-w, :-w]
 
 
-def ssim_luma(a: npt.NDArray[np.uint8], b: npt.NDArray[np.uint8], win: int = 8) -> float:
-    """PURE: mean SSIM of the two images' luma over every ``win`` x ``win`` window (stride 1, a
-    uniform window), K1 0.01, K2 0.03, L 255."""
+def _ssim_map(a: npt.NDArray[np.uint8], b: npt.NDArray[np.uint8],
+              win: int = 8) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:  # fmt: skip
+    """The SSIM of every ``win`` x ``win`` window of the two images' luma, and ``a``'s window
+    means."""
     if a.shape != b.shape:
         raise ValueError(f"shapes differ: {a.shape} vs {b.shape}")
     x, y = luma(a), luma(b)
@@ -328,7 +375,36 @@ def ssim_luma(a: npt.NDArray[np.uint8], b: npt.NDArray[np.uint8], win: int = 8) 
     cxy = _box_sum(x * y, win) / n - mx * my
     c1, c2 = (0.01 * 255) ** 2, (0.03 * 255) ** 2
     s = ((2 * mx * my + c1) * (2 * cxy + c2)) / ((mx * mx + my * my + c1) * (vx + vy + c2))
-    return float(np.mean(s))
+    return s, mx
+
+
+def ssim_luma(a: npt.NDArray[np.uint8], b: npt.NDArray[np.uint8], win: int = 8) -> float:
+    """PURE: mean SSIM of the two images' luma over every ``win`` x ``win`` window (stride 1, a
+    uniform window), K1 0.01, K2 0.03, L 255."""
+    return float(np.mean(_ssim_map(a, b, win)[0]))
+
+
+# An 8 x 8 SSIM window whose REFERENCE luma mean is below this is DARK (doc 8.3). There SSIM's
+# luminance constant C1 = (0.01 x 255)^2 = 6.5 is the size of a 2.5-level offset squared: black
+# decoded as (0, 1, 0) keeps 0.95 of a black window's SSIM; at mid-grey the same error costs ~0.
+DARK_LUMA = 16.0
+
+
+def ssim_parts(a: npt.NDArray[np.uint8], b: npt.NDArray[np.uint8], win: int = 8,
+               dark: float = DARK_LUMA) -> dict[str, float | int]:  # fmt: skip
+    """PURE: ssim_luma (``mean``, the same number) and its windows split by ``a``'s luma: the sums
+    and counts over the DARK windows and over the rest (summed per sample by summarise)."""
+    s, mx = _ssim_map(a, b, win)
+    d = mx < dark
+    return {"mean": float(np.mean(s)), "dark_sum": float(s[d].sum()), "dark_n": int(d.sum()),
+            "rest_sum": float(s[~d].sum()), "rest_n": int((~d).sum())}  # fmt: skip
+
+
+def black_counts(ref: npt.NDArray[np.uint8], dec: npt.NDArray[np.uint8]) -> tuple[int, int]:
+    """PURE: (pure black (0, 0, 0) pixels in ``ref``, how many of them ``dec`` keeps exactly black).
+    Round 2's GPU 4:4:4 conversion decoded black as (0, 1, 0) (doc 8.3)."""
+    black = ~ref.any(axis=-1)
+    return int(black.sum()), int((black & ~dec.any(axis=-1)).sum())
 
 
 def crop(img: npt.NDArray[np.uint8], box: tuple[int, int, int, int]) -> npt.NDArray[np.uint8]:
@@ -446,7 +522,7 @@ CONVENTIONS: dict[str, tuple[float, float, float, float, float]] = {
     "bt601-limited": (0.299, 0.587, 0.114, 219 / 255, 16.0),
 }
 FIT_NAMED_LEVELS = 3.0  # a fit within this many 8-bit levels of a convention is NAMED (doc 6.6)
-RAW_FORMATS = ("yuv444p", "yuv420p", "nv12", "vuyx", "vuya")
+RAW_FORMATS = ("yuv444p", "yuv420p", "nv12", "vuyx", "vuya", "xv30")
 
 
 def raw_frame_bytes(fmt: str, w: int, h: int) -> int:
@@ -455,17 +531,28 @@ def raw_frame_bytes(fmt: str, w: int, h: int) -> int:
         return w * h * 3
     if fmt in ("yuv420p", "nv12"):
         return w * h * 3 // 2
-    if fmt in ("vuyx", "vuya"):
+    if fmt in ("vuyx", "vuya", "xv30"):
         return w * h * 4
     raise ValueError(f"unknown raw format {fmt!r}")
 
 
-def raw_planes(data: bytes, fmt: str, w: int, h: int) -> list[tuple[npt.NDArray[np.uint8], ...]]:
+def plane_depth(fmt: str) -> int:
+    """PURE: the bits a sample of a planar or raw format (10 for yuv444p10le / xv30, else 8)."""
+    return 10 if fmt in ("yuv444p10le", "xv30") else 8
+
+
+def raw_planes(data: bytes, fmt: str, w: int, h: int) -> list[tuple[npt.NDArray[Any], ...]]:
     """PURE: a raw file of ``fmt`` frames -> (Y, U, V) per frame, each plane at its own size. NV12's
-    interleaved chroma is U then V; VUYX / VUYA (ffmpeg's packed 4:4:4) is V, U, Y, X/A bytes."""
+    interleaved chroma is U then V; VUYX / VUYA (ffmpeg's packed 4:4:4) is V, U, Y, X/A bytes; XV30
+    (ffmpeg's xv30le, VA's Y410; round 3) is one little-endian 32-bit word a pixel, (msb) 2 X,
+    10 V, 10 Y, 10 U (lsb): uint16 planes, 0..1023."""
     per = raw_frame_bytes(fmt, w, h)
-    out = []
+    out: list[tuple[npt.NDArray[Any], ...]] = []
     for i in range(len(data) // per):
+        if fmt == "xv30":
+            px = np.frombuffer(data, "<u4", w * h, i * per).reshape(h, w)
+            out.append(tuple(((px >> s) & 0x3FF).astype(np.uint16) for s in (10, 0, 20)))
+            continue
         buf = np.frombuffer(data, np.uint8, per, i * per)
         if fmt == "yuv444p":
             p = buf.reshape(3, h, w)
@@ -492,6 +579,64 @@ def planar_array(planes: tuple[npt.NDArray[np.uint8], ...]) -> npt.NDArray[np.ui
         return np.stack([y, u, v])
     flat = np.concatenate([np.ascontiguousarray(p).reshape(-1) for p in (y, u, v)])
     return flat.reshape(h * 3 // 2, w)
+
+
+def yuv_frame(planes: tuple[npt.NDArray[Any], ...], fmt: str) -> Any:
+    """(Y, U, V) -> a PyAV VideoFrame of the planar ``fmt``, for to_bgr: yuv444p / yuv420p through
+    from_ndarray (planar_array: exactly the path rounds 1 and 2 scored); yuv444p10le, which this
+    PyAV's from_ndarray refuses, by writing each plane's little-endian samples into a new frame."""
+    from av.video.frame import VideoFrame
+
+    if fmt in ("yuv444p", "yuv420p"):
+        return VideoFrame.from_ndarray(planar_array(planes), format=fmt)
+    if fmt != "yuv444p10le":
+        raise ValueError(f"yuv_frame: {fmt!r}")
+    h, w = planes[0].shape
+    frame = VideoFrame(w, h, fmt)
+    for pl, a in zip(frame.planes, planes, strict=True):
+        buf = np.zeros((pl.height, pl.line_size // 2), "<u2")  # the row padding kept
+        buf[:, :w] = a
+        pl.update(buf.tobytes())
+    return frame
+
+
+def neutral_counts(ref: npt.NDArray[np.uint8], planes: Sequence[npt.NDArray[Any]], *,
+                   limited: bool = False, depth: int = 8) -> dict[str, float]:  # fmt: skip
+    """PURE: what a 4:4:4 conversion wrote for the original's NEUTRAL pixels (B == G == R), where
+    every BT.709 / BT.601 convention puts both chroma samples at mid level (128 at 8 bits, 512 at
+    10), and for its BLACK ones (0, 0, 0), whose luma is the range's black (0 full, 16 limited).
+    Sums, for neutral_summary: the counts, the chroma's and black luma's errors in 8-BIT LEVELS,
+    and how many have U AND V both AT MID: within half an 8-bit level of it (exactly 128 at 8 bits;
+    511..513 at 10, where swscale's own full-range conversion writes 511). Doc 8.3: round 2's GPU
+    wrote 127 / 127, and black decoded green. ``planes`` at ``depth`` bits (10: XV30's samples)."""
+    y, u, v = planes
+    if u.shape != y.shape or v.shape != y.shape or y.shape != ref.shape[:2]:
+        raise ValueError("neutral_counts takes 4:4:4 planes the size of the original")
+    k = 2 ** (depth - 8)
+    neutral = (ref[..., 0] == ref[..., 1]) & (ref[..., 1] == ref[..., 2])
+    black = neutral & (ref[..., 0] == 0)
+    du, dv = (p[neutral].astype(np.int32) - 128 * k for p in (u, v))
+    bu, bv = (p[black].astype(np.int32) - 128 * k for p in (u, v))
+    by = y[black].astype(np.int32) - (16 if limited else 0) * k
+    tol = k / 2  # strictly within half an 8-bit level: 0 at 8 bits, +-1 at 10
+    return {"neutral": int(neutral.sum()), "u_err": float(du.sum()) / k,
+            "v_err": float(dv.sum()) / k,
+            "uv_mid": int(((np.abs(du) < tol) & (np.abs(dv) < tol)).sum()),
+            "black": int(black.sum()), "black_y_err": float(by.sum()) / k,
+            "black_uv_mid": int(((np.abs(bu) < tol) & (np.abs(bv) < tol)).sum())}  # fmt: skip
+
+
+def neutral_summary(rows: Sequence[dict[str, float]]) -> dict[str, Any]:
+    """PURE: neutral_counts rows of a sample -> means (8-bit levels) and at-mid shares."""
+    n, b = sum(r["neutral"] for r in rows), sum(r["black"] for r in rows)
+
+    def per(key: str, d: float) -> float | None:
+        return round(sum(r[key] for r in rows) / d, 4) if d else None
+
+    return {"neutral_px": int(n), "u_mean_err": per("u_err", n), "v_mean_err": per("v_err", n),
+            "uv_mid": per("uv_mid", n), "black_px": int(b),
+            "black_y_mean_err": per("black_y_err", b),
+            "black_uv_mid": per("black_uv_mid", b)}  # fmt: skip
 
 
 def luma_fit(refs: Sequence[npt.NDArray[np.uint8]], ys: Sequence[npt.NDArray[np.uint8]],
@@ -584,13 +729,17 @@ def gb_per_hour(bytes_per_frame: float, fps: float) -> float:
 
 
 def frame_metrics(ref: npt.NDArray[np.uint8], dec: npt.NDArray[np.uint8]) -> dict[str, Any]:
-    """PURE: one decoded frame against its PNG original."""
+    """PURE: one decoded frame against its PNG original (``ssim_split`` and ``black`` are reported,
+    never graded: rounds 1 and 2 had neither)."""
     total, kept = sat_counts(ref, dec)
+    sp = ssim_parts(ref, dec)
     return {
-        "psnr": psnr(ref, dec), "ssim": ssim_luma(ref, dec),
+        "psnr": psnr(ref, dec), "ssim": sp["mean"],
         "maxabs": int(np.max(np.abs(ref.astype(np.int16) - dec.astype(np.int16)))),
         "crops": {k: psnr(crop(ref, b), crop(dec, b)) for k, b in CROPS.items()},
         "sat": (total, kept),
+        "ssim_split": (sp["dark_sum"], sp["dark_n"], sp["rest_sum"], sp["rest_n"]),
+        "black": black_counts(ref, dec),
     }  # fmt: skip
 
 
@@ -616,6 +765,13 @@ def summarise(per_frame: Sequence[dict[str, Any]]) -> dict[str, Any]:
                            "psnr_min": round(min(cs), 3)}  # fmt: skip
     if all("gen2" in f for f in per_frame):
         out["gen2_psnr_mean"] = round(statistics.fmean(f["gen2"] for f in per_frame), 3)
+    if all("ssim_split" in f and "black" in f for f in per_frame):  # reported only (doc 6.7)
+        ds, dn, rs, rn = (sum(f["ssim_split"][i] for f in per_frame) for i in range(4))
+        bn, bk = (sum(f["black"][i] for f in per_frame) for i in range(2))
+        out.update({"dark_share": round(dn / (dn + rn), 4) if dn + rn else None,
+                    "ssim_dark": round(ds / dn, 5) if dn else None,
+                    "ssim_rest": round(rs / rn, 5) if rn else None,
+                    "black_px": bn, "black_keep": round(bk / bn, 4) if bn else None})  # fmt: skip
     return out
 
 
@@ -762,7 +918,11 @@ def verdict(score: dict[str, Any], bars: dict[str, float] = BARS) -> dict[str, A
 def controls_summary(score: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """PURE: the colour controls per ref sample (reported, never graded; doc 6.6): the round trip's
     PSNR and largest error under the arm's DECLARED convention, the luma fingerprint (the
-    convention the conversion actually used), and the GPU planes against swscale's."""
+    convention the conversion actually used), and the GPU planes against swscale's. Since round 3
+    (doc 6.7) also the conversion's own SSIM (round 2's score has it in ``quality``; it was not
+    printed), split dark / rest, the black pixels kept black, U and V against swscale's, and the
+    neutral pixels' chroma (``neutral``: 4:4:4 controls only). A score from before round 3 has
+    None in the keys it never had."""
     out: dict[str, dict[str, Any]] = {}
     for s, v in score["samples"].items():
         if v.get("kind") != "ref":
@@ -771,13 +931,37 @@ def controls_summary(score: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if arm.get("mode") not in CONTROL_MODES or arm.get("status") != "ok":
                 continue
             q, fit = arm.get("quality") or {}, arm.get("fit") or {}
+            sw = arm.get("vs_swscale") or {}
             out.setdefault(s, {})[name] = {
                 "declared": arm.get("declared"), "psnr_mean": q.get("psnr_mean"),
                 "maxabs": q.get("maxabs"), "sat_keep": q.get("sat_keep"),
                 "fit": fit.get("convention"), "fit_err_levels": fit.get("convention_err_levels"),
                 "scale": fit.get("scale"), "offset": fit.get("offset"),
-                "vs_swscale_Y": (arm.get("vs_swscale") or {}).get("Y"),
+                "vs_swscale_Y": sw.get("Y"),
+                "ssim_mean": q.get("ssim_mean"), "ssim_min": q.get("ssim_min"),
+                "ssim_dark": q.get("ssim_dark"), "ssim_rest": q.get("ssim_rest"),
+                "dark_share": q.get("dark_share"), "black_keep": q.get("black_keep"),
+                "vs_swscale_U": sw.get("U"), "vs_swscale_V": sw.get("V"),
+                "neutral": arm.get("neutral"),
             }  # fmt: skip
+    return out
+
+
+SSIM_KEYS = ("ssim_mean", "ssim_min", "ssim_dark", "ssim_rest", "dark_share", "black_keep")
+
+
+def ssim_summary(score: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """PURE: every graded arm's SSIM per ref sample, split dark / rest, and its black kept black
+    (reported, never graded: doc 6.7; None for a score from before round 3)."""
+    out: dict[str, dict[str, Any]] = {}
+    for s, v in score["samples"].items():
+        if v.get("kind") != "ref":
+            continue
+        for name, arm in v["arms"].items():
+            if arm.get("mode") not in GRADED_MODES or arm.get("status") != "ok":
+                continue
+            q = arm.get("quality") or {}
+            out.setdefault(name, {})[s] = {k: q.get(k) for k in SSIM_KEYS}
     return out
 
 
@@ -973,11 +1157,13 @@ def decode_png_bgr(data: bytes) -> npt.NDArray[np.uint8]:
 
 
 def frame_planes(frame: Any) -> list[npt.NDArray[np.uint8]]:
-    """A PyAV frame's planes, each cropped to its width (line padding dropped)."""
+    """A PyAV frame's planes as bytes, each cropped to its width (line padding dropped): a sample
+    of more than 8 bits is 2 bytes (yuv444p10le, round 3), ffmpeg's framemd5 layout either way."""
+    bps = (frame.format.components[0].bits + 7) // 8
     out = []
     for p in frame.planes:
         arr = np.frombuffer(memoryview(p), np.uint8).reshape(p.height, p.line_size)
-        out.append(arr[:, : p.width])
+        out.append(arr[:, : p.width * bps])
     return out
 
 
@@ -1150,16 +1336,18 @@ def score_gctl(root: Path, name: str, arm: Arm, runs: list[str],
     """A GPU colour control (round 2): its downloaded raw planes inverted with the arm's DECLARED
     convention against the PNG (the GPU's round trip, read like V1), the luma fingerprint of what
     the GPU actually wrote, and -- when it declares the bench's own convention -- its planes
-    against swscale's for the same frames (ctl-yuv420 / ctl-yuv444, the same 10 frames a run)."""
-    from av.video.frame import VideoFrame
-
+    against swscale's for the same frames (ctl-yuv420 / ctl-yuv444, the same 10 frames a run).
+    Since round 3 also what it wrote for neutral pixels (4:4:4 only), and a 10-bit control
+    (yuv444p10le planes from XV30): the fingerprint and the neutral errors in 8-bit levels, no
+    swscale twin (swscale's controls are 8-bit)."""
     enc = root / "out" / "enc" / name
     color = arm_color(arm)
+    depth = plane_depth(arm.plane_fmt)
     twin = "ctl-yuv420" if arm.plane_fmt == "yuv420p" else "ctl-yuv444"
-    per, refs, ys, diffs = [], [], [], []
+    per, refs, ys, diffs, neutral = [], [], [], [], []
     for r in runs:
         fmt = fmts[r]
-        if fmt not in RAW_FORMATS:
+        if fmt not in RAW_FORMATS or plane_depth(fmt) != depth:
             return {"status": "invalid", "mode": arm.mode, "note": f"{r}: raw format {fmt!r}"}
         planes = raw_planes((enc / arm.name / f"{r}.{arm.ext}").read_bytes(), fmt, w, h)
         want = min(arm.frames or len(ref[r]), len(ref[r]))
@@ -1168,17 +1356,22 @@ def score_gctl(root: Path, name: str, arm: Arm, runs: list[str],
                     "note": f"{r}: {len(planes)} frames, not {want}"}  # fmt: skip
         sw = enc / twin / f"{r}.yuv"
         sw_planes = (raw_planes(sw.read_bytes(), arm.plane_fmt, w, h)
-                     if color == COLOR and sw.exists() else [])  # fmt: skip
+                     if color == COLOR and depth == 8 and sw.exists() else [])  # fmt: skip
         for i, p in enumerate(planes):
-            dec = to_bgr(VideoFrame.from_ndarray(planar_array(p), format=arm.plane_fmt), color)
+            dec = to_bgr(yuv_frame(p, arm.plane_fmt), color)
             per.append(frame_metrics(ref[r][i], dec))
             refs.append(ref[r][i])
-            ys.append(p[0])
+            ys.append(p[0] if depth == 8 else p[0] / 2.0 ** (depth - 8))  # the fit in 8-bit levels
+            if p[1].shape == p[0].shape:
+                neutral.append(neutral_counts(ref[r][i], p, limited=arm.color_range == "tv",
+                                              depth=depth))  # fmt: skip
             if i < len(sw_planes):
                 diffs.append(plane_diff(p, sw_planes[i]))
     res: dict[str, Any] = {"status": "ok", "mode": arm.mode, "formats": sorted(set(fmts.values())),
                            "declared": f"bt709-{'full' if color[1] == 'JPEG' else 'limited'}",
                            "quality": summarise(per), "fit": luma_fit(refs, ys)}  # fmt: skip
+    if neutral:
+        res["neutral"] = neutral_summary(neutral)
     if diffs:
         res["vs_swscale"] = {"twin": twin, "frames": len(diffs), **{
             k: {"mean": round(statistics.fmean(d[k]["mean"] for d in diffs), 3),
@@ -1195,16 +1388,21 @@ def score_arm(root: Path, name: str, arm: Arm, runs: list[str],
     enc = root / "out" / "enc" / name / arm.name
     res: dict[str, Any] = {"status": "ok", "mode": arm.mode}
     if arm.mode == "ctl":
-        per, refs, ys = [], [], []
+        per, refs, ys, neutral = [], [], [], []
         for r in runs:
             path = enc / f"{r}.{arm.ext}"
             frames = read_raw_yuv(path, arm.sw_fmt, w, h)
             per += [frame_metrics(ref[r][i], f) for i, f in enumerate(frames)]
             refs += ref[r][: len(frames)]
-            ys += [p[0] for p in raw_planes(path.read_bytes(), arm.sw_fmt, w, h)]
+            planes = raw_planes(path.read_bytes(), arm.sw_fmt, w, h)
+            ys += [p[0] for p in planes]
+            if arm.sw_fmt == "yuv444p":  # the neutral measure's known-good case (doc 6.7)
+                neutral += [neutral_counts(ref[r][i], p) for i, p in enumerate(planes)]
         res["quality"] = summarise(per)  # round 1's numbers, unchanged
         res["declared"] = "bt709-full"
         res["fit"] = luma_fit(refs, ys)  # the fingerprint's known-good case (doc 6.6)
+        if neutral:
+            res["neutral"] = neutral_summary(neutral)
         return res
     total = frames = keys = 0
     key_b: list[float] = []
@@ -1338,6 +1536,7 @@ def cmd_score(a: argparse.Namespace) -> int:
             det.close()
     score["rates"] = rates(score)
     score["controls"] = controls_summary(score)
+    score["ssim"] = ssim_summary(score)
     score["verdict"] = verdict(score)
     score["ended"] = time.strftime("%FT%T%z")
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -1357,6 +1556,9 @@ def print_verdict(score: dict[str, Any]) -> None:
     for s, arms in controls_summary(score).items():  # the colour controls (never graded)
         for name, c in arms.items():
             print(json.dumps({"control": name, "sample": s, **c}))
+    for name, per in ssim_summary(score).items():  # where each graded arm's SSIM went (doc 6.7)
+        for s, q in per.items():
+            print(json.dumps({"ssim": name, "sample": s, **q}))
     for s, smp in score["samples"].items():  # what each graded stream says it is
         for name, arm in smp["arms"].items():
             if "vui_ok" in arm and not arm["vui_ok"]:
@@ -1386,7 +1588,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--root", type=Path, default=ROOT_DEFAULT)
     s.add_argument("--datasets", type=Path, default=DATASETS)
     s.add_argument("--round", type=int, default=1,
-                   help="which arms (ROUNDS): 1 = the original table, 2 = doc 6.6")  # fmt: skip
+                   help="which arms (ROUNDS): 1 = the original table, 2 = doc 6.6, "
+                        "3 = doc 6.7")  # fmt: skip
     c = sub.add_parser("score")
     c.add_argument("--root", type=Path, default=ROOT_DEFAULT)
     c.add_argument("--out", type=Path, required=True)
