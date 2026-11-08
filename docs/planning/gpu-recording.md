@@ -1189,7 +1189,14 @@ far from an encode, outside the recording), the video block's `by_status`; then 
 `rm -rf /dev/shm/poring-lab-mediarec` (a lock file only) and, from a worktree, its `.env` link.
 
 ### 9.3 Stage 2's results
-Not run yet (phase 2).
+**Named BEFORE the check runs (2026-11-08 23:24:39 ICT):**
+- the BASELINE pilot (same map, the GPU detect path, no recorder): rogue-xmas02.md p19,
+  `20261108T232242-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p19` (`--far-single`, 25 min);
+  a caveat for L1-L3: p19 ran its first ~10 min on p18's still-running detect server (the same
+  flags and floor) and switched to its own step at ~23:32 (a few seconds of CPU fallback);
+- the RECORDED pilot: p20 (rogue-xmas02.md 4AB), the same flags, the recorder beside it.
+
+Not run yet.
 
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single

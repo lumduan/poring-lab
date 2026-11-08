@@ -1176,6 +1176,19 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - p19 is also stage 2's BASELINE pilot (gpu-recording.md 9.3: same map, the GPU detect path, no
   recorder) for p20, which repeats it with the stage-2 recorder beside it.
 
+### 4AB. Pilot p20 pre-registration: p19 again, with the STAGE-2 RECORDER beside it (written BEFORE its run, 2026-11-08 23:24:39 ICT)
+
+- **Why:** Amendment J item 4 (stage 2, gpu-recording.md 9.1, its bars pre-registered 22:46:20).
+- **The bot:** p19's flags exactly (`--far-single`, 25 min): a second replicate of 4Z's change.
+- **Beside it, not a change of the bot:** `record_session.py --backend rdp --fps 1 --format
+  vpp-hevc444-10-q20 --also-png` for the run's 25 min, the media-rec sidecar encoding on the Arc's
+  media engine (the detect server uses its compute). The recorder's grab and its PNG writer use the
+  host CPU (~0.1-0.16 s a frame at 1 fps).
+- **Bars:** 4Z's bars for the bot (F1, E1, D1, R1, F3, E3, deaths); stage 2's bars (9.1) for the
+  recording, graded by `media_rec.py check` with p19 as the baseline (9.3).
+- **The MVP window:** killed 23:21:23, respawn from 00:21:23; p20 must end by then (its run starts
+  by 23:53, or its time box is cut to end before 00:20).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
