@@ -267,6 +267,12 @@ BOSS_AVOID_S = 30.0
 # or more away clicks ONCE and waits FAR_BASE_S + FAR_PER_CELL_S a cell (at most FAR_MAX_S) for
 # the arrow or our damage line -- the walk-up included -- re-clicking never.
 FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S = 4, 1.0, 0.2, 3.5
+# --skip-own-cells (dungeon@9.9, rogue-xmas02.md 4AB, Amendment J item 2c, "the misses on her own
+# sprite"): p16 + p17's 24 own-body strikes (the N / S cells, whose hover point lies on her own
+# sprite) missed 10 times, 9 of them south; the packets put the monster ON the clicked cell in only
+# 2 of 24 -- the SWORD came from a neighbour's sprite reaching over her, and a click through her
+# own sprite often started no attack. So the defend scan skips a cell whose hover point is on her
+# sprite (in_self_box) and hovers on: the neighbour is struck where it stands.
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -1053,6 +1059,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
+    if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
+        out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
     return out
 
 
@@ -2593,6 +2601,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if not in_view(u, v_):
                     verdicts["off"] += 1
                     continue
+                if (purpose == "defend" and getattr(a, "skip_own_cells", False)
+                        and in_self_box(u, v_, *self_uv())):  # fmt: skip
+                    verdicts["own_skip"] += 1  # dungeon@9.9: never through her own sprite
+                    continue
                 res = hover(u, v_)
                 if guard_tick():
                     break
@@ -3946,6 +3958,13 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--skip-own-cells",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.9 (rogue-xmas02.md 4AB; OFF by default): the defend scan skips a cell "
+        "whose hover point lies on her own sprite and hovers on (no strike through her sprite)",
     )
     t.add_argument(
         "--far-single",

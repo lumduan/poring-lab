@@ -1332,3 +1332,19 @@ def test_far_single_clicks_once_and_waits_for_the_walk_up() -> None:
     # the post-arrow wait of --quick-drop takes the far window
     assert not dh.quick_no_hit(10.5, -1e9, 10.0, 13.0, 3.0)  # 2.5 s after the arrow, 3.0 window
     assert dh.quick_no_hit(10.5, -1e9, 10.0, 13.6, 3.0)
+
+
+def test_skip_own_cells_never_strikes_through_her_sprite() -> None:
+    """dungeon@9.9 (rogue-xmas02.md 4AB, Amendment J item 2c): the defend scan skips a cell whose
+    hover point is on her own sprite (in_self_box), off by default."""
+    u0, v0 = dh.FOOT_PX
+    assert dh.in_self_box(u0, v0 - 40, u0, v0)  # her body
+    assert not dh.in_self_box(u0 + 60, v0 - 40, u0, v0)  # a diagonal neighbour's body point
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "skip_own_cells" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, skip_own_cells=True))["skip_own_cells"] == [
+        dh.SELF_HALF_W, dh.SELF_UP, dh.SELF_DOWN]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert 'verdicts["own_skip"] += 1  # dungeon@9.9: never through her own sprite' in src
