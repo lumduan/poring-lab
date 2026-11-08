@@ -2256,8 +2256,8 @@ FAILS (36.4 %, bar <= 35 %); E1, R1, D1, F3, E3, deaths PASS. By 4AC's rule both
   had none in that window). The box path's next look came 1.9-4.6 s later; its target was then 3-6
   cells away 17 times, 8-12 cells 11 times, none 3 times. The 9+ cell strikes fell from 35 (p16) /
   28 / 19 to **3**, and the time held on class-D strikes fell 65 % against p16's (494.8 -> 170.9 s);
-  but class D at 2-6 cells rose to 15 of 45 (p19 4 / 24, p20 6 / 18), 7 of 19 within 6 s after an
-  approach and 15 of 44 otherwise.
+  but class D at 2-6 cells rose to 15 of 45 (p19 4 / 24, p20 6 / 18); at 2-8 cells, 7 of 19 within
+  6 s after an approach and 15 of 44 otherwise (both near p16's rate).
 - **What a class-D strike is (packets, all 26):** every one had a SWORD verdict on its hover (the
   box path's own check), and one click (two had 4, at 0 cells). 24 of 26 sent a walk request and
   NO attack request; 12 walked to the monster's cell (+-1), 10 elsewhere (1-3 cells off the click
