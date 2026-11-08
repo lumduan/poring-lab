@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p13r (4U) done 2026-11-08 18:43: every bar PASS, E1 44.0 / h, class D 19 %. Next: p14 (4V) --lead-strike, the box path aims ahead of a walking target (Batt, Amendment H)."
+next_action: "p14 (4V) done 2026-11-08 19:35: --lead-strike NOT adopted (M1 inconclusive, E1 32.0 / h and R1 failed; 2 of its 3 led strikes still missed). Batt's clip: the stand-still is the 7-s no-hit lock after a missed strike + the ring scan, and the walk engages boxes within ~3 cells only. Batt decides p15."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1885,3 +1885,44 @@ detect server `final` with the floor from the installed unit; the setup added 10
   baseline. The supply was again below p12's (12.0 vs 16.7 / 10 min); kills per monster seen are
   the best so far.
 - The bag cleared after it (18:44:04-18:45:32: Etc 2, Use 5; weight 590 -> 520, 10 / 10).
+
+**Pilot p14 (4V; 19:04:20-19:35:06, its own time box; immunity OFF at 19:04:05, judged "Returned
+to normal state."; back ON at 19:35:28, judged "You are now immune to attacks."; the detect server
+`final`). VERDICT: M1 INCONCLUSIVE (1 box strike on a target walking at the grab), M2 / M3 / D1 /
+F3 / E3 / deaths PASS; E1 FAILS (32.0 / h) and R1 FAILS (2 own-body class D). `--lead-strike` is
+NOT adopted.**
+
+| | p13r (baseline) | **p14** | bar |
+|---|---|---|---|
+| M1 box strikes on a target walking at the grab: class D | 1 of 3 | **1 of 1** | <= 1 of >= 3: INCONCLUSIVE |
+| M2 box strikes on a standing target: class D | 1 of 9 | **0 of 7** | <= 2: PASS |
+| M3 led hovers that read SWORD and were struck | - | **3 of 3** | >= half: PASS |
+| the led strikes' classes (reported) | - | **D, D, A** | |
+| E1 kills | 22 (44.0 / h) | **16 (32.0 / h)** | >= 40 / h: **FAIL** |
+| D1 live detector p50 | 20.5 ms | **20.6 ms** (1,819, all GPU) | <= 35: PASS |
+| R1 own-body class D | 0 | **2** (10 own-body strikes) | <= 1: **FAIL** |
+| F3 / E3 (hard bars, Fly Wings, stalls) / deaths | 0 / pass, 0, 3 / 0 | **0 / pass, 0, 5 / 0** (lowest HP 63.7 %) | PASS |
+| supply: seen (/ 10 min); kills per seen | 36 (12.0); 0.611 | **44 (14.7); 0.364** | reported |
+| class D share | 19 % (7 / 36) | **23 % (7 / 31)** | reported |
+| the sword verdict after the grab, p50 | 277 ms | **398 ms** (+ the second detection) | reported |
+
+- **The lead itself:** 11 box targets carried a lead record (9 others found no box to target);
+  3 read as walking (53-68 px / s, lead 16-24 px), each hover read SWORD and was struck: 2 ended
+  class D, 1 attacked. Packets put one of the two Ds on a walker at the grab (1.3 cells off), the
+  other with no monster within 3 cells of the led cell, and the attacked one on a monster the
+  packets call standing. So the sprite's measured motion and the server's disagree in 2 of 3; no
+  sign that the lead turns a walker's miss into an attack.
+- **E1:** more monsters came (44) but fewer died per sighting (0.364). Engagements 47 (box 20,
+  Battle Log 11, Miss cue 8, walk_sword 8; p13r 31) and strikes 31: more fights started by being
+  hit, fewer finished. Not proven to be the lead's doing (its cost is ~0.12 s a box target).
+- **Batt's clip (19:09:47-19:09:56, sent during the run):** "it does not seem to see the Myst
+  Case". The detector boxed it every second (0.94-0.97). The Rogue stood because the led strike
+  at 19:09:40.9 (53.9 px / s) started no attack and the lock waited for hits until 19:09:48.2
+  ("no hits", 7.3 s), then the defend scan of the ring cells (2.7 s); only then the next box
+  (19:09:53.6). Locked time on class-D strikes per run: p12 88.9 s, p13 56.5 s, p13r 49.2 s
+  (median ~7 s each). And on patrol the walk engages a box only within `BOX_NEAR_PX` (110 px,
+  ~3 cells): monsters further away are passed by design.
+- **Items (snatched):** Scell 4, Piece of Cake 2, Candy 1, Zargon 1.
+- **Decision:** M1's rule says the next run repeats the flag and pools; E1 and R1 failed, so the
+  flag is not adopted. Batt chooses the next step (the 21:xx report).
+- The bag cleared after it (19:36:23-19:37:49: Etc 2, Use 4; weight 598 -> 520, 10 / 10).
