@@ -476,6 +476,8 @@ as Batt prefers:
     frame, at better quality than the CPU encoders at the same bitrate. Recordings are 1-fps PNG
     today, 7-8.4 GB/h, so a hardware-encoded recording path is a candidate (Batt's call, a
     separate design).
+    ➡️ That design and its PRE-REGISTERED bench: [gpu-recording.md](gpu-recording.md)
+    (2026-11-08, PROPOSED; nothing run on the GPU yet).
 - Found by the subagent: compose in a git worktree has no `.env` (it interpolates `:?` variables
   and host_profile reads it). A guarded compose step from a worktree needs the main `.env`
   linked in (gitignored, removed after).

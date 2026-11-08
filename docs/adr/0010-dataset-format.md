@@ -88,6 +88,12 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > The first is `packets.states.jsonl.gz` (Phase 3 M3: the act/turn decoders, replayed from the
 > banked captures by `scripts/replay_states.py`).
 
+> ➡️ **Note 2026-11-08: PROPOSED, NOT DECIDED -- a hardware-encoded (VA-API) recording path for
+> the RDP sessions** ([gpu-recording.md](../planning/gpu-recording.md), Batt: "interested").
+> It cannot be lossless (VDEnc has no lossless mode; the BGR -> YUV conversion rounds), so adopting
+> it would be an amendment to this ADR, Batt's decision. Its bench is pre-registered there.
+> Nothing in this ADR changes until then: RDP sessions stay lossless PNG.
+
 ## Context
 
 Phase 2 needs recorded sessions:
