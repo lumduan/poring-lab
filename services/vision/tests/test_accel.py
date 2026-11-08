@@ -128,7 +128,9 @@ def test_the_openvino_backend_runs_the_pinned_onnx(
             return NS(create_infer_request=Req)
 
     monkeypatch.setitem(sys.modules, "openvino", NS(Core=Core))
-    net = ds.OvNet(str(onnx), ds.file_sha256(str(onnx)), "GPU")
+    # the host-side conversion (--ov-preproc cpu): the fake has no openvino.preprocess, and the
+    # default became "gpu" on 2026-11-08 (4916182a; the device-side path has its own parity check)
+    net = ds.OvNet(str(onnx), ds.file_sha256(str(onnx)), "GPU", preproc="cpu")
     assert net.shape == (1, 7, 19320) and seen["device"] == "GPU"
     assert seen["cfg"]["INFERENCE_PRECISION_HINT"] == "f32"
     canvas = np.zeros((736, 1280, 3), np.uint8)
