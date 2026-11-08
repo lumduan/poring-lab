@@ -1261,3 +1261,49 @@ def test_box_watch_near_orders_by_distance_and_skips() -> None:
     assert w.near(dh.FOOT_PX, dh.BOX_SCREEN_PX, 5.0) == (500, 250, 540, 310)
     assert w.near(dh.FOOT_PX, dh.BOX_SCREEN_PX, 5.0, lambda f: f[0] > 400) == (100, 100, 140, 160)
     assert w.near(dh.FOOT_PX, dh.BOX_NEAR_PX, 5.0) is None  # both beyond ~3 cells
+
+
+def test_boss_guard_names_and_fits() -> None:
+    """--engage-screen's boss guard (Batt 2026-11-08, Amendment J: "except the boss and its
+    minions"): the names from the KB (the boss spawn + its NPC_SUMMONSLAVE ids, both name tables),
+    and the Battle Log's garbled reads fitted against bosses AND the map's species."""
+    spawns = {"m": [{"name": "Cruiser", "id": 1248, "boss": False},
+                    {"name": "Garm Baby", "id": 1515, "boss": False},
+                    {"name": "Stormy Knight", "id": 1251, "boss": True}]}  # fmt: skip
+    mobs = {"1251": {"name": "Stormy Knight"}, "1515": {"name": "Baby Hatii"},
+            "1607": {"name": "Christmas Goblin"}, "1248": {"name": "Cruiser"}}  # fmt: skip
+    skills = {"1251": [{"info": "Stormy Knight@NPC_SUMMONSLAVE", "vals": ["1515", "", ""]},
+                       {"info": "Stormy Knight@NPC_SUMMONSLAVE", "vals": ["1607"]},
+                       {"info": "Stormy Knight@AL_TELEPORT", "vals": ["1248"]}]}  # fmt: skip
+    bosses = dh.boss_names("m", spawns, mobs, skills)
+    assert bosses == ("Baby Hatii", "Christmas Goblin", "Garm Baby", "Stormy Knight")
+    assert dh.boss_names("other", spawns, mobs, skills) == ()
+    species = ("Christmas Cookie", "Cookie", "Cruiser", "Myst Case")
+    # the reader's REAL reads on p16 (battle_log_live.jsonl): never a boss
+    for read in ("?vst Case", "Cruiser", "Christmas Coo?ie", "Coo?ie", "Someone", "??st? Case"):
+        assert dh.boss_of(read, bosses, species) is None, read
+    # the bosses as the same reader would garble them ('?' unread, i for l, v for y)
+    assert dh.boss_of("Stor?v ?ni?ht", bosses, species) == "Stormy Knight"
+    assert dh.boss_of("Garm Babv", bosses, species) == "Garm Baby"
+    assert dh.boss_of("Christmas Gobiin", bosses, species) == "Christmas Goblin"
+    assert dh.boss_of("Babv Hatii", bosses, species) == "Baby Hatii"
+    assert dh.boss_of(None, bosses, species) is None and dh.boss_of("Cruiser", (), species) is None
+    assert dh.BOSS_AVOID_S == 30.0
+    src = Path(dh.__file__).read_text()
+    assert 'press("fly", "boss")' in src and "and tick >= boss_until):  # a box never" in src
+
+
+def test_boss_guard_names_from_the_real_kb() -> None:
+    """The lab's KB (data/kb, generated locally from the pinned rAthena; skipped where absent):
+    xmas_dun02's boss is Stormy Knight, its summons Garm Baby (Baby Hatii) and Christmas Goblin."""
+    import json
+
+    import pytest
+
+    kb = Path(dh.ROOT) / "data" / "kb"
+    if not (kb / "spawns.json").exists():
+        pytest.skip("no local KB")
+    bosses = dh.boss_names("xmas_dun02", json.loads((kb / "spawns.json").read_text()),
+                           json.loads((kb / "mobs.json").read_text()),
+                           json.loads((kb / "mob_skills.json").read_text()))  # fmt: skip
+    assert set(bosses) == {"Stormy Knight", "Garm Baby", "Baby Hatii", "Christmas Goblin"}

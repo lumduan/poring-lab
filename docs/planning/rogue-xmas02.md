@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p16 (4X) done 2026-11-08 21:21: --engage-screen -> 87.9 kills / h (best), S1 / S2 / E1 PASS, R1 2 (fails, as in p14-p15). Batt: keep it ON (recommended)? Next candidates: the far misses (51 % class D), R1, stopping the walk at an engagement."
+next_action: "The night (Amendment J): p17 (4Y, --quick-drop beside --engage-screen) pre-registered 22:07; then (b) walk stop, (c) own-sprite misses, (a) far misses, a faster box rhythm, the stage-2 recording; report ~06:00."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1086,6 +1086,61 @@ Batt's words, translated (before 19:53:09, the turn's first `date`):
   - Q1 fails: the drops do not shorten the held time (the ring scan or the re-armed box path
     takes it) -> studied;
   - Q2 fails: the give-up is too early for good strikes -> the threshold is studied before reuse.
+
+### 4X'. Amendment J (2026-11-08 ~21:5x ICT): Batt's answers to the 21:43 report, and the night's plan
+
+Batt's words, translated (before 22:02:46, the turn's first `date`):
+1. **`--engage-screen`:** "on, except the boss and its minions" -> ADOPTED for xmas_dun02 runs, with
+   a BOSS GUARD (dungeon@9.7b): the map's boss and the monsters its NPC_SUMMONSLAVE skills call,
+   from the KB (Stormy Knight; Garm Baby, a.k.a. Baby Hatii; Christmas Goblin). The xmas02 model
+   has no class for them, so they are known by NAME: a Battle Log line whose bracketed name fits
+   one (the reader's own fuzzy fit, over the bosses and the map's species together) -> the
+   runner's Fly Wing escape and no box engagement for 30 s. Every run starts with
+   `@killmonster2`, which kills the MVP too (it respawns 60-70 min later), so within a 30-min run
+   the guard is the backstop; no boss or summon appeared in p10-p16 (packets). Tested on the
+   reader's real reads (none fits a boss) and on garbled boss names.
+2. **The next changes:** "approve all" -> (a) why far strikes miss, (b) stop the walk at an
+   engagement, (c) the misses on her own sprite.
+3. **`--quick-drop`:** "try it again together with --engage-screen" -> p17.
+4. **Recordings:** "do it now" -> stage 2, one side-by-side recording (PNG + the GPU encode of the
+   same session).
+5. **Batt (the night):** "plan everything and work continuously tonight, improving step by step:
+   walk without getting stuck, detect monsters fast, walk in and strike at once; keep improving
+   until 06:00, then report."
+
+**The night's plan (each pilot pre-registered in its own section BEFORE its run; one change at a
+time; a change that passes its bars joins the base, else it is switched off):**
+1. p17: the base (fast detector, `--self-recheck`, `--still-strike`, `--engage-screen` + the boss
+   guard) + `--quick-drop`. p16's 68 class-D strikes were held 494.8 s, 27 % of its run.
+2. p18: + (b) stop the walk at an engagement (its mechanics checked live first: a click on her
+   own cell).
+3. p19: + (c) the own-sprite misses (R1: 2 in p14, p15, p16), from a study of those strikes.
+4. p20: + (a) the far misses (p16: 57 of 106 far strikes class D), from a packets study.
+5. p21: + a faster box rhythm while walking ("detect fast"): the detector is 21 ms a call, the
+   watcher looks once a second (BOX_EVERY_S).
+6. Stage-2 recording beside one pilot (declared in that pilot's pre-registration).
+7. Further steps chosen from what each result shows, until ~05:30; the report at ~06:00.
+
+### 4Y. Pilot p17 pre-registration: --quick-drop beside --engage-screen (written BEFORE its run, 2026-11-08 22:07 ICT)
+
+- **Why:** Amendment J item 3. With the screen-wide engagement p16 struck 134 times and held its
+  68 misses 494.8 s (median 7.25 s): the give-up matters more now than in p15.
+- **The base (p16's flags, adopted):** the fast detector, `--self-recheck`, `--still-strike`,
+  `--engage-screen` now WITH the boss guard; `--lead-strike` off; 10 potions.
+- **The one change against p16: `--quick-drop`** (dungeon@9.6, as in 4W: no arrow / damage 2.0 s
+  after the click -> no lock; an arrow but no hit of ours 2.0 s after it -> the lock drops; then
+  the box path again, twice a fight at most).
+- **The run:** 4X's command with `--label xmas02-p17 --quick-drop`.
+- **Bars:**
+  - **Q1 (the hypothesis):** time held on class-D strikes (`quick_drop_study.py`): total <= 250 s
+    (half of p16's 494.8) AND median <= 4.0 s (p16 7.25).
+  - **Q2 (no cost):** quick drops of a strike that started an attack (K / A) <= 5.
+  - **E1:** kills >= 80 / h (p16 87.9; it must not lose the gain). **D1** <= 35 ms; **R1**
+    own-body class D <= 1; **F3** <= 2; **E3** hard bars pass, 0 dead-end Fly Wings, stalls
+    <= 39 / h; **deaths** 0.
+  - Reported: kills per monster seen (p16 0.80), the supply, the drops by why, boss_guard events.
+- **Decisions:** Q1 + Q2 + E1 pass with no regression bar failing -> `--quick-drop` joins the
+  base; Q1 fails -> off (studied); Q2 or E1 fails -> off.
 
 ## 5. Results
 

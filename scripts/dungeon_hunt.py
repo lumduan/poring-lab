@@ -251,6 +251,13 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # (~6); with the flag both take ANY monster box on the screen whose body point is in view (not
 # under a UI window), the nearest to our feet first (BoxWatch.near already orders by distance).
 BOX_SCREEN_PX = 4000.0  # beyond any distance on the 1280 x 720 game region
+# The BOSS GUARD of --engage-screen (Batt 2026-11-08 ~21:5x, Amendment J: "on, except the boss and
+# its minions"): the xmas02 model has no class for them (Stormy Knight, its summons Garm Baby /
+# Christmas Goblin), so they are known by NAME: a Battle Log line whose bracketed name fits one
+# (boss_of) -> the runner's own Fly Wing escape, and no box engagement for BOSS_AVOID_S. Every run
+# starts with @killmonster2 (the MVP dead; it respawns 60-70 min later), so in a 30-min run this is
+# the backstop. The names come from the KB (boss_names: the map's boss spawns + their summons).
+BOSS_AVOID_S = 30.0
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -1038,6 +1045,42 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     return out
 
 
+def boss_names(map_name: str, spawns: Mapping[str, Any], mobs: Mapping[str, Any],
+               skills: Mapping[str, Any]) -> tuple[str, ...]:  # fmt: skip
+    """PURE: the map's boss spawns (``boss`` true) and every monster their NPC_SUMMONSLAVE skills
+    call, by the names the KB knows (the spawn's name and the mob table's, which may differ:
+    1515 is "Garm Baby" in the spawns and "Baby Hatii" in the mob table)."""
+    entries = spawns.get(map_name) or []
+    by_id: dict[str, set[str]] = {}
+    for e in entries:
+        by_id.setdefault(str(e.get("id")), set()).add(str(e.get("name")))
+    out: set[str] = set()
+    for e in entries:
+        if not e.get("boss"):
+            continue
+        ids = {str(e.get("id"))}
+        for sk in skills.get(str(e.get("id")), []):
+            if str(sk.get("info", "")).endswith("@NPC_SUMMONSLAVE"):
+                ids |= {str(v) for v in sk.get("vals", []) if str(v).strip()}
+        for i in ids:
+            out |= by_id.get(i, set())
+            if mobs.get(i, {}).get("name"):
+                out.add(str(mobs[i]["name"]))
+    return tuple(sorted(out))
+
+
+def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]) -> str | None:
+    """PURE: the boss a Battle Log line's bracketed name reads as, or None. The fit is the
+    reader's own (battle_log.species_of: '?' = 1-2 unread letters) over the bosses AND the map's
+    other species, so a garbled ordinary name can never fit a boss by elimination."""
+    if not name_read or not bosses:
+        return None
+    import battle_log
+
+    fit = battle_log.species_of(str(name_read), tuple(bosses) + tuple(species))
+    return fit if fit in bosses else None
+
+
 def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: float,
                  hit_s: float = QUICK_HIT_S) -> bool:  # fmt: skip
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
@@ -1641,6 +1684,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     map_ = a.map
     keys_ = conf["keys"]
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
+    bosses: tuple[str, ...] = ()  # --engage-screen's boss guard (Amendment J)
+    map_species: tuple[str, ...] = ()
+    if getattr(a, "engage_screen", False):
+        kb_b = ROOT / "data" / "kb"
+        sp_doc = json.loads((kb_b / "spawns.json").read_text())
+        bosses = boss_names(map_, sp_doc, json.loads((kb_b / "mobs.json").read_text()),
+                            json.loads((kb_b / "mob_skills.json").read_text()))  # fmt: skip
+        map_species = tuple(sorted({str(e.get("name")) for e in sp_doc.get(map_, [])
+                                    if str(e.get("name")) not in bosses}))  # fmt: skip
+    boss_until = -1e9
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
@@ -1910,7 +1963,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
-            "fixes": fixes_of(a),
+            "fixes": fixes_of(a), "bosses": list(bosses),
             "char": a.char, "steal": a.steal, "bank_tags": bank, "clear_map": a.clear_map,
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
@@ -3057,7 +3110,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     new = blt.lines[seen_lines:]
                     seen_lines = len(blt.lines)
                 taken_new = None
+                boss_hit: str | None = None
                 for ln in new:
+                    if bosses and ln.get("type") in ("damage", "taken"):  # the boss guard
+                        boss_hit = boss_of(ln.get("name_read"), bosses, map_species) or boss_hit
                     typ = ln.get("type")
                     if typ == "taken":
                         last_taken = tick
@@ -3137,7 +3193,25 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 swing_now = swing_engages(tick, last_swing, swing_floor)  # 9.1b, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
-                if boxes is not None and mode != "fight" and not sitting:  # a box never
+                if boss_hit is not None:  # --engage-screen's boss guard (Amendment J): fly away
+                    ev({"kind": "boss_guard", "name": boss_hit, "fly": tick - fly_at > 2.0})
+                    counts["boss_guard"] += 1
+                    boss_until = tick + BOSS_AVOID_S
+                    if tick - fly_at > 2.0:
+                        if sitting:
+                            press("stand", "boss")
+                            sitting = False
+                        press("fly", "boss")
+                        fly_at = time.monotonic()
+                        lock, goal_path = None, None
+                        loot_list, fight_ref = [], None
+                        mode = "search"
+                        here, last_taken = None, -1e9
+                        box_fight.clear()
+                        time.sleep(1.0)
+                        continue
+                if (boxes is not None and mode != "fight" and not sitting
+                        and tick >= boss_until):  # a box never  # fmt: skip
                     here_b = here  # stands us up
 
                     def skip_b(foot: Sequence[float], here_b: Cell | None = here_b,
