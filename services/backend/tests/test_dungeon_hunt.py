@@ -1234,7 +1234,8 @@ def test_engage_screen_takes_any_box_in_view_nearest_first() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, engage_screen=True))["engage_screen"] == [
         dh.BOX_SCREEN_PX]  # fmt: skip
     src = Path(dh.__file__).read_text()
-    assert "return skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)" in src
+    # dungeon@9.12 added `or unreachable(here_b, foot)` (False unless --reach-check)
+    assert "return (skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)" in src
     assert "near_ = boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_FRESH_S, skip_s)" in src
     assert "near_b = (boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_TARGET_WAIT_S + 1.0," in src
     # the default paths are unchanged
@@ -1383,3 +1384,30 @@ def test_box_every_sets_the_watchers_rhythm() -> None:
     src = Path(dh.__file__).read_text()
     assert "self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))" in src
     assert 'getattr(a, "box_every", BOX_EVERY_S))' in src
+
+
+def test_reach_check_skips_boxes_the_server_would_not_walk_to() -> None:
+    """dungeon@9.12 (rogue-xmas02.md 4AE): pilots p16-p21 clicked monsters behind walls for
+    110-153 s a run (the server never answered those walk requests); a box whose cell is not
+    reachable on one click (nor any of its 8 neighbours) is passed over."""
+
+    class G:
+        xs, ys = 30, 12
+        wall = {(10, y) for y in range(0, 11)}  # a wall at x=10, open only at y=11
+
+        def nopass(self, x: int, y: int) -> bool:
+            return not (0 <= x < self.xs and 0 <= y < self.ys) or (x, y) in self.wall
+
+    g = G()
+    assert dh.reach_ok(g, (5, 5), (8, 5))  # same side, a straight walk
+    assert not dh.reach_ok(g, (5, 1), (14, 1))  # behind the wall: a detour over 14 steps
+    assert dh.reach_ok(g, (8, 9), (12, 9))  # behind the wall but the detour is short
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "reach_check" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, reach_check=True))["reach_check"] == [17, 14]
+    src = Path(dh.__file__).read_text()
+    assert "or unreachable(here_s, foot))" in src  # the trigger
+    assert "or unreachable(here, f)))" in src  # the box path (engage-screen)
+    assert 'raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}")' in src  # fail closed

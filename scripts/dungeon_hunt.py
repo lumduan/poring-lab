@@ -1072,7 +1072,22 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
+        out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
     return out
+
+
+def reach_ok(grid: Any, here: Cell, cell: Cell) -> bool:
+    """PURE (dungeon@9.12, rogue-xmas02.md 4AE): would the server walk us from ``here`` to the
+    monster's ``cell``, or to one of its 8 neighbours (the client walks a melee strike up to the
+    target), on ONE click (poring_dataset.walk.click_walk_ok: a walk, <= 17 steps, <= 14 unless the
+    straight line is clear). Pilots p16-p21 lost 110-153 s a run clicking monsters it was not."""
+    from poring_dataset import walk as wkp
+
+    for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+        if wkp.click_walk_ok(grid, here[0], here[1], cell[0] + dx, cell[1] + dy):
+            return True
+    return False
 
 
 def boss_names(map_name: str, spawns: Mapping[str, Any], mobs: Mapping[str, Any],
@@ -1746,6 +1761,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         map_species = tuple(sorted({str(e.get("name")) for e in sp_doc.get(map_, [])
                                     if str(e.get("name")) not in bosses}))  # fmt: skip
     boss_until = -1e9
+    reach_grid: Any = None  # dungeon@9.12: the server's walkability for --reach-check
+    if getattr(a, "reach_check", False):
+        from poring_dataset import walkable as wk_r
+
+        try:
+            reach_grid = wk_r.server_grid(map_)
+        except LookupError as e:  # MapSourceError: walkability unknown -> refuse, never guess
+            raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}") from None
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
@@ -2242,6 +2265,30 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             c_ = nearest_rel(project(here_, BOX_GRID), BOX_GRID, foot)
             return (here_[0] + c_[0], here_[1] + c_[1])
 
+        reach_cache: dict[tuple[Cell, Cell], bool] = {}
+        reach_logged: dict[Cell, float] = {}
+
+        def unreachable(here_: Cell | None, foot: Sequence[float]) -> bool:
+            """dungeon@9.12 (--reach-check): the box's cell is one the server would not walk us to
+            on one click (reach_ok); False when unknown (no position, no grid)."""
+            if reach_grid is None or here_ is None:
+                return False
+            sp_ = box_spot(here_, foot)
+            if sp_ is None:
+                return False
+            key_ = (here_, sp_)
+            if key_ not in reach_cache:
+                if len(reach_cache) > 4000:
+                    reach_cache.clear()
+                reach_cache[key_] = reach_ok(reach_grid, here_, sp_)
+                if not reach_cache[key_]:
+                    counts["reach_skip"] += 1
+                    now_ = time.monotonic()
+                    if now_ - reach_logged.get(sp_, -1e9) >= 30.0:  # rate-limited record
+                        reach_logged[sp_] = now_
+                        ev({"kind": "reach_skip", "here": list(here_), "spot": list(sp_)})
+            return not reach_cache[key_]
+
         def box_fight_done() -> None:
             """dungeon@5 (decision 4): a box-started fight that ended with no strike is a miss."""
             if box_spots is not None and box_fight.get("spot") is not None \
@@ -2506,7 +2553,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                            boxes_after_ms=round((meta["t_done"] - t_set) * 1e3))  # fmt: skip
             if getattr(a, "engage_screen", False):  # dungeon@9.7: the nearest box on screen
                 near_b = (boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_TARGET_WAIT_S + 1.0,
-                                     lambda f: not in_view(f[0], f[1] - BODY_UP))
+                                     lambda f: (not in_view(f[0], f[1] - BODY_UP)
+                                                or unreachable(here, f)))
                           if fresh else None)  # fmt: skip
             else:
                 near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
@@ -3309,8 +3357,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
                     if getattr(a, "engage_screen", False):  # dungeon@9.7: any box on the screen
 
-                        def skip_s(foot: Sequence[float]) -> bool:
-                            return skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)
+                        def skip_s(foot: Sequence[float], here_s: Cell | None = here_b) -> bool:
+                            return (skip_b(foot) or not in_view(foot[0], foot[1] - BODY_UP)
+                                    or unreachable(here_s, foot))  # fmt: skip
 
                         near_ = boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_FRESH_S, skip_s)
                     else:
@@ -4013,6 +4062,15 @@ def main() -> int:
         help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
         "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
         "fight at most); no ring scan during that walk",
+    )
+    t.add_argument(
+        "--reach-check",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.12 (rogue-xmas02.md 4AE; OFF by default; with --engage-screen): a box "
+        "whose cell the server would not walk us to on one click (the server's map cache: a walk "
+        "<= 17 steps, <= 14 unless the straight line is clear) is passed over by the trigger and "
+        "the box path",
     )
     t.add_argument(
         "--skip-own-cells",

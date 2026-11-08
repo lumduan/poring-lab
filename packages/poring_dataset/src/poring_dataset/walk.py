@@ -133,3 +133,45 @@ def straight_path(grid: Grid, x0: int, y0: int, x1: int, y1: int) -> list[tuple[
             return None
         cells.append((x, y))
     return cells
+
+
+# What the lab server accepts for ONE walk click (dungeon@9.12, rogue-xmas02.md 4AE). Two facts, no
+# code: `max_walk_path: 17` is read from the running server's conf/battle/client.conf:42
+# (2026-11-09); a walk whose straight line is blocked is refused beyond 14 steps -- MEASURED on the
+# lab's own packets: of 2,933 move requests made standing (pilots p13r-p21, xmas_dun02), the rule
+# below called all 2,607 answered ones accepted and 325 of the 326 the server never answered refused
+# (no path 141, longer than 17: 132, a blocked line and longer than 14: 52).
+MAX_CLICK_WALK = 17
+MAX_DETOUR_WALK = 14
+
+
+def line_clear(grid: Grid, x0: int, y0: int, x1: int, y1: int) -> bool:
+    """Every cell of the textbook Bresenham line (Bresenham, 1965) from (x0, y0) to (x1, y1), both
+    ends included, is passable."""
+    dx, dy = abs(x1 - x0), abs(y1 - y0)
+    sx, sy = (1 if x1 > x0 else -1), (1 if y1 > y0 else -1)
+    err = dx - dy
+    x, y = x0, y0
+    while True:
+        if grid.nopass(x, y):
+            return False
+        if (x, y) == (x1, y1):
+            return True
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+
+
+def click_walk_ok(grid: Grid, x0: int, y0: int, x1: int, y1: int, *,
+                  max_walk: int = MAX_CLICK_WALK,
+                  max_detour: int = MAX_DETOUR_WALK) -> bool:  # fmt: skip
+    """Would the server walk us from (x0, y0) to (x1, y1) on ONE click: a walk exists, it is at most
+    ``max_walk`` steps, and at most ``max_detour`` unless the straight line is clear."""
+    path = walk_path(grid, x0, y0, x1, y1)
+    if path is None or len(path) > max_walk:
+        return False
+    return len(path) <= max_detour or line_clear(grid, x0, y0, x1, y1)
