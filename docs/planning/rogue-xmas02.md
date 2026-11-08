@@ -1220,7 +1220,7 @@ time; a change that passes its bars joins the base, else it is switched off):**
   `--far-approach` are OFF; the base stays p16's flags (`--engage-screen` + the boss guard).
 - **The one change against the base:** `--box-every 0.25` (dungeon@9.11, a39f4c17; BOX_FRESH_S
   unchanged at 1.5 s).
-- **The run:** the base command with `--label xmas02-p22 --box-every 0.25`, 23 min (it must end
+- **The run:** the base command with `--label xmas02-p22 --box-every 0.25`, 22 min (it must end
   before the MVP window opens at 01:32, Amendment K).
 - **Bars:** **S2'** kills per monster seen >= 0.85 (the base: p16 0.80, p21 0.804); **E1** kills
   >= 80 / h; **D1** the GPU call p95 <= 35 ms at 4x the rate (p21 21.9); **R1** own-body class D
@@ -2235,6 +2235,40 @@ had ended -- or not at all (one cell ahead). This client does not let a click in
 So "stop at once" cannot be done by a click; the box path already waits for the walk's end and a
 still scene (p16: settle p50 0.51 s + still p50 0.50 s an engagement). The lever left is the leg
 length (`WALK_AHEAD` 7; p16's legs median 6 cells): queued as a later pilot.
+
+**Pilot p21 (4AC; 00:32:54-00:58:40, 25 min; the MVP killed 00:32:08; immunity ON at 00:58:52,
+judged "You are now immune to attacks."; the base + `--far-single --far-approach`). VERDICT: F1
+FAILS (36.4 %, bar <= 35 %); E1, R1, D1, F3, E3, deaths PASS. By 4AC's rule both flags are OFF
+(studied below).**
+
+| | p16 (base) | p19 / p20 (`--far-single`) | **p21 (+ `--far-approach`)** | bar |
+|---|---|---|---|---|
+| F1 far class-D share | 54 % (57 / 106) | 50 % / 51 % | **36.4 % (24 / 66)** | <= 35 %: FAIL |
+| class D at 2-6 / 7-8 / 9+ cells | 5 / 41, 19 / 30, 33 / 35 | 4 / 24, 6 / 20, 26 / 28; 6 / 18, 2 / 14, 18 / 19 | **15 / 45, 7 / 18, 2 / 3** | reported |
+| time held on class-D strikes: total / median | 494.8 / 7.25 s | | **170.9 / 6.49 s** (26 strikes) | reported |
+| E1 kills | 44 (87.9 / h) | 122.4 / 85.7 per h | **45 (108.0 / h)** | >= 80 / h: PASS |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.911; 22.4 / 0.938; 15.2 | **0.804; 22.4** (56 seen) | reported |
+| R1 own-body class D | 2 | 0 / 0 | **0** (3 own-body strikes) | <= 1: PASS |
+| D1 p50 / p95; GPU share | 20.6 ms | 20.6 / 20.5 ms | **20.6 / 21.9 ms; 100 %** (1,568 calls) | PASS |
+| F3 / E3 / deaths | | | **0 / pass (NPC 0), 1 Fly Wing (`pos_unread`, not a dead end), 0 stalls / 0** | PASS |
+
+- **The approaches (31):** 25 sent a walk request (packets, -0.5..+0.2 s of the event; the other 6
+  had none in that window). The box path's next look came 1.9-4.6 s later; its target was then 3-6
+  cells away 17 times, 8-12 cells 11 times, none 3 times. The 9+ cell strikes fell from 35 (p16) /
+  28 / 19 to **3**, and the time held on class-D strikes fell 65 % against p16's (494.8 -> 170.9 s);
+  but class D at 2-6 cells rose to 15 of 45 (p19 4 / 24, p20 6 / 18), 7 of 19 within 6 s after an
+  approach and 15 of 44 otherwise.
+- **What a class-D strike is (packets, all 26):** every one had a SWORD verdict on its hover (the
+  box path's own check), and one click (two had 4, at 0 cells). 24 of 26 sent a walk request and
+  NO attack request; 12 walked to the monster's cell (+-1), 10 elsewhere (1-3 cells off the click
+  cell), 2 sent nothing. 21 ended at the lock's bound, 5 on an arrow. By species (the monster
+  nearest the clicked cell): Christmas Cookie 4 of 9, Cruiser 9 of 22, Myst Case 8 of 34 (Myst Cases
+  stand; the others walk). So the click was taken as a walk toward the monster, and the attack never
+  followed -- more often on walking monsters.
+- **Items (snatched):** Zargon 11, Scell 4, Candy 3, Piece of Cake 3, Red Herb 1, Well-baked Cookie
+  1, Level 3 Heal 1.
+- **The run procedure:** p21's runner (run_pilot v3) passed its own checks (server listening 00:32:53,
+  f32, floor 2450); its server step ended by its time box (rc 124, by design) at 01:00:23.
 
 ### 4Z. Pilot p18 pre-registration: --far-single, a far strike clicks once and waits for the walk-up (written BEFORE its run, 2026-11-08 22:47 ICT)
 
