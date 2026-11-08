@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../scripts/media_rec.py, ../../services/media-probe/mediarec.sh, ../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
-next_action: "Batt: stage 3 -- the ADR-0010 amendment (lossy recordings: vpp-hevc444-10-q20 in place of PNG), on 9.3's PASS. Until then --also-png stays required."
+next_action: "STAGE 3 DECIDED by Batt 2026-11-09 ~06:3x (\"use the GPU instead\"): the ADR-0010 amendment + video-only recording (vpp-hevc444-10-q20) and the readers; section 9.4."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -1230,6 +1230,14 @@ committed): VERDICT PASS -- every quality and stage-2 bar, nothing unmeasured, d
 
 - **What it means (9.1's rule 2):** the evidence for Batt's stage 3 -- the ADR-0010 amendment
   (recordings no longer lossless) -- not an adoption. Lossy-only recordings stay refused until then.
+
+### 9.4 Stage 3: DECIDED (Batt, 2026-11-09 ~06:3x ICT)
+
+Batt's answer to the 05:37 report: "ใช้ การ์ดจอแทนได้เลย" -- use the GPU video in place of PNG.
+On 9.3's PASS, recordings on the RDP path become `vpp-hevc444-10-q20` (lossy, 10-bit 4:4:4 HEVC,
+CQP 20, all-intra) without the PNG twin. The ADR-0010 amendment records the decision; the
+recorder's default, the video-only path and the session readers follow (built in a worktree,
+merged after review). Until that merge, recordings stay as they are.
 
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single

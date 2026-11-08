@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 05:0x: --reach-check (9.12b) JOINED THE BASE (p27: every bar; stuck 1.3 s vs 110-209 s). Next: the far mechanism on this base (draft 4AJ: --far-single --far-approach); --kill-gap with the quiet-kill 3-s block lifted; the MVP schedule stays (Amendment K) unless Batt disables its spawn."
+next_action: "Amendment L (2026-11-09 06:3x): p28 = the far mechanism on the new base (4AJ); the explore / map-knowledge search mode (4AL); a Stormy Knight sight-flee (mvp_watch pattern); the schedule stays the protection until its proof."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1391,6 +1391,37 @@ time; a change that passes its bars joins the base, else it is switched off):**
   beside p23 / p25: reach_skip events, class D by distance, the time held on class D, kills per
   monster seen, the after-kill time.
 - **Decisions:** every bar passes -> `--reach-check` (9.12b) joins the base; otherwise off.
+
+### 4AK. Amendment L (2026-11-09 ~06:3x ICT): Batt's answers to the 05:37 report, and the new route work
+
+Batt's answers (quoted, then in English):
+1. Recording: "ใช้ การ์ดจอแทนได้เลย" -- use the GPU video in place of PNG. Stage 3 of
+   gpu-recording.md is DECIDED (the ADR-0010 amendment; built and recorded there).
+2. The MVP spawn: "ไม่ปิด เทรน bot ให้รู้จักบอสด้วย เห็นในหน้าจอ วิงหนีเลย" -- do NOT disable it;
+   train the bot to know the boss: seen on the screen -> Fly Wing away at once. A sight-based
+   recognizer for the Stormy Knight (and its summons) follows the Orc Lord's (scripts/mvp_watch.py,
+   orclord-recognizer.md). Caution carried over: the Orc Lord's sight-flee was NOT adopted on
+   10-26 (it hit within ~1 s of entering view). So Amendment K's schedule (@mobsearch +
+   @killmonster2) stays the protection until a Stormy Knight flee proof passes.
+3. The next pilot: "เดินเข้าใกล้ก่อนตี" -- walk in close before striking: the far mechanism
+   (`--far-single --far-approach`) on the new base FIRST (4AJ). `--kill-gap` with the 3-s block
+   lifted comes later.
+4. `--skip-own-cells`: "ให้คุณตัดสินใจเองข้อนี้" -- my decision: it stays OFF. In p23, 5 of its 7
+   own-sprite strikes were HITS (monsters right N / S of her), and own-sprite misses are 0-2 a run
+   (p23-p27); skipping those points would lose more hits than it saves.
+
+The new request (Batt, quoted then in English): "อยากให้ลองเพิ่ม การเดินสุ่มใน map นี้ได้เลย
+ไม่จำเป็นต้องเดินชิดขอบ ... อยากพยามเดินไปทางใหม่ๆ โดยดูพิกัดบน มินิ map และบันทึกไว้ด้วย ว่าจุดไหน
+เดินได้ เดินไม่ได้ เอาข้อมูล map มาจาก data ก่อนก็ได้ พยายามหาเส้นทางที่สามารถ kill ต่อชั่วโมงได้เยอะสุด"
+-- add random / new-way walking on this map (not only the edge loop), by the minimap's coordinates;
+record where she could and could not walk (seeding from the map data); find the route with the
+most kills per hour. Plan (section 4AL, written before its pilots):
+- a persistent map-knowledge file per map (our own pixel observations only: positions read from
+  the minimap, walk clicks that did / did not move us, boxes seen, fights, landed strikes,
+  inferred kills, time spent), seeded from the server map cache's walkable cells;
+- a search mode that walks to NEW or productive regions (explore + exploit over map regions),
+  every leg routed on the server grid and checked with `click_walk_ok` (the walk-refusal rule);
+- route decisions use only what the bot itself saw (rule 1); packets score the runs offline.
 
 ## 5. Results
 
