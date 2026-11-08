@@ -2597,3 +2597,13 @@ K1, K3, R1, D1, E3, deaths PASS; E1 FAILS (74.4 / h). `--kill-gap` stays OFF (4A
   `--kill-gap`'s alone.
 - **Items (snatched):** Zargon 10, Piece of Cake 5, Red Herb 3, Scell 2, Manacles 2, Candy Cane 1,
   Well-baked Cookie 1, Pearl 1.
+
+**Pilot p27 attempt 1 (04:05:44-04:05:53): REFUSED by the runner's own setup** -- "weight [1202,
+2430] at or over 0.48 for the rogue: the setup never drops its Etc tab (a person first)". Nothing
+was typed or clicked by the run. The MVP had been killed at 04:05:01 ("1[dead] Stormy Knight");
+immunity was OFF from 04:05:24 to 04:16:17 with her standing at 7,21 (HP 5070 / 5070 at 04:16,
+full: no harm). The bag was cleared (`clear-bag`, Batt's standing rule: worn gear, 10 potions,
+10 Fly Wings; 04:16:40-04:18:52; weight 1202 -> 520; etc 6, use 8, eqp 1 dropped). The bag had last
+been cleared after p17 (520 at 22:47): ~76 weight a run over p18-p26. The detect server of attempt
+1 served idle until its time box (04:33:10); attempt 2 starts after it, 25 min, ending before the
+MVP's window (05:05).
