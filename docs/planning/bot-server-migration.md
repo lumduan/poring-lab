@@ -258,6 +258,8 @@ as Batt prefers:
     the numpy float conversion on bot-server's slower CPU and the 11 MB copy to the card without
     Resizable BAR. A uint8 input with the conversion on the GPU (OpenVINO's pre-processing) is
     the next speed-up.
+    ➡️ MEASURED 2026-11-08 (section 16): the CPU conversion is 17-18 ms a frame, the copy
+    3.5 ms. So the conversion, not the missing Resizable BAR, is the slow part.
 - **For comparison, ubuntu-docker's RTX path:** 49-52 ms a call, but paused half the time while
   R3 measures (p9: 911 GPU / 905 CPU detections).
 
@@ -287,3 +289,108 @@ as Batt prefers:
   - validation less often, or at the end;
   - then BF16 autocast, which needs no GradScaler and so no float64.
   - A like-for-like comparison with the 5060 Ti was not run: Batt chose Intel first.
+
+## 16. Resizable BAR: what the 256 MiB BAR costs (Batt's question, 2026-11-08; measured 10:38-10:39 ICT)
+- **Why it is off (the kernel log, 2026-11-07 boot):**
+  - i915 tried to resize BAR2 to 8 GiB: `Failed to resize BAR2 to 8192M (-ENOSPC)`, then
+    `Using a reduced BAR size of 256MiB`;
+  - the BIOS's bridge window above 4 GiB has no room for an 8 GiB BAR.
+  - The 256 MiB BAR bounds what the CPU can map of the card's memory. Copies issued through the
+    compute runtime use the card's own DMA engines instead.
+- **Measured:**
+  - by `python -m poring_vision.bar_bench` (new, committed), in the Intel vision worker via one
+    guarded `execdev:` step;
+  - the numbers are in `data/train/eval/bar-bench/20261108-bar.json`;
+  - medians of 20 timed reps after 3 warmups, each region ending with the accelerator's
+    synchronize.
+
+  | | result |
+  |---|---|
+  | host -> card, pinned, 11 / 45 / 512 MB | 4.78 / 4.98 / 5.08 GB/s (2.30 / 9.03 / 100.8 ms) |
+  | card -> host, pinned, 512 MB | 5.68 GB/s |
+  | host -> card, pageable (a plain numpy / torch buffer), 11 / 512 MB | 3.23 / 3.59 GB/s |
+  | the card's own memory (256 MB copy, read + write) | 135 GB/s |
+  | matmul 4096 FP32 / FP16 / BF16 | 3.66 / 18.66 / 19.00 TFLOPS |
+  | ONE detector frame (736 x 1280): CPU float conversion (`detect_server.to_input`) | **17.3 ms** (17.8 in the OpenVINO run) |
+  | its float32 copy to the card (11.3 MB) / a uint8 copy (2.8 MB) | **3.48** / 1.58 ms |
+  | a uint8 copy + the conversion ON the card | 3.85 ms |
+  | OpenVINO GPU `infer` on a prepared input (copy in + forward + copy out), xmas02 | 13.2 ms |
+  | OpenVINO conversion + infer | 30.5 ms (p90 34.2) |
+
+- **What it means:**
+  - **The link works normally.**
+    - Pinned copies reach 65-72 % of PCIe Gen3 x8's raw 7.9 GB/s, a usual figure for that
+      link. Compute and VRAM bandwidth are healthy.
+    - A larger BAR would let the CPU write into the card's memory directly. It would not change
+      this DMA path.
+  - **Training: the BAR costs under 1 %.**
+    - An iteration moves ~45 MB of frames (batch 4): ~9 ms pinned, ~14 ms pageable, out of
+      1.6-1.7 s.
+    - The time goes elsewhere: the PNG decode and augmentation on the 1.7 GHz CPU (workers 0),
+      and validation's NMS (section 15; section 17 measures it).
+  - **Detection: the BAR costs at most the copy, 3.5 ms of the ~60 ms call.**
+    - The CPU's float conversion (17-18 ms) is 5 x the copy.
+    - Sending the uint8 frame and converting it on the card is 3.85 ms instead of
+      17.3 + 3.5 = 20.8 ms: **~17 ms saved a frame, without any BIOS change**. This is OpenVINO's
+      pre-processing (section 14's "next speed-up"). It needs its own parity check against the
+      CPU detector before it goes live.
+- **Decision 7 (a `pci=realloc` trial for Resizable BAR):**
+  - Recommended NOT to do it. The most it can win is part of a 3.5-ms copy.
+  - It needs a bootloader change and a reboot (which wipes /dev/shm's run-time inputs), and may
+    still fail on this BIOS's window.
+  - Batt decides.
+
+
+## 17. Training speed on the Arc: plan (written BEFORE the runs, 2026-11-08 10:42 ICT)
+- **Why:** section 15's smoke did 1.6-1.7 s an iteration (batch 4). Section 9's bare forward +
+  backward is 513 ms. Section 16 shows the copies cost ~10 ms, so the gap is the CPU: with
+  `--workers 0` every PNG decode (4 a mosaic sample, 16 an iteration) and the augmentation run
+  in the training loop, on 8 x 1.7 GHz cores.
+- **Arms, one at a time in the Intel worker (guarded `execdev:`):**
+  - the same real cache and settings as section 15: `xmas02-o3h-t-20261106`, `--smoke`, batch 4,
+    imgsz 1280, FP32;
+  - `--workers 0`, then 4, then 8. Add 2 or 6 only if 4 and 8 leave the question open;
+  - each run: `--mid-ckpt --trace ... --die-after-batches 60`, so it ends after 60 batches and
+    skips validation.
+- **Measures:**
+  - seconds per iteration over batches 11-60 (the median of the gaps between batch records,
+    stamped on the host as each line arrives; the trace is line-buffered);
+  - the worker's peak memory (`docker stats`, every 5 s; its cap is 6 GB, mem == memswap).
+- **Also:**
+  - **validation with a TRAINED model:** `--eval` of the deployed xmas02 weights on the smoke
+    val split, timed. This tells whether section 15's 16 minutes was an early-model artifact
+    (NMS on thousands of candidates);
+  - **BF16:** YOLO11n forward + backward, batch 4, 736 x 1280, FP32 vs BF16 autocast (section 9:
+    FP16 AMP gave 515 vs 513 ms).
+- **Decision rule:**
+  - the fastest `--workers` that stays under 5 GB peak becomes the default for Arc runs;
+  - BF16 goes into the trainer only if it is >= 15 % faster per iteration;
+  - the validation policy is proposed to Batt, not changed: it decides which checkpoint is
+    "best".
+
+### 17a. Results (2026-11-08 10:43-10:56 ICT)
+| arm | result |
+|---|---|
+| `--workers 0` | **1.86 s an iteration** (median over batches 11-60; mean 1.89). The worker held 5.63 of its 6 GB |
+| `--workers 4` | **OOM-killed** at the worker's 6 GB cap after 3 batches. The kernel: the trainer's own process had 5.17 GB anonymous RSS |
+| `--workers 8` | **OOM-killed** before its first batch |
+| BF16 autocast, YOLO11n forward + backward, batch 4, 736 x 1280 | **591 ms vs FP32 499 ms: 0.84 x (slower)** |
+| validation of the TRAINED xmas02 weights (the val split, 1,106 frames) | **2 min 02 s**: 23.5 ms inference + 24.7 ms post-processing a frame; mAP50 0.993 |
+| 3 GB allocated and written on the card | +20 MiB on the host: **the card's memory is NOT mirrored in host RAM** (so not a Resizable BAR cost) |
+| a bare YOLO step's host memory | 0.88 -> 1.91 GB (the XPU runtime). The rest of the trainer's ~5.2 GB is its data pipeline (mosaic at 1280) |
+
+- **Decisions by the rule:**
+  - BF16 stays out (slower);
+  - `--workers` stays 0: no worker count fits under 6 GB;
+  - the validation policy needs no change: section 15's 16 minutes was a barely trained model's
+    NMS. A trained model validates 1,106 frames in 2 minutes.
+- **The lever is the worker's memory cap, Batt's call.**
+  - `compose.vision-worker.yaml`'s `mem_limit: 6g` (mem == memswap) dates from VM 103, where RAM
+    was shared with live capture.
+  - bot-server has 15 GiB, dedicated (~3 GB used by the rest of the stack). A cap of ~11 GB
+    would leave room for 4 data-loader workers.
+  - The forward + backward alone is ~0.5 s an iteration (section 9), so up to ~3 x faster is
+    the ceiling. That needs a re-run of the w4 / w8 arms after the change.
+  - Not changed: CLAUDE.md rule 5, "raise the limit consciously".
+- The tool is `python -m poring_vision.bar_bench --only-yolo --yolo ... --mem-probe GB`; its
+  results are in `data/train/eval/speed/`.
