@@ -905,6 +905,55 @@ Batt's words, translated (before 15:43:36, the turn's first `date`):
 5. **GPU-encoded recordings:** "interested, and I think it is the faster way too" -> a design
    (docs/planning/gpu-recording.md, a subagent) with a bench pre-registered before its numbers.
 
+### 4T. Pilot p13 pre-registration: the fast GPU detector (written BEFORE its run, 2026-11-08 16:2x ICT)
+
+- **Why:** Batt 2026-11-08 (Amendment G item 2): "do 3 ... make it fast".
+- **The one change against p12: the detector path, faster, with the same boxes**
+  (bot-server-migration.md 19):
+  - the Arc's clock floor at RP0 (2450 MHz) while the run's detect server serves;
+  - the conversion on the card (`--ov-preproc gpu`, 16a's parity), FP32 (fast16 failed its
+    parity on v1, 58 / 59);
+  - the host's copy-free call and faster decode (byte- and box-identical, tested).
+  - p12's live detector: 1,811 calls, p50 64.7 ms (the numpy conversion, the card at ~800 MHz);
+    its box path: the boxes 89 ms and the sword verdict 319 ms after the grab (p50, 19 struck).
+    So the detector is ~1/4 of the grab -> verdict time; a moving target's miss (p12's 3 far box
+    D) can shrink only by that part.
+- **Kept from p12:** `--self-recheck` and `--still-strike` ON (Amendment G), MVP tombstones off,
+  the weight limit 48 %, the same map, route, seed and flags.
+- **Different, not a change of the bot:** the bag was cleared before it (Amendment G item 3;
+  `clear-bag`), so the weight starts low; below 50 % weight changes nothing in the fight.
+- **The run:**
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p13 --box-strike --box-now \
+          --self-recheck --still-strike
+
+  - Before it: `clear-bag`, immunity OFF judged ("Returned to normal state."), a judged
+    screenshot, the floor read back (`gt_min_freq_mhz` 2450).
+  - Beside it: the OpenVINO detect server, 2400 s, `--ov-preproc gpu --ov-precision f32`; its
+    start line must show `gpu_clock.min` 2450.
+  - After it: immunity ON, judged.
+- **Bars:**
+  - **D1 (the change):** the live detector's call p50 <= 35 ms (`detections.jsonl`, path gpu;
+    p12 64.7), and >= 99 % of the box watcher's detections by the GPU.
+  - **D2 (its mechanism):** the box path's boxes after the grab, p50 <= 65 ms (p12 89).
+  - **E1:** kills (packets) >= 40 / h (p12 58.0).
+  - **R1:** own-body class-D strikes <= 1. **F3:** far strikes clicked while walking <= 2.
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h. **Deaths:** 0.
+  - Reported against p12: far class-D (p12 6, F1's bar 3), class D by path, the sword verdict
+    after the grab (p50), still-waits, kills by species, items per hour, the server's stats lines.
+- **Scorers:** `dungeon_judge.py row`, `lock_study.py`, and the detections / box_target summary
+  as computed for p12 above (path counts, `ms` p50 / p95; `boxes_after_ms`,
+  `verdict_from_grab_ms` p50).
+- **Decisions:**
+  - D1 + D2 pass and no regression bar fails: the fast path is the live detector on bot-server
+    (the floor survives a reboot only once Batt installs `scripts/host/poring-lab-gpu-clock.service`);
+  - D1 fails: the run's load hides the gain; the server's stats lines and the host's call are
+    profiled live before it is reused;
+  - a regression bar fails: studied (the detector should change no decision), the fast path kept
+    out of the next run until then.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

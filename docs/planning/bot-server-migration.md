@@ -545,3 +545,7 @@ as Batt prefers:
     -> 3.7 / 4.2 ms (3 / 12 classes).
   - So `final` = fast16's flags on the final code, the same harness and the same bars, BEFORE
     p13. p13 runs on it.
+- ➡️ **Amendment 2 (2026-11-08 16:2x ICT, after fast16's first map, BEFORE `final` runs):** fast16
+  FAILED P1 on prt_fild08 (v1: 58 / 59 matched, 0.983 < 0.999). By the decision rule p13 runs
+  fast32, so `final` runs fast32's flags (the conversion on the card, FP32, the floor at RP0) on
+  the final code; same harness, same bars.
