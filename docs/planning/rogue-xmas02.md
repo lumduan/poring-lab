@@ -1423,6 +1423,28 @@ most kills per hour. Plan (section 4AL, written before its pilots):
   every leg routed on the server grid and checked with `click_walk_ok` (the walk-refusal rule);
 - route decisions use only what the bot itself saw (rule 1); packets score the runs offline.
 
+### 4AJ. Pilot p28 pre-registration: the far mechanism again (`--far-single --far-approach`), on the base with `--reach-check` (written BEFORE its run, 2026-11-09 06:37 ICT)
+
+- **Why (p16-p22's box strikes on REACHABLE targets only -- `reach_ok` from our packet cell + the
+  strike's rel; section 5):** class D at 2-6 cells is low everywhere (p16 4 / 38, p17 5 / 26, p19
+  4 / 23, p20 3 / 15, p21 8 / 38, p22 3 / 17). At 7-8 cells it is high WITHOUT `--far-single` (p16
+  17 / 28, p17 12 / 24, p22 5 / 16) and low WITH it (p19 2 / 16, p20 0 / 12, p21 3 / 13). At 9+
+  cells it is ~90 % without an approach (p16 18 / 20, p17 17 / 22, p19 15 / 17, p20 4 / 5, p22
+  10 / 11); p21's approach left 1 such strike (not D). p21 failed F1 by 1.4 points while ~half of
+  its far misses were targets the server would not walk us to (12 of 26 class D began with an
+  ignored request) -- which `--reach-check` now removes (adopted after p27: U2 0). On the new base p27 still missed 13
+  of 16 strikes at 9+ cells and 8 of 23 at 7-8 (F1 35.6 %). Batt chose this pilot first (Amendment L 3).
+- **The one change against the base (p16's flags + `--reach-check` 9.12b, Amendment L):** the far mechanism of 4AC as ONE change,
+  `--far-single --far-approach` (dungeon@9.8 + 9.10).
+- **The run:** the base command with `--label xmas02-p28 --far-single --far-approach`, 25 min.
+- **Bars:** **F1** far class-D share <= 25 % (p21 36.4 %, of which 12 of 24 far D began ignored);
+  **E1** kills >= 80 / h; **U1** stuck time <= 30 s (the base's own bar holds); **D1** the GPU call
+  p95 <= 35 ms; **R1** own-body class D <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls
+  <= 39 / h; **deaths** 0. Reported: class D by distance, the approaches, the time held on class D,
+  kills per monster seen, reach_skip events.
+- **Decisions:** F1 + E1 pass with no regression bar failing -> both flags join the base; otherwise
+  off (studied).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
