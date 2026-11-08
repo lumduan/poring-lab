@@ -103,7 +103,7 @@ To switch to the Thai-data server and back (stop needs no guard; start does):
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:8888` | rathena | web-server (`RATHENA_WEB_SERVER=true`): the client's account / character UI settings and emblems over HTTP, at its `AssistAddr` (2026-11-05). Its load routes are **unauthenticated** upstream | LAN |
 | `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
-| `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
+| `HOST_LAN_IP:8000` | backend | `/health`, `/hardware` (the host's CPU/RAM/GPU/temps/power; this listener only), `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
 | — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose networks only (`default` + the internal `agent` network) |
 | — (`:3306`) | db | MariaDB | compose network only |
@@ -156,8 +156,20 @@ Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-
   - Turning it on first releases what the tab holds. Off restores instant takeover, and every
     page load starts with it off.
   - An amber WATCH ONLY chip shows on the screen and in the header.
-- **Top bar (every page):** Console / Settings / Label QA, and the **mode badge**, always visible:
-  **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no status.
+- **Top bar (every page):** Console / Settings / Label QA / Hardware, and the **mode badge**, always
+  visible: **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no
+  status.
+- **Hardware** (`/hardware`, Batt 2026-11-08): the lab host's CPU (total and per core, MHz, load),
+  memory, `/dev/shm` against rule 7's 4 GB, root-disk free space, the GPU (busy from RC6 residency,
+  temperature, power against its limit, clocks, fan), every hwmon temperature, and power (the whole
+  server from the iLO power meter, the GPU, the CPU package), with 10-minute sparklines.
+  - The backend samples plain `/proc` + `/sys` files every 2 s in a worker thread
+    (`poring_backend/hardware.py`) and serves `GET /hardware` on `:8000` only; `:8001`, the agent's
+    listener, answers 404 (counted in `/health` `dropped_messages.hardware_http`).
+  - A sensor it cannot read shows `n/a:` and the reason (e.g. the CPU package's RAPL counter is
+    root only on the host and masked in containers; i915 has no unprivileged VRAM figure). The
+    host's `/dev/shm` is not mounted in the backend, so it shows `n/a` there unless
+    `HARDWARE_SHM_PATH` names a path on it. A sample older than 6 s is marked STALE.
 - **Route preview** (2026-10-08): the LIVE, world-anchored route of every walk run: a green line
   from the character's feet with square corner nodes, a box on the next click and arrows
   converging on the goal (the RA2 look), re-projected about 20 times a second and matched to the
