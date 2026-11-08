@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 1 (17:14-17:52): no candidate (hevc444-q20 failed S2, CPU 21.9 ms). Round 2 (18:53-19:47): the GPU colour conversion FIXED (round 1 wrote BT.601 limited); vpp-hevc444-q20 passes S2 (8.7 ms) and every bar but Q3 SSIM on xmas_dun02 (0.978 vs 0.9915); still no candidate (section 8.2). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 1 (17:14-17:52): no candidate (hevc444-q20 failed S2, CPU 21.9 ms). Round 2 (18:53-19:47): the GPU colour conversion FIXED (round 1 wrote BT.601 limited); vpp-hevc444-q20 passes S2 (8.7 ms) and every bar but Q3 SSIM on xmas_dun02 (0.978 vs 0.9915); still no candidate (section 8.2). Diagnosis 8.3 (no GPU): not a filter -- the GPU 4:4:4 conversion writes neutral chroma one level low, black decodes (0, 1, 0), SSIM's dark windows magnify it. Round 3 PRE-REGISTERED (amendment 6.7, 2026-11-08 20:32:43 ICT; NOT RUN): 4 one-change GPU paths (scaling mode fast / default, BGRX upload, 10-bit 4:4:4). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py]
-next_action: "Batt: (a) round 3 -- the VPP scaling mode / no scale step, same bars, amendment first; or (b) a decision on Q3 for vpp-hevc444-q20 (misses SSIM mean by 0.014, min by 0.001); then stage 2 (one side-by-side recording, section 9)."
+related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
+next_action: "The parent: run round 3 (section 7.3) when the Arc is free, then record 8.4. If it gives a candidate: stage 2 (one side-by-side recording, section 9), Batt's go."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -415,6 +415,121 @@ Considered and left out:
   the corrected name, written here first. A new evidence file, `help-scale_vaapi.txt`, saves the
   filter's own option list.
 
+### 6.7 AMENDMENT: round 3, a GPU 4:4:4 path that keeps neutral grey (PRE-REGISTERED 2026-11-08 20:32:43 ICT, before any round-3 run)
+**Batt, 2026-11-08 ~19:5x:** "try round 3": the GPU's scaling / processing step. Written after
+round 2 (8.2) and its diagnosis (8.3), before round 3 runs. **The bars (6.4) and the decision rule
+(6.5) do not change.** This amendment adds arms, reported measures and two notes on method.
+
+**Why these arms (8.3):** round 2's GPU 4:4:4 conversion is NOT a filter. It writes the chroma of
+neutral pixels one level low (127 / 127). Black then decodes as (0, 1, 0), and SSIM's dark windows
+turn that into the Q3 failure on xmas_dun02. Its 4:2:0 path, with the same options, is nearly
+exact. So round 3 asks: which GPU 4:4:4 path writes neutral grey at mid?
+- Each new arm is round 2's path with ONE change. A test pins that
+  (`test_round_3_changes_one_thing_per_arm_and_keeps_its_references`).
+- Each change comes as a control (the conversion alone) AND a candidate (the same conversion
+  into `vpp-hevc444-q20`'s encoder options), so a control that keeps grey can still give this
+  round's candidate.
+
+**Round 3's arms** (`gpu_rec_bench.ROUNDS[3]`, in the container's order; `sample --round 3`):
+
+| arm | mode | what | why it is in |
+|---|---|---|---|
+| `ctl-yuv444` | control | as round 1 | V1 (validity); the swscale twin; the new measures' known-good case |
+| `gctl-vpp444` | GPU control | round 2's, unchanged (scale_vaapi mode `hq`, ffmpeg's default; BGRA uploaded; VUYX out), 10 frames a run | the defect's positive case: the neutral measure must see it |
+| `gctl-vpp444-fast` | GPU control | the same with `mode=fast` (scale_vaapi 256), 5 frames a run | the scaling mode may pick another VPP engine at 1:1, and engines round differently (8.3 row 3: the 4:2:0 output is nearly exact) |
+| `gctl-vpp444-dflt` | GPU control | the same with `mode=default` (0: the driver's choice), 5 frames a run | idem |
+| `gctl-vpp444-bgr0` | GPU control | the same, the frames uploaded as `bgr0` (BGRX: the same bytes, no alpha), 5 frames a run | an alpha-less input may take another conversion path |
+| `gctl-vpp444-10` | GPU control | the same, to 10-bit 4:4:4 (`xv30`, VA's Y410), 5 frames a run | at 10 bits, a one-code error is a quarter of an 8-bit level, and black stays black. swscale's own 10-bit full-range conversion writes neutral chroma at 511 and still decodes black exactly (the round-3 end-to-end test's stand-in) |
+| `hevc444-q20` | intra | round 1's, unchanged | the CPU-converted reference, so round 3 stands on its own |
+| `vpp-hevc444-q20` | vpp (candidate) | round 2's, unchanged | round 2's closest arm, the reference |
+| `vpp-hevc444-q20-fast` | vpp (candidate) | `vpp-hevc444-q20` with `mode=fast` | as its control |
+| `vpp-hevc444-q20-dflt` | vpp (candidate) | `vpp-hevc444-q20` with `mode=default` | as its control |
+| `vpp-hevc444-q20-bgr0` | vpp (candidate) | `vpp-hevc444-q20` uploading `bgr0` | as its control |
+| `vpp-hevc444-10-q20` | vpp (candidate) | the 10-bit conversion into HEVC Main 4:4:4 10 (`VAProfileHEVCMain444_10`, EncSliceLP and VLD in round 2's vainfo), the same `-qp 20` | as its control. HEVC's QP_Y is the same step RELATIVE to the sample range at any bit depth (the decoder adds QpBdOffset), so QP 20 is the like-for-like quantiser |
+| `gctl-vpp444-tv` | GPU control | round 2's, unchanged, LAST | 8.3 row 6's inference about the tv path's black, measured. The one arm the out cap may skip (below) |
+
+Considered and left out:
+- **"No scaling step":** in this ffmpeg, scale_vaapi is the only VA-API filter that converts
+  colour (`help-scale_vaapi.txt`; the other VA-API filters keep the input format). At 1:1 it
+  already does no scaling: round 2 WAS the conversion-only path. Its `mode` flag is the one
+  scaling knob left, so it is in.
+- **`nl_anamorphic`** (768): a non-linear scaler for aspect changes; meaningless at 1:1.
+- **Chroma siting** (`out_chroma_location`): RGB in, 4:4:4 out, so no chroma sample is placed
+  anywhere.
+- **VUYA instead of VUYX out:** the same 8-bit layout with an alpha byte. Nothing points to another
+  path, so it is left for a later round if every 8-bit variant keeps the fault.
+- **RGB straight into the encoder** (6.6's idea): which conversion the driver would apply, and how
+  ffmpeg would tag it, still cannot be known offline. Its output could not be told apart from a
+  fault.
+- **A lower QP, or the tv arm at another QP:** that tunes past the cause instead of removing it.
+  The tv path's precision loss (8.3 row 6) is its own.
+- **GPU 4:2:0:** nearly exact, but its floor fails Q2, Q5 and Q6 by itself (6.6).
+
+**How each arm is graded and reported:**
+- **The candidates and the reference:** 6.4's bars, unchanged, on every ref sample. 6.5's rule
+  applies, with round 3's intra / vpp arms as the candidate set.
+- **The controls are reported, never graded, and never void the run;** V1 stays the only validity
+  bar. Since round 3 they also report (`controls_summary`; `score` prints them):
+  - their own SSIM (mean, min). It was in round 2's score already, but nothing printed it;
+  - SSIM split into DARK 8 x 8 windows (the PNG's luma mean < 16, `DARK_LUMA`) and the rest, and
+    the dark share (`ssim_parts`);
+  - `black_keep`: the share of pure-black PNG pixels decoded exactly black (`black_counts`);
+  - `neutral` (4:4:4 only, `neutral_counts`), on the PNG's neutral pixels (B = G = R):
+    - U's and V's mean error from mid, in 8-bit levels;
+    - `uv_mid`: the share with both U and V within half an 8-bit level of mid (exactly 128 at 8
+      bits; 511..513 at 10);
+    - the same on black (`black_uv_mid`), and black's luma error from the range's black
+      (`black_y_mean_err`: 0 full, 16 limited);
+  - U and V against swscale's, beside Y.
+- **Every graded arm also reports** its SSIM split dark / rest and its `black_keep` (`ssim`
+  lines, `ssim_summary`). Reported, not a bar.
+- **What the controls mean, decided now:**
+  - `ctl-yuv444` must show `uv_mid` = 1.0 and `black_keep` = 1.0 on both samples. Otherwise the
+    new measures are not trusted (their numbers are still reported).
+  - `gctl-vpp444` is predicted (8.3) to show, on both samples:
+    - `uv_mid` <= 0.5, with U's and V's mean errors near -1;
+    - `black_keep` <= 0.5;
+    - on xmas_dun02, `ssim_dark` below `ssim_rest`.
+    If it does not, 8.3's inference is wrong and is recorded as such. The arms are graded either
+    way.
+  - A variant whose control has `uv_mid` >= 0.99 and `black_keep` >= 0.99 on both samples "keeps
+    neutral grey". Its candidate is EXPECTED to pass Q3 on xmas_dun02. That is an expectation for
+    the report, not a bar.
+  - `gctl-vpp444-tv` is predicted to show `black_y_mean_err` < 0 and `black_keep` near 1 (8.3
+    row 6: its black luma sits below 16 and is clipped).
+  - A candidate whose control keeps grey and that still fails Q3 points at the encoder side (8.3
+    row 7). It is recorded so; nothing is re-run for it.
+
+**Two notes on method:**
+1. **The new controls run on the first 5 frames of each run (`frames` 5),** round 2's controls on
+   10. Why:
+   - a 4:4:4 raw run of 10 frames is 36.9 MB, and round 3 at 10 would write ~1.4 GB into the
+     container's /out against its 1.2 GB cap (`OUT_CAP`, rule 7). At 5 it writes ~1.12 GB;
+   - the 5 are the first 5 of `gctl-vpp444`'s 10, so every control sees the same frames;
+   - `gctl-vpp444-tv` runs last, because the cap skips whatever comes after it is reached. Only a
+     10-bit stream far larger than its 8-bit twin would reach it.
+2. **The BGRX arm's timing input is the same raw bytes DECLARED `bgr0`** (`-pix_fmt bgr0`), not
+   converted. That is what the recorder would hand over: its grab is BGRA with the alpha unused.
+   - Every other arm's timing is round 2's, unchanged (BGRA in), and so are round 2's arms'
+     commands (`test_recbench_sh_round_3_uploads_as_declared_and_keeps_round_2s_commands`).
+   - S2 / S3 are still the median of 3 passes, round-robin.
+
+**The outcomes, decided now:**
+- V1 fails: the run is INVALID (6.5.1).
+- One or more candidates pass: the smallest is round 3's CANDIDATE (6.5.3). Adoption is still
+  stage 2, and Batt's.
+  - A 10-bit candidate would also need stage 4's readers to take 10-bit 4:4:4. PyAV decodes it in
+    software (the unit tests), and VA-API lists the decode profile.
+- No candidate: the report names the closest arm's failing bars, and what the controls say about
+  the cause.
+- 6.5.5's one exception still holds. An arm that fails to RUN because a name is wrong for this
+  ffmpeg (`mode=fast` / `mode=default`, `bgr0`, `xv30` for scale_vaapi or hwdownload, the 10-bit
+  `-profile:v rext`) may be re-run once with the corrected name, written here first.
+  - A format the driver refuses is not a name error. It is reported as failed, and nothing is
+    re-run.
+- **Expected, not bars:** the container ~6 min (13 arms; round 2's 9 took 3 min); /out ~1.12 GB;
+  `score` ~25 min of host CPU (6 graded arms with the detector; round 2's 3 took 12).
+
 ## 7. Phase 2: the exact commands (the parent runs them; nothing here ran in phase 1)
 Preconditions:
 - the GPU is free (no detect-server step, no training, no pilot on the Arc);
@@ -540,6 +655,78 @@ with its declaration.
 to the NAS `scratch-archive/<date>/recbench-r2/` if they are wanted, then
 `rm -rf /dev/shm/poring-lab-recbench`.
 
+### 7.3 Round 3: the exact commands (6.7; the parent runs them, nothing here ran in its phase 1)
+Preconditions: as in section 7 (the GPU free; no pilot needing the CPU during `score`).
+- `/dev/shm` needs room for ~1.6 GB: ~0.36 GB in, at most 1.2 GB out, ~1.12 GB expected.
+- Round 2's root must be gone (`sample` refuses an existing one).
+
+**Step 0, the shell.** Run it from the main checkout once `design/gpu-recording-r3` is merged.
+From the worktree `/dev/shm/poring-lab-wt/gpu-rec3` instead, link the main `.env` in first, as in
+section 7, and remove it in step 5.
+
+```bash
+TZ=Asia/Bangkok date; df -h /dev/shm
+docker image ls poring-lab/media-probe --format '{{.ID}} {{.CreatedAt}}'  # 312dfd87b5c3 on 11-08
+ls -d /dev/shm/poring-lab-recbench 2>/dev/null && echo "a previous root is there: rm -rf it first"
+cd /home/bot/docker/poring-lab
+export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp
+export PYTHONPATH=$PWD/scripts:$PWD/packages/poring_env/src:$PWD/packages/poring_dataset/src:$PWD/packages/poring_packets/src:$PWD/services/backend/src:$PWD/services/vision/src
+```
+
+**Step 1, sample round 3.** The same sessions and runs as rounds 1 and 2; no motion clips:
+
+```bash
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
+  /home/bot/docker/poring-lab/.venv/bin/python scripts/gpu_rec_bench.py sample --round 3 \
+    --session 20261105T225409-rdp-xmas02-x2:xmas_dun02 \
+    --session 20261026T120547-rdp-rogue-c1:gef_fild10
+cat /dev/shm/poring-lab-recbench/in/round /dev/shm/poring-lab-recbench/in/timing_reps  # 3 and 3
+df -h /dev/shm
+```
+
+**Step 2, the container.** The same guarded one-shot as before, with nothing built: 13 arms, 3
+timing passes, ~6 min expected.
+
+```bash
+python3 scripts/guarded_build.py start:media-recbench@600
+timeout 1800 docker wait poring-lab-media-recbench-1
+docker logs poring-lab-media-recbench-1 2>&1 | tail -60
+python3 scripts/guarded_build.py rm:media-recbench
+tail -40 /dev/shm/poring-lab-recbench/out/results.txt
+grep -vP '\tok\t' /dev/shm/poring-lab-recbench/out/status.tsv  # failed / unavailable / skipped
+grep -E 'fast|dflt|bgr0|-10' /dev/shm/poring-lab-recbench/out/status.tsv
+du -sb /dev/shm/poring-lab-recbench/out  # ~1.12e9 expected, cap 1.2e9
+```
+
+**Step 3, score** (host CPU; the detector runs on 6 graded arms, so ~25 min):
+
+```bash
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
+  /home/bot/docker/poring-lab/.venv/bin/python scripts/gpu_rec_bench.py score \
+    --out /home/bot/docker/poring-lab/data/bench/gpu-rec/$(TZ=Asia/Bangkok date +%Y%m%d)-recbench-r3.json
+```
+
+It prints:
+- the verdict;
+- one `control` line per control and sample, now with its SSIM (mean, min, dark, rest), the dark
+  share, `black_keep` and `neutral`;
+- one `ssim` line per graded arm and sample;
+- a `vui_mismatch` line for any stream whose VUI disagrees with its declaration.
+
+**Step 4, record section 8.4.** Record, with times from `TZ=Asia/Bangkok date`:
+- the controls against 6.7's "what the controls mean": the known-good `ctl-yuv444` first, then
+  `gctl-vpp444`'s prediction, then each variant and `gctl-vpp444-tv`;
+- the graded arms' bars, their `ssim` lines and the verdict;
+- S2's three passes for each candidate;
+- every status note: `fmt-*`, failures, skips.
+- The tests can then pin round 3's score like round 2's
+  (`test_round_2_score_gives_the_same_verdict_rates_and_controls_today`). From a worktree, point
+  them at the main checkout's scores with `GPU_REC_SCORES=/home/bot/docker/poring-lab/data/bench/gpu-rec`.
+
+**Step 5, clean up the same day,** as in section 7. Copy `out/*.txt`, `out/*.tsv` and `out/md5/`
+to the NAS `scratch-archive/<date>/recbench-r3/` if they are wanted, then
+`rm -rf /dev/shm/poring-lab-recbench`.
+
 ## 8. Results (phase 2)
 **Run 2026-11-08** (the parent; section 7's commands from the main checkout after the merge):
 sample 17:14-17:15, the container 17:15:08-17:23:06 (guarded `start:media-recbench@600`, worst
@@ -656,10 +843,68 @@ The arms:
   conversion, 10-19 x below PNG's encode). On xmas_dun02 its SSIM sits below the CPU-converted
   arm's (0.978 vs 0.994) at nearly the same PSNR (42.4 vs 43.5): a structural difference, not a
   colour one. Most likely the VPP's scaling path filters the picture even at 1:1 (not proven).
+  ➡️ **SUPERSEDED by 8.3 (the same evening, no GPU run): NOT a filter.**
+  - The loss is already in the conversion alone: round 2's own control, SSIM 0.987. It was in this
+    score but not printed.
+  - The GPU writes NEUTRAL chroma one level low, so black decodes as (0, 1, 0).
+  - SSIM's dark windows, 30 % of xmas_dun02, magnify it.
 - **Next (an amendment BEFORE any re-run; Batt's go):** the VPP's scaling mode / filters (e.g.
   `scale_vaapi`'s mode, or no scale step at all with only the colour conversion) graded on the
   same bars; or a decision on Q3 for this arm (it misses the mean by 0.014 and the minimum by
   0.001).
+  ➡️ Batt chose round 3 ("try round 3", ~19:5x). It is amendment 6.7 (pre-registered
+  2026-11-08 20:32:43 ICT), aimed at 8.3's cause, and its commands are 7.3. Q3 is unchanged.
+
+### 8.3 Why `vpp-hevc444-q20` fails Q3 on xmas_dun02 (diagnosis, 2026-11-08 20:03-20:27 ICT, no GPU run)
+**The answer:** round 2's GPU 4:4:4 conversion is NOT a filter. It writes the chroma of
+**neutral** (grey and black) pixels one level low: U = V = 127 where swscale writes 128.
+- A one-level error is invisible in PSNR, but black then decodes as (B, G, R) = (0, 1, 0).
+- SSIM's luminance constant C1 = (0.01 x 255)^2 = 6.5 makes that cost 5 % of every black window.
+- 30 % of xmas_dun02's windows are dark, against 0.02 % of gef_fild10's. That is the whole SSIM
+  gap, and why only xmas_dun02 fails.
+
+Sources: round 2's score (`data/bench/gpu-rec/20261108-recbench-r2.json`, its NAS copy
+`scratch-archive/2026-11-08/recbench-r2/`). And a CPU simulation on the same frames
+(`docs/records/scorers/gpu_rec_r2_ssim_sim.py`, run 20:04:13-20:05:59 ICT): it reads the NAS
+read-only, uses no GPU, and is committed verbatim as it ran.
+
+| # | finding | evidence | status |
+|---|---|---|---|
+| 1 | The SSIM loss is already in the GPU's CONVERSION, before any encoder | `gctl-vpp444` (the conversion alone, downloaded raw) on xmas_dun02: SSIM **0.98719** (min 0.98213), against swscale's `ctl-yuv444` **0.99942** (0.99915). Same 20 frames, same inverse (`to_bgr`), same metric. That alone is below Q3's mean bar for the arms (0.9915). On gef_fild10: 0.99973 against 0.99963, no loss. The numbers were in the score's control `quality`. `controls_summary` did not print SSIM, so round 2's report could not say it | **proven** (`test_round_2_score_gives_the_same_verdict_rates_and_controls_today` pins them) |
+| 2 | It is not a spatial filter (scaling, sharpening, denoise) | The GPU's planes against swscale's, every pixel of those frames: Y at most 2 levels away, U and V at most 1. Every Y difference is downward: the mean equals minus the mean absolute (-0.366 / 0.366 on xmas, -0.399 / 0.399 on gef). A kernel with unit DC gain moves edge pixels both up AND down, and the UI crops are high-contrast text. Chroma siting cannot apply: RGB in, 4:4:4 out, nothing subsampled | the numbers **proven**; "no filter" **inferred** from them, strongly |
+| 3 | The 4:4:4 output path rounds wrongly, not scale_vaapi's colour options | `gctl-vpp420` (the same options, NV12 out): Y +0.03 / +0.01, at most 1 level. `gctl-vpp444` (VUYX out): Y -0.37 / -0.40, one-sided. Its chroma error depends on the content: xmas U -0.397, V -0.289 (dark, many neutral pixels); gef U -0.041, V +0.012 | **proven** for the numbers; which hardware path each output format takes is not known offline |
+| 4 | WHICH error costs the SSIM: the neutral chroma, not the luma | The simulation perturbs swscale's own 4:4:4 planes of the same 20 frames per sample and scores them with the bench's own metrics (table below). One model reproduces SSIM mean AND min on BOTH samples to 0.0001: Y rounded one-sidedly low, plus U and V one level low on neutral pixels. The Y bias alone costs no SSIM. The chroma alone costs all of it, all in dark windows | **inferred**, strongly: one model fits four numbers on two samples. Its PSNR is 1.1 dB high on xmas (47.6 vs 46.5), and its Y mean -0.28 against -0.37, so the GPU makes some further small error that the model leaves out |
+| 5 | Why only xmas_dun02 | Dark 8 x 8 windows (the PNG's luma mean < 16): **30.4 %** of xmas_dun02's, **0.02 %** of gef_fild10's. swscale decodes Y = 0, U = V = 127 as (0, 1, 0), and 127 / 128 or 128 / 127 as black: only both low tints black. In a black window, SSIM is then 1 - 0.587^2 / (0.587^2 + 6.5) = **0.950** (the unit test pins it) | **proven** (arithmetic, swscale checked, the measured shares) |
+| 6 | Why `vpp-hevc444-q20-tv` kept SSIM on xmas but failed elsewhere | `gctl-vpp444-tv`'s luma offset is 15.16 / 15.46, not 16, so its black sits BELOW the limited range's black, and the decoder clips it: (15, 127, 127) decodes black, while (16, 127, 127) decodes (0, 1, 0) (swscale, checked). Its control's SSIM on xmas: 0.99919. Its losses are elsewhere: a limited range codes 220 luma levels for 256, so it is ~1 dB lower everywhere (the conversion 45.4 vs 46.5 dB, the arm 41.5 / 38.4 vs 42.4 / 39.4). That fails Q4 (xmas crops -1.03 dB) and Q3 on gef (0.9891 < 0.9902) | the clip **inferred** (whether the tv path's chroma is low too was not measured: no limited twin); the precision cost **proven** by the numbers |
+| 7 | The encoder's share | The arm's gap (`hevc444-q20` 0.99414 to `vpp-hevc444-q20` 0.97765, -0.0165) is larger than the conversion's (-0.0122). The encoder options are identical. The controls cover 10 frames a run, the arms 50; the encoder may also spend its bits differently on a tinted black | **not explained**; round 3's per-arm dark / rest split measures it |
+
+The simulation (row 4). Each model is applied to swscale's BT.709 full-range 4:4:4 planes of
+the controls' 20 frames per sample (the first 10 of each run). "Neutral" means swscale wrote U =
+V = 128 there. Read back and scored as the bench does. Its first row reproduces `ctl-yuv444`
+exactly.
+
+| model, read as BT.709 full | PSNR, xmas / gef | SSIM mean (min), xmas | SSIM mean (min), gef | SSIM dark / rest windows, xmas | Y / U / V mean vs swscale, xmas |
+|---|---|---|---|---|---|
+| **measured, `gctl-vpp444`** | **46.49 / 46.60** | **0.98719 (0.98213)** | **0.99973 (0.99972)** | (not measured in round 2) | **-0.37 / -0.40 / -0.29** |
+| swscale (= `ctl-yuv444`) | 50.36 / 48.77 | 0.99942 (0.99915) | 0.99963 (0.99963) | 0.99957 / 0.99933 | 0 / 0 / 0 |
+| Y one level low everywhere | 45.31 / 43.72 | 0.99890 (0.99795) | 0.99956 (0.99951) | 0.99745 / 0.99926 | -0.72 / 0 / 0 |
+| Y rounded low (floor(Y + 0.1), never above swscale) | 48.43 / 46.72 | 0.99950 (0.99902) | 0.99974 (0.99973) | 0.99923 / 0.99955 | -0.28 / 0 / 0 |
+| U, V one level low on neutral pixels | 49.17 / 48.39 | 0.98679 (0.98174) | 0.99963 (0.99962) | **0.96088** / 0.99932 | 0 / -0.30 / -0.30 |
+| U, V one level low on dark pixels (luma < 16) | 48.95 / 48.72 | 0.98642 (0.98124) | 0.99963 (0.99962) | 0.95948 / 0.99933 | 0 / -0.33 / -0.33 |
+| **Y rounded low + U, V low on neutral pixels** | **47.63 / 46.48** | **0.98722 (0.98214)** | **0.99974 (0.99973)** | 0.96164 / 0.99955 | -0.28 / -0.30 / -0.30 |
+| Y rounded low + U, V low on dark pixels | 47.44 / 46.69 | 0.98696 (0.98198) | 0.99974 (0.99973) | 0.96078 / 0.99955 | -0.28 / -0.33 / -0.33 |
+
+- **What is not known offline:** why the VUYX path rounds this way, and whether another VPP path
+  does not. Which engine (fixed-function or kernel) the driver picks per output format and
+  scaling mode was not read from the driver's source here, and the bench measures it anyway.
+- **What round 3 measures that round 2 did not** (6.7):
+  - the neutral pixels' chroma directly (`neutral`: `uv_mid`, the mean errors, black);
+  - `black_keep`;
+  - the dark / rest SSIM split, for every control and every graded arm;
+  - U and V beside Y against swscale;
+  - the controls' own SSIM, printed.
+- **What this changes:** the target is a GPU 4:4:4 path whose neutral chroma comes out at mid
+  (6.7's arms), not a "no-filter" path.
 
 ## 9. The staged plan (question 5)
 
@@ -739,3 +984,36 @@ stage 5  higher fps (5-10), Batt's call per window    -> the grab path's own cos
   - round 2 end to end on stand-ins: the r1 control named `bt601-limited`;
   - round 2's container side with stub tools.
 - `docs/records/scorers/gpu_rec_r1_fingerprint.py`: 8.1's simulation, verbatim as it ran.
+
+### 10.2 What round 3's phase 1 changed (branch `design/gpu-recording-r3`, no GPU, no docker)
+- `scripts/gpu_rec_bench.py`:
+  - `ROUNDS[3]` / `TIMING_REPS[3]` (6.7's table), the arms, `VPP_FAST` / `VPP_MDEF`,
+    `HEVC444_10`;
+  - the `Arm` field `upload` ("-" = BGRA, rounds 1 and 2's; `bgr0`), last before `args`;
+  - 10-bit: `raw_planes` reads `xv30`, `plane_depth`, `yuv_frame` (yuv444p10le planes into a
+    frame, which this PyAV's `from_ndarray` refuses), and `frame_planes` keeps 2 bytes a sample
+    (D1 / D2 in yuv444p10le);
+  - reported, never graded:
+    - `ssim_parts` / `DARK_LUMA` (`ssim_luma` unchanged, now its mean);
+    - `black_counts`;
+    - `neutral_counts` / `neutral_summary`;
+    - in `frame_metrics` / `summarise`, the controls' and every graded arm's `ssim_dark`,
+      `ssim_rest`, `dark_share`, `black_keep`;
+    - `controls_summary` adds the controls' SSIM, U / V against swscale and `neutral`;
+    - `ssim_summary` (printed as `ssim` lines, saved as the score's `ssim`).
+- `services/media-probe/recbench.sh`:
+  - reads `upload`; uploads it before scale_vaapi (vpp / gctl);
+  - a vpp arm's timing input is the same raw bytes declared in it;
+  - round 1 and 2's commands are unchanged.
+- `services/backend/tests/test_gpu_rec_bench.py`:
+  - round 3's table: one change per arm, its references, the order;
+  - rounds 1 and 2 upload BGRA;
+  - round 2's real score: the same verdict, rates and controls today, and 8.3's proven numbers.
+    It runs where the score exists (`GPU_REC_SCORES` points a worktree at the main checkout's);
+  - the XV30 layout (swscale's and by hand);
+  - 10-bit planes and their inverse;
+  - the dark-window SSIM and black kept (the 0.950 of 8.3 row 5);
+  - the neutral measure (positive, negative, 10-bit, limited);
+  - round 3 end to end on stand-ins, including a 10-bit libx265 stream;
+  - round 3's container side with stub tools.
+- `docs/records/scorers/gpu_rec_r2_ssim_sim.py`: 8.3's simulation, verbatim as it ran.
