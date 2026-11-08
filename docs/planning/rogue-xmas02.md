@@ -1298,6 +1298,8 @@ time; a change that passes its bars joins the base, else it is switched off):**
   trigger and the box path pass over a box whose cell (and its 8 neighbours) the server would not
   walk us to on one click, from our minimap cell, on the server's map cache
   (`poring_dataset.walk.click_walk_ok`). Static map data and our pixel position only (rule 1).
+  The run uses f0d6c75b (01:30, before the run): the same check, its grid projection memoised per
+  cell (~2.3 ms a box otherwise).
 - **The run:** the base command with `--label xmas02-p23 --reach-check`, 25 min (after the MVP is
   killed, Amendment K).
 - **Bars:** **U1** stuck time (`walk_refusals.py`, 656609c2) <= 30 s; **U2** class-D box strikes
