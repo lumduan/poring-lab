@@ -524,3 +524,21 @@ def test_the_agent_network_is_refused_before_the_route(make: Any) -> None:
     client = make(peer=("10.210.97.7", 1))  # ADR-0005 c2
     r = client.get("/hardware")
     assert r.status_code == 403 and r.json()["detail"]["reason"] == "agent_network"
+
+
+def test_nics_hidden_by_the_network_namespace_keep_distinct_labels(tmp_path: Path) -> None:
+    """2026-11-08 (Batt's console error `tg3:tg3`): inside the backend's container the NICs'
+    interfaces are not visible (device/net is empty), so 4 tg3 sensors all read "tg3"; their
+    PCI addresses keep them apart."""
+    root, clock = host_tree(tmp_path / "host"), Clock()
+    hwmon = root / "sys/class/hwmon"
+    for i, fn in enumerate(("0000:02:00.0", "0000:02:00.1"), start=5):
+        dev = root / f"sys/devices/pci0000:00/0000:00:1c.4/{fn}"
+        (dev / "net").mkdir(parents=True)  # the dir is there, its interface is not
+        put(hwmon, f"hwmon{i}/name", "tg3")
+        put(hwmon, f"hwmon{i}/temp1_input", 50000)
+        (hwmon / f"hwmon{i}/device").symlink_to(dev)
+    m = monitor(root, clock, shm_path=None, disk_path=tmp_path)
+    labels = [t.label for t in m.sample().temps if t.chip == "tg3"]
+    assert labels == ["eno1", "NIC 02:00.0", "NIC 02:00.1"]
+    assert len(set(labels)) == len(labels)

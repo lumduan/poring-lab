@@ -385,6 +385,12 @@ def _temp_label(chip: Path, name: str, n: str, count: int) -> str:
     nets = _listdir(chip / "device/net")  # a NIC's sensor (tg3): name it by its interface
     if len(nets) == 1:
         return nets[0]
+    if (chip / "device/net").is_dir():
+        # a NIC whose interface this network namespace cannot see (the backend's container: the
+        # 4 tg3 sensors all read "tg3", 2026-11-08): its PCI address keeps each one apart
+        with contextlib.suppress(OSError):
+            pci = (chip / "device").resolve().name
+            return f"NIC {pci[5:] if pci.startswith('0000:') else pci}"
     return f"{name} temp{n}" if count > 1 else name
 
 

@@ -310,11 +310,11 @@ export default function HardwareMonitor({ backendUrl }: { backendUrl: string | n
             {groupTemps(s?.temps ?? []).map((group, gi) => (
               <div key={`${gi}:${group.chip}`}>
                 <p className="text-xs font-semibold text-neutral-400">{group.chip}</p>
-                {group.items.map((t) => {
+                {group.items.map((t, ti) => {
                   const tone = tempTone(t.c, t.max_c, t.crit_c);
                   const limits = [t.max_c != null && `max ${t.max_c.toFixed(0)}`, t.crit_c != null && `crit ${t.crit_c.toFixed(0)}`].filter(Boolean).join(" · ");
                   return (
-                    <Row key={`${t.chip}:${t.label}`} label={t.label === t.chip ? "temp" : t.label}>
+                    <Row key={`${ti}:${t.chip}:${t.label}`} label={t.label === t.chip ? "temp" : t.label}>
                       <Val text={fmtC(t.c)} sample={s} na={[]} tone={tone} />
                       {limits && <span className="ml-2 text-neutral-500">{limits}</span>}
                     </Row>
