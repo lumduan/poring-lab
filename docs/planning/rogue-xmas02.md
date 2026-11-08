@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p9 (4P, 2026-11-07 15:43-16:14): no immunity -> 34.0 kills / h (p8 12.0), 0 Myst Case teleports (M1 PASS), 0 deaths; E1 (>= 40) and E2 still FAIL. Next: pre-register ONE runner change chosen on p9 numbers: the 9 strike clicks that started no attack (class D) or the 2.0-s fight end (S1). Immunity stays OFF on xmas_dun02 (Batt)."
+next_action: "p10 (4Q, pre-registered 2026-11-08): --walk-stop, ring-1 strikes that scroll the scene stop and take no lock (p9 class D: 9 of 25, the clicks walked us off the attacker). Run it, score E1 / W1-W3. Immunity stays OFF on xmas_dun02 (Batt)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -676,6 +676,80 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   - E1 / E2 still fail: the next change is the fight end (S1 follow-ups), pre-registered on its
     own;
   - a death, or D1 failing: the next run's survival is studied before any other change.
+
+
+### 4Q. Pilot p10 pre-registration: --walk-stop for the clicks that started no attack (written BEFORE its run, 2026-11-08 10:57:51 ICT)
+
+- **Why:** Batt 2026-11-07: the no-attack clicks next, not immune. p9's class D = 9 of 25 strikes,
+  each holding the fight a median **7.33 s** (67.1 s in all; `lock_study.py` `owned_s`).
+- **Diagnosis (p9, offline: events + packets + the strike shots):**
+  - **The clicks hit the ground.** In every class-D strike the client sent WALK requests (the
+    first +0.36 s after the click), never an attack request. The monster kept hitting (and
+    missing) the Rogue while the burst's 4 clicks walked her ~6 cells away from it.
+  - **8 of 9 came from the defend scan (`by scan`).**
+    - The scan hovers each ring cell's body point (26 px above the cell), north first
+      (`ring(1)`'s order).
+    - The north cell's body point lies on the Rogue's OWN body, inside the glow and the Miss text
+      the client draws while she is attacked. A one-cell scan read SWORD there at the same pixel
+      (641, 312) in #07, #08 and #13.
+    - The shots: #07 had the Myst Case SOUTH of her, #13 had it ~3 cells away. In #19 (a kill at the
+      same point) the Myst Case sprite covered her.
+  - **A detector-box gate does not separate them** (tested offline on p9's own detections): the
+    real swords were boxed no more often than the false ones (at most 3 of 7 vs 2 of 8). The
+    detector misses monsters beside the Rogue, which is Batt's "it still does not see monsters
+    well". Not taken.
+  - **What does separate them:** a melee strike on a RING-1 cell attacks in place, so the scene
+    never scrolls. A ground click walks, so it does. 7 of the 9 were ring-1 strikes.
+- **The one change against p9: `--walk-stop` (dungeon@9.2, behind its flag, the fight paths scan /
+  stall_scan / box / queue):**
+  - after a ring-1 strike's click, `route_preview.scene_shift` (the camera's scroll, our character
+    and the UI masked) is read on every poll;
+  - >= 10 px on 2 polls in a row, before the lock arrow or our damage line, ends the strike:
+    - "walked": no more clicks, no lock, a 0.4-s settle;
+    - the defend scan skips that cell for 3 s, and the fight loop scans again;
+  - ring-1 bursts re-click every 0.8 s instead of 0.6, so the check sees the first click's walk
+    before a second click;
+  - nothing else changes: no change to the cursor read, the ring order, the box path's choice,
+    loot or walking.
+- **The run** (p9's command + `--walk-stop`, label xmas02-p10, same seed):
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p10 --box-strike --box-now \
+          --walk-stop
+
+  - Before it:
+    - immunity toggled OFF with `crusader.py --char thief gm --job rogue '@monsterignore'`,
+      judged by the answer ("Returned to normal state." = now off);
+    - a judged screenshot of the client.
+  - Beside it: the detect server, one guarded `execdev:vision` step (2400 s) in the Intel worker,
+    started first. bot-server: no R3 pauses.
+  - After it: immunity back ON (toggled and judged), the Rogue's resting state as before.
+- **Bars:**
+  - **E1 (primary, as p9):** kills (packets) >= 40 / h (p9 34.0).
+  - **W1 (the hypothesis):** class-D strikes hold the fight a median <= 2.0 s (`owned_s`; p9
+    7.33).
+  - **W2 (it sees the walk):** >= 75 % of the ring-1 class-D strikes on the fight paths end
+    "walked".
+  - **W3 (it costs no real strike):** <= 1 "walked" strike that was not class D (an attack request
+    came after all: a real strike cut short).
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h.
+  - **D1:** 0 deaths.
+  - Reported:
+    - E2 (box fights ending as a box miss; p9 62.5 %);
+    - M1 (Myst Case teleports);
+    - the S1 classes and each strike's scroll (`shift`);
+    - kills by species, items per hour, damage taken, potions.
+- **Scorers (committed before the run):**
+  - `scripts/dungeon_judge.py`: E1 / E3 / D1, as p9;
+  - `scripts/lock_study.py`: the classes, `owned_s`, and `walk_stop` = walked / walked_not_d /
+    d_owned_s_p50 (tests in `test_lock_study.py`; p9 re-scored: d 9, d_owned_s_p50 7.33).
+- **Decisions:**
+  - W1-W3 pass: `--walk-stop` stays ON for xmas_dun02 runs;
+  - W3 fails: no reuse until the scrolls of the cut strikes are studied;
+  - W2 fails: the logged `shift` series decide the threshold before any reuse;
+  - E1 still failing names the next change (sight: the walking-started box fights, 2 strikes of
+    15 in p9).
 
 ## 5. Results
 

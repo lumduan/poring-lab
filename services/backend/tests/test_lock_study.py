@@ -59,3 +59,23 @@ def test_the_reader_matches_each_hit_once() -> None:
     r = ls.reader(packets, lines, US)
     assert (r["our_hits"], r["matched"], r["exp_packets"], r["exp_lines"]) == (3, 2, 1, 0)
     assert r["lag_ms_p50"] == 300
+
+
+def test_owned_time_and_the_walk_stop_summary() -> None:
+    """rogue-xmas02.md 4Q (p10): each strike holds the fight until its unlock, the fight's end or
+    the next strike; a walked strike cutting a REAL strike short (a request came) is counted."""
+    events = [{"kind": "strike", "t_ns": 10 * S, "end": "walked"},  # no request: class D
+              {"kind": "strike", "t_ns": 11 * S, "end": "walked"},  # a request came: cut short
+              {"kind": "strike", "t_ns": 13 * S, "end": "bound"},  # D, locked until the unlock
+              {"kind": "unlock", "t_ns": int(20.3 * S)},
+              {"kind": "strike", "t_ns": 30 * S, "end": "arrow"},
+              {"kind": "fight_end", "t_ns": 33 * S}]  # fmt: skip
+    # 12.5 is within REQ_S of the 11-s strike only; 13's window holds no request
+    out = ls.strikes(events, [req(12.5, T1), req(30.2, T2)], US)
+    assert [o["class"] for o in out] == ["D", "C", "D", "C"]
+    assert [o["owned_s"] for o in out] == [1.0, 2.0, 7.3, 3.0]
+    ws = ls.walk_stop(out)
+    assert (ws["walked"], ws["walked_not_d"], ws["d"]) == (2, 1, 2)
+    assert ws["d_owned_s_p50"] == 4.15 and ws["d_owned_s_sum"] == 8.3
+    # no strike after the last one and no end: the held time is unknown, not infinite
+    assert ls.strikes([{"kind": "strike", "t_ns": 5 * S}], [], US)[0]["owned_s"] is None

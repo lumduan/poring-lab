@@ -1024,3 +1024,43 @@ def test_fresh_now_gives_up_after_its_timeout() -> None:
     bw.cond = threading.Condition(bw.lock)
     bw.meta, bw.kick_ev, bw.kick_seq, bw.kick_prefer = {"kick": 0}, threading.Event(), 0, None
     assert bw.fresh_now("gpu", 0.1) is None
+
+
+def test_walk_stop_ring1_walked_and_false_cells() -> None:
+    """dungeon@9.2 (rogue-xmas02.md 4Q, pilot p10): p9's class-D strikes were clicks on our own
+    glowing body that walked us off the attacker. A ring-1 strike stops on a scrolling scene."""
+    # ring 1 only: a ring-2 or box target farther away is APPROACHED (a legitimate walk)
+    assert all(dh.ring1(c) for c in dh.ring(1))
+    assert not any(dh.ring1(c) for c in dh.ring(2)) and not dh.ring1((0, 0))
+    # walked: the last WALK_STOP_N shifts all >= WALK_STOP_PX (one spike is not a walk)
+    px, n = dh.WALK_STOP_PX, dh.WALK_STOP_N
+    assert n == 2 and px == 10.0
+    assert not dh.walked_now([])
+    assert not dh.walked_now([(px + 5, 0.0)])  # a single spike
+    assert not dh.walked_now([(px + 5, 0.0), (1.0, 2.0)])  # back to still
+    assert dh.walked_now([(0.0, 0.0), (px, 0.0), (0.0, -px - 1)])  # two in a row, any direction
+    assert not dh.walked_now([(6.0, 6.0), (7.0, 7.0)])  # 8.5 and 9.9 px: below the bar
+    assert dh.walked_now([(8.0, 8.0), (7.5, 7.5)])  # 11.3 and 10.6 px
+    # the defend scan skips a walked cell for FALSE_REL_S, then tries it again
+    cells = dh.ring(1)
+    fr = {(0, 1): 100.0}
+    assert (0, 1) not in dh.drop_false(cells, fr, 100.0 + dh.FALSE_REL_S - 0.1)
+    assert dh.drop_false(cells, fr, 100.0 + dh.FALSE_REL_S + 0.1) == cells
+    assert dh.drop_false(cells, {}, 0.0) == cells
+    assert len(dh.drop_false(cells, fr, 101.0)) == len(cells) - 1
+    # only the fight paths use it, and the burst re-clicks later so the check sees the first walk
+    assert dh.WALK_STOP_BY == ("scan", "stall_scan", "box", "queue")
+    assert dh.WALK_STOP_GAP_S > dh.BURST_GAP_S
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "walk_stop" not in dh.fixes_of(dh.argparse.Namespace(**base, walk_stop=False))
+    assert "walk_stop" not in dh.fixes_of(dh.argparse.Namespace(**base))  # older namespaces
+    on = dh.fixes_of(dh.argparse.Namespace(**base, walk_stop=True))
+    assert on["walk_stop"] == [dh.WALK_STOP_PX, dh.WALK_STOP_N, dh.WALK_STOP_GAP_S, dh.FALSE_REL_S]
+    src = Path(dh.__file__).read_text()
+    # a walked strike takes no lock on any fight path
+    assert 'if strike(u, v, c, "scan"):' in src and 'if strike(u_b, v_b, rel_b, "box"):' in src
+    assert 'if strike(u2, v2, c2, "stall_scan"):' in src
+    assert 'if not strike(u_q, v_q, rel_q, "queue"):' in src
+    assert '"walked" if walked is not None else' in src

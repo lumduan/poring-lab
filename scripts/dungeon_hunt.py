@@ -203,6 +203,15 @@ HP_DROP_PTS, HP_DROP_S = 2, 1.5  # the HP percent falling this much this fast = 
 LOCK_NO_HIT_S = 3.5  # locked, but none of OUR hits in the log for this long -> scan again
 LOCK_MAX_S = 25.0
 BURST_GAP_S, BURST_MAX, BURST_MAX_S = 0.6, 4, 3.0  # arm C: re-click until the lock arrow
+# --walk-stop (dungeon@9.2, rogue-xmas02.md 4Q, pilot p10): a strike on a RING-1 cell attacks in
+# place, so the scene never scrolls; a scroll >= WALK_STOP_PX on WALK_STOP_N polls in a row before
+# the lock arrow or our damage line means the click hit the GROUND (p9's class D: 9 of 25 strikes,
+# each walking us ~6 cells off the attacker). The burst stops, no lock is taken, and the defend
+# scan skips that cell for FALSE_REL_S. Ring-1 bursts re-click every WALK_STOP_GAP_S, so the check
+# sees the first click's walk (its request came +0.36 s after the click in p9) before a second.
+WALK_STOP_PX, WALK_STOP_N, WALK_STOP_GAP_S, FALSE_REL_S = 10.0, 2, 0.8, 3.0
+WALK_STOP_SETTLE_S = 0.4  # after a walked strike: our 1-2 cell walk ends before the next scan
+WALK_STOP_BY = ("scan", "stall_scan", "box", "queue")  # the fight paths only
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -762,6 +771,23 @@ def ring(r_: int) -> list[Cell]:
                                         math.atan2(c[0], c[1]) % (2 * math.pi)))  # fmt: skip
 
 
+def ring1(rel: Sequence[int]) -> bool:
+    """PURE (--walk-stop): one of the eight cells beside us (a melee strike attacks in place)."""
+    return max(abs(rel[0]), abs(rel[1])) == 1
+
+
+def walked_now(shifts: Sequence[tuple[float, float]], px: float = WALK_STOP_PX,
+               n: int = WALK_STOP_N) -> bool:  # fmt: skip
+    """PURE (--walk-stop): the last ``n`` scene shifts since the click are all >= ``px``."""
+    return len(shifts) >= n and all(math.hypot(dx, dy) >= px for dx, dy in shifts[-n:])
+
+
+def drop_false(cells: Sequence[Cell], false_rel: Mapping[Cell, float], now: float,
+               keep_s: float = FALSE_REL_S) -> list[Cell]:  # fmt: skip
+    """PURE (--walk-stop): the scan's cells without those whose strike walked within ``keep_s``."""
+    return [c for c in cells if now - false_rel.get(tuple(c), -1e9) > keep_s]
+
+
 def hp_dropped(hist: Sequence[tuple[float, float]], now: float) -> bool:
     """PURE: the HP percent fell >= HP_DROP_PTS within HP_DROP_S (a hit the log did not show)."""
     pts = [f for t, f in hist if now - HP_DROP_S <= t <= now]
@@ -883,6 +909,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["walk_through"] = True
     if getattr(a, "walk_every", WALK_EVERY_S) != WALK_EVERY_S:  # the walk timer (idle study 4a)
         out["walk_every"] = a.walk_every
+    if getattr(a, "walk_stop", False):  # dungeon@9.2 (rogue-xmas02.md 4Q)
+        out["walk_stop"] = [WALK_STOP_PX, WALK_STOP_N, WALK_STOP_GAP_S, FALSE_REL_S]
     return out
 
 
@@ -1347,6 +1375,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     import map_zones as mz
     import record_session as rs
     import ro_agent as r
+    import route_preview as rp  # --walk-stop: the scene's scroll after a strike click
     import survive as sv
     import ui_gate
     from anim_region import stand_grid
@@ -1837,6 +1866,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
+        false_rel: dict[Cell, float] = {}  # --walk-stop: ring cells whose strike walked
         n_box_target = [0]  # dungeon@8.9: box targets so far (box_arm alternates by it)
         box_spots = (
             BoxSpots(after=a.box_ignore) if a.box_ignore > 0 else None
@@ -1989,6 +2019,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         return True  # the fight loop's own scan finds the target (lock timeout)
                     rel, (u, v) = moved
                     ref = frame()
+            # --walk-stop (dungeon@9.2): a ring-1 strike on a fight path watches the scene scroll
+            stop_walk = bool(getattr(a, "walk_stop", False)) and ring1(rel) and by in WALK_STOP_BY
+            ref3 = np.ascontiguousarray(np.asarray(ref)[..., :3]) if stop_walk else None
+            shifts: list[tuple[float, float]] = []
+            walked: float | None = None
+            gap = WALK_STOP_GAP_S if stop_walk else BURST_GAP_S
             t_click = r.ns()
             with blt.lock:
                 n_lines0 = len(blt.lines)
@@ -2008,9 +2044,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if hit_:
                     dmg = round(time.monotonic() - t_c, 2)
                     break
+                if stop_walk:
+                    cur3 = np.ascontiguousarray(np.asarray(cur)[..., :3])
+                    shifts.append(rp.scene_shift(ref3, cur3))
+                    if walked_now(shifts):
+                        walked = round(time.monotonic() - t_c, 2)
+                        false_rel[(int(rel[0]), int(rel[1]))] = time.monotonic()
+                        counts["walk_stop"] += 1
+                        break
                 if guard_tick():
                     break
-                if n < BURST_MAX and time.monotonic() - t_c >= n * BURST_GAP_S:
+                if n < BURST_MAX and time.monotonic() - t_c >= n * gap:
                     click_at(u, v, "strike_burst")
                     n += 1
             if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
@@ -2023,10 +2067,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             # time beside it (pilot 11:42: the end stamp put the attack before the window)
             ev({"t_ns": t_click, "t_end_ns": r.ns(), "kind": "strike", "u": round(u, 1),
                 "v": round(v, 1), "rel": list(rel),
-                "clicks": n, "arrow_s": arrow, "damage_s": dmg,
+                "clicks": n, "arrow_s": arrow, "damage_s": dmg, "walked_s": walked,
+                "shift": [round(x_, 1) for x_ in shifts[-1]] if shifts else None,
                 "end": "arrow" if arrow is not None else "damage" if dmg is not None else
-                ("escape" if escaped[0] else "bound"), "by": by,
-                "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
+                "walked" if walked is not None else ("escape" if escaped[0] else "bound"),
+                "by": by, "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
+            if walked is not None:
+                time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
+                return False  # the click hit the ground: no lock (the caller scans again)
             return True
 
         def box_target() -> tuple[Cell, tuple[float, float]] | None:
@@ -2093,6 +2141,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             ``stop_on`` ("sword" / "pickup") ends the scan. Aborts when a fight starts (loot)."""
             t_s = time.monotonic()
             verdicts: Counter[str] = Counter()
+            if purpose == "defend" and getattr(a, "walk_stop", False):
+                kept = drop_false(cells, false_rel, t_s)
+                verdicts["walked_skip"] += len(cells) - len(kept)
+                cells = kept
             uv = project(here, cells)
             found = None
             for c, (u, v) in zip(cells, uv, strict=True):
@@ -2837,7 +2889,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             res_q = hover(u_q, v_q)
                             if res_q["verdict"] != "sword":
                                 continue
-                            strike(u_q, v_q, rel_q, "queue")
+                            if not strike(u_q, v_q, rel_q, "queue"):
+                                continue  # --walk-stop: it walked, no lock
                             lock = {"t": time.monotonic(), "rel": rel_q, "cell": list(q["cell"])}
                             ev({"kind": "handoff", "from_kill_ms": None if not kills_seen else
                                 round((t_h - kills_seen[-1]) * 1e3), "cell": list(q["cell"]),
@@ -2853,22 +2906,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         got_b = box_target()
                         if got_b is not None:
                             rel_b, (u_b, v_b) = got_b
-                            strike(u_b, v_b, rel_b, "box")
-                            lock = {"t": time.monotonic(), "rel": rel_b,
-                                    "cell": None if here is None else
-                                    [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
+                            if strike(u_b, v_b, rel_b, "box"):  # False: --walk-stop, it walked
+                                lock = {"t": time.monotonic(), "rel": rel_b,
+                                        "cell": None if here is None else
+                                        [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
                     if lock is None:
                         found = scan("defend", ring(1), "sword")
                         if found is None and not quiet:  # ring 2 only while hits still come
                             found = scan("defend", ring(2), "sword")
                         if found is not None:
                             c, (u, v), _res = found
-                            strike(u, v, c, "scan")
-                            lock = {
-                                "t": time.monotonic(),
-                                "rel": c,
-                                "cell": None if here is None else [here[0] + c[0], here[1] + c[1]],
-                            }
+                            if strike(u, v, c, "scan"):  # False: --walk-stop, it walked
+                                cell_c = None if here is None else [here[0] + c[0], here[1] + c[1]]
+                                lock = {"t": time.monotonic(), "rel": c, "cell": cell_c}
                         elif tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick):
                             mode, swing_floor = "after", tick
                             ev({"kind": "fight_end", "kills": len(kills_seen)})
@@ -3169,8 +3219,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     if found is not None:
                                         c2, (u2, v2), _r2 = found
                                         ev({"kind": "engage", "by": "stall_scan", "name": None})
-                                        strike(u2, v2, c2, "stall_scan")
-                                        lock = {"t": time.monotonic(), "rel": c2, "cell": None}
+                                        if strike(u2, v2, c2, "stall_scan"):  # False: walked
+                                            lock = {"t": time.monotonic(), "rel": c2, "cell": None}
                                         mode = "fight"
                                     continue
                                 click_at(u, v, "walk")
@@ -3373,6 +3423,14 @@ def main() -> int:
         help="dungeon@8.8 (rogue-xmas02.md 4M; OFF by default, switched on by a pre-registration): "
         "a box fight first waits for our walk to end, then hovers a box grabbed after that and "
         "strikes on its SWORD; else the ring scan as before",
+    )
+    t.add_argument(
+        "--walk-stop",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.2 (rogue-xmas02.md 4Q, pilot p10; OFF by default): a ring-1 strike whose "
+        "first click scrolls the scene before the lock arrow / our damage line hit the ground: "
+        "stop the burst, take no lock, and skip that cell in the defend scan for a few seconds",
     )
     t.add_argument(
         "--plant-sweep",

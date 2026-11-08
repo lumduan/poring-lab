@@ -92,16 +92,34 @@ def classify(strike_t: int, unlock_t: int | None, packets: Sequence[dict[str, An
 
 def strikes(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
             gid: int | None) -> list[dict[str, Any]]:  # fmt: skip
-    """PURE: every strike, classed, with the first unlock after it (before the next strike)."""
+    """PURE: every strike, classed, with the first unlock after it (before the next strike).
+    ``owned_s`` (rogue-xmas02.md 4Q, p10): the strike's click to the first of the next strike,
+    its unlock and the next fight end -- the time it held the fight, lock or no lock (a
+    --walk-stop strike takes none)."""
     sts = [e for e in events if e.get("kind") == "strike"]
     unl = [e["t_ns"] for e in events if e.get("kind") == "unlock"]
+    ends = [e["t_ns"] for e in events if e.get("kind") == "fight_end"]
     out = []
     for i, st in enumerate(sts):
         nxt = sts[i + 1]["t_ns"] if i + 1 < len(sts) else float("inf")
         u = next((t for t in unl if st["t_ns"] < t < nxt), None)
+        f = next((t for t in ends if st["t_ns"] < t < nxt), None)
+        stop = min([t for t in (u, f, nxt) if t is not None])
+        owned = None if stop == float("inf") else round((stop - st["t_ns"]) / NS, 2)
         out.append({"t_ns": st["t_ns"], "by": st.get("by"), "end": st.get("end"),
-                    **classify(st["t_ns"], u, packets, gid)})  # fmt: skip
+                    "owned_s": owned, **classify(st["t_ns"], u, packets, gid)})  # fmt: skip
     return out
+
+
+def walk_stop(classed: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """PURE (rogue-xmas02.md 4Q, p10): the --walk-stop ends, the ones that cut a REAL strike short
+    (an attack request came after all: not class D), and the class-D strikes' held time."""
+    walked = [c for c in classed if c.get("end") == "walked"]
+    d_owned = [c["owned_s"] for c in classed if c["class"] == "D" and c["owned_s"] is not None]
+    return {"walked": len(walked), "walked_not_d": sum(1 for c in walked if c["class"] != "D"),
+            "d": sum(1 for c in classed if c["class"] == "D"),
+            "d_owned_s_p50": statistics.median(d_owned) if d_owned else None,
+            "d_owned_s_sum": round(sum(d_owned), 2)}  # fmt: skip
 
 
 def reader(packets: Sequence[dict[str, Any]], lines: Sequence[dict[str, Any]],
@@ -174,6 +192,7 @@ def load(session: Path) -> dict[str, Any]:
             "classes": dict(Counter(c["class"] for c in classed)),
             "unlock_s_p50": statistics.median([c["unlock_s"] for c in classed
                                                if c["unlock_s"] is not None] or [0]),
+            "walk_stop": walk_stop(classed),
             "reader": reader(packets, lines, gid),
             "walking": walking(events, packets, dets, classed) if dets else None}  # fmt: skip
 
