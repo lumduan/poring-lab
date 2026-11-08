@@ -2,7 +2,8 @@
 # worker's twin of compose.intel.yaml. guarded_build adds it LAST, after compose.vision-worker.yaml,
 # when the host profile is dedicated-intel. The same three changes, nothing else
 # (tests/test_guards.py): the Intel image, the DRM render node + render group instead of the NVIDIA
-# reservation, PORING_ACCEL=xpu with no VRAM cap by default.
+# reservation, PORING_ACCEL=xpu with no VRAM cap by default. Plus, the worker only: its memory
+# cap (Batt 2026-11-08, a dedicated host).
 services:
   vision-worker:
     image: poring-lab/vision-intel:local
@@ -14,3 +15,8 @@ services:
     environment:
       PORING_ACCEL: xpu
       VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}
+    # Batt 2026-11-08 ("raise it"): bot-server is dedicated (15 GiB), so the worker's cap goes
+    # 6g -> 11g: the trainer holds ~5.2 GB itself, and its data-loader workers OOM-killed at
+    # 6 GB (bot-server-migration.md 17a). mem == memswap, as everywhere.
+    mem_limit: 11g
+    memswap_limit: 11g

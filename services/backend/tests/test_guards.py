@@ -1109,7 +1109,11 @@ def test_the_intel_overlays_change_only_the_image_the_gpu_and_the_accelerator(
     assert list(services) == [svc]
     spec = services[svc]
     keys = {"image", "deploy", "devices", "group_add", "environment"}
-    assert set(spec) == (keys | {"build"} if svc == "vision" else keys)
+    # the worker on a dedicated host: its memory cap too (Batt 2026-11-08), mem == memswap
+    worker_keys = keys | {"mem_limit", "memswap_limit"}
+    assert set(spec) == (keys | {"build"} if svc == "vision" else worker_keys)
+    if svc == "vision-worker":
+        assert spec["mem_limit"] == spec["memswap_limit"] == "11g"
     assert spec["image"] == "poring-lab/vision-intel:local"
     assert spec["deploy"] == {}  # `!reset {}`: no NVIDIA reservation
     assert spec["devices"] == ["/dev/dri:/dev/dri"]
@@ -1155,3 +1159,20 @@ def test_the_intel_requirements_hold_the_locks_versions_but_the_torch_stack() ->
     differ = {n: (v, lock[n]) for n, v in req.items()
               if n in lock and n not in ("torch", "torchvision") and v != lock[n]}  # fmt: skip
     assert differ == {}
+
+
+def test_the_hardware_pages_shm_mount_is_an_empty_read_only_dir_in_the_backend_only() -> None:
+    """Batt 2026-11-08: the hardware page shows /dev/shm's use. statvfs of an EMPTY directory on
+    the host's /dev/shm reads the whole tmpfs; no file of it (the detect socket, rdp files) is
+    exposed, and nothing may write there."""
+    for name in ("compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"):
+        for svc, service in compose(name)["services"].items():
+            vols = [v for v in service.get("volumes", []) if isinstance(v, str)]
+            hw = [v for v in vols if v.startswith("/dev/shm/poring-lab-hwshm")]
+            if svc != "backend":
+                assert not hw, f"{name}: {svc} mounts the hardware page's shm dir"
+    backend = compose("compose.yaml")["services"]["backend"]
+    assert "/dev/shm/poring-lab-hwshm:/host-shm:ro" in backend["volumes"]
+    assert backend["environment"]["HARDWARE_SHM_PATH"] == "/host-shm"
+    # never the whole /dev/shm, never writable
+    assert not any(v.split(":")[0] == "/dev/shm" for v in backend["volumes"] if isinstance(v, str))

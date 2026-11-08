@@ -173,6 +173,7 @@ services:
       # The stream and the agent's frames are cropped to the session; input is normalised over it.
       SESSION_SIZE: ${SESSION_SIZE:-1440x900}
       DATA_DIR: /data
+      HARDWARE_SHM_PATH: /host-shm # the hardware page's /dev/shm (the mount below)
       # Browser WebSocket Origin allowlist (comma-separated); unknown origins are refused.
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:3000}
       ASSIST_LEASE_S: ${ASSIST_LEASE_S:-3.0}
@@ -220,6 +221,10 @@ services:
       # S2 input socket (ADR-0014): the Injector -- the ONE input writer -- sends the mux's events
       # to the S2 client here. Backend + gamestream only (tests/test_guards.py).
       - s2-input:/s2-input
+      # The hardware page's /dev/shm use (Batt 2026-11-08): an EMPTY directory on the host's
+      # /dev/shm, read-only. statvfs reads the whole tmpfs through it; no file of /dev/shm is
+      # exposed. After a reboot Docker creates it root-owned and empty: statvfs still works.
+      - /dev/shm/poring-lab-hwshm:/host-shm:ro
     ports:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
