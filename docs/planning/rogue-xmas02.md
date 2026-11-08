@@ -1310,6 +1310,29 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** U1 + U2 + E1 pass with no regression bar failing -> `--reach-check` joins the
   base; otherwise off (studied).
 
+### 4AF. Pilot p24 pre-registration: --kill-gap, a stopped hit stream is the kill (written BEFORE its run, 2026-11-09 02:11 ICT)
+
+- **Why (packets, `fight_time.py` 29cb100f; its K3 3c29013e):** at Base 99 the Battle Log shows no exp line, so the
+  runner never sees a kill. After the killing blow the lock waits LOCK_NO_HIT_S (3.5 s; "unlock no
+  hits" at ~4.0 s after the death in p21's kill fights), then the defend scan (~2.3 s) finds nobody
+  and the fight ends: from the death (packets) to fight_end a median 6.50 s (p16), 6.53 (p19), 6.46
+  (p21), 6.47 (p22) -- 276.8 s of p21's 1,500. Our hits on a living target come every 0.47 s (p50
+  0.47, p90 0.48 s, packets p16-p22); longer gaps were targets left and met again in a later fight.
+- **The one change against the base (p16's flags, `--engage-screen` + the boss guard; `--reach-check` OFF by
+  4AE's rule (p23)):** `--kill-gap` (dungeon@9.13, 1f8dc88e): after
+  KILL_GAP_HITS (2) of our damage lines on the lock, none for KILL_GAP_S (1.5 s) is taken as the
+  kill -- the lock goes (`unlock` why `kill_gap`), a `kill` event by `hit_gap` (the loot list as for
+  an exp line), and the existing quiet-kill end closes the fight when nothing hit us for 2.5 s.
+- **The run:** the base command with `--label xmas02-p24 --kill-gap`, 25 min.
+- **Bars:** **K1** after-the-kill time p50 <= 3.0 s (`fight_time.py`; p16-p22 6.46-6.53 s); **E1**
+  kills >= 80 / h; **K3** of the `hit_gap` kill events, those within 3 s after a packet death of a
+  monster we hit >= 70 % (the rest are false kills: a target that walked off or teleported);
+  **D1** the GPU call p95 <= 35 ms; **R1** own-body class D <= 1; **E3** hard bars pass, 0 dead-end
+  Fly Wings, stalls <= 39 / h; **deaths** 0 and the lowest HP >= 30 %. Reported: kills per monster
+  seen, the no-kill fights' time, the stuck time (U1 of the base), class D by distance.
+- **Decisions:** K1 + E1 + K3 pass with no regression bar failing -> `--kill-gap` joins the base;
+  otherwise off (studied).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2403,3 +2426,33 @@ server answered none (no self_move); a request south at 110.8 s was answered at 
 - **The fix (dungeon@9.12, 8dd42962): `--reach-check`**, pre-registered as p23 (4AE). Replayed on
   p16-p21's box strikes (our packet cell + the strike's rel): it passes over 90 of 205 class-D
   strikes and 2 of 192 good ones.
+
+**Pilot p23 (4AE; 01:44:01-02:09:46, 25 min; the MVP killed 01:43:01 -- "All monsters killed!",
+then "1[dead] Stormy Knight"; immunity OFF at 01:43:40 and ON at 02:09:58, both judged on the Chat
+tab; the base + `--reach-check`, f0d6c75b). VERDICT: U1, U2, E1, D1, E3, deaths PASS; R1 FAILS
+(2). By 4AE's rule `--reach-check` stays OFF; it returns with the own-sprite fix (p25).**
+
+| | p16 (base) | p21 / p22 | **p23 (+ reach-check)** | bar |
+|---|---|---|---|---|
+| U1 stuck time | 133.9 s | 132.9 / 133.1 s | **0 s** (5 of 533 requests ignored, none in a row of 3) | <= 30 s: PASS |
+| U2 class-D box strikes begun ignored | 14 | 12 / 17 | **2** | <= 3: PASS |
+| E1 kills | 44 (87.9 / h) | 108.0 / 70.7 per h | **36 (86.4 / h)** | >= 80 / h: PASS |
+| R1 own-body class D | 2 | 0 / 0 | **2** (7 own-body strikes) | <= 1: FAIL |
+| D1 GPU call p50 / p95 | 20.6 ms | | **20.5 / 21.9 ms; 100 %** (1,532 calls) | PASS |
+| E3 / deaths | | | **pass (NPC 0), 0 Fly Wings, 6 stalls (14.4 / h) / 0; lowest HP 58.7 %** | PASS |
+| reach_skip events (rate-limited, one per cell per 30 s) | | | **34** | reported |
+| class D at 0-1 / 2-6 / 7-8 / 9+ cells; F1 share | | p21 2 / 8, 15 / 45, 7 / 18, 2 / 3 | **7 / 21, 3 / 26, 7 / 17, 12 / 14; 38.6 %** | reported |
+| time held on class D: total / median | 494.8 / 7.25 s | 170.9 / 290.1 s | **208.8 / 7.23 s** (29) | reported |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.804 / 0.531 | **0.766; 18.8** (47) | reported |
+| after the kill p50 (`fight_time.py`); no-kill fights | 6.50 s | 6.46 / 6.47 s | **6.51 s; 38 fights, 416.5 s** | reported |
+
+- **R1's two:** all 7 own-body strikes came from the DEFEND SCAN's points on her own sprite (cells
+  (0, +-1), v 297-360; 5 K, 2 D at (0, 1) v 312.1); none from the box path. p23 had 21 scan strikes
+  (box 57): with the far monsters behind walls passed over, more monsters walked up to her. The
+  own-sprite fix that removes exactly those scan points is `--skip-own-cells` (dungeon@9.9, fa67f3e0;
+  Batt's approved item (c)).
+- **What is left of the far misses:** 9+ cells 12 of 14 class D (the server answered their walk
+  requests: only 2 class D began ignored) -- the far mechanism (`--far-single --far-approach`) is the
+  fix for those (a later pilot).
+- **Items (snatched):** Scell 6, Well-baked Cookie 3, Candy 2, Pearl 2, Zargon 2, Red Herb 1,
+  Piece of Cake 1, Iron 1, Manacles 1.
