@@ -1116,7 +1116,7 @@ def test_the_intel_overlays_change_only_the_image_the_gpu_and_the_accelerator(
         assert spec["mem_limit"] == spec["memswap_limit"] == "11g"
     assert spec["image"] == "poring-lab/vision-intel:local"
     assert spec["deploy"] == {}  # `!reset {}`: no NVIDIA reservation
-    assert spec["devices"] == ["/dev/dri:/dev/dri"]
+    assert spec["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]  # no KMS nodes (11-08)
     assert spec["group_add"] == ["${RENDER_GID:-991}"]
     assert spec["environment"] == {
         "PORING_ACCEL": "xpu", "VISION_MAX_VRAM_FRACTION": "${VISION_MAX_VRAM_FRACTION:-1.0}",

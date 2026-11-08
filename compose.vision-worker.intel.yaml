@@ -9,7 +9,8 @@ services:
     image: poring-lab/vision-intel:local
     deploy: !reset {}
     devices:
-      - /dev/dri:/dev/dri
+      # the render node only (Batt 2026-11-08): compute needs no KMS node (card0/card1)
+      - /dev/dri/renderD128:/dev/dri/renderD128
     group_add:
       - "${RENDER_GID:-991}" # the host's `render` group: getent group render
     environment:

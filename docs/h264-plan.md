@@ -372,3 +372,28 @@ Windows `typeperf` runs over the three RemoteFX Graphics counters, typed into a 
   - ~10–20 GB/hour as JPEG q80;
   - much less if sampled.
   - Measure on the first recording run, not here.
+
+## bot-server A/B: progressive vs AVCthin (plan written BEFORE the runs, 2026-11-08 13:41 ICT; Batt "compare it")
+
+- **Why:** a read-only study on bot-server (2026-11-08) estimated progressive's in-motion decode
+  at ~6 of the 8 slower cores (VM 103 measured 4.42-4.78) and AVCthin's at ~1.3. Progressive has no
+  GPU path in FreeRDP, so the codec is the CPU lever. Batt chose progressive on 2026-10-01 for
+  fidelity; this measures the trade on the new host.
+- **Setup:**
+  - bot-server, FreeRDP 3.32.1 (desktop image), the 1440x900 session, the 1280x720 client;
+  - the Rogue on the GM account, immunity ON (her rest state);
+  - after pilot p12, so nothing else loads the host (the vision worker stopped).
+- **Per codec** (`scripts/rdp_reconnect.sh <codec>`, ONE session, then the RDP bus live again):
+  1. motion: `measure_motion.py rotate 60` at the rest spot prt_fild08 268,107 (outdoor), and at
+     prt_church 99,112 (indoor) via a GM @warp. It reports delivered frames/s (median, p10-p90)
+     and the desktop container's cores;
+  2. packet -> frame: `measure_delay.py walks 40 --as gm` at prt_fild08;
+  3. idle: the desktop container's cores over 60 s standing (cgroup cpu.stat);
+  4. fidelity:
+     - 8 frames of the same still view: the PSNR of the HP/SP panel and the game region,
+       AVCthin vs progressive;
+     - the CPU detector's boxes on both: counts and species.
+- **Order:** progressive (the baseline, as now), then AVCthin, then back to progressive. The
+  codec stays progressive unless Batt decides otherwise.
+- **Reported, no bar:** a table like Arm C's, plus the fidelity numbers. The adoption is Batt's
+  (AVCthin is lossy; the bot reads these frames).
