@@ -245,7 +245,7 @@ LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25
 # after it -> the lock drops; after either, the box path runs again (the nearest box), at most
 # QUICK_RETRY times a fight, before the ring scan.
 QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
-# --kill-gap (dungeon@9.13, rogue-xmas02.md 4AG): at Base 99 the Battle Log shows NO exp line, so
+# --kill-gap (dungeon@9.13, rogue-xmas02.md 4AF): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
 # from the kill (packets) to fight_end, 276.8 s of the run's 1,500 (fight_time.py). Our hits on a
@@ -1080,7 +1080,7 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
-    if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AG)
+    if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
         out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS]
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
@@ -4103,7 +4103,7 @@ def main() -> int:
         "--kill-gap",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="dungeon@9.13 (rogue-xmas02.md 4AG; OFF by default): after 2 of our hits on the "
+        help="dungeon@9.13 (rogue-xmas02.md 4AF; OFF by default): after 2 of our hits on the "
         "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
         "quiet fight ends without the scan",
     )

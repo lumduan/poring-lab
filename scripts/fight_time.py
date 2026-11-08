@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Where a run's fight time goes (rogue-xmas02.md 4AG, p25's K1 / K2; committed before p25).
+"""Where a run's fight time goes (rogue-xmas02.md 4AF, p24's K1 / K2; committed before p24).
 
     fight_time.py SESSION_DIR
 

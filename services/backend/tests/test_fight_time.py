@@ -1,4 +1,4 @@
-"""scripts/fight_time.py (rogue-xmas02.md 4AG): where the fight time goes."""
+"""scripts/fight_time.py (rogue-xmas02.md 4AF): where the fight time goes."""
 
 from __future__ import annotations
 

@@ -1414,7 +1414,7 @@ def test_reach_check_skips_boxes_the_server_would_not_walk_to() -> None:
 
 
 def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:
-    """dungeon@9.13 (rogue-xmas02.md 4AG): no exp line at Base 99, so after 2 of our hits on the
+    """dungeon@9.13 (rogue-xmas02.md 4AF): no exp line at Base 99, so after 2 of our hits on the
     lock, none for 1.5 s (our hits come every 0.47 s) is the kill; off by default."""
     assert (dh.KILL_GAP_S, dh.KILL_GAP_HITS) == (1.5, 2)
     assert dh.kill_gapped(2, 1.6)
