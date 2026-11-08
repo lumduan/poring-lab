@@ -437,3 +437,43 @@ as Batt prefers:
   ~0.5 s (sections 9 and 17a), so loss, optimizer and the trainer's own work take ~0.8 s. A
   profile of that is the next step if training speed matters more.
 - **Default for Arc runs: `--workers 2`** (the same speed as 4, the least memory).
+
+## 18. What the Arc's media engine can do: the VA-API probe (2026-11-08 13:43-14:07 ICT; Batt "ok, try it")
+- **The probe:** `services/media-probe/` + compose service `media-probe` (441504e5..cb54dd3e, a
+  subagent's build).
+  - Profile `probe`, never started by default.
+  - Isolation: network none, read-only, cap_drop ALL, `/dev/dri/renderD128` only, 2g, 4 CPUs;
+    test_guards pins it.
+  - Ubuntu 26.04 + intel-media-va-driver-non-free 26.1.2 + ffmpeg 8.0.1.
+  - Run 4 times through `build:` / `start:` / `rm:` guarded steps. No lab container was restarted
+    (their StartedAt unchanged).
+  - The image is kept: 225 MB, for re-measuring with real streams.
+- **vainfo:** iHD 26.1.2, VA-API 1.23.
+  - Decode: H.264, HEVC (8 to 12-bit, 4:2:0 / 4:2:2 / 4:4:4), VP9, AV1, JPEG.
+  - Encode: H.264 / HEVC / VP9 / AV1, low-power VDEnc only (EncSliceLP), plus JPEG.
+- **Measured** (synthetic 1440x900 30-fps clip, 4 runs within 3 %; CPU ms a frame, GPU time not
+  counted):
+
+  | | CPU | VA-API |
+  |---|---|---|
+  | H.264 decode, frames to RAM (NV12) | 6.6 ms (1 thread) | 2.3-2.5 ms (download included) |
+  | H.264 decode to BGRX (what a client draws) | 9.0 ms | 11.1 ms (ffmpeg's NV12->BGRX is slow); GPU-side RGB: 300-400 ms or refused |
+  | H.264 encode 6 Mbit/s | 12.8 ms (x264 ultrafast, 4 threads) | **2.9-3.0 ms**, PSNR 46.5 vs 44.3 |
+  | HEVC / AV1 encode 6 Mbit/s | 88-90 / 47 ms | **3.2 / 3.0-3.2 ms**, PSNR 47.0 / 47.4 |
+  | JPEG of a 1440x900 BGRA frame | (the console's simplejpeg q80: 9.4 ms) | 6.6-6.8 ms incl. the upload; **colours washed out** (limited range in a full-range JPEG, not fixed) |
+
+- **Verdicts:**
+  - **RDP decode on the GPU: no.** Progressive has no GPU path. For an AVC mode the saving is at
+    most ~0.13 cores, and it needs our own FreeRDP build (WITH_FFMPEG_HWACCEL is OFF), iHD and the
+    render node in the desktop.
+  - **Console JPEG on the GPU: no.** It saves ~0.07 cores at 15 fps, has a colour defect, and
+    needs the render node in the backend (the input writer).
+  - **S2 decode:** a real gain (~0.25-0.35 cores at 60 fps) only if the frame bus takes NV12.
+    Later, if S2 is the path again.
+  - **Worth remembering:** the Arc encodes H.264 / HEVC / AV1 at 400+ fps for ~3 CPU ms a
+    frame, at better quality than the CPU encoders at the same bitrate. Recordings are 1-fps PNG
+    today, 7-8.4 GB/h, so a hardware-encoded recording path is a candidate (Batt's call, a
+    separate design).
+- Found by the subagent: compose in a git worktree has no `.env` (it interpolates `:?` variables
+  and host_profile reads it). A guarded compose step from a worktree needs the main `.env`
+  linked in (gitignored, removed after).
