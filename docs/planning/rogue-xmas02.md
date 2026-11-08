@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p13 (4T) done 2026-11-08 17:04: the fast detector D1 20.6 ms (p12 64.7) and D2 45 ms PASS; E1 FAIL 34.0 / h, explained by 38 % fewer monsters in sight (kills per sighting 0.55 vs 0.58). Batt: keep the fast path live (recommended)? Next candidates: aim for the target's motion (far box), (a2) the recheck on E / W cells; p14 carries 10 potions (potions_win)."
+next_action: "p13r (4U) done 2026-11-08 18:43: every bar PASS, E1 44.0 / h, class D 19 %. Next: p14 (4V) --lead-strike, the box path aims ahead of a walking target (Batt, Amendment H)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1816,3 +1816,31 @@ its start line). VERDICT: D1, D2, R1, F3, E3 and deaths PASS; E1 FAILS (34.0 / h
     detector is **Batt's call** (recommended: same boxes, ~3 x faster, every other bar passes).
   - After the run the bag was cleared again (17:05:56-17:07:26: Etc 2, Use 6; weight 942 -> 520,
     10 / 10 on the hotbar).
+
+**Pilot p13r (4U; 18:12:32-18:43:17, its own time box; immunity OFF at 18:12:09, judged
+"Returned to normal state."; back ON at 18:43:36, judged "You are now immune to attacks."; the
+detect server `final` with the floor from the installed unit; the setup added 10 Fly Wings only:
+10 White Potions held, `potions_win`). VERDICT: every bar PASSES. E1 44.0 / h.**
+
+| | p12 | p13 | **p13r** | bar |
+|---|---|---|---|---|
+| D1 live detector p50 / p95 | 64.7 / 68.3 ms | 20.6 / 22.1 | **20.5 / 22.5** (1,810, all GPU) | <= 35, >= 99 % GPU: PASS |
+| D2 boxes after the grab | 89 ms | 45 | **44** | <= 65: PASS |
+| E1 kills (packets) | 29 (58.0 / h) | 17 (34.0 / h) | **22 (44.0 / h)** | >= 40 / h: PASS |
+| R1 own-body class D | 0 | 1 | **0** (3 own-body strikes, all attacked; 8 transient swords) | <= 1: PASS |
+| F3 far clicks while walking | 0 | 0 | **0** | <= 2: PASS |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 2 | pass / 0 / 1 | **pass / 0 / 3** | PASS |
+| deaths | 0 | 0 | **0** (lowest HP 66.3 %, 0 potions) | PASS |
+| supply: monsters seen (/ 10 min) | 50 (16.7) | 31 (10.3) | **36 (12.0)** | reported |
+| kills per monster seen | 0.58 | 0.548 | **0.611** | reported |
+| class D share | 28 % (13 / 46) | 31 % (9 / 29) | **19 % (7 / 36)** | reported |
+| far class D | 6 of 29 | 4 of 16 | **4 of 19** | reported |
+
+- **Box path** (`target_motion.py`): 13 box strikes; target walking at the grab 3 (1 class D),
+  standing 9 (1 class D), no monster within 3 cells 1 (class D).
+- **Items (snatched):** Scell 4, Zargon 2, Red Herb 1, Piece of Cake 1, Level 3 Cold Bolt 1 (9;
+  18 / h).
+- **Decision (as pre-registered):** E1 passes, so the fast path's kill rate holds; p13r is p14's
+  baseline. The supply was again below p12's (12.0 vs 16.7 / 10 min); kills per monster seen are
+  the best so far.
+- The bag cleared after it (18:44:04-18:45:32: Etc 2, Use 5; weight 590 -> 520, 10 / 10).
