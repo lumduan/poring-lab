@@ -248,9 +248,10 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # --kill-gap (dungeon@9.13, rogue-xmas02.md 4AG): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
-# from the kill (packets) to fight_end, 296 s of the run's 1,500. Our hits on a living target come
-# every 0.47 s (packets, p16-p22: p50 0.47, p90 0.48 s). So after KILL_GAP_HITS of our hits on the
-# lock, none for KILL_GAP_S counts as the kill: the lock goes and, when quiet, the fight ends.
+# from the kill (packets) to fight_end, 276.8 s of the run's 1,500 (fight_time.py). Our hits on a
+# living target come every 0.47 s (packets, p16-p22: p50 0.47, p90 0.48 s). So after KILL_GAP_HITS
+# of our hits on the lock, none for KILL_GAP_S counts as the kill: the lock goes and, when quiet,
+# the fight ends.
 KILL_GAP_S, KILL_GAP_HITS = 1.5, 2
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
