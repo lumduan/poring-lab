@@ -1350,6 +1350,27 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** every bar passes on p25 -> `--reach-check` joins the base (the report names p23's
   R1 failure beside it); otherwise it stays off.
 
+### 4AH. Pilot p26 pre-registration: --kill-gap again, with its two fixes (9.13b + 9.13c) (written BEFORE its run, 2026-11-09 03:21 ICT)
+
+- **Why (p24, section 5):** the rule did what it was for -- after a real kill the fight ended
+  1.96 s after the death (6.46-6.53 s before) -- but E1 (74.3 / h) and K3 (62.2 %) failed on two
+  side effects, each now fixed and checked against p24's own record:
+  - 9.13c (9436a75b): KILL_GAP_HITS 2 -> 5; p24's false kills were mostly short contacts (2-4 of
+    our hits, the target walked off alive); 5 keeps 27 of its 28 real kills and 3 of 17 false;
+  - 9.13b (7ed2d7d8): a box fight the quiet-kill rule closes before the box path looked is no box
+    miss (p24: 14 of the first 15 misses, 10 spots ignored).
+- **The one change against the base (p16's flags, `--engage-screen` + the boss guard; `--reach-check` OFF (p25
+  failed U1 / U2)):** `--kill-gap` as it now stands (9.13c; the run
+  record says `"kill_gap": [1.5, 5, "9.13c"]`).
+- **The run:** the base command with `--label xmas02-p26 --kill-gap`, 25 min.
+- **Bars (4AF's, unchanged):** **K1** after-the-kill p50 <= 3.0 s; **E1** kills >= 80 / h; **K3**
+  inferred kills within 3 s after a death of ours >= 70 %; **D1** p95 <= 35 ms; **R1** own-body
+  class D <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0, the
+  lowest HP >= 30 %. Reported: box misses after a quiet-kill end (9.13b's count: 0 expected),
+  fights and no-kill fights, kills per monster seen, the stuck time.
+- **Decisions:** K1 + E1 + K3 pass with no regression bar failing -> `--kill-gap` joins the base;
+  otherwise off.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2505,3 +2526,26 @@ R1, E3, deaths PASS; E1 FAILS (74.3 / h), K3 FAILS (62.2 %). `--kill-gap` stays 
   kills kept, 3 of 17 false ones; share 0.90).
 - **Items (snatched):** Scell 14, Zargon 4, Manacles 3, Red Herb 2, Pearl 2, Iron 2, Piece of
   Cake 1, Pinafore 1.
+
+**Pilot p25 (4AG; 02:54:57-03:20:48, 25 min; the MVP killed 02:53:58, "1[dead] Stormy Knight";
+immunity OFF at 02:54:36 and ON at 03:21:02, both judged on the Chat tab; the base +
+`--reach-check`, replicated). VERDICT: U1 FAILS (43.3 s), U2 FAILS (5); E1, R1, D1, E3, deaths
+PASS. `--reach-check` stays OFF (4AG's rule).**
+
+| | p16 (base) | p23 (reach-check) | **p25 (reach-check, again)** | bar |
+|---|---|---|---|---|
+| U1 stuck time | 133.9 s | 0 s | **43.3 s** (3 spans: 4.1, 10.3, 28.9 s; 25 of 457 requests ignored) | <= 30 s: FAIL |
+| U2 class-D box strikes begun ignored | 14 | 2 | **5** | <= 3: FAIL |
+| E1 kills | 44 (87.9 / h) | 36 (86.4 / h) | **41 (98.2 / h)** | >= 80 / h: PASS |
+| R1 own-body class D | 2 | 2 | **0** (6 own-body strikes); pooled p23 + p25: 2 of 13 | <= 1: PASS |
+| D1 / E3 / deaths / lowest HP | | | **20.6 / 21.9 ms; pass (NPC 0), 0 Fly Wings, 1 stall; 0; 95.0 %** | PASS |
+| reach_skip events | | 34 | **50** | reported |
+| class D at 0-1 / 2-6 / 7-8 / 9+ cells; F1 share | | 7 / 21, 3 / 26, 7 / 17, 12 / 14; 38.6 % | **3 / 21, 6 / 28, 14 / 30, 21 / 23; 50.6 %** | reported |
+| time held on class D | 494.8 s | 208.8 s | **307.0 s** (44) | reported |
+| kills per monster seen; supply | 0.80; 18.3 | 0.766; 18.8 | **0.745; 22.0** (55) | reported |
+| after the kill p50; no-kill fights | 6.50 s | 6.51 s; 38 (416.5 s) | **6.55 s; 55 (575.6 s)** | reported |
+
+- The stuck time fell (133.9 -> 43.3 s) but not to the bar; why the 28.9 s span passed the check is
+  studied below (after p26).
+- **Items (snatched):** Zargon 6, Scell 5, Piece of Cake 3, Red Herb 1, Candy 1, Well-baked Cookie
+  1, Pearl 1.
