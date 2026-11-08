@@ -5,11 +5,17 @@ VDEnc) record the lab's frames as well as today's 1-fps lossless PNG, for less?
 
     gpu_rec_bench.py sample --session SID:MAP [--session SID:MAP ...] [--motion SID]
                             [--runs 2] [--run-len 50] [--motion-len 150] [--motion-start-s 300]
-                            [--root /dev/shm/poring-lab-recbench] [--datasets DIR]
+                            [--root /dev/shm/poring-lab-recbench] [--datasets DIR] [--round 1|2]
     (the container side: the guarded one-shot service media-recbench, recbench.sh; the doc's
      section 7 has the exact commands)
     gpu_rec_bench.py score --root ROOT --out OUT.json [--det-threads 8] [--no-detector]
     gpu_rec_bench.py verdict OUT.json
+
+ROUNDS: round 1 (section 8's run) is the original arm table; round 2 (doc 6.6, Batt 2026-11-08
+"try fixing the colours too") re-runs its references and adds the GPU-side colour conversion done
+right: four GPU colour controls (gctl: the conversion alone, with a luma fingerprint of the
+convention it actually used) and two 4:4:4 candidates. ``sample --round N`` writes that round's
+arms; ``score`` and ``verdict`` read it back (a score without one is round 1's).
 
 THREE PARTS, one source of truth for the arms (ARMS, below):
   * ``sample`` (host): REAL lab frames, read-only from the NAS. Each ``--session`` is an RDP PNG
@@ -48,7 +54,7 @@ import sys
 import tarfile
 import time
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -85,12 +91,16 @@ JPEG_ARM = "ref-jpeg95"  # the training cache's own encoder (build_frame_cache.j
 
 @dataclass(frozen=True)
 class Arm:
-    """One encoder setting. ``mode``: ctl (BGR -> YUV -> raw, the colour round trip alone), intra
-    (every frame an IDR), vpp (intra, the BGR -> YUV conversion on the GPU), gop (an IDR every 30
-    frames, no B-frames), x (exploratory, the lowest quantiser ffmpeg lets us ask for: 0 means
-    "unset" to vaapi_encode; reported, never graded). ``samples``: ref (the PNG
-    sessions), motion (the 30 / 10 / 5 fps clips) or all. ``frames``: 0 = every frame of a run,
-    else at most that many. ``args``: the encoder's own options, appended as written."""
+    """One encoder setting. ``mode``: ctl (BGR -> YUV by swscale -> raw, the colour round trip
+    alone), gctl (round 2: BGRA -> YUV on the GPU by scale_vaapi -> downloaded raw, the GPU's
+    conversion alone; reported, never graded), intra (every frame an IDR), vpp (intra, the
+    BGR -> YUV conversion on the GPU), gop (an IDR every 30 frames, no B-frames), x (exploratory,
+    the lowest quantiser ffmpeg lets us ask for: 0 means "unset" to vaapi_encode; reported, never
+    graded). ``samples``: ref (the PNG sessions), motion (the 30 / 10 / 5 fps clips) or all.
+    ``frames``: 0 = every frame of a run, else at most that many. ``vpp``: scale_vaapi's options
+    (vpp / gctl only). ``color_range``: the DECLARED range, pc (full) or tv (limited): the stream's
+    tag and the scorer's inverse conversion (the matrix is always BT.709). ``args``: the encoder's
+    own options, appended as written (last in the tsv, so a shell ``read`` gives it the rest)."""
 
     name: str
     mode: str
@@ -104,7 +114,9 @@ class Arm:
     ext: str
     mux: str
     frames: int
-    args: str
+    vpp: str = field(default="-", kw_only=True)
+    color_range: str = field(default="pc", kw_only=True)
+    args: str = ""
 
     def tsv(self) -> str:
         return "\t".join(str(v) for v in asdict(self).values())
@@ -114,6 +126,16 @@ _I = "-g 1 -bf 0"  # every frame an IDR (vaapi_encode: gop 1, idr_interval 0)
 _G = "-g 30 -bf 0"  # an IDR every 30 frames: 30 s at 1 fps, 1 s at 30 fps
 H264, HEVC, AV1 = "VAProfileH264High", "VAProfileHEVCMain", "VAProfileAV1Profile0"
 HEVC444 = "VAProfileHEVCMain444"
+# scale_vaapi's colour options (doc 8.1 / 6.6). Round 1 named the matrix and the range only; the
+# output frame's primaries stayed "unknown" (the encode log: "vaapi(pc, bt709/unknown/unknown)").
+# ffmpeg 8's vaapi_vpp passes VAProcColorStandardExplicit when the driver lists it, and iHD's
+# explicit path picks the YUV target colour space from the PRIMARIES alone (matrix ignored),
+# falling back to CSpace_BT601 -- BT.601, LIMITED range -- when they are unknown.
+VPP_R1 = "out_color_matrix=bt709:out_range=full"  # round 1's exact options (vpp-hevc420-q20)
+_P709 = "out_color_primaries=bt709:out_color_transfer=bt709"
+VPP_FULL = f"{VPP_R1}:{_P709}"
+VPP_TV = f"out_color_matrix=bt709:out_range=limited:{_P709}"
+_Q444 = f"-profile:v rext -rc_mode CQP -qp 20 {_I} -aud 1"  # hevc444-q20's encoder options
 ARMS: tuple[Arm, ...] = (
     Arm("ctl-yuv444", "ctl", "rawvideo", "yuv444p", "-", "yuv444p", "-", "ref", 0, "yuv",
         "rawvideo", 10, ""),
@@ -138,7 +160,7 @@ ARMS: tuple[Arm, ...] = (
     Arm("av1-420-g80", "intra", "av1_vaapi", "nv12", "nv12", "yuv420p", AV1, "ref", 1, "obu",
         "obu", 0, f"-rc_mode CQP -global_quality 80 {_I}"),
     Arm("vpp-hevc420-q20", "vpp", "hevc_vaapi", "nv12", "nv12", "yuv420p", HEVC, "ref", 1,
-        "hevc", "hevc", 0, f"-rc_mode CQP -qp 20 {_I} -aud 1"),
+        "hevc", "hevc", 0, f"-rc_mode CQP -qp 20 {_I} -aud 1", vpp=VPP_R1),
     Arm("hevc420-q20-g30", "gop", "hevc_vaapi", "nv12", "nv12", "yuv420p", HEVC, "all", 0,
         "hevc", "hevc", 0, f"-rc_mode CQP -qp 20 {_G} -aud 1"),
     Arm("hevc444-q20-g30", "gop", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444, "all", 0,
@@ -149,22 +171,65 @@ ARMS: tuple[Arm, ...] = (
         "hevc", "hevc", 10, f"-profile:v rext -rc_mode CQP -qp 1 {_I} -aud 1"),
     Arm("x-av1-g1", "x", "av1_vaapi", "nv12", "nv12", "yuv420p", AV1, "ref", 0, "obu", "obu", 10,
         f"-rc_mode CQP -global_quality 1 {_I}"),
+    # --- round 2 (doc 6.6, PRE-REGISTERED before its run): the GPU's own conversion -------------
+    # the controls: BGRA -> scale_vaapi -> downloaded raw, 10 frames a run (never graded)
+    Arm("gctl-vpp420-r1", "gctl", "rawvideo", "nv12", "-", "yuv420p", "-", "ref", 0, "yuv",
+        "rawvideo", 10, "", vpp=VPP_R1),
+    Arm("gctl-vpp420", "gctl", "rawvideo", "nv12", "-", "yuv420p", "-", "ref", 0, "yuv",
+        "rawvideo", 10, "", vpp=VPP_FULL),
+    Arm("gctl-vpp444", "gctl", "rawvideo", "vuyx|vuya", "-", "yuv444p", "-", "ref", 0, "yuv",
+        "rawvideo", 10, "", vpp=VPP_FULL),
+    Arm("gctl-vpp444-tv", "gctl", "rawvideo", "vuyx|vuya", "-", "yuv444p", "-", "ref", 0, "yuv",
+        "rawvideo", 10, "", vpp=VPP_TV, color_range="tv"),
+    # the candidates: hevc444-q20's encoder, the conversion on the GPU (8-bit 4:4:4 surfaces)
+    Arm("vpp-hevc444-q20", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444, "ref", 1,
+        "hevc", "hevc", 0, _Q444, vpp=VPP_FULL),
+    Arm("vpp-hevc444-q20-tv", "vpp", "hevc_vaapi", "vuyx|vuya", "vuyx", "yuv444p", HEVC444, "ref",
+        1, "hevc", "hevc", 0, _Q444, vpp=VPP_TV, color_range="tv"),
 )  # fmt: skip
 GRADED_MODES = ("intra", "vpp", "gop")
 CANDIDATE_MODES = ("intra", "vpp")
+CONTROL_MODES = ("ctl", "gctl")
 DECODERS = {"hevc": "hevc", "h264": "h264", "obu": "libdav1d"}  # host software decoders
 DEMUXERS = {"hevc": "hevc", "h264": "h264", "obu": "obu"}
-
-
-def arms_tsv(arms: Sequence[Arm] = ARMS) -> str:
-    """PURE: the container's arm table, one tab-separated line per arm (the args last, so a shell
-    `read` gives it the rest of the line)."""
-    head = "#" + "\t".join(Arm.__dataclass_fields__)
-    return "\n".join([head, *(a.tsv() for a in arms)]) + "\n"
+# Which arms each round runs, in the container's order. Round 1 is the original table (section
+# 8's run); round 2 re-runs its references so it stands on its own (doc 6.6). A score without a
+# "round" is round 1's.
+ROUNDS: dict[int, tuple[str, ...]] = {
+    1: ("ctl-yuv444", "ctl-yuv420", "hevc420-q14", "hevc420-q20", "hevc420-q26", "hevc444-q14",
+        "hevc444-q20", "hevc444-q26", "h264-420-q20", "av1-420-g40", "av1-420-g80",
+        "vpp-hevc420-q20", "hevc420-q20-g30", "hevc444-q20-g30", "h264-420-q20-g30",
+        "x-hevc444-q1", "x-av1-g1"),
+    2: ("ctl-yuv444", "ctl-yuv420", "gctl-vpp420-r1", "gctl-vpp420", "gctl-vpp444",
+        "gctl-vpp444-tv", "hevc444-q20", "vpp-hevc444-q20", "vpp-hevc444-q20-tv"),
+}  # fmt: skip
+# the encode timing pass: passes per arm (round 2 grades S2 / S3 on their MEDIAN, doc 6.6)
+TIMING_REPS = {1: 1, 2: 3}
 
 
 def arm_by_name(name: str) -> Arm:
     return next(a for a in ARMS if a.name == name)
+
+
+def round_arms(n: int) -> tuple[Arm, ...]:
+    """The arms of round ``n``, in its order (KeyError for an unknown round)."""
+    return tuple(arm_by_name(name) for name in ROUNDS[n])
+
+
+def arms_tsv(arms: Sequence[Arm] | None = None) -> str:
+    """PURE: the container's arm table, one tab-separated line per arm (the args last, so a shell
+    `read` gives it the rest of the line); round 1's arms by default."""
+    head = "#" + "\t".join(Arm.__dataclass_fields__)
+    rows = round_arms(1) if arms is None else arms
+    return "\n".join([head, *(a.tsv() for a in rows)]) + "\n"
+
+
+def arm_color(arm: Arm) -> tuple[str, str]:
+    """PURE: the arm's DECLARED convention as the scorer inverts it: BT.709, and its range (pc =
+    full = round 1's COLOR, tv = limited)."""
+    if arm.color_range not in ("pc", "tv"):
+        raise ValueError(f"{arm.name}: color_range {arm.color_range!r}")
+    return (COLOR[0], "JPEG" if arm.color_range == "pc" else "MPEG")
 
 
 # --- the pre-registered bars (the doc's section 6 table carries the same ids and values) --------
@@ -346,6 +411,147 @@ def timing_row(row: dict[str, str]) -> dict[str, Any]:
     }  # fmt: skip
 
 
+def merge_timing(rows: Sequence[dict[str, str]]) -> dict[str, dict[str, Any]]:
+    """PURE: timing.tsv rows -> one entry per name. A name with ONE ok row is exactly its
+    timing_row (round 1: one pass per arm, plus a failed loop pass before some decode fallbacks);
+    several ok rows (round 2: TIMING_REPS passes) give the MEDIAN CPU ms per frame and fps, with
+    every pass listed; a name with no ok row keeps its last row, as round 1's scorer did."""
+    by: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        by.setdefault(r["name"], []).append(timing_row(r))
+    out: dict[str, dict[str, Any]] = {}
+    for name, got in by.items():
+        ok = [t for t in got if t.get("cpu_ms_per_frame") is not None]
+        if len(ok) <= 1:
+            out[name] = ok[0] if ok else got[-1]
+            continue
+        cpu = [t["cpu_ms_per_frame"] for t in ok]
+        fps = [t["fps"] for t in ok]
+        out[name] = {
+            "status": "ok", "frames": ok[0]["frames"], "note": ok[0]["note"],
+            "cpu_ms_per_frame": round(statistics.median(cpu), 3),
+            "fps": round(statistics.median(fps), 1),
+            "passes": len(ok), "cpu_ms_passes": cpu, "fps_passes": fps,
+        }  # fmt: skip
+    return out
+
+
+# --- the colour fingerprint (round 2): which convention did a YUV plane actually get? ----------
+
+# Y' = scale * (kr R + kg G + kb B) + offset, 8-bit, per named convention
+CONVENTIONS: dict[str, tuple[float, float, float, float, float]] = {
+    "bt709-full": (0.2126, 0.7152, 0.0722, 1.0, 0.0),
+    "bt709-limited": (0.2126, 0.7152, 0.0722, 219 / 255, 16.0),
+    "bt601-full": (0.299, 0.587, 0.114, 1.0, 0.0),
+    "bt601-limited": (0.299, 0.587, 0.114, 219 / 255, 16.0),
+}
+FIT_NAMED_LEVELS = 3.0  # a fit within this many 8-bit levels of a convention is NAMED (doc 6.6)
+RAW_FORMATS = ("yuv444p", "yuv420p", "nv12", "vuyx", "vuya")
+
+
+def raw_frame_bytes(fmt: str, w: int, h: int) -> int:
+    """PURE: bytes of one raw frame of ``fmt``."""
+    if fmt == "yuv444p":
+        return w * h * 3
+    if fmt in ("yuv420p", "nv12"):
+        return w * h * 3 // 2
+    if fmt in ("vuyx", "vuya"):
+        return w * h * 4
+    raise ValueError(f"unknown raw format {fmt!r}")
+
+
+def raw_planes(data: bytes, fmt: str, w: int, h: int) -> list[tuple[npt.NDArray[np.uint8], ...]]:
+    """PURE: a raw file of ``fmt`` frames -> (Y, U, V) per frame, each plane at its own size. NV12's
+    interleaved chroma is U then V; VUYX / VUYA (ffmpeg's packed 4:4:4) is V, U, Y, X/A bytes."""
+    per = raw_frame_bytes(fmt, w, h)
+    out = []
+    for i in range(len(data) // per):
+        buf = np.frombuffer(data, np.uint8, per, i * per)
+        if fmt == "yuv444p":
+            p = buf.reshape(3, h, w)
+            out.append((p[0], p[1], p[2]))
+        elif fmt == "yuv420p":
+            n, c = w * h, (w // 2) * (h // 2)
+            out.append((buf[:n].reshape(h, w), buf[n : n + c].reshape(h // 2, w // 2),
+                        buf[n + c :].reshape(h // 2, w // 2)))  # fmt: skip
+        elif fmt == "nv12":
+            uv = buf[w * h :].reshape(h // 2, w // 2, 2)
+            out.append((buf[: w * h].reshape(h, w), uv[..., 0], uv[..., 1]))
+        else:
+            px = buf.reshape(h, w, 4)
+            out.append((px[..., 2], px[..., 1], px[..., 0]))
+    return out
+
+
+def planar_array(planes: tuple[npt.NDArray[np.uint8], ...]) -> npt.NDArray[np.uint8]:
+    """PURE: (Y, U, V) -> the array PyAV's VideoFrame.from_ndarray takes for yuv444p (3, h, w) or
+    yuv420p (h * 3 / 2, w): read_raw_yuv's own layout."""
+    y, u, v = planes
+    h, w = y.shape
+    if u.shape == y.shape:
+        return np.stack([y, u, v])
+    flat = np.concatenate([np.ascontiguousarray(p).reshape(-1) for p in (y, u, v)])
+    return flat.reshape(h * 3 // 2, w)
+
+
+def luma_fit(refs: Sequence[npt.NDArray[np.uint8]], ys: Sequence[npt.NDArray[np.uint8]],
+             step: int = 4) -> dict[str, Any]:  # fmt: skip
+    """PURE: least squares Y = a_r R + a_g G + a_b B + c over every ``step``-th pixel (both axes)
+    of the BGR originals and the Y planes a conversion wrote: the matrix and the range it USED, as
+    numbers (a limited range shows as scale ~0.859 and offset ~16, BT.601 as a_r / scale ~0.3)."""
+    xs, ts = [], []
+    for bgr, y in zip(refs, ys, strict=True):
+        s = bgr[::step, ::step].reshape(-1, 3).astype(np.float64)
+        xs.append(np.column_stack([s[:, 2], s[:, 1], s[:, 0], np.ones(len(s))]))
+        ts.append(y[::step, ::step].reshape(-1).astype(np.float64))
+    x, t = np.concatenate(xs), np.concatenate(ts)
+    coef, *_ = np.linalg.lstsq(x, t, rcond=None)
+    rms = float(np.sqrt(np.mean((x @ coef - t) ** 2)))
+    kr, kg, kb, c = (float(v) for v in coef)
+    scale = kr + kg + kb
+    name, err = name_convention(kr, kg, kb, c)
+    return {"kr": round(kr, 4), "kg": round(kg, 4), "kb": round(kb, 4), "offset": round(c, 2),
+            "scale": round(scale, 4), "rms": round(rms, 3), "pixels": int(len(t)),
+            "convention": name, "convention_err_levels": round(err, 2)}  # fmt: skip
+
+
+def name_convention(kr: float, kg: float, kb: float, offset: float) -> tuple[str, float]:
+    """PURE: the nearest named convention to a fitted luma, and its distance in 8-bit levels (the
+    largest of: each coefficient's difference x 255, the offset's difference); "none" when even
+    the nearest is more than FIT_NAMED_LEVELS away."""
+    best, best_err = "none", math.inf
+    for name, (r, g, b, scale, off) in CONVENTIONS.items():
+        err = max(abs(kr - scale * r) * 255, abs(kg - scale * g) * 255,
+                  abs(kb - scale * b) * 255, abs(offset - off))  # fmt: skip
+        if err < best_err:
+            best, best_err = name, err
+    return (best if best_err <= FIT_NAMED_LEVELS else "none"), best_err
+
+
+def plane_diff(a: Sequence[npt.NDArray[np.uint8]], b: Sequence[npt.NDArray[np.uint8]]
+               ) -> dict[str, dict[str, float]]:  # fmt: skip
+    """PURE: plane by plane (Y, U, V), ``a`` minus ``b``: the mean signed difference, the mean and
+    the largest absolute difference (the GPU's planes against swscale's of the same frames)."""
+    out = {}
+    for k, pa, pb in zip("YUV", a, b, strict=True):
+        if pa.shape != pb.shape:
+            raise ValueError(f"plane {k}: {pa.shape} vs {pb.shape}")
+        d = pa.astype(np.int16) - pb.astype(np.int16)
+        out[k] = {"mean": round(float(d.mean()), 3), "mean_abs": round(float(np.abs(d).mean()), 3),
+                  "max_abs": int(np.abs(d).max())}  # fmt: skip
+    return out
+
+
+VUI_RANGE = {0: "unspecified", 1: "tv", 2: "pc"}
+VUI_MATRIX = {0: "gbr", 1: "bt709", 2: "unspecified", 5: "bt470bg", 6: "smpte170m", 9: "bt2020nc"}
+
+
+def vui_of(frame: Any) -> dict[str, str]:
+    """A decoded frame's signalled range and matrix (the bitstream's VUI as libavcodec reads it)."""
+    return {"range": VUI_RANGE.get(int(frame.color_range), str(frame.color_range)),
+            "matrix": VUI_MATRIX.get(int(frame.colorspace), str(frame.colorspace))}  # fmt: skip
+
+
 def nearest_rank(vals: Sequence[float], q: float) -> float | None:
     s = sorted(vals)
     return s[min(len(s) - 1, int(q * len(s)))] if s else None
@@ -521,7 +727,7 @@ def verdict(score: dict[str, Any], bars: dict[str, float] = BARS) -> dict[str, A
         out["note"] = "V1 failed: the colour handling is not what the bench assumes; no verdict"
         return out
     sizes: dict[str, float] = {}
-    for a in ARMS:
+    for a in round_arms(int(score.get("round", 1))):
         if a.mode not in GRADED_MODES:
             continue
         per: dict[str, Any] = {}
@@ -550,6 +756,28 @@ def verdict(score: dict[str, Any], bars: dict[str, float] = BARS) -> dict[str, A
                                              for s in refs)  # fmt: skip
     if sizes:
         out["candidate"] = min(sizes, key=lambda k: sizes[k])
+    return out
+
+
+def controls_summary(score: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """PURE: the colour controls per ref sample (reported, never graded; doc 6.6): the round trip's
+    PSNR and largest error under the arm's DECLARED convention, the luma fingerprint (the
+    convention the conversion actually used), and the GPU planes against swscale's."""
+    out: dict[str, dict[str, Any]] = {}
+    for s, v in score["samples"].items():
+        if v.get("kind") != "ref":
+            continue
+        for name, arm in v["arms"].items():
+            if arm.get("mode") not in CONTROL_MODES or arm.get("status") != "ok":
+                continue
+            q, fit = arm.get("quality") or {}, arm.get("fit") or {}
+            out.setdefault(s, {})[name] = {
+                "declared": arm.get("declared"), "psnr_mean": q.get("psnr_mean"),
+                "maxabs": q.get("maxabs"), "sat_keep": q.get("sat_keep"),
+                "fit": fit.get("convention"), "fit_err_levels": fit.get("convention_err_levels"),
+                "scale": fit.get("scale"), "offset": fit.get("offset"),
+                "vs_swscale_Y": (arm.get("vs_swscale") or {}).get("Y"),
+            }  # fmt: skip
     return out
 
 
@@ -655,6 +883,9 @@ def cmd_sample(a: argparse.Namespace) -> int:
     if root.exists():
         print(f"REFUSED: {root} exists (a fresh run needs it gone: rm -rf {root})", file=sys.stderr)
         return 2
+    if a.round not in ROUNDS:
+        print(f"REFUSED: --round {a.round}: rounds are {sorted(ROUNDS)}", file=sys.stderr)
+        return 2
     plan: list[tuple[str, str, Path, list[int], str]] = []
     planned = largest = 0
     for spec in a.session:
@@ -679,7 +910,11 @@ def cmd_sample(a: argparse.Namespace) -> int:
     root.mkdir(mode=0o700)
     (root / "in").mkdir(mode=0o700)
     (root / "out").mkdir(mode=0o700)
-    (root / "in" / "arms.tsv").write_text(arms_tsv())
+    (root / "in" / "arms.tsv").write_text(arms_tsv(round_arms(a.round)))
+    # recbench.sh reads the encode timing passes; score reads the round (files, not samples: the
+    # container and the scorer list only directories as samples)
+    (root / "in" / "round").write_text(f"{a.round}\n")
+    (root / "in" / "timing_reps").write_text(f"{TIMING_REPS[a.round]}\n")
     total = 0
     for map_name, sid, session, starts, size in plan:
         wanted = {s + i for s in starts for i in range(a.run_len)}
@@ -746,16 +981,19 @@ def frame_planes(frame: Any) -> list[npt.NDArray[np.uint8]]:
     return out
 
 
-def to_bgr(frame: Any) -> npt.NDArray[np.uint8]:
-    """YUV -> BGR with the bench's colour convention (BT.709, full range), swscale via PyAV."""
-    out = frame.reformat(format="bgr24", src_colorspace=COLOR[0], src_color_range=COLOR[1])
+def to_bgr(frame: Any, color: tuple[str, str] = COLOR) -> npt.NDArray[np.uint8]:
+    """YUV -> BGR with the given convention (default the bench's: BT.709, full range; an arm's
+    DECLARED one is arm_color), swscale via PyAV."""
+    out = frame.reformat(format="bgr24", src_colorspace=color[0], src_color_range=color[1])
     return np.ascontiguousarray(out.to_ndarray())
 
 
-def decode_stream(path: Path, ext: str, plane_fmt: str, *, alone: bool) -> dict[str, Any]:
-    """Decode one elementary stream on the host (PyAV software, one thread): BGR frames, the planar
-    md5s, packet sizes, key flags, CPU time; with ``alone``, each packet also through a fresh
-    decoder (D1: does every frame decode by itself, to the same planes?)."""
+def decode_stream(path: Path, ext: str, plane_fmt: str, *, alone: bool,
+                  color: tuple[str, str] = COLOR) -> dict[str, Any]:  # fmt: skip
+    """Decode one elementary stream on the host (PyAV software, one thread): BGR frames (inverted
+    with ``color``), the planar md5s, packet sizes, key flags, CPU time, the first frame's
+    signalled range / matrix (``vui``); with ``alone``, each packet also through a fresh decoder
+    (D1: does every frame decode by itself, to the same planes?)."""
     import av
 
     name = DECODERS[ext]
@@ -777,7 +1015,7 @@ def decode_stream(path: Path, ext: str, plane_fmt: str, *, alone: bool) -> dict[
     frames += ctx.decode(None)
     dec_s = time.process_time() - t0
     t0 = time.process_time()
-    bgr = [to_bgr(f) for f in frames]
+    bgr = [to_bgr(f, color) for f in frames]
     bgr_s = time.process_time() - t0
     md5s = [md5_hex(planar_bytes(frame_planes(f if f.format.name == plane_fmt
                                               else f.reformat(format=plane_fmt))))
@@ -804,6 +1042,7 @@ def decode_stream(path: Path, ext: str, plane_fmt: str, *, alone: bool) -> dict[
         "inter_bytes_mean": statistics.fmean(inter) if inter else None,
         "keyframes": len(keys), "alone_identical": alone_ok, "undecodable": undecodable,
         "host_sw_ms": round(dec_s * 1000 / n, 3), "host_bgr_ms": round(bgr_s * 1000 / n, 3),
+        "vui": vui_of(frames[0]) if frames else None,
     }  # fmt: skip
 
 
@@ -828,7 +1067,9 @@ def jpeg95(bgr: npt.NDArray[np.uint8]) -> bytes:
 
 
 def score_sample(root: Path, name: str, status: dict[tuple[str, str, str], dict[str, str]],
-                 det: Any) -> dict[str, Any]:  # fmt: skip
+                 det: Any, arms: Sequence[Arm] | None = None) -> dict[str, Any]:  # fmt: skip
+    """One sample: the PNG reference, the JPEG q95 reference, then every arm of ``arms`` (round
+    1's by default) that names this sample's kind."""
     from gpu_live_parity import rows
 
     from poring_dataset.shards import decode_png, encode_png
@@ -885,7 +1126,7 @@ def score_sample(root: Path, name: str, status: dict[tuple[str, str, str], dict[
             "quality": summarise(per),
             "parity": parity_stats(jboxes) if det is not None else None,
         }
-    for arm in ARMS:
+    for arm in round_arms(1) if arms is None else arms:
         if arm.samples != "all" and arm.samples != kind:
             continue
         st = [status.get((arm.name, name, r)) for r in runs]
@@ -894,8 +1135,56 @@ def score_sample(root: Path, name: str, status: dict[tuple[str, str, str], dict[
             out["arms"][arm.name] = {"status": (bad or {}).get("status", "not run"),
                                      "note": (bad or {}).get("note", "")}  # fmt: skip
             continue
+        if arm.mode == "gctl":  # the raw format that ran (the first of "a|b" that worked)
+            fmts = {r: (s or {}).get("note") or arm.sw_fmt.split("|")[0]
+                    for r, s in zip(runs, st, strict=True)}  # fmt: skip
+            out["arms"][arm.name] = score_gctl(root, name, arm, runs, ref, w, h, fmts)
+            continue
         out["arms"][arm.name] = score_arm(root, name, arm, runs, ref, ref_boxes, w, h, det, kind)
     return out
+
+
+def score_gctl(root: Path, name: str, arm: Arm, runs: list[str],
+               ref: dict[str, list[npt.NDArray[np.uint8]]], w: int, h: int,
+               fmts: dict[str, str]) -> dict[str, Any]:  # fmt: skip
+    """A GPU colour control (round 2): its downloaded raw planes inverted with the arm's DECLARED
+    convention against the PNG (the GPU's round trip, read like V1), the luma fingerprint of what
+    the GPU actually wrote, and -- when it declares the bench's own convention -- its planes
+    against swscale's for the same frames (ctl-yuv420 / ctl-yuv444, the same 10 frames a run)."""
+    from av.video.frame import VideoFrame
+
+    enc = root / "out" / "enc" / name
+    color = arm_color(arm)
+    twin = "ctl-yuv420" if arm.plane_fmt == "yuv420p" else "ctl-yuv444"
+    per, refs, ys, diffs = [], [], [], []
+    for r in runs:
+        fmt = fmts[r]
+        if fmt not in RAW_FORMATS:
+            return {"status": "invalid", "mode": arm.mode, "note": f"{r}: raw format {fmt!r}"}
+        planes = raw_planes((enc / arm.name / f"{r}.{arm.ext}").read_bytes(), fmt, w, h)
+        want = min(arm.frames or len(ref[r]), len(ref[r]))
+        if len(planes) != want:
+            return {"status": "invalid", "mode": arm.mode,
+                    "note": f"{r}: {len(planes)} frames, not {want}"}  # fmt: skip
+        sw = enc / twin / f"{r}.yuv"
+        sw_planes = (raw_planes(sw.read_bytes(), arm.plane_fmt, w, h)
+                     if color == COLOR and sw.exists() else [])  # fmt: skip
+        for i, p in enumerate(planes):
+            dec = to_bgr(VideoFrame.from_ndarray(planar_array(p), format=arm.plane_fmt), color)
+            per.append(frame_metrics(ref[r][i], dec))
+            refs.append(ref[r][i])
+            ys.append(p[0])
+            if i < len(sw_planes):
+                diffs.append(plane_diff(p, sw_planes[i]))
+    res: dict[str, Any] = {"status": "ok", "mode": arm.mode, "formats": sorted(set(fmts.values())),
+                           "declared": f"bt709-{'full' if color[1] == 'JPEG' else 'limited'}",
+                           "quality": summarise(per), "fit": luma_fit(refs, ys)}  # fmt: skip
+    if diffs:
+        res["vs_swscale"] = {"twin": twin, "frames": len(diffs), **{
+            k: {"mean": round(statistics.fmean(d[k]["mean"] for d in diffs), 3),
+                "mean_abs": round(statistics.fmean(d[k]["mean_abs"] for d in diffs), 3),
+                "max_abs": max(d[k]["max_abs"] for d in diffs)} for k in "YUV"}}  # fmt: skip
+    return res
 
 
 def score_arm(root: Path, name: str, arm: Arm, runs: list[str],
@@ -906,11 +1195,16 @@ def score_arm(root: Path, name: str, arm: Arm, runs: list[str],
     enc = root / "out" / "enc" / name / arm.name
     res: dict[str, Any] = {"status": "ok", "mode": arm.mode}
     if arm.mode == "ctl":
-        per = []
+        per, refs, ys = [], [], []
         for r in runs:
-            frames = read_raw_yuv(enc / f"{r}.{arm.ext}", arm.sw_fmt, w, h)
+            path = enc / f"{r}.{arm.ext}"
+            frames = read_raw_yuv(path, arm.sw_fmt, w, h)
             per += [frame_metrics(ref[r][i], f) for i, f in enumerate(frames)]
-        res["quality"] = summarise(per)
+            refs += ref[r][: len(frames)]
+            ys += [p[0] for p in raw_planes(path.read_bytes(), arm.sw_fmt, w, h)]
+        res["quality"] = summarise(per)  # round 1's numbers, unchanged
+        res["declared"] = "bt709-full"
+        res["fit"] = luma_fit(refs, ys)  # the fingerprint's known-good case (doc 6.6)
         return res
     total = frames = keys = 0
     key_b: list[float] = []
@@ -921,9 +1215,11 @@ def score_arm(root: Path, name: str, arm: Arm, runs: list[str],
     d2 = {"compared": 0, "va_eq_sw": 0, "host_eq_sw": 0}
     host_ms: list[float] = []
     bgr_ms: list[float] = []
+    vuis: list[dict[str, str] | None] = []
     for r in runs:
         got = decode_stream(enc / f"{r}.{arm.ext}", arm.ext, arm.plane_fmt,
-                            alone=arm.mode in CANDIDATE_MODES)  # fmt: skip
+                            alone=arm.mode in CANDIDATE_MODES, color=arm_color(arm))  # fmt: skip
+        vuis.append(got["vui"])
         total, frames, keys = (
             total + got["bytes"],
             frames + len(got["bgr"]),
@@ -966,6 +1262,10 @@ def score_arm(root: Path, name: str, arm: Arm, runs: list[str],
                    "host_bgr_ms": round(statistics.fmean(bgr_ms), 3)},
         "d1": d1 if arm.mode in CANDIDATE_MODES else None, "d2": d2,
     })  # fmt: skip
+    # what the stream SAYS it is, against what the arm declares (reported, not a bar: doc 6.6)
+    want = {"range": arm.color_range, "matrix": "bt709"}
+    res["vui"] = sorted({json.dumps(v, sort_keys=True) for v in vuis if v})
+    res["vui_ok"] = bool(vuis) and all(v == want for v in vuis)
     if kind == "ref":
         res["quality"] = summarise(per)
         res["parity"] = parity_stats(pairs) if pairs else None
@@ -982,7 +1282,7 @@ def rates(score: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if refs:
         png = max(v["png"]["bytes_per_frame"] for v in refs)
         out["png"] = {str(f): gb_per_hour(png, f) for f in FPS_LADDER}
-    for a in ARMS:
+    for a in round_arms(int(score.get("round", 1))):
         if a.mode not in GRADED_MODES:
             continue
         sizes = [v["arms"][a.name]["bytes_per_frame"] for v in refs
@@ -1005,11 +1305,14 @@ def cmd_score(a: argparse.Namespace) -> int:
     out_dir = root / "out"
     status = {(r["arm"], r["sample"], r["run"]): r for r in parse_tsv(
         (out_dir / "status.tsv").read_text(), STATUS_FIELDS)}  # fmt: skip
-    timing = {r["name"]: timing_row(r) for r in parse_tsv(
-        (out_dir / "timing.tsv").read_text(), TIMING_FIELDS)}  # fmt: skip
+    timing = merge_timing(parse_tsv((out_dir / "timing.tsv").read_text(), TIMING_FIELDS))
+    round_file = root / "in" / "round"  # written by sample; absent in a round-1 root
+    rnd = int(round_file.read_text()) if round_file.exists() else 1
+    arms = round_arms(rnd)
     det_maps: dict[str, Any] = {}
     score: dict[str, Any] = {"started": time.strftime("%FT%T%z"), "root": str(root),
-                             "bars": BARS, "samples": {}, "timing": timing}  # fmt: skip
+                             "round": rnd, "arms": [x.name for x in arms], "bars": BARS,
+                             "samples": {}, "timing": timing}  # fmt: skip
     vainfo = out_dir / "vainfo.txt"
     if vainfo.exists():
         score["vainfo"] = [
@@ -1028,12 +1331,13 @@ def cmd_score(a: argparse.Namespace) -> int:
                 det = det_maps.get(meta["map"]) or ud.for_map(meta["map"], threads=a.det_threads)
                 det_maps[meta["map"]] = det
                 score.setdefault("detectors", {})[meta["map"]] = det.model.name
-            score["samples"][name] = score_sample(root, name, status, det)
+            score["samples"][name] = score_sample(root, name, status, det, arms)
             print(json.dumps({"scored": name}), flush=True)
     finally:
         for det in det_maps.values():
             det.close()
     score["rates"] = rates(score)
+    score["controls"] = controls_summary(score)
     score["verdict"] = verdict(score)
     score["ended"] = time.strftime("%FT%T%z")
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -1050,6 +1354,13 @@ def print_verdict(score: dict[str, Any]) -> None:
                         for b, r in bars.items() if isinstance(r, dict)
                         and r.get("result") == "FAIL"})  # fmt: skip
         print(f"{name:18s} {'PASS' if arm['pass'] else 'no  '} {' '.join(fails)}")
+    for s, arms in controls_summary(score).items():  # the colour controls (never graded)
+        for name, c in arms.items():
+            print(json.dumps({"control": name, "sample": s, **c}))
+    for s, smp in score["samples"].items():  # what each graded stream says it is
+        for name, arm in smp["arms"].items():
+            if "vui_ok" in arm and not arm["vui_ok"]:
+                print(json.dumps({"vui_mismatch": name, "sample": s, "vui": arm["vui"]}))
     print(json.dumps({"rates_gb_per_hour": score.get("rates")}))
 
 
@@ -1074,6 +1385,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--motion-start-s", type=float, default=300.0)
     s.add_argument("--root", type=Path, default=ROOT_DEFAULT)
     s.add_argument("--datasets", type=Path, default=DATASETS)
+    s.add_argument("--round", type=int, default=1,
+                   help="which arms (ROUNDS): 1 = the original table, 2 = doc 6.6")  # fmt: skip
     c = sub.add_parser("score")
     c.add_argument("--root", type=Path, default=ROOT_DEFAULT)
     c.add_argument("--out", type=Path, required=True)
