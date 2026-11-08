@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p10 (4Q, pre-registered 2026-11-08): --walk-stop, ring-1 strikes that scroll the scene stop and take no lock (p9 class D: 9 of 25, the clicks walked us off the attacker). Run it, score E1 / W1-W3. Immunity stays OFF on xmas_dun02 (Batt)."
+next_action: "p10 (4Q) done 2026-11-08 11:30: E1 24.0 / h FAIL, W1 / W2 FAIL, W3 / E3 / D1 PASS; --walk-stop NOT adopted. Root cause of class D in p9 + p10: the defend scan's N / S body points lie on the Rogue's own sprite. Batt picks the next change: (a) own-body hover points, (b) far-target strikes, (c) sight."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1371,3 +1371,61 @@ immune]. It still does not see monsters well -- I watched the bot play." And: fo
 bot-server first. So the next runner change waits behind the move. The no-attack clicks (class D,
 9 of 25) and sight (walking-started box fights strike 2 of 15) are its two candidates; sight is
 also what a detector trained on bot-server can improve (xmas02-detector.md Amendment L).
+
+**Pilot p10 (4Q, pre-registered 10:57:51, committed d17e6541 before the run; demo
+20261108T105957-...-xmas02-p10, bot-server; dungeon@9.2 `--walk-stop` + p9's flags; immunity OFF
+at 10:59 (judged "Returned to normal state."), back ON at 11:30 (judged "You are now immune to
+attacks."); the run 10:59:57-11:30:43, its own time box; the OpenVINO detect server in the Intel
+worker). VERDICT: E1, W1 and W2 FAIL; W3, E3 and D1 PASS. `--walk-stop` is NOT adopted (it stays
+behind its flag, OFF by default). The run found the root cause behind both p9's and p10's class D
+(below).**
+
+| | p9 | **p10** | bar |
+|---|---|---|---|
+| E1 kills (packets) | 17 (34.0 / h) | **12 (24.0 / h)** | >= 40 / h: FAIL |
+| W1 class-D median held (`owned_s`) | 7.33 s (9 D) | **7.20 s (13 D)** | <= 2.0 s: FAIL |
+| W2 ring-1 fight-path Ds ending "walked" | - | **1 / 5** | >= 75 %: FAIL |
+| W3 "walked" strikes that were not D | - | **0** | <= 1: PASS |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 9 | **pass / 0 / 3 (6 / h)** | PASS |
+| D1 deaths | 0 | **0** (lowest HP 91 %, 0 potions) | PASS |
+| E2 box fights ending as a box miss (reported) | 20 / 32 = 62.5 % | 10 / 19 = 52.6 % | (<= 50 %) |
+| strikes / landed | 25 / 14 | 27 / 13 | reported |
+
+- **What the walk-stop did:**
+  - It fired once, on a defend-scan strike on the north cell [0, 1]: the scene scrolled 43.6 px
+    by 0.36 s, the burst stopped, and the strike held the fight 2.9 s, not ~7.2.
+  - Every ring-1 strike that attacked in place read 0-2 px of scroll, so there were no false
+    stops (W3).
+- **Why W1 / W2 failed: p10's 13 class-D strikes were a different mix (packets checked):**
+  - **8 strikes on FAR targets, outside the change** (`walk_sword` 5 at 5-7 cells, `box` 3 at
+    3-6 cells). They clicked 4 times to the bound, ~7.2 s each, ~57 s in all. p9 had 1.
+  - **3 clicks on the Rogue's OWN cell:**
+    - a defend-scan SWORD at the south cell's body point (641, 360), which lies on her own feet;
+    - the client sent no attack and no walk, so there was no scroll to see, and a false lock
+      arrow ended each strike;
+    - ~19 s in all.
+  - **1 click while already attacking:** our hits went on before and after it; class D only
+    because no NEW request came. Not a loss.
+  - **1 ground click:** the walk-stop caught it.
+- **The root cause behind both runs:** the defend scan's north and south body points (641, 312)
+  and (641, 360) lie ON the Rogue's own sprite, where her hit and Miss effects animate. A SWORD
+  read there clicks her own body:
+  - north ([0, 1], [0, 2]): the client walks her on (p9: 5 of its 9 Ds, p10: 1);
+  - south ([0, -1]): nothing happens (p9: 1, p10: 3).
+  The walk-stop only limits the north case's cost.
+- **Kills fell 17 -> 12:** fewer engagements (29 vs 46; box 19 vs 32), not the change, which
+  touched 1 strike. The spawns differed; the same seed only fixes the route.
+- **The reader:** 102 / 114 of our hits read (89.5 %; p9 100 %), lag p50 397 ms / p95 488 ms.
+- **Items per hour (all snatched):** Scell 2 (4.0 / h), Red Herb, Piece of Cake, Zargon 1 each
+  (2.0 / h each).
+- **Decisions (as pre-registered):**
+  - `--walk-stop` is not adopted;
+  - W2's shift series show the 10-px threshold is not the problem (43.6 px vs <= 2 px): the
+    D population is.
+  - The next change is Batt's choice between:
+    - **(a) own-body hover points:** never trust a SWORD read inside the Rogue's own sprite box,
+      or hover the N / S cells at points clear of her body. This covers 6 of p9's 9 Ds and 4 of
+      p10's 13;
+    - **(b) far-target strikes:** lead a moving target (frames lag ~0.5 s), and cap the burst
+      for far clicks. This covers p10's 8;
+    - **(c) sight:** the detector misses monsters beside the Rogue (4Q's offline box test).
