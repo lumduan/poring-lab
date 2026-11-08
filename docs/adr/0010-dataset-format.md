@@ -51,6 +51,7 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > **5 h of H.264 per session before shipping**. The 20 GB unshipped cap alone would allow ~8 h.
 > ➡️ SUPERSEDED 2026-11-05: the floor is **120 GB** (Batt; see "Amendment 2026-11-05" below).
 > ➡️ SUPERSEDED AGAIN 2026-11-06: the floor is **100 GB** (Batt; "Amendment 2026-11-06" below).
+> ➡️ PER HOST since 2026-11-08: 100 GB on VM 103, **30 GB on bot-server** ("Amendment 2026-11-08" below).
 >
 > **Determinism.** The bitstream is the dataset only while decoding is bit-identical.
 > - `scripts/dataset_check.py` decodes every frame on the HOST after shipping and compares each
@@ -292,4 +293,22 @@ They cover:
     recorder's own floor (100 GB) and unshipped cap (20 GB).
 - **Unchanged:** the floor, the unshipped cap, the size cap per recording, one recorder at a time,
   `ionice -c3`, and every other recording's IO rule.
+
+## Amendment 2026-11-08: the floor is per host -- 30 GB on bot-server (Batt)
+
+- **Decision (Batt, 2026-11-08 ~11:4x ICT, answering the 11:40 report):** "set it to 30 GB"
+  ("ตั้งไว้ 30GB").
+  - Why: bot-server's root disk is 122.2 GB in all, with 83.4 GB free after the move. 100 GB
+    refused every recording there.
+  - On bot-server the disk has no other tenant: no quant capture, no Frigate.
+- **Code:**
+  - `dataset_ship.MIN_FREE_BY_PROFILE` = shared-nvidia 100 GB (VM 103, unchanged),
+    dedicated-intel 30 GB. `MIN_FREE_BYTES` is this host's, by `LAB_HOST_PROFILE`
+    (`scripts/host_profile.py`, ADR-0022).
+  - The local root is `~/poring-lab-rec`: /home/batt on VM 103, /home/bot on bot-server. The
+    old literal `/home/batt/...` does not exist on bot-server.
+- **Unchanged:**
+  - the 20 GB unshipped cap, the size cap per recording, one recorder at a time;
+  - the IO rules, and shipping + deleting each session before the next;
+  - decimal GB (`df -B1`).
 

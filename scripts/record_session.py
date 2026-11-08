@@ -41,7 +41,7 @@
   --max-bytes then budget the whole recording. --state-file (in /dev/shm) tells a watch beside it
   whether frames are being banked (stage_items.py watch --recorder-state): JSON, re-written every
   frame and every pause second (`beat_ns`).
-* Sink (ADR-0010): the VM's local disk, /home/batt/poring-lab-rec (never ./data: vision mounts it).
+* Sink (ADR-0010): the host's local disk, ~/poring-lab-rec (never ./data: vision mounts it).
   It is a buffer on the disk shared with live capture, so it is capped -- refused at the start, and
   stopped cleanly mid-recording, when the filesystem has < --min-free-gb free or more than
   --max-unshipped-gb of sessions wait under the root. scripts/dataset_ship.py ships them to the

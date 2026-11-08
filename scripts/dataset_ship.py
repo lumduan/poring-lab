@@ -8,7 +8,8 @@
     dataset_ship.py mark-invalid SESSION_ID --reason TEXT [--dest DIR]
 
 Where things live:
-* Local root (record_session.py's default --out): /home/batt/poring-lab-rec. It is on the disk
+* Local root (record_session.py's default --out): ~/poring-lab-rec (/home/batt on VM 103,
+  /home/bot on bot-server). It is on the disk
   shared with live capture, so it is a BUFFER, capped: recording refuses / stops when the
   filesystem has < 100 GB free or > 20 GB of sessions are still unshipped (local_caps()).
   The floor was 140 GB until Batt's 2026-11-05 decision (a 1-fps PNG recording is 7.0-8.4 GB/h)
@@ -66,12 +67,29 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCAL_ROOT = Path("/home/batt/poring-lab-rec")
+# The user's home: /home/batt on VM 103 (as before), /home/bot on bot-server (2026-11-08: the old
+# literal path does not exist there).
+LOCAL_ROOT = Path.home() / "poring-lab-rec"
 NAS_ROOT = Path("/mnt/poring-lab-datasets")
 # Batt 2026-11-06 (was 120 GB since 11-05, 140 GB before; ADR-0010 Amendment 2026-11-06): 100 GB
 # stays free for the other tenants of the root disk, "so we don't bother HA often"; a 1-fps PNG
-# recording takes 7.0-8.4 GB/h and is shipped after.
-MIN_FREE_BYTES = 100 * 10**9
+# recording takes 7.0-8.4 GB/h and is shipped after. That is VM 103's (shared-nvidia) floor.
+# Batt 2026-11-08: bot-server (dedicated-intel: a 122-GB root disk with no other tenant, 83 GB free
+# after the move) keeps 30 GB free -- 100 GB refused every recording there.
+MIN_FREE_BY_PROFILE = {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9}
+
+
+def min_free_bytes(profile: str | None = None) -> int:
+    """This host's free-space floor: the named profile's, or host_profile.current()'s."""
+    if profile is None:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import host_profile
+
+        profile = host_profile.current().name
+    return MIN_FREE_BY_PROFILE[profile]
+
+
+MIN_FREE_BYTES = min_free_bytes()
 MAX_UNSHIPPED_BYTES = 20 * 10**9
 BWLIMIT_KBPS = 40000  # rsync --bwlimit (KiB/s): ~40 MB/s, a fraction of the disk's throughput
 RETENTION_DAYS = 365

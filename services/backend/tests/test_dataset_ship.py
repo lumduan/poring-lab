@@ -69,13 +69,19 @@ SID = "20261003T110000-rdp-calib"
 def test_the_free_space_floor_is_batts_100_gb(
     ds: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on the shared root disk
-    (120 GB since 11-05, 140 GB before)."""
-    assert ds.MIN_FREE_BYTES == 100 * 10**9
+    """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on VM 103's shared root
+    disk (120 GB since 11-05, 140 GB before); Batt 2026-11-08: 30 GB on bot-server (dedicated)."""
+    assert ds.MIN_FREE_BY_PROFILE == {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9}
+    assert ds.min_free_bytes("shared-nvidia") == 100 * 10**9
+    assert ds.min_free_bytes("dedicated-intel") == 30 * 10**9
+    assert ds.min_free_bytes() == ds.MIN_FREE_BYTES  # this host's, read from its .env
+    floor = 100 * 10**9
     monkeypatch.setattr(ds, "free_bytes", lambda path: 99 * 10**9)
-    assert "floor 100 GB" in (ds.local_caps(tmp_path, unshipped=0) or "")
+    assert "floor 100 GB" in (ds.local_caps(tmp_path, min_free=floor, unshipped=0) or "")
     monkeypatch.setattr(ds, "free_bytes", lambda path: 101 * 10**9)
-    assert ds.local_caps(tmp_path, unshipped=0) is None
+    assert ds.local_caps(tmp_path, min_free=floor, unshipped=0) is None
+    monkeypatch.setattr(ds, "free_bytes", lambda path: 31 * 10**9)  # bot-server's 30 GB floor
+    assert ds.local_caps(tmp_path, min_free=30 * 10**9, unshipped=0) is None
 
 
 def test_ship_verifies_then_deletes_the_local_copy(ds: ModuleType, dirs: SimpleNamespace) -> None:
@@ -303,7 +309,7 @@ def test_record_session_refuses_before_touching_x_when_the_caps_are_hit(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     rs = load("record_session")
-    assert str(rs.dataset_ship.LOCAL_ROOT) == "/home/batt/poring-lab-rec"
+    assert Path.home() / "poring-lab-rec" == rs.dataset_ship.LOCAL_ROOT
     monkeypatch.setattr(rs, "read_lock", lambda _: SimpleNamespace(backend="rdp", phase="steady"))
     monkeypatch.setattr(rs.dataset_ship, "free_bytes", lambda path: 100 * 10**9)
 
