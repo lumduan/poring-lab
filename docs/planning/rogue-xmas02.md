@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "The night (2026-11-09): p21 F1 36.4 % FAILS (the far flags off); p22 (4AD, --box-every 0.25) 01:03-01:25; the walk-refusal study (section 5): the server ignores a walk click > 17 steps or > 14 with the line blocked, p16-p21 lost 110-153 s a run -> --reach-check (dungeon@9.12) as p23 (4AE) after the MVP kill (~01:42)."
+next_action: "The night (2026-11-09): p21 far flags OFF, p22 box-every OFF, p23 --reach-check (stuck 133 -> 0 s; R1 2 fails -> off), p24 --kill-gap (after-kill 6.5 -> 1.96 s; E1 / K3 fail -> off; fixes 9.13b/c). Next: the MVP look 02:53, p25 --reach-check replicated (4AG), p26 --kill-gap 9.13c, then the far mechanism."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
