@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p15 (4W, --quick-drop) pre-registered 2026-11-08 19:57; then p16 = the patrol engages any monster box on screen, nearest first (Amendment I)."
+next_action: "p15 (4W) done 20:31: --quick-drop NOT adopted (Q1 3.89 s / 31.7 s, E1 32.0 / h, R1). Batt's 4 clips: the 3-cell trigger, the 6-cell box-path cap, the walk finishing first. p16 (4X, --engage-screen) pre-registered."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1973,3 +1973,64 @@ NOT adopted.**
 - **Decision:** M1's rule says the next run repeats the flag and pools; E1 and R1 failed, so the
   flag is not adopted. Batt chooses the next step (the next report).
 - The bag cleared after it (19:36:23-19:37:49: Etc 2, Use 4; weight 598 -> 520, 10 / 10).
+
+**Pilot p15 (4W; 20:01:01-20:31:47, its own time box; immunity OFF at 20:00:41, judged "Returned
+to normal state."; back ON at 20:32:06, judged "You are now immune to attacks."). VERDICT: Q2,
+D1, F3, E3, deaths PASS; Q1 FAILS (held median 3.89 s, total 31.7 s), E1 FAILS (32.0 / h), R1
+FAILS (2 own-body class D). `--quick-drop` is NOT adopted (4W's rule: Q1 fails -> studied).**
+
+| | p13r | p14 | **p15** | bar |
+|---|---|---|---|---|
+| Q1 time held on class-D strikes: median / total | 7.22 / 49.2 s | - | **3.89 / 31.7 s** | <= 3.0 and <= 25: FAIL |
+| Q2 good strikes (K / A) given up | - | - | **0** (7 drops: 6 D, 1 C; 5 no arrow, 2 no hit; all re-armed) | <= 3: PASS |
+| E1 kills | 22 (44.0 / h) | 16 (32.0) | **16 (32.0 / h)** | >= 40: FAIL |
+| R1 own-body class D | 0 | 2 | **2** (5 own-body strikes) | <= 1: FAIL |
+| D1 / F3 / E3 / deaths | pass | pass | **20.6 ms / 0 / pass, 0 Fly Wings, 5 stalls / 0** (lowest HP 94.3 %) | PASS |
+| supply (/ 10 min); kills per seen | 36 (12.0); 0.611 | 44 (14.7); 0.364 | **39 (13.0); 0.41** | reported |
+| box engagements whose box path found NO box | 6 of 19 | 9 of 20 | **12 of 22** | reported |
+
+- **What the drops did:** the held time on misses fell by a third (49 -> 32 s), but the
+  "no hits" rule still ended 22 locks (strikes that ended on a damage line carry no arrow time,
+  so the quick rule does not see them).
+- **Batt's four clips (20:17:35, 20:17:52, 20:18:10, 20:19:32), matched to this run's log:**
+  - 20:17:35: a Cruiser passed at 113 px from her feet (one detection a second while she walked),
+    just outside the patrol trigger's 110 px (~3 cells): no engagement.
+  - 20:17:52: a monster stood ~150 px away (4-5 cells) the whole time: outside the trigger; the
+    ring scan after the previous fight found nothing; she walked on.
+  - 20:18:10 and 20:19:32 (a Myst Case beside her): she DID engage (boxes at 75 and 50 px), but
+    the box path first lets the current walk end (1.2 s): she walked ~3 cells on, and its fresh
+    detection put the monster at 230-250 px, beyond BOX_TARGET_PX (220): "no box", a ring scan,
+    and she walked on.
+  - So the detector saw them; the limits are the 3-cell trigger, the 6-cell box-path cap, the walk
+    finishing first and one detection a second. Across runs the "no box" share grew: p12 7 / 26,
+    p13 7 / 20, p13r 6 / 19, p14 9 / 20, p15 12 / 22.
+- **Items (snatched):** Scell 6, Zargon 2, Candy 1, Well-baked Cookie 1, Manacles 1.
+- The bag cleared after it (20:34:04-20:35:33: Etc 3, Use 4; weight 585 -> 520, 10 / 10).
+
+### 4X. Pilot p16 pre-registration: --engage-screen, any monster on the screen, nearest first (written BEFORE its run, 2026-11-08 20:35 ICT)
+
+- **Why:** Amendment I item 1 (b), widened by Batt: "strike within what the screen shows, the
+  nearest monster first". Batt's clips and p15 above: the 3-cell trigger and the 6-cell box-path
+  cap let monsters pass, and the box path found no box in 6-12 of ~20 box engagements.
+- **The one change against p13r: `--engage-screen` (dungeon@9.7, behind its flag, 441cc93d):**
+  the patrol's box trigger and the box path take ANY monster box whose body point is in view
+  (not under a UI window, not an ignored box spot), the nearest to her feet first.
+- **Kept from p13r:** the fast detector, `--self-recheck`, `--still-strike`; `--lead-strike` and
+  `--quick-drop` OFF (neither adopted: p14, p15); the 10-potion stock; the same map, route, seed
+  and flags.
+- **The run:** 4U's command with `--label xmas02-p16 --engage-screen`; the same before / beside /
+  after steps.
+- **Bars:**
+  - **S1 (the hypothesis):** box engagements whose box path found no box <= 15 % (p13r 32 %, p15
+    55 %).
+  - **S2 (it turns into kills):** kills per monster seen >= 0.65 (p13r 0.611, the best so far).
+  - **E1:** kills >= 40 / h. **D1:** live detector p50 <= 35 ms. **R1:** own-body class D <= 1.
+    **F3:** far clicks while walking <= 2. **E3:** hard bars pass (NPC contacts included: far
+    targets mean longer walks), 0 dead-end Fly Wings, stalls <= 39 / h. **Deaths:** 0.
+  - Reported: engagements by source, the box path's target distance (d_px), strikes, class D by
+    path, the supply.
+- **Decisions:**
+  - S1 + S2 + E1 pass and no regression bar fails: `--engage-screen` stays ON;
+  - S1 passes, S2 fails: more targets but no more kills -> the far strikes' outcome is studied;
+  - S1 fails: the walk carries her past the target before the box path looks (Batt's 20:18:10 /
+    20:19:32 clips) -> stopping the walk at the engagement is the next change.
