@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). STAGE 2 (one side-by-side recording, PNG + the candidate through a contained sidecar fed by one RAM pipe) BUILT and PRE-REGISTERED 2026-11-08 22:46:20 ICT (section 9.1), NOT RUN. Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). STAGE 2 (one side-by-side recording, PNG + the candidate through a contained sidecar fed by one RAM pipe) BUILT and PRE-REGISTERED 2026-11-08 22:46:20 ICT (section 9.1), NOT RUN. Adoption needs Batt's decision and an ADR-0010 amendment (section 3). Stage 2 (2026-11-09 05:00-05:33): the side-by-side recording beside p20 checked -- VERDICT PASS on every bar (9.3): video 0.84 vs PNG 5.69 GB/h at 1 fps, 18.3 vs 136.1 ms CPU a frame, no detector latency cost."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../scripts/media_rec.py, ../../services/media-probe/mediarec.sh, ../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
-next_action: "The parent: stage 2's commands (section 9.2) beside a 30-min pilot, then 9.3's results; then Batt: the ADR-0010 amendment (lossy recordings), stage 3."
+next_action: "Batt: stage 3 -- the ADR-0010 amendment (lossy recordings: vpp-hevc444-10-q20 in place of PNG), on 9.3's PASS. Until then --also-png stays required."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -1196,7 +1196,40 @@ far from an encode, outside the recording), the video block's `by_status`; then 
   flags and floor) and switched to its own step at ~23:32 (a few seconds of CPU fallback);
 - the RECORDED pilot: p20 (rogue-xmas02.md 4AB), the same flags, the recorder beside it.
 
-Not run yet.
+**The check (2026-11-09 05:00:25-05:33:19 ICT, host CPU, after the night's last pilot; the
+command of 9.2 step 4 with `--det-threads 4`; out `data/bench/gpu-rec/20261109-stage2.json`, not
+committed): VERDICT PASS -- every quality and stage-2 bar, nothing unmeasured, detector-powered.**
+- The recording: `20261108T235614-rdp-s2-xmas_dun02-p20` (beside pilot p20, 21 min, stop
+  "duration"), 1,200 kept frames, every one fed, decoded and matched (undecodable 0, missing 0,
+  shard cuts none, D1: all 1,200 decoded alone and identical).
+- Sizes: PNG 1,579,630 B a frame, video 232,957 B (ratio 0.1475); at 1 fps 5.69 vs 0.84 GB an hour.
+- CPU a frame: the PNG writer 136.1 ms, the video path 18.3 ms (the sidecar 15.0, the feed 3.3);
+  the backend 0.23 cores.
+
+| bar | measured | rule | |
+|---|---|---|---|
+| Q1 | 43.42 dB | >= jpeg 32.23 + 0.0 | PASS |
+| Q2 | 41.40 dB | >= 36.0 | PASS |
+| Q3 | 0.99375 / 0.98899 | mean >= jpeg 0.99413 - 0.002, min >= 0.97 | PASS |
+| Q4 | 2.848 | every crop's mean - jpeg's >= -0.5 | PASS |
+| Q5 | 40.77 | >= 32.0 | PASS |
+| Q6 | 1.0 (326,753) | >= 0.95 | PASS |
+| G1 | -0.209 | >= -1.0 | PASS |
+| P1 / P2 | 0.9973 / 0.9973 | >= 0.97; >= jpeg (0.9947 / 0.9921) - 0.01 | PASS |
+| P3 | median 0.1, p95 0.4 px | <= 1.0 / <= 3.0 | PASS |
+| D1 | 1,200 / 1,200 | every frame alone | PASS |
+| S1 | 0.1475 | <= 0.25 | PASS |
+| K1 | kept - matched 0; 1,200 / 1,200 decoded | <= 0 | PASS |
+| F1 | 1,200 / 1,200 signal pc / bt709 | every decoded frame | PASS |
+| C1 | 18.27 ms | <= 20.0 | PASS |
+| C2 | 18.27 vs the PNG writer's 136.08 ms | <= 0.2 x | PASS |
+| C3 | 3.27 ms | <= 5.0 | PASS |
+| L1 | p50 20.5 vs the baseline p19's 20.6 ms (-0.1) | recording - baseline <= 1.0 | PASS |
+| L2 | p95 22.1 vs 21.9 ms (+0.2) | <= 3.0 | PASS |
+| L3 | GPU share 1.0 vs 0.9967 (+0.0033) | >= -0.01 | PASS |
+
+- **What it means (9.1's rule 2):** the evidence for Batt's stage 3 -- the ADR-0010 amendment
+  (recordings no longer lossless) -- not an adoption. Lossy-only recordings stay refused until then.
 
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single
