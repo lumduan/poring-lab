@@ -999,6 +999,47 @@ Batt's words, translated (before 18:06:52, the turn's first `date`):
   - E1 fails with the supply below 14 / 10 min again: the map's supply is studied (why fewer
     monsters appear) before p14 is compared to anything.
 
+### 4V. Pilot p14 pre-registration: --lead-strike, the box path aims ahead of a walking target (written BEFORE its run, 2026-11-08 18:5x ICT)
+
+- **Why:** Batt 2026-11-08 ~18:0x (Amendment H item 3): "aim for the monsters that are walking".
+- **The study (offline, packets; `scripts/target_motion.py`, committed with this; its positive
+  case is p12 + p13):** box strikes on a target WALKING at the grab: 6, of which 5 class D; on a
+  STANDING target: 25, of which 1 class D (p13r: walking 3 / 1 D, standing 9 / 1 D). The walker
+  moved 0.8-1.5 cells between the grab and the click (~1 cell): the click lands where it WAS.
+- **The one change against p13r: `--lead-strike` (dungeon@9.5, behind its flag):**
+  - after the box path's first fresh detection (on a still scene), a SECOND one `LEAD_GAP_S`
+    (0.12 s) later; the same sprite = the box whose centre is nearest, within `LEAD_MATCH_PX` (40);
+  - its velocity between the two grabs; at `LEAD_MIN_PX_S` (25 px / s) or faster it is walking
+    and the hover point is its centre + velocity x `LEAD_T_S` (0.35 s: p13's hover -> verdict 232
+    ms + the second detection ~45 ms + the stream ~70 ms), the lead at most `LEAD_MAX_PX` (64);
+  - no SWORD at the led point: the sprite's current centre once (the fallback); a standing
+    sprite: its current centre (as before, from the fresher detection);
+  - no lead on a scrolling scene (`still` false) or without a match; each case logged.
+  - Its cost on every box target: the second detection (~0.16 s).
+- **Kept from p13r:** the fast detector, `--self-recheck`, `--still-strike`, the 10-potion stock,
+  the same map, route, seed and flags.
+- **The run:** 4U's command with `--label xmas02-p14 --lead-strike`; the same before / beside /
+  after steps (immunity OFF judged; the detect server 2400 s, f32, floor 2450; immunity ON
+  judged; `clear-bag`).
+- **Bars:**
+  - **M1 (the hypothesis):** box strikes on a target walking at the grab (`target_motion.py`):
+    class D in at most 1 of them, with at least 3 such strikes; fewer than 3: INCONCLUSIVE (the
+    next run repeats the flag and the two are pooled).
+  - **M2 (no cost on standing targets):** box strikes on a standing target: class D <= 2.
+  - **M3 (it engages):** the led hovers that read SWORD and were struck >= half of the led hovers
+    (the `lead` records: walking, verdicts).
+  - **E1:** kills >= 40 / h (p13r 44.0). **D1:** live detector p50 <= 35 ms. **R1:** own-body
+    class D <= 1. **F3:** far clicks while walking <= 2. **E3:** hard bars pass, 0 dead-end Fly
+    Wings, stalls <= 39 / h. **Deaths:** 0.
+  - Reported: the supply and kills per monster seen (`sight_supply.py`), the lead records (speed,
+    lead px, why none), the box path's timings (boxes / verdict after the grab), class D by path.
+- **Decisions:**
+  - M1 + M2 pass and no regression bar fails: `--lead-strike` stays ON for xmas_dun02 runs;
+  - M1 fails with M3 passing: the lead lands on the sprite but the click still walks -> the
+    timing (LEAD_T_S) or the click's own lag is studied before reuse;
+  - M3 fails: the led point misses the sprite (the velocity or the lead is wrong) -> studied;
+  - M2 fails: the extra detection costs standing targets -> studied before reuse.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

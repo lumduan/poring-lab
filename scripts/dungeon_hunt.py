@@ -226,6 +226,15 @@ SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN = 0.4, 20, 95, 6  # the box arou
 # scrolling < STILL_PX, at most STILL_MAX_S) and aims again: the box path's detection is taken
 # after it; walk_sword's point is carried by the scroll seen meanwhile and hovered again.
 STILL_PX, STILL_N, STILL_MAX_S = 2.0, 3, 1.5
+# --lead-strike (dungeon@9.5, rogue-xmas02.md 4V, pilot p14; Batt 2026-11-08 ~18:0x: "aim for the
+# monsters that are walking"): box strikes on a target WALKING at the grab were class D in 5 of 6
+# (p12 + p13, target_motion.py), on a standing one in 1 of 25; the walker moved ~1 cell between
+# the grab and the click. So the box path takes a SECOND detection LEAD_GAP_S after its first,
+# matches the same sprite (centre within LEAD_MATCH_PX), and when it moves faster than
+# LEAD_MIN_PX_S on a still scene, hovers where it will be: its centre + velocity x LEAD_T_S
+# (p13: the hover -> verdict 232 ms + the second detection ~45 ms + the stream ~70 ms), the lead
+# at most LEAD_MAX_PX. No SWORD there -> its current point once (the fallback).
+LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25.0, 0.35, 64.0
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -827,6 +836,45 @@ def still_now(shifts: Sequence[tuple[float, float]], px: float = STILL_PX,
     return len(shifts) >= n and all(math.hypot(dx, dy) < px for dx, dy in shifts[-n:])
 
 
+def box_centre(b: Sequence[float]) -> tuple[float, float]:
+    """PURE: a box's (x0, y0, x1, y1) centre."""
+    return ((float(b[0]) + float(b[2])) / 2, (float(b[1]) + float(b[3])) / 2)
+
+
+def same_box(b1: Sequence[float], later: Sequence[Sequence[float]],
+             match_px: float = LEAD_MATCH_PX) -> tuple[float, ...] | None:  # fmt: skip
+    """PURE (--lead-strike): the box of ``later`` whose centre is nearest to ``b1``'s, within
+    ``match_px`` (the same sprite one detection later), or None."""
+    c1 = box_centre(b1)
+    best: tuple[float, tuple[float, ...]] | None = None
+    for b in later:
+        c = box_centre(b)
+        d = math.hypot(c[0] - c1[0], c[1] - c1[1])
+        if d <= match_px and (best is None or d < best[0]):
+            best = (d, tuple(float(x) for x in b[:4]))
+    return None if best is None else best[1]
+
+
+def lead_point(b1: Sequence[float], t1: float, b2: Sequence[float], t2: float,
+               lead_t: float = LEAD_T_S, min_px_s: float = LEAD_MIN_PX_S,
+               max_px: float = LEAD_MAX_PX) -> dict[str, Any]:  # fmt: skip
+    """PURE (--lead-strike): the sprite's velocity between two grabs (px / s) and the hover point:
+    ``b2``'s centre, moved by velocity x ``lead_t`` (at most ``max_px``) when the speed is at least
+    ``min_px_s``, else ``b2``'s centre itself ({"point", "v", "speed", "lead", "walking"})."""
+    c1, c2 = box_centre(b1), box_centre(b2)
+    dt = t2 - t1
+    v = ((c2[0] - c1[0]) / dt, (c2[1] - c1[1]) / dt) if dt > 0 else (0.0, 0.0)
+    speed = math.hypot(*v)
+    lead = (0.0, 0.0)
+    if speed >= min_px_s:
+        lx, ly = v[0] * lead_t, v[1] * lead_t
+        n = math.hypot(lx, ly)
+        k = max_px / n if n > max_px else 1.0
+        lead = (lx * k, ly * k)
+    return {"point": (c2[0] + lead[0], c2[1] + lead[1]), "v": v, "speed": speed, "lead": lead,
+            "walking": speed >= min_px_s}  # fmt: skip
+
+
 def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
     """PURE (--self-recheck): (u, v) lies on our own sprite, whose feet are at (u0, v0)."""
     return abs(u - u0) <= SELF_HALF_W and v0 - SELF_UP <= v <= v0 + SELF_DOWN
@@ -965,6 +1013,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["self_recheck"] = [SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN]
     if getattr(a, "still_strike", False):  # dungeon@9.4 (rogue-xmas02.md 4S)
         out["still_strike"] = [STILL_PX, STILL_N, STILL_MAX_S]
+    if getattr(a, "lead_strike", False):  # dungeon@9.5 (rogue-xmas02.md 4V)
+        out["lead_strike"] = [LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX]
     return out
 
 
@@ -1162,6 +1212,14 @@ class BoxWatch:
                     return None
                 self.cond.wait(left)
             return dict(self.meta)
+
+    def snapshot(self) -> tuple[float, list[tuple[float, float, float, float]]]:
+        """dungeon@9.5 (--lead-strike): the last detection's grab time and its monster boxes
+        (x0, y0, x1, y1), our own sprite's boxes left out (as ``near`` does)."""
+        with self.lock:
+            t, got = self.last
+        return t, [(b.x0, b.y0, b.x1, b.y1) for b in got
+                   if not self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2)]  # fmt: skip
 
     def wait_fresh(self, since: float, timeout: float) -> bool:
         """dungeon@8.8: wait until the watcher holds boxes from a grab started at or after
@@ -2292,7 +2350,38 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             )
             verdicts: list[str] = []
             points = box_hover_points(near_b)
-            for u_, v_ in points[:1] if a.box_now else points:  # dungeon@8.9: ONE hover
+            shift = (0.0, 0.0)  # the lead, added to the foot for the strike's cell
+            if getattr(a, "lead_strike", False) and meta is not None:
+                # dungeon@9.5 (rogue-xmas02.md 4V): a second detection, the same sprite, its motion
+                lead_rec: dict[str, Any] = {"why": None}
+                if not still_rec.get("still", False):
+                    lead_rec["why"] = "not_still"  # a scrolling scene's motion is not the sprite's
+                else:
+                    time.sleep(max(0.0, LEAD_GAP_S - (time.monotonic() - meta["t"])))
+                    meta2 = boxes.fresh_now(arm or "gpu", BOX_TARGET_WAIT_S)
+                    t2, got2 = boxes.snapshot() if meta2 is not None else (0.0, [])
+                    b2 = same_box(near_b, got2) if meta2 is not None else None
+                    if meta2 is None:
+                        lead_rec["why"] = "no_detection"
+                    elif b2 is None:
+                        lead_rec["why"] = "no_match"
+                    else:
+                        lp = lead_point(near_b, meta["t"], b2, t2)
+                        lead_rec.update(
+                            gap_ms=round((t2 - meta["t"]) * 1e3), det2_ms=meta2["ms"],
+                            path2=meta2["path"], speed=round(lp["speed"], 1),
+                            v=[round(x_, 1) for x_ in lp["v"]],
+                            lead=[round(x_, 1) for x_ in lp["lead"]], walking=lp["walking"],
+                            box2=[round(x_, 1) for x_ in b2])  # fmt: skip
+                        now_pt = box_hover_points(b2)[0]
+                        points = [lp["point"], now_pt] if lp["walking"] else [now_pt]
+                        shift = lp["lead"] if lp["walking"] else (0.0, 0.0)
+                        foot = ((b2[0] + b2[2]) / 2, b2[3])
+                rec["lead"] = lead_rec
+            n_hover = 1 if a.box_now else len(points)
+            if "lead" in rec and rec["lead"].get("walking"):
+                n_hover = 2  # the led point, then the sprite's current point once
+            for k_, (u_, v_) in enumerate(points[:n_hover]):  # dungeon@8.9: ONE hover
                 if not in_view(u_, v_):
                     verdicts.append("off")
                     continue
@@ -2303,6 +2392,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     rec["verdict_from_grab_ms"] = round((time.monotonic() - meta["t"]) * 1e3)
                 verdicts.append(str(res_["verdict"]))
                 if res_["verdict"] == "sword":
+                    if k_ == 0 and shift != (0.0, 0.0):  # the led point: the cell it predicts
+                        foot = (foot[0] + shift[0], foot[1] + shift[1])
                     sp_ = box_spot(here, foot)
                     rel_ = (0, 0) if sp_ is None or here is None else \
                         (sp_[0] - here[0], sp_[1] - here[1])  # fmt: skip
@@ -3684,6 +3775,14 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--lead-strike",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.5 (rogue-xmas02.md 4V, pilot p14; OFF by default): the box path takes a "
+        "second detection, and a target sprite that moves on a still scene is hovered where it "
+        "will be at the click (its velocity x LEAD_T_S); no SWORD there -> its current point once",
     )
     t.add_argument(
         "--plant-sweep",

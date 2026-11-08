@@ -1153,3 +1153,45 @@ def test_the_rogues_own_potion_stock_outranks_the_strategy() -> None:
     assert dh.potions_target(p2, dh.CHARS_CONF["thief"]) == 30  # unchanged: the strategy's
     assert dh.potions_target(p2, dh.CHARS_CONF["crusader"]) == 30
     assert dh.potions_target({}, dh.CHARS_CONF["crusader"]) == dh.POTIONS_TO
+
+
+def test_lead_strike_matches_the_sprite_and_leads_a_walker_only() -> None:
+    """dungeon@9.5 (rogue-xmas02.md 4V, pilot p14; Batt: "aim for the monsters that are
+    walking"): the second detection's same sprite, its velocity, the lead capped, none when it
+    stands; the lead needs a still scene and the led point falls back to the current one."""
+    import math
+
+    import pytest
+
+    assert (dh.LEAD_GAP_S, dh.LEAD_MATCH_PX, dh.LEAD_MIN_PX_S, dh.LEAD_T_S, dh.LEAD_MAX_PX) == (
+        0.12, 40.0, 25.0, 0.35, 64.0)  # fmt: skip
+    b1 = (100.0, 200.0, 140.0, 260.0)  # centre (120, 230)
+    later = [(300.0, 200.0, 340.0, 260.0), (110.0, 200.0, 150.0, 260.0),
+             (101.0, 201.0, 139.0, 261.0)]  # centres 200, 10 and 1 px from b1's  # fmt: skip
+    assert dh.box_centre(b1) == (120.0, 230.0)
+    assert dh.same_box(b1, later) == (101.0, 201.0, 139.0, 261.0)  # the nearest centre
+    assert dh.same_box(b1, [(300.0, 200.0, 340.0, 260.0)]) is None  # 200 px away: not it
+    # walking east at 100 px/s over 0.12 s: led 35 px ahead of the second box's centre
+    b2 = (112.0, 200.0, 152.0, 260.0)
+    lp = dh.lead_point(b1, 10.0, b2, 10.12)
+    assert lp["walking"] and abs(lp["speed"] - 100.0) < 1e-6
+    assert lp["lead"] == pytest.approx((35.0, 0.0)) and lp["point"] == pytest.approx((167.0, 230.0))
+    # a fast sprite's lead is capped at LEAD_MAX_PX, in its own direction
+    fast = dh.lead_point(b1, 0.0, (148.0, 236.0, 188.0, 296.0), 0.12)  # (48, 36) px in 0.12 s
+    assert math.hypot(*fast["lead"]) == pytest.approx(64.0)
+    assert fast["lead"][0] / fast["lead"][1] == pytest.approx(48 / 36)
+    # standing (jitter 1 px in 0.12 s = 8 px/s): no lead, the current centre
+    still = dh.lead_point(b1, 0.0, (101.0, 200.0, 141.0, 260.0), 0.12)
+    assert not still["walking"] and still["lead"] == (0.0, 0.0)
+    assert still["point"] == (121.0, 230.0)
+    assert dh.lead_point(b1, 1.0, b1, 1.0)["speed"] == 0.0  # no time between: no velocity
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "lead_strike" not in dh.fixes_of(dh.argparse.Namespace(**base, lead_strike=False))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, lead_strike=True))["lead_strike"] == [
+        0.12, 40.0, 25.0, 0.35, 64.0]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert 'lead_rec["why"] = "not_still"' in src  # a scrolling scene: no lead
+    assert 'points = [lp["point"], now_pt] if lp["walking"] else [now_pt]' in src
+    assert "n_hover = 2  # the led point, then the sprite's current point once" in src
