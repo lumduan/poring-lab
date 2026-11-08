@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p10 (4Q) done 2026-11-08 11:30: E1 24.0 / h FAIL, W1 / W2 FAIL, W3 / E3 / D1 PASS; --walk-stop NOT adopted. Root cause of class D in p9 + p10: the defend scan's N / S body points lie on the Rogue's own sprite. Batt picks the next change: (a) own-body hover points, (b) far-target strikes, (c) sight."
+next_action: "p11 (4R, pre-registered 2026-11-08): --self-recheck, a defend-scan sword on the Rogue's own sprite must persist 0.4 s (Batt chose option a). Run it, score E1 / R1-R3. Then option (b) far-target strikes."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -750,6 +750,62 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   - W2 fails: the logged `shift` series decide the threshold before any reuse;
   - E1 still failing names the next change (sight: the walking-started box fights, 2 strikes of
     15 in p9).
+
+
+### 4R. Pilot p11 pre-registration: --self-recheck, a sword on the Rogue's own sprite must persist (written BEFORE its run, 2026-11-08 12:04:07 ICT)
+
+- **Why:** Batt 2026-11-08 chose option (a) after p10 (section 5): the defend scan's N / S body
+  points lie on the Rogue's own sprite, and SWORD reads there were ground or own-cell clicks:
+  - p9: 6 of its 10 own-body strikes were class D;
+  - p10: 5 of 7 (`lock_study.py` `self_recheck.own_body_*`; the box is her feet point (641, 362),
+    +-20 px wide, 95 px up, 6 px down).
+- **What the sword there is NOT (measured, `cursor_sword` on real pixels):**
+  - her aura alone reads 0.21-0.32 at the N / S points (p10's immunity shots);
+  - the Miss text alone reads 0.37-0.55 (14 frames of the miss_cue template's recordings, with
+    the hotspot at its corner, its centre, and 8 px out);
+  - SWORD_MIN is 0.75. So a control read without the pointer would not catch it.
+  - The sword there is TRANSIENT: an attacking monster's frame reaching her body point, or the
+    arrow over her effects. The click 0.07 s later finds ground (p9) or her own cell (p10).
+- **The one change against p9: `--self-recheck` (dungeon@9.3, behind its flag):**
+  - a defend-scan SWORD at a point inside her own sprite box counts only if a second read
+    0.4 s later (`hover` again, two motions) is a SWORD too;
+  - else that cell is skipped and the scan goes on;
+  - each recheck logs both reads' sword recalls (event `self_recheck`).
+  - Not in this run: `--walk-stop` (not adopted after p10), any detector change (the GPU
+    preprocessing waits for its own parity check).
+- **The run** (p9's command + `--self-recheck`, label xmas02-p11, same seed):
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p11 --box-strike --box-now \
+          --self-recheck
+
+  - Before it: immunity toggled OFF and judged ("Returned to normal state."), then a judged
+    screenshot of the client.
+  - Beside it: the OpenVINO detect server, one guarded `execdev:vision` step (2400 s).
+  - After it: immunity ON and judged ("You are now immune to attacks."); the Rogue at rest.
+- **Bars:**
+  - **E1 (primary, as p9 / p10):** kills (packets) >= 40 / h (p9 34.0, p10 24.0).
+  - **R1 (the hypothesis):** own-body class-D strikes <= 1 (p9 6, p10 5).
+  - **R2 (it costs no real strike):** defend-scan strikes that started an attack >= 7 (p9 7,
+    p10 9).
+  - **R3:** class D <= 25 % of strikes (p9 36 %, p10 48 %).
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h.
+  - **D1:** 0 deaths.
+  - Reported:
+    - rechecks and transient ones, with each pair of recalls;
+    - class D by path (far `walk_sword` / `box` strikes are NOT this change's: p10 had 8);
+    - `owned_s`, E2, kills by species, items, damage taken.
+- **Scorers (committed before the run):** `dungeon_judge.py row`, `lock_study.py`
+  (`self_recheck` + `walk_stop` + classes; tests in `test_lock_study.py`; p9 / p10 re-scored as
+  the baselines above).
+- **Decisions:**
+  - R1 and R2 pass: `--self-recheck` stays ON for xmas_dun02 runs;
+  - R1 passes, R2 fails (real strikes lost): the 0.4-s wait and the box are studied from the
+    logged recall pairs before any reuse;
+  - R1 fails: the recall pairs show whether the second read still sees the transient sword
+    (then a longer wait, or a different point);
+  - E1 failing names the next change: the far-target strikes (option b), then sight (c).
 
 ## 5. Results
 

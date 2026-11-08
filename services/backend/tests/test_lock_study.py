@@ -79,3 +79,20 @@ def test_owned_time_and_the_walk_stop_summary() -> None:
     assert ws["d_owned_s_p50"] == 4.15 and ws["d_owned_s_sum"] == 8.3
     # no strike after the last one and no end: the held time is unknown, not infinite
     assert ls.strikes([{"kind": "strike", "t_ns": 5 * S}], [], US)[0]["owned_s"] is None
+
+
+def test_own_body_strikes_and_the_self_recheck_summary() -> None:
+    """rogue-xmas02.md 4R (p11): strikes on the Rogue's own sprite, by class, and the rechecks."""
+    assert ls.own_body({"u": 641.0, "v": 312.0}) and ls.own_body({"u": 641.0, "v": 360.0})
+    assert not ls.own_body({"u": 675.0, "v": 336.0}) and not ls.own_body({"u": 641.0, "v": 386.0})
+    assert not ls.own_body({})  # an old event without a point
+    events = [{"kind": "strike", "t_ns": 10 * S, "u": 641.0, "v": 312.0, "by": "scan"},  # D
+              {"kind": "strike", "t_ns": 20 * S, "u": 641.0, "v": 360.0, "by": "scan"},  # attacked
+              {"kind": "strike", "t_ns": 30 * S, "u": 675.0, "v": 336.0, "by": "scan"},  # not own
+              {"kind": "self_recheck", "t_ns": 9 * S, "verdict2": "unknown"},
+              {"kind": "self_recheck", "t_ns": 19 * S, "verdict2": "sword"}]  # fmt: skip
+    out = ls.strikes(events, [req(20.2, T1), req(30.3, T2)], US)
+    assert [o["own_body"] for o in out] == [True, True, False]
+    sr = ls.self_recheck(out, events)
+    assert sr == {"own_body_strikes": 2, "own_body_d": 1, "own_body_attacked": 1,
+                  "rechecks": 2, "transient": 1, "scan_attacked": 2}  # fmt: skip

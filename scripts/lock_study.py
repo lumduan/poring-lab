@@ -30,6 +30,9 @@ from pathlib import Path
 from typing import Any
 
 REQ_S, HIT_S, READ_S, WALK_S = 2.0, 25.0, 2.0, 1.0
+# rogue-xmas02.md 4R (p11): the Rogue's own sprite on screen, around her feet point (dungeon_hunt
+# SELF_HALF_W / SELF_UP / SELF_DOWN; the camera keeps her feet at FEET_UV)
+FEET_UV, SELF_HALF_W, SELF_UP, SELF_DOWN = (641.0, 362.0), 20, 95, 6
 DIED = 1  # entity_vanish reason (rAthena CLR_DEAD)
 NS = 1_000_000_000
 
@@ -107,8 +110,29 @@ def strikes(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
         stop = min([t for t in (u, f, nxt) if t is not None])
         owned = None if stop == float("inf") else round((stop - st["t_ns"]) / NS, 2)
         out.append({"t_ns": st["t_ns"], "by": st.get("by"), "end": st.get("end"),
-                    "owned_s": owned, **classify(st["t_ns"], u, packets, gid)})  # fmt: skip
+                    "owned_s": owned, "own_body": own_body(st),
+                    **classify(st["t_ns"], u, packets, gid)})  # fmt: skip
     return out
+
+
+def own_body(st: dict[str, Any]) -> bool:
+    """PURE (4R): the strike's point lies on the Rogue's own sprite."""
+    if st.get("u") is None or st.get("v") is None:
+        return False
+    u0, v0 = FEET_UV
+    return abs(st["u"] - u0) <= SELF_HALF_W and v0 - SELF_UP <= st["v"] <= v0 + SELF_DOWN
+
+
+def self_recheck(classed: Sequence[dict[str, Any]],
+                 events: Sequence[dict[str, Any]]) -> dict[str, Any]:  # fmt: skip
+    """PURE (4R, p11): the own-body strikes by class, and the --self-recheck second reads."""
+    ob = [c for c in classed if c.get("own_body")]
+    rc = [e for e in events if e.get("kind") == "self_recheck"]
+    return {"own_body_strikes": len(ob), "own_body_d": sum(1 for c in ob if c["class"] == "D"),
+            "own_body_attacked": sum(1 for c in ob if c["class"] != "D"),
+            "rechecks": len(rc), "transient": sum(1 for e in rc if e.get("verdict2") != "sword"),
+            "scan_attacked": sum(1 for c in classed if c.get("by") in ("scan", "stall_scan")
+                                 and c["class"] != "D")}  # fmt: skip
 
 
 def walk_stop(classed: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -193,6 +217,7 @@ def load(session: Path) -> dict[str, Any]:
             "unlock_s_p50": statistics.median([c["unlock_s"] for c in classed
                                                if c["unlock_s"] is not None] or [0]),
             "walk_stop": walk_stop(classed),
+            "self_recheck": self_recheck(classed, events),
             "reader": reader(packets, lines, gid),
             "walking": walking(events, packets, dets, classed) if dets else None}  # fmt: skip
 

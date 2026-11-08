@@ -212,6 +212,13 @@ BURST_GAP_S, BURST_MAX, BURST_MAX_S = 0.6, 4, 3.0  # arm C: re-click until the l
 WALK_STOP_PX, WALK_STOP_N, WALK_STOP_GAP_S, FALSE_REL_S = 10.0, 2, 0.8, 3.0
 WALK_STOP_SETTLE_S = 0.4  # after a walked strike: our 1-2 cell walk ends before the next scan
 WALK_STOP_BY = ("scan", "stall_scan", "box", "queue")  # the fight paths only
+# --self-recheck (dungeon@9.3, rogue-xmas02.md 4R, pilot p11; Batt 2026-11-08 chose option a): the
+# defend scan's N / S body points lie ON the Rogue's own sprite (641,312 / 641,288 / 641,360), and
+# a SWORD read there was a ground click in 6 of p9's 9 class-D strikes and 4 of p10's 13. Neither
+# her aura nor the Miss text alone reads as a sword (0.21-0.55 vs SWORD_MIN 0.75, measured): the
+# sword there is TRANSIENT (an attacking monster's frame, or the arrow over her effects). So a
+# sword at a point inside her own sprite box counts only if it is still there SELF_RECHECK_S later.
+SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN = 0.4, 20, 95, 6  # the box around her feet point
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -782,6 +789,11 @@ def walked_now(shifts: Sequence[tuple[float, float]], px: float = WALK_STOP_PX,
     return len(shifts) >= n and all(math.hypot(dx, dy) >= px for dx, dy in shifts[-n:])
 
 
+def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
+    """PURE (--self-recheck): (u, v) lies on our own sprite, whose feet are at (u0, v0)."""
+    return abs(u - u0) <= SELF_HALF_W and v0 - SELF_UP <= v <= v0 + SELF_DOWN
+
+
 def drop_false(cells: Sequence[Cell], false_rel: Mapping[Cell, float], now: float,
                keep_s: float = FALSE_REL_S) -> list[Cell]:  # fmt: skip
     """PURE (--walk-stop): the scan's cells without those whose strike walked within ``keep_s``."""
@@ -911,6 +923,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["walk_every"] = a.walk_every
     if getattr(a, "walk_stop", False):  # dungeon@9.2 (rogue-xmas02.md 4Q)
         out["walk_stop"] = [WALK_STOP_PX, WALK_STOP_N, WALK_STOP_GAP_S, FALSE_REL_S]
+    if getattr(a, "self_recheck", False):  # dungeon@9.3 (rogue-xmas02.md 4R)
+        out["self_recheck"] = [SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN]
     return out
 
 
@@ -2135,6 +2149,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             ev({**rec, "verdicts": verdicts, "struck": False})
             return None
 
+        def self_uv() -> tuple[float, float]:
+            """Our own feet point on screen (the camera keeps us there): the self box's anchor."""
+            u0_, v0_ = project(here, [(0, 0)])[0]
+            return float(u0_), float(v0_)
+
         def scan(purpose: str, cells: Sequence[Cell], stop_on: str
                  ) -> tuple[Cell, Any, dict[str, Any]] | None:  # fmt: skip
             """Hover each cell's point (defend: the body above it; loot: the cell); the first
@@ -2156,6 +2175,25 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if guard_tick():
                     break
                 vd = "pickup" if pickup_seen(res["rec"]) else res["verdict"]
+                if (
+                    vd == "sword"
+                    and purpose == "defend"
+                    and getattr(a, "self_recheck", False)
+                    and in_self_box(u, v_, *self_uv())
+                ):
+                    # --self-recheck (dungeon@9.3): on our own sprite a sword must persist
+                    time.sleep(SELF_RECHECK_S)
+                    res2 = hover(u, v_)
+                    ev({"kind": "self_recheck", "rel": list(c), "u": round(u, 1),
+                        "v": round(v_, 1), "first": round(res["rec"].get("sword", 0.0), 3),
+                        "second": round(res2["rec"].get("sword", 0.0), 3),
+                        "verdict2": res2["verdict"]})  # fmt: skip
+                    counts["self_recheck"] += 1
+                    if res2["verdict"] != "sword":
+                        counts["self_transient"] += 1
+                        verdicts["self_transient"] += 1
+                        continue
+                    res = res2
                 verdicts[vd] += 1
                 if vd == stop_on or (stop_on == "pickup" and vd == "sword"):
                     found = (c, (u, v_), res)
@@ -3431,6 +3469,14 @@ def main() -> int:
         help="dungeon@9.2 (rogue-xmas02.md 4Q, pilot p10; OFF by default): a ring-1 strike whose "
         "first click scrolls the scene before the lock arrow / our damage line hit the ground: "
         "stop the burst, take no lock, and skip that cell in the defend scan for a few seconds",
+    )
+    t.add_argument(
+        "--self-recheck",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.3 (rogue-xmas02.md 4R, pilot p11; OFF by default): a defend-scan SWORD at "
+        "a point on our own sprite (the N / S cells' body points) counts only if a second read "
+        "0.4 s later is a SWORD too; else the scan goes on",
     )
     t.add_argument(
         "--plant-sweep",

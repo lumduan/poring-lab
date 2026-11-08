@@ -1064,3 +1064,24 @@ def test_walk_stop_ring1_walked_and_false_cells() -> None:
     assert 'if strike(u2, v2, c2, "stall_scan"):' in src
     assert 'if not strike(u_q, v_q, rel_q, "queue"):' in src
     assert '"walked" if walked is not None else' in src
+
+
+def test_self_recheck_box_holds_the_own_body_points_of_p9_and_p10() -> None:
+    """dungeon@9.3 (rogue-xmas02.md 4R, pilot p11; Batt chose option a): the defend scan's N / S
+    body points lie on the Rogue's own sprite; a sword read there must persist SELF_RECHECK_S."""
+    u0, v0 = 641.0, 362.0  # her feet point: E [1, 0]'s body point (675, 336) + BODY_UP, minus 34
+    for u, v in ((641, 312), (641, 302), (641, 288), (641, 279), (641, 360), (641, 324)):
+        assert dh.in_self_box(u, v, u0, v0), (u, v)  # p9 / p10's class-D and own-body strikes
+    for u, v in ((675, 336), (607, 336), (675, 355), (674, 313), (641, 386), (641, 250)):
+        assert not dh.in_self_box(u, v, u0, v0), (u, v)  # E / W / diagonals, S's feet, far N
+    assert dh.SELF_RECHECK_S == 0.4
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "self_recheck" not in dh.fixes_of(dh.argparse.Namespace(**base, self_recheck=False))
+    on = dh.fixes_of(dh.argparse.Namespace(**base, self_recheck=True))
+    assert on["self_recheck"] == [dh.SELF_RECHECK_S, dh.SELF_HALF_W, dh.SELF_UP, dh.SELF_DOWN]
+    src = Path(dh.__file__).read_text()
+    # only the defend scan, only a sword, only on our own sprite; a failed second read goes on
+    assert 'and purpose == "defend"' in src and "in_self_box(u, v_, *self_uv())" in src
+    assert 'if res2["verdict"] != "sword":' in src and 'verdicts["self_transient"] += 1' in src
