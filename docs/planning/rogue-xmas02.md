@@ -1087,6 +1087,34 @@ Batt's words, translated (before 19:53:09, the turn's first `date`):
     takes it) -> studied;
   - Q2 fails: the give-up is too early for good strikes -> the threshold is studied before reuse.
 
+### 4X. Pilot p16 pre-registration: --engage-screen, any monster on the screen, nearest first (written BEFORE its run, 2026-11-08 20:35 ICT)
+
+- **Why:** Amendment I item 1 (b), widened by Batt: "strike within what the screen shows, the
+  nearest monster first". Batt's clips and p15 above: the 3-cell trigger and the 6-cell box-path
+  cap let monsters pass, and the box path found no box in 6-12 of ~20 box engagements.
+- **The one change against p13r: `--engage-screen` (dungeon@9.7, behind its flag, 441cc93d):**
+  the patrol's box trigger and the box path take ANY monster box whose body point is in view
+  (not under a UI window, not an ignored box spot), the nearest to her feet first.
+- **Kept from p13r:** the fast detector, `--self-recheck`, `--still-strike`; `--lead-strike` and
+  `--quick-drop` OFF (neither adopted: p14, p15); the 10-potion stock; the same map, route, seed
+  and flags.
+- **The run:** 4U's command with `--label xmas02-p16 --engage-screen`; the same before / beside /
+  after steps.
+- **Bars:**
+  - **S1 (the hypothesis):** box engagements whose box path found no box <= 15 % (p13r 32 %, p15
+    55 %).
+  - **S2 (it turns into kills):** kills per monster seen >= 0.65 (p13r 0.611, the best so far).
+  - **E1:** kills >= 40 / h. **D1:** live detector p50 <= 35 ms. **R1:** own-body class D <= 1.
+    **F3:** far clicks while walking <= 2. **E3:** hard bars pass (NPC contacts included: far
+    targets mean longer walks), 0 dead-end Fly Wings, stalls <= 39 / h. **Deaths:** 0.
+  - Reported: engagements by source, the box path's target distance (d_px), strikes, class D by
+    path, the supply.
+- **Decisions:**
+  - S1 + S2 + E1 pass and no regression bar fails: `--engage-screen` stays ON;
+  - S1 passes, S2 fails: more targets but no more kills -> the far strikes' outcome is studied;
+  - S1 fails: the walk carries her past the target before the box path looks (Batt's 20:18:10 /
+    20:19:32 clips) -> stopping the walk at the engagement is the next change.
+
 ### 4X'. Amendment J (2026-11-08 ~21:5x ICT): Batt's answers to the 21:43 report, and the night's plan
 
 Batt's words, translated (before 22:02:46, the turn's first `date`):
@@ -1141,6 +1169,29 @@ time; a change that passes its bars joins the base, else it is switched off):**
   - Reported: kills per monster seen (p16 0.80), the supply, the drops by why, boss_guard events.
 - **Decisions:** Q1 + Q2 + E1 pass with no regression bar failing -> `--quick-drop` joins the
   base; Q1 fails -> off (studied); Q2 or E1 fails -> off.
+
+### 4Z. Pilot p18 pre-registration: --far-single, a far strike clicks once and waits for the walk-up (written BEFORE its run, 2026-11-08 22:47 ICT)
+
+- **Why:** Amendment J item 2 (a). The study (p16, packets): far strikes missed by DISTANCE --
+  2-6 cells 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of 35 -- and on 31 of 57 far misses the
+  target stood still. On a far miss the client's first request was a WALK (a monster out of reach
+  is walked to first), and the burst re-clicked the same screen point every 0.6 s while the camera
+  scrolled: 3-5 walk requests in 4 s, the approach cancelled. Far hits mostly took ONE click.
+- **The one change against p16: `--far-single`** (dungeon@9.8, e6f85581): a strike 4+ cells away
+  clicks once and waits 1.0 s + 0.2 s a cell (at most 3.5 s) for the arrow or our damage line,
+  never re-clicking; nearer strikes burst as before.
+- **The base:** p16's (`--engage-screen` with the boss guard); `--quick-drop` OFF (p17).
+- **The run:** the base command with `--label xmas02-p18 --far-single`.
+- **Bars:**
+  - **F1 (the hypothesis):** far strikes (2+ cells, lock_study) that are class D <= 35 % (p16 54 %,
+    p17 60 %).
+  - **E1:** kills >= 80 / h (p16 87.9). **D1** <= 35 ms; **R1** own-body class D <= 1; **F3** <= 2;
+    **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0.
+  - Reported: class D by distance (2-6 / 7-8 / 9+ cells), clicks per far strike, kills per monster
+    seen, the supply.
+- **Decisions:** F1 + E1 pass with no regression bar failing -> `--far-single` joins the base;
+  F1 passes and E1 fails -> the wait costs more than it saves (studied); F1 fails -> off.
+- R1 has failed in p14-p17 (2, 2, 2, 8 own-body class D): (c) is studied beside this run.
 
 ### 4Z'. Amendment K (2026-11-08 23:20 ICT): p18 died to the MVP -- the boss is avoided by SCHEDULE
 
@@ -2350,54 +2401,3 @@ server answered none (no self_move); a request south at 110.8 s was answered at 
 - **The fix (dungeon@9.12, 8dd42962): `--reach-check`**, pre-registered as p23 (4AE). Replayed on
   p16-p21's box strikes (our packet cell + the strike's rel): it passes over 90 of 205 class-D
   strikes and 2 of 192 good ones.
-
-### 4Z. Pilot p18 pre-registration: --far-single, a far strike clicks once and waits for the walk-up (written BEFORE its run, 2026-11-08 22:47 ICT)
-
-- **Why:** Amendment J item 2 (a). The study (p16, packets): far strikes missed by DISTANCE --
-  2-6 cells 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of 35 -- and on 31 of 57 far misses the
-  target stood still. On a far miss the client's first request was a WALK (a monster out of reach
-  is walked to first), and the burst re-clicked the same screen point every 0.6 s while the camera
-  scrolled: 3-5 walk requests in 4 s, the approach cancelled. Far hits mostly took ONE click.
-- **The one change against p16: `--far-single`** (dungeon@9.8, e6f85581): a strike 4+ cells away
-  clicks once and waits 1.0 s + 0.2 s a cell (at most 3.5 s) for the arrow or our damage line,
-  never re-clicking; nearer strikes burst as before.
-- **The base:** p16's (`--engage-screen` with the boss guard); `--quick-drop` OFF (p17).
-- **The run:** the base command with `--label xmas02-p18 --far-single`.
-- **Bars:**
-  - **F1 (the hypothesis):** far strikes (2+ cells, lock_study) that are class D <= 35 % (p16 54 %,
-    p17 60 %).
-  - **E1:** kills >= 80 / h (p16 87.9). **D1** <= 35 ms; **R1** own-body class D <= 1; **F3** <= 2;
-    **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0.
-  - Reported: class D by distance (2-6 / 7-8 / 9+ cells), clicks per far strike, kills per monster
-    seen, the supply.
-- **Decisions:** F1 + E1 pass with no regression bar failing -> `--far-single` joins the base;
-  F1 passes and E1 fails -> the wait costs more than it saves (studied); F1 fails -> off.
-- R1 has failed in p14-p17 (2, 2, 2, 8 own-body class D): (c) is studied beside this run.
-
-### 4X. Pilot p16 pre-registration: --engage-screen, any monster on the screen, nearest first (written BEFORE its run, 2026-11-08 20:35 ICT)
-
-- **Why:** Amendment I item 1 (b), widened by Batt: "strike within what the screen shows, the
-  nearest monster first". Batt's clips and p15 above: the 3-cell trigger and the 6-cell box-path
-  cap let monsters pass, and the box path found no box in 6-12 of ~20 box engagements.
-- **The one change against p13r: `--engage-screen` (dungeon@9.7, behind its flag, 441cc93d):**
-  the patrol's box trigger and the box path take ANY monster box whose body point is in view
-  (not under a UI window, not an ignored box spot), the nearest to her feet first.
-- **Kept from p13r:** the fast detector, `--self-recheck`, `--still-strike`; `--lead-strike` and
-  `--quick-drop` OFF (neither adopted: p14, p15); the 10-potion stock; the same map, route, seed
-  and flags.
-- **The run:** 4U's command with `--label xmas02-p16 --engage-screen`; the same before / beside /
-  after steps.
-- **Bars:**
-  - **S1 (the hypothesis):** box engagements whose box path found no box <= 15 % (p13r 32 %, p15
-    55 %).
-  - **S2 (it turns into kills):** kills per monster seen >= 0.65 (p13r 0.611, the best so far).
-  - **E1:** kills >= 40 / h. **D1:** live detector p50 <= 35 ms. **R1:** own-body class D <= 1.
-    **F3:** far clicks while walking <= 2. **E3:** hard bars pass (NPC contacts included: far
-    targets mean longer walks), 0 dead-end Fly Wings, stalls <= 39 / h. **Deaths:** 0.
-  - Reported: engagements by source, the box path's target distance (d_px), strikes, class D by
-    path, the supply.
-- **Decisions:**
-  - S1 + S2 + E1 pass and no regression bar fails: `--engage-screen` stays ON;
-  - S1 passes, S2 fails: more targets but no more kills -> the far strikes' outcome is studied;
-  - S1 fails: the walk carries her past the target before the box path looks (Batt's 20:18:10 /
-    20:19:32 clips) -> stopping the walk at the engagement is the next change.
