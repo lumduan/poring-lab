@@ -549,3 +549,36 @@ as Batt prefers:
   FAILED P1 on prt_fild08 (v1: 58 / 59 matched, 0.983 < 0.999). By the decision rule p13 runs
   fast32, so `final` runs fast32's flags (the conversion on the card, FP32, the floor at RP0) on
   the final code; same harness, same bars.
+- **Results, fast32 and fast16** (16:11:32-16:23:38 ICT; each server step ended on its time box,
+  rc 124, the stop verified: the worker idle, nothing of ours on the GPU; the floor read 2450 in
+  both start lines):
+
+  | | fast32 v1 | fast32 xmas02 | fast16 v1 | fast16 xmas02 |
+  |---|---|---|---|---|
+  | matched / CPU, matched / GPU | 59 / 59, 59 / 59 | 533 / 533, 533 / 533 | **58 / 59**, 58 / 59 | 533 / 533, 533 / 533 |
+  | largest coordinate difference | 0.0 px | 0.1 px | 1.0 px | **3.3 px** |
+  | the bot's call (host), p50 / p95 | 27.6 / 35.3 ms | 24.1 / 28.6 | 16.6 / 26.2 | 17.7 / 22.3 |
+  | the server's forward, p50 | 15.2 ms | 15.4 | 9.6 | 9.8 |
+  | soak (2 Hz, 60 s): calls by the GPU; the bot's call p50; the server's | 120 / 120; 22.3 ms; 16.4 | | 120 / 120; 16.2 ms; 11.1 | |
+
+  - **fast32: P1 PASS, P2 PASS; S1 FAILS on v1** (27.6 > 25 ms) and passes on xmas02 (24.1). Its
+    harness ran the OLD client code (before 16:17:28); the soak, the bot's live pattern (GPU calls
+    only), is 22.3 ms against 16a's 37.4.
+  - **fast16: P1 FAILS on both maps** (v1 one box lost; xmas02 one box moved 3.3 px). FP16 stays
+    off; a later FP16 needs its own plan (e.g. per model, or the first and last layers in FP32).
+  - The per-map host times are 2-5 ms above the soak's. There each GPU call runs right after a
+    CPU detection of the same frame (the harness alternates them); most likely the CPU
+    detector's 16 threads are still busy as the GPU call starts (not measured).
+- **Result, `final`** (fast32's flags on the final code, 16:23:38-16:29:41 ICT; time box rc 124,
+  the stop verified; the start line: `ov_preproc` gpu, `precision` f32, `gpu_clock` min 2450):
+  **P1 PASS** (v1 59 / 59, 0.0 px; xmas02 533 / 533, 0.1 px), **S1 PASS** (the bot's call p50
+  22.0 / 22.7 ms, p95 27.1 / 28.2), **P2 PASS** (soak 120 / 120 by the GPU, the bot's call p50
+  20.6 ms, the server's 16.2).
+
+  | the bot's GPU call, p50 | 16a (11-08 noon) | p12's live run | `final` |
+  |---|---|---|---|
+  | per-map (alternating with the CPU) | 41.9 / 38.6 ms | - | **22.0 / 22.7 ms** |
+  | soak / live, GPU calls only | 37.4 ms | 64.7 ms (the numpy conversion) | **20.6 ms** |
+
+  - **Decision (pre-registered):** p13 (rogue-xmas02.md 4T) runs on `final`: `serve-cmd
+    --ov-preproc gpu --ov-precision f32` (the defaults), the floor at 2450.
