@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p15 (4W) done 20:31: --quick-drop NOT adopted (Q1 3.89 s / 31.7 s, E1 32.0 / h, R1). Batt's 4 clips: the 3-cell trigger, the 6-cell box-path cap, the walk finishing first. p16 (4X, --engage-screen) pre-registered."
+next_action: "p16 (4X) done 2026-11-08 21:21: --engage-screen -> 87.9 kills / h (best), S1 / S2 / E1 PASS, R1 2 (fails, as in p14-p15). Batt: keep it ON (recommended)? Next candidates: the far misses (51 % class D), R1, stopping the walk at an engagement."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2006,6 +2006,32 @@ FAILS (2 own-body class D). `--quick-drop` is NOT adopted (4W's rule: Q1 fails -
     p13 7 / 20, p13r 6 / 19, p14 9 / 20, p15 12 / 22.
 - **Items (snatched):** Scell 6, Zargon 2, Candy 1, Well-baked Cookie 1, Manacles 1.
 - The bag cleared after it (20:34:04-20:35:33: Etc 3, Use 4; weight 585 -> 520, 10 / 10).
+
+**Pilot p16 (4X; 20:50:48-21:21:35, its own time box; immunity OFF at 20:50:33, judged "Returned
+to normal state."; back ON at 21:21:46, judged "You are now immune to attacks."). VERDICT: S1, S2,
+E1, D1, F3, E3, deaths PASS; R1 FAILS (2 own-body class D, as in p14 and p15). Kills 87.9 / h, the
+best by far.**
+
+| | p12 | p13r | p15 | **p16** | bar |
+|---|---|---|---|---|---|
+| S1 box engagements with no box found | 7 of 26 | 6 of 19 | 12 of 22 | **10 of 116 (8.6 %)** | <= 15 %: PASS |
+| S2 kills per monster seen | 0.58 | 0.611 | 0.41 | **0.80** | >= 0.65: PASS |
+| E1 kills | 29 (58.0 / h) | 22 (44.0 / h) | 16 (32.0 / h) | **44 (87.9 / h)** | >= 40 / h: PASS |
+| monsters seen (/ 10 min) | 50 (16.7) | 36 (12.0) | 39 (13.0) | **55 (18.3)** | reported |
+| strikes; class D | 46; 28 % | 36; 19 % | 28; 25 % | **134; 51 %** (far D 57 of 106) | reported |
+| box path's target distance p50 / max | - | - | - | **251 / 491 px** (~7 / ~14 cells) | reported |
+| R1 own-body class D | 0 | 0 | 2 | **2** (11 own-body strikes) | <= 1: **FAIL** |
+| D1 / F3 / E3 / deaths | | | | **20.6 ms / 0 / pass (NPC contacts 0), 0 Fly Wings, 1 stall / 0** (lowest HP 78.0 %) | PASS |
+
+- **What changed:** 116 box engagements (p13r 19), every fight started by a box; the box path
+  struck 105 of them. Half the strikes miss (far ones), but each miss now costs little next to the
+  monsters she reaches: kills doubled at the same 30 minutes.
+- **Items (snatched):** Scell 8, Zargon 8, Well-baked Cookie 3, Piece of Cake 3, Pearl 2, Candy 1,
+  Candy Cane 1, Manacles 1 (27; 54 / h).
+- **Decision (as pre-registered):** "S1 + S2 + E1 pass and no regression bar fails" -> stays ON;
+  R1 (a regression bar) failed with 2, so keeping `--engage-screen` ON is **Batt's call**
+  (recommended: kills x 2; R1 has read 2 in p14, p15 and p16 alike, with 5-11 own-body strikes).
+- The bag cleared after it (21:22:16-21:24:03: Etc 4, Use 6; weight 654 -> 520, 10 / 10).
 
 ### 4X. Pilot p16 pre-registration: --engage-screen, any monster on the screen, nearest first (written BEFORE its run, 2026-11-08 20:35 ICT)
 
