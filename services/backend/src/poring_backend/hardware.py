@@ -588,15 +588,17 @@ class HardwareMonitor:
         t0 = time.perf_counter()
         t_ns = self._clock()
         probe = Probe(self._logged)
-        cpu = self._cpu(probe)
-        memory = self._memory(probe)
+        # Each section is guarded too: a bug in one (an unexpected file layout) nulls that section
+        # with its reason, never the whole sample.
+        cpu = probe.get("cpu", partial(self._cpu, probe)) or Cpu()
+        memory = probe.get("memory", partial(self._memory, probe)) or Memory()
         shm = self._fs(probe, "shm", self.shm_path, SHM_LIMIT_B,
                        "the host's /dev/shm is not mounted here")  # fmt: skip
         disk = self._fs(probe, "disk", self.disk_path, None, "no disk path configured")
-        chips, sensors = self._hwmon(t_ns)
-        temps = read_temps(sensors, probe)
-        gpu = self._read_gpu(probe, t_ns)
-        power = self._power(probe, t_ns, gpu, chips)
+        chips, sensors = probe.get("temps", partial(self._hwmon, t_ns)) or ([], [])
+        temps = probe.get("temps", partial(read_temps, sensors, probe)) or []
+        gpu = probe.get("gpu", partial(self._read_gpu, probe, t_ns))
+        power = probe.get("power", partial(self._power, probe, t_ns, gpu, chips)) or Power()
         self._seq += 1
         return Sample(
             seq=self._seq,
@@ -626,7 +628,9 @@ class HardwareMonitor:
         cores = sorted((k for k in times or {} if k != "cpu"), key=_natural)
         if times:
             cpu.cores = len(cores) or None
-            cpu.busy_pct = _round1(busy_pct(self._cpu_prev.get("cpu"), times["cpu"]))
+            total = times.get("cpu")
+            prev = self._cpu_prev.get("cpu")
+            cpu.busy_pct = None if total is None else _round1(busy_pct(prev, total))
             cpu.core_pct = [_round1(busy_pct(self._cpu_prev.get(k), times[k])) for k in cores]
             if cpu.busy_pct is None:
                 probe.miss("cpu.busy_pct", "warming up" if not self._cpu_prev else "counter reset")

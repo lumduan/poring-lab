@@ -327,6 +327,23 @@ def test_an_empty_host_gives_nulls_with_reasons_never_an_exception(tmp_path: Pat
     assert view.current is not None and view.history.series["cpu_pct"] == [None]
 
 
+def test_a_bug_in_one_section_nulls_that_section_not_the_sample(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = host_tree(tmp_path)
+    put(root, "proc/stat", "cpu0 1 2 3 4 5")  # no aggregate line: an unexpected layout
+    m = monitor(root, Clock())
+
+    def broken(probe: hw.Probe, t_ns: int) -> hw.Gpu | None:
+        raise KeyError("an unexpected layout")
+
+    monkeypatch.setattr(m, "_read_gpu", broken)
+    s = m.sample()
+    assert s.cpu.busy_pct is None and s.cpu.cores == 1
+    assert s.gpu is None and s.na["gpu"] == "error (KeyError)"
+    assert s.power.server_w == 69.0 and len(s.temps) == 5  # the other sections stand
+
+
 def test_a_missing_statvfs_path_is_null(tmp_path: Path) -> None:
     s = monitor(tmp_path, Clock(), disk_path=tmp_path / "gone").sample()
     assert s.disk is None and s.na["disk"] == f"{tmp_path / 'gone'} absent"
