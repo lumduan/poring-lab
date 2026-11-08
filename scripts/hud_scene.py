@@ -73,6 +73,7 @@ import signal
 import sys
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -117,6 +118,10 @@ class Tuning:
     LEGACY is the 2026-10-08 first cut's behaviour, for comparison."""
 
     motion: str = "floor"  # "floor": per-object perspective; "global": one 2-D shift for all
+    # Batt 2026-11-08 ("use the GPU for detection, the box HUD too"): the HUD's boxes come from the
+    # vision worker's detect server on the Arc first (unit_detector.GpuDetector), the same CPU
+    # detector behind it (absent, busy with the runner, or slow: the CPU serves). "cpu": as before.
+    detector: str = "gpu"
     det_moving_s: float = 0.5  # the detector's period while the scene moves (2 threads: ~nonstop)
     det_changed_s: float = 1.0  # ... while the frame changes (a unit walks in)
     det_idle_s: float = 5.0  # ... when it is still
@@ -966,7 +971,8 @@ def serve(hz: float, tuning: Tuning) -> int:
     latest: dict[str, Any] = {}
     stop = threading.Event()
     stats: dict[str, Any] = {"det": 0, "det_ms": [], "frames": 0, "motion": 0, "corr": 0,
-                             "floor_ms": [], "confirm": 0, "mask_ms": [], "masked": 0}  # fmt: skip
+                             "floor_ms": [], "confirm": 0, "mask_ms": [], "masked": 0,
+                             "paths": Counter()}  # fmt: skip
     # THE CUT-IN MASK (Batt 2026-10-09 ~16:10): while the dialog reader sees an open dialog (or
     # cannot read it: fail closed), the NPC dialog's cut-in region is UI. The dialog is read only
     # when a detection or a drawn box lies over that region, and the read is reused while the
@@ -980,10 +986,17 @@ def serve(hz: float, tuning: Tuning) -> int:
         from poring_env.signboard import find_signs
 
         try:
-            det = unit_detector.UnitDetector(threads=DET_THREADS)
+            cpu_det = unit_detector.UnitDetector(threads=DET_THREADS)
         except Exception as exc:  # noqa: BLE001
             print(f"{time.strftime('%H:%M:%S')} HUD detector unavailable ({exc})", flush=True)
             return
+        det: Any = cpu_det
+        if tuning.detector == "gpu":  # the Arc first, the CPU behind it (GpuDetector's fallback)
+            try:
+                det = unit_detector.GpuDetector(cpu_det, weights="v1")
+            except Exception as exc:  # noqa: BLE001 -- the CPU alone, as before
+                print(f"{time.strftime('%H:%M:%S')} HUD GPU detector unavailable ({exc}): "
+                      "the CPU serves", flush=True)  # fmt: skip
         try:
             while not stop.is_set():
                 got = latest.get("frame")
@@ -999,6 +1012,7 @@ def serve(hz: float, tuning: Tuning) -> int:
                     continue
                 t0 = time.monotonic()
                 units = [b for b in det.detect(img) if b.cls != "player"]
+                stats["paths"][getattr(det, "last_path", "") or "cpu"] += 1
                 # signboards by their SHAPE, with an NPC under each wherever one could be seen
                 npcs = [(b.x0, b.y0, b.x1, b.y1) for b in units if b.cls == "npc"]
                 found = detect_found(units, find_signs(img, npcs=npcs, exclude=rp.UI_WINDOWS))
@@ -1090,7 +1104,7 @@ def serve(hz: float, tuning: Tuning) -> int:
                       f" Hz, motion msgs {stats['motion'] / 60:.2f}/s (with corrections "
                       f"{stats['corr'] / 60:.2f}/s, floor median {fm[len(fm) // 2]:.0f} ms), "
                       f"detector {stats['det'] / 60:.2f} Hz (median {ms[len(ms) // 2]:.0f} ms; "
-                      f"{stats['confirm']} confirming passes), "
+                      f"{stats['confirm']} confirming passes; by {dict(stats['paths'])}), "
                       f"objects {len(tracker.objects)} (seen once {len(tracker.candidates)}; "
                       f"candidates so far {tracker.counts}), display {out.state}: sent "
                       f"{out.sent}, dropped {out.dropped}, superseded {out.superseded}, "
@@ -1119,6 +1133,8 @@ def main() -> int:
     ap.add_argument("--det-period", type=float, default=TUNING.det_moving_s,
                     help="the detector's period while the scene moves (s)")  # fmt: skip
     ap.add_argument("--motion", choices=("floor", "global"), default=TUNING.motion)
+    ap.add_argument("--detector", choices=("gpu", "cpu"), default=TUNING.detector,
+                    help="gpu: the Arc's detect server first, the CPU behind it")  # fmt: skip
     ap.add_argument("--seen-twice", choices=("units", "off"), default="units",
                     help="draw a new unit once a later pass sees it (off: at once)")  # fmt: skip
     ap.add_argument("--confirm-s", type=float, default=TUNING.confirm_s,
@@ -1126,7 +1142,8 @@ def main() -> int:
     a = ap.parse_args()
     seen = TUNING.seen_twice if a.seen_twice == "units" else ()
     return serve(a.hz, replace(TUNING, det_moving_s=a.det_period, motion=a.motion,
-                               seen_twice=seen, confirm_s=max(0.0, a.confirm_s)))  # fmt: skip
+                               seen_twice=seen, confirm_s=max(0.0, a.confirm_s),
+                               detector=a.detector))  # fmt: skip
 
 
 if __name__ == "__main__":

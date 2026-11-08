@@ -203,7 +203,8 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
   `/detect/detect.sock`. `guarded_build.py worker:vision` creates that directory first, as the
   host user, mode 0700 (a missing bind source would be created root-owned).
 - **Direction and content: frames in, numbers out.**
-  - The host bot (`scripts/unit_detector.GpuDetector`) is the ONLY client. It connects; vision
+  - The host bot (`scripts/unit_detector.GpuDetector`) is the ONLY client (➡️ since 2026-11-08
+    also the box HUD, through the same class: see "Amendment (2026-11-08)" below). It connects; vision
     never initiates anything and still reaches no host, LAN or internet address (row 5).
   - In: the letterboxed game-region frame (uint8 BGR at the model's input size), chosen and cut
     by the host. Out: the model head's raw float32 output.
@@ -235,6 +236,23 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
     service or any other container;
   - the acceptance script gains row 6 (`/detect` is tmpfs and holds nothing but `detect.sock`) and
     runs inside the worker after the change, rows 1-5 included.
+
+
+## Amendment (2026-11-08): the box HUD is the socket's second host client (Batt)
+
+- **Decision (Batt, 2026-11-08 ~11:4x ICT):** "we use the GPU for detection, and other things
+  too, like the box HUD: if the GPU is faster, do it".
+- **What changes:** `scripts/hud_scene.py` (the display-only box HUD, a HOST process like the
+  bot) asks for its boxes through the same `unit_detector.GpuDetector`, with its CPU detector
+  behind it (`--detector gpu`, the default; `cpu` = as before).
+- **What does not change:**
+  - the direction (frames in, numbers out);
+  - one socket, one connection at a time (`listen(1)`): while the bot's runner holds it, the
+    HUD's calls fall back to its CPU detector (GpuDetector's 250-ms timeout and 5-s retry);
+  - vision still initiates nothing and reaches no host, LAN or internet address;
+  - every other row of this ADR.
+- **Why it is safe:** the HUD is a host process with the bot's own privileges and no input path.
+  It sends the same letterboxed frame and decodes the same raw output with the host's own code.
 
 ## Tracking
 

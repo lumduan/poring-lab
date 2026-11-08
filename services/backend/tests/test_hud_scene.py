@@ -630,3 +630,14 @@ def test_a_candidate_the_confirming_pass_does_not_see_is_never_drawn(hs: ModuleT
     assert [k for _, k in r["passes"]].count("confirm") == 1
     t = r["tracker"]
     assert not t.candidates and t.counts == {"held": 1, "confirmed": 0, "expired": 1}
+
+
+def test_the_huds_boxes_come_from_the_arc_first_with_the_cpu_behind(hs: ModuleType) -> None:
+    """Batt 2026-11-08 ("the GPU for detection, the box HUD too"): the HUD asks the vision worker's
+    detect server first (GpuDetector), the same CPU detector behind it; --detector cpu = before."""
+    assert hs.TUNING.detector == "gpu"
+    src = (SCRIPTS / "hud_scene.py").read_text()
+    assert "cpu_det = unit_detector.UnitDetector(threads=DET_THREADS)" in src
+    assert 'det = unit_detector.GpuDetector(cpu_det, weights="v1")' in src
+    assert 'if tuning.detector == "gpu":' in src and "detector=a.detector" in src
+    assert 'stats["paths"][getattr(det, "last_path", "") or "cpu"] += 1' in src  # in the report
