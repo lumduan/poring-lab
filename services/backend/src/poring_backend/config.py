@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -124,6 +124,18 @@ class Settings(BaseSettings):
     # fully black desktop would trip it). BLACK_HOLD_S: how long it must stay black.
     game_region: str = ""
     black_hold_s: float = 5.0
+
+    # --- The hardware monitor (hardware.py, GET /hardware; Batt 2026-11-08) ----------------------
+    # HARDWARE_ROOT: where /proc and /sys are read from. "/" in the container: it sees the host's
+    # own counters read-only (no new mount). Tests point it at a fixture tree.
+    hardware_root: Path = Path("/")
+    hardware_period_s: float = Field(default=2.0, gt=0)
+    # HARDWARE_SHM_PATH: any path ON the host's /dev/shm (statvfs reads its filesystem). Unset in
+    # the container: its own /dev/shm is private (rdp-ring), so the page says "not mounted here".
+    hardware_shm_path: Path | None = None
+    # HARDWARE_DISK_PATH: a path on the host's root disk; unset = DATA_DIR (/data, the repo's
+    # ./data bind mount, which lives on the root LV).
+    hardware_disk_path: Path | None = None
 
     @field_validator("session_size")
     @classmethod

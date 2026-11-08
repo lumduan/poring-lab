@@ -22,6 +22,7 @@ from poring_backend.drops import DropCounter
 from poring_backend.foreground import ForegroundGate
 from poring_backend.freshness_monitor import StallMonitor
 from poring_backend.grabsource import GrabSource
+from poring_backend.hardware import HardwareMonitor
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.interlock import Interlock, Verdict, Window, load_config
 from poring_backend.latency import InputRecord, LatencyRecorder
@@ -348,6 +349,14 @@ class AppState:
         )
         # ADR-0007: the packet feed for the console (never the agent, never the mux).
         self.packets = PacketHub()
+        # The hardware monitor (Batt 2026-11-08): plain /proc + /sys reads every 2 s in a worker
+        # thread, served at GET /hardware on the PUBLIC listener only (routes_hardware.py).
+        self.hardware = HardwareMonitor(
+            settings.hardware_root,
+            shm_path=settings.hardware_shm_path,
+            disk_path=settings.hardware_disk_path or settings.data_dir,
+            period_s=settings.hardware_period_s,
+        )
         self.agents: set[Outbox] = set()
         self.rdp_window_present: bool | None = None
         self.stream_window_present: bool | None = None
@@ -442,8 +451,10 @@ class AppState:
         if self.clipboard is not None:
             self.clipboard.start()
         self._status_task = asyncio.create_task(self._status_loop(), name="status-loop")
+        self.hardware.start()
 
     async def stop(self) -> None:
+        await self.hardware.stop()
         if self._status_task is not None:
             self._status_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
