@@ -1096,3 +1096,37 @@ def test_the_rogue_holds_her_etc_tab_up_to_48_percent() -> None:
     assert dh.etc_hold_refused(0.48, False, rogue) == "at or over 0.48"
     assert dh.etc_hold_refused(0.41, False, thief) == f"at or over {dh.CLEAR_AT}"
     assert dh.etc_hold_refused(None, False, rogue) and dh.etc_hold_refused(0.30, True, rogue)
+
+
+def test_still_strike_waits_for_a_still_scene_and_carries_the_point_the_right_way() -> None:
+    """dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; Batt chose option b): far strikes wait for a
+    still scene; walk_sword's point is carried by the scroll (scene_shift's sign, tested here)."""
+    import route_preview as rp
+
+    px, n = dh.STILL_PX, dh.STILL_N
+    assert (px, n, dh.STILL_MAX_S) == (2.0, 3, 1.5)
+    assert not dh.still_now([])
+    assert not dh.still_now([(0.0, 0.0), (0.0, 0.0)])  # two quiet pairs: not yet
+    assert dh.still_now([(14.0, 0.0), (0.5, 0.0), (0.0, 1.0), (1.2, 1.2)])  # 3 in a row < 2 px
+    assert not dh.still_now([(0.0, 0.0), (0.0, 0.0), (0.0, 2.5)])  # the last one scrolls
+    # the sign: a scene moved by (+10, +6) px reads (+10, +6), so a point carried by it follows
+    rng = np.random.default_rng(20261108)
+    a = (rng.random((720, 1280, 3)) * 255).astype(np.uint8)
+    a = np.ascontiguousarray(np.repeat(np.repeat(a[::8, ::8], 8, axis=0), 8, axis=1)[:720, :1280])
+    b = np.roll(np.roll(a, 6, axis=0), 10, axis=1)
+    dx, dy = rp.scene_shift(a, b)
+    assert abs(dx - 10) <= 2 and abs(dy - 6) <= 2, (dx, dy)
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "still_strike" not in dh.fixes_of(dh.argparse.Namespace(**base, still_strike=False))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, still_strike=True))["still_strike"] == [
+        dh.STILL_PX, dh.STILL_N, dh.STILL_MAX_S]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    # far walk_sword strikes only (ring 1 attacks in place); no SWORD after the wait: no strike
+    assert 'if getattr(a, "still_strike", False) and not ring1(rel):' in src
+    assert "aim = still_retarget(u, v, rel)" in src and "u2, v2 = u + dx, v + dy" in src
+    assert 'if verdict != "sword":' in src and 'counts["still_lost"] += 1' in src
+    # the box path's detection comes after the still scene
+    i_still = src.index("still_b, waited_b, _sh = wait_still()")
+    assert i_still < src.index("t_set = time.monotonic()")

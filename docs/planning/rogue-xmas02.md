@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p11 (4R) done 2026-11-08 13:26: E1 43.9 / h PASS (a first), R1 0 own-body D, R2 10, E3, D1 PASS; R3 38.5 % FAIL. --self-recheck stays ON. Batt picks next: (b) far-target strikes (9 of 15 D) or (a2) the recheck widened to the E / W cells (5 of 15)."
+next_action: "p12 (4S, pre-registered 2026-11-08): --still-strike, a far strike waits for a still scene and aims again (Batt chose option b; far strikes clicked while walking missed 71 %). Run it with --self-recheck; score E1 / F1-F3 / R1."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -816,6 +816,70 @@ are judged on runs 1 + 2 pooled, K2 per run (section 5's rule).
   - The detector's GPU conversion passed its parity run meanwhile (bot-server-migration.md 16a)
     and became the default. As promised above, this run's detect server is started with
     `--ov-preproc cpu`: the same detector as p9 / p10.
+
+
+### 4S. Pilot p12 pre-registration: --still-strike, a far strike waits for a still scene (written BEFORE its run, 2026-11-08 13:40:22 ICT)
+
+- **Why:** Batt 2026-11-08 chose option (b) after p11: far-target strikes (2+ cells) are the
+  largest class-D share.
+  - `lock_study.py far_strikes`: p10 13 far strikes (8 D), p11 22 (8 D).
+- **Diagnosis (p10 + p11, offline: events + packets):**
+  - Every far class-D strike's click sent a WALK request (+0.34 s), never an attack request,
+    after a SWORD read at that point: `box_target` 320-360 ms after a fresh detection, or
+    `walk_sword` during the walk's own hover.
+  - **Walking decides it:** far strikes clicked while we walked (our `self_move` within 1 s
+    before the click) started no attack in 10 of 14 (71 %); standing, in 6 of 20 (30 %).
+    - box: 5 / 7 walking vs 3 / 11 standing;
+    - walk_sword: 5 / 7 vs 3 / 9.
+  - Moving, the client resolves a click at our SERVER position, ~0.5 s ahead of the frame we see
+    (memory: frames-lag-server-half-second). The click lands cells off the sprite we hovered.
+  - The box path's settle is a fixed 1.2 s after our last walk click, not a measured standstill:
+    5 of its 7 walking misses came after it.
+- **The one change against p11: `--still-strike` (dungeon@9.4, behind its flag):**
+  - `wait_still()`: frames ~60 ms apart until 3 consecutive pairs scroll < 2 px
+    (`route_preview.scene_shift`), at most 1.5 s;
+  - the box path: its detection (box_now) is taken after that wait;
+  - `walk_sword` far strikes: after the wait, the point is carried by the scroll seen meanwhile
+    (scene_shift's sign tested) and hovered again; no SWORD there means no strike
+    (`still_retarget`, logged);
+  - ring-1 strikes are unchanged (they attack in place).
+- **Kept from p11:**
+  - `--self-recheck` ON (4R's decision);
+  - the detect server with `--ov-preproc cpu` (as p11; the GPU conversion becomes this map's
+    detector only after this run);
+  - MVP tombstones off on the lab server (bdb2f1c4);
+  - the Rogue's weight limit 48 % (588b4a16).
+- **The run:**
+
+      nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
+          --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim \
+          --clear-map --minutes 30 --seed 20261105 --label xmas02-p12 --box-strike --box-now \
+          --self-recheck --still-strike
+
+  - Before it: immunity OFF, judged ("Returned to normal state."), and a judged screenshot.
+  - Beside it: the OpenVINO detect server, 2400 s, `--ov-preproc cpu`.
+  - After it: immunity ON, judged.
+- **Bars:**
+  - **E1 (primary):** kills (packets) >= 40 / h (p11 43.9, p10 24.0).
+  - **F1 (the hypothesis):** far class-D strikes <= 3 (p10 8, p11 8).
+  - **F2 (it costs no real strike):** far strikes that started an attack >= 10 (p10 5,
+    p11 14).
+  - **F3 (the mechanism):** far strikes clicked while walking <= 2 (p10 6, p11 8).
+  - **R1 (p11's gain holds):** own-body class-D strikes <= 1.
+  - **E3:** the hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h.
+  - **D1:** 0 deaths.
+  - Reported:
+    - the waits (still or capped, waited ms), the retargets and the lost ones;
+    - class D by path, `owned_s`, E2, kills by species, items.
+- **Scorers (committed before the run):** `dungeon_judge.py row`; `lock_study.py`
+  (`far_strikes` = far / far_d / far_attacked / far_d_walking / far_walking / retargets /
+  retarget_lost, tested; p10 / p11 re-scored as the baselines above).
+- **Decisions:**
+  - F1 and F2 pass: `--still-strike` stays ON for xmas_dun02 runs;
+  - F3 fails: the still detector misses our motion (its thresholds), studied before reuse;
+  - F1 fails with F3 passing: standing is not enough; the next idea is the click's aim (the
+    target's own motion);
+  - F2 fails: the wait loses real targets, so its cap or the retarget is revisited.
 
 ## 5. Results
 

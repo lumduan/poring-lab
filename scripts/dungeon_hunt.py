@@ -219,6 +219,13 @@ WALK_STOP_BY = ("scan", "stall_scan", "box", "queue")  # the fight paths only
 # sword there is TRANSIENT (an attacking monster's frame, or the arrow over her effects). So a
 # sword at a point inside her own sprite box counts only if it is still there SELF_RECHECK_S later.
 SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN = 0.4, 20, 95, 6  # the box around her feet point
+# --still-strike (dungeon@9.4, rogue-xmas02.md 4S, pilot p12; Batt 2026-11-08 chose option b):
+# far strikes (2+ cells) clicked WHILE WE WALKED started no attack in 10 of 14 (p10 + p11),
+# standing in 6 of 20: moving, the client resolves a click at our SERVER position (~0.5 s ahead
+# of the frame). So a far strike first waits for a still scene (STILL_N consecutive frame pairs
+# scrolling < STILL_PX, at most STILL_MAX_S) and aims again: the box path's detection is taken
+# after it; walk_sword's point is carried by the scroll seen meanwhile and hovered again.
+STILL_PX, STILL_N, STILL_MAX_S = 2.0, 3, 1.5
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -802,6 +809,12 @@ def etc_hold_refused(share: float | None, red: bool, conf: Mapping[str, Any]) ->
     return f"at or over {limit}" if share >= limit else None
 
 
+def still_now(shifts: Sequence[tuple[float, float]], px: float = STILL_PX,
+              n: int = STILL_N) -> bool:  # fmt: skip
+    """PURE (--still-strike): the last ``n`` frame-to-frame scene shifts are all < ``px``."""
+    return len(shifts) >= n and all(math.hypot(dx, dy) < px for dx, dy in shifts[-n:])
+
+
 def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
     """PURE (--self-recheck): (u, v) lies on our own sprite, whose feet are at (u0, v0)."""
     return abs(u - u0) <= SELF_HALF_W and v0 - SELF_UP <= v <= v0 + SELF_DOWN
@@ -938,6 +951,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["walk_stop"] = [WALK_STOP_PX, WALK_STOP_N, WALK_STOP_GAP_S, FALSE_REL_S]
     if getattr(a, "self_recheck", False):  # dungeon@9.3 (rogue-xmas02.md 4R)
         out["self_recheck"] = [SELF_RECHECK_S, SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "still_strike", False):  # dungeon@9.4 (rogue-xmas02.md 4S)
+        out["still_strike"] = [STILL_PX, STILL_N, STILL_MAX_S]
     return out
 
 
@@ -2115,6 +2130,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             assert boxes is not None
             t_0 = time.monotonic()
             time.sleep(settle_left(last_walk_click, t_0))
+            still_rec: dict[str, Any] = {}
+            if getattr(a, "still_strike", False):  # dungeon@9.4: the detection after a still scene
+                still_b, waited_b, _sh = wait_still()
+                still_rec = {"still": still_b, "still_wait_ms": round(waited_b * 1e3)}
+                counts["still_wait"] += 1
             t_set = time.monotonic()
             meta: dict[str, Any] | None = None
             arm = None
@@ -2127,7 +2147,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)
             rec: dict[str, Any] = {"kind": "box_target", "fresh": fresh,
                                    "settle_ms": round((t_set - t_0) * 1e3),
-                                   "wait_ms": round((time.monotonic() - t_set) * 1e3)}  # fmt: skip
+                                   "wait_ms": round((time.monotonic() - t_set) * 1e3),
+                                   **still_rec}  # fmt: skip
             if a.box_now:
                 rec["arm"] = arm
             if meta is not None:
@@ -2164,6 +2185,39 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     return rel_, (u_, v_)
             ev({**rec, "verdicts": verdicts, "struck": False})
             return None
+
+        def wait_still() -> tuple[bool, float, tuple[float, float]]:
+            """--still-strike: frames every ~60 ms until the scene stops scrolling (still_now) or
+            STILL_MAX_S; (still, waited s, the scroll summed over the wait)."""
+            t_w = time.monotonic()
+            prev = np.ascontiguousarray(np.asarray(frame())[..., :3])
+            shifts: list[tuple[float, float]] = []
+            while time.monotonic() - t_w < STILL_MAX_S:
+                time.sleep(0.06)
+                cur_ = np.ascontiguousarray(np.asarray(frame())[..., :3])
+                shifts.append(rp.scene_shift(prev, cur_))
+                prev = cur_
+                if still_now(shifts):
+                    break
+            total = (sum(x for x, _ in shifts), sum(y for _, y in shifts))
+            return still_now(shifts), time.monotonic() - t_w, total
+
+        def still_retarget(u: float, v: float, rel: Cell) -> tuple[float, float] | None:
+            """--still-strike for walk_sword: wait for a still scene, carry the point by the scroll
+            seen meanwhile, hover there again; the point if a SWORD is still there, else None."""
+            still, waited, (dx, dy) = wait_still()
+            u2, v2 = u + dx, v + dy
+            verdict = "off"
+            if in_view(u2, v2):
+                verdict = str(hover(u2, v2)["verdict"])
+            ev({"kind": "still_retarget", "rel": list(rel), "still": still,
+                "waited_ms": round(waited * 1e3), "shift": [round(dx, 1), round(dy, 1)],
+                "verdict": verdict})  # fmt: skip
+            counts["still_wait"] += 1
+            if verdict != "sword":
+                counts["still_lost"] += 1
+                return None
+            return u2, v2
 
         def self_uv() -> tuple[float, float]:
             """Our own feet point on screen (the camera keeps us there): the self box's anchor."""
@@ -3290,9 +3344,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 ev(rec_w)
                             elif act_ == "engage":
                                 ev({"kind": "engage", "by": "walk_sword", "name": None})
-                                strike(u, v - BODY_UP / 2, rel, "walk_sword")
-                                lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
-                                mode = "fight"
+                                aim: tuple[float, float] | None = (u, v)
+                                if getattr(a, "still_strike", False) and not ring1(rel):
+                                    aim = still_retarget(u, v, rel)  # dungeon@9.4 (4S)
+                                if aim is not None:
+                                    strike(aim[0], aim[1] - BODY_UP / 2, rel, "walk_sword")
+                                    lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
+                                    mode = "fight"
                             else:
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
                                          "clicked": False, "why": why_w, "red": res.get("red"),
@@ -3493,6 +3551,14 @@ def main() -> int:
         help="dungeon@9.3 (rogue-xmas02.md 4R, pilot p11; OFF by default): a defend-scan SWORD at "
         "a point on our own sprite (the N / S cells' body points) counts only if a second read "
         "0.4 s later is a SWORD too; else the scan goes on",
+    )
+    t.add_argument(
+        "--still-strike",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
+        "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
+        "its point carried by the scroll, hovered again)",
     )
     t.add_argument(
         "--plant-sweep",

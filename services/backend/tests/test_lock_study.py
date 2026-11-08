@@ -96,3 +96,18 @@ def test_own_body_strikes_and_the_self_recheck_summary() -> None:
     sr = ls.self_recheck(out, events)
     assert sr == {"own_body_strikes": 2, "own_body_d": 1, "own_body_attacked": 1,
                   "rechecks": 2, "transient": 1, "scan_attacked": 2}  # fmt: skip
+
+
+def test_far_strikes_by_walking_and_the_retargets() -> None:
+    """rogue-xmas02.md 4S (p12): far strikes (2+ cells), walking at the click or not."""
+    events = [{"kind": "strike", "t_ns": 10 * S, "rel": [0, -6], "by": "walk_sword"},  # D, walking
+              {"kind": "strike", "t_ns": 20 * S, "rel": [3, 1], "by": "box"},  # attacked, still
+              {"kind": "strike", "t_ns": 30 * S, "rel": [1, 0], "by": "scan"},  # near
+              {"kind": "still_retarget", "t_ns": 9 * S, "verdict": "sword"},
+              {"kind": "still_retarget", "t_ns": 15 * S, "verdict": "clear"}]  # fmt: skip
+    walk = {"type": "self_move", "t_mono_ns": int(9.5 * S)}
+    out = ls.strikes(events, [walk, req(20.3, T1)], US)
+    assert [(o["far"], o["walking"]) for o in out] == [(True, True), (True, False), (False, False)]
+    fs = ls.far_strikes(out, events)
+    assert fs == {"far": 2, "far_d": 1, "far_attacked": 1, "far_d_walking": 1, "far_walking": 1,
+                  "retargets": 2, "retarget_lost": 1}  # fmt: skip

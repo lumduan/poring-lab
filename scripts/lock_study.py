@@ -109,10 +109,32 @@ def strikes(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
         f = next((t for t in ends if st["t_ns"] < t < nxt), None)
         stop = min([t for t in (u, f, nxt) if t is not None])
         owned = None if stop == float("inf") else round((stop - st["t_ns"]) / NS, 2)
+        rel = st.get("rel") or [0, 0]
+        far = max(abs(rel[0]), abs(rel[1])) >= 2
+        walking = any(p.get("type") == "self_move"
+                      and st["t_ns"] - WALK_S * NS <= p["t_mono_ns"] <= st["t_ns"]
+                      for p in packets)  # fmt: skip
         out.append({"t_ns": st["t_ns"], "by": st.get("by"), "end": st.get("end"),
-                    "owned_s": owned, "own_body": own_body(st),
+                    "owned_s": owned, "own_body": own_body(st), "far": far, "walking": walking,
                     **classify(st["t_ns"], u, packets, gid)})  # fmt: skip
     return out
+
+
+def far_strikes(classed: Sequence[dict[str, Any]],
+                events: Sequence[dict[str, Any]]) -> dict[str, Any]:  # fmt: skip
+    """PURE (4S, p12): the far strikes (2+ cells) by class and by walking at the click (a
+    ``self_move`` of ours within WALK_S before it), and the --still-strike waits."""
+    far = [c for c in classed if c.get("far")]
+    rt = [e for e in events if e.get("kind") == "still_retarget"]
+    return {
+        "far": len(far),
+        "far_d": sum(1 for c in far if c["class"] == "D"),
+        "far_attacked": sum(1 for c in far if c["class"] != "D"),
+        "far_d_walking": sum(1 for c in far if c["class"] == "D" and c.get("walking")),
+        "far_walking": sum(1 for c in far if c.get("walking")),
+        "retargets": len(rt),
+        "retarget_lost": sum(1 for e in rt if e.get("verdict") != "sword"),
+    }
 
 
 def own_body(st: dict[str, Any]) -> bool:
@@ -218,6 +240,7 @@ def load(session: Path) -> dict[str, Any]:
                                                if c["unlock_s"] is not None] or [0]),
             "walk_stop": walk_stop(classed),
             "self_recheck": self_recheck(classed, events),
+            "far_strikes": far_strikes(classed, events),
             "reader": reader(packets, lines, gid),
             "walking": walking(events, packets, dets, classed) if dets else None}  # fmt: skip
 
