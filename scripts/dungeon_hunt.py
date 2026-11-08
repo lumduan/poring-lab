@@ -2267,15 +2267,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         reach_cache: dict[tuple[Cell, Cell], bool] = {}
         reach_logged: dict[Cell, float] = {}
+        reach_proj: dict[str, Any] = {"here": None, "uv": None}  # box_spot's projection, per cell
 
         def unreachable(here_: Cell | None, foot: Sequence[float]) -> bool:
             """dungeon@9.12 (--reach-check): the box's cell is one the server would not walk us to
             on one click (reach_ok); False when unknown (no position, no grid)."""
             if reach_grid is None or here_ is None:
                 return False
-            sp_ = box_spot(here_, foot)
-            if sp_ is None:
-                return False
+            if reach_proj["here"] != here_:  # box_spot's projection (~2.3 ms) once per cell
+                reach_proj.update(here=here_, uv=project(here_, BOX_GRID))
+            c_r = nearest_rel(reach_proj["uv"], BOX_GRID, foot)
+            sp_ = (here_[0] + c_r[0], here_[1] + c_r[1])  # == box_spot(here_, foot)
             key_ = (here_, sp_)
             if key_ not in reach_cache:
                 if len(reach_cache) > 4000:
