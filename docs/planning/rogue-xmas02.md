@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p12 (4S, pre-registered 2026-11-08): --still-strike, a far strike waits for a still scene and aims again (Batt chose option b; far strikes clicked while walking missed 71 %). Run it with --self-recheck; score E1 / F1-F3 / R1."
+next_action: "p12 (4S) done 2026-11-08 14:44: E1 58.0 / h PASS (best so far), F2 23, F3 0 walking clicks, R1 0; F1 FAIL (6 far D, all standing: 3 box targets that moved). Batt: keep --still-strike ON (recommended)? Next candidates: aim for the target's motion (far box), (a2) the recheck on E / W cells (7 near D)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1619,3 +1619,40 @@ xmas_dun02 runs. E1 passes for the first time.**
   - The next change is Batt's choice:
     - **(b) far-target strikes:** 9 of the 15 Ds;
     - **(a2) the recheck widened to the E / W body points:** 5 of the 15.
+
+**Pilot p12 (4S; 14:13:17-14:43:59, its own time box; immunity OFF at 14:12, judged "Returned to
+normal state."; back ON at 14:44, judged "You are now immune to attacks."; the detect server with
+`--ov-preproc cpu`; vision now maps only renderD128, 64991a9a). VERDICT: E1, F2, F3, R1, E3 and D1
+PASS; F1 FAILS. Kills 58.0 / h, the best so far.**
+
+| | p10 | p11 | **p12** | bar |
+|---|---|---|---|---|
+| E1 kills (packets) | 12 (24.0 / h) | 22 (43.9 / h) | **29 (58.0 / h)** | >= 40 / h: PASS |
+| F1 far class-D strikes | 8 | 8 | **6** | <= 3: FAIL |
+| F2 far strikes that started an attack | 5 | 14 | **23** (of 29) | >= 10: PASS |
+| F3 far strikes clicked while walking | 6 | 8 | **0** | <= 2: PASS |
+| R1 own-body class-D strikes | 5 | 0 | **0** (2 own-body strikes attacked; 7 transient swords rejected) | <= 1: PASS |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 3 | pass / 0 / 4 | **pass / 0 / 2** (1 Fly Wing: `pos_unread`, not a dead end) | PASS |
+| D1 deaths | 0 | 0 | **0** (lowest HP 78.7 %, 0 potions) | PASS |
+| class D share (reported) | 48 % | 38.5 % | **28 %** (13 / 46) | |
+
+- **The waits:** 38 (box 26 + `walk_sword` 12).
+  - Median 0.99 s, at most 1.6 s; still in 33, capped at 1.5 s in 5.
+  - walk_sword retargets: 12, of which 8 still read SWORD and were struck; 4 were lost
+    (2 unknown, 2 clear): no strike.
+- **The 6 far class-D strikes, all clicked standing:**
+  - 3 `box` (3-4 cells): the wait ended still, the hover read SWORD 320-368 ms after the
+    grab, and the click still walked. The monster had moved. This is 4S's "standing is not
+    enough" case: the target's own motion.
+  - 2 defend-scan strikes on ring-2 cells (not this change's path).
+  - 1 `walk_sword` that ended on a damage line after one click (likely already attacking).
+- **The other 7 class-D strikes** are ring-1 defend-scan strikes, mostly beside the self box
+  (option a2's case).
+- **Reader:** 341 / 341 of our hits read, lag p50 397 ms.
+- **Items (snatched):** Zargon 7, Scell 4, Candy 3, Well-baked Cookie 3, Piece of Cake 2.
+- **Engagements:** 61 (box 26, Battle Log 13, walk_sword 12, Miss cue 8, HP drop 2).
+- **Decisions (as pre-registered):**
+  - F1 fails with F3 passing, so standing is not enough. The next idea for far strikes is the
+    click's aim, for the target's own motion.
+  - 4S named "stays ON" only for F1 + F2 passing. With E1 at 58.0 / h, F2 at 23 and no click
+    while walking, keeping `--still-strike` ON is **Batt's call** (recommended).
