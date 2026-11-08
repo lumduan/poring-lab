@@ -961,6 +961,44 @@ Batt's words, translated (before 15:43:36, the turn's first `date`):
   - a regression bar fails: studied (the detector should change no decision), the fast path kept
     out of the next run until then.
 
+### 4T'. Amendment H (2026-11-08 ~18:0x ICT): Batt's answers to the 17:54 report
+
+Batt's words, translated (before 18:06:52, the turn's first `date`):
+1. **The clock-floor unit:** "install it, do it for me" -> installed 18:06:52
+   (`scripts/host/poring-lab-gpu-clock.service`, enabled + active; stop -> floor 300, start ->
+   2450, proven; bot-server-migration.md 19).
+2. **The fast detector:** "use it" -> ADOPTED as the live detector on bot-server (`final`:
+   the conversion on the card, FP32, the floor at RP0).
+3. **Next pilots:** "aim for the monsters that are walking, and if possible repeat p13 to see the
+   result with a normal spawn" -> p13r (4U: p13 unchanged), then p14 (the aim for a moving
+   target, pre-registered after p13r with its own study).
+4. **GPU-encoded recordings:** "try fixing the colours too" -> round 2 of the bench
+   (gpu-recording.md; its amendment is written before its run).
+
+### 4U. Pilot p13r pre-registration: p13 REPEATED, unchanged (written BEFORE its run, 2026-11-08 18:1x ICT)
+
+- **Why:** Amendment H item 3. p13 met 31 monsters in sight against p12's 50 (kills per monster
+  seen 0.55 vs 0.58), so its E1 says little about the bot. The same run again shows E1 with a
+  normal supply, and is p14's baseline.
+- **No change of the bot against p13:** the same code path, flags, map, route and seed; the
+  detect server `final` (FP32, the conversion on the card), now with the floor from the installed
+  unit.
+- **Different, not a bot change:** the stock is the Rogue's 10 White Potions (`potions_win`,
+  Amendment G; p13 carried 30, used 0); the bag starts cleared (weight ~21 %).
+- **The run:** 4T's command with `--label xmas02-p13r`; before it immunity OFF judged and a judged
+  screenshot; beside it the detect server 2400 s (its start line: f32, `gpu_clock.min` 2450);
+  after it immunity ON judged, then `clear-bag`.
+- **Bars:** 4T's, unchanged (D1 <= 35 ms and >= 99 % GPU; D2 <= 65 ms; E1 >= 40 / h; R1 <= 1;
+  F3 <= 2; E3; deaths 0).
+- **Reported:** the supply, `scripts/sight_supply.py` (committed before this run; its positive
+  case is p12 / p13: 50 and 31 seen, 16.7 and 10.3 / 10 min, kills per seen 0.58 and 0.548), and
+  4T's reported items.
+- **Decisions:**
+  - E1 passes: the fast path's kill rate holds with a normal supply; p13r is p14's baseline.
+  - E1 fails with the supply at or above 14 / 10 min: studied before p14 (the bot changed).
+  - E1 fails with the supply below 14 / 10 min again: the map's supply is studied (why fewer
+    monsters appear) before p14 is compared to anything.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

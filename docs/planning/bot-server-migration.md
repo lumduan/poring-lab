@@ -584,3 +584,9 @@ as Batt prefers:
 
   - **Decision (pre-registered):** p13 (rogue-xmas02.md 4T) runs on `final`: `serve-cmd
     --ov-preproc gpu --ov-precision f32` (the defaults), the floor at 2450.
+- ➡️ **The floor's unit INSTALLED 2026-11-08 18:06:52 ICT** (Batt: "install it, do it for me";
+  rogue-xmas02.md Amendment H): `/etc/systemd/system/poring-lab-gpu-clock.service` +
+  `/usr/local/libexec/poring-lab-gpu-clock.sh`, enabled and active; its log "floor 2450 MHz
+  (start)". Proven both ways: `systemctl stop` -> 300, `start` -> 2450. p13 (16:33-17:04) ran on
+  the run-time setting; the live result: 20.6 ms a call (p12 64.7). Batt adopted the fast path
+  as the live detector (Amendment H item 2).
