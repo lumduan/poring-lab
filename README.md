@@ -84,6 +84,8 @@ humanization and LLM integration are clearly marked TODOs.
 
 | `db-th`, `rathena-th`, `sniffer-th` | th | **The Thai-data experiment (Batt, 2026-10-05; ADR-0006 environment 1b):** a SEPARATE rAthena with the same image, SHA and pre-renewal mode; its own database (`db-th-data`) and captures (`captures-th`); a map cache generated from the Thai client's GRF by rAthena's own tool (`scripts/gen_mapcache_th.py` → `data/mapcache-th/`, never committed), installed as `db/import/map_cache.dat`. **One at a time with `rathena`:** the same pinned IP and LAN ports, so Docker refuses to start both. Its sniffer attests `server=lab-rathena-th` (ADR-0016 amendment). Its client is the separate copy `C:\RO-rAthena-th\` (`ro_agent.py --profile th`). |
 
+| `media-probe`, `media-recbench`, `media-rec` | probe, recbench, mediarec | The GPU recording plan ([docs/planning/gpu-recording.md](docs/planning/gpu-recording.md); bot-server's Arc only): the media-probe image (iHD + ffmpeg 8; no network, a read-only root, the DRM render node only). `media-probe` and `media-recbench` are one-shot evidence runs; `media-rec` is stage 2's encoder sidecar, idle until `record_session.py --format vpp-hevc444-10-q20 --also-png` feeds it raw frames through one named pipe in `/dev/shm/poring-lab-mediarec` (section 9.1). Started and removed only by `guarded_build.py` (`start:media-rec@60`, `rm:media-rec`). |
+
 `sniffer` shares rathena's network namespace, so `--profile sniffer` brings `db` and `rathena` up with it.
 To switch to the Thai-data server and back (stop needs no guard; start does):
 

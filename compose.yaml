@@ -591,6 +591,56 @@ services:
     cpus: 4
     logging: *logging
 
+  # --- The STAGE-2 ENCODER SIDECAR (docs/planning/gpu-recording.md 9.1; Batt 2026-11-08 "do it
+  # now") ------------------------------------------------------------------------------------------
+  # The media probe's IMAGE, long-lived and idle until record_session.py --format vpp-hevc444-10-q20
+  # --also-png hands it a job: the host recorder feeds every kept frame (raw BGRA) through ONE
+  # named pipe in a RAM directory, and this encodes it with round 3's candidate (VA-API) into the
+  # local disk's ~/poring-lab-rec/.media-rec, beside the PNG shards (the host renames the stream
+  # into the session at its end). Never started by default (profile `mediarec`); started and
+  # removed only through guarded_build.py (start:media-rec@60, rm:media-rec). Everything
+  # media-probe is contained by, plus exactly three binds (tests/test_guards.py): its script
+  # read-only, the control directory (RAM) and the bitstream directory (disk), both ours (0700;
+  # scripts/media_rec.py prep) and never created by Docker: a start without them is refused.
+  # Nothing of the lab's: no data, state, settings, X, frame bus, input, detect socket or network.
+  # user 1000 = the host user that owns both directories. 1g: its page cache of the stream's
+  # writes is charged here (mem == memswap, reclaimable); cpus 2 caps a runaway encode.
+  media-rec:
+    profiles: [mediarec]
+    image: poring-lab/media-probe:local
+    pull_policy: never
+    restart: "no"
+    init: true
+    user: "1000:1000"
+    entrypoint: ["bash", "/opt/mediarec.sh"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - ./services/media-probe/mediarec.sh:/opt/mediarec.sh:ro
+      - type: bind
+        source: /dev/shm/poring-lab-mediarec
+        target: /ctl
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOME}/poring-lab-rec/.media-rec
+        target: /rec
+        bind:
+          create_host_path: false
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    mem_limit: 1g
+    memswap_limit: 1g
+    oom_score_adj: 500
+    cpus: 2
+    logging: *logging
+
 volumes:
   db-data:
   db-th-data:

@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). STAGE 2 (one side-by-side recording, PNG + the candidate through a contained sidecar fed by one RAM pipe) BUILT and PRE-REGISTERED 2026-11-08 22:46:20 ICT (section 9.1), NOT RUN. Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
-next_action: "Batt: stage 2 (section 9) -- one side-by-side recording, PNG + vpp-hevc444-10-q20 of the same session; then the ADR-0010 amendment (lossy recordings)."
+related: [../../scripts/media_rec.py, ../../services/media-probe/mediarec.sh, ../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
+next_action: "The parent: stage 2's commands (section 9.2) beside a 30-min pilot, then 9.3's results; then Batt: the ADR-0010 amendment (lossy recordings), stage 3."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -94,6 +94,9 @@ without touching the backend.
   like the vision worker (`sleep infinity`), and `docker exec -i` (control) per session. Never
   `docker compose run` from the recorder: the hook and rule 5 send every start through
   guarded_build.
+  ➡️ **SUPERSEDED by 9.1 (stage 2, built 2026-11-08):** the idle sidecar started by a guarded step
+  stands, but frames reach it through ONE named pipe in a RAM directory, not `docker exec -i`
+  (9.1's table says why), so only the pipe is measured, not "both" as the table row above says.
 
 ## 3. Lossless or lossy (question 2)
 - **Lossless is not available on this path.**
@@ -200,7 +203,7 @@ without touching the backend.
 | determinism / hash checks | `dataset_check.py` compares H.264 sessions with the live client's checksums; a PNG session has nothing to check | HEVC / AV1 / H.264 decoding is bit-exact by the standards for conformant decoders: bar D2 checks VA-API = software decoder = the host's pinned PyAV on every frame. A new session format would store per-frame YUV md5s (at ship time or offline), with the BGR conversion pinned (BT.709, full range) | the bars, then stage 4 |
 | ADR-0010's "lossless" | every reader that assumes it | -- | **Batt: an ADR-0010 amendment or a new ADR** |
 | the encoder and the live detector share the Arc | the bot's detection latency | stage 2: the detect server's p50 / p95 with the encoder running vs without | stage 2's bar |
-| an encoder failure mid-session | that session | the recorder stops with a `stop_reason` (fail closed), never a silent PNG fallback | stage 2's code |
+| an encoder failure mid-session | that session | the recorder stops with a `stop_reason` (fail closed), never a silent PNG fallback. ➡️ That is the rule for a video-ONLY recording (stage 3 on). In stage 2 (9.1) the PNG is always recorded and is the reference: the video side's failure ends the video only and is recorded in the manifest, never silently | stage 2's code |
 | the colour convention itself (range / matrix mix-ups, like the VA JPEG defect) | every number | bar V1 (`ctl-yuv444`) and the `vpp-hevc420-q20` arm (the GPU's own conversion) | V1 voids the run |
 
 ## 6. The bench, PRE-REGISTERED (2026-11-08 16:29:19 ICT, the commit that adds this doc; before any number)
@@ -943,6 +946,8 @@ The candidate (graded on the same bars as rounds 1-2):
   same session), then an ADR-0010 amendment (the recordings stop being lossless) -- Batt's
   decision. `mode=default` 8-bit is the fallback if 10-bit HEVC Main 4:4:4 10 is refused by a
   reader.
+  ➡️ Batt's go ~21:5x ("do it now"): stage 2 is built and PRE-REGISTERED in 9.1; its commands are
+  9.2; not run yet.
 
 ## 9. The staged plan (question 5)
 
@@ -952,7 +957,7 @@ stage 0  design + bench, bars pre-registered        (this commit)
 stage 1  the bench on real frames (section 7)        -> a candidate arm, or "no"
    |       "no": record it; PNG stays (stop here)
    |
-stage 2  ONE side-by-side recording (Batt's go)       -> the full-session bars
+stage 2  ONE side-by-side recording (Batt's go)       -> the full-session bars (9.1)
    |       the media-rec sidecar + record_session --format <candidate> --also-png:
    |       every kept frame to BOTH writers. Bars, pre-registered before it:
    |       sizes and the recorder's CPU (CpuMeter, the hop included), the detect
@@ -976,6 +981,215 @@ stage 5  higher fps (5-10), Batt's call per window    -> the grab path's own cos
   or Paeth) or a CPU lossless video codec (FFV1) might cut that without giving up ADR-0010's
   promise, at a CPU cost on this 1.7 GHz Xeon that nobody has measured. If stage 1 says "no", that
   is the next question.
+
+### 9.1 STAGE 2, PRE-REGISTERED (2026-11-08 22:46:20 ICT, the commit that adds it; before any stage-2 run)
+**Batt, 2026-11-08 ~21:5x:** "do it now": stage 2, ONE side-by-side recording of a real bot session,
+every kept frame written both as today's lossless PNG and through round 3's candidate, so that Batt
+can decide the ADR-0010 question (stage 3: recordings no longer lossless).
+- **Phase 1 (this commit):** the code, the sidecar, the tests, these bars and the commands (9.2).
+  Nothing ran on the GPU, no container was started, nothing was recorded: the parent runs live
+  pilots on the Arc all night and runs 9.2 beside one of them.
+- **What stage 2 adds to stage 1:** stage 1 graded 200 sampled frames per map, encoded from PNG
+  files in a one-shot container. Stage 2 grades ONE WHOLE SESSION recorded live, on the frame path
+  the recorder really uses (the grab's raw BGRA, through the hop), with what it costs the recorder
+  and the live detector beside it.
+
+**The mechanism: how the frames reach the encoder.**
+
+```text
+backend (X grab) --docker exec pipe, raw BGRA (as today)--> host recorder (record_session.py)
+                                                               |  PNG -> session/shard-*.tar
+                                  raw BGRA, alpha set to 255   |  (unchanged; the reference)
+                          ONE named pipe (FIFO) in a RAM dir:  v  /dev/shm/poring-lab-mediarec
+      the sidecar media-rec (the media-probe image; no network, read-only, the render node only):
+      ffmpeg: hwupload -> scale_vaapi (BT.709 full, xv30) -> hevc_vaapi Main 4:4:4 10, CQP 20,
+      all-intra, AUDs                                          |
+                       sequential, the local disk:             v  ~/poring-lab-rec/.media-rec/.<sid>.hevc
+      at the end the recorder RENAMES it into the session (one filesystem, no copy):
+      session/video.hevc + video.idx.csv + video.ffmpeg.log   (dataset_ship ships them with it)
+```
+
+| option | the hop | its CPU | containment | chosen |
+|---|---|---|---|---|
+| `docker exec -i`, ffmpeg's stdin (section 2's sketch) | host -> dockerd -> containerd-shim -> ffmpeg | the daemon relays every byte in user space (3.7 MB a frame, several copies), charged to dockerd and the shim: CpuMeter cannot see it | a docker action in the recorder's own path; an exec cannot be signalled (the Docker API), and its stdin dies with the client | no |
+| **one FIFO in a RAM directory bound into the sidecar** | host write -> the kernel pipe (1 MiB) -> ffmpeg's read | one kernel copy on each side, charged to the recorder (the feed thread) and to the sidecar's cgroup: both measured (C1, C3) | the recorder makes no docker call but read-only `inspect`; the sidecar is started and removed by guarded steps; /dev/shm holds only small control files (the pipe's buffer is kernel memory) | **yes** |
+| a second FIFO back (the recorder writes the bitstream) | as above, plus ~0.3 MB a frame back | one more copy | no disk bind in the sidecar | no: the S2 client's `.s2-h264` is the precedent for a dot-named disk directory that a container writes and the recorder renames from |
+| the encoder on the host (B) | none | none | unpinned media packages on the host | no (section 2) |
+
+- **Why the output goes to the disk, not RAM:** a 30-min stream is ~0.9 GB (1.74 GB/h at 1 fps,
+  against PNG's 8.4), at the edge of rule 7's 1 GB item in /dev/shm and past it for longer sessions. A recording is a
+  sequential file on the root disk (rule 7, 2026-10-29). The dot-named directory is never listed
+  by dataset_ship; its size counts in the recorder's local caps and in `--max-bytes`.
+- **Matching every frame to its PNG twin:** `video.idx.csv` has one row per kept PNG frame:
+  `frame_id`, `t_mono_ns` (the PNG record's own), `video_index` (its place in the stream: all
+  intra, no B-frames, `-fps_mode passthrough`, one access unit per fed frame, in order), `status`
+  (`fed`, `dropped_queue_full`, `write_failed`, `not_fed_<state>`) and the write's start / end
+  (host CLOCK_MONOTONIC, the detect log's clock). The manifest's `format` stays `png`, so every
+  reader reads the session as before; its `video` block describes the side stream.
+- **Fail-safe: the PNG is the reference.**
+  - The PNG loop never waits for the video: a kept frame is put on a bounded queue (8 frames,
+    ~30 MB); a full queue drops THAT frame from the video (its row says so); a feed thread writes the
+    queue to the pipe.
+  - The encoder closing its pipe (EPIPE), a frame write blocked for 20 s, or the feed thread ending
+    fails the VIDEO side once, with its reason (`video.status` / `reason`), and the PNG frames go on
+    to the session's end. The recorder prints one warning.
+  - A video side that cannot START (no sidecar, a refused job, another recorder holding it)
+    refuses the recording before any frame (part 0); a later `--resume` part records PNG only and
+    says why.
+  - The sidecar ends a job whose recorder never opened the pipe (a watchdog gives ffmpeg
+    end-of-file after 60 s), and a container stop ends a running job cleanly (SIGINT to ffmpeg).
+  - Without `--also-png` the format is refused: lossy-only recordings wait for the ADR-0010
+    amendment.
+- **The encoder is round 3's candidate, unchanged** (`test_the_sidecar_runs_round_3s_candidate_
+  exactly` pins every option to `gpu_rec_bench.ARMS`): `format=bgra,hwupload,scale_vaapi=
+  out_color_matrix=bt709:out_range=full:out_color_primaries=bt709:out_color_transfer=bt709:
+  format=xv30`, `-fps_mode passthrough -c:v hevc_vaapi -low_power 1 -profile:v rext -rc_mode CQP
+  -qp 20 -g 1 -bf 0 -aud 1`, tagged `-color_range pc -colorspace bt709 -color_primaries bt709
+  -color_trc bt709`. The one input difference: the bench encoded PNGs (ffmpeg turns them into BGRA
+  with alpha 255); the recorder feeds the grab's BGRA with its alpha SET to 255 (the grab does not
+  specify it), so the uploaded bytes are the same kind.
+
+**The bars** (graded on the one session; the values live in `media_rec.STAGE2_BARS` and, for
+stage 1's, `gpu_rec_bench.BARS`; a test keeps this table and the code equal):
+
+| bar | key | what | value |
+|---|---|---|---|
+| K1 | `K1_missing` | every kept PNG frame has a decoded twin: kept minus matched at most this, every fed frame decoded, none undecodable | 0 |
+| F1 | -- | every decoded frame signals pc / bt709 (the declared convention; stage 1 reported it) | every frame |
+| D1 | -- | every access unit decodes ALONE to the same planes (stage 1's D1) | every frame |
+| Q1-Q6, G1, P1-P3, S1 | 6.4's keys | stage 1's bars with stage 1's values (6.4), over EVERY frame of the session, against the JPEG q95 of the same frames; the map's deployed CPU detector (`unit_detector.for_map`) on the PNG, the decoded frame and the JPEG; P powered at 100 PNG boxes | 6.4 |
+| C1 | `C1_video_ms` | the video side's CPU per fed frame: the feed thread (the alpha copy, the pipe write) plus the sidecar's cgroup over the recording (the pipe read, upload, VPP, encode, file write), ms, at most | 20.0 |
+| C2 | `C2_png_ratio` | ... and at most this x the PNG writer's CPU per kept frame in the same session (`png_writer_cpu_s`: encode + tar, the recorder's own thread) | 0.2 |
+| C3 | `C3_hop_ms` | the hop's host side alone (the feed thread) per fed frame, ms, at most | 5.0 |
+| L1 | `L1_p50_ms` | the detect server's GPU calls (detect_speed's measure: `detections.jsonl`, path gpu) logged inside the recording's [t0, t1]: p50 minus the BASELINE pilot's, ms, at most | 1.0 |
+| L2 | `L2_p95_ms` | ... p95 minus the baseline's, ms, at most | 3.0 |
+| L3 | `L3_gpu_share` | ... the share of calls the GPU answered (the rest fell back to the CPU) minus the baseline's, at least | -0.01 |
+| L | `L_min_calls` | L1-L3 graded only with at least this many calls in the recording's window AND in the baseline (else NA) | 500 |
+
+- **Stage 1's own bars, not graded here:** `S2` and `S3` (the container's encode timing from raw
+  frames in RAM; C1-C3 measure the whole video side instead) and `D2` (the VA-API decode in the
+  container: stage 2 runs no container decode, and stage 1 proved VA = software = host for this
+  encoder on every frame).
+- **The baseline:** the most recent pilot on the same map, with the detect server on the GPU and
+  no recorder beside it, NAMED in 9.3 before `check` runs (`--baseline`).
+- **Why these values** (set before any stage-2 number):
+  - C1 20 ms: S2's 15 ms for the encode from RAM (stage 1 measured 8.7), plus 5 for the hop.
+  - C2 0.2: S2 held the encode alone to 0.1 x `encode_png`; the hop is allowed as much again.
+    Today's PNG writer costs ~89-159 ms a frame on bot-server (stage 1's `encode_png`).
+  - C3 5 ms: one 3.7 MB copy (the alpha) and one 3.7 MB pipe write a frame.
+    - Honest note: 5.0 was written in `media_rec.py` BEFORE the stub end-to-end test ran. That test
+      then measured the feed thread at 4.6 ms a frame (5 frames, nice 19, beside the libx265
+      stand-in encoding on the same CPU), and a microbenchmark on an idle core 2.8 ms (copy and
+      alpha 1.45, the pipe write 1.33). The value is kept as written: a live C3 near the limit is
+      the CPU contention the bar exists to see.
+  - L1 1 ms: recent pilots' GPU call p50 is 20.5-20.6 ms (detect_speed), so 1 ms is ~5 %. L2 3 ms
+    on the tail. L3: a GPU call slower than `GPU_CALL_S` (250 ms) falls back to the CPU, so a drop
+    in the GPU's share is contention the latencies alone could hide.
+- **Measured and reported, never graded:**
+  - sizes and GB per hour of both files; the recorder's CPU per kept frame with the feed and
+    without it (the process minus the feed thread), the PNG writer's, the sidecar's; the backend's
+    cores (the grab, the same in both);
+  - the hop's write latency (p50, p95, max) and the queue's high-water mark;
+  - inside the recording, the detect calls that meet a frame's write (its span + 50 ms) against the
+    rest: the same pilot and minutes, paired by time; and the pilot's calls outside the recording
+    when the pilot ran longer;
+  - `recorder_boxes`' own comparison (IoU 0.5) of the two box files, written beside the score in
+    its row format (boxes only, never pixels), ready for `detector_vs_packets.py`.
+- **The decision rule:**
+  1. PASS: no bar FAILS, and every bar is MEASURED. NA is allowed only for Q6 (too few saturated
+     pixels, as in stage 1); P must be powered, and L1-L3 need the pilot and the baseline.
+  2. A PASS is the evidence for Batt's stage 3 (the ADR-0010 amendment), not an adoption.
+  3. A FAIL names its bars. Nothing is re-run and no bar re-tuned without an amendment here first,
+     timestamped from `date`. A run that cannot complete (the sidecar refused, the pilot ended
+     early) is re-run as it is, once, written here first.
+  4. A video side that FAILED mid-session (a stall, EPIPE) fails K1 by construction; its PNG
+     session stays an ordinary PNG session.
+- **Expected, not bars:** 0.15-0.21 x PNG's bytes (stage 1); C1 ~11-15 ms; C3 ~3 ms; no measurable
+  L1 / L2 change at 1 fps (an encode is ~4 ms of VDEnc a second, a fixed-function engine apart from
+  the EUs the detector uses; the memory bandwidth is shared); `check` ~1 s a frame with the
+  detector (~30-40 min for 1800 frames).
+- **Not checkable offline** (phase 1 had no GPU and no container): that this ffmpeg takes these
+  options from a pipe at 1 fps (`-video_size` / `-framerate` on rawvideo, `-fs`, `-n`,
+  `-stats_period` are new to this path; the encode options are stage 1's); compose's `${HOME}` in
+  the bind source and the start of a service by name outside its active profile (stage 1's
+  `start:media-recbench` did the same); the sidecar's cgroup CPU file on bot-server; the encoder's
+  per-frame CPU at 1 fps (stage 1 timed a 600-frame burst); whether the grab's alpha matters.
+
+### 9.2 Stage 2: the exact commands (the parent runs them; nothing here ran in phase 1)
+Preconditions:
+- the media-probe image is there (`312dfd87b5c3` on 11-08); nothing is built;
+- the root disk has the room: a 30-min session at 1 fps is ~2.3-4.2 GB of PNG (1.27-2.34 MB a
+  frame) plus ~0.9 GB of video; `--max-bytes 8G` counts both; the 30 GB floor and the 20 GB
+  unshipped cap stay;
+- a pilot about to start on the Arc (its detector on the GPU path), and a BASELINE pilot's session
+  directory (the same map, no recorder) to name in 9.3.
+
+**Step 0, the shell** (the main checkout once this branch is merged; from the worktree
+`/dev/shm/poring-lab-wt/gpu-rec-s2` instead, link the main `.env` in first, as in section 7, and
+remove it in step 5):
+
+```bash
+TZ=Asia/Bangkok date; df -B1 /home/bot; df -h /dev/shm
+docker image ls poring-lab/media-probe --format '{{.ID}} {{.CreatedAt}}'  # 312dfd87b5c3 on 11-08
+cd /home/bot/docker/poring-lab
+export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp
+export PYTHONPATH=$PWD/scripts:$PWD/packages/poring_env/src:$PWD/packages/poring_dataset/src:$PWD/packages/poring_packets/src:$PWD/services/backend/src:$PWD/services/vision/src
+PY=/home/bot/docker/poring-lab/.venv/bin/python
+```
+
+**Step 1, the sidecar's two directories** (ours, 0700; idempotent), then **the sidecar** (guarded,
+long-lived, idle until a job):
+
+```bash
+$PY scripts/media_rec.py prep
+python3 scripts/guarded_build.py start:media-rec@60
+docker logs poring-lab-media-rec-1 2>&1 | tail -3   # "mediarec: ready: ffmpeg version 8.0.1 ..."
+$PY scripts/media_rec.py status                       # state running; ctl and rec empty
+```
+
+**Step 2, the recording, beside the pilot** (start it once the pilot is in the field; it records
+for 30 min, or until the pilot's session ends and you stop it with Ctrl+C / SIGTERM: a signal ends
+it cleanly):
+
+```bash
+$PY scripts/record_session.py --backend rdp --label s2-<map>-<pilot> --seconds 1800 --fps 1 \
+  --format vpp-hevc444-10-q20 --also-png --max-bytes 8G
+```
+
+- It prints one JSON line at the end: `frames`, `stop_reason`, and `video` (`status`, `reason`,
+  `fed`, `by_status`). A `WARNING: the video side failed` line during the run means the PNG goes
+  on alone (the reason is in the manifest).
+- Read-only looks during the run: `ls -la ~/poring-lab-rec/.media-rec`,
+  `docker logs poring-lab-media-rec-1 2>&1 | tail -3`.
+
+**Step 3, stop and remove the sidecar** (after the recording has printed its line):
+
+```bash
+python3 scripts/guarded_build.py rm:media-rec
+$PY scripts/media_rec.py status   # state absent; rec empty (its stream was renamed into the session)
+```
+
+**Step 4, the check** (host CPU, after the pilot; the detector runs 3 times a frame, ~1 s a frame):
+
+```bash
+S=$(ls -d ~/poring-lab-rec/*-rdp-s2-* | tail -1)
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 19 \
+  $PY scripts/media_rec.py check "$S" --map <map> --pilot <PILOT_SESSION_DIR> \
+    --baseline <BASELINE_PILOT_SESSION_DIR> --det-threads 4 \
+    --out /home/bot/docker/poring-lab/data/bench/gpu-rec/$(TZ=Asia/Bangkok date +%Y%m%d)-stage2.json
+```
+
+- It prints the verdict, completeness, sizes and CPU, then one line per bar; exit 0 only on PASS.
+  The two box files land beside the score (`*.png-boxes.jsonl`, `*.video-boxes.jsonl`).
+- Then ship the session as usual (`scripts/dataset_ship.py`): the video files go with it.
+
+**Step 5, record 9.3** (times from `TZ=Asia/Bangkok date`): the baseline's name first, then the
+bars and the verdict, the CPU split, the latency lines (in the recording, the baseline, near /
+far from an encode, outside the recording), the video block's `by_status`; then clean up:
+`rm -rf /dev/shm/poring-lab-mediarec` (a lock file only) and, from a worktree, its `.env` link.
+
+### 9.3 Stage 2's results
+Not run yet (phase 2).
 
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single
@@ -1055,3 +1269,29 @@ stage 5  higher fps (5-10), Batt's call per window    -> the grab path's own cos
   - round 3 end to end on stand-ins, including a 10-bit libx265 stream;
   - round 3's container side with stub tools.
 - `docs/records/scorers/gpu_rec_r2_ssim_sim.py`: 8.3's simulation, verbatim as it ran.
+
+### 10.3 What stage 2's phase 1 changed (branch `feat/gpu-recording-stage2`, no GPU, no docker)
+- `scripts/media_rec.py` (new): the video side's host half (`VideoFeed`: the job, the pipe, the
+  bounded queue and feed thread, the fail-safe, the index, the rename), `prep` / `status`, and the
+  offline `check` (every frame against its PNG twin with gpu_rec_bench's metrics and bars, the
+  stage-2 bars `STAGE2_BARS`, the latency split, recorder_boxes' comparison).
+- `services/media-probe/mediarec.sh` (new): the sidecar's entry, bound read-only into the
+  media-probe image (nothing built): one job at a time, round 3's candidate exactly, a watchdog for
+  a recorder that never came, a clean stop.
+- `compose.yaml`: the long-lived service `media-rec` (profile `mediarec`): media-probe's isolation
+  plus exactly three binds (the script read-only, the RAM control directory, the disk's
+  `.media-rec`; neither created by Docker), user 1000, 1g, 2 CPUs.
+- `scripts/record_session.py`: `--format vpp-hevc444-10-q20 --also-png` (rdp only; the format alone
+  is refused); every kept frame offered to the video side, which never blocks the PNG loop; the
+  manifest's `video` block, `png_writer_cpu_s`, `cpu_wall_s`, the sidecar's cores in `cpu_cores`;
+  `--max-bytes` and the local caps count both files. `RECORDER_VERSION` stays 6 (manifest fields
+  and files beside the shards only).
+- `services/backend/tests/test_guards.py`: pins the sidecar (isolation, binds, profile, nowhere
+  else), its host side's directories, and that the input writer never holds a GPU node.
+- `services/backend/tests/test_media_rec.py` (new): the candidate's options, the job regex (and
+  bash agrees), each stage-2 bar failing alone, the verdict rule, the latency split, VideoFeed
+  against a simulated sidecar (happy, the encoder dying, a stall, no sidecar, two recorders), and
+  END TO END with the real `mediarec.sh` and a stub ffmpeg (libx265 4:4:4 10-bit on the CPU):
+  `record()` writes the PNG session and its video twin, an encoder crash leaves the PNG session
+  whole, then `check` decodes every frame.
+- `README.md`: the media services' row.

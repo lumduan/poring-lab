@@ -1285,3 +1285,89 @@ def test_the_recording_bench_and_its_scorer_agree_on_the_directory_and_the_cap()
     script = (ROOT / "services" / "media-probe" / "recbench.sh").read_text()
     assert f"OUT_CAP=${{RECBENCH_OUT_CAP:-{mod.OUT_CAP}}}" in script
     assert mod.OUT_CAP + 512 * 2**20 < 3 * 2**30
+
+
+MEDIAREC_CTL = "/dev/shm/poring-lab-mediarec"
+MEDIAREC_REC = "${HOME}/poring-lab-rec/.media-rec"
+COMPOSE_FILES = ("compose.yaml", "compose.dev.yaml", "compose.intel.yaml",
+                 "compose.vision-worker.yaml", "compose.vision-worker.intel.yaml",
+                 "compose.vision-dev.yaml")  # fmt: skip
+
+
+def test_the_stage_2_sidecar_is_the_probe_contained_plus_three_binds() -> None:
+    """Stage 2's encoder sidecar (docs/planning/gpu-recording.md 9.1, Batt 2026-11-08 "do it
+    now"): the media probe's image, long-lived, its own profile, every isolation property of
+    media-probe, and exactly three binds -- its script read-only, the control directory (RAM: the
+    job, the frame pipe) and the bitstream directory (the local disk's dot-named .media-rec) --
+    neither created by Docker (a start without them is refused). Nothing of the lab's: no data,
+    state, settings, X, frame bus, input socket, detect socket or network."""
+    services = compose("compose.yaml")["services"]
+    side = services["media-rec"]
+    assert side["profiles"] == ["mediarec"]
+    assert side["image"] == "poring-lab/media-probe:local" and side["pull_policy"] == "never"
+    assert "build" not in side  # build:media-probe builds the one image
+    assert side["entrypoint"] == ["bash", "/opt/mediarec.sh"]
+    assert side["user"] == "1000:1000" and side["init"] is True
+    assert side["network_mode"] == "none" and "networks" not in side and "ports" not in side
+    assert side["read_only"] is True
+    assert side["tmpfs"] == ["/tmp:size=64m"]
+    assert side["volumes"] == [
+        "./services/media-probe/mediarec.sh:/opt/mediarec.sh:ro",
+        {"type": "bind", "source": MEDIAREC_CTL, "target": "/ctl",
+         "bind": {"create_host_path": False}},
+        {"type": "bind", "source": MEDIAREC_REC, "target": "/rec",
+         "bind": {"create_host_path": False}},
+    ]  # fmt: skip
+    assert "volumes_from" not in side
+    assert side["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    assert side["group_add"] == ["${RENDER_GID:-991}"]
+    assert side["cap_drop"] == ["ALL"] and "cap_add" not in side
+    assert side["security_opt"] == ["no-new-privileges:true"]
+    assert "privileged" not in side and "deploy" not in side
+    assert side["mem_limit"] == side["memswap_limit"] == "1g" and side["oom_score_adj"] == 500
+    assert 0 < float(side["cpus"]) <= 2
+    assert side["restart"] == "no"
+    assert "environment" not in side and "env_file" not in side and "depends_on" not in side
+    for name in COMPOSE_FILES[1:]:
+        assert "media-rec" not in (compose(name).get("services") or {}), name
+    for name in COMPOSE_FILES:
+        for svc, spec in (compose(name).get("services") or {}).items():
+            if svc != "media-rec":
+                assert "mediarec" not in (spec or {}).get("profiles", []), (name, svc)
+                vols = str((spec or {}).get("volumes", []))
+                assert MEDIAREC_CTL not in vols and ".media-rec" not in vols, (name, svc)
+
+
+def test_the_stage_2_sidecar_and_its_host_side_agree_on_the_directories() -> None:
+    """The recorder's side (scripts/media_rec.py) feeds the pipe in the sidecar's /ctl and renames
+    the stream out of its /rec: the same two host directories, under the recorder's local root
+    (dataset_ship.LOCAL_ROOT, ~/poring-lab-rec: a rename, no copy). The sidecar's options are
+    round 3's candidate: test_media_rec.py."""
+    import importlib.util
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "media_rec_guard", ROOT / "scripts" / "media_rec.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert str(mod.CTL) == MEDIAREC_CTL and not MEDIAREC_CTL.startswith("/dev/shm/poring-lab-tmp")
+    assert mod.local_root() == Path.home() / "poring-lab-rec"
+    assert str(mod.rec_dir()) == MEDIAREC_REC.replace("${HOME}", str(Path.home()))
+    ship = (ROOT / "scripts" / "dataset_ship.py").read_text()
+    assert 'LOCAL_ROOT = Path.home() / "poring-lab-rec"' in ship
+    assert mod.REC_NAME.startswith(".")  # dataset_ship lists no dot-named directory
+    assert mod.UID == 1000 and mod.SERVICE == "media-rec"
+    assert mod.CONTAINER == "poring-lab-media-rec-1"
+
+
+def test_the_input_writer_never_holds_a_gpu_node() -> None:
+    """CLAUDE.md rule 3 / gpu-recording.md 2 (option C refused): the backend (the one input
+    writer), the desktop (the RDP client) and the gamestream client get no /dev/dri node in any
+    compose file; the encoder runs in its own sidecar."""
+    for name in COMPOSE_FILES:
+        for svc in ("backend", "desktop", "gamestream"):
+            spec = (compose(name).get("services") or {}).get(svc) or {}
+            assert "/dev/dri" not in str(spec.get("devices", [])), (name, svc)
