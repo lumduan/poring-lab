@@ -2174,6 +2174,38 @@ the base + `--quick-drop`). VERDICT: E1, Q2, D1, F3, E3, deaths PASS; Q1 FAILS, 
   Manacles 2, Candy 1, Iron 1.
 - The bag cleared after it (22:45:16-22:47:02; weight 613 -> 520, 10 / 10).
 
+**Pilot p18 (4Z; 22:52:36-23:16:54): INVALID -- killed by the MVP Stormy Knight at 24 min
+(Amendment K).** Not scored for adoption; its evidence is on the NAS (p18-pilot).
+
+**Pilots p19 (4AA; 23:22:42-23:48:4x, 25 min) and p20 (4AB; 23:55:4x-00:17:04, 21 min, the stage-2
+recorder beside it): `--far-single` replicated. VERDICT: F1 FAILS in both (50 %, 51 %); E1, D1, R1,
+F3, E3, deaths PASS in both. By 4Z's rule `--far-single` alone stays OFF; it returns inside p21's
+combined change (4AC).**
+
+| | p16 (base) | **p19** | **p20 (+ recorder)** | bar |
+|---|---|---|---|---|
+| F1 far class-D share | 54 % (57 / 106) | **50 % (36 / 72)** | **51 % (26 / 51)** | <= 35 %: FAIL |
+| class D at 2-6 / 7-8 / 9+ cells | 5 / 41, 19 / 30, 33 / 35 | **4 / 24, 6 / 20, 26 / 28** | **6 / 18, 2 / 14, 18 / 19** | reported |
+| E1 kills | 44 (87.9 / h) | **51 (122.4 / h)** | **30 (85.7 / h)** | >= 80 / h: PASS |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | **0.911; 22.4** | **0.938; 15.2** | reported |
+| R1 own-body class D | 2 | **0** (4 own-body strikes) | **0** (1) | <= 1: PASS |
+| D1 p50; GPU share | 20.6 ms | **20.6 ms; 99.7 %** (5 CPU calls at the server switch, below) | **20.5 ms (p95 22.1); 100 %** | PASS |
+| F3 / E3 / deaths | | **0 / pass (NPC 0), 1 Fly Wing (`pos_unread`, not a dead end), 1 stall / 0** | **0 / pass, 0 Fly Wings, 4 stalls / 0** | PASS |
+
+- **The 7-8 cell strikes are fixed** (63 % -> 30 % / 14 % class D), the 9+ cell ones are not (93 %,
+  95 %): too far for one click. Hence `--far-approach` (4AC).
+- **Process slips (no effect on the bot's flags):** p19's own detect-server step was REFUSED (the
+  worker still served p18's 2400-s step); p19 ran its first 10 min on that server (the same flags
+  and floor) and its own from 23:32:32 (5 CPU calls between). Editing the runner script while it ran
+  killed p19's wrapper after the run (bash reads a script as it goes). p20's runner then refused
+  on a buffered start line; its server (23:52:46, f32, floor 2450) served and p20 was started by
+  hand on it, its time box cut to 21 min to end before the MVP's window (00:21).
+- **Items:** p19 Zargon 9, Piece of Cake 4, Scell 4, Candy 2, Well-baked Cookie 2, Red Herb 1, Candy
+  Cane 1, Pearl 1, Iron 1, Sandals 1; p20 Zargon 5, Scell 4, Piece of Cake 3, Red Herb 2, Pearl 2,
+  Iron 2, Well-baked Cookie 1, Manacles 1.
+- **The stage-2 recording (p20):** 1,200 frames, 1.9 GB (PNG + HEVC), stop "duration"; its check
+  (gpu-recording.md 9.1) runs later in the night (CPU-heavy, never beside a pilot).
+
 **(b) the walk stop: the mechanics, measured live (22:43-22:45, immunity ON on the clear stand;
 `walkstop_test.py`, its result on the NAS with p17's evidence).** A 6-cell walk click, then 0.4 s
 later a second click on her own cell, or 1 / 2 / 3 / 4 cells ahead of the frame's position: in
