@@ -1066,6 +1066,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
+    if getattr(a, "box_every", BOX_EVERY_S) != BOX_EVERY_S:  # dungeon@9.11 (rogue-xmas02.md 4AD)
+        out["box_every"] = float(a.box_every)
     if getattr(a, "far_approach", False):  # dungeon@9.10 (rogue-xmas02.md 4AC)
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
@@ -1244,7 +1246,8 @@ class BoxWatch:
     precision 96-100 %: a box near us is believed, "no box" means nothing."""
 
     def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any,
-                 map_name: str | None = None, detector: str = "cpu") -> None:  # fmt: skip
+                 map_name: str | None = None, detector: str = "cpu",
+                 every_s: float = BOX_EVERY_S) -> None:  # fmt: skip
         import threading
 
         import unit_detector
@@ -1276,6 +1279,7 @@ class BoxWatch:
         self.meta: dict[str, Any] = {"kick": 0}
         self.paths: Counter[str] = Counter()  # which path gave each detection
         self.halt = threading.Event()
+        self.every_s = float(every_s)  # dungeon@9.11 (--box-every): the watcher's rhythm
         self.n = 0
         self.n_self = 0
         self.n_skip = 0
@@ -1304,7 +1308,8 @@ class BoxWatch:
                 self.n += 1
                 self.paths[path] += 1
                 self.cond.notify_all()
-            self.kick_ev.wait(max(0.0, BOX_EVERY_S - (time.monotonic() - t)))
+            every = getattr(self, "every_s", BOX_EVERY_S)  # (a test builds it without __init__)
+            self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))
             self.kick_ev.clear()
 
     def kick(self, prefer: str) -> int:
@@ -2031,8 +2036,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         if a.boxes and not mr:
             boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
                              None if a.box_model == "v1" else a.map,
-                             "cpu" if a.box_detector == "cpu" else "gpu")  # fmt: skip
-            ev({"kind": "box_model", "choice": a.box_model, **boxes.model})
+                             "cpu" if a.box_detector == "cpu" else "gpu",
+                             getattr(a, "box_every", BOX_EVERY_S))  # fmt: skip
+            ev({"kind": "box_model", "choice": a.box_model, **boxes.model,
+                "every_s": boxes.every_s})  # fmt: skip
             if boxes.gpu:  # dungeon@8.9: each detection's path + wall time (R3's windows, 4N G1)
                 boxes.det.log_path = out / "detections.jsonl"
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
@@ -4051,6 +4058,13 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@4's White Plant cursor sweep (dungeon@5: OFF, Batt decision 6)",
+    )
+    t.add_argument(
+        "--box-every",
+        type=float,
+        default=BOX_EVERY_S,
+        help="dungeon@9.11 (rogue-xmas02.md 4AD; default BOX_EVERY_S 1.0): the box watcher's "
+        "rhythm in seconds (Batt: 'detect monsters fast'; the GPU call is ~21 ms)",
     )
     t.add_argument(
         "--box-detector",

@@ -955,7 +955,7 @@ def test_the_box_flags_default_to_todays_behaviour() -> None:
     assert '"--box-detector",\n        choices=["cpu", "gpu", "ab"],\n        default="gpu",' in src
     flag = '"--box-now",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
     assert flag in src
-    assert '"cpu" if a.box_detector == "cpu" else "gpu")' in src
+    assert '"cpu" if a.box_detector == "cpu" else "gpu",' in src  # then --box-every (9.11)
     # dungeon@8.9: ONE hover with --box-now (dungeon@9.5 --lead-strike adds the fallback hover)
     assert "n_hover = 1 if a.box_now else len(points)" in src
     assert "for k_, (u_, v_) in enumerate(points[:n_hover]):  # dungeon@8.9: ONE hover" in src
@@ -1369,3 +1369,17 @@ def test_far_approach_walks_toward_a_far_target_first() -> None:
     assert 'click_at(u_a, v_a, "approach")' in src and "last_walk_click = time.monotonic()" in src
     assert "if lock is None and not approaching:  # dungeon@9.10: no scan mid-approach" in src
     assert "nonlocal last_walk_click" in src
+
+
+def test_box_every_sets_the_watchers_rhythm() -> None:
+    """dungeon@9.11 (rogue-xmas02.md 4AD): --box-every sets BoxWatch's rhythm; the default (1.0 s)
+    leaves the run record unchanged."""
+    assert dh.BOX_EVERY_S == 1.0
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "box_every" not in dh.fixes_of(dh.argparse.Namespace(**base, box_every=1.0))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, box_every=0.25))["box_every"] == 0.25
+    src = Path(dh.__file__).read_text()
+    assert "self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))" in src
+    assert 'getattr(a, "box_every", BOX_EVERY_S))' in src
