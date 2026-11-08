@@ -1209,6 +1209,27 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** F1 + E1 pass with no regression bar failing -> both flags join the base; F1
   fails -> both off (studied).
 
+### 4AD. Pilot p22 pre-registration: --box-every 0.25, the box watcher looks four times a second (written BEFORE its run, 2026-11-09 01:01 ICT)
+
+- **Why:** Batt's directive (2026-11-08 ~21:5x): "detect monsters fast; seen, walk in and strike
+  at once". The box watcher (the live GPU detector, ~20.6 ms a call since the clock floor) looks
+  once a second (BOX_EVERY_S 1.0): a monster that comes into view waits up to 1 s before the box
+  path can see it, and the box it strikes is up to 1.5 s old (BOX_FRESH_S). p21: 1,568 calls in 25
+  min (1.05 a second), the GPU idle ~98 % of the time.
+- **p21's outcome decides the base (4AC):** F1 failed (36.4 %, bar <= 35 %), so `--far-single` and
+  `--far-approach` are OFF; the base stays p16's flags (`--engage-screen` + the boss guard).
+- **The one change against the base:** `--box-every 0.25` (dungeon@9.11, a39f4c17; BOX_FRESH_S
+  unchanged at 1.5 s).
+- **The run:** the base command with `--label xmas02-p22 --box-every 0.25`, 23 min (it must end
+  before the MVP window opens at 01:32, Amendment K).
+- **Bars:** **S2'** kills per monster seen >= 0.85 (the base: p16 0.80, p21 0.804); **E1** kills
+  >= 80 / h; **D1** the GPU call p95 <= 35 ms at 4x the rate (p21 21.9); **R1** own-body class D
+  <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0.
+  Reported: the calls a second, the box targets and struck, `boxes_after_ms` / the verdict p50,
+  class D by distance, the supply.
+- **Decisions:** S2' + E1 pass with no regression bar failing -> `--box-every 0.25` joins the base;
+  otherwise off (studied).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
