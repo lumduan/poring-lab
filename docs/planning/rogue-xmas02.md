@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "The night (Amendment J): p17 (4Y, --quick-drop beside --engage-screen) pre-registered 22:07; then (b) walk stop, (c) own-sprite misses, (a) far misses, a faster box rhythm, the stage-2 recording; report ~06:00."
+next_action: "The night: p17 done (quick-drop OFF again: Q1, R1 fail; E1 88.0 / h); the walk cannot be interrupted by a click (4Z's note); p18 (4Z, --far-single) pre-registered 22:47."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2087,6 +2087,57 @@ best by far.**
   R1 (a regression bar) failed with 2, so keeping `--engage-screen` ON is **Batt's call**
   (recommended: kills x 2; R1 has read 2 in p14, p15 and p16 alike, with 5-11 own-body strikes).
 - The bag cleared after it (21:22:16-21:24:03: Etc 4, Use 6; weight 654 -> 520, 10 / 10).
+
+**Pilot p17 (4Y; 22:11:57-22:42:44; immunity OFF at 22:11:34 and ON at 22:42:56, both judged;
+the base + `--quick-drop`). VERDICT: E1, Q2, D1, F3, E3, deaths PASS; Q1 FAILS, R1 FAILS (8).
+`--quick-drop` stays OFF (4Y's rule).**
+
+| | p16 (base) | **p17 (+ quick-drop)** | bar |
+|---|---|---|---|
+| Q1 time held on class-D strikes: total / median | 494.8 / 7.25 s | **394.4 / 5.43 s** | <= 250 and <= 4.0: FAIL |
+| Q2 good strikes given up | - | **5** (74 drops: 56 no arrow, 18 no hit; 69 re-armed) | <= 5: PASS |
+| E1 kills | 44 (87.9 / h) | **44 (88.0 / h)** | >= 80 / h: PASS |
+| R1 own-body class D | 2 (of 11) | **8 (of 13)** | <= 1: FAIL |
+| kills per monster seen; supply | 0.80; 55 | **0.759; 58 (19.3 / 10 min)** | reported |
+| D1 / F3 / E3 / deaths | | **20.5 ms / 0 / pass (NPC 0), 0 dead-end Fly Wings, 3 stalls / 0** | PASS |
+
+- One Fly Wing was the strategy's swarm ESCAPE (HP falling 422 / s at 44 %; lowest HP 39.9 %, 1
+  potion), not a dead end. No boss_guard event (no boss or summon met).
+- Items (snatched): Zargon 13, Well-baked Cookie 5, Scell 4, Red Herb 2, Piece of Cake 2,
+  Manacles 2, Candy 1, Iron 1.
+- The bag cleared after it (22:45:16-22:47:02; weight 613 -> 520, 10 / 10).
+
+**(b) the walk stop: the mechanics, measured live (22:43-22:45, immunity ON on the clear stand;
+`walkstop_test.py`, its result on the NAS with p17's evidence).** A 6-cell walk click, then 0.4 s
+later a second click on her own cell, or 1 / 2 / 3 / 4 cells ahead of the frame's position: in
+EVERY trial the second click's walk request was sent only at 1.22-1.43 s -- when the 6-cell walk
+had ended -- or not at all (one cell ahead). This client does not let a click interrupt a walk.
+So "stop at once" cannot be done by a click; the box path already waits for the walk's end and a
+still scene (p16: settle p50 0.51 s + still p50 0.50 s an engagement). The lever left is the leg
+length (`WALK_AHEAD` 7; p16's legs median 6 cells): queued as a later pilot.
+
+### 4Z. Pilot p18 pre-registration: --far-single, a far strike clicks once and waits for the walk-up (written BEFORE its run, 2026-11-08 22:47 ICT)
+
+- **Why:** Amendment J item 2 (a). The study (p16, packets): far strikes missed by DISTANCE --
+  2-6 cells 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of 35 -- and on 31 of 57 far misses the
+  target stood still. On a far miss the client's first request was a WALK (a monster out of reach
+  is walked to first), and the burst re-clicked the same screen point every 0.6 s while the camera
+  scrolled: 3-5 walk requests in 4 s, the approach cancelled. Far hits mostly took ONE click.
+- **The one change against p16: `--far-single`** (dungeon@9.8, e6f85581): a strike 4+ cells away
+  clicks once and waits 1.0 s + 0.2 s a cell (at most 3.5 s) for the arrow or our damage line,
+  never re-clicking; nearer strikes burst as before.
+- **The base:** p16's (`--engage-screen` with the boss guard); `--quick-drop` OFF (p17).
+- **The run:** the base command with `--label xmas02-p18 --far-single`.
+- **Bars:**
+  - **F1 (the hypothesis):** far strikes (2+ cells, lock_study) that are class D <= 35 % (p16 54 %,
+    p17 60 %).
+  - **E1:** kills >= 80 / h (p16 87.9). **D1** <= 35 ms; **R1** own-body class D <= 1; **F3** <= 2;
+    **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0.
+  - Reported: class D by distance (2-6 / 7-8 / 9+ cells), clicks per far strike, kills per monster
+    seen, the supply.
+- **Decisions:** F1 + E1 pass with no regression bar failing -> `--far-single` joins the base;
+  F1 passes and E1 fails -> the wait costs more than it saves (studied); F1 fails -> off.
+- R1 has failed in p14-p17 (2, 2, 2, 8 own-body class D): (c) is studied beside this run.
 
 ### 4X. Pilot p16 pre-registration: --engage-screen, any monster on the screen, nearest first (written BEFORE its run, 2026-11-08 20:35 ICT)
 
