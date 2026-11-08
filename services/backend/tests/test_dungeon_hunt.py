@@ -875,7 +875,7 @@ def test_the_box_watcher_takes_the_maps_model_with_a_v1_rollback() -> None:
     assert "self.det: Any = unit_detector.for_map(map_name)" in src  # T-11 (Batt 2026-11-07)
     assert "self.det = unit_detector.for_map_gpu(map_name)" in src  # dungeon@8.9, same model
     assert 'None if a.box_model == "v1" else a.map' in src
-    assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model})' in src
+    assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model,' in src  # + every_s
     assert '"--box-model",\n        choices=["map", "v1"],\n        default="map",' in src
 
 
