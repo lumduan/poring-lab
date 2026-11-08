@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "p11 (4R, pre-registered 2026-11-08): --self-recheck, a defend-scan sword on the Rogue's own sprite must persist 0.4 s (Batt chose option a). Run it, score E1 / R1-R3. Then option (b) far-target strikes."
+next_action: "p11 (4R) done 2026-11-08 13:26: E1 43.9 / h PASS (a first), R1 0 own-body D, R2 10, E3, D1 PASS; R3 38.5 % FAIL. --self-recheck stays ON. Batt picks next: (b) far-target strikes (9 of 15 D) or (a2) the recheck widened to the E / W cells (5 of 15)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1495,3 +1495,63 @@ behind its flag, OFF by default). The run found the root cause behind both p9's 
     - **(b) far-target strikes:** lead a moving target (frames lag ~0.5 s), and cap the burst
       for far clicks. This covers p10's 8;
     - **(c) sight:** the detector misses monsters beside the Rogue (4Q's offline box test).
+
+**Pilot p11, attempt 1 (4R; 12:35:58-12:42:32, 5.87 min): VOID. A hard bar stopped it, not the
+change.**
+- **What stopped it:**
+  - the setup's `@killmonster2` (12:36:27) killed xmas_dun02's MVP, Stormy Knight;
+  - rAthena placed an MVP TOMBSTONE (an NPC) where it died: "Time of death 05:36" = 12:36 ICT;
+  - at 351 s a walk click toward (148, 20) opened its dialog ("[Stormy Knight] Has met its
+    demise ... Defeated by [Unknown]"). The UI gate stopped the run on the unknown state, and
+    the judge counts `npc_contacts` 1: the hard bars FAIL.
+  - p9 / p10 had the same tombstone on the map; their clicks missed it.
+- **Batt (12:4x): "disable tombs on the lab server".** `mvp_tomb_enabled: no` as a battle_conf
+  import (bdb2f1c4), guarded `recreate:rathena,sniffer`. Attempt 2 re-runs 4R unchanged.
+- **Reported from the 6 minutes, NOT pooled into attempt 2:**
+  - 10 strikes: K 4, C 1, D 5 (far `box` 2, `walk_sword` 1, a diagonal 1, own-body 1);
+  - 5 kills; 0 deaths, lowest HP 87.5 %;
+  - 356 / 356 detections by the Arc.
+- **The two `--self-recheck` reads behaved as designed:**
+  - N [0, 1] (641, 312): first 0.795 (sword), 0.4 s later 0.26 (clear). Rejected, the scan went
+    on: the transient case.
+  - S [0, -1] (641, 360): 0.808 then 0.822. It persisted and was struck, and it was still
+    class D. So a persistent own-body sword can still miss; attempt 2's R1 measures how often.
+
+**Pilot p11, attempt 2 (4R unchanged; MVP tombstones off since bdb2f1c4; 12:55:48-13:26:36, its
+own time box; immunity OFF at 12:53, judged "Returned to normal state."; back ON at 13:27, judged
+"You are now immune to attacks."; the OpenVINO detect server with `--ov-preproc cpu`, as
+pre-registered). VERDICT: E1, R1, R2, E3 and D1 PASS; R3 FAILS. `--self-recheck` stays ON for
+xmas_dun02 runs. E1 passes for the first time.**
+
+| | p9 | p10 | **p11 (attempt 2)** | bar |
+|---|---|---|---|---|
+| E1 kills (packets) | 17 (34.0 / h) | 12 (24.0 / h) | **22 (43.9 / h)** | >= 40 / h: PASS |
+| R1 own-body class-D strikes | 6 | 5 | **0** (6 own-body strikes, all attacked) | <= 1: PASS |
+| R2 defend-scan strikes that started an attack | 7 | 9 | **10** | >= 7: PASS |
+| R3 class D share | 9 / 25 = 36 % | 13 / 27 = 48 % | **15 / 39 = 38.5 %** | <= 25 %: FAIL |
+| E3 hard bars / dead-end Fly Wings / stalls | pass / 0 / 9 | pass / 0 / 3 | **pass (0 NPC contacts) / 0 / 4 (8 / h)** | PASS |
+| D1 deaths | 0 | 0 | **0** (lowest HP 90.7 %, 0 potions) | PASS |
+| E2 box fights ending as a box miss (reported) | 62.5 % | 52.6 % | 8 / 26 = 30.8 % | (<= 50 %) |
+
+- **The rechecks:** 9 own-body swords.
+  - 3 were transient and rejected (second reads 0.38, 0.465, 0.247 after 0.766-0.932).
+  - 6 persisted (second reads 0.758-0.851); all 6 strikes started an attack.
+- **The 15 class-D strikes, by path:**
+  - 9 far-target strikes: `box` 6 at 1-5 cells, `walk_sword` 3 at 5-7 cells. That is option (b).
+  - 6 defend-scan strikes: 5 on the EAST cell [1, 0] at (675, 336) and 1 on [1, 1].
+    - (675, 336) lies beside the self box (34 px from her feet point, the box is +-20). It is
+      the same pattern one cell over: the glow around her reaches it.
+    - Some ended on a damage line after one click: possibly "already attacking", class D only
+      by the scorer's rule.
+  - In all, 88.8 s of the 30 minutes held by class-D strikes.
+- **Kills by species, reader:** 202 / 203 of our hits read (99.5 %, lag p50 393 ms).
+- **Items (all snatched):** Scell 4, Piece of Cake 3, Zargon 2, Monk Hat 1.
+- **Engagements:** 63 (box 26, Battle Log 21, `walk_sword` 9, Miss cue 6, HP drop 1); p9 46,
+  p10 29.
+  - A single run's kills swing with the spawns (p10 24 / h with the same seed), so E1's pass is
+    one run. The next runs keep the flag on and show whether it holds.
+- **Decisions (as pre-registered):**
+  - R1 + R2 pass: `--self-recheck` stays ON for xmas_dun02 runs.
+  - The next change is Batt's choice:
+    - **(b) far-target strikes:** 9 of the 15 Ds;
+    - **(a2) the recheck widened to the E / W body points:** 5 of the 15.
