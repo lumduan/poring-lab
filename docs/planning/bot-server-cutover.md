@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "poring-lab moves whole from VM 103 (ubuntu-docker, 192.168.1.13) to bot-server (192.168.1.228): the game server, the lab stack, the agent; a check script proves nothing was left behind; then VM 103 is cleaned of poring-lab."
-status: "DONE 2026-11-07. Phase B 20:33-21:57 ICT (the lab runs on bot-server); Phase C on Batt's go ~22:3x ICT ('delete all'): C1-C5 (containers, networks, volumes, 9 images, the shared build cache; VM 103 +33.8 GB free), C7, C8, C10 (the NAS exports admit only .228) done; C6 (this repo) at the session's end; C9 (VM 103's automount lines) is Batt's sudo; C11 (the agent) by the armed post-session handoff (section 4a)."
+status: "DONE 2026-11-07. Phase B 20:33-21:57 ICT (the lab runs on bot-server); Phase C on Batt's go ~22:3x ICT ('delete all'): C1-C5 (containers, networks, volumes, 9 images, the shared build cache; VM 103 +33.8 GB free), C7, C8, C10 (the NAS exports admit only .228) done; C6 (this repo) at the session's end; C9 (VM 103's automount lines) is Batt's sudo; C11 (the agent) by the armed post-session handoff (section 4a). ➡️ 2026-11-08: C11 DONE 09:36:43 ICT (verified, all three deleted; its log was lost, see 4a) and C9 DONE (Batt 09:34:33-35, verified by HA); one leftover, ~/poring-lab-private (next_action)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [bot-server-migration.md, ../operations/bot-server-handover.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0001-single-rdp-session.md, ../adr/0019-windows-stays-clean.md]
-next_action: "On bot-server: read ~/poring-lab-vm103-handoff.log (or ...FAILED.log) to confirm C11; Batt runs C9's sudo line on VM 103. Then: ADR-0023's plan (Batt: after the move), the Arc training speed, p10."
+next_action: "Phase C is complete except one leftover, IN PROGRESS: ~/poring-lab-private moves from VM 103 to bot-server (Batt 11-08: move, then HA deletes it; HA copies, sha256 checked on bot-server gates the delete; poring-lab re-verifies here). Then: ADR-0023's plan (Batt: after the move), the Arc training speed, p10."
 title: "The cutover: poring-lab from VM 103 to bot-server"
 date: 2026-11-07
 owner: Batt
@@ -245,6 +245,39 @@ them); the NAS archive copies.
 | C10 | NAS exports 7 / 8 / 9: hosts [192.168.1.228] only (the allowed midclt rule; the NAS's zsh needs the JSON double-quoted: the first try changed nothing); Frigate unchanged before / after (started 2026-11-02 08:06:28Z, 0 restarts) |
 | C6 | the repo, last in the session, under the IO guard |
 | C11 | `/dev/shm/poring-decom/handoff.sh`, a user unit (`poring-lab-handoff`) waiting for the session's Claude Code (pid 118211): it pushes the final memory + history, VERIFIES every file on bot-server (memory by sha256, transcripts at least as long; the dry run: 493 files, 0 bad), and only then deletes the agent folder, its file history and the harness temp; its log goes to bot-server (`~/poring-lab-vm103-handoff.log`, or `.FAILED.log` with nothing deleted) |
+
+
+
+➡️ **2026-11-08: C11 and C9 RESULT** (HA, VM 103's agent, read-only, on Batt's request; its findings
+are in bot:~/poring-lab-vm103-handoff-check-20261108-1008.txt, sha256 6e312b64...):
+- **C11 DONE.** The VM 103 session closed at 09:35:53 ICT. The unit pushed, then VERIFIED
+  (an os.walk of the WHOLE folder: memory by sha256, transcripts at least as long, every other file
+  the same size; 4 SSH logins 09:36:40-42). Then it deleted the agent folder (09:36:43.450), the
+  file history (.646) and the temp dir (.914). None is left, and none is partial.
+- **Its log was lost.** The script's last line is `scp "$LOG" ... && echo`, so its exit status
+  (255) is scp's. LOG was /dev/shm/poring-decom/handoff.log, and that dir was gone by 09:36:43.
+  With a missing local source, scp prints `stat local ...: No such file` and exits 255 WITHOUT
+  connecting (tested: OpenSSH 10.2p1 here, 9.6p1 on VM 103). That fits: no 5th login on
+  bot-server. **The remover (Batt confirmed, 11-08):** the optional `rm -rf /dev/shm/poring-decom`
+  in the 11-07 report ("after the handoff log shows up"), which he ran beside C9 at 09:34. Refuted:
+  logind (Linger=yes, the user manager has run since 10-06, 0 removed sessions).
+  Lesson: never hand the operator a cleanup command for a dir that holds a log not yet shipped.
+- **489 vs the dry run's 493:** NOT a handoff gap. The verify passed before the deletes.
+  Afterwards, bot-server's own Claude Code cleanup (09:46:58, default cleanupPeriodDays 30) pruned
+  the session's tool-results older than 30 days. VM 103's copy was already deleted, so those
+  saved tool outputs are gone; the transcript keeps a preview of each. Now `cleanupPeriodDays: 365`,
+  and the history has a NAS copy: `archive/agent-history/20261108-vm103-session-5aab5193/`
+  (disk-audit.md).
+- **C9 DONE** by Batt at 09:34:33-35: backup /etc/fstab.bak-20261107; 4 poring lines removed;
+  units, mounts and dirs gone (HA verified).
+- **Missed by the move:** `~/poring-lab-private/` (6 files, 2026-10-05) is still on VM 103. It
+  holds the study-only local decoder that grf_read.py loads for `--decode-mixcrypt`; it is never in
+  the repo. bot-server lacks it, so after a reboot there the mixcrypt sprite re-extraction would
+  refuse. Neither the migration check nor the C list covered it. ➡️ Batt 11-08: MOVE it here, then HA deletes it
+  on VM 103 (the delete is gated on a sha256 check run on bot-server; `__pycache__/` is not copied).
+- Not ours: VM 103's Ollama container (poring-lab only called it from host scripts, last on
+  11-07). On Batt's GO, HA removed it at 10:19:50-53 ICT: the container, the image and the volume
+  with qwen3-vl:4b (+12.70 GB on VM 103).
 
 Also: the OpenVINO detect server is official IN the Intel worker (`serve-cmd --backend openvino`,
 the ONNX on the NAS's archive/models), proven on bot-server: listening with v1 + xmas02.

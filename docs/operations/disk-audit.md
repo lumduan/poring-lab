@@ -2,7 +2,7 @@
 title: "Disk audit: poring-lab's footprint on the shared root disk"
 status: living
 created: 2026-10-21
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-08
 owner: poring-lab
 ---
 
@@ -55,7 +55,7 @@ step ran under the guard; the worst capture stall was 8.0 % (frigate), 0 s above
 | 10 | `services/frontend/node_modules` | 0.50 | a HOST pnpm install from 09-29. frontend-dev never copies it (run-dev.mjs SKIP); only gen_protocol.sh's first branch would use it, and its frontend-dev branch works | 09-29 | no | n/a (regenerable) | **list**: delete proposed (no NAS value), needs Batt's OK |
 | 11 | `services/frontend/.qa-local` | 0.36 | the /qa label bundles (7 sessions, incl. Batt's hand-checked labels.json) | 10-05 | the /qa dev route + label_quality's default read it | no | **copy** to the NAS + verify now; the local delete waits on Batt (it breaks /qa until a NAS-backed path) |
 | 12 | `.mypy_cache` | 0.02 | stale (mypy runs with `--cache-dir=/dev/null`) | ? | no | n/a | **list**: delete proposed |
-| 13 | `~/.claude/projects/-home-batt-docker-poring-lab/<session>.jsonl` | 1.39 | THIS Claude session's transcript | live | yes while live | no | keep; propose a NAS archive after the session ends |
+| 13 | `~/.claude/projects/-home-batt-docker-poring-lab/<session>.jsonl` | 1.39 | THIS Claude session's transcript | live | yes while live | no | keep; propose a NAS archive after the session ends. ➡️ The session ended 2026-11-08; its history moved to bot-server and was COPIED to `archive/agent-history/` ("Moves -- 2026-10-22", last row) |
 | 14 | `~/.cache/poring-lab` | 0.0002 | locale-pack fingerprints | today | yes | - | keep |
 | 15 | Docker images (unique) | 12.29 | vision 10.34 (GPU work); gamestream 0.49; rathena-build 0.48 (0 containers); mariadb 0.34 (db, db-th); rathena 0.29; backend 0.24; sniffer 0.10. Plus ~0.86 desktop layers shared with gamestream, and base layers | images 2-3 weeks old | yes; rathena-build too (21:4x: `gen_packet_tables.py` and `gen_mapcache_th.py` run their throwaway containers from it) | - | keep |
 | 16 | Docker volumes | 0.54 | captures 0.22 (the 7-day pcap ring); db-data 0.17; **db-th-data 0.16** (the Thai experiment; its container exited, the th client copy was removed) | - | db-th: no | no | keep; **list** db-th (dump to the NAS + remove = Batt's call) |
@@ -167,7 +167,18 @@ db-th-data dump to the NAS then remove; the transcript to the NAS after the sess
 | 19:57 | `data/nametags` (208 MB, 7,658 files) | `archive/nametags/` | guarded `archive:` | verified + deleted; worst stall **11.1 %, 6 s above 10 %** (inside the guard's limits) |
 | 20:25 | the `db-th-data` volume (0.16 GB, 413 files) | `archive/db-th-data/db-th-data-20261022.tar.gz` (2.1 MB; 156.4 MB uncompressed: preallocated InnoDB files) | NEW guarded `voldump:` (a07d3cf): a cold tar of the stopped volume, file counts 413 = 413 | verified; worst stall 10.3 %, 2 s |
 | 20:26 | the db-th container (exited) + the volume | removed | NEW guarded `volrm:` (only with the dump present) | done, 0.0 % |
-| (later) | the session transcript | `scratch-archive/` | after the session (Batt) | pending |
+| (later) | the session transcript | `scratch-archive/` | after the session (Batt) | ➡️ DONE 2026-11-08 as a COPY (see below) |
+
+➡️ **2026-11-08 09:57-10:02 ICT, bot-server: the session transcript, a NAS COPY** (Batt: set
+`cleanupPeriodDays` longer on bot-server AND copy to the NAS; the local copy stays).
+- What: the VM 103 session 5aab5193 (ended 2026-11-08 09:35:53 ICT): the transcript (2.06 GB),
+  its folder (subagents 396, tool-results 17), and a memory snapshot (74 files).
+- Where: `archive/agent-history/20261108-vm103-session-5aab5193/` (not `scratch-archive/`: this is
+  long-term history). README.txt and SHA256SUMS sit beside it.
+- How: the `archive:` step's own rsync (paced, then a size + count check that listed nothing),
+  WITHOUT the delete. `archive:` itself refuses `~/.claude` sources and always deletes.
+- Why: bot-server's Claude Code cleanup (default 30 days) had pruned the session's older
+  tool-results at 09:46:58. `~/.claude/settings.json` now sets `cleanupPeriodDays: 365`.
 
 - Not ours, unchanged: the root LV at the time of the moves read ~477 GiB used / 110 GiB free (df).
 
