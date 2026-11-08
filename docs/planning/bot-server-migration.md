@@ -463,6 +463,8 @@ as Batt prefers:
   | JPEG of a 1440x900 BGRA frame | (the console's simplejpeg q80: 9.4 ms) | 6.6-6.8 ms incl. the upload; **colours washed out** (limited range in a full-range JPEG, not fixed) |
 
 - **Verdicts:**
+  - ➡️ The codec A/B (docs/h264-plan.md, 2026-11-08 14:45-15:02) measured progressive at 3.0 cores
+    in motion on bot-server; AVCthin 1.27, but 35 ms slower. Progressive kept.
   - **RDP decode on the GPU: no.** Progressive has no GPU path. For an AVC mode the saving is at
     most ~0.13 cores, and it needs our own FreeRDP build (WITH_FFMPEG_HWACCEL is OFF), iHD and the
     render node in the desktop.

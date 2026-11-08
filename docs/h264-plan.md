@@ -397,3 +397,34 @@ Windows `typeperf` runs over the three RemoteFX Graphics counters, typed into a 
   codec stays progressive unless Batt decides otherwise.
 - **Reported, no bar:** a table like Arm C's, plus the fidelity numbers. The adoption is Batt's
   (AVCthin is lossy; the bot reads these frames).
+
+### bot-server A/B: results (2026-11-08 14:45-15:02 ICT)
+- **The run:** all steps rc 0; `rdp_reconnect.sh` left exactly 1 client each time; the session is
+  back on **progressive** at 15:02.
+
+| | progressive | AVCthin |
+|---|---|---|
+| desktop cores, 60-s camera sweep, outdoor (prt_fild08 268,107) | **3.00** | **1.27** |
+| desktop cores, sweep indoor (prt_church 99,112) | 2.47 | 1.03 |
+| delivered frames / s, outdoor (median, p10-p90) | 29 (25-30) | 29 (25-30) |
+| delivered frames / s, indoor | 8 (3-30) | 6 (2-30) |
+| desktop cores idle (60 s standing) | 0.18 | 0.24 |
+| packet -> frame (40 walks), p50 / p75 / p90 / p95 | **141 / 144 / 166 / 192 ms** | 176 / 184 / 194 / 200 ms |
+| fidelity, static text (name / job / level / weight lines) | reference | 36.8-37.4 dB (VM 103: 37.8) |
+| fidelity, hotbar icons | reference | 32.8 dB |
+
+- **What it means on bot-server:**
+  - progressive costs **3.0 cores in motion**, not the ~6 the study estimated, and 0.18 idle;
+  - AVCthin saves ~1.7 cores in motion, but it is lossy, idles a little higher, and is
+    **~35 ms SLOWER** from packet to frame here (VM 103 had them about equal).
+  - The read-only study's estimate is superseded by this measurement.
+  - The HP / SP panel's 24.2 dB was a confound (HP was 5004 vs 5070 between the two sets);
+    static text is the fair measure.
+  - The CPU detector saw no monster in either set (none in view at the rest spot), so detector
+    parity on AVC frames is NOT measured.
+- **Recommendation: keep progressive.** The host is not CPU-bound in motion (3 of 8 cores),
+  and progressive is faster and lossless where the bot reads.
+  - If AVCthin is ever wanted: a detector parity on AVC frames with monsters in view (an xmas_dun02
+    pilot whose one change is the codec) first.
+- The evidence (the JSONs and the 16 shots) is on the NAS:
+  `scratch-archive/2026-11-08/codec-ab/`.
