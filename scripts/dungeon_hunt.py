@@ -245,6 +245,13 @@ LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25
 # after it -> the lock drops; after either, the box path runs again (the nearest box), at most
 # QUICK_RETRY times a fight, before the ring scan.
 QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
+# --kill-gap (dungeon@9.13, rogue-xmas02.md 4AG): at Base 99 the Battle Log shows NO exp line, so
+# the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
+# with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
+# from the kill (packets) to fight_end, 296 s of the run's 1,500. Our hits on a living target come
+# every 0.47 s (packets, p16-p22: p50 0.47, p90 0.48 s). So after KILL_GAP_HITS of our hits on the
+# lock, none for KILL_GAP_S counts as the kill: the lock goes and, when quiet, the fight ends.
+KILL_GAP_S, KILL_GAP_HITS = 1.5, 2
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
 # engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
@@ -1072,6 +1079,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AG)
+        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS]
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
     return out
@@ -1150,6 +1159,13 @@ def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: f
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
     our hits was seen since its click for ``hit_s`` after the arrow."""
     return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
+
+
+def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GAP_S,
+                min_hits: int = KILL_GAP_HITS) -> bool:  # fmt: skip
+    """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
+    landed on this lock and none for ``gap_s`` since the last."""
+    return hits_on_lock >= min_hits and since_last_hit > gap_s
 
 
 def through_path(leg: Sequence[Cell], leg2: Sequence[Cell] | None) -> list[Cell]:
@@ -2079,6 +2095,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_swing = -1e9  # dungeon@9.1 (--miss-cue): the last Miss read at our attacker
         swing_floor = -1e9  # 9.1b: the last fight's end; a Miss read before it starts no fight
         last_ours = -1e9
+        ours_ticks: deque[float] = deque(maxlen=64)  # dungeon@9.13: our recent hits' ticks
         kills_seen: list[float] = []
         mode = "search"
         lock: dict[str, Any] | None = None
@@ -3253,6 +3270,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         taken_new = taken_new or ln
                     elif typ == "damage":
                         last_ours = tick
+                        ours_ticks.append(tick)
                     elif typ == "base_exp":
                         kills_seen.append(tick)
                         ev({"kind": "kill", "by": "exp_line", "gm": None if here is None
@@ -3429,7 +3447,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if lock is not None:
                         since = tick - lock["t"]
                         idle = tick - max(last_ours, lock["t"])
-                        if since > LOCK_MAX_S or (since > LOCK_NO_HIT_S and idle > LOCK_NO_HIT_S):
+                        n_lock = (sum(1 for t_o in ours_ticks if t_o >= lock["t"])
+                                  if getattr(a, "kill_gap", False) else 0)  # fmt: skip
+                        if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):
+                            # dungeon@9.13: our hits stopped -> taken as the kill (no exp line)
+                            ev({"kind": "unlock", "why": "kill_gap", "s": round(since, 1),
+                                "hits": n_lock, "gap_s": round(tick - last_ours, 2)})  # fmt: skip
+                            kills_seen.append(tick)
+                            ev({"kind": "kill", "by": "hit_gap", "gm": None if here is None
+                                else list(here)})  # fmt: skip
+                            if here is not None:  # the loot list, as for an exp line's kill
+                                loot_list.append((here, tick))
+                            if mr and lock.get("cell"):  # it died: off the queue
+                                queue[:] = [q for q in queue
+                                            if list(q["cell"]) != list(lock["cell"])]  # fmt: skip
+                            lock = None
+                        elif since > LOCK_MAX_S or (since > LOCK_NO_HIT_S and idle > LOCK_NO_HIT_S):
                             ev({"kind": "unlock", "why": "no hits" if since <= LOCK_MAX_S
                                 else "max", "s": round(since, 1)})  # fmt: skip
                             lock = None
@@ -4064,6 +4097,14 @@ def main() -> int:
         help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
         "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
         "fight at most); no ring scan during that walk",
+    )
+    t.add_argument(
+        "--kill-gap",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.13 (rogue-xmas02.md 4AG; OFF by default): after 2 of our hits on the "
+        "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
+        "quiet fight ends without the scan",
     )
     t.add_argument(
         "--reach-check",

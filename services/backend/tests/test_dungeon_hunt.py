@@ -1411,3 +1411,24 @@ def test_reach_check_skips_boxes_the_server_would_not_walk_to() -> None:
     assert "or unreachable(here_s, foot))" in src  # the trigger
     assert "or unreachable(here, f)))" in src  # the box path (engage-screen)
     assert 'raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}")' in src  # fail closed
+
+
+def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:
+    """dungeon@9.13 (rogue-xmas02.md 4AG): no exp line at Base 99, so after 2 of our hits on the
+    lock, none for 1.5 s (our hits come every 0.47 s) is the kill; off by default."""
+    assert (dh.KILL_GAP_S, dh.KILL_GAP_HITS) == (1.5, 2)
+    assert dh.kill_gapped(2, 1.6)
+    assert not dh.kill_gapped(2, 1.4)  # still within ~3 swings
+    assert not dh.kill_gapped(1, 5.0)  # one hit is no hit stream (the no-hits unlock still runs)
+    assert not dh.kill_gapped(0, 9.0)
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "kill_gap" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, kill_gap=True))["kill_gap"] == [1.5, 2]
+    src = Path(dh.__file__).read_text()
+    assert 'if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):' in src
+    assert 'ev({"kind": "kill", "by": "hit_gap"' in src
+    assert "ours_ticks.append(tick)" in src
+    # the quiet-kill end the exp line used (pilot 4) is what ends the fight after it
+    assert 'ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})' in src
