@@ -258,6 +258,15 @@ BOX_SCREEN_PX = 4000.0  # beyond any distance on the 1280 x 720 game region
 # starts with @killmonster2 (the MVP dead; it respawns 60-70 min later), so in a 30-min run this is
 # the backstop. The names come from the KB (boss_names: the map's boss spawns + their summons).
 BOSS_AVOID_S = 30.0
+# --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
+# miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
+# 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
+# request, not an attack), and the burst re-clicked the SAME screen point every BURST_GAP_S while
+# the camera scrolled with her: that re-click landed on the floor and cancelled the approach (3-5
+# walk requests in 4 s on the far misses; the far hits mostly took ONE click). So a strike FAR_CELLS
+# or more away clicks ONCE and waits FAR_BASE_S + FAR_PER_CELL_S a cell (at most FAR_MAX_S) for
+# the arrow or our damage line -- the walk-up included -- re-clicking never.
+FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S = 4, 1.0, 0.2, 3.5
 CURSOR_WAIT_S = 0.35
 LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bounds
 # --loot trim (docs/planning/gef10-idle-study.md, gef10-eyes-loot.md E1): v1's list, nearest first,
@@ -1042,6 +1051,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
     if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
         out["engage_screen"] = [BOX_SCREEN_PX]
+    if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
+        out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
     return out
 
 
@@ -1079,6 +1090,15 @@ def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]
 
     fit = battle_log.species_of(str(name_read), tuple(bosses) + tuple(species))
     return fit if fit in bosses else None
+
+
+def far_window(rel: Sequence[int]) -> float | None:
+    """PURE (--far-single): how long a strike at ``rel`` waits for its arrow / damage line with
+    ONE click, or None when it is nearer than FAR_CELLS (the burst as before)."""
+    cells = max(abs(int(rel[0])), abs(int(rel[1])))
+    if cells < FAR_CELLS:
+        return None
+    return min(FAR_MAX_S, FAR_BASE_S + FAR_PER_CELL_S * cells)
 
 
 def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: float,
@@ -2360,6 +2380,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             cur = ref
             quick = bool(getattr(a, "quick_drop", False))
             burst_s = QUICK_ARROW_S if quick else BURST_MAX_S
+            far_w = far_window(rel) if getattr(a, "far_single", False) else None
+            if far_w is not None:  # dungeon@9.8: one click, the walk-up's own time
+                burst_s = far_w
             while time.monotonic() - t_c < burst_s:
                 time.sleep(0.06)
                 cur = frame()
@@ -2381,7 +2404,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         break
                 if guard_tick():
                     break
-                if n < BURST_MAX and time.monotonic() - t_c >= n * gap:
+                if far_w is None and n < BURST_MAX and time.monotonic() - t_c >= n * gap:
                     click_at(u, v, "strike_burst")
                     n += 1
             if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
@@ -2403,7 +2426,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
                 return False  # the click hit the ground: no lock (the caller scans again)
             last_strike.clear()
-            last_strike.update(t_click=t_c, arrow_t=None if arrow is None else t_c + arrow)
+            last_strike.update(
+                t_click=t_c,
+                arrow_t=None if arrow is None else t_c + arrow,
+                hit_s=QUICK_HIT_S if far_w is None else max(QUICK_HIT_S, far_w),
+            )
             if quick and arrow is None and dmg is None and not escaped[0]:
                 quick_rearm("no_arrow")  # dungeon@9.6: nothing connected: no lock, the next box
                 return False
@@ -3301,7 +3328,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             lock = None
                         elif getattr(a, "quick_drop", False) and last_strike and quick_no_hit(
                                 last_strike.get("arrow_t"), last_ours, last_strike["t_click"],
-                                tick):  # fmt: skip
+                                tick, last_strike.get("hit_s", QUICK_HIT_S)):  # fmt: skip
                             ev({"kind": "unlock", "why": "quick", "s": round(since, 1)})
                             lock = None
                             last_strike.clear()
@@ -3919,6 +3946,14 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--far-single",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.8 (rogue-xmas02.md 4Z, pilot p18; OFF by default): a strike 4+ cells away "
+        "clicks ONCE and waits 1.0 s + 0.2 s a cell (<= 3.5 s) for the arrow / damage, never "
+        "re-clicking while the camera scrolls (a re-click landed on the floor)",
     )
     t.add_argument(
         "--engage-screen",

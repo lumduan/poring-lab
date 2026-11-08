@@ -1307,3 +1307,28 @@ def test_boss_guard_names_from_the_real_kb() -> None:
                            json.loads((kb / "mobs.json").read_text()),
                            json.loads((kb / "mob_skills.json").read_text()))  # fmt: skip
     assert set(bosses) == {"Stormy Knight", "Garm Baby", "Baby Hatii", "Christmas Goblin"}
+
+
+def test_far_single_clicks_once_and_waits_for_the_walk_up() -> None:
+    """dungeon@9.8 (rogue-xmas02.md 4Z, pilot p18): p16's far misses -- the client walks to a far
+    monster first and the burst's re-click at the same screen point landed on the floor. A strike
+    4+ cells away clicks once and waits 1.0 s + 0.2 s a cell (<= 3.5 s); nearer ones burst."""
+    assert (dh.FAR_CELLS, dh.FAR_BASE_S, dh.FAR_PER_CELL_S, dh.FAR_MAX_S) == (4, 1.0, 0.2, 3.5)
+    assert dh.far_window((3, 1)) is None and dh.far_window((0, -2)) is None
+    import pytest
+
+    assert dh.far_window((4, 0)) == pytest.approx(1.8)
+    assert dh.far_window((-2, 8)) == pytest.approx(2.6)
+    assert dh.far_window((12, 3)) == pytest.approx(3.4) and dh.far_window((14, 0)) == 3.5
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "far_single" not in dh.fixes_of(dh.argparse.Namespace(**base, far_single=False))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, far_single=True))["far_single"] == [
+        4, 1.0, 0.2, 3.5]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert "if far_w is None and n < BURST_MAX and time.monotonic() - t_c >= n * gap:" in src
+    assert "hit_s=QUICK_HIT_S if far_w is None else max(QUICK_HIT_S, far_w)," in src
+    # the post-arrow wait of --quick-drop takes the far window
+    assert not dh.quick_no_hit(10.5, -1e9, 10.0, 13.0, 3.0)  # 2.5 s after the arrow, 3.0 window
+    assert dh.quick_no_hit(10.5, -1e9, 10.0, 13.6, 3.0)
