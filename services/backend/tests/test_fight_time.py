@@ -35,3 +35,12 @@ def test_summary_after_kill_and_nokill() -> None:
     assert got == {"fights": 3, "kill_fights": 2, "after_kill_p50_s": 3.25,
                    "after_kill_total_s": 6.5, "nokill_fights": 1,
                    "nokill_total_s": 5.0}  # fmt: skip
+
+
+def test_hit_gap_kills_match_a_death_just_before() -> None:
+    ev = [{"kind": "kill", "by": "hit_gap", "t_ns": 10 * S},  # death at 8.5: matched
+          {"kind": "kill", "by": "hit_gap", "t_ns": 20 * S},  # nothing 0-3 s before: false
+          {"kind": "kill", "by": "exp_line", "t_ns": 30 * S}]  # not inferred  # fmt: skip
+    got = ft.hit_gap_match(ev, [8 * S + S // 2, 21 * S])
+    assert got == {"hit_gap_kills": 2, "hit_gap_matched": 1, "hit_gap_share": 0.5}
+    assert ft.hit_gap_match([], [])["hit_gap_share"] is None

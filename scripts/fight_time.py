@@ -10,6 +10,8 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
 - A fight is a KILL fight when such a death falls inside it (to fight_end + 1 s); per kill fight
   the time from the first death to fight_end (``after_kill_s``: K1 is its median); the NO-KILL
   fights' count and total time (K2's context).
+- K3 (--kill-gap): each ``kill`` event by ``hit_gap`` is MATCHED when a death of ours (above) came
+  0-3 s before it; the matched share.
 By this definition (2026-11-09): p21 92 fights, 42 kill fights, after the kill p50 6.46 s (total
 276.8 s), no-kill fights 50 (434.1 s); p16 6.50 s (296.3 s), p19 6.53 s, p22 6.47 s.
 """
@@ -65,6 +67,16 @@ def summary(fs: Sequence[tuple[int, int]], kills: Sequence[int]) -> dict[str, An
             "nokill_fights": len(nokill), "nokill_total_s": round(sum(nokill), 1)}  # fmt: skip
 
 
+def hit_gap_match(events: Sequence[dict[str, Any]], kills: Sequence[int],
+                  window_s: float = 3.0) -> dict[str, Any]:  # fmt: skip
+    """PURE: --kill-gap's inferred kills, matched to a death of ours 0..window_s before each."""
+    inferred = [int(e["t_ns"]) for e in events
+                if e.get("kind") == "kill" and e.get("by") == "hit_gap"]  # fmt: skip
+    m = sum(any(0 <= t - k <= window_s * 1e9 for k in kills) for t in inferred)
+    return {"hit_gap_kills": len(inferred), "hit_gap_matched": m,
+            "hit_gap_share": round(m / len(inferred), 3) if inferred else None}  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -72,8 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     events = [json.loads(x) for x in (a.session / "events.jsonl").read_text().splitlines() if x]
     with gzip.open(a.session / "packets.jsonl.gz", "rt") as fh:
         packets = [json.loads(x) for x in fh if x.strip()]
-    print(json.dumps({"session": a.session.name,
-                      **summary(fights(events), our_kills(packets))}))  # fmt: skip
+    kills = our_kills(packets)
+    print(json.dumps({"session": a.session.name, **summary(fights(events), kills),
+                      **hit_gap_match(events, kills)}))  # fmt: skip
     return 0
 
 
