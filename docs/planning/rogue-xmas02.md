@@ -1371,6 +1371,27 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** K1 + E1 + K3 pass with no regression bar failing -> `--kill-gap` joins the base;
   otherwise off.
 
+### 4AI. Pilot p27 pre-registration: --reach-check 9.12b, the target is the cell the client picks (written BEFORE its run, 2026-11-09 03:49 ICT)
+
+- **Why (p23, p25, section 5):** `--reach-check` cut the stuck time from 110-153 s a run to 0 s
+  (p23) and 43.3 s (p25); p25 failed U1 / U2 because on this map's raised floors the box path's
+  flat projection put a target 4-6 cells off (p25 426 s: rel (-2, -6) -> (108, 247); the monster
+  at (108, 242) by the packets; the client walked toward (108, 243)). The client resolves a pixel
+  to the FIRST tile top the camera ray comes down through (poring_dataset.picking; memory "client
+  picks raised tops"); the picked cell under the box's foot names the monster's cell.
+- **The one change against the base (p16's flags, `--engage-screen` + the boss guard; `--kill-gap` OFF (p26
+  failed E1)):** `--reach-check` as it now stands, 9.12b
+  (c8544a05; the run record says `"reach_check": [17, 14, "9.12b"]`). Offline over p16 / p21 /
+  p23 / p25's box strikes (our packet cell + the strike's pixel): class D begun with an ignored
+  request caught 32 of 33 (9.12: 25), good strikes passed over 1 of 167 (9.12: the same 1).
+- **The run:** the base command with `--label xmas02-p27 --reach-check`, 25 min.
+- **Bars (4AE's, unchanged):** **U1** stuck time <= 30 s; **U2** class-D box strikes begun
+  ignored <= 3; **E1** kills >= 80 / h; **D1** the GPU call p95 <= 35 ms; **R1** own-body class D
+  <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0. Reported
+  beside p23 / p25: reach_skip events, class D by distance, the time held on class D, kills per
+  monster seen, the after-kill time.
+- **Decisions:** every bar passes -> `--reach-check` (9.12b) joins the base; otherwise off.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2549,3 +2570,30 @@ PASS. `--reach-check` stays OFF (4AG's rule).**
   studied below (after p26).
 - **Items (snatched):** Zargon 6, Scell 5, Piece of Cake 3, Red Herb 1, Candy 1, Well-baked Cookie
   1, Pearl 1.
+
+**Pilot p26 (4AH; 03:22:36-03:48:21, 25 min; immunity OFF at 03:21:50 and ON at 03:48:34, both
+judged on the Chat tab; the base + `--kill-gap` 9.13c, `"kill_gap": [1.5, 5, "9.13c"]`). VERDICT:
+K1, K3, R1, D1, E3, deaths PASS; E1 FAILS (74.4 / h). `--kill-gap` stays OFF (4AH's rule).**
+
+| | p16 (base) | p24 (9.13) | **p26 (9.13c)** | bar |
+|---|---|---|---|---|
+| K1 after the kill p50 | 6.50 s | 1.96 s | **2.06 s** (26 kill fights, 110.0 s) | <= 3.0 s: PASS |
+| E1 kills | 44 (87.9 / h) | 31 (74.3 / h) | **31 (74.4 / h)** | >= 80 / h: FAIL |
+| K3 inferred kills within 3 s after a death of ours | - | 62.2 % | **71.0 %** (22 of 31) | >= 70 %: PASS |
+| box misses after a quiet-kill end (9.13b) | - | 14 of the first 15 | **0** (6 box misses in all, 0 spots ignored) | reported |
+| fights; no-kill fights (time) | 116; 79 (814.4 s) | 183; 157 (784.1 s) | **579; 553 (752.3 s)** | reported |
+| R1 own-body class D / D1 / E3 / deaths | 2 | 1 | **1 (10 own-body strikes) / 20.6 / 21.7 ms / pass, 0 Fly Wings, 0 stalls / 0; lowest HP 87.9 %** | PASS |
+| stuck time; class D begun ignored (no `--reach-check`) | 133.9 s; 14 | 121.3 s; 12 | **208.7 s; 21** | reported |
+| kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.585; 21.2 | **0.674; 18.4** (46) | reported |
+| class D at 9+ cells; F1 share | 33 / 35; 54 % | 25 / 28; 51.8 % | **38 / 40; 70.8 %** | reported |
+
+- **What 9.13b exposed:** with the box miss gone, the quiet-kill rule (pilot 4's: end any fight
+  within 3 s after a kill, so the loot step runs) closed a NEW box fight on every tick of those 3 s
+  and the trigger opened it again -- 579 "fights", most 0 s long. So after each kill the bot still
+  waits ~3 s before it may engage the next monster, then loots: the 4.4 s the rule saves after a
+  death goes into that block. The kill rule itself works (K1, K3); the next step, not run tonight,
+  is to let a box engagement inside those 3 s take the next target (and loot after).
+- This run's stuck time (208.7 s, no `--reach-check`) is the largest of the night: E1 here is not
+  `--kill-gap`'s alone.
+- **Items (snatched):** Zargon 10, Piece of Cake 5, Red Herb 3, Scell 2, Manacles 2, Candy Cane 1,
+  Well-baked Cookie 1, Pearl 1.
