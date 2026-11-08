@@ -255,6 +255,7 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # contacts (2-4 of our hits, then the target walked off alive); 5 keeps 27 of its 28 real ones and 3
 # of the 17 false ones (a real kill took 3-22 hits, median 15).
 KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
+EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by then is given up
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
 # engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
@@ -1082,6 +1083,11 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "explore", False):  # dungeon@9.14 (rogue-xmas02.md 4AL)
+        import explore_map as em_f
+
+        out["explore"] = [em_f.REGION, em_f.GOOD_HITS, em_f.NOVELTY, em_f.DIST_W, em_f.TEMP,
+                          em_f.RECENT_S, EXPLORE_LEG_MAX_S]  # fmt: skip
     if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
         out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13c"]  # b: no_miss, c: 5 hits (after p24)
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
@@ -1888,11 +1894,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         for c_ in wps:
             if not okr[c_[1], c_[0]]:
                 raise SystemExit(f"dungeon@4 refused: waypoint {c_} is not on the route grid")
+    explore_on = bool(getattr(a, "explore", False))
+    if explore_on and not patrol:
+        raise SystemExit("dungeon@9.14 refused: --explore goes with --search patrol")
     start = hunt.start_cell(area, a.seed, near=hf.area_centre(area))
     if patrol and map_ in PATROL_START:
         import map_prep
 
         start = patrol_start(map_, okr, map_prep.stand_check)
+    ex_anchors: dict[tuple[int, int], Cell] = {}
+    ex_know0: Any = None
+    if explore_on:  # dungeon@9.14: the start's component of the route grid, in regions
+        import explore_map as em
+
+        ex_anchors = em.regions(em.component(np.asarray(okr, dtype=bool), start))
+        if not ex_anchors:
+            raise SystemExit(f"dungeon@9.14 refused: no explore region reachable from {start}")
+        ex_know0 = em.load(map_)
+    ex_rng = np.random.default_rng(a.seed + 914)  # its own stream: the other draws unchanged
     cj = json.loads((ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     camera = cam.camera_from_json(cj["camera"])
@@ -1928,9 +1947,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     out.mkdir(parents=True, exist_ok=False)
     evf = (out / "events.jsonl").open("a")
 
+    ev_hooks: list[Any] = []  # dungeon@9.14: passive observers of the event stream (--explore)
+
     def ev(rec: dict[str, Any]) -> None:
         evf.write(json.dumps({"t_ns": r.ns(), **rec}) + "\n")
         evf.flush()
+        for hook_ in ev_hooks:
+            try:
+                hook_(rec, time.monotonic())
+            except Exception as e:  # noqa: BLE001 -- an observer never stops the run
+                counts["ev_hook_error"] += 1
+                if counts["ev_hook_error"] == 1:
+                    evf.write(json.dumps({"t_ns": r.ns(), "kind": "ev_hook_error",
+                                          "error": repr(e)[:300]}) + "\n")  # fmt: skip
 
     counts: Counter[str] = Counter()
     reason = "time_box"
@@ -2116,7 +2145,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_swing = -1e9  # dungeon@9.1 (--miss-cue): the last Miss read at our attacker
         swing_floor = -1e9  # 9.1b: the last fight's end; a Miss read before it starts no fight
         last_ours = -1e9
-        ours_ticks: deque[float] = deque(maxlen=64)  # dungeon@9.13: our recent hits' ticks
+        ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
+        ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
+        if explore_on:
+            ex_rec = em.Recorder(map_, sid, lambda t0_, t1_: sum(
+                1 for t_o in ours_ticks if t0_ <= t_o <= t1_))  # fmt: skip
+            ev_hooks.append(ex_rec.on_event)
         kills_seen: list[float] = []
         mode = "search"
         lock: dict[str, Any] | None = None
@@ -2241,6 +2275,51 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 ev({"kind": "patrol", "event": "reached", "i": wp_st["last"], "next": wp_st["i"],
                     "laps": wp_st["laps"]})  # fmt: skip
             return wps[wp_st["i"]]
+
+        ex_st: dict[str, Any] = {"target": None, "t": 0.0, "recent": {}, "blocked": set()}
+
+        def explore_goal(h: Cell) -> Cell | None:
+            """dungeon@9.14 (--explore): the aimed region's anchor; on arrival (or after
+            EXPLORE_LEG_MAX_S) a new region is chosen -- explore + exploit, sampled
+            (explore_map.scores / choose) from the file's knowledge plus this run's."""
+            now_ = time.monotonic()
+            tg = ex_st["target"]
+            if tg is not None and mroutes.reached(h, ex_anchors[tg], WP_TOL):
+                ex_rec.arrived(tg)
+                ex_st["recent"][tg] = now_
+                ev({"kind": "explore", "event": "arrived", "region": list(tg), "at": list(h),
+                    "s": round(now_ - ex_st["t"], 1)})  # fmt: skip
+                tg = ex_st["target"] = None
+            elif tg is not None and now_ - ex_st["t"] > EXPLORE_LEG_MAX_S:
+                ex_st["recent"][tg] = now_
+                ev({"kind": "explore", "event": "timeout", "region": list(tg), "at": list(h)})
+                tg = ex_st["target"] = None
+            if tg is None:
+                skip_ = (
+                    {em.region_of(h)}
+                    | set(ex_st["blocked"])
+                    | {k_ for k_, t_ in ex_st["recent"].items() if now_ - t_ < em.RECENT_S}
+                )
+                know_ = em.merge(em.Knowledge(map=map_, regions=ex_know0.regions),
+                                 em.Knowledge(map=map_, regions=ex_rec.know.regions))  # fmt: skip
+                sc_ = em.scores(know_, ex_anchors, h, skip_)
+                tg = em.choose(sc_, ex_rng)
+                if tg is None:
+                    return None
+                ex_st["target"], ex_st["t"] = tg, now_
+                ev({"kind": "explore", "event": "target", "region": list(tg),
+                    "anchor": list(ex_anchors[tg]), "score": round(sc_[tg], 3),
+                    "choices": len(sc_), "at": list(h)})  # fmt: skip
+            return ex_anchors[tg]
+
+        def explore_block(h: Cell) -> None:
+            """No route to the aimed anchor: the region is left out for the run."""
+            wp_st["skips"] += 1  # dead_end counts it as a route-less skip
+            if ex_st["target"] is not None:
+                ex_st["blocked"].add(ex_st["target"])
+                ev({"kind": "explore", "event": "blocked", "region": list(ex_st["target"]),
+                    "at": list(h)})  # fmt: skip
+            ex_st["target"] = None
 
         def skip_waypoint(h: Cell) -> None:
             wp_st["skips"] += 1  # route-less skips in a row (dead_end)
@@ -3787,19 +3866,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         # end we reached; the waypoint is passed (the offline sim: without this the
                         # replan routed back to it and the walk oscillated at gef_fild10 wp 64)
                         pass_waypoint(here)
-                    if patrol:
+                    if patrol and explore_on:
+                        goal = explore_goal(here)
+                    elif patrol:
                         goal = patrol_goal(here)
                     elif not area[here[1], here[0]]:  # dungeon@4: a rest spot outside the area
                         goal = nearest_in(area & ~carved, here)
                     else:
                         goal = hf.heading_goal(area & ~carved, here, walk_st, rng)
                     goal_path = None if goal is None else route(okr, carved, here, goal)
-                    if patrol and goal is not None and goal_path is None:
+                    if patrol and explore_on and goal is not None and goal_path is None:
+                        explore_block(here)
+                    elif patrol and goal is not None and goal_path is None:
                         skip_waypoint(here)  # carved off: the next waypoint ahead
                     elif goal_path:
                         wp_st["skips"] = 0
                     wp_st["through"] = None
-                    ni_ = None if not patrol else mroutes.next_index(rt, wp_st["i"])
+                    ni_ = (None if not patrol or explore_on
+                           else mroutes.next_index(rt, wp_st["i"]))  # fmt: skip
                     if a.walk_through and ni_ is not None and goal is not None and goal_path:
                         ext_ = through_path(goal_path, route(okr, carved, goal, wps[ni_]))
                         if len(ext_) > len(goal_path):  # a path's last waypoint: no extension
@@ -3986,6 +4070,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         finally:
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts),
                 "pos_light_unconfirmed": pos_ok.unconfirmed})  # fmt: skip
+            if ex_rec is not None:  # dungeon@9.14: this run's knowledge, merged into the map's
+                (out / "explore-run.json").write_text(json.dumps(ex_rec.know.to_json()))
+                merged_ = em.save_merged(ex_rec.know)
+                ev({"kind": "explore_saved", "runs": len(merged_.runs),
+                    "regions": len(merged_.regions), "visited": len(merged_.visited),
+                    "refused": len(merged_.refused)})  # fmt: skip
             blt.stop()
             if tags_log is not None:
                 tags_log.close()
@@ -4132,6 +4222,15 @@ def main() -> int:
         help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
         "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
         "fight at most); no ring scan during that walk",
+    )
+    t.add_argument(
+        "--explore",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.14 (rogue-xmas02.md 4AL; OFF by default; with --search patrol): walk to "
+        "map REGIONS chosen by explore + exploit from data/maps/MAP/explore.json (what the bot "
+        "saw: dwell, fights, good fights, stalls) instead of the route loop; the run's knowledge "
+        "is merged into that file at its end",
     )
     t.add_argument(
         "--kill-gap",
