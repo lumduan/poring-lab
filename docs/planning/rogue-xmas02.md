@@ -1189,6 +1189,26 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **The MVP window:** killed 23:21:23, respawn from 00:21:23; p20 must end by then (its run starts
   by 23:53, or its time box is cut to end before 00:20).
 
+### 4AC. Pilot p21 pre-registration: --far-single + --far-approach, a far target is walked toward, then struck once (written BEFORE its run, 2026-11-09 00:18 ICT)
+
+- **Why (p19 + p20, results in section 5):** `--far-single` fixed the 7-8 cell strikes (class D:
+  p16 19 of 30 -> p19 6 of 20, p20 2 of 14) but not 9+ cells (p19 26 of 28, p20 18 of 19); F1 (far
+  class D <= 35 %) failed in both (50 %, 51 %), so by 4Z's rule it is off on its own. Kills per
+  monster seen were the best yet (0.911, 0.938).
+- **The one change against the base (p16's flags): far strikes as ONE mechanism**, `--far-single`
+  (dungeon@9.8) + `--far-approach` (dungeon@9.10, bac9c5a8): a box target 9+ cells away is walked
+  toward (4 cells short of it on the line), the box path looks again after that walk (twice a fight
+  at most), and a strike 4+ cells away clicks once and waits for the walk-up.
+- **The run:** the base command with `--label xmas02-p21 --far-single --far-approach`, 25 min
+  (Amendment K's MVP schedule).
+- **Bars:** **F1** far class-D share <= 35 % (p16 54 %, p19 50 %, p20 51 %); **E1** kills >= 80 / h;
+  **D1** <= 35 ms; **R1** own-body class D <= 1; **F3** <= 2; **E3** hard bars pass (NPC contacts:
+  the approach walks are longer), 0 dead-end Fly Wings, stalls <= 39 / h; **deaths** 0.
+  Reported: class D by distance, the approaches (count, the box path's next target distance),
+  kills per monster seen.
+- **Decisions:** F1 + E1 pass with no regression bar failing -> both flags join the base; F1
+  fails -> both off (studied).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
