@@ -956,7 +956,9 @@ def test_the_box_flags_default_to_todays_behaviour() -> None:
     flag = '"--box-now",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
     assert flag in src
     assert '"cpu" if a.box_detector == "cpu" else "gpu")' in src
-    assert "for u_, v_ in points[:1] if a.box_now else points:  # dungeon@8.9: ONE hover" in src
+    # dungeon@8.9: ONE hover with --box-now (dungeon@9.5 --lead-strike adds the fallback hover)
+    assert "n_hover = 1 if a.box_now else len(points)" in src
+    assert "for k_, (u_, v_) in enumerate(points[:n_hover]):  # dungeon@8.9: ONE hover" in src
     assert "meta = boxes.fresh_now(arm, BOX_TARGET_WAIT_S)" in src
     assert 'boxes.det.log_path = out / "detections.jsonl"' in src  # each GPU-path detection
     # without --box-now the box target is dungeon@8.8's, unchanged
