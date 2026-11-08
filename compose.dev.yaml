@@ -21,6 +21,8 @@ services:
       # accounts and the Validation group (group 20) without rebuilding the image.
       - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
       - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
+      # Batt 2026-11-08: no MVP tombstones (the battle_conf import), until the next image build
+      - ./services/rathena/conf/import/battle_conf.txt.tmpl:/opt/rathena-conf-templates/battle_conf.txt.tmpl:ro
 
   sniffer:
     # ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13): the decoder CODE comes from the host, read-only;
@@ -50,6 +52,8 @@ services:
       # entrypoint that installs rathena-th's import map cache (RATHENA_IMPORT_MAPCACHE).
       - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
       - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
+      # Batt 2026-11-08: no MVP tombstones (the battle_conf import), until the next image build
+      - ./services/rathena/conf/import/battle_conf.txt.tmpl:/opt/rathena-conf-templates/battle_conf.txt.tmpl:ro
 
   backend:
     environment:

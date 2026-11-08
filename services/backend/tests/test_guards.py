@@ -1176,3 +1176,15 @@ def test_the_hardware_pages_shm_mount_is_an_empty_read_only_dir_in_the_backend_o
     assert backend["environment"]["HARDWARE_SHM_PATH"] == "/host-shm"
     # never the whole /dev/shm, never writable
     assert not any(v.split(":")[0] == "/dev/shm" for v in backend["volumes"] if isinstance(v, str))
+
+
+def test_the_lab_servers_have_no_mvp_tombstones() -> None:
+    """Batt 2026-11-08 (pilot p11's NPC-contact hard bar): the battle_conf import turns MVP
+    tombstones off; the dev overlay binds it into both lab servers until the next image build."""
+    tmpl = (ROOT / "services" / "rathena" / "conf" / "import" / "battle_conf.txt.tmpl").read_text()
+    assert "mvp_tomb_enabled: no" in tmpl.splitlines()
+    services = compose("compose.dev.yaml")["services"]
+    mount = ("./services/rathena/conf/import/battle_conf.txt.tmpl:"
+             "/opt/rathena-conf-templates/battle_conf.txt.tmpl:ro")  # fmt: skip
+    for name in ("rathena", "rathena-th"):
+        assert mount in services[name]["volumes"], name
