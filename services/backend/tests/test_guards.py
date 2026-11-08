@@ -1188,3 +1188,33 @@ def test_the_lab_servers_have_no_mvp_tombstones() -> None:
              "/opt/rathena-conf-templates/battle_conf.txt.tmpl:ro")  # fmt: skip
     for name in ("rathena", "rathena-th"):
         assert mount in services[name]["volumes"], name
+
+
+def test_the_media_probe_is_contained_and_never_started_by_default() -> None:
+    """The throwaway VA-API probe (Batt 2026-11-08): its own profile, no network, a read-only root
+    with a RAM /tmp, no volumes, no capabilities, ONLY the DRM render node, no swap."""
+    services = compose("compose.yaml")["services"]
+    probe = services["media-probe"]
+    assert probe["profiles"] == ["probe"]
+    assert probe["image"] == "poring-lab/media-probe:local"
+    assert probe["build"] == {"context": "services/media-probe"}
+    assert probe["network_mode"] == "none" and "networks" not in probe and "ports" not in probe
+    assert probe["read_only"] is True
+    assert probe["tmpfs"] == ["/tmp:size=512m"]
+    assert "volumes" not in probe and "volumes_from" not in probe
+    assert probe["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    assert probe["group_add"] == ["${RENDER_GID:-991}"]
+    assert probe["cap_drop"] == ["ALL"] and "cap_add" not in probe
+    assert probe["security_opt"] == ["no-new-privileges:true"]
+    assert "privileged" not in probe and "deploy" not in probe
+    assert probe["mem_limit"] == probe["memswap_limit"] and probe["oom_score_adj"] == 500
+    assert 0 < float(probe["cpus"]) <= 4
+    assert probe["restart"] == "no"
+    assert "environment" not in probe and "env_file" not in probe
+    assert "depends_on" not in probe
+    for name in ("compose.dev.yaml", "compose.intel.yaml", "compose.vision-worker.yaml",
+                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml"):  # fmt: skip
+        assert "media-probe" not in (compose(name).get("services") or {}), name
+    for svc, spec in services.items():
+        if svc != "media-probe":
+            assert "probe" not in (spec or {}).get("profiles", []), svc

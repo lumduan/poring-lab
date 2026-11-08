@@ -511,6 +511,37 @@ services:
     mem_limit: 256m
     memswap_limit: 256m
 
+  # --- The THROWAWAY media probe (Batt 2026-11-08, "ok, try it") ----------------------------------
+  # What bot-server's Arc A380 does with VA-API (decode, encode, JPEG), measured before any lab
+  # image changes. Evidence only: one run, its stdout read, the container removed. Never started
+  # by default (profile `probe`); built and started only through guarded_build.py
+  # (build:media-probe, start:media-probe, rm:media-probe). Contained (tests/test_guards.py): no
+  # network at all (so no subnet: CLAUDE.md rule 6), a read-only root, a RAM /tmp for its clip, no
+  # volumes, no capabilities, ONLY the DRM render node (never card*), no restart, no env secrets.
+  media-probe:
+    profiles: [probe]
+    build:
+      context: services/media-probe
+    image: poring-lab/media-probe:local
+    pull_policy: never
+    restart: "no"
+    init: true
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    mem_limit: 2g
+    memswap_limit: 2g
+    oom_score_adj: 500
+    cpus: 4
+    logging: *logging
+
 volumes:
   db-data:
   db-th-data:
