@@ -1406,11 +1406,35 @@ def test_reach_check_skips_boxes_the_server_would_not_walk_to() -> None:
             "rest": "spot", "npc_guard": True, "miss_cue": True,
             "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
     assert "reach_check" not in dh.fixes_of(dh.argparse.Namespace(**base))
-    assert dh.fixes_of(dh.argparse.Namespace(**base, reach_check=True))["reach_check"] == [17, 14]
+    assert dh.fixes_of(dh.argparse.Namespace(**base, reach_check=True))["reach_check"] == [
+        17, 14, "9.12b"]  # fmt: skip
     src = Path(dh.__file__).read_text()
     assert "or unreachable(here_s, foot))" in src  # the trigger
     assert "or unreachable(here, f)))" in src  # the box path (engage-screen)
     assert 'raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}")' in src  # fail closed
+    # 9.12b: the target cell is the client's picked cell under the box's foot
+    assert "reach_pick[kp_] = picked_cell(camera, gat, here_, foot)" in src
+
+
+def test_picked_cell_on_the_real_camera_and_map() -> None:
+    """dungeon@9.12b: our own cell's projected point picks our own cell (flat ground), and p25's
+    strike at (110, 253) -> foot (560.7, 497.9) picks (108, 242), the monster's own cell by the
+    packets (the client walked toward (108, 243); the flat projection said (108, 247)). Skipped
+    when the run-time GAT is absent (rule 4: never committed)."""
+    import pytest
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    gat_path = cam.GAT_DIR / "xmas_dun02.gat"
+    if not gat_path.exists():
+        pytest.skip("no run-time GAT (generated locally)")
+    cj = json.loads((ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    gat = gatmod.parse(gat_path.read_bytes())
+    assert dh.picked_cell(camera, gat, (110, 253), dh.FOOT_PX) == (110, 253)
+    assert dh.picked_cell(camera, gat, (110, 253), (560.7, 497.9)) == (108, 242)
 
 
 def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:

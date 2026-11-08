@@ -1085,8 +1085,19 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
         out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13c"]  # b: no_miss, c: 5 hits (after p24)
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
-        out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
+        out["reach_check"] = [17, 14, "9.12b"]  # walk.py's limits; b: the picked cell (after p25)
     return out
+
+
+def picked_cell(camera: Any, gat: Any, here: Cell, px: Sequence[float]) -> Cell | None:
+    """dungeon@9.12b: the cell the CLIENT picks under game-region pixel ``px`` with the camera on
+    ``here`` -- the first tile top the camera ray comes down through (poring_dataset.picking);
+    None when the ray hits no top."""
+    from poring_dataset import picking as pick_
+
+    pc_ = pick_.pick_cells(camera, gat, here, np.array([[float(px[0]), float(px[1])]]))[0]
+    dx_p, dy_p = int(pc_[0]), int(pc_[1])
+    return None if dx_p == pick_.NONE else (here[0] + dx_p, here[1] + dy_p)
 
 
 def reach_ok(grid: Any, here: Cell, cell: Cell) -> bool:
@@ -2295,16 +2306,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         reach_cache: dict[tuple[Cell, Cell], bool] = {}
         reach_logged: dict[Cell, float] = {}
         reach_proj: dict[str, Any] = {"here": None, "uv": None}  # box_spot's projection, per cell
+        reach_pick: dict[tuple[Cell, int, int], Cell | None] = {}  # 9.12b: picked cells, 4-px bins
 
         def unreachable(here_: Cell | None, foot: Sequence[float]) -> bool:
             """dungeon@9.12 (--reach-check): the box's cell is one the server would not walk us to
             on one click (reach_ok); False when unknown (no position, no grid)."""
             if reach_grid is None or here_ is None:
                 return False
-            if reach_proj["here"] != here_:  # box_spot's projection (~2.3 ms) once per cell
-                reach_proj.update(here=here_, uv=project(here_, BOX_GRID))
-            c_r = nearest_rel(reach_proj["uv"], BOX_GRID, foot)
-            sp_ = (here_[0] + c_r[0], here_[1] + c_r[1])  # == box_spot(here_, foot)
+            # 9.12b (after p25): the cell the CLIENT picks under the box's foot -- the camera ray's
+            # first top surface (poring_dataset.picking); on xmas_dun02's raised floors the flat
+            # projection was 4-6 cells off (p25: 25 of 33 ignored-start misses caught -> 32)
+            kp_ = (here_, round(foot[0] / 4), round(foot[1] / 4))
+            if kp_ not in reach_pick:
+                if len(reach_pick) > 4000:
+                    reach_pick.clear()
+                reach_pick[kp_] = picked_cell(camera, gat, here_, foot)
+            sp_ = reach_pick[kp_]
+            if sp_ is None:  # no top surface hit: the flat projection, as box_spot
+                if reach_proj["here"] != here_:  # box_spot's projection (~2.3 ms) once per cell
+                    reach_proj.update(here=here_, uv=project(here_, BOX_GRID))
+                c_r = nearest_rel(reach_proj["uv"], BOX_GRID, foot)
+                sp_ = (here_[0] + c_r[0], here_[1] + c_r[1])  # == box_spot(here_, foot)
             key_ = (here_, sp_)
             if key_ not in reach_cache:
                 if len(reach_cache) > 4000:
