@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Phase 2 RUN 17:14-17:52 ICT: VALID, NO CANDIDATE (section 8). The closest arm hevc444-q20 passes every quality, parity and size bar (5-7 x smaller than PNG, 43.5 dB vs JPEG q95 32.9) and fails only S2 (21.9 ms CPU a frame vs 15). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 1 RUN 17:14-17:52 ICT: VALID, NO CANDIDATE (section 8). The closest arm hevc444-q20 passes every quality, parity and size bar (5-7 x smaller than PNG, 43.5 dB vs JPEG q95 32.9) and fails only S2 (21.9 ms CPU a frame vs 15). The GPU conversion's wrong colours are DIAGNOSED in 8.1: BT.601 limited written, BT.709 full read, because no colour primaries were named. ROUND 2 is PRE-REGISTERED (6.6, 18:35:58 ICT) and NOT RUN: 4:4:4 conversion on the GPU, primaries named, same bars. Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py]
-next_action: "Batt: (a) an amendment for a GPU-side colour conversion (vpp with the right range, 4:4:4 if possible) graded on the same bars, or (b) revisit S2's bar (0.1 x PNG); then stage 2 (one side-by-side recording, section 9)."
+related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py]
+next_action: "The parent, with the GPU free: run round 2 (section 7.2), record it as 8.2. Then Batt: a round-2 candidate goes to stage 2 (one side-by-side recording, section 9); with no candidate, Batt decides about S2's bar (0.1 x PNG)."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -54,7 +54,7 @@ owner: Batt
 |---|---|
 | The Arc's VA-API: iHD 26.1.2, VA-API 1.23, ffmpeg 8.0.1; encode H.264 / HEVC / VP9 / AV1 by **low-power VDEnc only** (EncSliceLP), plus JPEG; decode H.264, HEVC (8-12 bit, 4:2:0 / 4:2:2 / 4:4:4), VP9, AV1, JPEG | bot-server-migration.md 18 |
 | VA-API encode ~3 CPU ms a frame, 400+ fps; PSNR at 6 Mbit/s better than the CPU encoders (H.264 46.5 vs x264 44.3; HEVC 47.0; AV1 47.4); measured on a synthetic 1440x900 clip, NV12 already in RAM | idem |
-| The VA-API JPEG path has a colour-range defect (washed out) | idem |
+| The VA-API JPEG path has a colour-range defect (washed out). ➡️ Its likely cause, unknown primaries giving the driver's BT.601-limited default, is in 8.1 | idem |
 | The probe service `media-probe`: profile probe, network none, read-only, cap_drop ALL, renderD128 only, 2g, 4 CPUs; its image `poring-lab/media-probe:local` is kept (ID `312dfd87b5c3` on 2026-11-08) | compose.yaml, test_guards |
 | The RDP recorder runs ON THE HOST: the backend grabs GAME_REGION (`ro_agent.Screen`, a `docker exec -i` pipe of raw BGRA), the host process skips unchanged frames, encodes PNG (`shards.encode_png`: filter 0 on every row, zlib level 1) and writes tar shards to `~/poring-lab-rec` | record_session.py, shards.py, ro_agent.py |
 | PNG per frame (NAS manifests, 1280 x 720): xmas02-x2 (xmas_dun02) 1,536,518 B; rogue-c1 (gef_fild10) 2,308,854 B; ow1 2,257,611 B; 25 RDP sessions 10-25..29 7.0-8.4 GB/h at 1 fps | the manifests, ADR-0010 amendment 2026-11-05 |
@@ -324,6 +324,97 @@ Each bar is evaluated per ref sample, on every graded arm (intra, vpp, gop). The
      written here first. Its bars do not change.
 6. The verdict says what the hardware path CAN do. Adopting it is stage 2 onwards, and Batt's.
 
+### 6.6 AMENDMENT: round 2, the GPU conversion with the right colours (PRE-REGISTERED 2026-11-08 18:35:58 ICT, before any round-2 run)
+**Batt, 2026-11-08 ~18:0x:** "try fixing the colours too". Written after round 1 (section 8) and
+its diagnosis (8.1), and before round 2 runs. **The bars (6.4) and the decision rule (6.5) do not
+change.** This amendment adds arms, two notes on method, and two reports.
+
+**Round 2's arms** (`gpu_rec_bench.ROUNDS[2]`, in the container's order; `sample --round 2`):
+
+| arm | mode | what | why it is in |
+|---|---|---|---|
+| `ctl-yuv444` | control | as round 1 | V1 (validity), and the swscale twin of the 4:4:4 GPU controls |
+| `ctl-yuv420` | control | as round 1 | the swscale twin of the 4:2:0 GPU controls |
+| `gctl-vpp420-r1` | GPU control | BGRA -> `scale_vaapi=out_color_matrix=bt709:out_range=full:format=nv12` (round 1's exact options) -> downloaded raw, 10 frames a run | the defect's positive case: the fingerprint must see it |
+| `gctl-vpp420` | GPU control | the same plus `out_color_primaries=bt709:out_color_transfer=bt709` | the fix alone: only the primaries and the transfer differ from the row above |
+| `gctl-vpp444` | GPU control | the fix, to 8-bit 4:4:4 (`vuyx`, else `vuya`) | the candidate's conversion, without the encoder |
+| `gctl-vpp444-tv` | GPU control | the fix with `out_range=limited`, DECLARED limited | is the limited range honoured? (the fallback candidate's conversion) |
+| `hevc444-q20` | intra | round 1's closest arm, unchanged | the reference, so round 2 stands on its own |
+| `vpp-hevc444-q20` | vpp (candidate) | BGRA uploaded, the fix to 4:4:4 `vuyx` on the GPU, then exactly `hevc444-q20`'s encoder options | the target: hevc444-q20's quality without its 13.4 ms CPU conversion |
+| `vpp-hevc444-q20-tv` | vpp (candidate) | the same at limited range (`out_range=limited`, tagged `-color_range tv`, inverted limited by the scorer) | the fallback if the driver honours only the limited range |
+
+Considered and left out:
+- **A GPU 4:2:0 encode arm.** Every 4:2:0 arm of round 1 failed Q2, Q5 and Q6, even the
+  CPU-converted `hevc420-q14`. The 4:2:0 floor fails them by itself (`ctl-yuv420`: worst frame
+  32.5 dB < 36, the chat crop 24.8 < 32, saturated keep 0.76 < 0.95). Right colours cannot change
+  that. The 4:2:0 conversion's colours are still measured, as a control (`gctl-vpp420`).
+- **Other QPs.** In round 1, q14 failed S1 on gef_fild10 and q26 failed Q2-Q4. QP 20 is the only
+  one in range, and keeping hevc444-q20's options isolates the conversion.
+- **RGB straight into the encoder.** vainfo lists `VA_RT_FORMAT_RGB32` for `VAProfileHEVCMain444 /
+  VAEntrypointEncSliceLP`. Which conversion the driver would apply, and how ffmpeg would tag the
+  stream, cannot be known offline. It is an idea for round 3.
+
+**How each arm is graded and reported:**
+- **The candidates and the reference:** 6.4's bars, unchanged, on every ref sample. 6.5's rule
+  applies, with round 2's intra / vpp arms as the candidate set.
+- **The GPU controls (`gctl`) are reported, never graded, and never void the run.** V1 stays the
+  only validity bar. Each control reports (`gpu_rec_bench.controls_summary`):
+  - its round trip against the PNG, inverted with its DECLARED convention: PSNR, largest error,
+    saturated keep (read like V1);
+  - **the luma fingerprint:** a least-squares fit Y = a_r R + a_g G + a_b B + c over the PNG's
+    pixels and the Y plane the GPU wrote. It is NAMED as the nearest of BT.709 / BT.601 x full /
+    limited when it lies within 3 levels (`FIT_NAMED_LEVELS`), else "none". A limited range shows
+    as scale ~0.859 and offset ~16, BT.601 as a_r / scale ~0.3;
+  - for the full-range ones: its Y / U / V planes against swscale's planes of the same frames
+    (`ctl-yuv420` / `ctl-yuv444`, the same 10 frames a run).
+- **The fingerprint's known-good case:** `ctl-yuv444` and `ctl-yuv420` get the same fit. On
+  swscale's own conversions of test frames, every convention is named back within 1 level (the
+  unit tests).
+- **What the controls mean, decided now:**
+  - `ctl-yuv444` and `ctl-yuv420` must be named `bt709-full`. Otherwise the fingerprint is not
+    trusted and its names are not used; the numbers are still reported.
+  - `gctl-vpp420-r1` is predicted to be `bt601-limited` (8.1). If it is named anything else, 8.1's
+    inference is wrong and is recorded as such. The arms are graded either way.
+  - If `gctl-vpp420` and `gctl-vpp444` are named `bt709-full`, and `gctl-vpp444-tv` is named
+    `bt709-limited`, the mechanism (the primaries) is confirmed.
+  - A candidate whose control is NOT named as declared is expected to fail Q1-Q6. It is reported
+    with that cause.
+- **What each stream says it is:** the VUI (range, matrix) as PyAV reads it, against the arm's
+  declaration (`vui`, `vui_ok`). It is reported, not a bar; a stage-2 format would need it right.
+
+**Two notes on method** (they apply to every round-2 arm, the reference included):
+1. **The declared range.** An arm declares `color_range`: pc (full, round 1's `COLOR`) or tv
+   (limited). The stream's `-color_range` tag and the scorer's inverse follow it; the matrix is
+   BT.709 everywhere.
+   - Every round-1 arm declares pc, so its commands and its numbers do not change
+     (`test_round_1_is_the_original_table_unchanged`).
+   - Round 1's own score gives the same verdict and rates with this code
+     (`test_round_1_score_gives_the_same_verdict_and_rates_today`; run once against the score in the
+     main checkout's `data/` before this amendment was stamped: PASS).
+2. **S2 and S3 are graded on the MEDIAN of 3 timing passes,** run round-robin: pass 1 of every
+   timed arm (with its decode timings), then pass 2 of each, then pass 3. Why:
+   - round 1 timed each arm once, and its first timed arm paid a warm-up: `hevc420-q14` took
+     26.9 ms, against 22.5 for `hevc420-q20` and 22.0 for `hevc420-q26` (stime 3.25 s vs 1.34 /
+     1.33);
+   - the target's margin is thin. S2's limit on xmas_dun02 is 0.1 x 91.05 = 9.1 ms, and round 1's
+     `vpp-hevc420-q20` took 9.0 ms on the same upload + VPP path (4:2:0 out).
+   - The bar's value, its unit and what is timed (600 raw BGRA frames in RAM, conversion
+     included) do not change. Every pass is reported (`cpu_ms_passes`).
+   - **Expected, not a bar:** `vpp-hevc444-q20` near 9 ms, so S2 can go either way on xmas_dun02.
+     gef_fild10's limit is 15 ms.
+
+**The outcomes, decided now:**
+- V1 fails: the run is INVALID (6.5.1).
+- A candidate passes: it is round 2's CANDIDATE (the smaller one if both pass). Adoption is still
+  stage 2, and Batt's. A tv candidate would also need its range recorded in the session format
+  (stage 4).
+- No candidate: the report names the closest arm's failing bars. If S2 alone fails, that is a
+  question about the bar, for Batt; it is not a reason to re-run.
+- 6.5.5's one exception still holds. An arm that fails to RUN because an option or format name is
+  wrong for this ffmpeg (`out_color_primaries`, `vuyx` for scale_vaapi) may be re-run once with
+  the corrected name, written here first. A new evidence file, `help-scale_vaapi.txt`, saves the
+  filter's own option list.
+
 ## 7. Phase 2: the exact commands (the parent runs them; nothing here ran in phase 1)
 Preconditions:
 - the GPU is free (no detect-server step, no training, no pilot on the Arc);
@@ -383,6 +474,72 @@ rm /dev/shm/poring-lab-wt/gpu-rec/.env
 rm -rf /dev/shm/poring-lab-recbench
 ```
 
+### 7.2 Round 2: the exact commands (6.6; the parent runs them, nothing here ran in its phase 1)
+Preconditions: as in section 7 (the GPU free; no pilot needing the CPU during `score`).
+`/dev/shm` needs room for ~1.6 GB: ~0.36 GB in, at most 1.2 GB out, ~0.8 GB expected. Round 1's
+root must be gone (`sample` refuses an existing one).
+
+**Step 0, the shell.** Run it from the main checkout once `design/gpu-recording-r2` is merged.
+From the worktree `/dev/shm/poring-lab-wt/gpu-rec2` instead, link the main `.env` in first, as in
+section 7, and remove it in step 5.
+
+```bash
+TZ=Asia/Bangkok date; df -h /dev/shm
+docker image ls poring-lab/media-probe --format '{{.ID}} {{.CreatedAt}}'  # 312dfd87b5c3 on 11-08
+ls -d /dev/shm/poring-lab-recbench 2>/dev/null && echo "a previous root is there: rm -rf it first"
+cd /home/bot/docker/poring-lab
+export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp
+export PYTHONPATH=$PWD/scripts:$PWD/packages/poring_env/src:$PWD/packages/poring_dataset/src:$PWD/packages/poring_packets/src:$PWD/services/backend/src:$PWD/services/vision/src
+```
+
+**Step 1, sample round 2.** The same sessions and runs as round 1; no motion clips, because round
+2 has no GOP arm:
+
+```bash
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
+  /home/bot/docker/poring-lab/.venv/bin/python scripts/gpu_rec_bench.py sample --round 2 \
+    --session 20261105T225409-rdp-xmas02-x2:xmas_dun02 \
+    --session 20261026T120547-rdp-rogue-c1:gef_fild10
+cat /dev/shm/poring-lab-recbench/in/round /dev/shm/poring-lab-recbench/in/timing_reps  # 2 and 3
+df -h /dev/shm
+```
+
+**Step 2, the container.** The same guarded one-shot as round 1, with nothing built. Round 1 took
+8 min for 17 arms; round 2 has 9 arms and 3 timing passes.
+
+```bash
+python3 scripts/guarded_build.py start:media-recbench@600
+timeout 1800 docker wait poring-lab-media-recbench-1
+docker logs poring-lab-media-recbench-1 2>&1 | tail -60
+python3 scripts/guarded_build.py rm:media-recbench
+tail -40 /dev/shm/poring-lab-recbench/out/results.txt
+grep -E 'gctl|vpp-hevc444' /dev/shm/poring-lab-recbench/out/status.tsv  # ok, or why not
+```
+
+**Step 3, score** (host CPU; the detector runs on 3 graded arms instead of round 1's 13, so expect
+well under round 1's 26 min):
+
+```bash
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 \
+  /home/bot/docker/poring-lab/.venv/bin/python scripts/gpu_rec_bench.py score \
+    --out /home/bot/docker/poring-lab/data/bench/gpu-rec/$(TZ=Asia/Bangkok date +%Y%m%d)-recbench-r2.json
+```
+
+It prints the verdict, one `control` line per GPU control and sample (declared, PSNR, `fit`,
+scale / offset, Y against swscale), and a `vui_mismatch` line for any stream whose VUI disagrees
+with its declaration.
+
+**Step 4, record section 8.2.** Record, with times from `TZ=Asia/Bangkok date`:
+- the controls against 6.6's "what the controls mean": the known-good names first, then
+  `gctl-vpp420-r1`'s;
+- the graded arms' bars and the verdict;
+- S2's three passes for each candidate;
+- what `help-scale_vaapi.txt` and the status notes say about `vuyx`.
+
+**Step 5, clean up the same day,** as in section 7. Copy `out/*.txt`, `out/*.tsv` and `out/md5/`
+to the NAS `scratch-archive/<date>/recbench-r2/` if they are wanted, then
+`rm -rf /dev/shm/poring-lab-recbench`.
+
 ## 8. Results (phase 2)
 **Run 2026-11-08** (the parent; section 7's commands from the main checkout after the merge):
 sample 17:14-17:15, the container 17:15:08-17:23:06 (guarded `start:media-recbench@600`, worst
@@ -412,11 +569,58 @@ adopted. **The closest arm, `hevc444-q20`, fails ONE bar: S2** (the container's 
   (`conv_yuv444p`). The GPU-side conversion (`vpp-hevc420-q20`, 9.0 ms) is cheap, but its colours
   come out wrong (25-28 dB, SSIM 0.39 at worst): most likely a range or matrix mismatch in
   `scale_vaapi`, the same family as section 18's washed-out JPEG (not proven).
+  ➡️ **Diagnosed in 8.1 (the same evening, no GPU run):** the GPU wrote BT.601 LIMITED-range YUV
+  into a stream tagged, and scored, as BT.709 full range. Both were found: the range and the
+  matrix.
 - **Not answered by this run:** Batt's "faster" for training (the trainer reads the JPEG cache,
   section 4); the second hop's cost (stage 2).
 - **Next (an amendment BEFORE any re-run, Batt's go):** a GPU-side conversion with the right range
   (and 4:4:4 if `scale_vaapi` / the VPP can output it), graded on the same bars; or a decision on
   S2's bar itself (it was set at 0.1 x PNG; the arm is 0.14-0.24 x).
+  ➡️ Batt chose the first ("try fixing the colours too", ~18:0x). It is ROUND 2: amendment 6.6
+  (pre-registered 18:35:58 ICT) and its commands, 7.2. S2's bar is unchanged.
+
+### 8.1 Why `vpp-hevc420-q20`'s colours were wrong (diagnosis, 2026-11-08 18:07-18:35 ICT, no GPU run)
+**The answer:** the GPU wrote **BT.601, LIMITED-range** YUV, while the stream was tagged, and
+scored, as BT.709 full range.
+- The range is most of the loss: the picture is washed out, black at 16 and white at 235.
+- The matrix shows in the saturated colours.
+- The cause, inferred from ffmpeg's and Intel's source: round 1's `scale_vaapi` named the matrix
+  and the range, but not the **colour primaries**. The driver then falls back to BT.601 limited.
+
+| # | step | evidence | status |
+|---|---|---|---|
+| 1 | The tag and the scorer agree, and are the same for the CPU-converted arms | Every round-1 encode log prints the output stream as `vaapi(pc, bt709/unknown/unknown)`: range pc, matrix BT.709, primaries and transfer unknown. It does so for `vpp-hevc420-q20` and `hevc420-q20` alike (NAS `scratch-archive/2026-11-08/recbench/logs/e-gef_fild10-{vpp-hevc420-q20,hevc420-q20}-r0.log`). hevc_vaapi writes its VUI from these fields: full range, matrix 1. The scorer ignores the VUI and inverts with BT.709 full (`COLOR`) | **proven** for the log lines and the scorer. The VUI bits themselves are not dumped: the bitstreams went in round 1's step 5 |
+| 2 | Only the conversion differs | `hevc420-q20` and `vpp-hevc420-q20` share the encoder, the QP, the GOP, the tags, the decoder and the scorer. The CPU-converted one sits at the 4:2:0 floor (xmas 32.9 dB, against `ctl-yuv420`'s 33.0); the GPU one sits at 25.4 | **proven**: the defect is in the pixel values `scale_vaapi` wrote |
+| 3 | Which values: a fingerprint | Round 1's 200 PNG frames (the same runs, read from the NAS) converted to 4:2:0 by swscale under four hypotheses, read back as BT.709 full, with round 1's metrics (`docs/records/scorers/gpu_rec_r1_fingerprint.py`, 18:19-18:24 ICT; table below). Only BT.601 limited matches all four columns on both samples | **inferred**, strongly: one hypothesis matches four measures on two samples, and each of the other three misses at least one by far |
+| 4 | Why the GPU did it | ffmpeg 8.0 (`libavfilter/vaapi_vpp.c`): when the driver lists `VAProcColorStandardExplicit`, ffmpeg passes the explicit properties (primaries, transfer, matrix, range) instead of a named standard. Intel's media-driver (master, `ddi_vp_functions.cpp`, `VpSetColorStandardExplictly`): for a YUV target the colour space is chosen from `colour_primaries` ALONE (the matrix is not read). BT.709 primaries give `CSpace_BT709` / `_FullRange` by the range flag, BT.601 primaries `CSpace_BT601` / `_FullRange`, and **anything else `CSpace_BT601`**, BT.601 limited, with the log line "unknown Color Standard for YUV format". The PNG input carries no primaries and round 1 set none | **inferred** from the source, read and not tested here. Not checked: that iHD 26.1.2 lists Explicit (the list was not found in master), and that 26.1.2 matches master. If Explicit were not listed, ffmpeg would pick the BT.709 standard with the full-range flag, which would have been right; the measured BT.601-limited points to the explicit path |
+| 5 | The same cause explains section 18's washed-out VA-API JPEG | The probe's `scale_vaapi=format=nv12`, and its `out_range=full:out_color_matrix=bt470bg` variant, set no primaries either: BT.601 limited inside a full-range JPEG. That is why `out_range=full` did not fix it | **inferred** (the probe's per-variant numbers were not kept) |
+
+The fingerprint (step 3). Each simulation leaves out the QP 20 coding loss and the GPU's own chroma
+filter. Both cost round 1's measured row a little more (gef_fild10: 28.5 measured, 29.3 simulated).
+
+| conversion written, read as BT.709 full | PSNR mean (min), xmas / gef | SSIM mean (min), xmas / gef | saturated keep, xmas / gef | basic_info crop PSNR, xmas / gef |
+|---|---|---|---|---|
+| round 1's `vpp-hevc420-q20` (measured) | 25.38 (24.44) / 28.50 (27.65) | 0.615 (0.388) / 0.975 (0.973) | 0.186 / 0.114 | 22.7 / 22.6 |
+| BT.709 full (the bench's own convention) | 33.02 (32.30) / 34.19 (32.95) | 0.998 (0.997) / 0.999 (0.999) | 0.837 / 0.604 | 35.4 / 35.5 |
+| BT.709 limited | 25.39 (24.66) / 29.18 (28.27) | 0.623 (0.395) / 0.987 (0.985) | 0.700 / 0.454 | 22.4 / 22.4 |
+| **BT.601 limited** | **25.67 (24.80) / 29.28 (28.61)** | **0.623 (0.395) / 0.986 (0.984)** | **0.189 / 0.079** | **22.2 / 22.1** |
+| BT.601 full | 32.33 (31.22) / 32.67 (31.25) | 0.997 (0.995) / 0.997 (0.996) | 0.591 / 0.284 | 35.6 / 35.7 |
+
+- **The LIMITED range collapses SSIM on the dark dungeon:** 0.615 measured, 0.623 simulated. Black
+  lifted to 16 swamps SSIM's luminance term wherever the scene is dark. The range also takes the UI
+  crop down to 22 dB. Only the two limited hypotheses reproduce PSNR and SSIM; the full-range ones
+  are 7-8 dB off.
+- **The MATRIX is what the saturated-colour keep rate separates.** BT.709 limited would keep 0.70 /
+  0.45 of the saturated pixels, BT.601 limited 0.19 / 0.08; round 1 measured 0.19 / 0.11. Pure
+  red, for example, written BT.601 limited and read BT.709 full, comes back as RGB (255, 36, 10):
+  its G rises above the keep limit of 32. Written BT.709 limited, it comes back as (239, 15, 15),
+  still kept (swscale, checked).
+- **The fix to test (6.6):** name the primaries and the transfer too
+  (`out_color_primaries=bt709:out_color_transfer=bt709`). Round 2 tests steps 3 and 4 directly:
+  - `gctl-vpp420-r1` (round 1's exact options, downloaded raw) must come out `bt601-limited` by
+    the fingerprint;
+  - `gctl-vpp420` (the same plus the primaries) must come out `bt709-full`.
 
 ## 9. The staged plan (question 5)
 
@@ -465,3 +669,34 @@ stage 5  higher fps (5-10), Batt's call per window    -> the grab path's own cos
 - `services/backend/tests/test_guards.py`: pins that service. `services/backend/tests/
   test_gpu_rec_bench.py`: the pure helpers, the verdict, and the host decode path (D1's positive
   and negative case on a CPU-encoded stream).
+
+### 10.1 What round 2's phase 1 changed (branch `design/gpu-recording-r2`, no GPU, no docker)
+- `scripts/gpu_rec_bench.py`:
+  - `ROUNDS` (round 1 = the original table, unchanged; round 2 = 6.6's), `round_arms`,
+    `sample --round`. `sample` writes `in/round` and `in/timing_reps`; `score` and `verdict` read
+    the round back, and a score without one is round 1's;
+  - the `Arm` fields `vpp` (scale_vaapi's options) and `color_range` (pc / tv, the declared range),
+    `arm_color`, and the mode `gctl`;
+  - the GPU controls' scorer (`score_gctl`, `raw_planes` for NV12 / VUYX / VUYA, `planar_array`),
+    the luma fingerprint (`luma_fit`, `name_convention`, `CONVENTIONS`), `plane_diff`,
+    `controls_summary`;
+  - `decode_stream` / `to_bgr` invert with the arm's declared convention and report the VUI
+    (`vui_of`);
+  - `merge_timing`: the median of the timing passes; one pass is exactly round 1's `timing_row`.
+- `services/media-probe/recbench.sh`:
+  - reads the two new fields;
+  - takes the vpp / gctl conversion from the arm, and the `-color_range` tag from its declaration;
+  - the `gctl` branch: upload, `scale_vaapi`, download, raw;
+  - `TREPS` timing passes, round-robin;
+  - saves `help-scale_vaapi.txt`.
+- `services/backend/tests/test_gpu_rec_bench.py`:
+  - round 1 pinned: its arms, their fields and order, the default table;
+  - round 1's own score gives the same verdict and rates (it runs where `data/` has it);
+  - the timing merge on round 1's real rows;
+  - the raw layouts against swscale's own;
+  - the gctl path read exactly like the ctl path;
+  - the fingerprint names all four conventions, and names nothing it does not know;
+  - a declared limited range: positive and negative case, and the VUI;
+  - round 2 end to end on stand-ins: the r1 control named `bt601-limited`;
+  - round 2's container side with stub tools.
+- `docs/records/scorers/gpu_rec_r1_fingerprint.py`: 8.1's simulation, verbatim as it ran.

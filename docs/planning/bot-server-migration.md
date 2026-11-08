@@ -460,7 +460,7 @@ as Batt prefers:
   | H.264 decode to BGRX (what a client draws) | 9.0 ms | 11.1 ms (ffmpeg's NV12->BGRX is slow); GPU-side RGB: 300-400 ms or refused |
   | H.264 encode 6 Mbit/s | 12.8 ms (x264 ultrafast, 4 threads) | **2.9-3.0 ms**, PSNR 46.5 vs 44.3 |
   | HEVC / AV1 encode 6 Mbit/s | 88-90 / 47 ms | **3.2 / 3.0-3.2 ms**, PSNR 47.0 / 47.4 |
-  | JPEG of a 1440x900 BGRA frame | (the console's simplejpeg q80: 9.4 ms) | 6.6-6.8 ms incl. the upload; **colours washed out** (limited range in a full-range JPEG, not fixed) |
+  | JPEG of a 1440x900 BGRA frame | (the console's simplejpeg q80: 9.4 ms) | 6.6-6.8 ms incl. the upload; **colours washed out** (limited range in a full-range JPEG, not fixed). ➡️ Likely cause, inferred 2026-11-08 in [gpu-recording.md](gpu-recording.md) 8.1: `scale_vaapi` named no colour primaries, so iHD fell back to BT.601 limited |
 
 - **Verdicts:**
   - ➡️ The codec A/B (docs/h264-plan.md, 2026-11-08 14:45-15:02) measured progressive at 3.0 cores

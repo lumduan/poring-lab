@@ -36,8 +36,13 @@ they were used (mtime and sha256 below), so every published number can be re-der
 | `walk15_score.py` | 2026-10-09 04:30 | `ca0879e06dc52380` |
 | `walk16_score.py` | 2026-10-09 08:40 | `90214debc1a67642` |
 | `decision_hash.py` | 2026-10-08 15:40 | `d93daa4a48dd1c71` |
+| `gpu_rec_r1_fingerprint.py` | 2026-11-08 18:19 | `ae2da14dbf5d1fbd` |
 
 **Cited elsewhere:**
 - `decision_hash.py`: demonstrations.md (the walk decision-code hash, cited as scratch)
 - `availability.py`: docs/planning/training-cost.md
 - `izdun_check.py`: demonstrations.md 3.29 (the iz_dun00 Hydra / safety / refusal checks)
+- `gpu_rec_r1_fingerprint.py`: docs/planning/gpu-recording.md 8.1 (which colour convention
+  reproduces round 1's `vpp-hevc420-q20` numbers; run 18:19-18:24 ICT from the worktree's
+  `scripts/` on PYTHONPATH, its JSON sha256 `3232c1d6f198af7f`; reads the NAS sessions
+  read-only: `python gpu_rec_r1_fingerprint.py OUT.json`)
