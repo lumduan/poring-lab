@@ -542,6 +542,55 @@ services:
     cpus: 4
     logging: *logging
 
+  # --- The GPU RECORDING BENCH (docs/planning/gpu-recording.md; Batt 2026-11-08) -----------------
+  # The media probe's IMAGE, one-shot, on REAL lab frames: scripts/gpu_rec_bench.py sample writes
+  # them to /dev/shm/poring-lab-recbench/in (RAM; read-only here), this encodes every pre-registered
+  # arm with VA-API into .../out (RAM; the ONLY writable path), and the host scores it. Never
+  # started by default (profile `recbench`); only through guarded_build.py (start:media-recbench,
+  # rm:media-recbench), and only while no other job uses the GPU. Everything media-probe is
+  # contained by, plus exactly three binds (tests/test_guards.py): the bench script read-only, the
+  # input read-only, the output. user 1000 = the host user that owns both directories (mode 0700).
+  # 3g, not 2g: tmpfs pages written to /out are charged to THIS container (mem == memswap, no
+  # swap), and recbench.sh stops encoding past 1.2 GB there (RECBENCH_OUT_CAP).
+  media-recbench:
+    profiles: [recbench]
+    image: poring-lab/media-probe:local
+    pull_policy: never
+    restart: "no"
+    init: true
+    user: "1000:1000"
+    entrypoint: ["bash", "/opt/recbench.sh"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    # Long syntax for the two RAM directories: a missing source REFUSES the start (fail closed;
+    # Docker would otherwise create it root-owned), so gpu_rec_bench.py sample must run first.
+    volumes:
+      - ./services/media-probe/recbench.sh:/opt/recbench.sh:ro
+      - type: bind
+        source: /dev/shm/poring-lab-recbench/in
+        target: /in
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /dev/shm/poring-lab-recbench/out
+        target: /out
+        bind:
+          create_host_path: false
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    mem_limit: 3g
+    memswap_limit: 3g
+    oom_score_adj: 500
+    cpus: 4
+    logging: *logging
+
 volumes:
   db-data:
   db-th-data:

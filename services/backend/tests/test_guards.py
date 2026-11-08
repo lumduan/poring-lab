@@ -1218,3 +1218,70 @@ def test_the_media_probe_is_contained_and_never_started_by_default() -> None:
     for svc, spec in services.items():
         if svc != "media-probe":
             assert "probe" not in (spec or {}).get("profiles", []), svc
+
+
+RECBENCH_ROOT = "/dev/shm/poring-lab-recbench"
+
+
+def test_the_recording_bench_is_the_probe_contained_plus_three_binds() -> None:
+    """The GPU recording bench (docs/planning/gpu-recording.md, Batt 2026-11-08): the media probe's
+    image as a one-shot of its own profile, every isolation property of media-probe, and exactly
+    three binds -- its script read-only, the sampled frames read-only, one RAM output directory --
+    all of them its own (nothing of the lab's: no data, state, settings, X, frame bus or input).
+    The RAM binds never create their source: a missing one refuses the start (fail closed)."""
+    services = compose("compose.yaml")["services"]
+    bench = services["media-recbench"]
+    assert bench["profiles"] == ["recbench"]
+    assert bench["image"] == "poring-lab/media-probe:local" and bench["pull_policy"] == "never"
+    assert "build" not in bench  # build:media-probe builds the one image
+    assert bench["entrypoint"] == ["bash", "/opt/recbench.sh"]
+    assert bench["user"] == "1000:1000"
+    assert bench["network_mode"] == "none" and "networks" not in bench and "ports" not in bench
+    assert bench["read_only"] is True
+    assert bench["tmpfs"] == ["/tmp:size=512m"]
+    assert bench["volumes"] == [
+        "./services/media-probe/recbench.sh:/opt/recbench.sh:ro",
+        {"type": "bind", "source": f"{RECBENCH_ROOT}/in", "target": "/in", "read_only": True,
+         "bind": {"create_host_path": False}},
+        {"type": "bind", "source": f"{RECBENCH_ROOT}/out", "target": "/out",
+         "bind": {"create_host_path": False}},
+    ]  # fmt: skip
+    assert "volumes_from" not in bench
+    assert bench["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128"]
+    assert bench["group_add"] == ["${RENDER_GID:-991}"]
+    assert bench["cap_drop"] == ["ALL"] and "cap_add" not in bench
+    assert bench["security_opt"] == ["no-new-privileges:true"]
+    assert "privileged" not in bench and "deploy" not in bench
+    assert bench["mem_limit"] == bench["memswap_limit"] == "3g" and bench["oom_score_adj"] == 500
+    assert 0 < float(bench["cpus"]) <= 4
+    assert bench["restart"] == "no"
+    assert "environment" not in bench and "env_file" not in bench and "depends_on" not in bench
+    for name in ("compose.dev.yaml", "compose.intel.yaml", "compose.vision-worker.yaml",
+                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml"):  # fmt: skip
+        assert "media-recbench" not in (compose(name).get("services") or {}), name
+    for name in ("compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"):
+        for svc, spec in (compose(name).get("services") or {}).items():
+            if svc != "media-recbench":
+                assert "recbench" not in (spec or {}).get("profiles", []), (name, svc)
+                assert RECBENCH_ROOT not in str((spec or {}).get("volumes", [])), (name, svc)
+
+
+def test_the_recording_bench_and_its_scorer_agree_on_the_directory_and_the_cap() -> None:
+    """The container is charged for what it writes to /out (a tmpfs page belongs to its writer's
+    cgroup, mem == memswap): recbench.sh's cap is the scorer's, and /out + /tmp fit in 3g."""
+    import importlib.util
+    import sys
+
+    path = ROOT / "scripts" / "gpu_rec_bench.py"
+    spec = importlib.util.spec_from_file_location("gpu_rec_bench_guard", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod  # its dataclasses resolve their module by name
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.modules.pop(spec.name, None)
+    assert str(mod.ROOT_DEFAULT) == RECBENCH_ROOT
+    script = (ROOT / "services" / "media-probe" / "recbench.sh").read_text()
+    assert f"OUT_CAP=${{RECBENCH_OUT_CAP:-{mod.OUT_CAP}}}" in script
+    assert mod.OUT_CAP + 512 * 2**20 < 3 * 2**30
