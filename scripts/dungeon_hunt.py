@@ -251,8 +251,10 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # from the kill (packets) to fight_end, 276.8 s of the run's 1,500 (fight_time.py). Our hits on a
 # living target come every 0.47 s (packets, p16-p22: p50 0.47, p90 0.48 s). So after KILL_GAP_HITS
 # of our hits on the lock, none for KILL_GAP_S counts as the kill: the lock goes and, when quiet,
-# the fight ends.
-KILL_GAP_S, KILL_GAP_HITS = 1.5, 2
+# the fight ends. 9.13c (after p24): KILL_GAP_HITS 2 -> 5 -- p24's 17 false kills were mostly short
+# contacts (2-4 of our hits, then the target walked off alive); 5 keeps 27 of its 28 real ones and 3
+# of the 17 false ones (a real kill took 3-22 hits, median 15).
+KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
 # engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
@@ -1081,7 +1083,7 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
     if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
-        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13b"]  # b: kill_gap_no_miss (after p24)
+        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13c"]  # b: no_miss, c: 5 hits (after p24)
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14]  # poring_dataset.walk MAX_CLICK_WALK, MAX_DETOUR_WALK
     return out
@@ -4113,7 +4115,7 @@ def main() -> int:
         "--kill-gap",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="dungeon@9.13 (rogue-xmas02.md 4AF; OFF by default): after 2 of our hits on the "
+        help="dungeon@9.13c (rogue-xmas02.md 4AF; OFF by default): after 5 of our hits on the "
         "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
         "quiet fight ends without the scan",
     )
