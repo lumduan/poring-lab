@@ -1348,3 +1348,24 @@ def test_skip_own_cells_never_strikes_through_her_sprite() -> None:
         dh.SELF_HALF_W, dh.SELF_UP, dh.SELF_DOWN]  # fmt: skip
     src = Path(dh.__file__).read_text()
     assert 'verdicts["own_skip"] += 1  # dungeon@9.9: never through her own sprite' in src
+
+
+def test_far_approach_walks_toward_a_far_target_first() -> None:
+    """dungeon@9.10 (rogue-xmas02.md 4AC): p19's 9+ cell strikes missed 26 of 28 even with one
+    click; a box target 9+ cells away is walked toward (4 cells short of it) and looked at again."""
+    assert (dh.APPROACH_CELLS, dh.APPROACH_KEEP, dh.APPROACH_MAX, dh.APPROACH_HOLD_S) == (
+        9, 4, 2, 3.0)  # fmt: skip
+    assert dh.approach_cell((10, 0)) == (6, 0)
+    assert dh.approach_cell((-12, 6)) == (-8, 4)
+    assert dh.approach_cell((9, -9)) == (5, -5)
+    assert dh.approach_cell((3, 1)) == (0, 0)  # already within 4 cells: no walk
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "far_approach" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, far_approach=True))["far_approach"] == [
+        9, 4, 2, 3.0]  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    assert 'click_at(u_a, v_a, "approach")' in src and "last_walk_click = time.monotonic()" in src
+    assert "if lock is None and not approaching:  # dungeon@9.10: no scan mid-approach" in src
+    assert "nonlocal last_walk_click" in src

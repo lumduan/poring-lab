@@ -267,6 +267,13 @@ BOSS_AVOID_S = 30.0
 # or more away clicks ONCE and waits FAR_BASE_S + FAR_PER_CELL_S a cell (at most FAR_MAX_S) for
 # the arrow or our damage line -- the walk-up included -- re-clicking never.
 FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S = 4, 1.0, 0.2, 3.5
+# --far-approach (dungeon@9.10, rogue-xmas02.md 4AC): p19 (--far-single) still missed 26 of 28
+# strikes 9+ cells away (7-8 cells: 6 of 20; 2-6: 4 of 24): too far for one click to carry. So a
+# box target APPROACH_CELLS or more away is walked toward first -- a walk click on the cell
+# APPROACH_KEEP cells short of it on the line -- and the box path looks again once that walk has
+# ended (the settle and the still wait), at most APPROACH_MAX times a fight. No ring scan and no
+# fight end while an approach walk is under way.
+APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S = 9, 4, 2, 3.0
 # --skip-own-cells (dungeon@9.9, rogue-xmas02.md 4AB, Amendment J item 2c, "the misses on her own
 # sprite"): p16 + p17's 24 own-body strikes (the N / S cells, whose hover point lies on her own
 # sprite) missed 10 times, 9 of them south; the packets put the monster ON the clicked cell in only
@@ -1059,6 +1066,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
+    if getattr(a, "far_approach", False):  # dungeon@9.10 (rogue-xmas02.md 4AC)
+        out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
     return out
@@ -1098,6 +1107,16 @@ def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]
 
     fit = battle_log.species_of(str(name_read), tuple(bosses) + tuple(species))
     return fit if fit in bosses else None
+
+
+def approach_cell(rel: Sequence[int], keep: int = APPROACH_KEEP) -> tuple[int, int]:
+    """PURE (--far-approach): the cell ``keep`` cells short of ``rel`` on the line from us."""
+    x, y = int(rel[0]), int(rel[1])
+    d = max(abs(x), abs(y))
+    if d <= keep:
+        return (0, 0)
+    f = (d - keep) / d
+    return (round(x * f), round(y * f))
 
 
 def far_window(rel: Sequence[int]) -> float | None:
@@ -2449,6 +2468,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             click), then a box grabbed after that, the nearest to our cell's point within
             BOX_TARGET_PX, is hovered at its box_hover_points; the first SWORD is returned as
             (its cell relative to us, the hover point) for the strike. None: the ring scan."""
+            nonlocal last_walk_click
             assert boxes is not None
             t_0 = time.monotonic()
             time.sleep(settle_left(last_walk_click, t_0))
@@ -2493,6 +2513,23 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 d_px=round(math.hypot(foot[0] - FOOT_PX[0], foot[1] - FOOT_PX[1])),
             )
             verdicts: list[str] = []
+            if (getattr(a, "far_approach", False) and here is not None
+                    and int(box_fight.get("approach_n", 0)) < APPROACH_MAX):  # fmt: skip
+                sp_a = box_spot(here, foot)  # dungeon@9.10: too far -> walk toward it first
+                rel_a = None if sp_a is None else (sp_a[0] - here[0], sp_a[1] - here[1])
+                if rel_a is not None and max(abs(rel_a[0]), abs(rel_a[1])) >= APPROACH_CELLS:
+                    cell_a = approach_cell(rel_a)
+                    u_a, v_a = project(here, [cell_a])[0]
+                    if in_view(u_a, v_a):
+                        click_at(u_a, v_a, "approach")
+                        last_walk_click = time.monotonic()
+                        box_fight["approach_n"] = int(box_fight.get("approach_n", 0)) + 1
+                        box_fight["approach_t"] = last_walk_click
+                        box_fight["tried"] = False  # the box path looks again after the walk
+                        ev({**rec, "verdicts": [], "struck": False, "approach": list(cell_a),
+                            "rel_target": list(rel_a), "n": box_fight["approach_n"]})  # fmt: skip
+                        counts["far_approach"] += 1
+                        return None
             points = box_hover_points(near_b)
             shift = (0.0, 0.0)  # the lead, added to the foot for the strike's cell
             if getattr(a, "lead_strike", False) and meta is not None:
@@ -3417,7 +3454,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 lock = {"t": time.monotonic(), "rel": rel_b,
                                         "cell": None if here is None else
                                         [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
-                    if lock is None:
+                    approaching = (getattr(a, "far_approach", False)
+                                   and tick - float(box_fight.get("approach_t", -1e9))
+                                   < APPROACH_HOLD_S)  # fmt: skip
+                    if lock is None and not approaching:  # dungeon@9.10: no scan mid-approach
                         found = scan("defend", ring(1), "sword")
                         if found is None and not quiet:  # ring 2 only while hits still come
                             found = scan("defend", ring(2), "sword")
@@ -3958,6 +3998,14 @@ def main() -> int:
         help="dungeon@9.4 (rogue-xmas02.md 4S, pilot p12; OFF by default): a far strike (2+ cells) "
         "waits for a still scene and aims again (the box path: a detection after it; walk_sword: "
         "its point carried by the scroll, hovered again)",
+    )
+    t.add_argument(
+        "--far-approach",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
+        "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
+        "fight at most); no ring scan during that walk",
     )
     t.add_argument(
         "--skip-own-cells",
