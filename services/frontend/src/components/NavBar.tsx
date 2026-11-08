@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/", label: "Console" },
   { href: "/settings", label: "Settings" },
   { href: "/qa", label: "Label QA" },
+  { href: "/hardware", label: "Hardware" },
 ];
 
 /** The top bar on every page: navigation and the always-visible mode badge. The badge reads the
