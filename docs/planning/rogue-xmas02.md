@@ -1924,5 +1924,5 @@ NOT adopted.**
   ~3 cells): monsters further away are passed by design.
 - **Items (snatched):** Scell 4, Piece of Cake 2, Candy 1, Zargon 1.
 - **Decision:** M1's rule says the next run repeats the flag and pools; E1 and R1 failed, so the
-  flag is not adopted. Batt chooses the next step (the 21:xx report).
+  flag is not adopted. Batt chooses the next step (the next report).
 - The bag cleared after it (19:36:23-19:37:49: Etc 2, Use 4; weight 598 -> 520, 10 / 10).

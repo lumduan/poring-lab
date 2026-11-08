@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 1 RUN 17:14-17:52 ICT: VALID, NO CANDIDATE (section 8). The closest arm hevc444-q20 passes every quality, parity and size bar (5-7 x smaller than PNG, 43.5 dB vs JPEG q95 32.9) and fails only S2 (21.9 ms CPU a frame vs 15). The GPU conversion's wrong colours are DIAGNOSED in 8.1: BT.601 limited written, BT.709 full read, because no colour primaries were named. ROUND 2 is PRE-REGISTERED (6.6, 18:35:58 ICT) and NOT RUN: 4:4:4 conversion on the GPU, primaries named, same bars. Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Round 1 (17:14-17:52): no candidate (hevc444-q20 failed S2, CPU 21.9 ms). Round 2 (18:53-19:47): the GPU colour conversion FIXED (round 1 wrote BT.601 limited); vpp-hevc444-q20 passes S2 (8.7 ms) and every bar but Q3 SSIM on xmas_dun02 (0.978 vs 0.9915); still no candidate (section 8.2). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py]
-next_action: "The parent, with the GPU free: run round 2 (section 7.2), record it as 8.2. Then Batt: a round-2 candidate goes to stage 2 (one side-by-side recording, section 9); with no candidate, Batt decides about S2's bar (0.1 x PNG)."
+next_action: "Batt: (a) round 3 -- the VPP scaling mode / no scale step, same bars, amendment first; or (b) a decision on Q3 for vpp-hevc444-q20 (misses SSIM mean by 0.014, min by 0.001); then stage 2 (one side-by-side recording, section 9)."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -621,6 +621,45 @@ filter. Both cost round 1's measured row a little more (gef_fild10: 28.5 measure
   - `gctl-vpp420-r1` (round 1's exact options, downloaded raw) must come out `bt601-limited` by
     the fingerprint;
   - `gctl-vpp420` (the same plus the primaries) must come out `bt709-full`.
+
+
+### 8.2 Round 2's results (run 2026-11-08: sample 18:53, the container 18:53-19:03, score 19:35-19:47 ICT)
+**VERDICT: VALID (V1 PASS), NO CANDIDATE. The colour fix WORKS; the GPU-converted
+`vpp-hevc444-q20` passes S2 (8.7 ms CPU a frame) and every other bar but ONE: Q3 (SSIM) on
+xmas_dun02.** Results: `data/bench/gpu-rec/20261108-recbench-r2.json`; the small outputs on the NAS
+`scratch-archive/2026-11-08/recbench-r2/`.
+
+The controls (reported, not graded; the luma fingerprint):
+
+| control | xmas_dun02 | gef_fild10 |
+|---|---|---|
+| `gctl-vpp420-r1` (round 1's options) | **bt601-limited** (scale 0.858, offset 16.0): 8.1's diagnosis CONFIRMED | bt601-limited |
+| `gctl-vpp420` (+ the primaries) | bt709-full, Y vs swscale mean 0.03, max 1 | bt709-full |
+| `gctl-vpp444` (the fix, 4:4:4 on the GPU) | bt709-full, 46.5 dB, Y vs swscale mean -0.37, max 2 | bt709-full, 46.6 dB |
+| `gctl-vpp444-tv` | bt709-limited (the range honoured) | bt709-limited |
+
+The arms:
+
+| | hevc444-q20 (CPU conversion) | **vpp-hevc444-q20** | vpp-hevc444-q20-tv |
+|---|---|---|---|
+| CPU a frame (median of 3 passes) | 21.8 ms (S2 FAIL) | **8.7 ms (S2 PASS: <= 15 and <= 0.1 x PNG's 89 / 162)** | 8.6 ms |
+| encode speed | 161 fps | **283 fps** | 282 fps |
+| bytes vs PNG, xmas / gef | 0.15 / 0.21 | **0.15 / 0.21** | 0.14 / 0.19 |
+| PSNR mean, xmas / gef (JPEG q95 32.9 / 33.7) | 43.5 / 39.8 | **42.4 / 39.4** | 41.5 / 38.4 |
+| SSIM mean (min), xmas | 0.994 (0.990) | **0.978 (0.969): Q3 FAIL** (needs >= 0.9915 and min >= 0.97) | 0.992 (0.987) |
+| SSIM mean, gef | 0.992 | 0.992 | 0.989: Q3 FAIL |
+| UI crops vs JPEG, xmas (Q4, >= -0.5 dB) | +2.26 | +0.19 | **-1.03: FAIL** |
+| detector boxes vs PNG, xmas (166) | 166 / 166, p95 0.3 px | **166 / 166, 0.3 px** | 166 / 166, 0.3 px |
+| failing bars | S2 | **Q3 (xmas) only** | Q3 (gef), Q4 (xmas) |
+
+- **Read:** the GPU conversion is now right in colour and cheap (8.7 ms, 2.5 x below the CPU
+  conversion, 10-19 x below PNG's encode). On xmas_dun02 its SSIM sits below the CPU-converted
+  arm's (0.978 vs 0.994) at nearly the same PSNR (42.4 vs 43.5): a structural difference, not a
+  colour one. Most likely the VPP's scaling path filters the picture even at 1:1 (not proven).
+- **Next (an amendment BEFORE any re-run; Batt's go):** the VPP's scaling mode / filters (e.g.
+  `scale_vaapi`'s mode, or no scale step at all with only the colour conversion) graded on the
+  same bars; or a decision on Q3 for this arm (it misses the mean by 0.014 and the minimum by
+  0.001).
 
 ## 9. The staged plan (question 5)
 
