@@ -21,10 +21,15 @@ RUN f=/etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       intel-media-va-driver-non-free vainfo ffmpeg libva2 libva-drm2 \
- && rm -rf /var/lib/apt/lists/* \
- && dpkg-query -W -f='${Package} ${Version}\n' \
-      intel-media-va-driver-non-free vainfo ffmpeg libva2 libva-drm2 libavcodec-extra \
-      libavcodec62 libavcodec61 2>/dev/null | tee /opt/probe-packages.txt || true
+ && rm -rf /var/lib/apt/lists/*
+
+# the versions the probe prints (a missing optional pattern is fine; an empty list is not)
+RUN for p in intel-media-va-driver-non-free vainfo ffmpeg libva2 libva-drm2 'libavcodec6*' \
+      'libigdgmm*' 'libx264-*' 'libx265-*' 'libsvtav1enc*'; do \
+      dpkg-query -W -f='${Package} ${Version}\n' "$p" 2>/dev/null || true; \
+    done > /opt/probe-packages.txt \
+ && grep -q '^intel-media-va-driver-non-free ' /opt/probe-packages.txt \
+ && grep -q '^ffmpeg ' /opt/probe-packages.txt
 
 RUN useradd --uid 10001 --user-group --no-create-home --home-dir /tmp --shell /usr/sbin/nologin \
       probe
