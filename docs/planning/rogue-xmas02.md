@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "The night: p17 done (quick-drop OFF again: Q1, R1 fail; E1 88.0 / h); the walk cannot be interrupted by a click (4Z's note); p18 (4Z, --far-single) pre-registered 22:47."
+next_action: "The night (2026-11-09): p21 F1 36.4 % FAILS (the far flags off); p22 (4AD, --box-every 0.25) 01:03-01:25; the walk-refusal study (section 5): the server ignores a walk click > 17 steps or > 14 with the line blocked, p16-p21 lost 110-153 s a run -> --reach-check (dungeon@9.12) as p23 (4AE) after the MVP kill (~01:42)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1230,6 +1230,33 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **Decisions:** S2' + E1 pass with no regression bar failing -> `--box-every 0.25` joins the base;
   otherwise off (studied).
 
+### 4AE. Pilot p23 pre-registration: --reach-check, a box the server would not walk us to is passed over (written BEFORE its run, 2026-11-09 01:27 ICT)
+
+- **Why (packets of p13r-p21, section 5 "the walk refusals"):** the server never answered 326
+  standing walk requests of those pilots; p16-p21 (`--engage-screen`) spent 110-153 s a run in
+  stuck spans (>= 3 ignored requests in a row: p16 133.9, p17 122.4, p19 110.3, p20 152.8, p21
+  132.9 s) and 12-21 class-D box strikes a run began with an ignored request; p13r (before
+  `--engage-screen`) 0 s and 0. The rule the server follows was found and measured: a walk within
+  32 steps, at most 17 (`max_walk_path: 17`, the running server's conf/battle/client.conf:42) and
+  at most 14 unless the straight line is clear -- 2,607 / 2,607 answered requests called accepted,
+  325 / 326 ignored ones called refused. Replayed on p16-p21's box strikes, the check would have
+  passed over 90 of 205 class-D strikes and 2 of 192 good ones. Monsters behind a wall are on the
+  screen, so `--engage-screen` chose them; the client sends a monster click out of reach as a WALK.
+- **The one change against the base (p16's flags: `--engage-screen` + the boss guard; p21's far flags and p22's
+  `--box-every 0.25` are OFF):** `--reach-check` (dungeon@9.12, 8dd42962): the
+  trigger and the box path pass over a box whose cell (and its 8 neighbours) the server would not
+  walk us to on one click, from our minimap cell, on the server's map cache
+  (`poring_dataset.walk.click_walk_ok`). Static map data and our pixel position only (rule 1).
+- **The run:** the base command with `--label xmas02-p23 --reach-check`, 25 min (after the MVP is
+  killed, Amendment K).
+- **Bars:** **U1** stuck time (`walk_refusals.py`, 656609c2) <= 30 s; **U2** class-D box strikes
+  whose first walk request was ignored <= 3; **E1** kills >= 80 / h; **D1** the GPU call p95
+  <= 35 ms; **R1** own-body class D <= 1; **E3** hard bars pass, 0 dead-end Fly Wings, stalls
+  <= 39 / h; **deaths** 0. Reported: reach_skip events, class D by distance and the F1 share, the
+  time held on class D, kills per monster seen, the supply.
+- **Decisions:** U1 + U2 + E1 pass with no regression bar failing -> `--reach-check` joins the
+  base; otherwise off (studied).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2269,6 +2296,60 @@ FAILS (36.4 %, bar <= 35 %); E1, R1, D1, F3, E3, deaths PASS. By 4AC's rule both
   1, Level 3 Heal 1.
 - **The run procedure:** p21's runner (run_pilot v3) passed its own checks (server listening 00:32:53,
   f32, floor 2450); its server step ended by its time box (rc 124, by design) at 01:00:23.
+
+**Pilot p22 (4AD; 01:03:35-01:26:27, 22 min; immunity OFF at 01:02:02 and ON by 01:26:48, both
+judged on the Chat tab: "Returned to normal state." / "You are now immune to attacks."; the base +
+`--box-every 0.25`). VERDICT: S2' FAILS (0.531), E1 FAILS (70.7 / h); D1, R1, E3, deaths PASS.
+`--box-every 0.25` stays OFF (4AD's rule).**
+
+| | p16 (base) | p21 | **p22 (+ box-every 0.25)** | bar |
+|---|---|---|---|---|
+| S2' kills per monster seen; supply (/ 10 min) | 0.80; 18.3 | 0.804; 22.4 | **0.531; 22.2** (49 seen) | >= 0.85: FAIL |
+| E1 kills | 44 (87.9 / h) | 45 (108.0 / h) | **26 (70.7 / h)** | >= 80 / h: FAIL |
+| D1 GPU call p50 / p95; calls | 20.6 ms | 20.6 / 21.9; 1,568 | **20.5 / 21.8 ms; 5,316** (4.0 a second) | p95 <= 35: PASS |
+| R1 own-body class D | 2 | 0 | **0** (6 own-body strikes) | <= 1: PASS |
+| E3 / deaths | | | **pass (NPC 0), 0 Fly Wings, 0 stalls / 0** | PASS |
+| strikes; classes | | 74; D 26 | **89; D 42, K 22, A 11, C 14** | reported |
+| class D at 2-6 / 7-8 / 9+ cells; F1 share | 5 / 41, 19 / 30, 33 / 35; 54 % | 15 / 45, 7 / 18, 2 / 3; 36.4 % | **7 / 21, 9 / 21, 20 / 21; 57.1 %** | reported |
+| time held on class D: total / median | 494.8 / 7.25 s | 170.9 / 6.49 s | **290.1 / 7.24 s** | reported |
+| stuck time (walk_refusals.py) | 133.9 s | 132.9 s | **133.1 s** (17 class-D strikes began ignored) | reported |
+
+- The box path's timings did not move (boxes after the grab p50 44 ms, the verdict p50 278.5 ms;
+  67 box targets, 62 struck): a look 4 times a second found MORE targets (89 strikes), and the
+  extra ones were far (9+ cells: 21 strikes, 20 class D) -- the same unreachable targets the walk-
+  refusal study below names. Faster detection does not help while the bot cannot tell a monster it
+  can reach from one behind a wall.
+- **Items (snatched):** Zargon 5, Scell 3, Piece of Cake 2, Red Herb 1, Candy 1, Well-baked Cookie
+  1, Manacles 1.
+
+**The walk refusals (study, 2026-11-09, between p22's start 01:03:35 and the scorer's commit
+01:15; packets of p13r-p21; `walk_refusals.py`,
+656609c2).** p21's class-D strikes were taken apart first: 24 of 26 sent a walk request and NO
+attack request (each had a SWORD verdict on its hover). The first 9 came from ONE cell, (8, 65):
+from 12 s to 108 s into the run the bot sent ~40 walk requests to monsters 4-10 cells east and the
+server answered none (no self_move); a request south at 110.8 s was answered at once.
+- **The server's rule, found and measured** (2,933 requests made standing, p13r-p21): a walk is
+  answered when a path exists within 32 steps (`poring_dataset.walk.walk_path`), it is at most 17
+  steps (`max_walk_path: 17`, the running server's conf/battle/client.conf:42) and at most 14
+  unless the straight (Bresenham) line is clear. Predicted against the packets: answered 2,607 /
+  2,607 called accepted; ignored 325 / 326 called refused (no path 141, longer than 17: 132, a
+  blocked line and longer than 14: 52). Not hit stun (1 of 181 "ignored with a path" requests came
+  within 0.6 s of a hit before the 14-step rule was applied).
+- **What it cost, by pilot** (stuck spans = runs of >= 3 ignored requests; class-D box strikes
+  whose first request was ignored):
+
+| | p13r | p16 | p17 | p19 | p20 | p21 |
+|---|---|---|---|---|---|---|
+| stuck time (s) | 0 | 133.9 | 122.4 | 110.3 | 152.8 | 132.9 |
+| ignored requests / all | 1 / 1,020 | 68 / 500 | 72 / 571 | 58 / 446 | 67 / 474 | 58 / 429 |
+| class D with an ignored first request | 0 | 14 | 21 | 15 | 13 | 12 |
+
+- **Why it began with p16:** `--engage-screen` takes any box on the screen; monsters behind a wall
+  are on the screen. p13r (the 3-cell trigger) never met one. The 9+ cell "far misses" of p16-p20
+  were in good part the same thing (a far monster is more often behind a wall).
+- **The fix (dungeon@9.12, 8dd42962): `--reach-check`**, pre-registered as p23 (4AE). Replayed on
+  p16-p21's box strikes (our packet cell + the strike's rel): it passes over 90 of 205 class-D
+  strikes and 2 of 192 good ones.
 
 ### 4Z. Pilot p18 pre-registration: --far-single, a far strike clicks once and waits for the walk-up (written BEFORE its run, 2026-11-08 22:47 ICT)
 
