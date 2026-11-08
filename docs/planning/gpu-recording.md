@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08 (phase 1: this design and the bench tool, committed; NOTHING has run on the GPU). The bench's bars are PRE-REGISTERED in section 6 (2026-11-08 16:29:19 ICT), before any number exists. Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
+status: "PROPOSED 2026-11-08. Phase 2 RUN 17:14-17:52 ICT: VALID, NO CANDIDATE (section 8). The closest arm hevc444-q20 passes every quality, parity and size bar (5-7 x smaller than PNG, 43.5 dB vs JPEG q95 32.9) and fails only S2 (21.9 ms CPU a frame vs 15). Adoption needs Batt's decision and an ADR-0010 amendment (section 3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py]
-next_action: "Phase 2, when the GPU is free (no detect server, no training, no pilot on the Arc): run section 7's commands, then fill section 8 with the numbers and the verdict of section 6's rule. Then Batt decides stage 2 (one side-by-side recording, section 9)."
+next_action: "Batt: (a) an amendment for a GPU-side colour conversion (vpp with the right range, 4:4:4 if possible) graded on the same bars, or (b) revisit S2's bar (0.1 x PNG); then stage 2 (one side-by-side recording, section 9)."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -384,7 +384,39 @@ rm -rf /dev/shm/poring-lab-recbench
 ```
 
 ## 8. Results (phase 2)
-Not run yet.
+**Run 2026-11-08** (the parent; section 7's commands from the main checkout after the merge):
+sample 17:14-17:15, the container 17:15:08-17:23:06 (guarded `start:media-recbench@600`, worst
+stall 0.0 %; 80 runs ok, 0 failed), score 17:26-17:52. Results:
+`data/bench/gpu-rec/20261108-recbench.json`; the small outputs (vainfo, help, tsv, md5) on the NAS
+`scratch-archive/2026-11-08/recbench/`.
+
+**VERDICT: VALID (V1 PASS: 48.8 / 50.4 dB, max error 2), NO CANDIDATE.** By rule 4, nothing is
+adopted. **The closest arm, `hevc444-q20`, fails ONE bar: S2** (the container's CPU per frame).
+
+| | PNG (today) | JPEG q95 (the cache) | **hevc444-q20** | hevc444-q14 | vpp-hevc420-q20 |
+|---|---|---|---|---|---|
+| bytes a frame, xmas_dun02 / gef_fild10 | 1.27 / 2.34 MB | 0.27 / 0.54 MB | **0.19 / 0.49 MB** | 0.30 / 0.73 | 0.13 / 0.35 |
+| GB per hour at 1 / 10 fps | 8.4 / 84.1 | - | **1.75 / 17.5** | 2.62 / 26.2 | 1.25 / 12.5 |
+| PSNR mean (min), xmas / gef | lossless | 32.9 / 33.7 | **43.5 (41.9) / 39.8 (39.2)** | 46.8 / 43.7 | 25.4 / 28.5 |
+| SSIM mean, xmas / gef | 1 | 0.993 / 0.992 | **0.994 / 0.992** | 0.997 / 0.997 | 0.615 / 0.975 |
+| detector boxes vs PNG, xmas (166 boxes) | - | - | **166 / 166, p95 0.3 px** | 166 / 166 | 166 / 166, 0.7 px |
+| CPU a frame | encode 91 / 160 ms (host) | - | **21.9 ms** (container) | 22.2 | 9.0 |
+| encode speed | - | - | 161 fps | 159 | 246 |
+| failing bars | - | - | **S2 only** | S1 (gef), S2 | Q1-Q6, G1 (colour) |
+
+- **What it buys, measured:** ~5-7 x fewer bytes than PNG at a quality ~10 dB above the JPEG q95
+  cache the trainer reads today, the same detector boxes on xmas_dun02 (gef_fild10 has 17 boxes:
+  P is underpowered there), every frame decodes alone and bit-identically on VA-API, ffmpeg and
+  PyAV (D1, D2). The CPU per frame is 4-7 x below PNG's encode (21.9 vs 91-160 ms).
+- **Why S2 fails:** 13.4 ms of the 21.9 is swscale's BGRA -> YUV 4:4:4 on the CPU
+  (`conv_yuv444p`). The GPU-side conversion (`vpp-hevc420-q20`, 9.0 ms) is cheap, but its colours
+  come out wrong (25-28 dB, SSIM 0.39 at worst): most likely a range or matrix mismatch in
+  `scale_vaapi`, the same family as section 18's washed-out JPEG (not proven).
+- **Not answered by this run:** Batt's "faster" for training (the trainer reads the JPEG cache,
+  section 4); the second hop's cost (stage 2).
+- **Next (an amendment BEFORE any re-run, Batt's go):** a GPU-side conversion with the right range
+  (and 4:4:4 if `scale_vaapi` / the VPP can output it), graded on the same bars; or a decision on
+  S2's bar itself (it was set at 0.1 x PNG; the arm is 0.14-0.24 x).
 
 ## 9. The staged plan (question 5)
 
