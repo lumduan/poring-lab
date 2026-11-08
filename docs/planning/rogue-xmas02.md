@@ -1168,6 +1168,14 @@ time; a change that passes its bars joins the base, else it is switched off):**
 - **For Batt (a decision, not taken here):** on the lab server the MVP spawn on xmas_dun02 could be
   disabled (as the MVP tombs were, bdb2f1c4); then the schedule constraint goes away.
 
+### 4AA. Pilot p19 pre-registration: --far-single REPEATED (p18 died to the MVP), 25 min (written BEFORE its run, 2026-11-08 23:22 ICT)
+
+- 4Z's change, base, bars and decisions unchanged; the time box 25 min (Amendment K). The MVP was
+  killed at 23:21:23 (`@mobsearch` read "1[dead] Stormy Knight" after `@killmonster2`): its
+  respawn window is 00:21-00:31; p19 and p20 end before 00:21.
+- p19 is also stage 2's BASELINE pilot (gpu-recording.md 9.3: same map, the GPU detect path, no
+  recorder) for p20, which repeats it with the stage-2 recorder beside it.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
