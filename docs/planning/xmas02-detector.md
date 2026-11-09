@@ -1200,3 +1200,36 @@ adopted and the walking question goes back to Batt.**
   watcher box them before we stopped, and which of those boxes became strikes and kills. Its
   measures and bars are pre-registered before it is read; no live run and no training follow
   until then.
+
+### Amendment M (2026-11-09 ~21:0x ICT, written BEFORE any of its data): a Garm Baby class -- "Fly Wing when a Garm Baby is SEEN" (Batt)
+
+**Batt's words** (2026-11-09, rogue-xmas02.md 4AY + after the p43 death): "fly wing when see garm
+baby i[mmediately]", then "Go ahead with (c), including the immune spawns" (option (c) of the 20:4x
+report: a Garm Baby class in this detector, so the runner flies when one comes INTO VIEW, not after
+the Battle Log names it on contact; the data spawns Garm Babies near the IMMUNE Rogue).
+
+- **Why the class failed before (Amendment H):** T2 good-box 83.3 % / 73.3 % (< 90 %), species 100
+  / 86.7 %; the off boxes sat in crowded fights (packs). D3 also expected it rare (38 kept labels).
+- **The new data (immune lattice watches, section 2a's protocol, with a SPAWN):** `stage_items.py
+  watch --map xmas_dun02 --spawn 1515 --spawn-n 2 --dwell-s 40 --max-cells 16 --immune-confirmed`,
+  each beside `record_session.py --backend rdp --fps 1 --format png` (PNG: a pre-registered
+  detector study), the Rogue immune (judged on the Chat tab), `@killmonster2` after each dwell:
+  - **gw1, gw2 (DEV = TRAIN):** `lattice-train.json` (3a's non-TEST stands), seeds 2611091 /
+    2611092;
+  - **gw3 (HELD-OUT = TEST):** 3a's TEST stands MINUS the 16 R2-W used (`lattice-test.json` minus
+    stormy-knight-recognizer.md 8's cells: 72 stands), seed 2611093. Not read before the model is
+    frozen.
+  - Two dogs a stand, alone (the watch kills everything else between stands): the uncrowded frames
+    T2 lacked. Safety: the Rogue is immune throughout (monsters ignore her); no world click.
+- **The label rule, the frame exclusions, T1 / T2:** as section 4 / 5 / 6 froze them ("xmas02-o3h-t"),
+  with 1515 IN the tier. **T2 again for Garm Baby** on a new blind pack from gw1 + gw2 (two NEW
+  labellers, section 6's rule: good >= 90 % and species >= 95 % each); the four species are not
+  re-checked (they passed).
+- **If T2 passes:** classes-xmas02 gains `7 Garm Baby 1515` (a new file sha256, recorded); the cache
+  = Amendment I's TRAIN + gw1 + gw2 (VAL xw1 as before); the training recipe as Amendment I, the
+  class head fresh, 20 epochs (its exact launch committed in an amendment BEFORE the GPU step).
+- **The bars (the held-out score, once):** Q1 for Garm Baby on gw3's standing frames: recall >= 0.80
+  and precision >= 0.80 (section 9's Q1 rule); the four species keep Q1 on xw5 (>= 0.80 each); CPU
+  p95 <= 300 ms. Then deployment and the runner's "seen -> Fly Wing" (rogue-xmas02.md, its own
+  pre-registration and pilot).
+- **If T2 fails:** the class is not trained; reported to Batt.
