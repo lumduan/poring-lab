@@ -3,8 +3,14 @@ or its Orc Archers, in view?" from ONE frame's pixels, cheaply enough to run eve
 runner (numpy only, one thread; ~25-35 ms per 1280 x 720 frame on this host, niced).
 
     model = mvp_watch.load()                       # data/mvp_watch/orclord-v1.npz (fails closed)
+    model = mvp_watch.load(profile="stormy")       # data/mvp_watch/stormy-v1.npz (stormy only)
     v = mvp_watch.decide(frame_bgr, model)         # PURE: {"seen", "where", "score", "cue", ...}
     if v["seen"]: ...                              # the runner's flee rule (a Fly Wing at once)
+
+PER BOSS (docs/planning/stormy-knight-recognizer.md B1): a model is fitted for ONE boss profile
+(scripts/mvp_profiles.py: orclord, stormy) and its file names it (``profile``); ``load(...,
+profile=P)`` refuses another profile's model. The Orc Lord's v1 file format is kept byte for byte
+(no ``profile`` member: a file without one is the Orc Lord's), so its frozen sha256 stays.
 
 PIXELS IN ONLY (rule 1): the decision reads the frame and the model, nothing else. Packets are the
 offline truth the model was fitted and scored on (scripts/mvp_watch_study.py), never an input.
@@ -37,7 +43,8 @@ import numpy.typing as npt
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "data" / "mvp_watch"  # gitignored: a model holds client-derived pixel statistics
-DEFAULT_MODEL = MODEL_DIR / "orclord-v1.npz"
+LEGACY_PROFILE = "orclord"  # every model before B1; its file format carries no profile field
+DEFAULT_MODEL = MODEL_DIR / "orclord-v1.npz"  # the Orc Lord's (default_model(LEGACY_PROFILE))
 NBINS = 32768  # 5 bits per channel: index (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3)
 STEP = 2  # the half-resolution view: every 2nd pixel of the 1280 x 720 frame
 CELL = 8  # the party detector's cell (half-res px)
@@ -61,7 +68,7 @@ CENTRE_BOX = (600, 250, 680, 412)
 # clear the threshold by the model's ``zone_penalty`` more (orclord-recognizer.md Amendment B)
 SELF_ZONE = (560, 230, 720, 450)
 TITLE_BOX = (0, 0, 220, 16)  # Basic Info's title bar (full pixels), present in every layout
-AURA_RULE = (236, 25)  # G >= 236, G - R >= 25, G - B >= 25
+AURA_RULE = (236, 25)  # G >= 236, G - R >= 25, G - B >= 25 (the Orc Lord's; a model's aura_rule)
 
 
 class ModelUnavailable(RuntimeError):
@@ -77,11 +84,14 @@ class Model:
     aura_thr: float
     title: npt.NDArray[np.float32]  # the grey title bar at half resolution
     title_max: float = 15.0  # mean |difference| above which the frame is not the game
+    # the aura's ring (defaults: the Orc Lord's, tuned to its sprite; per boss: mvp_profiles)
     ring: tuple[float, float, float, float] = (27.0, 15.0, 17.0, 8.0)  # outer a, b; inner a, b
     ring_cell: int = 3  # the ring's grid (half-res px)
     ring_dy: float = 8.0  # the ring's centre above the foot point (half-res px)
     zone_penalty: float = 0.0  # subtracted from party windows whose foot is in SELF_ZONE
     version: str = "orclord-v1"
+    profile: str = LEGACY_PROFILE  # the boss profile it was fitted for (mvp_profiles)
+    aura_rule: tuple[int, int] = AURA_RULE  # the rim's colour rule (aura_lut)
     sha256: str = ""
     _cache: dict[Any, Any] = field(default_factory=dict, compare=False, repr=False)
 
@@ -226,7 +236,7 @@ def masks(model: Model, shape: tuple[int, int],
         zone = ~valid_windows(rect_mask(shape, (SELF_ZONE,)))
         model._cache[key] = (skip, valid_windows(skip), zone)
     if "aura_lut" not in model._cache:
-        model._cache["aura_lut"] = aura_lut()
+        model._cache["aura_lut"] = aura_lut(model.aura_rule)
     out: tuple[Any, Any, Any] = model._cache[key]
     return out
 
@@ -324,8 +334,26 @@ def decide_half(half: npt.NDArray[np.uint8], model: Model,
 # --- the loader ---------------------------------------------------------------------------------
 
 
+def check_profile(name: str) -> str:
+    """A profile name is a lower-case identifier (it names a file: default_model)."""
+    if not (name.isascii() and name.isidentifier() and name == name.lower()):
+        raise ValueError(f"bad profile name {name!r}")
+    return name
+
+
+def default_model(profile: str = LEGACY_PROFILE) -> Path:
+    """A profile's default model path: data/mvp_watch/<profile>-v1.npz."""
+    return MODEL_DIR / f"{check_profile(profile)}-v1.npz"
+
+
 def save(path: Path, model: Model) -> str:
-    """Write a model (np.savez, no pickle) and return its sha256."""
+    """Write a model (np.savez, no pickle) and return its sha256. The Orc Lord's (LEGACY_PROFILE)
+    keeps the v1 format byte for byte: no ``profile`` / ``aura_rule`` member (so it cannot carry
+    another aura rule); every other profile's file names its profile and its aura rule."""
+    check_profile(model.profile)
+    legacy = model.profile == LEGACY_PROFILE
+    if legacy and tuple(model.aura_rule) != AURA_RULE:
+        raise ValueError(f"an {LEGACY_PROFILE} model keeps the v1 format: aura_rule {AURA_RULE}")
     path.parent.mkdir(parents=True, exist_ok=True)
     arrays = {
         "body_lut": model.body_lut.astype(np.float32),
@@ -346,6 +374,9 @@ def save(path: Path, model: Model) -> str:
         "ring": np.array(model.ring, np.float64),
         "version": np.array(model.version),
     }
+    if not legacy:
+        arrays["profile"] = np.array(model.profile)
+        arrays["aura_rule"] = np.array(model.aura_rule, np.int64)
     tmp = path.with_name(path.name + ".tmp")
     with tmp.open("wb") as fh:
         np.savez(fh, **arrays)  # type: ignore[arg-type]
@@ -353,9 +384,14 @@ def save(path: Path, model: Model) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load(path: Path = DEFAULT_MODEL, sha256: str | None = None) -> Model:
-    """The frozen model, fail closed: a missing file, a wrong shape or a sha256 mismatch raises
-    ModelUnavailable (the runner must then not rely on a flee rule that cannot see)."""
+def load(path: Path | None = None, sha256: str | None = None, profile: str | None = None
+         ) -> Model:  # fmt: skip
+    """The frozen model, fail closed: a missing file, a wrong shape, a sha256 mismatch or (with
+    ``profile``) another boss profile's model raises ModelUnavailable (the runner must then not
+    rely on a flee rule that cannot see). ``path`` None: default_model(profile), the Orc Lord's
+    without one. A file without a ``profile`` member is the Orc Lord's (LEGACY_PROFILE)."""
+    if path is None:
+        path = default_model(LEGACY_PROFILE if profile is None else profile)
     if not path.exists():
         raise ModelUnavailable(f"{path} missing (docs/planning/orclord-recognizer.md)")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -366,12 +402,18 @@ def load(path: Path = DEFAULT_MODEL, sha256: str | None = None) -> Model:
         if body.shape != (NBINS,) or w.shape != (N_FEATURES, *WIN):
             raise ModelUnavailable(f"{path}: shapes {body.shape} / {w.shape}")
         sc, ring = z["scalars"], z["ring"]
+        got = str(z["profile"]) if "profile" in z.files else LEGACY_PROFILE
+        if profile is not None and got != profile:
+            raise ModelUnavailable(f"{path}: a {got!r} model, not {profile!r}")
+        rule = tuple(int(v) for v in z["aura_rule"]) if "aura_rule" in z.files else AURA_RULE
+        if len(rule) != 2:
+            raise ModelUnavailable(f"{path}: aura_rule {rule}")
         return Model(
             body_lut=body, lin_w=w, lin_b=float(sc[0]), lin_thr=float(sc[1]),
             aura_thr=float(sc[2]), title=z["title"].astype(np.float32), title_max=float(sc[3]),
             ring=(float(ring[0]), float(ring[1]), float(ring[2]), float(ring[3])),
             ring_cell=int(sc[4]), ring_dy=float(sc[5]), zone_penalty=float(sc[6]),
-            version=str(z["version"]),
+            version=str(z["version"]), profile=got, aura_rule=(rule[0], rule[1]),
             sha256=digest,
         )  # fmt: skip
 
