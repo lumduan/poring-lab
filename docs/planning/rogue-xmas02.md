@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 12:4x: the base = p16 + reach-check + far mechanism + explore + walk-pick. --kill-gap (p37): loot works (52 % of floor items) but K3 68.9 % / W1 3.6 % fail; next: confirm an inferred kill by the target box vanishing (K3 + Batt's loot-only-after-kill), then re-test."
+next_action: "2026-11-09 14:0x: the base = p16 + reach-check + far mechanism + explore + walk-pick. p38 (--kill-gap 9.13d): every bar but W1 (4.41 %; post-hoc a 7-click walk-geometry episode) -> off. p39 (4AT): --loot-first 9.16 on top of --kill-gap (loot step right after the kill, no instant-end loop, the scan's hand clicked); then the walk case (targets the client refuses)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1617,6 +1617,41 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   0 dead-end / stuck / idle Fly Wings; **deaths** 0. Reported: L2, the loot time, items / hour.
 - **Decisions:** every bar passes -> `--kill-gap` joins the base.
 
+### 4AT. Pilot p39 pre-registration: --loot-first (9.16) on top of --kill-gap -- the loot step right after the kill, no instant-end loop, the scan's hand clicked (written BEFORE its run, 2026-11-09 14:0x ICT)
+
+- **Why (p38's study, section 5; Batt: "fix the looting first"; his clip 2: "the scan finds the
+  hand, but the bot does not pick the item up"):**
+  - 1,057 of p38's 1,144 engages ended in the same tick (the quiet-kill loop);
+  - only 17 of its 53 kills had a loot step within 5 s (median 14.3 s), because a box on the
+    screen started the next fight before the loot step ran;
+  - 29 pickup hands read by 11 defend scans were passed by.
+- **The one change against p38 (the base + `--kill-gap` 9.13d):** `--loot-first` (9.16; the
+  record says `"loot_first": ["9.16"]`):
+  1. a box ALONE starts no fight while a kill's loot step is pending (a hit, an HP drop or a Miss
+     still starts it at once);
+  2. the quiet-kill rule ends only a fight that began before the kill;
+  3. a defend scan that found no sword clicks the first pickup hand it read (no hit within 1 s);
+     that spot joins the loot list, and the 9.13d settle holds the next walk.
+  The loot step itself is unchanged (the trim: 9 hovers, nearest first).
+- **The run:** the base + `--kill-gap --loot-first`, label `xmas02-p39`, 25 min, the MVP dead by
+  the schedule; R2-H2's PNG recording beside it (stormy-knight-recognizer.md 7).
+- **Bars:**
+  - **L1** pickups >= 50 % of floor items (fight_time.loot_summary);
+  - **L3 (new, the mechanism)** kills followed by a loot step with a list within 5 s >= 80 % (the
+    runner's events; p38: 17 / 53; 48 of its 53 kills ended a quiet fight at once);
+  - **L4 (new)** engages ended by the quiet-kill rule in the same tick (< 50 ms) <= 5 % of engages
+    (p38: 1,057 / 1,144);
+  - **K1** after-the-kill p50 <= 3.0 s; **K3** inferred kills real >= 70 %; **E1** kills >= 80 / h;
+    **W1** unsent walk clicks <= 1.5 %; **U1** stuck <= 30 s; **D1** p95 <= 35 ms;
+  - **R1 (pooled)** own-body class D of p39 + p33 + p35 + p36 <= 6 (those three: 1 + 0 + 1);
+  - **E3** hard bars, 0 dead-end / stuck / idle Fly Wings; **deaths** 0.
+  Reported: L2, the scan-hand clicks (and those held by a hit), `loot_first_held` ticks, the loot
+  time, items / hour, boss-guard Fly Wings.
+- **Decisions:** every bar passes -> `--kill-gap` and `--loot-first` join the base together (the
+  loot needs the inferred kills; `--kill-gap`'s only failed bar in p38 was W1, whose post-hoc is a
+  walking-geometry episode). W1 fails again -> both stay off and the walk case (targets the client
+  refuses, p38's 7-click episode) goes first.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -3103,3 +3138,44 @@ deaths PASS; K3 FAILS (68.9 %), W1 FAILS (3.6 %). `--kill-gap` stays OFF (4AQ's 
   vs 1.22 % in p36) is unexplained yet.
 - **Items (snatched + picked):** Scell 13, Zargon 9, Red Herb 5, Piece of Cake 5, Well-baked Cookie
   4, Candy Cane 3, Manacles 3, Candy 2.
+
+**Pilot p38 (4AS; 13:30:50-13:56:38, 25 min; the MVP dead by the schedule -- the R2-W watch's
+`@killmonster2` killed its natural spawn at 13:19:49 at the earliest, `@mobsearch` "1[dead]" at
+13:26:25 and 13:30:05, past its window; immunity OFF 13:30:3x, ON 13:58:4x; weight 691 / 2430 at
+the start, 0.33 at the end; the base + `--kill-gap` 9.13d). VERDICT: L1, K1, K3, E1, U1, D1, R1,
+E3, deaths PASS; W1 FAILS (4.41 %). `--kill-gap` stays OFF (4AS's rule).**
+
+| | p37 (9.13c) | **p38 (9.13d)** | bar |
+|---|---|---|---|
+| L1 floor items picked up | 12 / 23 | **8 / 16 (50.0 %)** | >= 50 %: PASS (at the bar) |
+| K1 after the kill p50 | 1.99 s | **1.99 s** (159.2 s in all) | <= 3.0 s: PASS |
+| K3 inferred kills real (corrected scorer) | 96.7 % | **96.2 % (51 / 53)** | >= 70 %: PASS |
+| E1 kills | 151.2 / h | **53 (126.8 / h)** | >= 80 / h: PASS |
+| W1 clicked walks never sent | 3.6 % | **10 / 227 (4.41 %)** | <= 1.5 %: FAIL |
+| U1 stuck | 15.2 s | **0 s** (427 requests, 0 ignored) | <= 30 s: PASS |
+| D1 GPU p95 | 22.2 ms | **22.8 ms** (p50 20.7, 1,553 calls) | <= 35 ms: PASS |
+| R1 pooled own-body class D (p38 + p33 + p35 + p36) | - | **4 + 1 + 0 + 1 = 6** | <= 6: PASS (at the bound) |
+| E3 / deaths | | **hard bars pass; 0 dead-end / stuck / idle Fly Wings; 4 boss-guard Fly Wings (lone Garm Babies, a regular spawn here); 6 stalls / 0 deaths; lowest HP 52 %** | PASS |
+| L2 hovering loot steps with no death of ours in 10 s before | 2 / 33 | **5 / 26** | reported |
+| the loot steps' time | 104.6 s | **80.3 s** (39 steps, 218 hovers, 8 picks) | reported |
+
+- **Items (snatched + picked):** Scell 12, Zargon 8, Piece of Cake 3, Candy 2, Iron 2, Manacles 2,
+  Red Herb, Candy Cane, Well-baked Cookie, Darkgreen Dyestuffs, Rough Wind, Ice Cubic 1 each.
+- **POST-HOC on W1 (deciding nothing):** 7 of the 10 unsent clicks were ONE 21-s episode
+  (1,284.7-1,305.5 s) at (153-164, 116-122): walk targets 7 cells to the WEST, with the red
+  no-entry cue counted at the target (3-218 px) and 2 stalls -- the client refused cells the
+  planner took as walkable. The other three: 2 answered at 1.25 / 1.37 s (just past the 1.2-s
+  window), 1 at 0.86 s after a walk and 1.59 s after a loot step. Without the episode W1 would be
+  3 / 220 (1.36 %). A walking-geometry case, not the loot settle; recorded for the walk work.
+- **WHY THE LOOT STILL LAGS (the study that 4AT acts on; Batt's two clips):**
+  - **The quiet-kill loop:** 1,057 of the run's 1,144 engages ended in the same tick. After a kill
+    the fight ends ("quiet kill"); on the next tick any box on the screen (`--engage-screen`)
+    starts a new fight; it has no lock yet, so the quiet-kill rule (a kill in the last 3 s) ends it
+    at once -- for 3 s, and no box is struck meanwhile.
+  - **The loot step is pushed back:** the box engage runs BEFORE the loot step in the loop, so the
+    loot list waits until no box is on the screen: only 17 of the 53 kills had a loot step within
+    5 s; the median wait was 14.3 s; one step carried 7 kills. The trim hovers the 9 planned cells
+    nearest to where she stands THEN -- not the kill's cells (102-157 s: five kills, one loot step
+    at 161 s, 0 picks).
+  - **The hand in the defend scan is passed by:** 29 PICKUP verdicts in 11 defend scans (the scan
+    stops on a sword only): Batt's clip 2.
