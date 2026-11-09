@@ -420,3 +420,74 @@ DATA, and lets DEV decide the cues again; the bars are round 1's.
   schedule (killed by the watch's `@killmonster2` at 13:19:49 at the earliest, so no respawn before
   14:19:49).
 - Both stay local until the fit / the held-out score are done, then ship (`dataset_ship.py`).
+
+## 9. Round 2 DEV recipe -- written before the fit (2026-11-09 13:5x ICT; no round-2 fit run yet, no held-out frame read)
+
+**The code** (commit 388700b0, tested on synthetic fixtures only):
+- `mvp_watch_study.py fit / score / dev --round 2`: the whole watch (every cell, and the frames
+  before the first spawn) and every whole hunting session are DEV for `fit` / `dev`, HELD-OUT for
+  `score`. `--round 1` (the default) keeps round 1's split and command lines.
+- `fit --aura or|and|off` is recorded in the model (`aura_mode`), so decide() and `score` follow
+  the model. `--aura-margin M`: the aura threshold = the DEV negatives' max + M, rounded up to
+  0.01 (round 1's recipe, done by hand in 5b).
+- `dev`: decides exactly the frames `fit` takes, from the fit's half-res memmaps (the same
+  decision as on the full frame). It gives the in-sample and leave-one-out numbers below.
+- The model's version names its round: `stormy-v2`. `score --round 2` refuses a round-1 model.
+
+**DEV (section 7):** round 1's watch sk1 (all 16 cells), p31 (all 1,440 frames), R2-H1 (p38, all
+of it, once its manifest shows a stop reason). The two round-1 truths are used as they are.
+R2-H1's truth is made with round 1's command (`truth --boss stormy --layout hunt`).
+**Never read:** R2-W (sk2) and R2-H2.
+
+**A regression check first:** round 1's fit command (5c) is re-run with the new code. It must give
+round 1's model bit for bit (sha256 a1287571...). It reads only round-1 DEV frames.
+
+**The inner check: leave one hunting session out (LOO).** Two folds:
+- fold A: fit on the watch + p31, measured on R2-H1;
+- fold B: fit on the watch + R2-H1, measured on p31.
+
+Each fold sets its own thresholds from its own training negatives (the party: max + LIN_MARGIN
+1.0; the aura, where used: max + 0.015, rounded up to 0.01). `dev` measures each fold on the watch
+and both hunting sessions:
+- **LOO false-positive rate** = false positives / frames x 600 on the left-out session's negatives
+  (hunt_negatives: lone Garm Baby frames are reported apart, never counted). The criterion is the
+  mean of the two folds' rates.
+- **Watch cells seen within 1.1 s (in-sample):** each fold's first-episode delays on the 16 cells.
+
+**The candidates.** All keep round 1's party detector recipe (5b) and its aura colour rule
+(248, 40) with ring (24, 10, 14, 4); the aura's share is also one of the detector's features.
+- (a) `--aura off`: the party detector alone.
+- (b) `--aura or --aura-margin 0.015`: round 1's OR, the threshold from DEV.
+- (c) `--aura and --aura-and 0.5 --aura-margin 0.015`: the aura counts only when the frame's best
+  party window also reaches half the party threshold.
+- (d) Only if (b)'s mean LOO rate is above (a)'s (the aura adds false positives out of sample):
+  (b) with round 1's tightest colour, `--aura-rule 248 56 --ring 21 10 11 4` (5a, last row). The
+  colour also changes the detector's aura feature, so (d) is its own fit.
+- (a), (b) and (c) train the SAME party detector in a fold (the aura mode and threshold do not
+  enter the training). So in a fold their false positives nest, (a) <= (c) <= (b), and so do
+  their cells.
+
+**The choice:**
+1. A candidate QUALIFIES when BOTH folds see >= 15 of 16 watch cells within 1.1 s (in-sample).
+2. Among those, the lowest mean LOO rate wins. Rates within 0.2 per 10 min of the lowest (under
+   half a false positive per ~25-min fold) are a tie, and a tie goes to the simpler one, in the
+   order (a), (b), (c), (d).
+3. If none qualifies: the one with the most cells (the worse fold), then the lowest mean rate. This
+   is reported to the parent as a failed DEV filter before any held-out score.
+
+**The final model:** the chosen recipe fitted on ALL DEV (`--pilot` p31, `--extra` R2-H1, the whole
+watch), its thresholds from all DEV negatives (party max + 1.0; aura max + 0.015 rounded up, where
+used). It is saved as `stormy-v2.npz`, and its sha256 is recorded here before any held-out score.
+Its DEV numbers come from `dev` and are labelled in-sample.
+
+**Caveats, written now:**
+- Bar 1 on 16 held-out cells: ">= 95 %" means 16 / 16 (15 / 16 is 93.75 %). The DEV filter
+  (>= 15 / 16 in-sample) is looser than the bar.
+- In round 1, cell 1 was seen only at 5.0 s in-sample: the party spawned on the Rogue, inside
+  SELF_ZONE. Every candidate shares that miss mode.
+- Each LOO rate rests on one ~25-min session: one false positive is ~0.4 per 10 min.
+- How it runs: the memmaps are decoded once by `dev` without a model, in their own memory scope
+  (a tmpfs page counts against the scope that writes it), under `/dev/shm/poring-lab-tmp/stormy-r2/`,
+  in parts of <= 1,000 frames (<= 0.69 GB each). Each fit runs alone (`systemd-run --user --scope
+  -p MemoryMax=4G -p MemorySwapMax=0 nice -n 19`, one thread), beside the live pilot.
+- Nothing is tuned on held-out data. Nothing is refitted after the held-out score.
