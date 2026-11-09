@@ -6,11 +6,18 @@ role: null
 verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
-related: []
-next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record console sessions as H.264, ship them, run scripts/dataset_check.py on the NAS copy; keep benchmark/hand-labelled sessions pinned.
+related: [0024-gpu-video-recordings.md]
+next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record console sessions as H.264, ship them, run scripts/dataset_check.py on the NAS copy; keep benchmark/hand-labelled sessions pinned. RDP sessions are GPU-encoded HEVC video since 2026-11-09 (Batt; ADR-0024 supersedes the lossless-frames rule for them).
 ---
 
 # ADR-0010: Phase 2 dataset format -- WebDataset tar shards of lossless frames + packet ground truth
+
+> ➡️ **SUPERSEDED IN PART 2026-11-09 (Batt): RDP recordings are GPU-encoded HEVC video, no longer
+> lossless PNG -- [ADR-0024](0024-gpu-video-recordings.md).** Decision 1's "lossless pixels" no
+> longer holds for an RDP session recorded in the default format (`vpp-hevc444-10-q20`:
+> `video.hevc` + `video.idx.csv`, no shards); `--format png` still records the PNG shards below,
+> and the studies that fit pixel cues still require it. Everything else here (the session
+> directory, the manifest, the packets, the sink, the caps, shipping, retention) stands.
 
 - **Status:** ➡️ **ACCEPTED 2026-10-02 21:06** (was PROPOSED the same day). The format is
   implemented in `packages/poring_dataset`. The storage location (decision 4), decided by Batt the
@@ -93,6 +100,8 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > It cannot be lossless (VDEnc has no lossless mode; the BGR -> YUV conversion rounds), so adopting
 > it would be an amendment to this ADR, Batt's decision. Its bench is pre-registered there.
 > Nothing in this ADR changes until then: RDP sessions stay lossless PNG.
+> ➡️ **DECIDED 2026-11-09 (Batt, "use the GPU video in place of PNG"), after stage 2's PASS:
+> [ADR-0024](0024-gpu-video-recordings.md).** The paragraph above is the history of the proposal.
 
 ## Context
 
@@ -123,7 +132,8 @@ Three constraints shape the format:
 1. **Session = a directory of WebDataset-style tar shards** (`poring_dataset.shards`):
    - `shard-NNNNNN.tar` (≤ 256 MiB each). Per frame:
      - `<frame_id>.png`: **lossless** pixels of `GAME_REGION`, exactly what the capture path
-       delivered;
+       delivered (➡️ RDP since 2026-11-09: GPU video by default, ADR-0024; `--format png` keeps
+       this layout);
      - `<frame_id>.json`: `{frame_id, t_mono_ns, t_wall}`;
      - later `<frame_id>.txt` (YOLO labels).
    - `manifest.json`: session id, `backend`, `config_hash` + config, game region, fps cap, shards,

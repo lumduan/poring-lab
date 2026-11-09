@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Recording the RDP path's GAME_REGION frames with the Arc A380's hardware video encoder (VA-API, low-power VDEnc) instead of today's 1-fps lossless PNG cuts the recorder's CPU per frame and the bytes per hour by a large factor, makes 5-10 fps recordings fit bot-server's disk, and keeps what the frames are used for (detector boxes, UI text, colour cues) within pre-registered bars against the PNG originals."
-status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). STAGE 2 (one side-by-side recording, PNG + the candidate through a contained sidecar fed by one RAM pipe) BUILT and PRE-REGISTERED 2026-11-08 22:46:20 ICT (section 9.1), NOT RUN. Adoption needs Batt's decision and an ADR-0010 amendment (section 3). Stage 2 (2026-11-09 05:00-05:33): the side-by-side recording beside p20 checked -- VERDICT PASS on every bar (9.3): video 0.84 vs PNG 5.69 GB/h at 1 fps, 18.3 vs 136.1 ms CPU a frame, no detector latency cost."
+status: "PROPOSED 2026-11-08. Round 3 (20:43-21:42 ICT): VALID, CANDIDATE vpp-hevc444-10-q20 (GPU conversion to 10-bit 4:4:4, HEVC CQP 20 all-intra): 8.7 ms CPU a frame, 0.15-0.21 x PNG, PSNR 44.3 / 40.4 dB, boxes 166 / 166, every bar PASS (section 8.4). Rounds 1-2: no candidate (S2; Q3, diagnosed in 8.3). STAGE 2 (one side-by-side recording, PNG + the candidate through a contained sidecar fed by one RAM pipe) BUILT and PRE-REGISTERED 2026-11-08 22:46:20 ICT (section 9.1), NOT RUN. Adoption needs Batt's decision and an ADR-0010 amendment (section 3). Stage 2 (2026-11-09 05:00-05:33): the side-by-side recording beside p20 checked -- VERDICT PASS on every bar (9.3): video 0.84 vs PNG 5.69 GB/h at 1 fps, 18.3 vs 136.1 ms CPU a frame, no detector latency cost. STAGE 3 DECIDED by Batt 2026-11-09 ~06:3x (ADR-0024) and BUILT on feat/recording-stage3 (9.4): rdp records video-only by default, one reader API (poring_dataset.frames); live verification pending."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [../../scripts/media_rec.py, ../../services/media-probe/mediarec.sh, ../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
-next_action: "STAGE 3 DECIDED by Batt 2026-11-09 ~06:3x (\"use the GPU instead\"): the ADR-0010 amendment + video-only recording (vpp-hevc444-10-q20) and the readers; section 9.4."
+related: [../adr/0024-gpu-video-recordings.md, ../../packages/poring_dataset/src/poring_dataset/frames.py, ../../scripts/media_rec.py, ../../services/media-probe/mediarec.sh, ../adr/0010-dataset-format.md, bot-server-migration.md, ../benchmarks/h264-vs-png.md, ../benchmarks/v0-png-vs-jpeg.md, ../adr/0005-vision-x-access.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../../scripts/gpu_rec_bench.py, ../../services/media-probe/recbench.sh, ../../scripts/record_session.py, ../records/scorers/gpu_rec_r1_fingerprint.py, ../records/scorers/gpu_rec_r2_ssim_sim.py]
+next_action: "Stage 3 BUILT (9.4, ADR-0024): the parent's live checks after the merge -- one short video-only recording beside a pilot, dataset_check.py on it, then each switched reader on stage 2's p20 with PORING_FRAME_SOURCE=png and =video, outputs compared (9.4's list)."
 title: "A hardware-encoded (VA-API) recording path: design and a pre-registered bench"
 date: 2026-11-08
 owner: Batt
@@ -965,6 +965,7 @@ stage 2  ONE side-by-side recording (Batt's go)       -> the full-session bars (
    |       every frame decoded and checked
    |
 stage 3  ADR-0010 amendment (Batt decides)            -> which format for which purpose
+   |       ➡️ DECIDED 2026-11-09 as ADR-0024 and BUILT (9.4)
    |       PNG stays selectable, and REQUIRED for cue-fitting studies until each
    |       passes its own parity on decoded frames
    |
@@ -1238,6 +1239,60 @@ On 9.3's PASS, recordings on the RDP path become `vpp-hevc444-10-q20` (lossy, 10
 CQP 20, all-intra) without the PNG twin. The ADR-0010 amendment records the decision; the
 recorder's default, the video-only path and the session readers follow (built in a worktree,
 merged after review). Until that merge, recordings stay as they are.
+➡️ The decision is recorded as a NEW ADR with a pointer in ADR-0010 (CLAUDE.md: "supersede it
+explicitly"), not as an amendment inside it: [ADR-0024](../adr/0024-gpu-video-recordings.md).
+
+**What was built (branch `feat/recording-stage3`, 2026-11-09; no GPU, no container, nothing
+recorded):**
+- `record_session.py` (recorder v7):
+  - `--backend rdp` with no `--format` records the video ONLY (`format` vpp-hevc444-10-q20, no
+    shards); `--format png` records PNG as before, to any `--out`; `--also-png` with the video
+    format (explicit or the default) is stage 2's side-by-side, unchanged;
+  - a video side that cannot start refuses every part; one that fails mid-session stops the
+    recording (`stop_reason: video_failed: ...`); `--resume` / `--state-file` take the video
+    format;
+  - the manifest: `format`, `frames` = the frames the stream holds (its access units counted once
+    at the end, `video.access_units`), `kept`, `bytes` = the stream's, `png_level` null;
+    `--max-bytes` and the local caps count the stream as in stage 2; a resumed recording's byte
+    budget counts both files of a side-by-side part (`bytes_total`).
+- `media_rec.py`: `video.idx.csv` gains the PNG record's `t_wall`, `bus_frame_id`, `source`
+  (`EXTRA_FIELDS`); `check` refuses a video-only session (no PNG twin to grade against).
+- `poring_dataset.frames` (new), one API for PNG and video sessions:
+  - `frame_refs(session)`: every frame's ref (frame_id, t_mono_ns, the file, offset, size: the
+    PNG member, or the access unit), from the index only;
+  - `read_ref(ref)`: one frame as BGR (the access unit decoded ALONE, BT.709 full range, the
+    VUI and the size checked);
+  - `iter_frames` / `iter_bgr(session, every=N)`: in recording order, lazily decoded;
+  - `nearest_ref`, `frame_source` (`PORING_FRAME_SOURCE=png|video`: a stage-2 session read from
+    either), `png_required` (the cue studies' refusal), `verify_video` (dataset_check's pass);
+  - the access units are split by the stream's own NAL syntax (H.265 7.4.2.4.4), the same split
+    as libavcodec's parser (pinned by a test on streams with and without AUDs).
+- The readers on it: build_frame_cache, qa_export, gold_eval, label_quality, m4_validate,
+  recorder_boxes (+ truth_draw), labels_v2, map_labels, detector_vs_packets; map_labels' and
+  detector_vs_packets' recording pins take recorder v7 and both formats.
+- The cue studies refuse a video recording (ADR-0024 decision 4): miss_cue, target_items,
+  mvp_watch_study, cursor_unknown. warp_watch is not a reader of these sessions (its own JPEG
+  shards): unchanged.
+- `dataset_check.py`: a video session is checked by `verify_video`; `dataset_ship` needed no
+  change (it ships every data file; a test ships and verifies a video-only session).
+
+**Not verifiable offline -- the parent's live checks after the merge** (bot-server, the sidecar
+up, beside a pilot as in 9.2):
+1. a short video-only recording: `record_session.py --backend rdp --label s3-<map> --seconds 300
+   --fps 1 --max-bytes 2G` (no `--format`): exit 0, `format` vpp-hevc444-10-q20, `frames` ==
+   `kept` == `video.access_units`, `stop_reason` duration, no shard in the session, the
+   `.media-rec` directory empty after it;
+2. `dataset_check.py <that session>` (exit 0: every access unit decoded alone, every fed row
+   matched);
+3. the refusal: the same command with the sidecar removed (`rm:media-rec`) refuses before any
+   frame and leaves no session directory;
+4. each switched reader on stage 2's session `20261108T235614-rdp-s2-xmas_dun02-p20`, once with
+   `PORING_FRAME_SOURCE=png` and once with `=video`, the outputs compared: `recorder_boxes.py
+   predict` (the boxes: the stage-2 check's own comparison is the reference, P1 0.9973),
+   `detector_vs_packets.py score-session` on both box files, `qa_export.py` (the same frame ids),
+   `build_frame_cache.py --dry-run` (the same frames), `map_labels.py labels` (the same kept
+   frames: its layout check and the fit read pixels), `labels_v2.py` npc-sheet;
+5. `dataset_ship.py ship` of the step-1 session after 17:00 (verified, local copy deleted).
 
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single
@@ -1343,3 +1398,13 @@ merged after review). Until that merge, recordings stay as they are.
   `record()` writes the PNG session and its video twin, an encoder crash leaves the PNG session
   whole, then `check` decodes every frame.
 - `README.md`: the media services' row.
+
+### 10.4 What stage 3 changed (branch `feat/recording-stage3`, no GPU, no docker)
+See 9.4 "What was built" and ADR-0024's "Implementation". The tests: `packages/poring_dataset/
+tests/test_frames.py` (the API on synthetic PNG and video sessions: the access-unit split against
+libavcodec's, decode alone = in order, the convention and size refusals, a short stream, a cut
+shard, the sources), `services/backend/tests/test_video_readers.py` (every switched reader on a
+video session gives its PNG twin's frames; the cue studies refuse; dataset_check), and in
+`test_media_rec.py` video-only END TO END with the real `mediarec.sh` and the CPU stand-in encoder
+(record() writes a video-only session that the API reads back frame for frame; an encoder crash
+stops the recording with the frames already in the stream; no sidecar refuses every part).

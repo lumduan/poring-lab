@@ -30,6 +30,9 @@ keeps scratch items up to 1 GB, 4 GB in total.
   on 10-28.
 - **Caps:** `record_session` refuses or stops below 100 GB free (Batt 2026-11-06; 120 GB from
   2026-11-05, 140 GB before; ADR-0010 amendments) or above 20 GB unshipped (its defaults).
+  ➡️ bot-server's floor is 30 GB (ADR-0010 Amendment 2026-11-08). Since 2026-11-09 (ADR-0024) an
+  RDP recording is GPU video by default, ~0.84 GB/h at 1 fps against PNG's 5.7-8.4; the stream
+  being recorded lives in `~/poring-lab-rec/.media-rec` and counts as unshipped.
 - The five /dev/shm sessions still waiting (e4, f3, e3, e3x, e3b; ~11 GB) ship 2026-10-30
   03:05-04:25 (rogue-gef10.md AK-4). ➡️ SHIPPED 2026-10-30 03:05-03:35 ICT, all five verified on the
   NAS and deleted locally (section "The pause" below).
