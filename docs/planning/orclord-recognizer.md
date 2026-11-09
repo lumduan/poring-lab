@@ -297,6 +297,14 @@ fit logs, the crops and a copy of the model are archived, sha256-checked (103 fi
   committed.
 - The watch's events.jsonl lives in /dev/shm/poring-lab-demo/ (the parent's session folder).
 - The fit is deterministic (seed 0).
+  - ➡️ **On ONE host only** (2026-11-09, [stormy-knight-recognizer.md](stormy-knight-recognizer.md)
+    2a). Re-run on bot-server from the NAS archive, `score` with the frozen model gave every
+    result key identical (latency aside).
+  - The re-fit matched every reported number, but its logistic weights differ by <= 3e-6, so
+    its file hashes `3c7f7003...`, not 43179452.... The pre-B1 code gives the same hash there,
+    so the cause is the host's floating point. The frozen model stays the archived file:
+    `scratch-archive/2026-10-25/orclord/model/`.
+  - These commands now take `--boss` (default `orclord`, these values) and run as written.
 
 ## 10. PRE-REGISTERED: round 2 -- the AURA rule alone on EDGE ENTRIES (the parent, 2026-10-25 22:16 ICT from `date`, BEFORE any round-2 frame exists)
 
