@@ -146,32 +146,16 @@ def episodes(rows: Sequence[dict[str, Any]], jobs: Iterable[int] = MVP_PARTY,
 def png_index(session: Path, manifest: dict[str, Any]) -> list[Any]:
     """map_labels.png_index, tolerant of a TRUNCATED last shard (a recording stopped by its IO
     guard mid-write, e.g. 20261025T204315-rdp-rogue-s1): the complete members before the cut are
-    kept, a frame missing its png or json is dropped."""
-    import tarfile
+    kept, a frame missing its png or json is dropped (poring_dataset.frames.frame_refs, its
+    default). The MVP watch fits colour cues on lossless frames: a VIDEO recording is REFUSED
+    (ADR-0024: PNG required until this study passes its parity on decoded frames; a stage-2
+    session is read as its video twin only with PORING_FRAME_SOURCE=video, the parity run)."""
+    from poring_dataset import frames as recorded
 
-    import qa_export
-
-    pngs: dict[str, tuple[Path, int, int]] = {}
-    metas: dict[str, dict[str, Any]] = {}
-    for name in manifest["shards"]:
-        shard = session / str(name)
-        if not shard.exists():
-            continue
-        try:
-            with tarfile.open(shard) as tar:
-                for m in tar:
-                    key, _, ext = m.name.partition(".")
-                    if ext == "png" and m.offset_data + m.size <= shard.stat().st_size:
-                        pngs[key] = (shard, m.offset_data, m.size)
-                    elif ext == "json":
-                        fh = tar.extractfile(m)
-                        assert fh is not None
-                        metas[key] = json.loads(fh.read())
-        except (tarfile.ReadError, EOFError, json.JSONDecodeError):
-            continue  # the cut: what was read before it stays
-    out = [qa_export.JpegRef(int(metas[k]["frame_id"]), int(metas[k]["t_mono_ns"]), *pngs[k])
-           for k in set(pngs) & set(metas)]  # fmt: skip
-    return sorted(out, key=lambda r: r.frame_id)
+    why = recorded.png_required(manifest, "mvp_watch_study")
+    if why:
+        raise SystemExit(why)
+    return recorded.frame_refs(session, manifest)
 
 
 # --- the truth ----------------------------------------------------------------------------------

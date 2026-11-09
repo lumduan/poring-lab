@@ -10,8 +10,9 @@ Batt's rules (2026-10-04): vision reads the NAS READ-ONLY, and a frame cache is 
 files), never one file per frame on the shared disk. So:
 - this runs on the HOST (it needs poring_dataset + PyAV; vision may not import them, test_guards);
 - each session is decoded in ONE sequential pass (H264Session.iter_every: no seeking, the offline
-  seek re-measure) or read shard by shard (PNG sessions); every ``--every``-th usable frame
-  (freeze spans excluded) is kept;
+  seek re-measure) or read shard by shard (PNG sessions), or its access units decoded one by one
+  (RDP video sessions, ADR-0024: poring_dataset.frames, every unit decodes alone; like PNG, every
+  ``--every-png``-th frame); every ``--every``-th usable frame (freeze spans excluded) is kept;
 - labels come from qa_export's Labeler (the same as /qa and label_iou: the backend's camera, the
   packet->frame offset, GM-command windows skipped). Frames on any map other than the session's
   scene maps (prt_fild08, prt_church; orcsdun01 since 2026-10-21) are skipped (p3-outdoor-b's
@@ -191,10 +192,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qa_export  # noqa: E402
 
 from poring_dataset import camera as camera_mod  # noqa: E402
+from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset import labels_v2 as lv  # noqa: E402
 from poring_dataset.camera import map_key  # noqa: E402
 from poring_dataset.labels import CLASSES  # noqa: E402
-from poring_dataset.shards import encode_png, read_shard  # noqa: E402
+from poring_dataset.shards import encode_png  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
 OUT = NAS / ".framecache"
@@ -228,12 +230,10 @@ def session_frames(
 
         yield from H264Session(session).iter_every(every)
         return
-    n = 0  # PNG sessions were recorded at ~1 fps (Batt 2026-10-04): their own, smaller step
-    for shard in manifest["shards"]:
-        for meta, img in read_shard(session / shard):
-            n += 1
-            if not (n - 1) % every_png:
-                yield meta, img
+    # PNG and RDP video sessions are recorded at ~1 fps (Batt 2026-10-04): their own, smaller step.
+    # strict: a cut PNG shard stops the build, as read_shard did (a video cut short by its encoder
+    # is served up to its cut: the manifest's frames already count only those).
+    yield from recorded.iter_bgr(session, manifest, every=every_png, strict=True)
 
 
 def yolo_lines(boxes: list[dict[str, Any]], w: int, h: int,
@@ -754,8 +754,9 @@ def recorded_times(
     every_jpeg: int = EVERY_JPEG,
 ) -> Iterator[tuple[int, int]]:  # fmt: skip
     """(frame_id, t_ns) of exactly the frames ``session_frames`` decodes, WITHOUT decoding: the
-    H.264 index (usable frames, every n-th, as iter_every), the PNG shards' json members, or a
-    warp_watch session's JPEG shard index."""
+    H.264 index (usable frames, every n-th, as iter_every), the PNG shards' json members or a
+    video session's index (poring_dataset.frames.frame_refs), or a warp_watch session's JPEG
+    shard index."""
     if qa_export.is_warp_watch(manifest):
         for ref in qa_export.jpeg_index(session, manifest)[::every_jpeg]:
             yield ref.frame_id, ref.t_mono_ns
@@ -768,18 +769,8 @@ def recorded_times(
         for fid in s.usable()[::every]:
             yield fid, t_of[fid]
         return
-    n = 0
-    for shard in manifest["shards"]:
-        with tarfile.open(session / shard) as tar:
-            for m in tar:
-                if not m.name.endswith(".json"):
-                    continue
-                n += 1
-                if not (n - 1) % every_png:
-                    fh = tar.extractfile(m)
-                    assert fh is not None
-                    meta = json.loads(fh.read())
-                    yield int(meta["frame_id"]), int(meta["t_mono_ns"])
+    for ref in recorded.frame_refs(session, manifest, strict=True)[::every_png]:
+        yield ref.frame_id, ref.t_mono_ns
 
 
 def v2_frames(
@@ -1416,7 +1407,8 @@ def map_session(
     off = int(float(mli.params["offset_ms"]) * 1e6)
     index, player = classes.index, classes.fixed["player"]
     tally = MapTally()
-    row: dict[str, Any] = {"split": part, "path": str(path), "format": "png",
+    row: dict[str, Any] = {"split": part, "path": str(path),
+                           "format": recorded.session_format(manifest),
                            "labels": map_rule(mli.spec),
                            "join_rule_3c": VAL_MONITOR if part == "val"
                            else join_verdict(sid, mli.spec.staged, mli.own),

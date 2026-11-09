@@ -14,9 +14,10 @@
   frames as lossless PNG + labels.json; index.json lists the sessions.
 * --mark-gold SESSION_ID (alone): mark that exported session as the gold set; /qa opens on it.
 * --sheet: also an offline contact sheet with the boxes drawn (for reports), e.g. in /dev/shm.
-* Either format: PNG shards, or an H.264 session (Batt 2026-10-04: the default) read through
+* Any format: PNG shards, an H.264 session (Batt 2026-10-04: the console default) read through
   poring_dataset.h264 -- evenly spread frames, freeze spans excluded, each frame verified against
-  the live decode. The bundle itself is always PNG, so /qa does not change.
+  the live decode -- or an RDP video session (ADR-0024: the rdp default; poring_dataset.frames,
+  every ``--every``-th frame as for PNG). The bundle itself is always PNG, so /qa does not change.
 * Indoor maps (Post-S2 round B1): the camera rotated by the client's own rule (camera.py); the
   client's indoorrswtable.txt must be extracted into the GAT dir, else the export refuses (fail
   closed: an outdoor camera on an indoor map gave the invalid 2026-10-04 indoor labels). Hidden NPC
@@ -53,12 +54,13 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.camera import load_indoor_table, map_camera, projector_for  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows, labels_for, labels_for_v1  # noqa: E402
 from poring_dataset.projection import camera_file  # noqa: E402
 from poring_dataset.render import K_NOSTALRO, SpriteSheet, load_scene  # noqa: E402
-from poring_dataset.shards import encode_png, read_shard  # noqa: E402
+from poring_dataset.shards import encode_png  # noqa: E402
 from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 from poring_dataset.ui_layout import UI_RECTS  # noqa: E402
@@ -451,11 +453,12 @@ class Labeler:
 def session_frames(
     session: Path, manifest: dict[str, Any], *, every: int, limit: int
 ) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
-    """A session's frames as (meta{frame_id, t_mono_ns}, BGR GAME_REGION image), either format.
-    PNG: every ``every``-th shard frame. H.264 (Batt 2026-10-04: the default): ``limit`` x 2
-    frames spread evenly over the session, freeze spans excluded, each GOP decoded once and every
-    frame checked against the live decode (poring_dataset.h264) -- GM windows thin them later.
-    warp_watch (JPEG shards): every ``every``-th frame."""
+    """A session's frames as (meta{frame_id, t_mono_ns}, BGR GAME_REGION image), any format.
+    PNG, or an RDP video (ADR-0024; poring_dataset.frames): every ``every``-th frame. H.264 (Batt
+    2026-10-04: the console default): ``limit`` x 2 frames spread evenly over the session, freeze
+    spans excluded, each GOP decoded once and every frame checked against the live decode
+    (poring_dataset.h264) -- GM windows thin them later. warp_watch (JPEG shards): every
+    ``every``-th frame."""
     if is_warp_watch(manifest):
         yield from jpeg_frames(session, manifest, every)
         return
@@ -465,13 +468,7 @@ def session_frames(
         stream = H264Session(session)
         yield from stream.frames(stream.sample(limit * 2))
         return
-    n = 0
-    for shard in manifest["shards"]:
-        for meta, img in read_shard(session / shard):
-            n += 1
-            if (n - 1) % every:
-                continue
-            yield meta, img
+    yield from recorded.iter_bgr(session, manifest, every=every, strict=True)
 
 
 def mark_gold(index_path: Path, session_id: str) -> None:

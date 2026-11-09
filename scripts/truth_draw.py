@@ -10,12 +10,13 @@ files and have at least one scored unit in --a; ``random.Random(seed).sample`` o
 order first). Each frame is drawn whole: --a's truth boxes RED, --b's GREEN, the kept detections
 YELLOW. ``draw.json`` lists what was drawn; the judgement itself is a person's (or the report's)
 reading of the PNGs. Offline only: packets are ground truth here, never an input of the bot.
+The session is read through poring_dataset.frames: PNG shards or an RDP video (ADR-0024); only
+the drawn frames are decoded.
 """
 
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import random
 import sys
@@ -60,8 +61,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--n", type=int, default=12)
     ap.add_argument("--seed", type=int, default=71)
     a = ap.parse_args(argv)
-    import recorder_boxes as rb
+    import numpy as np
     from PIL import Image, ImageDraw
+
+    from poring_dataset import frames as recorded
 
     pa, pb = load_pairs(a.a), load_pairs(a.b)
     by_a, by_b = {int(p["t"]): p for p in pa}, {int(p["t"]): p for p in pb}
@@ -70,11 +73,11 @@ def main(argv: list[str] | None = None) -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     manifest = json.loads((a.session / "manifest.json").read_text())
     rows = []
-    for meta, png in rb.iter_session(a.session, manifest):
-        t = int(meta["t_mono_ns"])
+    for ref in recorded.frame_refs(a.session, manifest):
+        t = ref.t_mono_ns
         if t not in pick:
             continue
-        img = Image.open(io.BytesIO(png)).convert("RGB")
+        img = Image.fromarray(np.ascontiguousarray(recorded.read_ref(ref)[:, :, ::-1]), "RGB")
         d = ImageDraw.Draw(img)
         for colour, bs in (
             (RED, boxes(by_a[t])),
@@ -85,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
                 d.rectangle([x0, y0, x1, y1], outline=colour, width=2)
         name = f"walk-{len(rows):02d}.png"
         img.save(a.out / name)
-        rows.append({"png": name, "t": t, "frame_id": int(meta["frame_id"]),
+        rows.append({"png": name, "t": t, "frame_id": ref.frame_id,
                      "truth_a": boxes(by_a[t]), "truth_b": boxes(by_b[t]),
                      "verdicts_a": by_a[t].get("verdicts"),
                      "verdicts_b": by_b[t].get("verdicts")})  # fmt: skip

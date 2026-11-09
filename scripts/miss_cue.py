@@ -338,6 +338,10 @@ def shard_index(sid: str) -> list[dict[str, Any]]:
         return json.loads(cache.read_text())["frames"]  # type: ignore[no-any-return]
     d = rec_dir(sid)
     man = json.loads((d / "manifest.json").read_text())
+    from poring_dataset.frames import png_required  # ADR-0024: the cue is fitted on PNG
+
+    if why := png_required(man, "miss_cue"):
+        raise SystemExit(why)
     rows: dict[str, dict[str, Any]] = {}
     for sh in man["shards"]:
         with open(d / sh, "rb") as fh, tarfile.open(fileobj=fh, mode="r:") as tar:

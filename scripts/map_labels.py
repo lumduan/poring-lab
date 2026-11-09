@@ -103,7 +103,6 @@ import random
 import shutil
 import statistics
 import sys
-import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
@@ -120,6 +119,7 @@ import orc_camera_check as occ  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
 
+from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset.camera import map_key  # noqa: E402
 from poring_dataset.labels import STATE_ACTION, in_windows  # noqa: E402
 from poring_dataset.render import MonsterAction, anchor_and_depth  # noqa: E402
@@ -784,29 +784,19 @@ def frame_exclusions(world: Any, scene: Any, size: tuple[int, int], spec_species
 # --- the session ------------------------------------------------------------------------------
 
 
-def png_index(session: Path, manifest: dict[str, Any]) -> list[qa_export.JpegRef]:
-    """Every frame of a recorder session (tar headers and the json members only), in frame order;
-    a frame's png and json may lie in two shards."""
-    pngs: dict[str, tuple[Path, int, int]] = {}
-    metas: dict[str, dict[str, Any]] = {}
-    for name in manifest["shards"]:
-        shard = session / str(name)
-        with tarfile.open(shard) as tar:
-            for m in tar:
-                key, _, ext = m.name.partition(".")
-                if ext == "png":
-                    pngs[key] = (shard, m.offset_data, m.size)
-                elif ext == "json":
-                    fh = tar.extractfile(m)
-                    assert fh is not None
-                    metas[key] = json.loads(fh.read())
-    out = [qa_export.JpegRef(int(metas[k]["frame_id"]), int(metas[k]["t_mono_ns"]), *pngs[k])
-           for k in set(pngs) & set(metas)]  # fmt: skip
-    return sorted(out, key=lambda r: r.frame_id)
+def png_index(session: Path, manifest: dict[str, Any]) -> list[Any]:
+    """Every frame of a recorder session, in frame order, from its index only: PNG (tar headers
+    and the json members; a frame's png and json may lie in two shards; a cut shard raises) or an
+    RDP video (ADR-0024: video.idx.csv and the stream's access units). poring_dataset.frames
+    FrameRefs: qa_export.JpegRef's fields (``shard`` is the tar or video.hevc)."""
+    return recorded.frame_refs(session, manifest, strict=True)
 
 
-def read_png(ref: qa_export.JpegRef) -> npt.NDArray[np.uint8]:
-    """One frame as BGR (one seek and read of its PNG bytes)."""
+def read_png(ref: Any) -> npt.NDArray[np.uint8]:
+    """One frame as BGR (one seek and read of its bytes): a PNG member (PIL), or an RDP video's
+    access unit decoded alone (poring_dataset.frames.read_ref: BT.709 full range, checked)."""
+    if Path(ref.shard).suffix == ".hevc":
+        return recorded.read_ref(ref)
     from PIL import Image
 
     with ref.shard.open("rb") as fh:
@@ -818,15 +808,22 @@ def read_png(ref: qa_export.JpegRef) -> npt.NDArray[np.uint8]:
     return np.ascontiguousarray(rgb[:, :, ::-1])
 
 
-RECORDER_VERSIONS = (5, 6)  # T-3: v6 changed only the IO-guard rule and guard_rule (e5d892f)
+# T-3: v6 changed only the IO-guard rule and guard_rule (e5d892f); v7 (ADR-0024, 2026-11-09) the
+# rdp default format (the GPU video; a --format png session is written as in v6)
+RECORDER_VERSIONS = (5, 6, 7)
+# ADR-0024: an RDP recording is PNG or the GPU video (the same grab, clock and region; lossy)
+RECORDING_FORMATS = ("png", recorded.VIDEO_FORMAT)
 
 
 def check_recording(manifest: dict[str, Any]) -> None:
-    """3c's recording path (fail closed): RDP PNG at 1280 x 720 on the lab server, recorder v5 or
-    v6 (xmas02-detector.md 3c / T-3; detector_vs_packets.SESSION_VERSIONS)."""
-    want = {"backend": "rdp", "format": "png",
-            "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
+    """3c's recording path (fail closed): RDP at 1280 x 720 on the lab server, PNG or (ADR-0024)
+    the GPU video, recorder v5 to v7 (xmas02-detector.md 3c / T-3;
+    detector_vs_packets.SESSION_VERSIONS)."""
+    want = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
+            "server": "lab-rathena"}  # fmt: skip
     bad = {k: manifest.get(k) for k, v in want.items() if manifest.get(k) != v}
+    if manifest.get("format") not in RECORDING_FORMATS:
+        bad["format"] = manifest.get("format")
     if manifest.get("recorder_version") not in RECORDER_VERSIONS:
         bad["recorder_version"] = manifest.get("recorder_version")
     if bad:

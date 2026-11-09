@@ -105,9 +105,12 @@ UI_HALF = 0.5  # a detection this much behind the UI windows is left out (the la
 BAR_4A = {"min_labels": 30, "recall": 0.80, "precision": 0.80}
 # a recorder session the X2 rule reads (map_labels.check_recording's path; v6 differs from v5 in
 # its IO-guard rule only, e5d892f -- the frame clock and the frame bus are v5's)
-SESSION_WANT = {"backend": "rdp", "format": "png", "game_region": [80, 77, 1280, 720],
+# ADR-0024 (2026-11-09): v7 records the GPU video on rdp by default (the same grab, clock and
+# region; a --format png session is written as in v6): both formats are read, by their index only
+SESSION_WANT = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
                 "server": "lab-rathena"}  # fmt: skip
-SESSION_VERSIONS = (5, 6)
+SESSION_FORMATS = ("png", "vpp-hevc444-10-q20")  # poring_dataset.frames.VIDEO_FORMAT
+SESSION_VERSIONS = (5, 6, 7)
 DIST_BINS = ((0, 5, "0-5"), (6, 10, "6-10"), (11, 15, "11-15"), (16, 10**6, "16+"))
 SELF_MOVE_NS = 500_000_000  # our character moved in the 500 ms before tw: "moving"
 EPISODE_GAP_NS = 2_000_000_000  # first sight: a unit's in-view captures this close are one episode
@@ -308,9 +311,11 @@ def session_rects(layout: str, chat_rect: Sequence[int]) -> list[tuple[int, int,
 
 
 def check_session(manifest: dict[str, Any]) -> None:
-    """The recording path X2 reads (fail closed): RDP PNG at 1280 x 720 on the lab server,
-    recorder v5 or v6."""
+    """The recording path X2 reads (fail closed): RDP at 1280 x 720 on the lab server, PNG or
+    (ADR-0024) the GPU video, recorder v5 to v7."""
     bad = {k: manifest.get(k) for k, v in SESSION_WANT.items() if manifest.get(k) != v}
+    if manifest.get("format") not in SESSION_FORMATS:
+        bad["format"] = manifest.get("format")
     if manifest.get("recorder_version") not in SESSION_VERSIONS:
         bad["recorder_version"] = manifest.get("recorder_version")
     if bad:
@@ -773,7 +778,7 @@ def projection_inputs(map_name: str, mapcache_dir: Path, sprites: Path, sprite_n
 
 
 def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
-    import mvp_watch_study as mws
+    from poring_dataset import frames as recorded
 
     session: Path = a.session
     manifest = json.loads((session / "manifest.json").read_text())
@@ -786,7 +791,7 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
     if boxes_meta is not None and boxes_meta.get("session_id") != sid:
         raise SystemExit(f"{a.boxes}: its meta says session {boxes_meta.get('session_id')!r}, "
                          f"not {sid!r}")  # fmt: skip
-    index = mws.png_index(session, manifest)
+    index = recorded.frame_refs(session, manifest)  # PNG or video: the index only, no pixel
     frames = [(int(r.frame_id), int(r.t_mono_ns)) for r in index]
     inputs = projection_inputs(a.map, a.mapcache_dir, a.sprites, a.sprite_names, a.kb)
     chat_rect, chat_how = chat_rect_for(sid, a.chat)
