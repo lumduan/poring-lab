@@ -1764,6 +1764,38 @@ Batt's answers (quoted, then in English):
 **THE BASE NOW:** p16's flags + `--reach-check --far-single --far-approach --explore --walk-pick
 --kill-gap --loot-first --walk-pick-step --quiet-scan`.
 
+### 4AZ. Pilot p43 pre-registration: --boss-walk (9.18) -- walk away from a summon, the Fly Wing only as the fallback; a staged encounter (written BEFORE its run, 2026-11-09 ~19:5x ICT)
+
+- **Why (Amendment O, item 2; Batt: "flee, the dog hits hard too; if you can walk away in another
+  direction, walk"):** the boss guard took 4 Fly Wings in p38 and 4 in p40 on lone Garm Babies (a
+  regular spawn here as well as the Stormy Knight's summon). Packets: p38 8 Garm Baby attacks on us
+  (2 damaging), p40 24 (all misses: her FLEE); our own hits on them 7 / 11. A Garm Baby walks 450 ms
+  a cell (the KB) and chases 12 cells; the Rogue walks ~150 ms a cell, so a walk can break contact.
+- **The one change against the base (Amendment O's):** `--boss-walk` (9.18; the record says
+  `"boss_walk": [14, 8, 2.5, 2, 60.0, "9.18"]`): a guard on a SUMMON clicks ONE walk to the farthest
+  pickable, one-click-reachable cell in view >= 8 cells away (offline: 14 cells found from the start
+  7,21 and three other spots), then 2.5 s with no walk click and no boss line; a boss line after
+  that, a 3rd walk-away within 60 s, or no cell -> today's Fly Wing. The Stormy Knight itself
+  (`boss_spawn_names`: "Stormy Knight" only) always takes the Fly Wing.
+- **The positive case (a staged encounter; encounters are rare: p39, p41, p42 had none):** the
+  trial-only `--stage-mob 1515:2` -- the setup's LAST line spawns 2 Garm Babies at the start
+  (`@monster 1515 2`, after `@killmonster2`). The base never carries it.
+- **The run:** the base + `--boss-walk --stage-mob 1515:2`, label `xmas02-p43`, 25 min, the MVP dead
+  by the schedule (killed 19:48:56).
+- **Bars (`fight_time` B1 / B2, committed before the run; packets):**
+  - **B1a (the staged encounter):** a `boss_walk` within the run's first 60 s, and it BROKE CONTACT
+    (no summon act on us, hit or miss, in the 2.5-10 s after it);
+  - **B1b:** of all walk-aways in the run, >= 50 % broke contact;
+  - **B2:** the guard's Fly Wings on summons <= the walk-aways (walking is the answer, the wing the
+    fallback);
+  - the base's bars as Amendment O: **W1 pooled** (p43 + p42 + p41 + p40) <= 2.0 %, **L1** >= 50 %,
+    **L3** >= 80 %, **L4** <= 5 %, **K1** <= 3.0 s, **K3** >= 70 %, **E1** >= 80 / h, **U1** <= 30 s,
+    **D1** <= 35 ms, **R1 pooled** (p43 + p42 + p41 + p40) <= 6, **Q1** <= 8, **E3** (hard bars, 0
+    dead-end / stuck / idle Fly Wings), **deaths** 0.
+  Reported: the summons' acts on us and the damaging ones, the lowest HP, S1, items / hour.
+- **Decisions:** every bar passes -> `--boss-walk` joins the base (`--stage-mob` never does). B1a
+  cannot be judged (the staged dogs never reach us) -> the trial is repeated, nothing decided.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
