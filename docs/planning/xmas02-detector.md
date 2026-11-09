@@ -1358,3 +1358,32 @@ scored by `blind_score.py` against the key c1050420... at 21:45:10 (the pack `gw
 - Amendment H's failure (73-83 % good in crowded packs) does not recur on the uncrowded, spawned
   dogs. **Garm Baby becomes a class** (Amendment M): the class file, the cache (Amendment I's TRAIN
   + gw2) and the training launch follow, each committed before its step.
+
+#### M4 (2026-11-09 21:5x ICT, before the cache's dry run): the class file
+
+- **`config/detector/classes-xmas02-gb.json`, sha256
+  `dd1d3f31e7e56a434c12c7c5a9640f29167cea1ed748c49c5b3303488b134be9`** = `classes-xmas02.json` plus
+  **7 Garm Baby 1515**: 0 player, 1 npc, 2 warp (EMPTY fixed classes, as Amendment H), 3 Myst Case
+  1249, 4 Cruiser 1248, 5 Cookie 1265, 6 Christmas Cookie 1246, **7 Garm Baby 1515**. Checked with
+  the cache's own loader (`build_frame_cache.SpeciesClasses.load` + `names`, data/kb): player, npc,
+  warp, mystcase, cruiser, cookie, cookie_xmas, garm_baby. The first seven ids and names are the
+  deployed model's (Amendment I / eval AMENDMENT 3's `.names.json`), in the same order.
+- **`classes-xmas02.json` is unchanged** (sha256 `9ab96672...`, Amendment H): the deployed model,
+  its ONNX and its evaluation keep it.
+- **The Christmas Goblin 1607 stays out** (T2 failed, Amendment H): a frame holding one stays
+  excluded (`species_unlisted:1607`).
+- **The old sessions' Garm Baby frames (Amendment I's TRAIN xw2 + xw3 x 2 and VAL xw1 x 2):** their
+  11-06 label files are used UNCHANGED (each byte-identical to the sha256 the 11-06 cache manifest
+  recorded, checked 21:5x; the own-C1 files too). Garm Baby was always in the MapSpec's `species`
+  (D3's conditional tier), so the label pass fitted it and kept or excluded its labels exactly as
+  the four others'; the 11-06 CACHE then refused every frame holding one as `species_unlisted:1515`
+  (xw3 36 + 29 frames; xw2 and xw1 none), not as `unchecked_species` (that is the label pass's own
+  frame exclusion for a species outside the MapSpec: Stormy Knight 1251's 30 frames, which stay
+  out). With 1515 a class, such a frame is WRITTEN when it is whole by the unchanged rule (no
+  excluded label of any species, no frame exclusion, every kept label clear of the models at or
+  above the T_h floor 0.536, our own character placed), and its Garm Baby boxes train as class 7.
+  Nothing in the label rule changes; the counts are the dry run's (M5).
+- Context, recorded only: those old labels were never checked by a T2 that passed. M1 point 2
+  found that on the 11-06 T2 key's floor-passing Garm Baby crops (drawn from these TRAIN sessions)
+  both 11-06 labellers were good 19 / 20 and 18 / 20, species 20 / 20; the cache writes only
+  floor-passing labels in whole frames. M3's PASS is on gw2's labels.
