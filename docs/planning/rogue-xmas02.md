@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 16:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step. p42 = --quiet-scan (4AW, by Amendment N 4AX; every bar kept). W1 stays the open subject; Batt: the W1 bar at the ~1-2 % residual (4AX options a/b/c), the lone-Garm-Baby boss guard."
+next_action: "2026-11-09 17:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step. p42 --quiet-scan: every bar but W1 (1.66 %), E1 153.6/h, defend-scan time 77.7 vs 215 s -> OFF until Batt answers the W1 bar (4AX a/b/c; under c it joins). Also for Batt: the lone-Garm-Baby boss guard."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3366,3 +3366,27 @@ BASE together.**
     target 24 of 1,168 (2.1 %): it explains 9 of 33.
   - So the base runs sit at W1 1.0-2.1 % (p39 2.07, p40 1.04, p41 1.57) with no single cause; each
     unsent click costs about one click interval (~1.3 s, ~5 s a run).
+
+**Pilot p42 (4AW by Amendment N; 16:54:41-17:20:31, 25 min; the MVP killed 16:53:48 after polls at
+16:46 / 16:50 (dead) and 16:53:35 (alive at 54, 172); the bag cleared 16:23-16:26 (-> 520 / 2430);
+immunity OFF 16:54:28, ON 17:22:3x; weight 570 / 2430 at the start; the base + `--quiet-scan`
+9.17). VERDICT: every bar but W1 PASSES; W1 FAILS (1.66 %). `--quiet-scan` stays OFF by 4AW's rule
+until Batt answers 4AX: under option (c) (W1 pooled <= 2.0 %) it would join; under (a) or (b) it
+would not (pooled p39-p42: 17 / 1,086 = 1.57 %).**
+
+| | p40 | p41 | **p42 (+ --quiet-scan)** | bar |
+|---|---|---|---|---|
+| Q1 defend scans with no hit on us in the 5 s before | 34 | 31 | **5 (found 0)** | <= 8: PASS |
+| S1 damaging hits on us per 10 min | 11.2 | 6.4 | **6.4** | <= 14: PASS |
+| W1 clicked walks never sent | 1.04 % | 1.57 % | **5 / 302 (1.66 %)** | <= 1.5 %: FAIL |
+| L1 / L3 / L4 | 100 % / 91.1 % / 0 | 95.2 % / 86.2 % / 0 | **100 % (22 / 22) / 82.0 % / 0 of 99** | PASS |
+| K1 / K3 | 1.97 s / 96.4 % | 1.96 s / 96.6 % | **1.98 s / 98.4 % (60 / 61)** | PASS |
+| E1 kills | 136.4 / h | 143.6 / h | **64 (153.6 / h)** | PASS |
+| U1 / D1 | 0 s / 22.5 ms | 8.7 s / 23.4 ms | **0 s / 22.8 ms** | PASS |
+| R1 pooled (p42 + p41 + p40 + p36) | | | **1 + 0 + 1 + 1 = 3** | PASS |
+| E3 / deaths | | | **hard bars pass; 0 Fly Wings; 6 stalls / 0; lowest HP 84.8 %** | PASS |
+| reported: defend-scan time / no-kill fights | 215 s / 30, 306.8 s | - / 29, 213.5 s | **77.7 s (30 scans) / 38, 212.3 s** | - |
+
+- **The skips:** 34 fight scans and 6 stall scans skipped; the scans still run after damage (30).
+- **Items (snatched + picked):** Scell 17, Zargon 14, Red Herb 9, Well-baked Cookie 4, Candy 3, Piece
+  of Cake 3, Pearl 3, Manacles 3, Old Blue Box 1, Level 3 Cold Bolt 1, Iron 1.
