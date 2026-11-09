@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Record a session for Phase 2 (ADR-0010): lossless GAME_REGION frames + the packet events.
+"""Record a session for Phase 2 (ADR-0010, ADR-0024): GAME_REGION frames + the packet events.
 
     record_session.py --backend console --label outdoor-a --seconds 1200 --max-bytes 3G
-    record_session.py --backend rdp --label calib --seconds 120 [--fps 1] [--out DIR] --max-bytes 2G
+    record_session.py --backend rdp --label calib --seconds 120 [--fps 1] --max-bytes 2G
+    record_session.py --backend rdp --format png [--out DIR] ...        (lossless PNG, selectable)
     record_session.py --backend console --format png --fps 1 ...        (PNG, still selectable)
 
-* THE DEFAULT FORMAT (Batt, 2026-10-04, C4): console -> raw H.264 with an IDR every 1 s; rdp -> PNG
-  (h264 is the S2 client's own bitstream, console only). ADR-0010's 2026-10-04 note has the rates.
+* THE DEFAULT FORMAT: console -> raw H.264 with an IDR every 1 s (Batt, 2026-10-04, C4; the S2
+  client's own bitstream, console only; ADR-0010's 2026-10-04 note has the rates); rdp ->
+  vpp-hevc444-10-q20, GPU-encoded video in place of PNG (ADR-0024, Batt 2026-11-09 "use the GPU
+  video in place of PNG"; below). PNG stays selectable with --format png, and REQUIRED for the
+  studies that fit pixel cues or templates (ADR-0024; their tools refuse a video session).
 * --format h264: no frames are grabbed here. The S2 client writes the bitstream it decodes into its
   recording dir (S2_REC_DIR, a host bind mount: .s2-h264 under the local root, dot-named so
   dataset_ship never lists it), driven by a control file this script writes and re-touches (the
@@ -21,7 +25,7 @@
 
 * Frames: GAME_REGION grabbed inside the backend container (ro_agent.Screen: same CLOCK_MONOTONIC
   as the packets), at most --fps, and only when the picture changed (a still scene costs nothing).
-  Lossless PNG in WebDataset-style tar shards (poring_dataset.shards).
+  --format png: lossless PNG in WebDataset-style tar shards (poring_dataset.shards).
   In console mode (S2, ADR-0014) the frames come from the S2 frame bus: each record carries the
   bus writer's `bus_frame_id`, `source` and the decode-complete time as `t_mono_ns`, and the
   recording STOPS on the first non-bus frame (an X grab there is a black or foreign picture).
@@ -32,7 +36,7 @@
 * Safety: the capture-backend lock must say --backend (ADR-0009); the quant IO guard
   (guarded_build's Guard) stops the recording on a breach -- the tolerant rule (DISK_RULE) on a
   disk sink, sustained stall only (RAM_RULE) on a tmpfs sink (Batt 2026-10-28); a hard size cap.
-* PAUSE AND RESUME (Batt 2026-11-06 ~14:0x, xmas02-detector.md Amendment D; png only):
+* PAUSE AND RESUME (Batt 2026-11-06 ~14:0x, xmas02-detector.md Amendment D; png and video):
   --io-rule sustained stops a part only on SUSTAINED stall (above 30 % for 30 s, no one-spike stop)
   on any sink. --resume N: a part stopped by the IO guard, or by a market-open window (weekdays
   09:30-10:15 and 14:00-14:45, CLAUDE.md rule 5), is followed by a NEW SESSION of the same label
@@ -41,17 +45,28 @@
   --max-bytes then budget the whole recording. --state-file (in /dev/shm) tells a watch beside it
   whether frames are being banked (stage_items.py watch --recorder-state): JSON, re-written every
   frame and every pause second (`beat_ns`).
-* STAGE 2 OF THE GPU RECORDING PLAN (docs/planning/gpu-recording.md 9.1; Batt 2026-11-08 "do it
-  now"; rdp only): --format vpp-hevc444-10-q20 --also-png records the PNG session exactly as above
-  AND feeds every kept frame (raw BGRA) to round 3's candidate encoder in the contained sidecar
-  `media-rec` (scripts/media_rec.py: one named pipe in /dev/shm/poring-lab-mediarec; the stream
-  lands in ~/poring-lab-rec/.media-rec and is renamed into the session as video.hevc, beside
-  video.idx.csv, one row per kept frame). The manifest's format stays "png" (every reader reads the
-  session as before) and its `video` block describes the side stream. The PNG is the reference:
-  an encoder that stops or falls behind ends the VIDEO side only, and its reason is recorded; a
-  video side that cannot start refuses the recording. Without --also-png the format is refused:
-  lossy-only recordings need the ADR-0010 amendment (Batt's decision, stage 3). --max-bytes and the
-  local caps count both files. Start the sidecar first: guarded_build.py start:media-rec@60.
+* THE VIDEO RECORDING (ADR-0024; gpu-recording.md 9.4, stage 3; rdp only, the default there):
+  every kept frame (raw BGRA, alpha set to 255) goes to round 3's encoder (10-bit 4:4:4 HEVC, CQP
+  20, all-intra) in the contained sidecar `media-rec` (scripts/media_rec.py: one named pipe in
+  /dev/shm/poring-lab-mediarec; the stream lands in ~/poring-lab-rec/.media-rec and is renamed into
+  the session as video.hevc, beside video.idx.csv: one row per kept frame with its frame_id,
+  t_mono_ns, place in the stream and the PNG record's t_wall / bus_frame_id / source). No shards:
+  the manifest's format is vpp-hevc444-10-q20, `frames` the frames in the stream, `video` the
+  encoder's block. poring_dataset.frames reads it (and PNG) for every reader. LOSSY (stage 2: PSNR
+  43.4 dB, the detector's boxes 0.9973 of PNG's; 0.84 vs 5.69 GB/h at 1 fps).
+  - The sidecar must be UP: a video side that cannot start REFUSES the recording (every part; there
+    is no PNG to fall back on). Start it first: guarded_build.py start:media-rec@60.
+  - The video side failing mid-session (the encoder closed its pipe, a write blocked 20 s) STOPS
+    the recording cleanly (stop_reason `video_failed: ...`): the frames already in the stream are
+    the session. A frame the encoder's queue could not take is lost (its index row says so).
+  - --out must be ~/poring-lab-rec (the sidecar's .media-rec is bound under it; a rename joins the
+    two); --format png records to any --out.
+* STAGE 2 (gpu-recording.md 9.1; Batt 2026-11-08 "do it now"): --also-png with the video format
+  records the PNG session exactly as --format png AND the video twin of every kept frame. The
+  manifest's format stays "png" (the PNG is the reference) and its `video` block describes the
+  twin: an encoder that stops or falls behind ends the VIDEO side only, and its reason is recorded;
+  a video side that cannot start refuses part 0 (a later --resume part records PNG only).
+  --max-bytes and the local caps count both files.
 * Sink (ADR-0010): the host's local disk, ~/poring-lab-rec (never ./data: vision mounts it).
   It is a buffer on the disk shared with live capture, so it is capped -- refused at the start, and
   stopped cleanly mid-recording, when the filesystem has < --min-free-gb free or more than
@@ -86,6 +101,7 @@ import measure_delay  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 from poring_backend.capture_lock import read_lock  # noqa: E402
+from poring_dataset import frames as recorded_frames  # noqa: E402
 from poring_dataset.shards import ShardWriter, write_manifest  # noqa: E402
 from poring_dataset.timeline import session_events  # noqa: E402
 
@@ -96,13 +112,16 @@ SALT = ROOT / "data" / "dataset-pseudonym.salt"
 # --state-file (Amendment D): they add manifest fields (io_rule, part) only; frames, shards and
 # packets are written as before. Still 6 with stage 2's side stream (gpu-recording.md 9.1): it
 # adds manifest fields (video, png_writer_cpu_s) and files beside the shards, nothing else.
-RECORDER_VERSION = 6
+# v7 (ADR-0024, 2026-11-09): rdp records the video format by default (frames in video.hevc, no
+# shards; video.idx.csv gains the PNG record's t_wall / bus_frame_id / source); manifest `kept`.
+# A --format png session's frames, shards and packets are written exactly as in v6.
+RECORDER_VERSION = 7
 H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
 H264_MAX_MB = 8192  # the client's size cap
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
 GAMESTREAM = "poring-lab-gamestream-1"
 BACKEND = "poring-lab-backend-1"
-VIDEO_FORMAT = "vpp-hevc444-10-q20"  # media_rec.ARM: stage 2's side stream (beside the PNG only)
+VIDEO_FORMAT = recorded_frames.VIDEO_FORMAT  # media_rec.ARM: the rdp default (ADR-0024)
 H264_ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}$")  # s2spike.h264rec.ID_RE
 TOUCH_S = 3.0  # the control file's dead-man touch (the client stops it after 15 s)
 # SIGINT/SIGTERM end a recording CLEANLY (2026-10-05, the M4 re-run stops it when its spawns are
@@ -362,8 +381,13 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     if a.format == "h264":
         return record_h264(a, lock, config, chash, session_id, out, caps, unshipped)
     gx, gy, gw, gh = r.game_region()
-    video = start_video(a, session_id, gw, gh)  # stage 2's side stream, or None
-    writer = ShardWriter(out, png_level=a.png_level)
+    png = a.format == "png"  # PNG shards: alone, or with stage 2's video twin
+    video = start_video(a, session_id, gw, gh)  # the video side (the frames, or the twin), or None
+    if png:
+        writer: Any = ShardWriter(out, png_level=a.png_level)
+    else:
+        out.mkdir(parents=True, exist_ok=True)
+        writer = NoShards()
     cpu = CpuMeter(("poring-lab-media-rec-1",) if video is not None else ())
     guard = load_guard(a.out, io_rule(a))
     period = 1.0 / a.fps
@@ -396,17 +420,21 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
             elif prev is not None and np.array_equal(bgr, prev):
                 skipped += 1
             else:
-                t_png = time.thread_time()
-                writer.add(frame_id, t_cap, bgr, t_wall=time.strftime("%FT%T%z"),
-                           bus_frame_id=bus_id, source=source)  # fmt: skip
-                png_cpu_s += time.thread_time() - t_png
-                if video is not None:  # never blocks: a lagging encoder loses frames, not the PNG
-                    video.offer(frame_id, t_cap, img)
+                rec = {"t_wall": time.strftime("%FT%T%z"), "bus_frame_id": bus_id, "source": source}
+                if png:
+                    t_png = time.thread_time()
+                    writer.add(frame_id, t_cap, bgr, **rec)
+                    png_cpu_s += time.thread_time() - t_png
+                if video is not None:  # never blocks: a lagging encoder loses frames, not the loop
+                    video.offer(frame_id, t_cap, img, rec)
                 frame_id += 1
                 prev = bgr
             last_bus_id = bus_id
             if video is not None and not video_warned and video.check():
                 video_warned = True
+                if not png:  # the video IS the recording: end it cleanly with what it holds
+                    stop_reason = f"video_failed: {video.reason}"
+                    break
                 print(f"WARNING: the video side failed, the PNG recording goes on: "
                       f"{video.reason}", file=sys.stderr)  # fmt: skip
             if writer.bytes + (video.bytes() if video is not None else 0) > a.max_bytes:
@@ -441,38 +469,78 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     freezes = freeze_report(t0, t1)
     events, anchor = write_packets(out, t0, t1)
     seconds = (t1 - t0) / 1e9
+    vbytes = video_file_bytes(out) if video is not None else 0
+    frames, nbytes = (writer.frames, writer.bytes) if png else (served_frames(out, vinfo), vbytes)
     manifest = {
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
         "backend": a.backend, "server": lab_servers.server(), "lock_seq": lock.seq,
         "config": config, "config_hash": chash,
-        "game_region": [gx, gy, gw, gh], "fps_cap": a.fps, "png_level": a.png_level,
-        "shards": writer.shards,
-        "frames": writer.frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
-        "frame_sources": sources, "bytes": writer.bytes,
+        "game_region": [gx, gy, gw, gh], "fps_cap": a.fps,
+        "png_level": a.png_level if png else None,
+        "shards": writer.shards, "kept": frame_id,
+        "frames": frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
+        "frame_sources": sources, "bytes": nbytes,
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
-        "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
+        "mb_per_min": round(nbytes / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "guard_rule": guard.describe(),
         "packet_events": len(events),
         "packet_anchor": anchor, "pseudonymised": True, "freezes": freezes,
-        "sink": {"root": str(a.out), **caps}, "format": "png", "cpu_cores": cpu_cores,
+        "sink": {"root": str(a.out), **caps}, "format": a.format, "cpu_cores": cpu_cores,
         "io_rule": getattr(a, "io_rule", "auto"), "part": getattr(a, "part", 0),
         "png_writer_cpu_s": round(png_cpu_s, 3), "cpu_wall_s": round(cpu.wall, 3),
     }  # fmt: skip
     if vinfo is not None:
         manifest["video"] = vinfo
     write_manifest(out, manifest)
-    keys = ("frames", "bytes", "seconds", "mb_per_min", "stop_reason", "packet_events", "cpu_cores")
-    res = {"dir": str(out), **{k: manifest[k] for k in keys}}
+    keys = ("format", "frames", "bytes", "seconds", "mb_per_min", "stop_reason", "packet_events",
+            "cpu_cores")  # fmt: skip
+    res = {"dir": str(out), **{k: manifest[k] for k in keys},
+           "bytes_total": writer.bytes + vbytes}  # fmt: skip
     if vinfo is not None:
         res["video"] = {k: vinfo.get(k) for k in ("status", "reason", "fed", "by_status")}
     return res
 
 
+class NoShards:
+    """The PNG writer's stand-in for a video-only recording: no shards, nothing written."""
+
+    def __init__(self) -> None:
+        self.shards: list[str] = []
+        self.frames = 0
+        self.bytes = 0
+
+    def close(self) -> None:
+        pass
+
+
+def video_file_bytes(out: Path) -> int:
+    path = out / recorded_frames.VIDEO_FILE
+    return path.stat().st_size if path.exists() else 0
+
+
+def served_frames(out: Path, vinfo: dict[str, Any] | None) -> int:
+    """A video-only session's ``frames``: the fed frames the stream holds (a stream cut short by
+    its encoder holds fewer than were fed). The access units are counted once here (one scan of
+    the file just written) and recorded in ``video.access_units``."""
+    fed = int((vinfo or {}).get("fed") or 0)
+    path = out / recorded_frames.VIDEO_FILE
+    try:
+        aus = len(recorded_frames.stream_access_units(path)) if path.exists() else 0
+    except OSError as exc:  # the manifest is still written; the reader counts again
+        if vinfo is not None:
+            vinfo["access_units_error"] = f"{type(exc).__name__}: {exc}"
+        return fed
+    if vinfo is not None:
+        vinfo["access_units"] = aus
+    return min(fed, aus)
+
+
 def start_video(a: argparse.Namespace, session_id: str, w: int, h: int) -> Any:
-    """Stage 2's side stream (--format vpp-hevc444-10-q20 --also-png): a started
-    media_rec.VideoFeed, or None without one. A side stream that cannot start REFUSES the first
-    part (nothing has been recorded: start the sidecar and retry); a later part (--resume) records
-    PNG only, the reason in its manifest (the PNG is the reference)."""
+    """The video side (``a.video``): a started media_rec.VideoFeed, or None without one. A video
+    side that cannot start REFUSES the recording: always when the video holds the frames
+    (video-only: there is nothing to fall back on; start the sidecar and retry), and in stage 2's
+    side-by-side the first part; a later side-by-side part (--resume) records PNG only, the reason
+    in its manifest (the PNG is the reference)."""
     if not getattr(a, "video", None):
         return None
     import media_rec
@@ -482,7 +550,7 @@ def start_video(a: argparse.Namespace, session_id: str, w: int, h: int) -> Any:
     try:
         feed.start()
     except media_rec.VideoRefused as exc:
-        if getattr(a, "part", 0) == 0:
+        if a.format != "png" or getattr(a, "part", 0) == 0:
             raise r.Stop(f"not recording: the video side cannot start: {exc}") from exc
         print(f"WARNING: part {a.part}: the video side cannot start, PNG only: {exc}",
               file=sys.stderr)  # fmt: skip
@@ -511,8 +579,8 @@ def record_parts(a: argparse.Namespace, rec: Any = None) -> dict[str, Any]:
     --max-bytes budget the whole recording. Any other stop (its duration, the size or local cap, a
     signal, a refusal) ends it. The state file ends "ended" whatever happens. ``rec``: the part
     recorder (tests; default record)."""
-    if a.format != "png":
-        raise r.Stop("--resume / --state-file: png recordings only")
+    if a.format not in ("png", VIDEO_FORMAT):
+        raise r.Stop(f"--resume / --state-file: png or {VIDEO_FORMAT} recordings only")
     rec = rec or record
     parts: list[dict[str, Any]] = []
     left_s, left_b, paused_s, end = a.seconds, a.max_bytes, 0.0, "duration"
@@ -530,7 +598,7 @@ def record_parts(a: argparse.Namespace, rec: Any = None) -> dict[str, Any]:
             parts.append(res)
             print(json.dumps({"part": len(parts) - 1, **res}), flush=True)
             left_s -= res["seconds"]
-            left_b -= res["bytes"]
+            left_b -= res.get("bytes_total", res["bytes"])  # stage 2: the PNG and its video twin
             end = res["stop_reason"]
             if (STOP["flag"] or not end.startswith(RESUMABLE) or len(parts) > a.resume
                     or left_s <= 0 or left_b <= 0):  # fmt: skip
@@ -728,19 +796,22 @@ def main() -> int:
     )  # fmt: skip
     ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
-    ap.add_argument("--fps", type=float, default=1.0, help="png: the frame rate cap (Batt: 1)")
+    ap.add_argument("--fps", type=float, default=1.0,
+                    help="png / video: the frame rate cap (Batt: 1)")  # fmt: skip
     ap.add_argument(
         "--format",
         choices=["png", "h264", VIDEO_FORMAT],
         default=None,
-        help="default: h264 on console (Batt 2026-10-04), png on rdp; "
-        f"{VIDEO_FORMAT}: stage 2's side-by-side recording (rdp, with --also-png only)",
+        help=f"default: h264 on console (Batt 2026-10-04), {VIDEO_FORMAT} on rdp (ADR-0024, "
+        "Batt 2026-11-09: GPU video in place of PNG; the media-rec sidecar must be up); png: "
+        "lossless PNG shards (still selectable; required by the cue-fitting studies)",
     )
     ap.add_argument(
         "--also-png",
         action="store_true",
-        help=f"with --format {VIDEO_FORMAT}: every kept frame to BOTH the PNG shards and the "
-        "encoder sidecar (gpu-recording.md 9.1); the PNG is the reference",
+        help=f"with {VIDEO_FORMAT} (the rdp default): every kept frame to BOTH the PNG shards and "
+        "the encoder sidecar (stage 2's side-by-side, gpu-recording.md 9.1); the PNG is the "
+        "reference",
     )
     ap.add_argument(
         "--idr-every",
@@ -766,12 +837,13 @@ def main() -> int:
     )  # fmt: skip
     ap.add_argument(
         "--resume", type=int, default=0,
-        help="png: resume after an IO-guard or market-window stop as a new session of the same "
-             "label, at most N times (Amendment D); --seconds / --max-bytes budget all parts",
+        help="png / video: resume after an IO-guard or market-window stop as a new session of "
+             "the same label, at most N times (Amendment D); --seconds / --max-bytes budget all "
+             "parts",
     )  # fmt: skip
     ap.add_argument(
         "--state-file", type=Path, default=None,
-        help="png: the recorder's state (JSON, under /dev/shm) for a watch beside it",
+        help="png / video: the recorder's state (JSON, under /dev/shm) for a watch beside it",
     )  # fmt: skip
     ap.add_argument(
         "--max-bytes",
@@ -818,27 +890,29 @@ def main() -> int:
 
 
 def resolve_format(a: argparse.Namespace) -> None:
-    """The default format per backend (Batt 2026-10-04: h264 on console, png on rdp), and the
-    S2 client's own limits checked up front (it silently ignores an out-of-range start). Stage 2
-    (gpu-recording.md 9.1): --format vpp-hevc444-10-q20 --also-png is a PNG recording (``format``
-    png) with ``video`` set; the lossy format alone is refused (ADR-0010: Batt's decision)."""
+    """The default format per backend: h264 on console (Batt 2026-10-04), VIDEO_FORMAT on rdp
+    (ADR-0024, Batt 2026-11-09: the GPU video in place of PNG); png stays selectable. The video
+    format alone is the video-only recording (``format`` VIDEO_FORMAT, ``video`` set); with
+    --also-png it is stage 2's side-by-side (gpu-recording.md 9.1: ``format`` png, ``video`` set,
+    the PNG the reference). The S2 client's own limits are checked up front for h264 (it silently
+    ignores an out-of-range start)."""
     also = getattr(a, "also_png", False)
     a.video = None
+    if a.format is None:
+        a.format = "h264" if a.backend == "console" else VIDEO_FORMAT
     if a.format == VIDEO_FORMAT:
-        if not also:
-            raise r.Stop(f"--format {VIDEO_FORMAT}: only with --also-png (stage 2: recordings "
-                         "stay lossless until Batt amends ADR-0010)")  # fmt: skip
         if a.backend != "rdp":
             raise r.Stop(f"--format {VIDEO_FORMAT}: rdp only (the console records its own H.264)")
-        if a.out.resolve() != dataset_ship.LOCAL_ROOT.resolve():
-            raise r.Stop(f"--format {VIDEO_FORMAT}: --out must be {dataset_ship.LOCAL_ROOT} (the "
-                         "sidecar writes its .media-rec; a rename joins the two)")  # fmt: skip
-        a.format, a.video = "png", VIDEO_FORMAT
+        out = getattr(a, "out", dataset_ship.LOCAL_ROOT)
+        if out.resolve() != dataset_ship.LOCAL_ROOT.resolve():
+            raise r.Stop(f"--format {VIDEO_FORMAT} (the rdp default): --out must be "
+                         f"{dataset_ship.LOCAL_ROOT} (the sidecar writes its .media-rec there; a "
+                         "rename joins the two); --format png records to any --out")  # fmt: skip
+        a.format, a.video = ("png" if also else VIDEO_FORMAT), VIDEO_FORMAT
         return
     if also:
-        raise r.Stop(f"--also-png goes with --format {VIDEO_FORMAT}")
-    if a.format is None:
-        a.format = "h264" if a.backend == "console" else "png"
+        raise r.Stop(f"--also-png goes with {VIDEO_FORMAT} (the rdp default), not --format "
+                     f"{a.format}")  # fmt: skip
     if a.format != "h264":
         return
     if a.seconds > H264_MAX_SECONDS:

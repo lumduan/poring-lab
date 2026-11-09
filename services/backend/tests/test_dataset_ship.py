@@ -101,6 +101,38 @@ def test_ship_verifies_then_deletes_the_local_copy(ds: ModuleType, dirs: SimpleN
     assert line["event"] == "shipped" and line["session_id"] == SID
 
 
+def test_a_video_only_session_ships_and_verifies(ds: ModuleType, dirs: SimpleNamespace) -> None:
+    """ADR-0024 (2026-11-09): an RDP recording's frames are video.hevc + video.idx.csv, no shard;
+    every data file is checksummed, re-hashed on the NAS, then the local copy goes. The sidecar's
+    own dot-named directory (its stream while recording) is never a session and never shipped,
+    but its bytes count as unshipped under the root (the local caps)."""
+    sid = "20261109T080000-rdp-video"
+    session = dirs.root / sid
+    session.mkdir()
+    (session / "video.hevc").write_bytes(b"\x00\x00\x00\x01\x46\x01\x50" * 3000)
+    (session / "video.idx.csv").write_text("frame_id,t_mono_ns,video_index,status\n0,1,0,fed\n")
+    (session / "video.ffmpeg.log").write_text("ffmpeg log\n")
+    (session / "packets.jsonl.gz").write_bytes(b"\x1f\x8b gz")
+    manifest = {"session_id": sid, "format": "vpp-hevc444-10-q20", "shards": [], "frames": 1}
+    (session / "manifest.json").write_text(json.dumps(manifest))
+    part = dirs.root / ".media-rec"
+    part.mkdir()
+    (part / ".next.hevc").write_bytes(b"x" * 1000)  # a stream being recorded
+    assert ds.unshipped_bytes(dirs.root) >= 21_000 + 1000
+    assert [p.name for p in ds.sessions(dirs.root)] == [sid]
+    assert ds.main(ship_argv(dirs)) == 0
+    assert not session.exists() and (part / ".next.hevc").exists()
+    remote = dirs.dest / sid
+    sums = ds.read_checksums(remote / "checksums.sha256")
+    assert set(sums) == {"video.hevc", "video.idx.csv", "video.ffmpeg.log", "packets.jsonl.gz"}
+    assert all(ds.sha256_file(remote / rel) == digest for rel, digest in sums.items())
+    nas = json.loads((remote / "manifest.json").read_text())
+    assert nas["format"] == "vpp-hevc444-10-q20" and nas["storage"]["files"] == 4
+    assert ds.verify(remote, remote, sums) == []
+    (remote / "video.hevc").write_bytes(b"corrupt")
+    assert ds.verify(remote, remote, sums) == ["checksum mismatch on the NAS: video.hevc"]
+
+
 def test_keep_local_banks_a_verified_copy_and_keeps_the_working_one(
     ds: ModuleType, dirs: SimpleNamespace
 ) -> None:
@@ -375,9 +407,10 @@ def test_record_session_h264_refuses_rdp_and_bad_labels(
         rs.record_h264(args, None, {}, "", "20261004T120000-console-x", tmp_path / "s", {}, 0)
 
 
-def test_the_default_format_is_h264_on_console_and_png_on_rdp() -> None:
-    """Batt 2026-10-04 (C4): H.264 with an IDR every 1 s is the default dataset format; PNG stays
-    selectable; the S2 client's own limits are checked before anything starts."""
+def test_the_default_format_is_h264_on_console_and_video_on_rdp() -> None:
+    """Batt 2026-10-04 (C4): H.264 with an IDR every 1 s is the default dataset format on console;
+    Batt 2026-11-09 (ADR-0024): GPU video on rdp; PNG stays selectable; the S2 client's own limits
+    are checked before anything starts."""
     rs = load("record_session")
 
     def args(**kw: object) -> SimpleNamespace:
@@ -390,7 +423,10 @@ def test_the_default_format_is_h264_on_console_and_png_on_rdp() -> None:
     assert (a.format, a.idr_every) == ("h264", 1.0)
     a = args(backend="rdp")
     rs.resolve_format(a)
-    assert a.format == "png"
+    assert a.format == a.video == "vpp-hevc444-10-q20"
+    a = args(backend="rdp", format="png")
+    rs.resolve_format(a)
+    assert a.format == "png" and a.video is None
     a = args(format="png")
     rs.resolve_format(a)
     assert a.format == "png"  # still selectable on console
@@ -400,7 +436,7 @@ def test_the_default_format_is_h264_on_console_and_png_on_rdp() -> None:
         rs.resolve_format(args(max_bytes=9 * 10**9))
     with pytest.raises(rs.r.Stop, match="0..60"):
         rs.resolve_format(args(idr_every=90.0))
-    assert rs.RECORDER_VERSION == 6  # v6 (2026-10-28): the IO rule follows the sink
+    assert rs.RECORDER_VERSION == 7  # v7 (2026-11-09): video on rdp; v6: the IO rule's sink
 
 
 def test_a_sidecar_joins_a_shipped_session_and_is_never_replaced(

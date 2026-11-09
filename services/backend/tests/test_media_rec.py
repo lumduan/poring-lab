@@ -235,7 +235,10 @@ def test_the_alpha_is_forced_on_a_copy(mr: ModuleType) -> None:
     assert (img[..., 3] == 0).all()
 
 
-def test_record_session_resolves_the_stage_2_format(mr: ModuleType) -> None:
+def test_record_session_resolves_the_video_and_stage_2_formats(mr: ModuleType) -> None:
+    """ADR-0024 (Batt 2026-11-09): the video format is the rdp default, alone (the video holds
+    the frames) or with --also-png (stage 2's side-by-side: a PNG session with its twin); PNG stays
+    selectable and records to any --out; the console keeps its H.264."""
     rs = _load("record_session")
     root = rs.dataset_ship.LOCAL_ROOT
 
@@ -244,15 +247,20 @@ def test_record_session_resolves_the_stage_2_format(mr: ModuleType) -> None:
                 "seconds": 60.0, "max_bytes": 1 << 30, "idr_every": 1.0}  # fmt: skip
         return argparse.Namespace(**{**base, **kw})
 
-    a = ns(format=mr.ARM, also_png=True)
-    rs.resolve_format(a)
-    assert a.format == "png" and a.video == mr.ARM
-    a = ns()
-    rs.resolve_format(a)
-    assert a.format == "png" and a.video is None
-    for bad, why in ((ns(format=mr.ARM), "only with --also-png"),
-                     (ns(also_png=True), "goes with"),
-                     (ns(format=mr.ARM, also_png=True, backend="console"), "rdp only"),
+    for a, fmt, video in ((ns(), mr.ARM, mr.ARM),  # the rdp default: video only
+                          (ns(format=mr.ARM), mr.ARM, mr.ARM),
+                          (ns(format=mr.ARM, also_png=True), "png", mr.ARM),  # stage 2
+                          (ns(also_png=True), "png", mr.ARM),  # the default's twin
+                          (ns(format="png"), "png", None),
+                          (ns(format="png", out=Path("/dev/shm/x")), "png", None),
+                          (ns(backend="console"), "h264", None)):  # fmt: skip
+        rs.resolve_format(a)
+        assert (a.format, a.video) == (fmt, video)
+    assert rs.VIDEO_FORMAT == mr.ARM and rs.RECORDER_VERSION == 7
+    for bad, why in ((ns(format="png", also_png=True), "goes with"),
+                     (ns(backend="console", also_png=True), "goes with"),
+                     (ns(format=mr.ARM, backend="console"), "rdp only"),
+                     (ns(out=Path("/dev/shm/x")), "--out must"),  # the default needs the root
                      (ns(format=mr.ARM, also_png=True, out=Path("/dev/shm/x")), "--out must"),
                      ):  # fmt: skip
         with pytest.raises(rs.r.Stop, match=why):
@@ -563,9 +571,10 @@ class FakeScreen:
 
 
 def _record(rs: ModuleType, mr: ModuleType, monkeypatch: pytest.MonkeyPatch, ctl: Path,
-            root: Path, n: int) -> dict[str, Any]:  # fmt: skip
+            root: Path, n: int, *, fmt: str = "png", part: int = 0) -> dict[str, Any]:  # fmt: skip
     """record_session.record() with everything around the frames faked: the lock, the config, the
-    screen, the guard, the packets, the caps; the video side is real (VideoFeed + the sidecar)."""
+    screen, the guard, the packets, the caps; the video side is real (VideoFeed + the sidecar).
+    ``fmt``: "png" (stage 2: the PNG and its video twin) or mr.ARM (the video only)."""
     usec = {"n": 0}
 
     def cpu_usec(name: str) -> int:
@@ -596,10 +605,10 @@ def _record(rs: ModuleType, mr: ModuleType, monkeypatch: pytest.MonkeyPatch, ctl
     monkeypatch.setattr(mr, "CTL", ctl)
     monkeypatch.setattr(mr, "container_state", lambda name=mr.CONTAINER: "running")
     monkeypatch.setattr(mr, "container_image", lambda name=mr.CONTAINER: "sha256:stub")
-    a = argparse.Namespace(backend="rdp", label="s2test", seconds=3.0, fps=4.0, format="png",
+    a = argparse.Namespace(backend="rdp", label="s2test", seconds=3.0, fps=4.0, format=fmt,
                            video=mr.ARM, png_level=1, out=root, max_bytes=1 << 30,
                            min_free_gb=0.0, max_unshipped_gb=1000.0, io_rule="auto", resume=0,
-                           part=0)  # fmt: skip
+                           part=part)  # fmt: skip
     res: dict[str, Any] = rs.record(a)
     return res
 
@@ -683,3 +692,111 @@ def test_the_sidecar_ends_a_job_whose_host_never_came(mr: ModuleType, tmp_path: 
     finally:
         log = side.stop()
     assert "a writer opened and closed" in log
+
+
+# --- STAGE 3 (ADR-0024): the video holds the frames -----------------------------------------------
+
+
+def _psnr(a: np.ndarray, b: np.ndarray) -> float:
+    mse = float(np.mean((a.astype(np.float64) - b.astype(np.float64)) ** 2))
+    return 99.0 if mse == 0 else 10 * np.log10(255.0**2 / mse)
+
+
+def test_end_to_end_a_video_only_recording_and_its_reader(
+        mr: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """record() with the video format alone: no shards, the frames in video.hevc, every kept
+    frame's row with the PNG record's fields; poring_dataset.frames serves every frame, by index
+    and in order, matched to its grab by frame id and time."""
+    from poring_dataset import frames as fr
+
+    rs = _load("record_session")
+    ctl, root, rec = _dirs(tmp_path)
+    side = _Sidecar(tmp_path, ctl, rec)
+    screen = FakeScreen(5)  # the same pictures the recorder grabs (a seeded generator)
+    try:
+        res = _record(rs, mr, monkeypatch, ctl, root, 5, fmt=mr.ARM)
+    finally:
+        log = side.stop()
+    assert "rc=0" in log
+    session = Path(res["dir"])
+    manifest = json.loads((session / "manifest.json").read_text())
+    assert manifest["format"] == mr.ARM and res["format"] == mr.ARM
+    assert manifest["shards"] == [] and not list(session.glob("shard-*.tar"))
+    assert manifest["frames"] == manifest["kept"] == 5 and manifest["recorder_version"] == 7
+    assert manifest["png_level"] is None and manifest["stop_reason"] == "duration"
+    v = manifest["video"]
+    assert v["status"] == "ok" and v["fed"] == 5 and v["access_units"] == 5
+    size = (session / "video.hevc").stat().st_size
+    assert manifest["bytes"] == size == res["bytes"] == res["bytes_total"]
+    names = sorted(p.name for p in session.iterdir())  # (the packets file: faked here)
+    assert names == ["manifest.json", "video.ffmpeg.log", "video.hevc", "video.idx.csv"]
+    rows = list(csv.DictReader((session / "video.idx.csv").open()))
+    assert [r["source"] for r in rows] == ["x11"] * 5 and all(r["t_wall"] for r in rows)
+    assert [r["bus_frame_id"] for r in rows] == ["-1"] * 5
+    refs = fr.frame_refs(session)
+    assert [r.frame_id for r in refs] == list(range(5))
+    got = list(fr.iter_bgr(session))
+    assert [m["frame_id"] for m, _ in got] == list(range(5))
+    for (meta, img), ref, row in zip(got, refs, rows, strict=True):
+        assert meta["t_mono_ns"] == ref.t_mono_ns == int(row["t_mono_ns"])
+        assert meta["source"] == "x11" and meta["t_wall"] == row["t_wall"]
+        assert img.shape == (720, 1280, 3)
+        assert _psnr(img, np.asarray(screen.frames[meta["frame_id"]])[..., :3]) > 40
+        assert np.array_equal(fr.read_ref(ref, (1280, 720)), img)  # alone == in order
+    assert fr.verify_video(session)["ok"] is True
+
+
+def test_end_to_end_a_video_only_recording_stops_when_its_encoder_dies(
+        mr: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    from poring_dataset import frames as fr
+
+    rs = _load("record_session")
+    ctl, root, rec = _dirs(tmp_path)
+    side = _Sidecar(tmp_path, ctl, rec, STUB_DIE_AFTER="2")
+    try:
+        res = _record(rs, mr, monkeypatch, ctl, root, 5, fmt=mr.ARM)
+    finally:
+        log = side.stop()
+    assert "rc=1" in log
+    session = Path(res["dir"])
+    manifest = json.loads((session / "manifest.json").read_text())
+    assert manifest["stop_reason"].startswith("video_failed: ") and "EPIPE" in res["stop_reason"]
+    assert manifest["video"]["status"] == "failed" and manifest["frames"] == 2
+    assert manifest["kept"] >= 3  # the frame whose write failed is kept, never in the stream
+    assert [r.frame_id for r in fr.frame_refs(session)] == [0, 1]
+
+
+def test_a_video_only_recording_without_its_sidecar_refuses_every_part(
+        mr: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """No fallback: a video recording whose encoder cannot start records nothing (part 0 and a
+    resumed part alike) and leaves no session directory behind."""
+    rs = _load("record_session")
+    ctl, root, _rec = _dirs(tmp_path)
+    monkeypatch.setattr(mr, "OPEN_TIMEOUT_S", 0.3)
+    real = mr.VideoFeed
+
+    def quick(*a: Any, **k: Any) -> Any:
+        return real(*a, **{**k, "open_timeout_s": 0.3})
+
+    monkeypatch.setattr(mr, "VideoFeed", quick)
+    for part in (0, 1):
+        with pytest.raises(rs.r.Stop, match="the video side cannot start"):
+            _record(rs, mr, monkeypatch, ctl, root, 3, fmt=mr.ARM, part=part)
+    assert [p.name for p in root.iterdir()] == [".media-rec"]
+
+
+def test_resume_takes_the_video_format_and_budgets_both_files() -> None:
+    rs = _load("record_session")
+    calls: list[argparse.Namespace] = []
+
+    def part(a: argparse.Namespace) -> dict[str, Any]:
+        calls.append(a)
+        why = "io_guard: cg 41.0% (above 30.0% for 30s)" if len(calls) == 1 else "duration"
+        return {"dir": f"/rec/{len(calls)}", "frames": 10, "bytes": 1 << 20, "seconds": 100.0,
+                "stop_reason": why, "bytes_total": 3 << 20}  # fmt: skip
+
+    rs.wait_ready = lambda first, budget: (True, 0.0)
+    a = argparse.Namespace(format=rs.VIDEO_FORMAT, seconds=600.0, max_bytes=10 << 20, resume=2,
+                           io_rule="sustained", label="v")  # fmt: skip
+    out = rs.record_parts(a, part)
+    assert out["parts"] == 2 and [c.max_bytes for c in calls] == [10 << 20, 7 << 20]

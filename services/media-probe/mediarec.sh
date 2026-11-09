@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# THE STAGE-2 ENCODER SIDECAR, container side (docs/planning/gpu-recording.md 9.1; its bars
-# PRE-REGISTERED before any run). Runs in the media-probe IMAGE as the long-lived compose service
+# THE RECORDING ENCODER SIDECAR, container side (docs/planning/gpu-recording.md 9.1; built for
+# stage 2, the side-by-side check, and since stage 3 -- ADR-0024, Batt 2026-11-09 -- the encoder
+# of every RDP recording: the video holds the frames). Runs in the media-probe IMAGE as the
+# long-lived compose service
 # `media-rec` (profile mediarec; tests/test_guards.py pins it): no network, a read-only root, the
 # render node only, user 1000, exactly two data binds:
 #   /ctl  the host's /dev/shm/poring-lab-mediarec (RAM): the job file, the frame pipe, status files
@@ -9,8 +11,8 @@
 # Started and removed ONLY by guarded_build.py (start:media-rec@60, rm:media-rec); between the two
 # it idles here, waiting for a job.
 #
-# One job at a time; the host side is scripts/media_rec.py VideoFeed (record_session.py --format
-# vpp-hevc444-10-q20 --also-png):
+# One job at a time; the host side is scripts/media_rec.py VideoFeed (record_session.py --backend
+# rdp: the default format vpp-hevc444-10-q20, or with --also-png stage 2's PNG twin beside it):
 #   /ctl/job               "start <session id> <width> <height> <max bytes>" (the host, atomically)
 #   /ctl/frames.fifo       the named pipe the host feeds: raw BGRA, width x height x 4 bytes a frame
 #   /ctl/running           SID=<id> while its ffmpeg runs (this script is its only writer)
