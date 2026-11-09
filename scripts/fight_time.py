@@ -22,6 +22,11 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
   their share (L3; p38: 17 / 53); the ``engage`` events ended by a ``fight_end`` "quiet kill" in
   under 50 ms, and their share of all engages (L4; p38: 1,057 / 1,144); the loot clicks by why
   (``list`` / ``sweep`` / ``scan_hand``).
+- Q1 / S1 (--quiet-scan, rogue-xmas02.md 4AW; committed before p42 was scored): the ``scan``
+  events of purpose ``defend`` whose START (the event time minus its ``ms``) had NO ``act`` on us
+  (target OUR_GID) in the 5 s before -- Q1 counts them (p38 / p39 / p40: 39 / 28 / 34) and how
+  many found a sword; S1 = our damaging hits taken (``act`` on us with damage > 0) per 10 min of
+  the run (p38 / p39 / p40: 11.2 / 10.8 / 11.2).
 By this definition (2026-11-09): p21 92 fights, 42 kill fights, after the kill p50 6.46 s (total
 276.8 s), no-kill fights 50 (434.1 s); p16 6.50 s (296.3 s), p19 6.53 s, p22 6.47 s.
 """
@@ -133,6 +138,30 @@ def loot_order(events: Sequence[dict[str, Any]], within_s: float = 5.0,
             "loot_clicks_by": dict(sorted(why.items()))}  # fmt: skip
 
 
+def quiet_scans(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
+                our_gid: int = OUR_GID, window_s: float = 5.0) -> dict[str, Any]:  # fmt: skip
+    """PURE: Q1 (defend scans with no act on us in the ``window_s`` before their start) and S1
+    (damaging acts on us per 10 min of the run)."""
+    on_us = sorted(int(p["t_mono_ns"]) for p in packets
+                   if p.get("type") == "act" and p.get("target_gid") == our_gid)  # fmt: skip
+    quiet = found = 0
+    for e in events:
+        if e.get("kind") != "scan" or e.get("purpose") != "defend":
+            continue
+        start = int(e["t_ns"]) - int(float(e.get("ms") or 0) * 1e6)
+        if not any(start - window_s * 1e9 <= t <= start for t in on_us):
+            quiet += 1
+            found += e.get("found") is not None
+    t0 = next((int(e["t_ns"]) for e in events if e.get("kind") == "run_start"), None)
+    t1 = next((int(e["t_ns"]) for e in reversed(events) if e.get("kind") == "run_end"), None)
+    per10 = None
+    if t0 is not None and t1 is not None and t1 > t0:
+        n = sum(1 for p in packets if p.get("type") == "act" and p.get("target_gid") == our_gid
+                and int(p.get("damage") or 0) > 0 and t0 <= int(p["t_mono_ns"]) <= t1)  # fmt: skip
+        per10 = round(n / ((t1 - t0) / 6e10) * 10, 1)
+    return {"quiet_defend_scans": quiet, "quiet_defend_found": found, "hits_taken_per10": per10}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -143,7 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     kills = our_kills(packets)
     print(json.dumps({"session": a.session.name, **summary(fights(events), kills),
                       **hit_gap_match(events, kills),
-                      **loot_summary(events, packets, kills), **loot_order(events)}))  # fmt: skip
+                      **loot_summary(events, packets, kills), **loot_order(events),
+                      **quiet_scans(events, packets)}))  # fmt: skip
     return 0
 
 

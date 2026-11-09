@@ -277,6 +277,13 @@ LOOT_SETTLE_S, LOOT_SETTLE_MAX_S = 0.8, 3.0
 # came within 1 s, and that spot joins the loot list (the loot step after the fight looks
 # around it).
 LOOT_FIRST_VERSION = "9.16"
+# --quiet-scan (dungeon@9.17, rogue-xmas02.md 4AW; Batt 2026-11-09 ~12:3x, his clip 1: "if no
+# damage happened in the last 5 s, there is no need to scan"): the ring scan for an attacker
+# ("defend": a fight with no lock, and after a walk stall) runs only when the screen showed
+# damage within QUIET_SCAN_S -- a hit line on us, an HP drop, a Miss at us, or a damage line of
+# ours. p38-p40 (packets, fight_time Q1): 39 / 28 / 34 defend scans came with no hit on us in the
+# 5 s before; they found a monster 7 times in 101 and took ~75-100 s a run.
+QUIET_SCAN_S = 5.0
 EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by then is given up
 # --walk-pick (dungeon@9.15, rogue-xmas02.md 4AM): a walk target fits only when the cell the CLIENT
 # picks under its projected pixel (picked_cell: the camera ray's first tile top) is walkable and
@@ -1138,6 +1145,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
             "9.13d",
             LOOT_SETTLE_S,
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
+    if getattr(a, "quiet_scan", False):  # dungeon@9.17 (rogue-xmas02.md 4AW)
+        out["quiet_scan"] = [QUIET_SCAN_S, "9.17"]
     if getattr(a, "loot_first", False):  # dungeon@9.16 (rogue-xmas02.md 4AT)
         out["loot_first"] = [LOOT_FIRST_VERSION]
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
@@ -1316,6 +1325,14 @@ def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GA
     """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
     landed on this lock and none for ``gap_s`` since the last."""
     return hits_on_lock >= min_hits and since_last_hit > gap_s
+
+
+def scan_needed(now: float, last_taken: float, last_ours: float, last_swing: float,
+                hp_drop: bool, window_s: float = QUIET_SCAN_S) -> bool:  # fmt: skip
+    """PURE (--quiet-scan, 9.17): the screen showed damage within ``window_s`` -- a hit line on us,
+    a damage line of ours, a Miss read at us -- or the HP just dropped; else the scan is skipped."""
+    recent = min(now - last_taken, now - last_ours, now - last_swing)
+    return hp_drop or recent < window_s
 
 
 def box_engage_held(loot_first: bool, mode: str, loot_pending: bool) -> bool:
@@ -2307,6 +2324,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_ours = -1e9
         loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
         loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
+        quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
         fight_t0 = -1e9  # 9.16: when the current fight began (the engage below)
         ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
         ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
@@ -3860,7 +3878,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                    and tick - float(box_fight.get("approach_t", -1e9))
                                    < APPROACH_HOLD_S)  # fmt: skip
                     if lock is None and not approaching:  # dungeon@9.10: no scan mid-approach
-                        found = scan("defend", ring(1), "sword")
+                        if quiet_scan_on and not scan_needed(
+                                tick, last_taken, last_ours, last_swing,
+                                hp_dropped(st.hist, tick)):  # fmt: skip
+                            counts["quiet_scan_skip"] += 1  # 9.17: no damage in 5 s
+                            found = None
+                        else:
+                            found = scan("defend", ring(1), "sword")
                         if found is None and not quiet:  # ring 2 only while hits still come
                             found = scan("defend", ring(2), "sword")
                         if found is not None:
@@ -4214,7 +4238,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                         time.sleep(1.0)
                                         continue
                                     # monsters that only MISS write no log line: look around
-                                    found = scan("defend", ring(1), "sword")
+                                    # (9.17: only after damage in the last 5 s -- the Miss cue
+                                    # reads the misses now)
+                                    if quiet_scan_on and not scan_needed(
+                                            tick, last_taken, last_ours, last_swing,
+                                            hp_dropped(st.hist, tick)):  # fmt: skip
+                                        counts["quiet_scan_skip_stall"] += 1
+                                        found = None
+                                    else:
+                                        found = scan("defend", ring(1), "sword")
                                     if found is not None:
                                         c2, (u2, v2), _r2 = found
                                         ev({"kind": "engage", "by": "stall_scan", "name": None})
@@ -4508,6 +4540,14 @@ def main() -> int:
         help="dungeon@9.15c (rogue-xmas02.md 4AU; OFF by default; with --walk-pick): when no "
         "path cell passes the pick check, the pickable one-click step nearest the goal instead "
         "of the plain target",
+    )
+    t.add_argument(
+        "--quiet-scan",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.17 (rogue-xmas02.md 4AW; OFF by default): the ring scan for an attacker "
+        "runs only after damage on the screen in the last 5 s (a hit line on us, an HP drop, a "
+        "Miss at us, a damage line of ours); else a fight with no lock ends at once",
     )
     t.add_argument(
         "--loot-first",

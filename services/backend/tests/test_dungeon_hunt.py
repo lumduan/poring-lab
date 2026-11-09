@@ -1577,3 +1577,28 @@ def test_walk_pick_step_takes_the_pickable_step_nearest_the_goal() -> None:
     i_plain = src.index("wt_ = walk_target(goal_path, ahead_, fits_plain)")
     assert i_step < i_plain
     assert 'rec_w["pick"] = pick_how' in src
+
+
+def test_quiet_scan_skips_the_ring_scan_without_damage_in_5_s() -> None:
+    """dungeon@9.17 (rogue-xmas02.md 4AW; Batt's clip 1: no damage in the last 5 s, no scan):
+    p38-p40's defend scans with no hit on us in the 5 s before found a monster 7 times in 101.
+    Off by default."""
+    assert dh.QUIET_SCAN_S == 5.0
+    never = -1e9
+    assert not dh.scan_needed(100.0, never, never, never, False)  # nothing: skip
+    assert dh.scan_needed(100.0, 96.0, never, never, False)  # hit on us 4 s ago
+    assert dh.scan_needed(100.0, never, 95.5, never, False)  # our damage line 4.5 s ago
+    assert dh.scan_needed(100.0, never, never, 99.0, False)  # a Miss at us
+    assert dh.scan_needed(100.0, never, never, never, True)  # the HP just dropped
+    assert not dh.scan_needed(100.0, 94.9, 94.0, 90.0, False)  # all older than 5 s
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "quiet_scan" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, quiet_scan=True))
+    assert rec["quiet_scan"] == [5.0, "9.17"]
+    src = Path(dh.__file__).read_text()
+    assert src.count("if quiet_scan_on and not scan_needed(") == 2  # the fight and the stall
+    assert 'counts["quiet_scan_skip"] += 1' in src and 'counts["quiet_scan_skip_stall"] += 1' in src
+    # without the flag both scans run exactly as before
+    assert src.count('found = scan("defend", ring(1), "sword")') == 2

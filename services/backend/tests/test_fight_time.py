@@ -93,3 +93,19 @@ def test_loot_order_counts_looted_kills_and_instant_ends() -> None:
     assert got["kills_looted_5s"] == 1 and got["kills_events"] == 2 and got["looted_share"] == 0.5
     assert got["engages"] == 2 and got["instant_ends"] == 1 and got["instant_share"] == 0.5
     assert got["loot_clicks_by"] == {"list": 1, "scan_hand": 1}
+
+
+def test_quiet_scans_counts_defend_scans_without_a_hit_before_and_hits_taken() -> None:
+    """Q1 / S1 (rogue-xmas02.md 4AW): a defend scan is quiet when no act on us came in the 5 s
+    before its START (event time minus ms); S1 = damaging acts on us per 10 min of the run."""
+    ev = [{"kind": "run_start", "t_ns": 0},
+          {"kind": "scan", "purpose": "defend", "ms": 2000, "found": None, "t_ns": 12 * S},
+          {"kind": "scan", "purpose": "defend", "ms": 1000, "found": [1, 2], "t_ns": 31 * S},
+          {"kind": "scan", "purpose": "loot", "ms": 1000, "found": None, "t_ns": 50 * S},
+          {"kind": "run_end", "t_ns": 600 * S}]  # fmt: skip
+    pk = [{"type": "act", "target_gid": ft.OUR_GID, "damage": 30, "t_mono_ns": 7 * S},  # < 5 s
+          {"type": "act", "target_gid": ft.OUR_GID, "damage": 0, "t_mono_ns": 20 * S},  # a miss
+          {"type": "act", "target_gid": 99, "damage": 50, "t_mono_ns": 29 * S}]  # fmt: skip
+    got = ft.quiet_scans(ev, pk)
+    assert got["quiet_defend_scans"] == 1 and got["quiet_defend_found"] == 1  # the 2nd scan only
+    assert got["hits_taken_per10"] == 1.0  # one damaging hit in 10 min
