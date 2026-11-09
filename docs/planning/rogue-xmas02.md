@@ -2950,3 +2950,24 @@ R1 FAILS (2). `--walk-pick` stays OFF (4AM's rule) -- and the run showed a regre
   the base itself in some runs; its use as a per-run regression bar is for Batt to revisit.
 - **Items (snatched):** Scell 14, Piece of Cake 4, Zargon 4, Red Herb 3, Manacles 3, Well-baked
   Cookie 1, Pearl 1, Iron 1.
+
+**Pilot p35 (4AO; 11:09:37-11:35:29, 25 min; the MVP killed 11:08:50 after polls at 11:04 (dead)
+and 11:08 (alive at 178, 235); immunity OFF at 11:09:13 and ON at 11:35:44; the base + `--explore
+--explore-cover`). VERDICT: C1 FAILS (407 new cells); C2, E1, the safety bars PASS.
+`--explore-cover` stays OFF (4AO's rule).**
+
+| | E1 / E2 explore runs | p34 | **p35 (+ explore-cover)** | bar |
+|---|---|---|---|---|
+| C1 new cells (vs the knowledge file before the run) | p29 607, p30 598, p31 600, p33 532 | 495 | **407** (of 533 visited: 76 %) | >= 700: FAIL |
+| C2 east-half share of the run's visited cells | 27.0 / 27.6 / 51.4 / 42.3 % | | **43.5 %** | 35-65 %: PASS |
+| E1 kills | 146.1-160.8 / h | 141.5 / h | **66 (158.1 / h)** | >= 80 / h: PASS |
+| deaths; E3; U1; X1 / X2 | | | **0; pass, 0 Fly Wings, 0 stalls; 0 s; 6 runs merged / no hook error** | PASS |
+
+- New cells fall run by run as the map fills (607 -> 407), and p35's new share of its visited cells
+  (76 %) is below p34's (495 of 607: 82 %): the coverage novelty did not find more new ground; legs
+  to far low-coverage regions still time out (5 of 12 targets).
+- 12 targeted, 6 reached, 5 timed out; monsters seen 71 (28.3 / 10 min), kills per seen 0.93;
+  stuck 0 s (0 of 311 requests ignored); lowest HP 72.9 %. The knowledge: 6 runs, 309 regions,
+  3,239 cells visited, 15 refused.
+- **Items (snatched):** Scell 13, Zargon 11, Piece of Cake 5, Well-baked Cookie 4, Red Herb 2,
+  Manacles 2, Candy 1, Candy Cane 1, Pearl 1.
