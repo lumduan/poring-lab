@@ -1651,3 +1651,16 @@ Variables (bot-server):
    execdev instead. A fix (skip the duty arguments on dedicated hosts) is its own change.
 7. VAL (xw1) holds no Garm Baby, so the training's monitor says nothing about it; the held-out
    score decides.
+
+#### M8 (2026-11-10 06:13 ICT, BEFORE any TEST or gw3 read): the training ended; THE SCORED MODEL FROZEN
+
+- `train ended rc=0` at 06:11:34 ICT (started 2026-11-09 22:14:03): all 20 epochs, 28,642 s,
+  FP32 on the Arc A380 (torch 2.15.0+xpu), peak 2,190 MiB, no step sleep; the guard's worst stall
+  0.0 %.
+- VAL (xw1 x 2, monitor only; NO Garm Baby in it) at epoch 20: P 0.983, R 0.984, mAP50 0.993,
+  mAP50-95 0.922; AP50 player 0.995, mystcase 0.9947, cruiser 0.9883, cookie 0.9937, cookie_xmas
+  0.9939.
+- **The scored checkpoint:** `data/train/xmas02-gb-20261109/weights/last.pt` after epoch 20,
+  **sha256 `85fb37a4cb606aad4636d605f9a2056dde6431a42559e052b1036aaac5f98d6b`** (5,534,234 bytes).
+  Nothing is refitted after this line. Next: M6's steps 1-5 (the ONNX export, the evaluation once
+  under M7, the worker stopped, the run archived).
