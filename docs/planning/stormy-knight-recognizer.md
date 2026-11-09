@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "Round 2 (section 7, Batt 2026-11-09): R2-H1 beside p38, R2-H2 beside the next explore pilot, R2-W (16 test-lattice cells) in an MVP-dead window; DEV fit; held-out once."
+next_action: "Round 2 (sections 7-8): R2-W DONE 13:10-13:25, R2-H1 recording beside p38; next R2-H2 beside the next explore pilot, then the DEV fit and the held-out score once."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -400,3 +400,23 @@ DATA, and lets DEV decide the cues again; the bars are round 1's.
   <= 1 per 10 min on R2-H2; latency p95 <= 60 ms. Reported: lone Garm Baby positives.
 - **After a pass:** the flee rule (seen -> Fly Wing at once) and its live proof are pre-registered
   on their own; until that proof passes the kill-before-run schedule stays.
+
+## 8. Round 2: the data (recorded BEFORE any round-2 fit; nothing below was scored)
+
+- **R2-W (HELD-OUT):** `stage_items.py watch --map xmas_dun02 --lattice lattice-test.json --seed
+  2511 --max-cells 16 --max-minutes 24 --dwell-s 40 --spawn 1251 --label sk2 --immune-confirmed`
+  (immunity judged ON on the Chat tab at 13:08: "You are now immune to attacks."; the test lattice
+  sha256 98d3f0d4ec3b1574..., 88 stands, none used by round 1). Session
+  `20261109T131033-watch-xmas_dun02-sk2`, 13:10:33-13:25:27 ICT: 16 cells, 16 spawns, 16 dwells,
+  16 `@killmonster2`, reason "done". Cells in order: 50,223 192,49 93,248 118,72 203,170 214,248
+  104,59 60,49 93,104 104,192 182,49 137,16 192,27 170,225 194,170 115,60.
+  Its recording `20261109T131023-rdp-sk-watch2`: PNG, recorder v7, 918 frames, 1.97 GB, stopped by
+  SIGTERM at 13:25:4x after the watch's end (stop "stopped by signal").
+- The natural MVP: `@mobsearch` at 13:26:25 said "1[dead]" (its window from the 12:19:14 kill runs
+  to 13:29:14; the watch's `@killmonster2` would have killed a natural spawn too).
+- **R2-H1 (DEV):** `record_session.py --backend rdp --label hunt-xmas02-p38 --seconds 1620 --fps 1
+  --format png --max-bytes 6G`, session `20261109T133046-rdp-hunt-xmas02-p38`, beside pilot p38
+  (rogue-xmas02.md 4AS: the explore base + `--kill-gap`), from 13:30:46 ICT; the MVP dead by the
+  schedule (killed by the watch's `@killmonster2` at 13:19:49 at the earliest, so no respawn before
+  14:19:49).
+- Both stay local until the fit / the held-out score are done, then ship (`dataset_ship.py`).
