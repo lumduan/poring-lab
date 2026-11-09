@@ -28,6 +28,14 @@ character (the screen centre, with its HP / SP bars) left out:
   regression trained on the Orc Lord's and its archers' windows against the hunting frames'.
 `seen` when either score clears its frozen threshold. A frame that does not show the game (the
 Basic Info title bar missing: a loading screen) is never `seen` (reason ``no_game_view``).
+
+THE MODEL'S AURA MODE (stormy-knight-recognizer.md 9, round 2): how the two cues combine is the
+model's own (``aura_mode``), so decide() follows the MODEL, not the code's profile values:
+- ``or`` (every v1 model; a file without the field): seen = aura >= aura_thr OR party >= lin_thr;
+- ``off``: the party detector alone (the aura's colour stays one of its cell features);
+- ``and``: seen = party >= lin_thr OR (aura >= aura_thr AND party >= the AND threshold), the AND
+  threshold = lin_thr - (1 - aura_and) x |lin_thr| (``aura_and`` 0.5: half a positive lin_thr).
+An explicit ``cues`` argument (the Orc Lord's ("aura",) studies) still picks the cues.
 """
 
 from __future__ import annotations
@@ -69,6 +77,8 @@ CENTRE_BOX = (600, 250, 680, 412)
 SELF_ZONE = (560, 230, 720, 450)
 TITLE_BOX = (0, 0, 220, 16)  # Basic Info's title bar (full pixels), present in every layout
 AURA_RULE = (236, 25)  # G >= 236, G - R >= 25, G - B >= 25 (the Orc Lord's; a model's aura_rule)
+AURA_MODES = ("or", "and", "off")  # how a model combines its cues (``or``: every v1 model)
+AURA_AND = 0.5  # ``and``: the share of a positive lin_thr the aura path's party score needs
 
 
 class ModelUnavailable(RuntimeError):
@@ -92,6 +102,8 @@ class Model:
     version: str = "orclord-v1"
     profile: str = LEGACY_PROFILE  # the boss profile it was fitted for (mvp_profiles)
     aura_rule: tuple[int, int] = AURA_RULE  # the rim's colour rule (aura_lut)
+    aura_mode: str = "or"  # AURA_MODES: how the cues combine (decide)
+    aura_and: float = AURA_AND  # ``and`` only: and_threshold()
     sha256: str = ""
     _cache: dict[Any, Any] = field(default_factory=dict, compare=False, repr=False)
 
@@ -226,6 +238,16 @@ def valid_windows(skip: npt.NDArray[np.bool_], win: tuple[int, int] = WIN) -> np
     return out
 
 
+def model_cues(model: Model) -> tuple[str, ...]:
+    """The cues a model decides with when the caller names none: ``off`` -> the party alone."""
+    return ("party",) if model.aura_mode == "off" else ("aura", "party")
+
+
+def and_threshold(model: Model) -> float:
+    """``and``: the party score the aura path needs (half of a positive lin_thr by default)."""
+    return model.lin_thr - (1.0 - model.aura_and) * abs(model.lin_thr)
+
+
 def masks(model: Model, shape: tuple[int, int],
           ui_rects: tuple[tuple[int, int, int, int], ...]) -> tuple[Any, Any, Any]:  # fmt: skip
     """(the half-res skip mask: UI + centre, the valid party windows, the windows whose foot is
@@ -276,12 +298,14 @@ def scores(half: npt.NDArray[np.uint8], model: Model, ui_rects: Rects = HUNT_REC
 
 
 def decide(frame: npt.NDArray[np.uint8], model: Model, ui_rects: Rects = HUNT_RECTS,
-           cues: tuple[str, ...] = ("aura", "party")) -> dict[str, Any]:  # fmt: skip
+           cues: tuple[str, ...] | None = None) -> dict[str, Any]:  # fmt: skip
     """PURE: one 1280 x 720 BGR(A) frame -> {"seen", "where", "score", "cue", "aura", "party",
     "reason"}. ``where`` is the full-frame pixel of the winning cue's foot point (the aura ring's,
     or the party window's bottom centre); ``score`` = the larger relative margin over its
-    threshold (>= 0: seen). ``cues``: the frozen v1 recipe uses both; ("aura",) is the aura rule
-    alone (orclord-recognizer.md 6: no hunting false positive in 33 min, POST-HOC)."""
+    threshold (>= 0: seen). ``cues`` None: the model's own (model_cues: both for every v1 model,
+    the party alone for an ``off`` one); ("aura",) is the aura rule alone (orclord-recognizer.md
+    6: no hunting false positive in 33 min, POST-HOC). Both cues combine by the model's
+    ``aura_mode`` (``or``, or ``and``: the aura path also needs and_threshold())."""
     frame = np.asarray(frame)[..., :3]
     out: dict[str, Any] = {"seen": False, "where": None, "score": None, "cue": None,
                            "aura": None, "party": None, "reason": None}  # fmt: skip
@@ -294,13 +318,17 @@ def decide(frame: npt.NDArray[np.uint8], model: Model, ui_rects: Rects = HUNT_RE
 def decide_half(half: npt.NDArray[np.uint8], model: Model,
                 ui_rects: tuple[tuple[int, int, int, int], ...] = HUNT_RECTS,
                 out: dict[str, Any] | None = None,
-                cues: tuple[str, ...] = ("aura", "party")) -> dict[str, Any]:  # fmt: skip
+                cues: tuple[str, ...] | None = None) -> dict[str, Any]:  # fmt: skip
     """decide() on the half-res view (360 x 640) the study caches."""
     if out is None:
         out = {"seen": False, "where": None, "score": None, "cue": None, "aura": None,
                "party": None, "reason": None}  # fmt: skip
+    if cues is None:
+        cues = model_cues(model)
     if not set(cues) <= {"aura", "party"} or not cues:
         raise ValueError(f"unknown cues {cues!r}")
+    if model.aura_mode not in AURA_MODES:
+        raise ValueError(f"unknown aura_mode {model.aura_mode!r}")
     if not game_view(half, model):
         out["reason"] = "no_game_view"
         return out
@@ -314,9 +342,13 @@ def decide_half(half: npt.NDArray[np.uint8], model: Model,
         sp = float(pm.flat[pi])
     ma = (sa - model.aura_thr) / max(model.aura_thr, 1e-6)
     mp = (sp - model.lin_thr) / max(abs(model.lin_thr), 1e-6)
+    both_and = model.aura_mode == "and" and pm is not None and "aura" in cues
+    if both_and:  # the aura path also needs the party's AND threshold
+        at = and_threshold(model)
+        ma = min(ma, (sp - at) / max(abs(at), 1e-6))
     out.update(aura=round(float(am.flat[ai]), 4), score=round(max(ma, mp), 4),
                party=None if pm is None else round(sp, 3))  # fmt: skip
-    if ma >= mp:
+    if "aura" in cues and ma >= mp:
         y, x = divmod(ai, am.shape[1])
         kh, kw = ring_kernel(model.ring, model.ring_cell).shape
         cx = (x + (kw - 1) / 2 + 0.5) * model.ring_cell
@@ -327,7 +359,8 @@ def decide_half(half: npt.NDArray[np.uint8], model: Model,
         cx, cy = (x + WIN[1] / 2) * CELL, (y + WIN[0]) * CELL
         out["cue"] = "party"
     out["where"] = (round(cx * STEP), round(cy * STEP))
-    out["seen"] = sa >= model.aura_thr or sp >= model.lin_thr
+    aura_ok = sa >= model.aura_thr and (not both_and or sp >= and_threshold(model))
+    out["seen"] = aura_ok or sp >= model.lin_thr
     return out
 
 
@@ -348,12 +381,18 @@ def default_model(profile: str = LEGACY_PROFILE) -> Path:
 
 def save(path: Path, model: Model) -> str:
     """Write a model (np.savez, no pickle) and return its sha256. The Orc Lord's (LEGACY_PROFILE)
-    keeps the v1 format byte for byte: no ``profile`` / ``aura_rule`` member (so it cannot carry
-    another aura rule); every other profile's file names its profile and its aura rule."""
+    keeps the v1 format byte for byte: no ``profile`` / ``aura_rule`` / ``aura_mode`` member (so
+    it cannot carry another aura rule or mode); every other profile's file names its profile and
+    its aura rule, and its aura mode when it is not ``or`` (with ``aura_and`` for ``and``): an
+    ``or`` model keeps the bytes of B1's format."""
     check_profile(model.profile)
+    if model.aura_mode not in AURA_MODES:
+        raise ValueError(f"aura_mode {model.aura_mode!r} not in {AURA_MODES}")
     legacy = model.profile == LEGACY_PROFILE
     if legacy and tuple(model.aura_rule) != AURA_RULE:
         raise ValueError(f"an {LEGACY_PROFILE} model keeps the v1 format: aura_rule {AURA_RULE}")
+    if legacy and model.aura_mode != "or":
+        raise ValueError(f"an {LEGACY_PROFILE} model keeps the v1 format: aura_mode 'or'")
     path.parent.mkdir(parents=True, exist_ok=True)
     arrays = {
         "body_lut": model.body_lut.astype(np.float32),
@@ -377,6 +416,10 @@ def save(path: Path, model: Model) -> str:
     if not legacy:
         arrays["profile"] = np.array(model.profile)
         arrays["aura_rule"] = np.array(model.aura_rule, np.int64)
+        if model.aura_mode != "or":
+            arrays["aura_mode"] = np.array(model.aura_mode)
+        if model.aura_mode == "and":
+            arrays["aura_and"] = np.array(model.aura_and, np.float64)
     tmp = path.with_name(path.name + ".tmp")
     with tmp.open("wb") as fh:
         np.savez(fh, **arrays)  # type: ignore[arg-type]
@@ -408,13 +451,17 @@ def load(path: Path | None = None, sha256: str | None = None, profile: str | Non
         rule = tuple(int(v) for v in z["aura_rule"]) if "aura_rule" in z.files else AURA_RULE
         if len(rule) != 2:
             raise ModelUnavailable(f"{path}: aura_rule {rule}")
+        mode = str(z["aura_mode"]) if "aura_mode" in z.files else "or"
+        if mode not in AURA_MODES:
+            raise ModelUnavailable(f"{path}: aura_mode {mode!r}")
+        aura_and = float(z["aura_and"]) if "aura_and" in z.files else AURA_AND
         return Model(
             body_lut=body, lin_w=w, lin_b=float(sc[0]), lin_thr=float(sc[1]),
             aura_thr=float(sc[2]), title=z["title"].astype(np.float32), title_max=float(sc[3]),
             ring=(float(ring[0]), float(ring[1]), float(ring[2]), float(ring[3])),
             ring_cell=int(sc[4]), ring_dy=float(sc[5]), zone_penalty=float(sc[6]),
             version=str(z["version"]), profile=got, aura_rule=(rule[0], rule[1]),
-            sha256=digest,
+            aura_mode=mode, aura_and=aura_and, sha256=digest,
         )  # fmt: skip
 
 
