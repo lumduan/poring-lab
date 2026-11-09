@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment L (2026-11-07 14:2x, Batt delegated): option (b) -- walking sight is judged by the live runner with the packets as the referee; the first step is offline, inside the p7 + p8 study (rogue-xmas02.md). (a), a per-capture camera estimate, is the fallback. DEPLOYED (Amendment J) and on the GPU path since 2026-11-07."
+next_action: "Amendment M (2026-11-09, a Garm Baby class): gw1 / gw2 labelled and two candidate T2 packs built (M1); gw1 fails 3c (own C1 6.21 %, all Garm Baby facing misses), gw2 passes (4.26 %); the parent fixes the pack (sources, the T_h floor) by an amendment BEFORE the two labellers; gw3 held out. Before it: Amendment L (2026-11-07 14:2x, Batt delegated): option (b) -- walking sight is judged by the live runner with the packets as the referee; the first step is offline, inside the p7 + p8 study (rogue-xmas02.md). (a), a per-capture camera estimate, is the fallback. DEPLOYED (Amendment J) and on the GPU path since 2026-11-07."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1233,3 +1233,93 @@ the Battle Log names it on contact; the data spawns Garm Babies near the IMMUNE 
   p95 <= 300 ms. Then deployment and the runner's "seen -> Fly Wing" (rogue-xmas02.md, its own
   pre-registration and pilot).
 - **If T2 fails:** the class is not trained; reported to Batt.
+
+#### M1 (2026-11-09 21:3x ICT, before any labeller): gw1 / gw2 labels and the T2 pack
+
+**How (a subagent, branch `feat/garm-class`, offline, CPU, a 4 GB scope without swap, nice 15):** the
+worktree's sources with the main venv; the FROZEN params `d4cc0a5d...` (Amendment G) and the 11-06
+inputs in /dev/shm (RSW + 37 RSMs, sprites, kb-sprites, the GAT); `map_labels.py labels` with
+`classes-none.json` and `check --c1-rule round2` per session, exactly as TRAIN was labelled (11-06
+`run-train.sh`). The tool commit is `a6abad45`: this amendment in the MapSpec (gw3's NAME refused like
+TEST by labels / pack / the cache; Garm Baby in T2's tier whatever its pool; the Goblin keeps D3's
+>= 30), with tests. Nothing in the label rule changed.
+
+**Positive case first:** xw3's second session (`20261106T160700-rdp-xmas02-xw3`, NAS) re-labelled on
+bot-server gives **678 / 678 frames identical** to its 11-06 label file (counts and drops identical;
+only `commit` and `labelled_at` differ). The frozen rule runs unchanged on this host.
+
+**The sessions:** both manifests pass 3c's path (rdp, png, recorder v7, [80, 77, 1280, 720],
+lab-rathena); 16 stands each of `lattice-train.json` (`73053842...`, Amendment A), none TEST by 3a;
+2 dogs spawned per stand (`@monster 1515 2`), `@killmonster2` after each 40-s dwell.
+
+| | gw1 | gw2 |
+|---|---|---|
+| recording / watch | `20261109T205355-rdp-gb-gw1` (924 frames, 1.86 GB, 732 packet events) / `20261109T205405-watch-xmas_dun02-gw1`, seed 2611091 | `20261109T210933-rdp-gb-gw2` (901, 1.95 GB, 852) / `20261109T210944-watch-xmas_dun02-gw2`, seed 2611092 |
+| candidates (drops) | 758 (gm_window 113, map_change 40, other_map 13) | 749 (gm_window 107, map_change 45) |
+| whole frames (frame exclusions) | 340 (dying_in_view 4) | 368 (dying_in_view 2) |
+| frames the cache's rule writes (whole, no `weak_fit`) | 287 | 298 |
+| kept (in whole frames): Myst Case / Cruiser / Cookie / Christmas Cookie | 232 (135) / 121 (33) / 55 (28) / 73 (23) | 167 (77) / 220 (118) / 159 (78) / 124 (92) |
+| **kept Garm Baby (in whole frames)** | **771 (468)**; 714 pass the T_h floor | **836 (521)**; 762 pass the T_h floor |
+| Garm Baby boxes in the frames the cache writes | 370 | 391 |
+| Garm Baby excluded | occluded_model 171, occluded_terrain 144, ambiguous_view 71, unfit 46, next_move 26, crowd 8, facing_unknown 3 | occluded_model 173, occluded_terrain 80, ambiguous_view 57, unfit 35, next_move 28, ui 5, crowd 2 |
+| Christmas Goblin | 0 | 0 |
+| **own C1 (3c: <= 5 % on >= 50)** | **22 / 354 = 6.21 %: NOT ADMITTED** | **18 / 423 = 4.26 %: ADMITTED** |
+| C1 Garm Baby / the four others | 22 / 213 = 10.3 % / 0 / 141 | 18 / 218 = 8.3 % / 0 / 205 |
+| C2 (median abs dx, dy) | PASS x 5; Garm Baby n 213, 1 / 1 px | PASS x 5; Garm Baby n 218, 1 / 1 px |
+| label file / own-C1 sha256 | `412ed242...` / `cf4b0c86...` | `f152ede6...` / `2e007e28...` |
+
+**What looked wrong, and what was checked (packets, label files and the C1 rows only; no frame opened):**
+1. **The bad C1 rows are Garm Baby FACING misses, not position misses.** Among the Garm Baby rows clear
+   of models and terrain, by the gap between fix 2's predicted heading (`after_move`) and the best of
+   the 8 headings at the predicted spot: 2-3 steps, bad in 21 of 23 (gw1) and 14 of 16 (gw2); 0-1
+   step, bad in 0 of 134 (gw1) and 4 of 157 (gw2). In gw1's bad rows the best-of-8 NCC at the same
+   spot is 0.23-0.70, against a prediction under tau (0.092).
+   It hits 7 (gw1) and 8 (gw2) of 26 scored dog units, in runs of 1-4 frames at one cell. Of gw1's 44
+   bad rows over both rules: 22 occluded_terrain and 18 unfit in the labels, 4 kept (one at NCC 0.725;
+   three at 0.094-0.117, below T_h, so the cache drops their frames as `weak_fit`). Why the standing
+   dogs face otherwise than their last step is NOT investigated here.
+2. **The T_h floor is not in the label files.** They keep every label that passes tau; T_h ("the floor on
+   EVERY kept label", 4a) is applied by the cache (`map_frame`, `weak_fit`) and by `pack --min-fit`. The
+   11-06 pack ran without `--min-fit` (key `min_fit` null; the eval doc's "the T_h floor is part of the
+   rule, so the pack takes no --min-fit" took the floor to be in the files). In the 11-06 key, Garm Baby
+   had 10 of 30 crops below T_h, the Goblin 15, Cruiser 2, Christmas Cookie 1. On the floor-passing
+   crops Garm Baby was good 19 / 20 and 18 / 20, species 20 / 20 for both (sub-floor: good 6 / 10 and
+   4 / 10); the Goblin 15 / 15 everything (sub-floor: good 11 / 15 and 10 / 15). **Recorded only:
+   Amendment H's verdict stands, and nothing is re-scored.**
+3. **Our own character:** the dogs spawned 1-3 cells from the stand (gw1 1 / 2 / 3 cells: 1 / 15 / 16;
+   gw2 5 / 10 / 17), never on our cell. Kept dog labels on our cell: gw1 0, gw2 2. No kept dog box lies
+   >= 0.5 under our own `player` box (labels_v2.self_label; gw1 32 under 0.25 and 6 under 0.5, gw2 40
+   and 8).
+4. **The GM windows:** the spawned dogs' appear packets carry `gm_command`, so each spawn opens its own
+   2-s window, beside the `@warp`, `@monster` and `@killmonster2` lines.
+5. **The @killmonster2 gaps:** the candidate frames from a stand's kill to the next warp (gw1 85, gw2
+   66) hold respawned common monsters only (24 and 22 kept labels), no dog. All 32 spawned dogs of each
+   session have kept labels. gw2's packet anchor (70 s before its t0) carries gw1's last two dogs:
+   packets only, no frame.
+
+**So 3c admits gw2 and not gw1.** Section 3b's T2 pool is "the TRAIN sessions admitted when the pack is
+built", while this amendment names gw1 + gw2; with point 2, the pack's sources and its floor are the
+parent's to fix before any labeller. **Two candidate packs were built (21:33:38-21:34:09), BEFORE any
+answer exists; ONE goes to the labellers, by an amendment; the other is deleted unseen.**
+
+| candidate | sources | floor | crops | pools: Myst Case / Cruiser / Cookie / Christmas Cookie / Garm Baby | answer_key.json sha256 | pack file list sha256 |
+|---|---|---|---|---|---|---|
+| `gw2-floor` | gw2 (3c) | `--min-fit 0.536` (4a, as the cache writes) | 150 | 161 / 197 / 153 / 116 / 762 | `c1050420fe41258ab183aa4b2469f2881148ba1d3e0e86184fb7690f298d1cd7` | `b5eeab68...` |
+| `gw12-asbuilt` | gw1 + gw2 (this amendment) | none (the 11-06 command) | 150 | 399 / 341 / 214 / 197 / 1,607 | `1c2f960214f15d0a3dfc64103c2e7da21b9f0ac965c1eeb40bde0f070edc20d3` | `e04abd66...` |
+
+- Both: `map_labels.py pack --map xmas_dun02 --seed 51` (salt xmas02), 30 per species, tier [1249, 1248,
+  1265, 1246, 1515], 8 grids; the instructions `docs/planning/xmas02-blind-instructions.txt`, **sha256
+  `dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed`** (T2's, unchanged); the
+  multi-view reference, **`d389551c9bf5f463d1954e777a934f4f1a432548427aca977fb991d4fa71b310`,
+  byte-identical to the 11-06 pack's** (the same 9 species and seed: letters A-I as then); pack.json
+  `b59f4c4f3e13184aa937ee888442740339a78e5ea09f556c10f3345a069f0b14`.
+- `gw12-asbuilt` drew no sub-floor Garm Baby crop (8 sub-floor crops among the others: Cruiser 5,
+  Myst Case, Cookie and Christmas Cookie 1 each). Its Garm Baby crops: 15 gw1 + 15 gw2.
+- Not built: gw1 + gw2 with the floor (one command, if the parent admits gw1 by an amendment).
+- Where (client pixels, /dev/shm, never committed): `/dev/shm/poring-lab-tmp/gb/t2/<candidate>/{pack,
+  key}`. The labellers' sha256-checked copy is `/dev/shm/poring-lab-tmp/blind-gb51-<candidate>/pack`,
+  their answers `.../answers/{E,F}.json`; the key never lies under it.
+- **The labellers:** two NEW blind agents, E and F (A, B: T2 of 11-06; C, D: the evaluation), each with
+  the pack, its instructions and its own answers path only. **The verdict:** `blind_score.py`,
+  section 6's bars for Garm Baby (1515) alone: good >= 90 % AND species >= 95 % from EACH labeller; the
+  four common species are reported and decide nothing (this amendment).
