@@ -1877,3 +1877,20 @@ Variables (bot-server):
    report should give the load average. Whether a failure with the deployed model also above 300 ms
    reads as "the host, not the model" is the parent's to fix BEFORE B4, if at all.
 4. gw3's own C1 was not run (not in M6 / M7); the blind check is what guards the labels scored.
+
+#### M10 (2026-11-10 ~06:4x ICT, the parent, BEFORE any labeller, prediction or latency run): part A's open points
+
+- **(a) The pack's 300 crops:** gw3's four common species (240 crops) are labelled too (the tool's
+  evaluation draw); their gw3 numbers are REPORTED only -- their verdict stays M7 point 4's (pooled
+  TEST, 11-07's labels).
+- **(b) Garm Baby's 60 crops from 25 dogs (one dog 7 times):** the bar counts crops as section 9
+  always has; the dog count is reported beside it.
+- **(c) THE LATENCY BAR, made relative to this host:** Amendment M's "CPU p95 <= 300 ms" came from
+  VM 103 (8 threads, 270 ms p95 on 2026-11-07); on bot-server (Xeon E5-2609 v4, 16 threads) the
+  DEPLOYED model already measured 338.6 ms p95 under load (cpu-detector-speed.md), so an absolute
+  300 would judge the host, not the model. **The bar: in B4's one run (both models, the same
+  refs, interleaved as eval_latency does), the new model's CPU p95 <= 1.10 x the deployed model's;
+  the absolute p95s and the load average are reported.** (The runner's live path is the GPU detect
+  server, D1 p95 ~23 ms; the CPU detector is its fallback.)
+- No other change: the Garm Baby bar (Q1s on gw3, >= 50 evaluated, recall and precision >= 0.80)
+  and the four species' (Q1c on pooled TEST, >= 0.80) stand as M7 wrote them.
