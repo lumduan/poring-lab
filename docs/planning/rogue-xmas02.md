@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 07:1x: p28 PASSED (124.7 kills/h, far misses 13 %): the far mechanism joined the base. Next: explore phase E1 (p29-p31, 4AL); the Stormy Knight recognizer (data at the MVP windows); --kill-gap with the quiet-kill block lifted."
+next_action: "2026-11-09 08:5x: E1 done (155.1 kills/h mean vs the edge loop 124.7); E2 (4AN): p32 edge loop, p33 explore; then --walk-pick (4AM, p34); the Stormy Knight watch (B2) at the 09:03 MVP window."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1469,6 +1469,37 @@ most kills per hour. Plan (section 4AL, written before its pilots):
 - **Then phase E2 (pre-registered after E1, from E1's numbers):** an exploit run (the learned
   regions, less novelty) against the edge loop on kills / h -- the adoption decision.
 
+### 4AM. Pilot pre-registration: --walk-pick, a walk target the client picks (written BEFORE its run, 2026-11-09 08:48 ICT)
+
+- **Why (p30, section 5; packets of p28-p30):** the client resolves a click to the first tile top
+  the camera ray comes down through; on xmas_dun02's raised floors a walk target's pixel can pick
+  another cell, and then the client sends NO walk request. Walk clicks whose picked cell was off by
+  more than 1 or unwalkable went unsent 17 of 39 times; all other walk clicks 17 of 869. p30's
+  `stuck` Fly Wing was 4 dropped clicks in 18 s at (161, 116).
+- **The one change against the base (the base after 4AN's verdict: with `--explore` if it joins):** `--walk-pick` (dungeon@9.15, 9e68ae89): `fits`
+  takes a walk target only when `picked_cell` under its pixel is on the route grid and within 1
+  cell of it; `walk_target` then takes a nearer path cell.
+- **The run:** the base command + `--walk-pick`, label `xmas02-p34`, 25 min.
+- **Bars:** **W1** walk clicks with no walk request within 1.2 s (packets) <= 1.5 % of the clicked
+  walk events (E1: p29 1.7 %, p30 7.2 %); **W2** 0 `stuck` and 0 `dead_end` Fly Wings; **E1**
+  kills >= 80 / h; **U1** stuck time <= 30 s; **D1** p95 <= 35 ms; **R1** own-body class D <= 1;
+  **E3** hard bars pass, stalls <= 39 / h; **deaths** 0. Reported: `walk_pick_skip` counts, stalls,
+  kills per monster seen.
+- **Decisions:** W1 + W2 + E1 pass with no regression bar failing -> `--walk-pick` joins the base.
+
+### 4AN. Pilots pre-registration: explore phase E2 -- the adoption test against the edge loop (written BEFORE its runs, 2026-11-09 08:48 ICT)
+
+- **Why:** E1 (p29-p31) is learning only (4AL). Its runs gave 158.4 and 160.8 kills / h (p31:
+  146.1) against the edge loop's 124.7 (p28) on the same base, with the same kills per monster
+  seen (0.985 / 0.905 vs 0.981) and more monsters seen (26.8 / 29.6 vs 21.2 per 10 min). The time
+  of day and the map's state differ between runs; E2 interleaves the two search modes.
+- **The runs (25 min each, the base, the MVP schedule):** p32 = the edge loop (the base as is), then
+  p33 = `--explore` (the knowledge file as E1 left it, plus what each run adds).
+- **The bar (pooled):** explore's mean kills / h over p29, p30, p31 and p33 >= 1.15 x the edge
+  loop's mean over p28 and p32; with deaths 0 and the E1 safety bars on p33.
+- **Decisions:** the bar passes -> `--explore` joins the base (the edge loop stays selectable);
+  otherwise explore stays an option, studied.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2803,3 +2834,22 @@ but 1 Fly Wing by the `stuck` escape (below), reported. 67 kills = 160.8 / h: p2
   one the client picks) is the next walking change, pre-registered on its own.
 - **Items (snatched):** Zargon 12, Scell 6, Piece of Cake 4, Manacles 3, Red Herb 2, Well-baked
   Cookie 2, Iron 2, Candy 1, Candy Cane 1, Pearl 1.
+
+**Pilot p31 (4AL, explore E1 run 3; 08:21:44-08:47:38, 25 min; immunity OFF at 08:21:20 and ON at
+08:47:53; the base + `--explore`; a 24-min PNG recording beside it, the Stormy Knight study's
+hunting negatives `20261109T082234-rdp-hunt-xmas02-p31`: 1,440 frames, 3.18 GB, rc 0). E1's bars:
+deaths, E3 (0 dead-end Fly Wings; 1 `pos_unread`), U1, X1, X2 ALL PASS. 61 kills = 146.1 / h.**
+
+| | p28 (edge loop) | p29 | p30 | **p31** | E1 (p29-p31) |
+|---|---|---|---|---|---|
+| kills; per hour | 52; 124.7 | 66; 158.4 | 67; 160.8 | **61; 146.1** | 194; mean 155.1 |
+| monsters seen / 10 min; kills per seen | 21.2; 0.981 | 26.8; 0.985 | 29.6; 0.905 | **22.7; 1.070** | |
+| stuck time; stalls; Fly Wings (why) | 17.0 s; 3; 0 | 0 s; 1; 0 | 7.7 s; 7; 1 (stuck) | **9.6 s; 6; 1 (pos_unread)** | |
+| D1 p95 | 21.9 ms | 22.1 | 22.2 | **24.2 ms** (the PNG recorder beside it) | |
+| lowest HP; deaths | 83.3 %; 0 | 83.7 %; 0 | 84.2 %; 0 | **72.9 %; 0** | 0 |
+
+- **The exploration:** 14 targeted, 7 reached, 6 timed out; merged: 3 runs, 239 regions, 1,805
+  cells visited, 13 refused; no `ev_hook_error`. Its own count: 51 good fights for 61 packet kills.
+- E1 adopts nothing (4AL). Phase E2 (4AN) is the adoption test.
+- **Items (snatched):** Scell 14, Zargon 8, Manacles 4, Candy 3, Piece of Cake 3, Well-baked Cookie
+  2, Red Herb 1, Pearl 1.
