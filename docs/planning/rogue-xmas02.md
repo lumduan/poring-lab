@@ -1594,6 +1594,29 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   was, not where she is. The fix (9.13d) waits for a fresh position read after a loot step before
   the next walk click -- p38.
 
+### 4AS. Pilot p38 pre-registration: --kill-gap 9.13d -- loot after kills seen from our damage, the walk waits for a fresh position after a pickup (written BEFORE its run, 2026-11-09 13:07 ICT)
+
+- **Why (Amendment M, 4AR):** Batt: fix the looting first; use the exp line when it shows, else the
+  damage stopping or the attack stopping, with fallbacks. The cues, in order (all pixels):
+  1. the Battle Log's exp line (`base_exp`) when it shows -- the existing kill path, unchanged;
+  2. our damage lines stopping after >= 5 on the lock (`--kill-gap`: on p37's packets 59 of 61
+     such inferences were real deaths, corrected scorer);
+  3. the lock's "no hits" unlock (3.5 s) as the last fallback (no loot from it).
+  The attack-motion cue: our damage lines ARE the record of each landed swing (one line a hit,
+  every 0.47 s), so "the swings stopped" is cue 2; a sprite-pose reader was not built. The box-gone
+  cue was tested offline on p24 / p26 / p37 and does not separate death from departure (precision
+  0.59-0.74 either way): not used.
+- **The one change against the base (p16's flags + reach-check + far mechanism + explore +
+  walk-pick):** `--kill-gap` as it now stands (9.13d, 59a22171; the record says `"kill_gap": [1.5, 5,
+  "9.13d", 0.8]`).
+- **The run:** the base command + `--kill-gap`, label `xmas02-p38`, 25 min.
+- **Bars:** **L1** pickups >= 50 % of floor items; **K1** after-the-kill p50 <= 3.0 s; **K3**
+  inferred kills real >= 70 % (the corrected scorer, be98ad8f); **E1** kills >= 80 / h; **W1**
+  unsent walk clicks <= 1.5 %; **U1** stuck <= 30 s; **D1** p95 <= 35 ms; **R1 (pooled, Amendment
+  M)** own-body class D of p38 + p33 + p35 + p36 <= 6 (those three: 1 + 0 + 1); **E3** hard bars,
+  0 dead-end / stuck / idle Fly Wings; **deaths** 0. Reported: L2, the loot time, items / hour.
+- **Decisions:** every bar passes -> `--kill-gap` joins the base.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
