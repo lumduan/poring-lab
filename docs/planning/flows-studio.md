@@ -291,3 +291,37 @@ the detector hexagon, the bottom sheet). Its ranked list, and what was done:
    documented option; compile and runtime errors still show).
 6. **An app icon:** `src/app/icon.svg` (our own drawing: two program blocks and a play mark).
    Next emits `<link rel="icon" href="/icon.svg?...">`, so browsers stop asking for /favicon.ico.
+
+## 9. Round 3 (2026-11-09 evening: matpilot's re-run, three small items)
+
+1. **Every Config value is a plain Python value** (a learner may run the Config):
+   `PATH = "S2"`, a string (it was the bare name `S2`, undefined in plain Python), and
+   `START = ("town", "spawn")`, a tuple (it was a call, `entry(...)`). The parser still reads the
+   bare name and `entry(...)`, so older text reads back as the same flow and hash (tested,
+   `test_every_config_value_is_a_python_literal`). The other constants were already literals
+   (strings, ints, True). `STOP_WHEN` and `ASSUMES`, when a flow has them, stay expressions
+   (sensor calls, like every line in Main); none of the committed flows has them.
+2. **The starter's lint chip** ("1 warning · 2 not ready") **cannot be cleared from the starter**.
+   All three findings belong to the ALWAYS-ON safety events the engine adds to EVERY flow
+   (ADR-0020 #15: `dead` respawns, `hp_critical` escapes); none of them comes from the starter's
+   three blocks:
+   - readiness: `handlers.dead.0: respawn is unsupported here: L2 binding
+     L2.window.death_dialog (not bound for kro-20211103-prere/lab-rathena)`;
+   - readiness: `handlers.hp_critical.0: escape is unsupported here: L3 binding L3.map.flags (not
+     bound for kro-20211103-prere/lab-rathena)`;
+   - warning: `handlers.dead: a death at main.0 respawns at the save point, which nothing sets
+     before it: set it first, or assert it`.
+   The safety events cannot be disabled (they are safety-critical). The two bindings are lab gaps
+   that every flow shows until they are written. The warning would go away only with
+   `set_save_point` (walking to a Kafra on a real map) or `assert_save_point(cell(...))`, which
+   would put an invented fact about the character into a learner's first program. Options for
+   Batt, none taken:
+   - (a) the context chip says "your blocks: lint ok · built-in safety events: 1 warning, 2 not
+     ready" (UI wording only; the Lint pane keeps every finding);
+   - (b) write the two bindings (the death dialog's L2 anchor for the lab client; lab-rathena's
+     L3 map flags); this clears the readiness items for every flow;
+   - (c) accept the save-point warning as a lesson (a flow that never sets a save point respawns
+     where the character last saved).
+3. **The header fits the 384 px pane and a phone:** two comment lines of 33 and 52 characters,
+   `# Made by poring-lab from blocks.` and `# The flow engine reads this file; it never runs it.`;
+   section rules are 52 characters (`RULE_WIDTH`; matpilot's are 76, which that pane clips).

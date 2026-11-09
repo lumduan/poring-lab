@@ -179,7 +179,7 @@ def test_the_python_view_is_in_sections() -> None:
     src = pyview.print_flow(f)
     heads = [line for line in src.splitlines() if line.startswith("# --- ")]
     assert [h.split()[2] for h in heads] == ["Config", "Setup", "Functions", "Events", "Main"]
-    assert all(len(h) == 76 and h.endswith("-") for h in heads)
+    assert all(len(h) == pyview.RULE_WIDTH <= 55 and h.endswith("-") for h in heads)  # fits 384 px
     assert pyview.parse(src) == f and pyview.print_flow(pyview.parse(src)) == src
     workflow = pyview.parse(
         (REPO / "packages/poring_flow/tests/fixtures/farm_loop.flow").read_text()
@@ -253,8 +253,10 @@ def test_the_config_constants_and_flow_call_are_the_same_flow() -> None:
     a, b = pyview.parse(old), pyview.parse(new)
     assert a == b and ir.flow_hash(a) == ir.flow_hash(b)
     src = pyview.print_flow(a)
-    assert src.startswith("# Made by poring-lab from blocks.")
+    assert src.startswith("# Made by poring-lab from blocks.\n# The flow engine reads this file")
     assert '\nFLOW_NAME = "t"\nIR_VERSION = 2\nMAX_RUNTIME_S = 600\nWHERE_BUDGET = 3\n' in src
+    assert '\nPATH = "S2"\n' in src  # a plain string: every Config value is a Python literal
+    assert all(len(line) <= 55 for line in src.splitlines() if line.startswith("#"))
     assert "\nPOTION = item(9001)\n" in src and "flow(" not in src
     with pytest.raises(pyview.ParseError, match="SERVER is set twice"):
         pyview.parse(new.replace('LOCALE = "en"', 'SERVER = "x"'))
@@ -286,3 +288,30 @@ def test_every_flow_we_have_round_trips_with_its_hash() -> None:
         assert back == f, f.name
         assert ir.flow_hash(back) == ir.flow_hash(f), f.name
         assert pyview.print_flow(back) == src, f.name
+
+
+def test_every_config_value_is_a_python_literal() -> None:
+    """Round 3 (matpilot, 2026-11-09): a learner may run the Config: PATH is the text "S2", START
+    a tuple; the old bare S2 and entry(...) still read back as the same flow."""
+    import ast
+
+    wf = editor.sample_flow()
+    src = pyview.print_flow(wf)
+    config = src.split("# --- Config")[1].split("\n# --- ")[0]
+    for line in config.splitlines()[1:]:
+        if line.strip():
+            name, value = line.split(" = ", 1)
+            ast.literal_eval(value)  # raises on a call or a bare name
+    assert '\nSTART = ("town", "spawn")\n' in src and '\nPATH = "S2"\n' in src
+    old = src.replace('PATH = "S2"', "PATH = S2").replace(
+        'START = ("town", "spawn")', 'START = entry("town", "spawn")'
+    )
+    assert (
+        old != src
+        and pyview.parse(old) == wf
+        and ir.flow_hash(pyview.parse(old)) == ir.flow_hash(wf)
+    )
+    with pytest.raises(pyview.ParseError):
+        pyview.parse(src.replace('PATH = "S2"', 'PATH = "S9"'))
+    with pytest.raises(pyview.ParseError):
+        pyview.parse(src.replace('START = ("town", "spawn")', 'START = ("town",)'))

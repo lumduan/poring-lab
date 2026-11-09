@@ -25,6 +25,7 @@ flows-studio.md section 3); the parser drops them like any comment, so the round
 from __future__ import annotations
 
 import ast
+import contextlib
 import io
 import json
 import math
@@ -403,10 +404,12 @@ def _module(tree: ast.Module, ctx: _Ctx) -> dict[str, Any] | None:
     ctx.blocks = {n for n, k in defined.items() if k == "block"}
 
     out: dict[str, Any] = {}
-    if config:
-        _config_head(config, ctx, out, doc)
-    else:
-        _flow_head(first.value, ctx, out, doc)  # type: ignore[union-attr]
+    # a bad head value is recorded (ctx.err): parse() raises ParseError with it
+    with contextlib.suppress(_Bad):
+        if config:
+            _config_head(config, ctx, out, doc)
+        else:
+            _flow_head(first.value, ctx, out, doc)  # type: ignore[union-attr]
     procedures: dict[str, Any] = {}
     handlers: list[Any] = []
     blocks: dict[str, dict[str, Any]] = {}
@@ -555,7 +558,7 @@ def _head(
     if tkw is not None:
         tgt = {k: _const(v, ctx) for k, v in tkw.items() if k != "path"}
         if "path" in tkw:
-            tgt["path"] = _constant(tkw["path"], ctx, ("S2", "RDP"))
+            tgt["path"] = _path(tkw["path"], ctx)
         out["target"] = tgt
     if "assumes" in kw:
         a = kw["assumes"]
@@ -567,7 +570,7 @@ def _head(
         out["stop_when"] = _expr_or_skip(kw["stop_when"], ctx)
     wf: dict[str, Any] = {}
     if "start" in kw:
-        b, e = _entry_ref(kw["start"], ctx)
+        b, e = _start(kw["start"], ctx)
         wf["start_block"], wf["start_entry"] = b, e
     if "run_until_stopped" in kw:
         wf["run_until_stopped"] = _const(kw["run_until_stopped"], ctx)
@@ -595,6 +598,32 @@ def _const(node: ast.expr, ctx: _Ctx) -> Any:
         return -node.operand.value
     ctx.err(node, "a constant (a number, text, True or False) is needed here")
     raise _Bad
+
+
+def _path(node: ast.expr, ctx: _Ctx) -> str:
+    """The target's path: the text "S2" / "RDP" (the Config constant, a plain Python string since
+    2026-11-09), or the bare name S2 / RDP (flow(...) and older text)."""
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value in ("S2", "RDP")
+    ):
+        return CONSTANTS[node.value]
+    return _constant(node, ctx, ("S2", "RDP"))
+
+
+def _start(node: ast.expr, ctx: _Ctx) -> tuple[str, str]:
+    """The workflow's start: ("block", "entry") (the Config constant, a plain Python tuple since
+    2026-11-09), or entry("block", "entry") (flow(...) and older text)."""
+    if isinstance(node, ast.Tuple | ast.List):
+        parts = node.elts
+        if len(parts) == 2 and all(
+            isinstance(x, ast.Constant) and isinstance(x.value, str) for x in parts
+        ):
+            return parts[0].value, parts[1].value  # type: ignore[attr-defined]
+        ctx.err(node, 'START = ("block", "entry") is needed here')
+        raise _Bad
+    return _entry_ref(node, ctx)
 
 
 def _constant(node: ast.expr, ctx: _Ctx, allowed: tuple[str, ...]) -> str:
@@ -1512,18 +1541,25 @@ def _def(decorator: list[str], name: str, body: list[Any], cat: Catalogue) -> li
 
 
 EVENTS = "Events"
+RULE_WIDTH = 52  # a section rule's length (matpilot's are 76: clipped in the 384 px pane)
 
 
 def section_rule(title: str) -> str:
     """A section heading in matpilot's style: `# --- Main ---...`, 76 characters."""
-    return f"# --- {title} ".ljust(76, "-")
+    return f"# --- {title} ".ljust(RULE_WIDTH, "-")
 
 
-GENERATED = "# Made by poring-lab from blocks. The flow engine reads this Python; it never runs it."
+# The first lines and the section rules fit the studio's Python pane (384 px) and a phone
+# (matpilot's measure, 2026-11-09: comment lines under ~55 characters; its rules are 76).
+GENERATED = [
+    "# Made by poring-lab from blocks.",
+    "# The flow engine reads this file; it never runs it.",
+]
 
 
-def _head_args(flow: ir.Flow, cat: Catalogue) -> list[tuple[str, str]]:
-    """The flow's head as (flow(...) argument, its source), in the printer's order."""
+def _head_args(flow: ir.Flow, cat: Catalogue, config: bool) -> list[tuple[str, str]]:
+    """The flow's head as (flow(...) argument, its source), in the printer's order. `config`: as
+    the Config constants, where the start is a plain tuple."""
     head = [("name", _s(flow.name))]
     if flow.description:
         head.append(("description", _s(flow.description)))
@@ -1534,7 +1570,8 @@ def _head_args(flow: ir.Flow, cat: Catalogue) -> list[tuple[str, str]]:
     if wf is not None:
         if wf.run_until_stopped:
             head.append(("run_until_stopped", "True"))
-        head.append(("start", f"entry({_s(wf.start_block)}, {_s(wf.start_entry)})"))
+        pair = f"{_s(wf.start_block)}, {_s(wf.start_entry)}"
+        head.append(("start", f"({pair})" if config else f"entry({pair})"))
     if flow.stop_when is not None:
         head.append(("stop_when", expr_src(flow.stop_when, cat)))
     if flow.assumes:
@@ -1548,14 +1585,16 @@ def _config_lines(flow: ir.Flow, cat: Catalogue) -> list[str]:
     so its Python still reads back exactly."""
     t = flow.target
     target = [("client", _s(t.client)), ("server", _s(t.server)), ("locale", _s(t.locale))]
-    target.append(("path", CONST_OF[t.path]))
     if set(flow.variables) & (set(CONFIG) | set(TARGET_CONFIG)):
-        args = [f"{k}={v}" for k, v in _head_args(flow, cat)]
+        target.append(("path", CONST_OF[t.path]))
+        args = [f"{k}={v}" for k, v in _head_args(flow, cat, config=False)]
         args.append("target=target(" + ", ".join(f"{k}={v}" for k, v in target) + ")")
         return ["flow(", *[f"    {a}," for a in args], ")"]
     names = {v: k for k, v in CONFIG.items()}
     tnames = {v: k for k, v in TARGET_CONFIG.items()}
-    lines = [f"{names[k]} = {v}" for k, v in _head_args(flow, cat)]
+    # every constant is a plain Python value (a learner may run the Config): "S2", ("town", "a")
+    target.append(("path", _s(CONST_OF[t.path])))
+    lines = [f"{names[k]} = {v}" for k, v in _head_args(flow, cat, config=True)]
     return lines + [f"{tnames[k]} = {v}" for k, v in target]
 
 
@@ -1623,7 +1662,7 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
                 chunks.append((True, ev_def, EVENTS))
     if flow.main is not None:
         chunks.append((False, _stmts(flow.main, "", cat), "Main"))
-    out: list[str] = [GENERATED]
+    out: list[str] = list(GENERATED)
     prev_def = False
     prev_section = ""
     for is_def, lines, section in chunks:

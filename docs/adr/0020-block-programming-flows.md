@@ -2343,4 +2343,6 @@ amendment ADDS to section 2.3; nothing above is rewritten.
   seconds" block as `wait(N)` and whole seconds without ".0"; its head is UPPER_CASE Config
   constants (`FLOW_NAME = ...`, `CLIENT = ...`) after a first comment line. The parser reads both
   `wait(N)` and the constants back as the same IR (and still reads `flow(...)`), so 7.5's round
-  trips and every hash hold (flows-studio.md section 8).
+  trips and every hash hold (flows-studio.md section 8). Round 3: every Config value is a plain
+  Python value (`PATH = "S2"`, `START = ("town", "spawn")`; the bare `S2` and `entry(...)` still
+  read back), and the first comment is two short lines (flows-studio.md section 9).
