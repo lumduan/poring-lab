@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, the Orc Lord's CPU recognizer recipe (scripts/mvp_watch.py: the boss AURA rule + the party window detector), refitted on xmas_dun02, tells 'the Stormy Knight (1251) or its summons (Garm Baby 1515, Christmas Goblin 1607) are in view' within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of hunting frames, at <= 60 ms p95 per frame -- enough for a Fly Wing at first sight."
-status: "B3 SCORED 2026-11-09 09:52-09:54 (section 6): recall 8 / 8 PASS, latency PASS, false positives 98 / 10 min on the held-out hunting frames FAIL -> NOT ADOPTED; the schedule stays. Post-hoc: the pale-green puzzle floors the DEV data never crossed."
+status: "ROUND 2 DEV FAILED its filter 2026-11-09 15:05 (sections 9-10): the leave-one-out check gave every candidate <= 5 / 16 watch cells within 1.1 s in-sample (>= 15 needed); the fallback froze stormy-v2 (aura off, sha256 ee896970...), in-sample 8 / 16 cells. Held-out (R2-W, R2-H2) NOT scored. Round 1 (section 6): NOT ADOPTED. The kill-before-run schedule stays."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "Round 2 (sections 7-8): R2-W DONE 13:10-13:25, R2-H1 recording beside p38; next R2-H2 beside the next explore pilot, then the DEV fit and the held-out score once."
+next_action: "Parent / Batt (section 10e): decide whether to spend the held-out R2-W + R2-H2 on stormy-v2 (it fails the DEV filter, so bar 1 is expected to fail) or keep them for a round-3 recipe pre-registered first; the exact score command is in 10d."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -420,6 +420,10 @@ DATA, and lets DEV decide the cues again; the bars are round 1's.
   schedule (killed by the watch's `@killmonster2` at 13:19:49 at the earliest, so no respawn before
   14:19:49).
 - Both stay local until the fit / the held-out score are done, then ship (`dataset_ship.py`).
+- **R2-H1 done:** stop "duration" at 13:57:4x ICT, PNG, recorder v7, 1,620 frames (1,548 on
+  xmas_dun02), 3.51 GB, 14 shards, unchanged_skipped 0. Its truth (13:58:07-13:58:20, round 1's
+  command, main a2181a74, `/dev/shm/poring-lab-tmp/stormy/r2h1-truth.json`): no Knight or Goblin
+  on screen; Garm Baby in view on 32 frames in 3 episodes (its own spawn: the lone caveat).
 
 ## 9. Round 2 DEV recipe -- written before the fit (2026-11-09 13:5x ICT; no round-2 fit run yet, no held-out frame read)
 
@@ -491,3 +495,161 @@ Its DEV numbers come from `dev` and are labelled in-sample.
   in parts of <= 1,000 frames (<= 0.69 GB each). Each fit runs alone (`systemd-run --user --scope
   -p MemoryMax=4G -p MemorySwapMax=0 nice -n 19`, one thread), beside the live pilot.
 - Nothing is tuned on held-out data. Nothing is refitted after the held-out score.
+
+## 10. Round 2: the frozen model (2026-11-09 13:52-15:09 ICT; DEV ONLY, written BEFORE any held-out score)
+
+**The DEV filter FAILED (section 9, step 3).** No candidate kept >= 15 of 16 watch cells within
+1.1 s in both folds; the best fold saw 5. The fallback (the most cells in the worse fold, then the
+lowest mean rate; all three tied) is (a), aura off. Its all-DEV model, stormy-v2, sees 8 of 16 cells
+within 1.1 s even IN-SAMPLE. This is reported to the parent before any held-out score.
+
+**What was read:** only DEV: round 1's watch sk1 (all 1,021 on-map frames), p31 (1,440) and R2-H1
+(1,548 on the map: 1,511 negatives, 37 lone Garm Baby frames reported apart). They were decoded
+once (13:58:29-14:02:28, `dev` without a model, its own scope) into half-res memmaps under
+`/dev/shm/poring-lab-tmp/stormy-r2/work` (7 parts, 2.6 GB, each <= 0.69 GB). Every number below
+reads only those. R2-W and R2-H2 were not opened, listed, decoded or summarised.
+
+### 10a. The regression check (round 1 reproduced)
+
+Round 1's fit command (5c), re-run at 13:52:35-13:54:54 with commit 388700b0, gave
+`a1287571e26447b64f0a1b7620c49d90368510193e177e935c6bb0fbde8f8caf`: round 1's model bit for bit
+(the same 325 / 70 / 43 / 301 items, lin_thr 4.5493, zone_penalty 1.9063; 2 min 19 s, max RSS
+1.5 GB).
+
+### 10b. The leave-one-out table (section 9; DEV only)
+
+Fold A fits the watch + p31 and leaves R2-H1 out. Fold B fits the watch + R2-H1 and leaves p31
+out. Cells and "in" are IN-SAMPLE; "LOO" is the left-out session.
+
+| cand | fold | cells within 1.1 s (in-sample) | on the 1st frame | LOO false positives | LOO / 10 min | in-fit hunt FP | watch-gap FP | party thr | aura thr | lone episodes seen |
+|---|---|---|---|---|---|---|---|---|---|---|
+| (a) off | A | 5 / 16 | 5 | 0 / 1,511 | 0.00 | 0 / 1,440 | 0 / 280 | 6.8316 | (unused) | 0 / 3 |
+| (a) off | B | 4 / 16 | 4 | 56 / 1,440 | 23.33 | 0 / 1,511 | 0 / 280 | 11.9270 | (unused) | 0 / 3 |
+| (b) or | A | 5 / 16 | 5 | 0 / 1,511 | 0.00 | 0 / 1,440 | 0 / 280 | 6.8316 | 0.46 | 0 / 3 |
+| (b) or | B | 4 / 16 | 4 | 56 / 1,440 | 23.33 | 0 / 1,511 | 0 / 280 | 11.9270 | 0.12 | 0 / 3 |
+| (c) and | A | 5 / 16 | 5 | 0 / 1,511 | 0.00 | 0 / 1,440 | 0 / 280 | 6.8316 | 0.46 (AND 3.4158) | 0 / 3 |
+| (c) and | B | 4 / 16 | 4 | 56 / 1,440 | 23.33 | 0 / 1,511 | 0 / 280 | 11.9270 | 0.12 (AND 5.9635) | 0 / 3 |
+
+- Mean LOO rate: 11.67 per 10 min for (a), (b) and (c); the worse fold's cells: 4 for each. None
+  qualifies. (d) was not run: (b)'s mean rate is not above (a)'s (section 9).
+- As section 9 expected, (a), (b) and (c) trained the same detector in each fold (the same
+  lin_thr). The aura added nothing:
+  - fold A's aura threshold is 0.46, because p31's puzzle floor reaches 0.4375;
+  - fold B's is 0.12 (R2-H1's max 0.1024), and no positive frame reaches it;
+  - every p31 frame above 0.12 was already a party false positive.
+- Fold B's 56 false positives are p31 frames 498-517 and 774-776 (party scores 63-76): the
+  pale-green puzzle room of section 6's post-hoc. R2-H1 did not cross it: its negatives never
+  score above 10.93 in fold B.
+- Per positive frame, in-sample: fold A 226 / 644, fold B 195 / 644 (round 1: 293 / 325).
+- Each fit: 6.0-6.3 min, max RSS 3.4-3.5 GB (that RSS counts the shared memmap pages; the fit's
+  own scope was charged 1.33 GB, peak 1.67 GB, sampled in fold A-a). Each `dev`: 2.1 min.
+- Fold models' sha256 (DEV evidence, archived): A-a 333b4875..., A-b aa164f36..., A-c 37999082...,
+  B-a b98afd29..., B-b ea2add2e..., B-c 78156d85....
+
+### 10c. The frozen model (the fallback recipe (a) on ALL DEV)
+
+    W=<checkout at 388700b0 or later>; python=/home/bot/docker/poring-lab/.venv/bin/python
+    T=/dev/shm/poring-lab-tmp/stormy; R=/dev/shm/poring-lab-tmp/stormy-r2   (OMP / OPENBLAS threads 1)
+    systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 19 $python $W/scripts/mvp_watch_study.py fit \
+        --boss stormy --round 2 --watch /home/bot/poring-lab-rec/20261109T085010-rdp-sk-watch1 \
+        --watch-truth $T/watch-truth.json --events /dev/shm/poring-lab-demo/20261109T085018-watch-xmas_dun02-sk1/events.jsonl \
+        --pilot /home/bot/poring-lab-rec/20261109T082234-rdp-hunt-xmas02-p31 $T/hunt-truth.json \
+        --extra /home/bot/poring-lab-rec/20261109T133046-rdp-hunt-xmas02-p38 $T/r2h1-truth.json \
+        --work $R/work --out $T/model/stormy-v2.npz --aura off
+
+- **Run:** 2026-11-09 14:52:39-15:03:04 ICT (from `date`), 10 min 25 s. Max RSS 5.5 GB, which
+  counts the 2.6 GB of shared memmap pages; the fit's own scope was charged 2.42 GB at
+  14:55:4x, and it ran under MemoryMax=4G without an OOM.
+- **The DEV items:** 644 positive, 268 watch-negative, 97 edge and 2,948 hunting frames (p31 1,439,
+  R2-H1 1,509). The title-bar guard dropped 3 hunting and 12 watch frames (loading screens). R2-H1's 37 lone Garm Baby frames
+  were left out of the negatives. Training windows: 19,731 positive, 521,040 random negative, and
+  63,829 + 62,624 hard negatives.
+- **The thresholds:**
+  - party **6.4700** = the DEV negatives' max outside SELF_ZONE (5.4700, p31 frame 1151) + 1.0;
+  - zone_penalty 0.0 (the zone's max + 1.0 is 6.2268, under the party threshold);
+  - the aura is OFF as a cue (aura_mode `off`). Its colour rule (248, 40) and ring (24, 10, 14, 4)
+    stay one of the detector's features. The stored aura_thr 0.06 is unused; the DEV negatives'
+    aura max was 0.4375.
+- **THE MODEL:**
+  - `/dev/shm/poring-lab-tmp/stormy/model/stormy-v2.npz`, 138,540 bytes;
+  - profile `stormy`, version `stormy-v2`, aura_mode `off`;
+  - **sha256 `ee896970c8eccddf92e03d84070d241980882cdaafafa19eb1722e0bf30fea02`**;
+  - client-derived pixel statistics: never committed;
+  - a copy, sha256 verified, is on the NAS: `scratch-archive/2026-11-09/b3-stormy-r2-dev/model/`.
+- **In-sample on ALL DEV (optimistic; `dev`, 15:03:04-15:05:11):**
+  - **8 / 16 watch cells within 1.1 s** (6 on the first frame; cells 6 and 12 at 1.0 s). The rest
+    were seen late: cells 4, 5, 7 and 9 at ~5.0 s, cells 1, 3, 8 and 10 at 11.0-12.0 s.
+  - Per frame: 268 / 644 positive frames (all of them the Knight's frames: 268 / 594).
+  - 0 false positives on the 1,440 + 1,511 hunting and 280 watch-gap DEV frames (by construction).
+  - Lone Garm Baby: 0 of R2-H1's 3 episodes seen (no Fly Wing on a lone summon).
+- **Nothing is refitted after a held-out score.**
+
+### 10d. The held-out score (the parent, ONCE, if it is run at all: see 10e)
+
+Run it at a time outside the market-open windows: it reads ~2,500 full PNG frames from the root disk.
+Both truths are made first, as round 1's (truth.sh), with the layout the frames show (round 1's
+watch: hunt).
+
+    W=<checkout at 388700b0 or later>; python=$W/.venv/bin/python; T=/dev/shm/poring-lab-tmp/stormy
+    export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+    export PYTHONPATH=$W/scripts:$W/packages/poring_env/src:$W/packages/poring_dataset/src:$W/packages/poring_packets/src
+    CAP="systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 15"
+    KB="--kb /home/bot/docker/poring-lab/data/kb --mapcache-dir /home/bot/docker/poring-lab/packages/poring_dataset/src/poring_dataset/_generated"
+    R2W=/home/bot/poring-lab-rec/20261109T131023-rdp-sk-watch2
+    R2WEV=/dev/shm/poring-lab-demo/20261109T131033-watch-xmas_dun02-sk2/events.jsonl
+    # 1. the truths (R2-W now; R2-H2 once recorded, its manifest showing a stop reason)
+    $CAP $python $W/scripts/mvp_watch_study.py truth --boss stormy $R2W --layout hunt $KB --out $T/r2w-truth.json
+    $CAP $python $W/scripts/mvp_watch_study.py truth --boss stormy <R2-H2 SESSION> --layout hunt $KB --out <R2-H2 TRUTH>
+    # 2. the frozen model
+    sha256sum $T/model/stormy-v2.npz      # ee896970c8eccddf92e03d84070d241980882cdaafafa19eb1722e0bf30fea02
+    # 3. HELD-OUT, once: R2-W's 16 cells (the whole watch) and R2-H2 (all of it)
+    $CAP $python $W/scripts/mvp_watch_study.py score --boss stormy --round 2 \
+        --model $T/model/stormy-v2.npz --sha256 ee896970c8eccddf92e03d84070d241980882cdaafafa19eb1722e0bf30fea02 \
+        --watch $R2W --watch-truth $T/r2w-truth.json --events $R2WEV \
+        --pilot <R2-H2 SESSION> <R2-H2 TRUTH> --out $T/score-r2-heldout.json
+
+- `score --round 2` scores every on-map frame of R2-W (its 16 cells; the frames before the first
+  spawn and after the last kill count as gap frames, reported only) and every on-map frame of R2-H2.
+  It decides each FULL frame with the model's own recipe (aura off), whatever the code's profile
+  says, and refuses a model that is not a round-2 one.
+- Bars (section 7): recall within 1.1 s on >= 95 % of R2-W's cells (16 / 16); <= 1 false positive
+  per 10 min on R2-H2 (`hunting[0]`); latency p95 <= 60 ms. R2-H2's lone Garm Baby frames are in
+  `hunting[0].lone`.
+
+### 10e. What the DEV data says (POST-HOC on DEV, deciding nothing)
+
+`posthoc_sweep.py` (archived) ran each fold's party detector (A-a, B-a) on every DEV frame and swept
+its threshold.
+
+| threshold | fold A cells (in-sample) | fold A LOO FP on R2-H1 (/ 10 min) | fold B cells (in-sample) | fold B LOO FP on p31 (/ 10 min) |
+|---|---|---|---|---|
+| 3.0 | 16 / 16 | 52 (20.6) | 16 / 16 | 116 (48.3) |
+| 4.0 | 15 / 16 | 11 (4.4) | 15 / 16 | 85 (35.4) |
+| 4.5 | 15 / 16 | 5 (2.0) | 15 / 16 | 80 (33.3) |
+| 5.0 | 14 / 16 | 0 (0.0) | 14 / 16 | 75 (31.3) |
+| 6.0 | 10 / 16 | 0 | 13 / 16 | 67 (27.9) |
+| the fold's own (6.83 / 11.93) | 5 / 16 | 0 | 4 / 16 | 56 (23.3) |
+
+- **The threshold rule costs the recall.** "DEV negatives' max + 1.0" was set on 371 negatives in
+  round 1. Over ~1,700-3,000 whole-session negatives the max climbs, while the median positive
+  frame's party score in-sample is only 6.1 (fold A). With the puzzle room in its training (fold A), a threshold
+  near 4.5-5.0 would have held 14-15 cells at 0-2 false positives per 10 min on the left-out
+  session.
+- **One session per floor is not enough.** Without the puzzle room in training (fold B), the room
+  scores up to 75.9, and no threshold works. Only p31 crossed it, so a leave-one-session-out check
+  can never see it in both folds.
+- **The aura** is no help on this map: the Knight's own aura never reaches a threshold above the
+  floors.
+- What could fix it (a round 3, pre-registered on its own, before any of its data):
+  - more DEV hunting sessions, so that every room (the puzzle room above all) is in >= 2 of them;
+  - a threshold rule chosen on the leave-one-out check, not "max + 1.0";
+  - a persistence rule (seen on 2 frames in a row). Today it would cost 1 s of the 1.1-s budget.
+- **R2-W and R2-H2 are still unread.** Scoring stormy-v2 on them would most likely fail bar 1 (it
+  sees 8 / 16 cells even in-sample) and would use up the only fresh held-out watch. Whether to score
+  it, or to keep them for a round-3 recipe, is the parent's / Batt's decision.
+
+**The evidence** (client-derived, never committed) is on the NAS:
+`scratch-archive/2026-11-09/b3-stormy-r2-dev/` (the chain's scripts, logs, every fold's fit and
+`dev` report, the LOO table, the post-hoc sweep, the fold models and a copy of stormy-v2;
+`files.sha256` verified). The DEV memmaps are deleted. `r2h1-truth.json` and the model stay in
+`/dev/shm/poring-lab-tmp/stormy/` for the parent.
