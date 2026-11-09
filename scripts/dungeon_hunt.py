@@ -256,6 +256,11 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # of the 17 false ones (a real kill took 3-22 hits, median 15).
 KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
 EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by then is given up
+# --walk-pick (dungeon@9.15, rogue-xmas02.md 4AM): a walk target fits only when the cell the CLIENT
+# picks under its projected pixel (picked_cell: the camera ray's first tile top) is walkable and
+# within WALK_PICK_TOL of it. p28-p30 (packets): such clicks went unsent 17 of 39 times, the others
+# 17 of 869; p30's stuck Fly Wing was 4 dropped clicks at (161, 116) on raised floors.
+WALK_PICK_TOL = 1
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
 # engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
@@ -1083,6 +1088,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "walk_pick", False):  # dungeon@9.15 (rogue-xmas02.md 4AM)
+        out["walk_pick"] = [WALK_PICK_TOL]
     if getattr(a, "explore", False):  # dungeon@9.14 (rogue-xmas02.md 4AL)
         import explore_map as em_f
 
@@ -1104,6 +1111,17 @@ def picked_cell(camera: Any, gat: Any, here: Cell, px: Sequence[float]) -> Cell 
     pc_ = pick_.pick_cells(camera, gat, here, np.array([[float(px[0]), float(px[1])]]))[0]
     dx_p, dy_p = int(pc_[0]), int(pc_[1])
     return None if dx_p == pick_.NONE else (here[0] + dx_p, here[1] + dy_p)
+
+
+def walk_pick_ok(picked: Cell | None, target: Cell, okr: Any, tol: int = WALK_PICK_TOL) -> bool:
+    """PURE (dungeon@9.15): the client's picked cell under a walk target's pixel is on the route
+    grid ``okr`` and within ``tol`` (Chebyshev) of the target."""
+    if picked is None:
+        return False
+    h, w = np.asarray(okr).shape
+    if not (0 <= picked[0] < w and 0 <= picked[1] < h) or not okr[picked[1], picked[0]]:
+        return False
+    return max(abs(picked[0] - target[0]), abs(picked[1] - target[1])) <= tol
 
 
 def reach_ok(grid: Any, here: Cell, cell: Cell) -> bool:
@@ -3907,7 +3925,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
                         def fits(c: Cell, h: Cell = here) -> bool:
                             u_, v_ = project(h, [(c[0] - h[0], c[1] - h[1])])[0]
-                            return in_view(u_, v_) and mz.segment_violates(h, c, zones) is None
+                            if not (in_view(u_, v_) and mz.segment_violates(h, c, zones) is None):
+                                return False
+                            if getattr(a, "walk_pick", False):  # dungeon@9.15
+                                pc_ = picked_cell(camera, gat, h, (u_, v_))
+                                if not walk_pick_ok(pc_, c, okr):
+                                    counts["walk_pick_skip"] += 1
+                                    return False
+                            return True
 
                         wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)
                         if wt_ is not None:
@@ -4222,6 +4247,14 @@ def main() -> int:
         help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
         "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
         "fight at most); no ring scan during that walk",
+    )
+    t.add_argument(
+        "--walk-pick",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.15 (rogue-xmas02.md 4AM; OFF by default): a walk target fits only when the "
+        "cell the client picks under its pixel (the camera ray's first tile top) is walkable and "
+        "within 1 cell of it -- else a nearer path cell (raised floors: the client drops it)",
     )
     t.add_argument(
         "--explore",

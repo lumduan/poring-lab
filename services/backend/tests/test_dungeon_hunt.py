@@ -1468,3 +1468,22 @@ def test_kill_gap_quiet_end_before_the_box_path_looked_is_no_miss() -> None:
     assert not dh.kill_gap_no_miss(False, {"spot": (1, 2), "n0": 3})  # the default path
     src = Path(dh.__file__).read_text()
     assert 'if kill_gap_no_miss(getattr(a, "kill_gap", False), box_fight):' in src
+
+
+def test_walk_pick_needs_the_clients_picked_cell_near_and_walkable() -> None:
+    """dungeon@9.15 (rogue-xmas02.md 4AM): p28-p30's walk clicks whose picked cell was off by more
+    than 1 or unwalkable went unsent 17 of 39 times (others 17 of 869); off by default."""
+    okr = np.ones((10, 10), dtype=bool)
+    okr[5, 5] = False
+    assert dh.WALK_PICK_TOL == 1
+    assert dh.walk_pick_ok((3, 3), (3, 3), okr) and dh.walk_pick_ok((4, 3), (3, 3), okr)
+    assert not dh.walk_pick_ok((3, 6), (3, 3), okr)  # picked 3 cells off (a raised top)
+    assert not dh.walk_pick_ok((5, 5), (5, 4), okr)  # picked an unwalkable cell
+    assert not dh.walk_pick_ok(None, (3, 3), okr) and not dh.walk_pick_ok((12, 3), (9, 3), okr)
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "walk_pick" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, walk_pick=True))["walk_pick"] == [1]
+    src = Path(dh.__file__).read_text()
+    assert "if not walk_pick_ok(pc_, c, okr):" in src
