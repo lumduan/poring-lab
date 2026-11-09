@@ -10,8 +10,9 @@ study (scripts/mvp_watch_study.py) and the model file (scripts/mvp_watch.py) kno
   its committed results stay reproducible.
 - ``stormy``: the Stormy Knight (1251) and its summons Garm Baby (1515, also a regular 30-min
   spawn there: ``lone``) and Christmas Goblin (1607) on xmas_dun02 (stormy-knight-recognizer.md
-  1-3). Its RECIPE fields (the aura threshold, the ring, the aura colour rule) are None:
-  PLACEHOLDERS that B3 fits on DEV and writes here before its fit (the fit refuses a None).
+  1-3). Its RECIPE (the aura threshold, the ring, the aura colour rule) was measured on DEV only
+  and frozen by B3 part 1 (stormy-knight-recognizer.md 5) before its fit; a recipe field left None
+  is a placeholder the fit refuses.
 
 The ids are the KB's (data/kb spawns.json / mob_skills.json NPC_SUMMONSLAVE, the derivation of
 dungeon_hunt.boss_names; ``kb_party`` re-derives them and the tests check the two agree when the
@@ -103,9 +104,13 @@ STORMY = BossProfile(
     sprite_names=_X1 / "kb-sprites" / "monster_sprite_names.json",
     # section 3 (pre-registered 2026-11-09): DEV = cells 0-7, HELD-OUT = cells 8-15 (16 cells)
     dev_cells=frozenset(range(8)), held_cells=frozenset(range(8, 16)), lone=(1515,),
-    # PLACEHOLDERS, NOT fitted values: B3 measures the Knight's own aura on DEV (section 1: "to be
-    # measured on the watch, not assumed") and writes them here before its fit
-    aura_thr=None, ring=None, ring_cell=None, ring_dy=None, aura_rule=None,
+    # FROZEN 2026-11-09 by B3 part 1 on DEV ONLY (stormy-knight-recognizer.md 5: watch cells 0-7,
+    # the hunt's first 300 s): the Knight's aura is a mint-white ring at its feet, its centre ~8
+    # half-res px above the foot point, measured 24 x 10 outside, 14 x 4 inside. The Orc Lord's
+    # rim rule (236, 25) takes xmas_dun02's green puzzle floor (a DEV gap frame scores 0.165); the
+    # saturated rim G >= 248, G - R >= 40, G - B >= 40 keeps every DEV negative <= 0.042 (hunt
+    # 0.019). The threshold = that max + 0.015 (Amendment B's margin), rounded up: 0.06.
+    aura_thr=0.06, ring=(24.0, 10.0, 14.0, 4.0), ring_cell=3, ring_dy=8.0, aura_rule=(248, 40),
     plan="docs/planning/stormy-knight-recognizer.md",
 )  # fmt: skip
 
