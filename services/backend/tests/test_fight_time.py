@@ -44,3 +44,21 @@ def test_hit_gap_kills_match_a_death_just_before() -> None:
     got = ft.hit_gap_match(ev, [8 * S + S // 2, 21 * S])
     assert got == {"hit_gap_kills": 2, "hit_gap_matched": 1, "hit_gap_share": 0.5}
     assert ft.hit_gap_match([], [])["hit_gap_share"] is None
+
+
+def test_loot_summary_pickups_and_scans_without_a_kill() -> None:
+    pk = [{"type": "floor_item_appear"}, {"type": "floor_item_appear"},
+          {"type": "pickup_request"}]  # fmt: skip
+    ev = [
+        {"kind": "loot_step", "hovered": 3, "t_ns": 20 * S},  # a death at 15 s: with a kill
+        {"kind": "loot_step", "hovered": 2, "t_ns": 50 * S},  # nothing in 10 s: without
+        {"kind": "loot_step", "hovered": 0, "t_ns": 60 * S},
+    ]  # no hover: not counted
+    got = ft.loot_summary(ev, pk, [15 * S])
+    assert got == {
+        "floor_items": 2,
+        "pickups": 1,
+        "pickup_share": 0.5,
+        "loot_steps_hovering": 2,
+        "loot_steps_without_kill": 1,
+    }

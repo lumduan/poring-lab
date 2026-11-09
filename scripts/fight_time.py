@@ -10,6 +10,11 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
 - A fight is a KILL fight when such a death falls inside it (to fight_end + 1 s); per kill fight
   the time from the first death to fight_end (``after_kill_s``: K1 is its median); the NO-KILL
   fights' count and total time (K2's context).
+- L1 / L2 (rogue-xmas02.md 4AQ, Batt 2026-11-09: "pick up what the scan finds; scan for drops only
+  after a kill"): floor items that appeared (``floor_item_appear``), our ``pickup_request``s and
+  their share; the loot steps that hovered (``hovered`` > 0) and how many of them came with NO death
+  of ours in the 10 s before (a loot scan without a kill). Base runs p28-p36: 0-2 pickups for 21-46
+  floor items (the loot list was empty: no exp line at Base 99).
 - K3 (--kill-gap): each ``kill`` event by ``hit_gap`` is MATCHED when a death of ours (above) came
   0-3 s before it; the matched share.
 By this definition (2026-11-09): p21 92 fights, 42 kill fights, after the kill p50 6.46 s (total
@@ -77,6 +82,19 @@ def hit_gap_match(events: Sequence[dict[str, Any]], kills: Sequence[int],
             "hit_gap_share": round(m / len(inferred), 3) if inferred else None}  # fmt: skip
 
 
+def loot_summary(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
+                 kills: Sequence[int], window_s: float = 10.0) -> dict[str, Any]:  # fmt: skip
+    """PURE: L1 (pickups / floor items) and L2 (hovering loot steps with no kill of ours before)."""
+    floor = sum(1 for p in packets if p.get("type") == "floor_item_appear")
+    picks = sum(1 for p in packets if p.get("type") == "pickup_request")
+    steps = [int(e["t_ns"]) for e in events
+             if e.get("kind") == "loot_step" and int(e.get("hovered") or 0) > 0]  # fmt: skip
+    no_kill = sum(1 for t in steps if not any(0 <= t - k <= window_s * 1e9 for k in kills))
+    return {"floor_items": floor, "pickups": picks,
+            "pickup_share": round(picks / floor, 3) if floor else None,
+            "loot_steps_hovering": len(steps), "loot_steps_without_kill": no_kill}  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -86,7 +104,8 @@ def main(argv: list[str] | None = None) -> int:
         packets = [json.loads(x) for x in fh if x.strip()]
     kills = our_kills(packets)
     print(json.dumps({"session": a.session.name, **summary(fights(events), kills),
-                      **hit_gap_match(events, kills)}))  # fmt: skip
+                      **hit_gap_match(events, kills),
+                      **loot_summary(events, packets, kills)}))  # fmt: skip
     return 0
 
 
