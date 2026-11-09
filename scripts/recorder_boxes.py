@@ -23,10 +23,15 @@ ids already written. A sidecar ``BOXES.jsonl.meta.json`` records the source, the
 the settings, the counts and whether every frame of the source has a row.
 
 SRC is either
-- a RECORDER session (scripts/record_session.py, PNG: ``manifest.json`` + ``shard-NNNNNN.tar``
-  holding ``NNNNNNNNN.png`` + ``NNNNNNNNN.json`` {frame_id, t_mono_ns, ...}): each shard is STREAMED
-  front to back (tarfile mode "r|", one read, nothing extracted to disk or /dev/shm); a frame is
-  decoded once both of its members were read; a truncated shard ends at its cut and is reported;
+- a RECORDER session (scripts/record_session.py), read through poring_dataset.frames: PNG
+  (``manifest.json`` + ``shard-NNNNNN.tar`` holding ``NNNNNNNNN.png`` + ``NNNNNNNNN.json``
+  {frame_id, t_mono_ns, ...}): each shard is STREAMED front to back (tarfile mode "r|", one read,
+  nothing extracted to disk or /dev/shm); a frame is decoded once both of its members were read; a
+  truncated shard ends at its cut and is reported. Or an RDP VIDEO session (ADR-0024: video.hevc +
+  video.idx.csv): every frame's access unit decoded alone, keyed by the index's frame id and
+  capture time; a stream cut short by its encoder ends at its cut and is reported. A stage-2
+  session is read from its PNG unless PORING_FRAME_SOURCE=video (its twin); the meta records
+  which (``frame_source``);
 - or a FRAMES DIR whose file stems carry the capture time (human_demo.py's 5 Hz recorder:
   ``frames/NNNNN-<t ns>.jpg``), for the positive control on a human demo. ``--times ROWS.jsonl``
   keeps only the frames whose time is one of those rows' ``t`` (the demo's live captures).
@@ -62,7 +67,6 @@ import io
 import json
 import os
 import sys
-import tarfile
 import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
@@ -72,77 +76,53 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from poring_dataset import frames as recorded  # noqa: E402
+
 NICE = 19
 THREADS = 2  # the brief's CPUQuota=200 %: two cores (the live detector runs unit_detector.THREADS)
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
-Frame = tuple[dict[str, Any], bytes]  # (the frame's meta: frame_id, t_mono_ns; its image bytes)
+# (the frame's meta: frame_id, t_mono_ns; its image bytes, or a loader that decodes it to BGR)
+Frame = tuple[dict[str, Any], bytes | Callable[[], Any]]
 
 
 # --- reading frames (pure parts on bytes) ------------------------------------------------------
 
-
-class ShardCut(Exception):
-    """A recorder shard ended mid-member (a recording stopped by its IO guard mid-write)."""
+ShardCut = recorded.ShardCut  # moved to poring_dataset.frames (2026-11-09), the same class
 
 
-def iter_shard(path: Path) -> Iterator[Frame]:
+def iter_shard(path: Path) -> Iterator[tuple[dict[str, Any], bytes]]:
     """(meta, PNG bytes) per frame of ONE recorder shard, in member order, the tar STREAMED (mode
     "r|": read once, front to back, nothing extracted). A frame is yielded once both of its
     members (``NNNNNNNNN.png``, ``NNNNNNNNN.json``) were read; the json's ``frame_id`` must be the
     member key's. A CUT shard raises ShardCut AFTER the complete frames before it: a member cut
     short, a member left without its pair, or no end-of-archive marker (two zero blocks) where
-    the members end -- tarfile ends a stream at a cut header silently, so the marker is read."""
-    pending: dict[str, dict[str, bytes]] = {}
+    the members end -- tarfile ends a stream at a cut header silently, so the marker is read.
+    (poring_dataset.frames.iter_png_shard since 2026-11-09.)"""
     try:
-        with tarfile.open(path, mode="r|") as tar:
-            end = 0
-            for m in tar:
-                if not m.isfile():
-                    continue
-                key, _, ext = m.name.partition(".")
-                if ext not in ("png", "json"):
-                    continue
-                fh = tar.extractfile(m)
-                assert fh is not None
-                data = fh.read()
-                if len(data) != m.size:
-                    raise ShardCut(f"{path.name}: {m.name} cut at {len(data)} of {m.size} bytes")
-                item = pending.setdefault(key, {})
-                item[ext] = data
-                if "png" in item and "json" in item:
-                    del pending[key]
-                    meta = json.loads(item["json"])
-                    if f"{int(meta['frame_id']):09d}" != key:
-                        raise SystemExit(f"{path.name}: {key}.json says frame {meta['frame_id']}")
-                    yield meta, item["png"]
-            end = tar.offset
-    except (tarfile.ReadError, EOFError) as e:
-        raise ShardCut(f"{path.name}: {e}") from e
-    if pending:
-        raise ShardCut(f"{path.name}: {sorted(pending)} without its pair (cut)")
-    with path.open("rb") as fh:
-        fh.seek(end)
-        marker = fh.read(1024)
-    if len(marker) < 1024 or marker.strip(b"\0"):
-        raise ShardCut(f"{path.name}: no end-of-archive marker at byte {end} (cut)")
+        yield from recorded.iter_png_shard(path)
+    except ValueError as e:  # a json that names another frame than its member key
+        raise SystemExit(str(e)) from e
 
 
 def iter_session(session: Path, manifest: dict[str, Any], cuts: list[str] | None = None
-                 ) -> Iterator[Frame]:  # fmt: skip
-    """Every frame of a recorder session, shard by shard in the manifest's order. A missing shard
-    or a cut is noted in ``cuts`` (when given) and the next shard follows (mvp_watch_study's
-    png_index keeps the same frames)."""
-    for name in manifest["shards"]:
-        shard = session / str(name)
-        if not shard.exists():
-            if cuts is not None:
-                cuts.append(f"{name}: missing")
-            continue
-        try:
-            yield from iter_shard(shard)
-        except ShardCut as e:
-            if cuts is not None:
-                cuts.append(str(e))
+                 ) -> Iterator[tuple[dict[str, Any], bytes]]:  # fmt: skip
+    """Every frame's PNG bytes of a PNG recorder session, shard by shard in the manifest's order.
+    A missing shard or a cut is noted in ``cuts`` (when given) and the next shard follows
+    (mvp_watch_study's png_index keeps the same frames). A video session (ADR-0024) has no PNG and
+    is refused (FrameSourceError): ``session_frames`` reads either."""
+    try:
+        yield from recorded.iter_png_session(session, manifest, cuts)
+    except recorded.FrameSourceError:
+        raise
+    except ValueError as e:  # a json that names another frame than its member key
+        raise SystemExit(str(e)) from e
+
+
+def session_frames(session: Path, manifest: dict[str, Any], cuts: list[str] | None = None
+                   ) -> Iterator[Frame]:  # fmt: skip
+    """Every frame of a recorder session, PNG or video (poring_dataset.frames.iter_frames), as
+    (meta, loader): a frame skipped by --resume is never decoded."""
+    yield from recorded.iter_frames(session, manifest, cuts=cuts)
 
 
 def frame_stem(name: str) -> tuple[int, int] | None:
@@ -167,9 +147,12 @@ def iter_frames_dir(directory: Path, times: set[int] | None = None) -> Iterator[
         yield {"frame_id": n, "t_mono_ns": t}, (directory / name).read_bytes()
 
 
-def decode_bgr(data: bytes) -> Any:
+def decode_bgr(data: Any) -> Any:
     """A PNG / JPEG as BGR uint8 (map_labels.read_png's and eval_latency's decoding: PIL RGB,
-    channels reversed): the order UnitDetector.detect takes, as a live grab gives it."""
+    channels reversed): the order UnitDetector.detect takes, as a live grab gives it. A loader (a
+    recorder session's frame: poring_dataset.frames) is called instead: it decodes to BGR."""
+    if callable(data):
+        return data()
     from PIL import Image
 
     rgb = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))
@@ -244,7 +227,9 @@ def sha256(path: Path) -> str:
 
 
 def is_session(src: Path) -> bool:
-    return (src / "manifest.json").exists() and any(src.glob("shard-*.tar"))
+    """A recorder session: its manifest beside PNG shards or an RDP video (ADR-0024)."""
+    shards = any(src.glob("shard-*.tar"))
+    return (src / "manifest.json").exists() and (shards or (src / recorded.VIDEO_FILE).exists())
 
 
 def cmd_predict(a: argparse.Namespace) -> dict[str, Any]:
@@ -260,12 +245,18 @@ def cmd_predict(a: argparse.Namespace) -> dict[str, Any]:
         out.write_text("".join(json.dumps(r) + "\n" for r in prior))
     done = {int(r["frame_id"]) for r in prior}
     cuts: list[str] = []
+    source = None
     if is_session(src):
         manifest = json.loads((src / "manifest.json").read_text())
-        if manifest.get("format") != "png":
-            raise SystemExit(f"{src}: format {manifest.get('format')!r}: only PNG sessions")
-        kind, sid, total = "recorder_session", str(manifest["session_id"]), manifest.get("frames")
-        frames: Iterable[Frame] = iter_session(src, manifest, cuts)
+        if manifest.get("format") not in ("png", recorded.VIDEO_FORMAT):
+            raise SystemExit(f"{src}: format {manifest.get('format')!r}: only PNG or RDP video "
+                             "sessions")  # fmt: skip
+        source = recorded.frame_source(src, manifest)
+        kind, sid = "recorder_session", str(manifest["session_id"])
+        # the frames the source serves: PNG's manifest count; a video's index matched to its stream
+        total = (manifest.get("frames") if source == "png"
+                 else len(recorded.frame_refs(src, manifest, source=source)))  # fmt: skip
+        frames: Iterable[Frame] = session_frames(src, manifest, cuts)
     elif src.is_dir():
         times = None if a.times is None else {int(r["t"]) for r in read_rows(a.times)}
         kind, sid = "frames_dir", src.parent.name if src.name == "frames" else src.name
@@ -292,7 +283,7 @@ def cmd_predict(a: argparse.Namespace) -> dict[str, Any]:
     rows = read_rows(out)
     meta = {"what": "v1 (unit_detector.UnitDetector, CPU ONNX) on every frame of a recorded "
                     "source: boxes.jsonl rows keyed by capture time (rogue-xmas02.md 4A)",
-            "source": str(src), "kind": kind, "session_id": sid,
+            "source": str(src), "kind": kind, "session_id": sid, "frame_source": source,
             "model": str(a.model), "model_sha256": sha256(a.model), "names": names,
             "conf": ud.CONF, "iou": ud.IOU, "threads": a.threads, "nice": os.nice(0),
             "frames_in_source": total, "rows": len(rows),

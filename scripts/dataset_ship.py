@@ -13,7 +13,9 @@ Where things live:
   shared with live capture, so it is a BUFFER, capped: recording refuses / stops when the
   filesystem has < 100 GB free or > 20 GB of sessions are still unshipped (local_caps()).
   The floor was 140 GB until Batt's 2026-11-05 decision (a 1-fps PNG recording is 7.0-8.4 GB/h)
-  and 120 GB until Batt's 2026-11-06 decision.
+  and 120 GB until Batt's 2026-11-06 decision; 30 GB on bot-server since 2026-11-08. Since
+  2026-11-09 (ADR-0024) an RDP recording is GPU video by default: ~0.84 GB/h at 1 fps (video.hevc
+  + video.idx.csv, no shards; shipped and verified like any other data file).
 * NAS root: /mnt/poring-lab-datasets (NFS, docs/operations/nas-sink.md). Written host-side only.
   It was never mounted into a container (an NFS hang must not freeze a lab service) until Batt's
   decision 4 (2026-10-04): vision alone mounts it READ-ONLY, soft (compose `datasets-nas`), for

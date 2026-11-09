@@ -85,15 +85,19 @@ def test_windows_pair_spawns_with_their_background() -> None:
 def test_a_png_session_offers_the_h264_interface_measure_uses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """2026-10-05: RDP-mode recordings are PNG shards; m4_validate reads them like H.264 ones."""
-    frames = [({"frame_id": 7, "t_mono_ns": 100}, np.zeros((2, 2, 3), np.uint8)),
-              ({"frame_id": 9, "t_mono_ns": 300}, np.ones((2, 2, 3), np.uint8))]  # fmt: skip
-    monkeypatch.setattr(m4, "read_shard", lambda path: iter(frames))
-    s = m4.PngSession(tmp_path, {"shards": ["shard-000000.tar"]})
+    """2026-10-05: RDP-mode recordings are PNG shards; m4_validate reads them like H.264 ones
+    (since 2026-11-09 through poring_dataset.frames, which reads an RDP video the same way)."""
+    from poring_dataset.shards import ShardWriter
+
+    w = ShardWriter(tmp_path)
+    w.add(7, 100, np.zeros((2, 2, 3), np.uint8))
+    w.add(9, 300, np.ones((2, 2, 3), np.uint8))
+    w.close()
+    s = m4.PngSession(tmp_path, {"format": "png", "shards": w.shards})
     assert [(u.t_ns, u.frame_id) for u in s.units] == [(100, 7), (300, 9)]
     assert s.usable() == [7, 9]
     ((meta, img),) = list(s.frames([9]))
-    assert meta["frame_id"] == 9 and int(img.max()) == 1
+    assert meta["frame_id"] == 9 and int(img.max()) == 1 and img.shape == (2, 2, 3)
 
 
 # --- the re-run (phase3-plan §5b), pre-registered before its session ------------------------

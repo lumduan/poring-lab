@@ -67,7 +67,6 @@ import json
 import re
 import statistics
 import sys
-import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -240,45 +239,32 @@ def banked_frames(session: Path, every: int = 15) -> list[tuple[int, Path | None
     return sorted(out, key=lambda r: r[0])
 
 
-# A frame inside a recorded PNG session's tar shard: "<shard path>@<data offset>+<size>".
-SHARD_REF = re.compile(r"^(?P<path>.+\.tar)@(?P<offset>\d+)\+(?P<size>\d+)$")
+# A frame inside a recorded session: "<shard path>@<data offset>+<size>", a PNG member of a tar
+# shard, or (ADR-0024) an access unit of an RDP video's video.hevc.
+SHARD_REF = re.compile(r"^(?P<path>.+\.(?:tar|hevc))@(?P<offset>\d+)\+(?P<size>\d+)$")
 
 
 def shard_frames(session: Path, every: int = 1) -> list[tuple[int, str]]:
-    """(capture time t_ns, SHARD_REF) of every ``every``-th frame of a RECORDED PNG session (its
-    manifest's tar ``shards``, counted in json-member order as build_frame_cache's
-    recorded_times does). Only tar headers and the chosen frames' json members are read; no
-    image. [] for any other session."""
+    """(capture time t_ns, SHARD_REF) of every ``every``-th frame of a RECORDED RDP session: its
+    PNG shards (counted in frame order as build_frame_cache's recorded_times does) or, ADR-0024,
+    its video (the ref is the access unit's bytes in video.hevc). Only the index is read
+    (poring_dataset.frames.frame_refs: tar headers and json members, or the video's index and
+    access units); no image. [] for any other session."""
+    from poring_dataset import frames as recorded
+
     mpath = session / "manifest.json"
     manifest = load_json(mpath) if mpath.exists() else {}
-    if manifest.get("kind") == "demo" or (manifest.get("format") or "png") != "png":
+    if manifest.get("kind") == "demo" or (manifest.get("format") or "png") not in (
+            "png", recorded.VIDEO_FORMAT):  # fmt: skip
         return []
-    out: list[tuple[int, str]] = []
-    n = 0
-    for shard in manifest.get("shards") or []:
-        path = session / shard
-        pngs: dict[str, tuple[int, int]] = {}
-        with tarfile.open(path) as tar:
-            for m in tar:
-                key, _, ext = m.name.partition(".")
-                if ext == "png":
-                    pngs[key] = (m.offset_data, m.size)
-                    continue
-                if ext != "json":
-                    continue
-                n += 1
-                if (n - 1) % every or key not in pngs:
-                    continue
-                fh = tar.extractfile(m)
-                assert fh is not None
-                meta = json.loads(fh.read())
-                off, size = pngs[key]
-                out.append((int(meta["t_mono_ns"]), f"{path}@{off}+{size}"))
-    return sorted(out, key=lambda r: r[0])
+    refs = recorded.frame_refs(session, manifest, strict=True)[::every]
+    return sorted(((r.t_mono_ns, f"{r.shard}@{r.offset}+{r.size}") for r in refs),
+                  key=lambda r: r[0])  # fmt: skip
 
 
 def open_frame(ref: str) -> Any:
-    """A frame image (PIL) from a file path or a SHARD_REF (one seek + read of its PNG bytes)."""
+    """A frame image (PIL) from a file path or a SHARD_REF (one seek + read of its PNG bytes; a
+    video's access unit decoded alone: poring_dataset.frames.read_ref)."""
     import io
 
     from PIL import Image
@@ -286,6 +272,12 @@ def open_frame(ref: str) -> Any:
     m = SHARD_REF.match(ref)
     if m is None:
         return Image.open(ref)
+    if m["path"].endswith(".hevc"):
+        from poring_dataset import frames as recorded
+
+        bgr = recorded.read_ref(recorded.FrameRef(-1, -1, Path(m["path"]), int(m["offset"]),
+                                                  int(m["size"])))  # fmt: skip
+        return Image.fromarray(np.ascontiguousarray(bgr[:, :, ::-1]), "RGB")
     size = int(m["size"])
     with open(m["path"], "rb") as fh:
         fh.seek(int(m["offset"]))

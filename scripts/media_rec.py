@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""STAGE 2 of the GPU recording plan: ONE side-by-side recording (docs/planning/gpu-recording.md
-9.1, its bars PRE-REGISTERED before any run). Every frame record_session.py keeps as lossless PNG
-is ALSO fed, raw BGRA, to round 3's candidate encoder (``vpp-hevc444-10-q20``, doc 8.4) in the
-contained sidecar ``media-rec``, so the two recordings of ONE session can be compared frame by
-frame.
+"""The VIDEO SIDE of an RDP recording: the GPU encoder in the contained sidecar ``media-rec``, fed
+raw BGRA by record_session.py. STAGE 3 (ADR-0024, Batt 2026-11-09): the video IS the recording on
+rdp by default (``--format vpp-hevc444-10-q20``: no PNG; poring_dataset.frames reads it). STAGE 2
+(docs/planning/gpu-recording.md 9.1, its bars PRE-REGISTERED before any run): ONE side-by-side
+recording, ``--also-png``: every frame kept as lossless PNG is ALSO fed to round 3's candidate
+encoder (``vpp-hevc444-10-q20``, doc 8.4), so the two recordings of ONE session can be compared
+frame by frame (``check``; stage 2 PASSED every bar, 9.3).
 
     media_rec.py prep        create the two directories the sidecar binds (ours, mode 0700)
     media_rec.py status      read-only: the sidecar's state, its control directory, leftovers
@@ -22,15 +24,18 @@ THE MECHANISM (doc 9.1):
                  sequential, to ~/poring-lab-rec/.media-rec/.<sid>.hevc (dot-named: never shipped)
                                                         v
        at the end the host RENAMES it into the session (the same filesystem, no copy):
-       session/video.hevc + video.idx.csv (one row per kept frame) + video.ffmpeg.log
+       session/video.hevc + video.idx.csv (one row per kept frame: INDEX_FIELDS + EXTRA_FIELDS,
+       the PNG record's t_wall / bus_frame_id / source) + video.ffmpeg.log
 
-* The host side (VideoFeed) never blocks the PNG loop: ``offer`` puts the frame on a bounded queue
-  (QUEUE_FRAMES); a full queue DROPS that frame from the video (its row says so); a feeder thread
-  writes the queue to the pipe. The PNG is the reference and always continues.
+* The host side (VideoFeed) never blocks the recorder's loop: ``offer`` puts the frame on a bounded
+  queue (QUEUE_FRAMES); a full queue DROPS that frame from the video (its row says so); a feeder
+  thread writes the queue to the pipe.
 * FAIL-SAFE: the encoder closing its pipe (EPIPE), a frame write blocked for STALL_S, or the
-  feeder dying ends the VIDEO side only, once, with its reason in the manifest's ``video``; the
-  PNG frames go on to the end of the session. A video side that cannot START refuses the
-  recording (part 0: nothing was recorded); a later part (--resume) records PNG only and says why.
+  feeder dying ends the VIDEO side, once, with its reason in the manifest's ``video``. Video-only:
+  the recorder then STOPS the session cleanly (``video_failed: ...``), the frames already in the
+  stream are the session. Stage 2: the PNG frames go on to the end of the session (the PNG is the
+  reference). A video side that cannot START refuses the recording (video-only: every part; stage
+  2: part 0, a later --resume part records PNG only and says why).
 * The alpha byte is set to 255 on the copy that is fed: the bench encoded PNGs, which ffmpeg turns
   into BGRA with alpha 255, and the grab's own alpha is not specified.
 * One recorder at a time (an exclusive flock on the control directory); one job at a time in the
@@ -91,6 +96,9 @@ JOB_RE = re.compile(
     r"([1-9][0-9]{0,12})$"
 )
 INDEX_FIELDS = ("frame_id", "t_mono_ns", "video_index", "status", "write_start_ns", "write_end_ns")
+# stage 3 (ADR-0024): the PNG record's own fields, so a video-only session keeps every field a
+# PNG session's json member holds (poring_dataset.frames reads them back; empty when not given)
+EXTRA_FIELDS = ("t_wall", "bus_frame_id", "source")
 
 
 def local_root() -> Path:
@@ -404,11 +412,14 @@ class VideoFeed:
             os.close(os.open(self.fifo, os.O_WRONLY | os.O_NONBLOCK))
 
     # -- the PNG loop's side --------------------------------------------------------------------
-    def offer(self, frame_id: int, t_mono_ns: int, img: Any) -> bool:
-        """Queue one kept frame for the video (never blocks). False when it will not be in it."""
+    def offer(self, frame_id: int, t_mono_ns: int, img: Any,
+              meta: dict[str, Any] | None = None) -> bool:  # fmt: skip
+        """Queue one kept frame for the video (never blocks). False when it will not be in it.
+        ``meta``: the PNG record's other fields (EXTRA_FIELDS) for the index row."""
         row: dict[str, Any] = {"frame_id": int(frame_id), "t_mono_ns": int(t_mono_ns),
                                "video_index": -1, "status": "queued",
-                               "write_start_ns": "", "write_end_ns": ""}  # fmt: skip
+                               "write_start_ns": "", "write_end_ns": "",
+                               **{k: (meta or {}).get(k, "") for k in EXTRA_FIELDS}}  # fmt: skip
         self.rows.append(row)
         self.check()
         if self.status != "feeding":
@@ -528,9 +539,9 @@ class VideoFeed:
     def _write_index(self, path: Path) -> None:
         with path.open("w", newline="") as fh:
             w = csv.writer(fh)
-            w.writerow(INDEX_FIELDS)
+            w.writerow((*INDEX_FIELDS, *EXTRA_FIELDS))
             for row in self.rows:
-                w.writerow([row[k] for k in INDEX_FIELDS])
+                w.writerow([row[k] for k in (*INDEX_FIELDS, *EXTRA_FIELDS)])
 
     def _release(self) -> None:
         if self._made_fifo and self.status != "feeding" and self._fd is None:
@@ -688,6 +699,10 @@ def cmd_check(a: argparse.Namespace) -> int:
     video = manifest.get("video")
     if not video:
         raise SystemExit(f"{session}: no video side in its manifest (not a stage-2 session)")
+    if (manifest.get("format") or "png") != "png":
+        raise SystemExit(f"{session}: format {manifest.get('format')}: check grades a video "
+                         "against its PNG twin, and a video-only session has none "
+                         "(dataset_check.py verifies its stream)")  # fmt: skip
     rows = read_index(session / "video.idx.csv")
     by_fid = {r["frame_id"]: r for r in rows}
     det = None

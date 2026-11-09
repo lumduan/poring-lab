@@ -12,6 +12,13 @@ Per session:
     live client's checksum;
   * decode throughput (frames/s, decode + BGRA conversion + checksum, one process).
 
+An RDP VIDEO session (ADR-0024, Batt 2026-11-09: ``format`` vpp-hevc444-10-q20) has no live
+checksum (the sidecar only encodes; stage 1 proved the VA-API, ffmpeg and PyAV decodes of this
+encoder bit-identical, and stage 2 every frame decoding alone): its pass is
+poring_dataset.frames.verify_video -- every access unit decoded ALONE to one frame of the game
+region's size signalling pc / bt709, every fed row of video.idx.csv matched to its unit, no unit
+left over. A frame that fails counts as a mismatch; a stream shorter than its index is incomplete.
+
 Results go to data/bench/h264/<session>.check.json (gitignored) -- NEVER into the session's NAS
 directory: it is shipped and checksummed (dataset_ship), and a write there would break its record.
 Exit 0 = every session identical and complete, 1 = a mismatch, 3 = incomplete or not comparable.
@@ -30,14 +37,30 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import dataset_ship  # noqa: E402
 
+from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset import h264  # noqa: E402
 
 OUT = ROOT / "data" / "bench" / "h264"
 
 
+def check_video(session: Path) -> dict[str, Any]:
+    """An RDP video session's pass (recorded.verify_video), in check()'s keys."""
+    t0 = time.monotonic()
+    rep = recorded.verify_video(session)
+    wall = time.monotonic() - t0
+    bad = sum(rep["bad"].values())
+    return {**rep, "kind": "video", "comparable": True, "compared": rep["decoded_alone"] + bad,
+            "identical": rep["decoded_alone"], "mismatched": bad, "complete": rep["ok"],
+            "decode_fps": round(rep["decoded_alone"] / wall, 1) if wall > 0 else None,
+            "wall_s": round(wall, 1),
+            "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}  # fmt: skip
+
+
 def check(session: Path) -> dict[str, Any]:
     import av
 
+    if recorded.is_video(recorded.load_manifest(session)):
+        return check_video(session)
     try:
         s = h264.H264Session(session)
     except h264.DecoderMismatch as exc:
@@ -93,6 +116,11 @@ def main(argv: list[str] | None = None) -> int:
         (OUT / f"{path.name}.check.json").write_text(json.dumps(result, indent=1) + "\n")
         print(json.dumps(result))
         results.append(result)
+    return verdict(results)
+
+
+def verdict(results: list[dict[str, Any]]) -> int:
+    """0 = every session identical and complete, 1 = a mismatch, 3 = incomplete / not comparable."""
     if any(r.get("comparable") and r["mismatched"] for r in results):
         return 1
     if any(not r.get("comparable") or not r["complete"] for r in results):

@@ -171,7 +171,10 @@ def test_a_session_is_the_x2_recording_path_or_refused() -> None:
           "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
     dv.check_session(ok)
     dv.check_session({**ok, "recorder_version": 5})
-    for bad in ({"recorder_version": 4}, {"format": "h264"}, {"backend": "console"},
+    dv.check_session({**ok, "recorder_version": 7})  # ADR-0024: v7's PNG
+    for bad in ({"recorder_version": 4}, {"recorder_version": 8}, {"format": "h264"},
+                {"recorder_version": 7, "format": "vpp-hevc444-10-q20"},  # lossy: refused
+                {"format": None}, {"backend": "console"},
                 {"game_region": [0, 0, 1920, 1080]}):  # fmt: skip
         with pytest.raises(SystemExit):
             dv.check_session({**ok, **bad})

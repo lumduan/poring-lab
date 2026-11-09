@@ -55,11 +55,16 @@ humanization and LLM integration are clearly marked TODOs.
     isolated), shared with the backend alone;
   - the backend refuses that subnet on every listener but `:8001`. So the bot's one way in is
     `/internal/agent` → the mux, and it can reach neither the LAN, the host nor the internet.
-- **Datasets** (ADR-0010): `scripts/record_session.py` records H.264 by default on console (the S2
-  client's own bitstream, an IDR every 1 s, ~2.5 GB/h; Batt 2026-10-04) and PNG on rdp
-  (`--format png --fps 1` is still selectable on console). `scripts/dataset_ship.py ship` moves
-  sessions to the NAS; `scripts/dataset_check.py` then verifies every H.264 frame on the host;
-  `poring_dataset.h264` reads them; `scripts/qa_export.py` reads either format.
+- **Datasets** (ADR-0010, ADR-0024): `scripts/record_session.py` records H.264 by default on
+  console (the S2 client's own bitstream, an IDR every 1 s, ~2.5 GB/h; Batt 2026-10-04) and, on
+  rdp, GPU-encoded HEVC video (`vpp-hevc444-10-q20`: 10-bit 4:4:4, CQP 20, all-intra, lossy;
+  ~0.84 GB/h at 1 fps; Batt 2026-11-09) through the `media-rec` sidecar, which must be up
+  (`guarded_build.py start:media-rec@60`; without it the recording is refused). Lossless PNG
+  stays selectable (`--format png --fps 1`, either backend) and is required by the studies that
+  fit pixel cues. `scripts/dataset_ship.py ship` moves sessions to the NAS;
+  `scripts/dataset_check.py` then verifies every H.264 frame against the live checksums, or decodes
+  every video frame alone; `poring_dataset.h264` reads H.264 and `poring_dataset.frames` reads PNG
+  and video sessions for every other reader (`scripts/qa_export.py` reads all three).
 - **The environment interlock** (ADR-0016) gates the mux's BOT presses:
   - the environments are user-managed on the Settings page (seeded once from
     `config/environments.yaml`);
@@ -84,7 +89,7 @@ humanization and LLM integration are clearly marked TODOs.
 
 | `db-th`, `rathena-th`, `sniffer-th` | th | **The Thai-data experiment (Batt, 2026-10-05; ADR-0006 environment 1b):** a SEPARATE rAthena with the same image, SHA and pre-renewal mode; its own database (`db-th-data`) and captures (`captures-th`); a map cache generated from the Thai client's GRF by rAthena's own tool (`scripts/gen_mapcache_th.py` → `data/mapcache-th/`, never committed), installed as `db/import/map_cache.dat`. **One at a time with `rathena`:** the same pinned IP and LAN ports, so Docker refuses to start both. Its sniffer attests `server=lab-rathena-th` (ADR-0016 amendment). Its client is the separate copy `C:\RO-rAthena-th\` (`ro_agent.py --profile th`). |
 
-| `media-probe`, `media-recbench`, `media-rec` | probe, recbench, mediarec | The GPU recording plan ([docs/planning/gpu-recording.md](docs/planning/gpu-recording.md); bot-server's Arc only): the media-probe image (iHD + ffmpeg 8; no network, a read-only root, the DRM render node only). `media-probe` and `media-recbench` are one-shot evidence runs; `media-rec` is stage 2's encoder sidecar, idle until `record_session.py --format vpp-hevc444-10-q20 --also-png` feeds it raw frames through one named pipe in `/dev/shm/poring-lab-mediarec` (section 9.1). Started and removed only by `guarded_build.py` (`start:media-rec@60`, `rm:media-rec`). |
+| `media-probe`, `media-recbench`, `media-rec` | probe, recbench, mediarec | The GPU recording plan ([docs/planning/gpu-recording.md](docs/planning/gpu-recording.md); bot-server's Arc only): the media-probe image (iHD + ffmpeg 8; no network, a read-only root, the DRM render node only). `media-probe` and `media-recbench` are one-shot evidence runs; `media-rec` is the RDP recordings' encoder sidecar (ADR-0024: the video IS the recording by default; stage 2's `--also-png` adds the PNG twin), idle until `record_session.py --backend rdp` feeds it raw frames through one named pipe in `/dev/shm/poring-lab-mediarec` (sections 9.1, 9.4). Started and removed only by `guarded_build.py` (`start:media-rec@60`, `rm:media-rec`). |
 
 `sniffer` shares rathena's network namespace, so `--profile sniffer` brings `db` and `rathena` up with it.
 To switch to the Thai-data server and back (stop needs no guard; start does):

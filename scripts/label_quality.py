@@ -318,7 +318,8 @@ def dump(
 def session_frame(path: Path, at_s: float) -> tuple[int, Any]:
     """(capture time, RGB game-region image) of the recorded frame nearest ``at_s`` seconds after
     the recording's t0. H.264: only the bytes from the GOP's IDR to that frame are read (never the
-    whole stream); PNG shards: the tar is walked by its headers and one PNG is read."""
+    whole stream); PNG shards or an RDP video (ADR-0024): the index is read (tar headers, or the
+    video's index and access units) and one frame is decoded (poring_dataset.frames)."""
     import numpy as np
 
     manifest = json.loads((path / "manifest.json").read_text())
@@ -345,24 +346,13 @@ def session_frame(path: Path, at_s: float) -> tuple[int, Any]:
             raise SystemExit("the frame decoded to nothing")
         x, y, w, h = (int(v) for v in manifest["game_region"])
         return int(units[target].t_ns), img[y : y + h, x : x + w]
-    from PIL import Image
+    from poring_dataset import frames as recorded
 
-    best: tuple[int, str, str] | None = None
-    for shard in manifest["shards"]:
-        with tarfile.open(path / shard, "r:") as tar:
-            for m in tar:
-                if m.name.endswith(".json"):
-                    meta = tar.extractfile(m)
-                    assert meta is not None
-                    t = int(json.loads(meta.read())["t_mono_ns"])
-                    if best is None or abs(t - want) < abs(best[0] - want):
-                        best = (t, shard, m.name.rsplit(".", 1)[0])
-    if best is None:
+    refs = recorded.frame_refs(path, manifest)
+    if not refs:
         raise SystemExit("no frames")
-    with tarfile.open(path / best[1], "r:") as tar:
-        png = tar.extractfile(tar.getmember(best[2] + ".png"))
-        assert png is not None
-        return best[0], np.asarray(Image.open(png).convert("RGB"))
+    ref = recorded.nearest_ref(refs, want)
+    return ref.t_mono_ns, np.ascontiguousarray(recorded.read_ref(ref)[:, :, ::-1])
 
 
 def peek(session: str, at_s: float, out: Path, datasets: Path, data: Path, k: float,

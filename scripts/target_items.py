@@ -536,6 +536,10 @@ def build_index(sid: str, out: Path | None = None) -> list[dict[str, Any]]:
     per-frame JSON only (no pixel read). ``out``: the study's scratch root (default OUT)."""
     d = DATASETS / sid
     man = json.loads((d / "manifest.json").read_text())
+    from poring_dataset.frames import png_required  # ADR-0024: the templates are fitted on PNG
+
+    if why := png_required(man, "target_items"):
+        raise SystemExit(why)
     rows: dict[str, dict[str, Any]] = {}
     for shard in man["shards"]:
         with tarfile.open(d / shard) as tar:

@@ -318,6 +318,10 @@ def cmd_events(tags: Sequence[str]) -> int:
 
 def _frame_index(rec: Path) -> list[tuple[int, str, str]]:
     man = json.loads((rec / "manifest.json").read_text())
+    from poring_dataset.frames import png_required  # ADR-0024: the cursor cues are read on PNG
+
+    if why := png_required(man, "cursor_unknown"):
+        raise SystemExit(why)
     idx = []
     for sh in man["shards"]:
         with tarfile.open(rec / sh) as tar:

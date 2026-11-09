@@ -223,6 +223,10 @@ weekdays; `ship` refuses then, unless `--force-market`), with quant-postgres 5 m
 
        uv run python scripts/record_session.py --backend rdp --label ship-test --seconds 30
 
+   ➡️ Since 2026-11-09 (ADR-0024) this records the GPU video by default and needs the `media-rec`
+   sidecar up (`guarded_build.py start:media-rec@60`), and `--max-bytes` is required (e.g.
+   `--max-bytes 1G`); add `--format png` for the PNG round trip this section was written with.
+
    It goes to `/home/batt/poring-lab-rec/<session>/`; the caps are 100 GB free (Batt 2026-11-06; 120 GB from 11-05, 140 GB before) and 20 GB unshipped.
 2. `uv run python scripts/dataset_ship.py status` shows it `local  unshipped` and `nas …: mounted`.
 3. Ship it:

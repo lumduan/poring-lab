@@ -54,6 +54,7 @@ import label_check  # noqa: E402
 import m4_cells  # noqa: E402
 import qa_export  # noqa: E402
 
+from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.h264 import H264Session  # noqa: E402
 from poring_dataset.projection import camera_file  # noqa: E402
@@ -66,7 +67,6 @@ from poring_dataset.render import (  # noqa: E402
     load_scene,
     predict_sprite,
 )
-from poring_dataset.shards import read_shard  # noqa: E402
 from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 from poring_dataset.ui_layout import covered_fraction  # noqa: E402
@@ -230,17 +230,14 @@ def windows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class PngSession:
-    """A PNG-shard session (RDP mode records PNG, 1 fps) with the slice of H264Session's interface
-    measure() uses (2026-10-05: the Thai-data experiment's sprite fidelity runs in RDP mode)."""
+    """An RDP session (PNG shards, 1 fps; or the video of ADR-0024) with the slice of
+    H264Session's interface measure() uses (2026-10-05: the Thai-data experiment's sprite fidelity
+    runs in RDP mode). The index is read once (poring_dataset.frames); a frame is decoded when
+    asked for."""
 
     def __init__(self, session: Path, manifest: dict[str, Any]) -> None:
-        self._frames: dict[int, tuple[dict[str, Any], npt.NDArray[np.uint8]]] = {}
-        self.units: list[Any] = []
-        for shard in manifest["shards"]:
-            for meta, img in read_shard(session / shard):
-                fid = int(meta["frame_id"])
-                self._frames[fid] = (meta, img)
-                self.units.append(_Unit(int(meta["t_mono_ns"]), fid))
+        self._refs = {r.frame_id: r for r in recorded.frame_refs(session, manifest)}
+        self.units: list[Any] = [_Unit(r.t_mono_ns, r.frame_id) for r in self._refs.values()]
 
     def usable(self) -> list[int]:
         return [u.frame_id for u in self.units]
@@ -249,7 +246,8 @@ class PngSession:
         self, ids: list[int], verify: bool = False
     ) -> Iterator[tuple[dict[str, Any], npt.NDArray[np.uint8]]]:
         for fid in ids:
-            yield self._frames[fid]
+            ref = self._refs[fid]
+            yield ref.meta(), recorded.read_ref(ref)
 
 
 @dataclass(frozen=True)

@@ -189,8 +189,10 @@ def test_check_recording_fails_closed() -> None:
             "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
     ml.check_recording(good)
     ml.check_recording({**good, "recorder_version": 6})  # T-3 (xmas02-detector.md 3c): v6 too
-    for k, v in (("backend", "console"), ("format", "h264"), ("recorder_version", 4),
-                 ("recorder_version", 7), ("recorder_version", None),
+    ml.check_recording({**good, "recorder_version": 7})  # ADR-0024: v7's PNG
+    for k, v in (("backend", "console"), ("format", "h264"), ("format", None),
+                 ("format", "vpp-hevc444-10-q20"),  # the GPU video: refused until its parity check
+                 ("recorder_version", 4), ("recorder_version", 8), ("recorder_version", None),
                  ("game_region", [80, 77, 1440, 900]), ("server", "lab-rathena-th")):  # fmt: skip
         with pytest.raises(SystemExit, match="not the recording path of 3c"):
             ml.check_recording({**good, k: v})
@@ -1231,13 +1233,15 @@ X2_MANIFEST = NAS / X2 / "manifest.json"
 @pytest.mark.skipif(not X2_MANIFEST.exists(), reason="the NAS is absent")
 def test_t3_positive_case_x2s_manifest_passes() -> None:
     """T-3's positive case: X2's manifest (recorder v6; ITS MANIFEST ONLY, X2 is TEST) is on the
-    recording path now; the same manifest at v5 passes and at v7 is refused (the rule)."""
+    recording path now; the same manifest at v5 and v7 (ADR-0024) passes and at v8 is refused
+    (the rule: a recorder version nobody has read is refused)."""
     m = json.loads(X2_MANIFEST.read_text())
     assert m["recorder_version"] == 6 and m["session_id"] == X2
     ml.check_recording(m)
     ml.check_recording({**m, "recorder_version": 5})
+    ml.check_recording({**m, "recorder_version": 7})
     with pytest.raises(SystemExit, match="recorder_version"):
-        ml.check_recording({**m, "recorder_version": 7})
+        ml.check_recording({**m, "recorder_version": 8})
 
 
 def test_t2_xmas02_spec() -> None:

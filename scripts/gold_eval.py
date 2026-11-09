@@ -51,7 +51,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import eval_q1  # noqa: E402
 import label_iou  # noqa: E402
 
-from poring_dataset.shards import encode_png, read_shard  # noqa: E402
+from poring_dataset import frames as recorded  # noqa: E402
+from poring_dataset.shards import encode_png  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
 OUT = ROOT / "data" / "train" / "eval" / "gold"
@@ -83,9 +84,10 @@ def extract(session: str, datasets: Path) -> int:
     if (manifest.get("format") or "png") == "h264":
         from poring_dataset.h264 import H264Session
 
-        pairs = H264Session(src).frames(sorted(want))
-    else:
-        pairs = (pi for shard in manifest["shards"] for pi in read_shard(src / shard))
+        pairs: Any = H264Session(src).frames(sorted(want))
+    else:  # PNG shards or an RDP video (ADR-0024): only the wanted frames are read and decoded
+        refs = [r for r in recorded.frame_refs(src, manifest) if r.frame_id in want]
+        pairs = ((r.meta(), recorded.read_ref(r)) for r in refs)
     for meta, img in pairs:
         fid = int(meta["frame_id"])
         if fid not in want or str(fid) in index:
