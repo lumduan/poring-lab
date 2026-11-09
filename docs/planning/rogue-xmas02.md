@@ -2775,3 +2775,31 @@ X2 ALL PASS. Reported: 66 kills = 158.4 / h, the most of the study.**
   slowly; E2's pre-registration weighs that (larger regions or pooled neighbours).
 - **Items (snatched):** Scell 11, Zargon 9, Piece of Cake 7, Well-baked Cookie 5, Manacles 3, Red
   Herb 2, Candy 2, Pearl 2, Iron 2, Sandals 1.
+
+**Pilot p30 (4AL, explore E1 run 2; 07:53:45-08:19:30, 25 min; the MVP killed 07:52:57 after the
+boss peek (stormy-knight-recognizer.md 1); immunity OFF at 07:53:20 and ON at 08:19:45; the base +
+`--explore`; the stage-3 video-only recording ran beside its minutes 1-6). E1's bars: deaths, U1,
+X1, X2 PASS; E3 hard bars pass, 0 dead-end Fly Wings by the bar's definition (why `dead_end`) --
+but 1 Fly Wing by the `stuck` escape (below), reported. 67 kills = 160.8 / h: p29 replicated.**
+
+| | p28 (edge loop) | p29 (explore) | **p30 (explore)** |
+|---|---|---|---|
+| kills; per hour | 52; 124.7 | 66; 158.4 | **67; 160.8** |
+| monsters seen (/ 10 min); kills per monster seen | 53 (21.2); 0.981 | 67 (26.8); 0.985 | **74 (29.6); 0.905** |
+| strikes; class D; F1 | 61; 8; 13.0 % | 77; 10; 12.7 % | **80; 15; 18.4 %** |
+| stuck time; stalls; Fly Wings | 17.0 s; 3; 0 | 0 s; 1; 0 | **7.7 s; 7; 1 (`stuck`)** |
+| after the kill p50 (total); no-kill fights (time) | 6.56 s (299.9 s); 32 (247.2 s) | 6.52 s (305.6 s); 49 (462.9 s) | **6.47 s (358.8 s); 35 (347.2 s)** |
+| deaths; lowest HP | 0; 83.3 % | 0; 83.7 % | **0; 84.2 %** |
+
+- **The exploration:** 11 regions targeted, 2 reached, 7 timed out, 1 blocked; merged: 2 runs,
+  206 regions, 1,205 cells visited, 8 refused cells; no `ev_hook_error`. Its own dwell 1,040 s,
+  67 good fights for 67 packet kills.
+- **The `stuck` Fly Wing (studied, packets):** at (161, 116) the runner booked 4 stalls in 18 s
+  (walk targets (154, 116), (154, 121), (165, 117), (161, 121)) and flew. The packets hold NO walk
+  request in those 18 s: the CLIENT dropped the clicks. Of p30's 7 stalls, 6 aimed at a cell the
+  client does not pick under the projected pixel (poring_dataset.picking: 4-6 cells off, 2 of them
+  unwalkable) -- the raised floors again (9.12b's cause, for WALK clicks). The edge loop's
+  waypoints never crossed those spots; explore does. A walk-click fix (the target cell must be the
+  one the client picks) is the next walking change, pre-registered on its own.
+- **Items (snatched):** Zargon 12, Scell 6, Piece of Cake 4, Manacles 3, Red Herb 2, Well-baked
+  Cookie 2, Iron 2, Candy 1, Candy Cane 1, Pearl 1.
