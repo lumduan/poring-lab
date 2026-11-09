@@ -704,7 +704,8 @@ def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float
                 ) -> tuple[npt.NDArray[np.float32], float]:  # fmt: skip
     """Positives: each party unit's window and its 4 neighbours; negatives: random windows of
     every frame away from the party, then ``rounds`` of hard negatives (each negative frame's
-    top 20 windows scoring above -2)."""
+    top 20 windows scoring above -2). The kept windows are COPIES: a view into a frame's window
+    vectors held all of them (~4.5 MB a frame; the Orc Lord's fit was OOM-killed under 4 GB)."""
     import mvp_watch as mw
 
     rng = np.random.default_rng(seed)
@@ -717,7 +718,7 @@ def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float
             near[max(0, cy - 2) : cy + 3, max(0, cx - 2) : cx + 3] = True
             for dy, dx in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
                 if 0 <= cy + dy < oh and 0 <= cx + dx < ow:
-                    xp.append(wv[cy + dy, cx + dx])
+                    xp.append(wv[cy + dy, cx + dx].copy())  # a view keeps the frame's wv
         if it.kind == "edge":
             continue
         cand = np.argwhere(it.valid & ~near)
@@ -744,7 +745,7 @@ def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float
             for j in np.argsort(sm, axis=None)[-20:]:
                 yy, xx = divmod(int(j), sm.shape[1])
                 if sm[yy, xx] > -2:
-                    hard.append(wv[yy, xx])
+                    hard.append(wv[yy, xx].copy())  # a view would keep every frame's wv (4.5 MB)
         if hard:
             neg = np.vstack([neg, np.array(hard, np.float32)])
     return w.reshape(mw.N_FEATURES, *mw.WIN), b
