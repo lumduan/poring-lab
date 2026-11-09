@@ -3211,3 +3211,36 @@ E3, deaths PASS; W1 FAILS (4.41 %). `--kill-gap` stays OFF (4AS's rule).**
     at 161 s, 0 picks).
   - **The hand in the defend scan is passed by:** 29 PICKUP verdicts in 11 defend scans (the scan
     stops on a sword only): Batt's clip 2.
+
+**Pilot p39 (4AT; 14:35:44-15:01:36, 25 min; the MVP killed 14:34:50 after polls at 14:20 / 14:24 /
+14:27 / 14:31 (dead) and 14:34:36 (alive at 65, 60); immunity OFF 14:35:31, kept OFF into p40;
+weight 815 / 2430 at the start; the base + `--kill-gap` 9.13d + `--loot-first` 9.16; R2-H2's PNG
+recording beside it, `20261109T143541-rdp-hunt-xmas02-p39`, 1,620 frames, 3.52 GB). VERDICT: every
+bar but W1 PASSES; W1 FAILS (2.07 %). By 4AT both stay OFF; by 4AU (written before this verdict)
+p40 now decides `--kill-gap` + `--loot-first` + `--walk-pick-step` together.**
+
+| | p38 (9.13d) | **p39 (+ --loot-first)** | bar |
+|---|---|---|---|
+| L1 floor items picked up | 8 / 16 (50.0 %) | **18 / 22 (81.8 %)** | >= 50 %: PASS |
+| L3 kills looted within 5 s | 17 / 53 (32 %) | **50 / 58 (86.2 %)** | >= 80 %: PASS |
+| L4 engages ended at once by quiet-kill | 1,057 / 1,144 (92 %) | **0 / 91** | <= 5 %: PASS |
+| K1 after the kill p50 | 1.99 s | **1.99 s** (180.2 s in all) | <= 3.0 s: PASS |
+| K3 inferred kills real | 96.2 % | **96.6 % (56 / 58)** | >= 70 %: PASS |
+| E1 kills | 126.8 / h | **62 (148.7 / h)** | >= 80 / h: PASS |
+| W1 clicked walks never sent | 4.41 % | **5 / 241 (2.07 %)** | <= 1.5 %: FAIL |
+| U1 stuck | 0 s | **5.2 s** (one span, 4 requests) | <= 30 s: PASS |
+| D1 GPU p95 | 22.8 ms | **25.0 ms** (p50 20.5) | <= 35 ms: PASS |
+| R1 pooled own-body class D (p39 + p33 + p35 + p36) | 6 | **1 + 1 + 0 + 1 = 3** | <= 6: PASS |
+| E3 / deaths | | **hard bars pass; 0 dead-end / stuck / idle Fly Wings; 1 `pos_unread` Fly Wing (the minimap readout unread ~26 s at 129, 41 on a light floor: reported, not counted, as p29-p33); 2 stalls / 0; lowest HP 70 %** | PASS |
+| L2 hovering loot steps with no death of ours in 10 s before | 5 / 26 | **6 / 58** | reported |
+| loot clicks (list / scan hand) | 8 / - | **18 / 1** | reported |
+
+- **Items (snatched + picked):** Scell 15, Zargon 13, Well-baked Cookie 4, Manacles 4, Piece of Cake
+  3, Pearl 3, Candy 2, Candy Cane 2, Red Herb 1, Iron 1.
+- **Batt's clips, answered:** after a kill the loot step now runs first (86 % within 5 s, from 32 %);
+  the instant-end loop is gone (0 of 91 engages, from 92 %); the floor items picked up went from
+  50 % to 81.8 % while kills / h rose (148.7 vs 126.8). A defend scan clicked a hand once.
+- **POST-HOC on W1 (deciding nothing):** the replay of the client's picking says all 5 unsent clicks
+  had a GOOD pick (not p38's ramp case): 2 were sent at +1.21 / +1.27 s (just past W1's 1.2-s
+  window), 2 came 1.7 / 2.2 s after a loot step, 1 had its next request 4.35 s later. 9.15c (p40)
+  addresses p38's bad-pick fallback, not these.
