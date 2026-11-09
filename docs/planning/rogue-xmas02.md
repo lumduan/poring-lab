@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 14:5x: the base = p16 + reach-check + far mechanism + explore + walk-pick. p38 (--kill-gap 9.13d): every bar but W1 -> off. p39 (4AT, running): --loot-first 9.16 on top of --kill-gap. p40 (4AU): --walk-pick-step 9.15c (the W1 cause: 9.15b's plain fallback onto cells the client cannot pick, 7 of p38's 10)."
+next_action: "2026-11-09 15:3x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step (p40 every bar; L1 100 %, W1 1.04 %, 136.4 kills/h). Next: where the no-kill fights go (306.8 s a run); the lone-Garm-Baby boss guard (4 Fly Wings a run) is Batt's call."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3244,3 +3244,36 @@ p40 now decides `--kill-gap` + `--loot-first` + `--walk-pick-step` together.**
   had a GOOD pick (not p38's ramp case): 2 were sent at +1.21 / +1.27 s (just past W1's 1.2-s
   window), 2 came 1.7 / 2.2 s after a loot step, 1 had its next request 4.35 s later. 9.15c (p40)
   addresses p38's bad-pick fallback, not these.
+
+**Pilot p40 (4AU; 15:03:56-15:29:50, 25 min; straight after p39, the MVP dead by the schedule
+(killed 14:34:50); immunity OFF from 14:35:31, ON 15:31:4x; weight 941 / 2430 at the start; the
+base + `--kill-gap` 9.13d + `--loot-first` 9.16 + `--walk-pick-step` 9.15c). VERDICT: EVERY BAR
+PASSES. By 4AU (p39 failed W1 only) `--kill-gap`, `--loot-first` and `--walk-pick-step` JOIN THE
+BASE together.**
+
+| | p38 | p39 | **p40 (+ --walk-pick-step)** | bar |
+|---|---|---|---|---|
+| W1 clicked walks never sent | 4.41 % | 2.07 % | **3 / 288 (1.04 %)** | <= 1.5 %: PASS |
+| L1 floor items picked up | 50.0 % | 81.8 % | **12 / 12 (100 %)** | >= 50 %: PASS |
+| L3 kills looted within 5 s | 32 % | 86.2 % | **51 / 56 (91.1 %)** | >= 80 %: PASS |
+| L4 engages ended at once | 92 % | 0 % | **0 / 89** | <= 5 %: PASS |
+| K1 after the kill p50 | 1.99 s | 1.99 s | **1.97 s** | <= 3.0 s: PASS |
+| K3 inferred kills real | 96.2 % | 96.6 % | **96.4 % (54 / 56)** | >= 70 %: PASS |
+| E1 kills | 126.8 / h | 148.7 / h | **57 (136.4 / h)** | >= 80 / h: PASS |
+| U1 stuck | 0 s | 5.2 s | **0 s** (381 requests, 2 ignored) | <= 30 s: PASS |
+| D1 GPU p95 | 22.8 ms | 25.0 ms | **22.5 ms** | <= 35 ms: PASS |
+| R1 pooled own-body class D (p40 + p36 + p35 + p33) | | | **1 + 1 + 0 + 1 = 3** | <= 6: PASS |
+| E3 / deaths | | | **hard bars pass; 0 dead-end / stuck / idle Fly Wings; 4 boss-guard Fly Wings (8 guard events, all lone Garm Babies); 1 stall / 0; lowest HP 65.7 %** | PASS |
+| L2 hovering loot steps with no death of ours in 10 s before | 5 / 26 | 6 / 58 | **7 / 58** | reported |
+
+- **The walk fallbacks:** 9.15c's step taken 5 times (4 clicks, all sent); 9.15b's plain click 0
+  times; the 3 unsent clicks were ordinary targets (no fallback). `loot_first_held` 40 ticks; the
+  defend scan clicked 2 hands.
+- **Items (snatched + picked):** Scell 8, Red Herb 6, Zargon 6, Piece of Cake 5, Candy 4,
+  Well-baked Cookie 4, Candy Cane 2, Iron 2, Manacles 2, Rough Wind 1, Nursing Bottle 1.
+- **THE BASE NOW:** p16's flags + `--reach-check` + `--far-single --far-approach` + `--explore` +
+  `--walk-pick` + `--kill-gap` + `--loot-first` + `--walk-pick-step`.
+- **Seen, not decided (for Batt):** the boss guard took 4 Fly Wings in p38 and 4 in p40 on LONE
+  Garm Babies (a regular spawn on this map; the pilots run only while the MVP is confirmed dead).
+- **Where the time goes now (fight_time):** fights with no kill 30 taking 306.8 s of the 1,500
+  (p39: 28, 259.8 s); class D strikes held 154.7 s in all.
