@@ -4,6 +4,7 @@
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
 import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
+import type { Models } from "./models.ts";
 import type { ZonesCheck, ZonesFile } from "./zones.ts";
 
 // "readiness" (Batt 2026-10-09, ADR-0020 contradictions #6): a binding not there YET for the target
@@ -107,7 +108,9 @@ export interface Scenario {
   weight_per_attack?: number;
   hp_per_attack?: number;
   attack_s?: number;
-  timeline?: { t: number; set?: Record<string, number | boolean>; sees?: Record<string, boolean> }[];
+  // detects: "<model>/<class>" -> how many boxes the trained model finds from t on (ADR-0020
+  // Amendment B; before any entry: 0)
+  timeline?: { t: number; set?: Record<string, number | boolean>; sees?: Record<string, boolean>; detects?: Record<string, number> }[];
 }
 
 export interface SimDoc {
@@ -154,6 +157,8 @@ export interface CatalogueDoc {
   // B2: the hunt block's groups, rule versions and badges (config/flows/hunt; null when unread)
   hunt_rules?: HuntRules | null;
   hunt_rules_error?: string | null;
+  // the trained models a detector block may name (poring_flow models.yaml; 2026-11-09)
+  models?: Models;
 }
 
 export interface WorldMap {

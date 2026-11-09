@@ -80,18 +80,19 @@ export function badgeText(c: HuntChoice, adopted: number): string {
 const optionText = (c: HuntChoice) =>
   c.option ? `${c.id}${c.is_default ? " (default)" : ""}` : `${c.id}${c.adopted ? " ★" : ""}${c.evidence.length ? " ◆" : ""}`;
 
-/** The pl_hunt block type, built from the catalogue (its lists change only with blocks.yaml). */
-export function huntDef(rules: HuntRules, colour: string): BlockDef {
+/** The pl_hunt block type, built from the catalogue (its lists change only with blocks.yaml).
+ * `style`: its MatPilot block style (theme.ts: Movement, Batt 2026-11-09). */
+export function huntDef(rules: HuntRules, style = "mp_movement_blocks"): BlockDef {
   const badge = { type: "field_label" as const, name: "BADGE", text: "", class: "pl-badge" };
   const evidence = { type: "field_label" as const, name: "EVIDENCE", text: "", class: "pl-evidence" };
   const run = { type: "field_label" as const, name: "RUN", text: "", class: "pl-run" };
   const def: BlockDef & Record<string, unknown> = {
     type: HUNT_TYPE,
-    message0: "hunt %1 %2 %3",
+    message0: "hunt the map's targets %1 %2 %3",
     args0: [badge, evidence, run],
     previousStatement: null,
     nextStatement: null,
-    colour,
+    style,
     mutator: "pl_state",
     tooltip: "hunt: hunt-flow's adopted rules as ONE block (Batt D2). Each parameter is a rule version; its numbers come with it, read-only. Gates, safety, readers and constants stay in the engine.",
   };

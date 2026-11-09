@@ -365,6 +365,10 @@ sensors:
   map_load_seen: {type: bool, passive: true, drift: true, cue: true, note: "the loading screen or the map-load notice (open question 28)"}
   engagement_seen: {type: bool, passive: true, drift: true, cue: true, note: "an engagement we did not order, from pixels (13.9)"}
   engaged_species: {type: mob, passive: true, drift: true, note: "needs a detector that names species (13.9, open question 33)"}
+  # The TRAINED MODELS as sensors (Batt 2026-11-09; models.yaml, ADR-0020 Amendment B): `model` is a
+  # catalogue model id, `label` one of its classes, both written as text (lint/detectors.py)
+  detector_sees: {type: bool, passive: true, drift: true, params: [{name: model, type: str, required: true, positional: true}, {name: label, type: str, required: true, positional: true}], note: "True when the model boxes that class in the frame (models.yaml)"}
+  detector_count: {type: int, passive: true, drift: true, range: [0, 999], params: [{name: model, type: str, required: true, positional: true}, {name: label, type: str, required: true, positional: true}], note: "how many boxes of that class the model finds (a detector only, models.yaml)"}
 
 # L1 concepts that are neither a block nor a sensor in IR 1 (the coverage test).
 excluded:

@@ -22,13 +22,14 @@ import math
 from collections import Counter
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from poring_env.protocol import Key, MouseButton, MouseMove, ReleaseAll
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
+from poring_flow.models import detector_keys
 from poring_flow.runtime import TICK_S, Plan, Sim, _Halt, _Tick
 from poring_flow.sheet import Cell, MapSheet, World
 
@@ -37,6 +38,7 @@ DIAG_MS = 212  # a diagonal step (x sqrt 2)
 MAX_HORIZON_S = 3600
 MAX_CELLS = 20_000  # every path segment together
 MAX_EVENTS = 400
+DetectKey = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}/[a-z][a-z0-9_]{0,47}$")]
 ScenarioKey = Literal[
     "hp_percent", "sp_percent", "weight_percent", "is_dead", "engagement_seen", "engaged_species"
 ]
@@ -49,6 +51,11 @@ class Change(BaseModel):
     t: float = Field(ge=0, le=MAX_HORIZON_S)
     set: dict[ScenarioKey, float | bool | int] = Field(default_factory=dict, max_length=6)
     sees: dict[int, bool] = Field(default_factory=dict, max_length=10)  # mob id -> seen
+    # a trained model's boxes (models.yaml, ADR-0020 Amendment B): "<model>/<class>" -> how many
+    # boxes of that class it finds from t on (0 = it sees none); before any entry: 0
+    detects: dict[DetectKey, Annotated[int, Field(ge=0, le=999)]] = Field(
+        default_factory=dict, max_length=10
+    )
 
 
 class Scenario(BaseModel):
@@ -161,12 +168,15 @@ class TraceSim(Sim):
         for item in world.items.values() if world else []:
             if item.kind == "butterfly_wing":
                 values[f"wing:{item.id}"] = "butterfly"
+        # every model / class pair the flow reads starts at 0 boxes (the scenario sets others)
+        values.update({f"detect:{k}": 0 for k in detector_keys(flow)})
         timeline: list[tuple[float, dict[str, Any]]] = []
         for ch in sc.timeline:
             changes: dict[str, Any] = {}
             for k, v in ch.set.items():
                 changes[k] = ir.MobRef(id=int(v)) if k == "engaged_species" else v
             changes.update({f"sees:{m}": seen for m, seen in ch.sees.items()})
+            changes.update({f"detect:{k}": n for k, n in ch.detects.items()})
             timeline.append((ch.t, changes))
         super().__init__(
             flow,

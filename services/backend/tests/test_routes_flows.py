@@ -142,7 +142,9 @@ def test_lint_simulate_python(make: Make) -> None:
     assert "death_respawn" in [x["kind"] for x in sim["trace"]["transitions"]]
     assert sim["lint"]["counts"] == lint["counts"]
     py = post(client, "python", {"flow": flow}).json()
-    assert py["python"].startswith("flow(\n") and py["flow_hash"] == lint["flow_hash"]
+    # the canonical Python view in sections (flows-studio.md 3): the Config section opens it
+    assert py["python"].startswith("# --- Config ---") and "\nflow(\n" in py["python"]
+    assert py["flow_hash"] == lint["flow_hash"]
     assert NoInput.sent == []  # nothing ever reached an input path
     # the local world: no sheets generated for these synthetic maps -> unsupported, fail closed
     local = post(client, "lint", {"flow": flow, "world": "local"}).json()
@@ -183,10 +185,14 @@ def test_compute_needs_the_csrf_token_and_is_rate_limited(make: Make) -> None:
     assert r.status_code == 403 and r.json()["detail"]["reason"] == "csrf_invalid"
     forged = {**H, "x-csrf-token": "9999999999." + "0" * 64}
     assert post(client, "python", {"flow": sample()}, headers=forged).status_code == 403
-    codes = [post(client, "python", {"flow": sample()}).status_code for _ in range(21)]
-    assert codes[:19] == [200] * 19 and codes[-1] == 429  # 20 a minute (one was refused above)
+    body = {"flow": sample(), "world": "sample"}
+    codes = [post(client, "lint", body).status_code for _ in range(21)]
+    assert codes[:20] == [200] * 20 and codes[-1] == 429  # lint and simulate: 20 a minute
+    # the Python view has its own budget (2026-11-09, the studio's side pane): 120 a minute
+    codes = [post(client, "python", {"flow": sample()}).status_code for _ in range(121)]
+    assert codes[:120] == [200] * 120 and codes[-1] == 429
     drops = client.get("/health").json()["dropped_messages"]["flows_http"]
-    assert drops["csrf_invalid"] == 2 and drops["rate_limited"] >= 1
+    assert drops["csrf_invalid"] == 2 and drops["rate_limited"] >= 2
 
 
 def test_hostile_bodies(make: Make) -> None:

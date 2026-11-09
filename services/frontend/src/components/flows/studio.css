@@ -1,0 +1,1187 @@
+/* The /flows STUDIO (2026-11-09, docs/planning/flows-studio.md): matpilot.org/blocks's layout and
+   colours, so learners who know it are at home (Batt). The tokens live on the studio root (the
+   NavBar above keeps its own look); light first, dark under prefers-color-scheme. UNLAYERED, so
+   these rules beat Tailwind's preflight (@layer base) inside the studio.
+
+   The tokens and most layout rules (.studio*, .segmented*, .button*, .notice*, .block-tab*,
+   .code-*, .py-*, .toggle-button, the narrow-screen rules) are ported from MatPilot
+   (https://github.com/lumduan/matpilot at commit d639909, src/app/globals.css; THIRD_PARTY.md),
+   MIT License, Copyright (c) 2026 Sarat Sonsuk. Permission is hereby granted, free of charge, to
+   any person obtaining a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
+   Software, and to permit persons to whom the Software is furnished to do so, subject to the
+   following conditions: The above copyright notice and this permission notice shall be included
+   in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+   WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+   OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   Ours: the scoping to .studio, the panes' and the canvas nodes' classes, the menu. */
+
+.studio {
+  color-scheme: light;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1b1f24;
+  --muted: #59636e;
+  --border: #d6dbe1;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --run-bg: #1d7a43;
+  --run-text: #ffffff;
+  --ok-bg: #e7f5ec;
+  --ok-border: #2e8b57;
+  --ok-text: #1d5c39;
+  --warn-bg: #fff6e0;
+  --warn-border: #b7791f;
+  --warn-text: #744d10;
+  --error-bg: #fdecec;
+  --error-border: #c53030;
+  --error-text: #8a1f1f;
+  --neutral-bg: #eef1f5;
+  --neutral-border: #8a96a3;
+  --neutral-text: #39424c;
+  /* Python colours, as VS Code's Light+ theme (lib/flow/pycolor.ts) */
+  --py-control: #af00db;
+  --py-keyword: #0000ff;
+  --py-string: #a31515;
+  --py-escape: #ee0000;
+  --py-number: #098658;
+  --py-comment: #008000;
+  --py-function: #795e26;
+  --py-class: #267f99;
+  --py-constant: #0070c1;
+  --py-variable: #001080;
+  --py-bracket1: #0431fa;
+  --py-bracket2: #319331;
+  --py-bracket3: #7b3814;
+  --code-mark: rgba(255, 196, 0, 0.3);
+
+  flex: 1 0 auto;
+  height: 0; /* the page's column gives it the height under the NavBar (flows/page.tsx) */
+  min-height: 30rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .studio {
+    color-scheme: dark;
+    --bg: #111418;
+    --surface: #1a1f25;
+    --text: #e6e9ed;
+    --muted: #9aa5b1;
+    --border: #2f3740;
+    --accent: #5b9bf0;
+    --accent-text: #0b1220;
+    --run-bg: #4cc27a;
+    --run-text: #08140d;
+    --ok-bg: #12291c;
+    --ok-border: #4caf7a;
+    --ok-text: #a6e3bf;
+    --warn-bg: #2e2410;
+    --warn-border: #d69e2e;
+    --warn-text: #f3d593;
+    --error-bg: #301616;
+    --error-border: #e05252;
+    --error-text: #f5b5b5;
+    --neutral-bg: #222932;
+    --neutral-border: #6b7783;
+    --neutral-text: #c9d1d9;
+    /* as VS Code's Dark+ theme */
+    --py-control: #c586c0;
+    --py-keyword: #569cd6;
+    --py-string: #ce9178;
+    --py-escape: #d7ba7d;
+    --py-number: #b5cea8;
+    --py-comment: #6a9955;
+    --py-function: #dcdcaa;
+    --py-class: #4ec9b0;
+    --py-constant: #4fc1ff;
+    --py-variable: #9cdcfe;
+    --py-bracket1: #ffd700;
+    --py-bracket2: #da70d6;
+    --py-bracket3: #179fff;
+    --code-mark: rgba(255, 213, 0, 0.2);
+  }
+}
+
+.studio *,
+.studio *::before,
+.studio *::after {
+  box-sizing: border-box;
+}
+
+.studio h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.studio code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* --- buttons ------------------------------------------------------------------------------------ */
+.studio .button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.studio .button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.studio .button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.studio .button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.studio .button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.studio .button-small {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.875rem;
+}
+.studio .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.studio .button-icon {
+  flex: none;
+}
+.studio .button-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1.1rem;
+}
+.studio .button-run.button-primary {
+  background: var(--run-bg);
+  border-color: var(--run-bg);
+  color: var(--run-text);
+}
+.studio .button-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.studio .icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.studio .icon-button:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+.studio .icon-button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+.studio .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- the header bar ---------------------------------------------------------------------------- */
+.studio-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.studio-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.studio-home {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+.studio-title {
+  font-size: 1.05rem;
+  margin: 0;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.status-pill {
+  flex: none;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--warn-border);
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.studio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  overflow: hidden;
+  background: var(--bg);
+}
+.segmented-option {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented-option + .segmented-option {
+  border-left: 1px solid var(--border);
+}
+.segmented-option[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.segmented-option:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+/* the Load menu (ours: a short list instead of matpilot's dialog) */
+.studio-menu {
+  position: relative;
+}
+.studio-menu-list {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  min-width: 17rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
+}
+.studio-menu-item {
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+.studio-menu-item:hover,
+.studio-menu-item:focus-visible {
+  background: var(--neutral-bg);
+  outline: none;
+}
+.studio-menu-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* --- notices ---------------------------------------------------------------------------------------- */
+.studio .notice {
+  margin: 0.75rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.4rem;
+  border-left: 4px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
+}
+.studio .notice-ok {
+  border-left-color: var(--ok-border);
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+.studio .notice-warn {
+  border-left-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.studio .notice-error {
+  border-left-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+.studio .notice code {
+  word-break: break-word;
+}
+.studio-notices {
+  padding: 0 0.75rem;
+}
+.studio-notices .notice {
+  margin: 0.4rem 0 0;
+  padding: 0.4rem 0.75rem;
+}
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+.notice-actions > span {
+  flex: 1 1 16rem;
+}
+
+/* --- the context bar (matpilot's device bar: what the flow is, not a device) ------------------ */
+.device-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.6rem;
+  padding: 0.3rem 0.75rem;
+  overflow-x: auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.device-chip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.device-chip .device-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.device-chip .device-value {
+  font-weight: 700;
+}
+.device-chip select {
+  font: inherit;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+.device-chip[data-level="error"] {
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+.device-chip[data-level="warning"] {
+  border-color: var(--warn-border);
+}
+.device-chip[data-level="ok"] {
+  border-color: var(--ok-border);
+}
+
+/* --- the body: canvas (tabs + blocks) and the Python beside it ----------------------------------- */
+.studio-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.studio-canvas {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.blocks-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.blocks-workspace {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.blocks-failed {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+}
+.block-tabs-bar {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.block-tabs {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.block-tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+.block-tab[data-active="true"] {
+  background: var(--bg);
+  border-color: var(--border);
+}
+.block-tab-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 0.85rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.block-tab[data-active="true"] .block-tab-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.block-tab-name:hover {
+  color: var(--text);
+}
+.block-tab-name:focus-visible,
+.block-tab-add:focus-visible,
+.python-file:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  border-radius: 0.4rem;
+}
+.block-tab-problem {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--warn-border);
+}
+.block-tab-add {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.3rem 0.25rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px dashed var(--neutral-border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.block-tab-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.block-tabs-trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem 0.3rem;
+}
+
+/* undo and redo float over the top right of the blocks, large enough for small fingers */
+.history-buttons {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  z-index: 5;
+  display: flex;
+  gap: 0.4rem;
+}
+.history-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+.history-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.history-button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.history-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+/* the Python beside the blocks; over the whole block area in the Python view */
+.studio-side {
+  display: flex;
+  flex-direction: column;
+  width: clamp(18rem, 30vw, 28rem);
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+/* above Blockly's toolbox (z-index 70), so the Python view covers the whole block area */
+.studio-python-full {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.studio-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.studio-panel-header h2 {
+  margin-right: auto;
+}
+.studio-panel-note {
+  flex: none;
+  margin: 0;
+  padding: 0.35rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+}
+.python-files {
+  display: flex;
+  flex: none;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.python-file {
+  flex: none;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.python-file[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* read-only code */
+.code-view {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  min-height: 12rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+}
+.code-gutter,
+.code-text {
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.6rem 0.5rem;
+}
+.code-gutter {
+  position: sticky;
+  left: 0;
+  min-width: 2.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+.code-gutter span {
+  display: block;
+}
+.code-gutter .code-gutter-error {
+  color: var(--error-text);
+  background: var(--error-bg);
+  font-weight: 700;
+}
+.code-text {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: pre;
+  tab-size: 4;
+}
+.studio-side .code-view,
+.studio-python-full .code-view {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+.studio-python-full .code-gutter,
+.studio-python-full .code-text {
+  font-size: 0.95rem;
+}
+.py-control { color: var(--py-control); }
+.py-keyword { color: var(--py-keyword); }
+.py-string { color: var(--py-string); }
+.py-escape { color: var(--py-escape); }
+.py-number { color: var(--py-number); }
+.py-comment { color: var(--py-comment); }
+.py-function { color: var(--py-function); }
+.py-class { color: var(--py-class); }
+.py-constant { color: var(--py-constant); }
+.py-variable { color: var(--py-variable); }
+.py-bracket1 { color: var(--py-bracket1); }
+.py-bracket2 { color: var(--py-bracket2); }
+.py-bracket3 { color: var(--py-bracket3); }
+
+/* --- the output drawer: Inspect, Lint, Simulate, Path map, Hunt rules -------------------------- */
+.studio-drawer {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr);
+  height: clamp(12rem, 36vh, 26rem);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.studio-drawer[data-panes="2"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.studio-drawer[data-panes="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.studio-drawer[data-panes="4"],
+.studio-drawer[data-panes="5"] {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  overflow-y: auto;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.pane + .pane {
+  border-left: 1px solid var(--border);
+}
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0.9rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+/* --- the problems under the blocks ------------------------------------------------------------- */
+.studio-problems {
+  flex: none;
+  max-height: 9rem;
+  overflow: auto;
+  padding: 0 0.75rem 0.4rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.studio-problems .notice {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.75rem;
+}
+.studio-problems ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.2rem;
+  list-style: disc;
+}
+.problem-link {
+  vertical-align: top;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+/* --- the status footer ------------------------------------------------------------------------- */
+.studio-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.studio-status-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-toggles {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.8rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.toggle-button:hover {
+  border-color: var(--accent);
+}
+.toggle-button[aria-pressed="true"] {
+  background: var(--neutral-bg);
+  border-color: var(--neutral-border);
+}
+.toggle-button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.badge-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.badge-dot-error {
+  background: var(--error-border);
+}
+
+/* --- the search box at the top of the block categories (components/flows/blockly-search.ts) ----- */
+.pl-toolbox-search-row {
+  height: auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+.pl-toolbox-search {
+  box-sizing: border-box;
+  width: 6.75rem;
+  margin: 0.3rem 0.25rem 0.4rem;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+.pl-toolbox-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- the panes' contents (Panels.tsx; ours, in the same tokens) ------------------------------ */
+.studio .muted {
+  color: var(--muted);
+}
+.studio .ok-text {
+  color: var(--ok-text);
+}
+.studio .warn-text {
+  color: var(--warn-text);
+}
+.studio .err-text {
+  color: var(--error-text);
+}
+.studio .run-text {
+  color: var(--accent);
+}
+.studio .strong {
+  font-weight: 700;
+}
+.studio .stack > * + * {
+  margin-top: 0.5rem;
+}
+.studio .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.studio .grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.studio .grid2 label,
+.studio label.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.studio .field {
+  width: 100%;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.studio .field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.studio .check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.studio .box {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+}
+.studio .finding {
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.35rem;
+  border-left: 4px solid var(--neutral-border);
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
+  cursor: pointer;
+}
+.studio .finding[data-severity="error"] {
+  border-left-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+.studio .finding[data-severity="warning"] {
+  border-left-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.studio .finding[data-severity="readiness"] {
+  border-left-color: var(--accent);
+}
+.studio .plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.studio .plain-list > li + li {
+  margin-top: 0.3rem;
+}
+.studio table.kv {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.studio table.kv td {
+  padding: 0.1rem 0.4rem 0.1rem 0;
+  vertical-align: top;
+}
+.studio .struck {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.studio details > summary {
+  cursor: pointer;
+}
+
+/* --- the workflow canvas (FlowCanvas.tsx): map blocks as cards in the same tokens --------------- */
+.studio .react-flow {
+  --xy-background-color: var(--bg);
+}
+.fc-node {
+  min-width: 230px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  font-size: 0.85rem;
+}
+.fc-node[data-selected="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.fc-node.fc-events {
+  border-style: dashed;
+  border-color: #be185d;
+  background: var(--bg);
+}
+.fc-title {
+  font-weight: 700;
+}
+.fc-sub {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.fc-start {
+  padding: 0 0.4rem;
+  border-radius: 0.3rem;
+  background: var(--run-bg);
+  color: var(--run-text);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+.fc-status {
+  font-size: 0.75rem;
+}
+.fc-status[data-level="error"] {
+  color: var(--error-text);
+}
+.fc-status[data-level="warning"] {
+  color: var(--warn-text);
+}
+.fc-status[data-level="readiness"] {
+  color: var(--accent);
+}
+.fc-status[data-level="ok"] {
+  color: var(--ok-text);
+}
+.fc-status[data-stale="true"] {
+  opacity: 0.55;
+}
+.fc-run {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.fc-ports {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  margin-top: 0.3rem;
+}
+.fc-port {
+  position: relative;
+  padding-right: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.fc-events-title {
+  color: #be185d;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.fc-row {
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+.fc-row .fc-mode {
+  width: 4.5rem;
+  flex: none;
+  color: var(--muted);
+}
+.fc-edge-label {
+  position: absolute;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  background: var(--surface);
+  font-size: 0.68rem;
+  font-weight: 600;
+  pointer-events: all;
+}
+.fc-lock {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.8rem;
+  margin-right: 0.2rem;
+  vertical-align: -1px;
+}
+
+/* --- phones and narrow windows: the Python becomes a sheet over the blocks, panes stack -------- */
+@media (max-width: 48rem) {
+  .studio-bar .status-pill,
+  .studio-title {
+    display: none;
+  }
+  .studio-bar {
+    column-gap: 0.4rem;
+  }
+  .studio-actions {
+    display: contents;
+  }
+  .studio-brand {
+    order: 1;
+    flex: 0 1 auto;
+  }
+  .segmented {
+    order: 3;
+  }
+  .segmented-option {
+    padding: 0.3rem 0.6rem;
+  }
+  .studio .button-run {
+    padding: 0.4rem 0.8rem;
+  }
+  .studio-actions > .studio-menu,
+  .studio-actions > .button-small {
+    order: 4;
+  }
+  .studio-actions > .studio-menu {
+    margin-left: auto;
+  }
+  /* Load, Save and Start over show only their icons; the words stay for screen readers */
+  .studio .button-file {
+    padding: 0.35rem 0.45rem;
+  }
+  .studio .button-file .button-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .studio .button-run {
+    order: 5;
+  }
+  .studio-side {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 85;
+    width: auto;
+    height: 55%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgb(0 0 0 / 18%);
+  }
+  .studio-drawer {
+    height: 45vh;
+  }
+  .studio-drawer[data-panes] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(15rem, auto);
+    overflow-y: auto;
+  }
+  .pane + .pane {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  /* the sentence on its own line, the panel toggles under it */
+  .studio-status {
+    flex-wrap: wrap;
+    gap: 0.3rem 0.5rem;
+    padding: 0.35rem 0.6rem;
+  }
+  .studio-status-text {
+    flex-basis: 100%;
+  }
+  .studio-toggles {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0.25rem;
+  }
+  .toggle-button {
+    padding: 0.25rem 0.5rem;
+  }
+  .studio-menu-list {
+    right: auto;
+    left: 0;
+  }
+  .studio .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

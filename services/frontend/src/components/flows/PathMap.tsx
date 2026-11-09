@@ -147,7 +147,7 @@ export default function PathMap({
   };
   return (
     <figure className="space-y-1">
-      <figcaption className="text-xs text-neutral-300">
+      <figcaption className="text-xs">
         {name} · {w}×{h} cells{rows ? "" : " (no walk grid: routes are estimates)"}
         {onCell && <span className="ml-2 text-neutral-400">cell {hover ? `(${hover[0]}, ${hover[1]})` : "-"} · x east, y north</span>}
       </figcaption>

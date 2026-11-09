@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BLOCK_DEFS, DEF_BY_TYPE, namesOf, toolbox } from "./blockdefs.ts";
+import { BLOCK_DEFS, blockOf, categoryOf, DEF_BY_TYPE, namesOf, toolbox } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, toWorkspace, type WsBlock, type Workspace } from "./blocks.ts";
 import { canonical, clone, type Flow } from "./ir.ts";
 import { FIXTURES, fixture, randomFlow } from "./testkit.ts";
@@ -68,7 +68,8 @@ test("the workspace uses only the fields, inputs and connections the block types
           for (const [i, inp] of Object.entries(b.inputs ?? {})) {
             assert.ok(n.inputs.has(i), `${b.type}.${i}`);
             const child = DEF_BY_TYPE[inp.block!.type];
-            if (inputKind(b.type, i) === "input_value") assert.ok(child.output === null, `${inp.block!.type} in ${b.type}.${i}`);
+            // a value block: any output (null, or the model blocks' "Boolean" / "Number" shapes)
+            if (inputKind(b.type, i) === "input_value") assert.ok(child.output !== undefined, `${inp.block!.type} in ${b.type}.${i}`);
             else assert.ok(child.previousStatement === null, `${inp.block!.type} in ${b.type}.${i}`);
           }
           if (b.next) assert.ok(DEF_BY_TYPE[b.type].nextStatement === null && DEF_BY_TYPE[b.next.block!.type].previousStatement === null);
@@ -139,8 +140,7 @@ test("bad fields are refused with their node, and nothing is applied", () => {
 test("new blocks from the toolbox take the catalogue's defaults", () => {
   const flow = fixture("visit_and_choose");
   const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, respawn: { concept: "char.respawn", timeout_s: 30 } }, "main");
-  const skills = tb.contents.find((c) => c.name === "Skills")!.contents;
-  const walk = skills.find((i) => i.type === "pl_walk_to")!;
+  const walk = blockOf(categoryOf(tb, "Movement"), "pl_walk_to")!; // MatPilot's categories (2026-11-09)
   const ws: Workspace = {
     blocks: {
       languageVersion: 0,
@@ -193,4 +193,91 @@ test("a map event dragged in becomes an override of a global key, else a map-onl
     ["override", "town_hp_low"],
     ["add", "town_only"],
   ]);
+});
+
+// --- the studio (2026-11-09): the model blocks, live paths, issues and detached stacks ------------
+const DETECT_FLOW = (): Flow => {
+  const f = clone(fixture("visit_and_choose"));
+  const sees = { kind: "sense" as const, sensor: "detector_sees", args: { label: { kind: "lit" as const, value: "monster" }, model: { kind: "lit" as const, value: "v1" } } };
+  const count = { kind: "sense" as const, sensor: "detector_count", args: { label: { kind: "lit" as const, value: "cookie_xmas" }, model: { kind: "lit" as const, value: "xmas02" } } };
+  f.main = [
+    { kind: "wait_until", cond: sees, timeout_s: 30, outcome_to: null },
+    { kind: "if", cond: { kind: "cmp", op: ">", left: count, right: { kind: "lit", value: 2 } }, then: [{ kind: "stop", reason: "many" }], orelse: [] },
+    ...(f.main ?? []),
+  ];
+  return f;
+};
+
+test("a detector sensor shows as the model block, and converts back exactly", () => {
+  const flow = DETECT_FLOW();
+  const ws = toWorkspace(flow, { kind: "main" });
+  const all = [...allBlocks(ws.blocks.blocks[0])];
+  const sees = all.find((b) => b.type === "pl_detect_sees");
+  const count = all.find((b) => b.type === "pl_detect_count");
+  assert.deepEqual(sees?.fields, { MODEL: "v1", CLASS: "monster" });
+  assert.deepEqual(count?.fields, { MODEL: "xmas02", CLASS: "cookie_xmas" });
+  assert.equal(DEF_BY_TYPE.pl_detect_sees.output, "Boolean"); // a question: a hexagon
+  assert.equal(DEF_BY_TYPE.pl_detect_count.output, "Number"); // a value: round
+  roundTrip(flow);
+  // not two text literals: kept exactly as a text expression
+  const odd = clone(flow);
+  const w = odd.main![0];
+  if (w.kind === "wait_until" && w.cond.kind === "sense") w.cond.args.model = { kind: "var", name: "M" };
+  odd.variables = { ...odd.variables, M: { kind: "lit", value: "v1" } };
+  const oddWs = toWorkspace(odd, { kind: "main" });
+  assert.equal(allBlocks(oddWs.blocks.blocks[0]).next().value?.inputs?.DO?.block?.inputs?.COND?.block?.type, "pl_expr");
+  roundTrip(odd);
+});
+
+test("a bad model or class is refused with its block's id", () => {
+  const flow = DETECT_FLOW();
+  const ws = viaJson(toWorkspace(flow, { kind: "main" }));
+  const sees = [...allBlocks(ws.blocks.blocks[0])].find((b) => b.type === "pl_detect_sees")!;
+  sees.fields!.MODEL = "Not A Model";
+  const r = fromWorkspace(flow, { kind: "main" }, ws);
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.ok(r.issues.some((i) => i.id === "n:main.0" && /not a model id/.test(i.text)), JSON.stringify(r.issues));
+});
+
+test("after an edit, every block knows its NEW node path", () => {
+  const flow = fixture("town_warp_farm");
+  const scope: Scope = { kind: "block", name: "town" };
+  const ws = viaJson(toWorkspace(flow, scope));
+  const main = ws.blocks.blocks[0];
+  // a new block at the top of the town's main: every old block moves down by one
+  const first = main.inputs!.DO!.block!;
+  main.inputs!.DO!.block = { type: "pl_wait", id: "fresh", fields: { SECONDS: 2 }, next: { block: first } };
+  const r = fromWorkspace(flow, scope, ws);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.paths.fresh, "town.0");
+  assert.equal(r.paths["n:town.0"], "town.1");
+  assert.equal(r.paths["n:town.9"], "town.10");
+  assert.equal(r.paths["h:main"], "town");
+  // a map event's body hangs from its label (ir.event_label), as the IR's node paths do
+  const farm = viaJson(toWorkspace(flow, { kind: "block", name: "farm" }));
+  const fr = fromWorkspace(flow, { kind: "block", name: "farm" }, farm);
+  assert.ok(fr.ok);
+  if (fr.ok) assert.ok(Object.entries(fr.paths).some(([id, p]) => id.startsWith("n:farm_hp_low.") && p.startsWith("farm_hp_low.")), JSON.stringify(fr.paths));
+});
+
+test("detached stacks are listed with their words, top block and size", () => {
+  const flow = fixture("visit_and_choose");
+  const ws: Workspace = {
+    blocks: {
+      languageVersion: 0,
+      blocks: [
+        { type: "pl_main", inputs: {} },
+        { type: "pl_walk_to", id: "lost", fields: { MAP: "prontera", X: 150, Y: 180 }, next: { block: { type: "pl_wait", fields: { SECONDS: 1 } } } },
+        { type: "pl_detect_sees", id: "q", fields: { MODEL: "v1", CLASS: "monster" } },
+      ],
+    },
+  };
+  const r = fromWorkspace(flow, { kind: "main" }, ws, { walk_to: { concept: "nav.walk_to", timeout_s: 120 } });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.deepEqual(r.loose.map((l) => [l.id, l.count, l.value]), [["lost", 2, false], ["q", 1, true]]);
+  assert.match(r.loose[0].words, /^walk\sto\sprontera\sx\s150\sy\s180$/);
+  assert.match(r.loose[1].words, /^detector\sv1\ssees\smonster$/);
 });

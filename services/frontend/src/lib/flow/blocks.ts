@@ -14,6 +14,8 @@
 import { DEF_BY_TYPE } from "./blockdefs.ts";
 import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
+import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
+import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
 import {
   type ActionStmt,
   type CellRef,
@@ -46,7 +48,12 @@ export type WsBlock = {
   extraState?: unknown;
 };
 export type Workspace = { blocks: { languageVersion: 0; blocks: WsBlock[] } };
-export type FromResult = { ok: true; flow: Flow; warnings: string[] } | { ok: false; errors: string[] };
+/** `paths`: each statement / hat block id -> its node path in the NEW flow (lint findings and run
+ * results land on the right block after edits); `issues`: the errors with their block; `loose`: the
+ * detached stacks (they are not applied: "Not running"). */
+export type FromResult =
+  | { ok: true; flow: Flow; warnings: string[]; paths: Record<string, string>; loose: Loose[] }
+  | { ok: false; errors: string[]; issues: Issue[]; loose: Loose[] };
 /** Catalogue defaults for blocks dragged from the toolbox without their state. */
 export type Defaults = Record<string, { concept: string; timeout_s: number }>;
 /** `hunt`: the hunt block's rule versions (GET /flows/catalogue `hunt_rules`); with them a hunt
@@ -100,7 +107,31 @@ function itemText(e: Expr): string | null {
   return null;
 }
 
+/** The model block's fields of a detector sensor, when it is one exactly (both text literals). */
+function detectFields(e: Expr): Record<string, string> | null {
+  if (e.kind !== "sense" || !(e.sensor in SENSOR_BLOCK)) return null;
+  const keys = Object.keys(e.args).sort();
+  if (keys.length !== 2 || keys[0] !== "label" || keys[1] !== "model") return null;
+  const m = e.args.model;
+  const c = e.args.label;
+  if (m.kind !== "lit" || typeof m.value !== "string" || !MODEL_KEY.test(m.value)) return null;
+  if (c.kind !== "lit" || typeof c.value !== "string" || !CLASS_KEY.test(c.value)) return null;
+  return { MODEL: m.value, CLASS: c.value };
+}
+
+/** A model block, or a compare / and / or / not holding one directly: shown as blocks, so a learner
+ * sees "if detector … count of … > 2" as blocks rather than a line of text. */
+function blockish(e: Expr): boolean {
+  if (detectFields(e)) return true;
+  if (e.kind === "cmp") return blockish(e.left) || blockish(e.right);
+  if (e.kind === "and" || e.kind === "or") return e.terms.some(blockish);
+  if (e.kind === "not") return blockish(e.term);
+  return false;
+}
+
 function exprBlock(e: Expr, path: string, ids: Ids): WsBlock {
+  const det = e.kind === "sense" ? detectFields(e) : null;
+  if (det && e.kind === "sense") return { type: SENSOR_BLOCK[e.sensor], fields: det };
   if (e.kind === "do" && paramsPlain(e.action)) {
     return {
       type: "pl_do",
@@ -109,7 +140,7 @@ function exprBlock(e: Expr, path: string, ids: Ids): WsBlock {
       extraState: actionRest(e.action),
     };
   }
-  if (!hasDo(e)) return { type: "pl_expr", fields: { TEXT: exprText(e) } };
+  if (!hasDo(e) && !blockish(e)) return { type: "pl_expr", fields: { TEXT: exprText(e) } };
   if (e.kind === "do") return { type: "pl_raw_expr", fields: { TEXT: exprText(e) }, extraState: { expr: e } };
   if (e.kind === "cmp") {
     return {
@@ -375,14 +406,34 @@ export function toWorkspace(flow: Flow, scope: Scope, opts: ConvertOptions = {})
 // --- workspace -> IR ------------------------------------------------------------------------------
 class Reader {
   errors: string[] = [];
+  issues: Issue[] = [];
   warnings: string[] = [];
+  paths: Record<string, string> = {};
+  private at: string | null = null; // the statement block being read (an issue names it)
   private defaults: Defaults;
   constructor(defaults: Defaults) {
     this.defaults = defaults;
   }
 
   err(where: string, msg: string): void {
-    if (this.errors.length < 50) this.errors.push(`${where}: ${msg}`);
+    if (this.errors.length < 50) {
+      this.errors.push(`${where}: ${msg}`);
+      this.issues.push({ where, text: msg, id: this.at });
+    }
+  }
+
+  /** Read under a block: its id names any issue, and records its node path. */
+  under<T>(b: WsBlock, path: string | null, read: () => T): T {
+    const prev = this.at;
+    if (b.id) {
+      this.at = b.id;
+      if (path !== null) this.paths[b.id] = path;
+    }
+    try {
+      return read();
+    } finally {
+      this.at = prev;
+    }
   }
 
   field(b: WsBlock, name: string): string {
@@ -444,6 +495,18 @@ class Reader {
       }
       case "pl_not":
         return { kind: "not", term: this.expr(b.inputs?.X?.block, where, `${what} (not)`) };
+      case "pl_detect_sees":
+      case "pl_detect_count": {
+        const model = this.field(b, "MODEL").trim();
+        const label = this.field(b, "CLASS").trim();
+        if (!MODEL_KEY.test(model)) this.err(where, `${what}: the model ${JSON.stringify(model)} is not a model id`);
+        if (!CLASS_KEY.test(label)) this.err(where, `${what}: the class ${JSON.stringify(label)} is not a class name`);
+        return {
+          kind: "sense",
+          sensor: DETECT_SENSOR[b.type],
+          args: { label: { kind: "lit", value: label }, model: { kind: "lit", value: model } },
+        };
+      }
       case "pl_do":
         return { kind: "do", action: this.generic(b, where) };
       case "pl_raw_expr": {
@@ -495,6 +558,10 @@ class Reader {
   }
 
   stmt(b: WsBlock, where: string): Stmt {
+    return this.under(b, where, () => this.stmtOf(b, where));
+  }
+
+  private stmtOf(b: WsBlock, where: string): Stmt {
     const pal = BLOCK_OF_TYPE[b.type];
     if (pal) {
       const r = this.rest(b, pal, where);
@@ -637,7 +704,8 @@ class Reader {
     return null;
   }
 
-  handler(b: WsBlock, where: string): Handler {
+  /** `root`: the node path its body's statements hang from (a map event's label). */
+  handler(b: WsBlock, where: string, root?: string): Handler {
     const st = (b.extraState ?? {}) as { rest?: HandlerRest };
     const r: HandlerRest = st.rest ?? {
       escalate: null,
@@ -657,7 +725,7 @@ class Reader {
       rank: this.rank(b, where),
       mode: this.field(b, "MODE") as Handler["mode"],
       then: this.field(b, "THEN") as Handler["then"],
-      body: this.stmts(b.inputs?.DO?.block, name),
+      body: this.stmts(b.inputs?.DO?.block, root ?? name),
       ...r,
     };
   }
@@ -665,62 +733,74 @@ class Reader {
 
 type Hat = { b: WsBlock; order: number; y: number };
 
-function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[] } {
+const HATS = new Set(["pl_main", "pl_event", "pl_extend", "pl_disable"]);
+
+function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; loose: Loose[] } {
   const main: WsBlock[] = [];
   const events: Hat[] = [];
-  let loose = 0;
+  const loose: Loose[] = [];
   for (const b of ws.blocks?.blocks ?? []) {
     if (b.type === "pl_main") main.push(b);
-    else if (b.type === "pl_event" || b.type === "pl_extend" || b.type === "pl_disable") {
+    else if (HATS.has(b.type)) {
       const order = Number((b.extraState as { order?: number } | undefined)?.order);
       events.push({ b, order: Number.isFinite(order) ? order : Infinity, y: b.y ?? 0 });
-    } else loose++;
+    } else {
+      const value = DEF_BY_TYPE[b.type] !== undefined && DEF_BY_TYPE[b.type].output !== undefined;
+      loose.push({ id: b.id ?? null, type: b.type, words: blockWords(b), count: value ? 1 : stackSize(b), value });
+    }
   }
-  if (loose) r.warnings.push(`${loose} loose block(s) outside any hat were not applied`);
+  if (loose.length) r.warnings.push(`${loose.length} loose block(s) outside any hat were not applied`);
   events.sort((a, c) => a.order - c.order || a.y - c.y);
-  return { main, events };
+  return { main, events, loose };
 }
 
 /** The flow with one scope replaced by the workspace's content (or the errors, nothing applied). */
 export function fromWorkspace(flow: Flow, scope: Scope, ws: Workspace, defaults: Defaults = {}): FromResult {
   const r = new Reader(defaults);
   const out = clone(flow);
-  const { main, events } = hats(ws, r);
+  const { main, events, loose } = hats(ws, r);
   if (scope.kind === "global") {
     if (main.length) r.warnings.push("a main hat has no place among the global events: not applied");
     out.handlers = events.map(({ b }, i) => {
       if (b.type !== "pl_event") {
-        r.err(`event ${i + 1}`, "extend / disable belong to a map block");
+        r.under(b, null, () => r.err(`event ${i + 1}`, "extend / disable belong to a map block"));
         return null;
       }
-      return r.handler(b, (b.fields?.NAME as string) || `event ${i + 1}`);
+      const name = (b.fields?.NAME as string) || `event ${i + 1}`;
+      return r.under(b, String(b.fields?.NAME ?? ""), () => r.handler(b, name));
     }).filter((h): h is Handler => h !== null);
   } else {
+    const root = scope.kind === "block" ? scope.name : "main";
     if (main.length !== 1) r.err("main", main.length ? "only one main hat" : "the main hat is missing");
-    const body = r.stmts(main[0]?.inputs?.DO?.block, scope.kind === "block" ? scope.name : "main");
+    const body = main[0] ? r.under(main[0], root, () => r.stmts(main[0].inputs?.DO?.block, root)) : [];
     if (scope.kind === "main") {
       if (events.length) r.warnings.push("events in a plain flow's main view were not applied (use the global events)");
       out.main = body;
     } else {
       const block = out.workflow?.blocks.find((b) => b.name === scope.name);
-      if (!block) return { ok: false, errors: [`no map block ${scope.name}`] };
+      if (!block) return { ok: false, errors: [`no map block ${scope.name}`], issues: [], loose };
       const globalNames = new Set(flow.handlers.map((h) => h.name));
       block.main = body;
       block.events = events.map(({ b }) => {
         const st = (b.extraState ?? {}) as { kind?: string; label?: string | null; max_per_run?: number | null };
         const where = b.fields?.NAME ? String(b.fields.NAME) : String(b.fields?.KEY ?? scope.name);
-        if (b.type === "pl_disable") return { kind: "disable", key: r.name(b, "KEY", where) } as MapEvent;
+        if (b.type === "pl_disable") return r.under(b, null, () => ({ kind: "disable", key: r.name(b, "KEY", where) }) as MapEvent);
         if (b.type === "pl_extend") {
-          const key = r.name(b, "KEY", where);
-          return {
+          const key = String(b.fields?.KEY ?? "").trim();
+          const label = st.label ?? `${scope.name}_${key}`;
+          return r.under(b, label, () => ({
             kind: "extend",
-            key,
-            steps: r.stmts(b.inputs?.DO?.block, st.label ?? `${scope.name}_${key}`),
+            key: r.name(b, "KEY", where),
+            steps: r.stmts(b.inputs?.DO?.block, label),
             max_per_run: st.max_per_run ?? null,
-            label: st.label ?? `${scope.name}_${key}`,
-          } as MapEvent;
+            label,
+          }) as MapEvent);
         }
-        const h = r.handler(b, where);
+        // the event's node path is its LABEL (ir.event_label), so its body's blocks get it
+        const named = String(b.fields?.NAME ?? "").trim();
+        const kind0 = st.kind === "override" || st.kind === "add" ? st.kind : globalNames.has(named) ? "override" : "add";
+        const root0 = st.label ?? (kind0 === "add" ? named : `${scope.name}_${named}`);
+        const h = r.under(b, root0, () => r.handler(b, where, root0));
         const kind =
           st.kind === "override" || st.kind === "add" ? st.kind : globalNames.has(h.name) ? "override" : "add";
         const label = st.label ?? (kind === "add" ? h.name : `${scope.name}_${h.name}`);
@@ -728,6 +808,6 @@ export function fromWorkspace(flow: Flow, scope: Scope, ws: Workspace, defaults:
       });
     }
   }
-  if (r.errors.length) return { ok: false, errors: r.errors };
-  return { ok: true, flow: out, warnings: r.warnings };
+  if (r.errors.length) return { ok: false, errors: r.errors, issues: r.issues, loose };
+  return { ok: true, flow: out, warnings: r.warnings, paths: r.paths, loose };
 }

@@ -295,7 +295,16 @@ Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
 
 ## Flows: block programs, SIMULATE only (MW2, 2026-10-08)
 
-Open `http://<host>:3000/flows` (not in the top bar yet). The page edits ADR-0020's flow IR:
+Open `http://<host>:3000/flows` (Flows in the top bar). The page edits ADR-0020's flow IR.
+➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
+matpilot are at home), in matpilot's colours, light or dark as the system is
+([docs/planning/flows-studio.md](docs/planning/flows-studio.md)): a header (Blocks | Python, Load,
+Save, Start over, the green **Simulate**), tabs over the blocks (`main` and `events`; a workflow
+adds a **Map** tab with the canvas below and one tab per map block), the **Python beside the
+blocks** (open by default on a wide screen), output panes in a drawer (Inspect, Lint, Simulate,
+Path map, Hunt rules), the problems under the blocks and a status line. The **trained models** are
+Sensors blocks ("detector v1 sees monster", "detector xmas02 count of cookie xmas"; ADR-0020
+Amendment B); a not-adopted model is never offered.
 - **Canvas:** map blocks joined by typed exits (walk exit, NPC warp, item warp; the death respawn
   is derived from the save point), the global and per-map events, a lint / run line under each.
   Draw an exit from a port onto another block; double-click a block for its blocks.
@@ -305,8 +314,8 @@ Open `http://<host>:3000/flows` (not in the top bar yet). The page edits ADR-002
   synthetic sample sheets, or the lab's own data/kb) with a scenario you choose; JSON import /
   export; the Python view, read-only.
 - **The hunt block (B2, 2026-10-21):** one dropdown per parameter (engage; dead + loot; search),
-  each a list of rule versions: ★ the adopted base's, ◆ hunting evidence (Batt's D8). "Show the hunt
-  rules" lists each version's numbers, read-only.
+  each a list of rule versions: ★ the adopted base's, ◆ hunting evidence (Batt's D8). The "Hunt
+  rules" pane lists each version's numbers, read-only.
 - **Zones (B2):** a map block's "Open the Zones layer" draws `config/map_zones/<map>.yaml`'s lines
   and areas, checks them with the runner's own loader and EXPORTS the YAML (a person commits it;
   `config/map_zones/README.md`). `zones_engine_unavailable` = the backend cannot import
@@ -314,7 +323,7 @@ Open `http://<host>:3000/flows` (not in the top bar yet). The page edits ADR-002
   a guarded `recreate:backend`).
 - **No live run:** nothing on the page reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
-  20 a minute). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md) and
+  20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md) and
   [docs/planning/blocks-from-hunt-flow.md](docs/planning/blocks-from-hunt-flow.md) (7b).
 
 **Bot typing needs the game window in front.** Before the bot types anything, the backend checks

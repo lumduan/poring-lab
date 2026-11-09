@@ -32,7 +32,17 @@ from pathlib import Path
 
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
-from poring_flow.lint import events, hunt, loops, semantics, simulate, structure, where, zones
+from poring_flow.lint import (
+    detectors,
+    events,
+    hunt,
+    loops,
+    semantics,
+    simulate,
+    structure,
+    where,
+    zones,
+)
 from poring_flow.lint.common import Ctx, Detector, Finding, Resolver
 from poring_flow.patrol import RoutesProvider
 from poring_flow.sheet import World
@@ -103,6 +113,7 @@ def lint(
     where.check(ctx)  # the /where budget (#10)
     hunt.check(ctx)  # rule versions, options; targets (2026-10-21); melee ring, patrol route
     zones.check(ctx)  # the map node's zones (Amendment A 4, 2026-10-21)
+    detectors.check(ctx)  # the trained models a flow reads (Amendment B, 2026-11-09)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 
 

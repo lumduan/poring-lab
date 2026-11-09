@@ -385,6 +385,10 @@ class AppState:
         # a time (each runs in a worker thread).
         self.flows_rate = RateLimit(limit=20, window_s=60.0)
         self.flows_read_rate = RateLimit(limit=60, window_s=60.0)  # GET /flows/world (reads files)
+        # POST /flows/python on its own budget (2026-11-09, flows-studio.md): the studio shows the
+        # Python beside the blocks and refreshes it after each edit (debounced, one in flight);
+        # printing is a pure function, so it must not use up lint's and simulate's 20.
+        self.flows_python_rate = RateLimit(limit=120, window_s=60.0)
         self.flows_lock = asyncio.Lock()
         # ADR-0016: the environment interlock (the user-managed set + attestation + window).
         self.interlock = Interlock(settings.environments_file, settings.win_host,

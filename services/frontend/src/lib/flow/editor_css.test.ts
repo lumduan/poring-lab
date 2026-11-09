@@ -19,3 +19,22 @@ test("flows.css hides every Blockly svg whose display attribute says none", () =
 test("flows.css stays unlayered, so its rule beats preflight's @layer base", () => {
   assert.doesNotMatch(code, /@layer|@import/);
 });
+
+// The studio (2026-11-09, flows-studio.md): studio.css is unlayered too, so its rules beat
+// Tailwind's preflight inside the studio; its tokens are MatPilot's, light and dark.
+const studio = readFileSync(join(import.meta.dirname, "..", "..", "components", "flows", "studio.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+test("studio.css stays unlayered and defines the tokens light and dark", () => {
+  assert.doesNotMatch(studio, /@layer|@import/);
+  for (const [token, light, dark] of [
+    ["--bg", "#f6f7f9", "#111418"],
+    ["--run-bg", "#1d7a43", "#4cc27a"],
+    ["--py-keyword", "#0000ff", "#569cd6"],
+  ]) {
+    assert.match(studio, new RegExp(`${token}: ${light};`));
+    assert.match(studio, new RegExp(`${token}: ${dark};`));
+  }
+  assert.match(studio, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(studio, /\.studio-side \{[^}]*width: clamp\(18rem, 30vw, 28rem\)/);
+  assert.match(studio, /@media \(max-width: 48rem\)[\s\S]*\.studio-side \{[^}]*height: 55%/);
+});

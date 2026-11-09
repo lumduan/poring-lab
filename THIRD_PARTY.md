@@ -103,6 +103,23 @@
 |---|---|---|---|
 | [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/formats/src/rsw.rs`, `lib/formats/src/rsm.rs`, `lib/formats/src/lib.rs` (`read_vec3`, `version_at_least`), `lib/renderer/src/model.rs` (`load_rsw_instances`, `build_instance_matrix`, `bbox_shift_matrix`, `node_post_matrix`, `node_accum_matrices`, `calc_bounding_box`), `lib/renderer/src/rsm_anim.rs` (`node_local_matrix`, frame 0), `lib/formats/src/map_coordinates.rs`, `lib/renderer/src/sprite_projection.rs` (`project_entity_screen`: where an entity's cell stands in that world) |
 
+### The /flows studio's layout, theme, code view and block search (2026-11-09)
+
+Batt (2026-11-09): "a layout like matpilot.org/blocks … use matpilot's colour theme"
+([docs/planning/flows-studio.md](docs/planning/flows-studio.md)); Batt teaches children with
+matpilot.org. Its LICENSE was read at the exact commit (`LICENSE`, MIT, sha256
+`519e79d4387e85cd8fb36588804fdadfa5e65bb1183f732ed2947a00b9f1e606`); each file below keeps the
+copyright and permission notice. No dependency was added: MatPilot's `@lezer/python` colouring is
+replaced by our own tokenizer (`services/frontend/src/lib/flow/pycolor.ts`).
+
+| Source | Commit | License | File read | Ported into |
+|---|---|---|---|---|
+| [lumduan/matpilot](https://github.com/lumduan/matpilot) | `d639909` | MIT, © 2026 Sarat Sonsuk (`LICENSE`) | `src/lib/blocks/colours.ts`, `src/lib/blocks/theme.ts` | `services/frontend/src/lib/flow/theme.ts` (category colours, block / category styles, font, light and dark component styles) |
+| same | `d639909` | same | `src/components/blocks/CodeView.tsx` | `services/frontend/src/components/flows/CodeView.tsx` (the read-only code view) |
+| same | `d639909` | same | `src/lib/blocks/search.ts`, `src/lib/blocks/words.ts` | `services/frontend/src/lib/flow/search.ts` (normalise, matchEntries, searchFlyout), `services/frontend/src/components/flows/blockly-search.ts` (the toolbox search row, its Blockly 13 focus fix, blockWords) |
+| same | `d639909` | same | `src/app/globals.css` (the tokens, `.studio*`, `.segmented*`, `.button*`, `.notice*`, `.block-tab*`, `.code-*`, `.py-*`, `.toggle-button`, the narrow-screen rules) | `services/frontend/src/components/flows/studio.css` |
+| same | `d639909` | same | `src/components/blocks/BlocksApp.tsx` (the layout, the icons), `src/lib/blocks/python-colors.ts` (the token kinds and rules only: its lezer code was not copied), `src/lib/blocks/generator.ts` (the `# --- Section ---` heading style), `src/lib/blocks/simple-definitions.ts` (the sensor blocks' shape) | `services/frontend/src/components/flows/FlowsApp.tsx`; the rules re-written in `pycolor.ts`; `packages/poring_flow/src/poring_flow/pyview.py` (`section_rule`); `blockdefs.ts` (`pl_detect_*`) |
+
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:

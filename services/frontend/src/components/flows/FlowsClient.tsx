@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 
 const FlowsApp = dynamic(() => import("@/components/flows/FlowsApp"), {
   ssr: false,
-  loading: () => <div className="p-4 text-sm text-neutral-400">Loading the flow editor…</div>,
+  loading: () => <div className="flex-1 p-4 text-sm text-neutral-400">Loading the flow studio…</div>,
 });
 
 export default function FlowsClient({ backendUrl }: { backendUrl: string | null }) {

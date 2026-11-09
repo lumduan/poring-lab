@@ -5,13 +5,22 @@
 //
 // Field kinds that SAVE their value: field_input (text), field_number, field_dropdown,
 // field_label_serializable. A plain field_label is NOT saved: BADGE (the skill's verification badge)
-// and RUN (the last simulate run) are decorations the component fills in after loading.
+// and RUN (the last simulate run) are decorations the component fills in after loading; nor is a
+// field_image (the model blocks' eye).
+//
+// Since 2026-11-09 (the studio, docs/planning/flows-studio.md) the blocks carry MatPilot's words,
+// STYLES and categories (theme.ts): only words, colours and the toolbox changed; every type, field,
+// input and the IR they convert to stayed. Two blocks were added: the TRAINED MODELS as sensors
+// (pl_detect_sees / pl_detect_count, models.ts; ADR-0020 Amendment B).
 
 export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "field_label_serializable" | "field_label";
+import { BLOCK_STYLE } from "./theme.ts";
+
 export type ArgDef =
   | { type: FieldKind; name: string; text?: string; value?: number; options?: [string, string][]; class?: string }
   | { type: "input_value" | "input_statement"; name: string; check?: string | string[] }
-  | { type: "input_dummy" };
+  | { type: "input_dummy" }
+  | { type: "field_image"; src: string; width: number; height: number; alt: string };
 export type BlockDef = {
   type: string;
   message0: string;
@@ -29,25 +38,27 @@ export type BlockDef = {
   previousStatement?: null | string;
   nextStatement?: null | string;
   output?: null | string;
-  colour: string;
+  colour?: string;
+  style?: string;
   tooltip?: string;
   inputsInline?: boolean;
   mutator?: string;
+  extensions?: string[];
 };
 
-export const COLOURS = {
-  action: "#4c97ff",
-  generic: "#5b80a5",
-  control: "#ffab19",
-  exit: "#59c059",
-  event: "#ff6680",
-  hat: "#9966ff",
-  expr: "#40bf9f",
-  raw: "#8c8c8c",
-};
+/** A block type's MatPilot style (theme.ts BLOCK_STYLE). */
+const st = (type: string): string => BLOCK_STYLE[type] ?? "mp_setup_blocks";
+
+/** The model blocks' icon: an eye (the "device" of a sensor block), drawn here, no outside file. */
+export const EYE_ICON =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="8" r="2.2" fill="#fff"/></svg>',
+  );
 
 const badge: ArgDef = { type: "field_label", name: "BADGE", text: "", class: "pl-badge" };
 const run: ArgDef = { type: "field_label", name: "RUN", text: "", class: "pl-run" };
+const eye: ArgDef = { type: "field_image", src: EYE_ICON, width: 16, height: 16, alt: "detector" };
 const label = (name: string): ArgDef => ({ type: "field_label_serializable", name, text: "" });
 const text = (name: string, value = ""): ArgDef => ({ type: "field_input", name, text: value });
 const num = (name: string, value = 0): ArgDef => ({ type: "field_number", name, value });
@@ -56,13 +67,15 @@ const opts = (vals: readonly string[]): [string, string][] => vals.map((v) => [v
 // refused), so the lossless state rides on mutators without a mutator UI.
 const STATE = "pl_state";
 
-const stmt = (def: Omit<BlockDef, "previousStatement" | "nextStatement">): BlockDef => ({
+const stmt = (def: Omit<BlockDef, "previousStatement" | "nextStatement" | "style">): BlockDef => ({
   ...def,
+  style: st(def.type),
   previousStatement: null,
   nextStatement: null,
   mutator: STATE,
 });
-const value = (def: Omit<BlockDef, "output">): BlockDef => ({ ...def, output: null, mutator: def.mutator ?? STATE });
+/** A value block; `output` "Boolean" draws a question (a hexagon), "Number" a round reporter. */
+const value = (def: Omit<BlockDef, "style">): BlockDef => ({ ...def, style: st(def.type), output: def.output ?? null, mutator: def.mutator ?? STATE });
 
 export const CMP_OPTIONS = ["<", "<=", ">", ">=", "==", "!=", "in", "not in"];
 export const PRIORITY_OPTIONS = ["critical", "survival", "upkeep"];
@@ -75,43 +88,37 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "pl_walk_to",
     message0: "walk to %1 x %2 y %3 %4 %5",
     args0: [text("MAP"), num("X"), num("Y"), badge, run],
-    colour: COLOURS.action,
     inputsInline: true,
     tooltip: "walk_to(cell): walk to a cell of this map",
   }),
   stmt({
     type: "pl_talk_npc",
-    message0: "talk to npc %1 %2 %3",
+    message0: "talk to the NPC %1 %2 %3",
     args0: [text("NPC"), badge, run],
-    colour: COLOURS.action,
     tooltip: "talk_npc(npc): walk up to the NPC and open its dialog (an L3 key)",
   }),
   stmt({
     type: "pl_choose_menu",
     message0: "choose menu option %1 %2 %3",
     args0: [text("OPTION"), badge, run],
-    colour: COLOURS.action,
     tooltip: "choose_menu(option): an option KEY, matched by its text on screen, never by index",
   }),
   stmt({
     type: "pl_open_window",
     message0: "open window %1 %2 %3",
     args0: [text("WINDOW", "basic_info"), badge, run],
-    colour: COLOURS.action,
     tooltip: "open_window(window): an L2 window name (ADR-0011 anchor map)",
   }),
   stmt({
     type: "pl_use_item",
     message0: "use item %1 %2 %3",
     args0: [text("ITEM"), badge, run],
-    colour: COLOURS.action,
     tooltip: "use_item(item): an item id, or a variable naming one (e.g. POTION)",
   }),
   stmt({
     type: "pl_wait",
     message0: "wait %1 seconds %2",
     args0: [num("SECONDS", 1), run],
-    colour: COLOURS.control,
     tooltip: "wait: the IR's core wait statement (wait_until(False, timeout_s=N)); no input",
   }),
   // --- every other catalogue block, lossless: its parameters by name ---
@@ -119,7 +126,6 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "pl_action",
     message0: "%1 ( %2 ) %3 %4",
     args0: [label("BLOCK"), text("ARGS"), badge, run],
-    colour: COLOURS.generic,
     tooltip: "A catalogue block. Parameters by name, e.g. within=12 or npc=npc(\"n_k1\")",
   }),
   // --- control ---
@@ -131,7 +137,6 @@ export const BLOCK_DEFS: BlockDef[] = [
     args1: [{ type: "input_statement", name: "THEN" }],
     message2: "else %1",
     args2: [{ type: "input_statement", name: "ELSE" }],
-    colour: COLOURS.control,
   }),
   stmt({
     type: "pl_while",
@@ -139,7 +144,6 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [{ type: "input_value", name: "COND" }, run],
     message1: "do %1",
     args1: [{ type: "input_statement", name: "BODY" }],
-    colour: COLOURS.control,
   }),
   stmt({
     type: "pl_repeat",
@@ -147,52 +151,45 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [{ type: "input_value", name: "TIMES" }, run],
     message1: "do %1",
     args1: [{ type: "input_statement", name: "BODY" }],
-    colour: COLOURS.control,
     tooltip: "repeat N (the Python view prints for _ in range(N))",
   }),
   stmt({
     type: "pl_wait_until",
     message0: "wait until %1 at most %2 s %3",
     args0: [{ type: "input_value", name: "COND" }, num("TIMEOUT", 10), run],
-    colour: COLOURS.control,
   }),
   stmt({
     type: "pl_set",
     message0: "set %1 to %2",
     args0: [text("VAR", "x"), { type: "input_value", name: "VALUE" }],
-    colour: COLOURS.control,
   }),
-  stmt({ type: "pl_call", message0: "call %1", args0: [text("PROC")], colour: COLOURS.control }),
-  stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run], colour: COLOURS.control }),
-  stmt({ type: "pl_break", message0: "break", colour: COLOURS.control }),
-  stmt({ type: "pl_continue", message0: "continue", colour: COLOURS.control }),
+  stmt({ type: "pl_call", message0: "call %1", args0: [text("PROC")] }),
+  stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
+  stmt({ type: "pl_break", message0: "break" }),
+  stmt({ type: "pl_continue", message0: "continue" }),
   // --- exits (13.1): they leave the map block ---
   stmt({
     type: "pl_exit_walk",
     message0: "walk exit at %1 x %2 y %3 → %4 . %5 %6",
     args0: [text("MAP"), num("X"), num("Y"), text("TO_BLOCK"), text("TO_ENTRY"), run],
-    colour: COLOURS.exit,
     tooltip: "walk_exit: walk onto an L3 warp of this map; arrive at <block>.<entry>",
   }),
   stmt({
     type: "pl_exit_npc",
     message0: "npc warp: talk to %1 choose %2 → %3 . %4 %5",
     args0: [text("NPC"), text("OPTIONS"), text("TO_BLOCK"), text("TO_ENTRY"), run],
-    colour: COLOURS.exit,
     tooltip: "npc_warp: talk to the NPC, choose each option key (comma separated) in order",
   }),
   stmt({
     type: "pl_exit_item",
     message0: "item warp: use %1 → %2 . %3 %4",
     args0: [text("ITEM"), text("TO_BLOCK"), text("TO_ENTRY"), run],
-    colour: COLOURS.exit,
     tooltip: "item_warp: e.g. a Butterfly Wing, to the SAVE POINT (never 'the previous map')",
   }),
   stmt({
     type: "pl_raw",
     message0: "%1 %2",
     args0: [label("TEXT"), run],
-    colour: COLOURS.raw,
     tooltip: "Not editable as blocks in MW2 (kept exactly): edit it in the JSON view",
   }),
   // --- expressions ---
@@ -200,10 +197,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "pl_raw_expr",
     message0: "%1",
     args0: [label("TEXT")],
-    colour: COLOURS.raw,
     tooltip: "Not editable as blocks in MW2 (kept exactly): edit it in the JSON view",
   }),
-  value({ type: "pl_expr", message0: "%1", args0: [text("TEXT", "hp_percent() < 50")], colour: COLOURS.expr,
+  value({ type: "pl_expr", message0: "%1", args0: [text("TEXT", "hp_percent() < 50")],
     tooltip: "An expression in the Python view's form, e.g. hp_percent() < 50, sees(mob=mob(9109), within=15)" }),
   value({
     type: "pl_compare",
@@ -211,14 +207,12 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [{ type: "input_value", name: "A" }, { type: "field_dropdown", name: "OP", options: opts(CMP_OPTIONS) },
       { type: "input_value", name: "B" }],
     inputsInline: true,
-    colour: COLOURS.expr,
   }),
-  value({ type: "pl_not", message0: "not %1", args0: [{ type: "input_value", name: "X" }], colour: COLOURS.expr }),
+  value({ type: "pl_not", message0: "not %1", args0: [{ type: "input_value", name: "X" }] }),
   value({
     type: "pl_logic",
     message0: "%1",
     args0: [{ type: "field_dropdown", name: "OP", options: opts(["and", "or"]) }],
-    colour: COLOURS.expr,
     mutator: "pl_logic",
     tooltip: "and / or over its terms (T0, T1, ...)",
   }),
@@ -227,19 +221,38 @@ export const BLOCK_DEFS: BlockDef[] = [
     message0: "%1 ( %2 ) %3",
     args0: [label("BLOCK"), text("ARGS"), badge],
     inputsInline: true,
-    colour: COLOURS.generic,
     tooltip: "An action used as a value: its outcome (OK, FAILED, ...)",
+  }),
+  // --- the TRAINED MODELS as sensors (Batt 2026-11-09; models.ts, ADR-0020 Amendment B): the model
+  // is the "device", like a colour sensor on a port; the dropdowns' menus come from the catalogue
+  value({
+    type: "pl_detect_sees",
+    extensions: ["pl_detector_menus"], // components/flows/blockly-fields.ts: the menus
+    message0: "%1 detector %2 sees %3",
+    args0: [eye, { type: "field_dropdown", name: "MODEL", options: [["v1", "v1"]] }, { type: "field_dropdown", name: "CLASS", options: [["monster", "monster"]] }],
+    output: "Boolean",
+    inputsInline: true,
+    tooltip: "detector_sees(model, class): True when the trained model boxes that class in the picture (pixels only)",
+  }),
+  value({
+    type: "pl_detect_count",
+    extensions: ["pl_detector_menus"], // components/flows/blockly-fields.ts: the menus
+    message0: "%1 detector %2 count of %3",
+    args0: [eye, { type: "field_dropdown", name: "MODEL", options: [["v1", "v1"]] }, { type: "field_dropdown", name: "CLASS", options: [["monster", "monster"]] }],
+    output: "Number",
+    inputsInline: true,
+    tooltip: "detector_count(model, class): how many boxes of that class the trained model finds (a detector only)",
   }),
   // --- hats ---
   {
     type: "pl_main",
     message0: "%1",
-    args0: [{ type: "field_label", name: "TITLE", text: "main flow" }],
+    args0: [{ type: "field_label", name: "TITLE", text: "when the program starts" }],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
-    colour: COLOURS.hat,
+    style: st("pl_main"),
     mutator: STATE,
-    tooltip: "The map block's main flow: every path ends in an exit or a stop",
+    tooltip: "The program's start (a map block's: when the flow arrives on its map). Every path ends in an exit or a stop",
   },
   {
     type: "pl_event",
@@ -254,7 +267,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     args2: [{ type: "input_value", name: "UNTIL" }, { type: "input_value", name: "REARM" }],
     message3: "do %1",
     args3: [{ type: "input_statement", name: "DO" }],
-    colour: COLOURS.event,
+    style: st("pl_event"),
     mutator: STATE,
     tooltip:
       "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order)",
@@ -265,7 +278,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [text("KEY")],
     message1: "with %1",
     args1: [{ type: "input_statement", name: "DO" }],
-    colour: COLOURS.event,
+    style: st("pl_extend"),
     mutator: STATE,
     tooltip: "EXTEND: the global event runs with these steps too (after its body if safety-critical)",
   },
@@ -273,7 +286,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "pl_disable",
     message0: "disable event %1 on this map",
     args0: [text("KEY")],
-    colour: COLOURS.event,
+    style: st("pl_disable"),
     mutator: STATE,
     tooltip: "DISABLE: the global event does not run here (never a safety-critical one)",
   },
@@ -292,7 +305,7 @@ export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; sa
   for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5]) {
     for (const a of args ?? []) {
       if (a.type === "input_value" || a.type === "input_statement") inputs.add(a.name);
-      else if (a.type !== "input_dummy") {
+      else if (a.type !== "input_dummy" && a.type !== "field_image") {
         fields.add(a.name);
         if (a.type !== "field_label") saved.add(a.name);
       }
@@ -303,12 +316,20 @@ export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; sa
 }
 
 // --- the toolbox ----------------------------------------------------------------------------------
+// MatPilot's order (Batt 2026-11-09, flows-studio.md section 2): Search, Movement, Actions, Control,
+// Conditions, Sensors, Operators, Variables, Functions, then Advanced (folding open, as MakeCode's)
+// with every other catalogue block and the map-event blocks. Each category is styled as MatPilot's.
 export type CatBlock = { concept: string; timeout_s: number; badge?: string; kind?: string };
-export type ToolboxItem = { kind: "block"; type: string; fields?: Record<string, unknown>; extraState?: unknown; inputs?: unknown };
+export type ToolboxItem =
+  | { kind: "block"; type: string; fields?: Record<string, unknown>; extraState?: unknown; inputs?: unknown }
+  | { kind: "label"; text: string };
+export type ToolboxCategory = { kind: "category"; name: string; categorystyle: string; contents: (ToolboxItem | ToolboxCategory)[] };
 export type Toolbox = {
   kind: "categoryToolbox";
-  contents: { kind: "category"; name: string; colour: string; contents: ToolboxItem[] }[];
+  contents: ({ kind: "search"; name: string; categorystyle: string } | ToolboxCategory)[];
 };
+/** The model blocks' first choice (models.ts firstDetector) and the not-adopted notes. */
+export type SensorDefaults = { model: string; label: string; notes: string[] };
 
 const PALETTE_TYPES: Record<string, string> = {
   walk_to: "pl_walk_to",
@@ -317,53 +338,90 @@ const PALETTE_TYPES: Record<string, string> = {
   open_window: "pl_open_window",
   use_item: "pl_use_item",
 };
+const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
 }
 
 const exprBlock = (t: string) => ({ block: { type: "pl_expr", fields: { TEXT: t } } });
+const lbl = (text: string): ToolboxItem => ({ kind: "label", text });
+const cat = (name: string, categorystyle: string, contents: (ToolboxItem | ToolboxCategory)[]): ToolboxCategory => ({
+  kind: "category",
+  name,
+  categorystyle,
+  contents,
+});
 
-/** The toolbox for a scope: the palette, the other catalogue blocks, control, exits, events.
- * `huntFields`: the hunt block's dropdown defaults when its type is registered (hunt.ts), else the
- * hunt block is offered as a generic block with its parameters by name. `huntOmit`: its optional
- * parameters' defaults (hunt.ts `omitted`), left out of the IR at that value. */
+/** A category of the toolbox by name, nested ones too (Advanced holds some). */
+export function categoryOf(tb: Toolbox | ToolboxCategory, name: string): ToolboxCategory | undefined {
+  for (const c of tb.contents) {
+    if (c.kind !== "category") continue;
+    if (c.name === name) return c;
+    const inner = categoryOf(c, name);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+
+/** The first block of a type a category offers (its own items, not nested categories). */
+export function blockOf(c: ToolboxCategory | undefined, type: string): Extract<ToolboxItem, { kind: "block" }> | undefined {
+  for (const i of c?.contents ?? []) if (i.kind === "block" && i.type === type) return i;
+  return undefined;
+}
+
+/** Every block a toolbox offers, with its category's name (the search and the tests). */
+export function toolboxBlocks(tb: Toolbox | ToolboxCategory): { category: string; item: Extract<ToolboxItem, { kind: "block" }> }[] {
+  const out: { category: string; item: Extract<ToolboxItem, { kind: "block" }> }[] = [];
+  for (const c of tb.contents) {
+    if (c.kind !== "category") continue;
+    for (const i of c.contents) if (i.kind === "block") out.push({ category: c.name, item: i });
+    out.push(...toolboxBlocks(c));
+  }
+  return out;
+}
+
+/** The toolbox for a scope. `huntFields`: the hunt block's dropdown defaults when its type is
+ * registered (hunt.ts), else the hunt block is offered as a generic block with its parameters by
+ * name. `huntOmit`: its optional parameters' defaults (hunt.ts `omitted`), left out of the IR at that
+ * value. `sensors`: the model blocks' first model and class, and the not-adopted models' notes. */
 export function toolbox(
   blocks: Record<string, CatBlock>,
   scope: "block" | "global" | "main",
   huntFields: Record<string, string> | null = null,
   huntOmit: Record<string, string> = {},
+  sensors: SensorDefaults = { model: "v1", label: "monster", notes: [] },
 ): Toolbox {
-  const palette: ToolboxItem[] = [];
-  for (const [name, type] of Object.entries(PALETTE_TYPES)) {
-    if (blocks[name]) palette.push({ kind: "block", type, extraState: rest(blocks[name]) });
-  }
-  palette.push({ kind: "block", type: "pl_wait", fields: { SECONDS: 1 } });
-  const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES))
-    .sort()
-    .map((n) =>
-      n === "hunt" && huntFields
-        ? {
-            kind: "block" as const,
-            type: "pl_hunt",
-            fields: huntFields,
-            extraState: Object.keys(huntOmit).length ? { ...rest(blocks[n]), omit: huntOmit } : rest(blocks[n]),
-          }
-        : { kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) },
+  const palette = (name: string): ToolboxItem[] =>
+    blocks[name] ? [{ kind: "block", type: PALETTE_TYPES[name], extraState: rest(blocks[name]) }] : [];
+  const hunt: ToolboxItem[] =
+    blocks.hunt && huntFields
+      ? [{ kind: "block", type: "pl_hunt", fields: huntFields, extraState: Object.keys(huntOmit).length ? { ...rest(blocks.hunt), omit: huntOmit } : rest(blocks.hunt) }]
+      : [];
+  const movement: ToolboxItem[] = [...palette("walk_to"), ...hunt];
+  if (scope === "block") {
+    movement.push(
+      lbl("Leave this map (a map block ends with one):"),
+      { kind: "block", type: "pl_exit_walk" },
+      { kind: "block", type: "pl_exit_npc" },
+      { kind: "block", type: "pl_exit_item", fields: { ITEM: "WING" } },
     );
+  }
+  const actions: ToolboxItem[] = ACTIONS.flatMap(palette);
   const control: ToolboxItem[] = [
-    { kind: "block", type: "pl_if", inputs: { COND: exprBlock("hp_percent() < 50") } },
+    { kind: "block", type: "pl_wait", fields: { SECONDS: 1 } },
+    { kind: "block", type: "pl_wait_until", inputs: { COND: exprBlock("hp_percent() > 90") } },
     { kind: "block", type: "pl_repeat", inputs: { TIMES: exprBlock("3") } },
     { kind: "block", type: "pl_while", inputs: { COND: exprBlock("weight_percent() < 50") } },
-    { kind: "block", type: "pl_wait_until", inputs: { COND: exprBlock("is_dead()") } },
     { kind: "block", type: "pl_stop" },
-    { kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } },
     { kind: "block", type: "pl_break" },
     { kind: "block", type: "pl_continue" },
+    lbl(scope === "global" ? "When something happens (every map):" : "When something happens:"),
+    { kind: "block", type: "pl_event", fields: { SCOPE: scope === "global" ? "global" : "map", NAME: "my_event" },
+      inputs: { WHEN: exprBlock("hp_percent() < 30") } },
   ];
   const conditions: ToolboxItem[] = [
-    { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } },
+    { kind: "block", type: "pl_if", inputs: { COND: exprBlock("hp_percent() < 50") } },
     { kind: "block", type: "pl_compare", inputs: { A: exprBlock("hp_percent()"), B: exprBlock("50") } },
     { kind: "block", type: "pl_logic", fields: { OP: "and" } },
     { kind: "block", type: "pl_not" },
@@ -373,25 +431,45 @@ export function toolbox(
     conditions.push({ kind: "block", type: "pl_do", fields: { BLOCK: "choose_menu", ARGS: 'option=option("o_key")' },
       extraState: rest(blocks.choose_menu) });
   }
-  const exits: ToolboxItem[] = [
-    { kind: "block", type: "pl_exit_walk" },
-    { kind: "block", type: "pl_exit_npc" },
-    { kind: "block", type: "pl_exit_item", fields: { ITEM: "WING" } },
+  const model = { MODEL: sensors.model, CLASS: sensors.label };
+  const sensorItems: ToolboxItem[] = [
+    { kind: "block", type: "pl_detect_sees", fields: model },
+    { kind: "block", type: "pl_detect_count", fields: model },
+    { kind: "block", type: "pl_wait_until", inputs: { COND: { block: { type: "pl_detect_sees", fields: model } } } },
+    ...sensors.notes.map(lbl),
+    lbl("More sensors, written as an expression:"),
+    { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent()" } },
+    { kind: "block", type: "pl_expr", fields: { TEXT: "weight_percent()" } },
+    { kind: "block", type: "pl_expr", fields: { TEXT: "is_dead()" } },
   ];
-  const events: ToolboxItem[] = [
-    { kind: "block", type: "pl_event", fields: { SCOPE: scope === "global" ? "global" : "map", NAME: "my_event" },
-      inputs: { WHEN: exprBlock("hp_percent() < 30") } },
+  const operators: ToolboxItem[] = [
+    { kind: "block", type: "pl_expr", fields: { TEXT: "0" } },
+    { kind: "block", type: "pl_expr", fields: { TEXT: "1 + 2" } },
+    { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } },
   ];
+  const variables: ToolboxItem[] = [{ kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } }];
+  const functions: ToolboxItem[] = [{ kind: "block", type: "pl_call" }];
+  const others: ToolboxItem[] = Object.keys(blocks)
+    .filter((n) => !(n in PALETTE_TYPES) && !(n === "hunt" && huntFields))
+    .sort()
+    .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
+  const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
   if (scope === "block") {
-    events.push({ kind: "block", type: "pl_extend" }, { kind: "block", type: "pl_disable" });
+    advanced.push(cat("Map events", "loop_category", [{ kind: "block", type: "pl_extend" }, { kind: "block", type: "pl_disable" }]));
   }
-  const cats = [
-    { kind: "category" as const, name: "Skills", colour: COLOURS.action, contents: palette },
-    { kind: "category" as const, name: "More skills", colour: COLOURS.generic, contents: others },
-    { kind: "category" as const, name: "Control", colour: COLOURS.control, contents: control },
-    { kind: "category" as const, name: "Conditions", colour: COLOURS.expr, contents: conditions },
-    { kind: "category" as const, name: "Events", colour: COLOURS.event, contents: events },
-  ];
-  if (scope === "block") cats.splice(3, 0, { kind: "category", name: "Exits", colour: COLOURS.exit, contents: exits });
-  return { kind: "categoryToolbox", contents: cats };
+  return {
+    kind: "categoryToolbox",
+    contents: [
+      { kind: "search", name: "Search", categorystyle: "mp_setup_category" },
+      cat("Movement", "mp_movement_category", movement),
+      cat("Actions", "mp_output_category", actions),
+      cat("Control", "loop_category", control),
+      cat("Conditions", "loop_category", conditions),
+      cat("Sensors", "mp_sensor_category", sensorItems),
+      cat("Operators", "math_category", operators),
+      cat("Variables", "variable_category", variables),
+      cat("Functions", "mp_function_category", functions),
+      cat("Advanced", "mp_setup_category", advanced),
+    ],
+  };
 }

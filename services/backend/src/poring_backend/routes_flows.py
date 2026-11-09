@@ -25,7 +25,8 @@ loop never waits on it.
 Who may (the Settings page's pattern, routes_settings.py):
   * GET: the PUBLIC listener only, a LAN viewer, an allowlisted Origin (`browser_gate`);
   * POST: the same, plus the CSRF token of GET /settings/csrf in X-CSRF-Token and at most 20
-    requests a minute per client;
+    requests a minute per client (POST /flows/python: 120 a minute on its own budget, 2026-11-09:
+    the studio's Python pane refreshes after edits);
   * never the agent's :8001 (refused: `not_public_listener`), and the agent network never reaches
     :8000 (AgentNetworkGuard, ADR-0005 c2).
 Refusals are counted in /health (`dropped_messages.flows_http`).
@@ -76,14 +77,24 @@ def read_gate(request: Request) -> AppState:
     return get_state(request)
 
 
-def compute_gate(request: Request) -> AppState:
+def _post_gate(request: Request, python: bool) -> AppState:
     state = read_gate(request)
     if not csrf_valid(state, request.headers.get("x-csrf-token", "")):
         raise _fail(request, 403, "csrf_invalid")
     client = request.client.host if request.client else ""
-    if not state.flows_rate.allow(client, time.monotonic()):
+    rate = state.flows_python_rate if python else state.flows_rate
+    if not rate.allow(client, time.monotonic()):
         raise _fail(request, 429, "rate_limited")
     return state
+
+
+def compute_gate(request: Request) -> AppState:
+    return _post_gate(request, python=False)
+
+
+def python_gate(request: Request) -> AppState:
+    """POST /flows/python: the same gate on its own budget (120 a minute: the side pane)."""
+    return _post_gate(request, python=True)
 
 
 def _engine(request: Request) -> Any:
@@ -397,7 +408,7 @@ async def post_simulate(
 
 
 @router.post("/python")
-async def post_python(request: Request, state: AppState = Depends(compute_gate)) -> dict[str, Any]:
+async def post_python(request: Request, state: AppState = Depends(python_gate)) -> dict[str, Any]:
     _engine(request)
     env = await _body(request)
     flow = _flow(request, env)

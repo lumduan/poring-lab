@@ -43,6 +43,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
   (DRAFT, PROPOSED, NOT accepted; at the end) would turn hunt-flow's adopted behaviours into
   block parameters (a `hunt` block in the map node) and make map zones map-node data. The plan:
   [blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
+- ➡️ 2026-11-09: [Amendment B](#amendment-b-2026-11-09-batt-asked-the-trained-models-as-sensor-blocks)
+  (Batt asked: "design the trained model files as blocks"): two catalogue sensors,
+  `detector_sees(model, label)` and `detector_count(model, label)`, over a committed model
+  catalogue; no IR change. The studio around them: [flows-studio.md](../planning/flows-studio.md).
 - **Related:**
   - [ADR-0002](0002-input-mux.md): one input writer, the lease, releases on handoff;
   - [ADR-0003](0003-env-abstraction.md): the `Env` contract the blocks act through;
@@ -2295,3 +2299,43 @@ what works; the result should become blocks a person can read and change."
 - Costs: an exporter, a key classification and a deny-list to maintain; an engine split that must
   stay bytecode-identical; one more IR field; the slice (6) needs a host-side executor that
   section 6 did not plan.
+
+## Amendment B (2026-11-09, Batt asked): the trained models as sensor blocks
+
+**Batt (2026-11-09, translated):** "Design the trained model files as blocks." Built offline the
+same day with the /flows studio ([flows-studio.md](../planning/flows-studio.md) section 4). This
+amendment ADDS to section 2.3; nothing above is rewritten.
+
+- **Two sensors in the catalogue** (`blocks.yaml`): `detector_sees(model, label)` (bool: the model
+  boxes that class in the frame) and `detector_count(model, label)` (int: how many boxes). Both are
+  passive and drift, like `sees`; both read pixels only, through the perception the runner already
+  uses (scripts/unit_detector.py, scripts/mvp_watch.py); nothing reads packets (ADR-0007).
+- **No IR change.** They are ordinary `Sense` expressions with two text-literal arguments, so IR 2,
+  its JSON Schema, every existing flow's hash and the restricted Python grammar (7.2) are unchanged.
+  A dedicated expression kind was considered and not taken: section 2.3 already defines sensors as
+  catalogue entries with typed parameters, and a new kind would have needed a schema change, a
+  converter and a new Python form for no extra meaning.
+- **The model catalogue** (`poring_flow/models.yaml`, served in GET /flows/catalogue `models`):
+  each model's id, kind (detector | boss recognizer), status (live | not adopted), file name, sha256
+  prefix, maps and class names, each copied from where the repo already records it (a drift test
+  reads those sources). No weights and no client data (rule 4); species names for display come from
+  the local KB at run time.
+- **Lint (layer 1, `lint/detectors.py`):** the model and the class must be text literals
+  (`detector_literal`), the model in the catalogue (`detector_model`) and adopted
+  (`detector_not_adopted`: a model that failed or has no verdict is not a working sensor, e.g. the
+  Stormy Knight recognizer's round 1, stormy-knight-recognizer.md section 6), the class one of its
+  trained classes (`detector_class`), and a count only from a detector (`detector_count_kind`); all
+  errors. A map-scoped model read in a map block on another map is a warning (`detector_map`).
+- **SIMULATE:** a detector is a SCENARIO input, as `sees` is (13.4's scenario): the timeline's
+  `detects` gives "<model>/<class>" a box count from a time on; every pair a flow reads starts at 0.
+- **The Python view** prints them as calls (`detector_sees("v1", "monster")`) and parses them back
+  like any sensor (7.5's round trips hold).
+- **Not decided here:** how MW3's executor reads a model at run time (its freshness, its `unknown`,
+  the GPU path's fallback) follows section 2.3's rules for any sensor when MW3 is built; and a
+  "confidence of a class" sensor, left out because the detectors report a score per box, not a
+  calibrated per-class confidence.
+- **Beside it, the same day (the studio, not the models):** the canonical Python (7.2) now heads
+  its parts with matpilot's section comments (`# --- Config ---`, Setup, Functions, Map blocks,
+  Events, Main). The parser drops comments, so 7.5's round trips are unchanged; the one canonical
+  fixture that pinned the old text was updated (flows-studio.md section 3, which also proposes,
+  without deciding, matpilot's `try` / `finally` around Main).

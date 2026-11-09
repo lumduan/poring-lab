@@ -17,7 +17,9 @@ Additions to 7.2's allow-list, each needed by 13.6.8's example or by the IR (all
 - the bare `_` as a `for` target: `for _ in range(n)` is the `repeat` block (7.2 has no form for
   it);
 - `x = block(...)` stores the block's outcome (`outcome_to`, 2.2).
-Comments are dropped (open question 12).
+Comments are dropped (open question 12). The printer heads each part with a section comment in
+matpilot's style (`# --- Config ---`, Setup, Functions, Map blocks, Events, Main: 2026-11-09,
+flows-studio.md section 3); the parser drops them like any comment, so the round trips hold.
 """
 
 from __future__ import annotations
@@ -1407,8 +1409,17 @@ def _def(decorator: list[str], name: str, body: list[Any], cat: Catalogue) -> li
     return [*decorator, f"def {name}():", *_stmts(body, "    ", cat)]
 
 
+EVENTS = "Events"
+
+
+def section_rule(title: str) -> str:
+    """A section heading in matpilot's style: `# --- Main ---...`, 76 characters."""
+    return f"# --- {title} ".ljust(76, "-")
+
+
 def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
-    """The canonical Python view of a flow."""
+    """The canonical Python view of a flow, in sections (Config, Setup, Functions, Map blocks,
+    Events, Main; an empty one is left out)."""
     cat = cat or catalogue()
     head = [f"ir={flow.ir}", f"name={_s(flow.name)}"]
     if flow.description:
@@ -1430,11 +1441,17 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
         f"target=target(client={_s(t.client)}, server={_s(t.server)}, "
         f"locale={_s(t.locale)}, path={CONST_OF[t.path]})"
     )
-    chunks: list[tuple[bool, list[str]]] = [(False, ["flow(", *[f"    {h}," for h in head], ")"])]
+    # (is a def, its lines, its SECTION): matpilot's sections (flows-studio.md section 3), so a
+    # learner reads the same shape on /flows as on a robot's Python; comments, so the parser
+    # drops them and every round trip is unchanged
+    chunks: list[tuple[bool, list[str], str]] = [
+        (False, ["flow(", *[f"    {h}," for h in head], ")"], "Config")
+    ]
     if flow.variables:
-        chunks.append((False, [f"{k} = {_lit_src(v.value)}" for k, v in flow.variables.items()]))
+        lines = [f"{k} = {_lit_src(v.value)}" for k, v in flow.variables.items()]
+        chunks.append((False, lines, "Setup"))
     for name, body in flow.procedures.items():
-        chunks.append((True, _def([], name, body, cat)))
+        chunks.append((True, _def([], name, body, cat), "Functions"))
     for b in wf.blocks if wf else []:
         args = [_ref_src(b.map)]
         ents = []
@@ -1454,9 +1471,10 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
             args.append("resume_here=False")
         if b.zones is not None:
             args.append(f"zones=zones({_s(b.zones.map)}, sha256={_s(b.zones.sha256)})")
-        chunks.append((True, _def(_fit("@map_block", args, ""), b.name, b.main, cat)))
+        block_def = _def(_fit("@map_block", args, ""), b.name, b.main, cat)
+        chunks.append((True, block_def, "Map blocks"))
     for h in flow.handlers:
-        chunks.append((True, _def(_fit("@on", _on_args(h, cat), ""), h.name, h.body, cat)))
+        chunks.append((True, _def(_fit("@on", _on_args(h, cat), ""), h.name, h.body, cat), EVENTS))
     for b in wf.blocks if wf else []:
         for ev in b.events:
             label = ir.event_label(ev, b)
@@ -1465,28 +1483,33 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
                 if not chunks[-1][0] and chunks[-1][1][-1].startswith("disable("):
                     chunks[-1][1].append(line)
                 else:
-                    chunks.append((False, [line]))
+                    chunks.append((False, [line], EVENTS))
             elif isinstance(ev, ir.Extend):
                 args = [ev.key, f"scope={b.name}"]
                 if ev.max_per_run is not None:
                     args.append(f"max_per_run={ev.max_per_run}")
-                chunks.append((True, _def(_fit("@extend", args, ""), label, ev.steps, cat)))
+                chunks.append((True, _def(_fit("@extend", args, ""), label, ev.steps, cat), EVENTS))
             elif isinstance(ev, ir.Override):
                 args = [*_on_args(ev.event, cat), f"overrides={ev.event.name}", f"scope={b.name}"]
-                chunks.append((True, _def(_fit("@on", args, ""), label, ev.event.body, cat)))
+                ev_def = _def(_fit("@on", args, ""), label, ev.event.body, cat)
+                chunks.append((True, ev_def, EVENTS))
             else:
                 args = _on_args(ev.event, cat)
                 if ev.event.name != label:
                     args.append(f"key={_s(ev.event.name)}")
                 args.append(f"scope={b.name}")
-                chunks.append((True, _def(_fit("@on", args, ""), label, ev.event.body, cat)))
+                ev_def = _def(_fit("@on", args, ""), label, ev.event.body, cat)
+                chunks.append((True, ev_def, EVENTS))
     if flow.main is not None:
-        chunks.append((False, _stmts(flow.main, "", cat)))
+        chunks.append((False, _stmts(flow.main, "", cat), "Main"))
     out: list[str] = []
     prev_def = False
-    for is_def, lines in chunks:
+    prev_section = ""
+    for is_def, lines, section in chunks:
         if out:  # two blank lines around a definition, one otherwise (PEP 8)
             out += ["", ""] if is_def or prev_def else [""]
+        if section != prev_section:
+            out.append(section_rule(section))
         out += lines
-        prev_def = is_def
+        prev_def, prev_section = is_def, section
     return "\n".join(out) + "\n"

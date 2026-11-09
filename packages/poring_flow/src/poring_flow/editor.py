@@ -5,6 +5,7 @@ catalogue / L1 / L2 files and the static map sheets it is handed.
 - `catalogue_doc()`: the block catalogue plus each block's VERIFICATION BADGE, derived from L1's
   `verified_on` (an alone-test pass per path): verified on RDP / on S2 / on both, unverified,
   unknown (no L1 concept), core (no input). Flipping a concept's `verified_on` flips the badge.
+  It also carries the TRAINED MODELS a detector sensor may name (`models`, models.yaml).
 - `lint_doc()`: MW1's linter findings, each with the canvas node that owns it, the counts by
   severity (READINESS apart from errors: an unsupported binding blocks the run, not the design;
   Batt 2026-10-09, contradictions #6), the run-start gate's verdict on them (`runstart`), and
@@ -25,6 +26,7 @@ from poring_flow import always_on, ir, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
+from poring_flow.models import document as model_document
 from poring_flow.patrol import RoutesProvider
 from poring_flow.runstart import verdict
 from poring_flow.sheet import World, load_world
@@ -95,6 +97,8 @@ def catalogue_doc(
         "ranks": {"default": dict(ir.DEFAULT_RANK), "user": ir.USER_RANK, "max": ir.MAX_RANK},
         "safety_critical": list(ir.SAFETY_CRITICAL),
         "limits": {"json_bytes": ir.MAX_JSON_BYTES, "json_depth": ir.MAX_JSON_DEPTH},
+        # the trained models as sensor devices (models.yaml; ADR-0020 Amendment B, 2026-11-09)
+        "models": model_document(),
     }
 
 

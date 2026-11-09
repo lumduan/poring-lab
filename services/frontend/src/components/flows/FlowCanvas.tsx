@@ -3,7 +3,9 @@
 // The workflow canvas (MW2 level 1, React Flow): map blocks joined by typed exits, the global and
 // per-map event nodes, a status line under every node (lint, then the last simulate run). The
 // graph is DERIVED from the IR (lib/flow/canvas.ts); drawing or deleting an exit edits the IR.
-// Ideas from Node-RED (status badges, typed ports); no code from it or from n8n.
+// Ideas from Node-RED (status badges, typed ports); no code from it or from n8n. Since 2026-11-09
+// it is the studio's "Map" tab, in the studio's tokens (studio.css .fc-*) and the system's light /
+// dark mode.
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -54,20 +56,12 @@ const LABEL_DY: Record<string, number> = { walk_exit: -30, npc_warp: -10, item_w
 /** The safety-critical lock (13.6.1: extend only, never override or disable). */
 function Lock() {
   return (
-    <svg viewBox="0 0 12 14" className="mr-1 inline-block h-3 w-3 align-[-1px]" aria-label="safety-critical: extend only">
+    <svg viewBox="0 0 12 14" className="fc-lock" aria-label="safety-critical: extend only">
       <path d="M3 6V4a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
       <rect x="1.5" y="6" width="9" height="7" rx="1.5" fill="currentColor" />
     </svg>
   );
 }
-
-const LEVEL_CLASS: Record<string, string> = {
-  error: "text-red-300",
-  warning: "text-amber-300",
-  readiness: "text-sky-300",
-  info: "text-neutral-300",
-  ok: "text-emerald-300",
-};
 
 type Extra = { lint: LintDoc | null; trace: Trace | null; selected: boolean; stale: boolean };
 type MapNodeT = Node<NodeData & Extra, "map">;
@@ -75,10 +69,10 @@ type EventsNodeT = Node<NodeData & Extra, "events">;
 type MainNodeT = Node<NodeData & Extra, "main">;
 
 function StatusLine({ owner, lint, stale }: { owner: string; lint: LintDoc | null; stale: boolean }) {
-  if (!lint) return <div className="text-[11px] text-neutral-500">not linted yet</div>;
+  if (!lint) return <div className="fc-status fc-sub">not linted yet</div>;
   const l = lintLine(lintOf(lint, owner));
   return (
-    <div className={`text-[11px] ${LEVEL_CLASS[l.level]} ${stale ? "opacity-50" : ""}`}>
+    <div className="fc-status" data-level={l.level} data-stale={stale}>
       ● {l.text}
       {stale ? " (stale)" : ""}
     </div>
@@ -90,30 +84,26 @@ function MapNode({ data }: NodeProps<MapNodeT>) {
   const b = data.block;
   const run = blockRunLine(data.trace, b.name);
   return (
-    <div
-      className={`min-w-[230px] rounded-lg border bg-neutral-900 px-3 py-2 shadow-lg ${
-        data.selected ? "border-sky-400" : "border-neutral-600"
-      }`}
-    >
-      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-neutral-300" />
+    <div className="fc-node" data-selected={data.selected}>
+      <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !bg-neutral-400" />
       <div className="flex items-center gap-2">
-        {data.start && <span className="rounded bg-emerald-700 px-1.5 text-[10px] font-semibold">START</span>}
-        <span className="font-semibold">{b.name}</span>
+        {data.start && <span className="fc-start">START</span>}
+        <span className="fc-title">{b.name}</span>
       </div>
-      <div className="text-[11px] text-neutral-400">
+      <div className="fc-sub">
         map {b.map.map}
         {data.startEntry ? ` · entry ${data.startEntry}` : ` · ${b.entries.length} entr${b.entries.length === 1 ? "y" : "ies"}`}
       </div>
       {(b.targets.length > 0 || b.ignore.length > 0) && (
-        <div className="text-[11px] text-neutral-400">
+        <div className="fc-sub">
           targets {b.targets.map((m) => m.id).join(", ") || "-"} · ignore {b.ignore.map((m) => m.id).join(", ") || "-"}
         </div>
       )}
       <StatusLine owner={`block:${b.name}`} lint={data.lint} stale={data.stale} />
-      {run && <div className="text-[11px] text-fuchsia-300">sim: {run}</div>}
-      <div className="mt-1 flex flex-col items-end gap-0.5">
+      {run && <div className="fc-run">sim: {run}</div>}
+      <div className="fc-ports">
         {PORTS.map((p) => (
-          <div key={p.kind} className="relative pr-2 text-[10px]" style={{ color: EXIT_COLOURS[p.kind] }}>
+          <div key={p.kind} className="fc-port" style={{ color: EXIT_COLOURS[p.kind] }}>
             {p.label}
             <Handle
               type="source"
@@ -160,27 +150,23 @@ function EventsNode({ data }: NodeProps<EventsNodeT>) {
       : data.events.map(eventRow);
   const owner = data.scope === "global" ? "global" : `block:${data.block}`;
   return (
-    <div
-      className={`min-w-[230px] rounded-lg border border-dashed bg-neutral-950 px-3 py-2 ${
-        data.selected ? "border-sky-400" : "border-pink-500/70"
-      }`}
-    >
+    <div className="fc-node fc-events" data-selected={data.selected}>
       {data.scope === "block" && <Handle type="source" position={Position.Top} id="attach" className="!h-2 !w-2 !bg-neutral-500" />}
-      <div className="text-xs font-semibold text-pink-300">
+      <div className="fc-events-title">
         {data.scope === "global" ? "Global events (every map)" : `${data.block} · map events`}
       </div>
       <ul className="mt-1 space-y-0.5">
         {rows.map((r) => (
-          <li key={`${r.mode}:${r.key}`} className="flex gap-1.5 text-[11px]">
-            <span className="w-16 shrink-0 text-neutral-400">{r.mode}</span>
+          <li key={`${r.mode}:${r.key}`} className="fc-row">
+            <span className="fc-mode">{r.mode}</span>
             <span className="font-medium">
               {SAFETY_CRITICAL.includes(r.key) && <Lock />}
               {r.key}
             </span>
-            <span className="text-neutral-500">{r.detail}</span>
+            <span className="fc-sub">{r.detail}</span>
           </li>
         ))}
-        {rows.length === 0 && <li className="text-[11px] text-neutral-500">none</li>}
+        {rows.length === 0 && <li className="fc-sub">none</li>}
       </ul>
       {data.scope === "global" && <StatusLine owner={owner} lint={data.lint} stale={data.stale} />}
     </div>
@@ -190,9 +176,9 @@ function EventsNode({ data }: NodeProps<EventsNodeT>) {
 function MainNode({ data }: NodeProps<MainNodeT>) {
   if (data.kind !== "main") return null;
   return (
-    <div className={`min-w-[230px] rounded-lg border bg-neutral-900 px-3 py-2 ${data.selected ? "border-sky-400" : "border-neutral-600"}`}>
-      <div className="font-semibold">main (a plain flow)</div>
-      <div className="text-[11px] text-neutral-400">{data.main.length} statement(s) · no map blocks</div>
+    <div className="fc-node" data-selected={data.selected}>
+      <div className="fc-title">main (a plain flow)</div>
+      <div className="fc-sub">{data.main.length} statement(s) · no map blocks</div>
       <StatusLine owner="flow" lint={data.lint} stale={data.stale} />
     </div>
   );
@@ -219,7 +205,7 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
       {label && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan pointer-events-auto absolute rounded bg-neutral-950/90 px-1.5 py-0.5 text-[10px]"
+            className="nodrag nopan fc-edge-label"
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + dy}px)`, color: colour }}
           >
             {label}
@@ -336,7 +322,7 @@ export default function FlowCanvas(p: CanvasProps) {
         onNodeDoubleClick={(_, n) => onOpen(n.id)}
         zoomOnDoubleClick={false}
         deleteKeyCode={["Delete", "Backspace"]}
-        colorMode="dark"
+        colorMode="system"
         onInit={(inst) => {
           rf.current = inst as unknown as ReactFlowInstance;
         }}
@@ -347,7 +333,7 @@ export default function FlowCanvas(p: CanvasProps) {
       >
         <Background gap={24} />
         <Controls showInteractive={false} />
-        <MiniMap position="top-right" pannable zoomable nodeColor={(n) => (n.type === "events" ? "#9d4b6b" : "#3b5b8f")} />
+        <MiniMap position="top-right" pannable zoomable nodeColor={(n) => (n.type === "events" ? "#be185d" : "#a21caf")} />
       </ReactFlow>
     </div>
   );

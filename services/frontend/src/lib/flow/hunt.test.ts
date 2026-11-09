@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { COLOURS, namesOf, toolbox } from "./blockdefs.ts";
+import { blockOf, categoryOf, namesOf, toolbox } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, toWorkspace, type Workspace, type WsBlock } from "./blocks.ts";
 import { badgeText, defaultFields, fieldOf, HUNT_TYPE, huntDef, type HuntRules, huntTooltip, omitted, params } from "./hunt.ts";
 import { action, canonical, clone, type Flow, lit } from "./ir.ts";
@@ -40,7 +40,7 @@ function first(ws: Workspace): WsBlock {
 test("the hunt block's groups are Batt's, each a list of the registry's rule versions", () => {
   assert.deepEqual(RULES.groups.map((g) => g.name), ["engage", "dead_loot", "search", "stop"]);
   assert.deepEqual(Object.fromEntries(params(RULES).map((p) => [p.name, p.default])), DEFAULTS);
-  const def = huntDef(RULES, COLOURS.action);
+  const def = huntDef(RULES);
   const loot = (def.args2 ?? []).find((a) => "name" in a && a.name === "P_LOOT");
   assert.ok(loot && "options" in loot);
   assert.deepEqual(loot.options?.map(([, v]) => v), ["gm_fast_scan@54", "gm_scan_one_pass@51", "gm_scan@50"]);
@@ -49,7 +49,7 @@ test("the hunt block's groups are Batt's, each a list of the registry's rule ver
 });
 
 test("no field but the registry's parameters: no gate can become a field", () => {
-  const def = huntDef(RULES, COLOURS.action);
+  const def = huntDef(RULES);
   const n = namesOf(HUNT_TYPE, def);
   assert.deepEqual([...n.saved].sort(), params(RULES).map((p) => fieldOf(p.name)).sort());
   assert.deepEqual([...n.inputs], []);
@@ -93,7 +93,8 @@ test("without the lists, or with a value not among them, the hunt stays a generi
 
 test("dragged from the toolbox: the adopted base's rules, the catalogue's concept and timeout", () => {
   const tb = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 }, walk_to: { concept: "nav.walk_to", timeout_s: 120 } }, "block", defaultFields(RULES), omitted(RULES));
-  const item = tb.contents.find((c) => c.name === "More skills")!.contents.find((i) => i.type === HUNT_TYPE);
+  // the hunt block is Movement since the studio (2026-11-09: MatPilot's categories)
+  const item = blockOf(categoryOf(tb, "Movement"), HUNT_TYPE);
   assert.ok(item);
   assert.deepEqual(item.fields, defaultFields(RULES));
   assert.deepEqual((item.extraState as { omit?: unknown }).omit, OMIT);
@@ -109,7 +110,7 @@ test("dragged from the toolbox: the adopted base's rules, the catalogue's concep
   assert.deepEqual(Object.fromEntries(Object.entries(h.params).map(([k, e]) => [k, e.kind === "lit" ? e.value : null])), ADOPTED);
   // without the catalogue's toolbox lists the hunt is offered as a generic block
   const plain = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 } }, "block");
-  assert.ok(plain.contents.find((c) => c.name === "More skills")!.contents.some((i) => i.type === "pl_action"));
+  assert.ok(blockOf(categoryOf(plain, "More skills"), "pl_action"));
 });
 
 test("badges: the adopted base, the D8 hunting evidence, the versions that hold the rule", () => {
@@ -131,7 +132,7 @@ test("engage_source: an option in the engage group, default detector, written on
   assert.equal(es.required, false);
   assert.equal(es.default, "detector");
   assert.deepEqual(omitted(RULES), OMIT);
-  const def = huntDef(RULES, COLOURS.action);
+  const def = huntDef(RULES);
   assert.equal(def.message1, "engage: strike %1  engage on the way %2  engage source %3");
   const dd = (def.args1 ?? []).find((a) => "name" in a && a.name === "P_ENGAGE_SOURCE");
   assert.ok(dd && "options" in dd);
@@ -172,7 +173,7 @@ test("search_route: an option in the search group, default heading, written only
   assert.equal(sr.kind, "option");
   assert.equal(sr.required, false);
   assert.equal(sr.default, "heading");
-  const def = huntDef(RULES, COLOURS.action);
+  const def = huntDef(RULES);
   assert.equal(def.message3, "search: search %1  search route %2");
   const dd = (def.args3 ?? []).find((a) => "name" in a && a.name === "P_SEARCH_ROUTE");
   assert.ok(dd && "options" in dd);

@@ -151,7 +151,8 @@ class _Halt(Exception):  # noqa: N818 -- a control signal, not an error
 class Sim:
     """Run a flow against a scripted world. `timeline`: (t, {key: value}) changes, applied at the
     first tick at or after t. World keys: hp_percent, weight_percent, is_dead, map (current map),
-    cell (x, y), sees:<mob id>, engagement_seen, engaged_species, item:<id>, plus guard keys
+    cell (x, y), sees:<mob id>, detect:<model>/<class> (a box count), engagement_seen,
+    engaged_species, item:<id>, plus guard keys
     `human` (a takeover: pause) and `interlock` ("red": stop)."""
 
     def __init__(
@@ -225,6 +226,12 @@ class Sim:
         if s.sensor == "item_count":
             item = self._eval(s.args["item"])
             return self.world.get(f"item:{getattr(item, 'id', item)}")
+        if s.sensor in ("detector_sees", "detector_count"):  # a trained model (models.yaml)
+            model, label = self._eval(s.args["model"]), self._eval(s.args["label"])
+            n = self.world.get(f"detect:{model}/{label}")
+            if n is None:
+                return None
+            return n > 0 if s.sensor == "detector_sees" else n
         key = {"current_map": "map", "position": "cell"}.get(s.sensor, s.sensor)
         return self.world.get(key)
 

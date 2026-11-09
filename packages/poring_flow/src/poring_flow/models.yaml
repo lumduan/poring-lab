@@ -1,0 +1,67 @@
+# The TRAINED MODELS as sensor "devices" for the block editor (Batt 2026-11-09: "design the trained
+# model files as blocks"; docs/planning/flows-studio.md section 4, ADR-0020 Amendment B).
+#
+# Facts only, each copied from where the repo already records it (a drift test,
+# tests/test_models.py, reads those sources and fails on any difference):
+#   - ids, files and sha256 prefixes: scripts/unit_detector.py (GPU_WEIGHTS, MAP_MODELS) for the
+#     detectors; scripts/mvp_watch.py (default_model) and the plans' recorded sha256 for the
+#     boss recognizers;
+#   - CLASS NAMES: the model's own names, never invented: v1's are unit_detector.NAMES; xmas02's
+#     fixed classes are config/detector/classes-xmas02.json and its species unit_detector's
+#     MAP_MODELS["xmas_dun02"].collapse (in class-id order, as the model's sidecar lists them);
+#     a boss recognizer answers one question ("the boss or its party in view",
+#     mvp_profiles.BossProfile.party), so its one class is `party`.
+#   - status: `live` = deployed for the runner (a person's decision, recorded in the plan);
+#     `not_adopted` = trained or fitted but NOT a working sensor (a failed bar or no verdict).
+#     The linter refuses a not-adopted model (detector_not_adopted).
+# No weights, no client data: model FILES stay out of git (rule 4). Display names of species come
+# from the local KB at run time (the mob ids below), never from here.
+#
+# Per model:
+#   kind      detector (boxes per class: "sees" and "count") | boss_recognizer ("sees" only)
+#   status    live | not_adopted
+#   file      the model file's name (in /dev/shm/poring-lab-detector/model or data/mvp_watch)
+#   sha256    the file's first 12 hex digits (what the detect server prints)
+#   maps      the maps it was trained for; empty = every map (the runner's default)
+#   classes   the classes a flow may test, in the model's class-id order
+#   untrained classes the model HAS but was trained on no example (they never fire)
+#   mobs      class -> the mob ids it stands for (display through the local KB)
+#   why       the decision or verdict, with its date and plan
+version: 1
+models:
+  v1:
+    kind: detector
+    status: live
+    file: v1png-last-736x1280.onnx
+    sha256: 32b448a1d197
+    maps: []
+    classes: [player, monster, npc]
+    why: "LIVE since 2026-10-13 (Batt decision 10) after the gold-set parity, docs/benchmarks/v1-vs-v0png.md; every map but xmas_dun02"
+  xmas02:
+    kind: detector
+    status: live
+    file: xmas02-last-736x1280.onnx
+    sha256: 293dca922e3e
+    maps: [xmas_dun02]
+    classes: [player, mystcase, cruiser, cookie, cookie_xmas]
+    untrained: [npc, warp]
+    mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246]}
+    why: "PASSED 2026-11-07 00:39 (docs/benchmarks/xmas02-eval.md), deployed on xmas_dun02 by Batt's decision 2026-11-07 (docs/planning/xmas02-detector.md Amendment J); npc and warp are EMPTY fixed classes (Amendment H)"
+  stormy-v1:
+    kind: boss_recognizer
+    status: not_adopted
+    file: stormy-v1.npz
+    sha256: a1287571e264
+    maps: [xmas_dun02]
+    classes: [party]
+    mobs: {party: [1251, 1515, 1607]}
+    why: "round 1 FAILED its held-out bar 2026-11-09 (false positives 98 per 10 min against at most 1): NOT ADOPTED, docs/planning/stormy-knight-recognizer.md section 6"
+  orclord-v1:
+    kind: boss_recognizer
+    status: not_adopted
+    file: orclord-v1.npz
+    sha256: 43179452d01f
+    maps: [gef_fild10]
+    classes: [party]
+    mobs: {party: [1190, 1189, 1473]}
+    why: "the flee rule was NOT adopted (flee proof fp2 2026-10-26: bar 1 no verdict), docs/planning/orclord-recognizer.md"

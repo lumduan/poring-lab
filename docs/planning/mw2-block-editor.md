@@ -49,7 +49,7 @@ the deploy steps are at the end of this section.
 | 3 · blocks | `BlockEditor.tsx`, `lib/flow/blocks.ts`, `blockdefs.ts`: Blockly `zelos`; the palette `walk_to`, `talk_npc`, `choose_menu`, `open_window`, `use_item`, `wait`; every other catalogue block by name; if / while / repeat / wait until / set / call / stop / break / continue; the three exits; event hats (global, override, add), extend, disable. Each skill block shows its BADGE (L1 `verified_on`: verified RDP / S2 / both, unverified, unknown, core), its lint findings (⚠) and its last run |
 | 4 · simulate | `poring_flow/trace.py`: MW1's `runtime.Sim` (unchanged) driven by the map sheets (routes on the walk grid, NPCs and menu keys checked, the Kafra sets the save point, a wing / a respawn go there) and a bounded SCENARIO (vitals, a loot model, a timeline, e.g. a death at t = 200 s). Returns the cells per map, the exits taken (death_respawn included), per-node outcomes and durations, the events. Input batches are COUNTED, never built or kept |
 | 4 · MW2-0 | `poring_flow/kbsheet.py`, at RUN TIME and in memory (see deviation 1) |
-| 5 · backend | `services/backend/src/poring_backend/routes_flows.py`: GET `/flows/catalogue`, `/flows/world`, `/flows/sample`; POST `/flows/lint`, `/flows/simulate`, `/flows/python`. Public listener, LAN viewer, Origin; POST also the CSRF token and 20 a minute per client; the IR through MW1's `ir.from_json` (1 MiB, depth 256, the schema); one computation at a time in a worker thread; no input, no mux, no storage; 503 when `poring_flow` is not installed |
+| 5 · backend | `services/backend/src/poring_backend/routes_flows.py`: GET `/flows/catalogue`, `/flows/world`, `/flows/sample`; POST `/flows/lint`, `/flows/simulate`, `/flows/python`. Public listener, LAN viewer, Origin; POST also the CSRF token and 20 a minute per client (➡️ /flows/python 120 a minute since 2026-11-09, flows-studio.md); the IR through MW1's `ir.from_json` (1 MiB, depth 256, the schema); one computation at a time in a worker thread; no input, no mux, no storage; 503 when `poring_flow` is not installed |
 | 6 · dependencies | pinned exact; licences read at those versions and recorded in THIRD_PARTY.md; Blockly's peer `jsdom` removed by a pnpm override (pnpm 10 installs peers even under `ignoreMissing`); media self-hosted in `public/blockly-media`, sounds off; no `eval` / `new Function` in either library; the CSP is unchanged |
 
 **Deviations from this plan** (each reported, for Batt):
@@ -75,6 +75,8 @@ the deploy steps are at the end of this section.
    generated ones at typecheck (`lib/flow/check.ts`).
 7. **The rate limit** (20 a minute) covers lint, simulate and the Python view together; the editor
    lints 2.5 s after the last change.
+   ➡️ SUPERSEDED 2026-11-09 (flows-studio.md): POST /flows/python has its own budget of 120 a
+   minute (the studio's Python pane refreshes after each edit); lint and simulate keep the 20.
 8. **Layout** (node positions) is not stored: it is not in the IR, so not in the hash or the export.
 
 **Acceptance (section 7):**
