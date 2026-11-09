@@ -1533,6 +1533,32 @@ most kills per hour. Plan (section 4AL, written before its pilots):
   **deaths** 0. Reported: `walk_pick_skip`, `walk_pick_fallback`, stalls.
 - **Decisions:** every bar passes -> `--walk-pick` joins the base.
 
+### 4AQ. Pilot p37 pre-registration: --kill-gap again on the new base -- kills seen from our damage, loot only after them (written BEFORE its run, 2026-11-09 12:08 ICT)
+
+- **Why (Batt, 2026-11-09 ~12:0x, two clips from p36):** "while walking it scans for dropped
+  items although it did not fight; scan only after a kill -- if no exp line, use the damage: no
+  damage of ours in the last 5 s, no scan" and "after the kill and the drop the scan shows the
+  hand, but the bot does not pick the item up". The packets: **at Base 99 the bot has picked up
+  almost nothing** -- p28-p36 0-2 pickups for 18-46 floor items a run; every loot step planned 0
+  hovers (the loot list is built from exp-line kills, and Base 99 shows no exp line). The clip at
+  11:56 was the DEFEND scan (a Cruiser hitting her, its box hidden by her sprite), not a loot scan.
+  With `--kill-gap` (kills inferred from our damage lines) the loot list fills and the loot step
+  picks: p24 9 of 10 floor items, p26 10 of 16. p26's E1 failure (74.4 / h) ran WITHOUT
+  `--reach-check` (208.7 s stuck, the night's worst); the base now has reach-check, the far
+  mechanism, explore and walk-pick.
+- **The one change against the base (p16's flags + `--reach-check` + `--far-single --far-approach`
+  + `--explore` + `--walk-pick`):** `--kill-gap` (9.13c: after 5 of our damage lines on the lock,
+  none for 1.5 s = the kill -> the loot list at that cell, the quiet-kill end, the loot step).
+  Batt's 5-s rule holds by construction (the inference fires 1.5 s after our last hit).
+- **The run:** the base command + `--kill-gap`, label `xmas02-p37`, 25 min.
+- **Bars:** **L1** pickups >= 50 % of the floor items that appeared (`fight_time.py` L1; base 0 %);
+  **K1** after-the-kill p50 <= 3.0 s; **K3** inferred kills real >= 70 %; **E1** kills >= 80 / h;
+  the base's own bars: **U1** stuck <= 30 s, **W1** unsent walk clicks <= 1.5 %, **D1** p95 <=
+  35 ms, **R1** own-body class D <= 1, **E3** hard bars pass, 0 dead-end / stuck / idle Fly Wings,
+  **deaths** 0. Reported: L2 (hovering loot steps with no death of ours in the 10 s before; p26 13 of
+  23), items per hour, the loot time, kills per monster seen.
+- **Decisions:** every bar passes -> `--kill-gap` joins the base.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
