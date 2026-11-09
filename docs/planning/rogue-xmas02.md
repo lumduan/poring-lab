@@ -1796,6 +1796,30 @@ Batt's answers (quoted, then in English):
 - **Decisions:** every bar passes -> `--boss-walk` joins the base (`--stage-mob` never does). B1a
   cannot be judged (the staged dogs never reach us) -> the trial is repeated, nothing decided.
 
+### 4BA. --garm-fly (9.19) pre-registration: a Fly Wing when a Garm Baby is SEEN (written BEFORE its model exists, 2026-11-09 ~22:5x ICT; Batt: "fly wing when see garm baby i[mmediately]", then "Go ahead with (c), including the immune spawns")
+
+- **Why:** the boss guard flies only on a Battle Log line naming a Garm Baby, i.e. after contact
+  (p43: the dogs' 29 misses wrote no line; the first named line came 1.7 s in, from our own hit).
+  The detector learns a Garm Baby class (xmas02-detector.md Amendment M; training since 22:14).
+- **The change:** `--garm-fly` (9.19; record `"garm_fly": [["garm_baby"], 1.5, "9.19"]`): a box of an
+  ALARM class (garm_baby) in a detection <= 1.5 s old takes the boss guard's Fly Wing at once (the
+  same path: BOSS_AVOID_S, no strike on it; the box thread never offers it as a target). With the
+  deployed model (no such class) it is inert.
+- **Only if** Amendment M's held-out score passes (M7's bars) and the model is deployed (MAP_MODELS
+  xmas_dun02 -> the gb model, its four species collapsed to "monster", garm_baby kept).
+- **G0 (a safe positive case first, the Rogue IMMUNE; Batt's immune-spawn OK):** a 3-min run with
+  `--garm-fly --stage-mob 1515:1` while immune: a `garm_seen` and a Fly Wing within 5 s of the
+  dog's appearance (packets: entity_appear job 1515). Immune, so no damage is possible.
+- **The pilot (p44 or the next number):** the base + `--garm-fly`, 25 min, immunity OFF, the MVP dead
+  by the schedule, NO staged mob. Bars:
+  - **G1:** every lone Garm Baby that comes within 12 cells of us (packets) gets a Fly Wing before
+    any act of it on us (a hit or a miss); reported as n / n, judged only if n >= 1;
+  - **G2:** false alarms (`garm_seen` with no live Garm Baby within 15 cells, packets) <= 1 a run;
+  - the base's bars (Amendment O: W1 pooled <= 2.0 %, L1, L3, L4, K1, K3, E1, U1, D1, R1 pooled,
+    Q1, E3, deaths 0).
+- **Decisions:** G0 passes and every pilot bar passes -> `--garm-fly` joins the base; G2 fails ->
+  off (the model's precision on hunting frames is not good enough).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
