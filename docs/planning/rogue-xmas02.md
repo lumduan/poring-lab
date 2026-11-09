@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 10:3x: E2 PASSED -- --explore joined the base (154.7 vs 113.95 kills/h). Running p34 (--walk-pick, 4AM); then p35 (--explore-cover, 4AO) after the 11:0x MVP check."
+next_action: "2026-11-09 12:0x: the base = p16 + reach-check + far mechanism + explore + walk-pick (p36 passed every bar). Next (Batt): --kill-gap with the quiet-kill 3-s block lifted; the explore start point; the boss recognizer round 2 (stormy-knight-recognizer.md 6)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2971,3 +2971,25 @@ and 11:08 (alive at 178, 235); immunity OFF at 11:09:13 and ON at 11:35:44; the 
   3,239 cells visited, 15 refused.
 - **Items (snatched):** Scell 13, Zargon 11, Piece of Cake 5, Well-baked Cookie 4, Red Herb 2,
   Manacles 2, Candy 1, Candy Cane 1, Pearl 1.
+
+**Pilot p36 (4AP; 11:37:32-12:03:19, 25 min; immunity OFF at 11:37:13 and ON at 12:03:32; the base
+(+ `--explore`) + `--walk-pick` 9.15b). VERDICT: W1, W2, E1, U1, D1, R1, E3, deaths ALL PASS.
+`--walk-pick` (9.15b) JOINS THE BASE (4AP's rule).**
+
+| | p34 (9.15) | **p36 (9.15b)** | bar |
+|---|---|---|---|
+| W1 clicked walks never sent | 0 / 228 | **4 / 327 (1.22 %)** | <= 1.5 %: PASS |
+| W2 `stuck` / `dead_end` / `idle` Fly Wings | 0 / 0 / 1 | **0 / 0 / 0** (no Fly Wing) | PASS |
+| E1 kills | 59 (141.5 / h) | **56 (134.3 / h)** | >= 80 / h: PASS |
+| U1 stuck time | 0 s | **8.8 s** | <= 30 s: PASS |
+| R1 own-body class D | 2 | **1** (3 own-body strikes) | <= 1: PASS |
+| D1 / E3 / deaths | | **20.5 / 21.9 ms / pass, 1 stall / 0; lowest HP 86.7 %** | PASS |
+| `walk_pick_skip`; `walk_pick_fallback` | 594; - | **43; 1** | reported |
+
+- 14 regions targeted, 9 reached, 4 timed out; the knowledge: 7 runs. Monsters seen 56 (22.4 / 10
+  min), kills per seen 1.0.
+- **Items (snatched):** Scell 11, Zargon 9, Piece of Cake 4, Red Herb 1, Candy 1, Well-baked Cookie
+  1, Manacles 1.
+
+**The base from 2026-11-09 12:0x:** p16's flags + `--reach-check` (9.12b) + `--far-single
+--far-approach` + `--explore` (9.14) + `--walk-pick` (9.15b).
