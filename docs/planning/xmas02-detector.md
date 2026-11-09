@@ -1242,7 +1242,9 @@ inputs in /dev/shm (RSW + 37 RSMs, sprites, kb-sprites, the GAT); `map_labels.py
 `classes-none.json` and `check --c1-rule round2` per session, exactly as TRAIN was labelled (11-06
 `run-train.sh`). The tool commit is `a6abad45`: this amendment in the MapSpec (gw3's NAME refused like
 TEST by labels / pack / the cache; Garm Baby in T2's tier whatever its pool; the Goblin keeps D3's
->= 30), with tests. Nothing in the label rule changed.
+>= 30), with tests. Nothing in the label rule changed. (gw1's `labels` run started at 21:10 on
+9e4a0e70's code; a6abad45 landed during it, and its file records `a6abad45`, the HEAD when it was
+written: the label code is the same in both. gw1's C1, gw2 and both packs ran on a6abad45.)
 
 **Positive case first:** xw3's second session (`20261106T160700-rdp-xmas02-xw3`, NAS) re-labelled on
 bot-server gives **678 / 678 frames identical** to its 11-06 label file (counts and drops identical;
@@ -1268,7 +1270,9 @@ lab-rathena); 16 stands each of `lattice-train.json` (`73053842...`, Amendment A
 | C2 (median abs dx, dy) | PASS x 5; Garm Baby n 213, 1 / 1 px | PASS x 5; Garm Baby n 218, 1 / 1 px |
 | label file / own-C1 sha256 | `412ed242...` / `cf4b0c86...` | `f152ede6...` / `2e007e28...` |
 
-**What looked wrong, and what was checked (packets, label files and the C1 rows only; no frame opened):**
+**What looked wrong, and what was checked (packets, label files and the C1 rows only; no frame opened;
+the check script, its outputs and the positive case's label file: NAS
+`scratch-archive/2026-11-09/garm-m1/`, sha256-checked):**
 1. **The bad C1 rows are Garm Baby FACING misses, not position misses.** Among the Garm Baby rows clear
    of models and terrain, by the gap between fix 2's predicted heading (`after_move`) and the best of
    the 8 headings at the predicted spot: 2-3 steps, bad in 21 of 23 (gw1) and 14 of 16 (gw2); 0-1
