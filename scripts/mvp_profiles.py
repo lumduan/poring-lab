@@ -110,6 +110,9 @@ STORMY = BossProfile(
     # rim rule (236, 25) takes xmas_dun02's green puzzle floor (a DEV gap frame scores 0.165); the
     # saturated rim G >= 248, G - R >= 40, G - B >= 40 keeps every DEV negative <= 0.042 (hunt
     # 0.019). The threshold = that max + 0.015 (Amendment B's margin), rounded up: 0.06.
+    # These stay ROUND 1's on purpose (round 1's fit command must reproduce stormy-v1). Round 2's
+    # recipe is on its fit command line and in its model (stormy-knight-recognizer.md 9-10:
+    # stormy-v2 = --round 2 --aura off, the aura only a detector feature; DEV filter FAILED).
     aura_thr=0.06, ring=(24.0, 10.0, 14.0, 4.0), ring_cell=3, ring_dy=8.0, aura_rule=(248, 40),
     plan="docs/planning/stormy-knight-recognizer.md",
 )  # fmt: skip
