@@ -319,7 +319,7 @@ def cmd_measure(a: argparse.Namespace) -> dict[str, Any]:
 
 
 # --- ROUND 3 (gef10-round3.md): freeze, labels, G2 ----------------------------------------------
-LAYOUT_TEMPLATES = Path("/home/batt/docker/poring-lab/data/ui_anchors/layout")
+LAYOUT_TEMPLATES = Path.home() / "docker" / "poring-lab" / "data" / "ui_anchors" / "layout"
 R_LABEL = 6  # 8: a label's fit, +-px around the ANCHORED prediction
 G2_BAR_PX = 3.0  # 8 / round3 4.3: the median |dx|, |dy| at the frozen anchor, on TEST3
 MIN_FIT_FLOOR_ITEMS = 4  # round3 4.1: the clean samples come from >= 4 floor items
@@ -695,8 +695,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--offset-ms", type=float, required=True)
     p.add_argument("--offset-source", required=True)
     p.add_argument("--workers", type=int, default=1)
-    p.add_argument("--layout-templates", type=Path,
-                   default=Path("/home/batt/docker/poring-lab/data/ui_anchors/layout"))  # fmt: skip
+    p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
     p.add_argument("--rows", type=Path, default=None)
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("freeze")

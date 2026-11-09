@@ -7,6 +7,7 @@ data: the sprite projection is stubbed)."""
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -64,7 +65,7 @@ def test_orclord_profile_is_the_orc_lord_study_unchanged() -> None:
                           "ring_dy": 8.0, "aura_rule": (236, 25)}  # fmt: skip
 
 
-def test_stormy_profile_and_its_placeholders() -> None:
+def test_stormy_profile_and_its_frozen_recipe() -> None:
     p = mp.get("stormy")
     assert p is mp.STORMY
     assert (p.boss, p.summons, p.party) == (1251, (1515, 1607), (1251, 1515, 1607))
@@ -76,15 +77,19 @@ def test_stormy_profile_and_its_placeholders() -> None:
     assert p.dev_cells == frozenset(range(8)) and p.held_cells == frozenset(range(8, 16))
     assert p.lone == (1515,)  # Garm Baby: also its own 30-min spawn (the caveat)
     assert str(p.sprites).endswith("2026-11-05/x1/sprites/data/sprite/몬스터")
-    # the aura recipe is NOT fitted: every field a placeholder, and the recipe refuses
-    assert (p.aura_thr, p.ring, p.ring_cell, p.ring_dy, p.aura_rule) == (None,) * 5
+    # the aura recipe FROZEN by B3 part 1 on DEV (stormy-knight-recognizer.md 5)
+    assert p.recipe() == {"aura_thr": 0.06, "ring": (24.0, 10.0, 14.0, 4.0), "ring_cell": 3,
+                          "ring_dy": 8.0, "aura_rule": (248, 40)}  # fmt: skip
+    # a placeholder (None) still refuses, naming every one
+    bare = dataclasses.replace(p, aura_thr=None, ring=None, ring_cell=None, ring_dy=None,
+                               aura_rule=None)  # fmt: skip
     every = "aura_thr, ring, ring_cell, ring_dy, aura_rule not fitted yet"
     with pytest.raises(ValueError, match=every):
-        p.recipe()
+        bare.recipe()
     with pytest.raises(ValueError, match="ring_dy"):
-        p.recipe(aura_thr=0.1, ring=(30.0, 16.0, 19.0, 9.0), ring_cell=3, aura_rule=(236, 25))
-    got = p.recipe(aura_thr=0.1, ring=(30.0, 16.0, 19.0, 9.0), ring_cell=3, ring_dy=9.0,
-                   aura_rule=(236, 25), nose=1)  # fmt: skip
+        bare.recipe(aura_thr=0.1, ring=(30.0, 16.0, 19.0, 9.0), ring_cell=3, aura_rule=(236, 25))
+    got = bare.recipe(aura_thr=0.1, ring=(30.0, 16.0, 19.0, 9.0), ring_cell=3, ring_dy=9.0,
+                      aura_rule=(236, 25), nose=1)  # fmt: skip
     assert got == {"aura_thr": 0.1, "ring": (30.0, 16.0, 19.0, 9.0), "ring_cell": 3,
                    "ring_dy": 9.0, "aura_rule": (236, 25)}  # fmt: skip
     with pytest.raises(KeyError, match="orclord, stormy"):
@@ -192,8 +197,10 @@ def test_fit_recipe_defaults_overrides_and_placeholders() -> None:
     a = ap.parse_args(ORC_LINES["fit"])
     assert st.fit_recipe(a, mp.ORCLORD) == mp.ORCLORD.recipe()
     b = ap.parse_args([*ORC_LINES["fit"], "--boss", "stormy"])
-    with pytest.raises(SystemExit, match="stormy: aura_thr, ring, ring_cell, ring_dy, aura_rule"):
-        st.fit_recipe(b, mp.STORMY)
+    assert st.fit_recipe(b, mp.STORMY) == mp.STORMY.recipe()  # frozen by B3 part 1
+    bare = dataclasses.replace(mp.STORMY, ring=None, aura_rule=None)
+    with pytest.raises(SystemExit, match="stormy: ring, aura_rule not fitted yet"):
+        st.fit_recipe(b, bare)
     c = ap.parse_args([*ORC_LINES["fit"], "--boss", "stormy", "--aura-thr", "0.1", "--ring", "30",
                        "16", "19", "9", "--ring-cell", "3", "--ring-dy", "9",
                        "--aura-rule", "220", "10"])  # fmt: skip
@@ -511,3 +518,36 @@ def test_a_truth_without_the_maps_gat_refuses(
         st.truth(tmp_path / "no-session", "hunt", prof=mp.STORMY, **kw)
     with pytest.raises(SystemExit, match="prt_fild08.gat: the map's GAT"):
         st.truth(tmp_path / "no-session", "hunt", map_name="prt_fild08", **kw)
+
+
+# --- the stormy rim rule (B3 part 1, DEV-measured colours) ----------------------------------------
+
+KNIGHT_RIM = (
+    200,
+    252,
+    200,
+)  # BGR: the Knight's mint-white rim (DEV: R ~170-210, G 252, B ~170-200)
+XMAS_FLOOR = (
+    144,
+    248,
+    216,
+)  # BGR: xmas_dun02's green puzzle floor (DEV: R ~200-225, G 236-252, B ~140)
+
+
+def test_the_stormy_rule_takes_the_knights_rim_and_not_the_green_floor() -> None:
+    """The colours measured on DEV (stormy-knight-recognizer.md 5): the Orc Lord's rule takes the
+    floor (its DEV gap frames scored 0.165), the frozen stormy rule does not."""
+    orc, knight = mw.aura_lut(mp.ORCLORD.aura_rule), mw.aura_lut(mp.STORMY.aura_rule)
+    idx = mw.lut_index(np.array([[KNIGHT_RIM, XMAS_FLOOR]], np.uint8))
+    assert orc[idx].tolist() == [[1.0, 1.0]]
+    assert knight[idx].tolist() == [[1.0, 0.0]]
+    m = _model(profile="stormy", aura_rule=mp.STORMY.aura_rule, ring=mp.STORMY.ring,
+               ring_cell=mp.STORMY.ring_cell, ring_dy=mp.STORMY.ring_dy,
+               aura_thr=mp.STORMY.aura_thr)  # fmt: skip
+    f = _frame(m, foot=(900, 500), colour=XMAS_FLOOR)
+    f[mw.TITLE_BOX[3] :, :] = XMAS_FLOOR  # a whole green floor below the title bar
+    v = mw.decide(f, m)
+    assert v["seen"] is False and v["reason"] is None and v["aura"] == 0.0
+    g = _frame(m, foot=(900, 500), colour=KNIGHT_RIM)
+    v = mw.decide(g, m)
+    assert v["seen"] is True and v["cue"] == "aura"

@@ -47,7 +47,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path("/home/batt/docker/poring-lab")  # read-only fallbacks: data/, the generated map cache
+# read-only fallbacks: data/, the generated map cache (the main checkout, its owner's home)
+MAIN = Path.home() / "docker" / "poring-lab"
 DATASETS = Path("/mnt/poring-lab-datasets")
 OUT = Path("/dev/shm/poring-lab-tmp/item-r1")
 NS = 10**9

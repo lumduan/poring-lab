@@ -84,7 +84,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 Box = tuple[float, float, float, float]
-MAIN = Path("/home/batt/docker/poring-lab")
+MAIN = Path.home() / "docker" / "poring-lab"  # the main checkout (its owner's home)
 # the species scored one by one, per map (everything else is "other"); X2's four common species
 # (rogue-xmas02.md 4A; mob ids from the KB's classes.json for xmas_dun02, xmas02-prep.md 6)
 SPECIES_BY_MAP: dict[str, dict[int, str]] = {
