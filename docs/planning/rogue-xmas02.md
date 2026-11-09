@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 12:0x: the base = p16 + reach-check + far mechanism + explore + walk-pick (p36 passed every bar). Next (Batt): --kill-gap with the quiet-kill 3-s block lifted; the explore start point; the boss recognizer round 2 (stormy-knight-recognizer.md 6)."
+next_action: "2026-11-09 12:4x: the base = p16 + reach-check + far mechanism + explore + walk-pick. --kill-gap (p37): loot works (52 % of floor items) but K3 68.9 % / W1 3.6 % fail; next: confirm an inferred kill by the target box vanishing (K3 + Batt's loot-only-after-kill), then re-test."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3019,3 +3019,29 @@ and 11:08 (alive at 178, 235); immunity OFF at 11:09:13 and ON at 11:35:44; the 
 
 **The base from 2026-11-09 12:0x:** p16's flags + `--reach-check` (9.12b) + `--far-single
 --far-approach` + `--explore` (9.14) + `--walk-pick` (9.15b).
+
+**Pilot p37 (4AQ; 12:20:00-12:45:49, 25 min; the MVP killed 12:19:14 after polls at 12:10 / 12:14
+(dead) and 12:19 (alive at 119, 106); the bag cleared 12:14-12:16 (924 -> 520); immunity OFF at
+12:19:38 and ON at 12:46:04; the base + `--kill-gap` 9.13c). VERDICT: L1, K1, E1, U1, D1, R1, E3,
+deaths PASS; K3 FAILS (68.9 %), W1 FAILS (3.6 %). `--kill-gap` stays OFF (4AQ's rule).**
+
+| | base runs today | p26 (9.13c, no reach-check) | **p37 (9.13c, the new base)** | bar |
+|---|---|---|---|---|
+| L1 floor items picked up | p28-p36: 0-2 of 18-46 (~0 %) | 10 / 16 | **12 / 23 (52.2 %)** | >= 50 %: PASS |
+| K1 after the kill p50 | 6.47-6.56 s | 2.06 s | **1.99 s** (111.2 s in all) | <= 3.0 s: PASS |
+| K3 inferred kills real | - | 71.0 % | **68.9 % (42 / 61)** | >= 70 %: FAIL |
+| E1 kills | 134.3-160.8 / h (explore) | 74.4 / h | **63 (151.2 / h)** | >= 80 / h: PASS |
+| W1 clicked walks never sent | p36 1.22 % | - | **11 / 302 (3.6 %)** | <= 1.5 %: FAIL |
+| U1 / D1 / R1 / E3 / deaths | | | **15.2 s / 22.2 ms / 1 / pass, 0 Fly Wings, 3 stalls / 0; lowest HP 74.6 %** | PASS |
+| L2 hovering loot steps with no death of ours in 10 s before | - | 13 / 23 | **10 / 33** | reported |
+| the loot steps' time; kills per monster seen | | 70 s | **104.6 s; 1.0** | reported |
+
+- **Batt's two clips, answered by this run:** the loot works once kills are seen from our damage
+  (12 of 23 floor items, from ~0); loot scans now follow inferred kills -- but 10 of 33 still had no
+  real kill behind them: the false kills (a target that took >= 5 hits and walked off). The
+  11:56 clip itself was the defend scan (a hidden Cruiser), not a loot scan.
+- **The next step (not run):** confirm an inferred kill from pixels -- the target's box gone from
+  the box watcher at the lock's cell -- before the loot step (K3 and L2 together). W1's rise (3.6 %
+  vs 1.22 % in p36) is unexplained yet.
+- **Items (snatched + picked):** Scell 13, Zargon 9, Red Herb 5, Piece of Cake 5, Well-baked Cookie
+  4, Candy Cane 3, Manacles 3, Candy 2.
