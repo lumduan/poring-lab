@@ -1820,6 +1820,18 @@ Batt's answers (quoted, then in English):
 - **Decisions:** G0 passes and every pilot bar passes -> `--garm-fly` joins the base; G2 fails ->
   off (the model's precision on hunting frames is not good enough).
 
+### 4BB. G0b (written AFTER G0's first run, BEFORE its second, 2026-11-10 ~06:5x ICT): G0's measure fixed for a staged spawn
+
+- **G0 as run (06:54:28-06:58, `xmas02-g0`, the Rogue immune, the deployed xmas02-gb):** the staged
+  Garm Baby appeared (packets, `gm_command` true) 4.61 s BEFORE run_start -- the setup's last
+  line, before the runner watches; the runner's `garm_seen` (garm_baby, score 0.968) came 1.12 s
+  and its Fly Wing 1.33 s after run_start, i.e. 5.94 s after the appearance. **By 4BA's letter
+  (<= 5 s from the appearance) G0 FAILS by 0.94 s; 4.61 s of it were the setup.** 0 acts on us.
+- **The flaw is the measure, not the mechanism:** with `--stage-mob` the dog always appears before
+  the runner exists. **G0b: the same command once more; PASS = a `garm_seen` and a Fly Wing within
+  5 s of max(the dog's first appearance, run_start)**, 0 acts of the dog on us. Nothing else
+  changes; G0's own verdict stays FAIL as written.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
