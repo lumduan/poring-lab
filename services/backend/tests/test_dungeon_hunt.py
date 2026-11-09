@@ -1641,3 +1641,28 @@ def test_boss_walk_walks_away_from_a_summon_and_flies_from_the_boss() -> None:
     assert 'setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")' in src
     # without a walk-away the Fly Wing path is the one it always was
     assert 'press("fly", "boss")' in src
+
+
+def test_garm_fly_takes_the_wing_on_a_fresh_alarm_box_only() -> None:
+    """dungeon@9.19 (rogue-xmas02.md 4BA; Batt: fly wing when a Garm Baby is SEEN): a box of an
+    alarm class in a detection <= 1.5 s old takes the boss guard's Fly Wing; a model without the
+    class gives no alarm box, so the flag is inert. Off by default."""
+    import unit_detector as ud
+
+    assert dh.ALARM_CLASSES == ("garm_baby",) and dh.GARM_FRESH_S == 1.5
+    dog = ud.Box(100.0, 200.0, 160.0, 260.0, 0.81, "garm_baby")
+    assert dh.alarm_seen((10.0, [dog]), 11.0) is dog
+    assert dh.alarm_seen((10.0, [dog]), 11.6) is None  # stale
+    assert dh.alarm_seen((10.0, []), 10.1) is None  # no alarm box
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "garm_fly" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, garm_fly=True))
+    assert rec["garm_fly"] == [["garm_baby"], 1.5, "9.19"]
+    src = Path(dh.__file__).read_text()
+    assert "alarm = [b for b in raw if b.cls in ALARM_CLASSES]  # 9.19: never struck" in src
+    assert 'got = [b for b in raw if b.cls == "monster"]' in src  # only monsters are struck
+    assert 'boss_hit = "Garm Baby"  # the boss guard\'s own Fly Wing path below' in src
+    # the deployed model collapses only the four species: no garm_baby class -> no alarm
+    assert "garm_baby" not in ud.MAP_MODELS["xmas_dun02"].collapse

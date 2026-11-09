@@ -320,6 +320,13 @@ BOSS_AVOID_S = 30.0
 # BOSS_WALK_WINDOW_S, or no cell, takes today's Fly Wing. The boss ITSELF always takes the Fly Wing.
 BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S = 14, 8, 2.5
 BOSS_WALK_MAX, BOSS_WALK_WINDOW_S = 2, 60.0
+# --garm-fly (dungeon@9.19, rogue-xmas02.md 4BA; Batt 2026-11-09 ~20:4x: "fly wing when see garm
+# baby i[mmediately]"): the map's detector learns a Garm Baby class (xmas02-detector.md Amendment
+# M); a box of an ALARM class in a fresh detection (<= GARM_FRESH_S old) takes the boss guard's Fly
+# Wing at once -- before contact, where the Battle Log line came only after it. A model without
+# the class (the deployed one until M's evaluation passes) gives no alarm box: the flag is inert.
+ALARM_CLASSES = ("garm_baby",)
+GARM_FRESH_S = 1.5
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -1154,6 +1161,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
             "9.13d",
             LOOT_SETTLE_S,
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
+    if getattr(a, "garm_fly", False):  # dungeon@9.19 (rogue-xmas02.md 4BA)
+        out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19"]
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -1296,6 +1305,16 @@ def boss_spawn_names(map_name: str, spawns: Mapping[str, Any],
             if name:
                 out.add(str(name))
     return tuple(sorted(out))
+
+
+def alarm_seen(alarm: tuple[float, Sequence[Any]], now: float,
+               fresh_s: float = GARM_FRESH_S) -> Any | None:  # fmt: skip
+    """PURE (--garm-fly, 9.19): the first box of an alarm class in a detection at most ``fresh_s``
+    old (``alarm``: the box watcher's (grab time, alarm boxes)), else None."""
+    t, boxes = alarm
+    if not boxes or now - t > fresh_s:
+        return None
+    return boxes[0]
 
 
 def boss_walk_allowed(name: str, boss_only: Sequence[str], walks: Sequence[float], now: float,
@@ -1544,6 +1563,7 @@ class BoxWatch:
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.last: tuple[float, list[Any]] = (0.0, [])
+        self.alarm: tuple[float, list[Any]] = (0.0, [])  # 9.19: boxes of ALARM_CLASSES
         # dungeon@8.9 (--box-now): a detection on demand. kick() numbers the request; the loop's
         # next detection takes it (its grab starts after the kick) and records the number
         self.kick_ev = threading.Event()
@@ -1570,11 +1590,13 @@ class BoxWatch:
                 raw = self.det.detect(img, prefer=prefer or "gpu") if self.gpu else \
                     self.det.detect(img)  # fmt: skip
                 got = [b for b in raw if b.cls == "monster"]
+                alarm = [b for b in raw if b.cls in ALARM_CLASSES]  # 9.19: never struck
             except Exception:  # noqa: BLE001 -- a dead worker ends the watcher, not the run
                 return
             path = str(getattr(self.det, "last_path", "")) or "cpu"
             with self.cond:
                 self.last = (t, got)
+                self.alarm = (t, alarm)
                 self.meta = {"kick": seq, "t": t, "t_done": time.monotonic(), "path": path,
                              "ms": self.det.last_ms, "prefer": prefer,
                              "reason": getattr(self.det, "last_reason", None)}  # fmt: skip
@@ -3737,6 +3759,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 swing_now = swing_engages(tick, last_swing, swing_floor)  # 9.1b, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
+                if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
+                    seen_ = alarm_seen(boxes.alarm, tick)  # dungeon@9.19: a Garm Baby IN VIEW
+                    if seen_ is not None:
+                        ev({"kind": "garm_seen", "cls": seen_.cls,
+                            "score": round(float(seen_.score), 3),
+                            "box": [round(float(v_), 1) for v_ in
+                                    (seen_.x0, seen_.y0, seen_.x1, seen_.y1)],
+                            "age_s": round(tick - boxes.alarm[0], 2)})  # fmt: skip
+                        counts["garm_seen"] += 1
+                        boss_hit = "Garm Baby"  # the boss guard's own Fly Wing path below
                 if boss_hit is not None and tick < boss_grace_until:
                     counts["boss_walk_grace"] += 1  # 9.18: the dog's last hit as we walk off
                     boss_hit = None
@@ -4656,6 +4688,14 @@ def main() -> int:
         help="dungeon@9.15c (rogue-xmas02.md 4AU; OFF by default; with --walk-pick): when no "
         "path cell passes the pick check, the pickable one-click step nearest the goal instead "
         "of the plain target",
+    )
+    t.add_argument(
+        "--garm-fly",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.19 (rogue-xmas02.md 4BA; OFF by default; with the box detector): a box of "
+        "an alarm class (garm_baby, xmas02-detector.md Amendment M) in a fresh detection takes "
+        "the boss guard's Fly Wing at once; a model without the class gives no alarm",
     )
     t.add_argument(
         "--boss-walk",
