@@ -27,6 +27,11 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
   (target OUR_GID) in the 5 s before -- Q1 counts them (p38 / p39 / p40: 39 / 28 / 34) and how
   many found a sword; S1 = our damaging hits taken (``act`` on us with damage > 0) per 10 min of
   the run (p38 / p39 / p40: 11.2 / 10.8 / 11.2).
+- B1 / B2 (--boss-walk, rogue-xmas02.md 4AZ; committed before its trial was scored): each
+  ``boss_walk`` event BROKE CONTACT when no ``act`` on us (a hit OR a miss: the Rogue's FLEE makes
+  most of them misses, p40: 24 of 24) came from a summon (a gid whose ``entity_appear`` job is in
+  SUMMON_JOBS: Garm Baby 1515, Christmas Goblin 1607) in the 2.5 .. 10 s after it; the boss guard's
+  Fly Wings (``press`` fly, why ``boss``); the summons' acts on us and the damaging ones.
 By this definition (2026-11-09): p21 92 fights, 42 kill fights, after the kill p50 6.46 s (total
 276.8 s), no-kill fights 50 (434.1 s); p16 6.50 s (296.3 s), p19 6.53 s, p22 6.47 s.
 """
@@ -42,6 +47,7 @@ from pathlib import Path
 from typing import Any
 
 OUR_GID = 2000002  # the lab account's character id on the lab server (every pilot's Rogue)
+SUMMON_JOBS = (1515, 1607)  # xmas_dun02's Stormy Knight summons (Garm Baby, Christmas Goblin)
 DIED = 1  # entity_vanish reason: died
 
 
@@ -162,6 +168,26 @@ def quiet_scans(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, An
     return {"quiet_defend_scans": quiet, "quiet_defend_found": found, "hits_taken_per10": per10}
 
 
+def boss_walks(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, Any]],
+               our_gid: int = OUR_GID, jobs: Sequence[int] = SUMMON_JOBS,
+               after_s: tuple[float, float] = (2.5, 10.0)) -> dict[str, Any]:  # fmt: skip
+    """PURE: B1 (walk-aways that broke contact with the summons) and B2 (the guard's Fly Wings)."""
+    job = {int(p["gid"]): int(p.get("job") or 0) for p in packets
+           if p.get("type") == "entity_appear" and p.get("gid") is not None}  # fmt: skip
+    acts = [p for p in packets if p.get("type") == "act" and p.get("target_gid") == our_gid
+            and job.get(int(p.get("src_gid") or 0)) in jobs]  # fmt: skip
+    hits = sorted(int(p["t_mono_ns"]) for p in acts)
+    walks = [int(e["t_ns"]) for e in events if e.get("kind") == "boss_walk"]
+    broke = sum(not any(t + after_s[0] * 1e9 < h <= t + after_s[1] * 1e9 for h in hits)
+                for t in walks)  # fmt: skip
+    flies = sum(1 for e in events if e.get("kind") == "press"
+                and e.get("what") == "fly" and e.get("why") == "boss")  # fmt: skip
+    return {"boss_walks": len(walks), "boss_walks_broke": broke, "boss_flies": flies,
+            "boss_guards": sum(1 for e in events if e.get("kind") == "boss_guard"),
+            "summon_acts": len(hits),
+            "summon_damaging": sum(int(p.get("damage") or 0) > 0 for p in acts)}  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -173,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({"session": a.session.name, **summary(fights(events), kills),
                       **hit_gap_match(events, kills),
                       **loot_summary(events, packets, kills), **loot_order(events),
-                      **quiet_scans(events, packets)}))  # fmt: skip
+                      **quiet_scans(events, packets), **boss_walks(events, packets)}))  # fmt: skip
     return 0
 
 

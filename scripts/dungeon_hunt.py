@@ -311,6 +311,15 @@ BOX_SCREEN_PX = 4000.0  # beyond any distance on the 1280 x 720 game region
 # starts with @killmonster2 (the MVP dead; it respawns 60-70 min later), so in a 30-min run this is
 # the backstop. The names come from the KB (boss_names: the map's boss spawns + their summons).
 BOSS_AVOID_S = 30.0
+# --boss-walk (dungeon@9.18, rogue-xmas02.md 4AZ; Batt 2026-11-09 ~19:4x: "flee, the dog hits hard
+# too; if you can walk away in another direction, walk"): a guard on one of the boss's SUMMONS
+# (a Garm Baby: a regular spawn here too, walk 450 ms a cell, chase 12; the Rogue walks ~150) walks
+# away instead of a Fly Wing -- ONE click to the pickable, one-click-reachable cell in view that is
+# farthest from us, at least BOSS_WALK_MIN cells -- then no new walk click and no boss line for
+# BOSS_WALK_GRACE_S. A boss line after that, or more than BOSS_WALK_MAX walk-aways in
+# BOSS_WALK_WINDOW_S, or no cell, takes today's Fly Wing. The boss ITSELF always takes the Fly Wing.
+BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S = 14, 8, 2.5
+BOSS_WALK_MAX, BOSS_WALK_WINDOW_S = 2, 60.0
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -1145,6 +1154,11 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
             "9.13d",
             LOOT_SETTLE_S,
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
+    if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
+        out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
+                            BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
+    if getattr(a, "stage_mob", None):  # 9.18's trial: a staged encounter (setup only)
+        out["stage_mob"] = str(a.stage_mob)
     if getattr(a, "quiet_scan", False):  # dungeon@9.17 (rogue-xmas02.md 4AW)
         out["quiet_scan"] = [QUIET_SCAN_S, "9.17"]
     if getattr(a, "loot_first", False):  # dungeon@9.16 (rogue-xmas02.md 4AT)
@@ -1268,6 +1282,44 @@ def boss_names(map_name: str, spawns: Mapping[str, Any], mobs: Mapping[str, Any]
             if mobs.get(i, {}).get("name"):
                 out.add(str(mobs[i]["name"]))
     return tuple(sorted(out))
+
+
+def boss_spawn_names(map_name: str, spawns: Mapping[str, Any],
+                     mobs: Mapping[str, Any]) -> tuple[str, ...]:  # fmt: skip
+    """PURE (--boss-walk, 9.18): the names of the map's BOSS spawns only (the spawn's name and the
+    mob table's), without their summons -- the boss itself always takes the Fly Wing."""
+    out: set[str] = set()
+    for e in spawns.get(map_name) or []:
+        if e.get("boss"):
+            out.add(str(e.get("name")))
+            name = (mobs.get(str(e.get("id"))) or {}).get("name")
+            if name:
+                out.add(str(name))
+    return tuple(sorted(out))
+
+
+def boss_walk_allowed(name: str, boss_only: Sequence[str], walks: Sequence[float], now: float,
+                      max_n: int = BOSS_WALK_MAX,
+                      window_s: float = BOSS_WALK_WINDOW_S) -> bool:  # fmt: skip
+    """PURE (--boss-walk, 9.18): a summon (not the boss itself) with fewer than ``max_n`` walk-aways
+    in the last ``window_s``."""
+    return name not in boss_only and sum(1 for t in walks if now - t < window_s) < max_n
+
+
+def walk_away_target(here: Cell, fits: Callable[[Cell], bool], reach: Callable[[Cell], bool],
+                     radius: int = BOSS_WALK_R,
+                     min_d: int = BOSS_WALK_MIN) -> Cell | None:  # fmt: skip
+    """PURE (--boss-walk, 9.18): the cell within ``radius`` (Chebyshev) of ``here``, at least
+    ``min_d`` away, that ``fits`` (in view, off the UI and zones, the client's pick near it) and
+    ``reach`` (one click the server answers), FARTHEST from us first (ties: the smaller cell, a
+    fixed order); None when there is none."""
+    cands = [(max(abs(dx), abs(dy)), (here[0] + dx, here[1] + dy))
+             for dy in range(-radius, radius + 1) for dx in range(-radius, radius + 1)
+             if max(abs(dx), abs(dy)) >= min_d]  # fmt: skip
+    for _d, c in sorted(cands, key=lambda dc: (-dc[0], dc[1])):
+        if fits(c) and reach(c):
+            return c
+    return None
 
 
 def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]) -> str | None:
@@ -1967,6 +2019,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         map_species = tuple(sorted({str(e.get("name")) for e in sp_doc.get(map_, [])
                                     if str(e.get("name")) not in bosses}))  # fmt: skip
     boss_until = -1e9
+    boss_only: tuple[str, ...] = ()  # dungeon@9.18: the boss itself (no walk-away)
+    if bosses:
+        boss_only = boss_spawn_names(map_, sp_doc, json.loads((kb_b / "mobs.json").read_text()))
     reach_grid: Any = None  # dungeon@9.12: the server's walkability for --reach-check
     if getattr(a, "reach_check", False):
         from poring_dataset import walkable as wk_r
@@ -1985,6 +2040,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             step_grid = wk_s.server_grid(map_)
         except LookupError as e:  # walkability unknown -> refuse, never guess
             raise SystemExit(f"dungeon@9.15c refused: --walk-pick-step: {e}") from None
+    walk_grid: Any = None  # dungeon@9.18: the server's walkability for --boss-walk
+    if getattr(a, "boss_walk", False):
+        if not getattr(a, "engage_screen", False):
+            raise SystemExit("dungeon@9.18 refused: --boss-walk goes with --engage-screen")
+        walk_grid = reach_grid if reach_grid is not None else step_grid
+        if walk_grid is None:
+            from poring_dataset import walkable as wk_w
+
+            try:
+                walk_grid = wk_w.server_grid(map_)
+            except LookupError as e:  # walkability unknown -> refuse, never guess
+                raise SystemExit(f"dungeon@9.18 refused: --boss-walk: {e}") from None
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
@@ -2264,6 +2331,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         setup.append(f"@warp {map_} {start[0]} {start[1]}")
         if a.clear_map:  # dungeon@8, Amendment A4: the experimenter's step, never the bot's
             setup.append("@killmonster2")
+        if getattr(a, "stage_mob", None):  # 9.18's TRIAL only: a staged encounter at the start
+            mob_id, _, n_mob = str(a.stage_mob).partition(":")
+            setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")
         for cmd in setup:
             setup_line(cmd)
         bench.close_chat(agent_raw, screen)
@@ -2325,6 +2395,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
         loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
         quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
+        boss_walk_on = getattr(a, "boss_walk", False) and bool(bosses)  # dungeon@9.18
+        boss_walks: deque[float] = deque(maxlen=16)  # 9.18: the walk-aways' ticks
+        boss_grace_until = -1e9  # 9.18: boss lines read while walking away are the dog's last
         fight_t0 = -1e9  # 9.16: when the current fight began (the engage below)
         ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
         ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
@@ -3664,10 +3737,53 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 swing_now = swing_engages(tick, last_swing, swing_floor)  # 9.1b, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
+                if boss_hit is not None and tick < boss_grace_until:
+                    counts["boss_walk_grace"] += 1  # 9.18: the dog's last hit as we walk off
+                    boss_hit = None
                 if boss_hit is not None:  # --engage-screen's boss guard (Amendment J): fly away
                     ev({"kind": "boss_guard", "name": boss_hit, "fly": tick - fly_at > 2.0})
                     counts["boss_guard"] += 1
                     boss_until = tick + BOSS_AVOID_S
+                    wa_: Cell | None = None
+                    if boss_walk_on and here is not None and not sitting and boss_walk_allowed(
+                            boss_hit, boss_only, boss_walks, tick):  # fmt: skip
+                        # dungeon@9.18 (Batt): walk away from a summon when we can
+
+                        def wa_fits(c_: Cell, h: Cell = here) -> bool:
+                            hh, ww = okr.shape
+                            if not (0 <= c_[0] < ww and 0 <= c_[1] < hh) or not okr[c_[1], c_[0]]:
+                                return False
+                            if (
+                                carved[c_[1], c_[0]]
+                                or mz.segment_violates(h, c_, zones) is not None
+                            ):
+                                return False
+                            u_, v_ = project(h, [(c_[0] - h[0], c_[1] - h[1])])[0]
+                            if not in_view(u_, v_):
+                                return False
+                            return walk_pick_ok(picked_cell(camera, gat, h, (u_, v_)), c_, okr)
+
+                        def wa_reach(c_: Cell, h: Cell = here) -> bool:
+                            from poring_dataset import walk as wkp_w
+
+                            return bool(wkp_w.click_walk_ok(walk_grid, h[0], h[1], c_[0], c_[1]))
+
+                        wa_ = walk_away_target(here, wa_fits, wa_reach)
+                    if wa_ is not None and here is not None:
+                        u_w, v_w = project(here, [(wa_[0] - here[0], wa_[1] - here[1])])[0]
+                        click_at(u_w, v_w, "walk")
+                        boss_walks.append(tick)
+                        boss_grace_until = tick + BOSS_WALK_GRACE_S
+                        last_walk = tick + BOSS_WALK_GRACE_S  # no other walk click meanwhile
+                        counts["boss_walk"] += 1
+                        n_w = sum(1 for t in boss_walks if tick - t < BOSS_WALK_WINDOW_S)
+                        ev({"kind": "boss_walk", "name": boss_hit, "from": list(here),
+                            "to": list(wa_), "n_window": n_w})  # fmt: skip
+                        lock, goal_path = None, None
+                        loot_list, fight_ref = [], None
+                        mode = "search"
+                        box_fight.clear()
+                        continue
                     if tick - fly_at > 2.0:
                         if sitting:
                             press("stand", "boss")
@@ -4540,6 +4656,22 @@ def main() -> int:
         help="dungeon@9.15c (rogue-xmas02.md 4AU; OFF by default; with --walk-pick): when no "
         "path cell passes the pick check, the pickable one-click step nearest the goal instead "
         "of the plain target",
+    )
+    t.add_argument(
+        "--boss-walk",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.18 (rogue-xmas02.md 4AZ; OFF by default; with --engage-screen): the boss "
+        "guard WALKS AWAY from one of the boss's summons (one click, the farthest pickable "
+        "cell >= 8 away) instead of a Fly Wing; a new boss line after 2.5 s, a 3rd walk-away "
+        "in 60 s, no cell, or the boss itself -> the Fly Wing as before",
+    )
+    t.add_argument(
+        "--stage-mob",
+        default=None,
+        metavar="ID:N",
+        help="dungeon@9.18 TRIAL ONLY (rogue-xmas02.md 4AZ): the setup's last line spawns N of "
+        "mob ID at the start (@monster ID N), a staged encounter for a pre-registered trial",
     )
     t.add_argument(
         "--quiet-scan",

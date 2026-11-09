@@ -1602,3 +1602,42 @@ def test_quiet_scan_skips_the_ring_scan_without_damage_in_5_s() -> None:
     assert 'counts["quiet_scan_skip"] += 1' in src and 'counts["quiet_scan_skip_stall"] += 1' in src
     # without the flag both scans run exactly as before
     assert src.count('found = scan("defend", ring(1), "sword")') == 2
+
+
+def test_boss_walk_walks_away_from_a_summon_and_flies_from_the_boss() -> None:
+    """dungeon@9.18 (rogue-xmas02.md 4AZ; Batt: flee from the dog, walk away when you can): a guard
+    on a summon walks to the farthest pickable one-click cell >= 8 away; the boss itself, a 3rd
+    walk-away within 60 s or no cell keeps the Fly Wing. Off by default."""
+    spawns = {"m": [{"id": 1251, "name": "Stormy Knight", "boss": True},
+                    {"id": 1515, "name": "Garm Baby"},
+                    {"id": 1249, "name": "Myst Case"}]}  # fmt: skip
+    mobs = {"1251": {"name": "Stormy Knight"}, "1515": {"name": "Baby Hatii"}}
+    assert dh.boss_spawn_names("m", spawns, mobs) == ("Stormy Knight",)
+    assert dh.boss_walk_allowed("Garm Baby", ("Stormy Knight",), [], 100.0)
+    assert not dh.boss_walk_allowed("Stormy Knight", ("Stormy Knight",), [], 100.0)  # the boss
+    assert not dh.boss_walk_allowed(
+        "Garm Baby", ("Stormy Knight",), [70.0, 90.0], 100.0
+    )  # 2 in 60 s
+    assert dh.boss_walk_allowed("Garm Baby", ("Stormy Knight",), [30.0, 90.0], 100.0)  # one is old
+    here = (20, 20)
+    t = dh.walk_away_target(here, lambda c: True, lambda c: True)
+    assert t is not None and max(abs(t[0] - 20), abs(t[1] - 20)) == dh.BOSS_WALK_R  # the farthest
+    t2 = dh.walk_away_target(
+        here, lambda c: c[0] >= 20, lambda c: max(abs(c[0] - 20), abs(c[1] - 20)) <= 9
+    )
+    assert t2 is not None and t2[0] >= 20 and max(abs(t2[0] - 20), abs(t2[1] - 20)) == 9
+    assert dh.walk_away_target(here, lambda c: True, lambda c: False) is None  # no cell: the wing
+    assert dh.walk_away_target(here, lambda c: max(abs(c[0] - 20), abs(c[1] - 20)) < 8,
+                               lambda c: True) is None  # nothing at least 8 away  # fmt: skip
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "boss_walk" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, boss_walk=True, stage_mob="1515:2"))
+    assert rec["boss_walk"] == [14, 8, 2.5, 2, 60.0, "9.18"] and rec["stage_mob"] == "1515:2"
+    src = Path(dh.__file__).read_text()
+    assert '"dungeon@9.18 refused: --boss-walk goes with --engage-screen"' in src
+    assert "if boss_hit is not None and tick < boss_grace_until:" in src
+    assert 'setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")' in src
+    # without a walk-away the Fly Wing path is the one it always was
+    assert 'press("fly", "boss")' in src

@@ -109,3 +109,24 @@ def test_quiet_scans_counts_defend_scans_without_a_hit_before_and_hits_taken() -
     got = ft.quiet_scans(ev, pk)
     assert got["quiet_defend_scans"] == 1 and got["quiet_defend_found"] == 1  # the 2nd scan only
     assert got["hits_taken_per10"] == 1.0  # one damaging hit in 10 min
+
+
+def test_boss_walks_counts_walk_aways_that_broke_contact_and_the_wings() -> None:
+    """B1 / B2 (rogue-xmas02.md 4AZ): a walk-away broke contact when no summon hit us 2.5-10 s after
+    it; the guard's Fly Wings are the press events of fly with why boss."""
+    ev = [{"kind": "boss_guard", "t_ns": 10 * S}, {"kind": "boss_walk", "t_ns": 10 * S},
+          {"kind": "boss_guard", "t_ns": 40 * S}, {"kind": "boss_walk", "t_ns": 40 * S},
+          {"kind": "press", "what": "fly", "why": "boss", "t_ns": 46 * S},
+          {"kind": "press", "what": "fly", "why": "stuck", "t_ns": 90 * S}]  # fmt: skip
+    us = ft.OUR_GID
+    pk = [{"type": "entity_appear", "gid": 7, "job": 1515, "t_mono_ns": 9 * S},
+          {"type": "entity_appear", "gid": 8, "job": 1249, "t_mono_ns": 9 * S},
+          {"type": "act", "src_gid": 7, "target_gid": us, "damage": 300, "t_mono_ns": 11 * S},
+          {"type": "act", "src_gid": 7, "target_gid": us, "damage": 0, "t_mono_ns": 45 * S},
+          {"type": "act", "src_gid": 8, "target_gid": us, "damage": 90,
+           "t_mono_ns": 15 * S}]  # fmt: skip
+    got = ft.boss_walks(ev, pk)
+    # walk 1: the dog's hit at +1 s is inside the grace, the Myst Case is no summon -> broke
+    # walk 2: the dog attacked again at +5 s (a MISS counts: contact) -> not broken
+    assert got == {"boss_walks": 2, "boss_walks_broke": 1, "boss_flies": 1, "boss_guards": 2,
+                   "summon_acts": 2, "summon_damaging": 1}  # fmt: skip
