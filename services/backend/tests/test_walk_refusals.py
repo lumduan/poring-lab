@@ -36,3 +36,12 @@ def test_strike_requests_by_class_and_first_request() -> None:
     reqs = [(10 * S + S // 2, False), (20 * S - S // 2, True)]
     got = wr.strike_requests(ev, reqs, {10 * S: "D", 20 * S: "K", 30 * S: "D"})
     assert got == {"D:ignored": 1, "D:none": 1, "K:answered": 1}
+
+
+def test_unsent_walks_need_a_request_soon_after_the_click() -> None:
+    ev = [{"kind": "walk", "clicked": True, "t_ns": 10 * S},  # request at +0.5 s: sent
+          {"kind": "walk", "clicked": True, "t_ns": 20 * S},  # nothing within 1.2 s: unsent
+          {"kind": "walk", "clicked": False, "t_ns": 30 * S},  # not clicked: not counted
+          {"kind": "strike", "t_ns": 40 * S}]  # fmt: skip
+    got = wr.unsent_walks(ev, [10 * S + S // 2, 22 * S])
+    assert got == {"walk_clicks": 2, "unsent": 1, "unsent_share": 0.5}

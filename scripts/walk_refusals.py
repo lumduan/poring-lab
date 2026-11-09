@@ -9,6 +9,9 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
   ``self_move`` (the server moving us) arrives within 0.3 s of it, else IGNORED.
 - STUCK spans: runs of >= 3 consecutive ignored requests (no answered one between); each span's
   start (s into the run), length (first to last ignored request) and count; their total (U1).
+- W1 (rogue-xmas02.md 4AM, --walk-pick): every ``walk`` event with ``clicked`` true is SENT when a
+  ``self_move_request`` comes within -0.3 .. +1.2 s of the event, else UNSENT (the client dropped
+  the click); the unsent share. p28 / p29 / p30: 13 / 4 / 17 unsent (the analysis of 4AM).
 - With ``--lock`` (lock_study.py's output): each box strike's class by its first walk request
   within -0.6 .. +1.0 s of the click: ignored / answered / none (U2 = class D with an ignored one).
 p16-p21 by this definition (2026-11-09): stuck spans 133.9, 122.4, 110.3, 152.8, 132.9 s (p16,
@@ -76,6 +79,22 @@ def strike_requests(events: Sequence[dict[str, Any]], reqs: Sequence[tuple[int, 
     return dict(sorted(c.items()))
 
 
+def unsent_walks(events: Sequence[dict[str, Any]], req_times: Sequence[int]) -> dict[str, Any]:
+    """PURE: clicked walk events with no walk request within -0.3 .. +1.2 s (W1)."""
+    reqs = sorted(req_times)
+    n = unsent = 0
+    for e in events:
+        if e.get("kind") != "walk" or not e.get("clicked"):
+            continue
+        n += 1
+        t = int(e["t_ns"])
+        i = bisect.bisect_left(reqs, t - 300_000_000)
+        if not (i < len(reqs) and reqs[i] - t <= 1_200_000_000):
+            unsent += 1
+    return {"walk_clicks": n, "unsent": unsent,
+            "unsent_share": round(unsent / n, 4) if n else None}  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -90,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     spans = stuck_spans(reqs, t0)
     out: dict[str, Any] = {"session": a.session.name, "requests": len(reqs),
                            "ignored": sum(not ok for _t, ok in reqs), "stuck_spans": spans,
-                           "stuck_total_s": round(sum(s["span_s"] for s in spans), 1)}  # fmt: skip
+                           "stuck_total_s": round(sum(s["span_s"] for s in spans), 1),
+                           **unsent_walks(events, [t for t, _ok in reqs])}  # fmt: skip
     if a.lock is not None:
         doc = json.loads(a.lock.read_text())
         run = doc[0] if isinstance(doc, list) else doc
