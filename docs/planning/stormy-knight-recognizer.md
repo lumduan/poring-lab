@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "B1 (offline code): mvp_watch_study per boss (the Orc Lord unchanged, the Stormy Knight added). B2 (live): the immune watch on xmas_dun02 + a PNG hunting recording. Then B3 (fit on DEV, score HELD-OUT once) and the flee rule's own pre-registration."
+next_action: "B1 BUILT 2026-11-09 (section 2a: mvp_profiles.py, --boss stormy; branch feat/boss-profiles, the parent merges). B2 (live): the immune watch on xmas_dun02 + a PNG hunting recording. Then B3 (the aura recipe measured on DEV, fit on DEV, score HELD-OUT once) and the flee rule's own pre-registration."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -51,6 +51,7 @@ So until a Stormy Knight flee proof passes, Amendment K's schedule (`@mobsearch`
   the map and the negative species become a profile (`orclord` = today's values, its tests
   unchanged; `stormy` = 1251 + 1515 + 1607 on xmas_dun02, negatives Myst Case / Cruiser / Cookie
   / Christmas Cookie). `mvp_watch.py`'s model file names its profile; the runner loads the map's.
+  ➡️ **BUILT 2026-11-09 (branch `feat/boss-profiles`; section 2a).**
 - **B2 (live data, immune, the lab server only):**
   - the WATCH: `watch_lattice.py` cells on xmas_dun02 (train + test lattices, the three-check
     stand cells), `stage_items.py watch --spawn 1251` (one Stormy Knight per cell beside the
@@ -63,6 +64,113 @@ So until a Stormy Knight flee proof passes, Amendment K's schedule (`@mobsearch`
 - **B4 (after B3 passes):** the flee rule in the runner (`seen` -> Fly Wing at once, every ~0.5 s,
   beside the reactive boss guard) and its LIVE proof, pre-registered on its own: spawned Knights
   with immunity OFF, a heal at every trial start, stop after a near-death -- section 13's lessons.
+
+### 2a. B1: what was built (2026-11-09; offline code only, no data of this study touched)
+
+**The profiles** (`scripts/mvp_profiles.py`; the KB derivation `kb_party`, as
+`dungeon_hunt.boss_names` but by id, agrees with both against the local `data/kb`):
+
+| field | `orclord` (= the Orc Lord study, unchanged) | `stormy` |
+|---|---|---|
+| boss + summons (the party) | 1190 + 1189, 1473 | 1251 + 1515, 1607 |
+| negatives (the map's other species) | Orc Warrior, Orc Lady, Orc Baby, Poporing, Blue / Green Plant | Myst Case 1249, Cruiser 1248, Cookie 1265, Christmas Cookie 1246 |
+| maps (first = the hunting map, the truth's default) | gef_fild10, prt_fild08 (round 2's watch) | xmas_dun02 |
+| DEV / HELD-OUT watch cells | 0-7 / 8-14 | 0-7 / 8-15 (section 3) |
+| `lone` (party jobs that also spawn alone) | none | 1515 Garm Baby |
+| sprites (default) | the gef10 prep dir (`/dev/shm`, gone; NAS copy 2026-11-03) | the X1 archive on the NAS (`scratch-archive/2026-11-05/x1`, all 7 species) |
+| aura threshold / ring (a, b; inner a, b) / grid / dy / rim rule | 0.08 / (27, 15, 17, 8) / 3 / 8 / G >= 236, G - R >= 25, G - B >= 25 | **None: PLACEHOLDERS, not fitted.** B3 measures the Knight's own aura on DEV |
+
+**What changed:**
+- `mvp_watch_study.py`: `--boss PROFILE` on `truth` / `fit` / `score` / `entries`, default
+  `orclord`, so every command line in orclord-recognizer.md 9 and 11 works as written. The party,
+  names, map, sprites, cells and the fit's aura recipe come from the profile.
+- **Fail closed:**
+  - a truth names its boss (`boss`; a truth without one is the Orc Lord's), and fit / score /
+    entries refuse another boss's truth;
+  - they refuse a watch `events.jsonl` whose spawns are another mob, and a model of another
+    profile;
+  - `truth` refuses a party species without a decoded sprite (its frames would all read as
+    negatives), and a map whose GAT is not extracted (flat ground otherwise, silently);
+  - `fit --boss stormy` refuses until every recipe placeholder has a value.
+- **The Garm Baby caveat (section 3):** hunting frames with a Garm Baby that are not `neg` are
+  left out of the negatives (in fit and score) and reported apart. `score` gives
+  `hunting[].lone`: frames, pos, seen, episodes, `episodes_seen` and `episodes_seen_per_10min`
+  (the Fly Wings a lone Garm Baby would cost). The Knight or a Goblin in a hunting frame still
+  refuses.
+- **The chat window of the session's date:** `truth --chat auto` (the default) takes the
+  2026-11-05 docked window (0, 585, 600, 720) for sessions from 20261105T12 on, as
+  detector_vs_packets score-session does.
+  - The in-view rule uses it (the nested notice_left dropped), and the truth records it
+    (`chat`).
+  - fit / score / entries mask decide()'s UI with the truth's own layout and chat window
+    (`mask_rects`).
+  - The Orc Lord's sessions all get the legacy window, which IS client_layout's and mvp_watch's:
+    unchanged.
+- `mvp_watch.py`:
+  - a model names its `profile` and its `aura_rule` (the rim rule is now per model; decide()
+    reads it through the cached LUT, so its cost is unchanged);
+  - `load(path, sha256, profile=P)` raises ModelUnavailable for another profile's model;
+  - `default_model(P)` = `data/mvp_watch/<P>-v1.npz` (the default path stays the Orc Lord's);
+  - the Orc Lord's v1 file format is kept byte for byte: no `profile` member, so a file without
+    one is the Orc Lord's.
+- **The Orc Lord stays reproducible.** Re-run on bot-server on 2026-11-09 08:2x ICT with
+  orclord-recognizer.md 9's command lines unchanged (no `--boss`). The inputs are archived on the
+  NAS: the recordings, `scratch-archive/2026-10-25/orclord/work/*-truth.json`, and ow1's
+  events in `scratch-archive/2026-10-26/demo-sessions/`.
+  - `score`, with the frozen model (sha256 43179452...): every result key is IDENTICAL to
+    `score-supplement.json` (cells, recall 5 / 7, pos frames, watch gap, the pilot's and s1's
+    false positives, the bars). Only the latency differs: p95 40.9 ms against 53.5, another
+    host.
+  - `fit`: the same DEV frames (the three memmaps' frame ids byte-identical to the archive's),
+    the same item counts and every number fit3.log reports.
+    - The body LUT, the title bar and the ring are bit-identical. The logistic weights differ by
+      at most 3e-6 (zone_penalty 6.201293 against 6.201304), so the file hashes `3c7f7003...`,
+      not 43179452....
+    - The pre-B1 code (99ff12b3 plus only the copy fix below) gives the same `3c7f7003...` on
+      this host. So the difference comes from the host's floating point (VM 103 then, bot-server
+      now), not from B1.
+    - The frozen model stays the archived 43179452....
+  - **A fix found on the way:** the pre-B1 fit was OOM-killed twice under `MemoryMax=4G`.
+    `train_party` kept views into every frame's window vectors (~4.5 MB a frame); it now keeps
+    copies (the same numbers). The fit then ran in 2 min 51 s at ~3.2 GB RSS, 0.85 GB of which
+    is its /dev/shm memmaps.
+
+**Still the Orc Lord's, on purpose (one recipe, refitted; section 3 changes only the boss and the
+map):**
+- our own character's masks (CENTRE_BOX, SELF_ZONE), the title-bar guard;
+- the projection's 1d = 120 ms and k = 0.14;
+- the party detector's features, window, margin (+ 1.0), body-LUT weights and hard-negative
+  rounds;
+- RECALL_S 1.1 s, the 3-s episode gap, the hunting recording's first 300 s as DEV, the bars.
+- The live tools `orclord_edge_watch.py`, `orclord_flee_proof.py` and `orclord_flee_score.py`
+  stay the Orc Lord's (B4 writes the Knight's own flee proof). The runner's wiring is B4's:
+  `mvp_profiles.for_map(map)` gives the profile and `mvp_watch.load(profile=...)` its model.
+
+**B3's command lines** (bot-server; `MAIN` in the study still names `/home/batt`, so `--kb` and
+`--mapcache-dir` are given; the watch's `--layout` is the layout its frames show):
+
+    W=/home/bot/docker/poring-lab; python=$W/.venv/bin/python; T=/dev/shm/poring-lab-tmp/stormy
+    export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+    export PYTHONPATH=$W/scripts:$W/packages/poring_env/src:$W/packages/poring_dataset/src:$W/packages/poring_packets/src
+    CAP="systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 15"
+    KB="--kb $W/data/kb --mapcache-dir $W/packages/poring_dataset/src/poring_dataset/_generated"
+    WATCH=<the watch's PNG session>; WEV=<the watch's demo dir>/events.jsonl; HUNT=<the hunting PNG session>
+    # the truth (GAT: /dev/shm/poring-lab-tmp/gat/data/xmas_dun02.gat; sprites: the profile's)
+    $CAP $python $W/scripts/mvp_watch_study.py truth --boss stormy $WATCH --layout hunt $KB --out $T/watch-truth.json
+    $CAP $python $W/scripts/mvp_watch_study.py truth --boss stormy $HUNT --layout hunt $KB --out $T/hunt-truth.json
+    # DEV only: the aura recipe from B3's DEV measurement (or written into mvp_profiles.STORMY first)
+    $CAP $python $W/scripts/mvp_watch_study.py fit --boss stormy --watch $WATCH --watch-truth $T/watch-truth.json \
+        --events $WEV --pilot $HUNT $T/hunt-truth.json --work $T/fit --out $T/model/stormy-v1.npz \
+        --aura-thr X --ring A B AI BI --ring-cell N --ring-dy D --aura-rule G_MIN DIFF
+    sha256sum $T/model/stormy-v1.npz        # frozen: record it here BEFORE the score
+    # HELD-OUT, once (cells 8-15 and the hunting recording after its first 300 s)
+    $CAP $python $W/scripts/mvp_watch_study.py score --boss stormy --model $T/model/stormy-v1.npz --sha256 <HEX> \
+        --watch $WATCH --watch-truth $T/watch-truth.json --events $WEV \
+        --pilot $HUNT $T/hunt-truth.json --out $T/score-heldout.json
+
+- The fit decodes its DEV frames into `--work` (half resolution, ~0.7 MB a frame, in RAM): keep
+  each memmap under 1 GB and the lab's /dev/shm under 4 GB (CLAUDE.md rule 7).
+- The study refuses a VIDEO session (ADR-0024): B2 records with `--format png`.
 
 ## 3. PRE-REGISTERED: the split, the scores and the bars (2026-11-09, BEFORE any data)
 
