@@ -227,8 +227,10 @@ The Orc Lord's section 3 rules, unchanged except the boss and the map:
 - No held-out frame (cells 8-15, the hunt after 300 s) was decoded or looked at.
 - The truths are the parent's (main's code, `--boss stormy --layout hunt`, the 2026-11-05 chat
   window). Nothing called for re-making them.
-- Scratch, client-derived, never committed: `/dev/shm/poring-lab-tmp/stormy/b3/` (the scripts,
-  `glow.npz`, `gallery/*.png`).
+- The evidence (client-derived, never committed) is archived on the NAS:
+  `scratch-archive/2026-11-09/b3-stormy-dev/` (the analysis scripts, `glow.npz`,
+  `neg_hists.npz`, `fit.log`, `gallery/*.png`, a copy of the model; `files.sha256` verified).
+  The /dev/shm scratch and the DEV memmaps are deleted.
 
 ### 5a. The Knight's aura (the evidence)
 
@@ -313,7 +315,8 @@ The Orc Lord's section 3 rules, unchanged except the boss and the map:
   - `/dev/shm/poring-lab-tmp/stormy/model/stormy-v1.npz`, 138,278 bytes;
   - profile `stormy`, version `stormy-v1`;
   - **sha256 `a1287571e26447b64f0a1b7620c49d90368510193e177e935c6bb0fbde8f8caf`**;
-  - client-derived pixel statistics: never committed.
+  - client-derived pixel statistics: never committed;
+  - a copy, sha256 verified, is on the NAS: `scratch-archive/2026-11-09/b3-stormy-dev/model/`.
 - **In-sample on DEV (optimistic, for reference; the same decide() on the DEV memmaps):**
   - 7 / 8 DEV cells were seen within 1.1 s of their first episode: six on its first frame,
     cell 7 at 0.97 s.
