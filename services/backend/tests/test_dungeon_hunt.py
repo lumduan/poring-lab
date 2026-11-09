@@ -1538,3 +1538,42 @@ def test_loot_first_holds_box_engages_and_ends_only_the_killing_fight() -> None:
     assert '"why": "scan_hand"' in src and "loot_list.append((here, time.monotonic()))" in src
     # the loot step itself is unchanged: the trim's hovers, nearest to where she stands
     assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))" in src
+
+
+def test_walk_pick_step_takes_the_pickable_step_nearest_the_goal() -> None:
+    """dungeon@9.15c (rogue-xmas02.md 4AU): 7 of p38's 10 unsent walk clicks were 9.15b's plain
+    fallback onto cells the client could not pick; the flag steps to a pickable one-click cell
+    nearer the goal first. Off by default; 9.15b's plain click stays the last resort."""
+    free = np.ones((5, 7), dtype=bool)
+    free[1:4, 3] = False  # a wall with a gap at the top and the bottom
+    d = dh.grid_steps(free, (6, 2))
+    assert d[2, 6] == 0 and d[2, 4] == 2 and d[2, 2] == 5  # round the wall's top gap
+    assert np.isinf(dh.grid_steps(free, (3, 2))).all()  # a goal on the wall: nothing reached
+    early = dh.grid_steps(np.ones((50, 50), dtype=bool), (0, 0), until=[(2, 2)])
+    assert early[2, 2] == 2 and np.isinf(early[49, 49])  # stops once (2, 2) has its count
+    here = (1, 2)
+    picked = {(2, 1), (2, 3), (4, 2)}  # the cells the client would pick right
+    tried: list[tuple[int, int]] = []
+
+    def fits(c: tuple[int, int]) -> bool:
+        tried.append(c)
+        return c in picked
+
+    got = dh.pick_step(here, d, fits, lambda c: c != (4, 2), radius=4)
+    assert got in {(2, 1), (2, 3)}  # (4, 2) is nearer the goal but not one click away
+    assert tried[0] not in {(0, 1), (0, 2), (0, 3)}  # best first: no cell farther than us
+    assert dh.pick_step(here, d, lambda c: False, lambda c: True) is None
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "walk_pick_step" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, walk_pick=True, walk_pick_step=True))
+    assert rec["walk_pick_step"] == [9, "9.15c"] and rec["walk_pick"] == [1, "9.15b"]
+    src = Path(dh.__file__).read_text()
+    assert '"dungeon@9.15c refused: --walk-pick-step goes with --walk-pick"' in src
+    assert 'if wt_ is None and getattr(a, "walk_pick_step", False):' in src
+    # the step is tried BEFORE 9.15b's plain click, which stays as it was
+    i_step = src.index('if wt_ is None and getattr(a, "walk_pick_step", False):')
+    i_plain = src.index("wt_ = walk_target(goal_path, ahead_, fits_plain)")
+    assert i_step < i_plain
+    assert 'rec_w["pick"] = pick_how' in src

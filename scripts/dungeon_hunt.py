@@ -283,6 +283,14 @@ EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by t
 # within WALK_PICK_TOL of it. p28-p30 (packets): such clicks went unsent 17 of 39 times, the others
 # 17 of 869; p30's stuck Fly Wing was 4 dropped clicks at (161, 116) on raised floors.
 WALK_PICK_TOL = 1
+# --walk-pick-step (dungeon@9.15c, rogue-xmas02.md 4AU): when NO path cell passes the pick check,
+# 9.15b clicked the plain target -- p38 (offline replay of the client's picking): 7 of its 10
+# unsent walk clicks were exactly such clicks, one 21-s episode on the ramp at (153-164, 116-122)
+# where a raised block (altitude 40) south of her covers the pixels of every cell around her (the
+# client picked cells ~6 rows off; no pixel within 160 px picked the target). Instead: the cell
+# within WALK_PICK_STEP_R that passes the pick check and that the server walks us to on one click,
+# nearest the goal by grid steps and nearer than we are; 9.15b's plain click stays the last resort.
+WALK_PICK_STEP_R = 9
 # --engage-screen (dungeon@9.7, rogue-xmas02.md 4X, pilot p16; Batt 2026-11-08 ~19:5x: "6 cells is
 # still too few: strike within what the screen shows, the nearest monster first"): the patrol
 # engaged a box only within BOX_NEAR_PX (~3 cells) and the box path took one within BOX_TARGET_PX
@@ -1114,6 +1122,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         import explore_map as em_c
 
         out["explore_cover"] = [em_c.COVER_W]
+    if getattr(a, "walk_pick_step", False):  # dungeon@9.15c (rogue-xmas02.md 4AU)
+        out["walk_pick_step"] = [WALK_PICK_STEP_R, "9.15c"]
     if getattr(a, "walk_pick", False):  # dungeon@9.15 (rogue-xmas02.md 4AM)
         out["walk_pick"] = [WALK_PICK_TOL, "9.15b"]  # b: the plain-fits fallback (after p34)
     if getattr(a, "explore", False):  # dungeon@9.14 (rogue-xmas02.md 4AL)
@@ -1155,6 +1165,63 @@ def walk_pick_ok(picked: Cell | None, target: Cell, okr: Any, tol: int = WALK_PI
     if not (0 <= picked[0] < w and 0 <= picked[1] < h) or not okr[picked[1], picked[0]]:
         return False
     return max(abs(picked[0] - target[0]), abs(picked[1] - target[1])) <= tol
+
+
+def grid_steps(free: Any, goal: Cell, until: Sequence[Cell] = (), max_steps: int = 400) -> Any:
+    """PURE (--walk-pick-step, 9.15c): 8-connected step counts to ``goal`` over ``free`` (inf where
+    not reached), grown a ring at a time; it stops once every cell of ``until`` has a count."""
+    f = np.asarray(free, dtype=bool)
+    h, w = f.shape
+    dist = np.full((h, w), np.inf)
+    if not (0 <= goal[0] < w and 0 <= goal[1] < h) or not f[goal[1], goal[0]]:
+        return dist
+    front = np.zeros((h, w), dtype=bool)
+    front[goal[1], goal[0]] = True
+    seen = front.copy()
+    dist[goal[1], goal[0]] = 0.0
+    want = [c for c in until if 0 <= c[0] < w and 0 <= c[1] < h]
+    for step in range(1, max_steps + 1):
+        grow = np.zeros_like(front)
+        grow[1:, :] |= front[:-1, :]
+        grow[:-1, :] |= front[1:, :]
+        grow[:, 1:] |= front[:, :-1]
+        grow[:, :-1] |= front[:, 1:]
+        grow[1:, 1:] |= front[:-1, :-1]
+        grow[:-1, :-1] |= front[1:, 1:]
+        grow[1:, :-1] |= front[:-1, 1:]
+        grow[:-1, 1:] |= front[1:, :-1]
+        front = grow & f & ~seen
+        if not front.any():
+            break
+        seen |= front
+        dist[front] = float(step)
+        if want and all(np.isfinite(dist[c[1], c[0]]) for c in want):
+            break
+    return dist
+
+
+def pick_step(here: Cell, dist: Any, fits: Callable[[Cell], bool], reach: Callable[[Cell], bool],
+              radius: int = WALK_PICK_STEP_R) -> Cell | None:  # fmt: skip
+    """PURE (--walk-pick-step, 9.15c): the cell within ``radius`` of ``here`` that ``fits`` (in
+    view, off the UI, the client's pick near it) and ``reach`` (the server walks us there on one
+    click), nearest the goal by ``dist`` and nearer than ``here`` (ties: nearer to us); None when
+    there is none. Candidates are tried best first, so ``fits`` runs only until one passes."""
+    d = np.asarray(dist)
+    h, w = d.shape
+    d0 = d[here[1], here[0]] if 0 <= here[0] < w and 0 <= here[1] < h else np.inf
+    cands = []
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            c = (here[0] + dx, here[1] + dy)
+            if (dx, dy) == (0, 0) or not (0 <= c[0] < w and 0 <= c[1] < h):
+                continue
+            dc = d[c[1], c[0]]
+            if np.isfinite(dc) and dc < d0:
+                cands.append((float(dc), max(abs(dx), abs(dy)), c))
+    for _dc, _r, c in sorted(cands):
+        if fits(c) and reach(c):
+            return c
+    return None
 
 
 def reach_ok(grid: Any, here: Cell, cell: Cell) -> bool:
@@ -1891,6 +1958,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             reach_grid = wk_r.server_grid(map_)
         except LookupError as e:  # MapSourceError: walkability unknown -> refuse, never guess
             raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}") from None
+    step_grid: Any = None  # dungeon@9.15c: the server's walkability for --walk-pick-step
+    if getattr(a, "walk_pick_step", False):
+        if not getattr(a, "walk_pick", False):
+            raise SystemExit("dungeon@9.15c refused: --walk-pick-step goes with --walk-pick")
+        from poring_dataset import walkable as wk_s
+
+        try:
+            step_grid = wk_s.server_grid(map_)
+        except LookupError as e:  # walkability unknown -> refuse, never guess
+            raise SystemExit(f"dungeon@9.15c refused: --walk-pick-step: {e}") from None
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
@@ -4046,6 +4123,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
                         ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead
                         wt_ = walk_target(goal_path, ahead_, fits)
+                        pick_how = None  # the walk event's record of a fallback
+                        if wt_ is None and getattr(a, "walk_pick_step", False):
+                            # dungeon@9.15c (4AU): the pickable one-click step nearest the goal
+
+                            def fits_q(c_: Cell, h: Cell = here) -> bool:
+                                if not fits_plain(c_, h):
+                                    return False
+                                u_, v_ = project(h, [(c_[0] - h[0], c_[1] - h[1])])[0]
+                                return walk_pick_ok(picked_cell(camera, gat, h, (u_, v_)), c_, okr)
+
+                            def reach_w(c_: Cell, h: Cell = here) -> bool:
+                                from poring_dataset import walk as wkp_
+
+                                return bool(wkp_.click_walk_ok(step_grid, h[0], h[1], c_[0], c_[1]))
+
+                            free_ = np.asarray(okr, dtype=bool) & ~np.asarray(carved, dtype=bool)
+                            st_ = pick_step(here, grid_steps(free_, goal_path[-1], until=[here]),
+                                            fits_q, reach_w)  # fmt: skip
+                            if st_ is not None:
+                                counts["walk_pick_step"] += 1
+                                wt_, pick_how = (1, st_), "step"
                         if wt_ is None and getattr(a, "walk_pick", False):
                             # dungeon@9.15b (p34: 45 s with no click at 143,118 -> an idle Fly
                             # Wing): no cell passed the pick check -> today's click; the stall
@@ -4053,6 +4151,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             wt_ = walk_target(goal_path, ahead_, fits_plain)
                             if wt_ is not None:
                                 counts["walk_pick_fallback"] += 1
+                                pick_how = "plain"
                         if wt_ is not None:
                             _i, c = wt_
 
@@ -4130,6 +4229,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                          "ring": res.get("ring")}  # fmt: skip
                                 if dodge is not None:
                                     rec_w["dodge"] = dodge
+                                if pick_how is not None:  # 9.15b / 9.15c: which fallback
+                                    rec_w["pick"] = pick_how
                                 if why_w == "trusted":  # --walk-trust: an UNKNOWN read, clicked
                                     counts["walk_trusted"] += 1
                                     rec_w.update({"gate": "trusted", "red": res.get("red")})
@@ -4149,6 +4250,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                          "ring": res.get("ring")}  # fmt: skip
                                 if dodge is not None:
                                     rec_w["dodge"] = dodge
+                                if pick_how is not None:
+                                    rec_w["pick"] = pick_how
                                 if a.walk_trust:
                                     rec_w["trust"] = tw_
                                 ev(rec_w)
@@ -4397,6 +4500,14 @@ def main() -> int:
         help="dungeon@9.13c (rogue-xmas02.md 4AF; OFF by default): after 5 of our hits on the "
         "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
         "quiet fight ends without the scan",
+    )
+    t.add_argument(
+        "--walk-pick-step",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.15c (rogue-xmas02.md 4AU; OFF by default; with --walk-pick): when no "
+        "path cell passes the pick check, the pickable one-click step nearest the goal instead "
+        "of the plain target",
     )
     t.add_argument(
         "--loot-first",
