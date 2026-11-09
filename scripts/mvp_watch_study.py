@@ -76,7 +76,9 @@ AFTER_VANISH_NS = 4_000_000_000
 AROUND_APPEAR_NS = (500_000_000, 1_000_000_000)  # before, after a "new" appearance
 SPRITES = ORCLORD.sprites  # gef_fild10's decoded sprites (the --boss orclord default)
 SPRITE_NAMES = ORCLORD.sprite_names
-MAIN = Path("/home/batt/docker/poring-lab")  # the main checkout: data/kb and the mapcache
+# the main checkout: data/kb and the mapcache (its owner's home: /home/batt on VM 103, /home/bot
+# on bot-server)
+MAIN = Path.home() / "docker" / "poring-lab"
 
 
 @dataclass(frozen=True)

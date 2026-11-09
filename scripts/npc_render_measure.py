@@ -436,7 +436,7 @@ def probes(session: Path) -> Iterable[dict[str, Any]]:
 
 # --- the offline camera check over the design sessions ------------------------------------------
 
-INPUT_LOG = Path("/home/batt/docker/poring-lab/data/input_log")
+INPUT_LOG = Path.home() / "docker" / "poring-lab" / "data" / "input_log"
 
 
 def session_days(session_id: str) -> list[str]:

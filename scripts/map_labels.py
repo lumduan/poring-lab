@@ -2260,7 +2260,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    layout = Path("/home/batt/docker/poring-lab/data/ui_anchors/layout")
+    layout = Path.home() / "docker" / "poring-lab" / "data" / "ui_anchors" / "layout"
 
     def common(p: argparse.ArgumentParser, parts: bool = True) -> None:
         p.add_argument("--map", default="pay_fild07", choices=sorted(MAPS))

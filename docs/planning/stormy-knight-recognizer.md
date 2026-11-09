@@ -148,7 +148,10 @@ map):**
   `mvp_profiles.for_map(map)` gives the profile and `mvp_watch.load(profile=...)` its model.
 
 **B3's command lines** (bot-server; `MAIN` in the study still names `/home/batt`, so `--kb` and
-`--mapcache-dir` are given; the watch's `--layout` is the layout its frames show):
+`--mapcache-dir` are given; the watch's `--layout` is the layout its frames show). ➡️ Since
+2026-11-09 (commit "fix(scripts): the main checkout's default paths follow the owner's home")
+`MAIN` is `Path.home() / "docker" / "poring-lab"`: the two flags are no longer needed on
+bot-server, and they still work.
 
     W=/home/bot/docker/poring-lab; python=$W/.venv/bin/python; T=/dev/shm/poring-lab-tmp/stormy
     export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
