@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 16:1x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step (p40 all bars; p41 all but W1 1.57 %). By 4AV the next pilot is W1's (the study in p41's entry: an unexplained ~1-2 % residual, no other request sent); then --quiet-scan (4AW, queued). For Batt: the W1 bar at the residual; the lone-Garm-Baby boss guard."
+next_action: "2026-11-09 16:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step. p42 = --quiet-scan (4AW, by Amendment N 4AX; every bar kept). W1 stays the open subject; Batt: the W1 bar at the ~1-2 % residual (4AX options a/b/c), the lone-Garm-Baby boss guard."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1698,7 +1698,7 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
 - **Decisions:** every bar passes -> the base is confirmed. A bar fails -> the base stays as
   adopted (4AU), the failure is studied first and named as the next pilot's subject.
 
-### 4AW. QUEUED pre-registration: --quiet-scan (9.17) -- no ring scan for an attacker without damage in the last 5 s (written BEFORE its run, 2026-11-09 15:5x ICT; re-queued 16:1x: p41 failed W1, so by 4AV the NEXT pilot is W1's, and this one runs after it)
+### 4AW. Pilot p42 (by Amendment N, 4AX) pre-registration: --quiet-scan (9.17) -- no ring scan for an attacker without damage in the last 5 s (written BEFORE its run, 2026-11-09 15:5x ICT; re-queued 16:1x: p41 failed W1, so by 4AV the NEXT pilot is W1's, and this one runs after it)
 
 - **Why (Batt's clip 1, ~12:3x: "why does the bot, walking along, scan around although it did not
   fight a monster ... if no damage happened in the last 5 s, there is no need to scan"):** the
@@ -1712,8 +1712,8 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   an HP drop, a Miss at us, or a damage line of ours (pixels only); else a fight with no lock ends
   at once (and a walk stall re-plans without the scan). The box path, the lock, the quiet-kill end
   and the loot step are unchanged.
-- **The run:** the base + `--quiet-scan`, 25 min, the MVP dead by the schedule; its label (pN) is set
-  when it runs, after the W1 pilot (4AV).
+- **The run:** the base + `--quiet-scan`, label `xmas02-p42` (Amendment N, 4AX), 25 min, the MVP dead
+  by the schedule.
 - **Bars:**
   - **Q1 (the mechanism)** defend scans with no act on us in the 5 s before (`fight_time` Q1)
     <= 8 (p38-p40: 39 / 28 / 34; the rule still scans after our own damage lines);
@@ -1725,6 +1725,22 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   Reported: E1 against p40 / p41 (the expected gain is ~5 %), the skips (`quiet_scan_skip`,
   `quiet_scan_skip_stall`), the no-kill fights' time, the lowest HP.
 - **Decisions:** every bar passes -> `--quiet-scan` joins the base.
+
+### 4AX. Amendment N (2026-11-09 16:2x ICT, written BEFORE p42): the order of the next pilots; a question to Batt on W1
+
+- **What 4AV said:** a failed bar is studied first and named as the next pilot's subject. p41
+  failed W1 (1.57 %); the study is in p41's entry (section 5).
+- **What the study found:** the base's W1 is an ~1-2 % residual (p39 2.07, p40 1.04, p41 1.57 %):
+  the client ignores the click and sends nothing else; good picks, no fallback, no direction; a
+  repeated target explains 9 of 33. Each costs ~1.3 s (~5 s a run). No single-cause fix exists
+  yet, so a W1 pilot now would test nothing in particular.
+- **The order, therefore:** p42 runs 4AW's `--quiet-scan` (the defend scans without damage, ~75-100
+  s a run) with EVERY bar as 4AW wrote it, W1 <= 1.5 % included -- nothing is relaxed. W1 stays
+  the open subject; its next pilot is pre-registered when a mechanism is named.
+- **The question for Batt (his call, like R1's pooling in Amendment M):** at a residual of ~1-2 %
+  a single 25-min run fails W1 about half the time on noise, and every adoption needs it. Options:
+  (a) keep W1 <= 1.5 % per run; (b) W1 pooled over the pilot and its 3 preceding base runs, <= 1.5
+  % (p39-p41 now: 12 / 784 = 1.53 %); (c) W1 pooled <= 2.0 %. Until he answers, (a) stands.
 
 ## 5. Results
 
