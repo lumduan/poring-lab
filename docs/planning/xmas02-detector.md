@@ -1342,3 +1342,19 @@ answer exists; ONE goes to the labellers, by an amendment; the other is deleted 
 - The other candidate (`gw12-asbuilt`) is deleted unseen.
 - **T2's verdict** = `species_pass["1515"]` of blind_score.py over labellers E and F (both NEW):
   good >= 0.90 and species >= 0.95 each, on the 30 Garm Baby crops.
+
+#### M3 (2026-11-09 21:45 ICT): T2 for Garm Baby -- PASS
+
+Labellers E and F (both NEW, blind: the pack only), answers sha256 E fe4d2fad... / F 2a123a74...,
+scored by `blind_score.py` against the key c1050420... at 21:45:10 (the pack `gw2-floor`, M2):
+
+| species | E good / species | F good / species | verdict |
+|---|---|---|---|
+| **Garm Baby 1515** | **100 % / 100 %** | **100 % / 100 %** | **PASS** (>= 90 / >= 95 each) |
+| Myst Case 1249 / Cookie 1265 / Christmas Cookie 1246 | 100 / 100 | 100 / 100 | reported |
+| Cruiser 1248 | 100 / 100 | 96.7 / 100 (one "off": 095, a hat thrown above the box) | reported |
+
+- Agreement q1 150 / 150, q2 149, q3 150; 149 crops good for both with the right species.
+- Amendment H's failure (73-83 % good in crowded packs) does not recur on the uncrowded, spawned
+  dogs. **Garm Baby becomes a class** (Amendment M): the class file, the cache (Amendment I's TRAIN
+  + gw2) and the training launch follow, each committed before its step.
