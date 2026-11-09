@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "Amendment L (2026-11-09 06:3x): p28 = the far mechanism on the new base (4AJ); the explore / map-knowledge search mode (4AL); a Stormy Knight sight-flee (mvp_watch pattern); the schedule stays the protection until its proof."
+next_action: "2026-11-09 07:1x: p28 PASSED (124.7 kills/h, far misses 13 %): the far mechanism joined the base. Next: explore phase E1 (p29-p31, 4AL); the Stormy Knight recognizer (data at the MVP windows); --kill-gap with the quiet-kill block lifted."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1445,6 +1445,30 @@ most kills per hour. Plan (section 4AL, written before its pilots):
 - **Decisions:** F1 + E1 pass with no regression bar failing -> both flags join the base; otherwise
   off (studied).
 
+### 4AL. Pilots p29-p31 pre-registration: --explore, phase E1 (learning the map) (written BEFORE p29, 2026-11-09 07:08 ICT)
+
+- **Why:** Batt's request (Amendment L): walk new ways (not only the edge loop), record where she
+  could and could not walk, find the route with the most kills per hour. `--explore` (dungeon@9.14,
+  1da5179a): the route grid's component from the patrol start in 10-cell regions (xmas_dun02: 636
+  regions, 50,183 cells); the next region is SAMPLED by good fights per minute (a prior at the map's
+  mean) + a novelty bonus - a distance cost; a passive recorder books, per region, the time spent,
+  arrivals, engagements, fights and GOOD fights (>= 5 of our damage lines: on p24's packets 27 of 28
+  real kills, 3 of 17 false), and per cell the minimap reads and the stalled walk targets; the file
+  `data/maps/xmas_dun02/explore.json` grows run by run. Pixels only (rule 1); packets score offline.
+- **Phase E1 = learning, three runs (p29, p30, p31), each 25 min inside the MVP schedule:** the
+  base (p16's flags + `--reach-check` 9.12b + `--far-single --far-approach`, after p28) + `--explore`. Exploration is expected to cost kills (long legs, empty regions):
+  E1 adopts nothing; its bars are SAFETY and REGRESSION only.
+- **Bars (each run):** **deaths** 0; **E3** hard bars pass, 0 dead-end Fly Wings, stalls <= 39 / h;
+  **U1** stuck time <= 30 s (the base's own bar); **X1** the run's knowledge saved and merged
+  (`explore_saved` with the run counted); **X2** no `ev_hook_error`. A run failing a bar stops the
+  phase (studied first).
+- **Reported (each run and pooled):** kills / h and kills per monster seen (beside p27 / p28, the
+  edge loop on the same base); regions targeted / arrived / blocked / timed out; distinct cells
+  visited and regions with >= 1 min spent; the good fights per minute by region; refused cells;
+  the coverage map (`explore_map.py plot`).
+- **Then phase E2 (pre-registered after E1, from E1's numbers):** an exploit run (the learned
+  regions, less novelty) against the edge loop on kills / h -- the adoption decision.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -2695,3 +2719,31 @@ with the boss guard; `--self-recheck --still-strike`; the box path on the GPU de
 `--reach-check` (9.12b)**. Not adopted tonight, each by its own rule: `--quick-drop` (p17),
 `--far-single` alone (p19 / p20), `--far-single --far-approach` (p21), `--box-every 0.25` (p22),
 `--kill-gap` (p24, p26). Built, not run: `--skip-own-cells` (weighed against p23's data, section 5).
+
+**Pilot p28 (4AJ; 06:41:48-07:07:37, 25 min; the MVP killed 06:40:59, "1[dead] Stormy Knight";
+immunity OFF at 06:41:22 and ON at 07:07:52, both judged on the Chat tab; the base (p16's flags +
+`--reach-check` 9.12b) + `--far-single --far-approach`). VERDICT: F1, E1, U1, D1, R1, E3, deaths
+ALL PASS. `--far-single --far-approach` JOIN THE BASE (4AJ's rule). The best run of the study.**
+
+| | p21 (far, no reach-check) | p27 (base) | **p28 (base + far)** | bar |
+|---|---|---|---|---|
+| F1 far class-D share | 36.4 % (24 / 66) | 35.6 % (26 / 73) | **13.0 % (7 / 54)** | <= 25 %: PASS |
+| E1 kills | 45 (108.0 / h) | 44 (105.4 / h) | **52 (124.7 / h)** | >= 80 / h: PASS |
+| U1 stuck time | 132.9 s | 1.3 s | **17.0 s** (one span of 5) | <= 30 s: PASS |
+| D1 / R1 / E3 / deaths | | | **20.5 / 21.9 ms / 0 (6 own-body strikes) / pass, 0 Fly Wings, 3 stalls / 0; lowest HP 83.3 %** | PASS |
+| class D at 0-1 / 2-6 / 7-8 / 9+ | 2/8, 15/45, 7/18, 2/3 | 6/24, 5/34, 8/23, 13/16 | **1/7, 6/42, 1/11, 0/1** | reported |
+| strikes; class D | 74; 26 | 97; 32 | **61; 8** (K 52) | reported |
+| time held on class D | 170.9 s | 237.8 s | **47.2 s** | reported |
+| kills per monster seen; supply (/ 10 min) | 0.804; 22.4 | 0.657; 26.8 | **0.981; 21.2** (53) | reported |
+| approaches; reach_skip events | 31; - | -; 42 | **16; 95** | reported |
+| after the kill p50; no-kill fights | 6.46 s; 50 (434.1 s) | 6.49 s; 49 (587.1 s) | **6.56 s (299.9 s); 32 (247.2 s)** | reported |
+
+- With the unreachable targets gone, the approach walk takes a far target into reach: 9+ cell
+  strikes 1 (0 missed), 7-8 cells 1 of 11 missed.
+- **The next limit is the time after each kill:** 299.9 s of the run (41 kill fights, 6.56 s each)
+  -- `--kill-gap` with the quiet-kill block lifted (Amendment L 3, after the explore work).
+- **Items (snatched):** Scell 12, Zargon 7, Well-baked Cookie 3, Piece of Cake 3, Candy Cane 2,
+  Pearl 2, Candy 1, Manacles 1.
+
+**The base from 2026-11-09 07:1x:** p16's flags + `--reach-check` (9.12b) + `--far-single
+--far-approach`.
