@@ -1505,3 +1505,36 @@ def test_loot_settle_holds_walks_until_a_fresh_position() -> None:
     src = Path(dh.__file__).read_text()
     assert "and not loot_settling(loot_settle_t, last_pos_t, tick):" in src
     assert 'counts["loot_click"] += 1' in src
+
+
+def test_loot_first_holds_box_engages_and_ends_only_the_killing_fight() -> None:
+    """dungeon@9.16 (rogue-xmas02.md 4AT): p38's kills lost their loot step to the next box on the
+    screen, and the quiet-kill rule ended every fight begun in the 3 s after a kill at once (157
+    engage / fight_end pairs in 3 min); off by default, so the default path is unchanged."""
+    assert dh.box_engage_held(True, "after", True)
+    assert not dh.box_engage_held(True, "after", False)  # nothing to loot: engage at once
+    assert not dh.box_engage_held(True, "search", True)  # the loot step already ran
+    assert not dh.box_engage_held(False, "after", True)  # the default path
+    kills = [100.0]
+    assert dh.quiet_kill_ends(kills, 101.0, 95.0, True)  # the fight that killed: ends
+    assert not dh.quiet_kill_ends(kills, 101.0, 100.5, True)  # begun after the kill: goes on
+    assert dh.quiet_kill_ends(kills, 101.0, 100.5, False)  # the default: as before
+    assert not dh.quiet_kill_ends(kills, 103.5, 95.0, True)  # 3 s passed
+    assert not dh.quiet_kill_ends([], 1.0, 0.0, False)
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "loot_first" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert dh.fixes_of(dh.argparse.Namespace(**base, loot_first=True))["loot_first"] == ["9.16"]
+    src = Path(dh.__file__).read_text()
+    # part 1: only a box waits (a hit, an HP drop or a Miss still starts the fight)
+    assert "if near_ is not None and not (hit_now or dropped or swing_now) \\" in src
+    assert "and box_engage_held(loot_first_on, mode, bool(loot_list)):" in src
+    # part 2: the fight's start is the engage's tick
+    assert "fight_t0 = tick  # 9.16 part 2" in src
+    assert "if lock is None and quiet and quiet_kill_ends(kills_seen, tick, fight_t0," in src
+    # part 3: the defend scan's first hand, clicked only without a hit in the last 1 s
+    assert 'if vd == "pickup" and purpose == "defend" and loot_first_on and hand_at is None:' in src
+    assert '"why": "scan_hand"' in src and "loot_list.append((here, time.monotonic()))" in src
+    # the loot step itself is unchanged: the trim's hovers, nearest to where she stands
+    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))" in src

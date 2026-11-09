@@ -260,6 +260,23 @@ KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
 # target computed from the stale cell was dropped by the client: 8 of p37's 11 unsent walk
 # clicks came 0.7-4.1 s after such a step), at most LOOT_SETTLE_MAX_S
 LOOT_SETTLE_S, LOOT_SETTLE_MAX_S = 0.8, 3.0
+# --loot-first (dungeon@9.16, rogue-xmas02.md 4AT; Batt 2026-11-09: "fix the looting first").
+# p38 (9.13d) showed why kills at Base 99 still left their items:
+# (1) after a kill the fight ended ("quiet kill") and on the NEXT tick any box on the screen
+#     (--engage-screen) started a new fight BEFORE the loot step ran, so the loot list waited
+#     until no box was in view (p38: kills at 102, 118, 131, 147 and 157 s, one loot step at
+#     161 s, its 9 hovers around where she stood THEN, 0 picks);
+# (2) that new fight had no lock yet, so the quiet-kill rule ended it in the same tick, again
+#     and again for 3 s after the kill (157 such pairs in p38's first 3 min), and no box was
+#     struck meanwhile;
+# (3) a defend scan that read the PICKUP hand passed it by (Batt's clip 2; p38 at 184.9 s: two
+#     hands read, then a loot step with an empty list).
+# With the flag: (1) a box ALONE starts no fight while a kill's loot step is pending (a hit, an
+# HP drop or a Miss still does); (2) the quiet-kill rule ends only a fight that began before
+# the kill; (3) a defend scan that found no sword clicks the first hand it read, unless a hit
+# came within 1 s, and that spot joins the loot list (the loot step after the fight looks
+# around it).
+LOOT_FIRST_VERSION = "9.16"
 EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by then is given up
 # --walk-pick (dungeon@9.15, rogue-xmas02.md 4AM): a walk target fits only when the cell the CLIENT
 # picks under its projected pixel (picked_cell: the camera ray's first tile top) is walkable and
@@ -1111,6 +1128,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
             "9.13d",
             LOOT_SETTLE_S,
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
+    if getattr(a, "loot_first", False):  # dungeon@9.16 (rogue-xmas02.md 4AT)
+        out["loot_first"] = [LOOT_FIRST_VERSION]
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14, "9.12b"]  # walk.py's limits; b: the picked cell (after p25)
     return out
@@ -1230,6 +1249,22 @@ def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GA
     """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
     landed on this lock and none for ``gap_s`` since the last."""
     return hits_on_lock >= min_hits and since_last_hit > gap_s
+
+
+def box_engage_held(loot_first: bool, mode: str, loot_pending: bool) -> bool:
+    """PURE (--loot-first, 9.16 part 1): a box alone starts no fight while a kill's loot step is
+    pending -- the fight has ended (``after``) and the loot list is not empty."""
+    return loot_first and mode == "after" and loot_pending
+
+
+def quiet_kill_ends(kills: Sequence[float], tick: float, fight_t0: float,
+                    loot_first: bool) -> bool:  # fmt: skip
+    """PURE: the quiet-kill rule's kill part -- a kill in the last 3 s (as before); with
+    --loot-first (9.16 part 2) only a kill that came after this fight began, so a fight started
+    right after a kill is not ended by that kill in its first tick."""
+    if not kills or kills[-1] <= tick - 3.0:
+        return False
+    return not loot_first or kills[-1] >= fight_t0
 
 
 def kill_gap_no_miss(kill_gap: bool, box_fight: Mapping[str, Any]) -> bool:
@@ -2194,6 +2229,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         swing_floor = -1e9  # 9.1b: the last fight's end; a Miss read before it starts no fight
         last_ours = -1e9
         loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
+        loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
+        fight_t0 = -1e9  # 9.16: when the current fight began (the engage below)
         ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
         ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
         if explore_on:
@@ -2862,8 +2899,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def scan(purpose: str, cells: Sequence[Cell], stop_on: str
                  ) -> tuple[Cell, Any, dict[str, Any]] | None:  # fmt: skip
             """Hover each cell's point (defend: the body above it; loot: the cell); the first
-            ``stop_on`` ("sword" / "pickup") ends the scan. Aborts when a fight starts (loot)."""
+            ``stop_on`` ("sword" / "pickup") ends the scan. Aborts when a fight starts (loot).
+            --loot-first (9.16 part 3): a defend scan that found no sword clicks the first
+            PICKUP hand it read (no hit within 1 s), and that spot joins the loot list."""
+            nonlocal here, loot_settle_t
             t_s = time.monotonic()
+            hand_at: tuple[Cell, float, float] | None = None
             verdicts: Counter[str] = Counter()
             if purpose == "defend" and getattr(a, "walk_stop", False):
                 kept = drop_false(cells, false_rel, t_s)
@@ -2904,6 +2945,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         continue
                     res = res2
                 verdicts[vd] += 1
+                if vd == "pickup" and purpose == "defend" and loot_first_on and hand_at is None:
+                    hand_at = (c, u, v_)
                 if vd == stop_on or (stop_on == "pickup" and vd == "sword"):
                     found = (c, (u, v_), res)
                     break
@@ -2914,6 +2957,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 [round(found[1][0], 1), round(found[1][1], 1)],
                 "found_rel": None if found is None else list(found[0]),
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+            if found is None and hand_at is not None:
+                c_h, u_h, v_h = hand_at
+                if time.monotonic() - last_taken < 1.0:
+                    counts["scan_hand_hit"] += 1  # a hit came: the fight goes first
+                else:
+                    click_at(u_h, v_h, "loot")
+                    counts["loot_click"] += 1
+                    counts["scan_hand_click"] += 1
+                    ev({"kind": "loot_click", "u": round(u_h, 1), "v": round(v_h, 1),
+                        "rel": list(c_h), "cell": None if here is None else
+                        [here[0] + c_h[0], here[1] + c_h[1]], "why": "scan_hand"})  # fmt: skip
+                    time.sleep(0.45 + 0.2 * max(abs(c_h[0]), abs(c_h[1])))
+                    here = read_here() or here
+                    loot_settle_t = time.monotonic()  # 9.13d: the next walk waits
+                    if here is not None:
+                        loot_list.append((here, time.monotonic()))
             return found
 
         def read_here() -> Cell | None:
@@ -3550,6 +3609,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         near_ = boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_FRESH_S, skip_s)
                     else:
                         near_ = boxes.near(FOOT_PX, BOX_NEAR_PX, BOX_FRESH_S, skip_b)
+                if near_ is not None and not (hit_now or dropped or swing_now) \
+                        and box_engage_held(loot_first_on, mode, bool(loot_list)):  # fmt: skip
+                    counts["loot_first_held"] += 1  # 9.16 part 1: ticks a box waited
+                    near_ = None
                 if (hit_now or dropped or swing_now or near_ is not None) and mode != "fight":
                     # ONE engage event per fight, by what started it
                     box_fight.clear()
@@ -3581,6 +3644,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         sitting = False
                         ev({"kind": "rest_end", "why": "hit", "pct": pct, "sp_pct": spp})
                     mode, goal_path = "fight", None
+                    fight_t0 = tick  # 9.16 part 2
                     if fight_ref is None and here is not None:  # the sweep's "before"
                         fight_ref = {"img": img, "here": here, "t": tick}
                 # UI watch (the hard bar: an unknown UI state)
@@ -3640,7 +3704,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             last_strike.clear()
                             quick_rearm("no_hit")
                     quiet = tick - last_taken > FIGHT_TAKEN_S and not hp_dropped(st.hist, tick)
-                    if lock is None and quiet and kills_seen and kills_seen[-1] > tick - 3.0:
+                    if lock is None and quiet and quiet_kill_ends(kills_seen, tick, fight_t0,
+                                                                  loot_first_on):  # fmt: skip
                         # pilot 4: after a kill with no hit for 2.5 s, rings 1 + 2 took 8.6 s to
                         # find nobody -- end the fight; the loot step's hovers still see a SWORD
                         mode, swing_floor = "after", tick
@@ -4332,6 +4397,15 @@ def main() -> int:
         help="dungeon@9.13c (rogue-xmas02.md 4AF; OFF by default): after 5 of our hits on the "
         "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
         "quiet fight ends without the scan",
+    )
+    t.add_argument(
+        "--loot-first",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.16 (rogue-xmas02.md 4AT; OFF by default): after a kill the loot step "
+        "runs before a box alone starts the next fight; the quiet-kill rule ends only a fight "
+        "that began before the kill; a defend scan that found no sword clicks the first "
+        "pickup hand it read",
     )
     t.add_argument(
         "--reach-check",
