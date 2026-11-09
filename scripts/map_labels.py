@@ -51,9 +51,11 @@ label in the pool (no conditional tier), draws the first N of t2_order per speci
 xmas_dun02 (docs/planning/xmas02-detector.md, ACCEPTED 2026-11-06, Amendment A; its tool gaps
 T-1, T-2, T-3, T-8, T-9 of 1f): ``--map xmas_dun02``. FIT is xw1 and TEST is xw5, xp1 and X2, all
 by session NAME (the sessions are recorded after the plan: ``<stamp>-rdp-xmas02-xw1``); a part is
-refused by its NAME before anything of it is read. Engaged units are EXCLUDED (E0, D11) with
-gef10's Amendments B (``crowded``, T_h's set) and C (``facing_unknown``); ``dying_in_view`` (D8);
-one T2 stratum, seed 51, salt ``xmas02``. Its C1 always has the pickup-notice rule (``check
+refused by its NAME before anything of it is read. Amendment M (2026-11-09, the Garm Baby class):
+the held-out watch gw3 (``<stamp>-rdp-gb-gw3``) is refused like TEST, and Garm Baby (1515) is in
+T2's tier whatever its pool (the Goblin stays conditional). Engaged units are EXCLUDED (E0, D11)
+with gef10's Amendments B (``crowded``, T_h's set) and C (``facing_unknown``); ``dying_in_view``
+(D8); one T2 stratum, seed 51, salt ``xmas02``. Its C1 always has the pickup-notice rule (``check
 --c1-rule round2``, 4h / 5; ``round1`` is refused there). Its evaluation reads TEST under its own
 flag, ``--eval-test`` (9: seed 53, 60 per species), and refuses everything else:
 
@@ -309,13 +311,15 @@ GEF10 = MapSpec(
 # classes.json); the GAT is camera.GAT_DIR's (X1's)
 XD = Path("/dev/shm/poring-lab-tmp/xmas-det")
 XMAS02_X2 = "20261105T225409-rdp-xmas02-x2"  # 2e (D8): TEST-P, refused for FIT and TRAIN
+XMAS02_GW3 = "-rdp-gb-gw3"  # Amendment M: the held-out Garm Baby watch (`--label gb-gw3`)
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),
     rsw=XD / "grf" / "data" / "xmas_dun02.rsw",
     models=XD / "grf" / "data" / "model",
     # 1b / D3: the tier (Myst Case, Cruiser, Cookie, Christmas Cookie) + Garm Baby and Christmas
-    # Goblin CONDITIONAL; Stormy Knight (1251) OUT: its frames are unchecked_species (4h)
+    # Goblin CONDITIONAL (Amendment M, 2026-11-09: Garm Baby in the tier); Stormy Knight (1251)
+    # OUT: its frames are unchecked_species (4h)
     species=(1249, 1248, 1265, 1246, 1515, 1607),
     walkers=(1249, 1248, 1265, 1246, 1515),  # 4b: Garm Baby counts when seen
     fit_px=6,  # 4c-4d: +-6 px for every species, no anchor (no species flies)
@@ -330,8 +334,11 @@ XMAS02 = MapSpec(
     labels="xmas02-o3h-t",
     terrain=True,  # 4f (D10): o3h-t is reported beside o3h; freeze takes the rule 4f chose
     t2_salt="xmas02",
-    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),  # 3b: TEST by NAME
-    conditional=(1515, 1607),  # D3: in T2's tier only with >= 30 kept labels
+    # 3b: TEST by NAME; Amendment M (2026-11-09): + gw3, the Garm Baby watch on 3a's TEST stands,
+    # held out until the model is frozen (refused by labels / pack / the cache like xw5)
+    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3),
+    # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier
+    conditional=(1607,),
     # 6: the multi-view reference beside the map's species: Stormy Knight, Poring, Santa Poring
     reference=(1251, 1002, 1062),
     dying_rule=True,  # D8 (gef10 4g)
