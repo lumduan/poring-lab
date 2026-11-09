@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-09, committed 2efe641a (round 1); the backend restarted 16:21; matpilot's headless-Chrome side-by-side MATCHED on desktop geometry and colours. Round 2 (section 8: the Python in the blocks' words and as a real program's shape, the phone height, Results, no dev indicator, an app icon) in the working tree, not committed."
+status: "BUILT 2026-11-09: round 1 2efe641a (backend restarted 16:21; matpilot's headless-Chrome side-by-side matched on desktop); round 2 a06076e1 (the Python in the blocks' words, Config constants, the phone height, Results, no dev indicator, an app icon; backend restarted 17:23 ICT)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, mw2-block-editor.md, blocks-from-hunt-flow.md, xmas02-detector.md, stormy-knight-recognizer.md, orclord-recognizer.md, ../../THIRD_PARTY.md, ../../services/frontend/src/components/flows/FlowsApp.tsx, ../../packages/poring_flow/src/poring_flow/models.yaml]
-next_action: "Round 2: the parent restarts the backend (pyview's wait(N), whole seconds and the Config constants are host source), then matpilot re-runs its side-by-side (section 8's checklist). Open: section 7."
+next_action: "matpilot re-runs its side-by-side on round 2 (asked 17:23 ICT; section 8's checklist). For Batt: the import line and try/finally in Main (section 3 / 8 proposals). Open: section 7."
 title: "The /flows studio: matpilot's /blocks layout, the Python side by side, the trained models as blocks"
 date: 2026-11-09
 owner: Batt
