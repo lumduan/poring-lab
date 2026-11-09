@@ -1248,7 +1248,8 @@ def test_t2_xmas02_spec() -> None:
     spec = ml.MAPS["xmas_dun02"]
     assert spec is ml.XMAS02 and spec.name == "xmas_dun02" and spec.cells == (260, 260)
     assert spec.species == (1249, 1248, 1265, 1246, 1515, 1607)  # 1b / D3; 1251 is OUT
-    assert spec.conditional == (1515, 1607) and 1251 not in spec.species
+    # Amendment M (2026-11-09): Garm Baby IN the tier; the Goblin stays conditional
+    assert spec.conditional == (1607,) and 1251 not in spec.species
     assert spec.walkers == (1249, 1248, 1265, 1246, 1515) and spec.fit_px == 6
     assert spec.labels == "xmas02-o3h-t" and spec.t2_salt == "xmas02" and spec.t2_seed == 51
     assert spec.dying_rule and not spec.engaged_labels and spec.engaged_fixed == "E0"
@@ -1405,6 +1406,37 @@ def test_t2_pack_refuses_test_and_any_seed_but_51(tmp_path: Path) -> None:
         ml.cmd_pack(_pack_args(tmp_path, [good], seed=52, instructions=missing))
 
 
+GW1 = "20261109T205355-rdp-gb-gw1"  # Amendment M's watches: `--label gb-gw<n>`
+GW2 = "20261109T210933-rdp-gb-gw2"
+GW3 = "20261109T230000-rdp-gb-gw3"
+
+
+def test_m_gw3_is_refused_by_name_and_gw1_gw2_are_train(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Amendment M (2026-11-09): gw3 (3a's TEST stands) is held out until the model is frozen:
+    labels refuse it by its NAME before reading, T2's pool and the cache refuse its label file;
+    gw1 / gw2 (TRAIN) are neither TEST nor FIT, and labelled."""
+    spec = ml.XMAS02
+    assert spec.is_test(GW3, None) and not spec.is_fit(GW3, None)
+    for sid in (GW1, GW2, "20261109T230000-rdp-gb-gw30", "20261109T230000-rdp-gb-gw13"):
+        assert not spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
+    with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{GW3}"))
+    with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+        ml.pack_pool([_xdoc(tmp_path, GW1, [1515]), _xdoc(tmp_path, GW3, [1515])], spec, "/nas")
+    pool, *_ = ml.pack_pool([_xdoc(tmp_path, GW1, [1515]), _xdoc(tmp_path, GW2, [1249])],
+                            spec, "/nas")  # fmt: skip
+    assert sorted(pool) == [1249, 1515]
+    # the evaluation flag does not read gw3 either (its scoring is a later amendment's)
+    assert ml.eval_part_refusal(spec, GW3, None, "eval_test") is not None
+    for sid in (GW1, GW2):
+        opened = _fake_session(monkeypatch, sid, spec)
+        out = ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{sid}"))
+        assert opened == [f"/x/{sid}"] and out["session"] == sid
+    olf._JOB.clear()
+
+
 def test_t2_the_cache_refuses_test_label_files(tmp_path: Path) -> None:
     """build_frame_cache --labels map (MapLabelInputs): an xmas02 TEST label file is never cached;
     a TRAIN one is taken (its join rule is the own-C1 check's)."""
@@ -1454,11 +1486,15 @@ def test_t2_t2_sample_conditional_species_need_30_and_one_stratum() -> None:
             1607: [_item(XW2, f, 3, 1607) for f in range(30)]}  # fmt: skip
     chosen, per, tier = ml.t2_sample(pool, ml.XMAS02, 51)
     # the four common species are always the tier (in the spec's order); D3: a conditional one
-    # with >= 30 kept labels joins it (the Goblin's 30), one with 29 does not (Garm Baby)
-    assert tier == [1249, 1248, 1265, 1246, 1607]
+    # with >= 30 kept labels joins it (the Goblin's 30); Amendment M (2026-11-09): Garm Baby is IN
+    # the tier, with 29 too ("fewer: all")
+    assert tier == [1249, 1248, 1265, 1246, 1515, 1607]
     assert per["1249"] == {"pool": 40, "sampled": 30}
+    assert per["1515"] == {"pool": 29, "sampled": 29}
     assert per["1607"] == {"pool": 30, "sampled": 30}
-    assert all(c["stratum"] is None for c in chosen) and len(chosen) == 60
+    assert all(c["stratum"] is None for c in chosen) and len(chosen) == 89
+    pool[1607] = pool[1607][:29]  # the Goblin with 29 stays out (D3, unchanged)
+    assert ml.t2_sample(pool, ml.XMAS02, 51)[2] == [1249, 1248, 1265, 1246, 1515]
     want = ml.t2_order(pool[1249], 51, 1249, "xmas02")[:30]
     assert {(c["frame_id"], c["gid"]) for c in chosen if c["mob"] == 1249} == {
         (w["frame_id"], w["gid"]) for w in want}  # fmt: skip
@@ -1642,7 +1678,10 @@ def test_t9_eval_flags_are_per_map() -> None:
     assert ml.eval_part_refusal(ml.GEF10, A9, None, "eval_test") == want
     assert ml.eval_map_refusal(ml.PAYF07, "eval_test") is not None
     assert ml.eval_test2_refusal(ml.GEF10, A9, None) is None  # gef10's rule, unchanged
-    assert x.eval_suffixes == x.test_suffixes and ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
+    # TEST's names are the evaluation's, plus Amendment M's held-out gw3: refused like TEST, its
+    # scoring (and the flag that reads it) left to the amendment after the model is frozen
+    assert x.test_suffixes == (*x.eval_suffixes, ml.XMAS02_GW3)
+    assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
         ml.eval_flag_of(_ns(eval_test=True, eval_test2=True))
     assert ml.eval_flag_of(_ns()) is None and ml.eval_flag_of(_ns(eval_test=True)) == "eval_test"
