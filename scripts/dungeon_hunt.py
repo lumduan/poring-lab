@@ -1093,7 +1093,7 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
 
         out["explore_cover"] = [em_c.COVER_W]
     if getattr(a, "walk_pick", False):  # dungeon@9.15 (rogue-xmas02.md 4AM)
-        out["walk_pick"] = [WALK_PICK_TOL]
+        out["walk_pick"] = [WALK_PICK_TOL, "9.15b"]  # b: the plain-fits fallback (after p34)
     if getattr(a, "explore", False):  # dungeon@9.14 (rogue-xmas02.md 4AL)
         import explore_map as em_f
 
@@ -3935,18 +3935,30 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         pass_waypoint(here)  # --walk-through: its waypoint is behind us now
                     if goal_path and len(goal_path) >= 2:
 
-                        def fits(c: Cell, h: Cell = here) -> bool:
+                        def fits_plain(c: Cell, h: Cell = here) -> bool:
                             u_, v_ = project(h, [(c[0] - h[0], c[1] - h[1])])[0]
-                            if not (in_view(u_, v_) and mz.segment_violates(h, c, zones) is None):
+                            return in_view(u_, v_) and mz.segment_violates(h, c, zones) is None
+
+                        def fits(c: Cell, h: Cell = here) -> bool:
+                            if not fits_plain(c, h):
                                 return False
                             if getattr(a, "walk_pick", False):  # dungeon@9.15
+                                u_, v_ = project(h, [(c[0] - h[0], c[1] - h[1])])[0]
                                 pc_ = picked_cell(camera, gat, h, (u_, v_))
                                 if not walk_pick_ok(pc_, c, okr):
                                     counts["walk_pick_skip"] += 1
                                     return False
                             return True
 
-                        wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)
+                        ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead
+                        wt_ = walk_target(goal_path, ahead_, fits)
+                        if wt_ is None and getattr(a, "walk_pick", False):
+                            # dungeon@9.15b (p34: 45 s with no click at 143,118 -> an idle Fly
+                            # Wing): no cell passed the pick check -> today's click; the stall
+                            # / carve path handles a dropped one
+                            wt_ = walk_target(goal_path, ahead_, fits_plain)
+                            if wt_ is not None:
+                                counts["walk_pick_fallback"] += 1
                         if wt_ is not None:
                             _i, c = wt_
 

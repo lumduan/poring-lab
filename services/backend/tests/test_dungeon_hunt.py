@@ -682,7 +682,9 @@ def test_long_legs_continue_through_the_next_waypoint_and_stay_off_by_default() 
     on = dh.fixes_of(dh.argparse.Namespace(**base, walk_ahead=12, walk_through=True))
     assert on["walk_ahead"] == 12 and on["walk_through"] is True
     src = (Path(dh.__file__)).read_text()
-    assert "walk_target(goal_path, MR_WALK_AHEAD if mr else a.walk_ahead, fits)" in src
+    # 9.15b split the call (ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead): behaviour unchanged
+    assert "ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead" in src
+    assert "wt_ = walk_target(goal_path, ahead_, fits)" in src
     assert "pass_waypoint(here)  # --walk-through: its waypoint is behind us now" in src
     # the offline sim's bug (2026-10-26 21:2x): a through-leg ending NEAR its end must pass its
     # waypoint before the replan, or the replan routes back to it (oscillation at gef_fild10 wp 64)
@@ -1484,6 +1486,8 @@ def test_walk_pick_needs_the_clients_picked_cell_near_and_walkable() -> None:
             "rest": "spot", "npc_guard": True, "miss_cue": True,
             "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
     assert "walk_pick" not in dh.fixes_of(dh.argparse.Namespace(**base))
-    assert dh.fixes_of(dh.argparse.Namespace(**base, walk_pick=True))["walk_pick"] == [1]
+    assert dh.fixes_of(dh.argparse.Namespace(**base, walk_pick=True))["walk_pick"] == [1, "9.15b"]
     src = Path(dh.__file__).read_text()
     assert "if not walk_pick_ok(pc_, c, okr):" in src
+    # 9.15b: with no candidate passing the pick check, the plain fits (today's click)
+    assert "wt_ = walk_target(goal_path, ahead_, fits_plain)" in src
