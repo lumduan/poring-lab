@@ -1684,6 +1684,20 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
     `--walk-pick-step` join the base together;
   - p39 failed another bar: p40 reports W1 for 9.15c, and nothing joins on p40 alone.
 
+### 4AV. Pilot p41 pre-registration: the new base, a confirmation run (written BEFORE its run, 2026-11-09 15:3x ICT)
+
+- **Why:** p40 adopted three flags at once (`--kill-gap`, `--loot-first`, `--walk-pick-step`), and
+  W1 passed close to its bar (1.04 % vs 1.5 %; p39 2.07 %). One more run of the unchanged base
+  shows whether the result holds. Nothing is changed.
+- **The run:** the base (p16's flags + `--reach-check --far-single --far-approach --explore
+  --walk-pick --kill-gap --loot-first --walk-pick-step`), label `xmas02-p41`, 25 min, the MVP dead
+  by the schedule.
+- **Bars:** 4AU's, unchanged (W1, L1, L3, L4, K1, K3, E1, U1, D1, R1 pooled over p41 + p40 + p36 +
+  p35, E3, deaths). Reported: the no-kill fights (count, time, by engage; p40: 31 / 269.9 s, box
+  25 / 196.6 s, strikes ending "arrow" 9 / "bound" 7), boss-guard Fly Wings, items / hour.
+- **Decisions:** every bar passes -> the base is confirmed. A bar fails -> the base stays as
+  adopted (4AU), the failure is studied first and named as the next pilot's subject.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
