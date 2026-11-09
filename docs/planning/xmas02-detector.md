@@ -1977,3 +1977,18 @@ decision and their own pre-registration (Amendment M).
   - `blind-gb53-gw3`: the labellers' pack and answers G / H;
   - 667 files, `SHA256SUMS` `39b8b90a...`. The copy was verified, then the /dev/shm originals were deleted.
 - **The two ONNX files stay in `/dev/shm/poring-lab-detector/model`** (M9).
+
+#### M12 (2026-11-10 ~07:0x ICT, the parent): DEPLOYED -- xmas02-gb is the map's model
+
+- **Why now:** M11 PASSED every bar, and Batt's "Go ahead with (c)" (2026-11-09 ~20:5x) was the
+  class AND its pilot (rogue-xmas02.md 4BA).
+- **The NAS archive (verified):** `archive/train/xmas02-gb-20261109/weights/last.pt` (85fb37a4...,
+  + results.csv); `archive/models/xmas02gb-last-736x1280.onnx` (b22d972b...) + its names.json,
+  `SHA256SUMS` updated and checked.
+- **The code:** `unit_detector.MAP_MODELS["xmas_dun02"]` = the gb ONNX (its four species -> "monster",
+  garm_baby kept), `gpu="xmas02gb"`; `GPU_WEIGHTS["xmas02gb"]` pins the .pt and the ONNX. The old
+  `GPU_WEIGHTS["xmas02"]` stays for a ROLLBACK (MAP_MODELS back to it: one line).
+- **What changes for the runner:** the box thread sees a Garm Baby as `garm_baby` (never a target);
+  `--garm-fly` (9.19) acts on it. Nothing else in the base changes; the four species' boxes come
+  from the better model (M11: precision 0.93-0.94 vs 0.87-0.88).
+- Next: rogue-xmas02.md 4BA -- G0 (the Rogue immune, one staged Garm Baby), then the pilot.

@@ -176,12 +176,15 @@ def test_for_map_pins_the_file_and_falls_back_to_v1(
 
 
 def test_the_deployed_xmas02_entry() -> None:
+    """2026-11-10 (xmas02-detector.md Amendment M / M11): the deployed model is xmas02-gb; its
+    four species collapse to "monster", garm_baby stays its own class (never a target)."""
     spec = ud.MAP_MODELS["xmas_dun02"]
-    assert spec.onnx == "xmas02-last-736x1280.onnx"
-    assert spec.sha256.startswith("293dca92")  # xmas02-eval.md AMENDMENT 3's export
+    assert spec.onnx == "xmas02gb-last-736x1280.onnx"
+    assert spec.sha256.startswith("b22d972b")  # M9's export of M8's last.pt
     assert sorted(spec.collapse) == sorted(XMAS02[3:]) and set(spec.collapse.values()) == {
         "monster"
     }
+    assert "garm_baby" not in spec.collapse
 
 
 def test_the_worker_suppresses_a_group_together() -> None:
@@ -518,9 +521,10 @@ def test_for_map_gpu_takes_the_maps_own_weights(
 
 
 def test_the_deployed_gpu_weights_and_the_server_step() -> None:
-    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02"
+    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02gb"
     assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
-    assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")
+    assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")  # kept for a rollback
+    assert ud.GPU_WEIGHTS["xmas02gb"].sha256.startswith("85fb37a4cb")  # M8's frozen last.pt
     step = ud.serve_step(1800)
     assert step.startswith("execdev:vision@1800=python -m poring_vision.detect_server ")
     assert "--socket /detect/detect.sock" in step
@@ -543,7 +547,7 @@ def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
         assert pinned.onnx == "v1png-last-736x1280.onnx" and pinned.onnx_sha256.startswith(
             "32b448a1"
         )
-        assert ud.GPU_WEIGHTS["xmas02"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
+        assert ud.GPU_WEIGHTS["xmas02gb"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
         with gpu_det(model_answering(tmp_path, [1]), sock) as det:
             det.spec = ud.GpuWeights(pinned.path, "b" * 64, pinned.onnx, pinned.sha256)
             det.detect(FRAME)  # the server says the .pt sha; it is the "onnx" pin here: accepted

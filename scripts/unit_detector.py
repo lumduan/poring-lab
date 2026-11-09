@@ -81,12 +81,17 @@ class MapModel:
 
 # xmas02-eval.md PASSED 2026-11-07 00:39 (Q1c 4/4, P4A still 0.946); deployed by Batt's decision
 # 2026-11-07 ("use it"). The ONNX's NAS copy: scratch-archive/2026-11-07/detector-model/.
+# ➡️ SUPERSEDED 2026-11-10 by xmas02-gb (xmas02-detector.md Amendment M / M11: the held-out score
+# PASSED -- Garm Baby Q1s recall 1.000 / precision 0.922, the four species Q1c 0.93-0.94, CPU 0.955
+# x; Batt 2026-11-09 "go ahead with (c)": the class, then a pilot): its four species collapse to
+# "monster" as before; garm_baby is NOT collapsed -- the runner never strikes it, and --garm-fly
+# (dungeon@9.19) takes the Fly Wing on it. The old model stays in GPU_WEIGHTS (xmas02) for rollback.
 MAP_MODELS: dict[str, MapModel] = {
     "xmas_dun02": MapModel(
-        "xmas02-last-736x1280.onnx",
-        "293dca922e3e7890e3f26f40f140ef9b3d7eec4799392152ff3be8d132cace13",
+        "xmas02gb-last-736x1280.onnx",
+        "b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37",
         {s: "monster" for s in ("mystcase", "cruiser", "cookie", "cookie_xmas")},
-        gpu="xmas02",
+        gpu="xmas02gb",
     ),
 }
 
@@ -281,6 +286,11 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                          "5c5bb67a746b42014935700f449ecbf45525bbddf250fb21738eb6248a2b8b7b",
                          "xmas02-last-736x1280.onnx",
                          "293dca922e3e7890e3f26f40f140ef9b3d7eec4799392152ff3be8d132cace13"),
+    # xmas02-detector.md Amendment M (M8 froze last.pt, M9 exported the ONNX, M11 PASSED)
+    "xmas02gb": GpuWeights("/datasets/archive/train/xmas02-gb-20261109/weights/last.pt",
+                           "85fb37a4cb606aad4636d605f9a2056dde6431a42559e052b1036aaac5f98d6b",
+                           "xmas02gb-last-736x1280.onnx",
+                           "b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37"),
 }  # fmt: skip
 
 

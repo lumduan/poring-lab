@@ -1664,5 +1664,6 @@ def test_garm_fly_takes_the_wing_on_a_fresh_alarm_box_only() -> None:
     assert "alarm = [b for b in raw if b.cls in ALARM_CLASSES]  # 9.19: never struck" in src
     assert 'got = [b for b in raw if b.cls == "monster"]' in src  # only monsters are struck
     assert 'boss_hit = "Garm Baby"  # the boss guard\'s own Fly Wing path below' in src
-    # the deployed model collapses only the four species: no garm_baby class -> no alarm
+    # the deployed model (xmas02-gb since 2026-11-10) never collapses garm_baby into "monster":
+    # it is an alarm class, never a strike target
     assert "garm_baby" not in ud.MAP_MODELS["xmas_dun02"].collapse
