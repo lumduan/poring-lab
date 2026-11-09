@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 17:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step. p42 --quiet-scan: every bar but W1 (1.66 %), E1 153.6/h, defend-scan time 77.7 vs 215 s -> OFF until Batt answers the W1 bar (4AX a/b/c; under c it joins). Also for Batt: the lone-Garm-Baby boss guard."
+next_action: "2026-11-09 17:5x (Amendment O): THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan; W1 pooled <= 2.0 %. Next: the boss guard walks away from a lone Garm Baby when it can (pre-register, pilot); the no-kill fights study."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1742,6 +1742,28 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   (a) keep W1 <= 1.5 % per run; (b) W1 pooled over the pilot and its 3 preceding base runs, <= 1.5
   % (p39-p41 now: 12 / 784 = 1.53 %); (c) W1 pooled <= 2.0 %. Until he answers, (a) stands.
 
+### 4AY. Amendment O (2026-11-09 ~17:5x ICT): Batt's answers to the 17:26 report
+
+Batt's answers (quoted, then in English):
+1. W1 (4AX): "(c) ... ทำตามนี้เลย" -- **W1 is judged POOLED over the pilot and its 3 preceding base runs
+   (the set Amendment M uses for R1), <= 2.0 %.** From now on; earlier verdicts stand as made.
+   - **p42 by (c): p42 + p41 + p40 + p36 = (5 + 4 + 3 + 4) / (302 + 255 + 288 + 327) = 16 / 1,172 =
+     1.37 % -> PASS; every other bar of 4AW passed -> `--quiet-scan` JOINS THE BASE.**
+   - A correction: the 17:26 report's option (b) figure (1.57 %) pooled p39-p42; p39 was not a
+     base run. With the R1 set the pool is 1.37 % (it would have passed (b) too).
+2. The boss guard on lone Garm Babies: "หนี หมา ก็โจมตีแรง ถ้าเดินหนีไปทางอื่นได้ก็เดิน" -- keep
+   fleeing (the Garm Baby hits hard too), but WALK away in another direction when that is possible,
+   instead of a Fly Wing. A walk-away change is to be pre-registered (the Stormy Knight itself keeps
+   the immediate Fly Wing).
+3. The recognizer's held-out data: "ทดสอบได้เลย" -- score stormy-v2 on R2-W + R2-H2 now, once
+   (stormy-knight-recognizer.md 10d), and record it.
+4. The /flows Python: "เพิ่มได้เลย" -- add the import line and try/finally (flows-studio.md).
+5. The /flows lint chip: option (b) -- write the lab's missing safety bindings (the death dialog's
+   L2 anchor, lab-rathena's L3 map flags), so the chip clears for every flow.
+
+**THE BASE NOW:** p16's flags + `--reach-check --far-single --far-approach --explore --walk-pick
+--kill-gap --loot-first --walk-pick-step --quiet-scan`.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -3370,7 +3392,8 @@ BASE together.**
 **Pilot p42 (4AW by Amendment N; 16:54:41-17:20:31, 25 min; the MVP killed 16:53:48 after polls at
 16:46 / 16:50 (dead) and 16:53:35 (alive at 54, 172); the bag cleared 16:23-16:26 (-> 520 / 2430);
 immunity OFF 16:54:28, ON 17:22:3x; weight 570 / 2430 at the start; the base + `--quiet-scan`
-9.17). VERDICT: every bar but W1 PASSES; W1 FAILS (1.66 %). `--quiet-scan` stays OFF by 4AW's rule
+9.17). VERDICT: every bar but W1 PASSES; W1 FAILS (1.66 %). ➡️ SUPERSEDED BY AMENDMENT O (4AY, Batt's (c)):
+W1 pooled 1.37 % PASSES -> `--quiet-scan` JOINS THE BASE. As written: `--quiet-scan` stays OFF by 4AW's rule
 until Batt answers 4AX: under option (c) (W1 pooled <= 2.0 %) it would join; under (a) or (b) it
 would not (pooled p39-p42: 17 / 1,086 = 1.57 %).**
 
