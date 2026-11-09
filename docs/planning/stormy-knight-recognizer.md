@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, the Orc Lord's CPU recognizer recipe (scripts/mvp_watch.py: the boss AURA rule + the party window detector), refitted on xmas_dun02, tells 'the Stormy Knight (1251) or its summons (Garm Baby 1515, Christmas Goblin 1607) are in view' within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of hunting frames, at <= 60 ms p95 per frame -- enough for a Fly Wing at first sight."
-status: "PROPOSED 2026-11-09 (Batt's Amendment L 2, rogue-xmas02.md 4AK). The split and bars are pre-registered in section 3 BEFORE any data exists. Section 1's look (07:51) is one live peek, no data set."
+status: "B3 SCORED 2026-11-09 09:52-09:54 (section 6): recall 8 / 8 PASS, latency PASS, false positives 98 / 10 min on the held-out hunting frames FAIL -> NOT ADOPTED; the schedule stays. Post-hoc: the pale-green puzzle floors the DEV data never crossed."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "B1 merged (7e69de45). B2 DONE 2026-11-09 08:50-09:07 (section 4). B3 part 1 DONE (section 5, DEV only): the aura recipe frozen, the model fitted on DEV, sha256 a1287571... B3 part 2 (the parent): the HELD-OUT score ONCE with section 5d's command line."
+next_action: "Round 2 (needs Batt only if he wants it now): whole-map PNG hunting negatives from explore runs, the aura rule dropped or bound to the party cue, a new watch for new held-out cells; pre-registered before any of it."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -351,3 +351,31 @@ Score with the frozen model's sha256, at a time outside the market-open windows:
 - Bars (section 3): recall within 1.1 s on 8 / 8 held-out cells; <= 1 false positive per 10 min
   of the hunt's held-out frames; latency p95 <= 60 ms.
 - Any lone Garm Baby frames in the held-out hunt are reported in `hunting[0].lone` (the caveat).
+
+## 6. RESULT: the held-out score, run ONCE (2026-11-09 09:52:07-09:54:16 ICT; the parent; model sha256 a1287571e26447b6..., verified before the run)
+
+Command: section 5's (B3 part 1) exact line; out `/dev/shm/poring-lab-tmp/stormy/score-heldout.json`
+(archived with the evidence).
+
+| bar | measured | rule | |
+|---|---|---|---|
+| 1. recall within 1 s (held-out cells 8-15) | **8 / 8 (1.0)**; first-frame recall 1.0; re-entries 3, 1 within 1 s, 0 never | >= 95 % | **PASS** |
+| 2. false positives, the hunting recording's held-out frames | **186 of 1,139 frames = 98.0 per 10 min** | <= 1 per 10 min | **FAIL** |
+| 3. latency p95 | **28.6 ms** (p50 26.4, max 37.6; 1,712 calls) | <= 60 ms | **PASS** |
+
+- Reported, not gating: the watch's held-out gap frames (after `@killmonster2`, before the next
+  spawn) fired 29 of 200 (87 per 10 min); positive frames seen 277 of 319 (the Knight's 266 of 290).
+- **VERDICT: NOT ADOPTED (bar 2).** Nothing is refitted on HELD-OUT (section 3); Amendment K's
+  schedule stays the protection.
+
+**POST-HOC (after the score; deciding nothing):** two held-out hunting false positives looked at.
+- Frame 500 (and its run 498-507, party scores ~70, aura ~0.4): a PALE-GREEN PUZZLE FLOOR with dice
+  decoration (the map's north-west rooms): the aura rule fires on the floor and the party detector
+  on the decor. DEV's hunting minutes (the first 300 s) never crossed that floor; the explore mode
+  (rogue-xmas02.md 4AL) now walks the whole map, so the negatives must too.
+- Frame 368 (party score 4.6, just over 4.55): a red ground-skill circle around the Rogue.
+
+**What would fix it (a second round, pre-registered on its own):** hunting negatives from the WHOLE
+map (several explore runs recorded with `--format png`, every region crossed), the aura rule
+dropped or bound to the party detector (it fires on this map's floors), a new watch for new
+held-out cells, and the DEV negatives drawn from every floor type before the threshold is set.
