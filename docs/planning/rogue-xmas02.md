@@ -1500,6 +1500,24 @@ most kills per hour. Plan (section 4AL, written before its pilots):
 - **Decisions:** the bar passes -> `--explore` joins the base (the edge loop stays selectable);
   otherwise explore stays an option, studied.
 
+### 4AO. Pilot p35 pre-registration: --explore-cover, explore's novelty from coverage (written BEFORE its run, 2026-11-09 11:02 ICT)
+
+- **Why (Batt, 2026-11-09 ~09:5x, on the knowledge map):** "the right side is walked much less
+  than the left (the green lines)". E1's east-half share (x >= 130) of each run's visited cells:
+  p29 27.0 %, p30 27.6 %, p31 51.4 %, against 48.9 % of the reachable map. Each E1 run added ~600
+  new cells (607, 598, 600). The novelty bonus counted ARRIVALS, and most regions walked through
+  were never "arrived at" (0 arrivals), so walked and unwalked regions looked equally new.
+- **The one change against the base (p16's flags + `--reach-check` + `--far-single --far-approach` + `--explore`, after E2; `--walk-pick` OFF after p34):** `--explore-cover` (dungeon@9.14b, 29a1b7f5): the
+  novelty is COVER_W (2.0) x (1 - the share of a region's reachable cells ever read as our
+  position: the knowledge file + the run).
+- **The run:** the base command + `--explore-cover`, label `xmas02-p35`, 25 min.
+- **Bars:** **C1** new cells (not in the knowledge file before the run) >= 700 (E1: ~600 a run; p33 532: 2,337 - 1,805);
+  **C2** the east-half share of the run's visited cells within 35-65 %; **E1** kills >= 80 / h;
+  the E1 safety bars (deaths 0, E3, U1 <= 30 s, X1, X2). Reported: kills / h beside the explore
+  runs, regions targeted / reached, the coverage map.
+- **Decisions:** C1 + E1 pass with no safety bar failing -> `--explore-cover` joins the base
+  (C2 reported with it).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
