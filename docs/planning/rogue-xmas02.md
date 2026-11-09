@@ -2894,3 +2894,26 @@ at 10:32:25; the base + `--explore`). 64 kills = 153.6 / h. E1's safety bars on 
 
 **The base from 2026-11-09 10:3x:** p16's flags + `--reach-check` (9.12b) + `--far-single
 --far-approach` + `--explore` (9.14). The edge loop stays selectable (`--no-explore`).
+
+**Pilot p34 (4AM; 10:34:11-10:59:57, 25 min; immunity OFF at 10:33:42 and ON at 11:00:12; the base
+(+ `--explore`, E2) + `--walk-pick`). VERDICT: W1, W2 (by its letter), E1, U1, D1, E3, deaths PASS;
+R1 FAILS (2). `--walk-pick` stays OFF (4AM's rule) -- and the run showed a regression of its own.**
+
+| | p29-p33 (explore, no walk-pick) | **p34 (+ walk-pick)** | bar |
+|---|---|---|---|
+| W1 clicked walks the client never sent (`walk_refusals.py`, 934a0e24) | p29 1.7 %, p30 7.2 %, p33 2.8 % | **0 of 228 (0.0 %)** | <= 1.5 %: PASS |
+| W2 `stuck` / `dead_end` Fly Wings | p30: 1 `stuck` | **0 / 0** -- but 1 `idle` Fly Wing caused by walk-pick (below) | PASS by its letter |
+| E1 kills | 146.1-160.8 / h | **59 (141.5 / h)** | >= 80 / h: PASS |
+| U1 stuck time | 0-18.8 s | **0 s** (0 of 323 requests ignored) | <= 30 s: PASS |
+| R1 own-body class D | | **2** (9 own-body strikes) | <= 1: FAIL |
+| D1 / E3 / deaths | | **20.6 / 22.4 ms / pass, 1 stall / 0; lowest HP 58.1 %** | PASS |
+
+- **The `idle` Fly Wing:** at (143, 118) the explore goal (194, 144) had a 61-cell route, and for
+  45 s no walk click went out at all: every candidate path cell failed the pick check (the raised
+  floors east of the centre), so `walk_target` returned none and the idle guard flew. 594 candidate
+  cells were skipped over the run. The fix (9.15b, a later pilot): when no candidate passes the
+  pick check, fall back to today's click (the stall / carve path handles it).
+- R1 note (reported): own-body class D in base runs today: p27 1, p32 3, p33 1 -- the bar fails on
+  the base itself in some runs; its use as a per-run regression bar is for Batt to revisit.
+- **Items (snatched):** Scell 14, Piece of Cake 4, Zargon 4, Red Herb 3, Manacles 3, Well-baked
+  Cookie 1, Pearl 1, Iron 1.
