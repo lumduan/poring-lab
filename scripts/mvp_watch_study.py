@@ -9,6 +9,8 @@ from the packets, the crops a recognizer is fitted on, and the held-out score.
                              --pilot S T [--supplement S T]... --out SCORE.json   HELD-OUT, once
     mvp_watch_study.py entries --model MODEL.npz --sha256 HEX --watch S --watch-truth T --events E
                              --hunt S T [--hunt S T]... --out SCORE.json   ROUND 2 (10), once
+    mvp_watch_study.py dev   --watch S --watch-truth T --events E --pilot S T [--extra S T]...
+                             --work DIR [--model MODEL.npz --sha256 HEX] --out DEV.json   DEV only
 
 PER BOSS (docs/planning/stormy-knight-recognizer.md B1): every subcommand takes ``--boss PROFILE``
 (scripts/mvp_profiles.py), default ``orclord`` = the Orc Lord study's values, unchanged (every
@@ -19,6 +21,19 @@ A truth names its profile (``boss``; none = orclord) and fit / score / entries r
 the model names its own (mvp_watch.save). A profile's ``lone`` jobs (stormy: Garm Baby, a regular
 spawn too) may appear in its hunting recordings: those frames are left out of the negatives and
 reported apart (section 3's Garm Baby caveat); any other party unit there still refuses.
+
+THE ROUND (stormy-knight-recognizer.md 7 + 9): ``fit`` / ``score`` / ``dev`` take ``--round``,
+default 1 = every split above, unchanged. ``--round 2`` = the Stormy Knight's round 2: every
+on-map frame of the watch (all its cells) and of every hunting session is DEV for ``fit`` / ``dev``
+and HELD-OUT for ``score`` (the pilot is no longer cut at 300 s). The model's version names its
+round (``stormy-v2``) and ``score --round R`` refuses a model of another round. ``fit --aura
+or|and|off`` (default ``or``, the v1 recipe) is recorded in the model (mvp_watch ``aura_mode``),
+so decide() and ``score`` follow the MODEL; ``--aura-margin M`` sets the aura threshold to the DEV
+negatives' max + M, rounded up to 0.01 (round 1's recipe, written by hand then). ``dev`` decides
+exactly the frames ``fit`` takes (DEV only) from the fit's half-res memmaps (decide_half on the
+memmap = decide on the full frame): the in-sample / leave-one-session-out numbers. Without
+``--model`` it only decodes the memmaps (run it in its own memory scope first: a tmpfs page is
+charged to the scope that writes it).
 
 THE CHAT WINDOW OF THE SESSION'S DATE (B1): the client's chat window moved on 2026-11-05 (docked
 bottom-left, six lines: (0, 585, 600, 720); chat_window.for_sid). ``truth --chat auto`` (the
@@ -418,6 +433,10 @@ HELD_CELLS = ORCLORD.held_cells
 PILOT_DEV_S = 300.0
 RECALL_S = 1.1  # the episode's first or second recorded frame (1 fps)
 EPISODE_GAP_S = 3.0
+# the splits (``--round``): 1 = the pre-registered cells and the pilot's first 300 s (every study
+# so far); 2 = stormy-knight-recognizer.md 7: whole sessions, every watch cell, DEV or HELD-OUT
+ROUNDS = (1, 2)
+PART_FRAMES = 1000  # round 2's memmaps: parts of <= 1000 half-res frames (0.69 GB; rule 7)
 
 
 def watch_times(events_path: Path, boss: int | None = None) -> tuple[list[int], list[int]]:
@@ -477,6 +496,50 @@ def pilot_part(rows: Sequence[dict[str, Any]], dev_s: float = PILOT_DEV_S,
         return {}
     t0 = int(on[0]["t"])
     return {int(r["frame_id"]): ("dev" if (int(r["t"]) - t0) / 1e9 < dev_s else "held") for r in on}
+
+
+def watch_split(wrows: dict[int, dict[str, Any]], spawns: Sequence[int], map_name: str,
+                prof: mvp_profiles.BossProfile, round_: int, part: str) -> set[int]:  # fmt: skip
+    """PURE: the watch frames of ``part`` (dev | held) in round ``round_``. Round 1: the
+    profile's DEV cells and the frames before the first spawn / its HELD-OUT cells; round 2: every
+    frame on the map, whichever part (the whole watch is one side of the split)."""
+    if part not in ("dev", "held") or round_ not in ROUNDS:
+        raise ValueError(f"part {part!r}, round {round_!r}")
+    on = {f for f, r in wrows.items() if on_map(r, map_name)}
+    if round_ == 2:
+        return on
+    cells = prof.dev_cells | {-1} if part == "dev" else prof.held_cells
+    return {f for f in on if cell_of(int(wrows[f]["t"]), spawns) in cells}
+
+
+def hunt_split(rows: Sequence[dict[str, Any]], map_name: str, pilot: bool, round_: int,
+               part: str) -> set[int]:  # fmt: skip
+    """PURE: a hunting session's frames of ``part`` (dev | held). Round 1: the PILOT's first
+    PILOT_DEV_S on the map (dev) or the rest (held), every other session whole (--extra in fit,
+    --supplement in score); round 2: every session whole."""
+    if part not in ("dev", "held") or round_ not in ROUNDS:
+        raise ValueError(f"part {part!r}, round {round_!r}")
+    split = pilot_part(rows, map_name=map_name)
+    if round_ == 2 or not pilot:
+        return set(split)
+    return {f for f, v in split.items() if v == part}
+
+
+def colour_cells(prof: mvp_profiles.BossProfile, round_: int, spawns: Sequence[int],
+                 kills: Sequence[int]) -> list[int]:  # fmt: skip
+    """The watch cells the body LUT's colours come from: the DEV cells (round 1), every cell
+    with a spawn and its @killmonster2 (round 2)."""
+    if round_ == 2:
+        return list(range(min(len(spawns), len(kills))))
+    return sorted(prof.dev_cells)
+
+
+def version_round(version: str) -> int:
+    """A model version's round: ``<profile>-v<N>`` (orclord-v1, stormy-v1: 1; stormy-v2: 2)."""
+    head, sep, tail = version.rpartition("-v")
+    if not sep or not head or not tail.isdigit():
+        raise ValueError(f"model version {version!r} is not <profile>-v<N>")
+    return int(tail)
 
 
 def cell_scores(seq: Sequence[tuple[float, str, bool]], recall_s: float = RECALL_S,
@@ -550,27 +613,84 @@ def truth_of(path: Path, prof: mvp_profiles.BossProfile) -> dict[str, Any]:
 # --- frames ---------------------------------------------------------------------------------------
 
 
-def half_frames(session: Path, keep: set[int], out: Path) -> tuple[Any, list[int]]:
+class Frames:
+    """Half-res frames kept in several memmap PARTS, read as one sequence (len, [i], iter): a
+    session longer than PART_FRAMES stays within rule 7's 1 GB per scratch item."""
+
+    def __init__(self, parts: Sequence[Any]) -> None:
+        self.parts = list(parts)
+        self.starts = [0]
+        for p in self.parts:
+            self.starts.append(self.starts[-1] + len(p))
+
+    def __len__(self) -> int:
+        return self.starts[-1]
+
+    def __getitem__(self, i: int) -> Any:
+        import bisect
+
+        if not -len(self) <= i < len(self):
+            raise IndexError(i)
+        i %= len(self)
+        k = bisect.bisect_right(self.starts, i) - 1
+        return self.parts[k][i - self.starts[k]]
+
+    def __iter__(self) -> Any:
+        for p in self.parts:
+            yield from p
+
+
+def part_paths(out: Path, n: int, part_frames: int) -> list[Path]:
+    """The memmap parts of ``n`` frames: <stem>.p0.npy, <stem>.p1.npy, ..."""
+    k = max(1, -(-n // part_frames))
+    return [out.with_name(f"{out.stem}.p{j}.npy") for j in range(k)]
+
+
+def half_frames(session: Path, keep: set[int], out: Path,
+                part_frames: int | None = None) -> tuple[Any, list[int]]:  # fmt: skip
     """Decode the kept frames once into a half-res memmap (out, /dev/shm): (array, frame ids).
-    A memmap left by an earlier run with the same frame ids is reused."""
+    A memmap left by an earlier run with the same frame ids is reused. ``part_frames``: write
+    parts of at most that many frames (part_paths) and return them as one Frames (round 2);
+    None: one file, as before."""
     import map_labels as ml
 
     ids_path = out.with_name(out.name + ".ids.json")
-    if out.exists() and ids_path.exists():
+    if ids_path.exists():
         ids = json.loads(ids_path.read_text())
-        if set(ids) == keep:
+        if set(ids) == keep and part_frames is None and out.exists():
             arr = np.load(out, mmap_mode="r")
             if len(arr) == len(ids):
                 return arr, ids
+        if set(ids) == keep and part_frames is not None:
+            paths = part_paths(out, len(ids), part_frames)
+            if all(q.exists() for q in paths):
+                got = Frames([np.load(q, mmap_mode="r") for q in paths])
+                if len(got) == len(ids):
+                    return got, ids
     manifest = json.loads((session / "manifest.json").read_text())
     refs = [r for r in png_index(session, manifest) if r.frame_id in keep]
-    arr = np.lib.format.open_memmap(out, mode="w+", dtype=np.uint8, shape=(len(refs), 360, 640, 3))
-    for i, r in enumerate(refs):
-        arr[i] = ml.read_png(r)[::2, ::2]
-    arr.flush()
+    if part_frames is None:
+        arr = np.lib.format.open_memmap(out, mode="w+", dtype=np.uint8,
+                                        shape=(len(refs), 360, 640, 3))  # fmt: skip
+        for i, r in enumerate(refs):
+            arr[i] = ml.read_png(r)[::2, ::2]
+        arr.flush()
+        ids = [r.frame_id for r in refs]
+        ids_path.write_text(json.dumps(ids))
+        return arr, ids
+    parts = []
+    for j, q in enumerate(part_paths(out, len(refs), part_frames)):
+        chunk = refs[j * part_frames : (j + 1) * part_frames]
+        mm = np.lib.format.open_memmap(q, mode="w+", dtype=np.uint8,
+                                       shape=(len(chunk), 360, 640, 3))  # fmt: skip
+        for i, r in enumerate(chunk):
+            mm[i] = ml.read_png(r)[::2, ::2]
+        mm.flush()
+        del mm
+        parts.append(np.load(q, mmap_mode="r"))
     ids = [r.frame_id for r in refs]
     ids_path.write_text(json.dumps(ids))
-    return arr, ids
+    return Frames(parts), ids
 
 
 # --- the fit (DEV only) ---------------------------------------------------------------------------
@@ -653,10 +773,23 @@ def llr_of(pos: npt.NDArray[np.float64], neg: npt.NDArray[np.float64], passes: i
     return np.maximum(out, floor).astype(np.float32)
 
 
+LOGREG_WHOLE_MAX = 250_000  # rows: every fit before round 2 (the Orc Lord's ~0.2 M) stays whole
+LOGREG_CHUNK = 32_768  # rows per block above it (~100 MB of float64 a block, not ~4 GB)
+
+
 def logreg(x: npt.NDArray[np.float32], y: npt.NDArray[np.float64], wts: npt.NDArray[np.float64],
-           l2: float = 1.0, iters: int = 12) -> tuple[npt.NDArray[np.float32], float]:  # fmt: skip
+           l2: float = 1.0, iters: int = 12,
+           chunk: int | None = None) -> tuple[npt.NDArray[np.float32], float]:  # fmt: skip
     """Weighted L2 logistic regression by Newton steps on standardised features; returns the
-    weights and bias in the raw features' units."""
+    weights and bias in the raw features' units. Up to LOGREG_WHOLE_MAX rows (every fit before
+    round 2) it runs on the whole standardised matrix, exactly as before; above (or with
+    ``chunk`` given) it sums the gradient and the Hessian over blocks of ``chunk`` rows: the same
+    Newton steps to rounding, in ~100 MB instead of two float64 copies of the matrix."""
+    n = len(x)
+    if chunk is None and n > LOGREG_WHOLE_MAX:
+        chunk = LOGREG_CHUNK
+    if chunk is not None and chunk < n:
+        return _logreg_blocks(x, y, wts, l2, iters, chunk)
     mu, sd = x.mean(0), x.std(0) + 1e-3
     z = np.hstack([(x - mu) / sd, np.ones((len(x), 1), np.float32)]).astype(np.float64)
     w = np.zeros(z.shape[1])
@@ -665,6 +798,39 @@ def logreg(x: npt.NDArray[np.float32], y: npt.NDArray[np.float64], wts: npt.NDAr
         p = 1.0 / (1.0 + np.exp(-np.clip(z @ w, -30, 30)))
         g = z.T @ (wts * (p - y)) + reg * w
         hess = (z * (wts * p * (1 - p))[:, None]).T @ z + np.diag(reg)
+        w -= np.linalg.solve(hess, g)
+    wf = (w[:-1] / sd).astype(np.float32)
+    return wf, float(w[-1] - (w[:-1] * mu / sd).sum())
+
+
+def _logreg_blocks(x: npt.NDArray[np.float32], y: npt.NDArray[np.float64],
+                   wts: npt.NDArray[np.float64], l2: float, iters: int,
+                   chunk: int) -> tuple[npt.NDArray[np.float32], float]:  # fmt: skip
+    """logreg's Newton steps with the sums taken block by block (float64 accumulators)."""
+    n, d = x.shape
+    blocks = [slice(i, min(n, i + chunk)) for i in range(0, n, chunk)]
+    acc = np.zeros(d)
+    for b in blocks:
+        acc += x[b].sum(0, dtype=np.float64)
+    mu = acc / n
+    acc[:] = 0.0
+    for b in blocks:
+        acc += ((x[b] - mu) ** 2).sum(0)
+    sd = np.sqrt(acc / n) + 1e-3
+
+    def z_of(b: slice) -> npt.NDArray[np.float64]:
+        return np.hstack([(x[b] - mu) / sd, np.ones((b.stop - b.start, 1))])
+
+    w = np.zeros(d + 1)
+    reg = l2 * np.r_[np.ones(d), 0.0]
+    for _ in range(iters):
+        g = reg * w
+        hess = np.diag(reg)
+        for b in blocks:
+            z = z_of(b)
+            p = 1.0 / (1.0 + np.exp(-np.clip(z @ w, -30, 30)))
+            g += z.T @ (wts[b] * (p - y[b]))
+            hess += (z * (wts[b] * p * (1 - p))[:, None]).T @ z
         w -= np.linalg.solve(hess, g)
     wf = (w[:-1] / sd).astype(np.float32)
     return wf, float(w[-1] - (w[:-1] * mu / sd).sum())
@@ -702,16 +868,22 @@ def make_items(frames: Any, fids: Sequence[int], rows: dict[int, dict[str, Any]]
     return out
 
 
-def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float = 1.0
+def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float = 1.0,
+                stats: dict[str, Any] | None = None
                 ) -> tuple[npt.NDArray[np.float32], float]:  # fmt: skip
     """Positives: each party unit's window and its 4 neighbours; negatives: random windows of
     every frame away from the party, then ``rounds`` of hard negatives (each negative frame's
     top 20 windows scoring above -2). The kept windows are COPIES: a view into a frame's window
-    vectors held all of them (~4.5 MB a frame; the Orc Lord's fit was OOM-killed under 4 GB)."""
+    vectors held all of them (~4.5 MB a frame; the Orc Lord's fit was OOM-killed under 4 GB).
+    The training matrix is built once and grown by each round's hard negatives (the rows and
+    their order as before: positives, random negatives, then each round's hard ones), so a
+    round-2 fit's ~0.5 M windows are held once, not three times. ``stats``: filled with the row
+    counts (pos, neg, hard per round)."""
     import mvp_watch as mw
 
     rng = np.random.default_rng(seed)
-    xp, xn = [], []
+    xp: list[Any] = []
+    xn: list[Any] = []
     for it in items:
         wv = mw.window_vectors(it.feats)
         oh, ow = wv.shape[:2]
@@ -727,13 +899,19 @@ def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float
         if len(cand):
             n = 60 if it.kind == "pos" else 150
             pick = cand[rng.choice(len(cand), min(len(cand), n), replace=False)]
-            xn.extend(wv[pick[:, 0], pick[:, 1]])
-    pos, neg = np.array(xp, np.float32), np.array(xn, np.float32)
+            xn.append(wv[pick[:, 0], pick[:, 1]])  # a copy (fancy indexing), one block a frame
+    dim = mw.N_FEATURES * mw.WIN[0] * mw.WIN[1]
+    pos = np.array(xp, np.float32).reshape(-1, dim)
+    x = np.vstack([pos, *(np.asarray(v, np.float32).reshape(-1, dim) for v in xn)])
+    del xn, xp
+    n_pos = len(pos)
+    if stats is not None:
+        stats.update(pos=n_pos, neg=len(x) - n_pos, hard=[])
     w, b = np.zeros(1, np.float32), 0.0
     for r in range(rounds + 1):
-        x = np.vstack([pos, neg])
-        y = np.r_[np.ones(len(pos)), np.zeros(len(neg))]
-        wts = np.r_[np.full(len(pos), len(neg) / len(pos) * 0.5), np.ones(len(neg))]
+        n_neg = len(x) - n_pos
+        y = np.r_[np.ones(n_pos), np.zeros(n_neg)]
+        wts = np.r_[np.full(n_pos, n_neg / n_pos * 0.5), np.ones(n_neg)]
         w, b = logreg(x, y, wts, l2)
         if r == rounds:
             break
@@ -748,13 +926,16 @@ def train_party(items: Sequence[Item], rounds: int = 2, seed: int = 0, l2: float
                 yy, xx = divmod(int(j), sm.shape[1])
                 if sm[yy, xx] > -2:
                     hard.append(wv[yy, xx].copy())  # a view would keep every frame's wv (4.5 MB)
+        if stats is not None:
+            stats["hard"].append(len(hard))
         if hard:
-            neg = np.vstack([neg, np.array(hard, np.float32)])
+            x = np.vstack([x, np.array(hard, np.float32)])
     return w.reshape(mw.N_FEATURES, *mw.WIN), b
 
 
 AURA_THR = ORCLORD.aura_thr  # Amendment B: the aura rule's frozen threshold (DEV hunting max 0.065)
 LIN_MARGIN = 1.0  # Amendment B: the party threshold = the DEV negatives' max + this
+AURA_MARGIN = 0.015  # Amendment B / stormy 5b: the aura threshold = the DEV negatives' max + this
 BODY_HUNT_W, BODY_OTHER_W = 10.0, 5.0  # the body LUT's weights of hunting / other-species pixels
 
 
@@ -789,13 +970,55 @@ def fit_recipe(a: argparse.Namespace, prof: mvp_profiles.BossProfile) -> dict[st
         raise SystemExit(str(e)) from None
 
 
-def aura_fields(recipe: dict[str, Any], prof: mvp_profiles.BossProfile) -> dict[str, Any]:
-    """The model's aura fields of a resolved recipe, its profile and its version (``<name>-v1``:
-    the Orc Lord's ``orclord-v1``, as before)."""
+def aura_fields(recipe: dict[str, Any], prof: mvp_profiles.BossProfile,
+                round_: int = 1) -> dict[str, Any]:  # fmt: skip
+    """The model's aura fields of a resolved recipe, its profile and its version
+    (``<name>-v<round>``: the Orc Lord's ``orclord-v1``, as before; round 2's ``stormy-v2``)."""
     return {"ring": tuple(float(v) for v in recipe["ring"]), "ring_cell": int(recipe["ring_cell"]),
             "ring_dy": float(recipe["ring_dy"]),
             "aura_rule": tuple(int(v) for v in recipe["aura_rule"]),
-            "profile": prof.name, "version": f"{prof.name}-v1"}  # fmt: skip
+            "profile": prof.name, "version": f"{prof.name}-v{round_}"}  # fmt: skip
+
+
+def aura_threshold(neg_max: float, margin: float) -> float:
+    """PURE: the aura threshold from the DEV negatives' max: max + margin, rounded UP to 0.01
+    (round 1's 0.0417 + 0.015 -> 0.06, stormy-knight-recognizer.md 5b)."""
+    import math
+
+    return math.ceil(round((neg_max + margin) * 100.0, 9)) / 100.0
+
+
+def seen_rule(party: float, aura: float, lin_thr: float, aura_thr: float, mode: str,
+              aura_and: float = 0.5) -> bool:  # fmt: skip
+    """PURE: mvp_watch.decide's ``seen`` from a frame's best party and aura scores, by the
+    model's aura mode (or / and / off; mvp_watch.and_threshold)."""
+    if party >= lin_thr:
+        return True
+    if mode == "off":
+        return False
+    if mode == "and":
+        return aura >= aura_thr and party >= lin_thr - (1.0 - aura_and) * abs(lin_thr)
+    return aura >= aura_thr
+
+
+def memmap_names(watch: Path, sessions: Sequence[Any], round_: int) -> tuple[str, list[str]]:
+    """The fit's / dev's memmap file names: round 1's ``watch-dev.npy`` / ``hunt-<i>.npy`` (as
+    before); round 2's by session id, so the leave-one-out fits share one --work."""
+    if round_ == 1:
+        return "watch-dev.npy", [f"hunt-{i}.npy" for i in range(len(sessions))]
+    return (f"watch-{Path(watch).name}.npy",
+            [f"hunt-{Path(s).name}.npy" for s in sessions])  # fmt: skip
+
+
+def _round(a: argparse.Namespace) -> int:
+    r = int(getattr(a, "round", None) or 1)
+    if r not in ROUNDS:
+        raise SystemExit(f"--round {r}: not one of {ROUNDS}")
+    return r
+
+
+def _parts(round_: int) -> int | None:
+    return PART_FRAMES if round_ == 2 else None
 
 
 def _changes(session: Path) -> list[int]:
@@ -805,36 +1028,49 @@ def _changes(session: Path) -> list[int]:
 def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
     """DEV only: the watch's cells 0-7 (and before the first spawn), the pilot's first 300 s on
     the map, and every --extra hunting session (Amendment B). Per boss: the profile's DEV cells,
-    party and aura recipe (fit_recipe)."""
+    party and aura recipe (fit_recipe). ``--round 2``: the whole watch and every whole hunting
+    session (watch_split, hunt_split), the memmaps by session id in parts (rule 7), the version
+    ``<profile>-v2``. ``--aura``: the model's aura mode; ``--aura-margin``: the aura threshold
+    from the DEV negatives' max (aura_threshold)."""
     import mvp_watch as mw
 
     prof = profile_of(a)
+    round_ = _round(a)
+    mode = str(getattr(a, "aura", None) or "or")
+    aura_and = float(getattr(a, "aura_and", None) or mw.AURA_AND)
+    margin = getattr(a, "aura_margin", None)
+    if mode not in mw.AURA_MODES:
+        raise SystemExit(f"--aura {mode}: not one of {mw.AURA_MODES}")
+    if prof is ORCLORD and mode != "or":
+        raise SystemExit("--boss orclord keeps the v1 format: --aura or")
+    if margin is not None and getattr(a, "aura_thr", None) is not None:
+        raise SystemExit("--aura-margin sets the aura threshold from DEV: not with --aura-thr")
     recipe = fit_recipe(a, prof)
     aura_thr = float(recipe["aura_thr"])
     a.work.mkdir(parents=True, exist_ok=True)
     wrows = _rows(a.watch_truth, prof)
     wmap = _map_of(a.watch_truth, prof)
     spawns, kills = watch_times(a.events, prof.boss)
-    dev_cells = prof.dev_cells | {-1}  # and the frames before the first spawn
-    dev_w = {f for f, r in wrows.items()
-             if on_map(r, wmap) and cell_of(int(r["t"]), spawns) in dev_cells}  # fmt: skip
-    watch, wids = half_frames(a.watch, dev_w, a.work / "watch-dev.npy")
+    # round 1: cells 0-7 and the frames before the first spawn; round 2: the whole watch
+    dev_w = watch_split(wrows, spawns, wmap, prof, round_, "dev")
+    sessions = [a.pilot, *(a.extra or [])]
+    wname, hnames = memmap_names(a.watch, [s for s, _ in sessions], round_)
+    watch, wids = half_frames(a.watch, dev_w, a.work / wname, _parts(round_))
     hunts = []
     lone_left: dict[str, int] = {}
-    for i, (session, tpath) in enumerate([a.pilot, *(a.extra or [])]):
+    for i, (session, tpath) in enumerate(sessions):
         rows = _rows(Path(tpath), prof)
-        part = pilot_part(list(rows.values()), map_name=_map_of(Path(tpath), prof))
-        keep = {f for f, v in part.items() if v == "dev"} if i == 0 else set(part)
+        keep = hunt_split(list(rows.values()), _map_of(Path(tpath), prof), i == 0, round_, "dev")
         keep, lone = hunt_negatives(rows, keep, session, prof)
         if prof.lone:
             lone_left[Path(session).name] = len(lone)
-        arr, ids = half_frames(Path(session), keep, a.work / f"hunt-{i}.npy")
+        arr, ids = half_frames(Path(session), keep, a.work / hnames[i], _parts(round_))
         hunts.append((arr, ids, rows, _rects(Path(tpath), prof)))
     wrects = _rects(a.watch_truth, prof)  # the Orc Lord's ow1: STANDARD_RECTS, as before
     ui_watch = mw.rect_mask((360, 640), wrects)
     changes = _changes(a.watch)
-    h = colour_hists(watch, wids, wrows, spawns, kills, changes, sorted(prof.dev_cells), ui_watch,
-                     prof.party)  # fmt: skip
+    h = colour_hists(watch, wids, wrows, spawns, kills, changes,
+                     colour_cells(prof, round_, spawns, kills), ui_watch, prof.party)  # fmt: skip
     hh = np.zeros(mw.NBINS)
     for arr, _, _, hrects in hunts:  # the Orc Lord's pilots: HUNT_RECTS, as before
         ui_hunt = mw.rect_mask((360, 640), hrects)
@@ -853,13 +1089,17 @@ def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
         axis=0,
     )
     zero = np.zeros((mw.N_FEATURES, *mw.WIN), np.float32)
-    aura = aura_fields(recipe, prof)
+    aura = aura_fields(recipe, prof, round_)
     model0 = mw.Model(body_lut=body, lin_w=zero, lin_b=0.0, lin_thr=0.0, aura_thr=aura_thr,
                       title=title.astype(np.float32), **aura)  # fmt: skip
     items = make_items(watch, wids, wrows, model0, wrects, hunt=False, jobs=prof.party)
     for arr, ids, rows, hrects in hunts:
         items += make_items(arr, ids, rows, model0, hrects, hunt=True, jobs=prof.party)
-    w, b = train_party(items)
+    neg_aura = max(it.aura for it in items if it.kind in ("neg", "hunt"))
+    if margin is not None:  # round 2: the aura threshold from DEV (the negatives' max + margin)
+        aura_thr = aura_threshold(neg_aura, float(margin))
+    train: dict[str, Any] = {}
+    w, b = train_party(items, stats=train)
     out_best, in_best = [], []  # each frame's best window outside / inside SELF_ZONE
     for it in items:
         sm = mw.window_scores(it.feats, w, b)
@@ -871,23 +1111,32 @@ def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
     zone_thr = max(s for s, n in zip(in_best, is_neg, strict=True) if n) + LIN_MARGIN
     penalty = max(0.0, zone_thr - lin_thr)
     model = mw.Model(body_lut=body, lin_w=w, lin_b=b, lin_thr=lin_thr, aura_thr=aura_thr,
-                     title=title.astype(np.float32), zone_penalty=penalty, **aura)  # fmt: skip
+                     title=title.astype(np.float32), zone_penalty=penalty, aura_mode=mode,
+                     aura_and=aura_and, **aura)  # fmt: skip
     sha = mw.save(a.out, model)
     best = [max(o, i - penalty) for o, i in zip(out_best, in_best, strict=True)]
     negs = [s for s, n in zip(best, is_neg, strict=True) if n]
     pos = [(s, it.aura) for s, it in zip(best, items, strict=True) if it.kind == "pos"]
-    neg_aura = max(it.aura for it in items if it.kind in ("neg", "hunt"))
-    recall = float(np.mean([s >= lin_thr or au >= aura_thr for s, au in pos]))
+    recall = float(np.mean([seen_rule(s, au, lin_thr, aura_thr, mode, aura_and)
+                            for s, au in pos]))  # fmt: skip
     pixels = {k: int(v.sum()) for k, v in h.items()} | {"hunt": int(hh.sum())}
     rep = {"model": str(a.out), "sha256": sha, "lin_thr": round(lin_thr, 4), "lin_b": round(b, 4),
            "zone_thr": round(zone_thr, 4), "zone_penalty": round(penalty, 4),
            "aura_thr": aura_thr, "dev_items": dict(Counter(it.kind for it in items)),
            "dev_neg_max_party": round(max(negs), 4), "dev_neg_max_aura": round(neg_aura, 4),
            "dev_pos_recall_in_sample": round(recall, 4), "colour_pixels": pixels}  # fmt: skip
-    if prof is not ORCLORD:  # the Orc Lord's report keeps its keys
+    if prof is not ORCLORD or round_ != 1:  # the Orc Lord's report keeps its keys
         rep |= {"boss": prof.name, "lone_frames_left_out": lone_left,
                 "recipe": {k: list(v) if isinstance(v, tuple) else v
                            for k, v in recipe.items()}}  # fmt: skip
+        rep |= {"round": round_, "version": model.version, "aura_mode": mode,
+                "aura_margin": margin, "train_rows": train,
+                "dev_frames": {"watch": len(wids),
+                               **{Path(s).name: len(ids) for (s, _), (_, ids, _, _)
+                                  in zip(sessions, hunts, strict=True)}}}  # fmt: skip
+        if mode == "and":
+            rep["aura_and"] = aura_and
+            rep["and_thr"] = round(mw.and_threshold(model), 4)
     return rep
 
 
@@ -902,21 +1151,26 @@ def _full_frames(session: Path, keep: set[int]) -> Iterable[tuple[int, int, Any]
 
 def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     """HELD-OUT, once: the watch's cells 8-14, the pilot after its first 300 s; --supplement
-    sessions (Amendment B) are reported apart. decide() on the FULL frames, timed. Per boss: the
-    profile's HELD-OUT cells (stormy: 8-15) and party; the model must be the profile's."""
+    sessions (Amendment B) are reported apart. decide() on the FULL frames, timed, by the
+    model's own recipe (its aura mode too). Per boss: the profile's HELD-OUT cells (stormy: 8-15)
+    and party; the model must be the profile's. ``--round 2``: the whole watch (every cell) and
+    the whole pilot are HELD-OUT, and the model must be a round-2 one (version_round)."""
     import mvp_watch as mw
 
     prof = profile_of(a)
+    round_ = _round(a)
     try:
         model = mw.load(a.model, a.sha256, profile=prof.name)
     except mw.ModelUnavailable as e:
         raise SystemExit(str(e)) from None
+    if version_round(model.version) != round_:
+        raise SystemExit(f"{a.model}: a {model.version} model, not a round-{round_} one")
     ms: list[float] = []
     wrows = _rows(a.watch_truth, prof)
     wmap = _map_of(a.watch_truth, prof)
     spawns, _ = watch_times(a.events, prof.boss)
-    held = {f for f, r in wrows.items()
-            if on_map(r, wmap) and cell_of(int(r["t"]), spawns) in prof.held_cells}  # fmt: skip
+    # round 1: the HELD-OUT cells; round 2: the whole (held-out) watch
+    held = watch_split(wrows, spawns, wmap, prof, round_, "held")
     per_cell: dict[int, list[tuple[float, str, bool]]] = {}
     gap = {"n": 0, "fp": 0, "fp_frames": []}
     pos_frames = {"n": 0, "seen": 0, "lord_n": 0, "lord_seen": 0}
@@ -947,8 +1201,8 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
         (f"supplement:{Path(s).name}", (s, t)) for s, t in (a.supplement or [])
     ]:
         rows = _rows(Path(tpath), prof)
-        part = pilot_part(list(rows.values()), map_name=_map_of(Path(tpath), prof))
-        keep = {f for f, v in part.items() if v == "held"} if name == "pilot" else set(part)
+        keep = hunt_split(list(rows.values()), _map_of(Path(tpath), prof), name == "pilot",
+                          round_, "held")  # fmt: skip
         keep, lone = hunt_negatives(rows, keep, session, prof)
         hrects = _rects(Path(tpath), prof)  # the Orc Lord's pilot / s1: HUNT_RECTS, as before
         n, fp, fps, reasons = 0, 0, [], Counter()
@@ -975,6 +1229,8 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     return {
         "model": str(a.model), "sha256": model.sha256,
         **({} if prof is ORCLORD else {"boss": prof.name, "held_cells": sorted(prof.held_cells)}),
+        **({} if round_ == 1 else {"round": round_, "held_cells": "all", "version": model.version,
+                                   "aura_mode": model.aura_mode}),
         "cells": {str(c): e for c, e in first.items()},
         "recall_within_1s": round(within / n_cells, 4) if n_cells else None,
         "cells_within": within, "cells_n": n_cells,
@@ -994,6 +1250,126 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
             "latency_p95<=60ms": float(np.percentile(lat, 95)) <= 60.0,
         },
     }  # fmt: skip
+
+
+def _top(rows: Sequence[tuple[int, float, float]], k: int = 5) -> dict[str, Any]:
+    """The ``k`` highest party and aura scores of (frame id, party, aura) negatives."""
+    by_p = sorted(rows, key=lambda r: -r[1])[:k]
+    by_a = sorted(rows, key=lambda r: -r[2])[:k]
+    return {"party": [[f, p, au] for f, p, au in by_p], "aura": [[f, p, au] for f, p, au in by_a]}
+
+
+def cmd_dev(a: argparse.Namespace) -> dict[str, Any]:
+    """DEV ONLY (stormy-knight-recognizer.md 9): exactly the frames ``fit --round R`` takes (the
+    same watch_split / hunt_split / hunt_negatives, the same memmaps in --work), decided with a
+    model from the half-res memmaps (decide_half on a memmap frame = decide on the full frame).
+    The watch's cells (first-episode delay, within RECALL_S), its gap frames, and per hunting
+    session the false positives per 10 min and its lone frames. Every number is IN-SAMPLE for the
+    sessions the model was fitted on; a session left out of its fit gives the leave-one-out rate.
+    It cannot tell a held-out session from a DEV one: never give it one (the caller's split).
+    Without --model: decode the memmaps only (its own memory scope, before the fits)."""
+    import mvp_watch as mw
+
+    prof = profile_of(a)
+    round_ = _round(a)
+    model = None
+    if a.model is not None:
+        if not a.sha256:
+            raise SystemExit("dev --model needs --sha256")
+        try:
+            model = mw.load(a.model, a.sha256, profile=prof.name)
+        except mw.ModelUnavailable as e:
+            raise SystemExit(str(e)) from None
+    a.work.mkdir(parents=True, exist_ok=True)
+    wrows = _rows(a.watch_truth, prof)
+    wmap = _map_of(a.watch_truth, prof)
+    spawns, _ = watch_times(a.events, prof.boss)
+    dev_w = watch_split(wrows, spawns, wmap, prof, round_, "dev")
+    sessions = [a.pilot, *(a.extra or [])]
+    wname, hnames = memmap_names(a.watch, [s for s, _ in sessions], round_)
+    watch, wids = half_frames(a.watch, dev_w, a.work / wname, _parts(round_))
+    hunts = []
+    for i, (session, tpath) in enumerate(sessions):
+        rows = _rows(Path(tpath), prof)
+        keep = hunt_split(list(rows.values()), _map_of(Path(tpath), prof), i == 0, round_, "dev")
+        keep, lone = hunt_negatives(rows, keep, session, prof)
+        arr, ids = half_frames(Path(session), keep, a.work / hnames[i], _parts(round_))
+        larr, lids = (None, [])
+        if lone:
+            larr, lids = half_frames(Path(session), lone, a.work / f"lone-{hnames[i]}",
+                                     _parts(round_))  # fmt: skip
+        hunts.append((Path(session).name, arr, ids, larr, lids, rows, lone,
+                      _rects(Path(tpath), prof)))  # fmt: skip
+    decoded = {"watch": len(wids), **{h[0]: [len(h[2]), len(h[4])] for h in hunts}}
+    rep: dict[str, Any] = {"round": round_, "boss": prof.name, "split": "dev", "decoded": decoded}
+    if model is None:
+        return rep
+    wrects = _rects(a.watch_truth, prof)
+    per_cell: dict[int, list[tuple[float, str, bool]]] = {}
+    gap: dict[str, Any] = {"n": 0, "fp": 0, "fp_frames": []}
+    pos_frames = {"n": 0, "seen": 0, "lord_n": 0, "lord_seen": 0}
+    gap_scores: list[tuple[int, float, float]] = []
+    for i, fid in enumerate(wids):
+        v = mw.decide_half(np.asarray(watch[i]), model, wrects)
+        row = wrows[fid]
+        kind = kind_of(row, prof.party)
+        t = int(row["t"])
+        per_cell.setdefault(cell_of(t, spawns), []).append((t / 1e9, kind, bool(v["seen"])))
+        if kind == "neg":
+            gap["n"] += 1
+            if v["party"] is not None:
+                gap_scores.append((fid, float(v["party"]), float(v["aura"])))
+            if v["seen"]:
+                gap["fp"] += 1
+                gap["fp_frames"].append([fid, v["cue"], v["where"], v["aura"], v["party"]])
+        elif kind == "pos":
+            pos_frames["n"] += 1
+            pos_frames["seen"] += int(v["seen"])
+            if any(u["in_view"] and u["job"] == prof.boss for u in row["units"]):
+                pos_frames["lord_n"] += 1
+                pos_frames["lord_seen"] += int(v["seen"])
+    cells = {c: cell_scores(seq) for c, seq in sorted(per_cell.items())}
+    first = {c: d["episodes"][0] for c, d in cells.items() if d["episodes"]}
+    later = [e for d in cells.values() for e in d["episodes"][1:]]
+    hunting = []
+    for name, arr, ids, larr, lids, rows, lone, hrects in hunts:
+        n, fp, fps, reasons = 0, 0, [], Counter()
+        neg_scores: list[tuple[int, float, float]] = []
+        for i, fid in enumerate(ids):
+            v = mw.decide_half(np.asarray(arr[i]), model, hrects)
+            n += 1
+            reasons[str(v["reason"])] += 1
+            if v["party"] is not None:
+                neg_scores.append((fid, float(v["party"]), float(v["aura"])))
+            if v["seen"]:
+                fp += 1
+                fps.append([fid, v["cue"], v["where"], v["aura"], v["party"]])
+        hrep: dict[str, Any] = {"session": name, "frames": n, "fp": fp,
+                                "fp_per_10min": fp_rate(fp, n), "fp_frames": fps,
+                                "reasons": dict(reasons), "top": _top(neg_scores)}  # fmt: skip
+        if prof.lone:
+            lone_seen = {fid: bool(mw.decide_half(np.asarray(larr[i]), model, hrects)["seen"])
+                         for i, fid in enumerate(lids)} if larr is not None else {}  # fmt: skip
+            hrep["lone"] = lone_report(rows, lone, lone_seen, n + len(lone), prof)
+        hunting.append(hrep)
+    within = sum(e["within"] for e in first.values())
+    rep |= {
+        "model": str(a.model), "sha256": model.sha256, "version": model.version,
+        "aura_mode": model.aura_mode, "aura_thr": model.aura_thr,
+        "lin_thr": round(model.lin_thr, 4), "zone_penalty": round(model.zone_penalty, 4),
+        "cells": {str(c): e for c, e in first.items()}, "cells_n": len(first),
+        "cells_within": within,
+        "first_frame": sum(e["first_frame"] for e in first.values()),
+        "reentries": {"n": len(later), "within": sum(e["within"] for e in later),
+                      "never": sum(e["delay"] is None for e in later)},
+        "pos_frames": pos_frames,
+        "watch_gap": gap | {"fp_per_10min": fp_rate(gap["fp"], gap["n"]),
+                            "top": _top(gap_scores)},
+        "hunting": hunting,
+    }  # fmt: skip
+    if model.aura_mode == "and":
+        rep["and_thr"] = round(mw.and_threshold(model), 4)
+    return rep
 
 
 # --- round 2: the aura rule alone on EDGE ENTRIES (orclord-recognizer.md section 10 + 10a) -------
@@ -1266,17 +1642,35 @@ def parser() -> argparse.ArgumentParser:
     q.add_argument("--hunt", nargs=2, action="append", required=True,
                    metavar=("SESSION", "TRUTH"))  # fmt: skip
     q.add_argument("--out", type=Path, required=True)
-    for name in ("fit", "score"):
+    for name in ("fit", "score", "dev"):
         q = sub.add_parser(name)
         boss_arg(q)
+        q.add_argument("--round", type=int, choices=ROUNDS, default=1,
+                       help="the split: 1 = the pre-registered cells and the pilot's "
+                       "first 300 s; 2 = whole sessions (stormy-knight-recognizer.md 7; "
+                       "%(default)s)")  # fmt: skip
         q.add_argument("--watch", type=Path, required=True)
         q.add_argument("--watch-truth", type=Path, required=True)
         q.add_argument("--events", type=Path, required=True)
         q.add_argument("--pilot", nargs=2, metavar=("SESSION", "TRUTH"), required=True)
         q.add_argument("--out", type=Path, required=True)
-        if name == "fit":
+        if name == "dev":
             q.add_argument("--extra", nargs=2, action="append", metavar=("SESSION", "TRUTH"))
             q.add_argument("--work", type=Path, required=True)
+            q.add_argument("--model", type=Path, default=None)
+            q.add_argument("--sha256", default=None)
+        elif name == "fit":
+            q.add_argument("--extra", nargs=2, action="append", metavar=("SESSION", "TRUTH"))
+            q.add_argument("--work", type=Path, required=True)
+            q.add_argument("--aura", choices=("or", "and", "off"), default="or",
+                           help="how the model combines its cues (mvp_watch aura_mode; "
+                           "%(default)s = the v1 recipe)")  # fmt: skip
+            q.add_argument("--aura-and", type=float, default=0.5,
+                           help="--aura and: the party's share of its threshold the aura path "
+                           "needs (%(default)s)")  # fmt: skip
+            q.add_argument("--aura-margin", type=float, default=None,
+                           help="the aura threshold = the DEV negatives' max + this, rounded up "
+                           "to 0.01 (round 2; default: the profile's / --aura-thr)")  # fmt: skip
             # the aura recipe (default: the profile's; a None placeholder must be given here)
             q.add_argument("--aura-thr", type=float, default=None)
             q.add_argument("--ring", type=float, nargs=4, default=None,
@@ -1306,6 +1700,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif a.cmd == "fit":
         rep = cmd_fit(a)
         print(json.dumps(rep, indent=1))
+    elif a.cmd == "dev":
+        rep = cmd_dev(a)
+        a.out.write_text(json.dumps(rep, indent=1) + "\n")
+        print(json.dumps({k: v for k, v in rep.items() if k not in ("cells", "hunting")}, indent=1))
     elif a.cmd == "entries":
         rep = cmd_entries(a)
         a.out.write_text(json.dumps(rep, indent=1) + "\n")
