@@ -1327,3 +1327,18 @@ answer exists; ONE goes to the labellers, by an amendment; the other is deleted 
   the pack, its instructions and its own answers path only. **The verdict:** `blind_score.py`,
   section 6's bars for Garm Baby (1515) alone: good >= 90 % AND species >= 95 % from EACH labeller; the
   four common species are reported and decide nothing (this amendment).
+
+#### M2 (2026-11-09 ~21:4x ICT, the parent, BEFORE any labeller): the choices M1 asked for
+
+- **gw1 is NOT admitted.** 3c's join rule binds as written (own C1 <= 5 % on >= 50 rows): gw1
+  6.21 % fails, gw2 4.26 % passes. Changing the rule after seeing the number would be post-hoc, so
+  gw1 is outside T2's pool and outside TRAIN. Amendment M's "TRAIN + gw1 + gw2" becomes **TRAIN =
+  Amendment I's TRAIN + gw2** (391 Garm Baby boxes in written frames). If the trained model falls
+  short, more data comes from a NEW watch under 3c, never from gw1.
+- **The T2 pack is `gw2-floor`** (gw2 only, `--min-fit 0.536`, 4a's floor, as the cache writes):
+  T2 checks exactly the labels that train (M1 point 2: the 11-06 pack ran without the floor).
+  Its answer key sha256 c1050420fe41258ab183aa4b2469f2881148ba1d3e0e86184fb7690f298d1cd7, pack.json
+  b59f4c4f3e13184a..., the instructions dc48fb15... (T2's, unchanged), the reference d389551c...
+- The other candidate (`gw12-asbuilt`) is deleted unseen.
+- **T2's verdict** = `species_pass["1515"]` of blind_score.py over labellers E and F (both NEW):
+  good >= 0.90 and species >= 0.95 each, on the 30 Garm Baby crops.
