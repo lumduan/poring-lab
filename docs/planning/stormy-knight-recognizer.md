@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "Parent / Batt (section 10e): decide whether to spend the held-out R2-W + R2-H2 on stormy-v2 (it fails the DEV filter, so bar 1 is expected to fail) or keep them for a round-3 recipe pre-registered first; the exact score command is in 10d."
+next_action: "Round 2 stopped at DEV (section 11, the parent 2026-11-09 15:4x): R2-W + R2-H2 stay unread for a round 3 pre-registered first (10e); Batt may decide to score stormy-v2 instead (10d). The kill-before-run schedule stays."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -424,6 +424,11 @@ DATA, and lets DEV decide the cues again; the bars are round 1's.
   xmas_dun02), 3.51 GB, 14 shards, unchanged_skipped 0. Its truth (13:58:07-13:58:20, round 1's
   command, main a2181a74, `/dev/shm/poring-lab-tmp/stormy/r2h1-truth.json`): no Knight or Goblin
   on screen; Garm Baby in view on 32 frames in 3 episodes (its own spawn: the lone caveat).
+- **R2-H2 (HELD-OUT):** `record_session.py --backend rdp --label hunt-xmas02-p39 --seconds 1620
+  --fps 1 --format png --max-bytes 6G`, session `20261109T143541-rdp-hunt-xmas02-p39`, beside pilot
+  p39 (rogue-xmas02.md 4AT: the base + `--kill-gap --loot-first`), 14:35:41-15:02:4x ICT, stop
+  "duration", 1,620 frames, 3.52 GB; the MVP killed 14:34:50 (alive at 65, 60 at 14:34:36). Not
+  opened since.
 
 ## 9. Round 2 DEV recipe -- written before the fit (2026-11-09 13:5x ICT; no round-2 fit run yet, no held-out frame read)
 
@@ -653,3 +658,16 @@ its threshold.
 `dev` report, the LOO table, the post-hoc sweep, the fold models and a copy of stormy-v2;
 `files.sha256` verified). The DEV memmaps are deleted. `r2h1-truth.json` and the model stay in
 `/dev/shm/poring-lab-tmp/stormy/` for the parent.
+
+## 11. The parent's decision: round 2 stops at DEV; the held-out data stays unread (2026-11-09 15:4x ICT)
+
+- **NOT SCORED.** The DEV filter (section 9) failed, and stormy-v2 sees 8 / 16 watch cells even
+  in-sample (bar 1 needs 16 / 16 held-out). Scoring it would use up R2-W and R2-H2 -- the only
+  fresh held-out watch and hunt -- on a model that cannot pass. They stay unread, for a round 3
+  pre-registered first along 10e's lines (every room in >= 2 DEV sessions, a leave-one-out
+  threshold rule, perhaps a persistence rule). Batt may decide otherwise; the command is in 10d.
+- The code is merged (c764ef5f; round 1's model reproduces bit for bit). The flee rule does not
+  exist; **the kill-before-run schedule (rogue-xmas02.md Amendment K) stays the only protection.**
+- Local data kept until a decision: R2-W (`20261109T131023-rdp-sk-watch2`, 1.97 GB), R2-H1
+  (3.51 GB), R2-H2 (3.52 GB), round 1's watch and hunt (2.22 + 3.18 GB) in ~/poring-lab-rec; they
+  ship to the NAS after 17:00 (`dataset_ship.py`), unread.
