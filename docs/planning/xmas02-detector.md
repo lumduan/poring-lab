@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "xmas02-gb (Amendment M, a Garm Baby class): trained and frozen 2026-11-10 (M8); evaluation part A built (M9), not yet scored. DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment M (2026-11-09, a Garm Baby class): gw1 / gw2 labelled and two candidate T2 packs built (M1); gw1 fails 3c (own C1 6.21 %, all Garm Baby facing misses), gw2 passes (4.26 %); the parent fixes the pack (sources, the T_h floor) by an amendment BEFORE the two labellers; gw3 held out. Before it: Amendment L (2026-11-07 14:2x, Batt delegated): option (b) -- walking sight is judged by the live runner with the packets as the referee; the first step is offline, inside the p7 + p8 study (rogue-xmas02.md). (a), a per-capture camera estimate, is the fallback. DEPLOYED (Amendment J) and on the GPU path since 2026-11-07."
+next_action: "Amendment M (2026-11-09, a Garm Baby class, Batt): T2 PASS (M3); the xmas02-gb model trained 20 epochs (M6) and FROZEN (M8: last.pt 85fb37a4...); M9 (2026-11-10 06:1x-06:3x): the evaluation part A done -- the ONNX (b22d972b...), gw3's labels (662056b2...) and its seed-53 pack (300 crops, key 99f2acc7...) -- before any labeller or prediction. Next: two NEW blind labellers G and H, then part B (M9 5: refs, predictions, the scores once, the latency), then Batt decides deployment and the runner's seen -> Fly Wing (rogue-xmas02.md). Earlier: Amendment L (walking sight judged by the live runner, packets the referee); DEPLOYED (Amendment J) on the GPU path since 2026-11-07."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1664,3 +1664,216 @@ Variables (bot-server):
   **sha256 `85fb37a4cb606aad4636d605f9a2056dde6431a42559e052b1036aaac5f98d6b`** (5,534,234 bytes).
   Nothing is refitted after this line. Next: M6's steps 1-5 (the ONNX export, the evaluation once
   under M7, the worker stopped, the run archived).
+
+#### M9 (2026-11-10 06:1x-06:3x ICT): the evaluation, part A (the export, gw3's labels and pack; before any labeller and any prediction)
+
+**How (a subagent, branch `feat/garm-eval` from `a6043fad`, offline, CPU, a 4 GB scope without swap):**
+the worktree's sources with the main venv (M1's way), the frozen params `d4cc0a5d...` (Amendment G)
+and the 11-06 inputs in /dev/shm; gitignored local data linked read-only from the main checkout
+(`data/kb`, and `packages/poring_dataset/src/poring_dataset/_generated`, the generated map cache:
+`mapcache.load` checks every file against the committed lock). No GPU, no guarded step, no
+prediction, no score. The model was re-hashed first: `last.pt` sha256 `85fb37a4...` (M8), 5,534,234
+bytes.
+
+**1. The ONNX export (M6 step 1, the deployed model's recipe):**
+- The temporary env: the archived `$A7/onnx-export/build.sh` (sha256
+  `0b1db27cc873a853071b6bd8ed91f9ffab6cb531b329be361732006c7ae3e2d2`, run from a byte-identical
+  copy), 06:16:57-06:17:08, 1.5 GB in `/dev/shm/poring-lab-tmp/onnx-export` (the lab's /dev/shm
+  1.9 GB at its peak): torch 2.15.0+cpu, ultralytics 8.4.165, onnx 1.23.2, onnxslim 0.1.99,
+  onnxruntime 1.31.1. **Removed at 06:18** (the lab's /dev/shm back to 0.41 GB).
+- The export: M6's Python unchanged (as a file), 06:17:37-06:17:44, `imgsz=(736, 1280)`,
+  `simplify=True`, `device='cpu'`; opset 18; input `images` [1, 3, 736, 1280], output `output0`
+  [1, 12, 19320] (4 + 8 classes); the ONNX's own metadata names the 8 classes, imgsz [736, 1280].
+  The deployed model's export has the same producer (pytorch 2.15.0), opset and ultralytics.
+- **`/dev/shm/poring-lab-detector/model/xmas02gb-last-736x1280.onnx`, sha256
+  `b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37`** (10,828,684 bytes), and
+  **`xmas02gb-last-736x1280.names.json`, sha256
+  `1c400d92fdd5df005243a1f7314aef759a21b2cf6cd80a33c09b96ff69582079`**: player, npc, warp,
+  mystcase, cruiser, cookie, cookie_xmas, garm_baby (the class file's order, M4).
+- The deployed `xmas02-last-736x1280.onnx` (`293dca92...`) and its `.names.json` (`af86aacc...`)
+  are unchanged, re-hashed after the move; nothing else in the folder changed.
+
+**2. gw3's labels (M6 step 2, M7 point 1; the frozen rule, as the 11-07 TEST labels were made):**
+- The recording `$N/20261109T212445-rdp-gb-gw3`: its `checksums.sha256` verified on the NAS
+  (06:18:45-06:19:23: 8 shards + packets OK); 916 frames, 932 packet events, rdp / png / recorder
+  v7 / [80, 77, 1280, 720] / lab-rathena. The watch (`20261109T212455-watch-xmas_dun02-gw3`,
+  events sha256 `77c722d4...`; not read by the label tool): seed 2611093, 16 stands of
+  `lattice-test-gb.json` (`22c337b4...`), 16 spawns of `1515 x 2`, 16 dwells of 40 s, 16
+  `@killmonster2`, `run_end: done`.
+- `map_labels.py labels --map xmas_dun02 --eval-test` with `--params $F/params.json` (FROZEN
+  `d4cc0a5d...`) and `--classes $F/classes-none.json` (`516cf0f5...`, the TRAIN and 11-07 TEST
+  labels' file), nice 19, 06:20:01-06:25:22 (commit `a6043fad`, M7's `eval_suffixes`).
+  A first call at 06:19:33 stopped while opening the session, before any frame was labelled: the
+  worktree had no generated map cache (gitignored); linked read-only from the main checkout, rerun.
+- **The label file: `/dev/shm/poring-lab-tmp/gb/eval/labels-test/20261109T212445-rdp-gb-gw3.json`,
+  sha256 `662056b27b73dcc312c04e2229992da3b4f982881fdbde0d6678739a248bef79`**, `eval_test: true`.
+  Candidates 759 of 916 (drops: gm_window 118, map_change 39); whole frames 394 (frame
+  exclusions: dying_in_view 3).
+
+| species | kept (in whole frames) | pass the T_h floor (the pack's pool) | units | under a model | excluded |
+|---|---|---|---|---|---|
+| Myst Case 1249 | 359 (192) | 347 | 11 | 53 | occluded_model 24, ambiguous_view 14, occluded_terrain 14, next_move 7, unfit 5, facing_unknown 2, ui 2, crowd 1 |
+| Cruiser 1248 | 236 (116) | 205 | 13 | 26 | occluded_terrain 31, occluded_model 12, ambiguous_view 9, facing_unknown 9, next_move 3, unfit 1 |
+| Cookie 1265 | 164 (84) | 157 | 5 | 48 | occluded_terrain 20, ambiguous_view 14, occluded_model 14, facing_unknown 8, next_move 4, unfit 3, crowd 1 |
+| Christmas Cookie 1246 | 76 (39) | 73 | 4 | 28 | ambiguous_view 7, unfit 4, next_move 3, occluded_model 2 |
+| **Garm Baby 1515** | **899 (566)** | **796** | **32 (all 32 spawned dogs)** | 136 | occluded_model 134, occluded_terrain 68, ambiguous_view 61, unfit 39, next_move 18, crowd 7, ui 1 |
+| Christmas Goblin 1607 | 0 | 0 | 0 | 0 | - |
+
+**3. The evaluation pack (M6 step 2, M7 point 2: `--min-fit 0.536`; the 11-07 pack's shape):**
+
+    E=/dev/shm/poring-lab-tmp/gb/eval   # the brief's location (M6 named $T/pack-gw3, $T/key-gw3)
+    map_labels.py pack --map xmas_dun02 --eval-test $E/labels-test/20261109T212445-rdp-gb-gw3.json \
+        --per-species 60 --seed 53 --min-fit 0.536 --pack-dir $E/pack --key-dir $E/key \
+        --instructions docs/planning/xmas02-blind-instructions.txt \
+        --instructions-sha256 dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed \
+        --out $E/pack-build.json          # --out: required (11-07 found the same); M6 left it out
+
+- Built 06:25:52-06:26:22 (nice 15; `/dev/shm/poring-lab-tmp/gb/eval/build_pack.sh`): **300 crops,
+  15 grids**, salt xmas02. The tool's evaluation draw takes EVERY species with a kept label (as on
+  11-07), so all five drew 60: pools Myst Case 347, Cruiser 205, Cookie 157, Christmas Cookie 73,
+  **Garm Baby 796** (after the floor: weak_fit removed 12 / 31 / 7 / 3 / **103**).
+- **Garm Baby's 60 crops: 25 of the 32 dogs** (1 crop: 9 dogs, 2: 6, 3: 5, 4: 3, 5: 1, 7: 1), 58
+  frames, 9 under a model, fit 0.541-0.772 (median 0.629). The others: Myst Case 10 units, Cruiser
+  11, Cookie 5, Christmas Cookie 4. 261 distinct frames in all.
+- **The four common species' gw3 crops are reported and decide nothing**: their verdict is pooled
+  TEST with 11-07's pack (M7 point 4). **Garm Baby's verdict is the scorer's `Q1` (the classes
+  agreeing: Q1s), `per_species.garm_baby`** (M7 point 3): >= 50 evaluated crops, recall >= 0.80
+  AND precision >= 0.80. Q1c for Garm Baby is reported beside it.
+- **sha256 (recorded here BEFORE any labeller sees the pack):**
+  - the instructions `instructions.txt` = `docs/planning/xmas02-blind-instructions.txt`:
+    **`dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed`** (T2's and the 11-07
+    evaluation's, byte-identical; checked by the tool);
+  - `reference.png` **`2cae63ada9b143397a8c4e147a7707b0ee48d0c46b55f3787914a66db134d4aa`**,
+    byte-identical to the 11-07 evaluation pack's (the same 9 species and seed 53; the key's
+    letters equal 11-07's);
+  - `pack.json` `cdf9202f18d2303514704a30ec5a8ec81b71c94401e63dc5490a0ca7c4dc6590`;
+  - **the answer key `$E/key/answer_key.json`
+    `99f2acc70a7380931de81675e8a3010c8b6334aa7b296fccc8bbf080d0638891`** (min_fit 0.536, seed 53,
+    eval_test, params `d4cc0a5d...`, its one source = the label file above);
+  - the pack's file list `$E/pack-files.sha256` (318 files)
+    `3030eb8ac4708a9be61726a29e64710ca3d9ca6d9d0e48531e3d5f760952556c`; `pack-build.json`
+    `73088dcc...`.
+- **The labellers' copy: `/dev/shm/poring-lab-tmp/blind-gb53-gw3/pack`**, sha256-checked against
+  the file list (318 / 318), with an EMPTY `answers/` beside it. The key lives only under
+  `$E/key`, never under the labellers' directory.
+
+**4. The labellers: two NEW blind agents, G and H** (A, B: T2 of 11-06; C, D: the 11-07 evaluation;
+E, F: T2 of Garm Baby, M3). Each gets ONLY its brief below (G's sha256 `b681753d...`, H's
+`e855e350...`; the two differ only in the letter and the answers path): the pack, its instructions,
+its own answers path. Never the key, the model, packets, labels, this document or the other
+labeller. G's brief, verbatim (H: `H` for `G` in the first line and in `answers/H.json`):
+
+    You are BLIND LABELLER G for a poring-lab blind label check. You work
+    ALONE. Another labeller judges the same pack separately; you never see its work and it never sees
+    yours.
+
+    YOUR INPUTS (and nothing else):
+    - The pack directory PACK = /dev/shm/poring-lab-tmp/blind-gb53-gw3/pack
+      (reference.png, grids/grid_NN.png, crops/NNN.png, pack.json, instructions.txt).
+    - Its instructions: PACK/instructions.txt. Read it FIRST, in full, and follow it exactly. It
+      defines the three questions, the answer values and the answer format.
+
+    YOUR OUTPUT (the only file you write):
+    - ANSWERS = /dev/shm/poring-lab-tmp/blind-gb53-gw3/answers/G.json
+      A JSON list with ONE object per crop listed in PACK/pack.json, EVERY crop, in the format the
+      instructions give: {"crop": "001", "q1": ..., "q2": ..., "q3": ..., "note": ...}.
+
+    HOW:
+    - Look at PACK/reference.png first (the letters A-I, several views each). Then judge every crop:
+      use the grids for an overview and open PACK/crops/NNN.png whenever a tile is too small to judge
+      the box or the species. Judge each crop on its own pixels against reference.png.
+    - When you cannot tell, answer "unsure" and say why in "note". Do not guess to fill a value.
+    - Before you finish: re-read ANSWERS, check it parses as JSON, has exactly one object per crop
+      in pack.json (no crop missing, none twice), and uses only the values the instructions allow.
+
+    STRICTLY FORBIDDEN (the check is only valid if you see nothing but the pack):
+    - Opening, listing or reading ANY path outside PACK, except writing your own ANSWERS file. In
+      particular: no other directory under /dev/shm (no answer key, no labels, no other pack, no
+      other answers file), no repository file or document, no NAS path, no model or detector
+      output, no packet capture, no recording, no web search.
+    - Writing anywhere but ANSWERS; changing or deleting anything in PACK.
+    - Inferring the species from file names, crop numbers or their order (they carry no class
+      information).
+    - Running any program on the pack beyond viewing the images and reading pack.json /
+      instructions.txt (no scripts, no image analysis tools, no model).
+    - Contacting the other labeller or any other agent.
+
+    SAFETY (poring-lab, CLAUDE.md rules 1-10, inherited): no docker or docker compose of any kind, no
+    guarded steps, no GPU jobs, no game, Windows, GUI or input actions, no git commits, no filesystem
+    walks (find, du, rg, tree, ls -R, recursive grep), no bulk reads of large files. Scratch, if you
+    need any at all, goes nowhere: you need none.
+
+    WHEN DONE: reply with (1) the ANSWERS path, (2) the number of crops answered, (3) counts of q1
+    yes / no / unsure, q2 good / loose / off / n/a, q3 per letter + none / unsure, (4) any crop you
+    found hard, by number, with one line each. Do not report anything about the key, the model or
+    the other labeller (you have not seen them).
+
+**5. Part B (after BOTH labellers; scored ONCE; M6 steps 2-4 under M7, the paths above).**
+Variables (bot-server):
+
+      W=/home/bot/docker/poring-lab; G=/dev/shm/poring-lab-tmp/gb/eval; B=/dev/shm/poring-lab-tmp/blind-gb53-gw3
+      E=$W/data/train/eval/xmas02gb        # /data/train/eval/xmas02gb in the worker
+      M=/dev/shm/poring-lab-detector/model; N=/mnt/poring-lab-datasets
+      A7=$N/scratch-archive/2026-11-07/xmas02-eval; A7E=$N/archive/train/eval/xmas02
+      WT=/dev/shm/poring-lab-wt/garm-eval
+      PP="env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=$WT/scripts:$WT/packages/poring_env/src:$WT/packages/poring_dataset/src:$WT/packages/poring_packets/src:$WT/services/backend/src $W/.venv/bin/python"
+      CAP="systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0"
+      GB="python3 scripts/guarded_build.py --threshold 30 --sustain 30"   # from $W
+
+- **B0, the inputs fixed before any score:** both answer files hashed; the labellers' pack
+  unchanged; the key, the model and the reused 11-07 files re-hashed:
+
+        sha256sum $B/answers/G.json $B/answers/H.json
+        ( cd $B/pack && sha256sum -c --quiet $G/pack-files.sha256 ) && echo pack-unchanged
+        sha256sum $G/key/answer_key.json $W/data/train/xmas02-gb-20261109/weights/last.pt  # 99f2acc7... / 85fb37a4...
+        mkdir -p $E $G/test1107 && cp $A7/eval/key/answer_key.json $G/test1107/key-1107.json \
+            && cp $A7/blind-eval53/answers/C.json $A7/blind-eval53/answers/D.json $G/test1107/ \
+            && cp $A7E/q1-refs.json $A7E/latency-200-refs.json $E/
+        sha256sum $G/test1107/key-1107.json $G/test1107/C.json $G/test1107/D.json $E/q1-refs.json $E/latency-200-refs.json
+        # = fc9facb1... / 01808a2b... / 9c3817ba... / c640936a... / d89ec7eb... (read 06:2x: all five match on the NAS)
+
+- **B1, gw3's refs** (the pack's 261 frames, read in place from the NAS; no latency draw: the
+  latency keeps 11-07's 200 TEST frames):
+
+        $CAP nice -n 15 $PP $WT/scripts/eval_q1.py refs $G/key/answer_key.json --out $E/q1-refs-gw3.json --labels-dir $G/labels-test
+
+- **B2, the detections** (the worker; imgsz 1280, conf 0.25 = predict_dir's defaults):
+
+        cd $W && $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/xmas02-gb-20261109/weights/last.pt \
+            --refs /data/train/eval/xmas02gb/q1-refs-gw3.json --out /data/train/eval/xmas02gb/q1-pred-gw3.json"
+        cd $W && $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/xmas02-gb-20261109/weights/last.pt \
+            --refs /data/train/eval/xmas02gb/q1-refs.json --out /data/train/eval/xmas02gb/q1-pred-test.json"
+
+- **B3, the scores, once each:**
+
+        $CAP nice -n 15 $PP $WT/scripts/eval_q1.py score $G/key/answer_key.json $B/answers/G.json $B/answers/H.json \
+            $E/q1-pred-gw3.json --cache-manifest $N/.framecache/xmas02-gb-o3h-t-20261109/manifest.json --out $E/q1-score-gw3.json
+        # VERDICT Garm Baby (M7 3): Q1.per_species.garm_baby -- evaluated >= 50, recall >= 0.80 AND precision >= 0.80 ("pass")
+        $CAP nice -n 15 $PP $WT/scripts/eval_q1.py score $G/test1107/key-1107.json $G/test1107/C.json $G/test1107/D.json \
+            $E/q1-pred-test.json --cache-manifest $N/.framecache/xmas02-gb-o3h-t-20261109/manifest.json --out $E/q1-score-test.json
+        # VERDICT the four species (M7 4): Q1c.per_species.{mystcase,cruiser,cookie,cookie_xmas} on pooled TEST, each >= 0.80 / >= 0.80
+
+- **B4, CPU latency** (the 200 TEST frames, interleaved, UnitDetector's 16 threads; eval_latency
+  sets nice 10 itself, so it is NOT started under a higher nice; the deployed model beside it):
+
+        $CAP $PP $WT/scripts/eval_latency.py $E/latency-200-refs.json \
+            --model xmas02=$M/xmas02-last-736x1280.onnx --model xmas02gb=$M/xmas02gb-last-736x1280.onnx --out $E/latency-cpu.json
+        # bar (Amendment M): ms.xmas02gb.p95 <= 300
+
+- Then M6 step 5 (the parent): `worker-stop:vision` (verified), the results here and in
+  xmas02-eval.md (`xmas02-gb`), the run archived.
+
+**What looked wrong, or needs the parent before part B (recorded; nothing changed):**
+1. **The pack holds 300 crops, not 240:** the evaluation draw takes every species with a kept label,
+   so gw3's four common species add 240 crops that decide nothing (point 3). It follows the tool
+   and M6's command; it costs labeller time only.
+2. **Garm Baby's crops are 60 views of 25 dogs** (one dog 7 times): the bar counts crops, as for
+   every species before (the common species are 4-13 units on gw3 too), so the 60 are not 60
+   independent dogs. Recorded only.
+3. **The latency bar is new to this host:** 11-07's 270 ms p95 was measured on VM 103 at 8
+   threads; here UnitDetector runs 16 threads on the Xeon E5-2609 v4, and
+   cpu-detector-speed.md has one 16-thread p95 of the deployed xmas02 at 338.6 ms under load 14-23.
+   Amendment M's bar is absolute (p95 <= 300 ms); B4 measures the deployed model beside it, and the
+   report should give the load average. Whether a failure with the deployed model also above 300 ms
+   reads as "the host, not the model" is the parent's to fix BEFORE B4, if at all.
+4. gw3's own C1 was not run (not in M6 / M7); the blind check is what guards the labels scored.
