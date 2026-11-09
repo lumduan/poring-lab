@@ -1613,3 +1613,19 @@ Variables (bot-server):
    xmas02-eval.md, and the run archived (`guarded_build.py archive:` to
    `archive/train/xmas02-gb-20261109`). Deployment and the runner's "seen -> Fly Wing" follow their
    own pre-registration (Amendment M).
+
+**M6, as run (22:11-22:39 ICT; the training continues):**
+- `worker:vision@120`: up 22:11:38, settled 22:13:38 (idle, nothing on the GPU).
+- The training: unit `poring-train-xmas02gb` (systemd-run --user) started 22:14:03; the guard printed
+  "host profile dedicated-intel is DEDICATED: R1-R3, the co-tenant watch and the duty cycle do not
+  apply here" and ran M6's command unchanged.
+- **The init, checked in the trainer's log:** `Overriding model.yaml nc=7 with nc=8`, **`Remapped 7/8
+  cls head rows from pretrained weights by class name`**, `Transferred 499/499 items from pretrained
+  weights` (garm_baby's row is the one not remapped). `amp=False` (FP32), `Using 2 dataloader
+  workers`, `Using 2291 train, 1106 val images`. The optimizer: ultralytics' `optimizer=auto` (as in
+  Amendment I's run: neither run set it) chose AdamW lr 0.000833, momentum 0.9 (its rule for a short
+  schedule).
+- **Epoch 1 completed at 22:38:3x: 1,410.8 s** (~1.0 iteration a second over 1,146 batches, plus the
+  VAL pass and the mid-epoch checkpoints); GPU memory 2.1 GB. VAL (monitor only, D13; no Garm Baby in
+  it): P 0.976, R 0.984, mAP50 0.992, mAP50-95 0.904. **At that pace the 20 epochs end ~06:0x ICT
+  2026-11-10** (~7.8 h; inside the step's 12-h limit, which falls at ~10:14).
