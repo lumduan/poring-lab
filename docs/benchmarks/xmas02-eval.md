@@ -264,6 +264,12 @@ held-out watch gw3; the four species' Q1 on xw5; CPU p95 <= 300 ms) are in
 [xmas02-detector.md](../planning/xmas02-detector.md) Amendment M (M4-M6). Its results go there or
 below, labelled `xmas02-gb`; nothing here is re-scored.
 
+➡️ **RESULT (2026-11-10 06:43-06:48 ICT): xmas02-gb PASSES** -- Garm Baby Q1s on gw3 (59 evaluated
+crops of 24 dogs, recall 1.000, precision 0.922), the four species' Q1c on POOLED TEST (M7 point 4:
+recall 0.98-1.00, precision 0.93-0.94) and the CPU p95 RELATIVE to the deployed model on bot-server
+(M10: 734.6 vs 769.3 ms, 0.955 <= 1.10). The bars as amended (M7, M10) and the full result:
+[xmas02-detector.md](../planning/xmas02-detector.md) M11. Not deployed: Batt's decision.
+
 ## RESULTS
 
 ### VERDICT (2026-11-07 00:39 ICT): THE xmas02 MODEL PASSES -- Q1c holds for all four tier species and P4A holds
