@@ -2747,3 +2747,31 @@ ALL PASS. `--far-single --far-approach` JOIN THE BASE (4AJ's rule). The best run
 
 **The base from 2026-11-09 07:1x:** p16's flags + `--reach-check` (9.12b) + `--far-single
 --far-approach`.
+
+**Pilot p29 (4AL, explore E1 run 1; 07:09:47-07:35:34, 25 min; immunity OFF at 07:09:24 and ON
+at 07:35:47, both judged on the Chat tab; the base + `--explore`). E1's bars: deaths, E3, U1, X1,
+X2 ALL PASS. Reported: 66 kills = 158.4 / h, the most of the study.**
+
+| | p27 (edge loop) | p28 (edge loop, the base) | **p29 (explore)** |
+|---|---|---|---|
+| kills; per hour | 44; 105.4 | 52; 124.7 | **66; 158.4** |
+| monsters seen (/ 10 min); kills per monster seen | 67 (26.8); 0.657 | 53 (21.2); 0.981 | **67 (26.8); 0.985** |
+| strikes; class D; F1 | 97; 32; 35.6 % | 61; 8; 13.0 % | **77; 10; 12.7 %** |
+| stuck time; stalls; Fly Wings | 1.3 s; 1; 4 | 17.0 s; 3; 0 | **0 s; 1; 0** |
+| fights; no-kill fights (time); after the kill p50 | 84; 49 (587.1 s); 6.49 s | 73; 32 (247.2 s); 6.56 s | **94; 49 (462.9 s); 6.52 s** |
+| deaths; lowest HP | 0; 68.5 % | 0; 83.3 % | **0; 83.7 %** |
+
+- **The exploration (X1 / X2):** 13 regions targeted, 5 reached, 7 legs timed out at 150 s (the
+  far ones: fights on the way), 0 blocked; `explore_saved` merged the run (1 run, 145 regions,
+  607 cells visited, 1 refused cell); no `ev_hook_error`.
+- **The recorder against the packets:** 65 good fights (>= 5 of our damage lines) for 66 packet
+  kills; 94 fights (the runner's own count). Its dwell came to 1,021 s of 1,500 (a gap of more than
+  5 s -- a loot step, a long scan -- books 5 s only): the rates are comparable between regions,
+  not absolute.
+- **Why more kills:** the same kills per monster seen as p28 (0.985 vs 0.981), and more monsters
+  seen (26.8 vs 21.2 / 10 min): new ground holds monsters the edge loop had already cleared.
+  One run; E1 goes on (p30, p31) as pre-registered.
+- No region has a minute of dwell yet (145 regions in 25 min, ~7 s each): 10-cell regions learn
+  slowly; E2's pre-registration weighs that (larger regions or pooled neighbours).
+- **Items (snatched):** Scell 11, Zargon 9, Piece of Cake 7, Well-baked Cookie 5, Manacles 3, Red
+  Herb 2, Candy 2, Pearl 2, Iron 2, Sandals 1.
