@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "Round 2 (needs Batt only if he wants it now): whole-map PNG hunting negatives from explore runs, the aura rule dropped or bound to the party cue, a new watch for new held-out cells; pre-registered before any of it."
+next_action: "Round 2 (section 7, Batt 2026-11-09): R2-H1 beside p38, R2-H2 beside the next explore pilot, R2-W (16 test-lattice cells) in an MVP-dead window; DEV fit; held-out once."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -379,3 +379,24 @@ Command: section 5's (B3 part 1) exact line; out `/dev/shm/poring-lab-tmp/stormy
 map (several explore runs recorded with `--format png`, every region crossed), the aura rule
 dropped or bound to the party detector (it fires on this map's floors), a new watch for new
 held-out cells, and the DEV negatives drawn from every floor type before the threshold is set.
+
+## 7. PRE-REGISTERED: round 2 (2026-11-09 ~13:1x ICT, Batt "go on with the boss-summoning work"; BEFORE any round-2 data)
+
+Round 1 failed bar 2 on floors its DEV data never crossed (section 6 post-hoc). Round 2 changes the
+DATA, and lets DEV decide the cues again; the bars are round 1's.
+- **New data:**
+  - R2-H1, R2-H2: two 1-fps PNG hunting recordings beside explore pilots on the base (`--explore`
+    walks the whole map), the MVP dead by the schedule; R2-H1 first.
+  - R2-W: a second immune watch, 16 cells drawn from the TEST lattice (`lattice-test.json`, cells
+    round 1 never used), `--spawn 1251`, 40-s dwells, PNG.
+- **The split:**
+  - DEV = round 1's watch (all 16 cells) + round 1's hunting recording (all of it; scored once,
+    so no longer held out) + R2-H1 (all of it).
+  - HELD-OUT = R2-W (all 16 cells) + R2-H2 (all of it), scored ONCE with the frozen model.
+- **What DEV may change:** the aura rule (dropped, or ANDed with the party detector, or a tighter
+  colour), the party detector's training negatives (every floor type in DEV), its threshold (the
+  DEV negatives' max + margin, as Amendment B). Nothing is tuned on held-out data.
+- **The bars (round 1's, section 3):** recall within 1.1 s >= 95 % of R2-W's cells; false positives
+  <= 1 per 10 min on R2-H2; latency p95 <= 60 ms. Reported: lone Garm Baby positives.
+- **After a pass:** the flee rule (seen -> Fly Wing at once) and its live proof are pre-registered
+  on their own; until that proof passes the kill-before-run schedule stays.
