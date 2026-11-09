@@ -1518,6 +1518,21 @@ most kills per hour. Plan (section 4AL, written before its pilots):
 - **Decisions:** C1 + E1 pass with no safety bar failing -> `--explore-cover` joins the base
   (C2 reported with it).
 
+### 4AP. Pilot p36 pre-registration: --walk-pick again, with its 9.15b fallback (written BEFORE its run, 2026-11-09 11:36 ICT)
+
+- **Why (p34, section 5):** `--walk-pick` took the client's dropped walk clicks from 1.7-7.2 % (p29,
+  p30, p33) to 0 of 228, but R1 failed (2) and the run had an `idle` Fly Wing the flag caused: at
+  (143, 118) no path cell passed the pick check for 45 s, so no click went out. 9.15b (60ad8935):
+  when no candidate passes, the plain fits (today's click) -- the stall / carve path handles it.
+- **The one change against the base (p16's flags + `--reach-check` + `--far-single --far-approach` + `--explore`; `--explore-cover` OFF after p35):** `--walk-pick` as it now stands (9.15b; the run
+  record says `"walk_pick": [1, "9.15b"]`).
+- **The run:** the base command + `--walk-pick`, label `xmas02-p36`, 25 min.
+- **Bars (4AM's, unchanged):** **W1** clicked walks never sent <= 1.5 %; **W2** 0 `stuck`, 0
+  `dead_end` -- and now also 0 `idle` -- Fly Wings; **E1** kills >= 80 / h; **U1** stuck time <= 30 s;
+  **D1** p95 <= 35 ms; **R1** own-body class D <= 1; **E3** hard bars pass, stalls <= 39 / h;
+  **deaths** 0. Reported: `walk_pick_skip`, `walk_pick_fallback`, stalls.
+- **Decisions:** every bar passes -> `--walk-pick` joins the base.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
