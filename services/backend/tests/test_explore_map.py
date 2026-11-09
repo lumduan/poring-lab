@@ -111,3 +111,24 @@ def test_the_runner_wires_explore_behind_its_flag() -> None:
     assert "merged_ = em.save_merged(ex_rec.know)" in src
     # the patrol loop's own paths are unchanged
     assert "goal = patrol_goal(here)" in src and "skip_waypoint(here)  # carved off" in src
+
+
+def test_coverage_and_the_cover_novelty() -> None:
+    """dungeon@9.14b (rogue-xmas02.md 4AO): the novelty from coverage, so walked-through regions
+    stop looking new (Batt: the east side was walked much less)."""
+    reach = np.zeros((10, 20), dtype=bool)
+    reach[:, :] = True
+    cov = em.coverage(["1,1", "2,2", "15,3", "99,99"], reach, size=10)
+    assert cov == {(0, 0): 0.02, (1, 0): 0.01}
+    know = em.Knowledge(map="m")
+    anchors = {(0, 0): (5, 5), (1, 0): (15, 5)}
+    sc = em.scores(know, anchors, (10, 5), cover={(0, 0): 0.9, (1, 0): 0.0})
+    assert sc[(1, 0)] - sc[(0, 0)] > 1.5  # the unwalked region wins by ~COVER_W x 0.9
+    assert em.COVER_W == 2.0
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert dh.fixes_of(dh.argparse.Namespace(**base, explore_cover=True))["explore_cover"] == [2.0]
+    src = Path(dh.__file__).read_text()
+    assert "cover_ = em.coverage(vis_, ex_reach)" in src
+    assert "--explore-cover goes with --explore" in src

@@ -50,6 +50,12 @@ DIST_W = 0.15  # the score lost per 100 cells (Chebyshev) to the anchor
 TEMP = 0.25  # the softmax temperature over scores
 RECENT_S = 180.0  # a region aimed at this recently is not chosen again
 MEAN_FLOOR = 0.2  # good fights per minute assumed before any data (p27: ~44 kills in 25 min)
+# --explore-cover (dungeon@9.14b, rogue-xmas02.md 4AO; Batt 2026-11-09: "the right side is walked
+# much less than the left"): the novelty bonus from COVERAGE -- COVER_W x (1 - the share of a
+# region's reachable cells ever read as our position) -- in place of the arrivals count, which
+# booked 0 arrivals for most regions walked through (E1: east-half share of visited cells 27 % /
+# 28 % / 51 % in p29 / p30 / p31, against 49 % of the reachable map)
+COVER_W = 2.0
 
 Cell = tuple[int, int]
 Key = tuple[int, int]
@@ -191,16 +197,39 @@ def rates(know: Knowledge, keys: Iterable[Key]) -> dict[Key, float]:
     return out
 
 
+def coverage(visited: Iterable[str], reach: npt.NDArray[np.bool_],
+             size: int = REGION) -> dict[Key, float]:  # fmt: skip
+    """PURE: region -> the share of its reachable cells among ``visited`` ("x,y" keys)."""
+    tot: dict[Key, int] = {}
+    ys, xs = np.nonzero(reach)
+    for x, y in zip(xs.tolist(), ys.tolist(), strict=True):
+        k = (x // size, y // size)
+        tot[k] = tot.get(k, 0) + 1
+    seen: dict[Key, int] = {}
+    h, w = reach.shape
+    for ks in visited:
+        x, y = (int(t) for t in ks.split(","))
+        if 0 <= x < w and 0 <= y < h and reach[y, x]:
+            k = (x // size, y // size)
+            seen[k] = seen.get(k, 0) + 1
+    return {k: seen.get(k, 0) / n for k, n in tot.items()}
+
+
 def scores(know: Knowledge, anchors: Mapping[Key, Cell], here: Cell,
-           skip: Iterable[Key] = ()) -> dict[Key, float]:  # fmt: skip
-    """PURE: the explore + exploit score of every region not in ``skip``."""
+           skip: Iterable[Key] = (),
+           cover: Mapping[Key, float] | None = None) -> dict[Key, float]:  # fmt: skip
+    """PURE: the explore + exploit score of every region not in ``skip``; with ``cover``
+    (--explore-cover) the novelty is COVER_W x (1 - the region's coverage)."""
     left = [k for k in anchors if k not in set(skip)]
     rt = rates(know, left)
     n_all = sum(int(v["visits"]) for v in know.regions.values())
     out = {}
     for k in left:
         n_k = int(know.regions.get(key_s(k), empty_region())["visits"])
-        nov = NOVELTY * math.sqrt(math.log(1 + n_all) / (1 + n_k)) if n_all else NOVELTY
+        if cover is not None:
+            nov = COVER_W * (1.0 - cover.get(k, 0.0))
+        else:
+            nov = NOVELTY * math.sqrt(math.log(1 + n_all) / (1 + n_k)) if n_all else NOVELTY
         a = anchors[k]
         dist = max(abs(a[0] - here[0]), abs(a[1] - here[1]))
         out[k] = rt[k] + nov - DIST_W * dist / 100.0

@@ -1088,6 +1088,10 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_approach"] = [APPROACH_CELLS, APPROACH_KEEP, APPROACH_MAX, APPROACH_HOLD_S]
     if getattr(a, "skip_own_cells", False):  # dungeon@9.9 (rogue-xmas02.md 4AB)
         out["skip_own_cells"] = [SELF_HALF_W, SELF_UP, SELF_DOWN]
+    if getattr(a, "explore_cover", False):  # dungeon@9.14b (rogue-xmas02.md 4AO)
+        import explore_map as em_c
+
+        out["explore_cover"] = [em_c.COVER_W]
     if getattr(a, "walk_pick", False):  # dungeon@9.15 (rogue-xmas02.md 4AM)
         out["walk_pick"] = [WALK_PICK_TOL]
     if getattr(a, "explore", False):  # dungeon@9.14 (rogue-xmas02.md 4AL)
@@ -1913,6 +1917,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if not okr[c_[1], c_[0]]:
                 raise SystemExit(f"dungeon@4 refused: waypoint {c_} is not on the route grid")
     explore_on = bool(getattr(a, "explore", False))
+    if getattr(a, "explore_cover", False) and not explore_on:
+        raise SystemExit("dungeon@9.14b refused: --explore-cover goes with --explore")
     if explore_on and not patrol:
         raise SystemExit("dungeon@9.14 refused: --explore goes with --search patrol")
     start = hunt.start_cell(area, a.seed, near=hf.area_centre(area))
@@ -1921,11 +1927,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         start = patrol_start(map_, okr, map_prep.stand_check)
     ex_anchors: dict[tuple[int, int], Cell] = {}
+    ex_reach: Any = None
     ex_know0: Any = None
     if explore_on:  # dungeon@9.14: the start's component of the route grid, in regions
         import explore_map as em
 
-        ex_anchors = em.regions(em.component(np.asarray(okr, dtype=bool), start))
+        ex_reach = em.component(np.asarray(okr, dtype=bool), start)
+        ex_anchors = em.regions(ex_reach)
         if not ex_anchors:
             raise SystemExit(f"dungeon@9.14 refused: no explore region reachable from {start}")
         ex_know0 = em.load(map_)
@@ -2320,7 +2328,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 )
                 know_ = em.merge(em.Knowledge(map=map_, regions=ex_know0.regions),
                                  em.Knowledge(map=map_, regions=ex_rec.know.regions))  # fmt: skip
-                sc_ = em.scores(know_, ex_anchors, h, skip_)
+                cover_ = None
+                if getattr(a, "explore_cover", False):  # dungeon@9.14b: novelty by coverage
+                    vis_ = {**ex_know0.visited, **ex_rec.know.visited}
+                    cover_ = em.coverage(vis_, ex_reach)
+                sc_ = em.scores(know_, ex_anchors, h, skip_, cover_)
                 tg = em.choose(sc_, ex_rng)
                 if tg is None:
                     return None
@@ -4247,6 +4259,13 @@ def main() -> int:
         help="dungeon@9.10 (rogue-xmas02.md 4AC; OFF by default): a box target 9+ cells away is "
         "walked toward first (to 4 cells short of it), then the box path looks again (twice a "
         "fight at most); no ring scan during that walk",
+    )
+    t.add_argument(
+        "--explore-cover",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.14b (rogue-xmas02.md 4AO; OFF by default; with --explore): the novelty "
+        "bonus from coverage (the share of a region's cells ever walked) instead of arrivals",
     )
     t.add_argument(
         "--walk-pick",
