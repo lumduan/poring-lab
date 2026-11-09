@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 17:5x (Amendment O): THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan; W1 pooled <= 2.0 %. Next: the boss guard walks away from a lone Garm Baby when it can (pre-register, pilot); the no-kill fights study."
+next_action: "2026-11-09 20:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan. p43 --boss-walk with 2 staged Garm Babies: THE ROGUE DIED (walk-away ignored the threat side; the wing came late) -> not adopted; the guard keeps the Fly Wing. A redesign goes to Batt first."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3445,3 +3445,37 @@ would not (pooled p39-p42: 17 / 1,086 = 1.57 %).**
 - **The skips:** 34 fight scans and 6 stall scans skipped; the scans still run after damage (30).
 - **Items (snatched + picked):** Scell 17, Zargon 14, Red Herb 9, Well-baked Cookie 4, Candy 3, Piece
   of Cake 3, Pearl 3, Manacles 3, Old Blue Box 1, Level 3 Cold Bolt 1, Iron 1.
+
+**Pilot p43 (4AZ; started 20:13:2x ICT; the MVP killed 19:48:56; immunity OFF 20:12:24; the base
++ `--boss-walk` 9.18 + the staged `--stage-mob 1515:2`). THE ROGUE DIED ~18 s into the run (the
+runner's reason "death"). VERDICT: deaths FAIL, B1a / B1b FAIL (0 of 2 walk-aways broke contact)
+-> `--boss-walk` NOT adopted; the boss guard keeps its Fly Wing. Recovered: the end path's `@warp
+prt_fild08 268 107` (20:13:58) brought her back; `@heal` + immunity ON at 20:15 ("HP, SP
+recovered.", "You are now immune to attacks.").**
+
+What happened (packets; t = seconds from run_start):
+
+| t | what |
+|---|---|
+| -4.0 .. 12.2 | the 2 staged Garm Babies (gids ...089 / ...090) attack from the setup's last line on: 29 attacks, ALL misses (her FLEE) |
+| 0.7 | her strike on a dog at rel (1, 0) -- one cell EAST -- lands (our damage line) |
+| 2.6 / 3.2 | the guard reads "Garm Baby"; walk-away 1: (7, 21) -> (21, 15), 14 cells EAST -- the dog's side |
+| 6.4 / 6.8 | a boss line after the 2.5-s grace; walk-away 2: (21, 15) -> (7, 16), back WEST to the start |
+| 13.0 .. 16.1 | 8 hits in 3 s, 565-872 each (~5,700; her HP 5,070) |
+| 15.2 / 16.6 | the guard's Fly Wing (the 3rd boss line in 60 s); the HP Fly Wing at 6 % |
+| ~18 | dead (the hits at 15.7 and 16.1 landed around the wings) |
+
+- **Why it failed (the design, mine):**
+  - walk_away_target chose the cell FARTHEST FROM HER with no idea where the threat was. She had
+    just struck the dog at rel (1, 0), so the first walk went past it, and the second came back;
+    neither broke contact;
+  - TWO dogs staged ON her is a much stronger case than a lone dog met in the field (p40: 24 of 24
+    misses);
+  - the fallback took the 3rd boss line (15 s in) and ~5,700 damage.
+- **What a redesign would need (not pre-registered, for Batt):**
+  - the walk away from the THREAT: the last strike's / lock's cell or the Miss text's position,
+    the farthest pickable cell on the far side;
+  - the Fly Wing at once on the first DAMAGING summon hit, or when the HP falls;
+  - a staged case of ONE dog a few cells away, never on her.
+- `--stage-mob` stays a trial-only option and must not stage strong monsters next to the character
+  again without Batt's OK.
