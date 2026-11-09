@@ -69,7 +69,10 @@ next_action: "The parent's live checks after the merge (gpu-recording.md 9.4): o
 4. **PNG stays REQUIRED for the studies that fit pixel cues or templates on recordings and apply
    them live** -- `miss_cue`, `target_items`, `mvp_watch_study`, `cursor_unknown`, and UI templates
    cut from a recording -- until each passes its own parity on decoded frames (plan section 5 and
-   0a.7). Those tools refuse a video recording (`poring_dataset.frames.png_required`): never an
+   0a.7). **The same for the pre-registered detector studies** (the parent's review, 2026-11-09):
+   `map_labels.check_recording` (xmas02-detector.md 3c / T-3: its frame gates were fitted on PNG)
+   and `detector_vs_packets.check_session` (the X2 rule) accept recorder v7 but only `format
+   png`; a video session is refused there until a pre-registered parity check (live check 4). Those tools refuse a video recording (`poring_dataset.frames.png_required`): never an
    empty read of a session that lists no shards. Record their sessions with `--format png`.
 5. **One reader API for both layouts**: `poring_dataset.frames` (frame refs from the index only;
    one frame decoded by its own access unit; a session iterated every N-th frame; the nearest

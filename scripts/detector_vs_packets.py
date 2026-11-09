@@ -106,10 +106,12 @@ BAR_4A = {"min_labels": 30, "recall": 0.80, "precision": 0.80}
 # a recorder session the X2 rule reads (map_labels.check_recording's path; v6 differs from v5 in
 # its IO-guard rule only, e5d892f -- the frame clock and the frame bus are v5's)
 # ADR-0024 (2026-11-09): v7 records the GPU video on rdp by default (the same grab, clock and
-# region; a --format png session is written as in v6): both formats are read, by their index only
+# region; a --format png session is written as in v6). The X2 rule was pre-registered on LOSSLESS
+# frames: a video session stays REFUSED here until a pre-registered parity check passes
+# (gpu-recording.md 9.4 live check 4; the parent's review, 2026-11-09) -- record with --format png
 SESSION_WANT = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
                 "server": "lab-rathena"}  # fmt: skip
-SESSION_FORMATS = ("png", "vpp-hevc444-10-q20")  # poring_dataset.frames.VIDEO_FORMAT
+SESSION_FORMATS = ("png",)
 SESSION_VERSIONS = (5, 6, 7)
 DIST_BINS = ((0, 5, "0-5"), (6, 10, "6-10"), (11, 15, "11-15"), (16, 10**6, "16+"))
 SELF_MOVE_NS = 500_000_000  # our character moved in the 500 ms before tw: "moving"

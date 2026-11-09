@@ -1269,7 +1269,9 @@ recorded):**
     as libavcodec's parser (pinned by a test on streams with and without AUDs).
 - The readers on it: build_frame_cache, qa_export, gold_eval, label_quality, m4_validate,
   recorder_boxes (+ truth_draw), labels_v2, map_labels, detector_vs_packets; map_labels' and
-  detector_vs_packets' recording pins take recorder v7 and both formats.
+  detector_vs_packets' recording pins take recorder v7 but PNG ONLY (the parent's review: their
+  pre-registered gates were fitted on lossless frames; a video session is refused there until a
+  pre-registered parity check -- live check 4).
 - The cue studies refuse a video recording (ADR-0024 decision 4): miss_cue, target_items,
   mvp_watch_study, cursor_unknown. warp_watch is not a reader of these sessions (its own JPEG
   shards): unchanged.

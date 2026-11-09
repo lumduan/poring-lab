@@ -811,13 +811,16 @@ def read_png(ref: Any) -> npt.NDArray[np.uint8]:
 # T-3: v6 changed only the IO-guard rule and guard_rule (e5d892f); v7 (ADR-0024, 2026-11-09) the
 # rdp default format (the GPU video; a --format png session is written as in v6)
 RECORDER_VERSIONS = (5, 6, 7)
-# ADR-0024: an RDP recording is PNG or the GPU video (the same grab, clock and region; lossy)
-RECORDING_FORMATS = ("png", recorded.VIDEO_FORMAT)
+# ADR-0024: an RDP recording is PNG or the GPU video (the same grab, clock and region; lossy).
+# 3c's frame gates (the layout check, o3h's sprite NCC with T_h) were fitted on PNG: a video
+# recording stays REFUSED here until a pre-registered parity check passes (gpu-recording.md 9.4
+# live check 4; the parent's review, 2026-11-09) -- record label data with --format png
+RECORDING_FORMATS = ("png",)
 
 
 def check_recording(manifest: dict[str, Any]) -> None:
-    """3c's recording path (fail closed): RDP at 1280 x 720 on the lab server, PNG or (ADR-0024)
-    the GPU video, recorder v5 to v7 (xmas02-detector.md 3c / T-3;
+    """3c's recording path (fail closed): RDP at 1280 x 720 on the lab server, PNG only (the GPU
+    video refused until its parity check, ADR-0024), recorder v5 to v7 (xmas02-detector.md 3c / T-3;
     detector_vs_packets.SESSION_VERSIONS)."""
     want = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
             "server": "lab-rathena"}  # fmt: skip

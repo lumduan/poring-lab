@@ -189,9 +189,9 @@ def test_check_recording_fails_closed() -> None:
             "game_region": [80, 77, 1280, 720], "server": "lab-rathena"}  # fmt: skip
     ml.check_recording(good)
     ml.check_recording({**good, "recorder_version": 6})  # T-3 (xmas02-detector.md 3c): v6 too
-    ml.check_recording({**good, "recorder_version": 7})  # ADR-0024: v7's PNG, and its video
-    ml.check_recording({**good, "recorder_version": 7, "format": "vpp-hevc444-10-q20"})
+    ml.check_recording({**good, "recorder_version": 7})  # ADR-0024: v7's PNG
     for k, v in (("backend", "console"), ("format", "h264"), ("format", None),
+                 ("format", "vpp-hevc444-10-q20"),  # the GPU video: refused until its parity check
                  ("recorder_version", 4), ("recorder_version", 8), ("recorder_version", None),
                  ("game_region", [80, 77, 1440, 900]), ("server", "lab-rathena-th")):  # fmt: skip
         with pytest.raises(SystemExit, match="not the recording path of 3c"):

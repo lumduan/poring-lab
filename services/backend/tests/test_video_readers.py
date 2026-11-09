@@ -186,7 +186,11 @@ def test_the_index_and_peek_readers(twins: tuple[Path, Path]) -> None:
 
     for d in twins:
         manifest = fr.load_manifest(d)
-        dv.check_session({**manifest, "game_region": [80, 77, 1280, 720]})
+        if manifest["format"] == "png":
+            dv.check_session({**manifest, "game_region": [80, 77, 1280, 720]})
+        else:  # the pre-registered X2 / 3c studies refuse lossy frames until a parity check
+            with pytest.raises(SystemExit, match="format"):
+                dv.check_session({**manifest, "game_region": [80, 77, 1280, 720]})
         refs = ml.png_index(d, manifest)
         assert [r.frame_id for r in refs] == KEPT
         assert all(_close(ml.read_png(r), r.frame_id) for r in refs)
