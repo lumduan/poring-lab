@@ -17,6 +17,11 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
   floor items (the loot list was empty: no exp line at Base 99).
 - K3 (--kill-gap): each ``kill`` event by ``hit_gap`` is MATCHED when a death of ours (above) came
   0-3 s before it; the matched share.
+- L3 / L4 (--loot-first, rogue-xmas02.md 4AT; committed before p39 was scored): the runner's
+  ``kill`` events followed by a ``loot_step`` with a list (``list_kills`` > 0) within 5 s, and
+  their share (L3; p38: 17 / 53); the ``engage`` events ended by a ``fight_end`` "quiet kill" in
+  under 50 ms, and their share of all engages (L4; p38: 1,057 / 1,144); the loot clicks by why
+  (``list`` / ``sweep`` / ``scan_hand``).
 By this definition (2026-11-09): p21 92 fights, 42 kill fights, after the kill p50 6.46 s (total
 276.8 s), no-kill fights 50 (434.1 s); p16 6.50 s (296.3 s), p19 6.53 s, p22 6.47 s.
 """
@@ -105,6 +110,29 @@ def loot_summary(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, A
             "loot_steps_hovering": len(steps), "loot_steps_without_kill": no_kill}  # fmt: skip
 
 
+def loot_order(events: Sequence[dict[str, Any]], within_s: float = 5.0,
+               instant_s: float = 0.05) -> dict[str, Any]:  # fmt: skip
+    """PURE: L3 (kills looted within ``within_s``) and L4 (engages ended at once by quiet-kill)."""
+    kills = [int(e["t_ns"]) for e in events if e.get("kind") == "kill"]
+    steps = [int(e["t_ns"]) for e in events
+             if e.get("kind") == "loot_step" and int(e.get("list_kills") or 0) > 0]  # fmt: skip
+    looted = sum(any(0 <= t - k <= within_s * 1e9 for t in steps) for k in kills)
+    engages = sum(1 for e in events if e.get("kind") == "engage")
+    instant = sum(1 for e0, e1 in zip(events, events[1:], strict=False)
+                  if e0.get("kind") == "engage" and e1.get("kind") == "fight_end"
+                  and e1.get("why") == "quiet kill"
+                  and int(e1["t_ns"]) - int(e0["t_ns"]) < instant_s * 1e9)  # fmt: skip
+    why: dict[str, int] = {}
+    for e in events:
+        if e.get("kind") == "loot_click":
+            why[str(e.get("why"))] = why.get(str(e.get("why")), 0) + 1
+    return {"kills_looted_5s": looted, "kills_events": len(kills),
+            "looted_share": round(looted / len(kills), 3) if kills else None,
+            "engages": engages, "instant_ends": instant,
+            "instant_share": round(instant / engages, 3) if engages else None,
+            "loot_clicks_by": dict(sorted(why.items()))}  # fmt: skip
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path)
@@ -115,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     kills = our_kills(packets)
     print(json.dumps({"session": a.session.name, **summary(fights(events), kills),
                       **hit_gap_match(events, kills),
-                      **loot_summary(events, packets, kills)}))  # fmt: skip
+                      **loot_summary(events, packets, kills), **loot_order(events)}))  # fmt: skip
     return 0
 
 

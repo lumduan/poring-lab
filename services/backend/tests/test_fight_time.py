@@ -74,3 +74,22 @@ def test_our_kills_follow_each_life_of_a_reused_gid() -> None:
         {"type": "entity_vanish", "gid": 7, "reason": 1, "t_mono_ns": 61 * S},
     ]  # our kill again
     assert ft.our_kills(pk) == [2 * S, 61 * S]
+
+
+def test_loot_order_counts_looted_kills_and_instant_ends() -> None:
+    """L3 / L4 (rogue-xmas02.md 4AT): kills followed by a loot step with a list within 5 s, and
+    engages a quiet-kill fight_end closed in under 50 ms (p38's loop: 1,057 of 1,144)."""
+    ev = [{"kind": "kill", "t_ns": 10 * S},
+          {"kind": "loot_step", "list_kills": 1, "t_ns": 11 * S},  # looted at +1 s
+          {"kind": "kill", "t_ns": 20 * S},
+          {"kind": "loot_step", "list_kills": 0, "t_ns": 21 * S},  # an empty list: not looted
+          {"kind": "engage", "t_ns": 30 * S},
+          {"kind": "fight_end", "why": "quiet kill", "t_ns": 30 * S + 10_000_000},  # instant
+          {"kind": "engage", "t_ns": 40 * S},
+          {"kind": "fight_end", "why": "quiet kill", "t_ns": 42 * S},  # a real fight
+          {"kind": "loot_click", "why": "list", "t_ns": 43 * S},
+          {"kind": "loot_click", "why": "scan_hand", "t_ns": 44 * S}]  # fmt: skip
+    got = ft.loot_order(ev)
+    assert got["kills_looted_5s"] == 1 and got["kills_events"] == 2 and got["looted_share"] == 0.5
+    assert got["engages"] == 2 and got["instant_ends"] == 1 and got["instant_share"] == 0.5
+    assert got["loot_clicks_by"] == {"list": 1, "scan_hand": 1}
