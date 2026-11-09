@@ -210,7 +210,7 @@ def test_wait_n_seconds_reads_as_wait_and_is_the_same_ir() -> None:
     )
     assert plain == long and ir.flow_hash(plain) == ir.flow_hash(long)
     src = pyview.print_flow(plain)
-    assert "\nwait(1)\nwait(2.5)\n" in src  # whole seconds without ".0", as the block says
+    assert "\n    wait(1)\n    wait(2.5)\n" in src  # whole seconds without ".0", as the block says
     # an outcome keeps the long form: wait(...) has none
     kept = flow_of('R = "x"\nR = wait_until(False, timeout_s=3)\nstop("done")\n')
     assert "R = wait_until(False, timeout_s=3)" in pyview.print_flow(kept)
@@ -316,3 +316,84 @@ def test_every_config_value_is_a_python_literal() -> None:
         pyview.parse(src.replace('PATH = "S2"', 'PATH = "S9"'))
     with pytest.raises(pyview.ParseError):
         pyview.parse(src.replace('START = ("town", "spawn")', 'START = ("town",)'))
+
+
+# --- round 4 (Batt 2026-11-09): the import line and Main's try / finally --------------------------
+WRAP_TAIL = "finally:\n    # the engine lets go of all input\n    release_all()\n"
+
+
+def test_main_runs_in_try_finally_and_the_file_imports_the_stub() -> None:
+    f = ir.from_json(STARTER.read_text(encoding="utf-8"))
+    src = pyview.print_flow(f)
+    assert "\nfrom poring_flow.learner import *\n" in src
+    assert "\ntry:\n    wait(1)\n" in src and src.endswith(WRAP_TAIL)
+    assert all(len(line) <= 42 for line in src.splitlines() if line.strip().startswith("#"))
+    # the older shape (no import, no wrapper) reads back as the same flow and hash
+    old = src.replace("from poring_flow.learner import *\n", "").replace(WRAP_TAIL, "")
+    old = old.replace("try:\n", "").replace("\n    ", "\n")
+    assert "try" not in old and pyview.parse(old) == f
+    assert ir.flow_hash(pyview.parse(old)) == ir.flow_hash(f) == ir.flow_hash(pyview.parse(src))
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        HEAD + "import os\nsit()\n",
+        "from poring_flow.learner import walk_to\n" + HEAD + "sit()\n",
+        HEAD + "from poring_flow.learner import *\nsit()\n",  # not the first statement
+        "from poring_flow.learner import * as x\n" + HEAD + "sit()\n",
+        HEAD + "try:\n    sit()\nexcept E:\n    pass\n",
+        HEAD + "try:\n    sit()\nfinally:\n    sit()\n",  # a different finally
+        HEAD + "try:\n    sit()\nfinally:\n    release_all()\nsit()\n",  # not the last statement
+        HEAD + "try:\n    sit()\nelse:\n    sit()\nfinally:\n    release_all()\n",
+        HEAD + "def p():\n    try:\n        sit()\n    finally:\n        release_all()\np()\n",
+        HEAD + "try:\n    def p():\n        sit()\nfinally:\n    release_all()\n",  # a def inside
+        HEAD + "try:\n    NEW = 1\nfinally:\n    release_all()\n",  # a new name inside
+        HEAD + "sit()\nrelease_all()\n",  # release_all outside the finally
+    ],
+)
+def test_the_learner_shape_is_read_only_where_the_view_prints_it(src: str) -> None:
+    with pytest.raises((pyview.ParseError, SyntaxError)):
+        pyview.parse(src)
+
+
+def test_the_learner_shape_reads_back_with_a_flow_call_head() -> None:
+    src = "from poring_flow.learner import *\n" + HEAD + "try:\n    sit()\n" + WRAP_TAIL
+    assert pyview.parse(src) == flow_of("sit()\n")
+
+
+def test_the_learner_stub_names_everything_the_view_prints() -> None:
+    import ast
+    import builtins
+    import inspect
+
+    import poring_flow.learner as learner
+    from poring_flow.catalogue import CONSTANTS, HELPERS, REF_CONSTRUCTORS, catalogue
+
+    cat = catalogue()
+    want = (
+        set(cat.blocks) | set(cat.sensors) | set(REF_CONSTRUCTORS) | set(HELPERS) | set(CONSTANTS)
+    )
+    assert want - {"range"} <= set(learner.__all__) and "range" not in learner.__all__
+    with pytest.raises(NotImplementedError, match="poring-lab runs flows itself"):
+        learner.walk_to(None)  # type: ignore[attr-defined]
+    assert learner.release_all() is None  # nothing ran in the stub: nothing is held
+    assert list(inspect.signature(learner.walk_to).parameters)[0] == "cell"  # type: ignore[attr-defined]
+    assert learner.OK == "ok"  # type: ignore[attr-defined]
+    # every name a printed flow LOADS is defined: by the file itself, the stub, or Python
+    flows = [
+        pyview.parse(p.read_text())
+        for p in sorted((REPO / "packages/poring_flow/tests/fixtures").glob("*.flow"))
+    ]
+    flows += [editor.sample_flow(), ir.from_json(STARTER.read_text(encoding="utf-8"))]
+    for f in flows:
+        tree = ast.parse(pyview.print_flow(f))
+        stored = {
+            n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+        }
+        stored |= {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+        loaded = {
+            n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        }
+        missing = loaded - stored - set(learner.__all__) - set(dir(builtins))
+        assert not missing, (f.name, missing)

@@ -1,5 +1,6 @@
 # Made by poring-lab from blocks.
 # Read by the flow engine, never run.
+from poring_flow.learner import *
 
 # --- Config -----------------------------
 FLOW_NAME = "hunt_field"

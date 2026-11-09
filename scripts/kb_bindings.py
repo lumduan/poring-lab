@@ -5,6 +5,9 @@
 
 Writes data/kb/bindings/<server>.json, which poring_skills.resolve reads for the L3 keys an L1
 concept needs:
+- map.flags (2026-11-09: the always-on hp_critical escape, ADR-0020 13.6.8): the maps where the
+  server forbids a Fly Wing (`noteleport`) and a Butterfly Wing (`noreturn`), from rAthena's
+  npc/mapflag/*.txt at the pinned ref. `--only-map-flags` adds just this key to the existing file;
 - map.walkability: client∩server (Batt's decision 4, 2026-10-15): a walk uses only cells walkable
   in BOTH the client's GAT (client data in /dev/shm) and the server's map cache; per map, the two
   sources' agreement counts (map_agreement.py; its cell lists stay in data/kb/map_agreement.json)
@@ -135,6 +138,36 @@ def leaf(**kw: Any) -> dict[str, Any]:
     return {"status": "generated", **kw}
 
 
+# The map flags nav.escape reads (L3.map.flags): a Fly Wing teleports, a Butterfly Wing returns to
+# the save point; the server refuses each on the maps of its flag file.
+MAPFLAG_FILES = {"noteleport": "npc/mapflag/noteleport.txt", "noreturn": "npc/mapflag/noreturn.txt"}
+MAPFLAG = re.compile(r"^(?P<map>[\w@.\-]+)\s+mapflag\s+(?P<flag>\w+)\s*(?://.*)?$")
+
+
+def map_flags(texts: dict[str, str]) -> dict[str, Any]:
+    """L3 map.flags from the flag files' text ({flag: file text}): per flag, the maps it names
+    (a `<map> mapflag <flag>` line; comments and other flags skipped). A LEAF of lists, not a
+    family keyed by map: escape takes no parameter, the executor looks the current map up."""
+    out: dict[str, list[str]] = {}
+    for flag, text in texts.items():
+        maps = set()
+        for line in text.splitlines():
+            m = MAPFLAG.match(line.strip())
+            if m and m["flag"] == flag:
+                maps.add(m["map"])
+        out[flag] = sorted(maps)
+    return leaf(
+        source="rAthena npc/mapflag/" + ", ".join(f"{f}.txt" for f in texts),
+        note="the static flag files only: a script that sets a flag at run time is not read",
+        **out,
+    )
+
+
+def fetch_map_flags(ref: str) -> dict[str, Any]:
+    return map_flags({f: kb_build.fetch(ref, path).decode(errors="replace")
+                      for f, path in MAPFLAG_FILES.items()})  # fmt: skip
+
+
 def walkability(gat_dir: Path, mapcache_dir: Path, kb: Path) -> dict[str, Any]:
     """L3 map.walkability (decision 4): the source is client∩server, with the agreement counts of
     every map that has BOTH a GAT and a server cache entry (no cell lists here) and the maps that
@@ -165,7 +198,11 @@ def main() -> int:
                     help="the client's GATs (default: poring_dataset.camera.GAT_DIR)")  # fmt: skip
     ap.add_argument("--mapcache-dir", type=Path, default=None,
                     help="the server map cache (default: poring_dataset _generated)")  # fmt: skip
+    ap.add_argument("--only-map-flags", action="store_true",
+                    help="add L3 map.flags to the existing file, nothing else")  # fmt: skip
     a = ap.parse_args()
+    if a.only_map_flags:
+        return only_map_flags(a.out / f"{a.server}.json")
     from poring_dataset import mapcache
     from poring_dataset.camera import GAT_DIR
 
@@ -193,7 +230,8 @@ def main() -> int:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "never_commit": "GPL-derived (rAthena)",
         "server_": {},
-        "map": {"walkability": walkability(a.gat_dir, mapcache_dir, ROOT / "data" / "kb")},
+        "map": {"walkability": walkability(a.gat_dir, mapcache_dir, ROOT / "data" / "kb"),
+                "flags": fetch_map_flags(ref)},
         "warp": {"cells": leaf(by_map=route["warps"])},
         "mob": {"stats": leaf(source="data/kb/mobs.json")},
         "skill": {"tree": leaf(by_job=route["skill_trees"])},
@@ -222,6 +260,22 @@ def main() -> int:
                       "quiz_selects": len(quiz), "walkability_maps": len(walk["by_map"]),
                       "walkability_missing": {k: len(v) for k, v in walk["missing"].items()}}
                      ))  # fmt: skip
+    return 0
+
+
+def only_map_flags(path: Path) -> int:
+    """Add (or replace) L3 map.flags in an existing bindings file, at the file's own ref."""
+    doc = json.loads(path.read_text())
+    ref = json.loads(kb_build.LOCK.read_text())["rathena_ref"]
+    if doc.get("rathena_ref") != ref:
+        raise SystemExit(f"{path} is from ref {doc.get('rathena_ref')}, the lock says {ref}")
+    flags = fetch_map_flags(ref)
+    doc.setdefault("map", {})["flags"] = flags
+    tmp = path.with_suffix(".json.part")
+    tmp.write_text(json.dumps(doc, indent=1, ensure_ascii=False))
+    tmp.replace(path)
+    print(json.dumps({"out": str(path), "map.flags": {f: len(v) for f, v in flags.items()
+                                                      if isinstance(v, list)}}))  # fmt: skip
     return 0
 
 

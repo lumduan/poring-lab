@@ -56,6 +56,7 @@ HELPERS = (
     "item_warp",
     "wait_until",
     "wait",  # wait(seconds): the "wait N seconds" block (2026-11-09)
+    "release_all",  # the view's finally: (Main's try / finally, 2026-11-09)
     "stop",
     "bounded",
     "known",

@@ -48,10 +48,32 @@ window:
   skills: {anchor: skills, status: unverified, measured_on: [rdp]}
   inventory: {anchor: inventory, status: unverified, measured_on: [rdp]}
   equipment: {anchor: equipment, status: unverified, measured_on: [rdp]}
+  # char.respawn's dialog (2026-11-09, Batt: "write the lab's missing safety bindings"; the flow
+  # engine's always-on `dead` event): the "Game option" window the client draws on death, at
+  # client [505, 450, 280, 70] (scripts/gm_vitals.py DEAD_BOX). It is recognised by its LOCAL
+  # signature `dead_game_option` and the variant `dead_game_option@ko` re-cut live on this client
+  # (ro_agent's format, data/ro_agent/signatures/, gitignored: client pixels), not by an anchor-map
+  # template: demonstrations.md 3.96b S6b PASS on RDP 2026-10-21 (0.0 on the dialog, 72-78 alive).
+  death_dialog:
+    signature: dead_game_option
+    variants: [dead_game_option@ko]
+    box: [505, 450, 280, 70]
+    status: unverified
+    measured_on: [rdp]
+    evidence: demonstrations.md 3.96b S6b
 element:
   hp_bar: {anchor_element: hp_bar, status: unverified}
   sp_bar: {anchor_element: sp_bar, status: unverified}
   minimap_xy: {anchor_element: minimap_xy, status: unverified}
+  # The death dialog's buttons, client pixels [x, y, w, h] and their centres, measured 2026-11-09
+  # OFFLINE on the archived frame crusader/deathcap 0149 (NAS scratch-archive/2026-10-21, the
+  # Crusader's death of 2026-10-21; read only): a 221 x 20 button at y 472 and one at y 495 (23 px
+  # pitch, as the system menu's). The FIRST is "move to the save point": char.respawn's step,
+  # NEVER clicked by us yet (the GM recovery avoids it), so char.respawn stays unverified. The
+  # SECOND, "return to game", is the GM recovery's known step (gm_vitals RETURN_TO_GAME (645, 503),
+  # clicked live in S6b): `stay_button`, not a respawn.
+  return_button: {box: [534, 472, 221, 20], click: [644, 481], status: unverified, measured_on: [rdp]}
+  stay_button: {box: [534, 495, 221, 20], click: [644, 504], status: unverified, measured_on: [rdp]}
 game_option:
   # The in-game system menu (Escape = shortcut.system_menu), measured live 2026-10-10 03:33-03:35 ICT on
   # RDP (docs/demonstrations.md 3.34): five buttons on a 23 px pitch; the FIRST goes to character

@@ -165,6 +165,7 @@ class _Ctx:
     blocks: set[str] = field(default_factory=set)
     in_block: bool = False
     loops: int = 0
+    wrapped: set[int] = field(default_factory=set)  # the statements of Main's try / finally
 
     def err(self, node: ast.AST, msg: str) -> None:
         self.errors.append(f"{_at(node)}: {msg}")
@@ -322,6 +323,7 @@ def parse(source: str, cat: Catalogue | None = None, warnings: list[str] | None 
         for w in alias_warnings:
             py_warnings.warn(w, AliasWarning, stacklevel=2)
     ctx = _Ctx(cat or catalogue())
+    ctx.wrapped = _learner_shape(tree)
     try:
         _allow_list(tree, ctx)
         if not ctx.errors and _nesting(tree.body) > MAX_NESTING + 1:
@@ -337,6 +339,59 @@ def parse(source: str, cat: Catalogue | None = None, warnings: list[str] | None 
         return ir.validate(data)
     except ir.FlowError as e:
         raise ParseError(e.messages) from None
+
+
+def _is_learner_import(st: ast.stmt) -> bool:
+    """`from poring_flow.learner import *`, exactly."""
+    return (
+        isinstance(st, ast.ImportFrom)
+        and st.module == LEARNER_MODULE
+        and st.level == 0
+        and len(st.names) == 1
+        and st.names[0].name == "*"
+        and st.names[0].asname is None
+    )
+
+
+def _is_main_wrapper(st: ast.stmt) -> bool:
+    """`try:` + Main + `finally: release_all()`, exactly: no except, no else, nothing else."""
+    if not isinstance(st, ast.Try) or st.handlers or st.orelse or not st.body:
+        return False
+    if len(st.finalbody) != 1 or not isinstance(st.finalbody[0], ast.Expr):
+        return False
+    call = st.finalbody[0].value
+    return (
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "release_all"
+        and not call.args
+        and not call.keywords
+    )
+
+
+def _learner_shape(tree: ast.Module) -> set[int]:
+    """Remove the learner shape's two forms, IN PLACE, before the allow-list sees the tree: the
+    import as the first statement (after a docstring), the try / finally as the LAST top-level
+    statement (its body takes its place). Returns the ids of Main's statements that were inside
+    it. Anything else (another import, a try elsewhere, with except, a different finally) is left
+    where it is, so the allow-list refuses it exactly as before."""
+    body = tree.body
+    first = (
+        1
+        if body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+        else 0
+    )
+    if len(body) > first and _is_learner_import(body[first]):
+        del body[first]
+    if body and _is_main_wrapper(body[-1]):
+        wrapper = body.pop()
+        assert isinstance(wrapper, ast.Try)
+        body.extend(wrapper.body)
+        return {id(st) for st in wrapper.body}
+    return set()
 
 
 def _call_name(node: ast.AST) -> str | None:
@@ -378,6 +433,8 @@ def _module(tree: ast.Module, ctx: _Ctx) -> dict[str, Any] | None:
     # pass 1: the names every body may refer to
     defined: dict[str, str] = {}
     for st in rest:
+        if id(st) in ctx.wrapped:
+            continue  # Main's own statements (inside the view's try / finally)
         if isinstance(st, ast.FunctionDef):
             if st.name in names:
                 ctx.err(st, f"def {st.name} shadows a catalogue name")
@@ -417,7 +474,11 @@ def _module(tree: ast.Module, ctx: _Ctx) -> dict[str, Any] | None:
     pending_events: list[tuple[str, dict[str, Any]]] = []
     for st in rest:
         try:
-            if isinstance(st, ast.Assign) and not main and _is_decl(st, ctx):
+            if id(st) in ctx.wrapped:
+                main.extend(
+                    _body([st], ctx)
+                )  # a def or a new name in there is refused, as in a body
+            elif isinstance(st, ast.Assign) and not main and _is_decl(st, ctx):
                 name = st.targets[0].id  # type: ignore[attr-defined]
                 if name in names or name in defined:
                     ctx.err(st, f"{name} shadows a catalogue or definition name")
@@ -1552,6 +1613,13 @@ def section_rule(title: str) -> str:
 # The first lines and the section rules fit the studio's Python pane (384 px) and a phone:
 # matpilot measured ~43 monospace characters after the gutter (2026-11-09 round 3), so every
 # generated comment line is at most RULE_WIDTH (42); code lines are left as they are.
+# The learner shape (Batt 2026-11-09: "add the import line and try/finally now"): the file imports
+# the stub module that names every block (poring_flow.learner: each raises "poring-lab runs flows
+# itself"), and Main runs in try / finally. The parser removes exactly these two forms
+# (_learner_shape) and reads the rest as before; any other import or try is still refused.
+LEARNER_MODULE = "poring_flow.learner"
+IMPORT = f"from {LEARNER_MODULE} import *"
+FINALLY_NOTE = "    # the engine lets go of all input"
 GENERATED = [
     "# Made by poring-lab from blocks.",
     "# Read by the flow engine, never run.",
@@ -1662,8 +1730,17 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
                 ev_def = _def(_fit("@on", args, ""), label, ev.event.body, cat)
                 chunks.append((True, ev_def, EVENTS))
     if flow.main is not None:
-        chunks.append((False, _stmts(flow.main, "", cat), "Main"))
-    out: list[str] = list(GENERATED)
+        # Main in matpilot's try / finally: what the finally says is what the engine does when a
+        # flow ends (runtime.Sim.run: it lets go of every key and button still held)
+        main = [
+            "try:",
+            *_stmts(flow.main, "    ", cat),
+            "finally:",
+            FINALLY_NOTE,
+            "    release_all()",
+        ]
+        chunks.append((False, main, "Main"))
+    out: list[str] = [*GENERATED, IMPORT]
     prev_def = False
     prev_section = ""
     for is_def, lines, section in chunks:

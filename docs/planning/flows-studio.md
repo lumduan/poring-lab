@@ -329,3 +329,48 @@ the detector hexagon, the bottom sheet). Its ranked list, and what was done:
    characters after the gutter, so 52 still clipped): two lines of 33 and 37 characters, `# Made
    by poring-lab from blocks.` and `# Read by the flow engine, never run.`; rules 42 (`RULE_WIDTH`).
    Code lines are left as they are (they scroll, as in an editor; matpilot's advice).
+
+## 10. Round 4 (2026-11-09 ~20:xx, Batt: "add the import line and try/finally now"; option (b))
+
+**A. The Python reads like a file a learner could run, and stays honest.**
+- The file now has three parts around its sections:
+  - `from poring_flow.learner import *` comes right after the two comment lines;
+  - a plain flow's Main runs in `try:` ... `finally:` with the comment line
+    `# the engine lets go of all input` and `release_all()`.
+- The `finally` is what the engine really does when a flow ends: runtime.Sim.run sends a
+  ReleaseAll when anything is held or the flow did not end normally, and ADR-0020 section 6
+  releases everything at every stop.
+- `poring_flow.learner` is a **STUB** module, built from the catalogue so it never drifts.
+  - Every block, sensor, reference constructor and helper has its name and signature; calling one
+    raises `NotImplementedError("…: poring-lab runs flows itself; this file is read, never run")`.
+  - So `python my_flow.py` stops at its first block with that message, not a NameError.
+  - `release_all()` is the one name that does nothing: nothing ran, so nothing is held.
+  - `range` is Python's own. The constants (`OK`, `CRITICAL`, `S2`, …) are their IR values.
+- **The parser** removes exactly these two forms before its allow-list:
+  - the import as the FIRST statement;
+  - the try / finally as the LAST top-level statement, with no except or else, and nothing but
+    `release_all()` in its finally.
+  - Main's statements inside it are read as Main statements: a def or a new name in there is
+    refused.
+  - Any other import or try is still refused as before: the hostile corpus is unchanged, and 12
+    new refusal cases are in tests/test_models.py.
+  - The older shapes (no import, no wrapper) read back as the same flow and hash.
+- Workflow flows (map blocks) have no Main, so they get the import line only.
+- Every printed name is defined by the file, the stub or Python (a static test over every
+  committed flow, the sample and the starter).
+- Every comment line, the indented finally note included, is at most 42 characters.
+
+**B. The lab's missing safety bindings (Batt chose option (b)): "not ready" clears for every flow.**
+
+| Binding | Where | What it points to | Committed? |
+|---|---|---|---|
+| `L2.window.death_dialog` | `packages/poring_skills/l2/kro-20211103-prere.yaml` | the "Game option" death dialog at client [505, 450, 280, 70] (gm_vitals DEAD_BOX), recognised by the LOCAL signature `dead_game_option` (+ `@ko`), `data/ro_agent/signatures/` | the names and numbers yes; the signature pixels NO (local, gitignored) |
+| `L2.element.return_button` | same file | the dialog's FIRST button, "move to the save point": box [534, 472, 221, 20], click (644, 481), measured OFFLINE on the archived frame `crusader/deathcap` 0149 (NAS scratch-archive/2026-10-21, read only) | numbers yes; the frame NO |
+| `L2.element.stay_button` (extra) | same file | the SECOND button, "return to game": box [534, 495, 221, 20], click (644, 504); gm_vitals RETURN_TO_GAME (645, 503), clicked live in S6b | numbers yes |
+| `L3.map.flags` | `data/kb/bindings/lab-rathena.json` (LOCAL, gitignored) | the maps of rAthena's `npc/mapflag/noteleport.txt` (345) and `noreturn.txt` (8 active; the rest are commented out at this ref) at the pinned ref e985006; a leaf of lists (escape takes no parameter) | NO: GPL-derived, written by `scripts/kb_bindings.py --only-map-flags`; the code is committed |
+
+- Every binding is `status: unverified`. The dialog was proven on RDP (3.96b S6b), but its first
+  button was never clicked by us, so char.respawn's L1 badge stays unverified.
+- The map flags are read from the static flag files only: a script that sets a flag at run time
+  is not read (the leaf says so).
+- **The starter's chip:** "1 warning". The save-point warning stays as Batt's lesson.

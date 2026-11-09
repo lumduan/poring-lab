@@ -2346,3 +2346,12 @@ amendment ADDS to section 2.3; nothing above is rewritten.
   trips and every hash hold (flows-studio.md section 8). Round 3: every Config value is a plain
   Python value (`PATH = "S2"`, `START = ("town", "spawn")`; the bare `S2` and `entry(...)` still
   read back), and the first comment is two short lines (flows-studio.md section 9).
+- **Round 4 (Batt: "add the import line and try/finally now"):**
+  - The view imports a STUB module (`from poring_flow.learner import *`: each name raises "poring-lab
+    runs flows itself") and runs a plain flow's Main in `try:` / `finally: release_all()`. That
+    finally is what the engine does when a flow ends (section 6: it releases everything).
+  - 7.2's parser removes exactly these two forms (the import first, the try / finally last) and
+    still refuses every other import and try. 7.4 holds: the stub is never run by the engine.
+  - The always-on `dead` and `hp_critical` events' bindings are written: L2 death dialog + its
+    buttons (numbers only), L3 map flags (local, generated). So their "not ready" clears for
+    every flow (flows-studio.md section 10).

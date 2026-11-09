@@ -83,5 +83,8 @@ def test_the_built_ins_bindings_are_checked() -> None:
 
     flow = pyview.parse(PLAIN)
     found = readiness(lint(flow, resolver=default_resolver(flow.target, Path("/nonexistent"))))
-    assert {f.path for f in found} >= {"dead.0", "hp_critical.0"}  # read_position resolves
+    # read_position resolves; dead's L2 bindings exist since 2026-11-09 (the death dialog and its
+    # save-point button), so only hp_critical's escape waits here (no L3 file: map.flags)
+    paths = {f.path for f in found}
+    assert "hp_critical.0" in paths and "dead.0" not in paths
     assert editor.owners(flow)["dead"] == "global"

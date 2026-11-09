@@ -188,7 +188,7 @@ def test_the_bare_underscore_is_only_repeats_target() -> None:
     underscore rule; `_` is nothing else (not a variable, not another loop's target)."""
     flow = parse_ok("for _ in range(3):\n    sit()\n")
     assert isinstance((flow.main or [])[0], ir.Repeat)
-    assert "for _ in range(3):\n    sit()" in pyview.print_flow(flow)
+    assert "    for _ in range(3):\n        sit()" in pyview.print_flow(flow)  # Main in try
     assert refused('SPOTS = [cell("m", 1, 2)]\nfor _ in SPOTS:\n    sit()\n') == [
         "line 3, col 1: for _ in range(n) is the repeat block: one argument"
     ]

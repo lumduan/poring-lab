@@ -75,3 +75,21 @@ def test_walkability_is_the_gat_here_and_both_sources_for_a_walk(tmp_path: Path)
     (tmp_path / "lab-rathena.json").write_text(json.dumps({"map": {"walkability": leaf}}))
     got = resolve("nav.walk_to", LAB, l3_root=tmp_path)["L3.map.walkability"]
     assert got["source"] == "client∩server" and got["by_map"]["m"]["client_only"] == 3
+
+
+def test_the_always_on_safety_events_resolve_on_the_lab(tmp_path: Path) -> None:
+    """2026-11-09 (Batt: "write the lab's missing safety bindings"): char.respawn's death dialog and
+    its save-point button (L2, numbers and names only), nav.escape's map flags (L3, local)."""
+    got = resolve("char.respawn", LAB)
+    dialog = got["L2.window.death_dialog"]
+    assert dialog["signature"] == "dead_game_option" and dialog["box"] == [505, 450, 280, 70]
+    button = got["L2.element.return_button"]
+    x, y, w, h = button["box"]
+    assert x <= button["click"][0] < x + w and y <= button["click"][1] < y + h
+    assert button["status"] == "unverified"  # never clicked by us: the badge stays unverified
+    with pytest.raises(Unsupported, match="L3.map.flags"):
+        resolve("nav.escape", LAB, l3_root=tmp_path / "none")
+    (tmp_path / "lab-rathena.json").write_text(json.dumps({"map": {"flags": {
+        "status": "generated", "source": "s", "noteleport": ["m1"], "noreturn": []}}}))  # fmt: skip
+    got = resolve("nav.escape", LAB, l3_root=tmp_path)
+    assert got["L3.map.flags"]["noteleport"] == ["m1"] and "L2.shortcut.hotbar" in got

@@ -401,9 +401,7 @@ CASES = [
             "main.0: walk_to is unsupported here: L3 binding "
             "L3.map.walkability (no L3 bindings for lab-rathena)",
             # the always-on safety events the flow does not write run too (#15): their bindings
-            "handlers.dead.0: respawn is unsupported here: L2 binding L2.window.death_dialog "
-            "(not bound "
-            "for kro-20211103-prere/lab-rathena (params {}))",
+            # (dead's L2 death dialog + save-point button are bound since 2026-11-09)
             "handlers.hp_critical.0: escape is unsupported here: L3 binding L3.map.flags (no L3 "
             "bindings "
             "for lab-rathena)",
