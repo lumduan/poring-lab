@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 14:0x: the base = p16 + reach-check + far mechanism + explore + walk-pick. p38 (--kill-gap 9.13d): every bar but W1 (4.41 %; post-hoc a 7-click walk-geometry episode) -> off. p39 (4AT): --loot-first 9.16 on top of --kill-gap (loot step right after the kill, no instant-end loop, the scan's hand clicked); then the walk case (targets the client refuses)."
+next_action: "2026-11-09 14:5x: the base = p16 + reach-check + far mechanism + explore + walk-pick. p38 (--kill-gap 9.13d): every bar but W1 -> off. p39 (4AT, running): --loot-first 9.16 on top of --kill-gap. p40 (4AU): --walk-pick-step 9.15c (the W1 cause: 9.15b's plain fallback onto cells the client cannot pick, 7 of p38's 10)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1651,6 +1651,38 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
   loot needs the inferred kills; `--kill-gap`'s only failed bar in p38 was W1, whose post-hoc is a
   walking-geometry episode). W1 fails again -> both stay off and the walk case (targets the client
   refuses, p38's 7-click episode) goes first.
+
+### 4AU. Pilot p40 pre-registration: --walk-pick-step (9.15c) -- a pickable one-click step instead of the plain fallback (written BEFORE p39's verdict and p40's run, 2026-11-09 14:5x ICT)
+
+- **Why (W1, the walk clicks the client never sends):** an offline replay of the client's picking
+  (poring_dataset.picking, the camera and the GAT; every clicked walk of p34-p38):
+  - p37's 11 unsent clicks all had a GOOD pick: the stale position after a pickup walk, which
+    9.13d's settle fixed (p38: 3 such clicks);
+  - **7 of p38's 10 unsent clicks had a BAD pick** (the client picks a cell ~6 rows off), all in one
+    21-s episode on the ramp at (153-164, 116-122): a raised block (altitude 40) south of her covers
+    the pixels of every cell around her; no pixel within 160 px picks the target. They were 9.15b's
+    plain fallback (no path cell passed the pick check). Of the 217 sent clicks, 2 had a bad pick.
+  - Offline, the new step finds a pickable one-click cell nearer the goal in 4 of the episode's 5
+    situations (the fifth keeps the plain click), in 100-190 ms.
+- **The one change:** `--walk-pick-step` (9.15c; with `--walk-pick`; the record says
+  `"walk_pick_step": [9, "9.15c"]`): when no path cell passes the pick check, the cell within 9
+  that passes it and that the server walks us to on one click (`click_walk_ok`), nearest the goal by
+  grid steps and nearer than we are; 9.15b's plain click stays the last resort. Every walk event now
+  records which fallback it used (`pick`: `step` / `plain`; a record only, in every run).
+- **The run:** the base + `--kill-gap --loot-first --walk-pick-step`, label `xmas02-p40`, 25 min,
+  the MVP dead by the schedule (killed 14:34:50).
+- **Bars:** **W1** unsent walk clicks <= 1.5 % (the target); the rest as 4AT: **L1** >= 50 %,
+  **L3** >= 80 %, **L4** <= 5 %, **K1** p50 <= 3.0 s, **K3** >= 70 %, **E1** >= 80 / h, **U1** <= 30 s,
+  **D1** p95 <= 35 ms, **R1 (pooled)** own-body class D of p40 and its 3 preceding base runs <= 6,
+  **E3** hard bars, 0 dead-end / stuck / idle Fly Wings (a `pos_unread` Fly Wing is reported, not
+  counted, as in p29-p33), **deaths** 0. Reported: the steps and plain fallbacks taken, unsent
+  clicks by `pick`, stalls.
+- **Decisions (p39's verdict is not known when this is written):**
+  - p39 passed every bar (`--kill-gap` + `--loot-first` in the base): every p40 bar passes ->
+    `--walk-pick-step` joins the base;
+  - p39 failed W1 only: every p40 bar passes -> `--kill-gap`, `--loot-first` and
+    `--walk-pick-step` join the base together;
+  - p39 failed another bar: p40 reports W1 for 9.15c, and nothing joins on p40 alone.
 
 ## 5. Results
 
