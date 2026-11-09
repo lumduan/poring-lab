@@ -11,7 +11,7 @@ import { canonical, type Flow } from "./ir.ts";
 import { classFor, classOptions, firstDetector, modelOptions, type Models, notAdopted } from "./models.ts";
 import { browserStorage, forget, KEYS, pythonDefault, readChoice, readText, type StorageLike, writeChoice } from "./prefs.ts";
 import { matchEntries, normalise, searchFlyout, type SearchEntry } from "./search.ts";
-import { starterFlow } from "./starter.ts";
+import { oneMapStarter, STARTER_WORLD, starterFlow } from "./starter.ts";
 import { BLOCK_STYLE, BLOCK_STYLES, CATEGORY_COLOURS, CATEGORY_STYLES, COMPONENT_STYLES, contrast, INJECT } from "./theme.ts";
 import { blockWords, hatTitle, lintErrors, looseText, statusText, tabOf } from "./words.ts";
 
@@ -183,14 +183,30 @@ test("the search finds blocks by their words, other words and their Python", () 
 });
 
 // --- the starter -------------------------------------------------------------------------------------
-test("the starter is the committed canonical fixture, and its one tab round-trips", () => {
-  const fixture = JSON.parse(readFileSync(new URL("./fixtures/starter.json", import.meta.url), "utf8")) as Flow;
-  const s = starterFlow();
-  assert.equal(canonical(s), canonical(fixture));
-  assert.equal(s.workflow, null);
-  const ws = JSON.parse(JSON.stringify(toWorkspace(s, { kind: "main" }))) as Workspace;
-  const types = [ws.blocks.blocks[0].type, ws.blocks.blocks[0].inputs?.DO?.block?.type];
-  assert.deepEqual(types, ["pl_main", "pl_wait"]);
-  const back = fromWorkspace(s, { kind: "main" }, ws);
-  assert.ok(back.ok && canonical(back.flow) === canonical(s));
+test("the starters are their committed canonical fixtures, and every tab round-trips", () => {
+  const load = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8")) as Flow;
+  // the FIRST SCREEN (2026-11-09 pm): two map blocks, so the studio opens on the Map tab
+  const two = starterFlow();
+  assert.equal(canonical(two), canonical(load("starter")));
+  assert.deepEqual(two.workflow?.blocks.map((b) => b.name), ["town", "field"]);
+  assert.equal(two.workflow?.start_block, "town");
+  assert.equal(STARTER_WORLD, "sample"); // the sample's synthetic sheets
+  const exits = two.workflow!.blocks.flatMap((b) => b.main.filter((st) => st.kind === "take_exit").map((st) => st.kind === "take_exit" && `${b.name}->${st.exit.kind}->${st.exit.to_block}`));
+  assert.deepEqual(exits, ["town->npc_warp->field", "field->item_warp->town"]);
+  const one = oneMapStarter();
+  assert.equal(canonical(one), canonical(load("starter_one_map")));
+  assert.equal(one.workflow, null);
+  for (const [flow, scopes] of [
+    [two, [{ kind: "block", name: "town" }, { kind: "block", name: "field" }, { kind: "global" }]],
+    [one, [{ kind: "main" }, { kind: "global" }]],
+  ] as const) {
+    for (const scope of scopes) {
+      const ws = JSON.parse(JSON.stringify(toWorkspace(flow, scope))) as Workspace;
+      const back = fromWorkspace(flow, scope, ws);
+      assert.ok(back.ok && canonical(back.flow) === canonical(flow), `${flow.name} ${JSON.stringify(scope)}`);
+    }
+  }
+  // the town's save point shows as its sentence block (Actions)
+  const town = toWorkspace(two, { kind: "block", name: "town" }).blocks.blocks[0].inputs?.DO?.block;
+  assert.equal(town?.type, "pl_set_save_point");
 });

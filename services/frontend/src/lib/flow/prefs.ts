@@ -14,6 +14,7 @@ export const KEYS = {
   paths: "poring-lab.flows.path-pane.v1",
   hunt: "poring-lab.flows.hunt-pane.v1",
   flow: "poring-lab.flows.flow.v1",
+  world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on
 } as const;
 
 /** The browser's localStorage, or null where reading it throws (blocked site data). */

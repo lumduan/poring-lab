@@ -73,7 +73,7 @@ no input), and the page reaches no executor, mux, agent channel or input path.
   drawer 45vh with panes stacked, the status sentence on its own line. ➡️ Round 2 (section 8): one
   header row with ▶, the NavBar in one row, a scrolling context bar, the footer's "More ▾".
 
-**What a learner sees first:** the header, the tab `main`, the starter program (when the program
+**What a learner sees first** (➡️ since round 5, section 11: the Map tab of a two-map starter): the header, the tab `main`, the starter program (when the program
 starts: wait 1 seconds; wait until detector v1 sees monster, at most 30 s; stop done) and its Python
 beside it. A browser's last flow is restored instead when it has one (checked like an imported
 file; a broken one gives the starter and a notice).
@@ -374,3 +374,53 @@ the detector hexagon, the bottom sheet). Its ranked list, and what was done:
 - The map flags are read from the static flag files only: a script that sets a flag at run time
   is not read (the leaf says so).
 - **The starter's chip:** "1 warning". The save-point warning stays as Batt's lesson.
+
+## 11. Round 5 (2026-11-09 evening, Batt said yes to both proposals)
+
+1. **The first screen is a TWO-MAP STARTER on the Map tab.** Batt asked whether the node-red /
+   n8n map canvas had been dropped: it must be the first thing a learner sees.
+   - `starterFlow()` (fixtures/starter.json) is a workflow of two map blocks:
+     - `town` (town_1): `set_save_point(npc("n_kafra"))`, walk to (97, 71), then the NPC warp exit
+       (talk to `n_warper`, choose `o_to_field`) to `field`.
+     - `field` (field_1, targets 9101, 9102, 9105, 9109): `for _ in range(5): attack_nearest(within=12)`,
+       then a Butterfly Wing (`WING = item(9002)`) back to the save point, `town.spawn`.
+     - It runs until stopped.
+   - **A correction:** the brief said a Fly Wing, but a Fly Wing teleports within the same map; the
+     Butterfly Wing goes to the save point, which the town sets.
+   - **Facts used:** the SYNTHETIC maps, NPC and option keys, item and mob ids of Batt's sample
+     (packages/poring_flow examples/sheets/sample). Nothing client-derived. So the starter is
+     linted and simulated on the sample sheets (`STARTER_WORLD = "sample"`; the context bar shows
+     it).
+   - Every spawn of field_1 is a target (the boss 9109 too), so no species warning.
+   - **Lint:** 0 errors, 2 not ready, 1 warning (the sample itself has 0 / 5 / 2 / 2 info):
+     - not ready: `set_save_point` needs `L4.text.menu_option` (no L4 locale resolver yet,
+       ADR-0012);
+     - not ready: `attack_nearest` needs `L2.input.attack_click` (not bound for the lab client);
+     - warning: the save-point lesson. It stays even with `set_save_point` first, because a death
+       DURING it respawns at the old save point. No true fix exists, so Batt's lesson stays.
+   - **SIMULATE** on the sample sheets: town → npc_warp → field → item_warp → town, every exit
+     arriving.
+   - The Python pane shows `def town()` and `def field()`, each under its `@map_block`.
+   - The one-map starter is kept: Load ▸ "Starter: one map" (fixtures/starter_one_map.json).
+     Load ▸ "Starter: two maps" and Start over give the new one.
+   - A browser's saved flow still wins over the starter; the static-data choice is remembered
+     with it (`poring-lab.flows.world.v1`).
+2. **The shop / Kafra / storage blocks are Actions, written as sentences** (matpilot's output
+   blue, after talk / choose / use item / open window, under the label "At a shop or a Kafra:"):
+
+   | Block | Words |
+   |---|---|
+   | set_save_point | "set the save point at the Kafra <npc>" |
+   | kafra_teleport | "teleport with the Kafra <npc> to <map>" |
+   | kafra_store | "store <items> at the Kafra <npc>, or all but <keep>" |
+   | kafra_withdraw | "take <items> from the Kafra <npc>" |
+   | rent_cart | "rent a cart from the Kafra <npc>" |
+   | buy | "buy <items> from <npc>" |
+   | sell | "sell all but <keep> to <npc>" |
+
+   - The IR is unchanged: each sentence block is the same catalogue action.
+   - Item lists are typed as text, "501, 502" or "501, WING".
+   - A value a field cannot hold exactly stays the generic block, losslessly: a list variable,
+     an empty list, or an extra parameter.
+   - `cart_transfer` stays in More skills: its `direction` values are written nowhere, so a
+     sentence would invent them. `refine` is a smith's service, not a shop / Kafra / storage block.

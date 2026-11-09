@@ -19,7 +19,7 @@ import { huntKey, register, registerHunt, themesOf } from "@/components/flows/bl
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT } from "@/lib/flow/api";
-import { type Toolbox, toolbox } from "@/lib/flow/blockdefs";
+import { SENTENCE_BY_TYPE, type Toolbox, toolbox } from "@/lib/flow/blockdefs";
 import { type Defaults, fromWorkspace, type Scope, toWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical, type Flow } from "@/lib/flow/ir";
@@ -34,6 +34,7 @@ const PALETTE_BLOCK: Record<string, string> = {
   pl_choose_menu: "choose_menu",
   pl_open_window: "open_window",
   pl_use_item: "use_item",
+  ...SENTENCE_BY_TYPE, // the shop / Kafra / storage sentences (2026-11-09 pm)
 };
 const CONVERT_MS = 120; // a drag fires many events: convert once they settle
 

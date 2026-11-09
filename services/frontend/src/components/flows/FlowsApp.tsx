@@ -29,7 +29,7 @@ import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, r
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { type AuthoredExit, canonical, emptyFlow, type Flow, MAX_JSON_BYTES } from "@/lib/flow/ir";
 import { browserStorage, KEYS, pythonDefault, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
-import { starterFlow } from "@/lib/flow/starter";
+import { oneMapStarter, STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
 import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText, tabOf } from "@/lib/flow/words";
 import { backendHttpBase } from "@/lib/ws";
@@ -51,6 +51,7 @@ const SAVE_DEBOUNCE_MS = 800;
 const NOTICE_MS = 12_000;
 const VIEWS = ["blocks", "python"] as const;
 const OPEN_CLOSED = ["open", "closed"] as const;
+const WORLDS = ["local", "sample"] as const;
 type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt";
 const PANES: [Pane, string][] = [
   ["inspect", "Inspect"],
@@ -106,7 +107,11 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const flowRef = useRef<Flow>(start.flow);
   const [epoch, setEpoch] = useState(0); // the flow was replaced from outside the blocks: reload them
   const [positions, setPositions] = useState<Record<string, XY>>({});
-  const [world, setWorld] = useState<WorldSource>("local");
+  // the static data the flow is linted and simulated on: the starter's are the sample sheets; a
+  // restored flow keeps this browser's choice (2026-11-09 pm)
+  const [world, setWorld] = useState<WorldSource>(() =>
+    start.restored ? readChoice(browserStorage(), KEYS.world, WORLDS, "local") : STARTER_WORLD,
+  );
   const [catalogue, setCatalogue] = useState<CatalogueDoc | null>(null);
   const [engineErr, setEngineErr] = useState<string | null>(null);
   const [lint, setLint] = useState<{ doc: LintDoc; for: string } | null>(null);
@@ -195,6 +200,10 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
     const t = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(t);
   }, [notice]);
+
+  useEffect(() => {
+    writeChoice(store, KEYS.world, world);
+  }, [world, store]);
 
   // remember this browser's flow (a convenience: a reload does not lose the work)
   useEffect(() => {
@@ -316,7 +325,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   };
   const startOver = () => {
     if (!window.confirm("Start a new program from the starter blocks? The flow here is replaced. (Undo, right after, brings it back.)")) return;
-    replace(starterFlow(), { undo: true, notice: "Started a new program from the starter blocks." });
+    replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Started a new program from the starter: two maps, on the sample sheets." });
   };
   const newWorkflow = () => {
     setMenu(false);
@@ -537,8 +546,11 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={newWorkflow}>
                   A new workflow<small>map blocks joined by exits, on the Map tab</small>
                 </button>
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(starterFlow(), { undo: true, notice: "Opened the starter program." }))}>
-                  The starter program<small>one tab, main: wait, wait until the detector sees a monster, stop</small>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." }))}>
+                  Starter: two maps<small>town → NPC warp → field, a wing back (the first screen)</small>
+                </button>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(oneMapStarter(), { undo: true, notice: "Opened the starter: one map." }))}>
+                  Starter: one map<small>one tab, main: wait, wait until the detector sees a monster, stop</small>
                 </button>
               </div>
             )}

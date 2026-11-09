@@ -115,6 +115,51 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [text("ITEM"), badge, run],
     tooltip: "use_item(item): an item id, or a variable naming one (e.g. POTION)",
   }),
+  // --- the shop / Kafra / storage blocks as SENTENCES (2026-11-09 pm, Batt: Actions, not
+  // "More skills"): each the same catalogue action as before (the IR is unchanged), its parameters
+  // as fields; a parameter the field cannot hold exactly keeps the generic block (SENTENCE below)
+  stmt({
+    type: "pl_set_save_point",
+    message0: "set the save point at the Kafra %1 %2 %3",
+    args0: [text("NPC"), badge, run],
+    tooltip: "set_save_point(npc): save the respawn point with this Kafra (an L3 key)",
+  }),
+  stmt({
+    type: "pl_kafra_teleport",
+    message0: "teleport with the Kafra %1 to %2 %3 %4",
+    args0: [text("NPC"), text("TO"), badge, run],
+    tooltip: "kafra_teleport(npc, to=map): pay the Kafra and arrive in that map",
+  }),
+  stmt({
+    type: "pl_kafra_store",
+    message0: "store %1 at the Kafra %2, or all but %3 %4 %5",
+    args0: [text("ITEMS"), text("NPC"), text("KEEP"), badge, run],
+    tooltip: "kafra_store(npc, items=..., all_except=...): item ids or variables, comma separated; leave one of the two empty",
+  }),
+  stmt({
+    type: "pl_kafra_withdraw",
+    message0: "take %1 from the Kafra %2 %3 %4",
+    args0: [text("ITEMS"), text("NPC"), badge, run],
+    tooltip: "kafra_withdraw(npc, items=...): item ids or variables, comma separated",
+  }),
+  stmt({
+    type: "pl_rent_cart",
+    message0: "rent a cart from the Kafra %1 %2 %3",
+    args0: [text("NPC"), badge, run],
+    tooltip: "rent_cart(npc)",
+  }),
+  stmt({
+    type: "pl_buy",
+    message0: "buy %1 from %2 %3 %4",
+    args0: [text("ITEMS"), text("NPC"), badge, run],
+    tooltip: "buy(npc, items=...): item ids or variables, comma separated",
+  }),
+  stmt({
+    type: "pl_sell",
+    message0: "sell all but %1 to %2 %3 %4",
+    args0: [text("KEEP"), text("NPC"), badge, run],
+    tooltip: "sell(npc, keep=...): sells every item NOT listed (irreversible); item ids or variables, comma separated",
+  }),
   stmt({
     type: "pl_wait",
     message0: "wait %1 seconds %2",
@@ -294,6 +339,27 @@ export const BLOCK_DEFS: BlockDef[] = [
 
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
 
+/** A sentence block's field: the catalogue parameter it holds and how (blocks.ts converts). */
+export type SentenceField = { param: string; field: string; kind: "npc" | "map" | "items"; optional?: boolean };
+/** The shop / Kafra / storage actions shown as sentences (2026-11-09 pm), in the toolbox's order. */
+export const SENTENCE: Record<string, { type: string; fields: SentenceField[] }> = {
+  set_save_point: { type: "pl_set_save_point", fields: [{ param: "npc", field: "NPC", kind: "npc" }] },
+  kafra_teleport: { type: "pl_kafra_teleport", fields: [{ param: "npc", field: "NPC", kind: "npc" }, { param: "to", field: "TO", kind: "map" }] },
+  kafra_store: {
+    type: "pl_kafra_store",
+    fields: [
+      { param: "npc", field: "NPC", kind: "npc" },
+      { param: "items", field: "ITEMS", kind: "items", optional: true },
+      { param: "all_except", field: "KEEP", kind: "items", optional: true },
+    ],
+  },
+  kafra_withdraw: { type: "pl_kafra_withdraw", fields: [{ param: "npc", field: "NPC", kind: "npc" }, { param: "items", field: "ITEMS", kind: "items" }] },
+  rent_cart: { type: "pl_rent_cart", fields: [{ param: "npc", field: "NPC", kind: "npc" }] },
+  buy: { type: "pl_buy", fields: [{ param: "npc", field: "NPC", kind: "npc" }, { param: "items", field: "ITEMS", kind: "items" }] },
+  sell: { type: "pl_sell", fields: [{ param: "npc", field: "NPC", kind: "npc" }, { param: "keep", field: "KEEP", kind: "items" }] },
+};
+export const SENTENCE_BY_TYPE: Record<string, string> = Object.fromEntries(Object.entries(SENTENCE).map(([b, s]) => [s.type, b]));
+
 /** Every field and input name a block type has (the converter's contract). `def`: a type built
  * at run time from the catalogue (the hunt block, hunt.ts). */
 export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; saved: Set<string>; inputs: Set<string> } {
@@ -408,6 +474,9 @@ export function toolbox(
     );
   }
   const actions: ToolboxItem[] = ACTIONS.flatMap(palette);
+  const sentences = Object.entries(SENTENCE).filter(([name]) => blocks[name]);
+  if (sentences.length) actions.push(lbl("At a shop or a Kafra:"));
+  for (const [name, sb] of sentences) actions.push({ kind: "block", type: sb.type, extraState: rest(blocks[name]) });
   const control: ToolboxItem[] = [
     { kind: "block", type: "pl_wait", fields: { SECONDS: 1 } },
     { kind: "block", type: "pl_wait_until", inputs: { COND: exprBlock("hp_percent() > 90") } },
@@ -450,7 +519,7 @@ export function toolbox(
   const variables: ToolboxItem[] = [{ kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } }];
   const functions: ToolboxItem[] = [{ kind: "block", type: "pl_call" }];
   const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES) && !(n === "hunt" && huntFields))
+    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];

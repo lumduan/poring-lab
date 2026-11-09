@@ -16,7 +16,8 @@ from poring_flow.models import detector_keys, document, models
 from poring_flow.trace import Scenario, simulate
 
 REPO = Path(__file__).resolve().parents[3]
-STARTER = REPO / "services/frontend/src/lib/flow/fixtures/starter.json"
+STARTER = REPO / "services/frontend/src/lib/flow/fixtures/starter.json"  # two maps (2026-11-09 pm)
+STARTER_ONE = REPO / "services/frontend/src/lib/flow/fixtures/starter_one_map.json"
 HEAD = (
     'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
     'server="lab-rathena", locale="en", path=S2))\n'
@@ -193,13 +194,34 @@ def test_the_python_view_is_in_sections() -> None:
 
 
 # --- the studio's starter program ---------------------------------------------------------------
-def test_the_starter_is_canonical_and_has_no_error() -> None:
-    text = STARTER.read_text(encoding="utf-8")
-    f = ir.from_json(text)
-    assert text == ir.to_json(f) + "\n"
-    assert f.main is not None and f.workflow is None
-    assert not lint.errors(lint.lint(f))
-    assert pyview.parse(pyview.print_flow(f)) == f
+def test_the_starters_are_canonical_and_have_no_error() -> None:
+    """The first screen (2026-11-09 pm, Batt: the map canvas first) is a two-map workflow on the
+    sample's SYNTHETIC sheets; the one-map starter stays (Load). Both canonical, no lint error."""
+    for path, workflow in ((STARTER, True), (STARTER_ONE, False)):
+        text = path.read_text(encoding="utf-8")
+        f = ir.from_json(text)
+        assert text == ir.to_json(f) + "\n", path.name
+        assert (f.workflow is not None) == workflow and (f.main is None) == workflow
+        assert pyview.parse(pyview.print_flow(f)) == f
+    two = ir.from_json(STARTER.read_text(encoding="utf-8"))
+    assert two.workflow is not None and [b.name for b in two.workflow.blocks] == ["town", "field"]
+    doc = editor.lint_doc(
+        two, world=editor.sample_world(), resolver=lint.default_resolver(two.target)
+    )
+    assert doc["counts"]["error"] == 0, doc["findings"]
+    rules = sorted({f["rule"] for f in doc["findings"]})
+    assert rules == ["bindings", "save_point"], (
+        rules
+    )  # 2 lab binding gaps + Batt's save-point lesson
+    one = ir.from_json(STARTER_ONE.read_text(encoding="utf-8"))
+    assert not lint.errors(lint.lint(one))
+    # the Python shows each map as its @map_block function
+    src = pyview.print_flow(two)
+    assert "\ndef town():\n" in src and "\ndef field():\n" in src and src.count("@map_block(") == 2
+    # SIMULATE on the sample sheets: town -> field -> town, every exit arriving
+    t = simulate(two, editor.sample_world(), Scenario.model_validate({"horizon_s": 300}))
+    kinds = [(x["kind"], x["from"], x["to"], x["arrived"]) for x in t["transitions"][:2]]
+    assert kinds == [("npc_warp", "town", "field", True), ("item_warp", "field", "town", True)]
 
 
 # --- round 2 (2026-11-09): the Python in the blocks' own words, the Config constants -------------
@@ -282,7 +304,8 @@ def test_every_flow_we_have_round_trips_with_its_hash() -> None:
         pyview.parse(p.read_text())
         for p in sorted((REPO / "packages/poring_flow/tests/fixtures").glob("*.flow"))
     ]
-    flows += [editor.sample_flow(), ir.from_json(STARTER.read_text(encoding="utf-8"))]
+    flows += [editor.sample_flow()]
+    flows += [ir.from_json(p.read_text(encoding="utf-8")) for p in (STARTER, STARTER_ONE)]
     for f in flows:
         src = pyview.print_flow(f)
         back = pyview.parse(src)
@@ -323,7 +346,7 @@ WRAP_TAIL = "finally:\n    # the engine lets go of all input\n    release_all()\
 
 
 def test_main_runs_in_try_finally_and_the_file_imports_the_stub() -> None:
-    f = ir.from_json(STARTER.read_text(encoding="utf-8"))
+    f = ir.from_json(STARTER_ONE.read_text(encoding="utf-8"))  # a plain flow: its Main
     src = pyview.print_flow(f)
     assert "\nfrom poring_flow.learner import *\n" in src
     assert "\ntry:\n    wait(1)\n" in src and src.endswith(WRAP_TAIL)
@@ -385,7 +408,8 @@ def test_the_learner_stub_names_everything_the_view_prints() -> None:
         pyview.parse(p.read_text())
         for p in sorted((REPO / "packages/poring_flow/tests/fixtures").glob("*.flow"))
     ]
-    flows += [editor.sample_flow(), ir.from_json(STARTER.read_text(encoding="utf-8"))]
+    flows += [editor.sample_flow()]
+    flows += [ir.from_json(p.read_text(encoding="utf-8")) for p in (STARTER, STARTER_ONE)]
     for f in flows:
         tree = ast.parse(pyview.print_flow(f))
         stored = {

@@ -11,7 +11,7 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { DEF_BY_TYPE } from "./blockdefs.ts";
+import { DEF_BY_TYPE, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
@@ -26,6 +26,7 @@ import {
   type ItemRef,
   type MapBlock,
   type MapEvent,
+  type Ref,
   type Stmt,
   type Var,
   clone,
@@ -170,6 +171,42 @@ function rawText(s: Stmt): string {
   }
 }
 
+/** An item list as a sentence field's text: "501, 502" (ids) or "501, WING" (ids and variables);
+ * null when the value is anything else (a list variable, an empty list): the generic block. */
+function itemsText(e: Expr): string | null {
+  const id = (x: unknown) => (typeof x === "object" && x !== null && !Array.isArray(x) && (x as Ref).kind === "item" ? (x as ItemRef).id : null);
+  if (e.kind === "lit" && Array.isArray(e.value) && e.value.length && e.value.every((r) => id(r) !== null)) {
+    return e.value.map((r) => String(id(r))).join(", ");
+  }
+  if (e.kind === "list" && e.items.length && e.items.some((i) => i.kind === "var")) {
+    const parts = e.items.map((i) => (i.kind === "var" ? i.name : i.kind === "lit" && id(i.value) !== null ? String(id(i.value)) : null));
+    return parts.every((x) => x !== null) ? parts.join(", ") : null;
+  }
+  return null;
+}
+
+/** The fields of a shop / Kafra / storage action shown as its sentence block, when every
+ * parameter fits a field exactly; else null (the generic block keeps it, exactly). */
+function sentenceFields(a: ActionStmt): Record<string, string> | null {
+  const spec = SENTENCE[a.block];
+  if (!spec || Object.keys(a.params).some((k) => !spec.fields.some((f) => f.param === k))) return null;
+  const out: Record<string, string> = {};
+  for (const f of spec.fields) {
+    const v = a.params[f.param];
+    if (!v) {
+      if (!f.optional) return null;
+      out[f.field] = "";
+      continue;
+    }
+    const r = v.kind === "lit" && typeof v.value === "object" && !Array.isArray(v.value) ? v.value : null;
+    if (f.kind === "npc" && r?.kind === "npc") out[f.field] = r.key;
+    else if (f.kind === "map" && r?.kind === "map") out[f.field] = r.map;
+    else if (f.kind === "items" && itemsText(v) !== null) out[f.field] = itemsText(v)!;
+    else return null;
+  }
+  return out;
+}
+
 function paramsPlain(a: ActionStmt): boolean {
   return Object.values(a.params).every((e) => !hasDo(e));
 }
@@ -228,6 +265,8 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
             if (r.kind === "window") return { type: p.type, fields: { WINDOW: r.name }, extraState: actionRest(s) };
           }
         }
+        const sentence = sentenceFields(s);
+        if (sentence) return { type: SENTENCE[s.block].type, fields: sentence, extraState: actionRest(s) };
         if (paramsPlain(s)) {
           return { type: "pl_action", fields: { BLOCK: s.block, ARGS: argsText(s.params) }, extraState: actionRest(s) };
         }
@@ -561,7 +600,35 @@ class Reader {
     return this.under(b, where, () => this.stmtOf(b, where));
   }
 
+  /** A sentence field's item list: ids and variable names, comma separated (one at least). */
+  items(b: WsBlock, field: string, where: string): Expr {
+    const tokens = this.field(b, field)
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (!tokens.length) this.err(where, `${field.toLowerCase()}: at least one item id or variable`);
+    const parts: Expr[] = [];
+    for (const t of tokens) {
+      if (/^[0-9]{1,8}$/.test(t) && Number(t) >= 1) parts.push({ kind: "lit", value: { kind: "item", id: Number(t) } });
+      else if (NAME.test(t)) parts.push({ kind: "var", name: t });
+      else this.err(where, `${field.toLowerCase()}: ${JSON.stringify(t)} is not an item id or a variable`);
+    }
+    if (parts.every((x) => x.kind === "lit")) return { kind: "lit", value: parts.map((x) => (x as { value: ItemRef }).value) };
+    return { kind: "list", items: parts };
+  }
+
   private stmtOf(b: WsBlock, where: string): Stmt {
+    const sentence = SENTENCE_BY_TYPE[b.type];
+    if (sentence) {
+      const params: Record<string, Expr> = {};
+      for (const f of SENTENCE[sentence].fields) {
+        if (f.optional && !this.field(b, f.field).trim()) continue;
+        if (f.kind === "npc") params[f.param] = { kind: "lit", value: { kind: "npc", key: this.name(b, f.field, where, KEY) } };
+        else if (f.kind === "map") params[f.param] = { kind: "lit", value: { kind: "map", map: this.name(b, f.field, where, MAP_ID) } };
+        else params[f.param] = this.items(b, f.field, where);
+      }
+      return { kind: "action", block: sentence, params, ...this.rest(b, sentence, where) };
+    }
     const pal = BLOCK_OF_TYPE[b.type];
     if (pal) {
       const r = this.rest(b, pal, where);

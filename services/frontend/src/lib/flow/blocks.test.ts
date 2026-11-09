@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import { BLOCK_DEFS, blockOf, categoryOf, DEF_BY_TYPE, namesOf, toolbox } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, toWorkspace, type WsBlock, type Workspace } from "./blocks.ts";
-import { canonical, clone, type Flow } from "./ir.ts";
+import { canonical, clone, type Expr, type Flow, type Stmt } from "./ir.ts";
+import { blockWords } from "./words.ts";
 import { FIXTURES, fixture, randomFlow } from "./testkit.ts";
 
 function scopes(flow: Flow): Scope[] {
@@ -88,7 +89,7 @@ test("the sample shows MW2's palette blocks with node-path ids", () => {
   assert.deepEqual(types.slice(0, 5), [
     ["h:main", "pl_main"],
     ["n:town.0", "pl_walk_to"],
-    ["n:town.1", "pl_action"],
+    ["n:town.1", "pl_set_save_point"], // a sentence block since 2026-11-09 pm (Actions)
     ["n:town.2", "pl_open_window"],
     ["n:town.3", "pl_walk_to"],
   ]);
@@ -280,4 +281,61 @@ test("detached stacks are listed with their words, top block and size", () => {
   assert.deepEqual(r.loose.map((l) => [l.id, l.count, l.value]), [["lost", 2, false], ["q", 1, true]]);
   assert.match(r.loose[0].words, /^walk\sto\sprontera\sx\s150\sy\s180$/);
   assert.match(r.loose[1].words, /^detector\sv1\ssees\smonster$/);
+});
+
+// --- the shop / Kafra / storage sentences (2026-11-09 pm) -------------------------------------
+test("shop and Kafra actions show as sentences and convert back exactly; anything else stays generic", () => {
+  const act = (block: string, concept: string, params: Record<string, Expr>): Stmt => ({
+    kind: "action", block, concept, params, timeout_s: 60, on_fail: "stop", outcome_to: null, note: null,
+  });
+  const npc = (key: string): Expr => ({ kind: "lit", value: { kind: "npc", key } });
+  const ids = (...n: number[]): Expr => ({ kind: "lit", value: n.map((id) => ({ kind: "item" as const, id })) });
+  const flow = clone(fixture("visit_and_choose"));
+  flow.variables = { ...flow.variables, WING: { kind: "lit", value: { kind: "item", id: 9002 } }, KEEP: { kind: "lit", value: [{ kind: "item", id: 1 }] } };
+  flow.main = [
+    act("buy", "trade.buy", { npc: npc("n_shop"), items: ids(501, 502) }),
+    act("sell", "trade.sell", { npc: npc("n_shop"), keep: { kind: "list", items: [{ kind: "lit", value: { kind: "item", id: 501 } }, { kind: "var", name: "WING" }] } }),
+    act("kafra_store", "storage.deposit", { npc: npc("n_k1"), all_except: ids(9002) }),
+    act("kafra_store", "storage.deposit", { npc: npc("n_k1") }),
+    act("kafra_teleport", "nav.kafra_teleport", { npc: npc("n_k1"), to: { kind: "lit", value: { kind: "map", map: "geffen" } } }),
+    act("set_save_point", "nav.set_save_point", { npc: npc("n_k1") }),
+    // not a sentence's shape: a list variable, an empty list, an extra parameter -> generic
+    act("sell", "trade.sell", { npc: npc("n_shop"), keep: { kind: "var", name: "KEEP" } }),
+    act("buy", "trade.buy", { npc: npc("n_shop"), items: ids() }),
+    act("set_save_point", "nav.set_save_point", { npc: npc("n_k1"), within: { kind: "lit", value: 3 } }),
+    ...(flow.main ?? []),
+  ];
+  const ws = toWorkspace(flow, { kind: "main" });
+  const types = [...allBlocks(ws.blocks.blocks[0])].slice(1, 10).map((b) => b.type);
+  assert.deepEqual(types, ["pl_buy", "pl_sell", "pl_kafra_store", "pl_kafra_store", "pl_kafra_teleport", "pl_set_save_point", "pl_action", "pl_action", "pl_action"]);
+  const sell = [...allBlocks(ws.blocks.blocks[0])][2];
+  assert.deepEqual(sell.fields, { NPC: "n_shop", KEEP: "501, WING" });
+  assert.match(blockWords(sell), /^sell\sall\sbut\s501,\sWING\sto\sn_shop$/);
+  assert.match(blockWords([...allBlocks(ws.blocks.blocks[0])][1]), /^buy\s501,\s502\sfrom\sn_shop$/);
+  roundTrip(flow);
+  // a learner's edit: items typed as text
+  const edited = viaJson(ws);
+  const buy = [...allBlocks(edited.blocks.blocks[0])][1];
+  buy.fields!.ITEMS = "607, WING";
+  const r = fromWorkspace(flow, { kind: "main" }, edited);
+  assert.ok(r.ok);
+  if (r.ok) {
+    const s0 = r.flow.main![0];
+    assert.ok(s0.kind === "action" && s0.params.items.kind === "list" && s0.params.items.items.length === 2);
+  }
+  buy.fields!.ITEMS = "";
+  const bad = fromWorkspace(flow, { kind: "main" }, edited);
+  assert.ok(!bad.ok && bad.issues.some((i) => /at least one item/.test(i.text)));
+});
+
+test("Actions holds the shop and Kafra sentences, after the four NPC / item / window actions", () => {
+  const cat = Object.fromEntries(
+    ["talk_npc", "choose_menu", "use_item", "open_window", "buy", "sell", "kafra_store", "set_save_point", "sit"].map((n) => [n, { concept: "x.y", timeout_s: 60 }]),
+  );
+  const tb = toolbox(cat, "block");
+  const actions = categoryOf(tb, "Actions")!.contents.filter((i) => i.kind === "block").map((i) => (i as { type: string }).type);
+  assert.deepEqual(actions, ["pl_talk_npc", "pl_choose_menu", "pl_use_item", "pl_open_window", "pl_set_save_point", "pl_kafra_store", "pl_buy", "pl_sell"]);
+  const more = categoryOf(tb, "More skills")!.contents.map((i) => (i as { fields?: { BLOCK?: string } }).fields?.BLOCK);
+  assert.deepEqual(more, ["sit"]);
+  for (const t of actions) assert.equal(DEF_BY_TYPE[t].style, "mp_output_blocks", t); // matpilot's output blue
 });
