@@ -301,7 +301,7 @@ matpilot are at home), in matpilot's colours, light or dark as the system is
 ([docs/planning/flows-studio.md](docs/planning/flows-studio.md)): a header (Blocks | Python, Load,
 Save, Start over, the green **Simulate**), tabs over the blocks (`main` and `events`; a workflow
 adds a **Map** tab with the canvas below and one tab per map block), the **Python beside the
-blocks** (open by default on a wide screen), output panes in a drawer (Inspect, Lint, Simulate,
+blocks** (open by default on a wide screen), output panes in a drawer (Inspect, Lint, Results,
 Path map, Hunt rules), the problems under the blocks and a status line. The **trained models** are
 Sensors blocks ("detector v1 sees monster", "detector xmas02 count of cookie xmas"; ADR-0020
 Amendment B); a not-adopted model is never offered.

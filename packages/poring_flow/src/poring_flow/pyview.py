@@ -360,15 +360,18 @@ def _module(tree: ast.Module, ctx: _Ctx) -> dict[str, Any] | None:
         doc = body[0].value.value
         body = body[1:]
     first = body[0] if body else None
-    if (
+    config = _config_run(body)
+    if config:
+        rest = body[len(config) :]
+    elif (
         not isinstance(first, ast.Expr)
         or not isinstance(first.value, ast.Call)
         or (_call_name(first.value) != "flow")
     ):
-        ctx.err(first or tree, "the first statement is flow(...)")
+        ctx.err(first or tree, "the flow starts with its Config (FLOW_NAME = ...) or flow(...)")
         return None
-    head = first.value
-    rest = body[1:]
+    else:
+        rest = body[1:]
     names = ctx.cat.names()
 
     # pass 1: the names every body may refer to
@@ -400,7 +403,10 @@ def _module(tree: ast.Module, ctx: _Ctx) -> dict[str, Any] | None:
     ctx.blocks = {n for n, k in defined.items() if k == "block"}
 
     out: dict[str, Any] = {}
-    _flow_head(head, ctx, out, doc)
+    if config:
+        _config_head(config, ctx, out, doc)
+    else:
+        _flow_head(first.value, ctx, out, doc)  # type: ignore[union-attr]
     procedures: dict[str, Any] = {}
     handlers: list[Any] = []
     blocks: dict[str, dict[str, Any]] = {}
@@ -453,13 +459,77 @@ def _is_decl(st: ast.Assign, ctx: _Ctx) -> bool:
         return False
     if st.targets[0].id in ctx.variables:
         return False
-    return _call_name(st.value) not in set(ctx.cat.blocks) | {"wait_until"}
+    return _call_name(st.value) not in set(ctx.cat.blocks) | {"wait_until", "wait"}
+
+
+# The Config constants (2026-11-09, flows-studio.md section 3): the flow's head as a real program's
+# settings, one per line, in place of the flow(...) call (which is still read). CONSTANT -> the
+# flow(...) argument; CLIENT / SERVER / LOCALE / PATH are target(...)'s.
+CONFIG = {
+    "FLOW_NAME": "name",
+    "DESCRIPTION": "description",
+    "IR_VERSION": "ir",
+    "MAX_RUNTIME_S": "max_runtime_s",
+    "WHERE_BUDGET": "where_budget",
+    "RUN_UNTIL_STOPPED": "run_until_stopped",
+    "START": "start",
+    "STOP_WHEN": "stop_when",
+    "ASSUMES": "assumes",
+}
+TARGET_CONFIG = {"CLIENT": "client", "SERVER": "server", "LOCALE": "locale", "PATH": "path"}
+
+
+def _config_run(body: list[ast.stmt]) -> list[ast.Assign]:
+    """The leading `CONSTANT = value` statements of a Config head (empty: a flow(...) head)."""
+    run: list[ast.Assign] = []
+    for st in body:
+        if (
+            isinstance(st, ast.Assign)
+            and len(st.targets) == 1
+            and isinstance(st.targets[0], ast.Name)
+            and (st.targets[0].id in CONFIG or st.targets[0].id in TARGET_CONFIG)
+        ):
+            run.append(st)
+        else:
+            break
+    return run
+
+
+def _config_head(run: list[ast.Assign], ctx: _Ctx, out: dict[str, Any], doc: str | None) -> None:
+    kw: dict[str, ast.expr] = {}
+    tkw: dict[str, ast.expr] = {}
+    for st in run:
+        name = st.targets[0].id  # type: ignore[attr-defined]
+        into, key = (kw, CONFIG[name]) if name in CONFIG else (tkw, TARGET_CONFIG[name])
+        if key in into:
+            ctx.err(st, f"{name} is set twice")
+        into[key] = st.value
+    _head(kw, tkw if tkw else None, run[0], ctx, out, doc)
 
 
 def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) -> None:
     if call.args:
         ctx.err(call, "flow(...) takes keyword arguments only")
     kw = _kw(call)
+    tkw: dict[str, ast.expr] | None = None
+    if "target" in kw:
+        t = kw.pop("target")
+        if _call_name(t) != "target" or t.args:  # type: ignore[attr-defined]
+            ctx.err(t, "target=target(client=..., server=..., locale=..., path=S2)")
+        else:
+            tkw = _kw(t)  # type: ignore[arg-type]
+    _head(kw, tkw, call, ctx, out, doc)
+
+
+def _head(
+    kw: dict[str, ast.expr],
+    tkw: dict[str, ast.expr] | None,
+    where: ast.AST,
+    ctx: _Ctx,
+    out: dict[str, Any],
+    doc: str | None,
+) -> None:
+    """The flow's head from its arguments (flow(...) or the Config constants: the same IR)."""
     allowed = {
         "ir",
         "name",
@@ -482,16 +552,11 @@ def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) 
         out["description"] = _const(kw["description"], ctx)
     elif doc is not None:
         out["description"] = doc
-    if "target" in kw:
-        t = kw["target"]
-        if _call_name(t) != "target" or t.args:  # type: ignore[attr-defined]
-            ctx.err(t, "target=target(client=..., server=..., locale=..., path=S2)")
-        else:
-            tk = _kw(t)  # type: ignore[arg-type]
-            tgt = {k: _const(v, ctx) for k, v in tk.items() if k != "path"}
-            if "path" in tk:
-                tgt["path"] = _constant(tk["path"], ctx, ("S2", "RDP"))
-            out["target"] = tgt
+    if tkw is not None:
+        tgt = {k: _const(v, ctx) for k, v in tkw.items() if k != "path"}
+        if "path" in tkw:
+            tgt["path"] = _constant(tkw["path"], ctx, ("S2", "RDP"))
+        out["target"] = tgt
     if "assumes" in kw:
         a = kw["assumes"]
         if not isinstance(a, ast.List | ast.Tuple):
@@ -778,6 +843,9 @@ def _stmt(st: ast.stmt, ctx: _Ctx) -> list[Any]:
             return [_action(st.value, ctx, outcome_to=name)]  # type: ignore[arg-type]
         if cname == "wait_until":
             return [_wait_until(st.value, ctx, outcome_to=name)]  # type: ignore[arg-type]
+        if cname == "wait":
+            ctx.err(st, f"wait(seconds) has no outcome: {name} = wait_until(False, timeout_s=...)")
+            raise _Bad
         return [{"kind": "set", "var": name, "value": _expr(st.value, ctx)}]
     if isinstance(st, ast.AugAssign):
         if not isinstance(st.target, ast.Name) or type(st.op) not in (ast.Add, ast.Sub):
@@ -892,6 +960,8 @@ def _call_stmt(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
         return _action(call, ctx)
     if name == "wait_until":
         return _wait_until(call, ctx)
+    if name == "wait":
+        return _wait(call, ctx)
     if name == "stop":
         if len(call.args) != 1 or call.keywords:
             ctx.err(call, 'stop("reason") takes one reason')
@@ -912,6 +982,17 @@ def _call_stmt(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
         raise _Bad
     ctx.err(call, f"{name}(...) is not a block, a procedure or a flow statement")
     raise _Bad
+
+
+def _wait(call: ast.Call, ctx: _Ctx) -> dict[str, Any]:
+    """`wait(seconds)`: the "wait N seconds" block, the printer's form of
+    `wait_until(False, timeout_s=N)` (the same IR)."""
+    arg = call.args[0] if len(call.args) == 1 and not call.keywords else None
+    secs = arg.value if isinstance(arg, ast.Constant) else None
+    if isinstance(secs, bool) or not isinstance(secs, int | float):
+        ctx.err(call, "wait(seconds) takes one number of seconds, e.g. wait(1)")
+        raise _Bad
+    return {"kind": "wait_until", "cond": {"kind": "lit", "value": False}, "timeout_s": secs}
 
 
 def _wait_until(call: ast.Call, ctx: _Ctx, outcome_to: str | None = None) -> dict[str, Any]:
@@ -1153,6 +1234,14 @@ def _num(v: Any) -> str:
     return repr(v)
 
 
+def _secs(v: float) -> str:
+    """A FLOAT field in seconds (timeouts, cooldowns): whole seconds without ".0" (`wait(1)`, as the
+    block says). Read back, the float field takes the int as the same float, so the IR, its JSON
+    and its hash are unchanged. Never used for a literal VALUE (an int literal stays an int)."""
+    f = float(v)
+    return str(int(f)) if f.is_integer() and abs(f) < 1e15 else repr(f)
+
+
 def _ref_src(r: Any) -> str:
     if isinstance(r, ir.CellRef):
         return f"cell({_s(r.map)}, {r.x}, {r.y})"
@@ -1258,7 +1347,7 @@ def _action_call(a: ir.ActionStmt, cat: Catalogue) -> str:
     args = _call_args(a.params, spec.params if spec else [], cat)
     extra = []
     if spec is None or a.timeout_s != spec.timeout_s:
-        extra.append(f"timeout_s={_num(a.timeout_s)}")
+        extra.append(f"timeout_s={_secs(a.timeout_s)}")
     if a.on_fail != "stop":
         extra.append("on_fail=CONTINUE")
     if a.note is not None:
@@ -1277,7 +1366,7 @@ def _fit(head: str, args: list[str], indent: str, tail: str = "") -> list[str]:
 
 def _exit_src(x: ir.Exit, cat: Catalogue) -> str:
     to = f"to=entry({_s(x.to_block)}, {_s(x.to_entry)})"
-    tail = "" if x.timeout_s == 120 else f", timeout_s={_num(x.timeout_s)}"
+    tail = "" if x.timeout_s == 120 else f", timeout_s={_secs(x.timeout_s)}"
     if x.kind == "walk_exit" and x.warp is not None:
         return f"walk_exit({_ref_src(x.warp)}, {to}{tail})"
     if x.kind == "npc_warp" and x.npc is not None:
@@ -1294,6 +1383,17 @@ def _stmts(body: list[Any], indent: str, cat: Catalogue) -> list[str]:
     for st in body:
         out.extend(_stmt_src(st, indent, cat))
     return out
+
+
+def _is_plain_wait(st: ir.WaitUntil) -> bool:
+    """wait_until(False, timeout_s=N) without an outcome: the "wait N seconds" block."""
+    c = st.cond
+    return (
+        st.outcome_to is None
+        and isinstance(c, ir.Lit)
+        and isinstance(c.value, bool)
+        and c.value is False
+    )
 
 
 def _stmt_src(st: Any, ind: str, cat: Catalogue) -> list[str]:
@@ -1317,11 +1417,13 @@ def _stmt_src(st: Any, ind: str, cat: Catalogue) -> list[str]:
         cond = expr_src(st.cond, cat)
         if st.max_iter is not None or st.max_s is not None:
             kws = [f"max_iter={st.max_iter}"] if st.max_iter is not None else []
-            kws += [f"max_s={_num(st.max_s)}"] if st.max_s is not None else []
+            kws += [f"max_s={_secs(st.max_s)}"] if st.max_s is not None else []
             cond = f"bounded({cond}, {', '.join(kws)})"
         return [f"{ind}while {cond}:", *_stmts(st.body, ind + "    ", cat)]
     if isinstance(st, ir.WaitUntil):
-        call = f"wait_until({expr_src(st.cond, cat)}, timeout_s={_num(st.timeout_s)})"
+        if _is_plain_wait(st):  # the "wait N seconds" block, in its own words (wait(1))
+            return [f"{ind}wait({_secs(st.timeout_s)})"]
+        call = f"wait_until({expr_src(st.cond, cat)}, timeout_s={_secs(st.timeout_s)})"
         return [f"{ind}{st.outcome_to} = {call}" if st.outcome_to else f"{ind}{call}"]
     if isinstance(st, ir.Repeat):
         return [
@@ -1395,7 +1497,7 @@ def _on_args(h: ir.Handler, cat: Catalogue) -> list[str]:
     if h.max_insert_fails != 3:
         args.append(f"max_insert_fails={h.max_insert_fails}")
     if h.cooldown_s != 0:
-        args.append(f"cooldown_s={_num(h.cooldown_s)}")
+        args.append(f"cooldown_s={_secs(h.cooldown_s)}")
     if h.max_per_min is not None:
         args.append(f"max_per_min={h.max_per_min}")
     if h.max_fires_per_10min != 10:
@@ -1417,36 +1519,55 @@ def section_rule(title: str) -> str:
     return f"# --- {title} ".ljust(76, "-")
 
 
+GENERATED = "# Made by poring-lab from blocks. The flow engine reads this Python; it never runs it."
+
+
+def _head_args(flow: ir.Flow, cat: Catalogue) -> list[tuple[str, str]]:
+    """The flow's head as (flow(...) argument, its source), in the printer's order."""
+    head = [("name", _s(flow.name))]
+    if flow.description:
+        head.append(("description", _s(flow.description)))
+    head += [("ir", str(flow.ir)), ("max_runtime_s", str(flow.max_runtime_s))]
+    if flow.where_budget != ir.WHERE_BUDGET_DEFAULT:
+        head.append(("where_budget", str(flow.where_budget)))
+    wf = flow.workflow
+    if wf is not None:
+        if wf.run_until_stopped:
+            head.append(("run_until_stopped", "True"))
+        head.append(("start", f"entry({_s(wf.start_block)}, {_s(wf.start_entry)})"))
+    if flow.stop_when is not None:
+        head.append(("stop_when", expr_src(flow.stop_when, cat)))
+    if flow.assumes:
+        head.append(("assumes", "[" + ", ".join(expr_src(a, cat) for a in flow.assumes) + "]"))
+    return head
+
+
+def _config_lines(flow: ir.Flow, cat: Catalogue) -> list[str]:
+    """The Config section: the head as UPPER_CASE constants, one per line, as a robot program's
+    settings (2026-11-09). A flow with a VARIABLE named like a constant keeps the flow(...) call,
+    so its Python still reads back exactly."""
+    t = flow.target
+    target = [("client", _s(t.client)), ("server", _s(t.server)), ("locale", _s(t.locale))]
+    target.append(("path", CONST_OF[t.path]))
+    if set(flow.variables) & (set(CONFIG) | set(TARGET_CONFIG)):
+        args = [f"{k}={v}" for k, v in _head_args(flow, cat)]
+        args.append("target=target(" + ", ".join(f"{k}={v}" for k, v in target) + ")")
+        return ["flow(", *[f"    {a}," for a in args], ")"]
+    names = {v: k for k, v in CONFIG.items()}
+    tnames = {v: k for k, v in TARGET_CONFIG.items()}
+    lines = [f"{names[k]} = {v}" for k, v in _head_args(flow, cat)]
+    return lines + [f"{tnames[k]} = {v}" for k, v in target]
+
+
 def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
     """The canonical Python view of a flow, in sections (Config, Setup, Functions, Map blocks,
     Events, Main; an empty one is left out)."""
     cat = cat or catalogue()
-    head = [f"ir={flow.ir}", f"name={_s(flow.name)}"]
-    if flow.description:
-        head.append(f"description={_s(flow.description)}")
-    head.append(f"max_runtime_s={flow.max_runtime_s}")
-    if flow.where_budget != ir.WHERE_BUDGET_DEFAULT:
-        head.append(f"where_budget={flow.where_budget}")
     wf = flow.workflow
-    if wf is not None:
-        if wf.run_until_stopped:
-            head.append("run_until_stopped=True")
-        head.append(f"start=entry({_s(wf.start_block)}, {_s(wf.start_entry)})")
-    if flow.stop_when is not None:
-        head.append(f"stop_when={expr_src(flow.stop_when, cat)}")
-    if flow.assumes:
-        head.append("assumes=[" + ", ".join(expr_src(a, cat) for a in flow.assumes) + "]")
-    t = flow.target
-    head.append(
-        f"target=target(client={_s(t.client)}, server={_s(t.server)}, "
-        f"locale={_s(t.locale)}, path={CONST_OF[t.path]})"
-    )
     # (is a def, its lines, its SECTION): matpilot's sections (flows-studio.md section 3), so a
     # learner reads the same shape on /flows as on a robot's Python; comments, so the parser
     # drops them and every round trip is unchanged
-    chunks: list[tuple[bool, list[str], str]] = [
-        (False, ["flow(", *[f"    {h}," for h in head], ")"], "Config")
-    ]
+    chunks: list[tuple[bool, list[str], str]] = [(False, _config_lines(flow, cat), "Config")]
     if flow.variables:
         lines = [f"{k} = {_lit_src(v.value)}" for k, v in flow.variables.items()]
         chunks.append((False, lines, "Setup"))
@@ -1502,7 +1623,7 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
                 chunks.append((True, ev_def, EVENTS))
     if flow.main is not None:
         chunks.append((False, _stmts(flow.main, "", cat), "Main"))
-    out: list[str] = []
+    out: list[str] = [GENERATED]
     prev_def = False
     prev_section = ""
     for is_def, lines, section in chunks:

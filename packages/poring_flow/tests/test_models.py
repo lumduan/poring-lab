@@ -144,7 +144,7 @@ def test_events_read_detectors_too() -> None:
 def test_the_python_view_round_trips_a_detector() -> None:
     f = flow_of('wait_until(detector_sees("xmas02", "mystcase"), timeout_s=30)\nstop("done")\n')
     src = pyview.print_flow(f)
-    assert 'wait_until(detector_sees("xmas02", "mystcase"), timeout_s=30.0)' in src
+    assert 'wait_until(detector_sees("xmas02", "mystcase"), timeout_s=30)' in src
     assert pyview.parse(src) == f
 
 
@@ -200,3 +200,89 @@ def test_the_starter_is_canonical_and_has_no_error() -> None:
     assert f.main is not None and f.workflow is None
     assert not lint.errors(lint.lint(f))
     assert pyview.parse(pyview.print_flow(f)) == f
+
+
+# --- round 2 (2026-11-09): the Python in the blocks' own words, the Config constants -------------
+def test_wait_n_seconds_reads_as_wait_and_is_the_same_ir() -> None:
+    plain = flow_of('wait(1)\nwait(2.5)\nstop("done")\n')
+    long = flow_of(
+        'wait_until(False, timeout_s=1)\nwait_until(False, timeout_s=2.5)\nstop("done")\n'
+    )
+    assert plain == long and ir.flow_hash(plain) == ir.flow_hash(long)
+    src = pyview.print_flow(plain)
+    assert "\nwait(1)\nwait(2.5)\n" in src  # whole seconds without ".0", as the block says
+    # an outcome keeps the long form: wait(...) has none
+    kept = flow_of('R = "x"\nR = wait_until(False, timeout_s=3)\nstop("done")\n')
+    assert "R = wait_until(False, timeout_s=3)" in pyview.print_flow(kept)
+    for bad in (
+        'R = "x"\nR = wait(1)\n',
+        "wait()\n",
+        'wait("a")\n',
+        "wait(True)\n",
+        "wait(1, 2)\n",
+    ):
+        with pytest.raises(pyview.ParseError):
+            flow_of(bad + 'stop("done")\n')
+    with pytest.raises(pyview.ParseError, match="shadows a catalogue name"):
+        flow_of('def wait():\n    stop("x")\nstop("done")\n')
+
+
+def test_whole_seconds_print_as_ints_and_read_back_as_the_same_float() -> None:
+    f = flow_of(
+        "wait_until(hp_percent() > 90, timeout_s=30.0)\nsit(timeout_s=12.0)\nsit(timeout_s=2.5)\n"
+        'stop("done")\n'
+    )
+    src = pyview.print_flow(f)
+    assert "timeout_s=30)" in src and "sit(timeout_s=12)" in src and "sit(timeout_s=2.5)" in src
+    back = pyview.parse(src)
+    assert back == f and ir.canonical_json(back) == ir.canonical_json(f)
+    assert '"timeout_s":30.0' in ir.canonical_json(back)  # the IR keeps its float
+
+
+def test_the_config_constants_and_flow_call_are_the_same_flow() -> None:
+    old = (
+        'flow(ir=2, name="t", max_runtime_s=600, where_budget=3, '
+        'target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2))\n'
+        'POTION = item(9001)\nuse_item(POTION)\nstop("done")\n'
+    )
+    new = (
+        'FLOW_NAME = "t"\nIR_VERSION = 2\nMAX_RUNTIME_S = 600\nWHERE_BUDGET = 3\n'
+        'CLIENT = "kro-20211103-prere"\nSERVER = "lab-rathena"\nLOCALE = "en"\nPATH = S2\n'
+        'POTION = item(9001)\nuse_item(POTION)\nstop("done")\n'
+    )
+    a, b = pyview.parse(old), pyview.parse(new)
+    assert a == b and ir.flow_hash(a) == ir.flow_hash(b)
+    src = pyview.print_flow(a)
+    assert src.startswith("# Made by poring-lab from blocks.")
+    assert '\nFLOW_NAME = "t"\nIR_VERSION = 2\nMAX_RUNTIME_S = 600\nWHERE_BUDGET = 3\n' in src
+    assert "\nPOTION = item(9001)\n" in src and "flow(" not in src
+    with pytest.raises(pyview.ParseError, match="SERVER is set twice"):
+        pyview.parse(new.replace('LOCALE = "en"', 'SERVER = "x"'))
+
+
+def test_a_variable_named_like_a_constant_keeps_the_flow_call() -> None:
+    src = (
+        'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
+        'server="lab-rathena", locale="en", path=S2))\nSERVER = item(9001)\nuse_item(SERVER)\n'
+        'stop("done")\n'
+    )
+    f = pyview.parse(src)
+    out = pyview.print_flow(f)
+    assert "\nflow(\n" in out and "\nSERVER = item(9001)\n" in out
+    assert pyview.parse(out) == f
+
+
+def test_every_flow_we_have_round_trips_with_its_hash() -> None:
+    """IR -> the new Python -> IR is identical, the hash too, and canonical Python is stable, for
+    every committed flow source, the sample and the starter."""
+    flows = [
+        pyview.parse(p.read_text())
+        for p in sorted((REPO / "packages/poring_flow/tests/fixtures").glob("*.flow"))
+    ]
+    flows += [editor.sample_flow(), ir.from_json(STARTER.read_text(encoding="utf-8"))]
+    for f in flows:
+        src = pyview.print_flow(f)
+        back = pyview.parse(src)
+        assert back == f, f.name
+        assert ir.flow_hash(back) == ir.flow_hash(f), f.name
+        assert pyview.print_flow(back) == src, f.name

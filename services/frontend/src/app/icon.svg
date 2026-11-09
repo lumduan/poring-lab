@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- poring-lab's app icon (2026-11-09): our own drawing of two stacked program blocks and a
+       play mark; nothing from the game client. -->
+  <rect width="32" height="32" rx="7" fill="#111418"/>
+  <path d="M6 7h11l2 2h7v6H6z" fill="#b45309"/>
+  <path d="M6 17h20v8H19l-2 2H6z" fill="#0e7490"/>
+  <path d="M10 18.8v4.4l4-2.2z" fill="#ffffff"/>
+</svg>

@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  // No on-screen dev indicator (the "N" bubble covered the /flows status line and a toggle,
+  // 2026-11-09); compile and runtime errors are still shown (Next 16 docs: devIndicators).
+  devIndicators: false,
   ...(devHost ? { allowedDevOrigins: [devHost] } : {}),
 };
 

@@ -118,7 +118,7 @@ WITH_IGNORE = (
     "    targets=[mob(9101), mob(9102)],\n",
     "    targets=[mob(9101)],\n    ignore=[mob(9102)],\n",
 )
-SHARED = ('server="lab-rathena"', 'server="community-bot-testing"')
+SHARED = ('SERVER = "lab-rathena"', 'SERVER = "community-bot-testing"')  # the Config section
 RING = "hunt's engage_source melee_ring strikes EVERY monster in melee range"
 # The patrol route (Batt 2026-10-22): the search group's option, after the search rule version
 SEARCH = 'search="heading_coverage@22")'

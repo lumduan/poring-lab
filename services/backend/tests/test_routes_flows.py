@@ -142,8 +142,10 @@ def test_lint_simulate_python(make: Make) -> None:
     assert "death_respawn" in [x["kind"] for x in sim["trace"]["transitions"]]
     assert sim["lint"]["counts"] == lint["counts"]
     py = post(client, "python", {"flow": flow}).json()
-    # the canonical Python view in sections (flows-studio.md 3): the Config section opens it
-    assert py["python"].startswith("# --- Config ---") and "\nflow(\n" in py["python"]
+    # the canonical Python view in sections (flows-studio.md 3): the Config constants open it
+    assert py["python"].startswith("# Made by poring-lab from blocks.")
+    assert "\n# --- Config ---" in py["python"]
+    assert '\nFLOW_NAME = "town_warp_farm"\n' in py["python"]
     assert py["flow_hash"] == lint["flow_hash"]
     assert NoInput.sent == []  # nothing ever reached an input path
     # the local world: no sheets generated for these synthetic maps -> unsupported, fail closed

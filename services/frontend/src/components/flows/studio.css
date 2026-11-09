@@ -1088,30 +1088,62 @@
   vertical-align: -1px;
 }
 
+/* the footer's "More" menu: phones only (the pane toggles fold into it) */
+.toggles-more-wrap {
+  display: none;
+  position: relative;
+}
+.toggles-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  min-width: 10rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
+}
+.toggles-menu .toggle-button {
+  justify-content: space-between;
+}
+
 /* --- phones and narrow windows: the Python becomes a sheet over the blocks, panes stack -------- */
 @media (max-width: 48rem) {
-  .studio-bar .status-pill,
-  .studio-title {
+  /* the header in ONE row: the NavBar names the page; Blocks | Python, the file icons, ▶ */
+  .studio-brand {
     display: none;
   }
   .studio-bar {
-    column-gap: 0.4rem;
+    flex-wrap: nowrap;
+    column-gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
   }
   .studio-actions {
     display: contents;
   }
-  .studio-brand {
-    order: 1;
-    flex: 0 1 auto;
-  }
   .segmented {
-    order: 3;
+    order: 1;
+    flex: none;
   }
   .segmented-option {
     padding: 0.3rem 0.6rem;
   }
   .studio .button-run {
-    padding: 0.4rem 0.8rem;
+    padding: 0.35rem 0.7rem;
+  }
+  .studio .button-run .button-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   .studio-actions > .studio-menu,
   .studio-actions > .button-small {
@@ -1160,26 +1192,52 @@
     border-left: 0;
     border-top: 1px solid var(--border);
   }
-  /* the sentence on its own line, the panel toggles under it */
+  /* one row: the sentence, then Python and More (the panes fold into More) */
   .studio-status {
-    flex-wrap: wrap;
-    gap: 0.3rem 0.5rem;
+    gap: 0.5rem;
     padding: 0.35rem 0.6rem;
   }
-  .studio-status-text {
-    flex-basis: 100%;
-  }
   .studio-toggles {
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: none;
+    flex-wrap: nowrap;
     gap: 0.25rem;
+  }
+  .studio-toggles .pane-toggle {
+    display: none;
+  }
+  .toggles-more-wrap {
+    display: block;
+  }
+  /* the context bar: one row that scrolls sideways, the words only */
+  .device-bar {
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+    min-height: 2.3rem;
+    padding: 0.25rem 0.6rem;
+    scrollbar-width: thin;
+  }
+  .device-chip {
+    padding: 0.1rem 0.45rem;
+  }
+  .device-chip .device-label,
+  .device-chip-wide {
+    display: none;
   }
   .toggle-button {
     padding: 0.25rem 0.5rem;
   }
+  /* the Load menu spans the bar (the Load button sits mid-row) */
+  .studio-bar {
+    position: relative;
+  }
+  .studio-menu {
+    position: static;
+  }
   .studio-menu-list {
-    right: auto;
-    left: 0;
+    top: 100%;
+    left: 0.5rem;
+    right: 0.5rem;
+    min-width: 0;
   }
   .studio .grid2 {
     grid-template-columns: minmax(0, 1fr);

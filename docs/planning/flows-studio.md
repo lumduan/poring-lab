@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-09 (working tree, not committed): the /flows studio in matpilot.org/blocks's layout and colours, the Python beside the blocks, the trained models as sensor blocks (ADR-0020 Amendment B). Checked by unit tests and a headless Blockly 13 round trip; not yet looked at in a browser."
+status: "BUILT 2026-11-09, committed 2efe641a (round 1); the backend restarted 16:21; matpilot's headless-Chrome side-by-side MATCHED on desktop geometry and colours. Round 2 (section 8: the Python in the blocks' words and as a real program's shape, the phone height, Results, no dev indicator, an app icon) in the working tree, not committed."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, mw2-block-editor.md, blocks-from-hunt-flow.md, xmas02-detector.md, stormy-knight-recognizer.md, orclord-recognizer.md, ../../THIRD_PARTY.md, ../../services/frontend/src/components/flows/FlowsApp.tsx, ../../packages/poring_flow/src/poring_flow/models.yaml]
-next_action: "The parent restarts the backend (the new sensors, lint rules, model catalogue, Python sections and the Python route's own rate budget are host source); then Batt and the matpilot session look at http://192.168.1.228:3000/flows (light and dark, 1280 px and 390 px) against /blocks. Open: section 7."
+next_action: "Round 2: the parent restarts the backend (pyview's wait(N), whole seconds and the Config constants are host source), then matpilot re-runs its side-by-side (section 8's checklist). Open: section 7."
 title: "The /flows studio: matpilot's /blocks layout, the Python side by side, the trained models as blocks"
 date: 2026-11-09
 owner: Batt
@@ -33,14 +33,14 @@ no input), and the page reaches no executor, mux, agent channel or input path.
 │ flow: plain (one main) · static data [local ▾] · lint: lint ok · hash 3f2a…       │  context bar
 │ ┌ main │ events ─────────────────────────────────┐┌ Python ─────────── [Copy] [x]┐ │
 │ │ Search  ┌──────────────┐                 (↶)(↷) ││ my_first_flow.py | .flow.json│ │
-│ │ Movement│ when the program starts       │       ││  1 # --- Config ------------ │ │
-│ │ Actions │   wait 1 seconds              │       ││  2 flow(                     │ │
+│ │ Movement│ when the program starts       │       ││  3 # --- Config ------------ │ │
+│ │ Actions │   wait 1 seconds              │       ││  4 FLOW_NAME = "my_first_…"  │ │
 │ │ Control │   wait until (detector v1 …)  │       ││  …                           │ │
-│ │ …       │   stop done                   │       ││  9 # --- Main -------------- │ │
+│ │ …       │   stop done                   │       ││ 12 # --- Main -------------- │ │
 │ └─────────┴───────────────────────────────┘       │└──────────────────────────────┘ │
-│ ┌ Inspect ┐┌ Lint ┐┌ Simulate ┐┌ Path map ┐┌ Hunt rules ┐   drawer, when a pane is on │
+│ ┌ Inspect ┐┌ Lint ┐┌ Results ┐┌ Path map ┐┌ Hunt rules ┐    drawer, when a pane is on │
 │ Fix before simulating: … · Lint errors: … · Not running (the faded blocks): …       │  problems
-│ Ready. Press Simulate…                  (Python)(Inspect)(Lint)(Simulate)(Path map) │  status footer
+│ Ready. Press Simulate…                   (Python)(Inspect)(Lint)(Results)(Path map) │  status footer
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +70,8 @@ no input), and the page reaches no executor, mux, agent channel or input path.
 - **Status footer:** a sentence ("Ready. Press Simulate…"), toggles with `aria-pressed`, each
   remembered per browser (`poring-lab.flows.*.v1`, every localStorage access wrapped).
 - **Narrow (< 48rem):** icon-only file buttons, the Python pane becomes a bottom sheet (55 %), the
-  drawer 45vh with panes stacked, the status sentence on its own line.
+  drawer 45vh with panes stacked, the status sentence on its own line. ➡️ Round 2 (section 8): one
+  header row with ▶, the NavBar in one row, a scrolling context bar, the footer's "More ▾".
 
 **What a learner sees first:** the header, the tab `main`, the starter program (when the program
 starts: wait 1 seconds; wait until detector v1 sees monster, at most 30 s; stop done) and its Python
@@ -85,7 +86,7 @@ file; a broken one gives the starter and a notice).
 | double-click a node → a full-screen Blockly modal with Apply / Close | the node's **tab**; edits apply live (no Apply step) |
 | Inspect tab (map block props, run settings, static data, Simulate this node, Start here, Delete) | **Inspect** pane (follows the tab, or the node clicked on the Map tab) |
 | Lint tab | **Lint** pane + errors under the blocks + the context bar's summary |
-| Simulate tab + its path maps | **Simulate** pane (+ a detector sighting row) and the **Path map** pane |
+| Simulate tab + its path maps | the green **Simulate** runs it; the **Results** pane (its form, + a detector sighting row) and the **Path map** pane |
 | JSON tab | the `.flow.json` pill in the Python pane |
 | Python tab (hidden) | the **Python pane beside the blocks**, and the full Python view |
 | Load sample / New / Import JSON / Export JSON | **Load** menu (sample, a new workflow, the starter, a file) / **Save** |
@@ -140,7 +141,8 @@ in flow colour with the cap.
   browser refuses, the code is SELECTED and a notice says to press Ctrl+C (⌘C).
 
 **The shape decision: DONE as section comments.** `print_flow` now heads each part as matpilot's
-generator does (`# --- Config ---…`, 76 characters): **Config** (the `flow(...)` head), **Setup**
+generator does (`# --- Config ---…`, 76 characters): **Config** (the `flow(...)` head; ➡️ since
+round 2 UPPER_CASE constants, section 8), **Setup**
 (the variables), **Functions** (procedures), **Map blocks**, **Events** (global handlers and map
 events), **Main** (a plain flow's statements); an empty part has no heading. They are comments, so
 the parser drops them and every round trip holds (IR → Python → IR identical; canonical Python →
@@ -231,3 +233,61 @@ larger change, proposed here for Batt:
 - **`try` / `finally`** (section 3): Batt's call.
 - **Python import** (editing the Python and turning it back into blocks, matpilot's "Edit"): waits
   for ADR-0020 F3's sandbox, as before.
+
+## 8. Round 2 (2026-11-09 afternoon: matpilot's side-by-side review, ranked)
+
+matpilot's headless Chrome against /blocks (light / dark, 1280 x 800 and 390 x 844) found the
+desktop geometry and colours MATCH (the Python pane 384 px at x = 896, the toolbox 123 px, the
+header, zelos, the block colours, the cap hat, the search row, the grid, dark mode, the code view,
+the detector hexagon, the bottom sheet). Its ranked list, and what was done:
+
+1. **The Python in each block's own words** (pyview, printer sugar the parser reads back):
+   - "wait 1 seconds" prints `wait(1)` (was `wait_until(False, timeout_s=1.0)`); the parser reads
+     `wait(N)` as the same IR. With an outcome it keeps `R = wait_until(False, timeout_s=N)`
+     (`R = wait(1)` is refused, with that hint). `wait` is a reserved helper name.
+   - Every SECONDS field (timeouts, cooldowns, `bounded(max_s=)`) prints whole seconds without
+     ".0": `wait_until(X, timeout_s=30)`. The fields are floats, so 30 reads back as 30.0: the IR,
+     its JSON and its hash are unchanged. Literal VALUES keep their type (an int stays an int).
+   - The other blocks were checked against their words: `walk_to(cell(...))`,
+     `talk_npc(npc(...))`, `choose_menu(option(...))`, `use_item(...)`, `open_window(window(...))`,
+     `stop("done")`, `for _ in range(3):` (repeat), `while ...:`, `X = ...` (set), `proc()` (call),
+     `take_exit(...)`, `detector_sees(...)`: each one line a learner can connect to its block; no
+     other sugar was needed.
+2. **A real program's shape:** DONE for the header and the Config.
+   - The first line is `# Made by poring-lab from blocks. The flow engine reads this Python; it
+     never runs it.`
+   - The Config section is UPPER_CASE constants, one per line: `FLOW_NAME`, `DESCRIPTION`,
+     `IR_VERSION`, `MAX_RUNTIME_S`, `WHERE_BUDGET`, `RUN_UNTIL_STOPPED`, `START`, `STOP_WHEN`,
+     `ASSUMES`, `CLIENT`, `SERVER`, `LOCALE`, `PATH` (each only when the old call printed it).
+   - The parser reads both the constants and the old `flow(...)` call (every committed source,
+     the hostile corpus and the LLM-facing grammar keep working). A flow with a VARIABLE named like
+     a constant keeps the `flow(...)` call, so its Python still reads back exactly (tested).
+   - **NOT done: the import line.** There is no module a learner could import: the flow engine
+     parses this Python and never runs it, so `from ... import *` would teach a false fact.
+     Proposal: print it once an executor or an SDK a learner can run exists (MW3), naming that
+     module; until then the first comment line says what the file is.
+   - Evidence: `tests/test_models.py`:
+     - every committed `.flow` source, the sample and the starter go IR -> Python -> IR identical,
+       with the same `flow_hash`, and the canonical Python is stable;
+     - `flow(...)` and the constants give the same flow and hash;
+     - `wait(N)` and `wait_until(False, ...)` give the same IR and hash;
+     - whole seconds read back as the same float.
+     All of test_pyview (round trips, the hostile corpus) passes unchanged. Updated honestly:
+     hunt_field.flow (canonical: regenerated), test_where (`WHERE_BUDGET = 3`),
+     test_lint_zones_hunt (its server swap now edits `SERVER = ...`), test_routes_flows (the
+     first line).
+3. **Phone height (390 x 844):**
+   - (a) the NavBar (every page): under 48rem one row, the pages in a "Flows ▾" menu, the mode
+     badge as its LED only (colour and pulse; the word stays for screen readers and in its
+     tooltip);
+   - (b) the studio header is ONE row on a phone: Blocks | Python, the Load / Save / Start over
+     icons, ▶ Simulate (its word kept for screen readers); the brand is left to the NavBar;
+   - (c) the context bar is one row that scrolls sideways, without its labels and the hash;
+     shorter source names ("lab data/kb", "sample sheets");
+   - (d) the footer: Python plus one "More ▾" for Inspect / Lint / Results / Path map / Hunt
+     rules, beside the status sentence (one row).
+4. **"Simulate" means run it:** the footer toggle and its pane are **Results**.
+5. **The Next.js dev indicator is off** (`devIndicators: false`, next.config.ts; Next 16's
+   documented option; compile and runtime errors still show).
+6. **An app icon:** `src/app/icon.svg` (our own drawing: two program blocks and a play mark).
+   Next emits `<link rel="icon" href="/icon.svg?...">`, so browsers stop asking for /favicon.ico.

@@ -1,11 +1,14 @@
+# Made by poring-lab from blocks. The flow engine reads this Python; it never runs it.
+
 # --- Config ---------------------------------------------------------------
-flow(
-    ir=2,
-    name="hunt_field",
-    max_runtime_s=3600,
-    start=entry("field", "south"),
-    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=RDP),
-)
+FLOW_NAME = "hunt_field"
+IR_VERSION = 2
+MAX_RUNTIME_S = 3600
+START = entry("field", "south")
+CLIENT = "kro-20211103-prere"
+SERVER = "lab-rathena"
+LOCALE = "en"
+PATH = RDP
 
 
 # --- Map blocks -----------------------------------------------------------

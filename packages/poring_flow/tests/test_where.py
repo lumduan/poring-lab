@@ -25,8 +25,8 @@ def test_the_budget_is_a_flow_field_with_a_default() -> None:
     assert farm_flow().where_budget == ir.WHERE_BUDGET_DEFAULT == 12
     flow = pyview.parse(HEAD.format(extra=", where_budget=3") + "sit()\n")
     assert flow.where_budget == 3
-    assert "where_budget=3" in pyview.print_flow(flow)
-    assert "where_budget" not in pyview.print_flow(farm_flow())  # the default is not printed
+    assert "\nWHERE_BUDGET = 3\n" in pyview.print_flow(flow)  # the Config section (2026-11-09)
+    assert "WHERE_BUDGET" not in pyview.print_flow(farm_flow())  # the default is not printed
     assert pyview.parse(pyview.print_flow(flow)) == flow
     data = json.loads(ir.to_json(farm_flow()))
     for bad in (-1, ir.WHERE_BUDGET_MAX + 1):

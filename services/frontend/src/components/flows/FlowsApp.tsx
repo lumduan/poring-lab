@@ -55,7 +55,7 @@ type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt";
 const PANES: [Pane, string][] = [
   ["inspect", "Inspect"],
   ["lint", "Lint"],
-  ["simulate", "Simulate"],
+  ["simulate", "Results"], // what it shows: "Simulate" always means RUN it (the green button)
   ["paths", "Path map"],
   ["hunt", "Hunt rules"],
 ];
@@ -128,6 +128,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const [codeFile, setCodeFile] = useState<"py" | "json">("py");
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
   const [menu, setMenu] = useState(false);
+  const [more, setMore] = useState(false); // the footer's "More" menu (phones)
   const store = useMemo(() => browserStorage(), []);
   const [view, setViewState] = useState<(typeof VIEWS)[number]>(() => readChoice(store, KEYS.view, VIEWS, "blocks"));
   const [pythonPanel, setPythonPanel] = useState<(typeof OPEN_CLOSED)[number]>(() => {
@@ -432,6 +433,33 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const codeText = codeFile === "py" ? pyText : exportText(flow);
   const zonesBlock = zonesFor ? flow.workflow?.blocks.find((x) => x.name === zonesFor) : undefined;
 
+  const paneToggles = (cls: string, after?: () => void) =>
+    PANES.filter(([p]) => p !== "hunt" || huntRules).map(([p, label]) => (
+      <button
+        key={p}
+        type="button"
+        className={`toggle-button ${cls}`}
+        aria-pressed={panes[p]}
+        onClick={() => {
+          setPane(p, !panes[p]);
+          after?.();
+        }}
+        data-testid={cls ? `toggle-${p}` : `more-${p}`}
+      >
+        {label}
+        {p === "lint" && !panes.lint && errors.length > 0 && (
+          <span className="badge-dot badge-dot-error">
+            <span className="visually-hidden"> errors</span>
+          </span>
+        )}
+        {p === "simulate" && !panes.simulate && simDoc && !simStale && (
+          <span className="badge-dot">
+            <span className="visually-hidden"> a new run</span>
+          </span>
+        )}
+      </button>
+    ));
+
   const codePane = (full: boolean) => (
     <>
       <div className="studio-panel-header">
@@ -544,7 +572,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
             data-testid="simulate"
           >
             <PlayIcon />
-            {simBusy ? "Simulating…" : "Simulate"}
+            <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
         </div>
       </header>
@@ -598,15 +626,15 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
         <label className="device-chip">
           <span className="device-label">static data</span>
           <select value={world} onChange={(e) => setWorld(e.target.value as WorldSource)} data-testid="world">
-            <option value="local">local data/kb (lab)</option>
-            <option value="sample">synthetic sample sheets</option>
+            <option value="local">lab data/kb</option>
+            <option value="sample">sample sheets</option>
           </select>
         </label>
         <div className="device-chip" data-level={!total ? undefined : lintStale ? undefined : total.level}>
           <span className="device-label">lint</span>
           <span className="device-value">{total ? `${total.text}${lintStale ? " (checking…)" : ""}` : "…"}</span>
         </div>
-        <div className="device-chip">
+        <div className="device-chip device-chip-wide">
           <span className="device-label">hash</span>
           <code>{lintDoc && !lintStale ? lintDoc.flow_hash.slice(0, 12) : "…"}</code>
         </div>
@@ -828,21 +856,19 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
               Python
             </button>
           )}
-          {PANES.filter(([p]) => p !== "hunt" || huntRules).map(([p, label]) => (
-            <button key={p} type="button" className="toggle-button" aria-pressed={panes[p]} onClick={() => setPane(p, !panes[p])} data-testid={`toggle-${p}`}>
-              {label}
-              {p === "lint" && !panes.lint && errors.length > 0 && (
+          {paneToggles("pane-toggle")}
+          {/* phones (< 48rem): Python stays; the panes fold into one "More" menu */}
+          <div className="toggles-more-wrap">
+            <button type="button" className="toggle-button toggles-more" aria-expanded={more} onClick={() => setMore(!more)} data-testid="toggle-more">
+              More ▾
+              {!more && errors.length > 0 && (
                 <span className="badge-dot badge-dot-error">
-                  <span className="visually-hidden"> errors</span>
-                </span>
-              )}
-              {p === "simulate" && !panes.simulate && simDoc && !simStale && (
-                <span className="badge-dot">
-                  <span className="visually-hidden"> a new run</span>
+                  <span className="visually-hidden"> lint errors</span>
                 </span>
               )}
             </button>
-          ))}
+            {more && <div className="toggles-menu">{paneToggles("", () => setMore(false))}</div>}
+          </div>
         </div>
       </footer>
 
