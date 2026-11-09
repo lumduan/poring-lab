@@ -179,7 +179,7 @@ def test_the_python_view_is_in_sections() -> None:
     src = pyview.print_flow(f)
     heads = [line for line in src.splitlines() if line.startswith("# --- ")]
     assert [h.split()[2] for h in heads] == ["Config", "Setup", "Functions", "Events", "Main"]
-    assert all(len(h) == pyview.RULE_WIDTH <= 55 and h.endswith("-") for h in heads)  # fits 384 px
+    assert all(len(h) == pyview.RULE_WIDTH <= 42 and h.endswith("-") for h in heads)  # fits 384 px
     assert pyview.parse(src) == f and pyview.print_flow(pyview.parse(src)) == src
     workflow = pyview.parse(
         (REPO / "packages/poring_flow/tests/fixtures/farm_loop.flow").read_text()
@@ -253,10 +253,11 @@ def test_the_config_constants_and_flow_call_are_the_same_flow() -> None:
     a, b = pyview.parse(old), pyview.parse(new)
     assert a == b and ir.flow_hash(a) == ir.flow_hash(b)
     src = pyview.print_flow(a)
-    assert src.startswith("# Made by poring-lab from blocks.\n# The flow engine reads this file")
+    head = "# Made by poring-lab from blocks.\n# Read by the flow engine, never run.\n"
+    assert src.startswith(head)
     assert '\nFLOW_NAME = "t"\nIR_VERSION = 2\nMAX_RUNTIME_S = 600\nWHERE_BUDGET = 3\n' in src
     assert '\nPATH = "S2"\n' in src  # a plain string: every Config value is a Python literal
-    assert all(len(line) <= 55 for line in src.splitlines() if line.startswith("#"))
+    assert all(len(line) <= 42 for line in src.splitlines() if line.startswith("#"))
     assert "\nPOTION = item(9001)\n" in src and "flow(" not in src
     with pytest.raises(pyview.ParseError, match="SERVER is set twice"):
         pyview.parse(new.replace('LOCALE = "en"', 'SERVER = "x"'))

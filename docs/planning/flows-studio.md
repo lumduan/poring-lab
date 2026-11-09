@@ -325,3 +325,7 @@ the detector hexagon, the bottom sheet). Its ranked list, and what was done:
 3. **The header fits the 384 px pane and a phone:** two comment lines of 33 and 52 characters,
    `# Made by poring-lab from blocks.` and `# The flow engine reads this file; it never runs it.`;
    section rules are 52 characters (`RULE_WIDTH`; matpilot's are 76, which that pane clips).
+   ➡️ SUPERSEDED the same evening (matpilot's round-3 check: the pane shows ~43 monospace
+   characters after the gutter, so 52 still clipped): two lines of 33 and 37 characters, `# Made
+   by poring-lab from blocks.` and `# Read by the flow engine, never run.`; rules 42 (`RULE_WIDTH`).
+   Code lines are left as they are (they scroll, as in an editor; matpilot's advice).

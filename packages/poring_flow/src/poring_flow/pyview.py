@@ -1541,19 +1541,20 @@ def _def(decorator: list[str], name: str, body: list[Any], cat: Catalogue) -> li
 
 
 EVENTS = "Events"
-RULE_WIDTH = 52  # a section rule's length (matpilot's are 76: clipped in the 384 px pane)
+RULE_WIDTH = 42  # a section rule's length: the 384 px pane shows ~43 characters (matpilot)
 
 
 def section_rule(title: str) -> str:
-    """A section heading in matpilot's style: `# --- Main ---...`, 76 characters."""
+    """A section heading in matpilot's style: `# --- Main ---...`, RULE_WIDTH characters."""
     return f"# --- {title} ".ljust(RULE_WIDTH, "-")
 
 
-# The first lines and the section rules fit the studio's Python pane (384 px) and a phone
-# (matpilot's measure, 2026-11-09: comment lines under ~55 characters; its rules are 76).
+# The first lines and the section rules fit the studio's Python pane (384 px) and a phone:
+# matpilot measured ~43 monospace characters after the gutter (2026-11-09 round 3), so every
+# generated comment line is at most RULE_WIDTH (42); code lines are left as they are.
 GENERATED = [
     "# Made by poring-lab from blocks.",
-    "# The flow engine reads this file; it never runs it.",
+    "# Read by the flow engine, never run.",
 ]
 
 

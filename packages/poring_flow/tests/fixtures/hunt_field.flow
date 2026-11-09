@@ -1,7 +1,7 @@
 # Made by poring-lab from blocks.
-# The flow engine reads this file; it never runs it.
+# Read by the flow engine, never run.
 
-# --- Config ---------------------------------------
+# --- Config -----------------------------
 FLOW_NAME = "hunt_field"
 IR_VERSION = 2
 MAX_RUNTIME_S = 3600
@@ -12,7 +12,7 @@ LOCALE = "en"
 PATH = "RDP"
 
 
-# --- Map blocks -----------------------------------
+# --- Map blocks -------------------------
 @map_block(
     map_id("field_9"),
     entries=[entry_at("south", cell("field_9", 20, 20))],
