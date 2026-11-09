@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 08:5x: E1 done (155.1 kills/h mean vs the edge loop 124.7); E2 (4AN): p32 edge loop, p33 explore; then --walk-pick (4AM, p34); the Stormy Knight watch (B2) at the 09:03 MVP window."
+next_action: "2026-11-09 10:3x: E2 PASSED -- --explore joined the base (154.7 vs 113.95 kills/h). Running p34 (--walk-pick, 4AM); then p35 (--explore-cover, 4AO) after the 11:0x MVP check."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2871,3 +2871,26 @@ watch ran 08:50-09:05 before it, its `@killmonster2`s also killing the natural M
 - The edge loop's E2 mean so far: (124.7 + 103.2) / 2 = 113.95 / h; p33 (explore) follows.
 - **Items (snatched):** Zargon 8, Red Herb 3, Candy 2, Candy Cane 2, Well-baked Cookie 2, Piece of
   Cake 2, Scell 2, Manacles 2.
+
+**Pilot p33 (4AN, E2's explore run; 10:06:05-10:32:04, 25 min; the MVP killed 10:02:49, "1[dead]
+Stormy Knight"; the bag cleared 10:03:41-10:05:53 (1,139 -> 520); immunity OFF at 10:03:12 and ON
+at 10:32:25; the base + `--explore`). 64 kills = 153.6 / h. E1's safety bars on it: deaths 0, E3
+(hard bars pass, 0 Fly Wings, 1 stall), U1 18.8 s, X1 (4 runs merged), X2 (no hook error) PASS.**
+
+**E2's VERDICT (4AN): PASS -- `--explore` JOINS THE BASE.**
+
+| | runs | kills / h | mean |
+|---|---|---|---|
+| explore | p29, p30, p31, p33 | 158.4, 160.8, 146.1, 153.6 | **154.7** |
+| the edge loop (same base) | p28, p32 | 124.7, 103.2 | **113.95** |
+| ratio | | | **1.358** (bar >= 1.15: PASS) |
+
+- p33 in detail: monsters seen 71 (28.4 / 10 min), kills per seen 0.901; 75 strikes, class D 10
+  (F1 11.3 %); stuck 18.8 s; after the kill p50 6.55 s (372.8 s); no-kill fights 30 (310.3 s);
+  12 regions targeted, 5 reached, 6 timed out; 612 cells visited, 42.3 % on the east half; the
+  knowledge: 4 runs, 270 regions, 2,337 cells, 14 refused. Lowest HP 78.4 %.
+- **Items (snatched):** Scell 12, Zargon 11, Piece of Cake 4, Manacles 3, Well-baked Cookie 2,
+  Candy 1, Pearl 1.
+
+**The base from 2026-11-09 10:3x:** p16's flags + `--reach-check` (9.12b) + `--far-single
+--far-approach` + `--explore` (9.14). The edge loop stays selectable (`--no-explore`).
