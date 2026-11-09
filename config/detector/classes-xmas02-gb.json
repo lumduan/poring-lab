@@ -1,0 +1,18 @@
+{
+ "scheme": "xmas02-gb",
+ "source": "docs/planning/xmas02-detector.md Amendment M (2026-11-09, Batt: a Garm Baby class) + M3 (T2 for Garm Baby PASSED 21:45) + M4: classes-xmas02.json (Amendment H, unchanged, the deployed model's) plus 7 Garm Baby 1515; map-scoped (D1); npc and warp kept as EMPTY fixed classes (build_frame_cache.SpeciesClasses requires player / npc / warp), so the species start at id 3",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR); 3 Myst Case 1249, 4 Cruiser 1248, 5 Cookie 1265, 6 Christmas Cookie 1246, 7 Garm Baby 1515. The Christmas Goblin 1607 failed T2 (Amendment H) and stays out (its frames excluded)",
+ "fixed": {
+  "player": 0,
+  "npc": 1,
+  "warp": 2
+ },
+ "monster_first_id": 3,
+ "monsters": [
+  1249,
+  1248,
+  1265,
+  1246,
+  1515
+ ]
+}

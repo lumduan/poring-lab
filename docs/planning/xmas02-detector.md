@@ -1358,3 +1358,274 @@ scored by `blind_score.py` against the key c1050420... at 21:45:10 (the pack `gw
 - Amendment H's failure (73-83 % good in crowded packs) does not recur on the uncrowded, spawned
   dogs. **Garm Baby becomes a class** (Amendment M): the class file, the cache (Amendment I's TRAIN
   + gw2) and the training launch follow, each committed before its step.
+
+#### M4 (2026-11-09 21:5x ICT, before the cache's dry run): the class file
+
+- **`config/detector/classes-xmas02-gb.json`, sha256
+  `dd1d3f31e7e56a434c12c7c5a9640f29167cea1ed748c49c5b3303488b134be9`** = `classes-xmas02.json` plus
+  **7 Garm Baby 1515**: 0 player, 1 npc, 2 warp (EMPTY fixed classes, as Amendment H), 3 Myst Case
+  1249, 4 Cruiser 1248, 5 Cookie 1265, 6 Christmas Cookie 1246, **7 Garm Baby 1515**. Checked with
+  the cache's own loader (`build_frame_cache.SpeciesClasses.load` + `names`, data/kb): player, npc,
+  warp, mystcase, cruiser, cookie, cookie_xmas, garm_baby. The first seven ids and names are the
+  deployed model's (Amendment I / eval AMENDMENT 3's `.names.json`), in the same order.
+- **`classes-xmas02.json` is unchanged** (sha256 `9ab96672...`, Amendment H): the deployed model,
+  its ONNX and its evaluation keep it.
+- **The Christmas Goblin 1607 stays out** (T2 failed, Amendment H): a frame holding one stays
+  excluded (`species_unlisted:1607`).
+- **The old sessions' Garm Baby frames (Amendment I's TRAIN xw2 + xw3 x 2 and VAL xw1 x 2):** their
+  11-06 label files are used UNCHANGED (each byte-identical to the sha256 the 11-06 cache manifest
+  recorded, checked 21:5x; the own-C1 files too). Garm Baby was always in the MapSpec's `species`
+  (D3's conditional tier), so the label pass fitted it and kept or excluded its labels exactly as
+  the four others'; the 11-06 CACHE then refused every frame holding one as `species_unlisted:1515`
+  (xw3 36 + 29 frames; xw2 and xw1 none), not as `unchecked_species` (that is the label pass's own
+  frame exclusion for a species outside the MapSpec: Stormy Knight 1251's 30 frames, which stay
+  out). With 1515 a class, such a frame is WRITTEN when it is whole by the unchanged rule (no
+  excluded label of any species, no frame exclusion, every kept label clear of the models at or
+  above the T_h floor 0.536, our own character placed), and its Garm Baby boxes train as class 7.
+  Nothing in the label rule changes; the counts are the dry run's (M5).
+- Context, recorded only: those old labels were never checked by a T2 that passed. M1 point 2
+  found that on the 11-06 T2 key's floor-passing Garm Baby crops (drawn from these TRAIN sessions)
+  both 11-06 labellers were good 19 / 20 and 18 / 20, species 20 / 20; the cache writes only
+  floor-passing labels in whole frames. M3's PASS is on gw2's labels.
+
+#### M5 (2026-11-09 21:5x ICT, before the cache step): the cache -- the dry run, and the command
+
+**The inputs:** Amendment I's TRAIN (xw2 + xw3 x 2) and VAL (xw1 x 2) with their 11-06 label and own-C1
+files unchanged (M4), plus **gw2** (`20261109T210933-rdp-gb-gw2`, M1's label file `f152ede6...` and
+own C1 `2e007e28...` = ADDED; M2). gw1 is NOT in it (M2). gw3 (the held-out) is not named to any
+command: map_labels' MapSpec refuses `-rdp-gb-gw3` by name like TEST (M1, `a6abad45`), and the cache
+refuses a TEST part. The frozen params `d4cc0a5d...` (Amendment G); the class list M4's
+(`dd1d3f31...`). Why the list is passed from `/dev/shm/poring-lab-tmp/gb/m5/classes-xmas02-gb.json`:
+the guarded `cache:` step runs the MAIN checkout's builder and admits only relative paths (main has
+no M4 until the parent merges) or absolute paths below `/dev/shm/poring-lab-tmp/`; that copy is
+byte-identical to the committed file (sha256 `dd1d3f31...`, read 21:53), and the manifest records
+the list's sha256.
+
+**The dry run (21:53:15-21:53:25; main's `build_frame_cache.py`, the code the guarded step runs, with
+the arguments below + `--dry-run`, nice 15, a 4 GB scope; its output
+`/dev/shm/poring-lab-tmp/gb/m5/cache-dry.json`, sha256 `c183e121...`):** every TRAIN session
+`join_rule_3c` ADDED (`would_refuse_3c` empty), VAL `VAL_MONITOR`.
+
+| session | split | frames considered | frames written | boxes: Myst Case / Cruiser / Cookie / Christmas Cookie / **Garm Baby** | est. shards |
+|---|---|---|---|---|---|
+| xw2 `20261106T151122` | train | 1,589 | 1,034 (= 11-06) | 621 / 312 / 194 / 115 / **0** | 5 |
+| xw3 `20261106T154241` | train | 932 | 543 (= 11-06) | 224 / 137 / 60 / 78 / **0** | 2 |
+| xw3 `20261106T160700` | train | 678 | **416** (11-06: 409) | 259 / 83 / 27 / 49 / **7** | 2 |
+| **gw2** `20261109T210933` | train | 749 | **298** | 66 / 95 / 63 / 68 / **391** (in 224 frames) | 2 |
+| **TRAIN** | | 3,948 | **2,291** (11-06: 1,986) | **1,170 / 627 / 344 / 310 / 398** (Garm Baby in 231 frames) | 11 (~4.85 GB) |
+| xw1 `20261106T115507` + `20261106T144500` | val | 1,628 | 1,106 (= 11-06) | 511 / 205 / 206 / 210 / **0** | 5 (~2.35 GB) |
+
+(+ one `player` box per written frame: our own character.) gw2's 298 frames and 391 Garm Baby boxes
+equal M1's count of what the cache's rule writes.
+
+- **The old sessions' Garm Baby frames (M4), by the dry run:** of the 11-06 cache's 36 + 29 frames
+  refused as `species_unlisted:1515` (both xw3 sessions), **7 are written now** (xw3 `160700`: 7
+  Garm Baby boxes in 7 frames, which also bring 21 Myst Case and 7 Cruiser boxes); the other 58
+  stay out for their own exclusions (a Garm Baby label excluded: `occluded_terrain`, `weak_fit`,
+  `occluded_model`, `ambiguous_view`, `next_move`, `crowd`; or a Christmas Goblin
+  `species_unlisted:1607`, 32 frames in xw3 `154241`; or Stormy Knight's `unchecked_species:1251`,
+  30). xw2 and VAL hold no Garm Baby label in a written frame.
+- **VAL holds no Garm Baby box**, so the trainer's VAL monitor reports no `garm_baby` AP. VAL
+  decides nothing (D13); Garm Baby is judged only by the held-out score (Amendment M's bars).
+
+**The cache step (exactly Amendment I's form; from the main checkout):**
+
+    cd /home/bot/docker/poring-lab
+    F=/dev/shm/poring-lab-tmp/xmas-det/fit; G=/dev/shm/poring-lab-tmp/gb/m1
+    python3 scripts/guarded_build.py --threshold 30 --sustain 30 "cache@7200=--labels map --classes species \
+      --class-list /dev/shm/poring-lab-tmp/gb/m5/classes-xmas02-gb.json --kb data/kb \
+      --map-params $F/params.json --map-params-sha256 d4cc0a5d9e530e382e31ea9c9ae1fc1087dd31c37577b43b307eff65994fdb6e \
+      --map-labels $F/labels/20261106T151122-rdp-xmas02-xw2.json $F/labels/20261106T154241-rdp-xmas02-xw3.json \
+        $F/labels/20261106T160700-rdp-xmas02-xw3.json $G/labels/20261109T210933-rdp-gb-gw2.json \
+        $F/labels/20261106T115507-rdp-xmas02-xw1.json $F/labels/20261106T144500-rdp-xmas02-xw1.json \
+      --own-c1 $F/own-c1/20261106T151122-rdp-xmas02-xw2.json $F/own-c1/20261106T154241-rdp-xmas02-xw3.json \
+        $F/own-c1/20261106T160700-rdp-xmas02-xw3.json $G/own-c1/20261109T210933-rdp-gb-gw2.json \
+      --train 20261106T151122-rdp-xmas02-xw2 20261106T154241-rdp-xmas02-xw3 20261106T160700-rdp-xmas02-xw3 \
+        20261109T210933-rdp-gb-gw2 \
+      --val 20261106T115507-rdp-xmas02-xw1 20261106T144500-rdp-xmas02-xw1 \
+      --cache-id xmas02-gb-o3h-t-20261109 --image png"
+
+- Output: **`/mnt/poring-lab-datasets/.framecache/xmas02-gb-o3h-t-20261109`** (the builder's
+  `--cache-id`; no `--link-cache`, D1). The sustained IO rule as Amendment I (on this dedicated host
+  the guard watches no capture service: ADR-0022). A refusal or an abort stops here and is
+  reported; nothing is loosened.
+- The written counts must equal the dry run's (TRAIN 2,291, VAL 1,106, the boxes above); a
+  difference stops before any GPU step.
+
+**The cache (M5's command, 21:54:55-22:10:23 ICT): OK.**
+`/mnt/poring-lab-datasets/.framecache/xmas02-gb-o3h-t-20261109`: **3,397 frames written** (TRAIN 2,291:
+xw2 1,034, xw3 543 + 416, gw2 298; VAL 1,106: xw1 183 + 923), 16 shards (7.20 GB), 926.1 s; the
+guard watched no capture service (dedicated host), 0 s above 30 %. **Every session's counts equal
+the dry run's** (frames, boxes and frames per class id, exclusions by reason, `join_rule_3c`):
+TRAIN boxes Myst Case 1,170 / Cruiser 627 / Cookie 344 / Christmas Cookie 310 / **Garm Baby 398**.
+The manifest's names: player, npc, warp, mystcase, cruiser, cookie, cookie_xmas, **garm_baby**; its
+class list sha256 `dd1d3f31...` (M4's); `manifest.json` sha256 `6a030c3353b51104600109d7cca81b79feb15bd08c891b1196a3816ffc21d239`.
+Two shards re-hashed from the NAS match the manifest (`shard-000004`, `shard-000010`: gw2's).
+
+#### M6 (2026-11-09 22:11 ICT, committed BEFORE the worker or any GPU step): the training launch
+
+Amendment I's recipe on the M5 cache, with the init, the data-loader workers and the launch path
+this host needs; each difference and its reason below.
+
+- **The settings:** YOLO11n (the init's own architecture), imgsz 1280, seed 20261004 (train.py's
+  default), **batch 2**, **20 epochs**, close_mosaic 3, hsv_s 0.2, hsv_h 0.015 (the default),
+  scale 0.1, `--mid-ckpt` (MID_CKPT=1: `weights/mid.pt` every 640 batches or 300 s, the exact
+  resume). The Arc path (ADR-0022): `PORING_ACCEL=xpu`, **FP32** (`accel.amp_ok()` is False: the A380
+  has no float64, bot-server-migration.md 15), **`--workers 2`** (= train.py's
+  `DEFAULT_WORKERS["xpu"]`, 17b: 1.36 vs 1.86 s an iteration; passed explicitly), the worker's
+  11g memory cap and VRAM fraction 1.0 (the Intel overlay). 2,291 TRAIN frames = 1,146 batches an
+  epoch; VAL 1,106 frames (monitor only, D13).
+- **The init: the deployed xmas02 `last.pt`**, `/datasets/archive/train/xmas02-20261106/weights/last.pt`
+  (NAS `archive/train/xmas02-20261106`), sha256
+  `5c5bb67a746b42014935700f449ecbf45525bbddf250fb21738eb6248a2b8b7b` (read 21:4x; eval AMENDMENT 3's).
+  **Why this one, and not gef10 r2's:** the same map, and 1,986 of the 2,291 TRAIN frames are the
+  frames it was trained on; and **the code transfers a head of a different size**: ultralytics
+  8.4.165 (vision's pin) builds the model from the checkpoint's YAML with nc = 8 (the cache's
+  names) and loads every tensor whose shape matches. The Detect head's class-branch width
+  `c3 = max(ch[0], min(nc, 100))` is 64 for nc 7 and 8, so only the class-output convolutions
+  differ, and ultralytics' `cls_remap` (its default True; train.py does not set it;
+  labels-v2-plan.md 4) copies their rows **by name**. So player, npc, warp, mystcase, cruiser,
+  cookie and cookie_xmas start from the deployed model's rows, and **garm_baby's row starts
+  fresh**. The training log's transfer and remap lines are recorded below as the check.
+  - **Amendment M said "the class head fresh".** With this code, that holds for the new class only:
+    the seven old rows are seeded by name. The same rule ran on 11-06 (gef10 r2's player / npc / warp
+    rows seeded Amendment I's 7-class head, which Amendment I also called "fresh"). An all-fresh head
+    needs a train.py change (no flag exists today); not made here.
+- **The launch path: the guarded `execdev:` step that `train-day.sh` builds, WITHOUT its two duty
+  arguments; not `train-day.sh` itself.** Why:
+  - `train-day.sh` always adds `--step-sleep-ms 2000 --duty-file /lab-duty/duty.json`. On this host
+    (dedicated-intel) guarded_build runs no duty cycle (`gpu_guards`: "R1-R3, the co-tenant watch
+    and the duty cycle do not apply here (ADR-0022)"), so nothing writes `state/train-duty/duty.json`.
+    The file there is VM 103's last one (`t_epoch` 2026-11-07 00:01 ICT), older than train.py's 120 s,
+    so `read_duty` falls back to the slowest level: **2,000 ms of sleep after EVERY batch**, ~38 min
+    an epoch, ~12.7 h over 20 epochs, beyond the step's 12-h limit.
+  - Dropping the two arguments is exactly "the duty cycle does not apply here"; nothing else of the
+    command changes. The IO guard stays as the runbook sets it (`--threshold 30 --sustain 30`; on
+    this host it watches no capture service).
+  - What is lost: train-day's resume loop. Here R2 / R3 do not run and the IO guard has nothing to
+    trip on, so the only stops are the 12-h limit, a crash, or a person: then the resume below, by
+    hand. Fixing train-day.sh (skip the duty arguments on a dedicated host) is a code change for
+    later, reported, not made here.
+- **The commands (from the main checkout):**
+
+        cd /home/bot/docker/poring-lab
+        python3 scripts/guarded_build.py worker:vision@120          # the worker; a dedicated host: no quiet_start window to measure
+        python3 scripts/guarded_build.py --threshold 30 --sustain 30 \
+          "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-gb-o3h-t-20261109 --epochs 20 --batch 2 --workers 2 --name xmas02-gb-20261109 --mid-ckpt --weights /datasets/archive/train/xmas02-20261106/weights/last.pt --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
+
+  The second runs detached (`systemd-run --user`, unit `poring-train-xmas02gb`) through
+  `/dev/shm/poring-lab-tmp/gb/m6/launch.sh`; its guard output goes to
+  `/dev/shm/poring-lab-tmp/gb/m6/train-guarded.out`, the trainer's own output to
+  `/dev/shm/poring-lab-tmp/poring-guarded-execdev-vision.log`; the run's files to
+  `data/train/xmas02-gb-20261109/` (`results.csv`, `weights/{last,mid}.pt`).
+  - **A resume, if it stops early** (the same run, the exact mid-epoch resume; no `--weights` or
+    augmentation flags, as train-day's `--resume`):
+
+        python3 scripts/guarded_build.py --threshold 30 --sustain 30 \
+          "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-gb-o3h-t-20261109 --epochs 20 --batch 2 --workers 2 --name xmas02-gb-20261109 --mid-ckpt --resume"
+
+- **The scored checkpoint:** `data/train/xmas02-gb-20261109/weights/last.pt` after the LAST
+  COMPLETED epoch (if it ends early: that epoch's, and why). Never `best.pt` or `mid.pt`. gw3, xw5,
+  xp1 and X2 are not read before the training ends and its sha256 is recorded.
+- **While it runs:** the worker is busy (one job at a time), so the live detector's GPU path (the
+  detect server) cannot run beside it; no pilot runs (the brief). The parent stops the worker after
+  the post-training GPU steps.
+
+**After the training (the parent; the held-out score ONCE, Amendment M's bars UNCHANGED).**
+Variables (bot-server):
+
+      W=/home/bot/docker/poring-lab; F=/dev/shm/poring-lab-tmp/xmas-det/fit
+      T=/dev/shm/poring-lab-tmp/xmas-det/eval-gb; E=$W/data/train/eval/xmas02gb   # /data/train/eval/xmas02gb in the worker
+      M=/dev/shm/poring-lab-detector/model; N=/mnt/poring-lab-datasets
+      A7=$N/scratch-archive/2026-11-07/xmas02-eval; A7E=$N/archive/train/eval/xmas02   # 11-07's evaluation inputs
+      CAP="systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0"
+      GB="python3 scripts/guarded_build.py --threshold 30 --sustain 30"
+
+0. **The end:** `train-guarded.out` ends `execdev:vision: OK`, `results.csv` has 20 rows; the
+   `last.pt` sha256 is recorded in an amendment (here or the eval doc) BEFORE any TEST or gw3 read.
+1. **The ONNX export** (the deployed model's recipe: detector-cpu.md, eval AMENDMENT 3; a TEMPORARY
+   RAM env, ~1.5 GB: `df -h /dev/shm` first, the lab's total <= 4 GB; removed after):
+
+        bash $A7/onnx-export/build.sh       # /dev/shm/poring-lab-tmp/onnx-export: uv venv 3.12, torch cpu, ultralytics==8.4.165, onnx, onnxslim, onnxruntime
+        X=/dev/shm/poring-lab-tmp/onnx-export; cp $W/data/train/xmas02-gb-20261109/weights/last.pt $X/xmas02gb-last.pt
+        cd $X && .venv/bin/python -c "from ultralytics import YOLO; import json, shutil; m = YOLO('xmas02gb-last.pt'); \
+            json.dump([m.names[i] for i in sorted(m.names)], open('xmas02gb-last-736x1280.names.json', 'w')); \
+            shutil.move(m.export(format='onnx', imgsz=(736, 1280), simplify=True, device='cpu'), 'xmas02gb-last-736x1280.onnx')"
+        mv $X/xmas02gb-last-736x1280.onnx $X/xmas02gb-last-736x1280.names.json $M/ && sha256sum $M/xmas02gb-last-736x1280.*
+        rm -rf $X
+
+   The names must read player, npc, warp, mystcase, cruiser, cookie, cookie_xmas, garm_baby.
+2. **Garm Baby on gw3's standing frames: Q1 recall >= 0.80 AND precision >= 0.80** (section 9's
+   rule: >= 50 evaluated crops, two NEW blind labellers, a crop evaluated when both say yes / good /
+   the label's species). **Three things the parent fixes in an amendment BEFORE gw3 is read:**
+   - **a tool gap:** `MapSpec.eval_suffixes` (xmas_dun02) lacks `-rdp-gb-gw3`, so `--eval-test`
+     refuses gw3 today (it is refused everywhere else, as it must be). Add `XMAS02_GW3` to
+     `eval_suffixes` with a test; merged before the labels;
+   - **the pack's floor:** `--min-fit 0.536` or none (M1 point 2: the T_h floor is not in the label
+     files; M2 took it for T2 "to check what trains"; 11-07's evaluation pack ran without it);
+   - **which field decides for Garm Baby:** section 9's verdict Q1c COLLAPSES the classes (a Garm
+     Baby boxed as any monster class counts); the runner's "Fly Wing when a Garm Baby is SEEN" needs
+     the class to be garm_baby (Q1s, classes agreeing). Amendment M wrote "section 9's Q1 rule".
+
+        $CAP nice -n 19 uv run python scripts/map_labels.py labels --map xmas_dun02 --eval-test \
+            $N/20261109T212445-rdp-gb-gw3 --params $F/params.json --classes $F/classes-none.json \
+            --out $T/labels-test/20261109T212445-rdp-gb-gw3.json
+        $CAP nice -n 10 uv run python scripts/map_labels.py pack --map xmas_dun02 --eval-test \
+            $T/labels-test/20261109T212445-rdp-gb-gw3.json --per-species 60 --seed 53 [--min-fit 0.536] \
+            --pack-dir $T/pack-gw3 --key-dir $T/key-gw3 --instructions docs/planning/xmas02-blind-instructions.txt \
+            --instructions-sha256 dc48fb1582300e704ac333497d7681b051c3448a5e0d17d42f17b0322bac48ed
+        # two NEW blind labeller agents (G, H): the pack, its instructions, their own answers path only
+        $CAP uv run python scripts/eval_q1.py refs $T/key-gw3/answer_key.json --out $E/q1-refs-gw3.json \
+            --labels-dir $T/labels-test
+        $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/xmas02-gb-20261109/weights/last.pt \
+            --refs /data/train/eval/xmas02gb/q1-refs-gw3.json --out /data/train/eval/xmas02gb/q1-pred-gw3.json"
+        uv run python scripts/eval_q1.py score $T/key-gw3/answer_key.json $T/answers-gw3/G.json $T/answers-gw3/H.json \
+            $E/q1-pred-gw3.json --cache-manifest $N/.framecache/xmas02-gb-o3h-t-20261109/manifest.json \
+            --out $E/q1-score-gw3.json
+        # Garm Baby's row: Q1c.per_species.garm_baby and Q1.per_species.garm_baby (the field the amendment names)
+
+3. **The four species keep Q1 on xw5 (>= 0.80 each):** 11-07's TEST labels, pack key
+   (`fc9facb1...`), labellers C / D (`01808a2b...` / `9c3817ba...`) and refs (`q1-refs.json`
+   `c640936a...`) are reused AS THEY ARE (archived on the NAS; nothing re-labelled or re-asked), only
+   the predictions are new:
+
+        mkdir -p $T $E && cp $A7/eval/key/answer_key.json $T/key-1107.json && cp $A7/blind-eval53/answers/C.json \
+            $A7/blind-eval53/answers/D.json $T/ && cp $A7E/q1-refs.json $A7E/latency-200-refs.json $E/
+        sha256sum $T/key-1107.json $T/C.json $T/D.json $E/q1-refs.json $E/latency-200-refs.json   # = the values above / d89ec7eb...
+        $GB "execdev:vision@1800=python -m poring_vision.predict_dir --weights /data/train/xmas02-gb-20261109/weights/last.pt \
+            --refs /data/train/eval/xmas02gb/q1-refs.json --out /data/train/eval/xmas02gb/q1-pred-test.json"
+        uv run python scripts/eval_q1.py score $T/key-1107.json $T/C.json $T/D.json $E/q1-pred-test.json \
+            --cache-manifest $N/.framecache/xmas02-gb-o3h-t-20261109/manifest.json --out $E/q1-score-test.json
+
+   **For the parent to fix before the score:** on 11-07, xw5 ALONE had 41 / 45 / 51 / 25 evaluated
+   crops (Myst Case / Cruiser / Cookie / Christmas Cookie: `Q1c.split_session`), so section 9's
+   >= 50 minimum leaves a bar for Cookie only there; the pooled TEST Q1c (xw5 + xp1 + X2: 59 / 56 /
+   60 / 58) has all four, as the deployed model's verdict did (recall 0.98-1.00, precision
+   0.873-0.881). Which one "Q1 on xw5" means is the parent's reading, recorded before the score.
+4. **CPU p95 <= 300 ms** (the 200 refs, interleaved, nice 10, UnitDetector's 16 threads; the
+   deployed model beside it):
+
+        nice -n 10 uv run python scripts/eval_latency.py $E/latency-200-refs.json \
+            --model xmas02=$M/xmas02-last-736x1280.onnx --model xmas02gb=$M/xmas02gb-last-736x1280.onnx \
+            --out $E/latency-cpu.json
+
+5. Then `python3 scripts/guarded_build.py worker-stop:vision` (verified), the results in
+   xmas02-eval.md, and the run archived (`guarded_build.py archive:` to
+   `archive/train/xmas02-gb-20261109`). Deployment and the runner's "seen -> Fly Wing" follow their
+   own pre-registration (Amendment M).
+
+**M6, as run (22:11-22:39 ICT; the training continues):**
+- `worker:vision@120`: up 22:11:38, settled 22:13:38 (idle, nothing on the GPU).
+- The training: unit `poring-train-xmas02gb` (systemd-run --user) started 22:14:03; the guard printed
+  "host profile dedicated-intel is DEDICATED: R1-R3, the co-tenant watch and the duty cycle do not
+  apply here" and ran M6's command unchanged.
+- **The init, checked in the trainer's log:** `Overriding model.yaml nc=7 with nc=8`, **`Remapped 7/8
+  cls head rows from pretrained weights by class name`**, `Transferred 499/499 items from pretrained
+  weights` (garm_baby's row is the one not remapped). `amp=False` (FP32), `Using 2 dataloader
+  workers`, `Using 2291 train, 1106 val images`. The optimizer: ultralytics' `optimizer=auto` (as in
+  Amendment I's run: neither run set it) chose AdamW lr 0.000833, momentum 0.9 (its rule for a short
+  schedule).
+- **Epoch 1 completed at 22:38:3x: 1,410.8 s** (~1.0 iteration a second over 1,146 batches, plus the
+  VAL pass and the mid-epoch checkpoints); GPU memory 2.1 GB. VAL (monitor only, D13; no Garm Baby in
+  it): P 0.976, R 0.984, mAP50 0.992, mAP50-95 0.904. **At that pace the 20 epochs end ~06:0x ICT
+  2026-11-10** (~7.8 h; inside the step's 12-h limit, which falls at ~10:14).
