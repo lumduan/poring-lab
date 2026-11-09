@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "B1 merged (7e69de45). B2 DONE 2026-11-09 08:50-09:07 (section 4). B3: the truth (running), the aura recipe measured on DEV cells 0-7, fit on DEV, score HELD-OUT once."
+next_action: "B1 merged (7e69de45). B2 DONE 2026-11-09 08:50-09:07 (section 4). B3 part 1 DONE (section 5, DEV only): the aura recipe frozen, the model fitted on DEV, sha256 a1287571... B3 part 2 (the parent): the HELD-OUT score ONCE with section 5d's command line."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -61,6 +61,7 @@ So until a Stormy Knight flee proof passes, Amendment K's schedule (`@mobsearch`
     MVP dead by the schedule (its own pilot label; the run's other bars as 4AL's).
 - **B3:** the truth (`mvp_watch_study.py truth`, the projection of the label pipeline with
   xmas_dun02's GAT), the fit on DEV, the score on HELD-OUT once (section 3).
+  ➡️ Part 1 (the DEV recipe, the fit, the frozen model) DONE 2026-11-09: section 5.
 - **B4 (after B3 passes):** the flee rule in the runner (`seen` -> Fly Wing at once, every ~0.5 s,
   beside the reactive boss guard) and its LIVE proof, pre-registered on its own: spawned Knights
   with immunity OFF, a heal at every trial start, stop after a near-death -- section 13's lessons.
@@ -212,3 +213,135 @@ The Orc Lord's section 3 rules, unchanged except the boss and the map:
   summons around it (Garm Babies, Christmas Goblins); her HP stayed full (5,070 / 5,070 at
   08:51:2x).
 - Both recordings stay local until the truth / fit / score are done, then ship (`dataset_ship.py`).
+
+## 5. B3 part 1: the DEV recipe and the frozen model (2026-11-09 09:1x-09:3x ICT, DEV ONLY; written BEFORE the held-out score)
+
+**What was read:**
+- DEV only: the watch's cells 0-7 plus the frames before the first spawn (448 frames on
+  xmas_dun02), and the hunt's first 300 s on the map (301 frames).
+- They were decoded ONCE into the fit's own half-resolution memmaps (`$T/fit/watch-dev.npy`,
+  `hunt-0.npy`, the same frame sets `fit` selects). Every measurement below reads only those.
+- No held-out frame (cells 8-15, the hunt after 300 s) was decoded or looked at.
+- The truths are the parent's (main's code, `--boss stormy --layout hunt`, the 2026-11-05 chat
+  window). Nothing called for re-making them.
+- Scratch, client-derived, never committed: `/dev/shm/poring-lab-tmp/stormy/b3/` (the scripts,
+  `glow.npz`, `gallery/*.png`).
+
+### 5a. The Knight's aura (the evidence)
+
+- **It exists.** A glowing ellipse lies on the ground at the Knight's feet, as the Orc Lord's
+  does.
+  - Galleries: 32 crops across the 8 DEV cells (`gallery/knight-dev.png`) and feet zooms
+    (`feet1.png`).
+  - Its colour runs from mint / white-green on the rim to pale yellow-white inside.
+  - It is often covered by the party (white Garm Babies, Christmas Goblins) and by the summon's
+    white light bursts.
+- **Where.** The pixels that differ from each cell's background, near the foot point (250,268
+  px on 301 Knight frames), were binned by offset (`offsets.png`, `offsets_248_40.png`).
+  - The rim colours form an elliptical band around a centre ~8 half-res px above the foot point;
+    the legs leave its middle empty.
+  - Vertical profile at the centre column: arcs at y -12 and -2, a dip at -8 / -9.
+  - The dense band lies within 21-24 x 10-12 half-res px outside and 11-14 x 4-5 inside, with
+    dy 8 (three candidate rings are drawn on `offsets_248_40.png`).
+- **Colour, against xmas_dun02's floors.**
+  - The rim pixels the Orc Lord's rule takes at the feet: R median 187 (5-95 %: 131-225),
+    G 253, B 162 (95-219). A whiter, saturated mint green.
+  - xmas_dun02's GREEN PUZZLE FLOOR under the same rule: R 208 (157-229), G 246, B 142
+    (110-208). Yellower and less saturated.
+- **The rule, through decide()'s own path.** The DEV negatives are the 301 hunt frames plus the
+  80 watch frames of kind `neg`; loading screens are dropped by the title-bar guard. A cell is
+  "seen" (aura alone) when its first episode is seen within 1.1 s, at threshold = the negatives'
+  max + 0.015.
+
+| rule (G_MIN, DIFF), ring | DEV negatives max (hunt / watch gap) | Knight frames >= threshold | DEV cells seen within 1.1 s, aura alone |
+|---|---|---|---|
+| (236, 25) = the Orc Lord's, (27, 15, 17, 8) | 0.070 / **0.165** (cell 5's green floor after a warp) | 6.6 % | 0 / 8 |
+| (244, 25), (27, 15, 17, 8) | 0.034 / 0.112 | 7.9 % | 0 / 8 |
+| (248, 25), (27, 15, 17, 8) | 0.013 / 0.057 | 19.7 % | 0 / 8 |
+| (248, 40), (27, 15, 17, 8) | 0.013 / 0.033 | 23.0 % | 0 / 8 |
+| **(248, 40), (24, 10, 14, 4)** | **0.019 / 0.042** | **26.3 %** | **2 / 8** |
+| (248, 56), (21, 10, 11, 4) | 0.022 / 0.024 | 24.3 % | 2 / 8 |
+
+- **Yellow-green rules are unusable here.** A rule letting R near G fires on the floors:
+  - G >= 236, G - R >= 0-10, G - B >= 25-40 (Orc ring): hunt max 0.18-0.79;
+  - (236, 0) and (236, 10) on the chosen ring: hunt max 0.97 / 0.28, watch gap 1.00 / 0.80, so
+    no Knight frame clears the threshold.
+- **Rings:** 13 sizes were tried with (248, 40). From 21-24 x 9-12 outside / 11-14 x 3-5
+  inside, all give 25-26 % of the Knight's frames and 1-2 cells. The measured one,
+  (24, 10, 14, 4), is among the best and is kept.
+- **Where it fires:** at 0.06, the aura alone sees 75 DEV positive frames. The aura's point lies a median 16 px from
+  the Knight's foot, 89 % within 60 px and all within 120 px: it is the Knight's own aura.
+- **Verdict.** The aura is real but WEAK on this map. Even as a strict rule it sees ~25 % of the
+  Knight's frames and 2 of 8 DEV cells within 1.1 s (the Orc Lord's aura saw ~0.6 of its frames).
+  The party window detector has to carry the recipe. The aura stays in it as an OR cue above
+  every DEV negative.
+
+### 5b. The frozen recipe (`mvp_profiles.STORMY`, commit 8b27a88e)
+
+- **The aura:**
+  - rim rule G >= 248, G - R >= 40, G - B >= 40 (judged at the 5-bit bin centres, as
+    `aura_lut`);
+  - ring (24, 10, 14, 4) half-res px, grid 3, centre 8 px above the foot;
+  - threshold **0.06** = the DEV negatives' max 0.042 (cell 5's green floor, a watch gap frame)
+    + 0.015 (Amendment B's margin over its DEV max), rounded up.
+- **The party detector:** the Orc Lord's recipe, unchanged. That means the 11 cell features, the
+  7 x 5 window, the hard-negative rounds (2), the body-LUT weights (hunting x 10, other species
+  x 5), the margin + 1.0, SELF_ZONE and its own threshold, and the title-bar guard.
+- The UI mask comes from the truths' layout (hunt) with the 2026-11-05 chat window.
+
+### 5c. The fit (DEV only) and the frozen model
+
+    W=<checkout at 8b27a88e>; T=/dev/shm/poring-lab-tmp/stormy   (OMP / OPENBLAS threads 1)
+    systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 15 $python $W/scripts/mvp_watch_study.py fit --boss stormy \
+        --watch /home/bot/poring-lab-rec/20261109T085010-rdp-sk-watch1 --watch-truth $T/watch-truth.json \
+        --events /dev/shm/poring-lab-demo/20261109T085018-watch-xmas_dun02-sk1/events.jsonl \
+        --pilot /home/bot/poring-lab-rec/20261109T082234-rdp-hunt-xmas02-p31 $T/hunt-truth.json \
+        --work $T/fit --out $T/model/stormy-v1.npz
+
+- **Run:** 2026-11-09 09:23:10-09:24:41 ICT (from `date`), 1 min 31 s, max RSS 1.7 GB.
+- **The DEV items:** 325 positive, 70 watch-negative, 43 edge and 301 hunting frames. No Garm
+  Baby frame was left out of the hunt (its DEV part has no party unit).
+- **The party threshold:** **4.5493** = the DEV negatives' max outside SELF_ZONE (3.5493) + 1.0.
+  Inside SELF_ZONE it is + `zone_penalty` 1.9063, so the zone threshold is 6.4556.
+- **The aura:** 0.06 against a DEV max of 0.0417.
+- **Colour pixels:** party 1,097,843; other species 372,167; background 22,497,972; hunting
+  58,199,253.
+- **THE MODEL:**
+  - `/dev/shm/poring-lab-tmp/stormy/model/stormy-v1.npz`, 138,278 bytes;
+  - profile `stormy`, version `stormy-v1`;
+  - **sha256 `a1287571e26447b64f0a1b7620c49d90368510193e177e935c6bb0fbde8f8caf`**;
+  - client-derived pixel statistics: never committed.
+- **In-sample on DEV (optimistic, for reference; the same decide() on the DEV memmaps):**
+  - 7 / 8 DEV cells were seen within 1.1 s of their first episode: six on its first frame,
+    cell 7 at 0.97 s.
+  - **Cell 1 was seen at 5.0 s.** The party spawned ON our Rogue: the Knight's box was at
+    (589-689, 182-305), so its window's foot lies in SELF_ZONE. The party scores of 4.2 / 3.0
+    clear the outside threshold (4.55) but not the zone's (6.46). This is the Orc Lord's
+    SELF_ZONE trade-off (orclord-recognizer.md 4b), and the same miss mode can recur in a
+    held-out cell.
+  - Per frame: 293 / 325 positive frames, 282 / 304 of the Knight's.
+  - No positive on the 80 watch-gap and 301 hunting DEV frames (by construction).
+- **Nothing is refitted after the score.**
+
+### 5d. The held-out score (the parent, ONCE)
+
+Score with the frozen model's sha256, at a time outside the market-open windows: it reads
+~1,650 full PNG frames from the root disk.
+
+    W=/home/bot/docker/poring-lab; python=$W/.venv/bin/python; T=/dev/shm/poring-lab-tmp/stormy
+    export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+    export PYTHONPATH=$W/scripts:$W/packages/poring_env/src:$W/packages/poring_dataset/src:$W/packages/poring_packets/src
+    sha256sum $T/model/stormy-v1.npz      # a1287571e26447b64f0a1b7620c49d90368510193e177e935c6bb0fbde8f8caf
+    systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 nice -n 15 $python $W/scripts/mvp_watch_study.py score --boss stormy \
+        --model $T/model/stormy-v1.npz --sha256 a1287571e26447b64f0a1b7620c49d90368510193e177e935c6bb0fbde8f8caf \
+        --watch /home/bot/poring-lab-rec/20261109T085010-rdp-sk-watch1 --watch-truth $T/watch-truth.json \
+        --events /dev/shm/poring-lab-demo/20261109T085018-watch-xmas_dun02-sk1/events.jsonl \
+        --pilot /home/bot/poring-lab-rec/20261109T082234-rdp-hunt-xmas02-p31 $T/hunt-truth.json \
+        --out $T/score-heldout.json
+
+- `score --boss stormy` scores watch cells 8-15 (section 3) and the hunt after its first 300 s.
+  It decides each FULL frame with the model's own recipe, so it is independent of the code's
+  profile values.
+- Bars (section 3): recall within 1.1 s on 8 / 8 held-out cells; <= 1 false positive per 10 min
+  of the hunt's held-out frames; latency p95 <= 60 ms.
+- Any lone Garm Baby frames in the held-out hunt are reported in `hunting[0].lone` (the caveat).
