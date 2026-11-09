@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 15:3x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step (p40 every bar; L1 100 %, W1 1.04 %, 136.4 kills/h). Next: where the no-kill fights go (306.8 s a run); the lone-Garm-Baby boss guard (4 Fly Wings a run) is Batt's call."
+next_action: "2026-11-09 16:1x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step (p40 all bars; p41 all but W1 1.57 %). By 4AV the next pilot is W1's (the study in p41's entry: an unexplained ~1-2 % residual, no other request sent); then --quiet-scan (4AW, queued). For Batt: the W1 bar at the residual; the lone-Garm-Baby boss guard."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1698,6 +1698,34 @@ overwrote the real kill. Re-scored with the fixed scorer (the pre-registered qua
 - **Decisions:** every bar passes -> the base is confirmed. A bar fails -> the base stays as
   adopted (4AU), the failure is studied first and named as the next pilot's subject.
 
+### 4AW. QUEUED pre-registration: --quiet-scan (9.17) -- no ring scan for an attacker without damage in the last 5 s (written BEFORE its run, 2026-11-09 15:5x ICT; re-queued 16:1x: p41 failed W1, so by 4AV the NEXT pilot is W1's, and this one runs after it)
+
+- **Why (Batt's clip 1, ~12:3x: "why does the bot, walking along, scan around although it did not
+  fight a monster ... if no damage happened in the last 5 s, there is no need to scan"):** the
+  scan in that clip was the DEFEND scan (a fight with no lock, or after a walk stall). p38-p40
+  (packets, `fight_time.py` Q1, committed before this run): 39 / 28 / 34 defend scans started with
+  no hit on us in the 5 s before; they found a monster 7 times in 101, at ~2.7 s each (~75-100 s a
+  run). In p40, 3 of its first 6 box fights with no kill were a box path that never struck plus
+  this scan.
+- **The one change against the base:** `--quiet-scan` (9.17; the record says `"quiet_scan": [5.0,
+  "9.17"]`): the ring scan runs only when the SCREEN showed damage within 5 s -- a hit line on us,
+  an HP drop, a Miss at us, or a damage line of ours (pixels only); else a fight with no lock ends
+  at once (and a walk stall re-plans without the scan). The box path, the lock, the quiet-kill end
+  and the loot step are unchanged.
+- **The run:** the base + `--quiet-scan`, 25 min, the MVP dead by the schedule; its label (pN) is set
+  when it runs, after the W1 pilot (4AV).
+- **Bars:**
+  - **Q1 (the mechanism)** defend scans with no act on us in the 5 s before (`fight_time` Q1)
+    <= 8 (p38-p40: 39 / 28 / 34; the rule still scans after our own damage lines);
+  - **S1 (safety)** damaging hits on us <= 14 per 10 min (`fight_time` S1; p38-p40: 11.2 / 10.8 /
+    11.2);
+  - the base's bars as 4AU: **W1** <= 1.5 %, **L1** >= 50 %, **L3** >= 80 %, **L4** <= 5 %, **K1**
+    <= 3.0 s, **K3** >= 70 %, **E1** >= 80 / h, **U1** <= 30 s, **D1** <= 35 ms, **R1 (pooled)**
+    the pilot and its 3 preceding base runs <= 6, **E3**, **deaths** 0.
+  Reported: E1 against p40 / p41 (the expected gain is ~5 %), the skips (`quiet_scan_skip`,
+  `quiet_scan_skip_stall`), the no-kill fights' time, the lowest HP.
+- **Decisions:** every bar passes -> `--quiet-scan` joins the base.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -3291,3 +3319,34 @@ BASE together.**
   Garm Babies (a regular spawn on this map; the pilots run only while the MVP is confirmed dead).
 - **Where the time goes now (fight_time):** fights with no kill 30 taking 306.8 s of the 1,500
   (p39: 28, 259.8 s); class D strikes held 154.7 s in all.
+
+**Pilot p41 (4AV; 15:46:47-16:12:40, 25 min; the MVP killed 15:45:51 after polls at 15:35 / 15:38 /
+15:42 (dead) and 15:45:36 (alive at 68, 204); immunity OFF 15:46:35, ON 16:14:3x; weight 1099 /
+2430 at the start; THE NEW BASE, unchanged). VERDICT: every bar but W1 PASSES; W1 FAILS (1.57 %,
+4 of 255). By 4AV the base stays as adopted; W1 is studied and is the next pilot's subject.**
+
+| | p40 | **p41 (the base)** | bar |
+|---|---|---|---|
+| W1 clicked walks never sent | 1.04 % | **4 / 255 (1.57 %)** | <= 1.5 %: FAIL |
+| L1 / L3 / L4 | 100 % / 91.1 % / 0 | **95.2 % (20 / 21) / 86.2 % / 0 of 88** | PASS |
+| K1 / K3 | 1.97 s / 96.4 % | **1.96 s / 96.6 % (56 / 58)** | PASS |
+| E1 kills | 136.4 / h | **60 (143.6 / h)** | PASS |
+| U1 / D1 | 0 s / 22.5 ms | **8.7 s / 23.4 ms** | PASS |
+| R1 pooled (p41 + p40 + p36 + p35) | | **0 + 1 + 1 + 0 = 2** | PASS |
+| E3 / deaths | | **hard bars pass; 0 Fly Wings, 0 stalls / 0; lowest HP 85.8 %** | PASS |
+| reported: Q1 / S1 (`fight_time`, 4AW's) | 34 / 11.2 | **31 quiet defend scans (2 found) / 6.4 damaging hits per 10 min** | - |
+| reported: no-kill fights | 30 / 306.8 s | **29 / 213.5 s** | - |
+
+- **Items (snatched + picked):** Scell 17, Zargon 15, Well-baked Cookie 6, Piece of Cake 6, Manacles 4,
+  Red Herb 3, Candy 3, Pearl 1, Iron 1, Level 3 Heal 1. The 9.15c step was taken 8 times (all sent).
+- **THE W1 STUDY (after p41; deciding nothing yet):** the 33 unsent walk clicks of p37-p41 --
+  - the client sent NO other request for any of them (no attack, pickup, NPC or item request in
+    -0.3 .. +1.2 s): it simply ignored the click;
+  - p39-p41's 13 all had a GOOD pick (the replay) and none was a fallback; p41's 4 were followed by
+    the NEXT click's request at +1.24-1.26 s (the click cadence is ~1.27 s);
+  - by direction (p36-p41, 1,640 clicks): row 1.7 %, near-row 3.6 %, diagonal far 3.6 %, other
+    1.9 %, column 1.1 %: no direction explains it;
+  - a click on the SAME target as the previous one went unsent 9 of 145 times (6.2 %), a new
+    target 24 of 1,168 (2.1 %): it explains 9 of 33.
+  - So the base runs sit at W1 1.0-2.1 % (p39 2.07, p40 1.04, p41 1.57) with no single cause; each
+    unsent click costs about one click interval (~1.3 s, ~5 s a run).
