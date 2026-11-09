@@ -348,7 +348,9 @@ XMAS02 = MapSpec(
     engaged_fixed="E0",  # D11
     c1_rules=("round2",),  # 4h / 5: C1 always drops a label under a pickup notice (T-8)
     eval_flag="eval_test",  # 9 (T-9): the evaluation reads TEST only
-    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2),
+    # Amendment M7 (2026-11-09): gw3, the held-out Garm Baby watch, is scored with TEST -- read only
+    # after the model is frozen (its last.pt sha256 recorded first)
+    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,

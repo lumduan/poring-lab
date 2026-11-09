@@ -1428,8 +1428,8 @@ def test_m_gw3_is_refused_by_name_and_gw1_gw2_are_train(
     pool, *_ = ml.pack_pool([_xdoc(tmp_path, GW1, [1515]), _xdoc(tmp_path, GW2, [1249])],
                             spec, "/nas")  # fmt: skip
     assert sorted(pool) == [1249, 1515]
-    # the evaluation flag does not read gw3 either (its scoring is a later amendment's)
-    assert ml.eval_part_refusal(spec, GW3, None, "eval_test") is not None
+    # M7 (2026-11-09): the evaluation flag reads gw3 with TEST (once, after the model is frozen)
+    assert ml.eval_part_refusal(spec, GW3, None, "eval_test") is None
     for sid in (GW1, GW2):
         opened = _fake_session(monkeypatch, sid, spec)
         out = ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{sid}"))
@@ -1680,7 +1680,7 @@ def test_t9_eval_flags_are_per_map() -> None:
     assert ml.eval_test2_refusal(ml.GEF10, A9, None) is None  # gef10's rule, unchanged
     # TEST's names are the evaluation's, plus Amendment M's held-out gw3: refused like TEST, its
     # scoring (and the flag that reads it) left to the amendment after the model is frozen
-    assert x.test_suffixes == (*x.eval_suffixes, ml.XMAS02_GW3)
+    assert x.test_suffixes == x.eval_suffixes and ml.XMAS02_GW3 in x.eval_suffixes  # M7
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
         ml.eval_flag_of(_ns(eval_test=True, eval_test2=True))

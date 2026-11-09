@@ -1629,3 +1629,25 @@ Variables (bot-server):
   VAL pass and the mid-epoch checkpoints); GPU memory 2.1 GB. VAL (monitor only, D13; no Garm Baby in
   it): P 0.976, R 0.984, mAP50 0.992, mAP50-95 0.904. **At that pace the 20 epochs end ~06:0x ICT
   2026-11-10** (~7.8 h; inside the step's 12-h limit, which falls at ~10:14).
+
+#### M7 (2026-11-09 ~22:4x ICT, the parent, while the training runs and BEFORE gw3 or TEST is read): the evaluation's open points (M6 "what looked wrong")
+
+1. **The tool gap closed:** `MapSpec.eval_suffixes` (xmas_dun02) gains `-rdp-gb-gw3`, so
+   `--eval-test` may label / pack gw3 with TEST (code + test in this commit). Nothing reads gw3
+   before last.pt's sha256 is recorded (M6 step 0).
+2. **gw3's pack floor:** `--min-fit 0.536` (4a's floor, as M2 chose for T2: the label rule's
+   trusted boxes).
+3. **Garm Baby is scored SPECIES-STRICT (Q1s: the box's class must be garm_baby):** the runner
+   flies on a Garm Baby box, so a dog boxed as another species is a miss. Bars unchanged: recall
+   >= 0.80 and precision >= 0.80 on >= 50 evaluated crops.
+4. **The four common species keep section 9's verdict (Q1c), on POOLED TEST** (xw5 + xp1 + X2, as
+   on 2026-11-07, where each had >= 50 evaluated crops; xw5 alone had 41 / 45 / 51 / 25): 11-07's
+   key fc9facb1, answers C / D and refs reused, only the predictions new. Bars unchanged (>= 0.80).
+5. **The class head as run:** 7 of the 8 class rows were seeded by name from the deployed model;
+   only garm_baby started fresh (M6; the 11-06 run did the same from gef10 r2). Amendment M's
+   "the class head fresh" is read as this; no restart.
+6. **Recorded, not changed tonight:** `train-day.sh` passes a duty file that nothing writes on a
+   dedicated host (a stale VM 103 file -> a 2-s sleep after every batch); M6 launched through
+   execdev instead. A fix (skip the duty arguments on dedicated hosts) is its own change.
+7. VAL (xw1) holds no Garm Baby, so the training's monitor says nothing about it; the held-out
+   score decides.
