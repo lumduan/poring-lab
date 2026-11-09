@@ -1387,3 +1387,67 @@ scored by `blind_score.py` against the key c1050420... at 21:45:10 (the pack `gw
   found that on the 11-06 T2 key's floor-passing Garm Baby crops (drawn from these TRAIN sessions)
   both 11-06 labellers were good 19 / 20 and 18 / 20, species 20 / 20; the cache writes only
   floor-passing labels in whole frames. M3's PASS is on gw2's labels.
+
+#### M5 (2026-11-09 21:5x ICT, before the cache step): the cache -- the dry run, and the command
+
+**The inputs:** Amendment I's TRAIN (xw2 + xw3 x 2) and VAL (xw1 x 2) with their 11-06 label and own-C1
+files unchanged (M4), plus **gw2** (`20261109T210933-rdp-gb-gw2`, M1's label file `f152ede6...` and
+own C1 `2e007e28...` = ADDED; M2). gw1 is NOT in it (M2). gw3 (the held-out) is not named to any
+command: map_labels' MapSpec refuses `-rdp-gb-gw3` by name like TEST (M1, `a6abad45`), and the cache
+refuses a TEST part. The frozen params `d4cc0a5d...` (Amendment G); the class list M4's
+(`dd1d3f31...`). Why the list is passed from `/dev/shm/poring-lab-tmp/gb/m5/classes-xmas02-gb.json`:
+the guarded `cache:` step runs the MAIN checkout's builder and admits only relative paths (main has
+no M4 until the parent merges) or absolute paths below `/dev/shm/poring-lab-tmp/`; that copy is
+byte-identical to the committed file (sha256 `dd1d3f31...`, read 21:53), and the manifest records
+the list's sha256.
+
+**The dry run (21:53:15-21:53:25; main's `build_frame_cache.py`, the code the guarded step runs, with
+the arguments below + `--dry-run`, nice 15, a 4 GB scope; its output
+`/dev/shm/poring-lab-tmp/gb/m5/cache-dry.json`, sha256 `c183e121...`):** every TRAIN session
+`join_rule_3c` ADDED (`would_refuse_3c` empty), VAL `VAL_MONITOR`.
+
+| session | split | frames considered | frames written | boxes: Myst Case / Cruiser / Cookie / Christmas Cookie / **Garm Baby** | est. shards |
+|---|---|---|---|---|---|
+| xw2 `20261106T151122` | train | 1,589 | 1,034 (= 11-06) | 621 / 312 / 194 / 115 / **0** | 5 |
+| xw3 `20261106T154241` | train | 932 | 543 (= 11-06) | 224 / 137 / 60 / 78 / **0** | 2 |
+| xw3 `20261106T160700` | train | 678 | **416** (11-06: 409) | 259 / 83 / 27 / 49 / **7** | 2 |
+| **gw2** `20261109T210933` | train | 749 | **298** | 66 / 95 / 63 / 68 / **391** (in 224 frames) | 2 |
+| **TRAIN** | | 3,948 | **2,291** (11-06: 1,986) | **1,170 / 627 / 344 / 310 / 398** (Garm Baby in 231 frames) | 11 (~4.85 GB) |
+| xw1 `20261106T115507` + `20261106T144500` | val | 1,628 | 1,106 (= 11-06) | 511 / 205 / 206 / 210 / **0** | 5 (~2.35 GB) |
+
+(+ one `player` box per written frame: our own character.) gw2's 298 frames and 391 Garm Baby boxes
+equal M1's count of what the cache's rule writes.
+
+- **The old sessions' Garm Baby frames (M4), by the dry run:** of the 11-06 cache's 36 + 29 frames
+  refused as `species_unlisted:1515` (both xw3 sessions), **7 are written now** (xw3 `160700`: 7
+  Garm Baby boxes in 7 frames, which also bring 21 Myst Case and 7 Cruiser boxes); the other 58
+  stay out for their own exclusions (a Garm Baby label excluded: `occluded_terrain`, `weak_fit`,
+  `occluded_model`, `ambiguous_view`, `next_move`, `crowd`; or a Christmas Goblin
+  `species_unlisted:1607`, 32 frames in xw3 `154241`; or Stormy Knight's `unchecked_species:1251`,
+  30). xw2 and VAL hold no Garm Baby label in a written frame.
+- **VAL holds no Garm Baby box**, so the trainer's VAL monitor reports no `garm_baby` AP. VAL
+  decides nothing (D13); Garm Baby is judged only by the held-out score (Amendment M's bars).
+
+**The cache step (exactly Amendment I's form; from the main checkout):**
+
+    cd /home/bot/docker/poring-lab
+    F=/dev/shm/poring-lab-tmp/xmas-det/fit; G=/dev/shm/poring-lab-tmp/gb/m1
+    python3 scripts/guarded_build.py --threshold 30 --sustain 30 "cache@7200=--labels map --classes species \
+      --class-list /dev/shm/poring-lab-tmp/gb/m5/classes-xmas02-gb.json --kb data/kb \
+      --map-params $F/params.json --map-params-sha256 d4cc0a5d9e530e382e31ea9c9ae1fc1087dd31c37577b43b307eff65994fdb6e \
+      --map-labels $F/labels/20261106T151122-rdp-xmas02-xw2.json $F/labels/20261106T154241-rdp-xmas02-xw3.json \
+        $F/labels/20261106T160700-rdp-xmas02-xw3.json $G/labels/20261109T210933-rdp-gb-gw2.json \
+        $F/labels/20261106T115507-rdp-xmas02-xw1.json $F/labels/20261106T144500-rdp-xmas02-xw1.json \
+      --own-c1 $F/own-c1/20261106T151122-rdp-xmas02-xw2.json $F/own-c1/20261106T154241-rdp-xmas02-xw3.json \
+        $F/own-c1/20261106T160700-rdp-xmas02-xw3.json $G/own-c1/20261109T210933-rdp-gb-gw2.json \
+      --train 20261106T151122-rdp-xmas02-xw2 20261106T154241-rdp-xmas02-xw3 20261106T160700-rdp-xmas02-xw3 \
+        20261109T210933-rdp-gb-gw2 \
+      --val 20261106T115507-rdp-xmas02-xw1 20261106T144500-rdp-xmas02-xw1 \
+      --cache-id xmas02-gb-o3h-t-20261109 --image png"
+
+- Output: **`/mnt/poring-lab-datasets/.framecache/xmas02-gb-o3h-t-20261109`** (the builder's
+  `--cache-id`; no `--link-cache`, D1). The sustained IO rule as Amendment I (on this dedicated host
+  the guard watches no capture service: ADR-0022). A refusal or an abort stops here and is
+  reported; nothing is loosened.
+- The written counts must equal the dry run's (TRAIN 2,291, VAL 1,106, the boxes above); a
+  difference stops before any GPU step.
