@@ -254,6 +254,16 @@ drop, on the same 500 ms rule (`SELF_MOVE_NS`). Nothing else in the output chang
    `g2-pred-v1.json` if `gold_eval.py refs` writes byte-identical refs, else v1 is predicted again.
 10. Then `worker-stop:vision` (verified), and the results below.
 
+## AMENDMENT 4 (2026-11-09 22:1x ICT, before the GPU step): a second model, xmas02-gb (Garm Baby)
+
+Everything above and the RESULTS below are about the DEPLOYED xmas02 model (4 species,
+`classes-xmas02.json`) and stay as they are. A second model with an 8th class, Garm Baby 1515
+(Batt 2026-11-09), is trained from it: its data, class file (`classes-xmas02-gb.json`), cache
+(`xmas02-gb-o3h-t-20261109`), launch and post-training commands, and its bars (Garm Baby Q1 on the
+held-out watch gw3; the four species' Q1 on xw5; CPU p95 <= 300 ms) are in
+[xmas02-detector.md](../planning/xmas02-detector.md) Amendment M (M4-M6). Its results go there or
+below, labelled `xmas02-gb`; nothing here is re-scored.
+
 ## RESULTS
 
 ### VERDICT (2026-11-07 00:39 ICT): THE xmas02 MODEL PASSES -- Q1c holds for all four tier species and P4A holds
