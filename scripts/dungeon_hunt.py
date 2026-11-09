@@ -255,6 +255,11 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # contacts (2-4 of our hits, then the target walked off alive); 5 keeps 27 of its 28 real ones and 3
 # of the 17 false ones (a real kill took 3-22 hits, median 15).
 KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
+# 9.13d (after p37, rogue-xmas02.md 4AR): after a loot step that clicked an item, the next walk
+# click waits for a position read taken LOOT_SETTLE_S after the step (the pickup walk moved us; a
+# target computed from the stale cell was dropped by the client: 8 of p37's 11 unsent walk
+# clicks came 0.7-4.1 s after such a step), at most LOOT_SETTLE_MAX_S
+LOOT_SETTLE_S, LOOT_SETTLE_MAX_S = 0.8, 3.0
 EXPLORE_LEG_MAX_S = 150.0  # --explore (dungeon@9.14): a region not reached by then is given up
 # --walk-pick (dungeon@9.15, rogue-xmas02.md 4AM): a walk target fits only when the cell the CLIENT
 # picks under its projected pixel (picked_cell: the camera ray's first tile top) is walkable and
@@ -1100,7 +1105,12 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["explore"] = [em_f.REGION, em_f.GOOD_HITS, em_f.NOVELTY, em_f.DIST_W, em_f.TEMP,
                           em_f.RECENT_S, EXPLORE_LEG_MAX_S]  # fmt: skip
     if getattr(a, "kill_gap", False):  # dungeon@9.13 (rogue-xmas02.md 4AF)
-        out["kill_gap"] = [KILL_GAP_S, KILL_GAP_HITS, "9.13c"]  # b: no_miss, c: 5 hits (after p24)
+        out["kill_gap"] = [
+            KILL_GAP_S,
+            KILL_GAP_HITS,
+            "9.13d",
+            LOOT_SETTLE_S,
+        ]  # b no_miss, c 5 hits, d the loot settle (after p37)
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14, "9.12b"]  # walk.py's limits; b: the picked cell (after p25)
     return out
@@ -1201,6 +1211,18 @@ def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: f
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
     our hits was seen since its click for ``hit_s`` after the arrow."""
     return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
+
+
+def loot_settling(
+    settle_t: float,
+    last_pos_t: float,
+    now: float,
+    settle_s: float = LOOT_SETTLE_S,
+    max_s: float = LOOT_SETTLE_MAX_S,
+) -> bool:
+    """PURE (9.13d): hold walk clicks after a loot step that clicked (``settle_t``) until a position
+    read taken ``settle_s`` after it, at most ``max_s``."""
+    return now - settle_t < max_s and last_pos_t < settle_t + settle_s
 
 
 def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GAP_S,
@@ -2171,6 +2193,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         last_swing = -1e9  # dungeon@9.1 (--miss-cue): the last Miss read at our attacker
         swing_floor = -1e9  # 9.1b: the last fight's end; a Miss read before it starts no fight
         last_ours = -1e9
+        loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
         ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
         ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
         if explore_on:
@@ -3022,6 +3045,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if pickup_seen(res["rec"]):
                     d_ = max(abs(rel[0]), abs(rel[1]))
                     click_at(u, v, "loot")
+                    counts["loot_click"] += 1
                     ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
                         "rel": list(rel), "cell": list(c), "why": why})  # fmt: skip
                     picks += 1
@@ -3081,6 +3105,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if pickup_seen(res["rec"]):
                     d_ = max(abs(rel[0]), abs(rel[1]))
                     click_at(u, v, "loot")
+                    counts["loot_click"] += 1
                     ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
                         "rel": list(rel), "cell": list(c), "why": why})  # fmt: skip
                     picks += 1
@@ -3713,7 +3738,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if mode == "after":
                     queue.clear()
                 if mode == "after" and (loot_list or fight_ref is not None):
+                    clicks0_ = counts["loot_click"]
                     got_ = loot_step(loot_list, fight_ref)
+                    if getattr(a, "kill_gap", False) and counts["loot_click"] > clicks0_:
+                        loot_settle_t = time.monotonic()  # 9.13d: wait for a fresh position
                     idle_since = time.monotonic()
                     if got_ == "fight":
                         continue
@@ -3923,7 +3951,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         "turn": walk_st.get("turn"),
                         "wp": None if not patrol else wp_st["i"]})  # fmt: skip
                 if mode in ("search", "rest") and here is not None and goal_path \
-                        and tick - last_walk >= a.walk_every:  # fmt: skip
+                        and tick - last_walk >= a.walk_every \
+                        and not loot_settling(loot_settle_t, last_pos_t, tick):  # fmt: skip
                     last_walk = tick
                     # the path from where we are now
                     if here in goal_path:

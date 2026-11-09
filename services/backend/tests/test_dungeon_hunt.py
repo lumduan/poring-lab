@@ -701,7 +701,8 @@ def test_the_walk_timer_is_an_option_and_recorded_only_when_changed() -> None:
     assert "walk_every" not in dh.fixes_of(dh.argparse.Namespace(**base, walk_every=1.2))
     assert dh.fixes_of(dh.argparse.Namespace(**base, walk_every=0.8))["walk_every"] == 0.8
     src = (Path(dh.__file__)).read_text()
-    assert "and tick - last_walk >= a.walk_every:" in src and dh.WALK_EVERY_S == 1.2
+    # 9.13d added "and not loot_settling(...)" after it (False unless --kill-gap looted)
+    assert "and tick - last_walk >= a.walk_every" in src and dh.WALK_EVERY_S == 1.2
 
 
 def _ring_crop(
@@ -1453,7 +1454,7 @@ def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:
             "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
     assert "kill_gap" not in dh.fixes_of(dh.argparse.Namespace(**base))
     assert dh.fixes_of(dh.argparse.Namespace(**base, kill_gap=True))["kill_gap"] == [
-        1.5, 5, "9.13c"]  # fmt: skip
+        1.5, 5, "9.13d", 0.8]  # fmt: skip
     src = Path(dh.__file__).read_text()
     assert 'if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):' in src
     assert 'ev({"kind": "kill", "by": "hit_gap"' in src
@@ -1491,3 +1492,16 @@ def test_walk_pick_needs_the_clients_picked_cell_near_and_walkable() -> None:
     assert "if not walk_pick_ok(pc_, c, okr):" in src
     # 9.15b: with no candidate passing the pick check, the plain fits (today's click)
     assert "wt_ = walk_target(goal_path, ahead_, fits_plain)" in src
+
+
+def test_loot_settle_holds_walks_until_a_fresh_position() -> None:
+    """9.13d (rogue-xmas02.md 4AR): after a loot step that clicked, no walk click until a position
+    read 0.8 s after it, at most 3 s (p37: 8 of 11 dropped walk clicks right after such steps)."""
+    assert (dh.LOOT_SETTLE_S, dh.LOOT_SETTLE_MAX_S) == (0.8, 3.0)
+    assert dh.loot_settling(10.0, 10.5, 11.0)  # the last read is too early: hold
+    assert not dh.loot_settling(10.0, 10.9, 11.0)  # a read 0.9 s after the step: walk
+    assert not dh.loot_settling(10.0, 9.0, 13.5)  # 3 s passed: walk anyway
+    assert not dh.loot_settling(-1e9, 5.0, 11.0)  # no loot step: never holds
+    src = Path(dh.__file__).read_text()
+    assert "and not loot_settling(loot_settle_t, last_pos_t, tick):" in src
+    assert 'counts["loot_click"] += 1' in src
