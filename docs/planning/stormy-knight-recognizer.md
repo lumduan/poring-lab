@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "From pixels alone, the Orc Lord's CPU recognizer recipe (scripts/mvp_watch.py: the boss AURA rule + the party window detector), refitted on xmas_dun02, tells 'the Stormy Knight (1251) or its summons (Garm Baby 1515, Christmas Goblin 1607) are in view' within 1 s of their first frame in view on >= 95 % of held-out lattice cells, with <= 1 false positive per 10 min of hunting frames, at <= 60 ms p95 per frame -- enough for a Fly Wing at first sight."
-status: "ROUND 2 DEV FAILED its filter 2026-11-09 15:05 (sections 9-10): the leave-one-out check gave every candidate <= 5 / 16 watch cells within 1.1 s in-sample (>= 15 needed); the fallback froze stormy-v2 (aura off, sha256 ee896970...), in-sample 8 / 16 cells. Held-out (R2-W, R2-H2) NOT scored. Round 1 (section 6): NOT ADOPTED. The kill-before-run schedule stays."
+status: "ROUND 2 HELD-OUT SCORED 2026-11-09 19:46 (section 12, Batt asked): recall 5 / 16 FAIL, false positives 0.39 / 10 min PASS, latency 33.7 ms PASS -> NOT ADOPTED. Round 1 (section 6): NOT ADOPTED. The kill-before-run schedule stays."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "Round 2 stopped at DEV (section 11, the parent 2026-11-09 15:4x): R2-W + R2-H2 stay unread for a round 3 pre-registered first (10e); Batt may decide to score stormy-v2 instead (10d). The kill-before-run schedule stays."
+next_action: "A round 3 only if Batt wants it: pre-registered first, fresh held-out recordings, 10e's recipe (every room in >= 2 DEV sessions, a leave-one-out threshold)."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -671,3 +671,24 @@ its threshold.
 - Local data kept until a decision: R2-W (`20261109T131023-rdp-sk-watch2`, 1.97 GB), R2-H1
   (3.51 GB), R2-H2 (3.52 GB), round 1's watch and hunt (2.22 + 3.18 GB) in ~/poring-lab-rec; they
   ship to the NAS after 17:00 (`dataset_ship.py`), unread.
+
+## 12. RESULT: round 2's held-out score, run ONCE (Batt 2026-11-09 ~19:4x: "ทดสอบได้เลย" -- score it now; the parent, 19:41-19:46 ICT; model sha256 ee896970c8eccddf..., verified before the run)
+
+Section 11's hold was lifted by Batt. The truths were made first (round 1's command, `--layout hunt`,
+the recordings read from the NAS since they shipped at 17:11: R2-W 19:41:13-19:41:51, R2-H2
+19:41:51-19:42:34), then 10d's score line once (out `/dev/shm/poring-lab-tmp/stormy/score-r2-heldout.json`).
+
+| bar | measured | rule | |
+|---|---|---|---|
+| 1. recall within 1.1 s (R2-W, all 16 cells) | **5 / 16 (31.3 %)**; first-frame 25 %; re-entries 2 (1 within, 1 never) | >= 95 % (16 / 16) | **FAIL** |
+| 2. false positives, R2-H2 (all of it) | **1 frame = 0.39 per 10 min** (1,549 frames decided, 2 without a game view) | <= 1 per 10 min | **PASS** |
+| 3. latency p95 | **33.7 ms** (p50 28.1, max 39.9; 2,452 calls) | <= 60 ms | **PASS** |
+
+- Reported: positive frames seen 315 of 596 (the Knight's 315 of 573); the watch's gap frames 0 of
+  202 false; R2-H2 had no lone Garm Baby on screen.
+- **VERDICT: NOT ADOPTED (bar 1).** Round 2's data fixed round 1's failure (false alarms 98 -> 0.39
+  per 10 min) but the threshold it needed ("max + 1.0" over whole-session negatives) costs the
+  recall, as 10e predicted from DEV. **The kill-before-run schedule (rogue-xmas02.md Amendment K)
+  stays the only boss protection.**
+- R2-W and R2-H2 are now spent as held-out data; a round 3 needs fresh held-out recordings (10e's
+  recipe: every room in >= 2 DEV sessions, a leave-one-out threshold, perhaps persistence).
