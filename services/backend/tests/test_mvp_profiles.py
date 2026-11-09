@@ -263,15 +263,17 @@ def test_stormy_model_round_trip_and_fail_closed_mismatch(tmp_path: Path) -> Non
 RIM_YG = (60, 230, 215)  # BGR: a yellow-green rim (G 230, R 215): under the Orc Lord's G >= 236
 
 
-def _frame(model: mw.Model) -> np.ndarray:
+def _frame(model: mw.Model, foot: tuple[int, int] = (900, 500),
+           colour: tuple[int, int, int] = RIM_YG) -> np.ndarray:  # fmt: skip
+    """A plain field frame with the game's title bar and an aura ring around ``foot``."""
     f = np.zeros((720, 1280, 3), np.uint8)
     f[:, :] = (40, 90, 80)
     x0, y0, x1, y1 = mw.TITLE_BOX
     grey = np.repeat(np.repeat(model.title, 2, axis=0), 2, axis=1)
     f[y0:y1, x0:x1] = grey[: y1 - y0, : x1 - x0, None].astype(np.uint8)
     yy, xx = np.mgrid[0:720, 0:1280]
-    r = ((xx - 900) / 54.0) ** 2 + ((yy - 484) / 30.0) ** 2
-    f[(r <= 1.0) & (r >= 0.55)] = RIM_YG
+    r = ((xx - foot[0]) / 54.0) ** 2 + ((yy - foot[1] + 16) / 30.0) ** 2
+    f[(r <= 1.0) & (r >= 0.55)] = colour
     return f
 
 
@@ -446,3 +448,66 @@ def test_hunt_negatives_leave_lone_summons_out_and_refuse_the_boss() -> None:
     rows[5] = _row(5, [_u(1189, (100, 200, 180, 300), True)])  # an Orc Archer: the Orc Lord's
     with pytest.raises(SystemExit, match="an MVP-party unit is on screen"):
         st.hunt_negatives(rows, set(rows), "s")
+
+
+# --- the chat window of the session's date -------------------------------------------------------
+
+# the Orc Lord study's sessions (orclord-recognizer.md 1, 4b, 10a): all before 2026-11-05
+ORC_SIDS = ("20261025T195325-rdp-ow1", "20261025T200922-rdp-rogue-pilot",
+            "20261025T203115-rdp-rogue-pilot2", "20261025T204315-rdp-rogue-s1",
+            "20261026T000413-rdp-ow2", "20261025T213953-rdp-rogue-a1")  # fmt: skip
+LEGACY_CHAT, CHAT_1105 = (0, 532, 600, 626), (0, 585, 600, 720)
+
+
+def test_the_orc_lords_sessions_keep_their_ui_windows_and_masks() -> None:
+    import client_layout
+
+    own = {"standard": mw.STANDARD_RECTS, "hunt": mw.HUNT_RECTS}
+    for layout, rects in own.items():
+        assert (
+            rects == client_layout.RECTS[layout] and rects[client_layout.CHAT_INDEX] == LEGACY_CHAT
+        )
+        assert st.mask_rects({"layout": layout}) == rects  # a truth from before B1: no "chat"
+        for sid in ORC_SIDS:
+            ui = st.ui_rects_for(layout, sid)
+            assert ui["rects"] == client_layout.RECTS[layout], (layout, sid)
+            assert ui["chat"] == {"rect": list(LEGACY_CHAT), "nested_dropped": [],
+                                  "how": "auto:legacy (chat_window.for_sid)"}  # fmt: skip
+            assert st.mask_rects({"layout": layout, "chat": ui["chat"]}) == rects
+    a = st.parser().parse_args(ORC_LINES["truth"])
+    assert a.chat == "auto"
+
+
+def test_a_xmas02_session_gets_the_docked_chat_window_in_truth_and_mask() -> None:
+    sid = "20261109T080000-rdp-xmas02-w1"
+    ui = st.ui_rects_for("hunt", sid)
+    assert ui["chat"]["rect"] == list(CHAT_1105) and ui["chat"]["how"].startswith("auto:standard")
+    assert ui["chat"]["nested_dropped"] == [[0, 668, 50, 720]]  # notice_left lies inside it
+    assert CHAT_1105 in ui["rects"] and LEGACY_CHAT not in ui["rects"]
+    assert st.ui_rects_for("hunt", sid, "legacy")["chat"]["rect"] == list(LEGACY_CHAT)
+    # the in-view rule: a unit on the chat window's lower lines is behind the UI now
+    box = (300.0, 600.0, 380.0, 700.0)
+    assert st.in_view(box, (1280, 720), mw.HUNT_RECTS) is True
+    assert st.in_view(box, (1280, 720), ui["rects"]) is False
+    # decide()'s mask: the truth's chat window, the rest of the layout as mvp_watch's
+    rects = st.mask_rects({"layout": "hunt", "chat": ui["chat"]})
+    assert rects[4] == CHAT_1105 and rects[:4] + rects[5:] == mw.HUNT_RECTS[:4] + mw.HUNT_RECTS[5:]
+    m = _model()
+    f = _frame(m, foot=(300, 700), colour=(150, 250, 180))  # an aura-coloured ring in the chat
+    assert mw.decide(f, m, ui_rects=mw.HUNT_RECTS)["seen"] is True  # the legacy mask misses it
+    assert mw.decide(f, m, ui_rects=rects)["seen"] is False
+
+
+def test_a_truth_without_the_maps_gat_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """load_scene would project on flat ground without the GAT, silently: refused before the
+    session is even read."""
+    from poring_dataset import camera
+
+    monkeypatch.setattr(camera, "GAT_DIR", tmp_path)
+    kw: dict[str, Any] = {"kb": tmp_path, "mapcache_dir": tmp_path}
+    with pytest.raises(SystemExit, match="xmas_dun02.gat: the map's GAT is not extracted"):
+        st.truth(tmp_path / "no-session", "hunt", prof=mp.STORMY, **kw)
+    with pytest.raises(SystemExit, match="prt_fild08.gat: the map's GAT"):
+        st.truth(tmp_path / "no-session", "hunt", map_name="prt_fild08", **kw)

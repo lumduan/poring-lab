@@ -20,6 +20,15 @@ the model names its own (mvp_watch.save). A profile's ``lone`` jobs (stormy: Gar
 spawn too) may appear in its hunting recordings: those frames are left out of the negatives and
 reported apart (section 3's Garm Baby caveat); any other party unit there still refuses.
 
+THE CHAT WINDOW OF THE SESSION'S DATE (B1): the client's chat window moved on 2026-11-05 (docked
+bottom-left, six lines: (0, 585, 600, 720); chat_window.for_sid). ``truth --chat auto`` (the
+default) takes it from the session id, as detector_vs_packets.py score-session does: the in-view
+rule's UI windows are the layout's with that chat window (a window wholly inside another dropped:
+covered_fraction sums overlaps), recorded in the truth (``chat``). fit / score / entries then mask
+decide()'s UI with the truth's own layout and chat window (mask_rects). Every session before
+20261105T12 gets the legacy window, which IS client_layout's and mvp_watch's: the Orc Lord's
+truths and masks are unchanged; a truth without ``chat`` is read with the legacy window.
+
 OFFLINE ONLY (ADR-0007: packets are ground truth, never an input at decision time). Reads a
 recorder session (manifest, PNG tar shards, packets.jsonl.gz), the client's GAT and the decoded
 sprites (client-derived: /dev/shm only, never committed) and the local KB. No client, no GPU, no
@@ -315,17 +324,51 @@ def truth_doc(stack: TruthStack, frames: Iterable[tuple[int, int]], *, session: 
             "missing_sheets": stack.sheets.missing, "boss": prof.name}  # fmt: skip
 
 
+def ui_rects_for(layout: str, sid: str, chat: str = "auto") -> dict[str, Any]:
+    """The in-view rule's UI windows for a RECORDED session: the layout's (client_layout.RECTS)
+    with the chat window of ``chat`` (detector_vs_packets.chat_rect_for: auto = the session's
+    date), nested windows dropped. {"rects", "chat": {"rect", "how", "nested_dropped"}}."""
+    import detector_vs_packets as dv
+
+    rect, how = dv.chat_rect_for(sid, chat)
+    rects, dropped = dv.nested_rects(dv.session_rects(layout, rect))
+    return {"rects": rects, "chat": {"rect": list(rect), "how": how, "nested_dropped": dropped}}
+
+
+def mask_rects(doc: dict[str, Any]) -> tuple[tuple[int, int, int, int], ...]:
+    """decide()'s UI mask for a truth's frames: mvp_watch's rectangles of the truth's layout with
+    the chat window the truth used (none recorded: the legacy window, mvp_watch's own)."""
+    import client_layout
+    import mvp_watch as mw
+
+    rects = list(mw.STANDARD_RECTS if doc.get("layout") == "standard" else mw.HUNT_RECTS)
+    chat = doc.get("chat")
+    if chat:
+        a, b, c, d = (int(v) for v in chat["rect"])
+        rects[client_layout.CHAT_INDEX] = (a, b, c, d)
+    return tuple(rects)
+
+
 def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
           offset_ms: float = OFFSET_MS, map_name: str | None = None, sprites: Path | None = None,
-          sprite_names: Path | None = None,
-          prof: mvp_profiles.BossProfile = ORCLORD) -> dict[str, Any]:  # fmt: skip
+          sprite_names: Path | None = None, prof: mvp_profiles.BossProfile = ORCLORD,
+          chat: str = "auto") -> dict[str, Any]:  # fmt: skip
     """Per frame of a recorder session: every monster's predicted sprite box (unclipped), its
     Timeline state and whether it is in view, at the frame's capture time - 1d. Units are kept on
     ``map_name`` only (Amendment 10a: round 2's watch is on prt_fild08; the projection reads that
     map's GAT from the same GAT_DIR, nothing else changes). ``prof``: the boss profile (its party
-    flags ``party_edge``; its map and sprites are the defaults)."""
+    flags ``party_edge``; its map and sprites are the defaults). ``chat``: the chat window
+    (ui_rects_for; auto = the session's date). Refuses a map whose GAT is not extracted
+    (load_scene would project on FLAT ground without it, silently)."""
     import map_labels as ml
 
+    from poring_dataset.camera import GAT_DIR
+
+    gat = GAT_DIR / f"{prof.map if map_name is None else map_name}.gat"
+    if not gat.exists():
+        raise SystemExit(f"{gat}: the map's GAT is not extracted (PORING_GAT_DIR; "
+                         "xmas02-prep.md 9: grf_read.py extract ... --out "
+                         "/dev/shm/poring-lab-tmp/gat)")  # fmt: skip
     manifest = json.loads((session / "manifest.json").read_text())
     ml.check_recording(manifest)
     refs = png_index(session, manifest)
@@ -335,9 +378,13 @@ def truth(session: Path, layout: str, *, kb: Path, mapcache_dir: Path,
                         sprites=prof.sprites if sprites is None else sprites,
                         sprite_names=prof.sprite_names if sprite_names is None else sprite_names,
                         jobs=prof.party)  # fmt: skip
-    return truth_doc(stack, ((int(r.t_mono_ns), r.frame_id) for r in refs),
-                     session=manifest["session_id"], layout=layout, prof=prof,
-                     offset_ms=offset_ms, map_name=map_name)  # fmt: skip
+    ui = ui_rects_for(layout, str(manifest["session_id"]), chat)
+    stack.rects = ui["rects"]
+    doc = truth_doc(stack, ((int(r.t_mono_ns), r.frame_id) for r in refs),
+                    session=manifest["session_id"], layout=layout, prof=prof,
+                    offset_ms=offset_ms, map_name=map_name)  # fmt: skip
+    doc["chat"] = ui["chat"]
+    return doc
 
 
 def summary(doc: dict[str, Any], prof: mvp_profiles.BossProfile = ORCLORD) -> dict[str, Any]:
@@ -712,6 +759,10 @@ def _rows(path: Path, prof: mvp_profiles.BossProfile = ORCLORD) -> dict[int, dic
     return {int(r["frame_id"]): r for r in truth_of(path, prof)["frames"]}
 
 
+def _rects(path: Path, prof: mvp_profiles.BossProfile) -> tuple[tuple[int, int, int, int], ...]:
+    return mask_rects(truth_of(path, prof))
+
+
 def _map_of(path: Path, prof: mvp_profiles.BossProfile) -> str:
     """The map a truth kept its units on (truth --map; none recorded: the profile's)."""
     return str(json.loads(path.read_text()).get("map", prof.map))
@@ -775,14 +826,15 @@ def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
         if prof.lone:
             lone_left[Path(session).name] = len(lone)
         arr, ids = half_frames(Path(session), keep, a.work / f"hunt-{i}.npy")
-        hunts.append((arr, ids, rows))
-    ui_std = mw.rect_mask((360, 640), mw.STANDARD_RECTS)
-    ui_hunt = mw.rect_mask((360, 640), mw.HUNT_RECTS)
+        hunts.append((arr, ids, rows, _rects(Path(tpath), prof)))
+    wrects = _rects(a.watch_truth, prof)  # the Orc Lord's ow1: STANDARD_RECTS, as before
+    ui_watch = mw.rect_mask((360, 640), wrects)
     changes = _changes(a.watch)
-    h = colour_hists(watch, wids, wrows, spawns, kills, changes, sorted(prof.dev_cells), ui_std,
+    h = colour_hists(watch, wids, wrows, spawns, kills, changes, sorted(prof.dev_cells), ui_watch,
                      prof.party)  # fmt: skip
     hh = np.zeros(mw.NBINS)
-    for arr, _, _ in hunts:
+    for arr, _, _, hrects in hunts:  # the Orc Lord's pilots: HUNT_RECTS, as before
+        ui_hunt = mw.rect_mask((360, 640), hrects)
         for img in arr:
             hh += np.bincount(mw.lut_index(np.asarray(img))[~ui_hunt], minlength=mw.NBINS)
     body = llr_of(h["hP"], h["hN"] + BODY_HUNT_W * hh + BODY_OTHER_W * h["hO"])
@@ -791,7 +843,7 @@ def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
         np.stack(
             [
                 np.asarray(arr[j])[y0:y1, x0:x1].astype(np.float32).mean(axis=2)
-                for arr, _, _ in hunts
+                for arr, _, _, _ in hunts
                 for j in range(0, len(arr), 10)
             ]
         ),
@@ -801,9 +853,9 @@ def cmd_fit(a: argparse.Namespace) -> dict[str, Any]:
     aura = aura_fields(recipe, prof)
     model0 = mw.Model(body_lut=body, lin_w=zero, lin_b=0.0, lin_thr=0.0, aura_thr=aura_thr,
                       title=title.astype(np.float32), **aura)  # fmt: skip
-    items = make_items(watch, wids, wrows, model0, mw.STANDARD_RECTS, hunt=False, jobs=prof.party)
-    for arr, ids, rows in hunts:
-        items += make_items(arr, ids, rows, model0, mw.HUNT_RECTS, hunt=True, jobs=prof.party)
+    items = make_items(watch, wids, wrows, model0, wrects, hunt=False, jobs=prof.party)
+    for arr, ids, rows, hrects in hunts:
+        items += make_items(arr, ids, rows, model0, hrects, hunt=True, jobs=prof.party)
     w, b = train_party(items)
     out_best, in_best = [], []  # each frame's best window outside / inside SELF_ZONE
     for it in items:
@@ -865,8 +917,9 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
     per_cell: dict[int, list[tuple[float, str, bool]]] = {}
     gap = {"n": 0, "fp": 0, "fp_frames": []}
     pos_frames = {"n": 0, "seen": 0, "lord_n": 0, "lord_seen": 0}
+    wrects = _rects(a.watch_truth, prof)  # the Orc Lord's ow1: STANDARD_RECTS, as before
     for fid, t, img in _full_frames(a.watch, held):
-        v, dt = mw.timed(img, model, ui_rects=mw.STANDARD_RECTS)
+        v, dt = mw.timed(img, model, ui_rects=wrects)
         ms.append(dt)
         row = wrows[fid]
         kind = kind_of(row, prof.party)
@@ -894,10 +947,11 @@ def cmd_score(a: argparse.Namespace) -> dict[str, Any]:
         part = pilot_part(list(rows.values()), map_name=_map_of(Path(tpath), prof))
         keep = {f for f, v in part.items() if v == "held"} if name == "pilot" else set(part)
         keep, lone = hunt_negatives(rows, keep, session, prof)
+        hrects = _rects(Path(tpath), prof)  # the Orc Lord's pilot / s1: HUNT_RECTS, as before
         n, fp, fps, reasons = 0, 0, [], Counter()
         lone_seen: dict[int, bool] = {}
         for fid, _, img in _full_frames(Path(session), keep | lone):
-            v, dt = mw.timed(img, model, ui_rects=mw.HUNT_RECTS)
+            v, dt = mw.timed(img, model, ui_rects=hrects)
             ms.append(dt)
             if fid in lone:  # a lone summon's own spawn (stormy: Garm Baby): reported apart
                 lone_seen[fid] = bool(v["seen"])
@@ -1079,7 +1133,7 @@ def cmd_entries(a: argparse.Namespace) -> dict[str, Any]:
     ms: list[float] = []
     wdoc = truth_of(a.watch_truth, prof)
     wmap = str(wdoc.get("map", prof.map))
-    wrects = mw.HUNT_RECTS if wdoc["layout"] == "hunt" else mw.STANDARD_RECTS
+    wrects = mask_rects(wdoc)  # the truth's layout (and chat window), as before
     wrows = {int(r["frame_id"]): r for r in wdoc["frames"]}
     events = [json.loads(x) for x in a.events.read_text().splitlines() if x.strip()]
     windows = hop_windows(events, _changes(a.watch))
@@ -1122,8 +1176,9 @@ def cmd_entries(a: argparse.Namespace) -> dict[str, Any]:
                              "fp_frames": [], "party_frames": [], "reasons": Counter(),
                              "skipped_in_manifest": manifest.get("unchanged_skipped"),
                              "skipped_counted": sum(ticks.values()) - len(ticks)}  # fmt: skip
+        hrects = mask_rects(doc)  # the Orc Lord's a1-a6 (hunt, legacy chat): HUNT_RECTS
         for fid, t, img in _full_frames(Path(session), keep):
-            v, dt = mw.timed(img, model, ui_rects=mw.HUNT_RECTS, cues=ROUND2_CUES)
+            v, dt = mw.timed(img, model, ui_rects=hrects, cues=ROUND2_CUES)
             ms.append(dt)
             row = by_id[fid]
             kind = kind_of(row, prof.party)
@@ -1194,6 +1249,9 @@ def parser() -> argparse.ArgumentParser:
                    help="the decoded monster sprites (default: the profile's)")  # fmt: skip
     p.add_argument("--sprite-names", type=Path, default=None,
                    help="the client stems (default: the profile's)")  # fmt: skip
+    p.add_argument("--chat", default="auto",
+                   help="the chat window: auto (the session's date, chat_window.for_sid), "
+                   "legacy, standard, X0,Y0,X1,Y1")  # fmt: skip
     p.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("entries")
     boss_arg(q)
@@ -1237,7 +1295,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "truth":
         prof = profile_of(a)
         doc = truth(a.session, a.layout, kb=a.kb, mapcache_dir=a.mapcache_dir, map_name=a.map,
-                    sprites=a.sprites, sprite_names=a.sprite_names, prof=prof)  # fmt: skip
+                    sprites=a.sprites, sprite_names=a.sprite_names, prof=prof,
+                    chat=a.chat)  # fmt: skip
         doc["summary"] = summary(doc, prof)
         a.out.write_text(json.dumps(doc) + "\n")
         print(json.dumps(doc["summary"], indent=1))
