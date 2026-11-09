@@ -11,6 +11,7 @@ import { backendHttpBase } from "@/lib/ws";
 
 const LINKS = [
   { href: "/", label: "Console" },
+  { href: "/flows", label: "Flows" },
   { href: "/settings", label: "Settings" },
   { href: "/qa", label: "Label QA" },
   { href: "/hardware", label: "Hardware" },
