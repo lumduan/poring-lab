@@ -2853,3 +2853,21 @@ deaths, E3 (0 dead-end Fly Wings; 1 `pos_unread`), U1, X1, X2 ALL PASS. 61 kills
 - E1 adopts nothing (4AL). Phase E2 (4AN) is the adoption test.
 - **Items (snatched):** Scell 14, Zargon 8, Manacles 4, Candy 3, Piece of Cake 3, Well-baked Cookie
   2, Red Herb 1, Pearl 1.
+
+**Pilot p32 (4AN, E2's edge-loop run; 09:08:13-09:34:02, 25 min; immunity OFF at 09:07:47 and ON at
+09:34:15; the base as is: the edge loop + `--reach-check --far-single --far-approach`; the B2 boss
+watch ran 08:50-09:05 before it, its `@killmonster2`s also killing the natural MVP). 43 kills =
+103.2 / h; deaths 0.**
+
+| | p28 (edge loop) | **p32 (edge loop)** | E1 explore (p29-p31) |
+|---|---|---|---|
+| kills; per hour | 52; 124.7 | **43; 103.2** | 194; mean 155.1 |
+| monsters seen / 10 min; kills per seen | 21.2; 0.981 | **16.8; 1.024** | 26.8 / 29.6 / 22.7 |
+| strikes; class D; own-body class D | 61; 8; 0 | **61; 15; 3** | |
+| stuck time; stalls; Fly Wings | 17.0 s; 3; 0 | **13.0 s; 3; 1 (`pos_unread`)** | |
+| after the kill p50; no-kill fights (time) | 6.56 s; 32 (247.2 s) | **6.52 s; 17 (233.7 s)** | |
+| lowest HP; deaths | 83.3 %; 0 | **85.7 %; 0** | |
+
+- The edge loop's E2 mean so far: (124.7 + 103.2) / 2 = 113.95 / h; p33 (explore) follows.
+- **Items (snatched):** Zargon 8, Red Herb 3, Candy 2, Candy Cane 2, Well-baked Cookie 2, Piece of
+  Cake 2, Scell 2, Manacles 2.
