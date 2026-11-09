@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "xmas02-gb (Amendment M, a Garm Baby class): trained and frozen 2026-11-10 (M8); evaluation part A built (M9), not yet scored. DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). Not deployed (Batt's decision). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment M (2026-11-09, a Garm Baby class, Batt): T2 PASS (M3); the xmas02-gb model trained 20 epochs (M6) and FROZEN (M8: last.pt 85fb37a4...); M9 (2026-11-10 06:1x-06:3x): the evaluation part A done -- the ONNX (b22d972b...), gw3's labels (662056b2...) and its seed-53 pack (300 crops, key 99f2acc7...) -- before any labeller or prediction. Next: two NEW blind labellers G and H, then part B (M9 5: refs, predictions, the scores once, the latency), then Batt decides deployment and the runner's seen -> Fly Wing (rogue-xmas02.md). Earlier: Amendment L (walking sight judged by the live runner, packets the referee); DEPLOYED (Amendment J) on the GPU path since 2026-11-07."
+next_action: "xmas02-gb PASSED its held-out score (M11, 2026-11-10). Next: the parent stops the worker and archives the run (M6 step 5: data/train/xmas02-gb-20261109 and data/train/eval/xmas02gb); Batt decides deploying xmas02-gb on xmas_dun02; the runner's seen -> Fly Wing (--garm-fly, rogue-xmas02.md 4BA) follows its own pre-registration and pilot. Earlier: Amendment L (walking sight judged by the live runner, packets the referee); the 4-species xmas02 model DEPLOYED (Amendment J) on the GPU path since 2026-11-07."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -1894,3 +1894,86 @@ Variables (bot-server):
   server, D1 p95 ~23 ms; the CPU detector is its fallback.)
 - No other change: the Garm Baby bar (Q1s on gw3, >= 50 evaluated, recall and precision >= 0.80)
   and the four species' (Q1c on pooled TEST, >= 0.80) stand as M7 wrote them.
+
+#### M11 (2026-11-10 06:40-06:50 ICT): THE RESULT (the held-out score, once) -- THE xmas02-gb MODEL PASSES
+
+M9 section 5's commands B0-B4, each run ONCE, under M7 and M10's bars, by the subagent of M9 (worktree
+`feat/garm-eval` at `d273cda0`). The labellers' answers were scored as given.
+
+**B0, the inputs (06:40:54, before any score):** labellers G and H (both NEW, blind: the pack only),
+300 answers each, sha256 **G `42c6bae192f36fd422e0012b42551418d81647b171dc2a299c50e4c5d7a65130`**,
+**H `76dd98596bac3f283c99a9d13da64714316fb0d1e6583bc584b6c00a1fa13bba`**. The labellers' pack
+matched its file list (318 / 318), so it was unchanged. The key `99f2acc7...` and `last.pt` `85fb37a4...` were
+re-hashed. 11-07's key `fc9facb1...`, answers C `01808a2b...` / D `9c3817ba...`, refs `c640936a...`
+and latency refs `d89ec7eb...` were copied from the NAS and all five matched.
+
+**B1-B2, the refs and the detections:** gw3's refs, 261 frames (every image signature and tar member
+name verified), `q1-refs-gw3.json` `0144eab7...`. Two guarded `execdev:vision` steps in the worker
+(imgsz 1280, conf 0.25; the dedicated host: no capture service to watch, worst stall 0.0 %):
+gw3 06:41:18-06:42:24, 261 frames, `q1-pred-gw3.json` `1613c8ea...`; TEST 06:42:29-06:43:31, 231
+frames, `q1-pred-test.json` `39e7da4d...`. Each step ended "worker up and idle, nothing of ours on
+the GPU". The worker was left running (the parent stops it).
+
+**B3-B4, the scores (06:43:38-06:43:39) and the latency (06:44:25-06:48:35):**
+
+| bar | measured | rule | verdict |
+|---|---|---|---|
+| **Garm Baby on gw3, Q1s** (the box's class garm_baby; M7 point 3) | **59 evaluated crops of 24 dogs** (of 60 crops / 25 dogs in the pack); **recall 59 / 59 = 1.000; precision 59 / 64 = 0.922** | >= 50 evaluated; recall >= 0.80 AND precision >= 0.80 | **PASS** |
+| (beside it) Garm Baby on gw3, Q1c (classes collapsed) | 59 evaluated, recall 1.000, precision 59 / 68 = 0.868 (`precision_own_boxes` 0.908) | reported | - |
+| **Myst Case, pooled TEST, Q1c** (M7 point 4; 11-07's key / C / D) | 59 evaluated, recall 1.000, precision 59 / 63 = 0.937 | >= 50; >= 0.80 / >= 0.80 | **PASS** |
+| **Cruiser, pooled TEST, Q1c** | 56, recall 55 / 56 = 0.982, precision 55 / 59 = 0.932 | same | **PASS** |
+| **Cookie, pooled TEST, Q1c** | 60, recall 1.000, precision 60 / 64 = 0.938 | same | **PASS** |
+| **Christmas Cookie, pooled TEST, Q1c** | 58, recall 1.000, precision 58 / 62 = 0.935 | same | **PASS** |
+| **CPU latency** (M10 (c): one run, both models, the same 200 TEST refs, interleaved, UnitDetector 16 threads, nice 10) | **xmas02gb p95 734.6 ms; deployed xmas02 p95 769.3 ms; ratio 0.955** (p50 557.9 / 548.8; max 909.7 / 920.9; boxes 533 / 540; 249.1 s) | new p95 <= 1.10 x the deployed p95 (<= 846.2 ms) | **PASS** |
+
+- **The load during B4:** the 1-minute load average was 0.98 at the start (06:44:25). It rose with the run's own 16
+  inference threads on the 8 cores to 14.7-16.3 from 06:46:16 to the end (17.1 at 06:48:35). No other job of ours
+  ran beside it (the lab's live services as always: xfreerdp3 ~0.5 core, the backend, Xvfb). The absolute CPU numbers on this host are ~2.4-2.9x the 11-07 VM 103 run's (230 / 270 ms
+  p50 / p95 at 8 threads), for both models alike. That is the host, which is why M10 made the bar relative. The live path is the GPU detect server; the CPU detector is
+  its fallback.
+
+**THE VERDICT: PASS.** Every bar of Amendment M as fixed by M7 and M10 holds: Garm Baby Q1s on gw3, the four
+species' Q1c on pooled TEST and the relative CPU latency. **Passing does not switch the live detector:**
+deploying xmas02-gb on xmas_dun02, and the runner's "seen -> Fly Wing" (rogue-xmas02.md), are Batt's
+decision and their own pre-registration (Amendment M).
+
+**Reported, deciding nothing:**
+- **Labellers G and H:** the same 7 crops were not evaluated by both (q2 not good: Cruiser 6, Garm Baby 1).
+  293 of 300 were evaluated.
+- **gw3's four common species (M10 (a), reported only):** Q1s Myst Case 60 / 1.000 / 0.984, Cruiser 54 /
+  1.000 / 1.000, Cookie 60 / 1.000 / 0.952, Christmas Cookie 60 / 1.000 / 1.000; Q1c 0.870 / 0.857 / 0.870
+  / 0.870. Q1c pooled on gw3: 293 / 293 matched, 9 unmatched monster detections inside the evaluated
+  boxes, precision 0.970.
+- **Garm Baby's 5 unmatched garm_baby detections (Q1s), by geometry, no frame opened:** every one lies
+  inside the boxes of TWO overlapping kept Garm Baby labels, the stand's two spawned dogs on top of each
+  other (frames 257, 670 x 2, 672, 673). Most are the second dog, whose own label was not drawn into the pack.
+  Frame 670 carries one garm_baby box more than its two dogs.
+- **Garm Baby split:** clear 51 / 51 (precision 0.911), under a model 8 / 8 (1.000). Confusion (Q1,
+  class-blind position match): garm_baby 59 / 59 seen as garm_baby.
+- **No garm_baby box on the 231 pooled TEST frames,** which hold no Garm Baby label (xw5 + xp1 + X2's
+  pack frames). There, 0 of the detections were garm_baby (player 232, cruiser 110, mystcase 100, cookie 99,
+  cookie_xmas 76).
+- **The four species on pooled TEST vs the deployed model (11-07, the same key and answers):** Q1c
+  precision 0.937 / 0.932 / 0.938 / 0.935, against 0.881 / 0.873 / 0.881 / 0.877. Q1c pooled 232 / 233
+  matched with 4 unmatched in boxes (0.983), against 230 / 233 with 8 (0.966, the cookie + cookie_xmas double boxes).
+  Q1s Myst Case 59 / 1.000 / 0.983, Cruiser 56 / 0.982 / 0.982, Cookie 60 / 0.983 / 0.937, Christmas
+  Cookie 58 / 0.983 / 1.000.
+  Confusion: Christmas Cookie seen as cookie 1 (11-07: 5), cookie_xmas 56, mystcase 1; Cookie as cookie 59,
+  cruiser 1; Cruiser 55, none 1; Myst Case 59.
+- **TEST by part (Q1c: evaluated / recall / precision):**
+  - xw5: Myst Case 41 / 1.000 / 0.953, Cruiser 45 / 0.978 / 0.957, Cookie 51 / 1.000 / 0.962, Christmas Cookie 25 / 1.000 / 0.926;
+  - X2: 17 / 1.000 / 0.895, 9 / 1.000 / 0.818, 8 / 1.000 / 0.800, 27 / 1.000 / 0.931;
+  - xp1: 1, 2, 1 and 6 crops, all 1.000.
+
+**The outputs:**
+- **Local `data/train/eval/xmas02gb/`, 460 KB:**
+  - q1-refs-gw3, q1-pred-gw3 / -test, latency-cpu `2d7f0bec...`;
+  - q1-score-gw3 `62057d18d4c0de2cdd27ad7303a2da0c8debbbdac96da6245414fa184151f9cd`;
+  - q1-score-test `49330a83207830290105eba88fb3ccabc5ed3ac07e8503caa3ef37be16acfccc`;
+  - the two reused 11-07 refs.
+  They go to the NAS with the run in M6 step 5.
+- **The evaluation scratch on the NAS `scratch-archive/2026-11-10/garm-eval/`:**
+  - `gb/eval`: gw3's labels, the pack, the key, the 11-07 copies, the logs, the briefs, the scripts;
+  - `blind-gb53-gw3`: the labellers' pack and answers G / H;
+  - 667 files, `SHA256SUMS` `39b8b90a...`. The copy was verified, then the /dev/shm originals were deleted.
+- **The two ONNX files stay in `/dev/shm/poring-lab-detector/model`** (M9).
