@@ -48,13 +48,23 @@ def fights(events: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
 
 
 def our_kills(packets: Sequence[dict[str, Any]], our_gid: int = OUR_GID) -> list[int]:
-    """PURE: the death times of monsters we hit before they died, sorted."""
-    died = {p["gid"]: int(p["t_mono_ns"]) for p in packets
-            if p.get("type") == "entity_vanish" and p.get("reason") == DIED}  # fmt: skip
-    hit = {p.get("target_gid") for p in packets if p.get("type") == "act"
-           and p.get("src_gid") == our_gid and p.get("target_gid") in died
-           and int(p["t_mono_ns"]) <= died[p.get("target_gid")]}  # fmt: skip
-    return sorted(t for g, t in died.items() if g in hit)
+    """PURE: the death times of monsters we hit before they died, sorted. Time-ordered and per LIFE
+    of a gid: the server REUSES monster gids for later spawns, so a death counts when one of our
+    acts on that gid came after its previous death (or the start) and before this one.
+    (2026-11-09 fix: a gid -> last-death dict let a later spawn's death overwrite the real one --
+    p37 lost 17 real kills to it; K3, K1 and L2 were mis-scored.)"""
+    out: list[int] = []
+    hit_since: set[Any] = set()  # gids with an act of ours since their last death
+    for p in sorted(packets, key=lambda q: int(q.get("t_mono_ns") or 0)):
+        typ = p.get("type")
+        if typ == "act" and p.get("src_gid") == our_gid and p.get("target_gid") is not None:
+            hit_since.add(p.get("target_gid"))
+        elif typ == "entity_vanish" and p.get("reason") == DIED:
+            g = p.get("gid")
+            if g in hit_since:
+                out.append(int(p["t_mono_ns"]))
+            hit_since.discard(g)
+    return sorted(out)
 
 
 def summary(fs: Sequence[tuple[int, int]], kills: Sequence[int]) -> dict[str, Any]:

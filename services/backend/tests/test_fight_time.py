@@ -62,3 +62,15 @@ def test_loot_summary_pickups_and_scans_without_a_kill() -> None:
         "loot_steps_hovering": 2,
         "loot_steps_without_kill": 1,
     }
+
+
+def test_our_kills_follow_each_life_of_a_reused_gid() -> None:
+    """2026-11-09: the server reuses gids; a later spawn's death must not hide the earlier kill."""
+    pk = [
+        {"type": "act", "src_gid": ft.OUR_GID, "target_gid": 7, "t_mono_ns": 1 * S},
+        {"type": "entity_vanish", "gid": 7, "reason": 1, "t_mono_ns": 2 * S},  # our kill
+        {"type": "entity_vanish", "gid": 7, "reason": 1, "t_mono_ns": 50 * S},  # a later life,
+        {"type": "act", "src_gid": ft.OUR_GID, "target_gid": 7, "t_mono_ns": 60 * S},  # not hit
+        {"type": "entity_vanish", "gid": 7, "reason": 1, "t_mono_ns": 61 * S},
+    ]  # our kill again
+    assert ft.our_kills(pk) == [2 * S, 61 * S]
