@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, orclord-recognizer.md, xmas02-detector.md, gpu-recording.md, ../adr/0024-gpu-video-recordings.md, ../../scripts/mvp_watch.py, ../../scripts/mvp_watch_study.py, ../../scripts/stage_items.py, ../../scripts/watch_lattice.py]
-next_action: "B1 BUILT 2026-11-09 (section 2a: mvp_profiles.py, --boss stormy; branch feat/boss-profiles, the parent merges). B2 (live): the immune watch on xmas_dun02 + a PNG hunting recording. Then B3 (the aura recipe measured on DEV, fit on DEV, score HELD-OUT once) and the flee rule's own pre-registration."
+next_action: "B1 merged (7e69de45). B2 DONE 2026-11-09 08:50-09:07 (section 4). B3: the truth (running), the aura recipe measured on DEV cells 0-7, fit on DEV, score HELD-OUT once."
 title: "A Stormy Knight recognizer for the Rogue's flee rule on xmas_dun02 (pixels only, CPU; the Orc Lord's recipe refitted)"
 date: 2026-11-09
 owner: Batt
@@ -193,3 +193,22 @@ The Orc Lord's section 3 rules, unchanged except the boss and the map:
   30-min spawn). A positive on a lone Garm Baby counts as a true positive by the truth's rule
   (it is in the party list) -- and a flee from it costs one Fly Wing; its rate on the hunting
   recording is reported.
+
+## 4. B2: the data (2026-11-09, recorded BEFORE any fit; nothing below was scored)
+
+- **The hunting negatives:** `20261109T082234-rdp-hunt-xmas02-p31` -- recorded beside pilot p31
+  (rogue-xmas02.md 4AL, the explore run on the base), 08:22:34-08:46:34, PNG (`--format png`),
+  recorder v7, 1,440 frames at 1 fps, 3.18 GB, stop "duration"; the MVP dead by the schedule
+  (killed 07:52:57).
+- **The watch:** `stage_items.py watch --map xmas_dun02 --lattice lattice-train.json --seed 1251
+  --max-cells 16 --dwell-s 40 --spawn 1251 --label sk1 --immune-confirmed` (immunity judged ON on
+  the Chat tab at 08:49:5x: "You are now immune to attacks."), session
+  `20261109T085018-watch-xmas_dun02-sk1`, 08:50:18-09:05:04: 16 cells, 16 spawns, 16 dwells, 16
+  `@killmonster2`, reason "done". The lattice: `watch_lattice.py build --map xmas_dun02` (343
+  train / 88 test stands, train sha256 7305384271101c45..., in /dev/shm, client-derived).
+  Its recording `20261109T085010-rdp-sk-watch1`: PNG, recorder v7, 1,036 frames, 2.22 GB, stopped
+  by SIGTERM at 09:07 after the watch's end (stop "stopped by signal").
+- At cell 0 (08:50:5x, one screenshot) the spawned Knight stood ~6-8 cells from the Rogue with its
+  summons around it (Garm Babies, Christmas Goblins); her HP stayed full (5,070 / 5,070 at
+  08:51:2x).
+- Both recordings stay local until the truth / fit / score are done, then ship (`dataset_ship.py`).
