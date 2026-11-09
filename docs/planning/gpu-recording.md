@@ -1296,6 +1296,21 @@ up, beside a pilot as in 9.2):
    frames: its layout check and the fit read pixels), `labels_v2.py` npc-sheet;
 5. `dataset_ship.py ship` of the step-1 session after 17:00 (verified, local copy deleted).
 
+**The live checks, results (2026-11-09, main 6d4d8a90 + the review commit 127f0630):**
+- **1. PASS** -- `record_session.py --backend rdp --label s3-xmas02-p30 --seconds 300 --fps 1
+  --max-bytes 2G` (no `--format`) beside pilot p30, 07:54:30-07:59:3x ICT: rc 0, format
+  `vpp-hevc444-10-q20`, recorder v7, frames 300 = kept 300 = `video.access_units` 300, shards [],
+  `stop_reason` duration, `png_level` null; 89,413,961 bytes (17.9 MB / min = 1.07 GB / h at 1 fps:
+  this scene; stage 2's 0.84 was p20's); cores: recorder 0.028, media-rec 0.016, backend 0.237;
+  `~/poring-lab-rec/.media-rec` empty afterwards.
+- **2. PASS** -- `dataset_check.py` on it: rc 0, 300 rows fed, 300 access units, 300 decoded alone,
+  300 / 300 identical to their index rows, complete; host decode 8.2 frames a second (36.7 s).
+- **3. PASS** -- after `rm:media-rec` (08:00:32) the same command (10 s) refused before any frame:
+  rc 1, "not recording: the video side cannot start: poring-lab-media-rec-1 is absent: ...
+  start:media-rec@60 first"; no session directory was left.
+- **4.** not run yet (CPU-heavy, offline; a parity pre-registration first).
+- **5.** after 17:00 (the session stays local until then: 89 MB).
+
 ## 10. What phase 1 changed
 - `scripts/gpu_rec_bench.py` (new): `sample` / `score` / `verdict`; ARMS and BARS, the single
   source of both tables above.
