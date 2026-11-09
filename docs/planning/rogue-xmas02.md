@@ -1559,6 +1559,41 @@ most kills per hour. Plan (section 4AL, written before its pilots):
   23), items per hour, the loot time, kills per monster seen.
 - **Decisions:** every bar passes -> `--kill-gap` joins the base.
 
+### 4AR. Amendment M (2026-11-09 ~13:0x ICT): Batt's answers to the 12:48 report; R1 pooled; a scorer correction
+
+Batt's answers (quoted, then in English):
+1. "ไม่ฆ่าบอส ทำเรื่องเรียกบอสต่อได้เลย" -- not killing the boss as the answer: go on with the
+   boss-summoning work (the Stormy Knight recognizer, round 2). Until a recognizer passes its live
+   flee proof, the pilots keep Amendment K's kill-before-run as their only protection (stated to
+   Batt; he may say otherwise).
+2. R1 pooled: "ok". **From the next pre-registration on, R1 = the own-body class D of the pilot and
+   its 3 preceding base runs together, <= 1.5 a run on average (<= 6 over the 4 runs).** p23's and
+   p34's verdicts stand as made under the old R1.
+3. "แก้เรื่องเก็บของก่อน ถ้ามี exp ขึ้นก็ไม่ใช้ exp ถ้าไม่มีก็ให้สังเกตจาก damage หายไป หรือท่าทาง
+   ตัวละครที่หยุดไป หาทางอื่นสำรองด้วยอย่ายึดติดกับการดู exp อย่างเดียว" -- fix the looting first;
+   use the exp line when it shows, otherwise the damage lines stopping or the character's attack
+   stopping; keep other fallbacks; do not rely on the exp line alone.
+4. The CPU: Batt's own (closed).
+
+**A scorer correction (be98ad8f), found while studying 3.:** `fight_time.our_kills` mapped each
+monster gid to its LAST death; the server reuses gids for later spawns, so a later spawn's death
+overwrote the real kill. Re-scored with the fixed scorer (the pre-registered quantities unchanged):
+
+| | K3 as scored | K3 corrected | L2 as scored | L2 corrected | the run's verdict |
+|---|---|---|---|---|---|
+| p24 (9.13) | 62.2 % | 66.7 % (30 / 45) | 12 / 38 | 12 / 38 | unchanged: E1, K3 fail -> off |
+| p26 (9.13c) | 71.0 % | 87.1 % (27 / 31) | 13 / 23 | 9 / 23 | unchanged: E1 fail -> off |
+| p37 (9.13c, new base) | 68.9 % | **96.7 % (59 / 61)** | 10 / 33 | **2 / 33** | K3 now PASSES; W1 (3.6 %) still fails -> off |
+
+- So kills inferred from our damage lines were real 59 times in 61 on the new base, and loot scans
+  followed a real kill 31 times in 33: Batt's rule ("scan only after a kill") is met by them.
+- **p37's remaining failure, W1 (study):** 11 walk clicks never sent; 8 of them came 0.7-4.1 s
+  after a loot step that had clicked an item, none landed on a floor item, and no later request
+  went to the clicked cell (truly dropped). The likely cause is the stale position after a pickup
+  walk (memory "loot treadmill: stale odometry"): the next walk target is computed from where she
+  was, not where she is. The fix (9.13d) waits for a fresh position read after a loot step before
+  the next walk click -- p38.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
