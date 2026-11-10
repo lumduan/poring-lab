@@ -3463,4 +3463,20 @@ score):**
 - **fs5 (23:47 ICT, BEFORE its run):** the Crusader (NO aura), `--char crusader --views near --n 12
   --seed 2611305 --label fs5`. Like fs4: banked for a round 3, NOT in round 2, sharing no cell
   with fsTa / fsTn. The same Crusader prep as fs3 (the Red Herb stack dropped, then given back).
+- **fs5's run:** 23:52:04-00:19:17, rc 0, 12 spots; the recording `20261110T235204-rdp-xmas02-fs5`
+  is shipped. The Crusader's 40 Red Herbs were given back ("Item created."). The Rogue is back in,
+  `@monsterignore` "You are now immune to attacks.".
+
+### Amendment O15e (2026-11-11 00:22 ICT from `date`, BEFORE any held-out file is read): THE ROUND-2 MODEL FROZEN
+
+- `train ended rc=0` at 2026-11-11 00:19:51 ICT (started 22:30:31): all 12 epochs, 6,483 s, FP32 on
+  the Arc.
+- VAL (FIT p31, monitor only) at epoch 12: P 0.953, R 0.949, mAP50 0.982, mAP50-95 0.735. Round 1
+  at its epoch 20: 0.960 / 0.906 / 0.977 / 0.683.
+- **The scored checkpoint:** `data/train/xmas02-fi-r2-20261110/weights/last.pt` after epoch 12,
+  **sha256 `e381d68982fd4362569dcd405841624687f0e0faa2e9700847469ce2220bdc2b`** (5,530,394 bytes).
+  Nothing is refitted after this line.
+- Next, O15's order: the ONNX export, `GPU_WEIGHTS["xmas02fi2"]`, the held-out's `--eval-test`
+  labels (fsTa, fsTn now; fiT4-fiT6 after their pilots), the pack (seed 66), two NEW blind
+  labellers, the predictions, I5, `fi_eval.py --strata r2` once.
 
