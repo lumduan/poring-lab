@@ -1970,6 +1970,44 @@ Batt's answers to the 14:1x report (quoted, then in English):
    ours. The recordings ship now (`dataset_ship.py ship --force-market`, Batt's OK), and the
    floor-item pipeline (T2-items, the cache, the training) runs as soon as each step is ready.
 
+### 4BJ. Pilot p48 pre-registration: --late-confirm (LF-2, dungeon@9.21) -- a late light read confirmed at once from a newer frame (written BEFORE its run, 2026-11-10 15:40 ICT from `date`)
+
+- **The code (043b55a4, merged from feat/lf2-r1a; 166 tests on main pass incl. the click census):**
+  - LF-1 (always on, logging only): every hp_read logs `here_age_s`, plus `held` / `held_dt` for a
+    read PosConfirm held back;
+  - LF-2 (`--late-confirm`, OFF by default; run_start `"late_confirm": [1.0, 0.25, "9.21"]`): a
+    main read held back ONLY for being late (> 1.0 s after the previous read) is re-read at once
+    from a NEWER bus frame (another frame id, <= 0.25 s). It goes through PosConfirm's own accept
+    (a light read within dt / 0.15 s + 1 cells), then the UNCHANGED jump bar;
+  - outcomes logged as `lf2` (ok / base / differ / same_frame / no_frame / no_read / no_bus).
+- **R1 from now on (Amendment R):** R1-A, own-body class D that LOST an attack (`lock_study.py`
+  `own_body_d_lost`; 15 -> 9 over p36-p47).
+  - The bar from the rate, computed once by `lock_study.py <8 base runs> --r1-bar`: lambda 0.75 over
+    p36, p40, p41, p42, p44, p45, p46 and p47 (6 strikes).
+  - **R1 pooled over 4 runs FAILS at >= 7** (P(Poisson(3.0) >= 7) = 0.034; >= 6 = 0.084).
+  - The old count stays reported.
+- **The baseline (`slf_score.py` on p40-p47, 7 runs, as the study):** late unconfirmed-only spans
+  309 (44.1 a run); stale walks 134 (19.1 a run; landing >= 5 cells 44.9 %, unsent 5.2 %); fresh
+  reads 94.1 %; persistent spans 32; wrong standing fresh reads 1 in p36-p47 (p46 587.7 s, a likely
+  '3'->'7' light misread); jumps 0.
+- **The run:** the base (as p47) + `--late-confirm`, label `xmas02-p48`, 25 min, immunity OFF, the
+  MVP dead by the schedule, AFTER the item model's training has freed the GPU (one Arc: the detect
+  server and torch-xpu are not run together).
+- **Bars:**
+  - **M1 (the mechanism):** late unconfirmed-only spans <= 15 (baseline 44.1 a run; the in-sample
+    estimate ~1.3);
+  - **M2:** stale walks <= 12 (baseline 19.1 a run; estimate ~7.9);
+  - **M3 (no harm):** wrong standing fresh reads <= 1 and position jump bars = 0;
+  - reported: the lf2 outcomes, held reads within 1 cell of the packets, fresh share, persistent
+    spans, pos_unread wings, landing >= 5 over ALL walks;
+  - the base's bars: W1 pooled (p48 + p47 + p46 + p45) <= 2.0 %, L1 >= 50 %, L3 (by start) >= 80 %,
+    L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %, E1 >= 80 / h, U1 <= 30 s, D1 p95 <= 35 ms, R1-A pooled
+    (p48 + p47 + p46 + p45) < 7, Q1 <= 8, E3, deaths 0, P2 = 0.
+- **Decisions:** every bar passes -> `--late-confirm` JOINS THE BASE, and LF-4 is next (its own
+  pre-registration). M1 or M2 fails -> off, studied. M3 fails -> off at once.
+- W1 is not LF-2's measure: its expected change, ~0.6 unsent clicks a run, is below a 4-run pool's
+  noise (sd ~4.4).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
