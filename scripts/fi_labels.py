@@ -122,6 +122,13 @@ MARGIN_PX = 30.0  # a clear view lies >= 30 px inside the frame and from every U
 PACK_N = {"N": 15, "F": 15, "M": 10}  # O.5's item strata
 PACK_E_PLAIN, PACK_E_HARD = 10, 10  # O.5's E: plain + hard absent points
 EVAL_ITEMS, EVAL_E = 60, 20  # O.9: every kept label up to 60 + 20 E crops
+# Amendment O15 (round 2, `pack --round 2`): T2-r2 on the NEW TRAIN labels, seed 65, 40 item crops
+# with the N stratum (within 1 cell of her) first; the evaluation's pack, seed 66, up to 70 AURA
+# item crops (fiT4-fiT6 + fsTa) and 50 NO-AURA ones (fsTn), each + its E crops as round 1
+R2_PACK_SEED, R2_EVAL_SEED = 65, 66
+R2_PACK_ITEMS = 40
+R2_EVAL_SIZES = {"aura": 70, "no_aura": 50}
+R2_NOAURA = ("-rdp-xmas02-fsTn",)  # fi_eval.R2_NOAURA (a test pins the two equal)
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -359,6 +366,38 @@ def stratum_of(item: Mapping[str, Any]) -> str:
     if rel is not None and cheb(rel, (0, 0)) <= 1:
         return "N"
     return "M" if item.get("under") else "F"
+
+
+def pack_short(picks: Sequence[Mapping[str, Any]], by: Mapping[str, int], eval_test: bool,
+               r2: bool) -> dict[str, int]:  # fmt: skip
+    """PURE: how far the pack fell short of its sizes (round 1 per N / F / M or X; O15's round 2
+    per its total (T2-r2) or per aura / no-aura (the evaluation))."""
+    if not r2:
+        sizes = {"X": EVAL_ITEMS} if eval_test else PACK_N
+        return {k: n - by.get(k, 0) for k, n in sizes.items() if by.get(k, 0) < n}
+    if not eval_test:
+        return {"items": R2_PACK_ITEMS - len(picks)} if len(picks) < R2_PACK_ITEMS else {}
+    got = Counter("aura" if p.get("aura") else "no_aura" for p in picks)
+    return {k: n - got[k] for k, n in R2_EVAL_SIZES.items() if got[k] < n}
+
+
+def r2_picks(cands: Sequence[Mapping[str, Any]], eval_test: bool, seed: int, salt: str
+             ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE (O15, round 2): T2-r2 = R2_PACK_ITEMS item crops, the N stratum first, then F, then M
+    for what N lacks; the evaluation = R2_EVAL_SIZES per aura / no-aura (by session NAME), each
+    crop's N / F / M stratum kept and its ``aura`` recorded. <= 3 crops per floor item."""
+    if not eval_test:  # N first: one draw in the order N, F, M (the per-item cap shared)
+        sizes = {"N": R2_PACK_ITEMS, "F": R2_PACK_ITEMS, "M": R2_PACK_ITEMS}
+        return draw_strata(cands, sizes, seed, salt)[:R2_PACK_ITEMS]
+
+    def aura(c: Mapping[str, Any]) -> str:
+        return "no_aura" if any(str(c["session"]).endswith(x) for x in R2_NOAURA) else "aura"
+
+    picks = draw_strata([{**c, "stratum": aura(c)} for c in cands], R2_EVAL_SIZES, seed, salt)
+    for p in picks:
+        p["aura"] = p["stratum"] == "aura"
+        p["stratum"] = stratum_of(p)
+    return picks
 
 
 def draw_strata(cands: Sequence[Mapping[str, Any]], sizes: Mapping[str, int], seed: int,
@@ -1250,10 +1289,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     from PIL import Image
 
     spec = FI_MAPS[a.map]
-    want = spec.eval_seed if a.eval_test else spec.pack_seed
+    r2 = getattr(a, "round", 1) == 2
+    if r2:
+        want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
+    else:
+        want = spec.eval_seed if a.eval_test else spec.pack_seed
     if a.seed != want:
         raise SystemExit(f"--seed {a.seed}: the pre-registered seed is {want} "
-                         f"({'O.9' if a.eval_test else 'O.5'})")  # fmt: skip
+                         f"({'O15' if r2 else 'O.9' if a.eval_test else 'O.5'})")  # fmt: skip
     raw = INSTRUCTIONS.read_bytes()
     if sha256_bytes(raw) != INSTRUCTIONS_SHA256:
         raise SystemExit(f"{INSTRUCTIONS}: not the pinned instructions ({INSTRUCTIONS_SHA256[:8]})")
@@ -1263,7 +1306,9 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     check_pack_docs(spec, docs, a.eval_test, sha256_bytes(params_raw))
     sheets = frozen_sheets(prm)
     cands = pool_labels(docs)
-    if a.eval_test:
+    if r2:
+        picks = r2_picks(cands, a.eval_test, a.seed, spec.salt)
+    elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
                             spec.salt)  # fmt: skip
         for p in picks:
@@ -1336,9 +1381,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
             "crops": len(entries), "by_stratum": dict(sorted(by.items())),
             "items": len(picks), "e_plain": len(plain), "e_hard": len(hard),
             "hard_pool": len(hard_pool),
-            "hard_ncc": [p["ncc"] for p in hard], "short": {
-                s: n - by.get(s, 0) for s, n in ({"X": EVAL_ITEMS} if a.eval_test else PACK_N
-                                                 ).items() if by.get(s, 0) < n},
+            "hard_ncc": [p["ncc"] for p in hard],
+            "short": pack_short(picks, by, a.eval_test, r2), "round": 2 if r2 else 1,
             "pool": dict(Counter(c["stratum"] for c in cands)),
             "reference_sprites": n_sprites, "reference_sha256": key["reference_sha256"],
             "instructions_sha256": INSTRUCTIONS_SHA256, "built_at": olf.now_ict(),
@@ -1411,6 +1455,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
+    p.add_argument("--round", type=int, choices=(1, 2), default=1,
+                   help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
     p.add_argument("--key-dir", type=Path, default=None)

@@ -557,3 +557,34 @@ def test_freeze_v2_refuses_before_measuring(tmp_path: Path) -> None:
                  str(tmp_path / "new.json")])  # fmt: skip
     assert SPEC.params_v2 == Path("/dev/shm/poring-lab-tmp/xmas-fi/params-v2.json")
     assert (fl.ABSENT_POINTS, fl.ABSENT_SEED, fl.ABSENT_MAX_RATE) == (60, "per-sprite", 0.01)
+
+
+def test_o15_round2_pack_draws_near_first_and_the_eval_by_aura() -> None:
+    """O15: T2-r2 = 40 item crops, N first (then F, M), <= 3 per floor item; the evaluation's pack
+    = up to 70 aura + 50 no-aura crops by session NAME, each keeping its N / F / M stratum."""
+    import fi_eval as fe
+
+    assert fl.R2_NOAURA == fe.R2_NOAURA
+    assert (fl.R2_PACK_SEED, fl.R2_EVAL_SEED) == (65, 66)
+
+    def c(sid: str, fid: int, floor: int, st: str) -> dict[str, Any]:
+        return {"session": sid, "frame_id": fid, "floor_id": floor, "stratum": st,
+                "rel": [1.0, 0.0] if st == "N" else [3.0, 0.0], "under": None}  # fmt: skip
+
+    fs2, fs3 = "20261110T211700-rdp-xmas02-fs2", "20261110T221000-rdp-xmas02-fs3"
+    cands = ([c(fs2, i, i // 4, "N") for i in range(60)] + [c(fs3, i, 100 + i, "F")
+             for i in range(30)])  # fmt: skip
+    got = fl.r2_picks(cands, False, 65, "xmas02-fi")
+    assert len(got) == 40
+    per = Counter((g["session"], g["floor_id"]) for g in got)
+    assert max(per.values()) <= 3
+    n_n = sum(g["stratum"] == "N" for g in got)
+    assert n_n == 15 * 3 or n_n == 40  # 15 floor items x 3 near crops at most, then F fills
+    assert [g["stratum"] for g in got] == sorted((g["stratum"] for g in got),
+                                                 key="NFM".index)  # fmt: skip
+    ta, tn = "20261110T233000-rdp-xmas02-fsTa", "20261110T230000-rdp-xmas02-fsTn"
+    ev = [c(ta, i, i, "N") for i in range(90)] + [c(tn, i, 500 + i, "N") for i in range(20)]
+    got = fl.r2_picks(ev, True, 66, "xmas02-fi")
+    assert sum(g["aura"] for g in got) == 70 and sum(not g["aura"] for g in got) == 20
+    assert fl.pack_short(got, {}, True, True) == {"no_aura": 30}
+    assert fl.pack_short(got[:10], {}, False, True) == {"items": 30}
