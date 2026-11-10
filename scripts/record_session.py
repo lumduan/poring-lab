@@ -371,7 +371,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     refused = dataset_ship.local_caps(a.out, unshipped=unshipped, **caps)
     if refused:
         raise r.Stop(f"not recording: {refused}")
-    if dataset_ship.in_set_hours():
+    if dataset_ship.in_set_hours() and dataset_ship.market_gate_applies():  # shared hosts only
         print("WARNING: SET hours -- the quant stack is busiest now; the IO guard stays armed",
               file=sys.stderr)  # fmt: skip
     config = bench.run_config(a.backend)

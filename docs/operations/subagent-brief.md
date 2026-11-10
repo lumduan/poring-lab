@@ -33,7 +33,8 @@ SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all 
   - no .venv, node_modules, builds, caches or extracted trees in the repo or a worktree;
   - your worktree is in tmpfs (/dev/shm/poring-lab-wt/<name>, created by the parent): stay in it;
   - no disk-heavy steps (worktrees, env work, cache builds) between 09:30-10:15 or 14:00-14:45 ICT
-    (the market opens);
+    (the market opens) ON VM 103 ONLY; on bot-server there are no market-hour limits (Batt
+    2026-11-10: "the machine is ours, the GPU is ours alone");
   - Python in a worktree: do NOT build an env. Run the MAIN checkout's tools with your worktree's
     sources first on PYTHONPATH (no install, no disk IO):
       export PYTHONPATH=$PWD/scripts:$PWD/packages/<pkg>/src:...:$PWD/services/backend/src

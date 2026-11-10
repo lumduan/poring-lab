@@ -61,6 +61,10 @@ ports, quickstart) and `docs/adr/`.
      like this machine"): there guarded_build skips R1-R3 and idles the IO guard, and refuses if a
      capture service ever appears (`scripts/host_profile.py`). Rule 6's pinned subnets and every
      other rule bind on both hosts.
+   - ➡️ **Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
+     machine is our own, the GPU is ours alone; use it fully."** No market-hour waits there: no SET
+     hours, no market-open windows. `dataset_ship.py` gates SET hours on a SHARED host only
+     (`market_gate_applies`). Recordings, shipping, GPU training and disk-heavy steps run any time.
    - Every lab container keeps `mem_limit` equal to `memswap_limit` (no swap) and `oom_score_adj: 500`.
    - CPU: desktop keeps `cpu_shares: 64` (cgroup v2 weight 12 vs the quant containers' 100) and `cpus: 8`,
      backend `cpu_shares: 256`. xfreerdp 3.15's software decode took 7-15 cores in motion, and 8 was the
@@ -150,6 +154,8 @@ ports, quickstart) and `docs/adr/`.
      days running): no worktrees, env work or cache builds between 09:30 and 10:15 ICT or between
      14:00 and 14:45 ICT, Monday to Friday (not on Saturday or Sunday: Batt 2026-10-09). That
      applies to every agent, the parent included.
+     ➡️ VM 103 (shared-nvidia) only. On bot-server none of the market-hour rules apply (Batt
+     2026-11-10).
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned

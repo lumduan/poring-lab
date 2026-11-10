@@ -33,7 +33,8 @@ ship, per session (one with a manifest.json: a finished recording), in this orde
   6. ONLY THEN the local copy is deleted. With --keep-local (2026-10-09: banking the tmpfs demo
      sessions, which the scorers and the labels-v2 tools still read) step 6 is skipped.
   Any failure before 6 keeps the local copy. Refused during SET hours (09:30-17:00 Asia/Bangkok,
-  weekdays: the quant stack's busy window) unless --force-market, and when --dest is not a
+  weekdays: the quant stack's busy window) unless --force-market -- on a SHARED host only
+  (market_gate_applies; bot-server ships any time, Batt 2026-11-10) -- and when --dest is not a
   mounted filesystem (the NAS is down: never fill the empty mount-point directory instead).
 
 prune: NAS sessions older than --older-than (default 365d, from the session id's timestamp). DRY RUN
@@ -116,6 +117,17 @@ def in_set_hours(when: dt.datetime | None = None) -> bool:
     """SET's trading window, 09:30-17:00 Bangkok time, Monday to Friday (holidays not modelled)."""
     t = (when or now()).astimezone(BANGKOK)
     return t.weekday() < 5 and dt.time(9, 30) <= t.time() < dt.time(17, 0)
+
+
+def market_gate_applies(profile: str | None = None) -> bool:
+    """True when SET hours gate shipping on this host: only a SHARED host (VM 103, beside the quant
+    stack). Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
+    machine is our own, the GPU is ours alone, use it fully" -> dedicated-intel ships any time."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import host_profile
+
+    prof = host_profile.PROFILES[profile] if profile else host_profile.current()
+    return prof.shared
 
 
 # --- local caps (record_session.py uses these too) ------------------------------------------------
@@ -394,7 +406,7 @@ def resolve(root: Path, names: list[str]) -> list[Path]:
 
 
 def cmd_ship(a: argparse.Namespace, guard_factory: Callable[[Path], Guard | None]) -> int:
-    if in_set_hours() and not a.force_market:
+    if in_set_hours() and not a.force_market and market_gate_applies():
         raise Refused("SET hours (09:30-17:00 Bangkok, weekdays): not shipping (--force-market)")
     check_dest(a.dest, a.dest_is_dir_for_tests)
     todo = resolve(a.root, a.sessions)

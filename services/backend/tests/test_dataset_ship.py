@@ -209,11 +209,26 @@ def test_a_failed_rsync_keeps_the_local_copy(
 def test_ship_refuses_during_set_hours_unless_forced(
     ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setenv("LAB_HOST_PROFILE", "shared-nvidia")  # VM 103: beside the quant stack
     monkeypatch.setattr(ds, "now", lambda: WEDNESDAY_10)
     make_session(dirs.root, SID)
     assert ds.main(ship_argv(dirs)) == 2
     assert (dirs.root / SID).exists() and not (dirs.dest / SID).exists()
     assert ds.main(ship_argv(dirs, "--force-market")) == 0
+    assert not (dirs.root / SID).exists()
+
+
+def test_a_dedicated_host_ships_during_set_hours(
+    ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-10: bot-server (dedicated-intel) waits for nothing of the quant work; the gate
+    stays on a shared host (the test above)."""
+    monkeypatch.setenv("LAB_HOST_PROFILE", "dedicated-intel")
+    monkeypatch.setattr(ds, "now", lambda: WEDNESDAY_10)
+    assert ds.market_gate_applies() is False
+    assert ds.market_gate_applies("shared-nvidia") is True
+    make_session(dirs.root, SID)
+    assert ds.main(ship_argv(dirs)) == 0  # no --force-market needed
     assert not (dirs.root / SID).exists()
 
 
