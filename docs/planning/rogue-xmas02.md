@@ -3718,6 +3718,6 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
 
 - G1b's second `garm_seen` (5.14 s, streak 3) took no second wing (the boss guard's 2-s rule).
 - The 2-detection rule cost here: 1.0 s (the next detection) + 0.6 s until the runner's loop read it.
-  G0's 1-detection wing came 0.21 s after its box.
+  G0's 1-detection wing came 0.27 s after its box (box 1.06 s, wing 1.33 s).
 - G1's dog was never boxed while in view for ~4 s near the start. Why is not studied (likely the
   start's terrain, as G0b's: N1.4); it is the detector's, not this change's.
