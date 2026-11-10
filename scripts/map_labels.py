@@ -326,7 +326,8 @@ XMAS02_FIT_R1 = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xm
 XMAS02_FIT_R2 = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
                  "-rdp-xmas02-fsTa", "-rdp-xmas02-fsTn")  # fmt: skip
 XMAS02_FIT = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9",
-              "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3")  # fmt: skip
+              "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3", "-rdp-xmas02-fsTa4")  # fmt: skip
+# O17e: fsTa4, a second aura staging (fsTa3 stopped at spot 7), named BEFORE it records
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),

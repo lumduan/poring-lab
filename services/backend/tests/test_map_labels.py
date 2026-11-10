@@ -1443,7 +1443,8 @@ def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
     held-out is fiT4-fiT6 + the near stagings fsTa / fsTn; round 1's fiT1-fiT3 are TRAIN."""
     spec = ml.XMAS02
     for sid in [f"20261111T050000-rdp-hunt-xmas02-fiT{n}" for n in (7, 8, 9)] + [
-            "20261111T043000-rdp-xmas02-fsTa3", "20261111T053000-rdp-xmas02-fsTn3"]:  # fmt: skip
+            "20261111T043000-rdp-xmas02-fsTa3", "20261111T053000-rdp-xmas02-fsTn3",
+            "20261111T050000-rdp-xmas02-fsTa4"]:  # fmt: skip
         assert spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
     # O17: round 2's held-out (fiT4-6, fsTa, fsTn) is TRAIN-eligible since its score (O16)
     for sid in ("20261109T133046-rdp-hunt-xmas02-p38", "20261110T110000-rdp-hunt-xmas02-fiT12",

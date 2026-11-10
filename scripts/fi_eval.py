@@ -74,7 +74,7 @@ R2_NOAURA = ("-rdp-xmas02-fsTn",)
 R2_PILOTS = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6")
 # Amendment O17 (round 3): its fresh held-out, the same bars (``--strata r3``)
 R3_PILOTS = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9")
-R3_AURA = (*R3_PILOTS, "-rdp-xmas02-fsTa3")
+R3_AURA = (*R3_PILOTS, "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTa4")  # O17e: fsTa4 too
 R3_NOAURA = ("-rdp-xmas02-fsTn3",)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS)}
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar

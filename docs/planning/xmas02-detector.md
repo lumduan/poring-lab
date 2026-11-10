@@ -3631,3 +3631,17 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
 - **fsTn3** (the Crusader, seed 2611681) started 04:17:07 (the herb stack dropped as before,
   `held` rc 0 at 04:16:58).
 
+### Amendment O17e (2026-11-11 04:58 ICT from `date`): fsTn3 done; fsTa4 named, NOT staged
+
+- **fsTn3** (the Crusader, seed 2611681): 04:17:07-04:44:14, rc 0, 12 / 12 spots. The recording is
+  shipped. The Crusader's 40 Red Herbs were given back ("Item created."). The Rogue is back in, immune
+  ("You are now immune to attacks."). Her bag was cleared (`clear-bag` 04:46, fsTa3's leftover
+  Zargon), and she stands on prt_fild08's clear stand.
+- **fsTa4** (a second aura held-out, because fsTa3 stopped at spot 7) is NAMED in
+  `map_labels.XMAS02_FIT` and `fi_eval.R3_AURA` (tested). It is refused by name from TRAIN
+  whatever happens.
+  - It was NOT staged: in 400 seeds (2611700-2612099) no 12-spot near plan shares no cell with the
+    nine stagings so far. The lattice's TRAIN stands are used up for near views.
+  - The next session may stage fewer spots (`--n 6`) on a disjoint plan, or take round 3's aura
+    held-out from the pilots fiT7-fiT9 alone.
+
