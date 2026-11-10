@@ -2173,6 +2173,35 @@ the detect server, come after the training):
   - M2 NO VERDICT (fewer than 10 led clicks) -> reported, stays OFF;
   - any bar failing -> LS-2 alone stays the base.
 
+### 4BS. Pilots p57 + p58 pre-registration: --near-single (S-LF5 R2, dungeon@9.25), two runs pooled; p57 recorded as fiT7 (written BEFORE either run, 2026-11-11 06:42 ICT from `date`)
+
+- **Authority:** Batt, 4BP item 3 ("study and fix"). Study S-LF5 found NO misread: p53's span was a
+  client / server desync. The burst's 2-3-cell re-click landed on the floor after the camera
+  scrolled (26 of 68 such re-clicks walked her >= 2 cells off a live target, ~21 s a run). One such
+  walk, acked inside her attack motion, was cut short by the client.
+- **The change** (d8b9b365, OFF by default): `--far-single`'s one-click rule starts at 2 cells
+  (NEAR_SINGLE_CELLS) instead of 4. 0-1 cells keep the burst. The wait is FAR_BASE_S + 0.2 s a
+  cell (2 cells 1.4 s, 3 cells 1.6 s). Refused without `--far-single`.
+- **p54 is folded in:** its job was a base confirmation run + fiT7. To fit the MVP windows, fiT7 is
+  recorded beside p57 instead (`--label hunt-xmas02-fiT7`). Its loot path is unchanged, so it is a
+  held-out of the same kind. 4BQ is withdrawn unrun.
+- **The runs:** the base (+ LS-1 if 4BR adopts it, said in the report) + `--near-single`, labels
+  `xmas02-p57`, `xmas02-p58`, 25 min each, after p55 / p56.
+- **Bars (pooled p57 + p58, against the 13 base runs p40-p53 without p43; `client_cell.py`,
+  `late_strike.py`):**
+  - **M1:** floor walk-offs from 2-3-cell strikes (`floor_walkoffs_by_dist["2-3"]`) <= 1 over
+    the two runs (the base rate predicts ~4);
+  - **M2:** 2-3-cell strikes that sent NO request <= 1 a run (base: 1 in 13 runs), and
+    late-failed box strikes no worse than the runs just before (LS-2's or LS-1's pool);
+  - **M3:** the base's bars (W1 and R1-A pooled over p58 + p57 + p56 + p55, L1, L3, L4, K1, K3,
+    E1 >= 80 / h, U1, D1, Q1, P2, E3, deaths 0);
+  - **reported:** desync spans (`client_cell.py`), wrong standing reads by verdict (misread /
+    desync), LF-2's M1-M3, the 2-3-cell strikes' outcomes.
+- **Decision:** every bar passes -> `--near-single` JOINS THE BASE; else studied, stays off.
+- **Open for Batt (S-LF5 S1, not decided here):** LF-2's "0 wrong standing reads" bar counted
+  desyncs as misreads. Counting only MISREADS changes what a pre-registered bar counts, so it
+  needs his OK. Until then both counts are reported.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
