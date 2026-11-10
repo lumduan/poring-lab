@@ -3605,4 +3605,10 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   items, ~4.6 GB in 17 shards, `would_refuse_join` empty. VAL p31 as before.
 - **Epochs = min(12, max(3, floor(6,000 / (0.64 x 2,147 + 100)))) = 4.**
 - The Rogue's bag was emptied (`clear-bag`, 03:47) for fsTa3.
+- **O17c (03:55 ICT, BEFORE either staging):** round 3's held-out stagings:
+  - fsTa3 = the Rogue, `--views near --n 12 --seed 2611446`;
+  - fsTn3 = the Crusader, `--seed 2611681`;
+  - both were checked to share NO cell with fs1-fs5, fsTa, fsTn;
+  - `--session-negs` now takes plain names + `--session-negs-n 150` (96a9ecdb: the guarded cache
+    step refuses '=' in an argument). The dry run's counts are unchanged.
 
