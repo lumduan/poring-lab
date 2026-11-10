@@ -3721,7 +3721,7 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
   G0's 1-detection wing came 0.27 s after its box (box 1.06 s, wing 1.33 s).
 - G1's dog was never boxed while in view for ~4 s near the start. Why is not studied (likely the
   start's terrain, as G0b's: N1.4); it is the detector's, not this change's.
-- **The P1 / P2 scorer, and one clarification written BEFORE p45 was scored (2026-11-10 ~10:1x ICT):**
+- **The P1 / P2 scorer, and one clarification written BEFORE p45 was scored (2026-11-10 10:00 ICT from `date`, p45 running since 09:59:09):**
   - positions are interpolated along each walk (ours: self_move at 150 ms a cell, diagonal x1.4; a
     dog's: its entity_appear move at its `speed`). A first draft used the walk's DESTINATION and
     called G1b's real dog "15+ cells away" (we were walking east, away from it).
