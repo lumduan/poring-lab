@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { WorldMap } from "@/lib/flow/api";
 import { COLOUR_VARS, type Colours, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "@/lib/maps/draw";
 import { type Labels, poseAt, type Timeline } from "@/lib/maps/play";
+import { makeWanderers, type Spawn } from "@/lib/maps/wander";
 
 function readColours(el: HTMLElement | null): Colours {
   if (!el) return FALLBACK_COLOURS;
@@ -32,9 +33,12 @@ export type MatViewProps = {
   savePoint: { map: string; cell: [number, number] } | null;
   zoom: number; // 1 = fit the box; 2, 4: closer (the box scrolls, following the character)
   children?: ReactNode; // over the map itself (the login overlay), not over the empty stage
+  decorSeed?: number | null; // round 5: the map's other monsters (decoration) from this seed; null: off
 };
 
-export default function MatView({ map, rows, sheet, tl, time, labels, savePoint, zoom, children }: MatViewProps) {
+const NO_SPAWNS: Spawn[] = [];
+
+export default function MatView({ map, rows, sheet, tl, time, labels, savePoint, zoom, children, decorSeed = null }: MatViewProps) {
   const box = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [boxSize, setBoxSize] = useState<{ w: number; h: number }>({ w: 600, h: 360 });
@@ -63,6 +67,10 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
   const dpr = typeof window !== "undefined" ? Math.min(3, window.devicePixelRatio || 1) : 1;
   const scale = fitScale(boxSize.w, boxSize.h, w, h) * zoom;
 
+  // the map's other monsters: their walks made once per map, spawns and seed (never per frame)
+  const spawns = sheet?.spawns ?? NO_SPAWNS;
+  const decor = useMemo(() => (decorSeed === null || !map ? null : makeWanderers(rows, spawns, decorSeed, map)), [decorSeed, rows, spawns, map]);
+
   // the grid, drawn once per map and size: at whole DEVICE pixels a cell (sharp), then scaled onto
   // the canvas with smoothing off
   const cellPx = Math.max(1, Math.min(16, Math.round(scale * dpr), Math.floor(8192 / Math.max(w, h))));
@@ -84,8 +92,8 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
     ctx.clearRect(0, 0, w * scale, h * scale);
     ctx.imageSmoothingEnabled = false; // the grid stays crisp on a high-density screen
     if (base) ctx.drawImage(base, 0, 0, w * scale, h * scale);
-    drawScene(ctx, { map, w, h, scale, sheet, tl, time, labels, savePoint, colours });
-  }, [base, w, h, scale, dpr, tl, time, map, sheet, labels, savePoint, colours]);
+    drawScene(ctx, { map, w, h, scale, sheet, tl, time, labels, savePoint, colours, decor });
+  }, [base, w, h, scale, dpr, tl, time, map, sheet, labels, savePoint, colours, decor]);
 
   // follow the character when zoomed in
   const pose = tl ? poseAt(tl, time) : null;

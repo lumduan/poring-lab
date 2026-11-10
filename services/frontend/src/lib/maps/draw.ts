@@ -7,9 +7,10 @@
 // bottom row, so screen y = (h - 1 - y) * scale.
 import type { WorldMap } from "../flow/api.ts";
 import { type Labels, overlayAt, poseAt, type Timeline, trailAt } from "./play.ts";
+import { type Wanderers, wanderersAt } from "./wander.ts";
 
 export type Colours = Record<
-  "floor" | "wall" | "trail" | "route" | "bot" | "botEdge" | "monster" | "npc" | "warp" | "save" | "loot" | "text" | "bubble" | "bubbleText" | "empty",
+  "floor" | "wall" | "trail" | "route" | "bot" | "botEdge" | "monster" | "npc" | "warp" | "save" | "loot" | "text" | "bubble" | "bubbleText" | "empty" | "decor",
   string
 >;
 export const COLOUR_VARS: Record<keyof Colours, string> = {
@@ -28,6 +29,7 @@ export const COLOUR_VARS: Record<keyof Colours, string> = {
   bubble: "--mat-bubble",
   bubbleText: "--mat-bubble-text",
   empty: "--mat-empty",
+  decor: "--mat-decor",
 };
 export const FALLBACK_COLOURS: Colours = {
   floor: "#a7aeb6",
@@ -45,6 +47,7 @@ export const FALLBACK_COLOURS: Colours = {
   bubble: "#ffffff",
   bubbleText: "#1b1f24",
   empty: "#d6dbe1",
+  decor: "#7c2d12",
 };
 
 /** The parts of a CanvasRenderingContext2D the map view uses. */
@@ -131,11 +134,13 @@ export type DrawInput = {
   labels: Labels | null;
   savePoint: { map: string; cell: [number, number] } | null;
   colours: Colours;
+  // round 5 (Batt: "make it an option"): the map's other monsters, decoration only (wander.ts)
+  decor?: Wanderers | null;
 };
 
 /** Everything over the grid at `time`; returns where the character was drawn (px), or null. */
-export function drawScene(ctx: Ctx, d: DrawInput): { bot: { x: number; y: number } | null; monsters: number; bubble: string | null } {
-  const { map, w, h, scale, sheet, tl, time, labels, savePoint, colours } = d;
+export function drawScene(ctx: Ctx, d: DrawInput): { bot: { x: number; y: number } | null; monsters: number; bubble: string | null; decor: number } {
+  const { map, w, h, scale, sheet, tl, time, labels, savePoint, colours, decor } = d;
   const X = (x: number) => x * scale + scale / 2;
   const Y = (y: number) => (h - 1 - y) * scale + scale / 2;
   const dot = (x: number, y: number, r: number, fill: string, edge?: string) => {
@@ -201,7 +206,23 @@ export function drawScene(ctx: Ctx, d: DrawInput): { bot: { x: number; y: number
     ctx.stroke();
     if (big) label("save point", sx, sy, colours.save);
   }
-  if (!tl || !over) return { bot: null, monsters: 0, bubble: null };
+  // the map's other monsters (an option): small, faint dots, no HP bar, no name; never where the
+  // monster the run meets stands
+  let shown = 0;
+  if (decor && decor.list.length) {
+    shown = wanderersAt(decor, time, over ? over.monsters.map((m) => [Math.round(m.x), Math.round(m.y)] as const) : []);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = colours.decor;
+    const r = Math.max(2.5, scale * 0.6);
+    for (let i = 0; i < shown; i++) {
+      const o = decor.out[i];
+      ctx.beginPath();
+      ctx.arc(X(o.x), Y(o.y), r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (!tl || !over) return { bot: null, monsters: 0, bubble: null, decor: shown };
   // the trails: walked (green), the rest of the walk in progress (dashed)
   const tr = trailAt(tl, time, map);
   const tw = Math.max(1.5, scale * 0.55);
@@ -261,5 +282,5 @@ export function drawScene(ctx: Ctx, d: DrawInput): { bot: { x: number; y: number
     ctx.fillStyle = colours.bubbleText;
     ctx.fillText(text, bx + 7, by + 15);
   }
-  return { bot, monsters: over.monsters.length, bubble: bub?.text ?? null };
+  return { bot, monsters: over.monsters.length, bubble: bub?.text ?? null, decor: shown };
 }

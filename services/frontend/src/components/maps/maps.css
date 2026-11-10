@@ -21,6 +21,7 @@
   --mat-warp: #7c3aed;
   --mat-save: #be123c;
   --mat-loot: #ca8a04;
+  --mat-decor: #7c2d12; /* the map's other monsters (decoration), drawn at half opacity */
   --mat-text: #1b1f24;
   --mat-bubble: #ffffff;
   --mat-bubble-text: #1b1f24;
@@ -39,6 +40,7 @@
     --mat-warp: #c4b5fd;
     --mat-save: #fb7185;
     --mat-loot: #facc15;
+    --mat-decor: #fdba74;
     --mat-text: #e6e9ed;
     --mat-bubble: #1a1f25;
     --mat-bubble-text: #e6e9ed;
@@ -262,6 +264,18 @@
 .maps-legend li[data-k="monster"]::before { background: var(--mat-monster); }
 .maps-legend li[data-k="npc"]::before { background: var(--mat-npc); border-radius: 0.1rem; }
 .maps-legend li[data-k="warp"]::before { border: 2px solid var(--mat-warp); background: none; }
+.maps-legend li[data-k="decor"]::before { width: 0.5rem; height: 0.5rem; background: var(--mat-decor); opacity: 0.5; }
+/* round 5: the option in the legend row: "Show the map's other monsters (decoration)" */
+.maps-legend .maps-decor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.maps-legend .maps-decor-toggle::before {
+  display: none;
+}
 .maps-legend li[data-k="save"]::before { content: "×"; width: auto; height: auto; color: var(--mat-save); font-weight: 700; }
 
 /* matpilot's playback bar (MatRunPanel.tsx), with our step and reset buttons */

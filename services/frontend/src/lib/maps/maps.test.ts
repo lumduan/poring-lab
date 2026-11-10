@@ -13,6 +13,7 @@ import { oneMapStarter, starterFlow } from "../flow/starter.ts";
 import { addMapNode, blockName, centreCell, oneMapFlow, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
 import { fitViewport, followCentre, mapsGraph } from "./graph.ts";
+import { makeWanderers, shares, WANDER_CAP, wanderersAt } from "./wander.ts";
 import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, trailAt, walkSeconds } from "./play.ts";
 import { ACCOUNTS, DEFAULT_SESSION, parseSession, SERVERS, sessionLength, sessionProblems, sessionPython, sessionSteps } from "./session.ts";
 
@@ -344,4 +345,80 @@ test("following the playback's node: a pan only when it is out of view and every
   // every pan target it does give is finite
   const c = followCentre(box, { x: -500, y: 20, zoom: 0.85 }, { x: 40, y: 70, width: 210, height: 140 })!;
   assert.ok([c.x, c.y, c.zoom].every(Number.isFinite));
+});
+
+// --- round 5 (2026-11-10, Batt: "make it an option"): the map's other monsters, decoration --------
+// a synthetic 40 x 30 field with a wall and a pillar
+const FIELD = Array.from({ length: 30 }, (_, y) => Array.from({ length: 40 }, (_, x) => ((x === 20 && y < 25) || (x >= 5 && x <= 7 && y >= 5 && y <= 7) ? "#" : ".")).join(""));
+const SPAWNS = [
+  { mob: 9101, count: 20, boss: false },
+  { mob: 9102, count: 15, boss: false, area: [25, 2, 35, 12] as [number, number, number, number] },
+  { mob: 9109, count: 1, boss: true },
+];
+const walk = (x: number, y: number) => FIELD[y]?.[x] === ".";
+
+test("other monsters: capped, in proportion, at least one of each", () => {
+  assert.deepEqual(shares(SPAWNS), [20, 15, 1]);
+  const big = shares([{ mob: 1, count: 20 }, { mob: 2, count: 20 }, { mob: 3, count: 35 }, { mob: 4, count: 50 }, { mob: 5, count: 1 }, { mob: 6, count: 1 }]);
+  assert.ok(big.reduce((a, b) => a + b, 0) <= WANDER_CAP);
+  assert.ok(big.every((k) => k >= 1));
+  assert.equal(makeWanderers(FIELD, [{ mob: 1, count: 500 }], 1, "syn").list.length, WANDER_CAP);
+  assert.equal(makeWanderers(null, SPAWNS, 1, "syn").list.length, 0); // no walk grid: none
+});
+
+test("other monsters: deterministic from the seed, always on walkable cells, inside their areas", () => {
+  const a = makeWanderers(FIELD, SPAWNS, 7, "syn");
+  const b = makeWanderers(FIELD, SPAWNS, 7, "syn");
+  const c = makeWanderers(FIELD, SPAWNS, 8, "syn");
+  assert.equal(a.list.length, 36);
+  assert.deepEqual(a.list.map((w) => [...w.path]), b.list.map((w) => [...w.path]));
+  assert.notDeepEqual(a.list.map((w) => [...w.path]), c.list.map((w) => [...w.path]));
+  for (const w of a.list) {
+    for (let i = 0; i < w.n; i++) {
+      const [x, y] = [w.path[2 * i], w.path[2 * i + 1]];
+      assert.ok(walk(x, y), `(${x}, ${y})`);
+      if (w.mob === 9102) assert.ok(x >= 25 && x <= 35 && y >= 2 && y <= 12, `9102 left its area: (${x}, ${y})`);
+      if (i > 0) {
+        const [px, py] = [w.path[2 * i - 2], w.path[2 * i - 1]];
+        assert.ok(Math.max(Math.abs(x - px), Math.abs(y - py)) <= 1); // one cell a step
+        if (x !== px && y !== py) assert.ok(walk(x, py) && walk(px, y), "a diagonal through a corner");
+      }
+    }
+  }
+  // every frame: the same positions for the same time, each rounding to a walkable cell
+  for (let t = 0; t < 120; t += 0.37) {
+    const k = wanderersAt(a, t);
+    const k2 = wanderersAt(b, t);
+    assert.equal(k, k2);
+    for (let i = 0; i < k; i++) {
+      assert.deepEqual([a.out[i].x, a.out[i].y], [b.out[i].x, b.out[i].y]);
+      assert.ok(walk(Math.round(a.out[i].x), Math.round(a.out[i].y)), `t=${t}`);
+    }
+  }
+  const out = a.out; // made once: a frame writes into it, no new objects
+  wanderersAt(a, 3.3);
+  assert.equal(a.out, out);
+  assert.equal(wanderersAt(a, NaN), 0);
+});
+
+test("other monsters are never where the run's monster stands, at its meeting time", () => {
+  const st = makeWanderers(FIELD, SPAWNS, 3, "syn");
+  const all = wanderersAt(st, 10);
+  const c: [number, number] = [Math.round(st.out[0].x), Math.round(st.out[0].y)];
+  const k = wanderersAt(st, 10, [c]);
+  assert.ok(k < all);
+  for (let i = 0; i < k; i++) assert.ok(Math.max(Math.abs(Math.round(st.out[i].x) - c[0]), Math.abs(Math.round(st.out[i].y) - c[1])) > 1);
+  // through the drawing, on the fixture's run: during every meeting, no decoration at the met cell
+  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const rows = Array.from({ length: 100 }, () => ".".repeat(100)); // field_1's size; open
+  const decor = makeWanderers(rows, [{ mob: 9101, count: 40 }], 3, "field_1");
+  for (const f of tl.beats.filter((b) => b.kind === "fight" && b.step?.at)) {
+    const at = f.step!.at!;
+    for (let t = (f.step!.seen_t ?? f.step!.t0) + tl.offset; t <= f.t1; t += 0.1) {
+      const r = drawScene(recorder().ctx, { map: "field_1", w: 100, h: 100, scale: 2, sheet: null, tl, time: t, labels: null, savePoint: null, colours: FALLBACK_COLOURS, decor });
+      for (let i = 0; i < r.decor; i++) assert.ok(Math.max(Math.abs(Math.round(decor.out[i].x) - at[0]), Math.abs(Math.round(decor.out[i].y) - at[1])) > 1, `t=${t.toFixed(1)}`);
+    }
+  }
+  // and it is drawing only: off (null) draws none, the run's words do not change
+  assert.equal(drawScene(recorder().ctx, { map: "field_1", w: 100, h: 100, scale: 2, sheet: null, tl, time: 20, labels: null, savePoint: null, colours: FALLBACK_COLOURS, decor: null }).decor, 0);
 });

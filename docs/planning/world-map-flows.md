@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 (a NaN console bug: section 12) not committed yet."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 d95b24b5 (a NaN console bug: section 12); round 5 (the other monsters as an option: section 13) not committed yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Parent: commit round 4; matpilot: recount the NaN messages during a folded run (expected 0). Batt: section 9's questions."
+next_action: "Parent: commit round 5; matpilot: a look at the decoration toggle (section 13) and a recount of the NaN messages during a folded run (expected 0)."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -298,4 +298,28 @@ Checks:
   `followCentre`). They return null for a box with no size or for any non-finite number, and then
   nothing moves the view. Unfolding re-fits from the real size.
 - **Tests:** 2 new unit tests (268 pass).
+
+## 13. Round 5 (2026-11-10): the map's other monsters, as an option (Batt, section 9)
+
+- **The toggle:** a checkbox at the START of the map view's legend row (under the map), labelled
+  "Show the map's other monsters (decoration)". Its tooltip says what it is. It is OFF by default
+  and remembered per browser (`poring-lab.maps.other-monsters.v1`). When on, the legend adds
+  "other monsters (decoration)".
+- **What it draws** (lib/maps/wander.ts, drawn by draw.ts):
+  - the map's spawns from the static data the backend already gives (no backend change);
+  - each species in proportion to its count, at most 40 on a map, at least one of each while the
+    cap allows;
+  - inside their spawn areas when the sheet has them; nothing without a walk grid;
+  - small faint dots under the trails: no HP bar, no name.
+- **How they move:** each one's walk is made ONCE: a random walk of 48 cells from the run's seed
+  (the Run form's seed before a run), RO's 8 ways with no corner cutting, within 6 cells of its
+  first cell, walked forth and back at 1 cell / 1.6 s. A frame only interpolates into a list made
+  once (no allocation per frame).
+- **What it is not:** never engaged; never in the step list, the checks or the Python; never
+  drawn within one cell of the monster the run meets, while it is shown (from first seen to faded).
+- **Tests:** 3 new tests (271 pass):
+  - the cap and the shares;
+  - the same seed gives the same walks, another seed others; every cell walkable; one cell a
+    step; no diagonal through a corner; inside the area; one output list;
+  - never at the met monster's cell during any meeting of the fixture's run; off draws none.
 

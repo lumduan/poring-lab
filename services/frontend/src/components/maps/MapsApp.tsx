@@ -39,6 +39,7 @@ import { addMapNode, type MapFacts, oneMapFlow } from "@/lib/maps/build";
 import { mapsGraph } from "@/lib/maps/graph";
 import { beatAt, beatText, buildTimeline, type Check, type Labels, poseAt, runChecks, type Timeline } from "@/lib/maps/play";
 import { readSession, type Session, serverOf, sessionProblems, sessionPython, sessionSteps, slotText, writeSession } from "@/lib/maps/session";
+import { WANDER_KEY } from "@/lib/maps/wander";
 import { backendHttpBase } from "@/lib/ws";
 
 const MapsCanvas = dynamic(() => import("@/components/maps/MapsCanvas"), {
@@ -150,6 +151,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const [codeFile, setCodeFile] = useState<"session" | "py" | "json">("py");
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
   const [zonesFor, setZonesFor] = useState<string | null>(null);
+  // round 5 (Batt: "make it an option"): the map's other monsters as decoration; off by default
+  const [decorOn, setDecorOn] = useState(() => readChoice(store, WANDER_KEY, ["on", "off"] as const, "off") === "on");
   const [graphFolded, setGraphFolded] = useState(false); // round 3: the map gets the height in a run
   const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -794,7 +797,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 </div>
               </div>
               <div className="maps-mat-stage">
-                <MatView map={matMap} rows={rows} sheet={sheet} tl={tl} time={time} labels={labels} savePoint={sim?.doc.trace.save_point ?? null} zoom={zoom}>
+                <MatView map={matMap} rows={rows} sheet={sheet} tl={tl} time={time} labels={labels} savePoint={sim?.doc.trace.save_point ?? null} zoom={zoom} decorSeed={decorOn ? (sim?.seed ?? Math.round(num(runForm.seed, 1, 0, 2 ** 31 - 1))) : null}>
                   {tl && time < tl.offset && beat?.session && (
                     // the first seconds: the session's mock steps, before the character is on a map
                     // (round 3: over the map itself, one or two lines on a phone; the step list
@@ -832,6 +835,21 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 )}
               </div>
               <ul className="maps-legend" aria-label="What the map shows">
+                <li>
+                  <label className="maps-decor-toggle" title="Decoration only: the map's spawns from the static data, wandering from the run's seed. Never engaged, never in the steps, the checks or the Python.">
+                    <input
+                      type="checkbox"
+                      checked={decorOn}
+                      onChange={(e) => {
+                        setDecorOn(e.target.checked);
+                        writeChoice(store, WANDER_KEY, e.target.checked ? "on" : "off");
+                      }}
+                      data-testid="maps-decor"
+                    />
+                    Show the map&apos;s other monsters (decoration)
+                  </label>
+                </li>
+                {decorOn && <li data-k="decor">other monsters (decoration)</li>}
                 <li data-k="bot">the character</li>
                 <li data-k="trail">walked</li>
                 <li data-k="route">walking next</li>
