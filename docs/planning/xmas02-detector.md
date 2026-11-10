@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment O15 (2026-11-10 night): round 2 of the floor-item model -- the Base 99 aura over items next to her; TRAIN adds fiT1-3 + near stagings fs2 (Rogue) / fs3 (Crusader, no aura); held-out fiT4-6 + fsTa / fsTn; I1a / I1n >= 0.85 each (95 % reported)."
+next_action: "O16 (2026-11-11 03:4x): round 2 FAILS -- recall met (aura 0.928, no aura 0.980, precision 0.962) but false boxes in the pilots fail I2 0.75, I3 4.3 %, I4 11.3 % -> not deployed; a round 3 needs fight negatives near her."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3528,3 +3528,35 @@ score):**
   - `fi_eval.py --strata r2` once, with both prediction sets merged over the five sessions
     (`merge_preds.py`: same weights, disjoint keys).
 
+### Amendment O16 (2026-11-11 03:40 ICT from `date`): THE ROUND-2 RESULT (the held-out score, once) -- RECALL MET, FALSE BOXES FAIL
+
+`fi_eval.py --strata r2` once at 03:39:29 (score sha256 c71b324f...). Inputs:
+- both prediction sets merged over the five sessions (`fi_merge_preds.py`). The GPU set names one
+  file by two paths: the staged half predicted 00:27-00:30 from the local `last.pt` (frozen
+  e381d689 at 00:21), the pilots' half from the NAS copy (archived 00:30:59, re-hashed e381d689);
+  `--weights-sha256 e381d689...` records it;
+- I5 from the detect server (fi2 / gb one a run) and eval_latency on a quiet host.
+
+The GPU and the ONNX sets give IDENTICAL I1-I4 results.
+
+| bar | round 2 | round 1 (O14) | bar value | verdict |
+|---|---|---|---|---|
+| I1a recall, AURA (fiT4-6 + fsTa) | **64 / 69 = 0.928** (fsTa 56 / 56; fiT4 2 / 4, fiT5 2 / 4, fiT6 4 / 5) | 0.696 | >= 0.85 on >= 40 | PASS (Batt's 95 %: no) |
+| I1n recall, NO AURA (fsTn, Batt) | **49 / 50 = 0.980** | - | >= 0.85 on >= 30 | PASS (95 %: yes) |
+| I1 pooled (reported) | 113 / 119 = 0.950 | 0.696 | - | - |
+| I1 precision | 3,912 / 4,067 = 0.962 (31 ambiguous) | 0.864 | >= 0.85 | PASS |
+| I2 first kept-label frame boxed | **21 / 28 = 0.75** | 0.56 | >= 0.80 on >= 20 | **FAIL** |
+| I3 item-free pilot frames with a box: any / her 5 x 5 | **108 / 2,519 = 4.29 % / 81 = 3.22 %** | 0.49 % / 0.12 % | <= 0.5 % / <= 0.2 % | **FAIL** |
+| I4 drop-less kills with a box on the death cell's 3 x 3 | **15 / 133 = 11.3 %** | 0 / 124 | <= 5 % on >= 40 | **FAIL** |
+| I5 GPU, server forward p95 | 16.41 vs xmas02gb 16.77 ms = 0.979 x | no verdict | <= 1.10 x and <= 35 ms | PASS |
+| I5 CPU p95 | 721.4 vs 757.2 ms = 0.953 x | 1.043 x | <= 1.10 x | PASS |
+
+- **VERDICT: FAIL** (I2, I3, I4). The model is not deployed; `--loot-sight` is not
+  pre-registered.
+- **What round 2 changed:** recall near her went from 0.70 to 0.93 (aura) and 0.98 (no aura), so
+  the aura is no longer a blind spot. But the model now boxes things in the PILOTS' fights that are
+  not items: item-free frames 9x more often, mostly within 2 cells of her, and the death cells of
+  drop-less kills. TRAIN gained many near-her items (staged, standing still, no fight) and few
+  near-her negatives with fights.
+- **Where recall still misses:** all 6 misses are NATURAL drops (3 floor items in the pilots: fiT4
+  #1422 x 2 frames, fiT5 #1439 x 2, fiT6 #1460) and fsTn #1159. The staged aura items are 56 / 56.
