@@ -588,3 +588,15 @@ def test_o15_round2_pack_draws_near_first_and_the_eval_by_aura() -> None:
     assert sum(g["aura"] for g in got) == 70 and sum(not g["aura"] for g in got) == 20
     assert fl.pack_short(got, {}, True, True) == {"no_aura": 30}
     assert fl.pack_short(got[:10], {}, False, True) == {"items": 30}
+
+
+def test_o17_round3_pack_reads_fsTn3_as_no_aura() -> None:
+    import fi_eval as fe
+
+    assert fl.R3_NOAURA == fe.R3_NOAURA and fl.R3_EVAL_SEED == 67
+    c = {"frame_id": 1, "floor_id": 1, "stratum": "N", "rel": [1.0, 0.0], "under": None}
+    ev = [{**c, "session": "20261111T053000-rdp-xmas02-fsTn3", "frame_id": i, "floor_id": i}
+          for i in range(5)]  # fmt: skip
+    got = fl.r2_picks(ev, True, 67, "xmas02-fi", fl.R3_NOAURA)
+    assert all(not g["aura"] for g in got)
+    assert all(g["aura"] for g in fl.r2_picks(ev, True, 67, "xmas02-fi"))  # round 2's names

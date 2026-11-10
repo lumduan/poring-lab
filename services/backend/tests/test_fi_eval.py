@@ -296,3 +296,15 @@ def test_o15_i5_gpu_is_the_server_forward_time_against_the_deployed() -> None:
     assert fe.i5_server({"n": 300, "p95": 36.0}, {"n": 300, "p95": 35.0})["verdict"] == "FAIL"
     assert fe.i5_server({"n": 150, "p95": 16.0}, gb)["verdict"] == "NO_VERDICT"
     assert fe.i5_server(None, gb)["verdict"] == "NO_VERDICT"
+
+
+def test_o17_round3_strata_name_its_fresh_held_out() -> None:
+    box = [10.0, 10.0, 30.0, 30.0]
+    a7, n3 = "20261111T090000-rdp-hunt-xmas02-fiT7", "20261111T043000-rdp-xmas02-fsTn3"
+    crops = [_crop(a7, i, box) for i in range(40)] + [_crop(n3, 100 + i, box) for i in range(30)]
+    pred = {fe.frame_key(c["session"], c["frame_id"]): [box] for c in crops}
+    got = fe.i1_strata(crops, pred, "r3")
+    assert got["aura"]["num"] == 40 and got["no_aura"]["num"] == 30
+    assert got["no_aura"]["by_source"] == {"fsTn3": {"hit": 30, "n": 30}}
+    with pytest.raises(SystemExit, match="no stratum"):  # round 2's names are not round 3's
+        fe.i1_strata([_crop("20261110T221931-rdp-xmas02-fsTn", 1, box)], pred, "r3")

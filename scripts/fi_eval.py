@@ -72,6 +72,11 @@ R2_AURA = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-f
            "-rdp-xmas02-fsTa")  # fmt: skip
 R2_NOAURA = ("-rdp-xmas02-fsTn",)
 R2_PILOTS = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6")
+# Amendment O17 (round 3): its fresh held-out, the same bars (``--strata r3``)
+R3_PILOTS = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9")
+R3_AURA = (*R3_PILOTS, "-rdp-xmas02-fsTa3")
+R3_NOAURA = ("-rdp-xmas02-fsTn3",)
+STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS)}
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
 MINS = {
     "i1_recall": 40,
@@ -344,17 +349,17 @@ def on_suffix(sid: str, suffixes: Sequence[str]) -> bool:
     return any(sid.endswith(x) for x in suffixes)
 
 
-def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]]
-              ) -> dict[str, Any]:  # fmt: skip
+def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
+              rnd: str = "r2") -> dict[str, Any]:  # fmt: skip
     """PURE (O15): I1a (aura) and I1n (no aura) recall, each with its own minimum, the source
     counts and Batt's 95 % target; a crop of neither stratum refuses (fail closed)."""
     other = sorted({c["session"] for c in crops
-                    if not on_suffix(c["session"], R2_AURA + R2_NOAURA)})  # fmt: skip
+                    if not on_suffix(c["session"], STRATA[rnd][0] + STRATA[rnd][1])})  # fmt: skip
     if other:
-        raise SystemExit(f"--strata r2: crops of no stratum: {other}")
+        raise SystemExit(f"--strata {rnd}: crops of no stratum: {other}")
     out: dict[str, Any] = {}
-    for name, sfx, mins in (("aura", R2_AURA, MINS["i1_recall"]),
-                            ("no_aura", R2_NOAURA, MINS["i1n_recall"])):  # fmt: skip
+    for name, sfx, mins in (("aura", STRATA[rnd][0], MINS["i1_recall"]),
+                            ("no_aura", STRATA[rnd][1], MINS["i1n_recall"])):  # fmt: skip
         cs = [c for c in crops if on_suffix(c["session"], sfx)]
         r = i1_recall(cs, pred)
         r.update(ratio_bar(r["num"], r["den"], BARS["i1_recall"], mins, True))  # its own minimum
@@ -395,7 +400,8 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
     need = needed_keys(docs, crops)
     per: dict[str, Any] = {}
     verdicts: list[str] = []
-    pilots = docs if strata != "r2" else [d for d in docs if on_suffix(d["session"], R2_PILOTS)]
+    pilots = (docs if strata not in STRATA
+              else [d for d in docs if on_suffix(d["session"], STRATA[strata][2])])  # fmt: skip
     for name, doc in preds.items():
         pr = predictions(doc, need)
         r = {
@@ -405,8 +411,8 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
             "i3": i3(pilots, pr, anchor),
             "i4": i4(pilots, pr, anchor),
         }
-        if strata == "r2":
-            r["i1_strata"] = i1_strata(crops, pr)
+        if strata in STRATA:
+            r["i1_strata"] = i1_strata(crops, pr, strata)
             r["i1_recall"]["note"] = "pooled, reported only (O15: I1a / I1n decide)"
             i1v = [r["i1_strata"]["aura"]["verdict"], r["i1_strata"]["no_aura"]["verdict"]]
         else:
@@ -417,7 +423,7 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
                            r["i4"]["verdict"]]  # fmt: skip
     lat = i5(latency.get("gpu_ms"), latency.get("cpu"), latency.get("cpu_item"),
              latency.get("cpu_deployed"))  # fmt: skip
-    if strata == "r2":
+    if strata in STRATA:
         lat["gpu_call_reported"] = lat["gpu"]
         lat["gpu"] = i5_server(latency.get("gpu_server_item"), latency.get("gpu_server_deployed"))
     verdicts += [lat["gpu"]["verdict"], lat["cpu"]["verdict"]]
@@ -451,7 +457,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--cpu-latency", type=Path, default=None,
                     help="eval_latency.py output (or a bare {model: summary})")  # fmt: skip
     ap.add_argument("--cpu-item", default=None)
-    ap.add_argument("--strata", choices=("r2",), default=None, help="O15: round 2's strata")
+    ap.add_argument("--strata", choices=sorted(STRATA), default=None,
+                    help="O15 / O17: a round's strata")  # fmt: skip
     ap.add_argument(
         "--gpu-server",
         type=Path,
