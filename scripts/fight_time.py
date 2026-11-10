@@ -19,7 +19,9 @@ OFFLINE ground truth only (packets, ADR-0007): nothing here reaches a runner.
   0-3 s before it; the matched share.
 - L3 / L4 (--loot-first, rogue-xmas02.md 4AT; committed before p39 was scored): the runner's
   ``kill`` events followed by a ``loot_step`` with a list (``list_kills`` > 0) within 5 s, and
-  their share (L3; p38: 17 / 53); the ``engage`` events ended by a ``fight_end`` "quiet kill" in
+  their share (L3; p38: 17 / 53); since 4BG (before p47) also timed by the step's START
+  (``looted_share_start``, the event time minus its ``ms``: L3's judged value from p47 on);
+  the ``engage`` events ended by a ``fight_end`` "quiet kill" in
   under 50 ms, and their share of all engages (L4; p38: 1,057 / 1,144); the loot clicks by why
   (``list`` / ``sweep`` / ``scan_hand``).
 - Q1 / S1 (--quiet-scan, rogue-xmas02.md 4AW; committed before p42 was scored): the ``scan``
@@ -128,6 +130,12 @@ def loot_order(events: Sequence[dict[str, Any]], within_s: float = 5.0,
     steps = [int(e["t_ns"]) for e in events
              if e.get("kind") == "loot_step" and int(e.get("list_kills") or 0) > 0]  # fmt: skip
     looted = sum(any(0 <= t - k <= within_s * 1e9 for t in steps) for k in kills)
+    # L3 by the step's START (rogue-xmas02.md 4BG, from p47 on): the event is logged at the step's
+    # END (``t_ns``), so a step that picks items ends past 5 s although it began at once (p46: 11
+    # kills, start +0.79 s / end +5.78 s medians); its start = t_ns - ms
+    starts = [int(e["t_ns"]) - int(e.get("ms") or 0) * 1_000_000 for e in events
+              if e.get("kind") == "loot_step" and int(e.get("list_kills") or 0) > 0]  # fmt: skip
+    looted_s = sum(any(0 <= t - k <= within_s * 1e9 for t in starts) for k in kills)
     engages = sum(1 for e in events if e.get("kind") == "engage")
     instant = sum(1 for e0, e1 in zip(events, events[1:], strict=False)
                   if e0.get("kind") == "engage" and e1.get("kind") == "fight_end"
@@ -139,6 +147,8 @@ def loot_order(events: Sequence[dict[str, Any]], within_s: float = 5.0,
             why[str(e.get("why"))] = why.get(str(e.get("why")), 0) + 1
     return {"kills_looted_5s": looted, "kills_events": len(kills),
             "looted_share": round(looted / len(kills), 3) if kills else None,
+            "kills_looted_5s_start": looted_s,
+            "looted_share_start": round(looted_s / len(kills), 3) if kills else None,
             "engages": engages, "instant_ends": instant,
             "instant_share": round(instant / engages, 3) if engages else None,
             "loot_clicks_by": dict(sorted(why.items()))}  # fmt: skip

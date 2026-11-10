@@ -95,6 +95,20 @@ def test_loot_order_counts_looted_kills_and_instant_ends() -> None:
     assert got["loot_clicks_by"] == {"list": 1, "scan_hand": 1}
 
 
+def test_loot_order_by_the_steps_start() -> None:
+    """L3 by START (rogue-xmas02.md 4BG): a loot step logged at its END 6 s after the kill, that
+    began 0.8 s after it (ms 5200), counts by its start, not by its end (p46's 11 picking steps)."""
+    ev = [{"kind": "kill", "t_ns": 10 * S},
+          {"kind": "loot_step", "list_kills": 1, "ms": 5200, "t_ns": 16 * S},  # picked: ends late
+          {"kind": "kill", "t_ns": 30 * S},
+          {"kind": "loot_step", "list_kills": 1, "ms": 3000, "t_ns": 33 * S},  # in time both ways
+          {"kind": "kill", "t_ns": 50 * S},
+          {"kind": "loot_step", "list_kills": 1, "ms": 1000, "t_ns": 57 * S}]  # late both ways
+    got = ft.loot_order(ev)
+    assert got["kills_looted_5s"] == 1 and got["looted_share"] == round(1 / 3, 3)
+    assert got["kills_looted_5s_start"] == 2 and got["looted_share_start"] == round(2 / 3, 3)
+
+
 def test_quiet_scans_counts_defend_scans_without_a_hit_before_and_hits_taken() -> None:
     """Q1 / S1 (rogue-xmas02.md 4AW): a defend scan is quiet when no act on us came in the 5 s
     before its START (event time minus ms); S1 = damaging acts on us per 10 min of the run."""

@@ -1913,6 +1913,24 @@ Batt's answers to the 09:21 report (quoted, then in English):
 - **Decisions:** none ride on it. It is the base's confirmation run and the item data's held-out. A
   failed bar is studied, as for p41.
 
+### 4BG. Pilot p47 pre-registration: the base, unchanged, RECORDED as fiT2; L3 timed by the loot step's START (written BEFORE its run, 2026-11-10 11:22 ICT from `date`)
+
+- **Why:** O1's held-out needs a second fresh recorded base pilot (fiT2). p46's L3 study showed the
+  committed L3 times a loot step by its END, so steps that pick items fail it although they began at
+  once (p46: 11 kills, start +0.79 s / end +5.78 s medians).
+- **The L3 correction (from p47 on):** L3 = kills whose list loot step STARTED (event time minus its
+  `ms`) within 5 s: fight_time's `looted_share_start`, committed with a test before p47 runs. The
+  positive case: p46 50 / 65 by end -> 61 / 65 by start, as the study counted. The end-timed value
+  stays reported. The bar is unchanged (>= 80 %).
+- **The recorder:** `record_session.py --backend rdp --label hunt-xmas02-fiT2 --seconds 1620 --fps 1
+  --format png --max-bytes 6G`, started just before the runner, refused by name (O1), not opened,
+  shipped after the SET close.
+- **The run:** label `xmas02-p47`, 25 min, immunity OFF, the MVP dead by the schedule; the base as
+  p46 (p16 + `--reach-check --far-single --far-approach --explore --walk-pick --kill-gap --loot-first
+  --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2`).
+- **Bars:** 4BF's, pooled over p47 + p46 + p45 + p44 (W1 <= 2.0 %, R1 <= 6), with L3 by the start.
+- **Decisions:** none ride on it; a failed bar is studied.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
