@@ -3480,3 +3480,27 @@ score):**
   labels (fsTa, fsTn now; fiT4-fiT6 after their pilots), the pack (seed 66), two NEW blind
   labellers, the predictions, I5, `fi_eval.py --strata r2` once.
 
+### Amendment O15f (2026-11-11 00:39 ICT from `date`): the export, the registration, the staged held-out's labels and GPU predictions (NO score read)
+
+- **The ONNX export** (M9's recipe; the env script byte-identical, sha256 0b1db27c..., built in RAM,
+  removed after):
+  - `/dev/shm/poring-lab-detector/model/xmas02fi2-last-736x1280.onnx`, sha256 `7f148f3f63d56ddd...`;
+  - names `["floor_item"]` (d31e3c6c..., as round 1);
+  - copied to the NAS `archive/models/` (re-hashed).
+- **The run archived** (guarded `archive:`, size + count verified, local deleted):
+  `archive/train/xmas02-fi-r2-20261110`; its `last.pt` re-hashed e381d689 on the NAS.
+- **Registered:** `GPU_WEIGHTS["xmas02fi2"]` (d115127e, tested). It is NOT in MAP_MODELS. Since
+  p50 the detect server loads it and round 1's xmas02fi beside the map models (p50's listening
+  line names all five): a difference from p49's three, noted for D1.
+- **The held-out's `--eval-test` labels (the frozen e381d689 re-hashed; params v2):**
+  - fsTn (no aura): 113 kept frames, 422 labels, 39 floor items, 86 within 1 cell;
+  - fsTa (aura): 91 kept frames, 331 labels, 45 floor items, 91 within 1 cell.
+- **The GPU predictions on them** (predict_dir in the worker, conf 0.25, 1,534 frames,
+  `data/train/eval/xmas02fi2/pred-gpu-staged.json`): made 00:27-00:30.
+  - The ONNX set (`fi_onnx_pred.py`, committed 29d8876a) was started, then stopped at 500 / 1,534
+    so it would not load the host during p50 / p51; it is re-run whole after the pilots.
+  - Nothing of either prediction set has been compared with any label.
+- **The MVP window:** `@mobsearch` "1[dead]" from 00:21 (the stagings killed it at an unknown
+  time). The 3-min poll read it alive at 00:36:09 ([123:43]); `@killmonster2` at 00:37:03, then
+  "1[dead]". So p50 + p51 run before 01:37.
+
