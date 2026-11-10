@@ -3587,7 +3587,7 @@ STAYS DEPLOYED for the base (4BC).**
 - E1 157.6 / h is the base's best 25-min run so far (p40-p42: 136-154 / h); one run, not a claim
   that the new model caused it.
 
-**Study after p44 (2026-11-10 ~09:1x ICT; offline, the banked p40 / p41 / p42 / p44 sessions; DECIDES
+**Study after p44 (2026-11-10 08:5x ICT from `date`; offline, the banked p40 / p41 / p42 / p44 sessions; DECIDES
 NOTHING): where the base's time goes now.** `scripts/time_budget.py session SID --map xmas_dun02`
 (one label per instant, from the packets; its definitions as committed), then a per-kill split of the
 after-fight time (packets: our target's death vanish, the `floor_item_appear` packets of its drop;
@@ -3627,14 +3627,14 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
   - The frames: a pilot recorded at 1 fps (~3.3 GB a 25-min run; ~10-14 drops a run, each on the
     floor for ~3-4 s) or immune watches with staged drops.
   - Then T2 (a blind check on item crops), a retrain and the held-out score, as Amendment M.
-  - **Data already banked (counted ~09:4x):** five 1-fps hunt recordings with packets hold 87
+  - **Data already banked (counted 08:58):** five 1-fps hunt recordings with packets hold 87
     floor items in 6,180 frames:
     - p20 17 items / 1,200 frames, p30 7 / 300, p31 25 / 1,440, p38 16 / 1,620, p39 22 / 1,620;
     - they are not in the monster detector's splits, but p31 / p38 / p39 are the boss recognizer's
       negatives, DEV and HELD-OUT (stormy-knight-recognizer.md R2);
     - enough for a first label rule and its FIT check. A fresh recorded pilot would be the floor
       items' held-out.
-- **The idle inside the search (p44, studied ~09:3x):** 174.7 s in 230 spans (median 0.38 s); 219
+- **The idle inside the search (p44, studied 08:5x):** 174.7 s in 230 spans (median 0.38 s); 219
   of them end with our next walk click.
   - 187 spans with no runner event (77 s): the hand-off between walks. The walk decision runs every
     1.2 s and clicks 7 path cells ahead (`--walk-every`, `--walk-ahead`). The clicks came a median
