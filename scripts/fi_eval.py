@@ -30,6 +30,16 @@ is its centre minus the frozen anchor (O.1b: the drawn centre = the projected po
   box whose cell point lies in the death cell's 3 x 3 in <= 5 % of them (>= 40 kills).
 - I5 latency: the GPU call p95 <= 35 ms (predict_dir --timing, >= 200 calls); the CPU ONNX p95 <=
   1.10 x the deployed xmas02gb's in ONE interleaved run (scripts/eval_latency.py, >= 200 each).
+
+ROUND 2 (Amendment O15, 2026-11-10 night; ``--strata r2``, the tests written before any score):
+- I1 recall by STRATUM, each >= 0.85: I1a, the AURA (the Base 99 Rogue: the pilots fiT4-fiT6 and
+  the near staging fsTa, pooled, >= 40 crops) and I1n, NO AURA (the Base 60 Crusader's near
+  staging fsTn, >= 30 crops). Each source's count is reported, and Batt's 95 % beside each
+  stratum (a target, not a bar). The pooled I1 recall is reported only.
+- I2, I3 and I4 read the pilots (fiT4-fiT6) only; I1 precision reads all five.
+- I5 GPU (O14 had no verdict: its call-time harness adds ~35 ms to every model): the detect
+  server's forward p95 (scripts/fi_gpu_latency.py, one model a run, the same frames), <= 1.10 x
+  the deployed xmas02gb's AND <= 35 ms, on >= 200 calls each (``--gpu-server``).
 OFFLINE: JSON files only (no pixel, no packet read here, no GPU).
 """
 
@@ -57,8 +67,15 @@ BARS = {
     "i5_gpu_p95_ms": 35.0,
     "i5_cpu_ratio": 1.10,
 }
+# Amendment O15 (round 2): the strata by session NAME (map_labels.XMAS02_FIT)
+R2_AURA = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
+           "-rdp-xmas02-fsTa")  # fmt: skip
+R2_NOAURA = ("-rdp-xmas02-fsTn",)
+R2_PILOTS = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6")
+R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
 MINS = {
     "i1_recall": 40,
+    "i1n_recall": 30,
     "i1_precision": 40,
     "i2": 20,
     "i3_any": 200,
@@ -323,29 +340,86 @@ def predictions(doc: Mapping[str, Any], need: set[str]) -> dict[str, list[list[f
     return {k: boxes_of(frames[k]) for k in need}
 
 
+def on_suffix(sid: str, suffixes: Sequence[str]) -> bool:
+    return any(sid.endswith(x) for x in suffixes)
+
+
+def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]]
+              ) -> dict[str, Any]:  # fmt: skip
+    """PURE (O15): I1a (aura) and I1n (no aura) recall, each with its own minimum, the source
+    counts and Batt's 95 % target; a crop of neither stratum refuses (fail closed)."""
+    other = sorted({c["session"] for c in crops
+                    if not on_suffix(c["session"], R2_AURA + R2_NOAURA)})  # fmt: skip
+    if other:
+        raise SystemExit(f"--strata r2: crops of no stratum: {other}")
+    out: dict[str, Any] = {}
+    for name, sfx, mins in (("aura", R2_AURA, MINS["i1_recall"]),
+                            ("no_aura", R2_NOAURA, MINS["i1n_recall"])):  # fmt: skip
+        cs = [c for c in crops if on_suffix(c["session"], sfx)]
+        r = i1_recall(cs, pred)
+        r.update(ratio_bar(r["num"], r["den"], BARS["i1_recall"], mins, True))  # its own minimum
+        by_src: dict[str, list[int]] = {}
+        for c in cs:
+            src = next(x for x in sfx if c["session"].endswith(x)).rsplit("-", 1)[-1]
+            hit = f"{c['session']}:{c['frame_id']}:{c.get('floor_id')}" not in r["missed"]
+            by_src.setdefault(src, [0, 0])
+            by_src[src][0] += hit
+            by_src[src][1] += 1
+        r["by_source"] = {k: {"hit": v[0], "n": v[1]} for k, v in sorted(by_src.items())}
+        r["target_095"] = None if r["share"] is None else r["share"] >= R2_TARGET
+        out[name] = r
+    return out
+
+
+def i5_server(fi: Mapping[str, Any] | None, gb: Mapping[str, Any] | None) -> dict[str, Any]:
+    """PURE (O15): the detect server's forward p95 of the item model vs the deployed xmas02gb's
+    (fi_gpu_latency.py summaries {n, p95, ...}): <= 1.10 x AND <= 35 ms, >= 200 calls each."""
+    if fi is None or gb is None:
+        return {"verdict": "NO_VERDICT", "why": "no --gpu-server"}
+    n = min(int(fi.get("n", 0)), int(gb.get("n", 0)))
+    ratio = float(fi["p95"]) / float(gb["p95"]) if n and float(gb["p95"]) > 0 else None
+    ok = (ratio is not None and ratio <= BARS["i5_cpu_ratio"]
+          and float(fi["p95"]) <= BARS["i5_gpu_p95_ms"])  # fmt: skip
+    v = "NO_VERDICT" if n < MINS["i5"] or ratio is None else "PASS" if ok else "FAIL"
+    return {"n": n, "item_p95_ms": fi.get("p95"), "deployed_p95_ms": gb.get("p95"),
+            "ratio": None if ratio is None else round(ratio, 4), "bar_ratio": BARS["i5_cpu_ratio"],
+            "bar_ms": BARS["i5_gpu_p95_ms"], "min_rows": MINS["i5"], "verdict": v}  # fmt: skip
+
+
 def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str, Any]],
              crops: Sequence[Mapping[str, Any]], anchor: Sequence[float],
-             latency: Mapping[str, Any]) -> dict[str, Any]:  # fmt: skip
+             latency: Mapping[str, Any], strata: str | None = None) -> dict[str, Any]:  # fmt: skip
     """PURE: every bar for every prediction set, and the verdict (PASS only when every bar of
-    every set passes; any NO_VERDICT and no FAIL: NO_VERDICT)."""
+    every set passes; any NO_VERDICT and no FAIL: NO_VERDICT). ``strata`` "r2" (O15): I1 by
+    stratum, I2-I4 on the pilots only, I5 GPU from the detect server's forward time."""
     need = needed_keys(docs, crops)
     per: dict[str, Any] = {}
     verdicts: list[str] = []
+    pilots = docs if strata != "r2" else [d for d in docs if on_suffix(d["session"], R2_PILOTS)]
     for name, doc in preds.items():
         pr = predictions(doc, need)
         r = {
             "i1_recall": i1_recall(crops, pr),
             "i1_precision": i1_precision(docs, pr, anchor),
-            "i2": i2(docs, pr),
-            "i3": i3(docs, pr, anchor),
-            "i4": i4(docs, pr, anchor),
+            "i2": i2(pilots, pr),
+            "i3": i3(pilots, pr, anchor),
+            "i4": i4(pilots, pr, anchor),
         }
+        if strata == "r2":
+            r["i1_strata"] = i1_strata(crops, pr)
+            r["i1_recall"]["note"] = "pooled, reported only (O15: I1a / I1n decide)"
+            i1v = [r["i1_strata"]["aura"]["verdict"], r["i1_strata"]["no_aura"]["verdict"]]
+        else:
+            i1v = [r["i1_recall"]["verdict"]]
         per[name] = r
-        verdicts += [r["i1_recall"]["verdict"], r["i1_precision"]["verdict"], r["i2"]["verdict"],
-                     r["i3"]["any"]["verdict"], r["i3"]["around_5x5"]["verdict"],
-                     r["i4"]["verdict"]]  # fmt: skip
+        verdicts += i1v + [r["i1_precision"]["verdict"], r["i2"]["verdict"],
+                           r["i3"]["any"]["verdict"], r["i3"]["around_5x5"]["verdict"],
+                           r["i4"]["verdict"]]  # fmt: skip
     lat = i5(latency.get("gpu_ms"), latency.get("cpu"), latency.get("cpu_item"),
              latency.get("cpu_deployed"))  # fmt: skip
+    if strata == "r2":
+        lat["gpu_call_reported"] = lat["gpu"]
+        lat["gpu"] = i5_server(latency.get("gpu_server_item"), latency.get("gpu_server_deployed"))
     verdicts += [lat["gpu"]["verdict"], lat["cpu"]["verdict"]]
     v = "FAIL" if "FAIL" in verdicts else "NO_VERDICT" if "NO_VERDICT" in verdicts else "PASS"
     return {"per_predictions": per, "i5": lat, "verdict": v}
@@ -377,6 +451,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--cpu-latency", type=Path, default=None,
                     help="eval_latency.py output (or a bare {model: summary})")  # fmt: skip
     ap.add_argument("--cpu-item", default=None)
+    ap.add_argument("--strata", choices=("r2",), default=None, help="O15: round 2's strata")
+    ap.add_argument(
+        "--gpu-server",
+        type=Path,
+        nargs=2,
+        default=None,
+        metavar=("ITEM", "DEPLOYED"),
+        help="O15: fi_gpu_latency.py outputs, the item model's then xmas02gb's",
+    )
     ap.add_argument("--cpu-deployed", default=None)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
@@ -400,7 +483,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if a.cpu_latency is not None:
         latency["cpu"] = cpu_latency_models(json.loads(a.cpu_latency.read_text()))
-    res = evaluate(docs, preds, crops, anchor, latency)
+    if a.gpu_server is not None:
+        fi_d, gb_d = (json.loads(p.read_text())["models"] for p in a.gpu_server)
+        latency["gpu_server_item"] = next(iter(fi_d.values()))["server"]
+        latency["gpu_server_deployed"] = next(iter(gb_d.values()))["server"]
+    res = evaluate(docs, preds, crops, anchor, latency, a.strata)
     res.update(
         {
             "what": "O.9: the floor-item model's bars I1-I5",

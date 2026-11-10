@@ -259,3 +259,40 @@ def test_cpu_latency_reads_eval_latencys_own_output() -> None:
     assert fe.cpu_latency_models(summ) == summ
     out = fe.i5(None, fe.cpu_latency_models({"ms": summ}), "fi", "gb")["cpu"]
     assert out["ratio"] == round(757.3 / 726.1, 4)
+
+
+def _crop(sid: str, fid: int, box: list[float]) -> dict[str, Any]:
+    return {"session": sid, "frame_id": fid, "floor_id": fid, "box": box}
+
+
+def test_o15_i1_strata_split_aura_and_no_aura() -> None:
+    """O15: I1a (aura: fiT4-6 + fsTa, >= 40) and I1n (no aura: fsTn, >= 30), each >= 0.85, with
+    the sources counted and Batt's 95 % beside them; a crop of neither stratum refuses."""
+    box = [10.0, 10.0, 30.0, 30.0]
+    a1, a2 = "20261111T020000-rdp-hunt-xmas02-fiT4", "20261110T233000-rdp-xmas02-fsTa"
+    n1 = "20261110T230000-rdp-xmas02-fsTn"
+    crops = ([_crop(a1, i, box) for i in range(20)] + [_crop(a2, 100 + i, box) for i in range(20)]
+             + [_crop(n1, 200 + i, box) for i in range(30)])  # fmt: skip
+    pred = {fe.frame_key(c["session"], c["frame_id"]): [box] for c in crops}
+    for c in crops[:2] + crops[40:45]:  # 2 aura misses (38 / 40), 5 no-aura misses (25 / 30)
+        pred[fe.frame_key(c["session"], c["frame_id"])] = []
+    got = fe.i1_strata(crops, pred)
+    assert got["aura"]["num"] == 38 and got["aura"]["verdict"] == "PASS"
+    assert got["aura"]["target_095"] is True
+    assert got["aura"]["by_source"] == {"fiT4": {"hit": 18, "n": 20}, "fsTa": {"hit": 20, "n": 20}}
+    assert got["no_aura"]["num"] == 25 and got["no_aura"]["verdict"] == "FAIL"
+    assert got["no_aura"]["min_rows"] == 30
+    short = fe.i1_strata(crops[:40] + crops[40:60], pred)  # 20 no-aura crops: under 30
+    assert short["no_aura"]["verdict"] == "NO_VERDICT"
+    with pytest.raises(SystemExit, match="no stratum"):
+        fe.i1_strata([_crop("20261110T105312-rdp-hunt-xmas02-fiT1", 1, box)], pred)
+
+
+def test_o15_i5_gpu_is_the_server_forward_time_against_the_deployed() -> None:
+    fi, gb = {"n": 300, "p95": 16.51}, {"n": 300, "p95": 16.85}  # O14's own numbers
+    got = fe.i5_server(fi, gb)
+    assert got["verdict"] == "PASS" and got["ratio"] == round(16.51 / 16.85, 4)
+    assert fe.i5_server({"n": 300, "p95": 19.0}, gb)["verdict"] == "FAIL"  # 1.13 x
+    assert fe.i5_server({"n": 300, "p95": 36.0}, {"n": 300, "p95": 35.0})["verdict"] == "FAIL"
+    assert fe.i5_server({"n": 150, "p95": 16.0}, gb)["verdict"] == "NO_VERDICT"
+    assert fe.i5_server(None, gb)["verdict"] == "NO_VERDICT"
