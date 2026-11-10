@@ -3241,6 +3241,17 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - fi_eval reads `--cpu-latency` as `{model: summary}`. eval_latency writes it under `"ms"`, so
     its `"ms"` block was passed as it is (no number changed; the file is archived);
   - fi_eval accepts GPU timing only in predict_dir's format. Both are follow-ups for the tool.
+  - ➡️ 20:19 ICT (from `date`): the first is FIXED in 212fa291 (`cpu_latency_models` reads the
+    `"ms"` block itself). Re-scoring from the raw latency-cpu.json gave a byte-identical
+    fi-eval.json. The GPU-timing format stays as it is: I5 GPU needs a new harness first.
+- **The evidence (archived 20:19 ICT, sha256 205 / 205 verified in the NAS copy, then deleted
+  locally):** `scratch-archive/2026-11-10/fi-eval/`:
+  - `xmas-fi/`: labels-v2, params, the eval label files, i5/ (serve log, latencies),
+    onnx/ (onnx_pred.py, gpu_latency.py), fi-eval.json;
+  - `blind-fi63/`: the blind pack, its answers, key and score;
+  - `pred-xmas02fi/`: refs.json, pred-gpu.json, pred-onnx.json;
+  - `SHA256SUMS`.
+  The weights stay at `/datasets/archive/train/xmas02-fi-20261110/`.
 - **For Batt (a round 2 would need its own amendment):**
   - more TRAIN drops ON and NEXT TO her: staged piles viewed from her own cell, and kills'
     drops from recorded pilots;
