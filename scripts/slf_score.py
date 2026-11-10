@@ -143,13 +143,14 @@ def span_row(sp: Mapping[str, Any], reads: Sequence[Mapping[str, Any]], rt: Sequ
     lf = sp["last_fresh"] if sp["last_fresh"] is not None else a
     fails = sp["fails"]
     i = bisect.bisect_left(rt, a)
-    prev_gap = round((a - rt[i - 1]) / NS, 2) if i > 0 else None
+    prev_raw = (a - rt[i - 1]) / NS if i > 0 else None  # compared unrounded (1.004 s is late)
+    prev_gap = None if prev_raw is None else round(prev_raw, 2)
     first = fails[0]
     if "held_dt" in first:  # LF-1 logged PosConfirm's own dt (None = no read before it)
         dt = first["held_dt"]
         late_by, basis = dt is None or dt > LATE_S, "lf1"
     else:
-        late_by, basis = prev_gap is None or prev_gap > LATE_S, "main_gap"
+        late_by, basis = prev_raw is None or prev_raw > LATE_S, "main_gap"
     unconfirmed_only = all(r["rd"] == "unconfirmed" for r in fails)
     true0 = track.us(first["t_ns"]) if track is not None else None
     return {
