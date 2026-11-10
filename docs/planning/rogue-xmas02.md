@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "4BL (2026-11-10 21:1x): LF-2 (--late-confirm) JOINED THE BASE (Batt); p50 = LF-4 (--unread-step) pre-registered (4BM, recorded fiT4), after the floor-item round-2 training; Study S-LS (late strikes) running."
+next_action: "2026-11-11 night: LF-2 (--late-confirm) and LS-2 (--still-target, p52+p53: late-failed strikes 11.7 -> 3 a run) are IN THE BASE; LF-4 (--unread-step) stays OFF (never came due in p50/p51: Batt). p53 found a 3-cell light misread at (104,192) (LF-5 family)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -4655,3 +4655,47 @@ ICT from `date`.**
   (2.4).
 - **Next:** p52 + p53 (4BO), the base (LF-2) + `--still-target`, LF-4 OFF, in the next MVP window.
 
+**Pilots p52 + p53 (4BO: the base + `--still-target`, LS-2; LF-4 OFF), written 2026-11-11 02:38 ICT
+from `date`.**
+- **The runs:**
+  - the MVP was polled alive at 01:38:40 ([93:143], ~61.6 min after 00:37:03) and killed 01:39:37
+    ("1[dead]");
+  - p52 01:40:43-02:06:28, recorded fiT6; p53 02:09:10-02:34:56, not recorded;
+  - both rc 0, immunity OFF / ON read each time. The run record: `"still_target": [10.0, 0.25,
+    2.5, "9.23"]`.
+- **VERDICT: every 4BO bar passes in the pool -> `--still-target` JOINS THE BASE (4BO's
+  decision).** The late-failed box strikes fell from 11.7 a run (the base) and 11 in p50 / p51 to
+  3 + 3.
+
+| | base p40-p49 (a run) | p50 / p51 (no LS-2) | **p52** | **p53** | bar (pooled p52 + p53) |
+|---|---|---|---|---|---|
+| M1 late-FAILED box strikes (`late_strike.py`, held strikes timed from their last grab) | 11.7 (6-17) | 11 / 11 | **3** | **3** | **6 <= 12: PASS** |
+| late strikes / targeted | 25.8 % | 18.9 % / 26.9 % | **3 / 63 (4.8 %)** | **4 / 52 (7.7 %)** | reported |
+| time lost to failed late strikes | 117 s | 92.0 / 116.9 s | **23.0 s** | **28.5 s** | reported |
+| M2 hold time a run / holds ending timeout | - | - | **12.8 s / 1 of 11** | **19.3 s / 4 of 17** | <= 60 s; 5 / 28 = 17.9 % <= 25 %: PASS |
+| press checks: strike / not_still / still (held, re-struck) / timeout / lost / no_match | - | - | **35 / 19 / 9 / 1 / 1 / 3** | **31 / 8 / 13 / 4 / 0 / 1** | reported |
+| M3 box strikes / failed ON-TIME | 57-78 / 0-4 | 77, 67 / 2, 3 | **66 / 3** | **52 / 1** | >= 50, <= 4 a run: PASS |
+| E1 kills | 129.6-158.4 / h | 163.1 / 165.3 | **65 (155.9 / h)** | **55 (132.0 / h)** | >= 80 / h: PASS (no-harm) |
+| deaths / lowest HP / Fly Wings / stalls | | 0 / 82-87 % / 0 / 1-2 | **0 / 60.6 % / 0 / 0** | **0 / 68.6 % / 0 / 0** | E3, deaths 0: PASS |
+| W1 unsent walk clicks | | 5 / 216, 3 / 253 | **8 / 268** | **6 / 404**; pooled p53 + p52 + p51 + p50 = 22 / 1,141 (1.93 %) | <= 2.0 %: PASS |
+| R1-A | | 1, 0 | **3** | **0**; pooled = 4 | < 7: PASS |
+| L1 / L3 (start) / L4 | | | **100 % (23 / 23) / 93.9 % / 0 of 94** | **81.8 % (9 / 11) / 88.7 % / 0 of 76** | PASS |
+| K1 / K3 / Q1 | | | **1.98 s / 93.9 % / 4** | **1.99 s / 98.1 % / 3** | PASS |
+| U1 / D1 p95 / P2 | | | **15.8 s / 22.1 ms / 0** | **0 s / 22.0 ms / 0** | PASS |
+| reported (LF-2's guards, not 4BO's bars): M1 / M2 / M3 wrong standing | | 2, 0 / 0, 3 / 0, 1 | **0 / 2 / 0** | **0 / 8 / 14** | - |
+
+- **p53's 14 wrong standing reads, studied (they are not LS-2's):**
+  - all 14 are ONE episode, 894.5-897.1 s;
+  - the light reader read (104,189) steadily while she stood on (104,192) (packets), a 3-cell
+    misread; no jump (PosConfirm held it);
+  - it came in a fight after a box strike whose press check ended `not_still` (no D2, no hold:
+    LS-2 did nothing), and lasted until the "no hits" unlock at 897.1 s;
+  - so it is the light-floor reader on one spot, S-LF's dead-cell family (LF-5), not the hold.
+    Reported to Batt beside the verdict.
+- **p53's E1 (132.0 / h)** came with the night's lowest supply: monsters seen 22.0 per 10 min (p50-p52:
+  27.6-32.3), kills per sighting 1.0. E1 is a no-harm bar here, and it passes.
+- **The new base from p54:** 4BL's + `--still-target`. LF-4 stays OFF (4BM).
+- **Items per hour (x 60 / 25):** p52: Scell 15 (36.0), Zargon 14 (33.6), Well-baked Cookie 6 (14.4),
+  Piece of Cake, Manacles 5 (12.0), Red Herb, Candy, Candy Cane 2 (4.8), Rough Oridecon, Iron, Chef
+  King Orleans Vol.1 1 (2.4). p53: Scell 12 (28.8), Zargon 11 (26.4), Piece of Cake 4 (9.6), Red Herb 3
+  (7.2), Candy, Well-baked Cookie, Pearl, Iron, Manacles 1 (2.4).
