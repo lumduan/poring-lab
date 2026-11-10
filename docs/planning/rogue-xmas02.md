@@ -2085,6 +2085,50 @@ the detect server, come after the training):
   - no escape came due in either run -> it stays OFF as "harmless, unproven", for Batt;
   - a bar failing -> studied, stays off.
 
+### 4BN. Pilot p51 pre-registration: --unread-step REPEATED, recorded as fiT5 (written BEFORE either LF-4 run, 22:20 ICT from `date`)
+
+- As 4BM, unchanged: the base + `--unread-step`, label `xmas02-p51`, 25 min, recorded `--label
+  hunt-xmas02-fiT5`. W1 and R1-A are pooled over p51 + p50 + p49 + p48.
+- 4BM's decision is taken on p50 + p51 together.
+
+### 4BO. Pilots p52 + p53 pre-registration: --still-target (LS-2, dungeon@9.23), two runs pooled; p52 recorded as fiT6 (written BEFORE either run, 22:20 ICT from `date`)
+
+- **Authority:** Batt's 4BL item 4, to make the strike click land before the monster walks off.
+  LS-2 is Study S-LS's first proposal. It keeps every click SWORD-verified and does not reopen the
+  lead Batt dropped (LS-1 stays his decision).
+- **The change** (01702924, OFF by default; Study S-LS's sketch, with the builder's six recorded
+  additions):
+  - at the box target's SWORD read, ONE more detection D2;
+  - the matched box's foot moved < 10 px: strike as today;
+  - otherwise hold: a fresh detection every 0.25 s until two shifts in a row are < 10 px (`still`:
+    re-hover, strike only on a SWORD read), 2.5 s (`timeout`), no match (`lost`) or an escape
+    (`escaped`). The last three strike nothing (the ring scan or the next box follows);
+  - a D2 that cannot judge (none, no match) strikes as today;
+  - the held box passes box_target's own selection gates before the re-hover;
+  - refused without `--box-strike --box-now --still-strike`, or with `--lead-strike`.
+- **The runs:** the base (4BL) + `--still-target`. Labels `xmas02-p52` (recorded `--label
+  hunt-xmas02-fiT6`, 1,620 s) and `xmas02-p53` (not recorded). 25 min each, the MVP dead by the
+  schedule, immunity OFF. They run AFTER p50 / p51 (LF-4) and before the floor-item evaluation.
+  If LF-4 joins the base by 4BM, p52 / p53 carry it too, and the report says so.
+- **The scorer:** `late_strike.py score`, extended BEFORE p52 so a held strike is timed from its
+  LAST matched grab (`press.box_end`, `press.end_gap_ms`), with a test. The base's numbers are
+  unchanged by it (no `press` field before 9.23).
+- **Bars (pooled over p52 + p53, against the nine base runs p40-p49 without p43):**
+  - **M1, the mechanism:** late-FAILED box strikes <= 12 over the two runs. The base: 105 in 9
+    runs, 11.7 a run (6-17); P(<= 12 | 23.3) ~ 0.01;
+  - **M2, its cost:** hold time <= 60 s a run, and holds ending `timeout` <= 25 % of holds;
+  - **M3, no harm:**
+    - box strikes >= 50 a run (the base 57-78);
+    - failed ON-TIME box strikes <= 4 a run (the base 0-4);
+    - the base's bars: W1 and R1-A pooled over p53 + p52 + the two runs before, L1, L3, L4, K1,
+      K3, E1 >= 80 / h, U1, D1, Q1, P2, E3, deaths 0;
+  - **reported:** the walker flag against the packets (flagged and moving between D1 and D2); D2's
+    cost; the hold ends (still / timeout / lost / escaped); `lost_px` (a walking Cookie may leave
+    the 40-px match); the lost seconds a run (the base 117); E1 against 129.6-158.4 / h (LS-2's
+    expected ~+4 kills / h lies inside that noise, so E1 is a no-harm bar here).
+- **Decision:** every bar passes in the pool -> `--still-target` JOINS THE BASE. M1 failing ->
+  studied. An M3 failure -> stays off and is studied.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
