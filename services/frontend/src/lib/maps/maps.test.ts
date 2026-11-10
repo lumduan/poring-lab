@@ -12,7 +12,7 @@ import type { Flow } from "../flow/ir.ts";
 import { oneMapStarter, starterFlow } from "../flow/starter.ts";
 import { addMapNode, blockName, centreCell, oneMapFlow, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
-import { mapsGraph } from "./graph.ts";
+import { fitViewport, followCentre, mapsGraph } from "./graph.ts";
 import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, trailAt, walkSeconds } from "./play.ts";
 import { ACCOUNTS, DEFAULT_SESSION, parseSession, SERVERS, sessionLength, sessionProblems, sessionPython, sessionSteps } from "./session.ts";
 
@@ -307,4 +307,41 @@ test("the graph's smallest text stays >= 11 px at the fit's 0.85 zoom; the playb
   const bar = /\.mat-playback\s*\{([^}]*)\}/.exec(css)![1];
   assert.match(bar, /background:\s*var\(--surface\);/);
   assert.match(css, /\.maps-page\[data-run="true"\] \.maps-bar-spacer\s*\{[^}]*height:\s*calc\(2\.5rem \+ 16px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+});
+
+// --- round 4 (2026-11-10): the graph's view never animates over a zero-size (folded) box ---------
+test("the fit: within the zoom limits, START at the left when too wide; null for no box or NaN", () => {
+  const bounds = { x: 0, y: 70, width: 1300, height: 300 };
+  const wide = fitViewport({ width: 1400, height: 400 }, bounds, 0.85, 1.2, 24);
+  assert.ok(wide && !wide.overflow && wide.viewport.zoom <= 1.2 && wide.viewport.zoom >= 0.85);
+  const narrow = fitViewport({ width: 390, height: 320 }, bounds, 0.85, 1.2, 24)!;
+  assert.equal(narrow.overflow, true);
+  assert.deepEqual(narrow.viewport.zoom, 0.85);
+  assert.equal(narrow.viewport.x, 24); // the graph's left edge (START) at the pad
+  // folded (display: none) or not laid out: nothing to fit
+  assert.equal(fitViewport({ width: 0, height: 0 }, bounds, 0.85, 1.2, 24), null);
+  assert.equal(fitViewport({ width: 40, height: 40 }, bounds, 0.85, 1.2, 24), null); // smaller than the pads
+  assert.equal(fitViewport({ width: 800, height: 400 }, { ...bounds, width: 0 }, 0.85, 1.2, 24), null);
+  for (const bad of [NaN, Infinity]) {
+    assert.equal(fitViewport({ width: bad, height: 400 }, bounds, 0.85, 1.2, 24), null);
+    assert.equal(fitViewport({ width: 800, height: 400 }, { ...bounds, x: bad }, 0.85, 1.2, 24), null);
+  }
+});
+
+test("following the playback's node: a pan only when it is out of view and every number is finite", () => {
+  const box = { width: 800, height: 300 };
+  const vp = { x: 0, y: 0, zoom: 1 };
+  assert.equal(followCentre(box, vp, { x: 100, y: 50, width: 220, height: 120 }), null); // in view
+  assert.deepEqual(followCentre(box, vp, { x: 900, y: 50, width: 220, height: 120 }), { x: 1010, y: 110, zoom: 1 });
+  // the folded graph: a 0 x 0 box never pans (an animated pan over it made the zoom NaN)
+  assert.equal(followCentre({ width: 0, height: 0 }, vp, { x: 900, y: 50, width: 220, height: 120 }), null);
+  for (const bad of [NaN, Infinity, -Infinity]) {
+    assert.equal(followCentre(box, { ...vp, zoom: bad }, { x: 900, y: 50, width: 220, height: 120 }), null);
+    assert.equal(followCentre(box, vp, { x: bad, y: 50, width: 220, height: 120 }), null);
+    assert.equal(followCentre({ width: bad, height: 300 }, vp, { x: 900, y: 50, width: 220, height: 120 }), null);
+  }
+  assert.equal(followCentre(box, { ...vp, zoom: 0 }, { x: 900, y: 50, width: 220, height: 120 }), null);
+  // every pan target it does give is finite
+  const c = followCentre(box, { x: -500, y: 20, zoom: 0.85 }, { x: 40, y: 70, width: 210, height: 140 })!;
+  assert.ok([c.x, c.y, c.zoom].every(Number.isFinite));
 });

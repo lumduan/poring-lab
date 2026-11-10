@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 (4 small items + the graph fold: section 11) not committed yet."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 (a NaN console bug: section 12) not committed yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Parent: commit round 3; matpilot: a look at section 11's five changes. Batt: section 9's questions."
+next_action: "Parent: commit round 4; matpilot: recount the NaN messages during a folded run (expected 0). Batt: section 9's questions."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -276,4 +276,18 @@ Checks:
   no fold button before a run.
 - Not seen in a browser here: the fold, the centred zoom and the phone overlay (matpilot's eyes
   again).
+
+## 12. Round 4 (2026-11-10): the NaN `<circle>` during a run
+
+- **The bug:** React logged "Received NaN for the cx / cy / r attribute" during a run (matpilot
+  counted 23 in the first 1.5 s, then 127).
+- **The cause:** the only `<circle>` is React Flow's background dot (r = zoom / 2). While the graph
+  is FOLDED (display: none, a 0 x 0 box), the follow-the-playback pan called `setCenter` with a
+  300 ms animation. d3-zoom interpolates over the view's width, and with a width of 0 every frame
+  is NaN (`log(0 / 0)`; reproduced in node: `[NaN, NaN, NaN]` at t = 0.5). So the zoom, and the
+  dot, were NaN on every frame of each pan.
+- **The fix:** the fit and the pan are pure functions in lib/maps/graph.ts (`fitViewport`,
+  `followCentre`). They return null for a box with no size or for any non-finite number, and then
+  nothing moves the view. Unfolding re-fits from the real size.
+- **Tests:** 2 new unit tests (268 pass).
 

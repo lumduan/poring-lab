@@ -38,7 +38,7 @@ import type { LintDoc, Trace } from "@/lib/flow/api";
 import type { GEdge, XY } from "@/lib/flow/canvas";
 import type { AuthoredExit, Flow, MapBlock } from "@/lib/flow/ir";
 import { blockRunLine, edgeRuns, lintLine, lintOf } from "@/lib/flow/status";
-import { mapsGraph, type MapsNodeData } from "@/lib/maps/graph";
+import { fitViewport, followCentre, mapsGraph, type MapsNodeData } from "@/lib/maps/graph";
 import { ACCOUNTS, serverOf, type Session, slotText } from "@/lib/maps/session";
 
 const PORTS: { kind: AuthoredExit; label: string }[] = [
@@ -249,19 +249,11 @@ function MapsCanvas(p: MapsCanvasProps) {
     if (!inst || !el || !el.clientWidth || !el.clientHeight) return;
     const ns = inst.getNodes();
     if (!ns.length) return;
-    const b = inst.getNodesBounds(ns);
-    if (!(b.width > 0 && b.height > 0)) return;
-    const cw = el.clientWidth;
-    const ch = el.clientHeight;
-    const z = Math.min(MAX_ZOOM, (cw - 2 * PAD) / b.width, (ch - 2 * PAD) / b.height);
-    if (z >= MIN_ZOOM) {
-      setOverflow(false);
-      void inst.setViewport({ x: (cw - b.width * z) / 2 - b.x * z, y: (ch - b.height * z) / 2 - b.y * z, zoom: z }, { duration: 250 });
-      return;
-    }
-    setOverflow(true);
-    const y = b.height * MIN_ZOOM <= ch - 2 * PAD ? (ch - b.height * MIN_ZOOM) / 2 - b.y * MIN_ZOOM : PAD - b.y * MIN_ZOOM;
-    void inst.setViewport({ x: PAD - b.x * MIN_ZOOM, y, zoom: MIN_ZOOM }, { duration: 250 });
+    // round 4: null while folded (0 x 0) or for any non-finite number: nothing is animated then
+    const f = fitViewport({ width: el.clientWidth, height: el.clientHeight }, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
+    if (!f) return;
+    setOverflow(f.overflow);
+    void inst.setViewport(f.viewport, { duration: 250 });
   }, []);
   useEffect(() => {
     const t = setTimeout(fit, 120);
@@ -288,15 +280,15 @@ function MapsCanvas(p: MapsCanvasProps) {
     if (!inst || !el || !activeNode) return;
     const n = inst.getInternalNode(activeNode);
     if (!n) return;
-    const { x, y, zoom } = inst.getViewport();
-    const nw = n.measured.width ?? 220;
-    const nh = n.measured.height ?? 120;
     const at = n.internals.positionAbsolute;
-    const px = at.x * zoom + x;
-    const py = at.y * zoom + y;
-    if (px < 0 || py < 0 || px + nw * zoom > el.clientWidth || py + nh * zoom > el.clientHeight) {
-      void inst.setCenter(at.x + nw / 2, at.y + nh / 2, { zoom, duration: 300 });
-    }
+    // round 4: a folded graph (0 x 0) is never panned: an animated pan over a zero-size view gave
+    // React Flow a NaN zoom on every frame (its background dot's cx / cy / r)
+    const c = followCentre(
+      { width: el.clientWidth, height: el.clientHeight },
+      inst.getViewport(),
+      { x: at.x, y: at.y, width: n.measured.width ?? 220, height: n.measured.height ?? 120 },
+    );
+    if (c) void inst.setCenter(c.x, c.y, { zoom: c.zoom, duration: 300 });
   }, [activeNode]);
   const runs = useMemo(() => edgeRuns(trace, graph.edges.filter((e) => e.data.kind !== "session") as GEdge[]), [trace, graph]);
   const initial = useMemo(

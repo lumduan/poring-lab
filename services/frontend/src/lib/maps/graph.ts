@@ -70,3 +70,41 @@ export function mapsGraph(flow: Flow, session: Session, positions: Record<string
   for (const e of g.edges) if (e.data.kind !== "attach") edges.push(e);
   return { nodes, edges, notes: g.notes.filter((n) => !n.startsWith("death_respawn")) };
 }
+
+// --- the graph's view (round 4, 2026-11-10) ------------------------------------------------------
+// The fit and the follow-the-playback pan, as pure functions that return null for an unusable
+// input. A FOLDED graph is display: none, so its box is 0 x 0; a pan animated over a zero-size view
+// makes d3-zoom's interpolation divide by zero (log(0 / 0)), and React Flow then drew its
+// background dot with cx / cy / r = NaN on every frame of the animation (matpilot's console count,
+// round 4). Nothing moves the view unless every number is finite and the box has a size.
+export type Box = { width: number; height: number };
+export type Rect = { x: number; y: number; width: number; height: number };
+export type Viewport = { x: number; y: number; zoom: number };
+
+const finite = (...v: number[]) => v.every((n) => Number.isFinite(n));
+
+/** The viewport that fits `bounds` into `box` between minZoom and maxZoom; a graph too big for
+ * minZoom starts at its LEFT (START) and is centred vertically when it fits, else top-aligned.
+ * `overflow`: it did not fit at minZoom. Null: no box (folded, not laid out) or a bad number. */
+export function fitViewport(box: Box, bounds: Rect, minZoom: number, maxZoom: number, pad: number): { viewport: Viewport; overflow: boolean } | null {
+  if (!finite(box.width, box.height, bounds.x, bounds.y, bounds.width, bounds.height, minZoom, maxZoom, pad)) return null;
+  if (box.width <= 2 * pad || box.height <= 2 * pad || bounds.width <= 0 || bounds.height <= 0 || minZoom <= 0 || maxZoom < minZoom) return null;
+  const z = Math.min(maxZoom, (box.width - 2 * pad) / bounds.width, (box.height - 2 * pad) / bounds.height);
+  if (z >= minZoom) {
+    return { viewport: { x: (box.width - bounds.width * z) / 2 - bounds.x * z, y: (box.height - bounds.height * z) / 2 - bounds.y * z, zoom: z }, overflow: false };
+  }
+  const zz = minZoom;
+  const y = bounds.height * zz <= box.height - 2 * pad ? (box.height - bounds.height * zz) / 2 - bounds.y * zz : pad - bounds.y * zz;
+  return { viewport: { x: pad - bounds.x * zz, y, zoom: zz }, overflow: true };
+}
+
+/** Where to centre the view so the playback's node is in it (at the current zoom), or null: the
+ * node is already in view, the box has no size (folded), or a number is not finite. */
+export function followCentre(box: Box, vp: Viewport, node: Rect): { x: number; y: number; zoom: number } | null {
+  if (!finite(box.width, box.height, vp.x, vp.y, vp.zoom, node.x, node.y, node.width, node.height)) return null;
+  if (box.width <= 0 || box.height <= 0 || vp.zoom <= 0 || node.width < 0 || node.height < 0) return null;
+  const px = node.x * vp.zoom + vp.x;
+  const py = node.y * vp.zoom + vp.y;
+  const inView = px >= 0 && py >= 0 && px + node.width * vp.zoom <= box.width && py + node.height * vp.zoom <= box.height;
+  return inView ? null : { x: node.x + node.width / 2, y: node.y + node.height / 2, zoom: vp.zoom };
+}
