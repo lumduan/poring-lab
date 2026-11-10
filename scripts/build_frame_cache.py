@@ -1629,17 +1629,15 @@ def item_frame_rows(doc: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dic
     return items, negs, why
 
 
-def session_neg_count(sid: str, n_items: int, session_negs: Sequence[str] = ()) -> int:
+def session_neg_count(sid: str, n_items: int, session_negs: Sequence[str] = (),
+                      n: int = 0) -> int:  # fmt: skip
     """PURE (xmas02-detector.md O17, round 3): the negatives an item session draws: 1 per 3 of
-    its written item frames (O.8), or ``N`` when ``--session-negs SID=N`` names it and asks for
-    more (round 2's false boxes were fights near her: the pilots' item-free kept frames)."""
+    its written item frames (O.8), or ``n`` when ``--session-negs`` names it (a name the session
+    id ends with) and ``n`` is more (round 2's false boxes were fights near her: the pilots'
+    item-free kept frames). Plain tokens, so the guarded cache step's argument check holds."""
     want = n_items // ITEM_NEG_PER
-    for spec in session_negs:
-        name, _, n = spec.partition("=")
-        if not name or not n.isdigit():
-            raise SystemExit(f"--session-negs {spec!r}: SID=N")
-        if sid.endswith(name):
-            want = max(want, int(n))
+    if any(sid.endswith(name) for name in session_negs):
+        want = max(want, int(n))
     return want
 
 
@@ -1748,7 +1746,8 @@ def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSi
             raise SystemExit(f"{sid}: a --neg-sessions session with item frames")
         picked = list(chosen_negs or [])
     else:
-        k = session_neg_count(sid, len(items), getattr(a, "session_negs", ()))
+        k = session_neg_count(sid, len(items), getattr(a, "session_negs", ()),
+                              getattr(a, "session_negs_n", 0))  # fmt: skip
         picked = draw_negatives(negs, k, a.neg_seed, f"{ITEM_RULE}:{sid}")
     w, h = V2_SIZE
     row: dict[str, Any] = {"split": part, "path": str(path),
@@ -2106,7 +2105,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--session-negs",
         nargs="*",
         default=[],
-        help="items: SID=N -- this TRAIN item session draws N negatives (O17)",
+        help="items: TRAIN item sessions (names their ids end with) drawing --session-negs-n "
+        "negatives each (O17)",
+    )
+    f.add_argument(
+        "--session-negs-n",
+        type=int,
+        default=150,
+        help="items: the negatives each --session-negs session draws (O17: 150)",
     )
     f.add_argument("--neg-total", type=int, default=ITEM_NEG_TOTAL,
                    help="items: the negatives drawn from --neg-sessions (O.8: 300)")  # fmt: skip

@@ -295,11 +295,9 @@ def test_the_build_writes_item_frames_and_negatives(bfc: ModuleType, world: dict
 
 
 def test_o17_session_negs_raise_an_item_sessions_negatives(bfc: ModuleType) -> None:
-    """O17 (round 3): --session-negs SID=N lets a pilot draw N fight negatives instead of 1 per 3
-    item frames; never fewer than O.8's share; a malformed spec refuses."""
-    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 24) == 8
-    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 24, ["fiT4=150"]) == 150
-    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 600, ["fiT4=150"]) == 200
-    assert bfc.session_neg_count("x-rdp-xmas02-fs2", 92, ["fiT4=150"]) == 30
-    with pytest.raises(SystemExit, match="SID=N"):
-        bfc.session_neg_count("x", 3, ["fiT4"])
+    """O17 (round 3): --session-negs NAME... --session-negs-n N lets a pilot draw N fight negatives
+    instead of 1 per 3 item frames; never fewer than O.8's share; plain tokens (no '=')."""
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT6", 24) == 8
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT6", 24, ["fiT6"], 150) == 150
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT6", 600, ["fiT6"], 150) == 200
+    assert bfc.session_neg_count("x-rdp-xmas02-fs2", 92, ["fiT6"], 150) == 30
