@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 import fi_eval as fe  # noqa: E402
 
-SID = "20261111T090000-rdp-hunt-xmas02-fiT1"
+SID = "20261111T090000-rdp-hunt-xmas02-fiT4"
 ANCHOR = (-4.0, 2.0)
 S = 1_000_000_000
 AROUND = [550.0, 300.0, 730.0, 450.0]  # the 5 x 5 around her (pixels)

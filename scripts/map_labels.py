@@ -315,7 +315,13 @@ XMAS02_GW3 = "-rdp-gb-gw3"  # Amendment M: the held-out Garm Baby watch (`--labe
 # Amendment O1 (2026-11-10): the floor items' held-out, fresh base pilots recorded beside the
 # runner (`--label hunt-xmas02-fiT<n>`): refused by NAME before any of them records, for the
 # monster labels, T2's pool and the cache as for TEST; NOT in eval_suffixes (the item model's)
-XMAS02_FIT = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xmas02-fiT3")
+# Amendment O15 (2026-11-10 night, round 2): round 1's fiT1-fiT3 were scored ONCE (O14) and become
+# TRAIN-eligible (XMAS02_FIT_R1, history). Round 2's held-out, never trained on: the base pilots
+# fiT4-fiT6 (the aura Rogue, natural drops) and two NEAR stagings on spots sharing no cell with any
+# TRAIN staging: fsTa (the Rogue, aura) and fsTn (the Base 60 Crusader, NO aura; Batt 11-10 night)
+XMAS02_FIT_R1 = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xmas02-fiT3")
+XMAS02_FIT = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
+              "-rdp-xmas02-fsTa", "-rdp-xmas02-fsTn")  # fmt: skip
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),

@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment O14 (2026-11-10): the floor-item model xmas02-fi FAILS its held-out score (I1 recall 0.696, I2 0.56; I1 precision, I3, I4 0/124, I5 CPU pass; I5 GPU no verdict) -> NOT deployed; the misses are all items within 1 cell of her (TRAIN had ~12 % such boxes). A round 2 (more drops on / next to her) is Batt's decision."
+next_action: "Amendment O15 (2026-11-10 night): round 2 of the floor-item model -- the Base 99 aura over items next to her; TRAIN adds fiT1-3 + near stagings fs2 (Rogue) / fs3 (Crusader, no aura); held-out fiT4-6 + fsTa / fsTn; I1a / I1n >= 0.85 each (95 % reported)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3258,3 +3258,101 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - Candy Cane and Scell examples near her;
   - possibly a different box rule for items half under her sprite;
   - the held-out would again be fresh recordings.
+
+### Amendment O15 (2026-11-10 21:10 ICT from `date`, BEFORE any round-2 recording): Batt's answers; THE AURA; round 2 pre-registered
+
+**Batt's answers to the O14 report (quoted, then in English):**
+1. "สอน" -- train a round 2. With: "ปรับให้ > 85% ถ้ามากกว่าแล้ว ก็สามารถปรับให้มากขึ้นไปอีกให้ใกล้ 95%
+   ก็ได้ มีเวลาทำยาวๆ ทั้งคืน" -- get it above 85 %, then on toward 95 %; the whole night is
+   available.
+2. "ของที่พลาดทั้ง 14 ชิ้นอยู่ห่างตัว Rogue ไม่เกิน 1 ช่อง ... เพราะตัวเรา lv99 มีแสงด้วยเปล่า
+   อยากให้ทดสอบแบบ lv อื่นด้วยนะ ที่ไม่มีแสงรอบตัว ต้องเก็บได้เหมือนกัน" -- is it because our
+   character is Base 99 and has a glow? Test with another level too, one with no light around
+   the character: it must pick up just the same.
+
+**The aura (looked at, not yet measured):**
+- The Rogue (Thief8fce) is Base 99; the client draws the level-99 aura at her feet (white / pink
+  flares and a cyan ring).
+- In the eval pack's crops it lies over the cells next to her:
+  - 005 (Candy Cane, (-1,+1), MISSED) sits inside a pink-white flare;
+  - 040 (Scell, (+1,0), MISSED) is pale under a cyan haze;
+  - 010 (Zargon, (+1,0), hit) also has the cyan glow around it, but is dark and keeps its
+    contrast.
+- Round 1's TRAIN was ALL aura: p38, p20 and fs1 are all this Base 99 Rogue. Only ~12 % of its
+  boxes were within 1 cell of her.
+- The GM account's other characters have NO aura: Crus4b7e2 (Crusader, Base 60) and Valcd8bd6
+  (Novice, Base 70), from the lab DB.
+
+**Round 2: the data (one change of recipe: more near items, aura AND no aura).**
+- TRAIN adds, labelled `--split train` under params v2 (aea6f1d2), each by the join rule (G2 <= 3 px
+  on >= 30 fits):
+  1. **fiT1, fiT2, fiT3**: round 1's held-out. It was scored ONCE (O14) and is TRAIN-eligible from
+     this amendment (map_labels.XMAS02_FIT_R1). 43 of its 46 evaluated crops were within 1 cell of
+     her, and it holds the natural Scell / Candy Cane drops that staging cannot place (Scell is
+     outside the staged set, O3);
+  2. **fs2**: the Rogue (aura). `stage_items.py --char thief run --map xmas_dun02 --views near --n 12
+     --seed 2611121 --immune-confirmed --label fs2`. The near views (stage@9, `NEAR_OFFSETS`):
+     (0,0) on the pile's centre, then (2,0), (-2,0), (0,2). Each off-pile view keeps 3 pile cells
+     within 1 cell of her and none under her sprite. 12 spots, 48 stands, 72 items;
+  3. **fs3**: the Crusader (NO aura). `stage_items.py --char crusader run ... --views near --n 12
+     --seed 2611131 --label fs3`;
+  4. round 1's TRAIN (p38, p20, fs1) and the negatives, as O9.
+- **The held-out, never trained on (refused by NAME: map_labels.XMAS02_FIT, round 2):**
+  - **fiT4, fiT5, fiT6**: base pilots p50-p52 recorded beside the runner (aura, natural drops);
+  - **fsTa**: the Rogue (aura), `--views near --n 12 --seed 2611200 --label fsTa`;
+  - **fsTn**: the Crusader (NO aura), `--views near --n 12 --seed 2611201 --label fsTn`;
+  - the four stagings' cells (every stand + every 3 x 3 pile) were checked before this line: fsTa
+    and fsTn share NO cell with fs1, fs2, fs3 or each other. fs2 and fs3 share one spot,
+    (236,82), and fs2 and fs1 share one; both are TRAIN.
+- **The recordings:** `record_session.py --backend rdp --label xmas02-<fsX> --seconds 2400 --fps 1
+  --format png --max-bytes 6G`, started before the staging and stopped by ITS OWN PID right after
+  the run ends (O6's slip); fiT4-fiT6 as fiT3 (`--label hunt-xmas02-fiT<n> --seconds 1620`).
+- **Character switches** (the Crusader is the account's 2nd card): a client restart, the card,
+  `enter_game`, the chat-window and UI-gate checks, `@monsterignore` judged by its answer line,
+  `held` rc 0 before each staging. Then back to the Rogue, immune.
+
+**T2-r2, the labels' check on the NEW data (beside the training, before any score):**
+- A pack from fs2 + fs3 + fiT1-3's TRAIN labels, seed 65: up to 40 item crops (<= 3 a floor
+  item, N stratum first) + 20 E crops.
+- Two NEW blind labellers; `fi_blind_score.py`.
+- O.5's bars: good box >= 90 % on the item crops, present right >= 95 %.
+- A FAIL voids the round-2 model: it is never scored, and the report says why.
+
+**The cache and the training (O9's recipe, changed only where written):**
+- `build_frame_cache.py --labels items`, as O9, with the new label files in `--fi-labels` and
+  `--train`. A dry run first; the written counts must equal it.
+- The cache id: `xmas02-fi-r2-20261110`. VAL is FIT p31 (monitor only).
+- **The init: round 1's `last.pt` (e24e8f57).** It has the same single class, so the head
+  transfers too. 12 epochs, batch 2, workers 2, FP32 on the Arc, `--mid-ckpt`, hsv_s 0.2,
+  close_mosaic 3, scale 0.1.
+- The scored checkpoint is the last epoch's `last.pt`, frozen and sha256-recorded BEFORE any
+  held-out file is read.
+
+**The evaluation (O.9, with the strata Batt asked for; fi_eval gains them, with tests, BEFORE any
+score):**
+- The labels: `fi_labels.py label --eval-test` on fiT4-fiT6, fsTa and fsTn, once, after the model
+  froze.
+- The pack: seed 66, <= 3 crops a floor item, up to 70 aura item crops (fiT4-6 + fsTa) + up to 50
+  no-aura (fsTn) + 20 E. Two NEW blind labellers; the evaluated crops = both labellers' good boxes.
+
+| bar | what | value |
+|---|---|---|
+| I1a recall, AURA | fiT4-fiT6 + fsTa pooled; each source reported | >= 0.85 on >= 40 crops |
+| I1n recall, NO AURA (Batt) | fsTn | >= 0.85 on >= 30 crops |
+| I1 precision | every box on the judged frames of all five | >= 0.85 |
+| I2 | fiT4-fiT6's episodes, as O.9 | >= 0.80 on >= 20 (short: NO VERDICT, reported) |
+| I3, I4 | fiT4-fiT6, as O.9 | <= 0.5 % / <= 0.2 %; <= 5 % on >= 40 |
+| I5 CPU | eval_latency vs xmas02gb, interleaved | <= 1.10 x |
+| I5 GPU (fixed here: O14 had no verdict) | the detect server's forward p95, one model a run, the same harness and frames as xmas02gb | <= 1.10 x xmas02gb's AND <= 35 ms |
+
+- Batt's 95 % is REPORTED beside I1a / I1n (a target, not a bar).
+- **The verdict:** PASS when every bar holds. Deploying and `--loot-sight` stay Batt's. FAIL: a
+  round 3 only by a new amendment, with what failed.
+
+**The night's order (pipelined on the one Windows session and the one GPU):**
+1. fs2 (Rogue) -> switch -> fs3 (Crusader) -> ship + label the TRAIN -> the cache -> the training
+   starts (GPU);
+2. during it: fsTn (Crusader) -> switch -> fsTa (Rogue); T2-r2; fi_eval's strata; the late-strike
+   study (Batt's other idea; rogue-xmas02.md);
+3. after it: the pilots p50-p52 (fiT4-fiT6; the detect server needs the GPU), then the
+   evaluation.

@@ -93,7 +93,7 @@ def _install(monkeypatch: pytest.MonkeyPatch, tmp: Path, map_: str,
     for name, mod in (("ro_agent", r), ("crusader", cr), ("gm_state", gs), ("bench", bench),
                       ("ui_gate", ui)):  # fmt: skip
         monkeypatch.setitem(sys.modules, name, mod)
-    monkeypatch.setattr(si, "plan_spots", lambda m, n, seed, open_: SPOTS[:n])
+    monkeypatch.setattr(si, "plan_spots", lambda m, n, seed, open_, views="default": SPOTS[:n])
     monkeypatch.setattr(si, "_held_rows", lambda items: [])
     monkeypatch.setattr(si, "DEMO", tmp / "demo")
     monkeypatch.setattr(si.time, "sleep", w.sleeps.append)
@@ -123,7 +123,8 @@ def test_pay_fild07_types_exactly_stage4s_lines(monkeypatch: pytest.MonkeyPatch,
     assert w.lines == want and "@killmonster2" not in w.lines
     start, end = _events(tmp_path)[0], _events(tmp_path)[-1]
     assert set(start) == {"t_ns", "kind", "version", "map", "seed", "spots", "open", "offsets",
-                          "still_s", "targets"}  # fmt: skip
+                          "still_s", "targets", "char", "job", "views"}  # fmt: skip
+    assert (start["char"], start["job"], start["views"]) == ("thief", "rogue", "default")
     assert end == {"t_ns": 0, "kind": "run_end", "reason": "done"}
 
 
@@ -209,3 +210,27 @@ def test_xmas02_wrong_drop_stops_after_that_spots_kill(monkeypatch: pytest.Monke
     assert w.lines.count("@killmonster2") == 2  # spots 0 and 1, no end pair
     assert "@warp xmas_dun02 153 100" not in w.lines
     assert _events(tmp_path)[-1]["reason"].startswith("spot 1: dropped")
+
+
+def test_stage9_near_views_beside_the_crusader(monkeypatch: pytest.MonkeyPatch,
+                                               tmp_path: Path) -> None:  # fmt: skip
+    """stage@9 (xmas02-detector.md O15): --views near stands on the pile, then 2 cells off it on
+    three sides; --char crusader types every line as the Base 60 Crusader (no aura)."""
+    monkeypatch.setattr(si, "CHAR", si.CHAR)
+    monkeypatch.setattr(si, "JOB", si.JOB)
+    si.use_char("crusader")
+    assert (si.CHAR, si.JOB) == ("crusader", "crusader")
+    w = _install(monkeypatch, tmp_path, "xmas_dun02")
+    assert si.run(_args("xmas_dun02", views="near")) == 0
+    groups = si.item_groups(list(si.XMAS02_ITEMS), 3, 6, 5)
+    want = []
+    for (x, y), g in zip(SPOTS, groups, strict=True):
+        want += [f"@warp xmas_dun02 {x} {y}", "@killmonster2"]
+        want += [f"@item {i} 1" for i in g]
+        want += [f"@warp xmas_dun02 {x + dx} {y + dy}" for dx, dy in si.NEAR_OFFSETS[1:]]
+    assert w.lines == want
+    ev = _events(tmp_path)
+    assert (ev[0]["char"], ev[0]["job"], ev[0]["views"]) == ("crusader", "crusader", "near")
+    assert [tuple(o) for o in ev[0]["offsets"]] == list(si.NEAR_OFFSETS)
+    with pytest.raises(SystemExit, match="unknown character"):
+        si.use_char("novice")

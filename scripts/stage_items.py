@@ -78,7 +78,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@8"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
+VERSION = "stage@9"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
 # @4: the character is a ROGUE (job "rogue", data/thief) and watch --spawn (rogue-gef10 A4);
 # @5: per-MAP item sets (gef_fild10's drop set, gef10-eyes-loot.md E3): groups per spot, the map's
 # offsets, the 3 x 3 pile inside the area, @killmonster2 at the end, canopy / drop / held commands;
@@ -87,6 +87,7 @@ VERSION = "stage@8"  # @2: --open (target-items.md 9b); @3: refuses while target
 # (Batt 2026-11-06, xmas02-detector.md Amendment D)
 # @8: xmas_dun02's set (Amendment O.11 / O1; O3: Scell out, Cold Scroll in): spots on the lattice's
 # TRAIN stands, outside 3a's TEST blocks; clear "spot" (@killmonster2 at each spot); cut-grf --check
+# @9: --char crusader (no aura, Amendment O15) and run / spots --views near (NEAR_OFFSETS)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -99,6 +100,20 @@ WARP_SETTLE_S = 2.5
 READY_MAX_S = 20.0  # a map change's loading screen took longer than 2.5 s (prt_fild08 -> 07)
 CHAR = "thief"  # the data dir (crusader.py --char)
 JOB = "rogue"  # its job since 2026-10-25 (rogue-gef10.md 3c): every identity check reads it
+# stage@9 (xmas02-detector.md Amendment O15, Batt 2026-11-10 night: "test with another level,
+# with no light around her; it must pick up just the same"): the Base 99 Rogue's AURA washes over
+# the items next to her (O14's 14 misses, all within 1 cell). --char crusader stages beside the GM
+# account's Base 60 Crusader, who has no aura; the identity checks read its own references.
+JOB_OF: dict[str, str] = {"thief": "rogue", "crusader": "crusader"}
+
+
+def use_char(char: str) -> None:
+    """Every identity check, @-line and DB read of this run is the given test character's."""
+    global CHAR, JOB
+    if char not in JOB_OF:
+        raise SystemExit(f"stage_items: unknown character {char!r} (known: {sorted(JOB_OF)})")
+    CHAR, JOB = char, JOB_OF[char]
+
 
 # --- stage@5: the item set per MAP (gef10-eyes-loot.md E3) ---------------------------------------
 # gef_fild10's DROP SET: the items its hunts dropped (2026-10-26). Ids from the local KB (built from
@@ -166,6 +181,12 @@ class MapSet:
     spot_sep: int = SPOT_SEP
 
 
+# stage@9 (Amendment O15): the NEAR views. The character stands on the pile's centre, then 2 cells
+# off it on three sides, so every still view has items within 1 cell of her (O14's misses: rel
+# (+-1, 0), (+-1, +-1), (0, -1)). A view inside the pile would put an item under her own sprite and
+# fi_labels excludes such a frame (under_self), so the off-pile views stand 2 cells out.
+NEAR_OFFSETS: tuple[tuple[int, int], ...] = ((0, 0), (2, 0), (-2, 0), (0, 2))
+VIEWS: dict[str, tuple[tuple[int, int], ...] | None] = {"default": None, "near": NEAR_OFFSETS}
 DEFAULT_SET = MapSet(TARGETS, ICON_DIR, len(TARGETS), tuple(OFFSETS))
 MAP_SETS: dict[str, MapSet] = {
     "pay_fild07": replace(DEFAULT_SET, rsw=PAYF07_DATA / "pay_fild07.rsw",
@@ -178,9 +199,14 @@ MAP_SETS: dict[str, MapSet] = {
 }  # fmt: skip
 
 
-def map_set(map_: str) -> MapSet:
-    """The map's set; any other map stages pay_fild07's targets (stage@1-4's behaviour)."""
-    return MAP_SETS.get(map_, DEFAULT_SET)
+def map_set(map_: str, views: str = "default") -> MapSet:
+    """The map's set; any other map stages pay_fild07's targets (stage@1-4's behaviour).
+    ``views`` (stage@9): "near" replaces the still views by NEAR_OFFSETS."""
+    ms = MAP_SETS.get(map_, DEFAULT_SET)
+    if views not in VIEWS:
+        raise SystemExit(f"stage_items: unknown views {views!r} (known: {sorted(VIEWS)})")
+    offs = VIEWS[views]
+    return ms if offs is None else replace(ms, offsets=offs)
 
 
 def spot_cells(ms: MapSet) -> list[tuple[int, int]]:
@@ -372,14 +398,15 @@ def stands(spots: Sequence[tuple[int, int]],
     return [[x + dx, y + dy] for x, y in spots for dx, dy in offsets]
 
 
-def plan_spots(map_: str, n: int, seed: int, open_: Path | None) -> list[tuple[int, int]]:
+def plan_spots(map_: str, n: int, seed: int, open_: Path | None,
+               views: str = "default") -> list[tuple[int, int]]:  # fmt: skip
     """The run's spots (``spots`` prints the same list): the search area, the open ground when
     ``open_`` (required where the map's set says so), every spot_cells cell inside, and the stand
     checks of npc_click_test (warp spans, NPC touch areas, the SERVER's walkable cells) as a
     refusal on every stand."""
     import npc_click_test as nct
 
-    ms = map_set(map_)
+    ms = map_set(map_, views)
     if ms.needs_open and open_ is None:
         raise SystemExit(f"stage_items refused: {map_} stages on open ground only (--open)")
     area = search_area(map_, npc_keep=ms.npc_keep)
@@ -592,7 +619,7 @@ def _check(screen: Any) -> None:
     import ro_agent as r
 
     if not cr.check(screen, JOB, CHAR)["ok"]:
-        raise r.Stop("stage_items: not the Thief")
+        raise r.Stop(f"stage_items: not the {CHAR} ({JOB})")
 
 
 def _settle(screen: Any, max_s: float = READY_MAX_S) -> float:
@@ -764,7 +791,8 @@ def run(a: argparse.Namespace) -> int:
     import ro_agent as r
     import ui_gate
 
-    ms = map_set(a.map)
+    views = getattr(a, "views", "default")
+    ms = map_set(a.map, views)
     per_spot = ms.per_spot if a.per_spot is None else a.per_spot
     clear = ms.clear if a.clear is None else a.clear
     if not a.immune_confirmed:
@@ -777,7 +805,7 @@ def run(a: argparse.Namespace) -> int:
     why = held_refusal(_held_rows(ms.items), ms.items)
     if why:
         raise SystemExit(why)
-    spots = plan_spots(a.map, a.n, a.seed, a.open)
+    spots = plan_spots(a.map, a.n, a.seed, a.open, views)
     groups = item_groups(list(ms.items), len(spots), per_spot, a.seed)
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-stage-items-{a.map}-{a.label}"
     out = DEMO / sid
@@ -789,6 +817,7 @@ def run(a: argparse.Namespace) -> int:
         evf.flush()
 
     start = {"kind": "run_start", "version": VERSION, "map": a.map, "seed": a.seed, "spots": spots,
+             "char": CHAR, "job": JOB, "views": views,
              "open": None if a.open is None else str(a.open),
              "offsets": ms.offsets, "still_s": STILL_S, "targets": ms.items}  # fmt: skip
     if per_spot < len(ms.items) or clear != "none":  # stage@5's fields (pay_fild07: none)
@@ -1045,10 +1074,10 @@ def watch(a: argparse.Namespace) -> int:
 
 
 def spots_plan(map_: str, spots: Sequence[tuple[int, int]], seed: int,
-               per_spot: int | None = None) -> dict[str, Any]:  # fmt: skip
+               per_spot: int | None = None, views: str = "default") -> dict[str, Any]:  # fmt: skip
     """PURE (stage@5): what a run on these spots would stage: the groups (names), each item's
     count, the views and the stands."""
-    ms = map_set(map_)
+    ms = map_set(map_, views)
     k = ms.per_spot if per_spot is None else per_spot
     groups = [[ms.items[i] for i in g] for g in item_groups(list(ms.items), len(spots), k, seed)]
     counts = {n: sum(n in g for g in groups) for n in ms.items.values()}
@@ -1061,9 +1090,12 @@ def spots_plan(map_: str, spots: Sequence[tuple[int, int]], seed: int,
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
+    ap.add_argument("--char", default="thief", choices=sorted(JOB_OF),
+                    help="stage@9: the test character (crusader: no aura)")  # fmt: skip
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("spots")
     p.add_argument("--map", default="pay_fild07")
+    p.add_argument("--views", default="default", choices=sorted(VIEWS))
     p.add_argument("--n", type=int, default=12)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--open", type=Path, default=None)
@@ -1127,6 +1159,8 @@ def main() -> int:
     )
     p = sub.add_parser("run")
     p.add_argument("--map", default="pay_fild07")
+    p.add_argument("--views", default="default", choices=sorted(VIEWS),
+                   help="stage@9: near = NEAR_OFFSETS (items within 1 cell of her)")  # fmt: skip
     p.add_argument("--n", type=int, default=12)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--label", default="s")
@@ -1139,10 +1173,11 @@ def main() -> int:
                    help="stage@5: 'end' = two @killmonster2 65 s apart after the last spot; "
                         "stage@8: 'spot' = one at each spot (default: the map set's)")  # fmt: skip
     a = ap.parse_args()
+    use_char(a.char)
     if a.cmd == "spots":
-        spots = plan_spots(a.map, a.n, a.seed, a.open)
+        spots = plan_spots(a.map, a.n, a.seed, a.open, a.views)
         if a.plan:
-            print(json.dumps(spots_plan(a.map, spots, a.seed, a.per_spot)))
+            print(json.dumps(spots_plan(a.map, spots, a.seed, a.per_spot, a.views)))
         else:
             print(json.dumps(spots))
     elif a.cmd == "canopy":

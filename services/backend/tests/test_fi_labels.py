@@ -43,8 +43,8 @@ def test_the_spec_is_o1s_accepted_defaults() -> None:
 
 @pytest.mark.parametrize("sid", [
     "20261106T162044-rdp-xmas02-xw5", "20261106T171533-rdp-xmas02-xp1", ml.XMAS02_X2,
-    "20261109T212445-rdp-gb-gw3", "20261111T090000-rdp-hunt-xmas02-fiT1",
-    "20261111T100000-rdp-hunt-xmas02-fiT2", "20261111T110000-rdp-hunt-xmas02-fiT3",
+    "20261109T212445-rdp-gb-gw3", "20261111T090000-rdp-hunt-xmas02-fiT4",
+    "20261111T100000-rdp-hunt-xmas02-fiT5", "20261111T110000-rdp-hunt-xmas02-fiT6",
     "20261109T075431-rdp-s3-xmas02-p30",
 ])  # fmt: skip
 def test_test_gw3_fit_and_p30_are_refused_by_name_for_train_and_val(sid: str) -> None:
@@ -68,7 +68,7 @@ def test_fit_is_val_only_and_val_is_fit_only() -> None:
 
 
 def test_eval_test_reads_the_fit_held_out_and_nothing_else() -> None:
-    assert fl.role_refusal(SPEC, "20261111T090000-rdp-hunt-xmas02-fiT1", None, True) is None
+    assert fl.role_refusal(SPEC, "20261111T090000-rdp-hunt-xmas02-fiT4", None, True) is None
     for sid in (
         "20261109T082234-rdp-hunt-xmas02-p31",
         "20261109T133046-rdp-hunt-xmas02-p38",
@@ -85,7 +85,7 @@ def test_label_refuses_by_name_before_reading(tmp_path: Path) -> None:
     for name in (
         "20261106T162044-rdp-xmas02-xw5",
         "20261109T212445-rdp-gb-gw3",
-        "20261111T090000-rdp-hunt-xmas02-fiT1",
+        "20261111T090000-rdp-hunt-xmas02-fiT4",
         "20261109T075431-rdp-s3-xmas02-p30",
     ):
         with pytest.raises(SystemExit, match="refused"):
@@ -93,7 +93,7 @@ def test_label_refuses_by_name_before_reading(tmp_path: Path) -> None:
                      "--out", str(tmp_path / "o.json")])  # fmt: skip
     params = tmp_path / "params.json"
     params.write_text(json.dumps({"rule": fl.RULE, "map": "xmas_dun02", "status": "FROZEN"}))
-    fit = str(tmp_path / "20261111T090000-rdp-hunt-xmas02-fiT1")
+    fit = str(tmp_path / "20261111T090000-rdp-hunt-xmas02-fiT4")
     with pytest.raises(SystemExit, match="frozen item model"):
         fl.main(["label", fit, "--eval-test", "--params", str(params), "--out", "o.json"])
     with pytest.raises(SystemExit, match="no frozen model"):
@@ -368,7 +368,7 @@ def test_check_pack_docs_keeps_the_roles_apart() -> None:
     base = {"rule": fl.RULE, "params_sha256": "p"}
     fit = {**base, "session": "20261109T082234-rdp-hunt-xmas02-p31", "split": "val"}
     train = {**base, "session": "20261109T133046-rdp-hunt-xmas02-p38", "split": "train"}
-    held = {**base, "session": "20261111T090000-rdp-hunt-xmas02-fiT1", "split": "eval",
+    held = {**base, "session": "20261111T090000-rdp-hunt-xmas02-fiT4", "split": "eval",
             "eval_test": True}  # fmt: skip
     fl.check_pack_docs(SPEC, [fit, train], False, "p")
     fl.check_pack_docs(SPEC, [held], True, "p")

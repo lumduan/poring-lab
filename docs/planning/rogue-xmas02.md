@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-10 10:2x: p45 PASSES -> `--garm-fly --garm-confirm 2` (9.19b) JOINS THE BASE (G1b C1 1.60 s; P2 0 false; 2 one-detection false dog boxes filtered; P1 no dog met). xmas02-gb stays (p44). Floor items: xmas02-detector.md Amendment O PROPOSED (Batt decides). N1 not run (N2). THE BASE = p16 + reach-check + far-single + far-approach + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan + garm-fly + garm-confirm 2."
+next_action: "4BL (2026-11-10 21:1x): LF-2 (--late-confirm) JOINED THE BASE (Batt); p50 = LF-4 (--unread-step) pre-registered (4BM, recorded fiT4), after the floor-item round-2 training; Study S-LS (late strikes) running."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2025,6 +2025,65 @@ Batt's answers to the 14:1x report (quoted, then in English):
     the time budget;
   - a bar failing again -> LF-2 stays off and is studied.
 - LF-4 (`--unread-step`, merged OFF) gets its pilot after this one.
+
+### 4BL. Amendment S (2026-11-10, Batt's answers received by 21:0x ICT; written 21:11 from `date`): LF-2 JOINS THE BASE; LF-4 is tested; the night to 06:00
+
+Batt's answers to the 20:2x report (quoted, then in English):
+1. "เอาเข้าเลย" -- put LF-2 in. **`--late-confirm` (9.21) JOINS THE BASE** from p50 on. It passed
+   M1-M3 in p48 and p49; their E3 / Q1 failures were studied as other parts (a walk dead end; the
+   Battle Log reader's "no hits" unlocks).
+2. "สอน" -- the floor-item model's round 2 (xmas02-detector.md Amendment O15: the Base 99 aura;
+   a no-aura character as well).
+3. "ok ทดสอบด้วย" -- test LF-4 (`--unread-step`, 9.22) too.
+4. "วางแผนทำงานยาวๆ คืนนี้ จนถึง 06:00 ... มีอะไรเทรนได้เทรนเลย ปรับปรุงให้ดีขึ้นเรื่อยๆ ... หรือ ทำเรื่อง
+   คลิ๊กตี monster ให้ทันก่อน monster จะเดิน" -- plan long work through 06:00: train what can be
+   trained, keep improving; or make the strike click land before the monster walks off.
+   - That last one is **Study S-LS** (late strikes, analysis only, started 21:0x; appended to
+     this doc). Its mechanism is pre-registered on its own before any pilot of it.
+
+**The base from p50:** `--reach-check --far-single --far-approach --explore --walk-pick --kill-gap
+--loot-first --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2 --late-confirm`, with the
+runner's fixed flags (the P2 patrol, `--box-strike --box-now --self-recheck --still-strike
+--engage-screen`, 25 min, the MVP dead by the schedule, immunity OFF).
+
+**The night's order** (one Windows session; the GPU trains from ~23:00, so the pilots, which need
+the detect server, come after the training):
+1. the floor-item stagings fs2 / fs3 (TRAIN), then the training;
+2. during it, fsTn / fsTa (the held-out stagings) and S-LS;
+3. then p50 + p51 (LF-4, 4BM; recorded fiT4 / fiT5), and p52 (fiT6), pre-registered on its own
+   (S-LS's first mechanism if one is ready, else LF-4's third run);
+4. then the floor-item evaluation.
+
+### 4BM. Pilot p50 pre-registration: --unread-step (LF-4, dungeon@9.22) on the new base, recorded as fiT4 (written BEFORE its run, 21:11 ICT from `date`)
+
+- **The change:** LF-4 acts only when the pos_unread rule would press a Fly Wing (no fresh
+  position read for POS_FLY_S).
+  - It holds the wing while a walk click of ours is < 2 s old.
+  - Then it takes up to 2 steps of 2 cells back along her last own move (screen-relative), each
+    waiting 2 s for a fresh read.
+  - A fresh read ends it. Otherwise the wing, as before (backstop 15 s).
+  - Defaults, confirmed by Batt with the S-LF proposals: the direction "back"; W1 excludes the
+    steps' own clicks.
+- **How rare it is:** pos_unread wings were 0.29 a run in p40-p47 and 0 in p48 / p49 (LF-2 also
+  cut the persistent spans). A run may see no escape at all.
+- **The run:** label `xmas02-p50`, 25 min. Recorded `record_session.py --backend rdp --label
+  hunt-xmas02-fiT4 --seconds 1620 --fps 1 --format png --max-bytes 6G` (refused by name, not
+  opened, shipped at once).
+- **Bars:**
+  - the base's, unchanged: W1 pooled <= 2.0 % over p50 + p49 + p48 + p47 (the steps' clicks out of
+    W1); L1 >= 50 %, L3 >= 80 %, L4 <= 5 %; K1 <= 3 s, K3 >= 70 %; E1 >= 80 / h; U1 <= 30 s;
+    D1 p95 <= 35 ms; R1-A pooled < 7; Q1 <= 8; P2 0; E3; deaths 0;
+  - LF-2's, kept as guards: M1 <= 15, M2 <= 12, M3;
+  - **LF-4's own:**
+    - X1: every step it takes is safe: no NPC contact, no no-entry click, no death within 10 s
+      of a step;
+    - X2: the escapes that came due and how each ended (a fresh read / the wing / the backstop)
+      are REPORTED, with the time held.
+- **Decision (after p50 + p51, the same pre-registration repeated as 4BN):**
+  - both runs pass every bar AND at least one escape came due with X1 held -> `--unread-step`
+    JOINS THE BASE;
+  - no escape came due in either run -> it stays OFF as "harmless, unproven", for Batt;
+  - a bar failing -> studied, stays off.
 
 ## 5. Results
 

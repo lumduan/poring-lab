@@ -39,7 +39,8 @@ THE RULE (O.3, every value fixed on FIT p31 and frozen by ``freeze``):
 
 ROLES, refused by the part's NAME before anything of it is read (O.6; map_labels.XMAS02's
 test_suffixes, Amendment O1): the monster TEST (xw5, xp1, X2), gw3, the floor items' held-out
-fiT1-fiT3, and p30 (the GPU video, O.0). FIT (p31) is labelled only as ``--split val`` (VAL,
+(round 2, O15: fiT4-fiT6, fsTa, fsTn; round 1's fiT1-fiT3 are TRAIN-eligible since O15), and
+p30 (the GPU video, O.0). FIT (p31) is labelled only as ``--split val`` (VAL,
 monitor only); ``--split train`` refuses it, and ``--split val`` takes nothing else. ``--eval-test``
 reads fiT and nothing else, under FROZEN params and only once a frozen MODEL exists (its weights
 re-hashed against ``--model-sha256``; map_labels' ``--eval-test`` asks FROZEN params the same way).

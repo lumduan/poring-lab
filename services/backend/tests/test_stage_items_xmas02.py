@@ -233,3 +233,19 @@ def test_cut_grf_check_predicts_the_sets_own_ambiguous_pair(
     got = si.cut_grf("xmas_dun02", table, icons, check=True)
     assert got["own_set_ambiguous"] == [] and got["passes_once_screen_cut"] is True
     assert not out.exists()
+
+
+def test_stage9_near_views_keep_items_within_one_cell_and_off_her_cell() -> None:
+    """O15: every near view but the pile's centre stands OUTSIDE the 3 x 3 pile (an item under her
+    sprite excludes the frame) and still has pile cells within 1 cell of her."""
+    ms = si.map_set("xmas_dun02", "near")
+    assert ms.offsets == si.NEAR_OFFSETS and ms.offsets[0] == (0, 0)
+    assert si.map_set("xmas_dun02").offsets == si.GEF10_OFFSETS  # the default is unchanged
+    for dx, dy in ms.offsets[1:]:
+        assert (dx, dy) not in si.PILE
+        near = [(px, py) for px, py in si.PILE if max(abs(px - dx), abs(py - dy)) <= 1]
+        assert len(near) == 3
+    p = si.spots_plan("xmas_dun02", [(50 + 30 * i, 60) for i in range(12)], seed=2611, views="near")
+    assert p["stands"] == 48 and p["floor_items"] == 72
+    with pytest.raises(SystemExit, match="unknown views"):
+        si.map_set("xmas_dun02", "far")
