@@ -3788,3 +3788,43 @@ VERDICT (n = 0) -> by 4BE, `--garm-fly --garm-confirm 2` JOINS THE BASE.**
   (12.0), Candy 5 (12.0), Well-baked Cookie 3 (7.2), Candy Cane, Piece of Cake, Pearl, Iron 1 each (2.4).
 - The lowest HP, 46 %, is the lowest of the base runs reported here (p44 80.3 %); 0 Fly Wings were
   needed. Reported, not a bar.
+
+**Pilot p46 (4BF; 10:53:31-11:19:16 ICT, 25 min; the MVP alive at (179,235) at 10:52:07, killed,
+"1[dead]" at 10:52:40; immunity OFF 10:53:04 ("Returned to normal state."), ON 11:19:38 ("You are now
+immune to attacks."); the base since p45, unchanged; RECORDED as fiT1). VERDICT: every bar but L3
+PASSES; L3 FAILS by its letter (76.9 %). Studied (below): the loot step started in time on 61 of 65
+kills (93.8 %); the late ones were steps that PICKED items, measured at their end. No decision
+rides on p46 (4BF).**
+
+| | p44 | p45 | **p46 (base, recorded)** | bar |
+|---|---|---|---|---|
+| W1 walk clicks never sent | 6 / 289 | 4 / 260 | **5 / 252 (1.98 %); pooled p46 + p45 + p44 + p42 = 20 / 1,103 (1.81 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 / L4 | 100 % / 89.1 % / 0 | 94.7 % / 83.6 % / 0 | **96.2 % (25 / 26) / 76.9 % (50 / 65) / 0 of 97** | L3 >= 80 %: **FAIL**; L1, L4 PASS |
+| K1 / K3 | 1.97 s / 96.9 % | 1.98 s / 97.0 % | **1.96 s / 95.4 % (62 / 65)** | PASS |
+| E1 kills | 157.6 / h | 158.4 / h | **66 (158.4 / h)** | PASS |
+| U1 stuck / D1 GPU p95 | 0 s / 23.7 ms | 0 s / 26.2 ms | **0 s / 22.9 ms (p50 20.6; 1,557 calls)** | PASS |
+| R1 own-body class D, pooled p46 + p45 + p44 + p42 | | | **2 + 1 + 2 + 1 = 6** | <= 6: PASS (at the limit) |
+| Q1 quiet defend scans | 5 | 5 | **6 (found 1)** | <= 8: PASS |
+| P2 false alarms / P1 | | 0 / n = 0 | **0 / n = 0 (no dog, no garm_baby box at all)** | PASS / NO VERDICT |
+| E3 / deaths | | | **hard bars pass; 0 Fly Wings; 4 stalls; lowest HP 53.9 %; 0 deaths** | PASS |
+| reported: S1 hits on us per 10 min / no-kill fights | 8.0 / 32 | 11.2 / 44 | **8.8 / 32, 192.9 s** | - |
+
+- **L3 studied:**
+  - fight_time's committed L3 times the loot step by its event, which is logged at the step's END.
+  - In p46, 11 kills had a loot step that STARTED in time (median 0.79 s after the kill) but ENDED
+    late (median 5.78 s). All 11 picked items: p46 had 26 floor items (p44 15, p45 19).
+  - Timed by the step's start (`t_ns - ms`), L3 = 61 / 65 = 93.8 % (p45 60 / 67 = 89.6 %,
+    p44 61 / 64 = 95.3 %). The loot comes right after the kill, as 9.16 intends; the bar's letter
+    penalises the runs with more drops.
+  - **Proposed for the NEXT pre-registrations (not applied to p46):** L3 timed by the loot step's
+    START. Written 11:21 ICT, before any later pilot runs.
+- **The recorder's cost:** none seen (D1 p95 22.9 ms against 23.7 / 26.2; E1 equal to p45).
+- **The recording fiT1:** `20261110T105312-rdp-hunt-xmas02-fiT1`. PNG, recorder v7, 1,620 frames,
+  3.42 GB, stop "duration", 3,776 packet events. NOT OPENED (refused by name: O1). It stays local
+  (~/poring-lab-rec) until after the 16:30 SET close, then ships with `dataset_ship.py ship`.
+- **Class D strikes (reported):** 24 of 92 (62 K, 6 A); far 75, class D 17 (22.7 %). By distance:
+  0-1: 7 / 17, 2-6: 10 / 52, 7-8: 7 / 22, 9+: 0 / 1. Held on D 24, median 5.87 s, 140.4 s in all.
+- **Sight:** 78 monsters seen (31.2 / 10 min, the most of these runs; Myst Case 29, Cruiser 22,
+  Cookie 14, Christmas Cookie 13); kills per sighting 0.85.
+- **Items per hour (x 60 / 25.0):** Scell 18 (43.2 / h), Zargon 11 (26.4), Piece of Cake 8 (19.2),
+  Candy 6 (14.4), Manacles 5 (12.0), Red Herb, Candy Cane, Well-baked Cookie, Pearl 2 each (4.8).
