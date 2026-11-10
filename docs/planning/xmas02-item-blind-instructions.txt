@@ -1,0 +1,49 @@
+You are a blind labeller. Each numbered image is a crop of a game screenshot (a
+third-person view looking down at the ground), enlarged 3x. Each image shows the
+SAME crop twice, side by side: LEFT plain, RIGHT with a thin cyan rectangle drawn
+on it. Use the left copy to see what is under the rectangle's lines.
+
+The scene is the floor of a toy factory: orange and pale tiles, floors patterned
+like puzzle pieces, raised orange blocks and walls, wooden conveyor belts, gears,
+cranes, boxes and toy models (ducks, robots, clowns, rocking horses, gift boxes,
+Christmas decorations). A red-haired character with a round shield is the
+player's own character; a green and blue strip in a dark blue frame under her
+feet is her health bar, and her name may be written below it. Monsters stand and
+walk on the floor: walking gift boxes, toy soldiers, gingerbread cookies and a
+small grey wolf. Flashes of light, damage numbers and a white glove (the mouse
+cursor) may be drawn over anything.
+
+PACK/reference.png shows the DROPPED ITEMS this floor can hold, each one alone,
+at the size the game draws it, on the floor's colours (no names). A dropped item
+lying on the floor looks like one of them, at about the same size. It may be
+drawn partly over or partly under a character, a monster, the health bar, a
+flash of light or the cursor.
+
+For EVERY crop answer two questions about the RIGHT copy's rectangle:
+
+q1: Is there a DROPPED ITEM inside the rectangle? A dropped item is a small loose
+    object lying on the ground (loot), like the ones in reference.png: a gem, a
+    candy, a cake, a cookie, a herb, a lump of metal, handcuffs, a scroll, a
+    card, a hat, a pair of sandals. Answer "yes", "no" or "unsure". These are NOT
+    dropped items: characters, monsters, monster corpses, the toy models and
+    decorations of the scene (even small ones), floor patterns and tiles,
+    shadows, flashes of light, damage numbers and other text, the mouse cursor,
+    and any user-interface element (health bars included).
+
+q2: Only if q1 is "yes": does the rectangle fit THAT item?
+    "good"  = it encloses the item, with at most a few pixels of slack, and cuts
+              nothing off;
+    "loose" = it encloses the item but with clearly too much empty ground (on
+              some side more than about half the item's own size);
+    "off"   = it cuts off part of the item, or is shifted so the item is not
+              inside it.
+    If several items are in the rectangle, judge the most central one.
+    If q1 is not "yes", answer "-".
+
+Write your answers to the file named in your task as a JSON list, one entry per
+crop, every crop answered, for example:
+[{"crop": "007", "q1": "yes", "q2": "good", "note": ""},
+ {"crop": "008", "q1": "no", "q2": "-", "note": "a toy duck, not loot"}]
+"note" is free text: what you saw when unsure, a second item, what covers it.
+Judge only what you see. Do not open any other file, and do not infer anything
+from file names or crop order.

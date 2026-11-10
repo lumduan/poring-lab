@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). DEPLOYED 2026-11-10 ~07:0x (M12). Amendment N (Batt): teach the hidden Garm Babies first; Amendment N1 PROPOSED 2026-11-10 (the occlusion study + a plan; NOT accepted). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). DEPLOYED 2026-11-10 ~07:0x (M12). Amendment N (Batt): teach the hidden Garm Babies first; Amendment N1 PROPOSED 2026-11-10 (the occlusion study + a plan), NOT run (N2, Batt: option (a)). Amendment O PROPOSED 2026-11-10 (a floor-item class; a separate item model recommended; NOT accepted). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment N1 (PROPOSED 2026-11-10, not accepted): the parent tells Batt N1.5 (the deployed xmas02-gb already boxes dogs >= 50 % visible; the gap is the 5-50 % band; G0b's dog was FULLY hidden, which no training fixes) and decides N1.12 (full N1 or stop; FIT; D3; epochs; the bars incl. B5, the p44 false-alarm bar). Nothing is recorded, labelled or trained before an accepting amendment (N2). --garm-fly stays off; xmas02-gb stays deployed (M12). Earlier: Amendment L (walking sight judged by the live runner, packets the referee)."
+related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
+next_action: "Amendment O (PROPOSED 2026-11-10, not accepted; floor items for the loot step): the parent / Batt decide O.12 (O-D1: (b) a separate item model xmas02-fi, recommended, or (a) a class in xmas02-gb; O-D2 the rule xmas02-fi-1 with FIT p31's values; O-D4 a staged-drop immune watch fs1; O-D5 the held-out fiT1 + fiT2, fresh recorded base pilots; the bars I1-I5). Nothing is recorded, labelled or trained before an accepting amendment (O1). N2 (Batt): N1 is NOT run; --garm-fly 9.19b with a 2-detection confirmation is rogue-xmas02.md 4BE's; xmas02-gb stays deployed (M12). Earlier: Amendment L (walking sight judged by the live runner, packets the referee)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -2432,3 +2432,395 @@ decision and their own pre-registration (Amendment M).
   their own accepting amendment then.
 - Floor items (rogue-xmas02.md "Study after p44", 3a): Batt said yes, "เทรนแยกเลย" (train it
   separately). Its plan follows as its own amendment (Amendment O), proposed by a study before any data.
+
+### Amendment O (PROPOSED, 2026-11-10, not yet accepted): a FLOOR-ITEM class for the loot step -- the study, the label rule `xmas02-fi-1`, T2-items, the data, a separate item model, the bars
+
+> **PROPOSED, NOT ACCEPTED.** Written offline (subagent, branch `feat/floor-item`) for the parent and
+> Batt, 2026-11-10 09:44-10:4x ICT (`date`). Nothing below is adopted, recorded, labelled or trained
+> until a clock-labelled amendment (O1 ...) accepts it, BEFORE its data. **Frames read: FIT p31 and
+> DEV p38 only.** p20 and p39 were read by their PACKETS only (counts), never by a frame; p30 is a GPU
+> video recording (refused, below). The monster TEST sessions (xw5, xp1, X2, gw3) were not opened.
+> Not to be confused with rogue-xmas02.md 4AY, whose title is also "Amendment O" (Batt's answers of
+> 2026-11-09); this one is xmas02-detector.md's, named by N2.
+
+**Why (Batt 2026-11-10, rogue-xmas02.md 4BD 2: "teach it, train it separately, for confidence and
+faster looting"):** 68-82 % of the Rogue's kills drop nothing on the floor (Snatcher steals during
+the fight), yet every kill gets the full 9-cell loot hover (~3 s; 84-98 s a 25-min run); a kill with
+a drop takes ~4.0 s (rogue-xmas02.md "Study after p44"). If the detector sees floor items, the loot
+step can skip an empty floor and hover only the boxed cells.
+
+#### O.0 What was read and run (offline; CPU at nice 15 in a 4 GB scope without swap, <= 4 threads; no GPU, nothing live)
+
+- **The data:** the five banked 1-fps hunt recordings with packets (section "Study after p44"):
+  `20261108T235614-rdp-s2-xmas_dun02-p20`, `20261109T075431-rdp-s3-xmas02-p30`,
+  `20261109T082234-rdp-hunt-xmas02-p31`, `20261109T133046-rdp-hunt-xmas02-p38`,
+  `20261109T143541-rdp-hunt-xmas02-p39`.
+  - **FIT = p31** (every parameter below is fixed on it). **DEV = p38** (the same steps, reported,
+    nothing tuned on it). **UNTOUCHED = p20 and p39** (packets counted only; no frame decoded).
+  - **p30 is not usable:** its manifest `format` is `vpp-hevc444-10-q20` (the GPU video, ADR-0024),
+    which 3c's recording path refuses until a parity check (map_labels `RECORDING_FORMATS`). Its 7
+    floor items are counted in the packet facts only.
+  - **The boss recognizer's use of p31 / p38 / p39** (stormy-knight-recognizer.md: p31 its round-1
+    hunting negatives, p38 its round-2 DEV R2-H1, p39 its round-2 HELD-OUT R2-H2) does not interact:
+    a different model on a different question (an aura rule's false positives), scored once and
+    closed (NOT ADOPTED, 2026-11-09 19:46); its round 3 needs fresh recordings anyway (its own
+    next_action). These frames carry no floor-item label today; labelling them for items changes
+    nothing the recognizer measured. The floor items' HELD-OUT is a FRESH recording (O.6).
+- **The client data (rule 4: /dev/shm only, never committed, deleted after):** the item resname
+  table and the 28 item sprites (33 item ids) of the six species' drop tables (`data/kb/drops.json`),
+  extracted with `grf_read.py extract ... --decode-des --decode-mixcrypt` into
+  `/dev/shm/poring-lab-tmp/floor-item/`; the 11-06 inputs in `/dev/shm/poring-lab-tmp/xmas-det/`
+  (RSW + RSMs, GAT, kb-sprites) read-only; the frozen monster params `d4cc0a5d...` (Amendment G).
+- **The code:** the worktree's sources with the main venv; the label stack of map_labels
+  (`RecSession`, the 120-ms 1d, the session's UI rectangles), gef10_items' item sprites and
+  exclusions, item_labels' floor spans and sub-cell table (item-class.md 8a), the frozen monster
+  label pass (`map_labels.py labels`, FIT and DEV only, for Route M below).
+- **Scripts and outputs:** NAS `scratch-archive/2026-11-10/floor-item-study/` (47 files, `SHA256SUMS`
+  `c2e169ac...`, verified on the NAS): `pk_stats.py` (packet facts), `cand_stats.py` (still frames), `fi_study.py`
+  (per item view: the projection, the covers, the fits, 2 absent controls a frame), `fi_refit.py`
+  (grey vs colour masked NCC at +-6 / 10 / 16 px), `scale_test.py`, `fi_rule.py` (the rule's dry
+  run), `itemscale.py`, `sheet.py` (crop sheets), `an1-3.py`; the per-view rows, the monster labels
+  of p31 / p38, the crop sheets looked at (client pixels: never committed). No new tool in
+  `scripts/` (O.11 lists what an accepted plan needs).
+
+#### O.1 The facts
+
+**O.1a The drops (packets; all five recordings, counts only).**
+- 87 floor items: 74 `fall` + 13 `in_sight`; our kills 221, **68 of them (30.8 %) with a drop**
+  (p20 13 / 30, p30 5 / 13, p31 18 / 61, p38 15 / 53, p39 17 / 64).
+- **The item lands ON the death cell, not anywhere in its 3 x 3:** 62 single drops on the death
+  cell; 6 two-item drops on the death cell + (+1, -1) (rAthena's free-cell search for the second
+  item). The fall packet comes 0.23-0.27 s (median 0.251) BEFORE the death vanish.
+- **The death cell is next to the Rogue:** Chebyshev <= 1 in 218 of 221 kills (melee); by cell (rel
+  to her, y up = north): (1,0) 40, (0,-1) 38, **(0,+1) 36 (16.3 %)**, (-1,0) 33, (1,1) 23, (-1,-1)
+  22, (1,-1) 14, (-1,1) 10, other 5. The 74 falls relative to her: (1,0) 15, **(0,+1) 13 (17.6 %)**,
+  (0,-1) 12, (-1,0) 9, (1,1) 9, (-1,-1) 7, (-1,1) 4, (1,-1) 2, other 3.
+- **How long an item lies there** (appear -> vanish; at most 60.0 s, the expiry): median p20 20.8 s,
+  p31 23.3 s (1 and 0 of their falls picked), p38 12.9 s (8 of 15 falls picked), **p39 3.9 s (18 of
+  21 picked: the base with `--loot-first` picks ~3.8 s after the drop)**.
+- **Still frames:** 53-65 % of each recording's frames are candidates (our character still, 4g);
+  item views on still frames at age >= 2.2 s: p20 211 (14 items), p31 422 (19), p38 181 (15), p39
+  62 (21).
+
+**O.1b How an item looks on screen (FIT p31; DEV p38 beside it).**
+- **The sprites:** each of the 33 ids is ONE action with ONE frame (no animation of its own);
+  native extents 11 x 12 (Scell, the most common drop) to 36 x 26 (Sandals); the common ones Zargon
+  15 x 17, Piece of Cake 17 x 17, Red Herb 17 x 18, Candy 17 x 20, Iron 19 x 17, Pearl 21 x 19,
+  Manacles 23 x 21.
+- **Drawn at a FIXED native scale 1.0, not the monsters' billboard scale** (which is 0.956 here,
+  median): on FIT's clear views, a scale grid 0.90-1.10 gives the best median colour fit at 1.00 for
+  Scell (32 views: 0.791 at 0.95 -> 0.911 at 1.00), Zargon (0.940 -> 0.960), Pearl (0.906 ->
+  0.945) and Iron (0.632 -> 0.693); Candy 1.05, Cake flat 0.95-1.05, Manacles 0.95 (4 views each).
+  DEV agrees (Scell 0.870 -> 0.895, Zargon 0.877 -> 0.912). gef10 13j's 0.97-0.99 box sizes were the
+  same fact at another camera distance.
+- **The anchor** (the drawn sprite centre minus the projected point of item-class.md 8a's sub/16
+  cell, the camera on our still cell, the GAT altitude): FIT median **(-4, +2) px** over 192 clear
+  samples from 13 floor items (aged >= 2.5 s, >= 1 s before the vanish, clear of our box, our bar,
+  every unit, other items, models, terrain, >= 30 px from the UI and the edge); DEV (-5, +2) (73
+  samples, 6 items). Around it (the colour fit, FIT, 184 clear fits): median |dx| 1, |dy| 1 px, p90
+  5 / 2 px, 84 % within 3 px; DEV 1 / 1 px, 87 %. The sub-cell table needs no re-measure.
+- **Off the prediction:** items lying on a conveyor belt and items far from us (5-13 cells) are
+  drawn up to ~6-12 px off (by eye: a Scell on a belt ~10 px higher; p31 frame 160's Scell at a wall
+  edge ~13 px higher); a +-6 px search misses them, +-10 px catches most.
+
+**O.1c The fall and the vanish (FIT, by eye on 36 views younger than 3 s; 1 fps, so few).** Drawn at
+its final spot at 0.56 s and 0.81 s (the two views where that spot showed), not yet at 0.045 s
+(one); most views younger than ~1 s are covered by the dying monster and the hit flashes.
+item-class.md 8a's frozen margins (settle 2.2 s, gone 0.6 s, measured on prt_fild08: the fall +
+display ~1 s) cover it.
+For the runner, the item has lain ~2.2 s when the loot step starts (the kill is noticed 1.96 s after
+the death, the drop came 0.25 s before it).
+
+**O.1d What covers an item at the runner's moment (FIT + DEV, BY EYE: the first still frame aged
+2.0-3.6 s of each fall; 33 of the 34 falls have one).**
+
+| | views | what |
+|---|---|---|
+| visible | 15 | whole on the floor beside her, below her bar, under a belt's edge |
+| partly | 10 | under the bar's edge, a Cruiser's limb, a hit flash, a damage text |
+| **hidden** | **8** | **5 behind her own body: EVERY drop on (0,+1)**; 2 behind a live Cruiser on the next cell; 1 under the mouse cursor (the loot hover's hand) |
+
+- Over every still view aged >= 2.2 s (geometry, FIT 422 views): clear 197, under a model box 95
+  (mostly low belts: most still visible), under our bar 87 (the old 72 x 24 px bar box), under a
+  unit 24, inside a UI window 17, under our body 15.
+- **Our HP / SP bar, measured on FIT** (60 frames, its blue frame): **(-31, +10, +28, +18) px** from
+  our anchor (gef10's assumed box was (-36, 0, +36, +24)). Items on (+-1, 0) and (0, -1) mostly
+  clear it.
+- Other covers seen on frames the fit refused (O.4): our NAME under the bar (shown while the
+  cursor is on her), the cursor's hand, damage digits, an emote bubble.
+
+**O.1e Presence: a projected sprite at an empty spot fits too.** The same sprite placed at an empty
+ground point of the same frame (no item within 3 cells, no unit within 2, clear of our box and bar
+and the UI; 2 a frame): FIT 766 such ABSENT controls, DEV 418.
+
+| fit (scale 1.0, around the anchored prediction) | absent p95 / p99 / max (FIT) | present-clear p5 / p50 (FIT, 197) | at 0.65: absent pass / clear kept (FIT) | DEV at 0.65 |
+|---|---|---|---|---|
+| grey +-6 (gef10's label fit) | 0.506 / 0.598 / 0.654 | 0.597 / 0.927 | 0.1 % / 83.0 % | 0.0 % / 60.7 % |
+| grey +-10 | 0.562 / 0.630 / 0.662 | 0.597 / 0.927 | 0.4 % / 90.6 % | 0.2 % / 69.6 % |
+| **colour +-10 (one vector of the 3 channels)** | **0.569 / 0.612 / 0.665** | **0.616 / 0.928** | **0.26 % (2 / 766) / 90.2 %** | **0.0 % / 79.5 %** |
+
+- DEV's lower kept share is one floor item: a Manacles (24 views) fits at 0.34-0.75 (median 0.59);
+  FIT's Manacles fits at 0.58-0.77 (median 0.77, 21 views). Manacles' best scale is 0.95 on both
+  (4 views each). A per-item limit (O.14).
+
+#### O.2 What this means, before any design (for the parent and Batt)
+
+1. **Labels from packets work for items here:** at scale 1.0 and the FIT anchor the drawn item sits
+   within 1 px (median) of the prediction, and a colour fit separates present from absent at 0.65.
+2. **The runner's moment is the hard case:** at ~2.2 s the item lies on the cell next to her, often
+   partly under her bar, a monster's limb or a flash; **1 in 6 drops (the (0,+1) cell) lies fully
+   behind her own body** -- no model can see it. The runner must hover that one cell (O.10), not skip.
+3. **The kill's drop cell is known:** it is the death cell (92 % of items; the rest at (+1,-1)), and
+   the death cell is the target she was striking. The detector answers "is there something on it".
+4. **A label rule that excludes every covered frame keeps few frames of the runner's moment** (O.4:
+   10 of 34 falls have a kept label at age 2.2-4.0 s), so the item model learns mostly items lying a
+   few cells away. Whether it boxes the covered ones is what the held-out per-episode bar (I2) and
+   the runner's shadow pilot measure.
+
+#### O.3 The label rule `xmas02-fi-1` (PROPOSED; every value fixed on FIT p31)
+
+- **(a) The floor span** (item-class.md 3a, frozen there): an item is on the floor from its
+  `floor_item_appear` (either kind) to its `floor_item_vanish` or our map change. On a frame at
+  capture time t: LABELLED when t_a + 2.2 s <= t < t_v; the FRAME is excluded while t_a <= t < t_a +
+  2.2 s (`item_settling`) and while t_v <= t < t_v + 0.6 s (`item_vanishing`; it covers the 1d's 120
+  ms). Only the monsters' candidate frames (4g: our character still; GM windows, map changes,
+  `ui_layout_mismatch` out).
+- **(b) Where:** the cell (x + OX[sub_x], y + OY[sub_y]) with item-class.md 8a's frozen sub/16 table,
+  projected like a monster's anchor (the camera on our cell at tw = t - 120 ms, the GAT altitude),
+  **+ the ANCHOR (-4, +2) px** (O.1b; FIT).
+- **(c) The box: the item's OWN client sprite** (its one frame; gef10-detector.md 8's fix of
+  item-class.md 8b's too-small template boxes) **drawn at scale 1.0** (O.1b), moved by the best
+  **masked COLOUR NCC within +-10 px** (O.1e; +-6 cut visible items on belts and far cells). Below
+  **T_item = 0.65** or at the search edge: `item_unfit`.
+  - T_item's rule, fixed with the table above: the smallest value on a 0.05 grid whose FIT
+    absent-control pass rate is <= 0.5 %. Grey and +-16 are reported, not chosen.
+- **(d) Frame exclusions** (a frame is written only when every item in it is labelled; reasons
+  counted): `item_settling`, `item_vanishing`, `ui_partial` / `edge_partial` (wholly inside a UI
+  window or off the region: not drawn, no label), `stacked` (two item boxes IoU >= 0.5),
+  `under_self` (our self box, labels_v2's 34 x 74 + 4 px), **`under_bar` (the FIT-measured bar
+  (-31, +10, +28, +18) px)**, `under_unit` (the generic unit box at tw and tw - 0.5 s, gef10 round 3
+  4a), `item_unfit`, `item_unsprited` (an id without a sprite; none on this map).
+  Under a model or terrain box: kept only when (c) passes (o3h for items, as gef10 8).
+- **(e) One class, `floor_item`, for every item id.** The runner needs "something lies there"; the
+  item's identity stays with the inventory icons (as gef10 round 3's option C, Batt 2026-10-29).
+- **(f) A frame with no floor item on the floor and none settling or vanishing is a NEGATIVE** (no
+  item label), whatever else is in it.
+- **(g) Frozen at acceptance** in `/dev/shm/poring-lab-tmp/xmas-fi/params.json` (its sha256 in the
+  accepting amendment): the anchor, the scale, the fit and its radius, T_item, the bar, the margins,
+  the sub table, the sprite files' sha256, the tool's commit.
+
+#### O.4 The rule on FIT and DEV (dry run, `fi_rule.py`; per frame keep / exclude)
+
+| | FIT p31 | DEV p38 |
+|---|---|---|
+| candidate (still) frames | 938 | 991 |
+| frames with a floor item on the floor, settling or vanishing | 379 | 201 |
+| **frames kept with >= 1 item label** | **204** | **91** |
+| **item labels kept / floor items** | **233 / 15** | **95 / 10** |
+| by id | Scell 118, Candy 34, Pearl 27, Zargon 21, Cake 17, Iron 16 | Scell 71, Zargon 21, Red Herb 2, Manacles 1 |
+| labels within 1 cell of her / 2-5 cells / farther | 61 / 59 / 113 | 24 / 52 / 19 |
+| labels under a model box (kept by the fit) | 15 | 33 |
+| frame exclusions (a frame may carry several) | item_unfit 99, under_bar 43, item_settling 42, under_unit 24, under_self 21, item_vanishing 1 | item_unfit 57, item_settling 33, under_bar 28, under_self 16, under_unit 11, item_vanishing 6 |
+| item-free kept frames (negatives) | 575 | 779 |
+| **Route M: also whole for MONSTERS** (the frozen o3h-t labels of the same frames) | **84 frames / 109 labels (41 %)** | **47 / 50 (52 %)** |
+| falls with a kept label aged 2.2-4.0 s / at any age | 6 / 15 of 19 | 4 / 10 of 15 |
+
+- **Why frames are not monster-whole (FIT, among the 204):** a monster `engaged` 116, `dying_in_view`
+  19, `occluded_model` 16, `next_move` 8, other 9. The fight is where drops are.
+- **What `item_unfit` is:** by eye, on 35 views of frames excluded ONLY by it (FIT + DEV, the first
+  dry run at scale 0.95): 22 really covered (the cursor's hand, our name under the bar, damage
+  digits, an emote, a Cruiser, our own body), 13 visible items the fit refuses (Manacles and Iron at
+  0.5-0.63, a Scell on a belt ~10 px beyond the search). The final run (scale 1.0): 43 such frames on
+  FIT (25 at the search edge; Scell 32 views, Manacles 9) and 27 on DEV (20 views the one Manacles).
+  They cost frames, not wrong labels.
+- **The geometric check (G2's form, gef10 round 3 4.3):** the median |dx|, |dy| of the clear views'
+  colour fits at the anchored prediction: FIT 1 / 1 px (184 fits), DEV 1 / 1 px (52): PASS (<= 3 px).
+
+#### O.5 T2-items: the blind check (two NEW labellers)
+
+- **The pack (seed 61; 63 is the held-out evaluation's; salt `xmas02-fi`):** from the kept labels of
+  FIT + the TRAIN sessions admitted when the pack is built (O.6), **at most 3 crops per floor item**:
+  - **N (near) 15 crops:** labels within 1 cell of our cell (the runner's case);
+  - **F (far) 15 crops:** labels 2+ cells away, clear of every model box;
+  - **M (models) 10 crops:** labels under a model or terrain box, kept by the fit;
+  - **E (empty) 20 crops:** 10 plain absent points (O.1e's rule) and 10 HARD ones (the absent points
+    with the highest colour fit on TRAIN frames: floor patterns and decorations that look like loot);
+    the box the size of a random drop of the map.
+  - Mixed in one seeded order; the strata's sizes not stated in the pack.
+- **The crops:** item_labels' form (96 x 96 around the box, x3, plain and boxed side by side, a cyan
+  rectangle). **`reference.png`:** the 28 distinct floor sprites of the map's drop tables, each at
+  native size x3 on the floor's orange and pale tiles, no names (client pixels: generated at pack
+  time, its sha256 recorded before the labellers).
+- **The instructions: `docs/planning/xmas02-item-blind-instructions.txt`, sha256
+  `cff8ee8b7e738c13357c680072f9ce39762b652403a86a15ef462ff50e5fcdf5`** (committed with this
+  proposal, unused until accepted): gef10's item instructions (`7d0a9704...`) plus the scene, the
+  covers (bar, name, cursor, flashes), `reference.png`, and a `note` field.
+- **The bars (gef10-detector.md 8, unchanged), from EACH labeller:** good box (q1 yes AND q2 good)
+  >= 90 % on the 40 item crops AND item-present right (yes on an item crop, no on an E crop;
+  `unsure` is wrong) >= 95 % on all 60. Per stratum reported.
+- **Pre-registered fallbacks (each labeller):** N's good box < 90 % while F + M pass -> frames with a
+  kept label within 1 cell of her do not train; M's < 90 % while N + F pass -> frames with an
+  under-model label do not train. Any other failure: no item class this round (reported to Batt).
+- Labellers: two NEW blind agents (letters assigned at launch; none of A-L), M9's brief form.
+
+#### O.6 The data plan and the split (fixed at acceptance, before any new recording)
+
+| role | sessions | what it gives (FIT / DEV dry run; estimates for the rest) |
+|---|---|---|
+| FIT -> **VAL** (monitor only, after re-labelling with the frozen file) | p31 | 204 frames / 233 labels / 15 floor items |
+| **TRAIN, banked** | p38 (DEV) + p20 + p39 (UNTOUCHED), each by the join rule | p38 91 / 95 / 10; **estimates** p20 ~100 labels (211 still views x FIT's 0.55 kept share), p39 ~30 (62 x 0.5) |
+| **TRAIN, new** (decision O-D4) | **fs1**: one immune STAGED-DROP watch, recorded 1 fps PNG | ~100 staged floor items of the map's 12 common ids, ~6 a spot, 18 non-TEST stands (3a), views at (0,0), (3,0), (0,3) (gef10 E3's design) |
+| **HELD-OUT** (refused by name until the model is frozen) | **fiT1, fiT2**: two FRESH base pilots recorded 1 fps PNG beside the runner (fiT3 if I2 is short) | ~12-18 drops a run, ~1-2 labelled frames each (`--loot-first` picks at ~3.8 s); ~8-10 episodes and ~25-30 labels a run |
+| not used | p30 (GPU video) | -- |
+
+- **The join rule (3c's form, for items):** a session joins TRAIN only with the frozen tool and
+  params, 3c's recording path, and its own G2 (the median |dx|, |dy| of its clear views' fits) <= 3
+  px on >= 30 fits; else not admitted (reported). TEST, gw3, FIT and the fiT sessions are refused by
+  name.
+- **Why fs1 (cheapest per label):** a recorded base pilot gives ~25-30 labels (the base picks fast);
+  a staged watch gives ~100 floor items covering the drop SET evenly (FIT's kept labels are 51 %
+  Scell, DEV's 75 %), on many floors, with drops landing on HER 3 x 3 as kills' drops do. **Clean:** group 20
+  has `item` (and `monster`, `killmonster2`, `monsterignore`; no `@dropall` / `@itemmap`), so items
+  come from `@item` and the inventory's known drop path (`stage_items.py`, E3 / stage@6); **no
+  xmas_dun02 species loots** (AI types 17 / 5 / 3 / 4 / 21; looters are 02 / 07); staged items are
+  never income (a separate immune session, no hunting; they expire in 60 s), and the Rogue is immune. **Needs:** the
+  store step first (`clear_loot` drops WHOLE stacks: her Scell / Zargon stock must be in storage),
+  a `MAP_SETS["xmas_dun02"]` entry and its masked icon set (`cut-grf`, offline), the MVP clock (each
+  spot's `@killmonster2`).
+- **The stopping rule:** after the banked TRAIN + fs1: >= 300 floor_item boxes in written frames
+  from >= 40 floor items, with >= 8 ids at >= 10 boxes each -> stop; else fs2 (the next 18 stands).
+- **Disk:** fs1 ~4 GB, fiT1 / fiT2 ~3.3 GB each; one at a time, each shipped and verified before the
+  next (root free 80.78 GB at 10:17 `df -B1`; the floor 30 GB).
+
+#### O.7 The model: (a) xmas02-gb + a floor_item class, or (b) a separate item model
+
+| | (a) one model: class 8 `floor_item` added, retrained from xmas02-gb's last.pt | **(b) a separate model `xmas02-fi` (one class), its own round** |
+|---|---|---|
+| frames that can train | **Route M only**: an item frame must also be whole for the monsters (O.4: 41-52 % of the item frames; the fight is the drop moment, and E0 excludes the engaged unit); each hunting session must also pass 3c's monster C1 | every item-whole frame (100 %) + item-free negatives (hunts, and the immune watches xw2 / xw3 / gw2: no drops) |
+| risk to the deployed monster / Garm Baby model | retrained: every M11 bar must be re-scored (Q1c pooled TEST, Garm Baby Q1s on gw3), and the Fly Wing rides on it | **none: xmas02-gb is untouched** |
+| inference | one call; items in every watcher detection | a second model, called ONCE per kill (the loot step), on the same detect server (it already serves several GPU_WEIGHTS models by name) |
+| GPU time a call (the Arc, FP32; bot-server-migration.md 16-19) | +0 (the head grows 12 -> 13 channels) | +~16 ms server forward (~21 ms the bot's call, D1 p50 20.6 / p95 23.7 ms) per kill: ~62 calls, ~1.3 s a 25-min run |
+| CPU fallback (onnxruntime, 4 threads, quiet: 168.5 / 170.5 ms p50 / p95 for this architecture, bot-server-migration.md 2; 16 threads under load: p50 558 / p95 735 ms, M11) | +0 | +~170 ms (4 threads) per kill, inside the 2.9-s loot step it replaces |
+| training (M8's 0.625 s a frame-epoch on the Arc) | (2,291 + ~250 Route-M frames) x 20 epochs ~ **8.8 h** + the monster re-evaluation ~1 h | ~1,200 frames (~600 item frames + ~600 negatives) x 20 epochs ~ **4.2 h** |
+| Batt's "train it separately" | a separate ROUND, but the same model | a separate round AND model |
+
+**Recommendation: (b).** It keeps every item frame (2x (a)'s), never touches the model the Fly Wing
+relies on, needs no monster re-evaluation, and costs ~20 ms of GPU per kill. (a) would be preferred
+only if items were wanted in every watcher frame (e.g. a later "loot what is seen anywhere"); then
+it can follow from (b)'s labels.
+- **(b)'s recipe:** YOLO11n, imgsz 1280 (native: an 11 x 12 Scell spans ~1.4 cells of the stride-8
+  head), **init xmas02-gb's last.pt** (`85fb37a4...`: its backbone knows this map; no class name
+  matches, so ultralytics' cls_remap seeds none and the 1-row head starts fresh), M6's settings
+  (batch 2, workers 2, seed 20261004, close_mosaic 3, hsv_s 0.2, hsv_h 0.015, scale 0.1, FP32, mid
+  checkpoints, the execdev launch without train-day's duty arguments), **20 epochs**; the scored
+  checkpoint `last.pt` after the last completed epoch, its sha256 recorded before fiT is read.
+- Classes: `config/detector/classes-xmas02-fi.json` = [floor_item] (no `player`: the runner needs
+  none from this model).
+
+#### O.8 The cache (b)
+
+- A new labels mode (`build_frame_cache.py --labels items`, T-O2): every item-whole frame of the
+  admitted TRAIN sessions (all its items as class 0) + negatives: item-free candidate frames of the
+  same sessions (1 per 3 written item frames, seeded) and of xw2 / xw3 / gw2 (300, seeded: floors,
+  toys and monsters with nothing to find). VAL = p31 re-labelled (monitor only). A dry run first,
+  then the guarded `cache:` step (the sustained IO rule); its counts must equal the dry run's.
+
+#### O.9 The evaluation (once, after the freeze) and its bars
+
+- **The held-out:** fiT1 + fiT2 (+ fiT3), labelled once with the frozen file (`--eval-test`); a pack,
+  seed 63, every kept label up to 60 (<= 3 a floor item) + 20 E crops, two NEW labellers, O.5's
+  instructions; a crop is EVALUATED when both say yes / good. Both the item model's GPU weights and
+  its ONNX predict the same frames (predict_dir in the worker; conf 0.25).
+- **Bars (every one must pass; fewer rows than its minimum -> NO VERDICT, never a pass):**
+  - **I1 per crop:** recall >= 0.85 on >= 40 evaluated crops (a floor_item box >= 0.25 whose IoU with
+    the crop's box is >= 0.3 or whose centre lies in it); **precision >= 0.85** over every floor_item
+    box >= 0.25 on fiT's labelled frames, counting a box TRUE when it lies on a packet item on the
+    floor (kept or not: a covered item is not a false box), FALSE when no item lies within 1 cell.
+  - **I2 per EPISODE (the runner's view):** of fiT's drops from our kills with >= 1 kept-label frame,
+    the share boxed in their FIRST such frame >= 0.80, on >= 20 episodes (fiT3 if short; a second
+    short count is NO VERDICT). Reported beside: the (0,+1) drops (never labelled: behind her).
+  - **I3 false items on item-free frames:** fiT's candidate frames with no floor item on the floor
+    (packets): frames with a floor_item box >= 0.25 <= 1 per 200; inside the 5 x 5 around her <= 1
+    per 500.
+  - **I4 the runner's moments:** at each fiT kill WITHOUT a drop, the first frame 2.0-3.0 s after the
+    death: a floor_item box on the death cell's 3 x 3 in <= 5 % of them (>= 40 such kills).
+  - **I5 latency:** the GPU call p95 <= 35 ms (the worker, fiT's frames, as D1); the CPU ONNX p95 <=
+    1.10 x the deployed xmas02gb's in one interleaved run (M10 (c)).
+  - **(a) only, I6:** M11's bars on the new model (the four species' Q1c on pooled TEST each >= 0.80
+    and precision >= M11's - 0.03; Garm Baby Q1s on gw3 >= 0.80 / 0.80). Under (b) the deployed model
+    is untouched and I6 does not apply.
+- **The verdict:** PASS when every bar holds; deploying it and the runner change stay Batt's.
+
+#### O.10 The runner change it enables (a SKETCH, not code; its own pre-registration in rogue-xmas02.md)
+
+- **`--loot-sight` (dungeon@9.20):** after a kill (exp line or hit gap), the death cell D = the lock's
+  cell (the target she was striking; next to her in 218 / 221 kills). Grab a fresh frame, call the
+  item model once (GPU; CPU fallback).
+- The boxes -> cells (the box's centre minus the anchor, matched to the projected cells of her 5 x 5
+  within ~12 px).
+- **The plan:** hover the boxed cells of the 5 x 5, nearest first; **plus D when D = (0,+1)**
+  (behind her body: 16 % of kills, where no box can be expected; one hover ~0.35 s); plus D + (+1,-1)
+  when D is boxed or hidden (where a two-item drop puts its second item: 6 of 68 drops).
+- **No box and D not hidden -> no hover at all** (`loot_skip` logged).
+- **First a SHADOW pilot** (the 9 hovers unchanged; the item model's verdict logged at each kill;
+  packets the referee): false skips (a drop present, no box, D not (0,+1)) <= 5 % of drops; skips
+  on empty kills >= 80 %. Then the live A/B against the base: E1 kills / h and items / h, L1 / L3.
+- **The estimate** (O.1a + the Study after p44): ~44 empty kills a run x ~2.7 s saved (2.9 s -> a
+  frame and one call, or one hover when D = (0,+1)) + ~18 drop kills x ~1.5 s (only the boxed cell
+  hovered) ~ **120-145 s a 25-min run (~8-10 %)**, before the false-skip losses the shadow pilot
+  measures.
+
+#### O.11 The tools (offline, a tmpfs worktree, tests and a positive case each; after acceptance, before fs1)
+
+| # | what | positive case |
+|---|---|---|
+| T-O1 | the item label pass for xmas_dun02: gef10_items' freeze / label / g2 generalised by map (the item sprite dir and resname table, scale 1.0, the colour fit, T_item, the bar), `--eval-test` for fiT | a FIT frame with a known item at its prediction (p31 frame 1157: a Scell at (-6,-2), colour fit 0.938 at (-1, +1) px); this dry run's FIT counts reproduced (204 / 233 / 15) |
+| T-O2 | `build_frame_cache.py --labels items` (item-whole frames + seeded negatives, one class) | the dry run's counts = the label files' |
+| T-O3 | `pack` for items (strata N / F / M / E, hard negatives, `reference.png` from the sprites) + `item_blind_score.py` per stratum | a synthetic answer file per stratum |
+| T-O4 | `stage_items.py` `MAP_SETS["xmas_dun02"]`: the 12 ids with the most expected drops (rates x p44's sight mix): Scell 911, Zargon 912, Well-baked Cookie 538, Piece of Cake 539, Manacles 1098, Red Herb 507, Candy 529, Iron 998, Pearl 722, Candy Cane 530, Rough Oridecon 756, Holy Scroll 12001; groups of 6 a spot; its `cut-grf` icon set; the spots on non-TEST stands | the icon proof (`drop`, rc 0) live, before fs1 |
+| T-O5 | the evaluation: I1-I4 from labels, packets and predictions | a staged frame list with a known count |
+| T-O6 | (deployment, later) `GPU_WEIGHTS["xmas02fi"]`, the loot step's call (its own pre-registration) | -- |
+
+#### O.12 Decisions for the parent / Batt
+
+| # | decision | proposed default |
+|---|---|---|
+| O-D1 | **(b) a separate item model or (a) a class in xmas02-gb** | **(b)** (O.7) |
+| O-D2 | the rule `xmas02-fi-1` with FIT's values (anchor (-4, +2) px, scale 1.0, colour fit +-10 px, T_item 0.65, the measured bar, item-class's 2.2 / 0.6 s) | adopt; frozen at acceptance (O.3 (g)) |
+| O-D3 | the split: FIT p31 -> VAL; DEV p38 + UNTOUCHED p20 / p39 -> TRAIN by the join rule; p30 out | adopt |
+| O-D4 | **fs1, a staged-drop immune watch** (store step + icon set first; ~1 h live with the prep) | yes; the alternative is 2-3 more recorded base pilots (~25-30 labels each, Scell-heavy) |
+| O-D5 | **the held-out: fiT1 + fiT2**, fresh recorded base pilots (fiT3 if I2 is short) | adopt (they can be the day's ordinary base pilots, recorded) |
+| O-D6 | T2-items: strata N / F / M / E, the bars, the two fallbacks | adopt |
+| O-D7 | epochs 20; classes [floor_item]; init xmas02-gb last.pt | adopt |
+| O-D8 | the bars I1-I5 (I6 only under (a)) | adopt |
+| O-D9 | the runner change: a shadow pilot before any skip goes live | adopt (rogue-xmas02.md's own pre-registration) |
+
+#### O.13 Time and GPU (estimates)
+
+- **Tools:** T-O1-T-O5 ~1 day of agent time (gef10_items holds most of T-O1 / T-O3).
+- **Live:** fs1 ~1 h (the store step, the icon proof, a ~40-min watch, the ship); fiT1 / fiT2 2 x 25
+  min (base pilots, recorded); ~11 GB written, shipped one at a time.
+- **Labels, T2:** ~5-10 min CPU a session; two labellers ~30 min.
+- **GPU, (b):** ~1,200 frames x 20 epochs x 0.625 s ~ **4.2 h** (one execdev step, inside 12 h); the
+  cache ~10 min; the export + evaluation ~1 h with the labellers. **(a): ~8.8 h + ~1 h** re-scoring.
+- **Calendar:** ~1.5-2 days from an accepting amendment.
+
+#### O.14 What looked wrong, and the limits (recorded)
+
+1. **One Manacles fits poorly** (DEV: median 0.59 at scale 1.0, 24 views; FIT's 0.77; best scale
+   0.95 on both): a per-item drawing difference not understood; such frames fall to `item_unfit`
+   (20 of DEV's 27 unfit-only views), so Manacles (a 9 % Cruiser drop) may be thin in TRAIN. fs1
+   stages it; I1 / I2 report it apart.
+2. **Belts and wall edges:** items on a conveyor belt or beside a raised block can be drawn ~10-13 px
+   off the GAT projection (p31 frame 160); +-10 px catches most, the rest are `item_unfit`.
+3. **The deployed moment is under-sampled** by a rule that excludes covered frames (10 of 34 falls
+   labelled at age 2.2-4.0 s): I2 and the shadow pilot test it; teaching covered items would be its
+   own amendment (N1's visible-share approach).
+4. **The fall** was seen by eye on 3 clear views only (1 fps); the 2.2-s settle is conservative.
+5. **Absent controls are a sample of empty floor near her**, not the hard places (toy models,
+   decorations): T2's hard negatives and I3 / I4 cover those.
+6. **The CPU fallback's environment:** at 10:11 `/dev/shm/poring-lab-detector` held `model/` only (no
+   `.venv`); not investigated (an infra observation for the parent; the live path is the GPU server).
+7. The O.1b / O.1e numbers are FIT's (one recording, 13-16 floor items, 51 % of its kept labels
+   Scell); DEV agrees on the anchor, the scale and the fit offsets but has one bad item (Manacles);
+   p20 / p39 stay untouched.
