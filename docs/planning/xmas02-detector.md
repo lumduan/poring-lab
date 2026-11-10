@@ -2937,3 +2937,31 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - then the live icon proof (O2 section 6's chain, the store step first);
   - then fs1, the TRAIN labels (p20, p39), T2-items, the cache, the training, the evaluation on
     fiT1 + fiT2.
+
+#### O2, addendum (2026-11-10 11:4x ICT from `date`, the subagent, branch `feat/fi-tools`): params v2 and O3's fs1 set (tools, offline)
+
+- **Params v2 (O3's absent rule):** `fi_labels.py freeze-v2 --v1 params.json --labels <p31> <p38>`
+  wrote `/dev/shm/poring-lab-tmp/xmas-fi/params-v2.json` once, 11:38:47 ICT, commit `6bd49187`,
+  **sha256 `aea6f1d2b938d6fdfa1ebadc0042ba3a9ce2448f8b22f2075f0c0cb48297bb2c`** (v1 `d1c5606b...`
+  unchanged, its positive cases' record).
+  - The rule as recorded in it: 60 absent points of O.1e's rule on FIT p31 + DEV p38's v1 kept
+    frames (seed `per-sprite`; O2's check reproduced fit for fit), each of the 28 sprites fitted at
+    each (59 fits each; one point scores for one sprite only); an id whose sprite fits >= T_item
+    0.65 on MORE than 1 % is `item_unsprited`. The points, every fit and each sprite's rate are in
+    the file.
+  - **Excluded: Bib 7269 (44 / 59 = 74.6 %, max 0.870), Rough Wind 996 (1 / 59 = 1.7 %, max 0.681),
+    Holy Bonnet 2251 (1 / 59 = 1.7 %, max 0.651)**; every other sprite 0 / 59.
+- **p31 and p38 re-labelled under v2:** FIT p31 204 / 233 / 15 and DEV p38 91 / 95 / 10, **the same as
+  v1, 938 of 938 and 991 of 991 frames identical**: neither recording holds an excluded id (their
+  floor items: 911, 912, 529, 539, 722, 998, 1098 and 507, 979). G2 unchanged (253 / 89 fits,
+  1 / 1 px). Label files `e4e6995d...` (p31) and `5db250eb...` (p38) in
+  `/dev/shm/poring-lab-tmp/xmas-fi/labels-v2/`.
+- **The fs1 set (O3, 7.1):** O.11's ranking (drop rate x p44's sight: Myst Case 23, Cruiser 18,
+  Cookie 10, Christmas Cookie 8) reproduces O.11's twelve; 13th Cold Scroll 688 (0.08), 14th Chef
+  King Orleans Vol.1 11002 (0.05).
+  - **688 cannot join:** its grey masked icon lies 2.34 from Holy Scroll 12001's (< ICON_AMBIGUOUS
+    20): clear_loot would read both "unknown" and drop neither, so their screen-cut proof refuses.
+  - **11002 joins in Scell's place** (119 item pixels; its nearest of the set 46.4). The set: 912,
+    538, 539, 1098, 507, 529, 998, 722, 530, 756, 12001, 11002, in groups of 6.
+  - `cut-grf --check` (it now also names the set's own ambiguous pairs): no refusal but the 12
+    screen-cut references a live `give --frames` + `cut` makes; `passes_once_screen_cut: true`.

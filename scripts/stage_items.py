@@ -43,14 +43,16 @@ only (gm_state.ICON_MATCH_MASKED), so the slot background and the new-item glow 
     stage_items.py cut-grf --map gef_fild10 --table IDNUM2ITEMRESNAMETABLE --icons ITEM_BMP_DIR
 
 stage@8 (xmas02-detector.md Amendment O.6 / O.11, ACCEPTED by O1 2026-11-10; tool T-O4): xmas_dun02
-stages the 12 floor-item ids of O.11 in balanced groups of 6, its spots drawn ONLY from the watch
-lattice's TRAIN stands (watch_lattice.py's lattice-train.json, 3a) with every stand of a spot (the
-spot and its views) outside 3a's TEST blocks (so never a TEST stand, never gw3's: gw3 stood on
-TEST stands); ``clear="spot"``: one @killmonster2 at each spot right after its warp (every monster
-and a living MVP die, no drops of their own; the ICT clock times are the MVP clock; no species of
-the map loots, so no end pair). ``cut-grf --check`` runs the masked set's write gate offline
-WITHOUT writing: what is missing before it can pass (the screen-cut references of a live
-``give --frames`` + ``cut``) and every other refusal now:
+stages 12 floor-item ids by O.11's ranking (Amendment O3: Scell 911 out; the next usable id, 11002,
+in: the 13th's icon is ambiguous with Holy Scroll's) in balanced groups of 6. Its spots are drawn
+ONLY from the watch lattice's TRAIN stands (watch_lattice.py's lattice-train.json, 3a), with every
+stand of a spot (the spot and its views) outside 3a's TEST blocks: never a TEST stand, so never
+gw3's (gw3 stood on TEST stands). ``clear="spot"``: one @killmonster2 at each spot right after its
+warp (every monster and a living MVP die, no drops of their own; the ICT clock times are the MVP
+clock; no species of the map loots, so no end pair). ``cut-grf --check`` runs the masked set's
+write gate offline WITHOUT writing: what is missing before it can pass (the screen-cut references
+of a live ``give --frames`` + ``cut``), every other refusal now, and the set's own pairs within
+gm_state.ICON_AMBIGUOUS (their screen-cut proof would refuse):
 
     stage_items.py spots --map xmas_dun02 --n 18 --seed S --plan                       OFFLINE
     stage_items.py cut-grf --map xmas_dun02 --table TABLE --icons ITEM_BMP_DIR --check   OFFLINE
@@ -83,8 +85,8 @@ VERSION = "stage@8"  # @2: --open (target-items.md 9b); @3: refuses while target
 # @6: MASKED icon references from the client's own item icons (`cut-grf`, rogue-gef10.md AK-5)
 # @7: watch --recorder-state / --start-cell: dwell only while a pausing recorder banks frames
 # (Batt 2026-11-06, xmas02-detector.md Amendment D)
-# @8: xmas_dun02's set (Amendment O.11 / O1): spots on the lattice's TRAIN stands, outside 3a's TEST
-# blocks; clear "spot" (@killmonster2 at each spot); cut-grf --check (offline, writes nothing)
+# @8: xmas_dun02's set (Amendment O.11 / O1; O3: Scell out, Cold Scroll in): spots on the lattice's
+# TRAIN stands, outside 3a's TEST blocks; clear "spot" (@killmonster2 at each spot); cut-grf --check
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -121,14 +123,22 @@ PILE: tuple[tuple[int, int], ...] = tuple((dx, dy) for dy in (-1, 0, 1) for dx i
 LOOT_LIFE_S = 65.0  # a floor item lives 60 s (target-items.md 1: 40 of 48 lived exactly 60.0 s)
 SEARCH_MARGIN = 10  # cells: search_area's margin around every warp span (and NPC, npc_keep)
 # --- stage@8: xmas_dun02 (xmas02-detector.md Amendment O.11, ACCEPTED by O1 2026-11-10) -----------
-# The 12 ids with the most expected floor drops (drop rates x p44's sight mix; O.11's list, ids from
-# the local KB's items.json / drops.json, rAthena e985006): Etc tab Scell, Zargon, Manacles, Iron,
-# Pearl (aegis Scarlet_Jewel), Rough Oridecon; Use tab the Cookie, the Cake, Red Herb, Candy, Candy
-# Cane and the Holy Scroll (aegis Holy_Scroll_1_3). Typed in this order.
+# O.11's ranking: expected floor drops = drop rate (the local KB's drops.json, rAthena e985006)
+# x p44's sight mix (Myst Case 23, Cruiser 18, Cookie 10, Christmas Cookie 8; rogue-xmas02.md):
+# 1 Scell 911 (6.30), 2 Zargon 912 (3.61), 3 Well-baked Cookie 538 (2.20), 4 Piece of Cake 539
+# (1.84), 5 Manacles 1098 (1.62), 6 Red Herb 507 (1.36), 7 Candy 529 (1.10), 8 Iron 998 (0.58),
+# 9 Pearl 722 (aegis Scarlet_Jewel, 0.38), 10 Candy Cane 530 (0.36), 11 Rough Oridecon 756 (0.16),
+# 12 Holy Scroll 12001 (aegis Holy_Scroll_1_3, 0.10), 13 Cold Scroll 688 (aegis Cold_Scroll_1_3,
+# 0.08), 14 Chef King Orleans Vol.1 11002 (aegis Great_Chef_Orleans01, a Cookie drop, 0.05).
+# Amendment O3 (2026-11-10 11:30, O2 finding 7.1): Scell 911 LEAVES the set (its masked icon
+# compares 30 item pixels < MIN_ITEM_PX 40; the gate is kept) and the next id by the ranking joins.
+# The 13th, Cold Scroll 688, cannot: its grey masked icon lies 2.34 from Holy Scroll 12001's
+# (< gm_state.ICON_AMBIGUOUS 20: clear_loot reads both "unknown" and drops neither), so the next
+# usable one, 11002 (119 item pixels, its nearest of the set 46.4), joins. Typed in rank order.
 XMAS02_ITEMS: dict[int, str] = {
-    911: "scell", 912: "zargon", 538: "well_baked_cookie", 539: "piece_of_cake",
-    1098: "manacles", 507: "red_herb", 529: "candy", 998: "iron", 722: "pearl",
-    530: "candy_cane", 756: "rough_oridecon", 12001: "holy_scroll",
+    912: "zargon", 538: "well_baked_cookie", 539: "piece_of_cake", 1098: "manacles",
+    507: "red_herb", 529: "candy", 998: "iron", 722: "pearl", 530: "candy_cane",
+    756: "rough_oridecon", 12001: "holy_scroll", 11002: "orleans_book",
 }  # fmt: skip
 XMAS02_PER_SPOT = 6  # O.6 / O.11: groups of 6 a spot (gef10 E3's design)
 XMAS02_LATTICE = Path("/dev/shm/poring-lab-tmp/xmas-det/lattice/lattice-train.json")  # 3a's TRAIN
@@ -545,12 +555,20 @@ def cut_grf(map_: str, table: Path, icons: Path, check: bool = False) -> dict[st
     why = masked_refusals(masked, screen, stock)
     if check:
         missing = sorted(w.split(":")[0] for w in why if w.endswith(NO_SCREEN_REF))
+        own = own_set_nearest(masked)
+        ambiguous = sorted(f"{a}: {b} at {d}" for a, (b, d) in own.items()
+                           if d <= gm_state.ICON_AMBIGUOUS)  # fmt: skip
+        others = [w for w in why if not w.endswith(NO_SCREEN_REF)]
         return {"check": True, "written": [], "map": map_, "dir": str(ms.icon_dir),
                 "items": {n: int((~np.ma.getmaskarray(m)).sum())
                           for n, m in sorted(masked.items())},
                 "screen_refs_missing": missing,
-                "other_refusals": [w for w in why if not w.endswith(NO_SCREEN_REF)],
-                "own_set_nearest": own_set_nearest(masked),
+                "other_refusals": others,
+                # stage@8: two of the set within ICON_AMBIGUOUS read "unknown" in clear_loot, so
+                # each one's screen-cut proof will refuse: predicted here, before the live cut
+                "own_set_ambiguous": ambiguous,
+                "passes_once_screen_cut": not others and not ambiguous,
+                "own_set_nearest": own,
                 "ambiguous_bar": gm_state.ICON_AMBIGUOUS,
                 "stock_refs": sorted(stock)}  # fmt: skip
     if why:

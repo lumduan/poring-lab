@@ -4,6 +4,8 @@ Amendment O, sections O.3-O.6 and O.9; ACCEPTED by O1, 2026-11-10 10:29 ICT, wit
 defaults: one class ``floor_item``, a SEPARATE item model ``xmas02-fi``). Tools T-O1 and T-O3.
 
     fi_labels.py freeze [--out PARAMS]                       O.3 (g): the frozen params file, once
+    fi_labels.py freeze-v2 --v1 PARAMS --labels FIT.json DEV.json [--out PARAMS_V2]
+                                                             O3: v1 + the absent rule's ids, once
     fi_labels.py label PART --split train|val --params PARAMS --out LABELS.json [--workers N]
     fi_labels.py label PART --eval-test --model WEIGHTS --model-sha256 HEX --params PARAMS
                        --out LABELS.json                      O.9: fiT only, after the model froze
@@ -28,8 +30,10 @@ THE RULE (O.3, every value fixed on FIT p31 and frozen by ``freeze``):
 - (d) frame exclusions: item_settling, item_vanishing, ui_partial / edge_partial, stacked (two
   item boxes IoU >= 0.5), under_self (labels_v2's 34 x 74 self box + 4 px), under_bar (the
   FIT-measured bar (-31, +10, +28, +18) px from our anchor), under_unit (the generic unit box at tw
-  and tw - 0.5 s), item_unfit, item_unsprited (an id outside the frozen sprite table); and, fail
-  closed, item_unprojected (a prediction that does not exist). Under a model / terrain box: kept
+  and tw - 0.5 s), item_unfit, item_unsprited (an id outside the frozen sprite table; params v2,
+  Amendment O3: also an id the ABSENT RULE excludes -- its sprite fits >= T_item on > 1 % of FIT +
+  DEV's empty-floor absent points, so a fit cannot show it is there); and, fail closed,
+  item_unprojected (a prediction that does not exist). Under a model / terrain box: kept
   only when (c) passes (o3h for items);
 - (e) ONE class ``floor_item``; (f) a kept frame with no item label is a NEGATIVE.
 
@@ -158,6 +162,9 @@ class FiSpec:
     eval_seed: int
     salt: str
     plan: str
+    # params v2 (Amendment O3): the absent rule's sessions (FIT, DEV) and its output file
+    absent_suffixes: tuple[str, ...] = ()
+    params_v2: Path | None = None
 
 
 XMAS02_FI = FiSpec(
@@ -184,6 +191,8 @@ XMAS02_FI = FiSpec(
     eval_seed=63,
     salt="xmas02-fi",
     plan="docs/planning/xmas02-detector.md Amendment O / O1",
+    absent_suffixes=("-rdp-hunt-xmas02-p31", "-rdp-hunt-xmas02-p38"),
+    params_v2=FI / "params-v2.json",
 )  # fmt: skip
 FI_MAPS = {"xmas_dun02": XMAS02_FI}
 
@@ -561,10 +570,15 @@ def sprite_table(ids: Iterable[int], sprites: Path, resnames: Path) -> dict[str,
 
 class FrozenSheets:
     """Item id -> its SpriteSheet, ONLY for the ids of the frozen table and only when the files'
-    sha256 still match it (checked once, at load: a changed sprite refuses the run)."""
+    sha256 still match it (checked once, at load: a changed sprite refuses the run). ``excluded``
+    (params v2, Amendment O3): ids treated as ``item_unsprited`` -- never labelled (``__call__``
+    and ``sheets`` leave them out), though their sprite is still drawn where a box is only
+    predicted (``any``: the evaluation's floor targets, G2's other items) and on reference.png
+    (``all``)."""
 
-    def __init__(self, table: Mapping[str, Any], sprites: Path) -> None:
-        self.sheets: dict[int, SpriteSheet] = {}
+    def __init__(self, table: Mapping[str, Any], sprites: Path,
+                 excluded: Iterable[int] = ()) -> None:  # fmt: skip
+        self.all: dict[int, SpriteSheet] = {}
         for k, v in table.items():
             if v is None:
                 continue
@@ -572,10 +586,20 @@ class FrozenSheets:
             spr = (sprites / f"{v['resname']}.spr").read_bytes()
             if sha256_bytes(act) != v["act_sha256"] or sha256_bytes(spr) != v["spr_sha256"]:
                 raise SystemExit(f"item {k}: its sprite files differ from the frozen params")
-            self.sheets[int(k)] = SpriteSheet(parse_act(act), parse_spr(spr))
+            self.all[int(k)] = SpriteSheet(parse_act(act), parse_spr(spr))
+        self.excluded = frozenset(int(i) for i in excluded)
+        self.sheets = {k: v for k, v in self.all.items() if k not in self.excluded}
 
     def __call__(self, item_id: int) -> SpriteSheet | None:
         return self.sheets.get(int(item_id))
+
+    def any(self, item_id: int) -> SpriteSheet | None:
+        return self.all.get(int(item_id))
+
+
+def frozen_sheets(prm: Mapping[str, Any]) -> FrozenSheets:
+    """The params' sprites (v2: without the ids its absent rule excluded)."""
+    return FrozenSheets(prm["items"], Path(prm["sprites_dir"]), prm.get("items_excluded", ()))
 
 
 def freeze_params(spec: FiSpec, table: Mapping[str, Any], monster: Mapping[str, Any],
@@ -604,6 +628,47 @@ def freeze_params(spec: FiSpec, table: Mapping[str, Any], monster: Mapping[str, 
         "items_unsprited": sorted(int(k) for k, v in table.items() if v is None),
         **provenance,
     }  # fmt: skip
+
+
+ABSENT_POINTS = 60  # O3 (params v2): the absent points drawn on FIT + DEV's kept frames ...
+ABSENT_SEED = "per-sprite"  # ... in this seeded order (O2's per-sprite check, reproduced)
+ABSENT_MAX_RATE = 0.01  # an id whose sprite fits >= T_item on MORE than 1 % of them is excluded
+
+
+def absent_groups(table: Mapping[str, Any]) -> dict[int, list[int]]:
+    """PURE: each distinct sprite (ACT + SPR sha256) -> its ids, keyed by its smallest id."""
+    groups: dict[tuple[str, str], list[int]] = {}
+    for k, v in sorted(table.items(), key=lambda kv: int(kv[0])):
+        if v is not None:
+            groups.setdefault((v["act_sha256"], v["spr_sha256"]), []).append(int(k))
+    return {ids[0]: ids for ids in groups.values()}
+
+
+def absent_rule(fits: Mapping[int, Sequence[float]], groups: Mapping[int, Sequence[int]],
+                t_item: float, max_rate: float = ABSENT_MAX_RATE
+                ) -> tuple[list[int], dict[str, Any]]:  # fmt: skip
+    """PURE (Amendment O3, params v2): per sprite (its representative id -> the colour fits at
+    the empty-floor absent points) the share of fits >= ``t_item``; every id of a sprite whose
+    share is > ``max_rate`` is EXCLUDED (treated as item_unsprited). A sprite with no fit is
+    kept (nothing measured). Returns the excluded ids and the per-sprite rows."""
+    excluded: list[int] = []
+    rows: dict[str, Any] = {}
+    for rep_id, ids in sorted(groups.items()):
+        v = [float(x) for x in fits.get(rep_id, [])]
+        n, k = len(v), sum(x >= t_item for x in v)
+        rate = k / n if n else 0.0
+        out = n > 0 and rate > max_rate
+        rows[str(rep_id)] = {
+            "ids": list(ids),
+            "n": n,
+            "pass": k,
+            "rate": round(rate, 4),
+            "max": round(max(v), 4) if v else None,
+            "excluded": out,
+        }
+        if out:
+            excluded += list(ids)
+    return sorted(excluded), rows
 
 
 def load_params(path: Path, spec: FiSpec) -> dict[str, Any]:
@@ -673,23 +738,26 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
     preds: dict[int, tuple[il.Floor, SpriteSheet, SpritePrediction, tuple[float, float]]] = {}
     present: dict[int, Box] = {}  # every item on the floor (on or settling): G2's other items
     floor_rows = []
+    unsprited: list[int] = []
     for f, ph in near:
         cell = il.item_cell(f, gi.OX, gi.OY)
-        sheet = sheets(f.item_id)
-        p = None if sheet is None else _predict(sheet, cell, scene, prm)
+        sheet = sheets(f.item_id)  # None: unsprited, or excluded by v2's absent rule (O3)
+        draw = sheets.any(f.item_id)  # its sprite even when excluded: a predicted box only
+        p = None if draw is None else _predict(draw, cell, scene, prm)
         if eval_test:
             floor_rows.append({"floor_id": f.floor_id, "item_id": f.item_id, "phase": ph,
                                "pred_box": None if p is None else [round(x, 1) for x in p.box],
                                "near_box": cell_box(scene, cell, 1.5)})  # fmt: skip
+        if p is not None and ph in ("on", "settling"):
+            present[f.floor_id] = p.box
         if ph == "on" and sheet is None:
             reasons.append("item_unsprited")
+            unsprited.append(f.item_id)
             continue
         if ph == "on" and p is None:
             reasons.append("item_unprojected")
             continue
-        if p is not None and ph in ("on", "settling"):
-            present[f.floor_id] = p.box
-        if ph == "on" and sheet is not None and p is not None:
+        if ph == "on" and p is not None and sheet is not None:
             preds[f.floor_id] = (f, sheet, p, cell)
     if eval_test:
         base["floor"] = floor_rows
@@ -725,6 +793,8 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
         if unfit:
             reasons.append("item_unfit")
     reasons = list(dict.fromkeys(reasons))
+    if unsprited:  # which ids made it item_unsprited (v2: the absent rule's, O3)
+        base["unsprited_ids"] = sorted(set(unsprited))
     return {**base, "status": "exclude" if reasons else "keep", "reasons": reasons,
             "items": items}  # fmt: skip
 
@@ -845,7 +915,7 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
         model = {"weights": str(a.model), "sha256": got, "bytes": a.model.stat().st_size}
     elif a.model is not None or a.model_sha256 is not None:
         raise SystemExit("--model / --model-sha256 belong to --eval-test")
-    sheets = FrozenSheets(prm["items"], Path(prm["sprites_dir"]))
+    sheets = frozen_sheets(prm)
     occl = ml.occluders(spec.mspec)
     if occl.provenance()["rsw_sha256"] != prm["occluders"]["rsw_sha256"]:
         raise SystemExit("the map's RSW differs from the frozen params'")
@@ -877,6 +947,120 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
         out["kills"], out["kills_summary"] = kills_for_eval(sess, floors, prm)
     out["frames"] = frames
     return out
+
+
+def absent_fits(
+    docs: Sequence[Mapping[str, Any]],
+    spec: FiSpec,
+    prm: Mapping[str, Any],
+    sheets: FrozenSheets,
+    layout: Path,
+    n: int = ABSENT_POINTS,
+    seed: str = ABSENT_SEED,
+) -> tuple[list[dict[str, Any]], dict[int, list[float]]]:
+    """Params v2's measurement (O3; O2's per-sprite check as a tool): ``n`` absent points of
+    O.1e's rule on the docs' kept frames (absent_points, ``random.Random(seed)``), and at each
+    one the colour fit (+-r_label, the params' scale and anchor) of EVERY distinct sprite of the
+    table, its sub-cell drawn by ``random.Random(frame_id)`` / ``random.Random(frame_id + 1)``.
+    Returns the points (their provenance and fits) and the fits per sprite (its smallest id)."""
+    sessions: dict[str, ml.RecSession] = {}
+    pts = absent_points(docs, spec, prm, sheets, sessions, layout, n, random.Random(seed),
+                        fit=False)  # fmt: skip
+    groups = absent_groups(prm["items"])
+    off = int(float(prm["offset_ms"]) * 1e6)
+    r = int(prm["r_label"])
+    fits: dict[int, list[float]] = {k: [] for k in groups}
+    rows = []
+    for pt in pts:
+        sess = sessions[pt["session"]]
+        bgr = ml.read_png(_ref(sess, pt))
+        valid = olf.valid_map(sess.lab.size, sess.lab.ui_rects)
+        scene = sess.scene(sess.lab.timeline.frame_world(int(pt["t"]) - off))
+        fid = int(pt["frame_id"])
+        sub = (random.Random(fid).choice(SUBS), random.Random(fid + 1).choice(SUBS))
+        cell = (pt["cell"][0] + gi.OX[sub[0]], pt["cell"][1] + gi.OY[sub[1]])
+        row: dict[str, Any] = {"session": pt["session"], "frame_id": fid, "t": pt["t"],
+                               "cell": pt["cell"], "sub": list(sub), "fits": {}}  # fmt: skip
+        for rep_id in groups:
+            sh = sheets.any(rep_id)
+            pr = None if sh is None or scene is None else _predict(sh, cell, scene, prm)
+            fr = None if pr is None or sh is None else colour_fit(bgr, valid, sh, pr, r)
+            if fr is not None:
+                fits[rep_id].append(fr[0])
+                row["fits"][str(rep_id)] = fr[0]
+        rows.append(row)
+    return rows, fits
+
+
+def cmd_freeze_v2(a: argparse.Namespace) -> dict[str, Any]:
+    """Params v2 (Amendment O3): v1 + the ids its absent rule excludes, frozen ONCE in a new file
+    (v1 stays the record of the positive cases)."""
+    spec = FI_MAPS[a.map]
+    out: Path | None = a.out or spec.params_v2
+    if out is None:
+        raise SystemExit(f"{spec.name}: no params v2 path")
+    if out.exists():
+        raise SystemExit(f"{out} exists: params v2 is frozen ONCE (O3); a change is a new file")
+    if out.resolve().is_relative_to(ROOT):
+        raise SystemExit(f"{out}: client-derived (sprite hashes): never inside the repo")
+    raw1 = a.v1.read_bytes()
+    v1 = load_params(a.v1, spec)
+    if v1.get("version", 1) != 1 or "items_excluded" in v1:
+        raise SystemExit(f"{a.v1}: v2 is built from the v1 params")
+    v1_sha = sha256_bytes(raw1)
+    docs, files = [], []
+    for path in a.labels:
+        doc = json.loads(path.read_text())
+        sid = str(doc.get("session"))
+        if doc.get("rule") != spec.rule or doc.get("params_sha256") != v1_sha:
+            raise SystemExit(f"{path}: not {spec.rule} labels under {a.v1}")
+        if doc.get("eval_test") or role_refusal(spec, sid, doc.get("split"), False):
+            raise SystemExit(f"{path}: {sid}: not a FIT / DEV label file")
+        docs.append(doc)
+        files.append({"file": str(path), "sha256": olf.sha256_file(path), "session": sid,
+                      "split": doc["split"]})  # fmt: skip
+    got = sorted(next((x for x in spec.absent_suffixes if f["session"].endswith(x)), "")
+                 for f in files)  # fmt: skip
+    if got != sorted(spec.absent_suffixes):
+        raise SystemExit(f"--labels: one label file each of {', '.join(spec.absent_suffixes)} "
+                         "(O3: the rule is fixed on FIT + DEV)")  # fmt: skip
+    sheets = frozen_sheets(v1)
+    rows, fits = absent_fits(docs, spec, v1, sheets, a.layout_templates)
+    excluded, per = absent_rule(fits, absent_groups(v1["items"]), float(v1["t_item"]))
+    tool = Path(__file__).resolve()
+    doc = dict(v1)
+    doc.update({
+        "version": 2, "plan": f"{spec.plan} / O3",
+        "accepted_by": "Amendment O3 (2026-11-10 11:30 ICT): O2 finding 7.2, a per-id rule fixed "
+                       "on FIT + DEV's empty-floor absent points; frozen when this tool first "
+                       "writes this file",
+        "v1": str(a.v1), "v1_sha256": v1_sha, "v1_frozen_at": v1.get("frozen_at"),
+        "v1_commit": v1.get("commit"),
+        "absent_rule": {
+            "what": "an id whose sprite fits >= t_item on MORE than max_rate of the absent points "
+                    "is treated as item_unsprited (never labelled; its frames excluded)",
+            "t_item": float(v1["t_item"]), "max_rate": ABSENT_MAX_RATE,
+            "points_drawn": ABSENT_POINTS, "points": len(rows), "seed": ABSENT_SEED,
+            "point_rule": "O.1e via fi_labels.absent_points on the label files' kept frames",
+            "sub_rule": "random.Random(frame_id) / random.Random(frame_id + 1) over 3, 6, 9, 12",
+            "fit": f"colour NCC +-{v1['r_label']} px, scale {v1['scale']}, anchor "
+                   f"{v1['anchor_px']}", "label_files": files, "per_sprite": per,
+            "point_rows": rows},
+        "items_excluded": excluded,
+        "frozen_at": olf.now_ict(), "commit": olf.git_head(),
+        "tool": str(tool.relative_to(ROOT)), "tool_sha256": olf.sha256_file(tool),
+    })  # fmt: skip
+    out.parent.mkdir(parents=True, exist_ok=True)
+    raw = (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode()
+    out.write_bytes(raw)
+    return {"what": "O3: the frozen xmas02-fi-1 params v2", "out": str(out),
+            "sha256": sha256_bytes(raw), "v1_sha256": v1_sha, "points": len(rows),
+            "items_excluded": excluded,
+            "excluded_rates": {k: {x: r[x] for x in ("ids", "n", "pass", "rate", "max")}
+                               for k, r in per.items() if r["excluded"]},
+            "kept_max_rate": max((r["rate"] for r in per.values() if not r["excluded"]),
+                                 default=None),
+            "frozen_at": doc["frozen_at"], "commit": doc["commit"]}  # fmt: skip
 
 
 def cmd_g2(a: argparse.Namespace) -> dict[str, Any]:
@@ -952,7 +1136,7 @@ def absent_points(docs: Sequence[Mapping[str, Any]], spec: FiSpec, prm: Mapping[
               if f["status"] == "keep"]  # fmt: skip
     frames.sort(key=lambda x: (x[0], int(x[2]["frame_id"])))
     rng.shuffle(frames)
-    ids = sorted(int(k) for k, v in prm["items"].items() if v)
+    ids = sorted(sheets.sheets)  # the labelled ids (v1: every sprited id; v2: not the excluded)
     off = int(float(prm["offset_ms"]) * 1e6)
     out: list[dict[str, Any]] = []
     for sid, split, f in frames:
@@ -1076,7 +1260,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     prm = load_params(a.params, spec)
     docs = [json.loads(p.read_text()) for p in a.labels]
     check_pack_docs(spec, docs, a.eval_test, sha256_bytes(params_raw))
-    sheets = FrozenSheets(prm["items"], Path(prm["sprites_dir"]))
+    sheets = frozen_sheets(prm)
     cands = pool_labels(docs)
     if a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
@@ -1112,7 +1296,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         if d.exists() and any(d.iterdir()):
             raise SystemExit(f"{d} is not empty: a pack is built once")
         d.mkdir(parents=True, exist_ok=True)
-    ref_img, n_sprites = reference_sheet(sheets.sheets)
+    ref_img, n_sprites = reference_sheet(sheets.all)  # every floor sprite of the drop tables
     Image.fromarray(ref_img).save(root / "reference.png")
     (root / "instructions.txt").write_bytes(raw)
     key: dict[str, Any] = {"what": f"{'O.9' if a.eval_test else 'O.5'}: the answer key",
@@ -1199,6 +1383,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--drops", type=Path, default=None)
     p.add_argument("--out", type=Path, default=None, help="default: the map's O.3 (g) path")
     p.add_argument("--report", type=Path, default=None)
+    p = sub.add_parser("freeze-v2")
+    p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
+    p.add_argument("--v1", type=Path, required=True, help="the v1 params (FROZEN)")
+    p.add_argument("--labels", type=Path, nargs="+", required=True,
+                   help="FIT p31 and DEV p38's label files under v1")  # fmt: skip
+    p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
+    p.add_argument("--out", type=Path, default=None, help="default: the map's params v2 path")
+    p.add_argument("--report", type=Path, default=None)
     p = sub.add_parser("label")
     p.add_argument("part")
     p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
@@ -1233,9 +1425,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("label: --split train|val, or --eval-test")
     if a.cmd == "label" and a.eval_test and a.split is not None:
         raise SystemExit("label: --eval-test has no --split")
-    out = {"freeze": cmd_freeze, "label": cmd_label, "g2": cmd_g2, "pack": cmd_pack,
-           "refs": cmd_refs}[a.cmd](a)  # fmt: skip
-    dest = a.report if a.cmd == "freeze" else a.out
+    out = {"freeze": cmd_freeze, "freeze-v2": cmd_freeze_v2, "label": cmd_label, "g2": cmd_g2,
+           "pack": cmd_pack, "refs": cmd_refs}[a.cmd](a)  # fmt: skip
+    dest = a.report if a.cmd in ("freeze", "freeze-v2") else a.out
     if dest is not None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(out) + "\n")

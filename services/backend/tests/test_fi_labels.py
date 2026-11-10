@@ -419,3 +419,141 @@ def test_refs_cover_judged_and_i4_frames(tmp_path: Path) -> None:
     lab.write_text(json.dumps({**doc, "eval_test": False}))
     with pytest.raises(SystemExit, match="eval-test label files only"):
         fl.main(["refs", str(lab), "--refs-out", str(refs), "--out", str(tmp_path / "o.json")])
+
+
+# --- params v2 (Amendment O3): the absent rule ---------------------------------------------------
+
+
+def test_absent_rule_excludes_an_id_over_one_percent_and_keeps_one_under() -> None:
+    """O3: an id whose sprite fits >= T_item on MORE than 1 % of the absent points is excluded
+    (every id sharing that sprite too); exactly 1 %, none, or no fit at all: kept."""
+    groups = {7269: [7269], 911: [911], 4206: [4206, 4235], 50: [50], 60: [60]}
+    fits = {
+        7269: [0.87] * 44 + [0.5] * 15,  # 44 / 59 = 74.6 %
+        911: [0.60] * 59,  # 0 %
+        4206: [0.66] + [0.3] * 58,  # 1 / 59 = 1.7 % > 1 %: both card ids go
+        50: [0.65] + [0.1] * 99,  # exactly 1 / 100 = 1 %: kept (not MORE than 1 %)
+    }  # 60: no fit at all -> kept
+    excluded, rows = fl.absent_rule(fits, groups, 0.65)
+    assert excluded == [4206, 4235, 7269]
+    assert rows["7269"]["rate"] == round(44 / 59, 4) and rows["7269"]["excluded"]
+    assert rows["911"]["pass"] == 0 and not rows["911"]["excluded"]
+    assert rows["50"]["rate"] == 0.01 and not rows["50"]["excluded"]
+    assert rows["60"]["n"] == 0 and not rows["60"]["excluded"]
+    assert rows["4206"]["ids"] == [4206, 4235]
+
+
+def test_absent_groups_key_each_sprite_by_its_smallest_id() -> None:
+    table = {"4235": {"act_sha256": "c", "spr_sha256": "d"},
+             "4206": {"act_sha256": "c", "spr_sha256": "d"},
+             "911": {"act_sha256": "a", "spr_sha256": "b"}, "1": None}  # fmt: skip
+    assert fl.absent_groups(table) == {911: [911], 4206: [4206, 4235]}
+
+
+def test_frozen_sheets_leave_out_the_excluded_ids_but_still_draw_them(tmp_path: Path) -> None:
+    import hashlib
+
+    spr = tmp_path / "spr"
+    spr.mkdir()
+    table = {}
+    for iid in (911, 7269):
+        (spr / f"r{iid}.act").write_bytes(b"act")
+        (spr / f"r{iid}.spr").write_bytes(b"spr")
+        table[str(iid)] = {"resname": f"r{iid}", "act_sha256": hashlib.sha256(b"act").hexdigest(),
+                           "spr_sha256": hashlib.sha256(b"spr").hexdigest()}  # fmt: skip
+    orig = (fl.parse_act, fl.parse_spr)
+    try:
+        fl.parse_act = lambda b: "A"  # type: ignore[assignment]
+        fl.parse_spr = lambda b: "S"  # type: ignore[assignment]
+        sh = fl.frozen_sheets({"items": table, "sprites_dir": str(spr),
+                               "items_excluded": [7269]})  # fmt: skip
+        v1 = fl.frozen_sheets({"items": table, "sprites_dir": str(spr)})
+    finally:
+        fl.parse_act, fl.parse_spr = orig
+    assert sh(911) is not None and sh(7269) is None and sh.any(7269) is not None
+    assert sorted(sh.sheets) == [911] and sorted(sh.all) == [911, 7269]
+    assert sorted(v1.sheets) == [911, 7269] and v1.excluded == frozenset()
+
+
+class _Fake:
+    def __init__(self, **kw: Any) -> None:
+        self.__dict__.update(kw)
+
+
+def _one_item_frame(monkeypatch: pytest.MonkeyPatch, item_id: int,
+                    excluded: tuple[int, ...]) -> dict[str, Any]:  # fmt: skip
+    """_label_frame on ONE frame with one floor item ON the floor (fakes for the session, the
+    camera and the fit): what the rule writes for it."""
+    t = 100 * S
+    floor = il.Floor(5, item_id, 60, 70, 6, 6, "fall", t - 10 * S, t + 30 * S, True)
+    world = _Fake(self_pos=(57.0, 70.0), entities=[])
+    scene = _Fake(player=(57.0, 70.0))
+    sess = _Fake(lab=_Fake(timeline=_Fake(frame_world=lambda tw: world), size=SIZE, ui_rects=()),
+                 scene=lambda w: scene, layout_ok=lambda bgr: True)  # fmt: skip
+    sheet = object()
+
+    class Sheets:
+        def __call__(self, iid: int) -> Any:
+            return None if iid in excluded else sheet
+
+        def any(self, iid: int) -> Any:
+            return sheet
+
+    def project(sc: Any, cell: Any) -> tuple[tuple[float, float], float]:
+        return ((640.0, 420.0) if tuple(cell) == sc.player else (500.0, 300.0)), 1.0
+
+    pred = SpritePrediction((494.0, 294.0, 505.0, 306.0), (500.0, 300.0), 1.0, 1.0, 0, 0, 0, 0,
+                            True, "opaque")  # fmt: skip
+    monkeypatch.setattr(fl, "anchor_and_depth", project)
+    monkeypatch.setattr(fl, "_predict", lambda sh, cell, sc, prm: pred)
+    monkeypatch.setattr(fl, "_units", lambda *a: [])
+    monkeypatch.setattr(fl, "colour_fit", lambda *a: (0.9, 1, -1))
+    monkeypatch.setattr(ml, "read_png", lambda ref: np.zeros((720, 1280, 3), np.uint8))
+    prm = {"d_appear_s": 2.2, "d_gone_s": 0.6, "offset_ms": 120.0, "bar_px": list(SPEC.bar),
+           "stack_iou": 0.5, "r_label": 10, "t_item": 0.65}  # fmt: skip
+    monkeypatch.setattr(fl.olf, "_JOB", {"sess": sess, "floors": [floor], "sheets": Sheets(),
+                                         "occluders": _Fake(under=lambda *a: None),
+                                         "params": prm, "eval_test": False})  # fmt: skip
+    ref = _Fake(frame_id=7, t_mono_ns=t, shard=Path("shard-000000.tar"), offset=0, size=1)
+    return fl._label_frame(ref)  # type: ignore[arg-type]
+
+
+def test_a_frame_holding_an_excluded_id_is_excluded_with_its_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept = _one_item_frame(monkeypatch, 911, excluded=(7269,))
+    assert kept["status"] == "keep" and [i["item_id"] for i in kept["items"]] == [911]
+    assert "unsprited_ids" not in kept
+    gone = _one_item_frame(monkeypatch, 7269, excluded=(7269,))
+    assert gone["status"] == "exclude" and gone["reasons"] == ["item_unsprited"]
+    assert gone["items"] == [] and gone["unsprited_ids"] == [7269]
+    v1 = _one_item_frame(monkeypatch, 7269, excluded=())  # v1: the same frame was labelled
+    assert v1["status"] == "keep" and [i["item_id"] for i in v1["items"]] == [7269]
+
+
+def test_freeze_v2_refuses_before_measuring(tmp_path: Path) -> None:
+    out = tmp_path / "v2.json"
+    out.write_text("{}")
+    with pytest.raises(SystemExit, match="frozen ONCE"):
+        fl.main(["freeze-v2", "--v1", "p.json", "--labels", "l.json", "--out", str(out)])
+    v1 = tmp_path / "v1.json"
+    v1.write_text(json.dumps({"rule": fl.RULE, "map": "xmas_dun02", "status": "FROZEN",
+                              "version": 2, "items_excluded": []}))  # fmt: skip
+    with pytest.raises(SystemExit, match="built from the v1"):
+        fl.main(["freeze-v2", "--v1", str(v1), "--labels", "l.json", "--out",
+                 str(tmp_path / "new.json")])  # fmt: skip
+    v1.write_text(json.dumps({"rule": fl.RULE, "map": "xmas_dun02", "status": "FROZEN"}))
+    sha = __import__("hashlib").sha256(v1.read_bytes()).hexdigest()
+    lab = tmp_path / "l.json"
+    lab.write_text(json.dumps({"rule": fl.RULE, "params_sha256": sha, "split": "train",
+                               "session": "20261109T133046-rdp-hunt-xmas02-p38"}))  # fmt: skip
+    with pytest.raises(SystemExit, match="O3: the rule is fixed on FIT"):
+        fl.main(["freeze-v2", "--v1", str(v1), "--labels", str(lab), "--out",
+                 str(tmp_path / "new.json")])  # fmt: skip
+    lab.write_text(json.dumps({"rule": fl.RULE, "params_sha256": "0" * 64, "split": "train",
+                               "session": "20261109T133046-rdp-hunt-xmas02-p38"}))  # fmt: skip
+    with pytest.raises(SystemExit, match="not xmas02-fi-1 labels under"):
+        fl.main(["freeze-v2", "--v1", str(v1), "--labels", str(lab), "--out",
+                 str(tmp_path / "new.json")])  # fmt: skip
+    assert SPEC.params_v2 == Path("/dev/shm/poring-lab-tmp/xmas-fi/params-v2.json")
+    assert (fl.ABSENT_POINTS, fl.ABSENT_SEED, fl.ABSENT_MAX_RATE) == (60, "per-sprite", 0.01)
