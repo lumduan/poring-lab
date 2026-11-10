@@ -3721,3 +3721,13 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
   G0's 1-detection wing came 0.27 s after its box (box 1.06 s, wing 1.33 s).
 - G1's dog was never boxed while in view for ~4 s near the start. Why is not studied (likely the
   start's terrain, as G0b's: N1.4); it is the detector's, not this change's.
+- **The P1 / P2 scorer, and one clarification written BEFORE p45 was scored (2026-11-10 ~10:1x ICT):**
+  - positions are interpolated along each walk (ours: self_move at 150 ms a cell, diagonal x1.4; a
+    dog's: its entity_appear move at its `speed`). A first draft used the walk's DESTINATION and
+    called G1b's real dog "15+ cells away" (we were walking east, away from it).
+  - G1b's second `garm_seen` (5.14 s) came from a detection grabbed at 4.13 s, 0.29 s AFTER our own
+    teleport (3.84 s): the screen still showed the old place (frame lag + map load). It took no wing.
+  - **Clarification:** a `garm_seen` whose detection was grabbed < 2.0 s after our own map change is
+    judged (P2) against the dogs near us just before that change. With it G1b gives P2 = 0 false;
+    without it, 1.
+  - The scorer: NAS scratch-archive/2026-11-10/garm-confirm/p12.py (with p45's evidence).
