@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-09 20:2x: THE BASE = p16 + reach-check + far mechanism + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan. p43 --boss-walk with 2 staged Garm Babies: THE ROGUE DIED (walk-away ignored the threat side; the wing came late) -> not adopted; the guard keeps the Fly Wing. A redesign goes to Batt first."
+next_action: "2026-11-10 07:1x: the Garm Baby class is DEPLOYED (xmas02-detector.md M11 PASS, M12); --garm-fly G0 / G0b FAILED their letters (the setup counted; a dog hidden near the start went unboxed 4.5 s) -> not adopted; Batt decides on its pilot. THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3515,3 +3515,24 @@ What happened (packets; t = seconds from run_start):
   - a staged case of ONE dog a few cells away, never on her.
 - `--stage-mob` stays a trial-only option and must not stage strong monsters next to the character
   again without Batt's OK.
+
+**4BA G0 + 4BB G0b (2026-11-10 06:54-07:04 ICT; the Rogue immune; the deployed xmas02-gb; base + `--garm-fly
+--stage-mob 1515:1`, 3 min each). VERDICT: G0 FAILS (4BA's letter), G0b FAILS (4BB's letter) -> by 4BA,
+`--garm-fly` is NOT adopted; Batt decides whether its pilot runs at all.**
+
+| | G0 (`xmas02-g0`) | G0b (`xmas02-g0b`) |
+|---|---|---|
+| the staged dog appeared (packets) | 4.61 s BEFORE run_start, 1 cell from us | 4.57 s before run_start, at (10, 19), 3 cells |
+| in view from run_start | yes (seen at once) | 0-4.55 s (3-11 cells, we walked east), out of sight at 4.55 s, back in view at 35.6 s |
+| the detector's boxes while in view | garm_baby 0.968 in the first detection | 0.99-4.13 s: ONLY our own player box (no box of any class for the dog); at 36.37 s garm_baby 0.969 |
+| `garm_seen` / Fly Wing | 1.12 / 1.33 s after run_start | 36.4 / 36.61 s after run_start (0.8 / 1.0 s after re-entering view) |
+| the measure / the bar | 5.94 s from appearance / <= 5 s: FAIL | 36.61 s from max(appearance, start) / <= 5 s: FAIL |
+| acts of the dog on us | 0 (immune) | 0 (immune) |
+
+- **What they show:** when the detector boxes a Garm Baby, the guard flies within ~0.2-1.0 s; the
+  failures are a measure that counted the setup (G0) and a dog the detector did not box for 4.5 s
+  near the start while we walked off (G0b; most likely hidden behind scenery -- the label rule
+  excludes ~23 % of dogs as occluded, so the model never learned hidden dogs; not verifiable: no
+  recording ran). No false garm_baby box in either run.
+- Not re-run again (a third variant would be fishing). The Battle Log guard (fly on the first named
+  line) stays the base's protection.
