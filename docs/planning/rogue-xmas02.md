@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-10 09:2x: p44 (the base with the deployed xmas02-gb) PASSES EVERY BAR (157.6 / h, W1 pooled 1.59 %) -> xmas02-gb stays; its ONE garm_baby box was FALSE (a Cruiser under the Rogue, 1 frame). xmas02-detector.md N1 PROPOSED: G0b's dog was FULLY hidden (no model can box it); the deployed model boxes >= 50 %-visible dogs; Batt decides N1.12 (full N1 or stop) and --garm-fly. The study after p44 proposes a floor-item class (68-82 % of kills drop nothing). THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
+next_action: "2026-11-10 10:2x: p45 PASSES -> `--garm-fly --garm-confirm 2` (9.19b) JOINS THE BASE (G1b C1 1.60 s; P2 0 false; 2 one-detection false dog boxes filtered; P1 no dog met). xmas02-gb stays (p44). Floor items: xmas02-detector.md Amendment O PROPOSED (Batt decides). N1 not run (N2). THE BASE = p16 + reach-check + far-single + far-approach + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan + garm-fly + garm-confirm 2."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -3731,3 +3731,39 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
     judged (P2) against the dogs near us just before that change. With it G1b gives P2 = 0 false;
     without it, 1.
   - The scorer: NAS scratch-archive/2026-11-10/garm-confirm/p12.py (with p45's evidence).
+
+**Pilot p45 (4BE; 09:59:09-10:25:00 ICT, 25 min; the MVP killed 09:47 ("1[dead]" at 09:47:19);
+immunity OFF 09:58:55 ("Returned to normal state."), ON 10:25:23 ("You are now immune to attacks.");
+the base + `--garm-fly --garm-confirm 2`; no staged mob). VERDICT: every judged bar PASSES; P1 NO
+VERDICT (n = 0) -> by 4BE, `--garm-fly --garm-confirm 2` JOINS THE BASE.**
+
+| | p44 (base) | **p45 (+ --garm-fly --garm-confirm 2)** | bar |
+|---|---|---|---|
+| P1 lone dogs boxed before acting -> wing before the act | - | **n = 0** (no dog on the map during the run) | NO VERDICT |
+| P2 false alarms (`garm_seen` with no live dog within 15 cells) | - | **0** (2 single false boxes, never confirmed; see below) | = 0: PASS |
+| W1 walk clicks never sent | 6 / 289 | **4 / 260 (1.54 %); pooled p45 + p44 + p42 + p41 = 19 / 1,106 (1.72 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 / L4 | 100 % / 89.1 % / 0 | **94.7 % (18 / 19) / 83.6 % (56 / 67) / 0 of 106** | PASS |
+| K1 / K3 | 1.97 s / 96.9 % | **1.98 s / 97.0 % (65 / 67)** | PASS |
+| E1 kills | 66 (157.6 / h) | **66 (158.4 / h)** | >= 80 / h: PASS |
+| U1 stuck / D1 GPU p95 | 0 s / 23.7 ms | **0 s / 26.2 ms (p50 20.8; 1,566 calls, all GPU)** | PASS |
+| R1 own-body class D, pooled p45 + p44 + p42 + p41 | | **1 + 2 + 1 + 0 = 4** | <= 6: PASS |
+| Q1 quiet defend scans | 5 | **5 (found 1)** | <= 8: PASS |
+| E3 / deaths | | **hard bars pass; 0 Fly Wings; 1 stall; lowest HP 46 %; 0 deaths** | PASS |
+| reported: S1 hits on us per 10 min / no-kill fights | 8.0 / 32, 164.8 s | **11.2 / 44, 261.3 s** | - |
+
+- **The two garm_baby boxes, both FALSE and both filtered:** at 1315.27 s (0.588, box (626,321)-(704,389))
+  and 1498.14 s (0.660, (620,339)-(682,404)), each in ONE detection (the next held none); no Garm Baby
+  was alive on the map (packets: the only 1515 appeared 9.3 s before run_start and the setup's
+  `@killmonster2` cleared it). Both sat on the Rogue's own spot, as p44's (a Cruiser one cell below
+  her). Under 9.19 (one detection) each would have taken a needless Fly Wing.
+  - So far: 3 false one-detection dog boxes in 50 min of hunting (p44 1, p45 2), all at our own
+    position; 0 confirmed. Recorded for xmas02-detector.md N1 / D10 (hard negatives: a monster
+    overlapping the Rogue).
+- **Class D strikes (reported):** 22 of 90 (65 K, 2 A, 1 B); far strikes 80, class D 21 (26.3 %); by
+  distance 0-1: 1 / 10, 2-6: 16 / 61, 7-8: 5 / 19. Held on D: 22, median 6.13 s, 132.2 s in all.
+- **Sight:** 64 monsters seen (25.6 / 10 min; Myst Case 25, Cruiser 17, Christmas Cookie 12, Cookie 10),
+  kills per sighting 1.03.
+- **Items per hour (x 60 / 25.0):** Scell 17 (40.8 / h), Zargon 12 (28.8), Manacles 6 (14.4), Red Herb 5
+  (12.0), Candy 5 (12.0), Well-baked Cookie 3 (7.2), Candy Cane, Piece of Cake, Pearl, Iron 1 each (2.4).
+- The lowest HP, 46 %, is the lowest of the base runs reported here (p44 80.3 %); 0 Fly Wings were
+  needed. Reported, not a bar.
