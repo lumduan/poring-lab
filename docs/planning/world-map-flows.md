@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 (matpilot's headless-Chrome review, 7 items: section 10) not committed yet."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 (4 small items + the graph fold: section 11) not committed yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Parent: commit round 2; matpilot: re-run its headless-Chrome check on round 2 (section 10's list). Batt: section 9's questions."
+next_action: "Parent: commit round 3; matpilot: a look at section 11's five changes. Batt: section 9's questions."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -247,4 +247,33 @@ label guard). A server-render smoke test passes: the playback bar (4 SVG icons, 
 every label), the Run panel (one dot a step), the Maps page header (labelled icons), the graph, the
 map view, and /flows ("every map"). Not verifiable here: the real geometry and scrolling in a
 browser (no browser on this host). matpilot's re-run is the visual check.
+
+## 11. Round 3 (2026-11-10, matpilot's re-run)
+
+matpilot re-ran round 2 (light 1280 DPR 1, dark 1280 DPR 2, light 390 DPR 2, dark 390 DPR 3, no
+console errors) and VERIFIED section 10's seven items. Four small ones were left, plus one option:
+
+1. **The MOCK badges** (and the FIRST badge) are 13 px, so 11 px at the fit's 0.85 zoom (they were
+   12 px: 10.2 px).
+2. **The phone's fixed playback bar:**
+   - its background is opaque (var(--surface)), border and shadow kept;
+   - the page ends with a spacer of bar + 16 px + the safe area, so its last fields scroll clear
+     of the bar.
+3. **The login overlay:**
+   - it sits over the MAP itself (MatView's frame), no longer over the stage's empty top;
+   - on a phone it is one or two lines: "Logging in… (a mock) the character appears on town_1
+     (40, 40) in 9 s". The details stay in the step list.
+4. **Zoom:** 2x and 4x open CENTRED, on the character during a run, else on the map's middle (they
+   opened at the top-left).
+5. **Option, done:** on a wide screen Simulate FOLDS the graph to its toolbar, so the map gets the
+   height. The toolbar says "The graph is folded while the run plays · now: field (field_1)", and
+   "Show the graph" brings it back ("Fold the graph" folds it again). A phone keeps its one column.
+
+Checks:
+- pnpm lint and typecheck clean; pnpm test 266 pass. The new test: every graph text rule is
+  11 px or more at 0.85, the bar is opaque, the spacer's height is as specified.
+- A server-render smoke test: the overlay inside the map's frame; the spacer; the graph open, with
+  no fold button before a run.
+- Not seen in a browser here: the fold, the centred zoom and the phone overlay (matpilot's eyes
+  again).
 

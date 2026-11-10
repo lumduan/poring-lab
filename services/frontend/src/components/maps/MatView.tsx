@@ -5,7 +5,7 @@
 // routes, the monster it meets, the NPC it talks to (the drawing is lib/maps/draw.ts, tested in
 // node). One canvas, nothing loaded from outside; the grid is drawn once per map and scale. Zoomed
 // in, the box scrolls and follows the character.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import type { WorldMap } from "@/lib/flow/api";
 import { COLOUR_VARS, type Colours, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "@/lib/maps/draw";
@@ -31,9 +31,10 @@ export type MatViewProps = {
   labels: Labels | null;
   savePoint: { map: string; cell: [number, number] } | null;
   zoom: number; // 1 = fit the box; 2, 4: closer (the box scrolls, following the character)
+  children?: ReactNode; // over the map itself (the login overlay), not over the empty stage
 };
 
-export default function MatView({ map, rows, sheet, tl, time, labels, savePoint, zoom }: MatViewProps) {
+export default function MatView({ map, rows, sheet, tl, time, labels, savePoint, zoom, children }: MatViewProps) {
   const box = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [boxSize, setBoxSize] = useState<{ w: number; h: number }>({ w: 600, h: 360 });
@@ -88,6 +89,21 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
 
   // follow the character when zoomed in
   const pose = tl ? poseAt(tl, time) : null;
+  const poseRef = useRef(pose);
+  useEffect(() => {
+    poseRef.current = pose;
+  });
+  // round 3: a zoom (or a new map) opens CENTRED: on the character during a run, else on the
+  // middle of the map (it opened at the top-left corner)
+  useEffect(() => {
+    const el = box.current;
+    if (!el || zoom <= 1) return;
+    const p = poseRef.current;
+    const on = Boolean(p?.known && p.map === map);
+    const cx = ((on && p ? p.x : (w - 1) / 2) + 0.5) * scale + 2;
+    const cy = (h - 1 - (on && p ? p.y : (h - 1) / 2) + 0.5) * scale + 2;
+    el.scrollTo({ left: cx - el.clientWidth / 2, top: cy - el.clientHeight / 2 });
+  }, [zoom, map, scale, w, h]);
   useEffect(() => {
     const el = box.current;
     if (!el || zoom <= 1 || !pose?.known || pose.map !== map) return;
@@ -102,15 +118,18 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
   const here = pose?.known && pose.map === map ? `; the character at (${Math.round(pose.x)}, ${Math.round(pose.y)})` : "";
   return (
     <div className="mat-box" ref={box} data-testid="mat-view">
-      <canvas
-        ref={canvas}
-        width={Math.round(w * scale * dpr)}
-        height={Math.round(h * scale * dpr)}
-        style={{ width: w * scale, height: h * scale }}
-        className="mat-canvas"
-        role="img"
-        aria-label={`${map ?? "no map"}: ${w} × ${h} cells${rows ? "" : " (no walk grid: an estimate)"}${here}`}
-      />
+      <div className="mat-frame" style={{ width: w * scale, height: h * scale }}>
+        <canvas
+          ref={canvas}
+          width={Math.round(w * scale * dpr)}
+          height={Math.round(h * scale * dpr)}
+          style={{ width: w * scale, height: h * scale }}
+          className="mat-canvas"
+          role="img"
+          aria-label={`${map ?? "no map"}: ${w} × ${h} cells${rows ? "" : " (no walk grid: an estimate)"}${here}`}
+        />
+        {children}
+      </div>
       {!known && <p className="mat-note">No walk grid for {map ?? "this map"} in the static data: the area is only as large as the run, and walks are estimates.</p>}
     </div>
   );

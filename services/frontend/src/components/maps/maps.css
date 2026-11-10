@@ -72,6 +72,23 @@
 .maps-stage[data-mat="closed"] .maps-graph {
   flex: 1;
 }
+/* round 3: the graph folds to its toolbar while a run plays (the map gets the height); the
+   toolbar names the node the character is in and "Show the graph" brings it back */
+.maps-stage[data-graph="folded"] .maps-graph {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.maps-stage[data-graph="folded"] .maps-graph-canvas {
+  display: none;
+}
+.maps-now {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.maps-bar-spacer {
+  display: none;
+}
 .maps-toolbar {
   display: flex;
   flex: none;
@@ -182,19 +199,23 @@
   border-radius: 0.3rem;
   box-shadow: 0 1px 6px rgb(0 0 0 / 18%);
 }
+/* the canvas and what sits over it (MatView's children: the login overlay) */
+.mat-frame {
+  position: relative;
+}
 .mat-overlay {
   position: absolute;
-  top: 0.75rem;
+  top: 0.5rem;
   left: 50%;
   z-index: 5;
   display: grid;
   gap: 0.15rem;
-  width: min(30rem, calc(100% - 1.5rem));
+  width: min(30rem, calc(100% - 1rem));
   margin: 0;
-  padding: 0.55rem 0.8rem;
+  padding: 0.5rem 0.75rem;
   transform: translateX(-50%);
   color: var(--text);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: var(--surface);
   border: 1px solid var(--run-bg);
   border-left-width: 4px;
   border-radius: 0.45rem;
@@ -255,7 +276,7 @@
   width: min(40rem, calc(100% - 1.2rem));
   padding: 0.3rem 0.6rem;
   transform: translateX(-50%);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
@@ -510,7 +531,7 @@
   font-size: 0.85rem;
 }
 .mp-node .fc-start {
-  font-size: 0.78rem;
+  font-size: 0.82rem; /* round 3: 13 px, 11 px at the fit's 0.85 */
 }
 .maps-graph .fc-edge-label {
   font-size: 0.85rem;
@@ -556,7 +577,7 @@
   border-radius: 0.3rem;
   background: var(--warn-bg);
   color: var(--warn-text);
-  font-size: 0.75rem;
+  font-size: 0.82rem; /* round 3: 13 px (it was 12 px: 10.2 px at zoom 0.85) */
   font-weight: 800;
 }
 .mp-line {
@@ -637,6 +658,9 @@
     flex: none;
     height: 20rem;
   }
+  .maps-stage[data-graph="folded"] .maps-graph {
+    height: auto;
+  }
   .maps-mat {
     flex: none;
     height: min(30rem, 72dvh);
@@ -645,8 +669,20 @@
   }
   /* round 2: during a run the playback bar sticks to the screen's bottom, wherever the page is
      scrolled (the map, or the steps under it); the page keeps room for it */
-  .maps-page[data-run="true"] {
-    padding-bottom: 3.6rem;
+  .maps-page[data-run="true"] .maps-bar-spacer {
+    display: block;
+    flex: none;
+    height: calc(2.5rem + 16px + env(safe-area-inset-bottom, 0px));
+  }
+  /* round 3: the login overlay in one or two lines (the details are in the step list) */
+  .mat-overlay {
+    top: 0.35rem;
+    display: block;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+  }
+  .mat-overlay-detail {
+    display: none;
   }
   .maps-page[data-run="true"] .mat-playback {
     position: fixed;

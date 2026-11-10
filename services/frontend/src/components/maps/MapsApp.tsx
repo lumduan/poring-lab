@@ -150,6 +150,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const [codeFile, setCodeFile] = useState<"session" | "py" | "json">("py");
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
   const [zonesFor, setZonesFor] = useState<string | null>(null);
+  const [graphFolded, setGraphFolded] = useState(false); // round 3: the map gets the height in a run
   const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
@@ -323,7 +324,9 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         writeChoice(store, MK.mat, "open");
       }
       setSide("run");
-      scrollToMat.current = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 48rem)").matches);
+      const narrow = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 48rem)").matches);
+      scrollToMat.current = narrow; // a phone: bring the map into view
+      if (!narrow) setGraphFolded(true); // a wide screen: the map gets the graph's height ("Show the graph" brings it back)
     } catch (e) {
       setNotice({ text: `Simulate failed: ${e instanceof ApiError ? e.message : String(e)}`, tone: "error", undo: null });
     } finally {
@@ -404,6 +407,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const sheet: WorldMap | null = matMap ? (worldDoc?.maps[matMap] ?? null) : null;
   const rows = matMap ? (worldDoc?.walk?.[matMap] ?? null) : null;
   const simStale = sim !== null && sim.for !== key;
+  const folded = matOpen && graphFolded && tl !== null; // the graph folds only while a run is shown
 
   // --- load, save, add a map ---------------------------------------------------------------------
   const loadSample = async () => {
@@ -660,10 +664,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       </div>
 
       <div className="maps-body" data-panel={panelOpen ? "open" : "closed"}>
-        <div className="maps-stage" data-mat={matOpen ? "open" : "closed"}>
+        <div className="maps-stage" data-mat={matOpen ? "open" : "closed"} data-graph={folded ? "folded" : "open"}>
           <section className="maps-graph" aria-label="The maps and how they link">
             <div className="maps-toolbar">
-              {adding?.mode === "node" ? (
+              {folded ? (
+                <>
+                  <button type="button" className="block-tab-add" onClick={() => setGraphFolded(false)} aria-expanded={false} data-testid="maps-graph-show">
+                    Show the graph
+                  </button>
+                  <span className="maps-hint">
+                    The graph is folded while the run plays{activeNode ? " · now: " : ""}
+                    {activeNode && <span className="maps-now">{nodeWords(activeNode, flow)}</span>}
+                  </span>
+                </>
+              ) : adding?.mode === "node" ? (
                 <form
                   className="maps-add"
                   onSubmit={(e) => {
@@ -687,7 +701,14 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                   + map
                 </button>
               )}
-              <span className="maps-hint">Drag from a port (walk exit, npc warp, item warp) onto another map to link them; click a node to inspect it; double-click a map to open its flow.</span>
+              {!folded && tl && matOpen && (
+                <button type="button" className="block-tab-add" onClick={() => setGraphFolded(true)} aria-expanded={true} title="Fold the graph: the map gets the height" data-testid="maps-graph-fold">
+                  Fold the graph
+                </button>
+              )}
+              {!folded && (
+                <span className="maps-hint">Drag from a port (walk exit, npc warp, item warp) onto another map to link them; click a node to inspect it; double-click a map to open its flow.</span>
+              )}
             </div>
             <datalist id="maps-known">
               {[...new Set([...EXAMPLE_MAPS, ...blocks.map((b) => b.map)])].map((m) => (
@@ -773,17 +794,21 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 </div>
               </div>
               <div className="maps-mat-stage">
-                <MatView map={matMap} rows={rows} sheet={sheet} tl={tl} time={time} labels={labels} savePoint={sim?.doc.trace.save_point ?? null} zoom={zoom} />
-                {tl && time < tl.offset && beat?.session && (
-                  // the first seconds: the session's mock steps, before the character is on a map
-                  <p className="mat-overlay" role="status" data-testid="mat-session">
-                    <strong>{beat.session.node === "start" ? "Starting the client…" : beat.session.node === "login" ? "Logging in… (a mock)" : "Entering the game… (a mock)"}</strong>
-                    <span>
-                      {beat.session.text}. The character appears on {sim?.doc.trace.start.map ?? "the first map"}
-                      {sim?.doc.trace.start.cell ? ` at (${sim.doc.trace.start.cell[0]}, ${sim.doc.trace.start.cell[1]})` : ""} in {(tl.offset - time).toFixed(1)} s.
-                    </span>
-                  </p>
-                )}
+                <MatView map={matMap} rows={rows} sheet={sheet} tl={tl} time={time} labels={labels} savePoint={sim?.doc.trace.save_point ?? null} zoom={zoom}>
+                  {tl && time < tl.offset && beat?.session && (
+                    // the first seconds: the session's mock steps, before the character is on a map
+                    // (round 3: over the map itself, one or two lines on a phone; the step list
+                    // has the details)
+                    <p className="mat-overlay" role="status" data-testid="mat-session">
+                      <strong>{beat.session.node === "start" ? "Starting the client…" : beat.session.node === "login" ? "Logging in… (a mock)" : "Entering the game… (a mock)"}</strong>{" "}
+                      <span>
+                        the character appears on {sim?.doc.trace.start.map ?? "the first map"}
+                        {sim?.doc.trace.start.cell ? ` (${sim.doc.trace.start.cell[0]}, ${sim.doc.trace.start.cell[1]})` : ""} in {Math.ceil(tl.offset - time)} s
+                      </span>{" "}
+                      <span className="mat-overlay-detail">{beat.session.text}.</span>
+                    </p>
+                  )}
+                </MatView>
                 {tl && (
                   <PlaybackBar
                     time={time}
@@ -967,8 +992,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
           />
         </div>
       )}
+      {/* a phone in a run: room for the fixed playback bar (bar + 16 px + the safe area) */}
+      <div className="maps-bar-spacer" aria-hidden="true" />
     </main>
   );
+}
+
+/** The graph node the character is in, in words (the folded graph's toolbar). */
+function nodeWords(node: string, flow: Flow): string {
+  if (node === "start") return "START";
+  if (node === "login") return "Login (a mock)";
+  if (node === "character") return "Choose character (a mock)";
+  if (node === "main") return "main (a plain flow)";
+  const b = flow.workflow?.blocks.find((x) => `block:${x.name}` === node);
+  return b ? `${b.name} (${b.map.map})` : node;
 }
 
 function describeGuess(f: Flow, why: string, name?: string): string {

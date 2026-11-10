@@ -290,3 +290,21 @@ test("the Maps components draw no glyph Chromium on Linux lacks, and label their
   for (const label of ["Back to the start", "The step before", "The next step"]) assert.ok(bar.includes(`aria-label="${label}"`), label);
   assert.match(bar, /aria-label=\{playing \? "Pause" : "Play"\}/);
 });
+
+// --- round 3 (2026-11-10, matpilot's re-run) -------------------------------------------------------
+test("the graph's smallest text stays >= 11 px at the fit's 0.85 zoom; the playback bar is opaque", () => {
+  const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const graph = /^(\.mp-node|\.mp-title|\.mp-mock|\.mp-line|\.mp-muted|\.mp-key|\.mp-call|\.mp-button|\.mp-start|\.maps-graph)\b/;
+  let checked = 0;
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = m[1].split(",").map((x) => x.trim());
+    const size = /font-size:\s*([\d.]+)rem/.exec(m[2]);
+    if (!size || !selectors.some((x) => graph.test(x))) continue;
+    checked++;
+    assert.ok(Number(size[1]) * 16 * 0.85 >= 11, `${m[1].trim()}: ${size[1]}rem is ${(Number(size[1]) * 16 * 0.85).toFixed(1)} px at zoom 0.85`);
+  }
+  assert.ok(checked >= 8, `only ${checked} graph rules with a font size`);
+  const bar = /\.mat-playback\s*\{([^}]*)\}/.exec(css)![1];
+  assert.match(bar, /background:\s*var\(--surface\);/);
+  assert.match(css, /\.maps-page\[data-run="true"\] \.maps-bar-spacer\s*\{[^}]*height:\s*calc\(2\.5rem \+ 16px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+});
