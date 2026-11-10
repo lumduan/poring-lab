@@ -144,3 +144,46 @@ def test_xmas02_spots_are_train_stands_off_test_blocks_and_warps() -> None:
             assert max(abs(x - b[0]), abs(y - b[1])) >= si.SPOT_SEP
         for dx, dy in si.spot_cells(ms):
             assert walk[y + dy, x + dx] and not server.nopass(x + dx, y + dy), (x + dx, y + dy)
+
+
+def test_cut_grf_check_reports_the_gate_and_writes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """stage@8: ``cut-grf --check`` on synthetic BMPs: the missing screen-cut references and
+    every other refusal (a tiny icon's < 40 item pixels) are REPORTED apart, nothing is written;
+    without --check the same gate refuses."""
+    import gm_state
+    from PIL import Image
+
+    rng = np.random.default_rng(9)
+    items = {911: "scell", 912: "zargon"}
+    icons = tmp_path / "bmp"
+    icons.mkdir()
+    lines = []
+    for iid, name in items.items():
+        rgb = np.zeros((24, 24, 3), np.uint8)
+        rgb[...] = (255, 0, 255)
+        if name == "scell":
+            rgb[4:9, 4:10] = rng.integers(20, 230, (5, 6, 3), dtype=np.uint8)  # 30 item pixels
+        else:
+            rgb[1:20, 2:18] = rng.integers(20, 230, (19, 16, 3), dtype=np.uint8)
+        Image.fromarray(rgb).save(icons / f"res{iid}.bmp")
+        lines.append(f"{iid}#res{iid}#")
+    table = tmp_path / "table.txt"
+    table.write_bytes("\n".join(lines).encode("cp949"))
+    out_dir = tmp_path / "icons-out"
+    ms = si.map_set("xmas_dun02")
+    monkeypatch.setitem(si.MAP_SETS, "xmas_dun02", si.replace(ms, items=items, icon_dir=out_dir))
+    monkeypatch.setattr(
+        gm_state, "load_loot_refs", lambda: {"slot": ("empty", np.full((16, 14), 30.0, np.float32))}
+    )
+    got = si.cut_grf("xmas_dun02", table, icons, check=True)
+    assert got["check"] is True and got["written"] == []
+    assert got["screen_refs_missing"] == ["scell", "zargon"]
+    assert got["items"]["scell"] == 30 and got["items"]["zargon"] > 40
+    assert got["other_refusals"] == ["scell: 30 item pixels < 40"]
+    assert set(got["own_set_nearest"]) == {"scell", "zargon"}
+    assert not out_dir.exists()
+    with pytest.raises(SystemExit, match="refused"):
+        si.cut_grf("xmas_dun02", table, icons)
+    assert not out_dir.exists()
