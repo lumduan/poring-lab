@@ -4337,3 +4337,236 @@ reader's: ADOPTING LF-2 IS BATT'S DECISION.**
 - **Items per hour (x 60 / 25.1):** Scell 18 (43.1), Zargon 9 (21.5), Red Herb 7 (16.8), Manacles 5 (12.0),
   Candy, Well-baked Cookie, Piece of Cake 4 each (9.6), Candy Cane, Old Blue Box 2 (4.8), Rough
   Oridecon, Iron, Chef King Orleans Vol.1 1 (2.4).
+
+### Study S-LS (late strikes; 2026-11-10 night, analysis only)
+
+**Written 2026-11-10 21:39 ICT from `date`; offline; DECIDES NOTHING; nothing is built in the runner.**
+Batt's question (2026-11-10 night): "sometimes the bot has already picked a monster, but it clicks at
+the moment the monster has already walked away". Measured on the nine base runs p40, p41, p42,
+p44-p49 (p43 out: the staged boss trial; p48 / p49 carry `--late-confirm`, which touches only the
+position reader) with `scripts/late_strike.py` (committed with this study; its test
+`services/backend/tests/test_late_strike.py` holds a REAL late strike from p49). Packets are offline
+ground truth only (rule 1): they score, they never decide. Every proposal below decides from pixels
+and the bot's own commands.
+
+**Definitions (the scorer's):**
+- **Box strike:** a `strike` event by `box` with its struck `box_target` (620). **Targeted:** a
+  monster stood within 2.5 cells (Chebyshev) of the clicked cell when the picture was taken (589).
+- **Times** (one clock, bot-server's CLOCK_MONOTONIC):
+  - `t_grab`: the box frame's grab (its `detections.jsonl` row: `t_ns` - `ms`);
+  - `t_shown` = `t_grab` - 0.16 s: the server moment the picture shows (the lag fit below);
+  - `t_click`: the strike's stamp, just before `click_at`;
+  - `t_req`: the client's FIRST request after the stamp, a median 0.352 s later: the moment the
+    client RESOLVED the click.
+- **Target:** among those monsters, the one the click's attack request named, else the nearest.
+- **moved:** the target's Chebyshev distance between `t_shown` and `t_req`, along rAthena's path
+  (diagonal first, a diagonal step x1.4).
+- **LATE:** moved >= 1.0 cell. Its **kind** comes from when the walk that carried it off began:
+  - `walking`: it was walking at `t_shown` already (the picture showed a walker);
+  - `unseen`: it began between `t_shown` and `t_grab` (on the server, not yet drawn);
+  - `latency`: it began after `t_grab` (while the bot decided and the click travelled).
+- **Outcome** within 2.0 s of the click (re-clicks included, as lock_study's classes): `target` (an
+  attack request on it), `other`, `walk` (a walk request, no attack request), `none`. `walk` + `none`
+  = lock_study's class D.
+- **Lost time** of a FAILED late strike (`walk` / `none`): the click -> our next attack request on
+  any monster (cap 30 s), minus the run's median click -> attack request of a successful on-time
+  strike in the same distance band (0.36-1.65 s): the time the click would have taken anyway.
+
+**The stream lag for monster sprites (`late_strike.py fit-lag`).** Samples: 1,672 walking monsters
+on a standing camera. The error: the box foot vs the server's interpolated cell, projected by the
+runner's own camera (camera_rdp.json) with the GAT's altitude.
+
+| lag (s) | 0 | 0.05 | 0.10 | 0.15 | 0.175 | 0.20 | 0.25 | 0.30 | 0.40 |
+|---|---|---|---|---|---|---|---|---|---|
+| median px | 13.2 | 10.7 | 8.9 | 7.7 | **7.6** | 8.2 | 9.5 | 11.5 | 17.5 |
+
+- The picture shows MONSTERS 0.15-0.175 s behind the server; the scorer uses 0.16.
+- ➡️ This is not frames-lag's ~0.45-0.5 s (2026-10-16): that was OUR OWN walk, i.e. the camera. The
+  camera still glides for ~0.5 s after our walk ends (see "pixels" below).
+- The count barely depends on it: late failed 104 / 105 / 110 at a lag of 0 / 0.16 / 0.30 s.
+
+**Per run:**
+
+| run | box strikes (targeted) | late (share) | walking / unseen / latency | late: target / walk / none | late FAILED (of all class-D box strikes) | lost s | E1 kills | lost, in kills at the run's rate |
+|---|---|---|---|---|---|---|---|---|
+| p40 | 59 (57) | 14 (24.6 %) | 10 / 0 / 4 | 2 / 12 / 0 | 12 (of 18) | 157.1 | 57 | 6.0 |
+| p41 | 65 (61) | 15 (24.6 %) | 10 / 0 / 5 | 3 / 11 / 1 | 12 (of 14) | 135.6 | 60 | 5.4 |
+| p42 | 66 (58) | 14 (24.1 %) | 11 / 1 / 2 | 6 / 8 / 0 | 8 (of 13) | 74.0 | 64 | 3.2 |
+| p44 | 73 (70) | 15 (21.4 %) | 12 / 1 / 2 | 5 / 9 / 1 | 10 (of 14) | 88.1 | 66 | 3.9 |
+| p45 | 78 (77) | 24 (31.2 %) | 21 / 2 / 1 | 7 / 17 / 0 | 17 (of 21) | 123.8 | 66 | 5.4 |
+| p46 | 76 (74) | 20 (27.0 %) | 16 / 1 / 3 | 5 / 15 / 0 | 15 (of 16) | 180.6 | 66 | 7.9 |
+| p47 | 74 (69) | 23 (33.3 %) | 14 / 4 / 5 | 10 / 11 / 2 | 13 (of 21) | 137.6 | 60 | 5.5 |
+| p48 | 57 (54) | 11 (20.4 %) | 11 / 0 / 0 | 5 / 6 / 0 | 6 (of 9) | 60.8 | 54 | 2.2 |
+| p49 | 72 (69) | 16 (23.2 %) | 12 / 1 / 3 | 4 / 11 / 1 | 12 (of 16) | 97.6 | 64 | 4.2 |
+| **pooled** | **620 (589)** | **152 (25.8 %)** | **117 / 10 / 25** | **47 / 100 / 5** | **105 (of 142: 74 %)** | **1,055.2 (117.2 a run)** | 557 | **4.9 a run** |
+
+- Late strikes are the main cause of the box path's class D: 105 of its 142.
+- Beside them: 15 failed ON-TIME strikes (95.1 s) and 31 strikes with no monster near the clicked
+  cell (17 walk, 9 other, 5 none). Neither is this study's subject.
+
+**Whether the click attacked, by how far the target moved (pooled):**
+
+| moved (cells) | < 0.5 | 0.5-1.0 | 1.0-1.5 | 1.5-2.0 | 2.0-3.0 | >= 3 |
+|---|---|---|---|---|---|---|
+| strikes | 397 | 40 | 50 | 55 | 39 | 8 |
+| attacked the target | 387 (97 %) | 34 (85 %) | 28 (56 %) | 11 (20 %) | 8 (21 %) | 0 |
+
+The 1-cell line is where it breaks: a sprite still under the cursor gets the attack, past it the
+client resolves the floor. After a failed late click, the first walk request went within 1.5 cells
+of the OLD cell in 69 of 105: the client walked to where the sprite had been. At that moment the
+target stood a median 2.0 cells from that walk's cell.
+
+**Where the time goes, from the picture to the client's resolve (p50 ms; late and on-time strikes
+alike):**
+
+| stage | p50 (p10-p90) | what |
+|---|---|---|
+| stream lag | 160 (fit) | the server -> the grabbed picture |
+| detect + select | 52 (46-88) | the grab -> the hover's first motion |
+| hover + SWORD | 232 (227-276) | two motions + the cursor reads |
+| pre_click | 61 (55-84) | the event, a frame, the name-tag bank |
+| client | 352 (338-366) | `click_at`'s motions (~70 ms of sleeps) + the RDP input path + the client's handling, to its request |
+| **the grab -> the client's request** | **late 722 / on time 725 (683-765)** | |
+| **the picture's age at the resolve** | **~0.88 s** | |
+
+- The latency does NOT separate late from on-time strikes (722 vs 725 ms). The target's motion
+  does. In 0.88 s a 400-ms-a-cell walker covers ~2.2 cells; a Cookie (200 ms a cell) ~4.4.
+- The input path + the client (~0.28 s) is the largest stage, and no runner change reaches it.
+
+**Why: the kinds and the monsters.**
+- **117 of the 152 late strikes (77 %) were already WALKING in the picture.**
+  - Their walk began a median 0.90 s before the grab (p10 2.44 s, p90 0.27 s); 1.27 s before the
+    click.
+  - Unseen: 10 (the walk began a median 0.06 s before the grab). Latency: 25 (a median 0.13 s
+    after it).
+- Of all targeted strikes:
+  - walking in the picture: 148, of which 58 attacked their target (39 %);
+  - standing: 441, of which 410 did (93 %).
+- **The walkers are on short random walks, then they stand:**
+  - the rest of the walk after `t_shown`: median 1.0 s (p25 0.54, p75 1.7, p90 2.56 s);
+  - 123 of the 148 walks are ONE move record. The walk's end was >= 5 cells from us for 89 of them
+    and within 1 cell for 19: wandering, not chasing us;
+  - once it stopped, the target STOOD p10 3.26 s, p50 4.78 s. That fits rAthena's random-walk
+    timer (the next walk 4-5 s after one ends), which was recalled, not re-read at the pinned commit;
+  - a target standing in the picture began a walk within 0.9 s in 75 of 441 cases (17 %): the
+    unseen + latency kinds.
+
+| species (ms a cell) | box strikes | walking in the picture | late | late failed | lost s | walking share while in sight |
+|---|---|---|---|---|---|---|
+| Myst Case (400) | 258 | 85 | 90 (35 %) | 57 | 551.9 | 29.5 % |
+| Cookie (200) | 97 | 17 | 28 (29 %) | 24 | 232.4 | 19.3 % |
+| Christmas Cookie (400) | 87 | 29 | 28 (32 %) | 20 | 233.3 | 32.3 % |
+| Cruiser (400) | 146 | 16 | 5 (3 %) | 3 | 22.7 | 17.4 % |
+
+(+ 1 Garm Baby, 14.9 s.) Why the Cruiser is so rarely late, although it walks 17 % of the time, is not
+studied.
+
+**What a late failure costs, and why the runner does not notice it:**
+- The strike's own success signals do not see a late click. The 105 failed late strikes ended:
+  - `bound` 58;
+  - `damage` 10;
+  - `arrow` 37. 26 of those arrows came < 0.5 s after the click, before the client had even sent
+    its request (+0.35 s): not a lock arrow. On-time hits show such early "arrows" too (153 of 197).
+- So the lock is taken, and "no hits" ends it: the click -> the unlock p50 6.07 s (p10 4.33, p90
+  6.97). Then come the scan, the fight's end and a new engagement.
+- The click -> our next attack request on any monster: p50 9.46 s (p10 6.06, p90 17.67). The same
+  target was attacked later in 90 of 105 cases (p50 9.54 s after the click): the bot loses TIME,
+  not the monster.
+- **Lost: p50 8.58 s per failed late strike (p10 5.33, p90 17.67).** In all, 1,055 s over the 9
+  runs: 117 s a run, 7.8 % of a 25-min run. At each run's own rate that is ~4.9 kills a run,
+  ~11.7 kills / h against E1's 129.6-158.4 / h. This is the CEILING a perfect fix could return,
+  not an estimate of any one fix.
+- The 47 late strikes that still attacked cost nothing measurable (the click -> the attack p50
+  1.05 s, on time 1.06 s).
+
+**Could the pixels have told (what a runner has at decision time)?**
+- **The bot's own consecutive detections.** The struck sprite's box was in the previous detection
+  (<= 1.5 s older, p50 0.41 s) for 505 of the 589 strikes.
+- **The camera must be SETTLED.** When our own walk ended < 0.5 s before the earlier grab, standing
+  monsters' boxes still moved a median 14 px (the client's camera gliding). 0.5 s or more after it,
+  they moved 2.8 px (p90 ~11).
+- **The walker flag** (the scorer's `walker_flag`: the foot moved >= 10 px between two settled
+  detections; 365 strikes could be judged):
+  - it flags 68 of 85 walkers (0.80) and 56 of 277 standing targets (0.20);
+  - it flags 42 of the 64 late-failed strikes among them;
+  - by how far the target really moved between the two pictures (the study's 357 settled pairs, a
+    scratch count): flagged 0.15 at 0 cells, 0.33 under 0.2 cell, 0.78 at 0.2-0.4, 0.89-1.0 at
+    0.4 cell and more.
+- **224 strikes had no settled previous detection.** A runner needs its own second look: the press
+  check below.
+- **Species:** the model knows it, but the runner collapses it to "monster"
+  (`unit_detector.for_map`). A Myst Case is late 35 % of the time, a Cruiser 3 %.
+- **Hops:** a random walk is followed by 3.3-4.8 s standing. A target seen still in two settled
+  detections right after its walk stays for seconds.
+
+**Proposals (none built, none pre-registered; for Batt), ranked by the expected time saved a run.**
+How they were estimated:
+- a scratch simulation on the same 589 strikes;
+- the server tracks decide where the target is when the click resolves;
+- the measured "attacked by moved" curve above decides the hit;
+- a failed strike costs the median 8.58 s;
+- LS-1's velocity carries the measured settled-box jitter (Monte Carlo).
+
+These are estimates, not results. The throwaway scripts (the simulations `sim2.py` / `sim3.py`, the
+counts) and the scored rows: NAS `scratch-archive/2026-11-10/late-strike-study/` (31 files,
+sha256-verified).
+
+| rank | mechanism | the change (pixels + our own commands only) | est. saved a run | box hits a run | risk | what its pre-registration measures |
+|---|---|---|---|---|---|---|
+| 1 | **LS-1 re-aim + capped lead at the press** | after the SWORD, a 2nd detection D2 (~45 ms; the hover's ~0.3 s is the gap); the sprite's foot moved >= 15 px since D1 -> click D2's point + its velocity x the remaining age (~0.57 s), the lead at most 1 cell; else as today | ~60 s (no lead: ~35 s) | +7.5 | the led point is NOT SWORD-verified (the floor, or another monster under it); it REVISITS `--lead-strike`, which Batt dropped after p14 (Amendment I, item 2; p14 had 3 led strikes) | late failed a run; `other` outcomes; led clicks that attacked |
+| 2 | **LS-2 press check + HOLD until still** | the same D2; >= 10 px -> no click yet: a detection every 0.25 s until two in a row are still (<= 2.5 s), then hover THAT box (SWORD) and strike; < 10 px -> strike as today | ~43 s (holds ~29 s a run) | +8.8 | the holds cost time; a walker may leave the view or its reach; 20 % of standing targets are held ~0.3 s for nothing | late failed a run; hold time; the flag against the packets; box strikes a run |
+| 3 | **LS-4 trim the click latency** | bank the name tag after the click (inside pre_click's 61 ms); riskier: drop `click_at`'s +4,+3 nudge when the hover has just placed the pointer | ~19 s for 120 ms (the tag alone ~half) | +2.2 | the nudge had a measured landing gain (arm C 86 % vs 71 %, walk-marker memory) | late share; landing |
+| - | **LS-3 fast re-strike after a walked click** | when the click did not connect, run the box path again at once, instead of the lock's 3.5 s "no hits" + the scan | ceiling ~60 s, if the failure were known 1.2 s after the click; expected unknown | - | no proven pixel signal: the "arrow" fires early on 26 of 105; damage-only is `--quick-drop`'s rule (p15, p17: not adopted) | a signal study first |
+
+**Which first: LS-2.** LS-1's estimate is higher, but:
+- LS-2 keeps every click SWORD-verified on a still sprite, and it does not reopen the lead Batt
+  dropped;
+- its signal (the walker flag) is measured here, and its cost is bounded (<= 2.5 s a hold);
+- it rests on a measured server behaviour: 3.3-4.8 s standing after a walk;
+- it LOGS each D2 box. A later offline replay of LS-1's lead on live data would then use real
+  velocities, before any lead pilot (Batt's call).
+
+LS-2's bars, as a sketch (written as a real pre-registration only after Batt's OK):
+- **The run:** 2 pilots of the base + `--still-target`, pooled, against these 9 base runs.
+- **M1 (the mechanism):** late-failed box strikes (`late_strike.py score`) <= 12 over the 2 runs.
+  - The base: 105 in 9 runs (11.7 a run, 6-17; variance 11.2, Poisson-like).
+  - The estimate with LS-2: ~3.5 a run.
+  - P(<= 12 | the base's 23.3) ~ 0.01.
+- **M2 (its cost):** hold time <= 60 s a run, and holds that time out <= 25 %.
+- **M3 (no harm):**
+  - box strikes >= 50 a run (the base 57-78);
+  - failed on-time strikes <= 4 a run (the base 0-4);
+  - the base's bars (W1 and R1-A pooled, L1, L3, L4, K1, K3, E1 >= 80 / h, U1, D1, Q1, P2, E3,
+    deaths 0).
+- **Reported:**
+  - the flag against the packets: flagged and moving between D1 and D2;
+  - D2's cost, the hold outcomes, the lost s a run (the base 117);
+  - E1 against 129.6-158.4 / h. LS-2's expected ~+4 kills / h is inside that run-to-run noise, so E1
+    is a no-harm bar, not the mechanism's.
+
+**LS-2's runner change, as a sketch (`dungeon_hunt.py`; nothing built):**
+- **The flag:** `--still-target` (dungeon@9.23, OFF by default).
+  - Constants: `WALKER_PX` 10.0, `HOLD_GAP_S` 0.25, `HOLD_MAX_S` 2.5.
+  - `fixes_of`: `"still_target": [10.0, 0.25, 2.5, "9.23"]`.
+- **The hook, `box_target()`** (the closure in `run()`), in its hover loop at the SWORD branch
+  (`if res_["verdict"] == "sword":`), before `box_spot(here, foot)`, the event and the return. With
+  the flag, a still scene (`still_rec["still"]`) and a fresh detection (`meta`), it calls a new
+  `press_check(near_b, arm)`.
+- **`press_check`** (a new closure beside `wait_still` / `still_retarget`):
+  - one `boxes.fresh_now(arm or "gpu", BOX_TARGET_WAIT_S)` + `boxes.snapshot()`;
+  - the existing PURE `same_box(near_b, got2)`, and a new PURE `foot_shift(b1, b2)`;
+  - under `WALKER_PX`: strike as today. Else `hold_still(b2)`.
+- **`hold_still(b)`:**
+  - every `HOLD_GAP_S`, a `fresh_now` + `same_box` to the last box, with `guard_tick()` on each
+    poll (HP, escapes);
+  - it ends `still` (two shifts in a row under `WALKER_PX`), `timeout` (`HOLD_MAX_S`) or `lost` (no
+    match);
+  - `still` -> `hover(*box_hover_points(b)[0])`; on a SWORD, it returns the new (rel, point) from
+    `box_spot(here, foot)`;
+  - anything else -> `box_target` returns None, as today's no-SWORD case (the ring scan or the next
+    box).
+- **The event:** `box_target` gains `"press": {"moved_px", "det2_ms", "hold_ms", "polls", "end"}`.
+- **Tests:** PURE tests for `foot_shift` and the hold's end rule; the click census, because a strike
+  path changed.
+- **Unchanged:** no new input path. Every click still goes through `click_at` (FrameGuard), and is
+  SWORD-verified.
