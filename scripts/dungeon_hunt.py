@@ -862,6 +862,172 @@ def is_jump(here: Cell, p_: Cell, since_s: float) -> bool:
     return d > max(JUMP_CELLS, since_s / WALK_S_PER_CELL + WALK_SLACK)
 
 
+# --unread-step (dungeon@9.22, LF-4; rogue-xmas02.md 4BI, Amendment R; Study S-LF proposal 4 and
+# its note 2f): the pos_unread rule (POS_FLY_S without a fresh position read -> a Fly Wing) first
+#  (a) holds the wing while a walk click of OURS is younger than UNREAD_WALK_S (p39 250.96 s: the
+#      wing came 0.13 s after a walk click the client sent; "sent" is what the packets showed
+#      offline -- at decision time it is our click);
+#  (b) then takes up to UNREAD_STEPS steps of UNREAD_STEP_CELLS cells (Chebyshev), SCREEN-RELATIVE,
+#      opposite to her last own-command movement (a walk click's to - from, a far strike's walk-up):
+#      each step is a walk click through click_at after a CLEAR cursor read at its point, then
+#      UNREAD_READ_S for a fresh main read (the runner's own: PosConfirm, the jump bar);
+#  (c) a fresh read ends the escape: no wing, the run goes on;
+#  (d) still unread after the steps (or no step possible) -> the Fly Wing exactly as before.
+# Around a dead cell, fresh reads came back at 2 cells 79 % of the time (S-LF, p36-p47). The step
+# is relative to her sprite at the screen centre (the camera follows her), so it needs no map cell;
+# the checks that need one are judged from EVERY cell she may be on (unread_candidates) with a
+# margin, or skipped (the run_start record and rogue-xmas02.md say which). 9.20 is --loot-sight's,
+# 9.21 --late-confirm's.
+UNREAD_STEP_VERSION = "9.22"
+UNREAD_WALK_S = 2.0  # (a): a walk click of ours this young holds the wing
+UNREAD_STEP_CELLS = 2  # (b): each step's length (cells, Chebyshev)
+UNREAD_STEPS = 2  # (d): steps before the Fly Wing
+UNREAD_READ_S = 2.0  # (b): a step's wait for a fresh read: 2 cells at 150 ms, the frames' ~0.5 s
+# lag behind the server, and a light read's confirmation (two reads at READ_HZ)
+UNREAD_SAFE_R = 12  # no step while a no-enter / no-cross cell or a script NPC lies within this many
+# cells of a cell she may be on: the steps' 4 cells, a click carried ~3 cells along a walk (frames
+# lag), and the dead reckoning's own error (p47: 4 cells)
+UNREAD_MAX_S = 15.0  # a backstop: the escape holds the wing at most this long after it came due
+UNREAD_LAG_S = 0.5  # an own move this soon before the last fresh read may not be in that read yet
+UNREAD_WALK_BY = frozenset({"walk", "boss_walk", "approach"})  # the walk clicks among OwnMove.by
+
+
+@dataclass(frozen=True)
+class OwnMove:
+    """--unread-step (9.22): one of OUR commands that walks her -- when, the cell it aimed at
+    relative to her (screen-relative: the click's own rel, whatever ``here`` said), and which
+    (UNREAD_WALK_BY's walk clicks, or "strike": a strike whose target was >= 2 cells away, so the
+    client walked her up to it). Loot clicks are not kept: they step her ~1 cell onto an item, not
+    the way she came."""
+
+    t: float
+    rel: Cell
+    by: str
+
+
+def own_move_disp(m: OwnMove) -> Cell:
+    """PURE (9.22): the cells ``m`` moved her by (S-LF's dead reckoning): a walk click its rel; a
+    strike's walk-up its rel less one step toward her (she stops beside the target)."""
+    dx, dy = m.rel
+    if m.by == "strike":
+        return (dx - (dx > 0) + (dx < 0), dy - (dy > 0) + (dy < 0))
+    return (dx, dy)
+
+
+def last_own_move(moves: Sequence[OwnMove], fly_at: float) -> OwnMove | None:
+    """PURE (9.22): the newest own move after the last Fly Wing (a teleport ends the way she came)
+    that aimed somewhere (rel != (0, 0)); None: no step."""
+    for m in reversed(moves):
+        if m.t <= fly_at:
+            return None
+        if m.rel != (0, 0):
+            return m
+    return None
+
+
+def walk_click_t(moves: Sequence[OwnMove]) -> float:
+    """PURE (9.22): when our newest walk click (UNREAD_WALK_BY: the search walk, the boss walk-away,
+    the far approach; never LF-4's own steps) was made; -1e9: none."""
+    for m in reversed(moves):
+        if m.by in UNREAD_WALK_BY:
+            return m.t
+    return -1e9
+
+
+def unread_step_rel(moved: Sequence[int], cells: int = UNREAD_STEP_CELLS) -> Cell | None:
+    """PURE (9.22): the step back along the way she came -- ``cells`` (Chebyshev) opposite to
+    ``moved``, each axis rounded half away from zero ((11, 0) -> (-2, 0); (5, 3) -> (-2, -1);
+    (4, 3) -> (-2, -2)); None for (0, 0)."""
+    dx, dy = int(moved[0]), int(moved[1])
+    n = max(abs(dx), abs(dy))
+    if n == 0:
+        return None
+
+    def back(d: int) -> int:
+        return -int(math.copysign(math.floor(abs(cells * d / n) + 0.5), d))
+
+    return (back(dx), back(dy))
+
+
+def unread_step_cells(rel: Cell, on_self: Callable[[Cell], bool]) -> list[Cell]:
+    """PURE (9.22): the step's cells to hover, in order: ``rel``; or, when its point lies on her own
+    sprite (``on_self``: only (0, +2), straight north), the cells one aside, (+1, dy) then (-1, dy):
+    S-R1's kind b/c clicks on her sprite walked 1-2 cells or sent nothing."""
+    if not on_self(rel):
+        return [rel]
+    return [c for c in ((rel[0] + 1, rel[1]), (rel[0] - 1, rel[1])) if not on_self(c)]
+
+
+def unread_candidates(here: Cell | None, moves: Sequence[OwnMove], last_read_t: float,
+                      fly_at: float, lag_s: float = UNREAD_LAG_S) -> list[Cell]:  # fmt: skip
+    """PURE (9.22): the cells she may be on, for the checks that need one: the HELD cell ``here``
+    (the last fresh read) and, when own moves came after that read (less ``lag_s``: the frames lag
+    the server), the held cell moved by them (own_move_disp; never a position, never ``here``:
+    LF-3 is not built). [] without a held cell."""
+    if here is None:
+        return []
+    out = [(int(here[0]), int(here[1]))]
+    since = [m for m in moves if m.t > max(fly_at, last_read_t - lag_s)]
+    if since:
+        dx = sum(own_move_disp(m)[0] for m in since)
+        dy = sum(own_move_disp(m)[1] for m in since)
+        if (dx, dy) != (0, 0):
+            out.append((out[0][0] + dx, out[0][1] + dy))
+    return out
+
+
+def unread_step_safe(cands: Sequence[Cell], step: Cell, forbid: Any,
+                     npcs: Sequence[Sequence[int]], zones: Any,
+                     r: int = UNREAD_SAFE_R) -> str | None:  # fmt: skip
+    """PURE (9.22): why a step cannot be judged safe from the cells she may be on (``cands``), else
+    None: "no_cell" (none), "off_map" (a candidate off the grid), "zone_near" (a cell of ``forbid``
+    -- the no-enter and no-cross cells -- within ``r`` of a candidate), "npc_near" (a script NPC
+    within ``r``), or the walk click's own segment rule from a candidate ("no_enter" /
+    "no_cross", map_zones.segment_violates)."""
+    import map_zones as mz
+
+    if not cands:
+        return "no_cell"
+    fb = np.asarray(forbid, dtype=bool)
+    h, w = fb.shape
+    for c in cands:
+        x, y = int(c[0]), int(c[1])
+        if not (0 <= x < w and 0 <= y < h):
+            return "off_map"
+        if fb[max(0, y - r) : y + r + 1, max(0, x - r) : x + r + 1].any():
+            return "zone_near"
+        if any(max(abs(x - int(n[0])), abs(y - int(n[1]))) <= r for n in npcs):
+            return "npc_near"
+        why = mz.segment_violates((x, y), (x + step[0], y + step[1]), zones)
+        if why is not None:
+            return why
+    return None
+
+
+def unread_step_decide(now: float, t0: float, walk_t: float, steps: int, step_t: float,
+                       move: OwnMove | None, have_here: bool) -> tuple[str, str]:  # fmt: skip
+    """PURE (--unread-step, 9.22): what the pos_unread rule does on a tick it would press the Fly
+    Wing, the escape having come due at ``t0``: ("wait", why) holds the wing this tick, ("step",
+    "") takes the next step, ("wing", why) presses it as before. In order: the backstop
+    (UNREAD_MAX_S, "max"); a walk click of ours younger than UNREAD_WALK_S ("walk_sent"); a step
+    younger than UNREAD_READ_S ("step_read": its fresh read may still come); UNREAD_STEPS taken
+    ("steps"); no held cell to judge a step's safety from ("no_here"); no own move since the last
+    Fly Wing ("no_move": no way back is known)."""
+    if now - t0 > UNREAD_MAX_S:
+        return "wing", "max"
+    if now - walk_t < UNREAD_WALK_S:
+        return "wait", "walk_sent"
+    if steps and now - step_t < UNREAD_READ_S:
+        return "wait", "step_read"
+    if steps >= UNREAD_STEPS:
+        return "wing", "steps"
+    if not have_here:
+        return "wing", "no_here"
+    if move is None:
+        return "wing", "no_move"
+    return "step", ""
+
+
 def loot_order(changed: Sequence[tuple[float, Cell]], plan: set[Cell], here: Cell,
                empty: Mapping[Cell, float], kills: Sequence[tuple[Cell, float]]
                ) -> list[tuple[Cell, str]]:  # fmt: skip
@@ -1277,6 +1443,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["reach_check"] = [17, 14, "9.12b"]  # walk.py's limits; b: the picked cell (after p25)
     if getattr(a, "late_confirm", False):  # dungeon@9.21 (rogue-xmas02.md 4BI, LF-2)
         out["late_confirm"] = [CONFIRM_S, LATE_CONFIRM_WAIT_S, LATE_CONFIRM_VERSION]
+    if getattr(a, "unread_step", False):  # dungeon@9.22 (rogue-xmas02.md 4BI, LF-4)
+        out["unread_step"] = [UNREAD_WALK_S, UNREAD_STEP_CELLS, UNREAD_STEPS, UNREAD_READ_S,
+                              UNREAD_SAFE_R, UNREAD_MAX_S, UNREAD_STEP_VERSION]  # fmt: skip
     return out
 
 
@@ -2234,6 +2403,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
     trust_npcs = trust_npcs_for(map_) if a.walk_trust else []  # --walk-trust (off by default)
     guard_npcs = trust_npcs_for(map_) if a.npc_guard else []  # --npc-guard (off by default)
+    unread_forbid: Any = None  # dungeon@9.22 (--unread-step): the keep-outs a step stays far from
+    unread_npcs: list[Cell] = []
+    if getattr(a, "unread_step", False):
+        unread_forbid = mz.no_enter_mask(zones, ok.shape) | mz.no_cross_mask(zones, ok.shape)
+        try:  # fail closed: an NPC the KB does not know could not be kept away from
+            unread_npcs = trust_npcs_for(map_)
+        except SystemExit as e:
+            raise SystemExit(f"dungeon@9.22 refused: --unread-step: {e}") from None
     import miss_cue as mcue
 
     miss_tpl = None
@@ -2546,6 +2723,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
         quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
         late_confirm_on = getattr(a, "late_confirm", False)  # dungeon@9.21 (LF-2)
+        unread_step_on = getattr(a, "unread_step", False)  # dungeon@9.22 (LF-4)
+        own_moves: deque[OwnMove] = deque(maxlen=64)  # 9.22: our commands that walked her
+        ust: dict[str, Any] = {"t0": None}  # 9.22: the pos_unread escape in progress (t0: due)
+
+        def note_move(rel: Sequence[int], by: str) -> None:
+            """9.22: an own command that walks her (bookkeeping only: no input, no event)."""
+            own_moves.append(OwnMove(time.monotonic(), (int(rel[0]), int(rel[1])), by))
+
+        def unread_end(event: str, **rec: Any) -> None:
+            """9.22: the escape ends -- "fresh" (a fresh read: no wing), "wing" (LF-4's fallback,
+            the pos_unread wing follows), "refused" (no safe step: the wing follows), "fly" (another
+            Fly Wing took her away). A no-op when no escape runs."""
+            if ust["t0"] is not None:
+                ev({"kind": "unread_step", "event": event, "steps": ust["steps"],
+                    "s": round(time.monotonic() - ust["t0"], 2), **rec})  # fmt: skip
+                counts[f"unread_step_{event}"] += 1
+            ust["t0"] = None
+
         boss_walk_on = getattr(a, "boss_walk", False) and bool(bosses)  # dungeon@9.18
         boss_walks: deque[float] = deque(maxlen=16)  # 9.18: the walk-aways' ticks
         boss_grace_until = -1e9  # 9.18: boss lines read while walking away are the dog's last
@@ -2593,6 +2788,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         pos_hist: deque[tuple[float, Cell]] = deque(maxlen=32)  # position reads (house mode)
 
         def press(what: str, why: str) -> None:
+            if what == "fly" and why != "pos_unread":
+                unread_end("fly", why=why)  # 9.22: a teleport ends an escape (no-op without one)
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
@@ -2995,6 +3192,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 n_lines0 = len(blt.lines)
             click_at(u, v, "strike")
             n_strike[0] += 1
+            if max(abs(int(rel[0])), abs(int(rel[1]))) >= 2:  # 9.22: the client walks her up
+                note_move(rel, "strike")
             t_c = time.monotonic()
             n, arrow, dmg = 1, None, None
             cur = ref
@@ -3117,6 +3316,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if in_view(u_a, v_a):
                         click_at(u_a, v_a, "approach")
                         last_walk_click = time.monotonic()
+                        note_move(cell_a, "approach")  # 9.22: the way she came
                         box_fight["approach_n"] = int(box_fight.get("approach_n", 0)) + 1
                         box_fight["approach_t"] = last_walk_click
                         box_fight["tried"] = False  # the box path looks again after the walk
@@ -3297,6 +3497,81 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def read_here() -> Cell | None:
             rd = selfpos.read_minimap(frame(), digits, light=True)  # X1b: opt-in, confirmed
             return pos_ok.accept(time.monotonic(), rd)
+
+        def unread_active() -> bool:
+            """9.22: an escape runs for THIS stale span (no fresh read, no Fly Wing since it came
+            due): the search walk holds its clicks meanwhile. The pos_unread rule is checked on
+            every tick that reaches the walk, so the escape ends there (by its backstop at the
+            latest, UNREAD_MAX_S) -- never a walk click on the tick its wing is pressed."""
+            return ust["t0"] is not None and ust["span"] == last_pos_t and ust["fly"] == fly_at
+
+        def unread_held(now: float) -> bool:
+            """--unread-step (dungeon@9.22, LF-4): called when the pos_unread rule would press the
+            Fly Wing. True holds the wing this tick (a wait, or a step was clicked); False lets it
+            go (the flag off, or LF-4's fallback: the escape is ended and logged first)."""
+            nonlocal last_walk_click
+            if not unread_step_on:
+                return False
+            if ust["t0"] is None or ust["span"] != last_pos_t or ust["fly"] != fly_at:
+                ust.update(t0=now, span=last_pos_t, fly=fly_at, steps=0, step_t=-1e9, waits=set())
+                counts["unread_step_due"] += 1
+            mv = last_own_move(own_moves, fly_at)
+            walk_t = walk_click_t(own_moves)
+            act_u, why_u = unread_step_decide(now, ust["t0"], walk_t, ust["steps"], ust["step_t"],
+                                              mv, here is not None)  # fmt: skip
+            if act_u == "wait":
+                if why_u not in ust["waits"]:  # one record per reason and escape
+                    ust["waits"].add(why_u)
+                    ev({"kind": "unread_step", "event": "wait", "why": why_u,
+                        "age_s": round(now - (walk_t if why_u == "walk_sent" else ust["step_t"]),
+                                       2),
+                        "since_read_s": round(now - last_pos_t, 2)})  # fmt: skip
+                return True
+            if act_u == "wing":
+                unread_end("wing", why=why_u)
+                return False
+            assert mv is not None and here is not None  # unread_step_decide's "step"
+            rel_u = unread_step_rel(mv.rel)
+            assert rel_u is not None  # last_own_move keeps rel != (0, 0)
+            cands = unread_candidates(here, own_moves, last_pos_t, fly_at)
+            dir_ = {"by": mv.by, "rel": list(mv.rel), "age_s": round(now - mv.t, 2)}
+            why_safe = unread_step_safe(cands, rel_u, unread_forbid, unread_npcs, zones)
+            if why_safe is not None:
+                unread_end("refused", why=why_safe, rel=list(rel_u), dir=dir_,
+                           cands=[list(c_) for c_ in cands])  # fmt: skip
+                return False
+
+            def on_self(c_: Cell) -> bool:
+                u_s, v_s = project(None, [c_])[0]
+                return in_self_box(u_s, v_s, FOOT_PX[0], FOOT_PX[1])
+
+            # SCREEN-RELATIVE: the flat projection about her sprite at the screen centre (the
+            # camera follows her) -- the held cell's terrain may be another spot's (p47: 11 off)
+            verdicts: list[str] = []
+            for c_u in unread_step_cells(rel_u, on_self):
+                u_u, v_u = project(None, [c_u])[0]
+                if not in_view(u_u, v_u):
+                    verdicts.append("off")
+                    continue
+                res_u = hover(u_u, v_u)
+                ring_u = int(res_u["ring"][0]) if res_u.get("noentry_ring") else 0
+                act_w, why_w = wtr.decide(res_u["verdict"], ring_u, trusted=False, enabled=False,
+                                          noentry_red=RING_IN_MIN)  # fmt: skip
+                verdicts.append(why_w)
+                if act_w != "click":  # only a CLEAR read: never a SWORD, a ring, an unknown
+                    continue
+                click_at(u_u, v_u, "unread_step")
+                ust["steps"] += 1
+                ust["step_t"] = last_walk_click = time.monotonic()  # the idle watchdog, settle
+                counts["unread_step"] += 1
+                ev({"kind": "unread_step", "event": "step", "n": ust["steps"], "rel": list(c_u),
+                    "u": round(u_u, 1), "v": round(v_u, 1), "verdicts": verdicts, "dir": dir_,
+                    "held": None if here is None else list(here),
+                    "cands": [list(c_) for c_ in cands],
+                    "since_read_s": round(now - last_pos_t, 2)})  # fmt: skip
+                return True
+            unread_end("refused", why="cursor", rel=list(rel_u), dir=dir_, verdicts=verdicts)
+            return False
 
         def grey(img_: Any) -> Any:
             return np.asarray(img_)[..., :3].astype(np.float32).mean(axis=2)
@@ -3782,6 +4057,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             "since_s": round(tick - last_pos_t, 2)})  # fmt: skip
                         reason = "hard_bar: position jump (map change?)"
                         break
+                    if ust["t0"] is not None:  # 9.22 (--unread-step): (c) a fresh read, no wing
+                        unread_end("fresh", at=list(p_), held=None if here is None else list(here))
                     here, last_pos_t = p_, tick
                     if house_on:
                         pos_hist.append((tick, p_))
@@ -3949,6 +4226,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if wa_ is not None and here is not None:
                         u_w, v_w = project(here, [(wa_[0] - here[0], wa_[1] - here[1])])[0]
                         click_at(u_w, v_w, "walk")
+                        note_move((wa_[0] - here[0], wa_[1] - here[1]), "boss_walk")  # 9.22
                         boss_walks.append(tick)
                         boss_grace_until = tick + BOSS_WALK_GRACE_S
                         last_walk = tick + BOSS_WALK_GRACE_S  # no other walk click meanwhile
@@ -4409,8 +4687,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         "len": None if goal_path is None else len(goal_path),
                         "turn": walk_st.get("turn"),
                         "wp": None if not patrol else wp_st["i"]})  # fmt: skip
+                # 9.22 (--unread-step): no search walk click while a pos_unread escape runs
                 if mode in ("search", "rest") and here is not None and goal_path \
-                        and tick - last_walk >= a.walk_every \
+                        and tick - last_walk >= a.walk_every and not unread_active() \
                         and not loot_settling(loot_settle_t, last_pos_t, tick):  # fmt: skip
                     last_walk = tick
                     # the path from where we are now
@@ -4549,6 +4828,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     continue
                                 click_at(u, v, "walk")
                                 last_walk_click = tick
+                                note_move(rel, "walk")  # 9.22: the way she came
                                 rec_w = {"kind": "walk", "from": list(here), "to": list(c),
                                          "clicked": True, "why": mode, "red": res.get("red"),
                                          "ring": res.get("ring")}  # fmt: skip
@@ -4617,7 +4897,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # Fly Wing (a same-map teleport) gives the readout a new background: after
                 # POS_FLY_S without a read, at most POS_FLY_MAX a run, POS_FLY_S apart
                 if (tick - last_pos_t > POS_FLY_S and tick - fly_at > POS_FLY_S
-                        and pos_flies < POS_FLY_MAX):  # fmt: skip
+                        and pos_flies < POS_FLY_MAX
+                        and not unread_held(tick)):  # 9.22: --unread-step first  # fmt: skip
                     ev({"kind": "stuck", "at": None if here is None else list(here),
                         "why": "pos_unread"})  # fmt: skip
                     press("fly", "pos_unread")
@@ -4873,6 +5154,16 @@ def main() -> int:
         "held back for coming > 1.0 s after the read before it is confirmed at once by a read "
         "of a NEWER bus frame (another frame id, <= 0.25 s), by PosConfirm's own rule, instead "
         "of on the next tick; the position-jump bar is unchanged",
+    )
+    t.add_argument(
+        "--unread-step",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.22 (rogue-xmas02.md 4BI, LF-4; OFF by default): before the pos_unread Fly "
+        "Wing (20 s without a fresh position read), no wing while a walk click of ours is < 2 s "
+        "old; then up to 2 screen-relative 2-cell steps back along her last own movement, each a "
+        "walk click after a CLEAR cursor read, then 2 s for a fresh read; a fresh read cancels the "
+        "wing, else the wing as before",
     )
     t.add_argument(
         "--quiet-scan",
