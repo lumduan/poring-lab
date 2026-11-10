@@ -3586,3 +3586,49 @@ STAYS DEPLOYED for the base (4BC).**
   Pearl, Iron, Sandals 1 each (2.4). Weight share 0.33 -> 0.39 at the end.
 - E1 157.6 / h is the base's best 25-min run so far (p40-p42: 136-154 / h); one run, not a claim
   that the new model caused it.
+
+**Study after p44 (2026-11-10 ~09:1x ICT; offline, the banked p40 / p41 / p42 / p44 sessions; DECIDES
+NOTHING): where the base's time goes now.** `scripts/time_budget.py session SID --map xmas_dun02`
+(one label per instant, from the packets; its definitions as committed), then a per-kill split of the
+after-fight time (packets: our target's death vanish, the `floor_item_appear` packets of its drop;
+events: the runner's `kill` / `loot_step`). The two throwaway scripts: NAS
+`scratch-archive/2026-11-10/afterkill-study/` (sha256-verified).
+
+| share of the run | p40 | p41 | p42 | p44 |
+|---|---|---|---|---|
+| fight / approach / search walk | 17.9 / 12.7 / 19.9 % | 19.1 / 13.6 / 18.7 % | 19.4 / 13.4 / 21.7 % | 21.3 / 14.5 / 20.6 % |
+| IDLE in all | 49.3 % | 48.3 % | 45.2 % | 43.6 % |
+| - after a fight | 273 s | 264 s | 200 s | 299 s |
+| - inside the search | 246 s | 206 s | 221 s | 175 s |
+| - loot pauses / before an engage | 85 / 136 s | 142 / 114 s | 155 / 100 s | 101 / 82 s |
+
+The after-fight idle, per kill (kills matched to their death packet: p44 44 of 64, p42 43 of 61):
+- **death -> the runner's kill:** median 1.96 s (p42 1.97): the 1.6-s kill gap + the Battle Log's
+  lag. Our last damaging hit comes 0.49 s before the death vanish (median, all four runs).
+  - A shorter gap does not pay: fights with a gap of > 1.0 s between our hits while the target lived:
+    p40 1, p41 5, p42 9, p44 5 (> 1.6 s: 1 / 1 / 4 / 1).
+  - 1.0 s would save ~0.6 s x ~62 kills = ~38 s a run, but would end ~4 more live fights a run
+    (each a ~3-s loot step + a re-engage, ~20 s).
+- **THE LOOT STEP ON AN EMPTY FLOOR:** 68-82 % of kills drop NOTHING on the floor:
+  - p40 32 of 39, p41 30 / 44, p42 30 / 43, p44 34 / 44 (Snatcher took what it stole during the
+    fight; the floor drop comes 0.25 s before the death vanish).
+  - Each still gets the full loot step: 9 hovers, median 2.90-2.99 s (84-98 s a run on the matched
+    kills alone, i.e. ~6 % of the run).
+  - A kill with a drop: median 4.0 s.
+- **What would remove it: the bot seeing that nothing fell.**
+  - Floor items are not in the detector's classes, so the loot step must hover all 9 cells of the
+    3 x 3 drop area. rAthena puts a drop in a free cell around the death cell.
+  - A **floor-item class** would let the loot step:
+    - skip an empty floor (~2.9 s a kill on ~3 of 4 kills);
+    - and hover only the boxed cells on the rest (~4.0 s -> ~1-1.5 s).
+  - Estimate: ~110-130 s a run back to the hunt (~8 %).
+  - Labels from the packets: `floor_item_appear` gives the cell AND the sub-cell (`sub_x`,
+    `sub_y`), offline ground truth used only to make labels, as for the monsters (rule 1).
+  - The frames: a pilot recorded at 1 fps (~3.3 GB a 25-min run; ~10-14 drops a run, each on the
+    floor for ~3-4 s) or immune watches with staged drops.
+  - Then T2 (a blind check on item crops), a retrain and the held-out score, as Amendment M.
+- **Not studied yet (next):** the idle inside the search (175-246 s a run, mostly no runner step: the
+  time between a walk's arrival and the next click).
+- Proposed to Batt, not pre-registered: (a) teach the detector floor items; it could share N1's
+  retrain (one training run, the two new things scored by separate bars) or follow it; (b) leave
+  the kill gap at 1.6 s.
