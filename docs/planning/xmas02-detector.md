@@ -3504,3 +3504,27 @@ score):**
   time). The 3-min poll read it alive at 00:36:09 ([123:43]); `@killmonster2` at 00:37:03, then
   "1[dead]". So p50 + p51 run before 01:37.
 
+### Amendment O15g (2026-11-11 03:07 ICT from `date`, BEFORE any score): the held-out complete, the pack, the evaluated crops
+
+- **The pilots' held-out** (`--eval-test`, e381d689 re-hashed): fiT4 (beside p50) 994 candidate
+  frames, 18 labels / 8 floor items; fiT5 (p51) 932, 22 / 10; fiT6 (p52) 967, 24 / 10. Their refs:
+  2,879 frames. GPU predictions 02:4x-02:50.
+- **The pack (seed 66, `pack --round 2 --eval-test`, over fiT4-fiT6 + fsTa + fsTn):** 140 crops =
+  120 item crops (70 aura + 50 no-aura; N 40, F 67, M 13) + 20 E. Nothing short.
+- **Labellers O and P** (NEW, blind; told only that the character may look different):
+  - they answered all 140 and agree on all 140 (q1 and q2);
+  - each: q1 yes 119 / no 20 / unsure 1 (129, a cookie-like shape on a fallen monster); q2 good
+    119;
+  - both flagged 064 / 106 (a rod under a cake slice: the most central item judged).
+- **EVALUATED (both yes / good): 119 crops.**
+  - Aura 69: fiT4 4, fiT5 4, fiT6 5 (natural drops), fsTa 56 (staged). Its minimum is 40.
+  - No aura 50: fsTn. Its minimum is 30.
+  - The natural pilot drops are few (13 of 69). The per-source counts are reported beside I1a, as
+    O15 said.
+- **Still to come, then the score once:**
+  - the ONNX set on the pilots (running);
+  - I5 on 300 frames, every 14th of the 4,413 held-out refs: the detect server's forward time
+    for xmas02fi2 and xmas02gb, one a run; eval_latency, interleaved, on a quiet host;
+  - `fi_eval.py --strata r2` once, with both prediction sets merged over the five sessions
+    (`merge_preds.py`: same weights, disjoint keys).
+
