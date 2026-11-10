@@ -94,8 +94,9 @@ def test_own_body_strikes_and_the_self_recheck_summary() -> None:
     out = ls.strikes(events, [req(20.2, T1), req(30.3, T2)], US)
     assert [o["own_body"] for o in out] == [True, True, False]
     sr = ls.self_recheck(out, events)
-    assert sr == {"own_body_strikes": 2, "own_body_d": 1, "own_body_attacked": 1,
-                  "rechecks": 2, "transient": 1, "scan_attacked": 2}  # fmt: skip
+    assert sr == {"own_body_strikes": 2, "own_body_d": 1, "own_body_d_lost": 1,
+                  "own_body_attacked": 1, "rechecks": 2, "transient": 1,
+                  "scan_attacked": 2}  # fmt: skip
 
 
 def test_far_strikes_by_walking_and_the_retargets() -> None:
@@ -111,3 +112,62 @@ def test_far_strikes_by_walking_and_the_retargets() -> None:
     fs = ls.far_strikes(out, events)
     assert fs == {"far": 2, "far_d": 1, "far_attacked": 1, "far_d_walking": 1, "far_walking": 1,
                   "retargets": 2, "retarget_lost": 1}  # fmt: skip
+
+
+def test_r1a_a_strike_through_continued_hits_lost_nothing() -> None:
+    """rogue-xmas02.md 4BI (Amendment R, R1-A): a class-D strike counts for R1 only if it LOST an
+    attack. Our hits on T1 every 0.47 s go on across the click (study S-R1's kind a): not lost."""
+    hits = [act(9.06 + 0.47 * i, T1) for i in range(4)]  # 9.06, 9.53, 10.00 ... 10.47
+    r = ls.lost_attack(int(9.8 * S), hits, US)
+    assert r == {"lost": False, "reason": "continued", "gid": T1, "before_s": -0.27,
+                 "after_s": 0.2, "by": "hit"}  # fmt: skip
+    # the target's death within 1.0 s after the click ends the attack, nothing lost (p45 732.5)
+    r = ls.lost_attack(10 * S, [act(9.6, T1), gone(10.04, T1, 1)], US)
+    assert (r["lost"], r["by"], r["after_s"]) == (False, "death", 0.04)
+
+
+def test_r1a_lost_when_no_hit_before_or_the_hits_stop() -> None:
+    assert ls.lost_attack(10 * S, [], US) == {"lost": True, "reason": "no_hit_before"}
+    # the hit before is 1.2 s old: outside the window (kinds b / c: nothing was being hit)
+    assert ls.lost_attack(10 * S, [act(8.8, T1), act(10.3, T1)], US)["reason"] == "no_hit_before"
+    # hits before, but the next one 1.5 s after the click: the strike broke the attack
+    r = ls.lost_attack(10 * S, [act(9.5, T1), act(11.5, T1)], US)
+    assert r == {"lost": True, "reason": "stopped", "gids": [T1]}
+    # the next hit lands on ANOTHER monster: not the same one, so lost
+    assert ls.lost_attack(10 * S, [act(9.5, T1), act(10.4, T2)], US)["lost"]
+    # a miss (damage 0) is no hit; a vanish that is not a death (reason 0) is no death
+    assert ls.lost_attack(10 * S, [act(9.5, T1), act(10.4, T1, dmg=0)], US)["lost"]
+    assert ls.lost_attack(10 * S, [act(9.5, T1), gone(10.4, T1, 0)], US)["lost"]
+    # another source's hits are not ours
+    other = {"type": "act", "t_mono_ns": int(9.5 * S), "src_gid": 7, "target_gid": T1, "damage": 9}
+    assert ls.lost_attack(10 * S, [other, act(10.4, T1)], US)["lost"]
+    # two monsters hit before: the one we kept hitting decides
+    r = ls.lost_attack(10 * S, [act(9.4, T2), act(9.6, T1), act(10.3, T2)], US)
+    assert (r["lost"], r["gid"]) == (False, T2)
+
+
+def test_r1a_count_beside_the_old_one() -> None:
+    """own_body_d stays as scored; own_body_d_lost drops the strikes that lost nothing."""
+    events = [{"kind": "strike", "t_ns": 10 * S, "u": 641.0, "v": 312.0, "by": "scan"},  # kind a
+              {"kind": "strike", "t_ns": 20 * S, "u": 641.0, "v": 336.0, "by": "loot_sword"},
+              {"kind": "strike", "t_ns": 30 * S, "u": 675.0, "v": 336.0,
+               "by": "scan"}]  # fmt: skip
+    packets = [act(9.6, T1), act(10.07, T1), act(10.54, T1), act(29.5, T2), act(30.3, T2)]
+    out = ls.strikes(events, packets, US)
+    assert [o["class"] for o in out] == ["D", "D", "D"]
+    assert [o["r1a"]["lost"] for o in out] == [False, True, False]
+    sr = ls.self_recheck(out, events)
+    assert (sr["own_body_d"], sr["own_body_d_lost"]) == (2, 1)
+    # a strike that attacked carries no R1-A record
+    assert "r1a" not in ls.strikes(events[:1], [req(10.1, T1)], US)[0]
+
+
+def test_r1_bar_from_the_rate() -> None:
+    """Amendment R, 3: lambda per base run, k = the smallest k with P(Poisson(4 lambda) >= k) <=
+    0.05. Hand-checked: Poisson(3.0) P(>= 6) = 0.0839, P(>= 7) = 0.0335."""
+    b = ls.r1_bar([0, 1, 0, 1, 1, 0, 2, 1])
+    assert (b["runs"], b["strikes"], b["lambda"], b["pool_mean"]) == (8, 6, 0.75, 3.0)
+    assert (b["k"], b["p_ge_k_minus_1"], b["p_ge_k"]) == (7, 0.0839, 0.0335)
+    assert ls.poisson_sf(0, 3.0) == 1.0
+    assert abs(ls.poisson_sf(1, 3.0) - (1 - 0.049787068)) < 1e-6
+    assert ls.r1_bar([0, 0])["k"] == 1  # no strikes at all: any strike fails

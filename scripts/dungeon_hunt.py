@@ -710,6 +710,27 @@ def overweight_red(frame_bgr: Any) -> bool:
 
 
 CONFIRM_S = 1.0  # X1b round 2: a light-strip (fallback) read counts only when confirmed this soon
+# --late-confirm (dungeon@9.21, LF-2; rogue-xmas02.md 4BI, Amendment R; Study S-LF): a light read
+# that PosConfirm held back only because it came > CONFIRM_S after the read before it (the first
+# read after a strike, a scan, a loot step: 317 "unconfirmed only" spans in p40-p47) is confirmed
+# AT ONCE by a read of a NEWER frame -- another bus frame id, decoded after the one read, waited for
+# at most LATE_CONFIRM_WAIT_S -- instead of on the next tick. The second read goes through
+# PosConfirm.accept itself (the same reach rule, a base read counting as before), and the cell it
+# gives passes the position-jump hard bar like any other read. No frame id (an X grab) or the same
+# frame id: nothing is read and the read stays unconfirmed, as today. (9.20 is xmas02-detector.md
+# O.10's --loot-sight.)
+LATE_CONFIRM_VERSION = "9.21"
+LATE_CONFIRM_WAIT_S = 0.25  # the RDP bus sends a frame at least every 0.1 s (its keepalive)
+
+
+@dataclass(frozen=True)
+class Held:
+    """A light read PosConfirm held back (LF-1 logs it): its time, its cell and the seconds since
+    the read before it (None: no read before it)."""
+
+    t: float
+    cell: Cell
+    dt: float | None
 
 
 class PosConfirm:
@@ -727,13 +748,17 @@ class PosConfirm:
         self._lock = threading.Lock()
 
     def accept(self, t: float, rd: Any) -> Cell | None:
+        return self.check(t, rd)[0]
+
+    def check(self, t: float, rd: Any) -> tuple[Cell | None, Held | None]:
+        """accept(), and the read it HELD BACK (LF-1), if it held one back; one lock for both."""
         if rd.xy is None:
-            return None
+            return None, None
         p_ = (int(rd.xy[0]), int(rd.xy[1]))
         with self._lock:
             prev, self.last = self.last, (t, p_)
             if getattr(rd, "mode", "base") != "light":
-                return p_
+                return p_, None
             dt = t - prev[0] if prev is not None else math.inf
             if (
                 prev is not None
@@ -741,9 +766,78 @@ class PosConfirm:
                 and max(abs(p_[0] - prev[1][0]), abs(p_[1] - prev[1][1]))
                 <= dt / WALK_S_PER_CELL + 1
             ):
-                return p_
+                return p_, None
             self.unconfirmed += 1
+            return None, Held(t, p_, None if prev is None else dt)
+
+
+def late_confirm_due(held: Held | None) -> bool:
+    """PURE (--late-confirm, LF-2): a held-back read that was held only for being LATE (> CONFIRM_S
+    after the read before it, or no read before it) -- not one that disagreed with a recent read."""
+    return held is not None and (held.dt is None or held.dt > CONFIRM_S)
+
+
+def late_confirm_refusal(first_id: int, second_id: int, source: str) -> str | None:
+    """PURE (LF-2): why the second frame cannot confirm the first -- "no_bus" (an X grab carries no
+    frame id: a new frame cannot be proven), "same_frame" (the stream repeated the frame: two reads
+    of one picture are one read) -- else None."""
+    if source != "bus" or second_id < 0 or first_id < 0:
+        return "no_bus"
+    if second_id == first_id:
+        return "same_frame"
+    return None
+
+
+def newer_frame(
+    screen: Any,
+    region: tuple[int, int, int, int],
+    after_ns: int,
+    prev_id: int,
+    wait_s: float = LATE_CONFIRM_WAIT_S,
+) -> tuple[int, Any, int, str] | None:
+    """--late-confirm (LF-2): ``region`` (screen pixels, BGR) from a bus frame decoded after
+    ``after_ns`` whose frame id is not ``prev_id``, waiting at most ``wait_s`` (None: none came).
+    An X grab (no frame id) returns at once: late_confirm_refusal refuses it."""
+    end = time.monotonic() + wait_s
+    while True:
+        t, img, frame_id, source = screen.grab_meta(*region)
+        if source != "bus" or (t > after_ns and frame_id != prev_id):
+            return t, np.ascontiguousarray(np.asarray(img)[..., :3]), frame_id, source
+        if time.monotonic() > end:
             return None
+        time.sleep(0.01)
+
+
+def late_confirm(
+    pc: PosConfirm,
+    held: Held | None,
+    first: tuple[int, int],
+    newer: Callable[[int, int], tuple[int, Any, int, str] | None],
+    read: Callable[[Any], Any],
+    clock: Callable[[], float],
+) -> tuple[Cell | None, dict[str, Any] | None]:
+    """--late-confirm (dungeon@9.21, LF-2): when ``held`` is due (late_confirm_due), read a NEWER
+    frame -- ``newer(t_ns, frame_id)`` of the frame read (``first``) gives (t_ns, image, frame id,
+    source) or None -- and pass that read to PosConfirm.accept at ``clock()``: its reach rule
+    decides (a base read counts as always). Returns (the accepted cell or None, the log fields or
+    None when not due). Outcomes: "ok" (the newer light read agreed), "base" (the newer read was a
+    base read), "differ" (held back again), "no_read", "same_frame", "no_bus", "no_frame"."""
+    if not late_confirm_due(held):
+        return None, None
+    got = newer(*first)
+    if got is None:
+        return None, {"lf2": "no_frame"}
+    t2, img2, id2, src2 = got
+    rec: dict[str, Any] = {"lf2_fid": [first[1], id2], "lf2_ms": round((t2 - first[0]) / 1e6)}
+    why = late_confirm_refusal(first[1], id2, src2)
+    if why is not None:
+        return None, {**rec, "lf2": why}
+    rd2 = read(img2)
+    if rd2 is None or rd2.xy is None:
+        return None, {**rec, "lf2": "no_read"}
+    pos = pc.accept(clock(), rd2)
+    kind = "differ" if pos is None else "ok" if getattr(rd2, "mode", "base") == "light" else "base"
+    return pos, {**rec, "lf2": kind, "lf2_xy": [int(rd2.xy[0]), int(rd2.xy[1])]}
 
 
 def read_outcome(rd: Any, pos: Cell | None) -> str:
@@ -1181,6 +1275,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["loot_first"] = [LOOT_FIRST_VERSION]
     if getattr(a, "reach_check", False):  # dungeon@9.12 (rogue-xmas02.md 4AE)
         out["reach_check"] = [17, 14, "9.12b"]  # walk.py's limits; b: the picked cell (after p25)
+    if getattr(a, "late_confirm", False):  # dungeon@9.21 (rogue-xmas02.md 4BI, LF-2)
+        out["late_confirm"] = [CONFIRM_S, LATE_CONFIRM_WAIT_S, LATE_CONFIRM_VERSION]
     return out
 
 
@@ -2378,8 +2474,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         r.activate_client(agent_raw, screen)
         time.sleep(1.0)
 
+        frame_meta: list[tuple[int, int]] = [(0, -1)]  # 9.21: the last frame()'s (t_ns, frame id)
+
         def frame() -> Any:
-            return np.ascontiguousarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())[..., :3])
+            t_f, img_f, id_f, _src_f = r.grab_after_meta(screen, (gx0, gy0, gw, gh), r.ns())
+            frame_meta[0] = (t_f, id_f)
+            return np.ascontiguousarray(img_f[..., :3])
+
+        def newer_readout(after_ns: int, prev_id: int) -> tuple[int, Any, int, str] | None:
+            """9.21 (LF-2): the readout's rect (game-region pixels -> the screen) from a newer
+            frame (newer_frame)."""
+            x_r, y_r, w_r, h_r = selfpos.default_rect()
+            return newer_frame(screen, (gx0 + x_r, gy0 + y_r, w_r, h_r), after_ns, prev_id)
+
+        def read_readout(img_: Any) -> Any:
+            """9.21 (LF-2): the light-enabled read of the readout's rect alone (the same pixels
+            the main read crops from the whole frame)."""
+            h_i, w_i = np.asarray(img_).shape[:2]
+            return selfpos.read_minimap(img_, digits, (0, 0, w_i, h_i), light=True)
 
         fr1 = gm_state._frames(screen)
         w_ = gm_state._weight(fr1)
@@ -2433,6 +2545,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
         loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
         quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
+        late_confirm_on = getattr(a, "late_confirm", False)  # dungeon@9.21 (LF-2)
         boss_walk_on = getattr(a, "boss_walk", False) and bool(bosses)  # dungeon@9.18
         boss_walks: deque[float] = deque(maxlen=16)  # 9.18: the walk-aways' ticks
         boss_grace_until = -1e9  # 9.18: boss lines read while walking away are the dog's last
@@ -3610,6 +3723,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     here, last_taken = None, -1e9  # Amendment F: a new spot, the old hits gone
                     last_swing = -1e9
                 img = frame()
+                img_meta = frame_meta[0]  # 9.21 (LF-2): the frame this tick reads
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
                 if stock_watch is not None and stock_due:  # dungeon@8.4: the stock after a press
@@ -3648,7 +3762,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # FLY_JUMP_S (a Fly Wing is a same-map teleport; packets judge map changes)
                 fresh = tick - fly_at >= FLY_SETTLE_S
                 rd = selfpos.read_minimap(img, digits, light=True) if fresh else None
-                pos = pos_ok.accept(tick, rd) if rd is not None else None
+                pos, held = pos_ok.check(tick, rd) if rd is not None else (None, None)
+                lf_rec: dict[str, Any] = {}  # LF-1 (logging only, always): the held-back read
+                if held is not None:
+                    dt_h = None if held.dt is None else round(held.dt, 2)
+                    lf_rec = {"held": list(held.cell), "held_dt": dt_h}
+                if late_confirm_on and held is not None:  # 9.21 (LF-2): a newer frame confirms
+                    pos, lf2_ = late_confirm(pos_ok, held, img_meta, newer_readout, read_readout,
+                                             time.monotonic)  # fmt: skip
+                    if lf2_ is not None:
+                        lf_rec.update(lf2_)
+                        counts[f"late_confirm_{lf2_['lf2']}"] += 1
                 rd_why = read_outcome(rd, pos)
                 if pos is not None:
                     p_ = pos
@@ -3663,6 +3787,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         pos_hist.append((tick, p_))
                 ev({"kind": "hp_read", "pct": pct, "sp_pct": spp, "dead": dead, "ag_on": ag_on,
                     "dark": dark, "pos": None if here is None else list(here),
+                    "here_age_s": round(tick - last_pos_t, 2), **lf_rec,
                     "rd": rd_why})  # fmt: skip
                 if dead:
                     reason = "death"
@@ -4739,6 +4864,15 @@ def main() -> int:
         metavar="ID:N",
         help="dungeon@9.18 TRIAL ONLY (rogue-xmas02.md 4AZ): the setup's last line spawns N of "
         "mob ID at the start (@monster ID N), a staged encounter for a pre-registered trial",
+    )
+    t.add_argument(
+        "--late-confirm",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.21 (rogue-xmas02.md 4BI, LF-2; OFF by default): a light position read "
+        "held back for coming > 1.0 s after the read before it is confirmed at once by a read "
+        "of a NEWER bus frame (another frame id, <= 0.25 s), by PosConfirm's own rule, instead "
+        "of on the next tick; the position-jump bar is unchanged",
     )
     t.add_argument(
         "--quiet-scan",
