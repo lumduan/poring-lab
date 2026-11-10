@@ -2907,3 +2907,33 @@ xmas_dun02 --table /dev/shm/poring-lab-tmp/xmas-fi/grf/data/idnum2itemresnametab
 '/dev/shm/poring-lab-tmp/xmas-fi/icons/data/texture/유저인터페이스/item'` (refuses today: Scell);
 the given copies stored, `held` rc 0; `give --map xmas_dun02` (no frames); **`drop --map
 xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
+
+### Amendment O3 (2026-11-10 11:30 ICT from `date`, the parent): the tools merged; two findings decided before any new label
+
+- **Merged:** feat/fi-tools (ddd54d6a): T-O1 `fi_labels.py`, T-O2 `build_frame_cache.py --labels items`,
+  T-O3 the pack + `fi_blind_score.py`, T-O4 stage@8's xmas_dun02 set (offline part), T-O5
+  `fi_eval.py`. 63 new tests; the merged label / stage / census suites pass on main.
+- **The params v1** (`/dev/shm/poring-lab-tmp/xmas-fi/params.json`) were frozen 11:08:32 by e4103675:
+  sha256 `d1c5606b1677d02bf494efd93bceef82fafefc78b1af7c8905efb9c965b4e315`.
+  - Positive cases: FIT p31 938 / 938 frames identical to the study's dry run (204 / 233 / 15);
+    frame 1157's Scell at 0.9378; DEV p38 91 / 95 / 10.
+  - G2 PASSES on both: 1 / 1 px medians.
+- **O2 finding 7.1 (Scell's masked icon: 30 item px, under stage@6's MIN_ITEM_PX 40):** option (b).
+  - Scell leaves fs1's staged set; the next id by O.11's own ranking (drop rate x p44's sight mix)
+    joins in its place.
+  - AK-5's pre-registered gate is NOT lowered.
+  - Scell is already 51 % / 75 % of FIT's / DEV's kept labels, so fs1 loses little.
+- **O2 finding 7.2 (sprites that "fit" bare floor):** a per-id rule, fixed on FIT + DEV's 59
+  empty-floor absent points.
+  - An id whose sprite fits >= T_item on > 1 % of them is treated as `item_unsprited`: a frame
+    holding one is excluded, never labelled.
+  - Today that is Bib 7269 (74.6 %), Rough Wind 996 (1.7 %) and Holy Bonnet 2251 (1.7 %). The other
+    25 sprites, the 12 staged ids included, fit 0 %.
+  - It needs a **params v2** (a new file, frozen by its tool, its sha256 recorded here). p31 (VAL)
+    and p38 (TRAIN) are re-labelled under v2 before the cache.
+  - v1 stays as the record of the positive cases.
+- **Next:**
+  - v2 + the fs1 set change (tools, offline);
+  - then the live icon proof (O2 section 6's chain, the store step first);
+  - then fs1, the TRAIN labels (p20, p39), T2-items, the cache, the training, the evaluation on
+    fiT1 + fiT2.
