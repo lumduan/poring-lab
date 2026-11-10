@@ -3011,7 +3011,7 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - a run that stops early (rc 1) is reported as is, and not re-run without a reason.
 - **Disk:** ~45 min of 1-fps PNG, ~5.7 GB, on top of fiT1 3.42 + fiT2 3.50 GB unshipped. That is
   under the 20 GB cap and far over the 30 GB floor (73.8 GB free at 12:30). It ships after the
-  SET close with the others.
+  SET close with the others. ➡️ Shipped 14:54-14:58 at once (O8: no market waits on bot-server).
 
 ### Amendment O6 (2026-11-10 13:20 ICT from `date`, the parent): fs1 done; the TRAIN joins; the stopping rule MET
 
