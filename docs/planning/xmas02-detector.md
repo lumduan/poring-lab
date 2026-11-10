@@ -3446,3 +3446,16 @@ score):**
   pilots p50-p53 follow (rogue-xmas02.md 4BM-4BO; fiT4-fiT6), then the evaluation pack (seed 66)
   and the score.
 
+### Amendment O15d (2026-11-10 23:20 ICT from `date`, BEFORE its run): fs4, near-her TRAIN banked for a round 3 (NOT in round 2)
+
+- **Why now:** the training holds the GPU until ~00:35 and the pilots need it, so the Windows
+  session is idle. Batt (11-10 night): "train whatever can be trained, keep improving ... toward
+  95 %".
+- **fs4:** the Rogue (aura), `--views near --n 12 --seed 2611302 --label fs4`, recorded as
+  O15's stagings.
+  - Its cells (stands + piles) share NONE with the held-out fsTa / fsTn (checked before this
+    line).
+  - It is NOT in round 2's cache (frozen at 22:30) and not in its evaluation.
+  - It is TRAIN-eligible by name for a later round, which needs its own amendment and a fresh
+    held-out.
+
