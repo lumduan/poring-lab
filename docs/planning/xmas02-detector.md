@@ -3170,3 +3170,30 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
     been made on any fiT frame. The 2-session pack is deleted unseen.
 - fiT3's pilot changes nothing in the loot behaviour (LF-2 / LF-4 are position-reader changes), so it
   is a held-out of the same kind as fiT1 / fiT2; its run is recorded in rogue-xmas02.md.
+
+### Amendment O13 (2026-11-10 19:37 ICT from `date`, BEFORE any score): the held-out's labels, the evaluated crops, the predictions, and how I5 is measured
+
+- **fiT3** (`20261110T185223-rdp-hunt-xmas02-fiT3`, beside p49): 949 candidate frames, 24 kept / 24
+  labels / 5 floor items (26 in packets), 64 kills, 22 with a drop.
+- **The eval pack (seed 63, fiT1 + fiT2 + fiT3):** 74 crops = 54 item crops (N 48, F 6) + 20 E.
+  Labellers K and L (NEW, blind) answered all 74 and agree on 72 / 74 (q1) and 71 / 74 (q2).
+  **46 crops are EVALUATED** (both yes / good; I1's minimum is 40).
+- **The predictions (conf 0.25), on all 2,799 judged frames (`fi_labels.py refs`):**
+  - GPU: `predict_dir` in the worker with the frozen `last.pt` (e24e8f57);
+  - ONNX: the same frames through `unit_detector.UnitDetector` (the runner's CPU path), written in
+    predict_dir's format by a scratch script (archived with the evaluation).
+- **Registered for the GPU measure:** `unit_detector.GPU_WEIGHTS["xmas02fi"]` (the archived last.pt
+  e24e8f57 + the ONNX d149b3a7 in `archive/models`; tested). It is NOT in MAP_MODELS: the runner
+  never calls it.
+- **I5's GPU measure, fixed here:** "the GPU call p95 <= 35 ms (the worker, fiT's frames, as D1)".
+  D1 is the runner's GpuDetector call on the host's clock through the detect server (OpenVINO on
+  the Arc). So I5's GPU number comes from that path:
+  - the guarded serve step (`unit_detector.py serve-cmd --backend openvino`, as every pilot);
+  - a client calling `GpuDetector(weights="xmas02fi")` on 300 refs frames (every 9th key);
+  - the deployed xmas02gb interleaved on the same frames, reported beside it.
+  predict_dir's own wall time (p50 61 / p95 78 ms: ultralytics' Python pre- / post-processing on
+  torch-xpu) is reported, NOT judged.
+- **I5's CPU measure:** `eval_latency.py` on the same 300 frames, xmas02fi vs xmas02gb interleaved
+  (UnitDetector, 16 threads, nice 10), run on a quiet host. The bar is xmas02fi's p95 <= 1.10 x
+  xmas02gb's.
+- Then `fi_eval.py`, once, with both prediction sets.

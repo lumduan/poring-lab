@@ -525,6 +525,10 @@ def test_the_deployed_gpu_weights_and_the_server_step() -> None:
     assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
     assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")  # kept for a rollback
     assert ud.GPU_WEIGHTS["xmas02gb"].sha256.startswith("85fb37a4cb")  # M8's frozen last.pt
+    # xmas02-detector.md O11 / O12: the floor-item model, served for O.9's I5; never a map's model
+    assert ud.GPU_WEIGHTS["xmas02fi"].sha256.startswith("e24e8f5754")
+    assert ud.GPU_WEIGHTS["xmas02fi"].onnx_sha256.startswith("d149b3a759")
+    assert all(m.gpu != "xmas02fi" for m in ud.MAP_MODELS.values())
     step = ud.serve_step(1800)
     assert step.startswith("execdev:vision@1800=python -m poring_vision.detect_server ")
     assert "--socket /detect/detect.sock" in step

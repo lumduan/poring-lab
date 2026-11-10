@@ -291,6 +291,13 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                            "85fb37a4cb606aad4636d605f9a2056dde6431a42559e052b1036aaac5f98d6b",
                            "xmas02gb-last-736x1280.onnx",
                            "b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37"),
+    # xmas02-detector.md Amendment O (O11 froze last.pt, O12 exported the ONNX): the SEPARATE
+    # one-class floor-item model. Registered so the detect server can serve it (O.9's I5 "as D1");
+    # NOT in MAP_MODELS -- nothing in the runner calls it until --loot-sight's own pre-registration
+    "xmas02fi": GpuWeights("/datasets/archive/train/xmas02-fi-20261110/weights/last.pt",
+                           "e24e8f57548a3a6791b9756207fb2ffb11a8a0273c92db07f3bbcbe2196011a5",
+                           "xmas02fi-last-736x1280.onnx",
+                           "d149b3a759dd1c318907ec8db6634bcfabd06c70f2f54b88e998697c30af6038"),
 }  # fmt: skip
 
 
