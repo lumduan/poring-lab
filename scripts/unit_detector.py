@@ -304,6 +304,11 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                             "e381d68982fd4362569dcd405841624687f0e0faa2e9700847469ce2220bdc2b",
                             "xmas02fi2-last-736x1280.onnx",
                             "7f148f3f63d56ddd7a3ac3fba35b51fa129f9c17318eefb14bc68ccfee1f1ae2"),
+    # O17 / O17f: round 3 (+ fight negatives near her), served for its I5 only; NOT in MAP_MODELS
+    "xmas02fi3": GpuWeights("/datasets/archive/train/xmas02-fi-r3-20261111/weights/last.pt",
+                            "133589f32f802e5978f7c3b32bd9b8115a8694a0b319bbc7c64f86e69c633e5d",
+                            "xmas02fi3-last-736x1280.onnx",
+                            "c0ca01bea1d1d2e5e4e4e03bafc657117efab057e3283b012b2edbcc85d8f312"),
 }  # fmt: skip
 
 

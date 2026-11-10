@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "O16 (2026-11-11 03:4x): round 2 FAILS -- recall met (aura 0.928, no aura 0.980, precision 0.962) but false boxes in the pilots fail I2 0.75, I3 4.3 %, I4 11.3 % -> not deployed; a round 3 needs fight negatives near her."
+next_action: "O17f (2026-11-11 05:2x): round 3 FROZEN (133589f3 / ONNX c0ca01be, fight negatives near her). Its evaluation is the next session: record fiT7-fiT9 beside the next base pilots, label fsTa3 / fsTn3 / fiT7-9 --eval-test, pack --round 3 seed 67, two blind labellers, fi_eval --strata r3 once."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3645,3 +3645,20 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   - The next session may stage fewer spots (`--n 6`) on a disjoint plan, or take round 3's aura
     held-out from the pilots fiT7-fiT9 alone.
 
+### Amendment O17f (2026-11-11 05:23 ICT from `date`, BEFORE any round-3 held-out file is read): THE ROUND-3 MODEL FROZEN
+
+- `train ended rc=0` at 05:22:24 ICT (started 04:06): 4 epochs, 4,463 s, FP32 on the Arc.
+- VAL (FIT p31, monitor only) at epoch 4: P 0.986, R 0.937, mAP50 0.986, mAP50-95 0.704. Round 2 at
+  its epoch 12: 0.953 / 0.949 / 0.982 / 0.735.
+- **The scored checkpoint:** `archive/train/xmas02-fi-r3-20261111/weights/last.pt` after epoch 4,
+  **sha256 `133589f32f802e5978f7c3b32bd9b8115a8694a0b319bbc7c64f86e69c633e5d`** (5,529,370 bytes;
+  frozen at 05:22:32 locally, archived and re-hashed on the NAS). Nothing is refitted after this
+  line.
+- **The ONNX** (M9's recipe, the env removed after): `xmas02fi3-last-736x1280.onnx`, sha256
+  `c0ca01bea1d1d2e5...`, names `["floor_item"]`; copied to `archive/models/`.
+- `GPU_WEIGHTS["xmas02fi3"]` is registered (tested; NOT in MAP_MODELS).
+- **Next session, O17's order:**
+  - the held-out: fsTa3 (partial, 6 spots) + fsTn3 (12 spots), staged and shipped tonight, not
+    read; + fiT7-fiT9 recorded beside the next base pilots; fsTa4 is named, not staged;
+  - `--eval-test` labels, `pack --round 3 --eval-test --seed 67`, two NEW blind labellers, both
+    prediction sets, I5 (server time vs xmas02gb; eval_latency), `fi_eval.py --strata r3` once.
