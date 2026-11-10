@@ -180,3 +180,32 @@ def test_clear_none_and_refusals_type_nothing(monkeypatch: pytest.MonkeyPatch,
     with pytest.raises(SystemExit, match="axe"):
         si.run(_args("gef_fild10"))
     assert w.lines == []
+
+
+def test_xmas02_kills_at_each_spot_before_its_group(monkeypatch: pytest.MonkeyPatch,
+                                                     tmp_path: Path) -> None:  # fmt: skip
+    """stage@8 (xmas02-detector.md O.6 / O.11): one @killmonster2 right after each spot's warp,
+    before its @item lines (the map's monsters and a living MVP die, no drops); no end pair (no
+    xmas_dun02 species loots); the ICT times are the MVP clock in run_end."""
+    w = _install(monkeypatch, tmp_path, "xmas_dun02")
+    assert si.run(_args("xmas_dun02")) == 0
+    groups = si.item_groups(list(si.XMAS02_ITEMS), 3, 6, 5)
+    want = []
+    for (x, y), g in zip(SPOTS, groups, strict=True):
+        want += [f"@warp xmas_dun02 {x} {y}", "@killmonster2"]
+        want += [f"@item {i} 1" for i in g]
+        want += [f"@warp xmas_dun02 {x + 3} {y}", f"@warp xmas_dun02 {x} {y + 3}"]
+    assert w.lines == want and si.LOOT_LIFE_S not in w.sleeps
+    ev = _events(tmp_path)
+    assert ev[0]["clear"] == "spot" and ev[0]["per_spot"] == 6
+    assert [e["i"] for e in ev if e["kind"] == "killmonster2"] == [0, 1, 2]
+    assert len(ev[-1]["killmonster2"]) == 3 and ev[-1]["reason"] == "done"
+
+
+def test_xmas02_wrong_drop_stops_after_that_spots_kill(monkeypatch: pytest.MonkeyPatch,
+                                                        tmp_path: Path) -> None:  # fmt: skip
+    w = _install(monkeypatch, tmp_path, "xmas_dun02", fail={1: "short"})
+    assert si.run(_args("xmas_dun02")) == 1
+    assert w.lines.count("@killmonster2") == 2  # spots 0 and 1, no end pair
+    assert "@warp xmas_dun02 153 100" not in w.lines
+    assert _events(tmp_path)[-1]["reason"].startswith("spot 1: dropped")
