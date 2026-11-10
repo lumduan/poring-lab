@@ -3878,7 +3878,7 @@ rides on p46 (4BF).**
 - **The recorder's cost:** none seen (D1 p95 22.9 ms against 23.7 / 26.2; E1 equal to p45).
 - **The recording fiT1:** `20261110T105312-rdp-hunt-xmas02-fiT1`. PNG, recorder v7, 1,620 frames,
   3.42 GB, stop "duration", 3,776 packet events. NOT OPENED (refused by name: O1). It stays local
-  (~/poring-lab-rec) until after the 16:30 SET close, then ships with `dataset_ship.py ship`.
+  (~/poring-lab-rec) until after the 16:30 SET close, then ships with `dataset_ship.py ship`. ➡️ Shipped 14:58-15:0x (Batt 14:5x: no market waits on bot-server; xmas02-detector.md O8).
 - **Class D strikes (reported):** 24 of 92 (62 K, 6 A); far 75, class D 17 (22.7 %). By distance:
   0-1: 7 / 17, 2-6: 10 / 52, 7-8: 7 / 22, 9+: 0 / 1. Held on D 24, median 5.87 s, 140.4 s in all.
 - **Sight:** 78 monsters seen (31.2 / 10 min, the most of these runs; Myst Case 29, Cruiser 22,
@@ -3934,7 +3934,7 @@ change of today's. No decision rides on p47 (4BG).**
     (657,365); no dog in the packets) was never confirmed: --garm-confirm 2 filtered it, as in
     p44 / p45. False one-detection dog boxes so far: p44 1, p45 2, p47 1, all at our own spot.
 - **The recording fiT2:** `20261110T120155-rdp-hunt-xmas02-fiT2`, PNG, 1 fps, 27 min. NOT OPENED;
-  it ships after the SET close.
+  it ships after the SET close. ➡️ Shipped by 15:03:33 (O8).
 - **Sight:** 73 seen (29.2 / 10 min; Myst Case 35, Cruiser 19, Cookie 11, Christmas Cookie 8);
   kills per sighting 0.82. 169 reach skips (p46 62).
 - **Items per hour (x 60 / 25.0):** Zargon 18 (43.2 / h), Scell 13 (31.2), Well-baked Cookie 7 (16.8),

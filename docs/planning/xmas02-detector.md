@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment O ACCEPTED (O1, 10:29, the parent under Batt's go-ahead: a SEPARATE item model xmas02-fi); the tools merged (O3, ddd54d6a; params v1 d1c5606b); fiT1 recorded (p46, 3.42 GB, local until shipped after the SET close), fiT2 next (p47). Next: params v2 (ids that fit bare floor -> unsprited) + fs1's set without Scell (O3), then the live icon proof, fs1, the TRAIN labels, T2-items, the cache, the training, the evaluation (I1-I5)."
+next_action: "Amendment O ACCEPTED (O1, 10:29, the parent under Batt's go-ahead: a SEPARATE item model xmas02-fi); the tools merged (O3, ddd54d6a; params v1 d1c5606b); fiT1 + fiT2 + fs1 recorded and SHIPPED (O8, 14:54-15:03). Next: params v2 (ids that fit bare floor -> unsprited) + fs1's set without Scell (O3), then the live icon proof, fs1, the TRAIN labels, T2-items, the cache, the training, the evaluation (I1-I5)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3049,3 +3049,21 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   staged-drop watch, the held-out fiT1 / fiT2, the bars I1-I5, Scell -> 11002 in the staged set):
   "ทำได้เลย" (go ahead). O1's acceptance stands as Batt's. The queue is unchanged: the recordings
   ship after the SET close, then T2-items (seed 61), the cache, the training, the evaluation.
+
+### Amendment O8 (2026-11-10 15:04 ICT from `date`, the parent): the recordings shipped; T2-items started
+
+- **Shipped at once** (Batt 14:5x: no market waits on bot-server; `dataset_ship.py` gates SET hours
+  on shared hosts only since d62eba78), each verified on the NAS, local copy deleted:
+  - fs1 14:54:42-14:58:09 (19 files, 4.63 GB);
+  - fiT1 14:58:09-;
+  - fiT2 -15:03:33 (14 files, 3.50 GB).
+  Root free 80.72 GB after.
+- **T2-items pack** (O.5, seed 61; `fi_labels.py pack`, built 15:03:36 from main d62eba78):
+  - from the TRAIN label files under v2: p38, p20, fs1;
+  - 60 crops = N 15 / F 15 / M 10 / E 20 (10 plain + 10 hard; hard fits 0.525-0.603), 40 floor
+    items, at most 3 crops each;
+  - reference.png from the 28 sprites (6a665d79...); instructions cff8ee8b...;
+  - answer key sha256 368d66f3f5cce5ea... (never shown to a labeller).
+- Labellers: two NEW blind labellers, I and J (subagents that see only the pack). J starts when an
+  agent slot frees (at most 2 agents at once). Scored by `fi_blind_score.py` with O.5's bars and
+  fallbacks, once, when both have answered.
