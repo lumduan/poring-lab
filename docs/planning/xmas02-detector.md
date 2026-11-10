@@ -3121,3 +3121,14 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
 - Both labellers were blind: they saw only the pack (reference.png, 60 crops, the pinned
   instructions), never the key or each other.
 - By O9: the cache step and the training run now.
+
+- **O10, the run (by 15:18 ICT):**
+  - the cache 15:12-15:17:35, OK: `/mnt/poring-lab-datasets/.framecache/xmas02-fi-20261110`, 959
+    frames, 9 shards, 274.3 s. Every count equals the dry run's (TRAIN 687 / 878 boxes / 396
+    negatives; VAL 272 / 233 / 68);
+  - the training launched 15:18:02 (unit `poring-train-xmas02fi`,
+    `/dev/shm/poring-lab-tmp/xmas-fi/train/launch.sh`, O9's command verbatim), the init's sha
+    re-checked (85fb37a4);
+  - the log: "Overriding model.yaml nc=8 with nc=1", "Transferred 493/499 items from pretrained
+    weights" (the 6 = the class head, fresh as O9 says), 687 train / 272 val images, 2 workers,
+    20 epochs.
