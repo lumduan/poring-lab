@@ -3458,4 +3458,9 @@ score):**
   - It is NOT in round 2's cache (frozen at 22:30) and not in its evaluation.
   - It is TRAIN-eligible by name for a later round, which needs its own amendment and a fresh
     held-out.
+- **fs4's run:** 23:20:20-23:47:21, rc 0, 12 spots; the recording `20261110T232020-rdp-xmas02-fs4`
+  is shipped.
+- **fs5 (23:47 ICT, BEFORE its run):** the Crusader (NO aura), `--char crusader --views near --n 12
+  --seed 2611305 --label fs5`. Like fs4: banked for a round 3, NOT in round 2, sharing no cell
+  with fsTa / fsTn. The same Crusader prep as fs3 (the Red Herb stack dropped, then given back).
 
