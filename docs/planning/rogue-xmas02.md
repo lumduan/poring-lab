@@ -3591,7 +3591,7 @@ STAYS DEPLOYED for the base (4BC).**
 NOTHING): where the base's time goes now.** `scripts/time_budget.py session SID --map xmas_dun02`
 (one label per instant, from the packets; its definitions as committed), then a per-kill split of the
 after-fight time (packets: our target's death vanish, the `floor_item_appear` packets of its drop;
-events: the runner's `kill` / `loot_step`). The two throwaway scripts: NAS
+events: the runner's `kill` / `loot_step`). The three throwaway scripts: NAS
 `scratch-archive/2026-11-10/afterkill-study/` (sha256-verified).
 
 | share of the run | p40 | p41 | p42 | p44 |
@@ -3627,8 +3627,17 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
   - The frames: a pilot recorded at 1 fps (~3.3 GB a 25-min run; ~10-14 drops a run, each on the
     floor for ~3-4 s) or immune watches with staged drops.
   - Then T2 (a blind check on item crops), a retrain and the held-out score, as Amendment M.
-- **Not studied yet (next):** the idle inside the search (175-246 s a run, mostly no runner step: the
-  time between a walk's arrival and the next click).
+- **The idle inside the search (p44, studied ~09:3x):** 174.7 s in 230 spans (median 0.38 s); 219
+  of them end with our next walk click.
+  - 187 spans with no runner event (77 s): the hand-off between walks. The walk decision runs every
+    1.2 s and clicks 7 path cells ahead (`--walk-every`, `--walk-ahead`). The clicks came a median
+    1.33 s apart; a straight 7-cell leg takes 1.05 s at 150 ms a cell (median leg, by the
+    packets' start and end cells), so the Rogue stands ~0.3 s before the next click.
+  - The rest (~98 s) is spread over box waits (`box_target` / `box_miss`, the 1.2-s settle),
+    reach-check skips, fight ends and loot steps.
+  - **Not proposed:** the two "stand less" levers, longer legs and a faster walk timer, were tried
+    on gef_fild10 and failed their kills / h bars (rogue-gef10.md AG: -2.5 / h, more walking per
+    kill; AH: the timer failed too). Neither is re-run here without a new reason.
 - Proposed to Batt, not pre-registered: (a) teach the detector floor items; it could share N1's
   retrain (one training run, the two new things scored by separate bars) or follow it; (b) leave
   the kill gap at 1.6 s.
