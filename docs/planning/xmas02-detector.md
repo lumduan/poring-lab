@@ -2420,3 +2420,15 @@ decision and their own pre-registration (Amendment M).
    give NO VERDICT.
 7. The study's numbers are DEV: gw2 is TRAIN data of the deployed model (its excluded-dog frames
    were never written, the same dogs' other frames were); gw1 is clean but was refused by 3c.
+
+### Amendment N2 (2026-11-10, Batt's answers received before 09:40 ICT from `date`): N1 is NOT run now
+
+- Batt chose the parent's option (a) after N1.5: "ทำ a ตามที่แนะนำได้เลย" (do (a) as recommended).
+  N1's data, labels and training are NOT started. The deployed xmas02-gb stays. The runner gets a
+  2-detection confirmation instead (rogue-xmas02.md 4BE), and fully hidden dogs stay with the Battle
+  Log guard.
+- "ใช้ตามเกณฑ์ที่เสนอ" (use the proposed bars): N1.10's bars (B1-B7) and N1.12's proposals stand
+  as accepted IF N1 is ever run. Its D2-D7 choices (FIT watch, D3, stands, epochs) would still need
+  their own accepting amendment then.
+- Floor items (rogue-xmas02.md "Study after p44", 3a): Batt said yes, "เทรนแยกเลย" (train it
+  separately). Its plan follows as its own amendment (P), proposed by a study before any data.

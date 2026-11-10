@@ -327,6 +327,11 @@ BOSS_WALK_MAX, BOSS_WALK_WINDOW_S = 2, 60.0
 # the class (the deployed one until M's evaluation passes) gives no alarm box: the flag is inert.
 ALARM_CLASSES = ("garm_baby",)
 GARM_FRESH_S = 1.5
+# --garm-confirm N (dungeon@9.19b, rogue-xmas02.md 4BD; Batt 2026-11-10 09:2x, option (a)): the
+# Fly Wing waits for alarm boxes in N CONSECUTIVE detections (the watcher's ~1-s rhythm). p44's
+# one false garm_baby box (a Cruiser under the Rogue) stood in a single detection of 1,568; N = 1
+# is 9.19 unchanged.
+GARM_CONFIRM = 1
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -1163,6 +1168,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
     if getattr(a, "garm_fly", False):  # dungeon@9.19 (rogue-xmas02.md 4BA)
         out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19"]
+        if getattr(a, "garm_confirm", GARM_CONFIRM) != GARM_CONFIRM:
+            out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19b", int(a.garm_confirm)]
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -1308,13 +1315,20 @@ def boss_spawn_names(map_name: str, spawns: Mapping[str, Any],
 
 
 def alarm_seen(alarm: tuple[float, Sequence[Any]], now: float,
-               fresh_s: float = GARM_FRESH_S) -> Any | None:  # fmt: skip
+               fresh_s: float = GARM_FRESH_S, streak: int = 1,
+               need: int = GARM_CONFIRM) -> Any | None:  # fmt: skip
     """PURE (--garm-fly, 9.19): the first box of an alarm class in a detection at most ``fresh_s``
-    old (``alarm``: the box watcher's (grab time, alarm boxes)), else None."""
+    old (``alarm``: the box watcher's (grab time, alarm boxes)), else None. 9.19b: also None while
+    fewer than ``need`` consecutive detections (``streak``, the latest included) held one."""
     t, boxes = alarm
-    if not boxes or now - t > fresh_s:
+    if not boxes or now - t > fresh_s or streak < need:
         return None
     return boxes[0]
+
+
+def alarm_streak(prev: int, has_alarm: bool) -> int:
+    """PURE (9.19b): consecutive detections with an alarm box, the new detection included."""
+    return prev + 1 if has_alarm else 0
 
 
 def boss_walk_allowed(name: str, boss_only: Sequence[str], walks: Sequence[float], now: float,
@@ -1564,6 +1578,7 @@ class BoxWatch:
         self.cond = threading.Condition(self.lock)
         self.last: tuple[float, list[Any]] = (0.0, [])
         self.alarm: tuple[float, list[Any]] = (0.0, [])  # 9.19: boxes of ALARM_CLASSES
+        self.alarm_n = 0  # 9.19b: consecutive detections that held one (alarm_streak)
         # dungeon@8.9 (--box-now): a detection on demand. kick() numbers the request; the loop's
         # next detection takes it (its grab starts after the kick) and records the number
         self.kick_ev = threading.Event()
@@ -1597,6 +1612,7 @@ class BoxWatch:
             with self.cond:
                 self.last = (t, got)
                 self.alarm = (t, alarm)
+                self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))
                 self.meta = {"kick": seq, "t": t, "t_done": time.monotonic(), "path": path,
                              "ms": self.det.last_ms, "prefer": prefer,
                              "reason": getattr(self.det, "last_reason", None)}  # fmt: skip
@@ -3760,13 +3776,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
                 near_ = None
                 if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
-                    seen_ = alarm_seen(boxes.alarm, tick)  # dungeon@9.19: a Garm Baby IN VIEW
+                    streak_ = boxes.alarm_n  # 9.19b: --garm-confirm's consecutive detections
+                    seen_ = alarm_seen(
+                        boxes.alarm, tick, streak=streak_, need=a.garm_confirm
+                    )  # dungeon@9.19: a Garm Baby IN VIEW
                     if seen_ is not None:
                         ev({"kind": "garm_seen", "cls": seen_.cls,
                             "score": round(float(seen_.score), 3),
                             "box": [round(float(v_), 1) for v_ in
                                     (seen_.x0, seen_.y0, seen_.x1, seen_.y1)],
-                            "age_s": round(tick - boxes.alarm[0], 2)})  # fmt: skip
+                            "age_s": round(tick - boxes.alarm[0], 2),
+                            "streak": streak_})  # fmt: skip
                         counts["garm_seen"] += 1
                         boss_hit = "Garm Baby"  # the boss guard's own Fly Wing path below
                 if boss_hit is not None and tick < boss_grace_until:
@@ -4696,6 +4716,13 @@ def main() -> int:
         help="dungeon@9.19 (rogue-xmas02.md 4BA; OFF by default; with the box detector): a box of "
         "an alarm class (garm_baby, xmas02-detector.md Amendment M) in a fresh detection takes "
         "the boss guard's Fly Wing at once; a model without the class gives no alarm",
+    )
+    t.add_argument(
+        "--garm-confirm",
+        type=int,
+        default=GARM_CONFIRM,
+        help="dungeon@9.19b (rogue-xmas02.md 4BD; with --garm-fly): the Fly Wing waits for alarm "
+        "boxes in this many CONSECUTIVE detections (default 1 = 9.19 unchanged)",
     )
     t.add_argument(
         "--boss-walk",

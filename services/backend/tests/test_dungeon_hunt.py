@@ -993,6 +993,7 @@ def _watch(gpu: bool = True) -> dh.BoxWatch:
     bw.lock = threading.Lock()
     bw.cond = threading.Condition(bw.lock)
     bw.last, bw.meta, bw.paths = (0.0, []), {"kick": 0}, Counter()
+    bw.alarm, bw.alarm_n = (0.0, []), 0  # 9.19 / 9.19b
     bw.kick_ev, bw.kick_seq, bw.kick_prefer = threading.Event(), 0, None
     bw.halt, bw.n, bw.n_self, bw.n_skip = threading.Event(), 0, 0, 0
     bw.th = threading.Thread(target=bw._loop, daemon=True)
@@ -1667,3 +1668,46 @@ def test_garm_fly_takes_the_wing_on_a_fresh_alarm_box_only() -> None:
     # the deployed model (xmas02-gb since 2026-11-10) never collapses garm_baby into "monster":
     # it is an alarm class, never a strike target
     assert "garm_baby" not in ud.MAP_MODELS["xmas_dun02"].collapse
+
+
+def test_garm_confirm_waits_for_consecutive_alarm_detections() -> None:
+    """dungeon@9.19b (rogue-xmas02.md 4BD; Batt 2026-11-10, option (a)): with --garm-confirm 2 the
+    Fly Wing waits for alarm boxes in 2 CONSECUTIVE detections. p44's one false garm_baby box (a
+    Cruiser under the Rogue) stood in a single detection: never a wing. A dog boxed in detections
+    in a row (G0) flies on the second. The default (1) is 9.19 unchanged."""
+    import unit_detector as ud
+
+    assert dh.GARM_CONFIRM == 1
+    dog = ud.Box(100.0, 200.0, 160.0, 260.0, 0.81, "garm_baby")
+    # the streak: consecutive detections with an alarm box, the new one included
+    n = 0
+    seq_false = [False, False, True, False, False]  # p44 08:39:57-08:40:01: one box, one detection
+    fired = []
+    for i, has in enumerate(seq_false):
+        n = dh.alarm_streak(n, has)
+        a_ = (float(i), [dog] if has else [])
+        fired.append(dh.alarm_seen(a_, float(i) + 0.1, streak=n, need=2) is not None)
+    assert fired == [False] * 5
+    n = 0
+    seq_dog = [False, True, True, True]  # a dog in view for detections in a row
+    fired = []
+    for i, has in enumerate(seq_dog):
+        n = dh.alarm_streak(n, has)
+        a_ = (float(i), [dog] if has else [])
+        fired.append(dh.alarm_seen(a_, float(i) + 0.1, streak=n, need=2) is not None)
+    assert fired == [False, False, True, True]
+    # need=1 (the default) is 9.19: the first box flies
+    assert dh.alarm_seen((0.0, [dog]), 0.1, streak=1) is dog
+    assert dh.alarm_seen((0.0, [dog]), 0.1) is dog
+    # a stale streak does not fly either
+    assert dh.alarm_seen((0.0, [dog]), 1.6, streak=3, need=2) is None
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, garm_fly=True, garm_confirm=1))
+    assert rec["garm_fly"] == [["garm_baby"], 1.5, "9.19"]
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, garm_fly=True, garm_confirm=2))
+    assert rec["garm_fly"] == [["garm_baby"], 1.5, "9.19b", 2]
+    src = Path(dh.__file__).read_text()
+    assert "self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))" in src
+    assert "boxes.alarm, tick, streak=streak_, need=a.garm_confirm" in src

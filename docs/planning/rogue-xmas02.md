@@ -1847,6 +1847,54 @@ Batt's answers (quoted, then in English):
 - **Decisions:** every bar passes -> xmas02-gb stays deployed for the base. A bar fails -> studied;
   the rollback (MAP_MODELS back to xmas02) is Batt's call.
 
+### 4BD. Amendment P (2026-11-10, Batt's answers received before 09:40 ICT from `date`): N1 stopped, `--garm-fly` with a 2-detection confirmation, a floor-item class
+
+Batt's answers to the 09:21 report (quoted, then in English):
+1. "ทำ a ตามที่แนะนำได้เลย" -- do (a) as recommended: **N1 is NOT run now** (xmas02-detector.md
+   N2). The deployed xmas02-gb already sees dogs at least half visible; G0b's dog was fully hidden
+   (N1.4). Instead, `--garm-fly` is tested again with a **2-detection confirmation** (9.19b, 4BE),
+   so a one-frame false box (p44's Cruiser) never takes a wing. Fully hidden dogs stay with the
+   Battle Log guard.
+2. "สอน เทรนแยกเลย เพื่อความมั่นใจและรวมเร็วในการเก็บของ" -- yes, teach the detector floor items,
+   **trained separately** (its own round, not with N1), for confidence and for faster looting. Its
+   plan is a new xmas02-detector.md amendment (proposed by a study first, accepted before any data).
+3. "ใช้ตามเกณฑ์ที่เสนอ" -- N1's proposed bars stand IF N1 is ever run (N2).
+
+### 4BE. --garm-fly 9.19b pre-registration: the Fly Wing after alarm boxes in 2 CONSECUTIVE detections (written BEFORE its runs, 2026-11-10 09:4x ICT)
+
+- **The change:** `--garm-confirm N` (dungeon@9.19b; default 1 = 9.19 unchanged). The box watcher
+  counts consecutive detections that held a garm_baby box (`alarm_streak`), and `alarm_seen` returns
+  a box only when the streak reaches N. The `garm_seen` event records the streak; run_start records
+  `"garm_fly": [["garm_baby"], 1.5, "9.19b", 2]`. The run uses `--garm-fly --garm-confirm 2`.
+- **The offline replay (before any run, from the banked detections; the watcher's rhythm p50 1.0 s):**
+  - p44: 1 detection of 1,568 with a dog box, the false one -> N=1 would fly once, N=2 never;
+  - G0: dog boxes at 1.06 s and 1.17 s after run_start (two detections in a row) -> N=2 flies at
+    1.17 s, 0.11 s after N=1;
+  - G0b: the dog was boxed once (36.37 s), and the live wing (36.4 s) ended the view. It shows
+    nothing about a second detection.
+- **Tests:** `test_garm_confirm_waits_for_consecutive_alarm_detections` (p44's one-detection pattern
+  never flies; a dog in consecutive detections flies on the 2nd; N=1 is 9.19; stale never flies).
+  test_dungeon_hunt.py + test_click_census.py: 101 passed.
+- **G1 (a safe positive case first; the Rogue IMMUNE; Batt's immune-spawn OK, 4BA):** the base +
+  `--garm-fly --garm-confirm 2 --stage-mob 1515:1`, 3 min, label `xmas02-g1`.
+  - **C1:** a `garm_seen` with streak >= 2, and the boss guard's Fly Wing, within 2.5 s of the FIRST
+    detection that boxed the dog (detections.jsonl). Measured from that detection, not from the
+    appearance (G0 / G0b's lesson: the setup and a fully hidden dog are not this change's).
+  - No detection boxes the dog in the 3 min -> INCONCLUSIVE (the detector, N1.4), one re-run
+    (`xmas02-g1b`) allowed; a second inconclusive -> reported, decided by Batt.
+- **The pilot p45:** the base + `--garm-fly --garm-confirm 2`, 25 min, immunity OFF, the MVP dead by
+  the schedule, NO staged mob. Bars:
+  - **P1:** every lone Garm Baby boxed by the detector at least once before its first act on us
+    gets a Fly Wing before that act (packets: acts of job 1515 on us; detections.jsonl). Reported
+    as n / n, judged only if n >= 1. Dogs never boxed before acting are reported apart (the
+    detector's limit, N1.4; the Battle Log guard covers them).
+  - **P2:** false alarms (`garm_seen` with no live Garm Baby within 15 cells, packets) = 0.
+  - The base's bars (Amendment O): W1 pooled (p45 + p44 + p42 + p41) <= 2.0 %, L1 >= 50 %, L3 >= 80
+    %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %, E1 >= 80 / h, U1 <= 30 s, D1 p95 <= 35 ms, R1 pooled <= 6,
+    Q1 <= 8, E3, deaths 0.
+- **Decisions:** C1 and every p45 bar pass -> `--garm-fly --garm-confirm 2` JOINS THE BASE. P1 with
+  n = 0 is NO VERDICT and does not block. P2 fails -> off (studied). C1 fails -> no pilot; studied.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
