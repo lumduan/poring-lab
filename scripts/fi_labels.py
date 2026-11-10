@@ -757,7 +757,7 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
         if ph == "on" and p is None:
             reasons.append("item_unprojected")
             continue
-        if ph == "on" and p is not None:
+        if ph == "on" and p is not None and sheet is not None:
             preds[f.floor_id] = (f, sheet, p, cell)
     if eval_test:
         base["floor"] = floor_rows
