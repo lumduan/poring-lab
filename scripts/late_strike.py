@@ -15,7 +15,8 @@ before it):
 - TIMES.
   - ``t_grab``: the box frame's grab -- the detection row (detections.jsonl) holding the struck box,
     its ``t_ns`` minus its ``ms``; without one, the box_target's time minus its
-    ``verdict_from_grab_ms``, + GRAB_END_MS.
+    ``verdict_from_grab_ms``, + GRAB_END_MS. A strike held by --still-target (9.23) is judged from
+    its hold's last box, a strike led by --lead-press (9.24) from its D2 box (``strike_grab``).
   - ``t_shown`` = ``t_grab`` - FRAME_LAG_S: the server time the grabbed picture shows (the stream's
     lag for monster sprites, fitted by ``fit-lag``: S-LS, 1,672 walking monsters, p40-p49).
   - ``t_click``: the strike's stamp (taken just before click_at's two motions and the click).
@@ -368,7 +369,9 @@ def strike_grab(bt: Mapping[str, Any], dets: Sequence[dict[str, Any]], t_click: 
     strike: the struck box's detection (else the runner's stamp + GRAB_END_MS). A strike HELD by
     --still-target (dungeon@9.23, LS-2; rogue-xmas02.md 4BO) clicked the hold's LAST matched box
     (``press.box_end``), so its grab is that box's detection before the click, else D1's grab +
-    ``press.end_gap_ms``."""
+    ``press.end_gap_ms``. A strike LED by --lead-press (dungeon@9.24, LS-1; rogue-xmas02.md 4BP;
+    ``press.end`` "led") clicked ahead of D2's box (``press.box2``), so its grab is D2's: that
+    box's detection before the click, else D1's grab + ``press.gap_ms``."""
     t_stamp = int(bt["t_ns"] - float(bt["verdict_from_grab_ms"]) * 1e6)  # the runner's grab
     press = bt.get("press") or {}
     end = press.get("end")
@@ -382,6 +385,12 @@ def strike_grab(bt: Mapping[str, Any], dets: Sequence[dict[str, Any]], t_click: 
             return t_end, "hold_detection", end
         if press.get("end_gap_ms") is not None:
             return t_grab + int(float(press["end_gap_ms"]) * 1e6), "hold_gap", end
+    if end == "led" and press.get("box2"):
+        t_d2 = det_grab(dets, press["box2"], t_click)
+        if t_d2 is not None:
+            return t_d2, "lead_detection", end
+        if press.get("gap_ms") is not None:
+            return t_grab + int(float(press["gap_ms"]) * 1e6), "lead_gap", end
     return t_grab, src, end
 
 
@@ -474,7 +483,9 @@ def strike_rows(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, An
             regain_s=None if nxt_tgt is None or on_t else round((nxt_tgt - t_click) / NS, 2),
             req_to_target=None if first is None or first[1] != "self_move_request"
             or at_req is None else round(cheb(first[2], at_req), 2))  # fmt: skip
-        pv = prev_box(dets, bt["box"], t_grab) if dets and bt.get("box") else None
+        # a led strike's picture is D2's: its previous detection is compared with D2's box
+        box_pv = (bt.get("press") or {}).get("box2") if press_end == "led" else bt.get("box")
+        pv = prev_box(dets, box_pv, t_grab) if dets and box_pv else None
         if pv is not None and pv.get("match"):
             a_, b_ = pos_at(ours, pv["t_prev"]), pos_at(ours, t_grab)
             pv["scene_still"] = (a_ is not None and b_ is not None and not a_[2] and not b_[2]
@@ -563,6 +574,9 @@ def summary(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
                                       and r.get("move_start_s") is not None])
                              for k in ("walking", "unseen", "latency")},  # fmt: skip
         "walker_flag": dict(sorted(flags.items())),
+        "led": sum(1 for r in rows if r.get("press_end") == "led"),  # --lead-press (9.24)
+        "led_outcomes": dict(Counter(str(r.get("outcome")) for r in rows
+                                     if r.get("press_end") == "led")),
     }  # fmt: skip
 
 

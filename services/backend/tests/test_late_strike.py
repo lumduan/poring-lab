@@ -253,3 +253,56 @@ def test_a_held_strike_is_timed_from_the_holds_last_matched_grab() -> None:
     assert (t, src) == (10 * ns - 40_000_000 + 1000 * 1_000_000, "hold_gap")
     today = {**bt, "press": {"end": "strike", "moved_px": 3.0}}
     assert lst.strike_grab(today, dets, 11 * ns)[1] == "detection"
+
+
+def led_strike(press_end: str = "led") -> tuple[list[dict[str, object]], list[dict[str, object]],
+                                                list[dict[str, object]]]:  # fmt: skip
+    """A synthetic --lead-press strike (dungeon@9.24, LS-1): D1 grabbed at 100.0 s, D2 at 100.3 s
+    with the sprite's foot 20 px east (press.box2, gap_ms 300), the click led 1 cell ahead (rel
+    (4, 0) from (5, 5)). The Myst Case walks east from (6, 5) since 99.5 s (400 ms a cell): at D2's
+    picture (100.3 - 0.16 s) it was at (7.6, 5); the client resolved the click at 100.75 s with an
+    attack request on it, at (9.12, 5): the led cell (9, 5)."""
+    t_det = 100 * S
+    d1, d2 = [600.0, 300.0, 640.0, 360.0], [620.0, 300.0, 660.0, 360.0]
+    events = [{"t_ns": 50 * S, "kind": "run_start"},
+              {"t_ns": t_det + 345 * MS, "kind": "box_target", "struck": True, "box": d1,
+               "verdict_from_grab_ms": 280, "hover_from_grab_ms": 50, "rel": [4, 0],
+               "press": {"end": press_end, "moved_px": 20.0, "box2": d2, "gap_ms": 300,
+                         "lead": {"lead_px": [34.0, 0.0], "capped": True,
+                                  "sword": "unchecked"}}},
+              {"t_ns": t_det + 400 * MS, "kind": "strike", "by": "box", "rel": [4, 0],
+               "end": "arrow", "clicks": 1}]  # fmt: skip
+    dets = [{"t_ns": t_det + 21 * MS, "ms": 21.0, "boxes": [[*d1, 0.9, "monster"]]},
+            {"t_ns": t_det + 321 * MS, "ms": 21.0, "boxes": [[*d2, 0.9, "monster"]]}]  # fmt: skip
+    pk = [self_move(90 * S, 0, 0, 5, 5), appear_move(int(99.5 * S), MOB, 6, 5, 12, 5),
+          attack_req(t_det + 750 * MS, MOB)]  # fmt: skip
+    return events, pk, dets
+
+
+def test_a_led_strike_is_scored_from_its_d2_grab() -> None:
+    """4BP / LS-1: a led strike (press.end "led") clicked ahead of D2's box, so its picture is D2's
+    (press.box2's detection; without it, D1's grab + press.gap_ms); its previous detection is D1,
+    compared with D2's box (the runner's own 20-px shift). The summary counts the led strikes and
+    their outcomes. Today's strike and a held one are scored as before."""
+    events, pk, dets = led_strike()
+    (row,) = lst.strike_rows(events, pk, dets)
+    assert (row["grab_src"], row["press_end"]) == ("lead_detection", "led")
+    assert row["seen"] == [7.6, 5.0] and row["at_req"] == [9.12, 5.0]  # from D2's picture
+    assert (row["target"], row["outcome"], row["attack_s"]) == (MOB, "target", 0.35)
+    assert (row["moved"], row["late"], row["late_kind"]) == (1.53, True, "walking")
+    assert row["prev"]["match"] and row["prev"]["t_prev"] == 100 * S  # D1's grab
+    assert (row["prev"]["px"], row["prev"]["dt_s"], row["walker_flag"]) == (20.0, 0.3, True)
+    summ = lst.summary([row])
+    assert (summ["led"], summ["led_outcomes"], summ["late_failed"]) == (1, {"target": 1}, 0)
+    # D2's detection not logged: D1's grab + gap_ms
+    bt, t_click = events[1], 100 * S + 400 * MS
+    t, src, end = lst.strike_grab(bt, dets[:1], t_click)
+    assert (t, src, end) == (100 * S + 300 * MS, "lead_gap", "led")
+    t, src, _ = lst.strike_grab(bt, dets, t_click)
+    assert (t, src) == (100 * S + 300 * MS, "lead_detection")
+    # the same click scored as today's strike (D2 matched, < 10 px): D1's picture, D1's box
+    events_t, pk_t, dets_t = led_strike("strike")
+    (row_t,) = lst.strike_rows(events_t, pk_t, dets_t)
+    assert (row_t["grab_src"], row_t["press_end"]) == ("detection", "strike")
+    assert row_t["seen"] == [6.85, 5.0] and row_t["prev"] is None  # no detection before D1
+    assert lst.summary([row_t])["led"] == 0 and lst.summary([row_t])["led_outcomes"] == {}
