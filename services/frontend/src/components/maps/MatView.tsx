@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { WorldMap } from "@/lib/flow/api";
-import { COLOUR_VARS, type Colours, drawGrid, drawScene, FALLBACK_COLOURS, mapSize } from "@/lib/maps/draw";
+import { COLOUR_VARS, type Colours, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "@/lib/maps/draw";
 import { type Labels, poseAt, type Timeline } from "@/lib/maps/play";
 
 function readColours(el: HTMLElement | null): Colours {
@@ -56,21 +56,25 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
     return () => mq?.removeEventListener("change", read);
   }, []);
 
-  const fit = Math.max(1, Math.min(16, Math.floor(Math.min((boxSize.w - 8) / w, (boxSize.h - 8) / h)) || 1));
-  const scale = fit * zoom;
-  const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
+  // round 2: "fit" is the LARGEST scale that shows the whole map in the stage, keeping its aspect
+  // (matpilot's MatView fills the stage; not a whole number of pixels a cell any more); 2x and 4x
+  // zoom from there
+  const dpr = typeof window !== "undefined" ? Math.min(3, window.devicePixelRatio || 1) : 1;
+  const scale = fitScale(boxSize.w, boxSize.h, w, h) * zoom;
 
-  // the grid, drawn once per map and scale
+  // the grid, drawn once per map and size: at whole DEVICE pixels a cell (sharp), then scaled onto
+  // the canvas with smoothing off
+  const cellPx = Math.max(1, Math.min(16, Math.round(scale * dpr), Math.floor(8192 / Math.max(w, h))));
   const base = useMemo(() => {
     if (typeof document === "undefined") return null;
     const c = document.createElement("canvas");
-    c.width = w * scale;
-    c.height = h * scale;
+    c.width = w * cellPx;
+    c.height = h * cellPx;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    drawGrid(ctx, rows, w, h, scale, colours);
+    drawGrid(ctx, rows, w, h, cellPx, colours);
     return c;
-  }, [rows, w, h, scale, colours]);
+  }, [rows, w, h, cellPx, colours]);
 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
@@ -78,7 +82,7 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w * scale, h * scale);
     ctx.imageSmoothingEnabled = false; // the grid stays crisp on a high-density screen
-    if (base) ctx.drawImage(base, 0, 0);
+    if (base) ctx.drawImage(base, 0, 0, w * scale, h * scale);
     drawScene(ctx, { map, w, h, scale, sheet, tl, time, labels, savePoint, colours });
   }, [base, w, h, scale, dpr, tl, time, map, sheet, labels, savePoint, colours]);
 
@@ -100,8 +104,8 @@ export default function MatView({ map, rows, sheet, tl, time, labels, savePoint,
     <div className="mat-box" ref={box} data-testid="mat-view">
       <canvas
         ref={canvas}
-        width={w * scale * dpr}
-        height={h * scale * dpr}
+        width={Math.round(w * scale * dpr)}
+        height={Math.round(h * scale * dpr)}
         style={{ width: w * scale, height: h * scale }}
         className="mat-canvas"
         role="img"

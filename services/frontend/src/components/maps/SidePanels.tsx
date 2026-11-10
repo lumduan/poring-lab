@@ -11,6 +11,7 @@
 // Sonsuk; the licence text is in studio.css and THIRD_PARTY.md).
 import { memo, useEffect, useRef } from "react";
 
+import { PauseIcon, PlayIcon, StepBackIcon, StepIcon, ToStartIcon } from "@/components/maps/icons";
 import type { Beat, Check, Labels, Timeline } from "@/lib/maps/play";
 import { beatText } from "@/lib/maps/play";
 import { ACCOUNTS, CHAR_NAME, MAX_SLOT, type Session, SERVERS, sessionSteps } from "@/lib/maps/session";
@@ -124,26 +125,17 @@ const Checks = memo(function Checks({ checks }: { checks: Check[] }) {
   );
 });
 
-const KIND_MARK: Record<string, string> = {
-  session: "◆",
-  walk: "→",
-  talk: "❝",
-  menu: "≡",
-  fight: "✕",
-  item: "◇",
-  loot: "✦",
-  respawn: "✝",
-  act: "•",
-  wait: "…",
-  exit: "⇒",
-  arrive: "⇒",
-};
-
 const BeatList = memo(function BeatList({ tl, current, labels, onSeek }: { tl: Timeline; current: number; labels: Labels | null; onSeek: (t: number) => void }) {
   const list = useRef<HTMLOListElement | null>(null);
+  // keep the current step in view INSIDE the list only (round 2: scrollIntoView also scrolled the
+  // page, so a phone jumped from the map down to this list)
   useEffect(() => {
-    const el = list.current?.querySelector<HTMLElement>(`[data-beat="${current}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    const ol = list.current;
+    const el = ol?.querySelector<HTMLElement>(`[data-beat="${current}"]`);
+    if (!ol || !el) return;
+    if (el.offsetTop < ol.scrollTop || el.offsetTop + el.offsetHeight > ol.scrollTop + ol.clientHeight) {
+      ol.scrollTop = Math.max(0, el.offsetTop - ol.clientHeight / 3);
+    }
   }, [current]);
   const shown = tl.beats.slice(0, 600);
   return (
@@ -152,9 +144,7 @@ const BeatList = memo(function BeatList({ tl, current, labels, onSeek }: { tl: T
         <li key={b.i} data-beat={b.i} data-current={b.i === current} data-kind={b.kind}>
           <button type="button" className="mp-beat" onClick={() => onSeek(b.t0)} title="Go to this step">
             <span className="run-time">{seconds(b.t0)}</span>
-            <span className="mp-mark" aria-hidden="true">
-              {KIND_MARK[b.kind] ?? "•"}
-            </span>
+            <span className="mp-mark" data-kind={b.kind} aria-hidden="true" />
             <span>
               {b.node.startsWith("block:") ? <span className="muted">{b.node.slice(6)}: </span> : null}
               {beatText(b, labels)}
@@ -221,7 +211,8 @@ export function RunPanel({
       </div>
       <div className="button-row">
         <button type="button" className="button button-primary button-run" onClick={onRun} disabled={busy} data-testid="run-start">
-          {busy ? "Simulating…" : "▶ Simulate"}
+          <PlayIcon />
+          {busy ? "Simulating…" : "Simulate"}
         </button>
       </div>
       {result && (
@@ -284,17 +275,18 @@ export function PlaybackBar({
 }) {
   return (
     <div className="mat-playback" role="group" aria-label="Play back the run" data-testid="playback">
-      <button type="button" className="icon-button" onClick={onReset} title="Back to the start">
-        ⏮<span className="visually-hidden">Back to the start</span>
+      <button type="button" className="icon-button" onClick={onReset} title="Back to the start" aria-label="Back to the start" data-testid="playback-reset">
+        <ToStartIcon />
       </button>
-      <button type="button" className="icon-button" onClick={() => onStep(-1)} title="The step before">
-        ◀<span className="visually-hidden">The step before</span>
+      <button type="button" className="icon-button" onClick={() => onStep(-1)} title="The step before" aria-label="The step before" data-testid="playback-back">
+        <StepBackIcon />
       </button>
-      <button type="button" className="button button-small" onClick={playing ? onPause : onPlay} data-testid="playback-play">
-        {playing ? "⏸ Pause" : "▶ Play"}
+      <button type="button" className="button button-small button-file" onClick={playing ? onPause : onPlay} aria-label={playing ? "Pause" : "Play"} data-testid="playback-play">
+        {playing ? <PauseIcon /> : <PlayIcon />}
+        <span className="mp-play-text">{playing ? "Pause" : "Play"}</span>
       </button>
-      <button type="button" className="icon-button" onClick={() => onStep(1)} title="The next step" data-testid="playback-step">
-        ▶<span className="visually-hidden">The next step</span>
+      <button type="button" className="icon-button" onClick={() => onStep(1)} title="The next step" aria-label="The next step" data-testid="playback-step">
+        <StepIcon />
       </button>
       <input type="range" min={0} max={Math.max(0.1, end)} step={0.1} value={Math.min(time, end)} onChange={(e) => onSeek(Number(e.target.value))} aria-label="Time" data-testid="playback-time" />
       <span className="mat-playback-time" data-testid="playback-text">

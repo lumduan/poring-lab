@@ -59,13 +59,15 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow-y: auto; /* a short window scrolls instead of squeezing the map (round 2) */
 }
+/* round 2: the graph keeps about a third, the map view the rest (a square map was 294 px tall) */
 .maps-graph {
   position: relative;
   display: flex;
-  flex: 1 1 42%;
+  flex: 0 0 clamp(11rem, 32%, 20rem);
   flex-direction: column;
-  min-height: 12rem;
+  min-height: 11rem;
 }
 .maps-stage[data-mat="closed"] .maps-graph {
   flex: 1;
@@ -135,9 +137,9 @@
 /* --- the map view (matpilot's mat, for maps) -------------------------------------------------- */
 .maps-mat {
   display: flex;
-  flex: 1.3 1 58%;
+  flex: 1 1 auto;
   flex-direction: column;
-  min-height: 14rem;
+  min-height: 22rem;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
@@ -172,13 +174,32 @@
   display: grid;
   place-items: safe center;
   overflow: auto;
-  padding: 0.25rem 0.25rem 3.6rem; /* room for the playback bar */
+  padding: 2px; /* MatView's fit takes these 4 px off */
 }
 .mat-canvas {
   display: block;
   image-rendering: pixelated;
   border-radius: 0.3rem;
   box-shadow: 0 1px 6px rgb(0 0 0 / 18%);
+}
+.mat-overlay {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  gap: 0.15rem;
+  width: min(30rem, calc(100% - 1.5rem));
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  transform: translateX(-50%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--run-bg);
+  border-left-width: 4px;
+  border-radius: 0.45rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 16%);
+  font-size: 0.85rem;
 }
 .mat-note {
   position: absolute;
@@ -234,7 +255,7 @@
   width: min(40rem, calc(100% - 1.2rem));
   padding: 0.3rem 0.6rem;
   transform: translateX(-50%);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
@@ -259,7 +280,11 @@
 .mat-playback .icon-button {
   width: 1.8rem;
   height: 1.8rem;
-  font-size: 0.8rem;
+}
+.mat-playback .button-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 /* --- the panel beside the stage (matpilot's .mats-side) ---------------------------------------- */
@@ -412,6 +437,7 @@
   font-variant-numeric: tabular-nums;
 }
 .mp-beats {
+  position: relative; /* the current step's offsetTop is inside the list */
   max-height: 22rem;
   overflow-y: auto;
   margin: 0.4rem 0 0;
@@ -448,21 +474,46 @@
 }
 .mp-mark {
   flex: none;
-  width: 1rem;
-  text-align: center;
+  align-self: center;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--neutral-border);
 }
+.mp-mark[data-kind="walk"] { background: var(--mat-trail); }
+.mp-mark[data-kind="talk"],
+.mp-mark[data-kind="menu"] { background: var(--mat-npc); border-radius: 0.1rem; }
+.mp-mark[data-kind="fight"] { background: var(--mat-monster); }
+.mp-mark[data-kind="loot"],
+.mp-mark[data-kind="item"] { background: var(--mat-loot); }
+.mp-mark[data-kind="exit"],
+.mp-mark[data-kind="arrive"] { background: var(--mat-warp); }
+.mp-mark[data-kind="respawn"] { background: var(--mat-save); }
+.mp-mark[data-kind="session"] { background: var(--run-bg); }
+.mp-mark[data-kind="wait"] { background: none; border: 2px solid var(--neutral-border); }
 
 /* --- the graph's nodes (MapsCanvas.tsx) ------------------------------------------------------- */
 .mp-node {
-  min-width: 200px;
-  max-width: 260px;
+  min-width: 210px;
+  max-width: 280px;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 0.6rem;
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
+}
+.mp-node .fc-status,
+.mp-node .fc-run,
+.mp-node .fc-port {
+  font-size: 0.85rem;
+}
+.mp-node .fc-start {
+  font-size: 0.78rem;
+}
+.maps-graph .fc-edge-label {
+  font-size: 0.85rem;
 }
 .mp-node[data-selected="true"] {
   border-color: var(--accent);
@@ -497,7 +548,7 @@
 }
 .mp-title {
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 .mp-mock {
   padding: 0 0.35rem;
@@ -505,7 +556,7 @@
   border-radius: 0.3rem;
   background: var(--warn-bg);
   color: var(--warn-text);
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 .mp-line {
@@ -516,17 +567,17 @@
 }
 .mp-muted {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
 }
 .mp-key {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.86rem;
 }
 .mp-call {
   margin-top: 0.25rem;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.82rem;
 }
 .mp-actions {
   display: flex;
@@ -540,9 +591,18 @@
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
+}
+.mp-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.mp-button-icon {
+  width: 0.8rem;
+  height: 0.8rem;
 }
 .mp-button:hover {
   border-color: var(--accent);
@@ -570,13 +630,33 @@
   .maps-stage {
     flex: none;
   }
+  .maps-stage {
+    overflow: visible;
+  }
   .maps-graph {
     flex: none;
-    height: 22rem;
+    height: 20rem;
   }
   .maps-mat {
     flex: none;
-    height: 26rem;
+    height: min(30rem, 72dvh);
+    min-height: 0;
+    scroll-margin-top: 0.5rem;
+  }
+  /* round 2: during a run the playback bar sticks to the screen's bottom, wherever the page is
+     scrolled (the map, or the steps under it); the page keeps room for it */
+  .maps-page[data-run="true"] {
+    padding-bottom: 3.6rem;
+  }
+  .maps-page[data-run="true"] .mat-playback {
+    position: fixed;
+    left: 50%;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    z-index: 95;
+    width: calc(100% - 1rem);
+  }
+  .mp-play-text {
+    display: none;
   }
   .maps-hint {
     display: none;

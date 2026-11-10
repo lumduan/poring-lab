@@ -33,6 +33,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EXIT_COLOURS, ExitEdge } from "@/components/flows/FlowCanvas";
+import { PlayIcon } from "@/components/maps/icons";
 import type { LintDoc, Trace } from "@/lib/flow/api";
 import type { GEdge, XY } from "@/lib/flow/canvas";
 import type { AuthoredExit, Flow, MapBlock } from "@/lib/flow/ir";
@@ -159,7 +160,8 @@ function MapNode({ data }: NodeProps<MNode>) {
           Open flow
         </button>
         <button type="button" className="mp-button" onClick={() => data.onSimulateFrom(b.name)} title={`Simulate from ${b.name} (its entry), without the login`}>
-          ▶ here
+          <PlayIcon className="mp-button-icon" />
+          here
         </button>
       </div>
       <div className="fc-ports">
@@ -208,6 +210,10 @@ function SessionEdge(props: EdgeProps<SessionEdgeT>) {
   );
 }
 
+const MIN_ZOOM = 0.85; // node text (0.86rem and up) stays >= 11 px
+const MAX_ZOOM = 1.2;
+const PAD = 24;
+
 const nodeTypes = { start: StartNode, login: LoginNode, character: CharacterNode, map: MapNode, main: MainNode };
 const edgeTypes = { exit: ExitEdge, session: SessionEdge };
 
@@ -232,11 +238,66 @@ function MapsCanvas(p: MapsCanvasProps) {
   const { flow, session, positions, lint, trace, selected, activeNode, activeEdge, onSelect, onMove, onConnectExit, onDeleteExit, onOpenFlow, onSimulateFrom } = p;
   const graph = useMemo(() => mapsGraph(flow, session, positions), [flow, session, positions]);
   const rf = useRef<ReactFlowInstance | null>(null);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  const [overflow, setOverflow] = useState(false);
   const shape = graph.nodes.map((n) => n.id).join("|");
+  // round 2: fit, but never below MIN_ZOOM (the text stays >= 11 px); a graph wider than the view
+  // starts at its LEFT (START) and pans, and only then a small minimap shows
+  const fit = useCallback(() => {
+    const inst = rf.current;
+    const el = wrap.current;
+    if (!inst || !el || !el.clientWidth || !el.clientHeight) return;
+    const ns = inst.getNodes();
+    if (!ns.length) return;
+    const b = inst.getNodesBounds(ns);
+    if (!(b.width > 0 && b.height > 0)) return;
+    const cw = el.clientWidth;
+    const ch = el.clientHeight;
+    const z = Math.min(MAX_ZOOM, (cw - 2 * PAD) / b.width, (ch - 2 * PAD) / b.height);
+    if (z >= MIN_ZOOM) {
+      setOverflow(false);
+      void inst.setViewport({ x: (cw - b.width * z) / 2 - b.x * z, y: (ch - b.height * z) / 2 - b.y * z, zoom: z }, { duration: 250 });
+      return;
+    }
+    setOverflow(true);
+    const y = b.height * MIN_ZOOM <= ch - 2 * PAD ? (ch - b.height * MIN_ZOOM) / 2 - b.y * MIN_ZOOM : PAD - b.y * MIN_ZOOM;
+    void inst.setViewport({ x: PAD - b.x * MIN_ZOOM, y, zoom: MIN_ZOOM }, { duration: 250 });
+  }, []);
   useEffect(() => {
-    const t = setTimeout(() => void rf.current?.fitView({ padding: 0.12, duration: 250 }), 80);
+    const t = setTimeout(fit, 120);
     return () => clearTimeout(t);
-  }, [shape]);
+  }, [shape, fit]);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const ro = new ResizeObserver(() => {
+      if (t) clearTimeout(t);
+      t = setTimeout(fit, 150);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (t) clearTimeout(t);
+    };
+  }, [fit]);
+  // the playback's node out of view (a panned or a wide graph): bring it to the centre
+  useEffect(() => {
+    const inst = rf.current;
+    const el = wrap.current;
+    if (!inst || !el || !activeNode) return;
+    const n = inst.getInternalNode(activeNode);
+    if (!n) return;
+    const { x, y, zoom } = inst.getViewport();
+    const nw = n.measured.width ?? 220;
+    const nh = n.measured.height ?? 120;
+    const at = n.internals.positionAbsolute;
+    const px = at.x * zoom + x;
+    const py = at.y * zoom + y;
+    if (px < 0 || py < 0 || px + nw * zoom > el.clientWidth || py + nh * zoom > el.clientHeight) {
+      void inst.setCenter(at.x + nw / 2, at.y + nh / 2, { zoom, duration: 300 });
+    }
+  }, [activeNode]);
   const runs = useMemo(() => edgeRuns(trace, graph.edges.filter((e) => e.data.kind !== "session") as GEdge[]), [trace, graph]);
   const initial = useMemo(
     () =>
@@ -291,7 +352,7 @@ function MapsCanvas(p: MapsCanvasProps) {
   );
 
   return (
-    <div className="h-full w-full" data-testid="maps-canvas">
+    <div className="h-full w-full" ref={wrap} data-testid="maps-canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -312,13 +373,22 @@ function MapsCanvas(p: MapsCanvasProps) {
           rf.current = inst as unknown as ReactFlowInstance;
         }}
         fitView
-        fitViewOptions={{ padding: 0.12 }}
+        fitViewOptions={{ padding: 0.12, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }}
         proOptions={{ hideAttribution: false }}
         minZoom={0.2}
       >
         <Background gap={24} />
         <Controls showInteractive={false} />
-        <MiniMap position="top-right" pannable zoomable nodeColor={(n) => (n.type === "map" ? "#a21caf" : n.type === "start" ? "#1d7a43" : "#8a96a3")} />
+        {overflow && (
+          <MiniMap
+            position="top-right"
+            pannable
+            zoomable
+            style={{ width: 120, height: 80 }}
+            nodeColor={(n) => (n.type === "map" ? "#a21caf" : n.type === "start" ? "#1d7a43" : "#8a96a3")}
+            data-testid="maps-minimap"
+          />
+        )}
       </ReactFlow>
     </div>
   );

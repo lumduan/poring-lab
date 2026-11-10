@@ -924,16 +924,16 @@ function MapPicker({ flow, tab, onTab, onLeave }: { flow: Flow; tab: string; onT
   const wf = flow.workflow;
   const block = tab.startsWith("block:") ? wf?.blocks.find((b) => `block:${b.name}` === tab) : undefined;
   const title = !wf
-    ? "A plain flow: one program, no map blocks. The Maps page shows the login before it."
+    ? "None: a plain flow, one program with no map blocks. The Maps page shows the login before it."
     : block
       ? `This tab's flow is bound to the map ${block.map.map} (its map block ${block.name}): what the bot does on that map.`
-      : "Choose a map to open its flow (its map block's tab).";
+      : "Every map: the Map tab (or the events of every map). Choose a map to open its flow (its map block's tab).";
   return (
     <div className="block-tabs-trailing robot-picker" data-testid="map-picker">
       <label className="robot-picker-label" title={title}>
         <span className="robot-picker-name">Map</span>
         <select className="robot-picker-select" value={block ? tab : ""} onChange={(e) => onTab(e.target.value || "map")} disabled={!wf} data-testid="map-picker-select">
-          <option value="">{wf ? (tab === "events" ? "every map (events)" : "every map (the Map tab)") : "none: a plain flow"}</option>
+          <option value="">{wf ? "every map" : "none"}</option>
           {wf?.blocks.map((b) => (
             <option key={b.name} value={`block:${b.name}`}>
               {b.map.map} · {b.name}

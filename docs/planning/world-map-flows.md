@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10 (first version, not committed yet): the Maps page /maps (graph + session mock + map-bound flows + the map simulator); poring_flow.trace's play list and encounters (needs a guarded backend restart)."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 (matpilot's headless-Chrome review, 7 items: section 10) not committed yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Parent: guarded backend restart (trace.py), scripts/flows_gat.py for xmas_dun02's walk grid, commit. matpilot: a headless-Chrome look at /maps (light / dark, 1280 and 390 px). Batt: section 9's questions."
+next_action: "Parent: commit round 2; matpilot: re-run its headless-Chrome check on round 2 (section 10's list). Batt: section 9's questions."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -194,3 +194,57 @@ Tap by tap:
 - The session's server list mirrors config/environments.yaml, not the Settings page's set.
 - Learner mode (ADR-0023, decided, not built) will change the Login node (a declared permission, the
   Windows host on the console); this mock follows today's rules.
+
+## 10. Round 2 (2026-11-10, matpilot's headless-Chrome review, ranked)
+
+matpilot checked /maps in headless Chrome: light and dark, 1280x800 and 390x844, no console
+errors. Its verdict: the desktop run view matches its mats page (the playback bar, the run report,
+the checks, the step list, the tabs, the legend, the active node, /flows' Map picker). Done, in its
+order:
+
+1. **Phone: Simulate jumped to the step list.** The step list's `scrollIntoView` also scrolled the
+   PAGE, so the map and the playback bar ended above the screen.
+   - The list now scrolls only inside itself.
+   - On a phone, Simulate brings the MAP VIEW into view.
+   - During a run the playback bar is fixed to the screen's bottom, and the page keeps room for it.
+   - The Run report stays under the map (the phone's one column).
+2. **The map was small on desktop** (a 360x270 canvas in a 922x294 stage).
+   - "fit" is now the largest scale that shows the whole map in the stage, keeping its aspect.
+     It is no longer a whole number of pixels a cell. `draw.fitScale`, measured by a
+     ResizeObserver on the stage.
+   - The grid is drawn at whole DEVICE pixels a cell (devicePixelRatio, up to 3), then scaled
+     with smoothing off, so it stays sharp.
+   - 2x and 4x zoom from the fit.
+   - The graph now keeps about a third of the height (`clamp(11rem, 32%, 20rem)`) and the map view
+     the rest (at least 22rem). A short window scrolls the stage instead of squeezing the map.
+   - Example: town_1 (120x90) in a 922x360 stage is drawn at about 4 px a cell (about 475x356;
+     it was 3 px, 360x270).
+3. **Playback icons:**
+   - the media glyphs U+23EE and U+23F8 were empty boxes in Chromium on Linux. They are now
+     inline SVG icons (`components/maps/icons.tsx`), each with an aria-label, and so are the
+     header's Simulate and the node buttons;
+   - the step list's glyph marks are now coloured dots per kind;
+   - a test fails on any media glyph or default-emoji character in the Maps components.
+4. **Graph legibility:**
+   - the fit never zooms below 0.85, so node text is 11 px or more (the node fonts were raised);
+   - a graph wider than the view starts at its left (START) and pans;
+   - only then does a small 120x80 minimap show (none otherwise);
+   - when the playback's node is out of view, the graph centres it.
+5. **Phone header:** Load and Save have their folder and save icons and aria-labels (the words
+   stay for screen readers), as /flows' icon row has. Load's "▾" is an SVG caret.
+6. **The first seconds of a run:** while the mock login runs, an overlay on the map says
+   "Logging in… (a mock)" or "Entering the game…", what the step does, and "the character
+   appears on town_1 at (40, 40) in N s".
+7. **/flows details:**
+   - the Python pane's file chips wrap (no second scrollbar); a long name is cut with "…";
+   - the Map picker's first choice is "every map" (it was cut on a phone);
+   - choosing it opens the Map tab.
+
+matpilot's item 8 (the lint chip) is Batt's decision: left as it is.
+
+Checks: pnpm lint and typecheck clean, pnpm test 265 pass (2 new: the fit, and the glyph and
+label guard). A server-render smoke test passes: the playback bar (4 SVG icons, no media glyph,
+every label), the Run panel (one dot a step), the Maps page header (labelled icons), the graph, the
+map view, and /flows ("every map"). Not verifiable here: the real geometry and scrolling in a
+browser (no browser on this host). matpilot's re-run is the visual check.
+

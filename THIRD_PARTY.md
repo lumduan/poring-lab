@@ -133,6 +133,7 @@ MicroPython simulator and its mat geometry were not copied.
 | [lumduan/matpilot](https://github.com/lumduan/matpilot) | `d639909` | MIT, © 2026 Sarat Sonsuk (`LICENSE`) | `src/components/mats/MatRunPanel.tsx` (`PlaybackBar`: play / pause, the time slider, the speed; `Checks`: the ✓ / ✗ list), `src/hooks/useMatRun.ts` (the playback clock: real time × speed, on `requestAnimationFrame`) | `services/frontend/src/components/maps/SidePanels.tsx` (`PlaybackBar` + our step and reset, `Checks`), `services/frontend/src/components/maps/MapsApp.tsx` (the clock) |
 | same | `d639909` | same | `src/components/mats/MatsApp.tsx` (the stage with the playback bar over it, the panel beside it), `src/components/blocks/RobotPicker.tsx` (the Robot choice at the end of the tab row) | `MapsApp.tsx` (the layout); `services/frontend/src/components/flows/FlowsApp.tsx` (`MapPicker`: the map a tab's flow is bound to) |
 | same | `d639909` | same | `src/app/globals.css` (`.mat-playback*`, `.robot-checks*`, `.run-result`, `.run-output`, `.run-time`, `.mats-side`, `.robot-picker*`) | `services/frontend/src/components/maps/maps.css`; `.robot-picker*` in `services/frontend/src/components/flows/studio.css` |
+| same | `d639909` | same | `src/components/blocks/BlocksApp.tsx` (the folder, save and play icons; round 2) | `services/frontend/src/components/maps/icons.tsx` (with our own pause, step and back-to-start icons) |
 
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).

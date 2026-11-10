@@ -4,14 +4,14 @@
 // fixture is the simulator's own output on the SYNTHETIC sample sheets; poring_flow's
 // test_trace.py checks it is current).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import type { Trace } from "../flow/api.ts";
 import type { Flow } from "../flow/ir.ts";
 import { oneMapStarter, starterFlow } from "../flow/starter.ts";
 import { addMapNode, blockName, centreCell, oneMapFlow, targetGuess } from "./build.ts";
-import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, mapSize } from "./draw.ts";
+import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
 import { mapsGraph } from "./graph.ts";
 import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, trailAt, walkSeconds } from "./play.ts";
 import { ACCOUNTS, DEFAULT_SESSION, parseSession, SERVERS, sessionLength, sessionProblems, sessionPython, sessionSteps } from "./session.ts";
@@ -266,4 +266,27 @@ test("the scene at a time: the character where the timeline puts it, the monster
   assert.equal(drawScene(recorder().ctx, { map: "town_1", w: 120, h: 90, scale: 2, sheet: town, tl: null, time: 0, labels: null, savePoint: null, colours: FALLBACK_COLOURS }).bot, null);
   assert.deepEqual(mapSize("field_1", null, null, tl).known, false);
   assert.deepEqual(mapSize("x", ["...", "..."], null, null), { w: 3, h: 2, known: true });
+});
+
+// --- round 2 (2026-11-10, matpilot's headless-Chrome review) ----------------------------------------
+test("the map fills its stage: the largest scale that fits, its aspect kept", () => {
+  // a 922 x 360 stage: town_1 (120 x 90) is as tall as the stage, a square 260 map too
+  assert.equal(fitScale(924, 364, 120, 90), 4);
+  assert.ok(Math.abs(fitScale(924, 364, 260, 260) * 260 - 360) < 1e-9);
+  assert.ok(fitScale(2000, 400, 100, 100) * 100 <= 396); // never past the height
+  assert.equal(fitScale(0, 0, 100, 100), 1); // not measured yet
+  assert.equal(fitScale(10, 10, 2048, 2048), 0.5);
+});
+
+test("the Maps components draw no glyph Chromium on Linux lacks, and label their icon buttons", () => {
+  const dir = new URL("../../components/maps/", import.meta.url);
+  for (const name of readdirSync(dir).filter((f) => f.endsWith(".tsx"))) {
+    const src = readFileSync(new URL(name, dir), "utf8");
+    // the media-control block U+23E9..U+23FA (two of them rendered as empty boxes) and every
+    // character that defaults to an emoji (it needs an emoji font)
+    assert.ok(!/[\u23e9-\u23fa]|\p{Emoji_Presentation}/u.test(src), `${name} draws a glyph that may be a box`);
+  }
+  const bar = readFileSync(new URL("SidePanels.tsx", dir), "utf8");
+  for (const label of ["Back to the start", "The step before", "The next step"]) assert.ok(bar.includes(`aria-label="${label}"`), label);
+  assert.match(bar, /aria-label=\{playing \? "Pause" : "Play"\}/);
 });

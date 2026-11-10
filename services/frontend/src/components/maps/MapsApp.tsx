@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CodeView from "@/components/flows/CodeView";
 import { InspectPanel } from "@/components/flows/Panels";
+import { CaretIcon, CloseIcon, FolderIcon, PlayIcon, SaveIcon } from "@/components/maps/icons";
 import { CharacterPanel, DEFAULT_RUN, LoginPanel, PlaybackBar, RunPanel, type RunForm, SPEEDS, StartPanel } from "@/components/maps/SidePanels";
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
 import { type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
@@ -152,6 +153,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
+  const matRef = useRef<HTMLElement | null>(null);
+  const scrollToMat = useRef(false); // a phone: after Simulate, the map (not the panel) comes into view
   const key = useMemo(() => canonical(flow), [flow]);
   const blocks = useMemo(() => flow.workflow?.blocks.map((b) => ({ name: b.name, map: b.map.map })) ?? [], [flow]);
 
@@ -320,6 +323,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         writeChoice(store, MK.mat, "open");
       }
       setSide("run");
+      scrollToMat.current = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 48rem)").matches);
     } catch (e) {
       setNotice({ text: `Simulate failed: ${e instanceof ApiError ? e.message : String(e)}`, tone: "error", undo: null });
     } finally {
@@ -328,6 +332,11 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   };
   const tl = sim?.tl ?? null;
   const end = tl?.end ?? 0;
+  useEffect(() => {
+    if (!scrollToMat.current || !sim || !matOpen) return;
+    scrollToMat.current = false;
+    matRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [sim, matOpen]);
   useEffect(() => {
     if (!playing || !tl) return;
     let last = performance.now();
@@ -529,7 +538,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const zonesBlock = zonesFor ? flow.workflow?.blocks.find((x) => x.name === zonesFor) : undefined;
 
   return (
-    <main className="studio maps-page" data-testid="maps-app">
+    <main className="studio maps-page" data-run={tl ? "true" : "false"} data-testid="maps-app">
       <header className="studio-bar">
         <div className="studio-brand">
           <span className="studio-home">Maps</span>
@@ -542,8 +551,10 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         </div>
         <div className="studio-actions">
           <div className="studio-menu" ref={menuRef}>
-            <button type="button" className="button button-small button-file" onClick={() => setMenu(!menu)} aria-expanded={menu} data-testid="maps-load">
-              <span className="button-text">Load</span> ▾
+            <button type="button" className="button button-small button-file" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-label="Load a flow" title="Open a flow" data-testid="maps-load">
+              <FolderIcon />
+              <span className="button-text">Load</span>
+              <CaretIcon />
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
@@ -574,11 +585,13 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
               if (f) void importFile(f);
             }}
           />
-          <button type="button" className="button button-small button-file" onClick={exportFile} title="Save the flow as a .json file">
+          <button type="button" className="button button-small button-file" onClick={exportFile} aria-label="Save the flow" title="Save the flow as a .json file" data-testid="maps-save">
+            <SaveIcon />
             <span className="button-text">Save</span>
           </button>
           <button type="button" className="button button-primary button-run" onClick={() => void simulate(runForm.from === "login" || blocks.some((b) => b.name === runForm.from) ? runForm.from : "login")} disabled={simBusy} title="Run it in the simulator: no game, no input" data-testid="maps-simulate">
-            ▶ <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
+            <PlayIcon />
+            <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
         </div>
       </header>
@@ -601,8 +614,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                   Undo
                 </button>
               )}
-              <button type="button" className="icon-button" onClick={() => setNotice(null)} title="Hide">
-                ×<span className="visually-hidden">Hide</span>
+              <button type="button" className="icon-button" onClick={() => setNotice(null)} title="Hide" aria-label="Hide">
+                <CloseIcon />
               </button>
             </p>
           )}
@@ -726,7 +739,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             </div>
           )}
           {matOpen && (
-            <section className="maps-mat" aria-label="The map view">
+            <section className="maps-mat" aria-label="The map view" ref={matRef}>
               <div className="maps-mat-bar">
                 <label className="device-chip">
                   <span className="device-label">map</span>
@@ -761,6 +774,16 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
               </div>
               <div className="maps-mat-stage">
                 <MatView map={matMap} rows={rows} sheet={sheet} tl={tl} time={time} labels={labels} savePoint={sim?.doc.trace.save_point ?? null} zoom={zoom} />
+                {tl && time < tl.offset && beat?.session && (
+                  // the first seconds: the session's mock steps, before the character is on a map
+                  <p className="mat-overlay" role="status" data-testid="mat-session">
+                    <strong>{beat.session.node === "start" ? "Starting the client…" : beat.session.node === "login" ? "Logging in… (a mock)" : "Entering the game… (a mock)"}</strong>
+                    <span>
+                      {beat.session.text}. The character appears on {sim?.doc.trace.start.map ?? "the first map"}
+                      {sim?.doc.trace.start.cell ? ` at (${sim.doc.trace.start.cell[0]}, ${sim.doc.trace.start.cell[1]})` : ""} in {(tl.offset - time).toFixed(1)} s.
+                    </span>
+                  </p>
+                )}
                 {tl && (
                   <PlaybackBar
                     time={time}
@@ -806,8 +829,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                   </button>
                 ))}
               </div>
-              <button type="button" className="icon-button" onClick={() => (setPanelOpen(false), writeChoice(store, MK.panel, "closed"))} title="Close the panel">
-                ×<span className="visually-hidden">Close the panel</span>
+              <button type="button" className="icon-button" onClick={() => (setPanelOpen(false), writeChoice(store, MK.panel, "closed"))} title="Close the panel" aria-label="Close the panel">
+                <CloseIcon />
               </button>
             </div>
             <div className="maps-side-body">
@@ -835,7 +858,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                           Open its flow ↗
                         </button>
                         <button type="button" className="button button-small" onClick={() => void simulate(selectedBlock.name)} disabled={simBusy}>
-                          ▶ Simulate from here
+                          <PlayIcon />
+                          Simulate from here
                         </button>
                         <button type="button" className="button button-small" onClick={() => (setMatChoice(selectedBlock.map.map), setPlaying(false), matOpen || (setMatOpen(true), writeChoice(store, MK.mat, "open")))}>
                           Show its map

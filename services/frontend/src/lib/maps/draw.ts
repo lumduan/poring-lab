@@ -91,6 +91,13 @@ export function mapSize(map: string | null, rows: readonly string[] | null, shee
   return { w, h, known: false };
 }
 
+/** The largest CSS pixels a cell at which a w x h map fits a box (its aspect kept; round 2: the map
+ * fills the stage instead of a whole number of pixels a cell); at least 0.5, at most 24. */
+export function fitScale(boxW: number, boxH: number, w: number, h: number): number {
+  if (!(boxW > 0 && boxH > 0 && w > 0 && h > 0)) return 1;
+  return Math.max(0.5, Math.min(24, Math.min((boxW - 4) / w, (boxH - 4) / h)));
+}
+
 /** The walk grid: dark everywhere, walkable runs of each row in grey (no grid: one plain area). */
 export function drawGrid(ctx: Ctx, rows: readonly string[] | null, w: number, h: number, scale: number, colours: Colours): void {
   ctx.fillStyle = rows ? colours.wall : colours.empty;

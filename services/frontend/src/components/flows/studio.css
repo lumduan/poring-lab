@@ -625,13 +625,17 @@
 .python-files {
   display: flex;
   flex: none;
+  flex-wrap: wrap; /* round 2 (2026-11-10): long file names wrap; no second scrollbar over the code */
   gap: 0.25rem;
   padding: 0.3rem 0.6rem;
-  overflow-x: auto;
   border-bottom: 1px solid var(--border);
 }
 .python-file {
   flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   min-height: 2rem;
   padding: 0 0.7rem;
   border: 1px solid var(--border);
