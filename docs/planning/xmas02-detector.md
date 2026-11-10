@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment O ACCEPTED (O1; Batt confirmed O7): a SEPARATE item model xmas02-fi. Done: the tools (O3), params v2 aea6f1d2 (O4), the icon proof + fs1 (O5, O6: TRAIN 878 boxes / 86 items, stopping rule met), the recordings shipped (O8). NOW: T2-items (pack seed 61, blind labellers I and J; O8). Next: the cache (T-O2), the training (20 epochs, init xmas02-gb, ~4.2 h on the Arc), the evaluation I1-I5 on fiT1 + fiT2, then the runner's --loot-sight with a shadow pilot first."
+next_action: "Amendment O14 (2026-11-10): the floor-item model xmas02-fi FAILS its held-out score (I1 recall 0.696, I2 0.56; I1 precision, I3, I4 0/124, I5 CPU pass; I5 GPU no verdict) -> NOT deployed; the misses are all items within 1 cell of her (TRAIN had ~12 % such boxes). A round 2 (more drops on / next to her) is Batt's decision."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3197,3 +3197,53 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   (UnitDetector, 16 threads, nice 10), run on a quiet host. The bar is xmas02fi's p95 <= 1.10 x
   xmas02gb's.
 - Then `fi_eval.py`, once, with both prediction sets.
+
+### Amendment O14 (2026-11-10 20:14 ICT from `date`): THE RESULT (the held-out score, once) -- THE xmas02-fi MODEL FAILS
+
+`fi_eval.py` on fiT1 + fiT2 + fiT3 (score sha256 93be3bab1c9fcd82...), both prediction sets, once. The GPU
+(`predict_dir`, last.pt e24e8f57) and the ONNX (UnitDetector, d149b3a7) give IDENTICAL results
+(112 boxes on 111 frames each):
+
+| bar | result | bar value | verdict |
+|---|---|---|---|
+| I1 recall (46 evaluated crops) | 32 / 46 = **0.696** | >= 0.85 on >= 40 | **FAIL** |
+| I1 precision (every box on the judged frames) | 95 / 110 = 0.864 (15 false, 2 ambiguous) | >= 0.85 | PASS |
+| I2 first kept-label frame boxed (episodes) | 14 / 25 = **0.56** | >= 0.80 on >= 20 | **FAIL** |
+| I3 item-free frames with a box (any / her 5 x 5) | 12 / 2,454 = 0.49 % / 3 / 2,454 = 0.12 % | <= 0.5 % / <= 0.2 % | PASS |
+| I4 kills without a drop with a box on the death cell's 3 x 3 | **0 / 124** | <= 5 % on >= 40 | PASS |
+| I5 CPU p95 (interleaved, 300 frames, 16 threads) | 757.3 vs xmas02gb 726.1 ms = 1.043 x | <= 1.10 x | PASS |
+| I5 GPU "as D1" | NO VERDICT (below) | <= 35 ms | NO VERDICT |
+
+- **The verdict: FAIL** (I1 recall, I2). By O.9 the model is NOT deployed and the runner's
+  `--loot-sight` is not pre-registered. GPU_WEIGHTS keeps the entry (served only, never a map's
+  model); a removal is a one-line change, left as it is.
+- **Where it misses:**
+  - all 14 I1 misses are items within 1 cell of her: N 14 / 43; F 0 / 3;
+  - by item: Candy Cane 530 4 / 4, Scell 911 5 / 11, Cookie 538 2 / 4, Zargon 912 3 / 17, Pearl,
+    Candy, Cake 0;
+  - the missed crops' label fit is lower (median NCC 0.794 vs 0.909 for the hits): partly covered
+    by her sprite / bar, though both labellers judged them good;
+  - the TRAIN mix explains it: boxes within 1 cell of her are ~12 % of TRAIN (p38 24 / 95, p20 7 / 82,
+    fs1 75 / 701), but 43 of the 46 evaluated held-out crops. fs1 staged from views 0-3 cells away.
+- **What works:** it never boxes an empty floor where the runner looks (I4 0 / 124, I3 under its
+  bars). But at 70 % recall, "skip the loot step when no box" would skip ~30 % of the real drops.
+- **I5 GPU, measured as O13 fixed, NOT judged:**
+  - through the guarded serve step (OpenVINO; the listening line names xmas02fi d149b3a7) and
+    `GpuDetector`, one model a run (the server serves one client at a time), 300 frames;
+  - xmas02fi: call p50 51.1 / p95 63.6 ms, server forward p50 16.25 / p95 16.51 ms;
+  - the deployed xmas02gb, the same harness: call p50 52.4 / p95 63.8 ms, server 16.6 / 16.85 ms;
+  - so the harness adds ~35 ms that the live runner does not (xmas02gb's live D1 p95 22-26 ms in
+    p44-p49); the item model is NOT slower than the deployed one;
+  - a first, interleaved attempt was discarded: the second client got BlockingIOError and its CPU
+    fallback loaded the host;
+  - predict_dir's own wall time (p50 61 / p95 78 ms) is reported only.
+- **Tool notes:**
+  - fi_eval reads `--cpu-latency` as `{model: summary}`. eval_latency writes it under `"ms"`, so
+    its `"ms"` block was passed as it is (no number changed; the file is archived);
+  - fi_eval accepts GPU timing only in predict_dir's format. Both are follow-ups for the tool.
+- **For Batt (a round 2 would need its own amendment):**
+  - more TRAIN drops ON and NEXT TO her: staged piles viewed from her own cell, and kills'
+    drops from recorded pilots;
+  - Candy Cane and Scell examples near her;
+  - possibly a different box rule for items half under her sprite;
+  - the held-out would again be fresh recordings.
