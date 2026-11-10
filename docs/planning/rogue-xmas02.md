@@ -3909,3 +3909,216 @@ change of today's. No decision rides on p47 (4BG).**
   kills per sighting 0.82. 169 reach skips (p46 62).
 - **Items per hour (x 60 / 25.0):** Zargon 18 (43.2 / h), Scell 13 (31.2), Well-baked Cookie 7 (16.8),
   Manacles 7 (16.8), Piece of Cake 3 (7.2), Candy 2 (4.8), Red Herb, Candy Cane, Pearl 1 each (2.4).
+
+**Study S-LF (Amendment Q, 4BH; offline, written 14:04 ICT from `date`; DECIDES NOTHING): the
+light-floor position reader in the base runs.** Data: the banked sessions p36-p47 (p43 left out: it
+died at 18 s), the runner's `events.jsonl` (main HP reads with `rd`, walks, strikes, reach skips,
+the escape) against the packets' own cell (`time_budget.Track`, offline ground truth only). The
+throwaway scripts (`slf.py`, `slf2.py`, `slf3.py`, `clusters.py`, `recover.py`, `loot.py`) and
+their JSON: NAS `scratch-archive/2026-11-10/study-lf-r1/` (sha256-verified). Definitions, fixed in
+`slf2.py`'s docstring before its numbers were read:
+- a main HP read is FRESH (`base` / `light`: it moves `here`), FAILED (`unconfirmed`,
+  `light_failed:*`, `base:*`) or `settle`; a READER SPAN opens at a failed read after a fresh one
+  and closes at the next fresh read (or a Fly Wing's request): its seconds are the reader's;
+  PERSISTENT = >= 5 failed reads;
+- a clicked walk is "after a failed read" when a failed read came since the last fresh one; its
+  HERE ERROR = Chebyshev(packet cell at its request, its `from`), its LANDING ERROR =
+  Chebyshev(the request's cell, its `to`).
+
+The reads, per run:
+
+| run | main reads | fresh (base + light) | unconfirmed / uncovered_ink / no_glyph / half_shadow | reader spans (persistent) | their seconds (persistent) | longest gap | gaps >= 20 s | pos_unread wings |
+|---|---|---|---|---|---|---|---|---|
+| p36 | 3,431 | 96.0 % (79.5 + 16.5) | 58 / 49 / 1 / 29 | 52 (2) | 96.3 (21.7) | 21.5 s | 1 | 0 |
+| p37 | 4,421 | 90.0 % (66.1 + 23.9) | 62 / 338 / 40 / 1 | 60 (8) | 161.9 (86.3) | 20.2 s | 1 | 0 |
+| p38 | 4,246 | 97.5 % (77.4 + 20.1) | 57 / 29 / 1 / 1 | 48 (2) | 95.5 (18.7) | 15.4 s | 0 | 0 |
+| p39 | 3,205 | 93.0 % (62.8 + 30.2) | 83 / 53 / 80 / 2 | 66 (3) | 175.1 (54.5) | 41.0 s | 3 | **1** |
+| p40 | 2,988 | 96.1 % (72.7 + 23.4) | 56 / 38 / 4 / 1 | 48 (4) | 128.9 (21.1) | 29.1 s | 2 | 0 |
+| p41 | 3,112 | 95.5 % (77.5 + 18.0) | 54 / 61 / 24 / 0 | 47 (4) | 108.7 (40.1) | 25.2 s | 1 | 0 |
+| p42 | 3,210 | 93.2 % (72.8 + 20.4) | 59 / 126 / 3 / 29 | 53 (6) | 148.2 (93.1) | 44.6 s | 2 | 0 |
+| p44 | 3,298 | 92.5 % (65.1 + 27.4) | 80 / 139 / 20 / 0 (+8 ambiguous) | 71 (8) | 193.9 (102.5) | 26.4 s | 2 | 0 |
+| p45 | 3,290 | 96.8 % (66.4 + 30.4) | 86 / 13 / 5 / 1 | 74 (0) | 126.9 (0) | 16.6 s | 0 | 0 |
+| p46 | 3,358 | 93.0 % (63.3 + 29.7) | 78 / 131 / 7 / 18 | 68 (5) | 141.8 (67.1) | 29.5 s | 2 | 0 |
+| p47 | 3,437 | 92.1 % (72.7 + 19.4) | 44 / 186 / 34 / 0 | 44 (5) | 146.7 (94.8) | 37.0 s | 2 | **1** |
+
+- **Pooled p40-p47 (7 runs, 175.3 min, 22,693 main reads):** base 70.0 %, light 24.2 % -> a fresh
+  position on **94.1 %** of the reads (p5 on the edge loop: 96.1 %); unconfirmed 2.0 %,
+  `light_failed:uncovered_ink` 3.1 %, `no_glyph` 0.4 %, `half_shadow` 0.2 %. The fallback ran on
+  29.9 % of the reads, gave a read on 87.6 % of them and was accepted on 80.9 %.
+- **Two kinds of span, very different:**
+  - **317 "unconfirmed only" spans (497 s):** a light read that PosConfirm holds back because the
+    read before it is > 1.0 s old -- the first read after a blocking action (a strike, a scan, a
+    loot step). 326 of the 405 spans open on the first read after a > 1 s gap. The next read
+    normally confirms it 0.2 s later; the cost comes when the loop goes straight into another
+    blocking action.
+  - **32 PERSISTENT spans (418.7 s, 4.0 % of the time):** median 11.5 s, p90 21.6 s, max 44.4 s;
+    their failed reads: `uncovered_ink` 625, `no_glyph` 88, `half_shadow` 45, unconfirmed 41,
+    ambiguous 7. 25 of 32 hold a FIGHT (286.8 s of fight inside): she stands on one cell, the
+    camera does not move, the strip's background does not change, and every read fails until
+    she walks off. 56 short failure spans add 79.5 s.
+- **Where: DEAD CELLS, not the light floor in general.** In p40-p47, 19 cells hold half of the
+  1,305 failed reads. Over p36-p47, 30 cells have >= 15 failed reads and >= 80 % of their reads
+  failed; all lie in fallback areas (>= 91 % of the reads there needed the light fallback). The
+  recurring areas (failed reads, runs): (112-118, 207-213) 294 in 9 of 11 runs; (129-136, 37-41)
+  222 in 4; (121, 206) 108 in 2; (141, 98-99) 72 in 3; (88-89, 232-235) 70 in 3; (181-183, 136)
+  63 in 2. They are small patches: around a dead cell, reads at 1 cell are fresh 44 % of the
+  time, at 2 cells 79 %, at 3 cells 66 %. p5's west-leg failures (x 6-8) barely appear: the base
+  runs explore the interior, not the edge loop.
+- **What a stale `here` costs (p40-p47):**
+
+  | | clicked walks after a failed read | the other clicked walks |
+  |---|---|---|
+  | n | 134 | 1,792 |
+  | here error: median / >= 5 cells | 5 / 82 (61 %) | 3 / 456 (25 %) |
+  | landing error: median / >= 5 cells (sent clicks) | 4 / 57 of 127 (44.9 %) | 3 / 203 of 1,768 (11.5 %) |
+  | never sent (W1's kind) | 7 (5.2 %) | 24 (1.34 %) |
+
+  - 7 of W1's 31 unsent clicks in p40-p47 came after a failed read (7 % of the clicks); 79 of the
+    134 stale walks and 5 of the 7 unsent ones sat in "unconfirmed only" spans.
+  - Reach checks: 64 logged reach skips after a failed read had a here error of median 6 cells
+    (39 >= 5); after a fresh read, median 1 (507); after a blocked loop (no read for > 0.6 s),
+    median 6 too (91): the check computes the path from a cell she is not on.
+  - NOT affected: strikes (class D 25.2 % after a failed read, 27 / 107; 24.2 % otherwise,
+    118 / 487: they click the box's pixels) and the loot (floor items within 3 cells picked 39 of
+    40 in or within 5 s after a reader span, 94 of 95 otherwise: the hovers are screen-relative).
+- **The two pos_unread Fly Wings, both on dead patches after fights there:**
+  - **p39 250.96 s:** the last fresh read 210.08 s (129, 41); fights on (130, 41) -> (133, 37)
+    (strike walk-ups; 2 kills), 40.9 s without a fresh read; a walk click had just been SENT
+    (250.83 s, request (140, 45)) when the rule pressed the wing 0.2 s later.
+  - **p47 800.73 s:** ➡️ this CORRECTS p47's note above ("every position read at (101,208)"): the
+    last fresh read was 763.79 s at (101, 208), a light read; at 765.53 s a box strike at rel
+    (8, 0) walked her 11 cells east to (112, 207) (packets: self_move 105 -> 112). Every read from
+    768.0 s failed THERE (1 unconfirmed, then 66 `uncovered_ink`), while `here` stayed (101, 208),
+    11 cells off. Fights there (kills 775.0 and 787.1, the fight end 797.0), loot steps, then the
+    first search tick (800.73 s) took the wing: 37.0 s after the last fresh read.
+  - The rule (`POS_FLY_S` 20 s) is checked only outside fight mode (the fight branch
+    `continue`s), so its real limit is 20 s plus the fight's remainder. In p40-p47, 11 spans
+    passed 20 s; 10 ended in or right after a fight with a fresh read before the next search tick.
+- **Dead reckoning from our own commands, replayed offline (IN-SAMPLE: the variants were tried
+  on these same runs; an estimate, not a result):** `est` = the last fresh read, moved toward
+  each walk click's target (est + to - from) at 150 ms a cell, each strike's walk-up
+  (est + rel - 1 step toward her) and each loot click (est + rel), with the read's ~0.3 s lag
+  carried along an unfinished walk. Against the packets (p40-p47):
+
+  | | held `here` | dead-reckoned |
+  |---|---|---|
+  | failed reads within 1 cell / 2 cells (1,304) | 38.0 % / 40.7 % | 56.0 % / 63.9 % (worse in 119) |
+  | stale walk clicks within 2 cells (134), median | 13.4 %, 5 | 76.1 %, 1 |
+  | stale reach skips within 1 cell (64), median | 31.2 %, 6 | 75.0 %, 0 |
+
+  The rest is the client walking by itself (a melee chase), which our commands do not show.
+
+**S-LF proposals (none built, none pre-registered; for Batt):**
+1. **LF-1, logging only (no behaviour change):** log the value of a held-back (`unconfirmed`)
+   read and the age of `here` in each `hp_read`, so the next run can say how often the held-back
+   reads were right. Risk: none.
+2. **LF-2, PosConfirm after a blocking action:** when a light read comes > 1.0 s after the read
+   before it, confirm it at once with a read of a NEWER frame (a different frame id, ~0.03-0.1 s
+   later) instead of the next loop tick. It targets the 317 unconfirmed-only spans: 79 of the 134
+   stale walks, 5 of the 7 stale unsent clicks (W1 pooled would go ~1.6 % -> ~1.4 % if they fell
+   to the base rate). Cost: one extra read (~20-40 ms), ~45 a run. Risk: two consecutive frames
+   can both be the blended one if the stream repeats a frame: require a new frame id.
+3. **LF-3, dead reckoning while stale:** `here` = the replay above until the next fresh read
+   (estimated: stale walks within 2 cells 13 % -> 76 %, reach checks within 1 cell 31 % -> 75 %).
+   It never counts as a read (no position-jump bar from it). Risk: the client's own chases and
+   unsent / ignored clicks (the estimate assumes every click was sent); 9 % of failed reads were
+   estimated worse than the held cell. A pixel alternative exists: hunt_flow's floor odometry
+   (`route_preview`'s camera move, live on prt_fild08 / gef10), measurable first in shadow mode.
+4. **LF-4, the escape:** before a `pos_unread` Fly Wing, a 2-cell walk step back along the way
+   she came (screen-relative, a cell she walked through, so walkable), and no wing while a sent
+   walk click is < 2 s old (p39's case); the wing stays the fallback after 2 steps. From the data:
+   2 wings in 11 runs, both on dead patches; a fresh read 2 cells from a dead cell 79 % of the time.
+   Risk: the step walks into a monster (a fight is not worse than a random teleport).
+5. **LF-5, the reader itself (X1b round 4):** 83 % of the persistent failed reads are
+   `light_failed:uncovered_ink`. The 30 dead cells are new, live-chosen data for the round the
+   2026-11-06 design notes left open (the uncovered-ink check reading the original grey, not the
+   flattened one): `selfpos_light.py collect` at the dead cells (the stand-cell checks first),
+   half for the design, half held out, rounds 1-3 as the regression guard. Risk: a wrong read
+   (the bars keep 0 wrong; PosConfirm stays).
+- **What a pre-registration would measure:** the fresh share of main reads (p40-p47: 94.1 %);
+  persistent spans and their seconds (32 / 418.7 s in 7 runs); the here and landing errors of
+  walks after a failed read (median 5 / 4, landing >= 5 cells 44.9 %) and their unsent share
+  (5.2 %); reach skips' here error after a failed read (median 6); `pos_unread` wings (2 in 11
+  runs); 0 position-jump hard bars; 0 fresh reads > 2 cells off the packets while standing. The
+  scorer is `slf2.py` (NAS); it goes under `scripts/` with a test before any pilot uses it.
+
+**Study S-R1 (Amendment Q, 4BH; offline, written 14:04 ICT from `date`; DECIDES NOTHING): own-body
+class D at its bar.** `lock_study.py` as committed (own-body = the strike's point inside her sprite
+box, feet (641, 362) +-20 px, 95 px up, 6 down; class D = no attack request within 2 s of the
+first click), on p33-p47; each strike's context from the events and the packets (`r1.py`, NAS).
+
+Every own-body class-D strike, p36-p47 (t = seconds into the run; rel and positions in cells; "hits"
+= our damaging acts in the packets):
+
+| run, t | path, rel, point v | the monsters at the click (packets) | what the click did | kind | time lost |
+|---|---|---|---|---|---|
+| p36 392.5 | scan (0,+1), v 300, 4 clicks | Myst Case (+1,0), attacking | nothing sent; our hits every 0.47 s before and after; it died +2.3 | a | the runner saw the kill 5.0 s late |
+| p37 563.8 | scan (0,+1), v 328 | Myst Case (0,-1), attacking | nothing sent; hits went on; died +3.2 | a | 1.2 s late |
+| p38 175.5 | scan (0,+1), v 300, 4 clicks | Myst Case (+1,0) (the same spot as p36: (161,58)) | nothing sent; hits went on; died +0.9 | a | 6.4 s late |
+| p38 1347.6 | loot (0,0), v 336 | Cookie (-1,-1), attacking | a WALK to (0,+1) | b | held 4.3 s |
+| p38 1364.6 | scan (0,-1), v 360 (her feet) | Cookie (-1,-1), attacking | nothing sent | c | held 4.3 s |
+| p38 1460.4 | loot (0,0), v 336, after a FALSE kill-gap kill | Myst Case (0,-1), alive | nothing sent; hits went on; died +2.05 | a | 3.9 s late |
+| p39 1375.6 | loot (0,0), 4 clicks, after a FALSE kill-gap kill | Myst Case (-1,+1), attacking | walks to (0,+1), (0,+2); the 4th click attacked (+2.2 s) | b | ~2.2 s |
+| p40 1021.2 | scan (0,-1), v 360 (feet) | Garm Baby (-1,0), attacking (misses) | nothing sent | c | ~7.7 s to the next real strike |
+| p42 1353.3 | loot (0,+1), v 312 | none attacking; Myst Case (+1,+1) | walks to (0,+2), (0,+4) | b | 7.3 s |
+| p44 210.0 | scan (0,+1), v 336 | a Cruiser AT (0,+1), being hit (shot 14: "Cruiser" under the pointer) | nothing sent; hits went on; died +2.0 | a | 2.3 s late |
+| p44 220.0 | loot (0,+1), v 336 | nothing adjacent (Cruiser (-3,+1)); shot 15: her OWN name under the pointer | a walk to (0,+2) | b | 4.35 s |
+| p45 732.5 | loot (0,0), after a FALSE kill-gap kill | Myst Case (-1,0), alive | nothing sent; it died +0.04 | a | 2.3 s late |
+| p46 1111.7 | scan (0,-1), v 360 (feet), 4 clicks | nothing within 3 cells; a Cruiser (0,-4) attacking | nothing; the later clicks attacked the Cruiser (+2.6 s) | c | ~2.6 s |
+| p46 1217.1 | loot (0,0), v 336 | none attacking; Christmas Cookie (0,-2) | a walk to (0,+1) | b | 4.3 s |
+| p47 1225.1 | scan (0,+1), v 309 (recheck 0.753 -> 0.851) | Myst Case (0,-1), attacking | a walk to (0,+2); then the same sword and a 2nd strike | b | 4.8 s |
+
+- **15 strikes, three kinds:**
+  - **a, 6 -- ALREADY HITTING:** the client was attacking that very monster and kept hitting it
+    through the click; nothing was lost by the strike, the scorer's class D (no NEW request) is
+    true but not a miss. They come from the Battle Log reader not reading our damage: 4 follow an
+    "unlock: no hits" while we hit (the reader's lines garbled, 0 damage lines read), 2 a FALSE
+    kill-gap kill and the loot step's hover. Such unlocks: 0-5 a run (p40-p47: 9 in 7 runs), with
+    repeat cells ((161-162, 58) in p36 and p38; (119-120, 79-80) in p36, p37, p42).
+  - **b, 6 -- THE CLICK WALKED:** the point resolved to the floor behind her, a walk of 1-2 cells
+    north; 5 of the 6 are the loot step's hover of her own cell ((0,0) / (0,+1)), which has NO
+    self-recheck (the scan's `--self-recheck` passed the 6th).
+  - **c, 3 -- THE CLICK ON HER FEET:** the scan's (0,-1) point (v 360) is her own feet; nothing
+    sent; an attacker at (-1,-1) / (-1,0), or none adjacent.
+  - By path: scan 8 (a 4, b 1, c 3), loot step 7 (a 2, b 5). A monster stood within 1 cell at
+    12 of the 15 clicks; of all 69 own-body strikes, 54 started an attack, mostly on such
+    neighbours: the sword on her sprite is usually real, the click is what fails.
+  - Time lost: kind a ~21 s in all (the late kills, the reader's), b ~27 s, c ~15 s: ~63 s in
+    11 runs, ~6 s a run.
+- **Trend or noise:** the base runs (R1's pool), in order: p33 1, p35 0, p36 1, p40 1, p41 0,
+  p42 1, p44 2, p45 1, p46 2, p47 1 -- mean 1.0 a run.
+  - Poisson dispersion: chi-square 4.0 on 9 df, p 0.91 (no excess spread); with the trial runs
+    p34 2, p37 1, p38 4, p39 1 as well, mean 1.29, chi-square 10.0 on 13 df, p 0.69.
+  - Trend: a score test over the run order z 0.99 (p 0.32); the last 4 runs (6) against the 6
+    before (4): binomial p 0.17 by runs, 0.21 by strikes; the D share of own-body strikes 6 / 24
+    vs 4 / 36, Fisher p 0.18. No trend shown (10 runs give the test little power; the recent
+    changes add no measurable rise).
+  - The bar: at a steady 1.0-1.29 a run, a 4-run pool reaches >= 7 (R1 fails) with probability
+    0.11-0.26, and >= 6 with 0.22-0.41. R1 = 6 in p46 and p47 is inside that noise.
+
+**S-R1 proposals (none built, none pre-registered; for Batt):**
+1. **R1-A, the scorer (no runner change):** an own-body strike counts as class D only if it LOST
+   an attack -- not when our damaging hits on a monster within 1 cell go on across the click (a
+   hit on the same monster within 1.0 s before it, and the next hit or its death within 1.0 s
+   after). Effect: 15 -> 9 in p36-p47;
+   the pools p44 / p45 / p46 / p47: 3 / 2 / 4 / 4 (as scored: 4 / 4 / 6 / 6). Risk: it would hide
+   a strike on another monster; all 6 here continued on the same target. A bar's definition:
+   Batt's OK, written before the next pilot.
+2. **R1-B, the loot step's own-sprite sword:** the scan's `--self-recheck` (a second read 0.4 s
+   later must be a sword too) also for the loot step's hovers inside her sprite box. Aimed at
+   kind b (5 of 6). The loot path's 23 own-body strikes that did start an attack keep a
+   persisting sword; how many b's a recheck removes is unknown (it passed the scan's one) -- so
+   measure it. Cost ~0.4 s x ~3 a run. Risk: a real attacker skipped for one hover (the defend
+   scan still finds it).
+3. **R1-C, no click on her feet point:** kind c's (0,-1) point at v 360 lies on her feet; strike
+   that cell lower (its ground point outside the sprite box) or skip it when the ring's (+-1,-1)
+   cells are hovered. 3 of 15; `--skip-own-cells` (9.9) stays off (Amendment L, 4): it would
+   drop the good own-sprite strikes too.
+4. **R1-D, upstream of kind a:** the Battle Log reader's blind cells (garbled lines while we hit;
+   a spot-dependent background, as the readout's): a study of its own; nothing for R1 directly.
+5. **R1-E, the bar:** keep <= 6 knowing it fails by chance 11-26 % of the time at today's rate,
+   or set it from the rate (a pool at 4.0 reaches >= 9 with p 0.02). Batt's choice.
+- **What a pre-registration would measure:** own-body class D by kind (a / b / c) and by path; the
+  R1 pool both as scored and under R1-A; loot-step own-sprite rechecks and the transient ones;
+  own-body strikes that started an attack (54 of 69 now: must not fall); the time held on
+  own-body D strikes.
