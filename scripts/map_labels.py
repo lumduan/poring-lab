@@ -312,6 +312,10 @@ GEF10 = MapSpec(
 XD = Path("/dev/shm/poring-lab-tmp/xmas-det")
 XMAS02_X2 = "20261105T225409-rdp-xmas02-x2"  # 2e (D8): TEST-P, refused for FIT and TRAIN
 XMAS02_GW3 = "-rdp-gb-gw3"  # Amendment M: the held-out Garm Baby watch (`--label gb-gw3`)
+# Amendment O1 (2026-11-10): the floor items' held-out, fresh base pilots recorded beside the
+# runner (`--label hunt-xmas02-fiT<n>`): refused by NAME before any of them records, for the
+# monster labels, T2's pool and the cache as for TEST; NOT in eval_suffixes (the item model's)
+XMAS02_FIT = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xmas02-fiT3")
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),
@@ -336,7 +340,7 @@ XMAS02 = MapSpec(
     t2_salt="xmas02",
     # 3b: TEST by NAME; Amendment M (2026-11-09): + gw3, the Garm Baby watch on 3a's TEST stands,
     # held out until the model is frozen (refused by labels / pack / the cache like xw5)
-    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3),
+    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT),
     # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier
     conditional=(1607,),
     # 6: the multi-view reference beside the map's species: Stormy Knight, Poring, Santa Poring

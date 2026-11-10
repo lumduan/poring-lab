@@ -1437,6 +1437,24 @@ def test_m_gw3_is_refused_by_name_and_gw1_gw2_are_train(
     olf._JOB.clear()
 
 
+def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
+    """Amendment O1 (2026-11-10): fiT1-fiT3, the floor items' held-out recorded pilots, are
+    refused by NAME before any of them records (labels, T2's pool), like gw3; other hunt
+    recordings are not."""
+    spec = ml.XMAS02
+    for n in (1, 2, 3):
+        sid = f"20261110T110000-rdp-hunt-xmas02-fiT{n}"
+        assert spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
+    for sid in ("20261109T133046-rdp-hunt-xmas02-p38", "20261110T110000-rdp-hunt-xmas02-fiT12",
+                "20261110T110000-rdp-hunt-xmas02-fi1"):  # fmt: skip
+        assert not spec.is_test(sid, None), sid
+    t1 = "20261110T110000-rdp-hunt-xmas02-fiT1"
+    with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{t1}"))
+    with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+        ml.pack_pool([_xdoc(tmp_path, GW1, [1515]), _xdoc(tmp_path, t1, [1249])], spec, "/nas")
+
+
 def test_t2_the_cache_refuses_test_label_files(tmp_path: Path) -> None:
     """build_frame_cache --labels map (MapLabelInputs): an xmas02 TEST label file is never cached;
     a TRAIN one is taken (its join rule is the own-C1 check's)."""
@@ -1680,7 +1698,10 @@ def test_t9_eval_flags_are_per_map() -> None:
     assert ml.eval_test2_refusal(ml.GEF10, A9, None) is None  # gef10's rule, unchanged
     # TEST's names are the evaluation's, plus Amendment M's held-out gw3: refused like TEST, its
     # scoring (and the flag that reads it) left to the amendment after the model is frozen
-    assert x.test_suffixes == x.eval_suffixes and ml.XMAS02_GW3 in x.eval_suffixes  # M7
+    # Amendment O1 (2026-11-10): + the floor items' held-out names, refused like TEST but not M7's
+    assert set(x.test_suffixes) - set(ml.XMAS02_FIT) == set(x.eval_suffixes)
+    assert ml.XMAS02_GW3 in x.eval_suffixes  # M7
+    assert not set(ml.XMAS02_FIT) & set(x.eval_suffixes)
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
         ml.eval_flag_of(_ns(eval_test=True, eval_test2=True))

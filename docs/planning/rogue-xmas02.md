@@ -1895,6 +1895,24 @@ Batt's answers to the 09:21 report (quoted, then in English):
 - **Decisions:** C1 and every p45 bar pass -> `--garm-fly --garm-confirm 2` JOINS THE BASE. P1 with
   n = 0 is NO VERDICT and does not block. P2 fails -> off (studied). C1 fails -> no pilot; studied.
 
+### 4BF. Pilot p46 pre-registration: the base, unchanged, RECORDED as the floor items' held-out fiT1 (written BEFORE its run, 2026-11-10 10:4x ICT)
+
+- **Why:** xmas02-detector.md O1 needs fresh recorded base pilots as the floor-item model's
+  held-out (fiT1, fiT2). The run is the base as it stands since p45 (p16 + `--reach-check
+  --far-single --far-approach --explore --walk-pick --kill-gap --loot-first --walk-pick-step
+  --quiet-scan --garm-fly --garm-confirm 2`). Nothing in the runner changes.
+- **The recorder beside it:** `record_session.py --backend rdp --label hunt-xmas02-fiT1 --seconds 1620
+  --fps 1 --format png --max-bytes 6G` (as p38 / p39: R2-H1 / H2), started just before the runner. The
+  name is refused by map_labels before it records (O1). The session stays unopened until the item
+  model is frozen. It ships to the NAS after its run (`dataset_ship.py`), verified.
+- **The run:** label `xmas02-p46`, 25 min, immunity OFF, the MVP dead by the schedule.
+- **Bars:** the base's (Amendment O + 4BE): W1 pooled (p46 + p45 + p44 + p42) <= 2.0 %, L1 >= 50 %, L3
+  >= 80 %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %, E1 >= 80 / h, U1 <= 30 s, D1 p95 <= 35 ms, R1 pooled <= 6,
+  Q1 <= 8, E3, deaths 0, P2 = 0. P1 is reported. The recorder's cost is reported (D1, E1 against
+  p44 / p45).
+- **Decisions:** none ride on it. It is the base's confirmation run and the item data's held-out. A
+  failed bar is studied, as for p41.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

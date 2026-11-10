@@ -2826,3 +2826,27 @@ it can follow from (b)'s labels.
 7. The O.1b / O.1e numbers are FIT's (one recording, 13-16 floor items, 51 % of its kept labels
    Scell); DEV agrees on the anchor, the scale and the fit offsets but has one bad item (Manacles);
    p20 / p39 stay untouched.
+
+### Amendment O1 (2026-11-10 10:4x ICT, the parent, under Batt's go-ahead): Amendment O ACCEPTED with its proposed defaults
+
+- **Authority:** Batt, before 09:40 ICT: "สอน เทรนแยกเลย เพื่อความมั่นใจและรวมเร็วในการเก็บของ" (teach
+  it; train it separately, for confidence and faster looting). The parent accepts O.12's defaults:
+  - O-D1 (b): a SEPARATE one-class item model `xmas02-fi` (Batt's "train separately");
+  - O-D2: the rule `xmas02-fi-1` with FIT's values, frozen when its tool (T-O1) first writes the
+    params file;
+  - O-D3: the split (p31 -> VAL; p38 + p20 + p39 -> TRAIN by the join rule; p30 out);
+  - O-D4: fs1, the immune staged-drop watch, after T-O4's live icon proof;
+  - O-D5: the held-out fiT1 + fiT2 (fiT3 if I2 is short), fresh base pilots recorded 1 fps PNG;
+  - O-D6: T2-items with its strata, bars and fallbacks;
+  - O-D7: 20 epochs, [floor_item], init xmas02-gb last.pt;
+  - O-D8: the bars I1-I5;
+  - O-D9: a shadow pilot before any loot skip goes live.
+  Batt may still change any of them; nothing below has trained or labelled yet.
+- **Done at acceptance (before any fiT recording):** `map_labels.XMAS02_FIT` = the names
+  `-rdp-hunt-xmas02-fiT1..3`, in the xmas_dun02 MapSpec's `test_suffixes` (refused by NAME for the
+  monster labels, T2's pool and the cache), NOT in its `eval_suffixes` (M7's monster evaluation is
+  unchanged). Test: `test_o1_the_floor_item_held_out_is_refused_by_name`.
+- **Next:**
+  - fiT1 is recorded beside the day's next base pilot (rogue-xmas02.md 4BF);
+  - the tools T-O1..T-O5 are built offline in a tmpfs worktree;
+  - then fs1, T2-items, the cache, the training, and the evaluation, in O's order.
