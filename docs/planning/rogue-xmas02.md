@@ -2141,6 +2141,38 @@ the detect server, come after the training):
 - **Decision:** none to take: a confirmation run of the base and round 3's first pilot held-out. A
   failed bar is studied before p55.
 
+### 4BR. Pilots p55 + p56 pre-registration: --lead-press (LS-1, dungeon@9.24) on the new base, two runs pooled; recorded fiT8 / fiT9 (written BEFORE either run, 2026-11-11 06:30 ICT from `date`)
+
+- **Authority:** Batt, 4BP item 4 ("try it: with the GPU the aim should be faster").
+- **The change** (38305666 + d81be893, OFF by default), on top of LS-2:
+  - when LS-2's press check finds the box's foot moved >= 15 px (LEAD_PX) between D1 and D2, LS-1
+    clicks a LED point instead of holding;
+  - the point is D2's hover point + v x (0.57 s + the time since D2's grab), capped at ONE cell
+    (Chebyshev, in cell units from the runner's own camera; 32 px only as a fallback);
+  - the led point must pass box_target's gates (far / skip / in view) and must not lie on her own
+    sprite. Else LS-2's hold;
+  - 10-15 px shifts still hold; the led point is NOT sword-checked (LS-1's known risk, recorded
+    `"sword": "unchecked"`);
+  - side effect, a dataset matter only: the name-tag bank reads the band under the led cell.
+- **The runs:** the base (4BQ's) + `--lead-press`, labels `xmas02-p55` (recorded `--label
+  hunt-xmas02-fiT8`) and `xmas02-p56` (`--label hunt-xmas02-fiT9`), 25 min each, the MVP dead by
+  the schedule, immunity OFF.
+- **Bars (pooled p55 + p56, against LS-2's p52 + p53):**
+  - **M1, no worse than LS-2:** late-FAILED box strikes <= 6 (LS-2's pool: 3 + 3);
+  - **M2, the led clicks** (`late_strike.py`: `led`, `led_outcomes`):
+    - led clicks that attacked their target >= 50 % (bar on >= 10 led clicks; fewer: NO VERDICT);
+    - led clicks that attacked ANOTHER monster <= 3 a run (the risk);
+  - **M3, no harm:** box strikes >= 50 a run; failed on-time box strikes <= 4 a run; the base's
+    bars (W1 and R1-A pooled over p56 + p55 + p54 + p53, L1, L3, L4, K1, K3, E1 >= 80 / h, U1, D1,
+    Q1, P2, E3, deaths 0);
+  - **reported:** hold time a run (LS-2: 12.8 / 19.3 s), the lost seconds, led clicks that walked,
+    the gates' fallbacks, LF-2's M1-M3.
+- **Decision:**
+  - every bar passes -> `--lead-press` JOINS THE BASE (a led click replaces the hold for >= 15 px
+    shifts);
+  - M2 NO VERDICT (fewer than 10 led clicks) -> reported, stays OFF;
+  - any bar failing -> LS-2 alone stays the base.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -4726,7 +4758,8 @@ Batt's answers (quoted, then in English):
    the press), because with the GPU detector the aim is fresher.
    - p14's `--lead-strike` (dropped, Amendment I) aimed from the CPU detector's older frames; LS-1
      leads from a D2 detection ~21 ms old.
-   - It is built behind its own flag, OFF by default, and pre-registered as 4BQ before its pilots.
+   - It is built behind its own flag, OFF by default, and pre-registered as 4BR before its pilots
+     (4BQ became p54's).
 
 **The order:** the LS-1 build (a subagent) and the misread study (live frames at (104,192), then
 offline) start now. The next MVP window runs p54 (the base, recorded fiT7), then p55 / p56
