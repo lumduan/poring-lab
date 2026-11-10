@@ -2008,6 +2008,24 @@ Batt's answers to the 14:1x report (quoted, then in English):
 - W1 is not LF-2's measure: its expected change, ~0.6 unsent clicks a run, is below a 4-run pool's
   noise (sd ~4.4).
 
+### 4BK. Pilot p49 pre-registration: --late-confirm REPEATED, recorded as the floor items' fiT3 (written BEFORE its run, 2026-11-10 18:51 ICT from `date`)
+
+- **Why:** p48 passed LF-2's own bars (M1 0, M2 8, M3 0) but failed E3 by its letter (a walk dead
+  end at (153,116), not the reader). Its E1 (129.6 / h) was the base's lowest. A replication
+  decides LF-2. The run is also the floor items' fiT3 (xmas02-detector.md O12: the held-out was
+  short).
+- **The run:** as p48 (the base + `--late-confirm`), label `xmas02-p49`, 25 min, immunity OFF, the
+  MVP dead by the schedule. Recorded: `record_session.py --backend rdp --label hunt-xmas02-fiT3
+  --seconds 1620 --fps 1 --format png --max-bytes 6G` (refused by name, not opened, shipped at once).
+- **Bars:** 4BJ's, unchanged (M1 <= 15, M2 <= 12, M3, the base's with W1 and R1-A pooled over p49
+  + p48 + p47 + p46).
+- **Decision:**
+  - every bar passes in p49 -> `--late-confirm` JOINS THE BASE (M1-M3 then passed twice);
+  - E1 in p48 + p49 averaging < 136 / h (p40-p47's lowest) is reported to Batt beside it, with
+    the time budget;
+  - a bar failing again -> LF-2 stays off and is studied.
+- LF-4 (`--unread-step`, merged OFF) gets its pilot after this one.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
@@ -4190,3 +4208,42 @@ Every own-body class-D strike, p36-p47 (t = seconds into the run; rel and positi
   R1 pool both as scored and under R1-A; loot-step own-sprite rechecks and the transient ones;
   own-body strikes that started an attack (54 of 69 now: must not fall); the time held on
   own-body D strikes.
+
+
+**Pilot p48 (4BJ; 18:23:14-18:49:04 ICT, 25 min; the MVP alive at (158,98) at 18:22:12, killed,
+"1[dead]" at 18:22:5x; immunity OFF 18:22:55, ON 18:49:35; the base + `--late-confirm` (LF-2, 9.21)).
+VERDICT: M1, M2, M3 PASS (LF-2 works as built); every base bar but E3 PASSES; E3 FAILS by its letter
+(ONE stuck Fly Wing, studied below: a walk dead end, not LF-2's). By 4BJ's letter `--late-confirm`
+does NOT join the base yet -> a replication, p49 (4BK).**
+
+| | baseline p40-p47 (a run) | **p48 (+ --late-confirm)** | bar |
+|---|---|---|---|
+| M1 late unconfirmed-only spans | 44.1 | **0** | <= 15: PASS |
+| M2 stale walks | 19.1 (landing >= 5: 44.9 %) | **8** (landing >= 5: 6) | <= 12: PASS |
+| M3 wrong standing fresh reads / jumps | 1 in 11 runs / 0 | **0 (2,011 standing reads) / 0** | <= 1 / 0: PASS |
+| reported: lf2 outcomes / held reads within 1 cell | - | **ok 35, base 2 / 36 of 37** | - |
+| reported: fresh share / persistent spans / gaps >= 20 s / pos_unread wings | 94.1 % / 4.6 / 1.6 / 0.29 | **97.9 % / 1 (15.2 s) / 0 / 0** | - |
+| W1 walk clicks never sent | | **8 / 400 (2.0 %); pooled p48 + p47 + p46 + p45 = 21 / 1,192 (1.76 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 (start) / L4 | | **95 % (19 / 20) / 96 % (48 / 50) / 0 of 80** | PASS |
+| K1 / K3 | | **1.99 s / 96 % (48 / 50)** | PASS |
+| E1 kills | p40-p47: 136-158 / h | **54 (129.6 / h)** | >= 80 / h: PASS (the lowest base run) |
+| U1 stuck / D1 GPU p95 | | **5.4 s / 22.6 ms** | PASS |
+| R1-A pooled p48 + p47 + p46 + p45 (old count) | | **0 + 1 + 2 + 0 = 3 (old 1 + 1 + 2 + 1)** | < 7: PASS |
+| Q1 / P2 | | **6 (found 0) / 0** | PASS |
+| E3 / deaths | | **hard bars pass; 1 Fly Wing (stuck); 5 stalls; lowest HP 66 %; 0 deaths** | E3: **FAIL** |
+
+- **The stuck Fly Wing (studied):**
+  - at 1286.4 s, on (153,116);
+  - every read there was a fresh BASE read and right (no light read, no LF-2 outcome; the packets
+    show her standing);
+  - the route toward (84,94) went east: three walk targets (160,116)-(160,118) read "no entry" on
+    the cursor (red 201-270) and were carved, then a stall and the stuck rule's wing;
+  - a walk dead end of the route / no-entry carve kind (4G's family), not the position reader.
+- **What changed besides the mechanism:**
+  - 400 walk clicks (p45-p47: 252-280);
+  - the time budget against p44: search walk 401 vs 310 s, 2,655 vs 2,233 cells walked, approach
+    9.1 vs 14.5 %, box targets 91 vs 116, kills per sighting 0.87 vs 1.12 (seen 62);
+  - LF-2 lets walks go on where a held read used to make her wait. Whether that costs kills, or
+    p48 is noise (E1 129.6 against 136-158), one run cannot say.
+- **Items per hour (x 60 / 25.0):** Scell 17 (40.8), Zargon 16 (38.4), Piece of Cake 8 (19.2),
+  Well-baked Cookie 7 (16.8), Candy 5 (12.0), Iron 2, Manacles 2 (4.8), Red Herb, Sandals, Hood 1 (2.4).
