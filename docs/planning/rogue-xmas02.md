@@ -3859,3 +3859,41 @@ rides on p46 (4BF).**
 - p47 runs after the MVP's next kill (its 10:52 kill allows no run past 11:52).
 - **Lesson for the next pilots:** check the weight before each run; it climbs ~0.06-0.08 a run
   with the current loot (p44 0.33 -> 0.39; p46 ended 0.50).
+
+**Pilot p47 (4BG; 12:02:10-12:28:02 ICT, 25 min; the MVP alive at (57,120) at 12:01:03, killed,
+"1[dead]" at 12:01:4x; immunity OFF 12:01:44, ON 12:28:31; weight 570 / 2430 at the start after the
+11:25 bag clear; the base unchanged; RECORDED as fiT2). VERDICT: every bar but E3 PASSES; E3 FAILS by
+its letter: ONE stuck Fly Wing (`pos_unread`). Studied below: the light-floor position reader, not a
+change of today's. No decision rides on p47 (4BG).**
+
+| | p45 | p46 | **p47 (base, recorded)** | bar |
+|---|---|---|---|---|
+| W1 walk clicks never sent | 4 / 260 | 5 / 252 | **4 / 280 (1.43 %); pooled p47 + p46 + p45 + p44 = 19 / 1,081 (1.76 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 (by start; by end) / L4 | 94.7 % / - / 0 | 96.2 % / 93.8 % (76.9 %) / 0 | **100 % (21 / 21) / 96.6 % (57 / 59) (89.8 %) / 0 of 101** | PASS |
+| K1 / K3 | 1.98 s / 97.0 % | 1.96 s / 95.4 % | **1.96 s / 100 % (59 / 59)** | PASS |
+| E1 kills | 158.4 / h | 158.4 / h | **60 (143.8 / h)** | >= 80 / h: PASS |
+| U1 stuck / D1 GPU p95 | 0 s / 26.2 ms | 0 s / 22.9 ms | **0 s / 22.5 ms (p50 20.9; 1,559 calls)** | PASS |
+| R1 own-body D, pooled p47 + p46 + p45 + p44 | | | **1 + 2 + 1 + 2 = 6** | <= 6: PASS (at the limit) |
+| Q1 quiet defend scans | 5 | 6 | **4 (found 0)** | <= 8: PASS |
+| P2 / P1 | 0 / n = 0 | 0 / n = 0 | **0 / n = 0** (1 single false dog box at 1387.8 s, on our own spot, filtered) | PASS / NO VERDICT |
+| E3 / deaths | | | **hard bars pass; 1 Fly Wing (stuck, `pos_unread`); 2 stalls; lowest HP 89.5 %; 0 deaths** | E3: **FAIL**; deaths PASS |
+| reported: S1 / no-kill fights | 11.2 / 44 | 8.8 / 32 | **5.2 / 41, 236.2 s** | - |
+
+- **The Fly Wing (studied):** from 770.0 s every position read at (101,208) failed with
+  `light_failed:uncovered_ink`. That is the light-strip readout's known limit (X1b: rounds 1-3,
+  4D-4F; p5's reader: 96.1 % live reads). The reader held the last position.
+  - The Rogue fought 3 monsters on that spot (kills at 775.0, 787.1 and the fight end at 797.0),
+    with loot steps between.
+  - After the last loot step (800.7 s), the runner's `stuck` rule (`why: pos_unread`, ~31 s
+    without a fresh read) pressed the Fly Wing (800.9 s), its designed safe escape.
+  - The reader, its rule and the escape are unchanged since 11-05; nothing changed today touches
+    them.
+  - The single dog box (1387.8 s, 0.684, (584,332)-(654,391) beside our player box (624,296)-
+    (657,365); no dog in the packets) was never confirmed: --garm-confirm 2 filtered it, as in
+    p44 / p45. False one-detection dog boxes so far: p44 1, p45 2, p47 1, all at our own spot.
+- **The recording fiT2:** `20261110T120155-rdp-hunt-xmas02-fiT2`, PNG, 1 fps, 27 min. NOT OPENED;
+  it ships after the SET close.
+- **Sight:** 73 seen (29.2 / 10 min; Myst Case 35, Cruiser 19, Cookie 11, Christmas Cookie 8);
+  kills per sighting 0.82. 169 reach skips (p46 62).
+- **Items per hour (x 60 / 25.0):** Zargon 18 (43.2 / h), Scell 13 (31.2), Well-baked Cookie 7 (16.8),
+  Manacles 7 (16.8), Piece of Cake 3 (7.2), Candy 2 (4.8), Red Herb, Candy Cane, Pearl 1 each (2.4).
