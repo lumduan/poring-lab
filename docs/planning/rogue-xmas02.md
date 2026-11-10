@@ -3888,11 +3888,14 @@ change of today's. No decision rides on p47 (4BG).**
 | R1 own-body D, pooled p47 + p46 + p45 + p44 | | | **1 + 2 + 1 + 2 = 6** | <= 6: PASS (at the limit) |
 | Q1 quiet defend scans | 5 | 6 | **4 (found 0)** | <= 8: PASS |
 | P2 / P1 | 0 / n = 0 | 0 / n = 0 | **0 / n = 0** (1 single false dog box at 1387.8 s, on our own spot, filtered) | PASS / NO VERDICT |
-| E3 / deaths | | | **hard bars pass; 1 Fly Wing (stuck, `pos_unread`); 2 stalls; lowest HP 89.5 %; 0 deaths** | E3: **FAIL**; deaths PASS |
+| E3 / deaths | | | **hard bars pass; 1 Fly Wing (stuck, `pos_unread`, on a "dead cell" at (112,207): ➡️ Study S-LF 2f); 2 stalls; lowest HP 89.5 %; 0 deaths** | E3: **FAIL**; deaths PASS |
 | reported: S1 / no-kill fights | 11.2 / 44 | 8.8 / 32 | **5.2 / 41, 236.2 s** | - |
 
-- **The Fly Wing (studied):** from 770.0 s every position read at (101,208) failed with
-  `light_failed:uncovered_ink`. That is the light-strip readout's known limit (X1b: rounds 1-3,
+- **The Fly Wing (studied):** from 770.0 s every position read failed with
+  `light_failed:uncovered_ink`. ➡️ CORRECTED by Study S-LF (2f, end of this section):
+  (101,208) was the HELD position. The packets put her at (112,207) from 767.0 s: a box strike
+  at rel (8,0) at 765.53 s walked her 11 cells east. Every read there failed (1 unconfirmed, then
+  66 uncovered_ink), and the wing came 37.0 s after the last fresh read. That is the light-strip readout's known limit (X1b: rounds 1-3,
   4D-4F; p5's reader: 96.1 % live reads). The reader held the last position.
   - The Rogue fought 3 monsters on that spot (kills at 775.0, 787.1 and the fight end at 797.0),
     with loot steps between.
