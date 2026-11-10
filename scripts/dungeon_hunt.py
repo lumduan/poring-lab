@@ -341,6 +341,14 @@ GARM_CONFIRM = 1
 # or more away clicks ONCE and waits FAR_BASE_S + FAR_PER_CELL_S a cell (at most FAR_MAX_S) for
 # the arrow or our damage line -- the walk-up included -- re-clicking never.
 FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S = 4, 1.0, 0.2, 3.5
+# --near-single (dungeon@9.25, rogue-xmas02.md Study S-LF5 proposal R2; Batt 2026-11-11 "study and
+# fix" the (104,192) "misread"): the same one-click rule from 2 cells. In p40-p53 the burst's
+# re-click at 2-3 cells never helped (every first click that sent anything sent it within 0.375
+# s) but walked her >= 2 cells off a live target 26 times in 68 re-clicks (~21 s a run), and one
+# such floor walk, acked inside her attack motion, was cut short by the client: the 2.6-s
+# client / server desync of p53. 0-1 cells keep the burst (20 strikes there sent nothing at first).
+NEAR_SINGLE_VERSION = "9.25"
+NEAR_SINGLE_CELLS = 2
 # --far-approach (dungeon@9.10, rogue-xmas02.md 4AC): p19 (--far-single) still missed 26 of 28
 # strikes 9+ cells away (7-8 cells: 6 of 20; 2-6: 4 of 24): too far for one click to carry. So a
 # box target APPROACH_CELLS or more away is walked toward first -- a walk click on the cell
@@ -1649,6 +1657,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
+    if getattr(a, "near_single", False):  # dungeon@9.25 (S-LF5 R2)
+        out["near_single"] = [NEAR_SINGLE_CELLS, NEAR_SINGLE_VERSION]
     if getattr(a, "box_every", BOX_EVERY_S) != BOX_EVERY_S:  # dungeon@9.11 (rogue-xmas02.md 4AD)
         out["box_every"] = float(a.box_every)
     if getattr(a, "far_approach", False):  # dungeon@9.10 (rogue-xmas02.md 4AC)
@@ -1895,11 +1905,12 @@ def approach_cell(rel: Sequence[int], keep: int = APPROACH_KEEP) -> tuple[int, i
     return (round(x * f), round(y * f))
 
 
-def far_window(rel: Sequence[int]) -> float | None:
+def far_window(rel: Sequence[int], from_cells: int = FAR_CELLS) -> float | None:
     """PURE (--far-single): how long a strike at ``rel`` waits for its arrow / damage line with
-    ONE click, or None when it is nearer than FAR_CELLS (the burst as before)."""
+    ONE click, or None when it is nearer than ``from_cells`` (FAR_CELLS; --near-single, 9.25:
+    NEAR_SINGLE_CELLS) -- the burst as before."""
     cells = max(abs(int(rel[0])), abs(int(rel[1])))
-    if cells < FAR_CELLS:
+    if cells < from_cells:
         return None
     return min(FAR_MAX_S, FAR_BASE_S + FAR_PER_CELL_S * cells)
 
@@ -2619,6 +2630,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                       getattr(a, "lead_strike", False))  # fmt: skip
         if why_st:
             raise SystemExit(f"dungeon@9.23 refused: {why_st}")
+    if getattr(a, "near_single", False) and not getattr(a, "far_single", False):
+        raise SystemExit("dungeon@9.25 refused: --near-single needs --far-single (it moves its "
+                         "one-click rule from 4 cells to 2)")  # fmt: skip
     if getattr(a, "lead_press", False):  # dungeon@9.24 (LS-1): never silently LS-2 alone
         why_lp = lead_press_refused(getattr(a, "still_target", False),
                                     getattr(a, "lead_strike", False))  # fmt: skip
@@ -3465,7 +3479,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             cur = ref
             quick = bool(getattr(a, "quick_drop", False))
             burst_s = QUICK_ARROW_S if quick else BURST_MAX_S
-            far_w = far_window(rel) if getattr(a, "far_single", False) else None
+            far_from = NEAR_SINGLE_CELLS if getattr(a, "near_single", False) else FAR_CELLS
+            far_w = far_window(rel, far_from) if getattr(a, "far_single", False) else None
             if far_w is not None:  # dungeon@9.8: one click, the walk-up's own time
                 burst_s = far_w
             while time.monotonic() - t_c < burst_s:
@@ -5645,6 +5660,13 @@ def main() -> int:
         help="dungeon@9.8 (rogue-xmas02.md 4Z, pilot p18; OFF by default): a strike 4+ cells away "
         "clicks ONCE and waits 1.0 s + 0.2 s a cell (<= 3.5 s) for the arrow / damage, never "
         "re-clicking while the camera scrolls (a re-click landed on the floor)",
+    )
+    t.add_argument(
+        "--near-single",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.25 (rogue-xmas02.md Study S-LF5 R2; OFF by default): --far-single's "
+        "one click from 2 cells instead of 4 (the 2-3-cell re-click walked her off the target)",
     )
     t.add_argument(
         "--engage-screen",

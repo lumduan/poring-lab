@@ -2512,3 +2512,19 @@ def test_cell_steps_on_the_runner_camera() -> None:
     assert capped and rule == "cell" and [round(x, 1) for x in lead] == [0.0, 23.8]
     lead, capped, _ = dh.lead_cap((60.0, -40.0), ex, ey)  # diagonal: one diagonal step
     assert capped and [round(x, 1) for x in lead] == [34.1, -22.7]
+
+
+def test_near_single_9_25_moves_the_one_click_rule_to_two_cells() -> None:
+    """dungeon@9.25 (S-LF5 R2): --near-single clicks once from 2 cells (0-1 keep the burst); the
+    default stays 4; it needs --far-single; the fixes record carries it only when on."""
+    assert dh.far_window((0, 3)) is None and dh.far_window((4, 0)) == 1.8
+    assert dh.far_window((0, 3), dh.NEAR_SINGLE_CELLS) == 1.6
+    assert dh.far_window((2, -1), dh.NEAR_SINGLE_CELLS) == 1.4
+    assert dh.far_window((1, 1), dh.NEAR_SINGLE_CELLS) is None
+    assert dh.NEAR_SINGLE_CELLS == 2 and dh.NEAR_SINGLE_VERSION == "9.25"
+    base = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                                 rest="spot", npc_guard=False, far_single=True)  # fmt: skip
+    assert "near_single" not in dh.fixes_of(base)
+    on = dh.argparse.Namespace(**{**vars(base), "near_single": True})
+    assert dh.fixes_of(on)["near_single"] == [2, "9.25"]
+    assert dh.fixes_of(on)["far_single"] == dh.fixes_of(base)["far_single"]
