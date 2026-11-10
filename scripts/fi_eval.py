@@ -263,6 +263,13 @@ def nearest_rank(values: Sequence[float], q: float) -> float:
     return float(s[max(1, math.ceil(q / 100 * len(s))) - 1])
 
 
+def cpu_latency_models(doc: Mapping[str, Any]) -> Mapping[str, Mapping[str, Any]]:
+    """eval_latency.py writes its per-model summaries under "ms" (O14 found it: the file was passed
+    as its "ms" block by hand). Accept that output as it is, or a bare {model: summary} map."""
+    ms = doc.get("ms")
+    return ms if isinstance(ms, Mapping) else doc
+
+
 def i5(gpu_ms: Sequence[float] | None, cpu: Mapping[str, Mapping[str, Any]] | None,
        item: str | None, deployed: str | None) -> dict[str, Any]:  # fmt: skip
     out: dict[str, Any] = {}
@@ -367,7 +374,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--key", type=Path, required=True)
     ap.add_argument("--evaluated", type=Path, required=True, help="fi_blind_score --both-good")
     ap.add_argument("--gpu-timing", type=Path, default=None, help="predict_dir --timing output")
-    ap.add_argument("--cpu-latency", type=Path, default=None, help="eval_latency.py output")
+    ap.add_argument("--cpu-latency", type=Path, default=None,
+                    help="eval_latency.py output (or a bare {model: summary})")  # fmt: skip
     ap.add_argument("--cpu-item", default=None)
     ap.add_argument("--cpu-deployed", default=None)
     ap.add_argument("--out", type=Path, required=True)
@@ -391,7 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.loads(a.gpu_timing.read_text())["timing_ms"]["per_frame"].values()
         )
     if a.cpu_latency is not None:
-        latency["cpu"] = json.loads(a.cpu_latency.read_text())
+        latency["cpu"] = cpu_latency_models(json.loads(a.cpu_latency.read_text()))
     res = evaluate(docs, preds, crops, anchor, latency)
     res.update(
         {

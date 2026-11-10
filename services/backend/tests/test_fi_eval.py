@@ -250,3 +250,12 @@ def test_main_reads_the_files(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="eval-test"):
         fe.main(["--labels", str(lab), "--predictions", f"gpu={pred}", "--key", str(kp),
                  "--evaluated", str(both), "--out", str(out)])  # fmt: skip
+
+
+def test_cpu_latency_reads_eval_latencys_own_output() -> None:
+    # O14: eval_latency.py nests the per-model summaries under "ms"; fi_eval read only the bare map
+    summ = {"fi": {"n": 300, "p95": 757.3}, "gb": {"n": 300, "p95": 726.1}}
+    assert fe.cpu_latency_models({"what": "x", "frames": 300, "ms": summ}) == summ
+    assert fe.cpu_latency_models(summ) == summ
+    out = fe.i5(None, fe.cpu_latency_models({"ms": summ}), "fi", "gb")["cpu"]
+    assert out["ratio"] == round(757.3 / 726.1, 4)
