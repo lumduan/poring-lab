@@ -1931,6 +1931,18 @@ Batt's answers to the 09:21 report (quoted, then in English):
 - **Bars:** 4BF's, pooled over p47 + p46 + p45 + p44 (W1 <= 2.0 %, R1 <= 6), with L3 by the start.
 - **Decisions:** none ride on it; a failed bar is studied.
 
+### 4BH. Amendment Q (2026-11-10, Batt's answers received by 13:38 ICT from `date`): L3 by the start; two studies in parallel
+
+- L3 judged by the loot step's START (4BG, from p47 on): "รับทราบ" (acknowledged).
+- The optional studies of the 13:24 report (item 9.4): "ทำคู่ไปด้วย" (do them in parallel). Both
+  are offline studies; they decide nothing:
+  - **S-LF, the light-floor position reader:** where and how often `light_failed` reads occur in
+    the base runs (p40-p47), how long a stale position lasts, the `pos_unread` escapes (p47's one
+    Fly Wing), and what a fix could be (none pre-registered yet);
+  - **S-R1, own-body class D at its limit:** R1 pooled reached 6 (its bar) in p46 and p47. Which
+    strikes, where, why, and whether it is a trend or noise.
+- Each study ends in a proposal; any runner change gets its own pre-registration and pilot.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

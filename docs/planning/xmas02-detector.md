@@ -3042,3 +3042,10 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   12 ids at >= 10 boxes. That is over >= 300 / >= 40 / >= 8 ids: **MET. No fs2.**
 - **Next:** T2-items (O.5: the pack from the TRAIN label files, seed 61, two NEW blind labellers,
   the bars and fallbacks), then the cache, the training (O-D7) and the evaluation on fiT1 + fiT2.
+
+### Amendment O7 (2026-11-10, Batt's answer received by 13:38 ICT from `date`): O's defaults CONFIRMED
+
+- Batt, to the 13:24 report's item 9.1 (the parent's O1 choices: a separate item model, the
+  staged-drop watch, the held-out fiT1 / fiT2, the bars I1-I5, Scell -> 11002 in the staged set):
+  "ทำได้เลย" (go ahead). O1's acceptance stands as Batt's. The queue is unchanged: the recordings
+  ship after the SET close, then T2-items (seed 61), the cache, the training, the evaluation.

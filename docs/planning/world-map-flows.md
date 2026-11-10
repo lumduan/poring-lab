@@ -188,6 +188,14 @@ Tap by tap:
 
 ## 9. Open (for Batt)
 
+➡️ ANSWERED by Batt (received by 13:38 ICT, 2026-11-10):
+- the /flows Map tab: KEEP it in /flows ("เก็บไว้ที่ /flows ดีกว่า จะได้เป็นสัดส่วน": better kept in
+  /flows, so each has its place). Both stay, as now;
+- the other spawns wandering: "ทำเป็น option ไว้" (make it an option): a toggle, decoration
+  only (round 5);
+- the Login list from config/environments.yaml: "รับทราบ" (acknowledged); it stays.
+
+
 - The /flows Map tab: keep both, or one of section 4's options.
 - Monsters on the map view are PLACED (a seed), not seen: should the run also show the map's other
   spawns wandering (decoration only), or only the one met (now)?
