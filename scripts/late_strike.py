@@ -60,7 +60,7 @@ import json
 import math
 import statistics
 from collections import Counter, defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -362,6 +362,29 @@ def det_grab(dets: Sequence[dict[str, Any]], box: Sequence[float], before: int,
     return None
 
 
+def strike_grab(bt: Mapping[str, Any], dets: Sequence[dict[str, Any]], t_click: int
+                ) -> tuple[int, str, str | None]:  # fmt: skip
+    """PURE: the grab a box strike's click is judged from, its source and the hold's end. Today's
+    strike: the struck box's detection (else the runner's stamp + GRAB_END_MS). A strike HELD by
+    --still-target (dungeon@9.23, LS-2; rogue-xmas02.md 4BO) clicked the hold's LAST matched box
+    (``press.box_end``), so its grab is that box's detection before the click, else D1's grab +
+    ``press.end_gap_ms``."""
+    t_stamp = int(bt["t_ns"] - float(bt["verdict_from_grab_ms"]) * 1e6)  # the runner's grab
+    press = bt.get("press") or {}
+    end = press.get("end")
+    t_grab = det_grab(dets, bt["box"], int(bt["t_ns"])) if bt.get("box") else None
+    src = "runner" if t_grab is None else "detection"
+    if t_grab is None:
+        t_grab = t_stamp + GRAB_END_MS * 1_000_000
+    if end == "still" and press.get("box_end"):
+        t_end = det_grab(dets, press["box_end"], t_click)
+        if t_end is not None:
+            return t_end, "hold_detection", end
+        if press.get("end_gap_ms") is not None:
+            return t_grab + int(float(press["end_gap_ms"]) * 1e6), "hold_gap", end
+    return t_grab, src, end
+
+
 def _xy(p: tuple[float, float, bool] | None) -> list[float] | None:
     return None if p is None else [round(p[0], 2), round(p[1], 2)]
 
@@ -386,10 +409,7 @@ def strike_rows(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, An
         if bt is None or bt.get("verdict_from_grab_ms") is None:
             continue
         t_stamp = int(bt["t_ns"] - float(bt["verdict_from_grab_ms"]) * 1e6)  # the runner's grab
-        t_grab = det_grab(dets, bt["box"], int(bt["t_ns"])) if bt.get("box") else None
-        grab_src = "runner" if t_grab is None else "detection"
-        if t_grab is None:
-            t_grab = t_stamp + GRAB_END_MS * 1_000_000
+        t_grab, grab_src, press_end = strike_grab(bt, dets, t_click)
         t_shown = t_grab - int(lag_s * NS)
         j = bisect.bisect_right(req_t, t_click)
         first = reqs[j] if j < len(reqs) and reqs[j][0] - t_click <= REQ_WIN_S * NS else None
@@ -400,7 +420,7 @@ def strike_rows(events: Sequence[dict[str, Any]], packets: Sequence[dict[str, An
         rec: dict[str, Any] = {
             "t_s": None if t0 is None else round((t_click - t0) / NS, 2), "t_ns": t_click,
             "rel": rel, "dist": dist, "band": band(dist), "end": st.get("end"),
-            "clicks": st.get("clicks"), "grab_src": grab_src,
+            "clicks": st.get("clicks"), "grab_src": grab_src, "press_end": press_end,
             "first_req": None if first is None else first[1],
             "first_req_to": None if first is None or first[1] != "self_move_request"
             else list(first[2]),

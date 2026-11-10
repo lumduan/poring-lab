@@ -234,3 +234,22 @@ def test_lag_profile_finds_the_drawn_lag() -> None:
     med = {lag: sorted(v)[len(v) // 2] for lag, v in prof.items()}
     assert len(prof[0.15]) == 4 and min(med, key=lambda lag: med[lag]) == 0.15
     assert med[0.15] < 1e-6 < med[0.0]
+
+
+def test_a_held_strike_is_timed_from_the_holds_last_matched_grab() -> None:
+    """4BO: --still-target's held strike (press.end "still") clicked press.box_end, so its grab is
+    that box's detection before the click; without it, D1's grab + end_gap_ms. Others unchanged."""
+    ns = 1_000_000_000
+    b1, b_end = [100.0, 100.0, 130.0, 150.0], [118.0, 104.0, 148.0, 154.0]
+    dets = [{"t_ns": 10 * ns, "ms": 40.0, "boxes": [b1]},
+            {"t_ns": 11 * ns, "ms": 40.0, "boxes": [b_end]}]  # fmt: skip
+    bt = {"t_ns": 10 * ns + 300_000_000, "verdict_from_grab_ms": 340.0, "box": b1}
+    t, src, end = lst.strike_grab(bt, dets, 11 * ns + 500_000_000)
+    assert (t, src, end) == (10 * ns - 40_000_000, "detection", None)
+    held = {**bt, "press": {"end": "still", "box_end": b_end, "end_gap_ms": 1000.0}}
+    t, src, end = lst.strike_grab(held, dets, 11 * ns + 500_000_000)
+    assert (t, src, end) == (11 * ns - 40_000_000, "hold_detection", "still")
+    t, src, _ = lst.strike_grab(held, dets[:1], 11 * ns + 500_000_000)
+    assert (t, src) == (10 * ns - 40_000_000 + 1000 * 1_000_000, "hold_gap")
+    today = {**bt, "press": {"end": "strike", "moved_px": 3.0}}
+    assert lst.strike_grab(today, dets, 11 * ns)[1] == "detection"
