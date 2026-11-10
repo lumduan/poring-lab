@@ -2965,3 +2965,18 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
     538, 539, 1098, 507, 529, 998, 722, 530, 756, 12001, 11002, in groups of 6.
   - `cut-grf --check` (it now also names the set's own ambiguous pairs): no refusal but the 12
     screen-cut references a live `give --frames` + `cut` makes; `passes_once_screen_cut: true`.
+
+### Amendment O4 (2026-11-10 11:46 ICT from `date`, the parent): params v2 recorded; fs1's 12th id confirmed
+
+- **Params v2:** `/dev/shm/poring-lab-tmp/xmas-fi/params-v2.json`, frozen 11:38:47 by 6bd49187.
+  - sha256 `aea6f1d2b938d6fdfa1ebadc0042ba3a9ce2448f8b22f2075f0c0cb48297bb2c`.
+  - O3's absent rule excludes Bib 7269 (44 / 59), Rough Wind 996 (1 / 59) and Holy Bonnet 2251
+    (1 / 59) as `item_unsprited`.
+  - **v2 is the rule for every label from now on.** v1 (d1c5606b) stays the positive cases' record.
+  - p31 / p38 under v2: unchanged, 938 / 938 and 991 / 991 frames identical (neither holds an
+    excluded id).
+- **fs1's set:** 11002 (Chef King Orleans Vol.1) takes Scell's place. The 13th by O.11's ranking,
+  688, is NOT usable: its masked icon lies 2.34 from 12001's, inside ICON_AMBIGUOUS 20, so
+  clear_loot could drop neither. The parent confirms "the next USABLE id by the ranking". cut-grf
+  --check passes offline. The 12 screen-cut references come from the live chain (O2 section 6).
+- Merged: feat/fi-tools again (O2 addendum, 36 + 9 tests). The worktree is removed.
