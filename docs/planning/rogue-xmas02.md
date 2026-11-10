@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-10 07:1x: the Garm Baby class is DEPLOYED (xmas02-detector.md M11 PASS, M12); --garm-fly G0 / G0b FAILED their letters (the setup counted; a dog hidden near the start went unboxed 4.5 s) -> not adopted; Batt decides on its pilot. THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
+next_action: "2026-11-10 08:5x: p44 (the base with the deployed xmas02-gb) PASSES EVERY BAR (157.6 / h, W1 pooled 1.59 %) -> xmas02-gb stays; its ONE garm_baby box was FALSE (a Cruiser under the Rogue, 1 frame). --garm-fly stays OFF (Batt (b), xmas02-detector.md N): hidden Garm Babies are taught first (study N1 running). THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -1839,7 +1839,7 @@ Batt's answers (quoted, then in English):
   unchanged base flags under every base bar. Batt keeps `--garm-fly` off (xmas02-detector.md N).
 - **The run:** the base (p16 + `--reach-check --far-single --far-approach --explore --walk-pick
   --kill-gap --loot-first --walk-pick-step --quiet-scan`), label `xmas02-p44`, 25 min, immunity
-  OFF, the MVP dead by the schedule (killed 07:00:54).
+  OFF, the MVP dead by the schedule (killed 07:00:54). ➡️ As run: killed 08:21:53 (07:00:54 was G0's kill; see the p44 result in section 5).
 - **Bars (Amendment O's):** W1 pooled (p44 + p42 + p41 + p40) <= 2.0 %, L1 >= 50 %, L3 >= 80 %, L4 <= 5 %,
   K1 <= 3.0 s, K3 >= 70 %, E1 >= 80 / h, U1 <= 30 s, D1 p95 <= 35 ms, R1 pooled <= 6, Q1 <= 8, E3
   (hard bars, 0 dead-end / stuck / idle Fly Wings), deaths 0. Reported: E1 against p40-p42 (136-154 /
@@ -3551,3 +3551,38 @@ What happened (packets; t = seconds from run_start):
   recording ran). No false garm_baby box in either run.
 - Not re-run again (a third variant would be fishing). The Battle Log guard (fly on the first named
   line) stays the base's protection.
+
+**Pilot p44 (4BC; 08:22:53-08:48:51 ICT, 25 min; the MVP killed 08:21:53 after a poll at 08:21 (alive at
+184, 100) -- 4BC's "killed 07:00:54" was the G0 run's kill, not this one's; immunity OFF 08:22:35
+("Returned to normal state."), ON 08:49:34 ("You are now immune to attacks."); weight 780 / 2430 at
+the start; the base, unchanged, with the deployed xmas02-gb). VERDICT: EVERY BAR PASSES -> xmas02-gb
+STAYS DEPLOYED for the base (4BC).**
+
+| | p40 | p41 | p42 | **p44 (base, xmas02-gb)** | bar |
+|---|---|---|---|---|---|
+| W1 clicked walks never sent | 3 / 288 | 4 / 255 | 5 / 302 | **6 / 289 (2.08 %); pooled p44 + p42 + p41 + p40 = 18 / 1,134 (1.59 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 / L4 | 100 % / 91.1 % / 0 | 95.2 % / 86.2 % / 0 | 100 % / 82.0 % / 0 | **100 % (15 / 15) / 89.1 % (57 / 64) / 0 of 99** | PASS |
+| K1 / K3 | 1.97 s / 96.4 % | 1.96 s / 96.6 % | 1.98 s / 98.4 % | **1.97 s / 96.9 % (62 / 64)** | PASS |
+| E1 kills | 136.4 / h | 143.6 / h | 153.6 / h | **66 (157.6 / h)** | >= 80 / h: PASS |
+| U1 stuck / D1 GPU p95 | 0 s / - | 8.7 s / - | 0 s / 22.8 ms | **0 s / 23.7 ms (p50 20.6; 1,568 calls, all GPU)** | PASS |
+| R1 own-body class D, pooled p44 + p42 + p41 + p40 | | | | **2 + 1 + 0 + 1 = 4** | <= 6: PASS |
+| Q1 defend scans with no hit in the 5 s before | 34 | 31 | 5 | **5 (found 0)** | <= 8: PASS |
+| E3 / deaths | | | | **hard bars pass (0 NPC contacts, 0 other maps); 0 Fly Wings; 1 stall; lowest HP 80.3 %; 0 deaths** | PASS |
+| reported: S1 hits on us per 10 min / no-kill fights | 11.2 | 6.4 | 6.4 / 38, 212.3 s | **8.0 / 32, 164.8 s** | - |
+
+- **Class D strikes (reported):** 17 of 82 (61 K, 4 A); far strikes 76, class D 14 (18.4 %); by
+  distance 0-1: 3 / 6, 2-6: 5 / 52, 7-8: 8 / 23, 9+: 1 / 1. Held on D: 17, median 6.61 s.
+- **Sight:** 59 monsters seen (23.5 / 10 min; Myst Case 23, Cruiser 18, Cookie 10, Christmas Cookie 8);
+  kills per sighting 1.12. Box targets 116, struck 73; boxes after the grab p50 45 ms.
+- **garm_baby boxes: ONE, and it was FALSE.** 08:39:58.35, 1 detection of 1,568: `garm_baby` 0.768 at
+  (621, 330)-(686, 398), just below our own player box. Packets: no Garm Baby (job 1515) appeared
+  in the whole run; the Rogue stood at (121, 206) and a Cruiser stood at (121, 205), the cell below
+  her, the one she was fighting (the kill by hit gap 5.2 s later, 14 hits). So the box was that
+  Cruiser, overlapping her sprite, read as a dog in a single frame. Never struck (garm_baby is not
+  a target). With `--garm-fly` ON it would have cost one needless Fly Wing in 25 min: a fact for
+  xmas02-detector.md N (a false-alarm bar on frames where a monster overlaps the Rogue).
+- **Items (snatched + picked), per hour (x 60 / 25.1):** Scell 13 (31.0 / h), Piece of Cake 11
+  (26.3), Zargon 11 (26.3), Manacles 6 (14.3), Red Herb 2 (4.8), Candy 2 (4.8), Well-baked Cookie,
+  Pearl, Iron, Sandals 1 each (2.4). Weight share 0.33 -> 0.39 at the end.
+- E1 157.6 / h is the base's best 25-min run so far (p40-p42: 136-154 / h); one run, not a claim
+  that the new model caused it.
