@@ -130,6 +130,13 @@ ALLOWED = {
                                    "with no no-entry ring (never a SWORD or an unknown read), and "
                                    "only when no no-enter / no-cross cell or script NPC lies "
                                    "within 12 cells of the held or the dead-reckoned cell. "
+                                   "With --still-target (OFF by default, dungeon@9.23, "
+                                   "rogue-xmas02.md Study S-LS LS-2; the count is unchanged: no "
+                                   "click of its own, the box strike stays strike()'s click_at) "
+                                   "a box target whose foot moved >= 10 px between two "
+                                   "detections is held (<= 2.5 s) until it stands, then struck "
+                                   "at its NEW box only where cursor_sword read SWORD there, "
+                                   "else not struck. "
                                    "And the death dialog's known step (its second button), as "
                                    "survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "

@@ -2119,3 +2119,209 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
     # LF-4 leaves the fight branch alone: the rule is still checked outside fights only
     fight_end = "time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))\n"
     assert fight_end + "                    continue" in src
+
+
+# --- --still-target (dungeon@9.23, LS-2; rogue-xmas02.md Study S-LS) ------------------------------
+
+
+def test_foot_shift_measures_the_foot_only() -> None:
+    """The foot is box_target's: the bottom edge's centre. A box that grows upward (a sprite's
+    head, an attack pose) has not moved; a diagonal step is measured as one distance."""
+    b1 = (100.0, 200.0, 140.0, 260.0)  # foot (120, 260)
+    assert dh.foot_shift(b1, b1) == 0.0
+    assert dh.foot_shift(b1, (112.0, 200.0, 152.0, 260.0)) == 12.0  # 12 px east
+    assert dh.foot_shift(b1, (100.0, 180.0, 140.0, 260.0)) == 0.0  # taller, the same foot
+    assert dh.foot_shift(b1, (103.0, 204.0, 143.0, 264.0)) == 5.0  # (3, 4)
+    assert dh.foot_shift((103.0, 204.0, 143.0, 264.0), b1) == 5.0  # symmetric
+    assert dh.foot_shift([100, 200, 140, 260, 0.9], b1) == 0.0  # extra fields ignored
+
+
+def test_press_decide_strikes_a_still_sprite_and_holds_a_walker() -> None:
+    """D2's verdict: the same sprite (same_box: the nearest centre within LEAD_MATCH_PX) whose foot
+    moved < WALKER_PX is struck as today; >= WALKER_PX is held; no match cannot judge."""
+    b1 = (100.0, 200.0, 140.0, 260.0)
+    near = (109.9, 200.0, 149.9, 260.0)  # 9.9 px east
+    end, b2, moved = dh.press_decide(b1, [(400.0, 200.0, 440.0, 260.0), near])
+    assert end == "strike" and b2 == near and moved is not None and abs(moved - 9.9) < 1e-9
+    end, b2, moved = dh.press_decide(b1, [(110.0, 200.0, 150.0, 260.0)])  # exactly 10 px
+    assert (end, b2, moved) == ("hold", (110.0, 200.0, 150.0, 260.0), 10.0)
+    assert dh.press_decide(b1, [(130.0, 200.0, 170.0, 260.0)])[0] == "hold"  # 30 px: a walker
+    assert dh.press_decide(b1, [(200.0, 200.0, 240.0, 260.0)]) == ("no_match", None, None)
+    assert dh.press_decide(b1, []) == ("no_match", None, None)
+    # the nearest centre is the sprite, not the first box listed
+    assert dh.press_decide(b1, [(125.0, 200.0, 165.0, 260.0), (102.0, 200.0, 142.0, 260.0)])[:2] \
+        == ("strike", (102.0, 200.0, 142.0, 260.0))  # fmt: skip
+    assert dh.nearest_centre_px(b1, [(200.0, 200.0, 240.0, 260.0), (160.0, 200.0, 200.0, 260.0)]) \
+        == 60.0  # fmt: skip
+    assert dh.nearest_centre_px(b1, []) is None
+
+
+def test_hold_end_rule() -> None:
+    """lost (no match) first; still = HOLD_STILL_N shifts IN A ROW under WALKER_PX (it may come on
+    the poll that also reaches the backstop); timeout at HOLD_MAX_S; else poll again."""
+    assert (dh.WALKER_PX, dh.HOLD_GAP_S, dh.HOLD_MAX_S, dh.HOLD_STILL_N) == (10.0, 0.25, 2.5, 2)
+    assert dh.hold_end([], 0.3, True) is None
+    assert dh.hold_end([12.0], 0.3, True) is None
+    assert dh.hold_end([12.0, 3.0], 0.55, True) is None  # one still shift is not still
+    assert dh.hold_end([12.0, 3.0, 4.0], 0.8, True) == "still"
+    assert dh.hold_end([3.0, 4.0], 0.55, True) == "still"  # stopped right after D2
+    assert dh.hold_end([3.0, 12.0, 4.0], 0.8, True) is None  # not in a row
+    assert dh.hold_end([9.99, 9.99], 0.55, True) == "still"
+    assert dh.hold_end([10.0, 3.0], 0.55, True) is None  # 10 px is a walker's shift
+    assert dh.hold_end([12.0, 15.0], 2.49, True) is None
+    assert dh.hold_end([12.0, 15.0], 2.5, True) == "timeout"
+    assert dh.hold_end([12.0, 3.0, 2.0], 2.6, True) == "still"  # still wins on the same poll
+    assert dh.hold_end([3.0, 2.0], 0.3, False) == "lost"  # no match: lost, whatever came before
+    assert dh.hold_end([12.0], 3.0, False) == "lost"
+
+
+class _HoldClock:
+    """A fake clock for hold_track: sleep and each detection advance it."""
+
+    def __init__(self) -> None:
+        self.t = 100.0
+        self.sleeps: list[float] = []
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, s: float) -> None:
+        self.sleeps.append(s)
+        self.t += s
+
+
+def _hold_run(steps: list[float | str | None],
+              guard_at: int | None = None) -> tuple[dict, list, list]:  # fmt: skip
+    """hold_track on a scripted sprite: each step is a foot x offset (the box moves east to it; a
+    float), None (no detection came: the full timeout passes) or "far" (only a box 200 px away)."""
+    clk = _HoldClock()
+    grabs: list[float] = []
+    timeouts: list[float] = []
+    script = list(steps)
+    polls = [0]
+
+    def detect(timeout: float) -> tuple[float, list[tuple[float, ...]]] | None:
+        timeouts.append(timeout)
+        step = script.pop(0)
+        if step is None:
+            clk.t += timeout
+            return None
+        t_g = clk.t
+        grabs.append(t_g)
+        clk.t += 0.05  # the detection's own time
+        if step == "far":
+            return t_g, [(300.0, 200.0, 340.0, 260.0)]
+        x = 100.0 + float(step)
+        return t_g, [(x, 200.0, x + 40.0, 260.0), (600.0, 100.0, 640.0, 160.0)]
+
+    def guard() -> bool:
+        polls[0] += 1
+        return guard_at is not None and polls[0] >= guard_at
+
+    hd = dh.hold_track((100.0, 200.0, 140.0, 260.0), clk.t, detect, guard, clock=clk,
+                       sleep=clk.sleep)  # fmt: skip
+    return hd, grabs, timeouts
+
+
+def test_hold_track_waits_for_two_still_detections_every_gap() -> None:
+    """A walker 20 px on, then standing: still on the 3rd poll; the polls are HOLD_GAP_S apart
+    (grab to grab), the last matched box is the one struck."""
+    hd, grabs, timeouts = _hold_run([20.0, 23.0, 25.0])
+    assert hd["end"] == "still" and hd["polls"] == 3
+    assert hd["shifts"] == [20.0, 3.0, 2.0]
+    assert hd["box"] == (125.0, 200.0, 165.0, 260.0) and hd["t"] == grabs[-1]
+    assert [round(b - a, 6) for a, b in zip([100.0, *grabs], grabs, strict=False)] == [0.25] * 3
+    assert timeouts[0] == 1.8 and hd["lost_px"] is None  # BOX_TARGET_WAIT_S, the time left
+    hd2, _g, _t = _hold_run([2.0, 3.0])  # it stopped right after D2
+    assert (hd2["end"], hd2["polls"]) == ("still", 2)
+
+
+def test_hold_track_times_out_on_a_walker_and_stays_bounded() -> None:
+    hd, grabs, timeouts = _hold_run([15.0 * (k + 1) for k in range(40)])
+    assert hd["end"] == "timeout" and hd["polls"] == 10  # grabs at +0.25 .. +2.5 s
+    assert all(s == 15.0 for s in hd["shifts"])
+    assert dh.HOLD_MAX_S <= hd["hold_s"] < dh.HOLD_MAX_S + dh.HOLD_GAP_S
+    assert all(0.1 <= t <= 1.8 for t in timeouts) and timeouts[-1] == 0.1  # never past the cap
+    assert hd["box"] == (250.0, 200.0, 290.0, 260.0)  # the last matched box
+
+
+def test_hold_track_lost_escaped_and_a_missing_detection() -> None:
+    hd, _g, _t = _hold_run(["far"])
+    assert (hd["end"], hd["polls"], hd["shifts"]) == ("lost", 1, [])
+    assert hd["lost_px"] == 200.0 and hd["box"] == (100.0, 200.0, 140.0, 260.0)
+    hd, _g, _t = _hold_run([20.0, 40.0], guard_at=2)  # the 2nd poll's guard_tick flew away
+    assert (hd["end"], hd["polls"], hd["shifts"]) == ("escaped", 1, [20.0])
+    hd, _g, _t = _hold_run([5.0], guard_at=1)  # flew away before the first poll
+    assert (hd["end"], hd["polls"]) == ("escaped", 0)
+    # no detection came (1.8 s): it neither breaks nor makes a still pair; the hold goes on
+    hd, _g, timeouts = _hold_run([None, 2.0, 3.0])
+    assert hd["end"] == "still" and hd["shifts"] == [None, 2.0, 1.0] and hd["polls"] == 3
+    assert timeouts[0] == 1.8 and round(timeouts[1], 6) == 0.45  # the 2.5-s backstop's left
+
+
+def test_still_target_is_refused_where_it_could_not_check() -> None:
+    """--still-target needs the box target's SWORD (--box-strike), its own detection (--box-now)
+    and a still scene (--still-strike); --lead-strike would replace the box it compares."""
+    assert dh.still_target_refused(True, True, True, False) is None
+    need = "--still-target needs --box-strike --box-now"
+    assert dh.still_target_refused(False, True, True, False) == need
+    assert dh.still_target_refused(True, False, True, False) == need
+    still = "--still-target needs --still-strike"
+    assert dh.still_target_refused(True, True, False, False) == still
+    lead = "--still-target does not go with --lead-strike"
+    assert dh.still_target_refused(True, True, True, True) == lead
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.23 refused: {why_st}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+
+
+def test_still_target_is_off_by_default_and_recorded_in_the_fixes() -> None:
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "still_target" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "still_target" not in dh.fixes_of(dh.argparse.Namespace(**base, still_target=False))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, still_target=True))
+    assert rec["still_target"] == [10.0, 0.25, 2.5, "9.23"]
+    rest = {k: v for k, v in rec.items() if k != "still_target"}
+    assert rest == dh.fixes_of(dh.argparse.Namespace(**base))  # its own key only
+    assert dh.STILL_TARGET_VERSION not in ("9.20", "9.21", "9.22")  # loot-sight, LF-2, LF-4
+    src = Path(dh.__file__).read_text()
+    flag = '"--still-target",\n        action=argparse.BooleanOptionalAction,\n'
+    flag += "        default=False,"
+    assert flag in src
+    assert 'still_target_on = getattr(a, "still_target", False)' in src
+    assert src.count('"fixes": fixes_of(a)') == 2  # run_start and the manifest both record it
+
+
+def test_still_target_is_wired_at_the_box_targets_sword_only() -> None:
+    """The flag off: box_target's SWORD branch is today's (one guarded block, before box_spot).
+    On: press_check's D2 by the box target's arm, the hold through hold_track with guard_tick, the
+    re-aim only after box_target's selection gate and a SWORD read; no input path of its own."""
+    src = Path(dh.__file__).read_text()
+    body = src[src.index("        def box_target() -> tuple[Cell, tuple[float, float]] | None:") :]
+    body = body[: body.index("\n        def ", 10)]
+    i_sword = body.index('if res_["verdict"] == "sword":')
+    i_on = body.index("if still_target_on:  # dungeon@9.23 (LS-2)", i_sword)
+    assert i_sword < i_on < body.index("sp_ = box_spot(here, foot)", i_sword)
+    assert body.count("still_target_on") == 1 and src.count("press_check(") == 2
+    assert 'rec["press"], today_p, got_p = press_check(' in body
+    assert 'near_b, meta, arm, bool(still_rec.get("still", False)))' in body
+    pc = src[src.index("        def press_check(") :]
+    pc = pc[: pc.index("\n        def self_uv(")]
+    assert "click_at(" not in pc and "agent." not in pc and ".click(" not in pc
+    assert pc.count("hover(") == 1  # the still box's first hover point
+    assert 'meta2 = boxes.fresh_now(arm_ or "gpu", BOX_TARGET_WAIT_S)' in pc
+    assert "end, b2, moved = press_decide(b1, got2)" in pc
+    assert "hd = hold_track(b, t_b, detect_, guard_tick)" in pc
+    assert "u_e, v_e = box_hover_points(last)[0]" in pc
+    i_far = pc.index('prs["gate"] = "far"')
+    i_skip = pc.index('prs["gate"] = "skip"')
+    i_view = pc.index('prs["verdict2"] = "off"')
+    i_hover = pc.index('prs["verdict2"] = str(hover(u_e, v_e)["verdict"])')
+    i_sword2 = pc.index('if prs["verdict2"] != "sword":')
+    i_ret = pc.index("return end, (rel_e, (u_e, v_e))")
+    assert i_far < i_skip < i_view < i_hover < i_sword2 < i_ret
+    # the event's "press" record: these five fields from the start, for every end
+    assert '{"moved_px": None, "det2_ms": None, "hold_ms": 0, "polls": 0,' in pc
+    assert 'counts[f"still_target_{end}"] += 1' in pc

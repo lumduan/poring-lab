@@ -1254,6 +1254,139 @@ def lead_point(b1: Sequence[float], t1: float, b2: Sequence[float], t2: float,
             "walking": speed >= min_px_s}  # fmt: skip
 
 
+# --still-target (dungeon@9.23, LS-2; rogue-xmas02.md Study S-LS, "Which first: LS-2" and "LS-2's
+# runner change"): 152 of p40-p49's 589 targeted box strikes were LATE (the target moved >= 1 cell
+# between the picture and the client's resolve, ~0.88 s), 105 of them failed (a walk or nothing:
+# 117 s lost a run), and 117 of the 152 were already WALKING in the picture. So at the box
+# target's SWORD, on a still scene with a fresh first detection D1, the runner takes ONE more
+# detection D2 and matches the same sprite (same_box). Its foot moved < WALKER_PX: the strike is
+# today's. Else the strike waits (hold_still): a detection every HOLD_GAP_S, matched to the last
+# box, guard_tick() on each poll, until HOLD_STILL_N foot shifts in a row are < WALKER_PX
+# ("still"), at most HOLD_MAX_S ("timeout"), or the sprite is not matched ("lost"). Still: its new
+# box's first hover point is hovered and struck only on a SWORD read there. Anything else: no
+# strike (box_target returns None, as on no SWORD). A D2 that cannot judge (no detection, no
+# match) strikes as today. No new input path: every click is click_at's and SWORD-verified.
+# S-LS: the walkers walk a median ~1.0 s more, then STAND 3.3-4.8 s (rAthena's random walk).
+STILL_TARGET_VERSION = "9.23"
+WALKER_PX = 10.0  # S-LS's walker flag: the foot moved this far between two settled detections
+HOLD_GAP_S = 0.25  # a held target's detections: one every this long
+HOLD_MAX_S = 2.5  # a hold's backstop (the rest of a walk after the picture: p90 2.56 s)
+HOLD_STILL_N = 2  # "still": this many foot shifts in a row under WALKER_PX
+
+
+def foot_shift(b1: Sequence[float], b2: Sequence[float]) -> float:
+    """PURE (--still-target, 9.23): how far (px) a box's FOOT -- its bottom edge's centre, as
+    box_target's ``foot`` -- moved from ``b1`` to ``b2``."""
+    f1 = ((float(b1[0]) + float(b1[2])) / 2, float(b1[3]))
+    f2 = ((float(b2[0]) + float(b2[2])) / 2, float(b2[3]))
+    return math.hypot(f2[0] - f1[0], f2[1] - f1[1])
+
+
+def press_decide(
+    b1: Sequence[float], later: Sequence[Sequence[float]], px: float = WALKER_PX
+) -> tuple[str, tuple[float, ...] | None, float | None]:
+    """PURE (--still-target, 9.23): D2's verdict on the SWORD-read box ``b1`` from the boxes of the
+    detection after it (``later``): ("no_match", None, None) when same_box finds none (D2 cannot
+    judge: the strike is today's); ("strike", b2, moved) when its foot moved < ``px``; else
+    ("hold", b2, moved)."""
+    b2 = same_box(b1, later)
+    if b2 is None:
+        return "no_match", None, None
+    moved = foot_shift(b1, b2)
+    return ("strike" if moved < px else "hold"), b2, moved
+
+
+def nearest_centre_px(b1: Sequence[float], later: Sequence[Sequence[float]]) -> float | None:
+    """PURE (--still-target, 9.23; logging only): the distance (px, 0.1) from ``b1``'s centre to
+    the nearest box centre of ``later`` -- why same_box matched none (a sprite that went beyond
+    its match radius, or none detected near) -- None when ``later`` holds no box."""
+    c1 = box_centre(b1)
+    ds = [math.hypot(box_centre(b)[0] - c1[0], box_centre(b)[1] - c1[1]) for b in later]
+    return round(min(ds), 1) if ds else None
+
+
+def hold_end(shifts: Sequence[float], elapsed_s: float, matched: bool, px: float = WALKER_PX,
+             n: int = HOLD_STILL_N, max_s: float = HOLD_MAX_S) -> str | None:  # fmt: skip
+    """PURE (--still-target, 9.23): how a hold ends after a poll, in order: "lost" (the poll's
+    detection held no box matching the last one), "still" (the last ``n`` foot shifts, one per
+    matched detection, all < ``px``), "timeout" (``elapsed_s`` since the hold began >= ``max_s``);
+    None: poll again."""
+    if not matched:
+        return "lost"
+    if len(shifts) >= n and all(s < px for s in shifts[-n:]):
+        return "still"
+    if elapsed_s >= max_s:
+        return "timeout"
+    return None
+
+
+def hold_track(
+    b: Sequence[float],
+    t_b: float,
+    detect: Callable[[float], tuple[float, Sequence[Sequence[float]]] | None],
+    guard: Callable[[], bool],
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    gap_s: float = HOLD_GAP_S,
+    max_s: float = HOLD_MAX_S,
+    wait_s: float = BOX_TARGET_WAIT_S,
+) -> dict[str, Any]:
+    """--still-target (dungeon@9.23, LS-2): the hold's polls on the moved sprite ``b`` (grabbed at
+    ``t_b``). Each poll: ``guard()`` first (the runner's guard_tick: True once we flew away ->
+    "escaped"), then ``gap_s`` after the last matched grab ``detect(timeout)`` -- a fresh
+    detection's (grab time, boxes), or None when none came within ``timeout`` (the hold's time
+    left, >= 0.1 s, <= ``wait_s``) -- matched to the last box by same_box; hold_end decides after
+    each poll. Returns {"end", "box" (the last matched box), "t" (its grab), "shifts" (each poll's
+    foot shift; None: no detection came), "polls", "hold_s", "lost_px" (nearest_centre_px of the
+    poll that matched nothing, else None)}."""
+    t_h = clock()
+    last, last_t = tuple(float(x) for x in b[:4]), t_b
+    shifts: list[float] = []
+    log: list[float | None] = []
+    polls = 0
+    lost_px: float | None = None
+    end: str | None = None
+    while end is None:
+        if guard():
+            end = "escaped"
+            break
+        sleep(max(0.0, gap_s - (clock() - last_t)))
+        left = max_s - (clock() - t_h)
+        polls += 1
+        got = detect(max(0.1, min(wait_s, left)))
+        matched = True
+        if got is None:
+            log.append(None)
+        else:
+            t_k, boxes_k = got
+            b_k = same_box(last, boxes_k)
+            if b_k is None:
+                matched = False
+                lost_px = nearest_centre_px(last, boxes_k)
+            else:
+                shifts.append(foot_shift(last, b_k))
+                log.append(round(shifts[-1], 1))
+                last, last_t = b_k, t_k
+        end = hold_end(shifts, clock() - t_h, matched, max_s=max_s)
+    return {"end": end, "box": last, "t": last_t, "shifts": log, "polls": polls,
+            "hold_s": clock() - t_h, "lost_px": lost_px}  # fmt: skip
+
+
+def still_target_refused(box_strike: bool, box_now: bool, still_strike: bool,
+                         lead_strike: bool) -> str | None:  # fmt: skip
+    """PURE (--still-target, 9.23): why the flag cannot work as built (the run would silently be
+    the base): it checks the box target's SWORD (--box-strike) against its own fresh detection
+    (--box-now) on a still scene (--still-strike); a led point (--lead-strike, dropped after p14)
+    would replace the box it compares. None: it can run."""
+    if not (box_strike and box_now):
+        return "--still-target needs --box-strike --box-now"
+    if not still_strike:
+        return "--still-target needs --still-strike"
+    if lead_strike:
+        return "--still-target does not go with --lead-strike"
+    return None
+
+
 def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
     """PURE (--self-recheck): (u, v) lies on our own sprite, whose feet are at (u0, v0)."""
     return abs(u - u0) <= SELF_HALF_W and v0 - SELF_UP <= v <= v0 + SELF_DOWN
@@ -1446,6 +1579,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "unread_step", False):  # dungeon@9.22 (rogue-xmas02.md 4BI, LF-4)
         out["unread_step"] = [UNREAD_WALK_S, UNREAD_STEP_CELLS, UNREAD_STEPS, UNREAD_READ_S,
                               UNREAD_SAFE_R, UNREAD_MAX_S, UNREAD_STEP_VERSION]  # fmt: skip
+    if getattr(a, "still_target", False):  # dungeon@9.23 (rogue-xmas02.md Study S-LS, LS-2)
+        out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
     return out
 
 
@@ -2360,6 +2495,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
+    if getattr(a, "still_target", False):  # dungeon@9.23 (LS-2): never silently the base run
+        why_st = still_target_refused(a.box_strike, a.box_now,
+                                      getattr(a, "still_strike", False),
+                                      getattr(a, "lead_strike", False))  # fmt: skip
+        if why_st:
+            raise SystemExit(f"dungeon@9.23 refused: {why_st}")
     import nametag
 
     tag_tpl = nametag.load_templates(nametag.map_dir(ROOT, map_) / "templates.npz")
@@ -2724,6 +2865,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
         late_confirm_on = getattr(a, "late_confirm", False)  # dungeon@9.21 (LF-2)
         unread_step_on = getattr(a, "unread_step", False)  # dungeon@9.22 (LF-4)
+        still_target_on = getattr(a, "still_target", False)  # dungeon@9.23 (LS-2)
         own_moves: deque[OwnMove] = deque(maxlen=64)  # 9.22: our commands that walked her
         ust: dict[str, Any] = {"t0": None}  # 9.22: the pos_unread escape in progress (t0: due)
 
@@ -3369,6 +3511,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if res_["verdict"] == "sword":
                     if k_ == 0 and shift != (0.0, 0.0):  # the led point: the cell it predicts
                         foot = (foot[0] + shift[0], foot[1] + shift[1])
+                    if still_target_on:  # dungeon@9.23 (LS-2): D2, then a hold for a walker
+                        rec["press"], today_p, got_p = press_check(
+                            near_b, meta, arm, bool(still_rec.get("still", False)))  # fmt: skip
+                        if not today_p and got_p is None:  # no strike: as on no SWORD
+                            ev({**rec, "verdicts": verdicts, "struck": False})
+                            return None
+                        if got_p is not None:  # it stood still and read SWORD again: its box
+                            ev({**rec, "verdicts": verdicts, "struck": True,
+                                "rel": list(got_p[0])})  # fmt: skip
+                            return got_p
                     sp_ = box_spot(here, foot)
                     rel_ = (0, 0) if sp_ is None or here is None else \
                         (sp_[0] - here[0], sp_[1] - here[1])  # fmt: skip
@@ -3409,6 +3561,94 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 counts["still_lost"] += 1
                 return None
             return u2, v2
+
+        def press_check(
+            b1: Sequence[float], meta_: dict[str, Any] | None, arm_: str | None, still_: bool
+        ) -> tuple[dict[str, Any], bool, tuple[Cell, tuple[float, float]] | None]:
+            """--still-target (dungeon@9.23, LS-2; rogue-xmas02.md Study S-LS): at the box
+            target's SWORD on D1's box ``b1``, ONE more detection D2 (press_decide). Returns (the
+            event's "press" record, True when the strike is today's, the re-aimed (rel, point) of
+            a held target that stood still and read SWORD again, else None). No still scene or no
+            fresh D1 (``meta_``): nothing to compare, today's strike, no D2."""
+            assert boxes is not None
+            t_p = time.monotonic()
+            prs: dict[str, Any] = {"moved_px": None, "det2_ms": None, "hold_ms": 0, "polls": 0,
+                                   "end": "not_still" if not still_ else "no_d1"}  # fmt: skip
+            if not still_ or meta_ is None:
+                counts[f"still_target_{prs['end']}"] += 1
+                return prs, True, None
+            meta2 = boxes.fresh_now(arm_ or "gpu", BOX_TARGET_WAIT_S)
+            end: str = "no_det2"
+            b2: tuple[float, ...] | None = None
+            t2 = 0.0
+            if meta2 is not None:
+                t2, got2 = boxes.snapshot()
+                end, b2, moved = press_decide(b1, got2)
+                prs.update(det2_ms=meta2["ms"], path2=meta2["path"],
+                           wait2_ms=round((time.monotonic() - t_p) * 1e3),
+                           gap_ms=round((t2 - meta_["t"]) * 1e3))  # fmt: skip
+                if b2 is None:
+                    prs["near2_px"] = nearest_centre_px(b1, got2)
+                else:
+                    assert moved is not None
+                    prs.update(moved_px=round(moved, 1), box2=[round(x_, 1) for x_ in b2])
+            got: tuple[Cell, tuple[float, float]] | None = None
+            today = end != "hold"
+            if end == "hold":
+                assert b2 is not None
+                end, got = hold_still(b2, t2, arm_ or "gpu", float(meta_["t"]), prs)
+            prs["end"] = end
+            prs["ms"] = round((time.monotonic() - t_p) * 1e3)  # the SWORD read -> the event
+            counts[f"still_target_{end}"] += 1
+            return prs, today, got
+
+        def hold_still(
+            b: Sequence[float], t_b: float, arm_: str, t1: float, prs: dict[str, Any]
+        ) -> tuple[str, tuple[Cell, tuple[float, float]] | None]:
+            """--still-target (9.23): the strike waits for the moved sprite ``b`` (grabbed at
+            ``t_b``) to stand -- hold_track: a fresh detection every HOLD_GAP_S matched to the
+            last box, guard_tick() on each poll (the HP, the escapes), until hold_end ends it.
+            "still": the new box passes box_target's own selection gate, its first hover point
+            is hovered, and only a SWORD read there returns (rel, point) for the strike;
+            "timeout" / "lost" / "escaped" (we flew away): None. ``prs`` gets the hold's fields
+            (``t1``: D1's grab)."""
+            assert boxes is not None
+            bw = boxes
+
+            def detect_(timeout: float) -> tuple[float, list[tuple[float, float, float, float]]] \
+                    | None:  # fmt: skip
+                return bw.snapshot() if bw.fresh_now(arm_, timeout) is not None else None
+
+            hd = hold_track(b, t_b, detect_, guard_tick)
+            end, last = str(hd["end"]), hd["box"]
+            prs.update(hold_ms=round(hd["hold_s"] * 1e3), polls=hd["polls"], shifts=hd["shifts"],
+                       box_end=[round(x_, 1) for x_ in last],
+                       end_gap_ms=round((hd["t"] - t1) * 1e3))  # fmt: skip
+            if hd["lost_px"] is not None:
+                prs["lost_px"] = hd["lost_px"]
+            if end != "still":
+                return end, None
+            foot_e = ((last[0] + last[2]) / 2, last[3])
+            lim = BOX_SCREEN_PX if getattr(a, "engage_screen", False) else BOX_TARGET_PX
+            if math.hypot(foot_e[0] - FOOT_PX[0], foot_e[1] - FOOT_PX[1]) > lim:
+                prs["gate"] = "far"  # box_target's own selection would not take it now
+                return end, None
+            if getattr(a, "engage_screen", False) and (
+                not in_view(foot_e[0], foot_e[1] - BODY_UP) or unreachable(here, foot_e)
+            ):
+                prs["gate"] = "skip"  # --engage-screen's in-view / --reach-check skip
+                return end, None
+            u_e, v_e = box_hover_points(last)[0]
+            if not in_view(u_e, v_e):
+                prs["verdict2"] = "off"
+                return end, None
+            prs["verdict2"] = str(hover(u_e, v_e)["verdict"])
+            if prs["verdict2"] != "sword":
+                return end, None
+            sp_e = box_spot(here, foot_e)
+            rel_e = (0, 0) if sp_e is None or here is None else \
+                (sp_e[0] - here[0], sp_e[1] - here[1])  # fmt: skip
+            return end, (rel_e, (u_e, v_e))
 
         def self_uv() -> tuple[float, float]:
             """Our own feet point on screen (the camera keeps us there): the self box's anchor."""
@@ -5164,6 +5404,16 @@ def main() -> int:
         "old; then up to 2 screen-relative 2-cell steps back along her last own movement, each a "
         "walk click after a CLEAR cursor read, then 2 s for a fresh read; a fresh read cancels the "
         "wing, else the wing as before",
+    )
+    t.add_argument(
+        "--still-target",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.23 (rogue-xmas02.md Study S-LS, LS-2; OFF by default; with --box-strike "
+        "--box-now --still-strike): at the box target's SWORD, one more detection of the same "
+        "sprite; its foot moved < 10 px -> the strike as before; else no click yet: a detection "
+        "every 0.25 s until two in a row are still (at most 2.5 s), then its new box is hovered "
+        "and struck only on a SWORD read; a timeout or a lost sprite -> no box strike",
     )
     t.add_argument(
         "--quiet-scan",
