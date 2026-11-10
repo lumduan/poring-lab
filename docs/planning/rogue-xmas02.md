@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-10 09:3x: p44 (the base with the deployed xmas02-gb) PASSES EVERY BAR (157.6 / h, W1 pooled 1.59 %) -> xmas02-gb stays; its ONE garm_baby box was FALSE (a Cruiser under the Rogue, 1 frame). xmas02-detector.md N1 PROPOSED: G0b's dog was FULLY hidden (no model can box it); the deployed model boxes >= 50 %-visible dogs; Batt decides N1.12 (full N1 or stop) and --garm-fly. The study after p44 proposes a floor-item class (68-82 % of kills drop nothing). THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
+next_action: "2026-11-10 09:2x: p44 (the base with the deployed xmas02-gb) PASSES EVERY BAR (157.6 / h, W1 pooled 1.59 %) -> xmas02-gb stays; its ONE garm_baby box was FALSE (a Cruiser under the Rogue, 1 frame). xmas02-detector.md N1 PROPOSED: G0b's dog was FULLY hidden (no model can box it); the deployed model boxes >= 50 %-visible dogs; Batt decides N1.12 (full N1 or stop) and --garm-fly. The study after p44 proposes a floor-item class (68-82 % of kills drop nothing). THE BASE = p16 + reach-check + far + explore + walk-pick + kill-gap + loot-first + walk-pick-step + quiet-scan."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
