@@ -3138,3 +3138,15 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - epoch 2: 554 s with validation (val recall 0.51, precision 0.78);
   - the rest at ~9 min an epoch -> the end ~19:00 ICT, far inside the step's 12 h;
   - nothing changed in the recipe.
+
+### Amendment O11 (2026-11-10 18:20 ICT from `date`, BEFORE any fiT read): the item training ended; THE SCORED MODEL FROZEN
+
+- `train ended rc=0` at 18:19:15 ICT (started 15:18:02): all 20 epochs, 10,805 s, FP32 on the Arc,
+  the guard's worst stall 0.0 %.
+- VAL (FIT p31, monitor only) at epoch 20: P 0.960, R 0.906,
+  mAP50 0.977, mAP50-95 0.683.
+- **The scored checkpoint:** `data/train/xmas02-fi-20261110/weights/last.pt` after epoch 20, **sha256
+  `e24e8f57548a3a6791b9756207fb2ffb11a8a0273c92db07f3bbcbe2196011a5`** (5,531,418 bytes). Nothing is refitted after this line.
+- Next, in O.9's order: the ONNX export (M9's recipe), fiT1 + fiT2 labelled once with `--eval-test`,
+  the eval pack (seed 63) and two NEW blind labellers, the predictions (GPU weights + ONNX, conf
+  0.25), `fi_eval.py` I1-I5, once. The run is archived to the NAS (archive/train/xmas02-fi-20261110).
