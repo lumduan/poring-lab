@@ -3408,3 +3408,41 @@ score):**
 - **Next, in order:** the cache (the dry run's command without `--dry-run`, guarded; its counts must
   equal the dry run's), then the training (O15's recipe, 12 epochs), then fsTn's and fsTa's
   stagings beside it.
+
+### Amendment O15c (2026-11-10 23:19 ICT from `date`, BEFORE the model froze and before any held-out read): the cache, the training's start, T2-r2 PASSES, the held-out stagings
+
+- **The cache** (22:23:59-22:30:19, guarded, rc 0): `/mnt/poring-lab-datasets/.framecache/
+  xmas02-fi-r2-20261110`, 1,227 frames (TRAIN 955 + VAL 272, as the dry run), 13 shards, 377 s.
+- **The training** started 22:30:31 (unit `poring-train-xmas02fi-r2`,
+  `/dev/shm/poring-lab-tmp/xmas-fi/train-r2/launch.sh`, O15's recipe, 12 epochs).
+  - The init re-hashed: e24e8f57.
+  - The log: "Transferred 499/499 items from pretrained weights" (the same single class, the head
+    included).
+  - ~10 min an epoch, so the end is ~00:35.
+  - VAL (monitor only) after epochs 1-3: P 0.962 / 0.978 / 0.967, R 0.967 / 0.973 / 0.874.
+- **T2-r2** (O15: a pack from fs2 + fs3 + fiT1 + fiT3's TRAIN labels, seed 65, `pack --round 2`):
+  - 60 crops = 40 item crops, ALL N (within 1 cell of the character), + 20 E (10 plain, 10 hard);
+  - two NEW blind labellers, M and N, who saw only the pack;
+  - `fi_blind_score.py` once, score sha256 8e6bc567...
+
+| labeller | good box, 40 item crops (>= 90 %) | present right, 60 crops (>= 95 %) | E right | verdict |
+|---|---|---|---|---|
+| M | 95.0 % (38 / 40) | 96.7 % (58 / 60) | 20 / 20 (10 hard) | PASS |
+| N | 95.0 % (38 / 40) | 96.7 % (58 / 60) | 20 / 20 (10 hard) | PASS |
+
+  - They agree on all 60 (q1 and q2). Their only misses are the same two "unsure" crops (015,
+    021: a round red-and-white object over a translucent corpse).
+  - **T2-r2 PASSES: the round-2 model stands** (it is not voided).
+- **The held-out stagings** (refused by name; nothing of them has been read, only shipped):
+  - fsTn, the Crusader (no aura, seed 2611201): 22:19:30-22:46:49, rc 0, 12 spots. Recording
+    `20261110T221931-rdp-xmas02-fsTn`, shipped (rc 0);
+  - the Crusader's 40 Red Herbs were given back (`@item 507 40`, "Item created.");
+  - the switch back to the Rogue: she logged in on xmas_dun02 (236,216) with monsters near, and
+    `@monsterignore` answered "You are now immune to attacks." at once (a relog clears it);
+  - fsTa, the Rogue (aura, seed 2611200): 22:49:12-23:16:01, rc 0, 12 spots. Recording
+    `20261110T224913-rdp-xmas02-fsTa` (3.46 GB), shipped (rc 0).
+- **Next:** at the training's end, freeze `last.pt` (sha256 here, before any held-out file is
+  read), the ONNX export, `GPU_WEIGHTS["xmas02fi2"]`, then the held-out's `--eval-test` labels. The
+  pilots p50-p53 follow (rogue-xmas02.md 4BM-4BO; fiT4-fiT6), then the evaluation pack (seed 66)
+  and the score.
+
