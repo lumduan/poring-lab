@@ -3012,3 +3012,33 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
 - **Disk:** ~45 min of 1-fps PNG, ~5.7 GB, on top of fiT1 3.42 + fiT2 3.50 GB unshipped. That is
   under the 20 GB cap and far over the 30 GB floor (73.8 GB free at 12:30). It ships after the
   SET close with the others.
+
+### Amendment O6 (2026-11-10 13:20 ICT from `date`, the parent): fs1 done; the TRAIN joins; the stopping rule MET
+
+- **fs1:** `stage_items.py run --map xmas_dun02 --n 18 --seed 2611101 --immune-confirmed --label fs1`.
+  - 12:42:33-13:17:48, rc 0, reason "done": 18 spots, 108 items staged, one `@killmonster2` at each
+    spot (12:42:52 .. 13:16:03).
+  - The recording `20261110T124228-rdp-xmas02-fs1`: PNG, 2,154 frames, 4.63 GB, 2,981 packet
+    events; stop "stopped by signal" at 13:18:24.
+  - A slip, recorded: the parent's `A && B & RP=$!` backgrounded the whole list, so the planned
+    TERM at 13:17:53 hit the subshell. The recorder itself was stopped by its PID 31 s later. The
+    frames after the run's end show the last spot only.
+- **The TRAIN labels under v2 (aea6f1d2) and the join rule (G2 <= 3 px on >= 30 fits):**
+
+| session | kept frames | labels | floor items | G2 (median dx / dy, within 3 px) | join |
+|---|---|---|---|---|---|
+| p38 (DEV) | 91 | 95 | 10 | 1 / 1 px | ADMITTED (O3's re-label) |
+| p20 | 57 | 82 | 8 | 1 / 2 px, 31.2 % | ADMITTED |
+| p39 | 20 | 23 | 5 | 1 / **4** px, 19.4 % | NOT admitted (G2 FAIL) |
+| fs1 | 143 | 701 | 68 | 0 / 1 px, 96.2 % (2,172 fits) | ADMITTED |
+| p31 (FIT) | 204 | 233 | 15 | 1 / 1 px | VAL (monitor only) |
+
+- fs1 by id: Holy Scroll 89, Rough Oridecon 78, Candy 71, Pearl 67, Red Herb 62, Orleans book 60,
+  Candy Cane 56, Manacles 54, Cake 52, Cookie 50, Iron 50, Zargon 12.
+  - By distance: within 1 cell 75, 2-5 cells 626.
+  - Exclusions: ui_layout_mismatch 579, item_unfit 389, under_bar 164, under_self 136, stacked 49,
+    under_unit 48, vanishing 35.
+- **O.6's stopping rule:** TRAIN = 878 boxes (p38 95 + p20 82 + fs1 701) from 86 floor items, with
+  12 ids at >= 10 boxes. That is over >= 300 / >= 40 / >= 8 ids: **MET. No fs2.**
+- **Next:** T2-items (O.5: the pack from the TRAIN label files, seed 61, two NEW blind labellers,
+  the bars and fallbacks), then the cache, the training (O-D7) and the evaluation on fiT1 + fiT2.
