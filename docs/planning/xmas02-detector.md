@@ -3560,3 +3560,35 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   near-her negatives with fights.
 - **Where recall still misses:** all 6 misses are NATURAL drops (3 floor items in the pilots: fiT4
   #1422 x 2 frames, fiT5 #1439 x 2, fiT6 #1460) and fsTn #1159. The staged aura items are 56 / 56.
+
+### Amendment O17 (2026-11-11 03:44 ICT from `date`, BEFORE its cache): ROUND 3 pre-registered -- fight negatives near her
+
+- **Why (O16, looked at after the score):** round 2's false boxes in the pilots sit in FIGHTS: a
+  Cruiser's mace head, a pale hit-effect fragment beside a Cruiser, a small puff on the floor.
+  - Their confidences are high (I3's boxes: quartiles 0.34 / 0.47 / 0.70), so no threshold
+    separates them.
+  - Round 2's TRAIN took 1 negative per 3 item frames from each item session: ~8 fight frames
+    per pilot, against hundreds of staged near-her items with no fight.
+- **Batt (11-10 night):** keep improving toward 95 %, train whatever can be trained.
+- **TRAIN r3** (params v2 aea6f1d2; each new session by the join rule G2):
+  - round 2's TRAIN (O15b);
+  - the banked fs4 (409 labels, G2 PASS) and fs5 (84, PASS);
+  - round 2's held-out, scored ONCE (O16) and TRAIN-eligible from here (`map_labels.XMAS02_FIT_R2`):
+    fiT4, fiT5, fiT6, fsTa, fsTn, relabelled `--split train`;
+  - **the change: `--session-negs` (build_frame_cache, tested):** 150 item-free kept frames from
+    EACH pilot in TRAIN (p38, p20, fiT1, fiT3, fiT4, fiT5, fiT6) instead of 1 per 3 item frames.
+    Those are the frames where she stands in a fight with no item on the floor.
+  - VAL: FIT p31 (monitor only).
+- **The training:** init = round 2's `last.pt` (e381d689); O15's recipe otherwise.
+  - Epochs = min(12, max(3, floor(6,000 s / (0.64 s x N_train + 100 s)))), N_train from the dry
+    run.
+  - 6,000 s keeps the end near 06:00 (Batt's window) from a ~04:05 start.
+- **The held-out r3, fresh (refused by name: `map_labels.XMAS02_FIT`, round 3):**
+  - fsTa3 (the Rogue, aura) and fsTn3 (the Crusader, no aura), near stagings on spots sharing NO
+    cell with any TRAIN staging (fs1-fs5, fsTa, fsTn), staged tonight beside the training;
+  - fiT7, fiT8, fiT9: base pilots recorded beside the next runs (the next session).
+- **The bars: O15's, unchanged** (I1a / I1n >= 0.85, I1 precision, I2, I3, I4, I5; Batt's 95 %
+  reported). `fi_eval` gains round 3's strata (`--strata r3`, the round-3 names) with a test
+  BEFORE any score. The model is frozen and sha256-recorded before any held-out file is read; the
+  evaluation is the next session's.
+

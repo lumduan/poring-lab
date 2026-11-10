@@ -1442,15 +1442,18 @@ def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
     records (labels, T2's pool), like gw3; other hunt recordings are not. O15 (round 2): the
     held-out is fiT4-fiT6 + the near stagings fsTa / fsTn; round 1's fiT1-fiT3 are TRAIN."""
     spec = ml.XMAS02
-    for sid in [f"20261110T110000-rdp-hunt-xmas02-fiT{n}" for n in (4, 5, 6)] + [
-            "20261110T230000-rdp-xmas02-fsTa", "20261110T233000-rdp-xmas02-fsTn"]:  # fmt: skip
+    for sid in [f"20261111T050000-rdp-hunt-xmas02-fiT{n}" for n in (7, 8, 9)] + [
+            "20261111T043000-rdp-xmas02-fsTa3", "20261111T053000-rdp-xmas02-fsTn3"]:  # fmt: skip
         assert spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
+    # O17: round 2's held-out (fiT4-6, fsTa, fsTn) is TRAIN-eligible since its score (O16)
     for sid in ("20261109T133046-rdp-hunt-xmas02-p38", "20261110T110000-rdp-hunt-xmas02-fiT12",
                 "20261110T110000-rdp-hunt-xmas02-fi1", "20261110T105312-rdp-hunt-xmas02-fiT1",
                 "20261110T120155-rdp-hunt-xmas02-fiT2", "20261110T185223-rdp-hunt-xmas02-fiT3",
+                "20261111T003808-rdp-hunt-xmas02-fiT4", "20261110T224913-rdp-xmas02-fsTa",
+                "20261110T221931-rdp-xmas02-fsTn",
                 "20261110T220000-rdp-xmas02-fs2", "20261110T224000-rdp-xmas02-fs3"):  # fmt: skip
         assert not spec.is_test(sid, None), sid
-    t1 = "20261110T110000-rdp-hunt-xmas02-fiT4"
+    t1 = "20261111T050000-rdp-hunt-xmas02-fiT7"
     with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
         ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{t1}"))
     with pytest.raises(SystemExit, match="TEST is not in T2's pool"):

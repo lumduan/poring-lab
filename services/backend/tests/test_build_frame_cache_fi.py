@@ -230,7 +230,7 @@ def test_the_join_rule_and_the_roles(bfc: ModuleType, world: dict[str, Any],
     with pytest.raises(SystemExit, match="sha256"):
         bfc.main(wrong)
     held = json.loads(world["files"][P38].read_text())
-    held.update(session="20261111T090000-rdp-hunt-xmas02-fiT4", eval_test=False)
+    held.update(session="20261111T090000-rdp-hunt-xmas02-fiT7", eval_test=False)
     write(world["tmp"] / "fit1.json", held)
     with pytest.raises(SystemExit, match="held-out"):
         bfc.main(
@@ -292,3 +292,14 @@ def test_the_build_writes_item_frames_and_negatives(bfc: ModuleType, world: dict
     with pytest.raises(SystemExit, match="exists"):
         bfc.main(argv(world, "--train", P38, XW2, "--val", P31, "--neg-sessions", XW2,
                       "--cache-id", "fi-test"))  # fmt: skip
+
+
+def test_o17_session_negs_raise_an_item_sessions_negatives(bfc: ModuleType) -> None:
+    """O17 (round 3): --session-negs SID=N lets a pilot draw N fight negatives instead of 1 per 3
+    item frames; never fewer than O.8's share; a malformed spec refuses."""
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 24) == 8
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 24, ["fiT4=150"]) == 150
+    assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT4", 600, ["fiT4=150"]) == 200
+    assert bfc.session_neg_count("x-rdp-xmas02-fs2", 92, ["fiT4=150"]) == 30
+    with pytest.raises(SystemExit, match="SID=N"):
+        bfc.session_neg_count("x", 3, ["fiT4"])

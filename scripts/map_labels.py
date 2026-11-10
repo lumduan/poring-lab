@@ -320,8 +320,13 @@ XMAS02_GW3 = "-rdp-gb-gw3"  # Amendment M: the held-out Garm Baby watch (`--labe
 # fiT4-fiT6 (the aura Rogue, natural drops) and two NEAR stagings on spots sharing no cell with any
 # TRAIN staging: fsTa (the Rogue, aura) and fsTn (the Base 60 Crusader, NO aura; Batt 11-10 night)
 XMAS02_FIT_R1 = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xmas02-fiT3")
-XMAS02_FIT = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
-              "-rdp-xmas02-fsTa", "-rdp-xmas02-fsTn")  # fmt: skip
+# Amendment O17 (2026-11-11, round 3): round 2's held-out was scored ONCE (O16) and becomes
+# TRAIN-eligible (XMAS02_FIT_R2, history); round 3's held-out is fresh: pilots fiT7-fiT9 and the
+# near stagings fsTa3 / fsTn3
+XMAS02_FIT_R2 = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
+                 "-rdp-xmas02-fsTa", "-rdp-xmas02-fsTn")  # fmt: skip
+XMAS02_FIT = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9",
+              "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3")  # fmt: skip
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),
