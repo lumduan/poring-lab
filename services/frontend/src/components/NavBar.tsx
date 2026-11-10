@@ -13,7 +13,7 @@ const LINKS = [
   { href: "/", label: "Console" },
   { href: "/flows", label: "Flows" },
   { href: "/settings", label: "Settings" },
-  { href: "/qa", label: "Label QA" },
+  // "Label QA" (/qa) left the bar 2026-11-10 (Batt: no longer used); the page itself remains
   { href: "/hardware", label: "Hardware" },
 ];
 
