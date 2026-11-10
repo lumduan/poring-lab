@@ -3592,3 +3592,17 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   BEFORE any score. The model is frozen and sha256-recorded before any held-out file is read; the
   evaluation is the next session's.
 
+### Amendment O17b (2026-11-11 03:52 ICT from `date`, BEFORE the cache): round 3's admissions and epochs
+
+- **The relabels (`--split train`, v2):**
+  - fiT6 18-24 labels, G2 PASS (43 fits): ADMITTED;
+  - fsTa 331 labels, PASS (1,140): ADMITTED;
+  - fsTn 422, PASS (1,103): ADMITTED;
+  - **fiT4 (29 fits) and fiT5 (26) NOT admitted** (G2 NOT_ENOUGH, by the letter, as fiT2). So
+    they give no fight negatives either: `--session-negs` names p38, p20, fiT1, fiT3, fiT6 (150
+    each).
+- **The dry run:** TRAIN 2,147 frames (880 item frames, 2,736 boxes, 1,267 negatives), 322 floor
+  items, ~4.6 GB in 17 shards, `would_refuse_join` empty. VAL p31 as before.
+- **Epochs = min(12, max(3, floor(6,000 / (0.64 x 2,147 + 100)))) = 4.**
+- The Rogue's bag was emptied (`clear-bag`, 03:47) for fsTa3.
+
