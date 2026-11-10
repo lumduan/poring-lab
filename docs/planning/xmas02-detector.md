@@ -3067,3 +3067,41 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
 - Labellers: two NEW blind labellers, I and J (subagents that see only the pack). J starts when an
   agent slot frees (at most 2 agents at once). Scored by `fi_blind_score.py` with O.5's bars and
   fallbacks, once, when both have answered.
+
+### Amendment O9 (2026-11-10 15:10 ICT from `date`, the parent, BEFORE the cache or any GPU step): the item cache and the training, pre-registered
+
+- **Runs only if T2-items passes** (O.5's bars from both labellers I and J, or a pre-registered
+  fallback; scored once by `fi_blind_score.py`).
+- **The negatives' label files** (made 15:07-15:09 under v2): xw2 1,589 frames, xw3 932 + 678, gw2
+  749. All are item-free: 0 floor items in their packets.
+- **The dry run (15:1x, `build_frame_cache.py --labels items ... --dry-run`):**
+  - TRAIN: 687 frames, 291 item frames / 878 boxes (p38 95, p20 82, fs1 701) + 396 negatives (1
+    per 3 item frames from each item session + 300 pooled from xw2 / xw3 / gw2, seed default).
+  - About 1.44 GB in 7 shards. VAL p31 (monitor only). `would_refuse_join` empty. 86 floor items.
+- **The cache step (the dry run's command without `--dry-run`, from the main checkout):**
+
+      L=/dev/shm/poring-lab-tmp/xmas-fi/labels-v2; P2=/dev/shm/poring-lab-tmp/xmas-fi/params-v2.json
+      N="20261106T151122-rdp-xmas02-xw2 20261106T154241-rdp-xmas02-xw3 20261106T160700-rdp-xmas02-xw3 20261109T210933-rdp-gb-gw2"
+      python3 scripts/guarded_build.py --threshold 30 --sustain 30 "cache@7200=--labels items \
+        --item-params $P2 --item-params-sha256 aea6f1d2b938d6fdfa1ebadc0042ba3a9ce2448f8b22f2075f0c0cb48297bb2c \
+        --fi-labels $L/<p38>.json $L/<p20>.json $L/<fs1>.json $L/<p31>.json $L/<xw2>.json $L/<xw3a>.json $L/<xw3b>.json $L/<gw2>.json \
+        --class-list config/detector/classes-xmas02-fi.json \
+        --train <p38> <p20> <fs1> $N --neg-sessions $N --neg-total 300 --val <p31> \
+        --cache-id xmas02-fi-20261110 --image png"
+
+  The written counts must equal the dry run's; a difference stops before any GPU step.
+- **The training (O-D7; M6's recipe and launch path):**
+  - one class [floor_item], 20 epochs, batch 2, workers 2, FP32 on the Arc, `--mid-ckpt`;
+  - the init is xmas02-gb's `last.pt` (85fb37a4). The class head has 1 row, which matches no name
+    of the init's, so it starts fresh; the backbone and neck are seeded;
+  - hsv_s 0.2, close_mosaic 3, scale 0.1;
+  - command:
+
+        python3 scripts/guarded_build.py --threshold 30 --sustain 30 \
+          "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-fi-20261110 --epochs 20 --batch 2 --workers 2 --name xmas02-fi-20261110 --mid-ckpt --weights /datasets/archive/train/xmas02-gb-20261109/weights/last.pt --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
+
+  - estimate: 687 frames x 20 epochs x 0.625 s (M8's rate) = ~2.4 h;
+  - its log's transfer / remap lines are recorded as the check.
+- **After it:** the scored model is frozen as M8 was. Then the evaluation, once: I1-I5 on fiT1 +
+  fiT2 (`fi_labels.py label --eval-test`, `fi_eval.py`, the T2 pack seed 63 for I1's crops). Then
+  `--loot-sight`'s pre-registration (a shadow pilot first).
