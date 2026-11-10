@@ -3612,3 +3612,22 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   - `--session-negs` now takes plain names + `--session-negs-n 150` (96a9ecdb: the guarded cache
     step refuses '=' in an argument). The dry run's counts are unchanged.
 
+### Amendment O17d (2026-11-11 04:17 ICT from `date`): the round-3 cache and training; fsTa3 stopped at spot 7 (kept as it is)
+
+- **The cache** (03:53:46-04:06:02, guarded, rc 0): `xmas02-fi-r3-20261111`, 2,419 frames (TRAIN
+  2,147 + VAL 272, as the dry run), 19 shards, 734 s.
+- **The training** started 04:06 (unit `poring-train-xmas02fi-r3`, O17's recipe, 4 epochs, the init
+  re-hashed e381d689; "Transferred 499/499"); ~17 min an epoch.
+- **fsTa3** (the Rogue, seed 2611446) ran 03:55:47-04:09:56, **rc 1 after 6 of 12 spots** (36
+  items).
+  - At spot 7's second `@item` the chat-window check read 'unknown' ("obscured", the input bar open,
+    an "obtained" popup over the busy floor; frame
+    `chat-window/20261111-040948-unreadable.png`). It stopped before typing, as built.
+  - It is KEPT as it is: a repeat under another name would not be refused by name.
+  - Spot 7's one given Zargon is still in her bag (a clear-bag before her next staging).
+  - The recording `20261111T035548-rdp-xmas02-fsTa3` is shipped. If round 3's aura stratum is
+    short (< 40 evaluated crops with fiT7-fiT9), that stratum is NO VERDICT and more held-out
+    comes from the next pilots.
+- **fsTn3** (the Crusader, seed 2611681) started 04:17:07 (the herb stack dropped as before,
+  `held` rc 0 at 04:16:58).
+
