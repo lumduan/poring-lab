@@ -153,6 +153,26 @@ def test_lint_simulate_python(make: Make) -> None:
     assert any(f["rule"] == "map_sheet" for f in local["findings"])
 
 
+def test_simulate_gives_the_play_list_with_encounters(make: Make) -> None:
+    """The Maps page (2026-11-10): the run in order, with a monster placed for each attack
+    (`encounters`, from `seed`) and the NPC each talk stands at; still computation only."""
+    client = make()
+    body = {"flow": sample(), "world": "sample",
+            "scenario": {"horizon_s": 120, "encounters": True, "seed": 3}}  # fmt: skip
+    r = post(client, "simulate", body)
+    assert r.status_code == 200, r.text
+    play = r.json()["trace"]["play"]
+    kinds = {s["kind"] for s in play}
+    assert {"walk", "talk", "menu", "fight", "exit"} <= kinds
+    fights = [s for s in play if s["kind"] == "fight"]
+    assert fights and all(s["mob"] in (9101, 9102) and s["at"] for s in fights)
+    assert next(s for s in play if s["kind"] == "talk")["at"] == [56, 44]  # n_kafra's cell
+    assert post(client, "simulate", body).json()["trace"]["play"] == play  # the seed repeats
+    bad = post(client, "simulate", {**body, "scenario": {"seed": -1}})
+    assert bad.status_code == 422 and bad.json()["detail"]["reason"] == "invalid_scenario"
+    assert NoInput.sent == []
+
+
 @pytest.mark.parametrize(
     ("peer", "headers", "status", "reason"),
     [

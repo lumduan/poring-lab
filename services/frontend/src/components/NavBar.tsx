@@ -12,6 +12,7 @@ import { backendHttpBase } from "@/lib/ws";
 const LINKS = [
   { href: "/", label: "Console" },
   { href: "/flows", label: "Flows" },
+  { href: "/maps", label: "Maps" }, // 2026-11-10: the maps graph, each map bound to its flow, the simulator
   { href: "/settings", label: "Settings" },
   // "Label QA" (/qa) left the bar 2026-11-10 (Batt: no longer used); the page itself remains
   { href: "/hardware", label: "Hardware" },

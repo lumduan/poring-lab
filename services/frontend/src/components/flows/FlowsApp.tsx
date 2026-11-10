@@ -18,6 +18,7 @@
 import "./studio.css";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
@@ -99,7 +100,7 @@ function initialFlow(): { flow: Flow; restored: boolean; broken: boolean } {
   return r.ok ? { flow: r.flow, restored: true, broken: false } : { flow: starterFlow(), restored: false, broken: true };
 }
 
-export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) {
+export default function FlowsApp({ backendUrl, initialBlock = null }: { backendUrl: string | null; initialBlock?: string | null }) {
   // Client-only (FlowsClient loads this with ssr: false): backendHttpBase reads window.location.
   const [api] = useState<FlowsApi>(() => new FlowsApi(backendHttpBase(backendUrl)));
   const [start] = useState(initialFlow);
@@ -120,7 +121,12 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const [simBusy, setSimBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [zonesFor, setZonesFor] = useState<string | null>(null);
-  const [tab, setTab] = useState<string>(() => tabsOf(start.flow)[0].key);
+  // `?block=<name>` (the Maps page's "Open flow", 2026-11-10): that map block's tab, if it is one
+  const [tab, setTab] = useState<string>(() => {
+    const all = tabsOf(start.flow);
+    const want = initialBlock ? `block:${initialBlock}` : null;
+    return want && all.some((t) => t.key === want) ? want : all[0].key;
+  });
   const [editor, setEditor] = useState<EditorState>(NO_EDITOR);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const pendingShow = useRef<{ tab: string; path: string } | null>(null);
@@ -205,11 +211,14 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
     writeChoice(store, KEYS.world, world);
   }, [world, store]);
 
-  // remember this browser's flow (a convenience: a reload does not lose the work)
+  // remember this browser's flow (a convenience: a reload does not lose the work); the Maps page
+  // reads the same flow, so it is also written at once on the way there and when the page goes
+  const flush = useCallback(() => writeChoice(store, KEYS.flow, exportText(flowRef.current)), [store]);
   useEffect(() => {
     const t = setTimeout(() => writeChoice(store, KEYS.flow, exportText(flow)), SAVE_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [flow, store]);
+  useEffect(() => () => void flush(), [flush]);
 
   // close the Load menu on a click outside it
   useEffect(() => {
@@ -678,6 +687,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
                 </button>
               )}
             </div>
+            <MapPicker flow={flow} tab={active.key} onTab={goTab} onLeave={flush} />
           </div>
           <div className="blocks-area">
             {active.scope ? (
@@ -696,6 +706,9 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
               />
             ) : (
               <div className="blocks-workspace" inert={view === "python"}>
+                <Link href="/maps" className="maps-link-chip" onClick={flush} data-testid="flows-maps-link">
+                  The Maps page: login, characters and the bot walking the maps ↗
+                </Link>
                 <FlowCanvas
                   flow={flow}
                   positions={positions}
@@ -900,6 +913,38 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
         </div>
       )}
     </main>
+  );
+}
+
+/** WHICH MAP this tab's flow is bound to (Batt 2026-11-10: "like binding a program to a robot in
+ * matpilot"): at the end of the tab row, as matpilot's Robot choice is. Each map block's tab IS its
+ * map's flow; the choice opens another map's tab, and "Maps" goes back to the maps graph (the
+ * Maps page) with this map selected. */
+function MapPicker({ flow, tab, onTab, onLeave }: { flow: Flow; tab: string; onTab: (key: string) => boolean; onLeave: () => void }) {
+  const wf = flow.workflow;
+  const block = tab.startsWith("block:") ? wf?.blocks.find((b) => `block:${b.name}` === tab) : undefined;
+  const title = !wf
+    ? "A plain flow: one program, no map blocks. The Maps page shows the login before it."
+    : block
+      ? `This tab's flow is bound to the map ${block.map.map} (its map block ${block.name}): what the bot does on that map.`
+      : "Choose a map to open its flow (its map block's tab).";
+  return (
+    <div className="block-tabs-trailing robot-picker" data-testid="map-picker">
+      <label className="robot-picker-label" title={title}>
+        <span className="robot-picker-name">Map</span>
+        <select className="robot-picker-select" value={block ? tab : ""} onChange={(e) => onTab(e.target.value || "map")} disabled={!wf} data-testid="map-picker-select">
+          <option value="">{wf ? (tab === "events" ? "every map (events)" : "every map (the Map tab)") : "none: a plain flow"}</option>
+          {wf?.blocks.map((b) => (
+            <option key={b.name} value={`block:${b.name}`}>
+              {b.map.map} · {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Link href={block ? `/maps?node=${encodeURIComponent(`block:${block.name}`)}` : "/maps"} className="robot-picker-link" onClick={onLeave} title="The maps graph: login, characters, the maps and their exits, and the simulator">
+        ◂ Maps
+      </Link>
+    </div>
   );
 }
 

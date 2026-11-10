@@ -1,0 +1,596 @@
+/* The MAPS page (2026-11-10, docs/planning/world-map-flows.md): the studio's tokens and parts
+   (studio.css, on the same .studio root), matpilot's Mats page layout (the stage with the playback
+   bar over it, the panel beside it; its .mat-playback, .robot-checks, .run-* rules ported), and our
+   own nodes (.mp-*) and map view (.mat-*, .maps-*).
+
+   The ported rules are MatPilot's (https://github.com/lumduan/matpilot at commit d639909,
+   src/app/globals.css; THIRD_PARTY.md), MIT License, Copyright (c) 2026 Sarat Sonsuk; the licence
+   text is in studio.css. */
+
+.maps-page {
+  /* the map view's colours: grey walkable, dark blocked (Batt's xmas_dun02 picture) */
+  --mat-floor: #a7aeb6;
+  --mat-wall: #1b1f24;
+  --mat-empty: #d6dbe1;
+  --mat-trail: #15803d;
+  --mat-route: #1f5fbf;
+  --mat-bot: #1f5fbf;
+  --mat-bot-edge: #ffffff;
+  --mat-monster: #dc2626;
+  --mat-npc: #c2410c;
+  --mat-warp: #7c3aed;
+  --mat-save: #be123c;
+  --mat-loot: #ca8a04;
+  --mat-text: #1b1f24;
+  --mat-bubble: #ffffff;
+  --mat-bubble-text: #1b1f24;
+}
+@media (prefers-color-scheme: dark) {
+  .maps-page {
+    --mat-floor: #6b7480;
+    --mat-wall: #0b0d10;
+    --mat-empty: #2f3740;
+    --mat-trail: #4ade80;
+    --mat-route: #93c5fd;
+    --mat-bot: #5b9bf0;
+    --mat-bot-edge: #0b1220;
+    --mat-monster: #f87171;
+    --mat-npc: #fb923c;
+    --mat-warp: #c4b5fd;
+    --mat-save: #fb7185;
+    --mat-loot: #facc15;
+    --mat-text: #e6e9ed;
+    --mat-bubble: #1a1f25;
+    --mat-bubble-text: #e6e9ed;
+  }
+}
+
+/* --- the body: the stage (graph above, map view below) and the panel beside it ------------------ */
+.maps-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.maps-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.maps-graph {
+  position: relative;
+  display: flex;
+  flex: 1 1 42%;
+  flex-direction: column;
+  min-height: 12rem;
+}
+.maps-stage[data-mat="closed"] .maps-graph {
+  flex: 1;
+}
+.maps-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.maps-toolbar .block-tab-add {
+  margin: 0;
+}
+.maps-hint {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.maps-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+.maps-add input {
+  width: 11rem;
+  padding: 0.2rem 0.45rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+}
+.maps-graph-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+.maps-dialog {
+  position: absolute;
+  top: 3rem;
+  left: 50%;
+  z-index: 60;
+  width: min(30rem, calc(100% - 1.5rem));
+  padding: 0.9rem 1rem;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+}
+.maps-dialog .maps-add {
+  flex-direction: column;
+  align-items: stretch;
+}
+.maps-dialog .maps-add input {
+  width: 100%;
+}
+
+/* --- the map view (matpilot's mat, for maps) -------------------------------------------------- */
+.maps-mat {
+  display: flex;
+  flex: 1.3 1 58%;
+  flex-direction: column;
+  min-height: 14rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.maps-mat-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.6rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.maps-mat-what {
+  flex: 1;
+  min-width: 8rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.maps-mat-bar .segmented-option {
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+}
+.maps-mat-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+.mat-box {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: safe center;
+  overflow: auto;
+  padding: 0.25rem 0.25rem 3.6rem; /* room for the playback bar */
+}
+.mat-canvas {
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 0.3rem;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 18%);
+}
+.mat-note {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  max-width: 24rem;
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border-left: 3px solid var(--warn-border);
+  border-radius: 0.3rem;
+  font-size: 0.78rem;
+}
+.maps-legend {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.9rem;
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.maps-legend li::before {
+  content: "";
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.3rem;
+  vertical-align: -0.05rem;
+  border-radius: 50%;
+}
+.maps-legend li[data-k="bot"]::before { background: var(--mat-bot); }
+.maps-legend li[data-k="trail"]::before { background: var(--mat-trail); border-radius: 0.15rem; }
+.maps-legend li[data-k="route"]::before { border: 2px dashed var(--mat-route); background: none; }
+.maps-legend li[data-k="monster"]::before { background: var(--mat-monster); }
+.maps-legend li[data-k="npc"]::before { background: var(--mat-npc); border-radius: 0.1rem; }
+.maps-legend li[data-k="warp"]::before { border: 2px solid var(--mat-warp); background: none; }
+.maps-legend li[data-k="save"]::before { content: "×"; width: auto; height: auto; color: var(--mat-save); font-weight: 700; }
+
+/* matpilot's playback bar (MatRunPanel.tsx), with our step and reset buttons */
+.mat-playback {
+  position: absolute;
+  left: 50%;
+  bottom: 0.6rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: min(40rem, calc(100% - 1.2rem));
+  padding: 0.3rem 0.6rem;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
+}
+.mat-playback input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.mat-playback-time {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mat-playback-speed {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+}
+.mat-playback .icon-button {
+  width: 1.8rem;
+  height: 1.8rem;
+  font-size: 0.8rem;
+}
+
+/* --- the panel beside the stage (matpilot's .mats-side) ---------------------------------------- */
+.maps-side {
+  display: flex;
+  flex-direction: column;
+  width: clamp(18rem, 28vw, 27rem);
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.maps-side-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.maps-side-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.7rem 0.8rem 1rem;
+  font-size: 0.86rem;
+}
+.maps-side-body .notice {
+  margin: 0;
+}
+.maps-python {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin: -0.7rem -0.8rem -1rem;
+}
+.maps-python .python-files {
+  align-items: center;
+}
+.maps-python .code-view {
+  margin: 0.4rem;
+  min-height: 16rem;
+}
+.mp-bound {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.45rem;
+  background: var(--bg);
+}
+.mp-fieldset {
+  margin: 0;
+  padding: 0.4rem 0.6rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+}
+.mp-fieldset legend {
+  padding: 0 0.3rem;
+  font-weight: 700;
+}
+.mp-choice {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-top: 0.4rem;
+}
+.mp-choice input {
+  margin-top: 0.25rem;
+}
+.mp-choice[data-disabled="true"] {
+  color: var(--muted);
+}
+.mp-why {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.mp-field {
+  display: grid;
+  gap: 0.25rem;
+}
+.mp-field select,
+.mp-field input {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+.mp-field input[aria-invalid="true"] {
+  border-color: var(--error-border);
+}
+.mp-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.mp-steps li + li {
+  margin-top: 0.35rem;
+}
+
+/* matpilot's run checks and results (MatRunPanel.tsx) */
+.studio .robot-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.86rem;
+}
+.studio .robot-checks li {
+  display: flex;
+  gap: 0.5rem;
+}
+.studio .robot-checks li + li {
+  margin-top: 0.4rem;
+}
+.studio .robot-check-mark {
+  flex: none;
+  width: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+}
+.studio .robot-checks li[data-ok="true"] .robot-check-mark {
+  color: var(--ok-text);
+}
+.studio .robot-checks li[data-ok="false"] .robot-check-mark {
+  color: var(--error-text);
+}
+.studio .robot-checks li[data-ok="unknown"] .robot-check-mark {
+  color: var(--warn-text);
+}
+.studio .run-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.studio .run-result .notice ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.studio .run-output summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.studio .run-time {
+  flex: none;
+  min-width: 3.6rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mp-beats {
+  max-height: 22rem;
+  overflow-y: auto;
+  margin: 0.4rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  font-size: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+.mp-beat {
+  display: flex;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mp-beat:hover {
+  background: var(--neutral-bg);
+}
+.mp-beats li[data-current="true"] .mp-beat {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.mp-beats li[data-current="true"] .run-time,
+.mp-beats li[data-current="true"] .muted {
+  color: inherit;
+}
+.mp-mark {
+  flex: none;
+  width: 1rem;
+  text-align: center;
+}
+
+/* --- the graph's nodes (MapsCanvas.tsx) ------------------------------------------------------- */
+.mp-node {
+  min-width: 200px;
+  max-width: 260px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  font-size: 0.82rem;
+}
+.mp-node[data-selected="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.mp-node[data-active="true"] {
+  border-color: var(--run-bg);
+  box-shadow: 0 0 0 3px var(--run-bg), 0 0 18px var(--run-bg);
+}
+.mp-start {
+  min-width: 0;
+  padding: 0.45rem 0.9rem;
+  border-color: var(--run-bg);
+  border-radius: 999px;
+  background: var(--run-bg);
+  color: var(--run-text);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.mp-session {
+  border-style: dashed;
+  border-color: var(--neutral-border);
+}
+.mp-map {
+  min-width: 230px;
+  border-color: #a21caf;
+}
+.mp-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.mp-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.mp-mock {
+  padding: 0 0.35rem;
+  border: 1px solid var(--warn-border);
+  border-radius: 0.3rem;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+.mp-line {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-muted {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.mp-key {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.mp-call {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+.mp-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.mp-button {
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mp-button:hover {
+  border-color: var(--accent);
+}
+.mp-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--neutral-border) !important;
+}
+.mp-chip {
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* --- phones and narrow windows: everything in one column -------------------------------------- */
+@media (max-width: 48rem) {
+  .maps-page {
+    height: auto;
+    min-height: 100dvh;
+  }
+  .maps-body {
+    flex-direction: column;
+  }
+  .maps-stage {
+    flex: none;
+  }
+  .maps-graph {
+    flex: none;
+    height: 22rem;
+  }
+  .maps-mat {
+    flex: none;
+    height: 26rem;
+  }
+  .maps-hint {
+    display: none;
+  }
+  .maps-side {
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .maps-side-body {
+    overflow: visible;
+  }
+  .mat-playback {
+    gap: 0.25rem;
+    padding: 0.25rem 0.4rem;
+  }
+}

@@ -120,6 +120,20 @@ replaced by our own tokenizer (`services/frontend/src/lib/flow/pycolor.ts`).
 | same | `d639909` | same | `src/app/globals.css` (the tokens, `.studio*`, `.segmented*`, `.button*`, `.notice*`, `.block-tab*`, `.code-*`, `.py-*`, `.toggle-button`, the narrow-screen rules) | `services/frontend/src/components/flows/studio.css` |
 | same | `d639909` | same | `src/components/blocks/BlocksApp.tsx` (the layout, the icons), `src/lib/blocks/python-colors.ts` (the token kinds and rules only: its lezer code was not copied), `src/lib/blocks/generator.ts` (the `# --- Section ---` heading style), `src/lib/blocks/simple-definitions.ts` (the sensor blocks' shape) | `services/frontend/src/components/flows/FlowsApp.tsx`; the rules re-written in `pycolor.ts`; `packages/poring_flow/src/poring_flow/pyview.py` (`section_rule`); `blockdefs.ts` (`pl_detect_*`) |
 
+### The Maps page: matpilot's mat page, for maps (2026-11-10)
+
+Batt (2026-11-10): "like matpilot's mat page where you watch the robot walk … binding a program to a
+robot in matpilot" ([docs/planning/world-map-flows.md](docs/planning/world-map-flows.md)). The same
+commit and LICENSE as above (read again 2026-11-10: sha256 unchanged). Ideas only, our own code:
+the graph (React Flow, already a dependency) and the simulator (poring_flow.trace); matpilot's
+MicroPython simulator and its mat geometry were not copied.
+
+| Source | Commit | License | File read | Ported into |
+|---|---|---|---|---|
+| [lumduan/matpilot](https://github.com/lumduan/matpilot) | `d639909` | MIT, © 2026 Sarat Sonsuk (`LICENSE`) | `src/components/mats/MatRunPanel.tsx` (`PlaybackBar`: play / pause, the time slider, the speed; `Checks`: the ✓ / ✗ list), `src/hooks/useMatRun.ts` (the playback clock: real time × speed, on `requestAnimationFrame`) | `services/frontend/src/components/maps/SidePanels.tsx` (`PlaybackBar` + our step and reset, `Checks`), `services/frontend/src/components/maps/MapsApp.tsx` (the clock) |
+| same | `d639909` | same | `src/components/mats/MatsApp.tsx` (the stage with the playback bar over it, the panel beside it), `src/components/blocks/RobotPicker.tsx` (the Robot choice at the end of the tab row) | `MapsApp.tsx` (the layout); `services/frontend/src/components/flows/FlowsApp.tsx` (`MapPicker`: the map a tab's flow is bound to) |
+| same | `d639909` | same | `src/app/globals.css` (`.mat-playback*`, `.robot-checks*`, `.run-result`, `.run-output`, `.run-time`, `.mats-side`, `.robot-picker*`) | `services/frontend/src/components/maps/maps.css`; `.robot-picker*` in `services/frontend/src/components/flows/studio.css` |
+
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:

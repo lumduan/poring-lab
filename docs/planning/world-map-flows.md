@@ -1,0 +1,196 @@
+---
+doc_type: design
+hypothesis: null
+status: "BUILT 2026-11-10 (first version, not committed yet): the Maps page /maps (graph + session mock + map-bound flows + the map simulator); poring_flow.trace's play list and encounters (needs a guarded backend restart)."
+role: null
+verdict_date: null
+verdict_ticket: null
+supersedes: null
+related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
+next_action: "Parent: guarded backend restart (trace.py), scripts/flows_gat.py for xmas_dun02's walk grid, commit. matpilot: a headless-Chrome look at /maps (light / dark, 1280 and 390 px). Batt: section 9's questions."
+title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
+date: 2026-11-10
+owner: Batt
+---
+
+# The Maps page (/maps)
+
+**Batt (2026-11-10, translated):** "Besides /flows, design a map-flow page too -- call it 'map' or
+anything that carries the meaning well. Start from login and character selection; make it a MOCK
+for now -- we already have the Python code for this part (the bot uses it). In this map-flow use the
+n8n / Node-RED way of placing blocks, like we did at the very start, because it is easy to read, and
+one map links to many other maps. The current flow must be BOUND TO A MAP, like binding a program to
+a robot in matpilot -- but here it is each map's flow: what to do in this map. We already have the
+map data (xmas_dun02's walk grid, grey walkable / black blocked, the bot's walked trails). Use this
+to SIMULATE the bot: e.g. walk from point a -> b -> c, like matpilot's mat page where you watch the
+robot walk, but also simulate meeting monsters and talking to NPCs at the positions in the block
+flow."
+
+Nothing on /maps runs live: the green button is SIMULATE (no game, no input), Login and Choose
+character are mocks, and the page reaches no executor, mux, agent channel or input path.
+
+## 1. The name: "Maps", at /maps
+
+- Batt's own word ("call it 'map'").
+- matpilot's parallel: Blocks / Robots / **Mats** there, Flows / **Maps** here. The Mats page is
+  where a learner watches the robot walk; Maps is where they watch the bot walk.
+- "World" already means the STATIC DATA in this code (`WorldSource`, `GET /flows/world`,
+  `sheet.World`, the context bar's "static data"): a page named World beside it would be ambiguous.
+- The NavBar: Console · Flows · **Maps** · Settings · Hardware.
+
+## 2. What Batt sees
+
+```
+┌ NavBar ──────────────────────────────────────────────────────────────────────────────────┐
+│ Maps [SIMULATE only] my_first_workflow                         Load ▾  Save  [▶ Simulate] │
+│ login (mock) lab-rathena · character (mock) the remembered slot · static data ▾ · maps 2 · lint │
+│ ┌ + map   (drag from a port onto another map …) ─────────────────┐┌ Node | Run | Python ┐ │
+│ │ (START)→[Login MOCK]→[Choose character MOCK]→[town_1]⇄[field_1] ││ the node's inspector │ │
+│ ├ map ▾ town_1 · a simulation · fit 2× 4× ────────────────────────┤│ or the run: checks,  │ │
+│ │  the walk grid; green walked routes; the bot; monsters; NPCs    ││ what happens, step   │ │
+│ │        ⏮ ◀ [▶ Play] ▶ ───────●────── 12.4 s / 71.0 s  4×       ││ by step; or Python   │ │
+│ └ legend ─────────────────────────────────────────────────────────┘└──────────────────────┘ │
+│ Playing at 12.4 s of 71.0 s · town: walk to the NPC …                  [Map view] [Panel] │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Tap by tap:
+1. **Maps** in the NavBar. The graph shows START → Login → Choose character → the flow's maps (the
+   two-map starter on a new browser: town_1 ⇄ field_1). The map view under it shows the first map's
+   walk grid (grey walkable, dark blocked) with its NPCs (squares) and warps (rings).
+2. **Login** (click it): the server list from config/environments.yaml. Only "Lab rAthena" can be
+   chosen; the Thai-data lab server, both official servers and the community server are disabled,
+   each with why (ADR-0006 / ADR-0016 / ADR-0019). The account is ro_agent's `which` (gm / player):
+   "the lab account from the server" (.env). There is no id or password field anywhere.
+3. **Choose character**: the slot (default: the one the client remembers, as the bot does) and an
+   optional character name (enter_game's `char`).
+4. **A map node**: its map id, its block, how many blocks its flow has, lint, the last run. **Open
+   flow** (or double-click) opens that map's blocks on /flows; **▶ here** simulates from that map
+   (no login). The panel shows /flows' own Inspect (name, map, entry, targets, ignore, zones, exits,
+   events) plus "Open its flow ↗", "Simulate from here", "Show its map".
+5. **Linking maps**: drag from a map's port (walk exit, npc warp, item warp) onto another map: an
+   exit with placeholder details the linter names (fill them in the map's flow). One map may link
+   to many. Select an exit and press Delete to remove it. **+ map** places a map node from the
+   static data (section 6).
+6. **▶ Simulate**: the run plays on the map view. The bot logs in (the two mock steps, 11 s), enters
+   the first map, walks its routes (green behind it, dashed ahead), walks up to each monster
+   (placed from the seed, its HP bar draining, then gone, a loot sparkle), stops next to each NPC
+   with a speech bubble ("set the save point with … at (56, 44)"), and on a warp the map view
+   switches to the next map while the graph's node glows and the exit edge thickens. Play / pause,
+   the step before / the next step, the time slider, 1× to 16×, back to the start.
+7. **Run** (the panel): start at START or at a map node, the monsters' seed, the time limit, a death
+   at t (the respawn), then matpilot's checks (e.g. ✓ reached town, ✓ every exit arrived, ✓ met N
+   monsters (placed from seed 1), ✗ never reached …) and **What happens**, every step with its time (click
+   one to go there).
+8. **Python** (the panel): `session.py (mock)`: the bot's real login calls the two mock nodes stand
+   for; `<flow>.py`: the flow engine's Python (every map's flow is a `def` under `@map_block`; the
+   selected map's def is scrolled into view); `<flow>.flow.json`.
+9. **On /flows**: at the end of the tab row, **Map ▾** says which map this tab's flow is bound to
+   (matpilot's Robot choice) and opens another map's flow; **◂ Maps** comes back with that map
+   selected. The Map tab keeps its canvas and gains a link "The Maps page ↗".
+
+## 3. The session mock (lib/maps/session.ts)
+
+| Node | What the mock shows | The bot's real code (scripts/ro_agent.py) |
+|---|---|---|
+| START | the client open on its login screen | `session(name)` (the Agent + Screen) |
+| Login | server (only lab-rathena selectable), account gm / player | `to_char_select(agent, screen, which)`: service select, the id and password from .env typed as a sensitive batch, Login, OK on the server list at once |
+| Choose character | the remembered slot or slot N, optional name | `enter_game(agent, screen, which, char=None)`: Enter on the selected slot, online=1 in the DB, the chat window check |
+
+- `login(agent, screen, which)` = both; `ro_agent.py login gm` runs it. ro_agent has NO slot click:
+  a numbered slot is "selected first, by hand" in the mock's words.
+- Times are illustrative (1 + 6 + 4 s); the real login waits on the client and the database.
+- `packages/poring_flow/tests/test_maps_page.py` fails if ro_agent's signatures, its `.env` account
+  prefixes, its `login` command or config/environments.yaml's ids and statuses stop matching what
+  the mock says.
+- Not read: settings/environments.json (the user-managed set). A server a person adds on the
+  Settings page does not appear here until the list is updated (a known gap; the mock automates
+  nothing either way).
+
+## 4. Binding a flow to a map
+
+- A map node IS a map block of the flow IR (`workflow.blocks[]`: its `map`, entries, targets,
+  ignore, events, `main`). "Its flow" = the block's `main`, the blocks on its /flows tab. The IR,
+  its hash and its JSON are unchanged (no new IR field: the session is the page's mock).
+- The two pages share ONE flow: this browser's `poring-lab.flows.flow.v1` (and the static-data
+  choice). Each page writes it at once when it links to the other, and when it unmounts.
+- Exits use what the IR has: walk_exit (a warp portal, or a walk off the map's edge onto its warp
+  cell), npc_warp (an NPC's menu path: a warper, or a Kafra teleport with its options), item_warp
+  (a Butterfly Wing to the save point; a Fly Wing stays on the map, so it is no exit), and the
+  derived death_respawn (to the save point's map).
+- **/flows' Map tab: KEPT**, with a link to the Maps page (round 5: Batt wanted the map canvas
+  first on /flows). It shows the event nodes the Maps page leaves out. Proposal for Batt: keep both
+  for now; later either (a) the Map tab becomes a link only, or (b) /flows opens on the first map's
+  blocks and the Maps page is the one map canvas.
+
+## 5. The simulator (poring_flow.trace `play`, the browser's playback)
+
+- **Backend (trace.py):** the trace gains `play`, the run IN ORDER: walk (its route), talk (the
+  NPC's key and cell), menu (an option key), fight (the monster's species and cell, loot), item,
+  loot, respawn, act, wait, exit (from block / map → to block / map / cell), arrive (a wing, a
+  respawn). Each step has t0, t1, its map block and map. Bounded: 2000 steps, 20 000 cells.
+- **Encounters** (`Scenario.encounters`, `seed`): OFF by default, so /flows' Simulate is unchanged
+  except for the added list. The Maps page turns them on: each attack meets ONE monster, placed
+  deterministically from the seed (the block's target species the sheet spawns, weighted by count;
+  the block's `mob` when it names one; inside the spawn's area when the sheet has one), 2..R cells
+  away on a walkable cell the walk grid reaches (R = `within`, at most 12); the bot walks up to the
+  cell next to it, then the kill takes `attack_s`. A hunt block meets one monster per call. A
+  SIMULATION: the monsters are placed, never seen.
+- **Browser (lib/maps/play.ts, draw.ts):** a timeline (the session's mock steps, then `play`),
+  the character's position at any time (a walk interpolated at RO's 150 ms a cell / 212 ms a
+  diagonal, scaled to the step), what the map shows then, the words, the checks.
+- **An older backend** (before the restart) refuses `encounters` / `seed` (422, extra inputs): the
+  page runs again without them, and with no `play` it builds an APPROXIMATE timeline from the walked
+  segments (each route once) and the exits, and says so.
+- `lint/simulate.py` (the linter's layer 3) is not the editor's simulator; it was not changed.
+
+## 6. xmas_dun02 (the Rogue's map)
+
+- The local KB has its sheet (spawns: Christmas Cookie 1246, Cookie 1265, Cruiser 1248, Myst Case
+  1249, Garm Baby 1515 x1, Stormy Knight 1251 x1 boss line).
+- **Its walk grid is not in the backend's GAT mount** (`data/gat`, compose.dev.yaml `/lab-gat`): the
+  extraction in /dev/shm has `xmas_dun02.gat`, `data/gat` does not. `python3 scripts/flows_gat.py`
+  copies the extraction there (client-derived, gitignored; the backend reads it per request, no
+  restart). Until then a node on xmas_dun02 has no entry cell ("anywhere") and the map view says
+  "no walk grid".
+- **Load ▸ One map from the lab data** (default xmas_dun02) and **+ map** build the node in the
+  browser from GET /flows/world at run time (nothing derived is committed): the entry = the walkable
+  cell nearest the centre; targets = the species spawned 2 or more times; ignored = boss lines and
+  single spawns (on xmas_dun02: the four species / the Stormy Knight and the Garm Baby, the Rogue's
+  own rule); its flow: attack the nearest target 5 times (within 9), then stop.
+- Checked offline with the shm GAT (the simulator, not the page): entry (130, 130), five fights on
+  Myst Case / Cookie / Cruiser cells, every walk on the grid.
+
+## 7. Checks run (2026-11-10)
+
+- Frontend (frontend-dev): `pnpm lint` clean, `pnpm typecheck` clean, `pnpm test` 263 pass (14 new
+  in `src/lib/maps/maps.test.ts`: the session, its Python, the graph, placing a map node, the
+  timeline, the pose, the overlays, the words and checks, the old-backend fallback, the drawing on a
+  recording 2D context).
+- A server-render smoke test of the real components (TypeScript's transpiler in the container's
+  tmpfs, no browser): the Maps page, its Login / Character / Start / Run panels, the playback bar,
+  the graph (5 nodes) and the map view, and /flows with `?block=field` (its field tab, the map
+  picker, the Maps link) render without an error; no password input anywhere.
+- poring_flow + the backend's flows routes: pytest (the new trace tests, test_maps_page.py,
+  test_routes_flows.py's play-list test), ruff, mypy strict.
+- `curl` /maps, /maps?node=block:town, /flows, /flows?block=field: 200; the lazy chunks of the maps
+  components compiled in the dev server.
+- **Not run: a browser** (none on this host): the canvas drawing runs in node against a recording
+  context only.
+
+## 8. What the parent does
+
+1. A guarded backend restart (`python3 scripts/guarded_build.py --sustain 30 --spike 25
+   restart:backend@30`): trace.py's play list and encounters. Until then the page falls back
+   (section 5).
+2. Optional, for xmas_dun02's walk grid: `python3 scripts/flows_gat.py` (section 6).
+3. Commit (the parent's).
+
+## 9. Open (for Batt)
+
+- The /flows Map tab: keep both, or one of section 4's options.
+- Monsters on the map view are PLACED (a seed), not seen: should the run also show the map's other
+  spawns wandering (decoration only), or only the one met (now)?
+- The session's server list mirrors config/environments.yaml, not the Settings page's set.
+- Learner mode (ADR-0023, decided, not built) will change the Login node (a declared permission, the
+  Windows host on the console); this mock follows today's rules.

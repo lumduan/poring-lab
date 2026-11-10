@@ -296,6 +296,13 @@ Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
 ## Flows: block programs, SIMULATE only (MW2, 2026-10-08)
 
 Open `http://<host>:3000/flows` (Flows in the top bar). The page edits ADR-0020's flow IR.
+
+**Maps** (`http://<host>:3000/maps`, Maps in the top bar, 2026-11-10): the same flow as a graph of maps:
+START -> Login -> Choose character (MOCKS: only the lab rAthena is selectable, no credential field)
+-> the map nodes, each bound to its own flow ("Open flow" opens its /flows tab; /flows' `Map` picker
+names the bound map). Simulate plays the bot on each map's walk grid: walks, seeded monsters, NPC
+talks, warps ([docs/planning/world-map-flows.md](docs/planning/world-map-flows.md)). A map's walk
+grid needs its GAT in `data/gat` (`scripts/flows_gat.py`, client-derived, gitignored).
 ➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
 matpilot are at home), in matpilot's colours, light or dark as the system is
 ([docs/planning/flows-studio.md](docs/planning/flows-studio.md)): a header (Blocks | Python, Load,

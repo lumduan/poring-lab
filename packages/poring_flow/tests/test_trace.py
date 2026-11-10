@@ -124,3 +124,114 @@ def test_the_trace_is_json_and_bounded() -> None:
     assert len(text) < 2_000_000
     assert len(t["events"]) <= 400
     assert ir.flow_hash(editor.sample_flow())  # the flow itself is untouched
+
+
+# --- the play list (2026-11-10, the Maps page's map view) -----------------------------------------
+def _cheb(a: list[int], b: list[int]) -> int:
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def test_the_play_list_is_the_run_in_order() -> None:
+    t = sample_trace(horizon_s=120)
+    play = t["play"]
+    assert play and not t["play_capped"]
+    assert all(s["t0"] <= s["t1"] for s in play)
+    assert all(a["t0"] <= b["t0"] for a, b in zip(play, play[1:], strict=False))
+    # town: walk to (55, 45), the Kafra (a walk up to it, the talk), ..., the warper, the exit
+    kinds = [(s["kind"], s.get("npc"), s.get("action")) for s in play[:4]]
+    assert kinds[0] == ("walk", None, None)
+    assert play[0]["cells"][0] == [40, 40] and play[0]["cells"][-1] == [55, 45]
+    talk = next(s for s in play if s["kind"] == "talk" and s["npc"] == "n_kafra")
+    town = editor.sample_world().sheet("town_1")
+    assert town is not None and town.walk is not None
+    kafra = town.npc("n_kafra")
+    assert kafra is not None and talk["at"] == [kafra.x, kafra.y]
+    # the walk before a talk ends next to the NPC, and every walked cell is walkable
+    i = play.index(talk)
+    if play[i - 1]["kind"] == "walk":
+        assert _cheb(play[i - 1]["cells"][-1], talk["at"]) == 1
+    for s in play:
+        if s["kind"] == "walk" and s["map"] == "town_1":
+            assert all(town.walk.walkable((x, y)) for x, y in s["cells"])
+    menu = next(s for s in play if s["kind"] == "menu" and s["option"] == "o_field_info")
+    assert menu["npc"] == "n_guide"
+    assert any(s["kind"] == "wait" and s["t1"] - s["t0"] >= 2 for s in play)
+    # the exits follow the transitions, and each step names the map it happens on
+    exits = [s for s in play if s["kind"] == "exit"]
+    assert [(s["exit"], s["from_block"], s["to_block"], s["to_map"]) for s in exits[:2]] == [
+        ("npc_warp", "town", "farm", "field_1"),
+        ("item_warp", "farm", "town", "town_1"),
+    ]
+    assert [x["t"] for x in t["transitions"][: len(exits)]] == [s["t1"] for s in exits]
+    warp_talk = play[play.index(exits[0]) - 1]
+    assert warp_talk["kind"] == "talk" and warp_talk["options"] == ["o_to_field"]
+    after = play[play.index(exits[0]) + 1]
+    assert after["map"] == "field_1" and after["block"] == "farm"
+
+
+def test_without_encounters_a_fight_stands_still() -> None:
+    t = sample_trace(horizon_s=120)
+    fights = [s for s in t["play"] if s["kind"] == "fight"]
+    assert fights and all(s["mob"] is None and s["at"] is None for s in fights)
+    assert not any(s["kind"] == "walk" and s["purpose"] == "engage" for s in t["play"])
+    assert all(s["loot"] for s in fights)  # the loot model adds weight per attack
+
+
+def test_encounters_place_monsters_and_the_character_walks_up() -> None:
+    t = sample_trace(horizon_s=120, encounters=True, seed=7)
+    play = t["play"]
+    field = editor.sample_world().sheet("field_1")
+    assert field is not None and field.walk is not None
+    fights = [s for s in play if s["kind"] == "fight"]
+    assert len(fights) >= 10
+    for f in fights:
+        assert f["mob"] in (9101, 9102)  # farm's targets; 9105 is ignored, the boss no target
+        assert field.walk.walkable(tuple(f["at"]))
+        i = play.index(f)
+        engage = play[i - 1]
+        if engage["kind"] == "walk" and engage["purpose"] == "engage":
+            assert _cheb(engage["cells"][-1], f["at"]) == 1
+            assert 2 <= _cheb(engage["cells"][0], f["at"]) <= 12
+            assert all(field.walk.walkable((x, y)) for x, y in engage["cells"])
+            assert f["seen_t"] == engage["t0"]
+    # the same seed places the same monsters; another seed others
+    again = sample_trace(horizon_s=120, encounters=True, seed=7)["play"]
+    other = sample_trace(horizon_s=120, encounters=True, seed=8)["play"]
+    cells = [s["at"] for s in fights]
+    assert [s["at"] for s in again if s["kind"] == "fight"] == cells
+    assert [s["at"] for s in other if s["kind"] == "fight"] != cells
+
+
+def test_encounters_take_the_named_species_and_what_the_sheet_spawns() -> None:
+    text = (editor._examples() / "town_warp_farm.flow").read_text()
+    flow = pyview.parse(text.replace("attack_nearest(within=12)", "attack_nearest(mob(9102))"))
+    t = simulate(flow, editor.sample_world(), Scenario(horizon_s=90, encounters=True, seed=1))
+    fights = [s for s in t["play"] if s["kind"] == "fight"]
+    assert fights and {s["mob"] for s in fights} == {9102}
+    # no sheets: the monster still stands near (an estimated walk up), of the block's targets
+    sc = Scenario(horizon_s=60, encounters=True, seed=1, start_block="farm")
+    t2 = simulate(editor.sample_flow(), None, sc)
+    walks = [s for s in t2["play"] if s["kind"] == "walk" and s["purpose"] == "engage"]
+    assert walks and all(s["estimated"] for s in walks)
+    assert {s["mob"] for s in t2["play"] if s["kind"] == "fight"} <= {9101, 9102}
+
+
+def test_a_respawn_arrives_on_the_save_points_map() -> None:
+    t = sample_trace(horizon_s=300, timeline=[DEATH], encounters=True)
+    respawn = next(s for s in t["play"] if s["kind"] == "respawn")
+    arrive = t["play"][t["play"].index(respawn) + 1]
+    assert arrive["kind"] == "arrive" and arrive["via"] == "respawn"
+    assert arrive["map"] == "town_1" and arrive["cell"] == [40, 40]
+
+
+def test_the_play_list_is_bounded() -> None:
+    from poring_flow.trace import MAX_PLAY, MAX_PLAY_CELLS
+
+    t = sample_trace(horizon_s=MAX_HORIZON_S, timeline=[DEATH], encounters=True)
+    assert len(t["play"]) <= MAX_PLAY
+    assert sum(len(s.get("cells") or []) for s in t["play"]) <= MAX_PLAY_CELLS
+    assert len(json.dumps(t)) < 4_000_000
+    with pytest.raises(ValidationError):
+        Scenario.model_validate({"seed": -1})
+    with pytest.raises(ValidationError):
+        Scenario.model_validate({"seed": 2**31})

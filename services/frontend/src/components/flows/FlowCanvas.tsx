@@ -184,9 +184,10 @@ function MainNode({ data }: NodeProps<MainNodeT>) {
   );
 }
 
-type ExitEdgeT = Edge<GEdge["data"] & { runs?: number }, "exit">;
+type ExitEdgeT = Edge<GEdge["data"] & { runs?: number; active?: boolean }, "exit">;
 
-function ExitEdge(props: EdgeProps<ExitEdgeT>) {
+/** An exit edge, typed by its colour and label (also the Maps page's, components/maps). */
+export function ExitEdge(props: EdgeProps<ExitEdgeT>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } = props;
   const [path, lx, ly] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const kind = data?.kind ?? "walk_exit";
@@ -200,7 +201,7 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
       <BaseEdge
         id={id}
         path={path}
-        style={{ stroke: colour, strokeWidth: selected ? 3 : 2, strokeDasharray: derived ? "6 5" : undefined, opacity: kind === "attach" ? 0.6 : 1 }}
+        style={{ stroke: colour, strokeWidth: selected || data?.active ? 3.5 : 2, strokeDasharray: derived ? "6 5" : undefined, opacity: kind === "attach" ? 0.6 : 1 }}
       />
       {label && (
         <EdgeLabelRenderer>

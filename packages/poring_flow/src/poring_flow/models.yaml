@@ -7,8 +7,8 @@
 #     detectors; scripts/mvp_watch.py (default_model) and the plans' recorded sha256 for the
 #     boss recognizers;
 #   - CLASS NAMES: the model's own names, never invented: v1's are unit_detector.NAMES; xmas02's
-#     fixed classes are config/detector/classes-xmas02.json and its species unit_detector's
-#     MAP_MODELS["xmas_dun02"].collapse (in class-id order, as the model's sidecar lists them);
+#     fixed classes are config/detector/classes-xmas02-gb.json and its species unit_detector's
+#     MAP_MODELS["xmas_dun02"].collapse then garm_baby (in class-id order, as the sidecar lists them);
 #     a boss recognizer answers one question ("the boss or its party in view",
 #     mvp_profiles.BossProfile.party), so its one class is `party`.
 #   - status: `live` = deployed for the runner (a person's decision, recorded in the plan);
@@ -37,16 +37,19 @@ models:
     maps: []
     classes: [player, monster, npc]
     why: "LIVE since 2026-10-13 (Batt decision 10) after the gold-set parity, docs/benchmarks/v1-vs-v0png.md; every map but xmas_dun02"
+  # the id `xmas02` is xmas_dun02's detector (the one a flow names); since 2026-11-10 it is the
+  # deployed xmas02-gb (unit_detector MAP_MODELS["xmas_dun02"]); the 11-07 model stays in
+  # GPU_WEIGHTS["xmas02"] only as the rollback
   xmas02:
     kind: detector
     status: live
-    file: xmas02-last-736x1280.onnx
-    sha256: 293dca922e3e
+    file: xmas02gb-last-736x1280.onnx
+    sha256: b22d972b714f
     maps: [xmas_dun02]
-    classes: [player, mystcase, cruiser, cookie, cookie_xmas]
+    classes: [player, mystcase, cruiser, cookie, cookie_xmas, garm_baby]
     untrained: [npc, warp]
-    mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246]}
-    why: "PASSED 2026-11-07 00:39 (docs/benchmarks/xmas02-eval.md), deployed on xmas_dun02 by Batt's decision 2026-11-07 (docs/planning/xmas02-detector.md Amendment J); npc and warp are EMPTY fixed classes (Amendment H)"
+    mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515]}
+    why: "xmas02-gb: PASSED its held-out score 2026-11-10 (docs/planning/xmas02-detector.md M11) and DEPLOYED on xmas_dun02 (M12), the 4 species of the 11-07 model (Amendment J) plus garm_baby (Amendment M; the runner never strikes it, --garm-fly flies on it); npc and warp are EMPTY fixed classes (Amendment H)"
   stormy-v1:
     kind: boss_recognizer
     status: not_adopted

@@ -77,6 +77,41 @@ export interface PathSegment {
   t: number;
 }
 
+/** One step of the run in order (poring_flow.trace's `play`, 2026-11-10; the Maps page animates
+ * it). Keys only: the page shows names from the static data. Absent on an older backend. */
+export interface PlayStep {
+  kind: "walk" | "talk" | "menu" | "fight" | "item" | "loot" | "respawn" | "act" | "wait" | "exit" | "arrive";
+  t0: number;
+  t1: number;
+  block: string | null;
+  map: string | null;
+  node?: string;
+  action?: string;
+  outcome?: string;
+  cells?: [number, number][];
+  estimated?: boolean;
+  trimmed?: boolean;
+  purpose?: "walk" | "npc" | "engage" | "exit";
+  npc?: string | null;
+  at?: [number, number] | null;
+  options?: string[];
+  option?: string | null;
+  mob?: number | null;
+  seen_t?: number;
+  loot?: boolean;
+  item?: number | null;
+  item_kind?: string | null;
+  exit?: "walk_exit" | "npc_warp" | "item_warp";
+  from_block?: string | null;
+  to_block?: string;
+  to_entry?: string;
+  to_map?: string | null;
+  cell?: [number, number] | null;
+  arrived?: boolean;
+  warp?: [number, number] | null;
+  via?: string;
+}
+
 export interface Trace {
   end: string;
   t_end_s: number;
@@ -93,6 +128,8 @@ export interface Trace {
   // ADR-0020 #10: every /where read (it types) with its reason, against the flow's budget
   where: { count: number; budget: number; over: boolean; reads: { t: number; reason: string }[] };
   notes: string[];
+  play?: PlayStep[]; // the run in order (absent before 2026-11-10's backend)
+  play_capped?: boolean;
   scenario: Scenario;
   world: { server: string | null; maps: string[] };
 }
@@ -111,6 +148,9 @@ export interface Scenario {
   // detects: "<model>/<class>" -> how many boxes the trained model finds from t on (ADR-0020
   // Amendment B; before any entry: 0)
   timeline?: { t: number; set?: Record<string, number | boolean>; sees?: Record<string, boolean>; detects?: Record<string, number> }[];
+  // the Maps page (2026-11-10): a monster placed for each attack, repeatable by the seed
+  encounters?: boolean;
+  seed?: number;
 }
 
 export interface SimDoc {
@@ -166,7 +206,7 @@ export interface WorldMap {
   size: [number, number] | null;
   npcs: { key: string; x: number; y: number; menu: string[]; kafra: { services: string[]; save_cell: [number, number] | null } | null }[];
   warps: { x: number; y: number; to_map: string; to_x: number; to_y: number }[];
-  spawns: { mob: number; count: number; boss: boolean }[];
+  spawns: { mob: number; count: number; boss: boolean; area?: [number, number, number, number] | null }[];
 }
 
 export interface WorldDoc {

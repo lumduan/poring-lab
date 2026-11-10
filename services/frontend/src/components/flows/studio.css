@@ -1243,3 +1243,57 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* --- the map a tab's flow is bound to (2026-11-10): matpilot's Robot choice (.robot-picker*),
+   at the end of the tab row; and the Map tab's link to the Maps page ------------------------- */
+.robot-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+}
+.robot-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.robot-picker-name {
+  color: var(--muted);
+  font-weight: 600;
+}
+.robot-picker-select {
+  max-width: 14rem;
+  padding: 0.2rem 0.4rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+}
+.robot-picker-link {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.maps-link-chip {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.75rem;
+  z-index: 6;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+@media (max-width: 48rem) {
+  .robot-picker-name {
+    display: none;
+  }
+  .robot-picker-select {
+    max-width: 8rem;
+  }
+}

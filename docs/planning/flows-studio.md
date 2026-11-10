@@ -6,7 +6,7 @@ role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [ADR-0020, mw2-block-editor.md, blocks-from-hunt-flow.md, xmas02-detector.md, stormy-knight-recognizer.md, orclord-recognizer.md, ../../THIRD_PARTY.md, ../../services/frontend/src/components/flows/FlowsApp.tsx, ../../packages/poring_flow/src/poring_flow/models.yaml]
+related: [ADR-0020, world-map-flows.md, mw2-block-editor.md, blocks-from-hunt-flow.md, xmas02-detector.md, stormy-knight-recognizer.md, orclord-recognizer.md, ../../THIRD_PARTY.md, ../../services/frontend/src/components/flows/FlowsApp.tsx, ../../packages/poring_flow/src/poring_flow/models.yaml]
 next_action: "matpilot re-runs its side-by-side on round 2 (asked 17:23 ICT; section 8's checklist). For Batt: the import line and try/finally in Main (section 3 / 8 proposals). Open: section 7."
 title: "The /flows studio: matpilot's /blocks layout, the Python side by side, the trained models as blocks"
 date: 2026-11-09
@@ -424,3 +424,20 @@ the detector hexagon, the bottom sheet). Its ranked list, and what was done:
      an empty list, or an extra parameter.
    - `cart_transfer` stays in More skills: its `direction` values are written nowhere, so a
      sentence would invent them. `refine` is a smith's service, not a shop / Kafra / storage block.
+
+## 12. The Maps page and the map a tab is bound to (2026-11-10)
+
+Batt asked for a map-flow page beside /flows: [world-map-flows.md](world-map-flows.md) (the Maps
+page, /maps: START → Login → Choose character (mocks) → the map nodes, each bound to its flow, and
+the bot simulated on the maps' walk grids). What changed HERE, on /flows:
+- **The Map picker** at the end of the tab row (matpilot's Robot choice): "Map ▾" names the map the
+  open tab's flow is bound to (a map block's tab) and opens another map's tab; **◂ Maps** goes to the
+  Maps page with that map selected.
+- **`/flows?block=<name>`** opens that map block's tab (the Maps page's "Open flow").
+- **The Map tab is kept**, with a link to the Maps page over its canvas (section 11: Batt wants the
+  map canvas first here). Whether to keep both is Batt's call (world-map-flows.md section 4).
+- The flow is written to this browser's storage at once when the page links to /maps or goes, so
+  the two pages show the same flow.
+- The simulator's trace gains the `play` list (`Scenario.encounters` off here: /flows' runs are
+  unchanged but for that list).
+

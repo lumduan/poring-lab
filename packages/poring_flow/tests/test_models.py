@@ -52,16 +52,20 @@ def test_the_detectors_match_unit_detector(scripts: object) -> None:
     assert v1.sha256 == ud.GPU_WEIGHTS["v1"].onnx_sha256[:12]
     mm = ud.MAP_MODELS["xmas_dun02"]
     assert xmas.maps == ["xmas_dun02"] and xmas.status == "live"
-    assert xmas.file == mm.onnx == ud.GPU_WEIGHTS["xmas02"].onnx
-    assert xmas.sha256 == mm.sha256[:12] == ud.GPU_WEIGHTS["xmas02"].onnx_sha256[:12]
-    # the model's own class order: the fixed classes by id, then the species (collapse's order)
-    classes = json.loads((REPO / "config/detector/classes-xmas02.json").read_text())
+    # the catalogue's `xmas02` is the map's DEPLOYED model (xmas02-gb since 2026-11-10, M12)
+    assert mm.gpu == "xmas02gb"
+    assert xmas.file == mm.onnx == ud.GPU_WEIGHTS[mm.gpu].onnx
+    assert xmas.sha256 == mm.sha256[:12] == ud.GPU_WEIGHTS[mm.gpu].onnx_sha256[:12]
+    # the model's own class order: the fixed classes by id, the collapsed species, then the
+    # alarm class garm_baby (class 7, never collapsed: unit_detector / dungeon_hunt.ALARM_CLASSES)
+    classes = json.loads((REPO / "config/detector/classes-xmas02-gb.json").read_text())
     fixed = sorted(classes["fixed"], key=classes["fixed"].get)
-    order = [*fixed, *mm.collapse]
+    species = [*mm.collapse, "garm_baby"]
+    assert "garm_baby" not in mm.collapse
+    order = [*fixed, *species]
     assert [c for c in order if c in xmas.classes] == xmas.classes
     assert sorted(xmas.classes + xmas.untrained) == sorted(order)
     assert xmas.untrained == ["npc", "warp"]  # EMPTY fixed classes (xmas02-detector.md H)
-    species = list(mm.collapse)
     assert [xmas.mobs[s] for s in species] == [[m] for m in classes["monsters"]]
 
 

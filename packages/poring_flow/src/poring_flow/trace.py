@@ -14,11 +14,30 @@ It is MW1's simulated executor (`runtime.Sim`) driven by the map sheets (`poring
 
 The input batches `runtime.Sim` would emit are counted, never built or kept: nothing here can
 reach the mux. Node paths are MW1's structural paths (`ir.sites`).
+
+THE PLAY LIST (2026-11-10, Batt's Maps page: "watch the bot walk a -> b -> c, meet monsters and
+talk to NPCs at the flow's positions", docs/planning/world-map-flows.md): `play` is the run in
+ORDER, one step per thing the character does, with its start and end time (`t0`, `t1`), the map
+block and map it happens on, and its cells: walk (the route), talk (the NPC and its cell), menu
+(an option key), fight (the monster, its cell, whether it dropped loot), item, loot, respawn, act
+(any other block), wait, exit (from block / map -> to block / map / cell) and arrive (the map
+changed outside an exit: a wing, a respawn). The browser animates it; it adds nothing the run did
+not do.
+- ENCOUNTERS (`Scenario.encounters`, off by default so every older caller's trace is unchanged
+  but for the added `play`): an attack places ONE monster deterministically from `Scenario.seed`
+  (the block's target species the sheet spawns, weighted by spawn count; the explicit `mob` when
+  the block names one), on a walkable cell 2..R cells from the character (R = the block's
+  `within`, at most 12) that the walk grid reaches; the character walks up to the cell next to
+  it, then the kill takes `attack_s`. Without encounters a fight stands still and names no
+  monster (the model only spends its time), as before.
+- Bounded: at most MAX_PLAY steps and MAX_PLAY_CELLS cells (a walk past the budget keeps its two
+  ends, `trimmed`).
 """
 
 from __future__ import annotations
 
 import math
+import random
 from collections import Counter
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -38,6 +57,16 @@ DIAG_MS = 212  # a diagonal step (x sqrt 2)
 MAX_HORIZON_S = 3600
 MAX_CELLS = 20_000  # every path segment together
 MAX_EVENTS = 400
+MAX_PLAY = 2000  # the play list's steps
+MAX_PLAY_CELLS = 20_000  # every play step's cells together
+MAX_SEED = 2**31 - 1
+ENGAGE_DEFAULT = 9  # cells: where an encounter's monster stands when the block names no `within`
+ENGAGE_MAX = 12
+ENGAGE_TRIES = 60
+# the blocks that walk up to an NPC and talk (the planner's NPC set)
+NPC_BLOCKS = ("talk_npc", "set_save_point", "kafra_store", "kafra_withdraw", "buy", "sell",
+              "rent_cart", "refine")  # fmt: skip
+FIGHT_BLOCKS = ("attack_nearest", "finish_target", "hunt")
 DetectKey = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}/[a-z][a-z0-9_]{0,47}$")]
 ScenarioKey = Literal[
     "hp_percent", "sp_percent", "weight_percent", "is_dead", "engagement_seen", "engaged_species"
@@ -73,6 +102,10 @@ class Scenario(BaseModel):
     hp_per_attack: float = Field(default=0, ge=0, le=50)
     attack_s: float = Field(default=3, gt=0, le=60)  # one kill
     timeline: list[Change] = Field(default_factory=list, max_length=50)
+    # the Maps page (2026-11-10): place a monster for every attack and walk up to it (the module
+    # docstring); off = a fight stands still, as before. `seed` makes the placement repeatable.
+    encounters: bool = False
+    seed: int = Field(default=0, ge=0, le=MAX_SEED)
 
     @model_validator(mode="after")
     def _entry_needs_block(self) -> Scenario:
@@ -209,8 +242,19 @@ class TraceSim(Sim):
         self.batches = 0
         self.dialog_npc: str | None = None  # the NPC whose dialog the last talk opened
         self._planned: dict[int, tuple[list[Cell], bool]] = {}
+        self._planned_ms: dict[int, float] = {}  # the walk part of a planned action, in ms
+        self._fights: dict[int, dict[str, Any]] = {}  # an encounter's monster, by action
         self._exit_planned: tuple[list[Cell], bool] | None = None
+        self._exit_ms = 0.0
+        self.play: list[dict[str, Any]] = []  # the run in order (the module docstring)
+        self.play_cells = 0
+        self.play_capped = False
+        self.encounter_n = 0
+        # the run is over: generators the run left open are closed later (garbage collection), and
+        # that GeneratorExit is no pre-emption: it must not add a step after the result
+        self._done = False
         self._exit_ctx: ir.Exit | None = None
+        self._exit_stmt: ir.TakeExit | None = None  # the take_exit running (its node path)
         self._pending_respawn: str | None = None
         self._last_outcome: dict[int, str] = {}
 
@@ -256,9 +300,104 @@ class TraceSim(Sim):
         ms = _steps_ms(route) if not estimated else WALK_MS * self._chebyshev(to)
         if exit_:
             self._exit_planned = (route, estimated)
+            self._exit_ms = ms
         else:
             self._planned[id(a)] = (route, estimated)
+            self._planned_ms[id(a)] = ms
         return Plan(ticks=_ticks(ms + extra_ms), effects={"cell": to})
+
+    # --- encounters (the Maps page; the module docstring) -----------------------------------------
+    def _block_now(self) -> ir.MapBlock | None:
+        return self.tree.blocks.get(self.block) if self.block else None
+
+    def _encounter_mob(
+        self, a: ir.ActionStmt, sheet: MapSheet | None, rng: random.Random
+    ) -> int | None:
+        """The species this attack meets: the block's `mob` when it names one, else a TARGET
+        species the sheet spawns (any spawn but the ignored ones in a block without targets),
+        weighted by its spawn count; a target the sheet does not list still counts once."""
+        named = self._eval(a.params.get("mob")) if "mob" in a.params else None
+        if isinstance(named, ir.MobRef):
+            return named.id
+        b = self._block_now()
+        targets = {m.id for m in b.targets} if b else set()
+        ignore = {m.id for m in b.ignore} if b else set()
+        pool: Counter[int] = Counter()
+        for sp in sheet.spawns if sheet else []:
+            if (not targets or sp.mob in targets) and sp.mob not in ignore:
+                pool[sp.mob] += sp.count
+        for m in sorted(targets - set(pool)):
+            pool[m] += 1
+        if not pool:
+            return None
+        ids = sorted(pool)
+        return rng.choices(ids, weights=[pool[i] for i in ids])[0]
+
+    def _encounter_cell(
+        self, sheet: MapSheet | None, here: Cell, radius: int, rng: random.Random, mob: int | None
+    ) -> tuple[Cell, list[Cell], bool] | None:
+        """(the monster's cell, the walk up to the cell next to it, estimated): a walkable cell
+        2..radius cells away that the walk grid reaches in a short route (inside the species'
+        spawn area when the sheet gives one and it is near); None when no such cell is found."""
+        walk = sheet.walk if sheet else None
+        area: set[Cell] | None = None
+        for sp in sheet.spawns if sheet else []:
+            if sp.mob == mob and sp.area is not None:
+                area = (area or set()) | (sp.cells(walk) or set())
+        for attempt in range(ENGAGE_TRIES):
+            dx, dy = rng.randint(-radius, radius), rng.randint(-radius, radius)
+            if max(abs(dx), abs(dy)) < 2:
+                continue
+            c = (here[0] + dx, here[1] + dy)
+            # the spawn area first; past half the tries, any near cell (the area is far away)
+            if area is not None and attempt < ENGAGE_TRIES // 2 and c not in area:
+                continue
+            if walk is None:
+                if c[0] < 0 or c[1] < 0:
+                    continue
+                return c, [here, self._next_to(here, c)], True
+            if not walk.walkable(c):
+                continue
+            route = walk.route(here, c)
+            if route is None or len(route) > 2 * radius + 2:
+                continue
+            return c, route[:-1] or [here], False
+        return None
+
+    @staticmethod
+    def _next_to(here: Cell, c: Cell) -> Cell:
+        """The cell next to `c` on the straight line from `here` (no walk grid: an estimate)."""
+        sx = (here[0] > c[0]) - (here[0] < c[0])
+        sy = (here[1] > c[1]) - (here[1] < c[1])
+        return (c[0] + sx, c[1] + sy)
+
+    def _fight_plan(self, a: ir.ActionStmt, effects: dict[str, Any]) -> Plan:
+        sc = self.scenario
+        here = self.world.get("cell")
+        if not sc.encounters or here is None:
+            return Plan(ticks=_ticks(sc.attack_s * 1000), effects=effects)
+        here = (int(here[0]), int(here[1]))
+        sheet = self._sheet()
+        self.encounter_n += 1
+        rng = random.Random(f"{sc.seed}:{self.encounter_n}:{self.world.get('map')}")
+        mob = self._encounter_mob(a, sheet, rng)
+        within = self._eval(a.params.get("within")) if "within" in a.params else None
+        radius = within if isinstance(within, int) and not isinstance(within, bool) else None
+        radius = max(2, min(ENGAGE_MAX, radius if radius is not None else ENGAGE_DEFAULT))
+        placed = self._encounter_cell(sheet, here, radius, rng, mob)
+        if placed is None:
+            self.notes.append(f"{self._where(a)}: no cell for a monster near ({here[0]}, "
+                              f"{here[1]}): the fight stands still")  # fmt: skip
+            self._fights[id(a)] = {"mob": mob, "at": None}
+            return Plan(ticks=_ticks(sc.attack_s * 1000), effects=effects)
+        cell, walk, estimated = placed
+        (x0, y0), (x1, y1) = walk[0], walk[-1]
+        ms = WALK_MS * max(abs(x1 - x0), abs(y1 - y0)) if estimated else _steps_ms(walk)
+        if len(walk) > 1:
+            self._planned[id(a)] = (walk, estimated)
+        self._planned_ms[id(a)] = ms
+        self._fights[id(a)] = {"mob": mob, "at": [cell[0], cell[1]]}
+        return Plan(ticks=_ticks(ms + sc.attack_s * 1000), effects={**effects, "cell": walk[-1]})
 
     def _chebyshev(self, to: Cell) -> int:
         here = self.world.get("cell")
@@ -310,12 +449,12 @@ class TraceSim(Sim):
         if a.block == "close_dialog":
             self.dialog_npc = None
             return Plan(ticks=5)
-        if a.block in ("attack_nearest", "finish_target"):
+        if a.block in ("attack_nearest", "finish_target") or (
+            a.block == "hunt" and sc.encounters
+        ):  # a hunt meets one monster per call with encounters on (else its default 1 s, as before)
             w = min(100.0, float(self.world.get("weight_percent") or 0) + sc.weight_per_attack)
             hp = max(1.0, float(self.world.get("hp_percent") or 0) - sc.hp_per_attack)
-            return Plan(
-                ticks=_ticks(sc.attack_s * 1000), effects={"weight_percent": w, "hp_percent": hp}
-            )
+            return self._fight_plan(a, {"weight_percent": w, "hp_percent": hp})
         if a.block == "use_item":
             item = self._eval(a.params.get("item")) if "item" in a.params else None
             kind = (
@@ -396,6 +535,8 @@ class TraceSim(Sim):
     def _stmt(self, st: Any, owner: str) -> Generator[_Tick, str | None, str]:
         path = self.paths.get(id(st))
         t0 = self.t
+        if isinstance(st, ir.TakeExit):
+            self._exit_stmt = st
         try:
             r = yield from super()._stmt(st, owner)
         except _Halt as h:
@@ -409,19 +550,39 @@ class TraceSim(Sim):
             outcome = self._last_outcome.get(id(st), "ok")
         elif isinstance(st, ir.TakeExit):
             outcome = "exit"
+        elif isinstance(st, ir.WaitUntil) and self.t > t0:
+            self._play_step({"kind": "wait", "t0": t0, "t1": self.t, "node": path or owner,
+                             "outcome": "ok"})  # fmt: skip
         self._record(path, t0, outcome)
         return r
 
     def _action(self, a: ir.ActionStmt, owner: str) -> Generator[_Tick, str | None, str]:
         t0 = self.t
-        out = yield from super()._action(a, owner)
+        # (block, map, cell, the open dialog's NPC, weight) when it starts: a step names where
+        # it began (a wing ends on another map)
+        before = (self.block, self.world.get("map"), self.world.get("cell"), self.dialog_npc,
+                  self.world.get("weight_percent"))  # fmt: skip
+        try:
+            out = yield from super()._action(a, owner)
+        except GeneratorExit:  # pre-empted: the model leaves the character where it was
+            self._planned.pop(id(a), None)
+            self._planned_ms.pop(id(a), None)
+            self._fights.pop(id(a), None)
+            if self._done:
+                raise
+            self._play_step({"kind": "act", "t0": t0, "t1": self.t, "action": a.block,
+                             "node": self._where(a), "outcome": "interrupted"}, before)  # fmt: skip
+            raise
         self._last_outcome[id(a)] = out
         if id(a) in self.do_paths:
             self._record(self.do_paths[id(a)] + ":" + a.block, t0, out)
         planned = self._planned.pop(id(a), None)
+        walk_ms = self._planned_ms.pop(id(a), 0.0)
+        fight = self._fights.pop(id(a), None)
         m = self.world.get("map")
         if out == "ok" and planned is not None and isinstance(m, str):
             self._segment(planned, self._where(a), m)
+        self._play_action(a, t0, before, out, planned, walk_ms, fight)
         if out == "ok" and a.block == "set_save_point":
             self._set_save_point(a)
         if out == "ok" and a.block == "respawn":
@@ -432,6 +593,94 @@ class TraceSim(Sim):
                     "character where it died (the real client sends it to the save point)"
                 )
         return out
+
+    # --- the play list (the module docstring) ---------------------------------------------------
+    def _play_step(self, step: dict[str, Any], before: tuple[Any, ...] | None = None) -> None:
+        if len(self.play) >= MAX_PLAY:
+            self.play_capped = True
+            return
+        block, m = (before[0], before[1]) if before else (self.block, self.world.get("map"))
+        out: dict[str, Any] = {
+            "block": block or None,
+            "map": m if m is not None else self.world.get("map"),
+        }
+        out.update(step)
+        out["t0"], out["t1"] = round(out["t0"], 2), round(max(out["t0"], out["t1"]), 2)
+        if "seen_t" in out:
+            out["seen_t"] = round(out["seen_t"], 2)
+        cells = out.get("cells")
+        if cells is not None:
+            if self.play_cells + len(cells) > MAX_PLAY_CELLS:
+                out["cells"], out["trimmed"] = [cells[0], cells[-1]], True
+            self.play_cells += len(out["cells"])
+        self.play.append(out)
+
+    def _play_walk(self, before: tuple[Any, ...], t0: float, ms: float, planned: Any,
+                   node: str, purpose: str, outcome: str) -> float:  # fmt: skip
+        """A walk step for a planned route; returns when it ends (the rest of the action
+        follows it). Nothing when the action did not walk (a failure before it moved)."""
+        if planned is None or outcome != "ok":
+            return t0
+        route, estimated = planned
+        if len(route) < 2:
+            return t0
+        t1 = t0 + ms / 1000
+        self._play_step({"kind": "walk", "t0": t0, "t1": t1, "cells": [list(c) for c in route],
+                         "estimated": estimated, "node": node, "purpose": purpose,
+                         "outcome": outcome}, before)  # fmt: skip
+        return t1
+
+    def _play_action(
+        self,
+        a: ir.ActionStmt,
+        t0: float,
+        before: tuple[Any, ...],
+        out: str,
+        planned: Any,
+        walk_ms: float,
+        fight: dict[str, Any] | None,
+    ) -> None:
+        node = self._where(a)
+        base = {"node": node, "action": a.block, "outcome": out}
+        sheet = self.static.sheet(before[1]) if self.static and isinstance(before[1], str) else None
+        if a.block == "walk_to":
+            if not self._play_walk(before, t0, walk_ms, planned, node, "walk", out) > t0:
+                self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t}, before)
+        elif a.block in NPC_BLOCKS:
+            ref = self._eval(a.params.get("npc")) if "npc" in a.params else None
+            npc = sheet.npc(ref.key) if sheet and isinstance(ref, ir.NpcRef) else None
+            t = self._play_walk(before, t0, walk_ms, planned, node, "npc", out)
+            self._play_step({**base, "kind": "talk", "t0": t, "t1": self.t,
+                             "npc": ref.key if isinstance(ref, ir.NpcRef) else None,
+                             "at": [npc.x, npc.y] if npc else None}, before)  # fmt: skip
+        elif a.block in ("choose_menu", "close_dialog"):
+            ref = self._eval(a.params.get("option")) if "option" in a.params else None
+            self._play_step({**base, "kind": "menu", "t0": t0, "t1": self.t, "npc": before[3],
+                             "option": ref.key if isinstance(ref, ir.OptionRef) else None},
+                            before)  # fmt: skip
+        elif a.block in FIGHT_BLOCKS and (a.block != "hunt" or fight is not None):
+            t = self._play_walk(before, t0, walk_ms, planned, node, "engage", out)
+            gained = float(self.world.get("weight_percent") or 0) > float(before[4] or 0)
+            self._play_step({**base, "kind": "fight", "t0": t, "t1": self.t, "seen_t": t0,
+                             "mob": fight["mob"] if fight else None,
+                             "at": fight["at"] if fight else None,
+                             "loot": out == "ok" and gained}, before)  # fmt: skip
+        elif a.block == "use_item":
+            item = self._eval(a.params.get("item")) if "item" in a.params else None
+            iid = item.id if isinstance(item, ir.ItemRef) else None
+            kind = self.static.items[iid].kind if self.static and iid in self.static.items else None
+            self._play_step({**base, "kind": "item", "t0": t0, "t1": self.t, "item": iid,
+                             "item_kind": kind}, before)  # fmt: skip
+        elif a.block in ("loot", "respawn"):
+            self._play_step({**base, "kind": a.block, "t0": t0, "t1": self.t}, before)
+        else:
+            self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t}, before)
+        m1 = self.world.get("map")
+        if out == "ok" and m1 != before[1] and before[1] is not None:  # a wing, a respawn
+            cell = self.world.get("cell")
+            self._play_step({"kind": "arrive", "t0": self.t, "t1": self.t, "via": a.block,
+                             "node": node, "map": m1, "block": self.block or None,
+                             "cell": list(cell) if cell else None})  # fmt: skip
 
     def _set_save_point(self, a: ir.ActionStmt) -> None:
         sheet = self._sheet()
@@ -470,6 +719,8 @@ class TraceSim(Sim):
 
     def _exit(self, x: ir.Exit, owner: str) -> Generator[_Tick, str | None, None]:
         before_block, before_map, t0 = self.block, self.world.get("map"), self.t
+        before = (before_block, before_map, self.world.get("cell"), self.dialog_npc,
+                  self.world.get("weight_percent"))  # fmt: skip
         if x.kind == "item_warp" and self.save_point is None:
             self.notes.append(
                 f"t={self.t:.0f}s: {before_block}'s item_warp with an UNKNOWN save point: the "
@@ -482,8 +733,10 @@ class TraceSim(Sim):
         finally:
             self._exit_ctx = None
         planned, self._exit_planned = self._exit_planned, None
+        exit_ms, self._exit_ms = self._exit_ms, 0.0
         if planned is not None and isinstance(before_map, str):  # walked on the map it left
             self._segment(planned, f"{before_block}: exit {x.kind}", before_map)
+        self._play_exit(x, t0, before, planned, exit_ms, owner)
         self.transitions.append(
             {
                 "t": round(self.t, 1),
@@ -500,6 +753,37 @@ class TraceSim(Sim):
             self.block_visits[self.block] += 1
         if self.scenario.single_block:
             raise _Halt("single_block_exit")
+
+    def _play_exit(self, x: ir.Exit, t0: float, before: tuple[Any, ...], planned: Any,
+                   ms: float, owner: str) -> None:  # fmt: skip
+        """An exit's steps on the map it leaves (the walk onto the warp or up to the NPC, the talk
+        and its options, the wing), then the exit itself: where it arrived."""
+        node = self.paths.get(id(self._exit_stmt)) if self._exit_stmt is not None else None
+        node = node or f"{before[0] or 'main'}: exit {x.kind}"
+        base = {"node": node, "action": f"take_exit {x.kind}", "outcome": "ok"}
+        t = self._play_walk(before, t0, ms, planned, node, "exit", "ok")
+        if x.kind == "npc_warp" and x.npc is not None:
+            sheet = (
+                self.static.sheet(before[1]) if self.static and isinstance(before[1], str) else None
+            )
+            npc = sheet.npc(x.npc.key) if sheet else None
+            self._play_step({**base, "kind": "talk", "t0": t, "t1": self.t, "npc": x.npc.key,
+                             "at": [npc.x, npc.y] if npc else None,
+                             "options": [o.key for o in x.options]}, before)  # fmt: skip
+        elif x.kind == "item_warp":
+            item = self._eval(x.item) if isinstance(x.item, ir.Var) else x.item
+            iid = item.id if isinstance(item, ir.ItemRef) else None
+            kind = self.static.items[iid].kind if self.static and iid in self.static.items else None
+            self._play_step({**base, "kind": "item", "t0": t, "t1": self.t, "item": iid,
+                             "item_kind": kind}, before)  # fmt: skip
+        cell = self.world.get("cell")
+        self._play_step({**base, "kind": "exit", "t0": self.t, "t1": self.t, "exit": x.kind,
+                         "from_block": before[0] or None, "to_block": x.to_block,
+                         "to_entry": x.to_entry, "to_map": self.world.get("map"),
+                         "cell": list(cell) if cell else None,
+                         "arrived": self.block == x.to_block,
+                         "warp": [x.warp.x, x.warp.y] if x.warp is not None else None},
+                        before)  # fmt: skip
 
     def _relocate(self) -> None:
         before = self.block
@@ -529,6 +813,7 @@ class TraceSim(Sim):
     # --- the result -----------------------------------------------------------------------------
     def result(self) -> dict[str, Any]:
         end = self.run()
+        self._done = True
         events = [
             {"t": round(t, 1), "kind": kind, "what": what}
             for t, kind, what in self.log[:MAX_EVENTS]
@@ -568,6 +853,9 @@ class TraceSim(Sim):
                 "reads": [{"t": round(t, 1), "reason": r} for t, r in self.where[:MAX_EVENTS]],
             },
             "notes": sorted(set(self.notes))[:50],
+            # the run in order for the Maps page's map view (the module docstring)
+            "play": list(self.play),
+            "play_capped": self.play_capped,
             "scenario": self.scenario.model_dump(mode="json"),
             "world": {
                 "server": self.static.server if self.static else None,
