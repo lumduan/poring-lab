@@ -3701,3 +3701,23 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
 - Proposed to Batt, not pre-registered: (a) teach the detector floor items; it could share N1's
   retrain (one training run, the two new things scored by separate bars) or follow it; (b) leave
   the kill gap at 1.6 s.
+
+**4BE G1 + G1b (2026-11-10 09:47-09:57 ICT; the Rogue IMMUNE since 08:49:34; the MVP alive at
+(145,137) at 09:46:45, killed by `@killmonster2`, "1[dead]" at 09:47:19; base + `--garm-fly
+--garm-confirm 2 --stage-mob 1515:1`, 3 min each). VERDICT: G1 INCONCLUSIVE, G1b C1 PASSES -> p45 runs
+(4BE).**
+
+| | G1 (`xmas02-g1`, 09:47:35) | G1b (`xmas02-g1b`, 09:53:10) |
+|---|---|---|
+| run_start | `"garm_fly": [["garm_baby"], 1.5, "9.19b", 2]` | the same |
+| the staged dog (packets) | appeared at (10,18) 4.53 s before run_start, walked to (17,15); we walked north to (9,35); out of view at 4.1 s | appeared at (7,19) 4.73 s before run_start |
+| detections boxing it | none of 189 | 2.13, 3.13, 4.13 s (consecutive) |
+| `garm_seen` / Fly Wing | none | 3.73 s (streak 2, score 0.981) / the wing pressed 3.94 s; teleported at 3.84 s to (216,180) |
+| C1 (wing <= 2.5 s after the first boxing detection) | INCONCLUSIVE (no box) | +1.60 s: PASS |
+| acts of the dog on us | 0 | 0 |
+
+- G1b's second `garm_seen` (5.14 s, streak 3) took no second wing (the boss guard's 2-s rule).
+- The 2-detection rule cost here: 1.0 s (the next detection) + 0.6 s until the runner's loop read it.
+  G0's 1-detection wing came 0.21 s after its box.
+- G1's dog was never boxed while in view for ~4 s near the start. Why is not studied (likely the
+  start's terrain, as G0b's: N1.4); it is the detector's, not this change's.
