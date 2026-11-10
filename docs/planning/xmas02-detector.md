@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). Not deployed (Batt's decision). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). DEPLOYED 2026-11-10 ~07:0x (M12). Amendment N (Batt): teach the hidden Garm Babies first; Amendment N1 PROPOSED 2026-11-10 (the occlusion study + a plan; NOT accepted). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "xmas02-gb PASSED its held-out score (M11, 2026-11-10). Next: the parent stops the worker and archives the run (M6 step 5: data/train/xmas02-gb-20261109 and data/train/eval/xmas02gb); Batt decides deploying xmas02-gb on xmas_dun02; the runner's seen -> Fly Wing (--garm-fly, rogue-xmas02.md 4BA) follows its own pre-registration and pilot. Earlier: Amendment L (walking sight judged by the live runner, packets the referee); the 4-species xmas02 model DEPLOYED (Amendment J) on the GPU path since 2026-11-07."
+next_action: "Amendment N1 (PROPOSED 2026-11-10, not accepted): the parent tells Batt N1.5 (the deployed xmas02-gb already boxes dogs >= 50 % visible; the gap is the 5-50 % band; G0b's dog was FULLY hidden, which no training fixes) and decides N1.12 (full N1 or stop; FIT; D3; epochs; the bars incl. B5, the p44 false-alarm bar). Nothing is recorded, labelled or trained before an accepting amendment (N2). --garm-fly stays off; xmas02-gb stays deployed (M12). Earlier: Amendment L (walking sight judged by the live runner, packets the referee)."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -2007,3 +2007,416 @@ decision and their own pre-registration (Amendment M).
   that put dogs near the map's models and raised blocks), a FRESH held-out (gw3 is spent; 56 unused
   TEST stands remain), the training (init xmas02-gb) and its bars (hidden-dog recall, the M11 bars
   not worse). `--garm-fly` stays off until then; the deployed xmas02-gb stays.
+
+### Amendment N1 (PROPOSED, 2026-11-10, not yet accepted): partly hidden Garm Babies -- the study, a rule variant `xmas02-o3h-t-occ`, its FIT test, T2-occ, the data, the training and the bars
+
+> **PROPOSED, NOT ACCEPTED.** Written offline (subagent, branch `feat/garm-occ`) for the parent and
+> Batt, 2026-11-10 08:24-09:2x ICT. Nothing below is adopted, recorded, labelled or trained until a
+> clock-labelled amendment (N2 ...) accepts it, BEFORE its data. Read: TRAIN gw2 and DEV gw1 only.
+> gw3, xw5, xp1 and X2 were NOT opened (gw3's 16 stands were taken from its watch's own log, only to
+> remove them from the free TEST stands; its published counts are M9's).
+
+#### N1.0 What was read and run (offline; CPU at nice 15 in a 4 GB scope without swap; no GPU, nothing live)
+
+- **gw2** (`20261109T210933-rdp-gb-gw2`, TRAIN by 3c) and **gw1** (`20261109T205355-rdp-gb-gw1`, NOT
+  admitted by 3c and never trained: DEV evidence only), every candidate frame (749 / 758), through
+  the FROZEN label stack unchanged (params `d4cc0a5d...`, `map_labels.labeler_for`, o3h-t), with each
+  label's prediction kept for the geometry below; M1's label files for the frame-level counts.
+- **The deployed xmas02-gb CPU ONNX** (`b22d972b...`, the unit_detector worker, 4 threads, conf 0.05,
+  per-class NMS, no collapse) on every candidate frame of both (median 201 ms a frame).
+- **G0b's runner archive** (`scratch-archive/2026-11-10/demo-sessions/...-xmas02-g0b`: its packets and
+  `detections.jsonl`; a pilot, not a detector data set) and **p44's record** (rogue-xmas02.md
+  section 5, the parent's 2c21af7c: one false garm_baby box).
+- Scripts and outputs: NAS `scratch-archive/2026-11-10/garm-occ-study/` (53 files, `SHA256SUMS`
+  `fcef932e...`, verified on the NAS): `occ_study.py` (geom / detect / stands), `analyze.py`,
+  `summary.py`, `variant_yield.py`, `fit_dryrun.py`, `fp_player.py`, `rank_stands.py`, `g0b.py`, the
+  per-label geometry (`geom*-*.json`), the detections (`det-*.json`), `stands.json`, the draft
+  lattices, the crop sheets. Never committed (per-frame numbers and pixels of client data).
+
+#### N1.1 How much of a dog is hidden: a geometry the frozen rule does not have
+
+- The frozen rule's "under" tests say WHETHER, not how much: under a model = the sprite's box overlaps
+  the model's whole projected VERTEX box, with no depth (a belt or a machine BEHIND the dog counts);
+  under terrain = it overlaps the floor-to-top box of a raised (>= 10) cell south of it. On the
+  excluded dogs those boxes cover a median 100 % of the label's box (models; terrain 88 % on gw2, 100 %
+  on gw1), whatever is really hidden.
+- **The study's estimate, per label at its predicted position:** every face of the 1,701 RSW models
+  (118,915 triangles; `rsw.parse_rsm` skips the faces, the study reads them) and every GAT cell >= 1
+  unit above the label's floor (a prism from the floor to its top; 24 rows south to 2 north, 8
+  columns either side) are projected with the label's own scene. A pixel of the dog's drawn sprite
+  (its frame's opaque pixels) is HIDDEN when a face covering it lies on the CAMERA's side of the
+  dog's billboard plane (the vertical plane through its cell facing the camera's yaw: at yaw 0,
+  south of the dog; interpolated perspective-correct). **v = the visible share of the sprite's
+  opaque pixels**, the UI windows and the frame edge counted as hidden too (what the frame shows);
+  v_scenery without them.
+- A first version used the camera depth of the dog's feet: a wall right BEHIND a standing dog then
+  "hid" half of it while its fit was 0.65 and kept. The plane test removed that (recorded so nobody
+  repeats it).
+- **It matches the pixels.** The fit NCC falls as v falls, while the NCC over the predicted-VISIBLE
+  pixels only (the hidden ones masked out of the fit's valid map, +-6 px as the rule fits) stays at
+  the clear dogs' level down to v 0.05 (all Garm Baby fates, median plain / masked NCC):
+
+| v_scenery | gw2 n | gw2 plain / masked | gw1 n | gw1 plain / masked |
+|---|---|---|---|---|
+| >= 0.95 | 873 | 0.609 / 0.608 | 854 | 0.620 / 0.618 |
+| 0.75-0.95 | 163 | 0.586 / 0.627 | 119 | 0.572 / 0.661 |
+| 0.50-0.75 | 33 | 0.451 / 0.627 | 23 | 0.291 / 0.677 |
+| 0.25-0.50 | 9 | 0.271 / 0.630 | 31 | 0.315 / 0.753 |
+| 0.05-0.25 | 20 | 0.134 / 0.674 | 28 | 0.118 / 0.702 |
+| < 0.05 | 118 | 0.095 / (no evidence: 7 % pass the floor) | 185 | 0.078 / (3 %) |
+
+- **By eye** (15 gw2 crops, the hidden pixels tinted): the 6 with v 0.00 show only a wall, a block or a
+  machine; in the 6 with v 0.14-0.61 the dog's back or head shows exactly outside the tint; the 3
+  "box-only" ones (v >= 0.95, excluded as occluded_model) are whole dogs under the GM's spawn-message chat
+  bubble, beside a summon glow and our own Rogue, or standing on a belt with a poor fit.
+
+#### N1.2 The problem in numbers (TRAIN gw2; DEV gw1 beside it)
+
+| | gw2 (TRAIN) | gw1 (DEV) |
+|---|---|---|
+| Garm Baby fates (candidate frames x visible dogs) / units | 1,216 / 32 | 1,240 / 32 |
+| kept by the frozen rule | 836 | 771 |
+| **excluded occluded_model + occluded_terrain** | **173 + 80 = 253** (21 units, 179 of 749 frames) | **171 + 144 = 315** (22 units, 252 of 758 frames) |
+| of them, by the study's v: **fully hidden (< 0.05)** | **114 (45 %)**: model 76, terrain 38 | **177 (56 %)**: model 70, terrain 107 |
+| **little (0.05-0.25)** | 20 (model 11, terrain 9) | 23 (18, 5) |
+| **partly (0.25-0.50)** | 9 (2, 7) | 21 (13, 8) |
+| **mostly visible (0.50-0.95)** | 76 (50, 26) | 61 (37, 24) |
+| **not hidden ("box-only", >= 0.95)** | 34 (all model) | 33 (all model) |
+| excluded ambiguous_view (2c: a facing ambiguity, NOT occlusion) | 57 (9 units; 44 of them v >= 0.95) | 71 (14 units; 47 of them v >= 0.95) |
+| kept but partly hidden (v < 0.95: under terrain below the 10 step, or under a model with a good fit) | 123, all v >= 0.50 | 95 (9 at 0.25-0.50) |
+| Garm Baby boxes the M5 cache WROTE from gw2, by v | 391: 337 >= 0.95, 50 at 0.75-0.95, 4 at 0.50-0.75, **none below 0.50** | (not in the cache) |
+
+- The main occluders of the really hidden ones (v < 0.95): terrain 129 / model 90 (gw2), 191 / 91
+  (gw1); the models: the block castles (`xmas_블럭성`), belt 02, the bear walls, the Santa bricks, a
+  crane.
+
+#### N1.3 The deployed xmas02-gb on these dogs (a garm_baby box >= 0.25 whose IoU with the dog's whole predicted box is >= 0.3 or whose centre lies in it; every verdict pooled)
+
+| v | gw2 boxed | gw1 boxed | gw1 per episode (>= 2 frames in the band): seen within 3 frames |
+|---|---|---|---|
+| >= 0.95 | 842 / 846 (99.5 %) | 820 / 828 (99.0 %) | 60 / 60 |
+| 0.50-0.95 | 214 / 223 (96 %) | 155 / 163 (95 %) | 30 / 31 (gw2 39 / 40) |
+| 0.25-0.50 | 3 / 9 | 14 / 36 (39 %; score median 0.41-0.57) | 1 / 4 (gw2 0 / 1) |
+| 0.05-0.25 | 1 / 20 | 0 / 28 | 0 / 4 (gw2 1 / 5) |
+| < 0.05 | 0 / 118 | 0 / 185 | 0 / 19 (gw2 0 / 11) |
+
+- gw2's frames that hold an excluded dog were never written (a frame with any excluded label is not
+  written), but the same dogs' other frames trained; **gw1 never trained at all**: its row is the
+  cleaner one, and the two agree.
+- At conf 0.05 the low band gains a few weak boxes (gw2 0.25-0.50: 6 / 9, score median 0.23).
+- garm_baby boxes >= 0.25 on no labelled dog's predicted box: 4 (gw2) and 5 (gw1) in ~1,000 each,
+  none touching our own player box; whether each is a dog beyond the visibility rule (half off the
+  frame or under the UI) or false was not resolved. Frames with a non-dog monster touching our box:
+  10 and 8 (immune watches: monsters ignore us), so **these watches cannot measure p44's kind of
+  false box.**
+
+#### N1.4 Partly vs fully hidden: separable -- and G0b's dog was FULLY hidden
+
+- **Separable, by the geometry and by the pixels:** about half the occlusion exclusions have v < 0.05
+  (nothing of the dog on screen: no crop shows one, the masked fit finds nothing, the deployed model
+  boxes 0 of 303 at conf 0.25); from v 0.05 up, the visible pixels fit like a clear dog's (N1.1). The partly hidden
+  ones are a minority with a clear lower end; the "box-only" ones are not hidden at all (their
+  exclusion is the floor on a poor fit under a model's box: overlays, glows, our own sprite).
+- **G0b (rogue-xmas02.md 4BB), recomputed from its packets and the runner's detections:** the staged
+  dog appeared at (10,19), 53 % visible from the start (7,21) (the rest hidden by terrain); 0.48 s
+  before run_start it began walking to (6,17). In all five detections while it was on screen (0.99-
+  4.13 s; we walked east, (7.6,21) -> (17.5,24)) it stood or walked at (7.8,17)-(6,17), **v = 0.00:
+  fully behind the +30 terrain block 3.5-4.5 cells south of it**; on screen, not under any UI window.
+  At 36.37 s it stood at (11,20), v 0.95, and was boxed garm_baby 0.969 at once (the predicted box
+  (109,359)-(187,421) against the detection's (105,359)-(176,421)). The same geometry from (7,21): (9,18)
+  23 % visible, (8..6,17) 0 %.
+  **So the G0b miss was not a detector failure: there was nothing to see.** No training can box it;
+  teaching partly hidden dogs could at most have given a box in the ~1 s it crossed (10,19) -> (9,18),
+  half of it before run_start.
+
+#### N1.5 What this means, before any design (for the parent and Batt)
+
+1. **The deployed model already sees a dog when half or more of it shows** (95-96 %; 30 / 31 and
+   39 / 40 such episodes within 3 frames), although it trained on no dog below 50 % visible.
+2. **The gap is the 5-50 % band:** 29 (gw2) and 64 (gw1) of ~1,230 dog views per watch (2.4 % and
+   5.2 %), boxed 4 / 29 and 14 / 64. That is the target of a retrain: a head or a back over a block, a dog walking
+   out from behind one -- warnings of a fraction of a second to a few seconds earlier on the runner.
+3. **Fully hidden dogs (9-15 % of views here) cannot be learned**, and G0b's was one. The Battle Log
+   guard (fly on the first named line) stays the protection against them.
+4. **False alarms already exist** (p44: 1 garm_baby box in 1,568 detections, a Cruiser under the
+   Rogue). Teaching partial dog views can only push that kind of error up; N1.10's B5 / B6 measure it,
+   and the runner's own rule may need a confirmation (N1.12 D9).
+5. A cheap side gain, independent of 2: frames held out today only because a dog in them is FULLY
+   hidden could be written (gw2 +36 frames, gw1 +62, each with its visible dogs and monsters).
+
+#### N1.6 The rule variant `xmas02-o3h-t-occ` (Garm Baby only)
+
+- **(a)** Everything as `xmas02-o3h-t` (the frozen params, tau, T_h, offset, E0, the frame exclusions)
+  for every label except a **Garm Baby (1515) label the frozen rule excludes as `occluded_model` or
+  `occluded_terrain`**. The four species are untouched (their labels byte-identical: a test).
+- **(b)** For such a label: v (N1.1, committed as code: T-N1) and the MASKED fit (the hidden pixels
+  out of the valid map; tau 0.092, +-6 px, not at the edge):
+  - **v < V_full = 0.05 (fixed now): `hidden_full`**: no label (nothing to see). Its frame is written
+    when it is otherwise whole -- only if decision D3 says so after T2-occ's stratum F; until then it
+    stays excluded as today;
+  - **V_min <= v < 0.95, the masked fit passing and the masked NCC >= T_h 0.536 (the frozen floor,
+    unchanged): KEPT**, flagged `occluded` with v and the masked NCC, its box the **AMODAL** box: the
+    whole sprite frame at the masked fit's offset (as every kept label's box is);
+  - otherwise excluded with its frozen reason, as today.
+- **(c)** Every other exclusion (2b next_move, 2c ambiguous_view, facing_unknown, crowd, ui, unfit,
+  the frame exclusions, E0) and the T_h floor on every kept label (the cache's `weak_fit`, on the
+  masked NCC for an `occluded` label) unchanged.
+- **Why AMODAL, not the visible part:**
+  - accuracy: the amodal box is the projection plus the fit that C1 / C2 measure (median 1 px); a
+    visible-part box would inherit the occluder geometry's error at its cut edge (the GAT is a
+    5-unit grid; the RSM faces approximate the drawn mesh) -- label noise exactly where the evidence
+    is thinnest; v only decides KEEP or not, so its error moves no box;
+  - one definition: every Garm Baby box in the cache is already the whole sprite, partly hidden
+    ones included (54 of the 391 boxes the cache wrote from gw2 have 5-50 % of the dog hidden), and
+    the camera's scale is fixed (D13: scale 0.1), so the whole box follows from any visible part;
+  - the runner needs presence only (any garm_baby box -> the Fly Wing) and Q1 matches a detection by
+    its centre in the box; T2's instructions already say sprites may be partly hidden (N1.7 adds
+    the box sentence);
+  - YOLO trains on full-extent boxes of occluded objects routinely (e.g. CrowdHuman's full-body
+    boxes); a visible-part box would range from a sliver to the whole dog and look like other
+    species' parts.
+  - The cost: an amodal box spans the occluder too. The guards: V_min (>= V_min of the dog's own
+    pixels in it are the dog), the masked floor, and the false-alarm bars (N1.10 B5, B6).
+- **The name:** `xmas02-o3h-t-occ` (labels, params, cache id); `freeze` refuses the name without the
+  variant's fields and the reverse (as Amendment G's rename rule).
+
+#### N1.6b Its FIT test: V_min, fixed on FIT before any TEST (like 4f)
+
+- **FIT = a NEW watch, `go1`** (N1.8), not gw1 / gw2 (this study read them; gw1 as FIT is the cheaper
+  alternative, D2).
+- **The population P (FIT's), chosen by the GEOMETRY, not by the frozen rule's verdict:** every
+  Garm Baby label that is kept or fails only its fit (no 2b / 2c / facing_unknown / crowd / ui
+  exclusion), uncrowded (Amendment B), with v in [0.05, 0.95). **The reference R:** the same, clear
+  of every occluder box (models and terrain at the rule's own test) with v >= 0.95. For both, the
+  MASKED fit (for R it equals the plain fit: nothing is masked). (Why not "the occlusion exclusions
+  only": they are the fit FAILURES by construction, against a reference of successes; the first
+  dry run did that and was biased.)
+- **A band passes when ALL hold:** (i) n >= 30 (the LOW bands: >= 20); (ii) its masked-NCC median >=
+  R's median - 0.05; (iii) its share passing the masked fit AND the floor (masked NCC >= T_h) >= R's
+  share - 0.10; (iv) **C1-occ**: of its floor-passing STANDING labels (idle >= 1 s), the share whose
+  PREDICTION (no shift; its frame, else the best of the action's frames, as C1) has a masked NCC <
+  tau (0.092) is <= 5 % on >= 30 rows (LOW: >= 20) -- 3c's C1 bar on the visible pixels.
+- **HIGH band [0.50, 0.95):** must pass, else the variant is NOT adopted (no occluded label is kept;
+  V_full's dropping may still be adopted by D3).
+- **LOW band:** **V_min = the smallest g in (0.15, 0.25, 0.35) whose band [g, 0.50) passes on its own**;
+  none passes (or too few rows) -> V_min = 0.50. Steps 0.05 and 0.10 are reported, never chosen
+  from; the grid, the margins, the minimum rows, V_full = 0.05 and the 0.95 top are fixed here.
+- A failure is reported, never re-run under the same bars.
+- **DEV dry run (this study's gw2 / gw1, NOT FIT; disclosed, decides nothing):**
+
+| | R (clear): n, masked-NCC median, floor share | HIGH [0.50, 0.95): n, median, floor share, C1-occ | LOW [0.15, 0.50): n, median, floor share, C1-occ | [0.05, 0.15) (reported) |
+|---|---|---|---|---|
+| gw2 | 553, 0.620, 0.899 | 173, 0.640, 0.821, 1 / 65: **PASS** | 5, 0.667, 0.80, 0 / 0: too few | 10, 0.694, 1.00, 1 / 7 |
+| gw1 | 489, 0.629, 0.857 | 127, 0.668, 0.929, 0 / 62: **PASS** | 27, 0.735, 1.00, 0 / 13: (iv) too few rows | 13, 0.565, 0.69, 2 / 3 |
+| pooled | 1,042, 0.624, 0.879 | 300, 0.656, 0.867, 1 / 127: **PASS** | 32, 0.732, 0.97, 0 / 13: (iv) too few rows | 23, 0.677, 0.83, **3 / 10** |
+
+  - The HIGH band would pass everywhere; the LOW band [0.15, 0.50) looks as good as the clear dogs
+    (masked median 0.73, floor 97 %) but holds too few STANDING rows on ordinary stands, so on this
+    data V_min would be 0.50. go1's occluder stands (N1.8: ~3-9x the partly hidden share) are what
+    can fill it. Below 0.15 the prediction stops matching (C1-occ 3 / 10 bad): the grid starts at
+    0.15 for that reason.
+  - The frozen C1 on the same partly hidden standing dogs (no mask): 17 / 156 bad (10.9 %); with the
+    mask (C1-occ) 1 / 127 in the HIGH band: the mask, not a looser bar, is what makes them pass.
+
+#### N1.7 T2-occ: the blind check of the occluded labels (two NEW labellers, I and J)
+
+- **The pack:** seed 55 (new), salt xmas02, from go1 + the admitted TRAIN watches labelled under the
+  variant; Garm Baby only, three strata: **O** (kept `occluded`, v in [V_min, 0.95)) 30 crops, half
+  of them with v < 0.50 when the pool holds them; **C**
+  (clear, v >= 0.95) 10 crops, a control; **F** (`hidden_full`, v < 0.05, the whole box drawn where the
+  dog stands) 15 crops, for D3. Mixed in one seeded order; the strata's sizes not stated in the pack
+  (labeller A noticed the balance on 11-06).
+- **The instructions:** a NEW file `docs/planning/xmas02-blind-instructions-occ.txt` (its sha256 in an
+  amendment BEFORE the pack) = the current file plus:
+  - "Some boxes are drawn around the WHOLE monster even where scenery hides part of it; the box then
+    also covers the block, wall or model in front of it. Judge Q2 against the monster as it would
+    stand unhidden: good when the visible part is inside the box where that part of the monster
+    would be and the box would fit the whole monster; off when it cuts the visible part or misses
+    the monster. A box with no part of a monster visible in it is no for Q1." and
+  - **Q4:** "how much of the monster can you see? most / about half / a little / none" (REPORTED
+    against v: does the geometry agree with the eye?).
+- **The bars:** stratum O: good >= 90 % AND species >= 95 % AND Q1 yes >= 95 %, from EACH labeller (6's
+  bars + Q1). C: section 6's. F (for D3): Q1 no or unsure on >= 90 % from each (nothing to see).
+- O fails -> the occluded labels are not trained (Amendment H's rule); F fails -> hidden_full frames
+  stay excluded.
+- Tool gap: `blind_score.py` per stratum and Q4 (T-N4).
+
+#### N1.8 The data plan
+
+- **Stands from the geometry (no recording read):** for every lattice stand, the idle Garm Baby at
+  every walkable cell within Chebyshev 1-5 of it (the spawn lands 1-3 cells away, M1 point 3, and the
+  dog wanders), its v_scenery seen from the stand; a stand's score = the share of those cells where
+  the dog is PARTLY hidden (0.25 <= v < 0.85), within 3 and within 5 cells. Computed for all 431 stands of
+  both lattices (`stands.json` in the study's archive; 3.6 s a stand):
+
+| stands | n | partly hidden share, cells within 3 (median / p90) | within 5 (median) | stands with >= 0.25 within 3 |
+|---|---|---|---|---|
+| TRAIN side, all | 343 | 0.049 / 0.205 | 0.094 | 17 |
+| gw1 / gw2's own stands | 30 | **0.022** / 0.208 | 0.076 | 0 |
+| **the 64 best TRAIN-side stands, minus gw1 / gw2's** (go1-go4, 16 each, dealt round-robin: each 0.195-0.224) | 64 | **0.203** / 0.292 | 0.193 | 17 |
+| the 56 unused TEST stands | 56 | 0.033 / 0.229 | 0.084 | 4 |
+| **their best 16** (goT) | 16 | **0.218** / 0.333 | 0.158 | 4 |
+
+  The ranking: by (share within 3 + share within 5), then the fewest fully hidden cells within 3, then
+  x, y. **So the occluder stands put a dog partly hidden ~3-9x as often as gw1 / gw2's stands did**
+  (within 5 / within 3). go1's 16: (82,49) (128,146) (27,247) (150,225) (38,203) (170,72) (8,238)
+  (18,225) (181,148) (93,16) (203,248) (192,194) (25,173) (159,118) (105,17) (179,71); goT's 16:
+  (8,140) (126,192) (170,94) (247,206) (223,105) (203,159) (159,225) (223,236) (181,216) (247,192)
+  (225,248) (181,81) (60,159) (146,16) (214,113) (8,16) (all TEST by 3a; none of R2-W's 16 or gw3's
+  16).
+- **The watches** (Amendment M's protocol unchanged: `stage_items.py watch --map xmas_dun02 --spawn
+  1515 --spawn-n 2 --dwell-s 40 --max-cells 16 --immune-confirmed`, beside `record_session.py
+  --backend rdp --format png --fps 1`, the Rogue immune and judged, `@killmonster2` after each dwell):
+
+| watch | role | stands (lattice file, client-derived, /dev/shm) | seed |
+|---|---|---|---|
+| `go1` | **FIT** (N1.6b) + VAL monitor | `lattice-occ-go1.json`: ranks 1, 5, 9 ... (16) | 2611101 |
+| `go2`, `go3`, `go4` | TRAIN by 3c, in order, until the stopping rule | `lattice-occ-go2/3/4.json`: ranks 2, 6, ... / 3, 7, ... / 4, 8, ... (16 each) | 2611102-4 |
+| `goT` | **the FRESH held-out** | `lattice-occ-goT.json`: the 16 best of the 56 unused TEST stands | 2611109 |
+
+  - The 64 TRAIN-side stands are the best of the 343 minus gw1 / gw2's 30, dealt round-robin so FIT
+    and each TRAIN watch get the same mix. The files (the study's drafts are in its archive) are
+    rebuilt by a committed rule (T-N5) and their sha256 recorded before go1.
+  - `goT`'s name (`-rdp-gb-goT`, a label `gb-goT`) joins the MapSpec's TEST and eval suffixes BEFORE
+    it records (refused by labels / pack / the cache; `--eval-test` only after the freeze).
+- **3c, the join rule:** as written (its own C1 <= 5 % on >= 50 standing labels) PLUS C1-occ <= 5 % on
+  its floor-passing standing `occluded` labels (>= 30, else reported). **A risk to say now:** gw1
+  failed 3c (6.21 %) on Garm Baby FACING misses (M1 point 1): 1 of the 2 earlier dog watches was
+  refused, so plan for one in two.
+- **The stopping rule:** after each admitted TRAIN watch, count the `occluded` Garm Baby boxes in the
+  frames the cache would write (gw2's re-labelled frames included); **stop at >= 300**, or after go4.
+  The estimate: gw2 gives 29 on ordinary stands (V_min 0.25; N1.2's frame rule); the occluder stands
+  should give several times that, but the per-frame blocks (the other dog excluded) cap it: ~60-120
+  a watch, so 3 watches. A watch beyond the stop is not admitted (Amendment F's rule).
+- **Disk and time:** gw1 / gw2 were 1.86 / 1.95 GB for 16 stands; each watch ~15 min of dwells, ~25-30
+  min with the prep and the ship; 5 watches ~2.5 h on the one Windows session; shipped and verified
+  one at a time (the recorder floor 30 GB on bot-server).
+
+#### N1.9 The cache and the training
+
+- **The cache:** M5's form; labels re-made under the variant for every session holding a Garm Baby
+  (gw2, both xw3); xw2 and xw1 unchanged (byte-identical labels: a test); + the admitted go2-go4;
+  **VAL: xw1 x 2 + go1** (a garm_baby AP that includes hidden dogs; monitor only). A dry run first,
+  then the guarded `cache:` step; its counts must equal the dry run's.
+- **No new class:** an occluded dog is `garm_baby` (class 7); the class list `dd1d3f31...` unchanged.
+- **Init: xmas02-gb's `last.pt`** (`85fb37a4...`); every class row seeded by name.
+- **The recipe: M6's** (YOLO11n, imgsz 1280, batch 2, workers 2, seed 20261004, close_mosaic 3, hsv_s
+  0.2, scale 0.1, FP32 on the Arc, mid-epoch checkpoints, the execdev launch without train-day's
+  duty arguments), **E epochs (D7: 20 as M6, or 10)**; the scored checkpoint `last.pt` after the last
+  completed epoch, its sha256 recorded before goT is read.
+
+#### N1.10 The evaluation (once, after the freeze) and its bars
+
+- **The held-out: goT** under the variant (`--eval-test`); a pack, seed 57, Garm Baby strata O-low (60,
+  or all), O-high (60) and C (60), two NEW labellers (K, L), N1.7's instructions; crops evaluated when both say yes /
+  good / Garm Baby. Both models (new and deployed) predict the same refs (paired).
+- **Bars (every one must PASS; fewer rows than its minimum -> NO VERDICT, never a pass):**
+  - **B1, hidden dogs per crop (Q1s, the box's class garm_baby):** on goT's evaluated **O-low** crops
+    (V_min <= v < 0.50; >= 30): recall >= 0.70; on its **O-high** crops (0.50 <= v < 0.95; >= 30):
+    recall >= 0.90; precision >= 0.80 over both. (Why: the deployed model's 5-50 % band is 18 / 93 on
+    this study's data and its 50-95 % band 369 / 386, so O-low is where the retrain must show, and
+    O-high must not fall; a back over a wall is harder than a whole dog, and the runner gets several
+    frames, B2.) The deployed model scored beside it on the same crops.
+    **If FIT gives V_min = 0.50,** O-low does not exist and the variant only adds dogs the deployed
+    model already boxes: the parent then re-decides D1 before any training.
+  - **B2, hidden dogs per EPISODE (the runner's view):** of goT's partly hidden episodes (one dog in
+    view with V_min <= v < 0.95 for >= 2 consecutive candidate frames, from the labels and the
+    geometry), the share with a garm_baby box (>= 0.25) within the episode's first 3 frames >= 0.80
+    (>= 20 episodes) AND >= the deployed model's share on the same episodes + 0.10. Reported beside:
+    the same with 2 CONSECUTIVE boxes (D9's confirmation rule).
+  - **B3, visible dogs not worse:** goT's C crops: Q1s recall >= 0.95, precision >= 0.85, AND recall >=
+    the deployed model's on the same crops - 0.02.
+  - **B4, the four species not worse:** Q1c on pooled TEST (11-07's key, C / D, refs: M7 point 4):
+    recall and precision >= 0.80 each AND precision >= M11's - 0.03 (>= 0.907 / 0.902 / 0.908 / 0.905).
+  - **B5, false alarms where a monster touches the Rogue (p44's kind; the parent, 2026-11-10):** on
+    TEST-P (X2 + xp1, every recorded capture) and goT, the captures where a non-dog unit's projected
+    box overlaps or touches our own projected box (packets) and no Garm Baby is within the view:
+    garm_baby boxes >= 0.25: the new model <= the deployed model on the same captures, AND <= 1 per
+    500 such captures; < 200 such captures -> NO VERDICT (the count is reported first).
+  - **B6, false alarms on dog-free captures:** every capture of X2 + xp1 and goT's dog-free frames (the
+    kill gaps) and the pooled TEST refs with no Garm Baby within view (packets): garm_baby boxes >=
+    0.25 <= 1 per 1,000 captures (p44 live: 1 / 1,568) AND the new model <= the deployed model + 1.
+  - **B7, CPU p95 <= 1.10 x the deployed model's** (M10 (c), one interleaved run).
+- **Live, after deployment (rogue-xmas02.md's own pre-registration, not this document's):** shadow
+  pilots of the base with `--garm-fly` OFF and the new model: a run is a "false-alarm run" when a
+  garm_baby box >= the fly threshold appears with no job 1515 in view (packets); 4BA's G2 (<= 1 false
+  alarm a run) judged on them before `--garm-fly` flies on anything.
+- **The verdict:** PASS when B1-B7 all pass; deploying it and `--garm-fly` stay Batt's decisions.
+
+#### N1.10b The false-alarm risk of occluded labels (the parent's p44 fact, 2026-11-10)
+
+- **The fact:** p44 (08:22-08:48, the deployed xmas02-gb, no Garm Baby in the run by packets): ONE
+  garm_baby box in 1,568 detections, FALSE: 0.768 at (621,330)-(686,398), just below our player box
+  (624,293)-(659,364), while a Cruiser stood on (121,205), the cell below the Rogue at (121,206), in
+  a fight (killed 5.2 s later). With `--garm-fly` on: one needless Fly Wing in 25 min (4BA's G2 allows
+  <= 1 a run).
+- **Why N1 can raise it:** (1) N1 teaches that a FRAGMENT of a monster beside an edge is a dog; a
+  monster partly covered by our own sprite is the same picture to the model, and p44's box is exactly
+  that; (2) an amodal box spans occluder pixels, so the model may learn edge context; (3) the training
+  is ASYMMETRIC: partly hidden dogs become positives, but a Cruiser or a Myst Case half behind the
+  Rogue never appears at all (E0 excludes the engaged unit and its frame; the crowd rule excludes
+  neighbours), so nothing teaches "a fragment that is NOT a dog". The deployed model, which saw no
+  dog below 50 % visible, already makes this error once a run.
+- **What guards it here:** V_min and the masked floor (a kept occluded label always holds >= V_min of
+  the dog's own pixels), B5 (frames where a monster touches the Rogue, paired against the deployed
+  model) and B6 (dog-free captures), and the live shadow pilots before `--garm-fly` flies. What
+  would REDUCE it (not in N1): hard negatives from hunting frames (D10) and a 2-detection
+  confirmation in the runner (D9).
+
+#### N1.11 The tools (offline, a tmpfs worktree, tests and a positive case each; before go1 records)
+
+| # | what | positive case |
+|---|---|---|
+| T-N1 | `rsw.parse_rsm` keeps the faces; an occlusion module: model faces + GAT prisms vs the billboard plane, v per label (the study's code, cleaned) | this study's v on gw2 reproduced (the per-label table above) |
+| T-N2 | the variant in `orc_labels_fix` / `map_labels` (`--occlusion o3h-t-occ`: the masked fit, `hidden_full`, `occluded` labels, v in the label files); `freeze` and the name | gw2 under the variant = this study's simulation (298 -> 363 frames at V_min 0.25); the four species byte-identical |
+| T-N3 | `threshold` reports N1.6b's FIT test (both bands, C1-occ); `check` reports C1-occ (3c) | the DEV dry run above reproduced |
+| T-N4 | `pack` strata O / C / F for Garm Baby; `blind_score.py` per stratum and Q4 | a synthetic answer file per stratum |
+| T-N5 | the stand ranking + `lattice-occ-{go1,go2,go3,go4,goT}.json` by the rule above | the study's ranking reproduced |
+| T-N6 | the cache: `occluded` labels as class 7, `weak_fit` on the masked NCC, `hidden_full` frames by D3 | the dry run's counts = the label files' |
+| T-N7 | the evaluation: B2's episodes, B5 / B6's packet tests (a unit's projected box touching ours; Garm Baby in view) | p44-like: a staged frame list from the gw watches with a known count |
+
+#### N1.12 Decisions for the parent / Batt
+
+| # | decision | proposed default |
+|---|---|---|
+| D1 | **full N1, or stop here**, given N1.5 (the deployed model already sees dogs >= 50 % visible; the gain is the 5-50 % band, 2-5 % of dog views; G0b's dog was fully hidden, which no training fixes) | **Batt is told N1.5 first.** If (b) stands: the full N1. The alternative: keep xmas02-gb, measure B5 / B6 on it (offline, TEST-P), and decide `--garm-fly` with D9; hidden dogs stay covered by the Battle Log guard |
+| D2 | FIT: a new watch `go1`, or gw1 (cheaper; read by this study) | `go1` |
+| D3 | write frames whose excluded dogs are all `hidden_full` (v < 0.05) | yes, if T2-occ's stratum F passes |
+| D4 | the scope: Garm Baby only, or every species' occluded labels too | Garm Baby only (the four species' M11 bars are not risked) |
+| D5 | amodal boxes (N1.6) | amodal |
+| D6 | the stands (N1.8's ranking; 64 TRAIN-side + 16 TEST) and the stopping rule (>= 300 occluded boxes, at most go2-go4) | adopt |
+| D7 | epochs: 20 (M6) or 10 | 10 (a fine-tune of a model that already holds this map; ~half the GPU) |
+| D8 | B1-B7's numbers (B1 0.70; B5 / B6 rates) | adopt |
+| D9 | (rogue-xmas02.md's, recorded here as a dependency) the runner's confirmation: fly on ONE garm_baby box, or on 2 in consecutive detections (p44's false box was one frame; a partly hidden dog is usually seen in consecutive frames: N1.3's episodes) | the parent's pre-registration of `--garm-fly` decides |
+| D10 | hard negatives for p44's case: frames with a monster overlapping our own sprite are never written today (E0 excludes the engaged unit, the crowd rule its neighbours) | a later round (gef10 4h's E2 / E3 path); B5 measures the risk now |
+
+#### N1.13 Time and GPU (estimates)
+
+- **Tools:** ~1 day of agent time (T-N1-T-N7), offline, in a tmpfs worktree.
+- **Live:** 5 watches, ~2.5 h on the one Windows session, ~10 GB recorded and shipped one by one.
+- **Labels, FIT, T2-occ:** ~10 min CPU a session; two labellers ~30 min.
+- **GPU (the Arc, M8's rate 0.625 s a frame-epoch):** ~2,291 + 65 (gw2's new frames) + ~350 a TRAIN
+  watch x 3 = **~3,400 frames: 10 epochs ~5.9 h, 20 epochs ~11.8 h** (at the 12-h step limit: one
+  planned resume). The cache ~20 min; the evaluation ~1.5 h with the labellers.
+- **Calendar:** ~2-3 days from an accepting amendment.
+
+#### N1.14 What looked wrong, and the limits (recorded)
+
+1. **The occlusion geometry is a model of the client, not the client:** GAT cell tops are flat 5-unit
+   prisms; the RSM faces are frame 0 (animated belts and gears move); the billboard plane ignores the
+   sprite's own depth. The pixels agree (N1.1), but T2-occ's Q4 and the masked floor are the checks.
+2. **ambiguous_view is not occlusion** (fix 2's 2c, a facing ambiguity): 57 / 71 dogs, most fully
+   visible; out of N1's scope.
+3. **"occluded_model" is often not occlusion:** 34 / 33 excluded dogs are fully visible (v >= 0.95):
+   the o3h floor on a poor fit under a model's box (GM chat bubbles, summon glows, our own Rogue, a
+   facing miss). The variant leaves them excluded (the floor).
+4. **The garm_baby boxes on no labelled dog** (4 + 5) were not resolved into dogs beyond the
+   visibility rule vs false boxes.
+5. **The watches cannot show p44's false box:** monsters ignore an immune Rogue (8-10 frames a
+   session with a monster touching our box). B5 needs TEST-P's fights; enough such captures there is
+   not known until counted.
+6. **Episodes are short and few in the low band** (gw1 4 + 4, gw2 1 + 5 at 5-50 %): one watch on ordinary
+   stands cannot score B2; goT's stands are chosen for it, and B2's minimum (20 episodes) may still
+   give NO VERDICT.
+7. The study's numbers are DEV: gw2 is TRAIN data of the deployed model (its excluded-dog frames
+   were never written, the same dogs' other frames were); gw1 is clean but was refused by 3c.
