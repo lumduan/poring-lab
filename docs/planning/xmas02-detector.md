@@ -3132,3 +3132,9 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   - the log: "Overriding model.yaml nc=8 with nc=1", "Transferred 493/499 items from pretrained
     weights" (the 6 = the class head, fresh as O9 says), 687 train / 272 val images, 2 workers,
     20 epochs.
+- **O10, the training's first epochs (by 16:18 ICT):**
+  - epoch 1: 3,019 s. Its validation took ~45 min at ~40 s a batch ("NMS time limit exceeded"):
+    the fresh 1-class head floods NMS with low-confidence boxes;
+  - epoch 2: 554 s with validation (val recall 0.51, precision 0.78);
+  - the rest at ~9 min an epoch -> the end ~19:00 ICT, far inside the step's 12 h;
+  - nothing changed in the recipe.
