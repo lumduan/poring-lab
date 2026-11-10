@@ -1870,3 +1870,252 @@ def test_lf1_each_hp_read_logs_the_held_read_and_the_age_of_here() -> None:
     pc = dh.PosConfirm()
     assert pc.check(0.0, R(xy=(1, 1), mode="light")) == (None, dh.Held(0.0, (1, 1), None))
     assert pc.check(0.1, R(xy=None, mode="light_failed")) == (None, None)
+
+
+# --- --unread-step (dungeon@9.22, LF-4; rogue-xmas02.md 4BI, Amendment R; Study S-LF 4 and 2f) ---
+
+
+def _mv(t: float, rel: tuple[int, int], by: str = "walk") -> dh.OwnMove:
+    return dh.OwnMove(t, rel, by)
+
+
+def test_unread_step_waits_for_a_young_walk_click_then_steps_then_flies() -> None:
+    """LF-4's pure decision on a tick the pos_unread rule would press the Fly Wing: no wing while
+    a walk click of ours is < 2 s old (p39 250.96 s: the wing came 0.13 s after one); else a step;
+    a step's fresh read gets 2 s; after 2 steps the wing, as before."""
+    assert (dh.UNREAD_WALK_S, dh.UNREAD_STEPS, dh.UNREAD_STEP_CELLS) == (2.0, 2, 2)
+    assert (dh.UNREAD_READ_S, dh.UNREAD_MAX_S) == (2.0, 15.0)
+    mv = _mv(0.0, (11, 0))
+
+    def d(now: float, walk_t: float = -1e9, steps: int = 0, step_t: float = -1e9,
+          move: dh.OwnMove | None = mv, here: bool = True) -> tuple[str, str]:  # fmt: skip
+        return dh.unread_step_decide(now, 100.0, walk_t, steps, step_t, move, here)
+
+    # (a) p39: the walk click 0.13 s before the rule fired -> wait, re-checked on the next tick
+    assert d(100.13, walk_t=100.0) == ("wait", "walk_sent")
+    assert d(101.99, walk_t=100.0) == ("wait", "walk_sent")
+    assert d(102.0, walk_t=100.0) == ("step", "")  # 2 s old: the wait is over
+    # (b) a step, then its read's 2 s; the second step; (d) then the wing
+    assert d(100.0) == ("step", "")
+    assert d(101.5, steps=1, step_t=100.0) == ("wait", "step_read")
+    assert d(102.0, steps=1, step_t=100.0) == ("step", "")
+    assert d(103.0, steps=2, step_t=102.0) == ("wait", "step_read")
+    assert d(104.0, steps=2, step_t=102.0) == ("wing", "steps")
+    # no own move since the last Fly Wing: no way back is known -> the wing, as today
+    assert d(100.0, move=None) == ("wing", "no_move")
+    # no held cell (after a Fly Wing, or before the first read): nothing to judge a step from
+    assert d(100.0, here=False) == ("wing", "no_here")
+    # the backstop: never more than UNREAD_MAX_S after the rule came due, even mid-wait
+    assert d(115.01, walk_t=115.0) == ("wing", "max")
+    assert d(115.0, walk_t=114.5) == ("wait", "walk_sent")
+
+
+def test_unread_step_simulated_escapes_end_fresh_or_by_the_wing() -> None:
+    """(c) a fresh read ends the escape with no wing; (d) none after 2 steps -> the wing. Ticks at
+    the runner's READ_HZ through the pure decision, with the read's arrival given."""
+
+    def escape(fresh_at: float | None, walk_t: float) -> tuple[str, list[float]]:
+        t0, steps, step_t, now, clicks = 0.0, 0, -1e9, 0.0, []
+        while True:
+            if fresh_at is not None and now >= fresh_at:
+                return "fresh", clicks
+            act, _why = dh.unread_step_decide(now, t0, walk_t, steps, step_t, _mv(-5.0, (8, 0)),
+                                              True)  # fmt: skip
+            if act == "wing":
+                return "wing", clicks
+            if act == "step":
+                steps, step_t = steps + 1, now
+                clicks.append(round(now, 1))
+            now = round(now + 1.0 / dh.READ_HZ, 6)
+
+    # p39: the walk 0.13 s before the rule fired -> at 1.8 s it is 1.93 s old (wait); steps at
+    # 2.0 and 4.0 s (each read's 2 s), then the wing at 6.0 s
+    assert escape(None, walk_t=-0.13) == ("wing", [2.0, 4.0])
+    assert escape(2.6, walk_t=-0.13) == ("fresh", [2.0])  # step 1's read came: no wing
+    assert escape(0.4, walk_t=-0.13) == ("fresh", [])  # the young walk itself freshened it
+    assert escape(None, walk_t=-1e9) == ("wing", [0.0, 2.0])  # p47: no young walk, steps at once
+    assert escape(3.0, walk_t=-1e9) == ("fresh", [0.0, 2.0])  # step 2's read came
+
+
+def test_unread_step_goes_back_along_her_last_own_move() -> None:
+    """(b): the step is 2 cells (Chebyshev) OPPOSITE to her last own-command movement -- a walk
+    click's to - from, a far strike's walk-up; Fly Wings end the way she came."""
+    assert dh.unread_step_rel((8, 0)) == (-2, 0)  # p47: the box strike at rel (8, 0)
+    assert dh.unread_step_rel((11, 0)) == (-2, 0)
+    assert dh.unread_step_rel((5, 3)) == (-2, -1)  # 1.2 -> 1
+    assert dh.unread_step_rel((4, 3)) == (-2, -2)  # 1.5 -> 2 (half away from zero)
+    assert dh.unread_step_rel((4, 1)) == (-2, -1)  # 0.5 -> 1, not banker's 0
+    assert dh.unread_step_rel((-4, -1)) == (2, 1)  # symmetric
+    assert dh.unread_step_rel((0, -7)) == (0, 2)
+    assert dh.unread_step_rel((-1, 1)) == (2, -2)
+    assert dh.unread_step_rel((0, 0)) is None
+    for m in [(7, 3), (-9, 2), (1, -6), (3, 3)]:
+        s = dh.unread_step_rel(m)
+        assert s is not None and max(abs(s[0]), abs(s[1])) == 2
+    moves = [_mv(1.0, (3, 0)), _mv(2.0, (0, 5), "strike"), _mv(3.0, (0, 0), "approach")]
+    assert dh.last_own_move(moves, fly_at=-1e9) == moves[1]  # (0, 0) aims nowhere: skipped
+    assert dh.last_own_move(moves, fly_at=2.5) is None  # every move before the Fly Wing
+    assert dh.last_own_move(moves, fly_at=1.5) == moves[1]
+    assert dh.last_own_move([], fly_at=-1e9) is None  # no own command: no step, the wing
+    # (a)'s clock: walk clicks only (a strike's walk-up is not a walk click)
+    assert dh.walk_click_t(moves) == 3.0
+    assert dh.walk_click_t([_mv(1.0, (3, 0), "boss_walk"), _mv(2.0, (4, 4), "strike")]) == 1.0
+    assert dh.walk_click_t([_mv(2.0, (4, 4), "strike")]) == -1e9
+    assert {"walk", "boss_walk", "approach"} == dh.UNREAD_WALK_BY
+    # the dead reckoning's displacement: a walk its rel, a strike stops beside the target
+    assert dh.own_move_disp(_mv(0.0, (3, -4))) == (3, -4)
+    assert dh.own_move_disp(_mv(0.0, (8, 0), "strike")) == (7, 0)
+    assert dh.own_move_disp(_mv(0.0, (-2, 3), "strike")) == (-1, 2)
+
+
+def test_unread_step_dodges_her_own_sprite_and_stays_in_view() -> None:
+    """The step's point is SCREEN-RELATIVE (the flat projection about her sprite at the screen
+    centre). Only (0, +2) of the 2-cell steps lies on her own sprite: hovered one cell aside."""
+    from poring_dataset import camera as cam
+
+    cj = json.loads(
+        (ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json").read_text()
+    )
+    camera = cam.camera_from_json(cj["camera"])
+
+    def uv(c: tuple[int, int]) -> tuple[float, float]:
+        u, v = camera.project(np.asarray([c], float), np.zeros(1))[0]
+        return float(u), float(v)
+
+    def on_self(c: tuple[int, int]) -> bool:
+        return dh.in_self_box(*uv(c), dh.FOOT_PX[0], dh.FOOT_PX[1])
+
+    steps = {dh.unread_step_rel((dx, dy)) for dx in range(-9, 10) for dy in range(-9, 10)} - {None}
+    assert len(steps) == 16  # the Chebyshev-2 ring
+    assert {s for s in steps if s is not None and on_self(s)} == {(0, 2)}
+    assert dh.unread_step_cells((0, 2), on_self) == [(1, 2), (-1, 2)]
+    assert dh.unread_step_cells((-2, 0), on_self) == [(-2, 0)]
+    for s in steps:
+        assert s is not None
+        for c in dh.unread_step_cells(s, on_self):
+            u, v = uv(c)
+            assert 30 <= u < 1280 - 30 and 30 <= v < 720 - 30  # in view, near the centre
+            assert abs(u - dh.FOOT_PX[0]) <= 140 and abs(v - dh.FOOT_PX[1]) <= 100
+
+
+def test_unread_step_judges_the_keep_outs_from_every_cell_she_may_be_on() -> None:
+    """The zone / NPC checks need a map cell, and ``here`` is stale: they are judged from the HELD
+    cell AND the held cell moved by our own commands since the last fresh read, with a margin of
+    UNREAD_SAFE_R cells. p47: held (101, 208); a box strike at rel (8, 0) took her to (112, 207)."""
+    held = (101, 208)
+    moves = [_mv(1.0, (2, 1)), _mv(5.0, (8, 0), "strike")]
+    assert dh.unread_candidates(None, moves, 4.0, -1e9) == []
+    assert dh.unread_candidates(held, moves, 6.0, -1e9) == [held]  # nothing since the read
+    assert dh.unread_candidates(held, moves, 4.0, -1e9) == [held, (108, 208)]  # p47: 4 cells off
+    assert dh.unread_candidates(held, moves, 0.9, -1e9) == [held, (110, 209)]
+    assert dh.unread_candidates(held, moves, 0.9, 3.0) == [held, (108, 208)]  # not before a wing
+    assert dh.unread_candidates(held, moves, 5.4, -1e9) == [held, (108, 208)]  # within the lag
+    back = [_mv(1.0, (3, 0)), _mv(2.0, (-3, 0))]
+    assert dh.unread_candidates(held, back, 0.0, -1e9) == [held]  # there and back: one cell
+
+    forbid = np.zeros((60, 60), dtype=bool)
+    forbid[30:35, 30:35] = True  # a no-enter block
+    assert dh.UNREAD_SAFE_R == 12
+    assert dh.unread_step_safe([(10, 10)], (-2, 0), forbid, [], None) is None
+    assert dh.unread_step_safe([(18, 32)], (-2, 0), forbid, [], None) == "zone_near"  # 12 off
+    assert dh.unread_step_safe([(17, 32)], (-2, 0), forbid, [], None) is None  # 13 off
+    # the held cell is clear, the dead-reckoned one is not: refused (prefer no step)
+    assert dh.unread_step_safe([(5, 5), (25, 25)], (2, 0), forbid, [], None) == "zone_near"
+    assert dh.unread_step_safe([(5, 5)], (2, 0), forbid, [(10, 14)], None) == "npc_near"
+    assert dh.unread_step_safe([(5, 5)], (2, 0), forbid, [(5, 18)], None) is None
+    assert dh.unread_step_safe([(5, 5), (-3, 5)], (2, 0), forbid, [], None) == "off_map"
+    assert dh.unread_step_safe([], (2, 0), forbid, [], None) == "no_cell"
+    # the walk click's own segment rule, from each candidate (reached with no margin)
+    import map_zones as mz
+
+    zones = mz.parse({"map": "t", "reviewed_by": "batt", "reviewed": "2026-11-10",
+                      "no_cross": [{"id": "l", "note": "n", "points": [[11, 0], [11, 59]]}],
+                      "no_enter": []}, "t", shape=(60, 60))  # fmt: skip
+    line = mz.no_cross_mask(zones, (60, 60))
+    assert dh.unread_step_safe([(10, 10)], (2, 0), line, [], zones, r=0) == "no_cross"
+    assert dh.unread_step_safe([(10, 10)], (-2, 0), line, [], zones, r=0) is None
+    assert dh.unread_step_safe([(10, 10)], (-2, 0), line, [], zones) == "zone_near"
+
+
+def test_unread_step_is_never_refused_at_xmas_dun02s_dead_patches_but_is_near_its_warp() -> None:
+    """xmas_dun02's one keep-out (the exit warp's span + 4, x 124-134 y 125-135) is >= 26 cells
+    from every recurring dead patch of S-LF (p36-p47): every step from them passes; near it none."""
+    import map_zones as mz
+
+    zones = mz.load("xmas_dun02", shape=(300, 300))
+    assert zones is not None
+    forbid = mz.no_enter_mask(zones, (300, 300)) | mz.no_cross_mask(zones, (300, 300))
+    steps = {dh.unread_step_rel((dx, dy)) for dx in range(-3, 4) for dy in range(-3, 4)} - {None}
+    dead = [(112, 207), (118, 213), (129, 41), (136, 37), (121, 206), (141, 98), (141, 99),
+            (88, 232), (89, 235), (181, 136), (183, 136)]  # fmt: skip
+    for c in dead:
+        for s in steps:
+            assert s is not None
+            assert dh.unread_step_safe([c], s, forbid, [], zones) is None, (c, s)
+    for c in [(129, 120), (120, 130), (140, 140), (129, 113)]:  # within 12 of the area
+        assert dh.unread_step_safe([c], (2, 0), forbid, [], zones) == "zone_near", c
+    assert dh.unread_step_safe([(129, 112)], (2, 0), forbid, [], zones) is None  # 13 off
+
+
+def test_unread_step_is_off_by_default_and_recorded_in_the_fixes() -> None:
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "unread_step" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "unread_step" not in dh.fixes_of(dh.argparse.Namespace(**base, unread_step=False))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, unread_step=True))
+    assert rec["unread_step"] == [2.0, 2, 2, 2.0, 12, 15.0, "9.22"]
+    assert dh.UNREAD_STEP_VERSION not in ("9.20", "9.21")  # --loot-sight's, --late-confirm's
+    src = Path(dh.__file__).read_text()
+    flag = '"--unread-step",\n        action=argparse.BooleanOptionalAction,\n'
+    flag += "        default=False,"
+    assert flag in src
+    assert 'unread_step_on = getattr(a, "unread_step", False)' in src
+    assert '"fixes": fixes_of(a)' in src  # run_start and the manifest both record it
+    # the run refuses before any input when the KB cannot list the map's NPCs
+    assert 'raise SystemExit(f"dungeon@9.22 refused: --unread-step: {e}") from None' in src
+
+
+def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
+    """The flag off: unread_held returns False first and nothing else changes (the wing's events
+    are today's). On: the step is the ONE new world click, through click_at, after a CLEAR read
+    only; a fresh read ends the escape; the search walk holds its clicks while one runs."""
+    src = Path(dh.__file__).read_text()
+    i_rule = src.index("and not unread_held(tick)):")
+    i_stuck = src.index('"why": "pos_unread"})')
+    assert src.index("and pos_flies < POS_FLY_MAX") < i_rule < i_stuck  # due first (short-circuit)
+    assert src[i_stuck : i_stuck + 200].count('press("fly", "pos_unread")') == 1
+    body = src[src.index("def unread_held(now: float) -> bool:") :]
+    body = body[: body.index("\n        def ", 10)]
+    assert body.index("if not unread_step_on:\n                return False") < body.index("ust.")
+    assert body.count("click_at(") == 1 and 'click_at(u_u, v_u, "unread_step")' in body
+    assert body.index('if act_w != "click":') < body.index("click_at(u_u, v_u")
+    assert "trusted=False, enabled=False" in body  # no --walk-trust for the step
+    assert "project(None, [c_u])" in body  # screen-relative: no map cell
+    assert "unread_step_safe(cands, rel_u, unread_forbid, unread_npcs, zones)" in body
+    assert body.index("unread_step_safe(") < body.index("hover(u_u, v_u)")
+    assert src.count('click_at(u_u, v_u, "unread_step")') == 1
+    assert "unread_step" not in dh.NPC_GUARDED  # a walk-type click, as the walk's
+    # (c): a fresh main read ends the escape, after the jump bar, before ``here`` moves
+    i_fresh = src.index('unread_end("fresh", at=list(p_)')
+    assert src.index("if (here is not None and is_jump(here, p_, tick - last_pos_t)") < i_fresh
+    assert i_fresh < src.index("here, last_pos_t = p_, tick")
+    # no search walk click while an escape runs; every other Fly Wing ends the escape
+    assert "and tick - last_walk >= a.walk_every and not unread_active() \\\n" in src
+    hook = 'if what == "fly" and why != "pos_unread":\n                unread_end("fly", why=why)'
+    assert hook in src
+    # the way she came: the walk click, the boss walk-away, the far approach, a far strike
+    assert src.count("note_move(") == 5  # the definition + 4 sources
+    for s_ in ('note_move(rel, "walk")', '"boss_walk")', 'note_move(cell_a, "approach")',
+               'note_move(rel, "strike")'):  # fmt: skip
+        assert s_ in src
+    # the event (slf_score.py's LF-4 block reads these shapes): one kind, its outcome in "event"
+    assert '{"kind": "unread_step", "event": event, "steps": ust["steps"],' in src
+    assert '{"kind": "unread_step", "event": "wait", "why": why_u,' in body
+    assert '{"kind": "unread_step", "event": "step", "n": ust["steps"], "rel": list(c_u),' in body
+    for end_ in ('unread_end("wing", why=why_u)', 'unread_end("refused", why=why_safe,',
+                 'unread_end("refused", why="cursor",'):  # fmt: skip
+        assert end_ in body
+    # LF-4 leaves the fight branch alone: the rule is still checked outside fights only
+    fight_end = "time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))\n"
+    assert fight_end + "                    continue" in src
