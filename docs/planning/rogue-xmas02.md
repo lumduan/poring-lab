@@ -3671,6 +3671,9 @@ The after-fight idle, per kill (kills matched to their death packet: p44 44 of 6
 - **What would remove it: the bot seeing that nothing fell.**
   - Floor items are not in the detector's classes, so the loot step must hover all 9 cells of the
     3 x 3 drop area. rAthena puts a drop in a free cell around the death cell.
+    ➡️ REFINED by xmas02-detector.md Amendment O (O.1a, the packets of five recorded hunts): 62 of 68
+    drops landed ON the death cell; the 6 two-item drops added (+1,-1). The death cell is next to
+    the Rogue in 218 / 221 kills, and ~1 in 6 drops lands on (0,+1), behind her own body.
   - A **floor-item class** would let the loot step:
     - skip an empty floor (~2.9 s a kill on ~3 of 4 kills);
     - and hover only the boxed cells on the rest (~4.0 s -> ~1-1.5 s).

@@ -2821,6 +2821,8 @@ it can follow from (b)'s labels.
    decorations): T2's hard negatives and I3 / I4 cover those.
 6. **The CPU fallback's environment:** at 10:11 `/dev/shm/poring-lab-detector` held `model/` only (no
    `.venv`); not investigated (an infra observation for the parent; the live path is the GPU server).
+   ➡️ CHECKED BY THE PARENT 2026-11-10 10:27 ICT: NOT a fault. `.venv` is there (a dot-directory a
+   plain `ls` does not list; dated 11-07 19:20), and its python imports onnxruntime 1.31.1.
 7. The O.1b / O.1e numbers are FIT's (one recording, 13-16 floor items, 51 % of its kept labels
    Scell); DEV agrees on the anchor, the scale and the fit offsets but has one bad item (Manacles);
    p20 / p39 stay untouched.
