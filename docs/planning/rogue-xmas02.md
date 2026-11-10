@@ -4614,3 +4614,44 @@ LS-2's bars, as a sketch (written as a real pre-registration only after Batt's O
   path changed.
 - **Unchanged:** no new input path. Every click still goes through `click_at` (FrameGuard), and is
   SWORD-verified.
+
+**Pilots p50 + p51 (4BM / 4BN: the base with LF-2 + `--unread-step`, LF-4), written 2026-11-11 01:35
+ICT from `date`.**
+- **The runs:**
+  - the MVP was polled alive at 00:36:09 ([123:43]) and killed 00:37:03 ("1[dead]");
+  - p50 00:38:19-01:04:08 (immunity OFF 00:37:4x, ON 01:06), recorded fiT4;
+  - p51 01:06:56-01:32:44 (OFF 01:06:3x, ON 01:34:4x), recorded fiT5;
+  - both runs rc 0. The detect server loaded the two floor-item models beside the map models
+    (5 models; p49 loaded 3).
+- **VERDICT: every bar passes in both runs, BUT NO pos_unread ESCAPE CAME DUE IN EITHER (0
+  `unread_step` events). By 4BM's letter `--unread-step` STAYS OFF: "harmless, unproven", for
+  Batt.**
+
+| | p49 (base + LF-2) | **p50** | **p51** | bar |
+|---|---|---|---|---|
+| E1 kills | 64 (153.2 / h) | **68 (163.1 / h)** | **69 (165.3 / h)** | >= 80 / h: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 / 79.3 % / 0 / 2 | **0 / 82.3 % / 0 / 2** | **0 / 86.8 % / 0 / 1** | E3, deaths 0: PASS |
+| W1 unsent walk clicks (the steps' clicks out: none taken) | 5 / 231 | **5 / 216** | **3 / 253**; pooled p51 + p50 + p49 + p48 = 21 / 1,100 (1.91 %) | pooled <= 2.0 %: PASS (p50 + p49 + p48 + p47: 22 / 1,127, 1.95 %) |
+| L1 / L3 (start) / L4 | 92.3 / 96.9 % / 0 | **100 % (32 / 32) / 89.7 % (52 / 58) / 0 of 97** | **94.4 % (17 / 18) / 89.9 % (62 / 69) / 0 of 103** | PASS |
+| K1 / K3 | 1.96 s / 95.3 % | **1.98 s / 96.6 %** | **1.99 s / 95.7 %** | PASS |
+| U1 stuck / D1 p95 | 0 s / 22.1 ms | **8.6 s / 22.1 ms** | **0 s / 22.5 ms** | PASS |
+| R1-A (old count) | 0 | **1 (3)** | **0 (1)**; pooled p51 + p50 + p49 + p48 = 1 | < 7: PASS |
+| Q1 quiet defend scans | 9 | **6 (found 0)** | **5 (found 0)** | <= 8: PASS |
+| P2 | 0 | **0** | **0** | PASS |
+| LF-2's M1 / M2 / M3 | 0 / 2 / 0 | **2 / 0 / 0, jumps 0** | **0 / 3 / 1, jumps 0** | PASS |
+| LF-4: escapes due / steps / X1 | - | **0 / 0 / -** | **0 / 0 / -** | NO VERDICT (never came due) |
+| reported: late strikes (S-LS) box / late / failed / lost s | 72 / 16 / 12 / 97.6 | **77 / 14 / 11 / 92.0** | **67 / 18 / 11 / 116.9** | - |
+
+- **Why LF-4 never acted:** a pos_unread escape needs POS_FLY_S without a fresh position read.
+  With LF-2 in the base the fresh share is 99.7 % (p50, p51), and no persistent unread span
+  happened. LF-4 remains a fallback for a problem LF-2 has mostly removed.
+- **E1:** 163.1 and 165.3 / h are the two highest base runs (p40-p49: 129.6-158.4). That is
+  reported, not attributed: no change of the base is behind it (LF-4 never acted), and the run
+  noise is ~±15 / h.
+- **Items per hour (x 60 / 25):** p50: Scell 19 (45.6), Zargon 12 (28.8), Piece of Cake 8 (19.2),
+  Well-baked Cookie 7 (16.8), Manacles 5 (12.0), Candy 4 (9.6), Red Herb, Iron 3 (7.2), Candy Cane 2
+  (4.8), Old Blue Box, Level 3 Cold Bolt 1 (2.4). p51: Scell, Zargon 14 (33.6), Piece of Cake 9
+  (21.6), Well-baked Cookie 5 (12.0), Red Herb 4 (9.6), Manacles 2 (4.8), Candy, Iron, Sandals 1
+  (2.4).
+- **Next:** p52 + p53 (4BO), the base (LF-2) + `--still-target`, LF-4 OFF, in the next MVP window.
+
