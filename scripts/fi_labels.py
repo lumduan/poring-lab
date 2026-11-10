@@ -125,9 +125,10 @@ NEG_ITEM_SPAN_NS = 3 * NS  # ... alive within +-3 s of the frame
 NEG_TRIES = 40
 SUBS = (3, 6, 9, 12)
 # the floor's colours behind reference.png's sprites: the median RGB of the orange and the pale
-# floor tiles, measured 2026-11-10 on FIT p31 (absent-point windows, O.1e's points)
-TILE_ORANGE = (204, 122, 66)
-TILE_PALE = (230, 214, 186)
+# floor pixels in the 33 x 33 windows around 12 of O.1e's absent points on FIT p31 (measured
+# 2026-11-10 11:1x ICT: 8,795 orange and 88 pale pixels)
+TILE_ORANGE = (202, 125, 86)
+TILE_PALE = (224, 202, 172)
 
 
 @dataclass(frozen=True)
