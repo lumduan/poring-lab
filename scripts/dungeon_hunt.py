@@ -1387,6 +1387,122 @@ def still_target_refused(box_strike: bool, box_now: bool, still_strike: bool,
     return None
 
 
+# --lead-press (dungeon@9.24, LS-1; rogue-xmas02.md Study S-LS, LS-1 and 4BP: Batt 2026-11-11, "try
+# it: with the GPU now, the aim should be faster"), ON TOP OF --still-target (LS-2): when
+# press_check's D2 says hold AND the sprite's foot moved >= LEAD_PX since D1, the strike does not
+# wait. It clicks where the sprite will be when the client resolves the click: D2's first hover
+# point + the foot's velocity between the two grabs x the picture's age at the resolve
+# (LEAD_AGE_S, S-LS's ~0.57 s: the stream lag 0.16 + pre_click 0.06 + the client 0.35, as
+# sim3.py modelled it; the time already spent since D2's grab is added). The lead is at most ONE
+# CELL, Chebyshev on the map grid as S-LS's simulation capped it, measured by the camera's own
+# per-cell screen vectors at D2's foot (~34 px across, ~24 px up / down: a flat 32-px cap would
+# lead ~1.35 cells up / down and ~0.8 diagonally); LEAD_CAP_PX only when those vectors are unusable.
+# The led point must pass box_target's selection gates (LS-2's re-hover's) and stay in view, off
+# our own sprite, else LS-2's hold. Shifts in [WALKER_PX, LEAD_PX) hold as LS-2 does; a D2 that
+# cannot judge strikes as today. The led point is NOT SWORD-read (the sprite is not there yet):
+# LS-1's known risk, recorded in every lead record. It revisits --lead-strike (9.5, dropped after
+# p14), which led from the CPU detector's older frames; LS-1 leads from a D2 ~21 ms old. No new
+# input path: the click is click_at's, as every strike.
+LEAD_PRESS_VERSION = "9.24"
+LEAD_PX = 15.0  # S-LS's LS-1 threshold: the foot moved this far between D1 and D2
+LEAD_AGE_S = 0.57  # D2's picture -> the client's resolve, beyond the time already spent (S-LS)
+LEAD_CAP_CELLS = 1.0  # the lead at most this many cells (Chebyshev; the per-cell screen vectors)
+LEAD_CAP_PX = 32.0  # ... or this many px when the per-cell vectors are unusable
+
+
+def cell_steps(
+    camera: Any, foot: Sequence[float], grid: Sequence[Cell] = BOX_GRID
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """PURE (--lead-press, 9.24): the screen vectors (px) of one cell step along x and along y at
+    the ``grid`` cell (relative to us) whose flat projection by ``camera`` (the runner's: it
+    follows us, our cell at FOOT_PX) is nearest ``foot`` -- on flat ground: an altitude moves a
+    cell's point, not the size of one step (lead_cap's cell)."""
+    g = np.asarray(grid, dtype=float)
+    c_ = nearest_rel(camera.project(g, np.zeros(len(g))), grid, foot)
+    pts = np.asarray([c_, (c_[0] + 1, c_[1]), (c_[0], c_[1] + 1)], dtype=float)
+    uv = np.asarray(camera.project(pts, np.zeros(3)), dtype=float)
+    return ((float(uv[1][0] - uv[0][0]), float(uv[1][1] - uv[0][1])),
+            (float(uv[2][0] - uv[0][0]), float(uv[2][1] - uv[0][1])))  # fmt: skip
+
+
+def lead_cap(
+    lead: Sequence[float],
+    cell_x: Sequence[float] | None = None,
+    cell_y: Sequence[float] | None = None,
+    cap_cells: float = LEAD_CAP_CELLS,
+    cap_px: float = LEAD_CAP_PX,
+) -> tuple[tuple[float, float], bool, str]:
+    """PURE (--lead-press, 9.24): the screen ``lead`` (px) shortened to at most ``cap_cells``
+    cells, Chebyshev, on the map grid whose one-cell steps along x / y are the screen vectors
+    ``cell_x`` / ``cell_y`` at the sprite (its direction kept); a lead within it is kept as is.
+    Without usable vectors (None, a zero one, or < ~6 degrees apart) at most ``cap_px`` px,
+    Euclidean. Returns (the lead, whether it was shortened, the rule used: "cell" / "px")."""
+    lx, ly = float(lead[0]), float(lead[1])
+    if cell_x is not None and cell_y is not None:
+        ax, ay, bx, by = float(cell_x[0]), float(cell_x[1]), float(cell_y[0]), float(cell_y[1])
+        det, norms = ax * by - bx * ay, math.hypot(ax, ay) * math.hypot(bx, by)
+        if norms > 0 and abs(det) >= 0.1 * norms:
+            m = max(abs(lx * by - bx * ly), abs(ax * ly - lx * ay)) / abs(det)  # in cells
+            if m <= cap_cells:
+                return (lx, ly), False, "cell"
+            return (lx * cap_cells / m, ly * cap_cells / m), True, "cell"
+    n = math.hypot(lx, ly)
+    if n <= cap_px:
+        return (lx, ly), False, "px"
+    return (lx * cap_px / n, ly * cap_px / n), True, "px"
+
+
+def press_lead(
+    b1: Sequence[float],
+    t1: float,
+    b2: Sequence[float],
+    t2: float,
+    t_now: float,
+    cell_x: Sequence[float] | None = None,
+    cell_y: Sequence[float] | None = None,
+    walker_px: float = WALKER_PX,
+    lead_px: float = LEAD_PX,
+    age_s: float = LEAD_AGE_S,
+) -> dict[str, Any]:
+    """PURE (--lead-press, 9.24, LS-1): D2's verdict by the foot shift from D1's box ``b1``
+    (grabbed at ``t1``) to D2's ``b2`` (``t2``): < ``walker_px`` -> "strike" (today's); <
+    ``lead_px`` -> "hold" (LS-2's); else "lead": the foot's velocity v = (foot2 - foot1) / (t2 -
+    t1) px / s, the age = ``age_s`` + the time already spent since D2's grab (``t_now`` - ``t2``),
+    the lead = v x age shortened by lead_cap (``cell_x`` / ``cell_y``), the led click = D2's first
+    hover point + the lead, and the led foot (its cell) = D2's foot + the lead. Grabs not in order
+    give no velocity: "hold" (``why`` "dt"). Returns {"decision", "moved", and for "lead": "v",
+    "age_s", "raw" (the lead before the cap), "lead", "capped", "cap", "point", "foot"}."""
+    moved = foot_shift(b1, b2)
+    if moved < walker_px:
+        return {"decision": "strike", "moved": moved}
+    if moved < lead_px:
+        return {"decision": "hold", "moved": moved}
+    dt = t2 - t1
+    if dt <= 0:
+        return {"decision": "hold", "moved": moved, "why": "dt"}
+    f1 = ((float(b1[0]) + float(b1[2])) / 2, float(b1[3]))
+    f2 = ((float(b2[0]) + float(b2[2])) / 2, float(b2[3]))
+    v = ((f2[0] - f1[0]) / dt, (f2[1] - f1[1]) / dt)
+    age = age_s + max(0.0, t_now - t2)
+    raw = (v[0] * age, v[1] * age)
+    lead, capped, rule = lead_cap(raw, cell_x, cell_y)
+    hx, hy = box_hover_points(b2)[0]
+    return {"decision": "lead", "moved": moved, "v": v, "age_s": age, "raw": raw, "lead": lead,
+            "capped": capped, "cap": rule, "point": (hx + lead[0], hy + lead[1]),
+            "foot": (f2[0] + lead[0], f2[1] + lead[1])}  # fmt: skip
+
+
+def lead_press_refused(still_target: bool, lead_strike: bool) -> str | None:
+    """PURE (--lead-press, 9.24): why the flag cannot work as built (the run would silently be
+    LS-2 alone, or the base): it leads from --still-target's press check, and --lead-strike
+    (dropped after p14) would replace the boxes it compares. None: it can run."""
+    if not still_target:
+        return "--lead-press needs --still-target"
+    if lead_strike:
+        return "--lead-press does not go with --lead-strike"
+    return None
+
+
 def in_self_box(u: float, v: float, u0: float, v0: float) -> bool:
     """PURE (--self-recheck): (u, v) lies on our own sprite, whose feet are at (u0, v0)."""
     return abs(u - u0) <= SELF_HALF_W and v0 - SELF_UP <= v <= v0 + SELF_DOWN
@@ -1581,6 +1697,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                               UNREAD_SAFE_R, UNREAD_MAX_S, UNREAD_STEP_VERSION]  # fmt: skip
     if getattr(a, "still_target", False):  # dungeon@9.23 (rogue-xmas02.md Study S-LS, LS-2)
         out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
+    if getattr(a, "lead_press", False):  # dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP)
+        out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
     return out
 
 
@@ -2501,6 +2619,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                       getattr(a, "lead_strike", False))  # fmt: skip
         if why_st:
             raise SystemExit(f"dungeon@9.23 refused: {why_st}")
+    if getattr(a, "lead_press", False):  # dungeon@9.24 (LS-1): never silently LS-2 alone
+        why_lp = lead_press_refused(getattr(a, "still_target", False),
+                                    getattr(a, "lead_strike", False))  # fmt: skip
+        if why_lp:
+            raise SystemExit(f"dungeon@9.24 refused: {why_lp}")
     import nametag
 
     tag_tpl = nametag.load_templates(nametag.map_dir(ROOT, map_) / "templates.npz")
@@ -2866,6 +2989,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         late_confirm_on = getattr(a, "late_confirm", False)  # dungeon@9.21 (LF-2)
         unread_step_on = getattr(a, "unread_step", False)  # dungeon@9.22 (LF-4)
         still_target_on = getattr(a, "still_target", False)  # dungeon@9.23 (LS-2)
+        lead_press_on = getattr(a, "lead_press", False)  # dungeon@9.24 (LS-1)
         own_moves: deque[OwnMove] = deque(maxlen=64)  # 9.22: our commands that walked her
         ust: dict[str, Any] = {"t0": None}  # 9.22: the pos_unread escape in progress (t0: due)
 
@@ -3569,11 +3693,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             target's SWORD on D1's box ``b1``, ONE more detection D2 (press_decide). Returns (the
             event's "press" record, True when the strike is today's, the re-aimed (rel, point) of
             a held target that stood still and read SWORD again, else None). No still scene or no
-            fresh D1 (``meta_``): nothing to compare, today's strike, no D2."""
+            fresh D1 (``meta_``): nothing to compare, today's strike, no D2. --lead-press
+            (dungeon@9.24, LS-1): a hold whose shift is >= LEAD_PX is led instead (lead_aim:
+            "led", its (rel, point) returned like a re-aim), else LS-2's hold."""
             assert boxes is not None
             t_p = time.monotonic()
             prs: dict[str, Any] = {"moved_px": None, "det2_ms": None, "hold_ms": 0, "polls": 0,
                                    "end": "not_still" if not still_ else "no_d1"}  # fmt: skip
+            if lead_press_on:
+                prs["lead"] = None  # dungeon@9.24: lead_aim's record, when a lead was computed
             if not still_ or meta_ is None:
                 counts[f"still_target_{prs['end']}"] += 1
                 return prs, True, None
@@ -3596,7 +3724,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             today = end != "hold"
             if end == "hold":
                 assert b2 is not None
-                end, got = hold_still(b2, t2, arm_ or "gpu", float(meta_["t"]), prs)
+                if lead_press_on:  # dungeon@9.24 (LS-1): a long shift is led, not held
+                    got = lead_aim(b1, float(meta_["t"]), b2, t2, prs)
+                if got is not None:
+                    end = "led"
+                else:
+                    end, got = hold_still(b2, t2, arm_ or "gpu", float(meta_["t"]), prs)
             prs["end"] = end
             prs["ms"] = round((time.monotonic() - t_p) * 1e3)  # the SWORD read -> the event
             counts[f"still_target_{end}"] += 1
@@ -3649,6 +3782,52 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             rel_e = (0, 0) if sp_e is None or here is None else \
                 (sp_e[0] - here[0], sp_e[1] - here[1])  # fmt: skip
             return end, (rel_e, (u_e, v_e))
+
+        def lead_aim(
+            b1: Sequence[float], t1: float, b2: Sequence[float], t2: float, prs: dict[str, Any]
+        ) -> tuple[Cell, tuple[float, float]] | None:
+            """--lead-press (dungeon@9.24, LS-1; rogue-xmas02.md Study S-LS, 4BP): D2 said hold on
+            D1's box ``b1`` (grab ``t1``) -> D2's ``b2`` (``t2``). press_lead: a shift < LEAD_PX
+            -> None (LS-2's hold, no record). Else the lead (v x age, one cell at most by the
+            camera's cell_steps at D2's foot) and its record in ``prs["lead"]``; the led point
+            must pass box_target's selection gates (LS-2's re-hover's: "far", --engage-screen's
+            "skip"), stay in view ("off") and off our own sprite ("self", as the detector's own
+            boxes are dropped); a gate -> None (LS-2's hold). Then (rel, point) for the strike,
+            the cell from the LED foot (box_spot). NO SWORD read at the led point -- the sprite
+            is not there yet: LS-1's known risk ("sword": "unchecked")."""
+            ex, ey = cell_steps(camera, ((b2[0] + b2[2]) / 2, b2[3]))
+            pl = press_lead(b1, t1, b2, t2, time.monotonic(), ex, ey)
+            if pl["decision"] != "lead":
+                return None  # [WALKER_PX, LEAD_PX): LS-2's hold, as without the flag
+            foot_l, (u_l, v_l) = pl["foot"], pl["point"]
+            lim = BOX_SCREEN_PX if getattr(a, "engage_screen", False) else BOX_TARGET_PX
+            gate: str | None = None
+            if math.hypot(foot_l[0] - FOOT_PX[0], foot_l[1] - FOOT_PX[1]) > lim:
+                gate = "far"  # box_target's own selection would not take it there
+            elif getattr(a, "engage_screen", False) and (
+                not in_view(foot_l[0], foot_l[1] - BODY_UP) or unreachable(here, foot_l)
+            ):
+                gate = "skip"  # --engage-screen's in-view / --reach-check skip
+            elif not in_view(u_l, v_l):
+                gate = "off"
+            elif self_box(u_l, v_l):
+                gate = "self"  # on our own sprite: a click there walks (--self-recheck's lesson)
+
+            def r1(xs: Sequence[float]) -> list[float]:
+                return [round(float(x_), 1) for x_ in xs]
+
+            prs["lead"] = {"v_px_s": r1(pl["v"]), "age_s": round(pl["age_s"], 3),
+                           "lead_px": r1(pl["lead"]), "capped": pl["capped"],
+                           "point": r1((u_l, v_l)), "raw_px": r1(pl["raw"]), "cap": pl["cap"],
+                           "cell_px": [r1(ex), r1(ey)], "foot": r1(foot_l), "gate": gate,
+                           "sword": "unchecked"}  # fmt: skip
+            if gate is not None:
+                counts["lead_press_gated"] += 1
+                return None
+            sp_l = box_spot(here, foot_l)
+            rel_l = (0, 0) if sp_l is None or here is None else \
+                (sp_l[0] - here[0], sp_l[1] - here[1])  # fmt: skip
+            return rel_l, (u_l, v_l)
 
         def self_uv() -> tuple[float, float]:
             """Our own feet point on screen (the camera keeps us there): the self box's anchor."""
@@ -5414,6 +5593,17 @@ def main() -> int:
         "sprite; its foot moved < 10 px -> the strike as before; else no click yet: a detection "
         "every 0.25 s until two in a row are still (at most 2.5 s), then its new box is hovered "
         "and struck only on a SWORD read; a timeout or a lost sprite -> no box strike",
+    )
+    t.add_argument(
+        "--lead-press",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP; OFF by default; with "
+        "--still-target, not with --lead-strike): when the press check would hold a sprite whose "
+        "foot moved >= 15 px between its two detections, it is struck ahead instead: the second "
+        "detection's hover point + the foot's velocity x (0.57 s + the time since that grab), "
+        "at most one cell; the led point is NOT SWORD-read; a led point outside the box target's "
+        "gates -> the hold as before; shifts of 10-15 px hold as before",
     )
     t.add_argument(
         "--quiet-scan",

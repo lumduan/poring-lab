@@ -2325,3 +2325,190 @@ def test_still_target_is_wired_at_the_box_targets_sword_only() -> None:
     # the event's "press" record: these five fields from the start, for every end
     assert '{"moved_px": None, "det2_ms": None, "hold_ms": 0, "polls": 0,' in pc
     assert 'counts[f"still_target_{end}"] += 1' in pc
+
+
+# --- --lead-press (dungeon@9.24, LS-1; rogue-xmas02.md Study S-LS, 4BP) ---------------------------
+
+
+def test_lead_press_constants() -> None:
+    assert (dh.LEAD_PX, dh.LEAD_AGE_S, dh.LEAD_CAP_PX, dh.LEAD_CAP_CELLS) == (15.0, 0.57, 32.0, 1.0)
+    assert dh.LEAD_PRESS_VERSION == "9.24" and dh.WALKER_PX < dh.LEAD_PX
+    assert dh.LEAD_PRESS_VERSION not in ("9.20", "9.21", "9.22", "9.23")
+
+
+def test_press_lead_decides_strike_hold_or_lead_by_the_foot_shift() -> None:
+    """< WALKER_PX: today's strike; [WALKER_PX, LEAD_PX): LS-2's hold; >= LEAD_PX: led. Grabs out
+    of order give no velocity: held."""
+    b1 = (100.0, 200.0, 140.0, 260.0)  # foot (120, 260)
+
+    def east(px: float) -> tuple[float, float, float, float]:
+        return (100.0 + px, 200.0, 140.0 + px, 260.0)
+
+    def decide(px: float, t2: float = 10.3) -> str:
+        return str(dh.press_lead(b1, 10.0, east(px), t2, 10.35)["decision"])
+
+    assert [decide(px) for px in (0.0, 9.9, 10.0, 14.9, 15.0, 30.0)] == [
+        "strike", "strike", "hold", "hold", "lead", "lead"]  # fmt: skip
+    assert dh.press_lead(b1, 10.0, east(12.0), 10.3, 10.35) == {"decision": "hold", "moved": 12.0}
+    assert dh.press_lead(b1, 10.0, east(20.0), 10.0, 10.35) == \
+        {"decision": "hold", "moved": 20.0, "why": "dt"}  # fmt: skip
+    assert dh.press_lead(b1, 10.0, east(20.0), 9.9, 10.35)["why"] == "dt"
+    # a box that grew upward (an attack pose, a head) did not move: struck as today
+    taller = (100.0, 150.0, 140.0, 260.0)
+    assert dh.press_lead(b1, 10.0, taller, 10.3, 10.35)["decision"] == "strike"
+
+
+def test_press_lead_is_velocity_times_the_age_from_d2() -> None:
+    """v = the foot's shift / the time between the two grabs; age = LEAD_AGE_S + the time already
+    spent since D2's grab; the led point = D2's FIRST hover point (its centre) + the lead; the led
+    foot = D2's foot + the lead (box_spot's cell)."""
+    b1 = (100.0, 200.0, 140.0, 260.0)
+    b2 = (112.0, 216.0, 152.0, 276.0)  # foot (120, 260) -> (132, 276): (12, 16), 20 px
+    big_x, big_y = (500.0, 0.0), (0.0, -500.0)  # cells too big to cap anything
+    pl = dh.press_lead(b1, 10.0, b2, 10.4, 10.43, big_x, big_y)
+    assert pl["decision"] == "lead" and pl["moved"] == 20.0
+    assert [round(x, 6) for x in pl["v"]] == [30.0, 40.0]  # px / s over the 0.4 s between grabs
+    assert abs(pl["age_s"] - 0.60) < 1e-9  # 0.57 + 0.03 since D2's grab
+    assert [round(x, 6) for x in pl["raw"]] == [18.0, 24.0] and pl["raw"] == pl["lead"]  # 0.6 s
+    assert (pl["capped"], pl["cap"]) == (False, "cell")
+    assert [round(x, 6) for x in pl["point"]] == [150.0, 270.0]  # D2's centre (132, 246) + lead
+    assert [round(x, 6) for x in pl["foot"]] == [150.0, 300.0]  # D2's foot (132, 276) + lead
+    assert dh.box_hover_points(b2)[0] == (132.0, 246.0)
+    # D2's grab "after" now (clock skew) adds nothing: the constant alone
+    assert dh.press_lead(b1, 10.0, b2, 10.4, 10.3, big_x, big_y)["age_s"] == dh.LEAD_AGE_S
+    # a walker going up and left: the lead points the same way
+    pl2 = dh.press_lead(b1, 10.0, (76.0, 170.0, 116.0, 230.0), 10.3, 10.3, big_x, big_y)
+    assert pl2["v"][0] < 0 and pl2["v"][1] < 0 and pl2["lead"][0] < 0 and pl2["lead"][1] < 0
+
+
+def test_lead_cap_one_cell() -> None:
+    """At most one cell, Chebyshev, on the camera's per-cell screen vectors (34 px across, 24 px up
+    here): a straight walk is cut to one step, a diagonal to one diagonal step; a short lead stays.
+    Without usable vectors: at most LEAD_CAP_PX (32 px), the direction kept."""
+    ex, ey = (34.0, 0.0), (0.0, -24.0)
+    assert dh.lead_cap((51.0, 0.0), ex, ey) == ((34.0, 0.0), True, "cell")
+    assert dh.lead_cap((-51.0, 0.0), ex, ey) == ((-34.0, 0.0), True, "cell")
+    assert dh.lead_cap((0.0, 36.0), ex, ey) == ((0.0, 24.0), True, "cell")
+    lead, capped, rule = dh.lead_cap((68.0, -36.0), ex, ey)  # (2, 1.5) cells -> (1, 0.75)
+    assert [round(x, 6) for x in lead] == [34.0, -18.0] and capped and rule == "cell"
+    assert dh.lead_cap((20.0, -10.0), ex, ey) == ((20.0, -10.0), False, "cell")
+    assert dh.lead_cap((34.0, -24.0), ex, ey) == ((34.0, -24.0), False, "cell")  # exactly 1 cell
+    # skewed vectors (the camera's perspective): the cap is still one step along each axis
+    lead, capped, _ = dh.lead_cap((90.0, 0.0), (33.2, 0.0), (-1.2, -22.6))
+    assert capped and [round(x, 6) for x in lead] == [33.2, 0.0]
+    lead, capped, _ = dh.lead_cap((0.0, 60.0), (33.2, 0.0), (-1.2, -22.6))  # 2.65 cells along y
+    assert capped and [round(x, 6) for x in lead] == [0.0, 22.6]
+    # the 32-px fallback: no vectors, a zero one, or parallel ones
+    for cx, cy in ((None, None), (ex, None), ((0.0, 0.0), ey), ((34.0, 0.0), (17.0, 0.0))):
+        lead, capped, rule = dh.lead_cap((300.0, 400.0), cx, cy)
+        assert [round(x, 6) for x in lead] == [19.2, 25.6] and capped and rule == "px"
+        assert abs((lead[0] ** 2 + lead[1] ** 2) ** 0.5 - dh.LEAD_CAP_PX) < 1e-9
+    assert dh.lead_cap((20.0, 10.0)) == ((20.0, 10.0), False, "px")
+    # press_lead hands its vectors to the cap: a fast walker is led one cell, not v x age
+    b1 = (100.0, 200.0, 140.0, 260.0)
+    pl = dh.press_lead(b1, 10.0, (130.0, 200.0, 170.0, 260.0), 10.3, 10.3, ex, ey)  # 100 px / s
+    assert [round(x, 6) for x in pl["raw"]] == [57.0, 0.0] and pl["capped"]
+    assert [round(x, 6) for x in pl["lead"]] == [34.0, 0.0]
+    pl_px = dh.press_lead(b1, 10.0, (130.0, 200.0, 170.0, 260.0), 10.3, 10.3)
+    assert [round(x, 6) for x in pl_px["lead"]] == [32.0, 0.0] and pl_px["cap"] == "px"
+
+
+def test_lead_press_is_refused_without_still_target_or_with_lead_strike() -> None:
+    assert dh.lead_press_refused(True, False) is None
+    need = "--lead-press needs --still-target"
+    assert dh.lead_press_refused(False, False) == need
+    assert dh.lead_press_refused(False, True) == need
+    assert dh.lead_press_refused(True, True) == "--lead-press does not go with --lead-strike"
+    src = Path(dh.__file__).read_text()
+    i_st = src.index('raise SystemExit(f"dungeon@9.23 refused: {why_st}")')
+    i_lp = src.index('raise SystemExit(f"dungeon@9.24 refused: {why_lp}")')
+    assert i_st < i_lp < src.index("typed: list[str] = []")  # before the setup types anything
+    assert 'if getattr(a, "lead_press", False):  # dungeon@9.24 (LS-1)' in src[i_st:i_lp]
+
+
+def test_lead_press_is_off_by_default_and_recorded_in_the_fixes() -> None:
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False, "still_target": True}  # fmt: skip
+    assert "lead_press" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "lead_press" not in dh.fixes_of(dh.argparse.Namespace(**base, lead_press=False))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, lead_press=True))
+    assert rec["lead_press"] == [15.0, 0.57, 32.0, 1.0, "9.24"]
+    assert rec["still_target"] == [10.0, 0.25, 2.5, "9.23"]  # LS-2's record is unchanged
+    rest = {k: v for k, v in rec.items() if k != "lead_press"}
+    assert rest == dh.fixes_of(dh.argparse.Namespace(**base))  # its own key only
+    src = Path(dh.__file__).read_text()
+    flag = '"--lead-press",\n        action=argparse.BooleanOptionalAction,\n'
+    flag += "        default=False,"
+    assert flag in src
+    assert src.count('lead_press_on = getattr(a, "lead_press", False)') == 1
+    assert src.count('"fixes": fixes_of(a)') == 2  # run_start and the manifest both record it
+
+
+def test_lead_press_is_wired_in_press_checks_hold_only() -> None:
+    """The flag off: press_check's hold is LS-2's (lead_aim is never called, got stays None ->
+    hold_still). On: a hold is first offered to lead_aim; a led (rel, point) comes back through
+    box_target's re-aim return (box_target itself is unchanged) to strike() -> click_at, the
+    same path as every strike; lead_aim reads no cursor, clicks nothing, applies its gates in
+    order."""
+    src = Path(dh.__file__).read_text()
+    body = src[src.index("        def box_target() -> tuple[Cell, tuple[float, float]] | None:") :]
+    body = body[: body.index("\n        def ", 10)]
+    assert "lead_press" not in body and "lead_aim" not in body  # box_target untouched
+    assert "if got_p is not None:  # it stood still and read SWORD again: its box" in body
+    assert src.count("lead_press_on") == 3  # its definition + press_check's two
+    assert src.count("lead_aim(") == 2  # its def + press_check's one call
+    pc = src[src.index("        def press_check(") :]
+    pc = pc[: pc.index("\n        def hold_still(")]
+    assert pc.count("lead_press_on") == 2
+    i_init = pc.index('prs["lead"] = None')
+    assert pc.index("if lead_press_on:\n") < i_init < pc.index("if not still_ or meta_ is None:")
+    i_hold = pc.index('if end == "hold":')
+    i_on = pc.index("if lead_press_on:  # dungeon@9.24 (LS-1)", i_hold)
+    i_call = pc.index('got = lead_aim(b1, float(meta_["t"]), b2, t2, prs)', i_on)
+    i_led = pc.index('end = "led"', i_call)
+    i_still = pc.index('end, got = hold_still(b2, t2, arm_ or "gpu", float(meta_["t"]), prs)')
+    assert i_hold < i_on < i_call < i_led < i_still < pc.index('prs["end"] = end')
+    assert "got: tuple[Cell, tuple[float, float]] | None = None" in pc[:i_hold]
+    assert 'counts[f"still_target_{end}"] += 1' in pc  # -> still_target_led
+    la = src[src.index("        def lead_aim(") :]
+    la = la[: la.index("\n        def self_uv(")]
+    for word in ("hover(", "click_at(", "agent.", ".click(", "fresh_now(", "sleep("):
+        assert word not in la, word
+    assert "pl = press_lead(b1, t1, b2, t2, time.monotonic(), ex, ey)" in la
+    assert "ex, ey = cell_steps(camera, ((b2[0] + b2[2]) / 2, b2[3]))" in la
+    i_dec = la.index('if pl["decision"] != "lead":')
+    i_far = la.index('gate = "far"')
+    i_skip = la.index('gate = "skip"')
+    i_off = la.index('gate = "off"')
+    i_self = la.index('gate = "self"')
+    i_rec = la.index('prs["lead"] = {"v_px_s": r1(pl["v"]), "age_s": round(pl["age_s"], 3),')
+    i_gate = la.index("if gate is not None:")
+    i_spot = la.index("sp_l = box_spot(here, foot_l)")
+    i_ret = la.index("return rel_l, (u_l, v_l)")
+    assert i_dec < i_far < i_skip < i_off < i_self < i_rec < i_gate < i_spot < i_ret
+    assert '"sword": "unchecked"' in la  # LS-1's known risk, in every lead record
+    for key in ('"lead_px": r1(pl["lead"])', '"capped": pl["capped"]', '"point": r1((u_l, v_l))'):
+        assert key in la, key
+
+
+def test_cell_steps_on_the_runner_camera() -> None:
+    """The cap's cell, by the runner's own camera (camera_rdp.json, the RDP fit): one step is ~34 px
+    across and ~24 px up / down on screen (so a flat 32-px cap would not be one cell), a little
+    smaller farther up the screen; and lead_cap on those vectors leads one cell at most."""
+    from poring_dataset import camera as cam
+
+    cj = json.loads(
+        (ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json").read_text()
+    )
+    camera = cam.camera_from_json(cj["camera"])
+    ex, ey = dh.cell_steps(camera, dh.FOOT_PX)  # our own cell
+    assert [round(x, 1) for x in ex] == [34.1, 0.0] and [round(x, 1) for x in ey] == [0.0, -23.8]
+    ex2, ey2 = dh.cell_steps(camera, (772.0, 269.0))  # (4, 4) cells off, up the screen
+    assert 32.5 < ex2[0] < 33.5 and -23.0 < ey2[1] < -21.5 and abs(ey2[0]) < 2.0
+    lead, capped, rule = dh.lead_cap((60.0, 0.0), ex, ey)
+    assert capped and rule == "cell" and [round(x, 1) for x in lead] == [34.1, 0.0]
+    lead, capped, rule = dh.lead_cap((0.0, 40.0), ex, ey)
+    assert capped and rule == "cell" and [round(x, 1) for x in lead] == [0.0, 23.8]
+    lead, capped, _ = dh.lead_cap((60.0, -40.0), ex, ey)  # diagonal: one diagonal step
+    assert capped and [round(x, 1) for x in lead] == [34.1, -22.7]
