@@ -2129,6 +2129,18 @@ the detect server, come after the training):
 - **Decision:** every bar passes in the pool -> `--still-target` JOINS THE BASE. M1 failing ->
   studied. An M3 failure -> stays off and is studied.
 
+### 4BQ. Pilot p54 pre-registration: the new base, unchanged, recorded as round 3's fiT7 (written BEFORE its run, 2026-11-11 06:09 ICT from `date`)
+
+- **The run:** 4BL's base + `--late-confirm` + `--still-target` (the base since p52 / p53), label
+  `xmas02-p54`, 25 min, the MVP dead by the schedule, immunity OFF. Recorded `record_session.py
+  --backend rdp --label hunt-xmas02-fiT7 --seconds 1620 --fps 1 --format png --max-bytes 6G`
+  (refused by name, not opened, shipped at once).
+- **Bars:** the base's (W1 and R1-A pooled over p54 + p53 + p52 + p51; L1, L3, L4, K1, K3, E1,
+  U1, D1, Q1, P2, E3, deaths 0) and LS-2's no-harm M3 (box strikes >= 50, failed on-time <= 4).
+  Reported: LS-2's measures (late-failed strikes, holds), LF-2's M1-M3.
+- **Decision:** none to take: a confirmation run of the base and round 3's first pilot held-out. A
+  failed bar is studied before p55.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
