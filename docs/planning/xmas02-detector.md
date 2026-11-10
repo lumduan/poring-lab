@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "Amendment O ACCEPTED (O1, 10:29, the parent under Batt's go-ahead: a SEPARATE item model xmas02-fi); the tools merged (O3, ddd54d6a; params v1 d1c5606b); fiT1 + fiT2 + fs1 recorded and SHIPPED (O8, 14:54-15:03). Next: params v2 (ids that fit bare floor -> unsprited) + fs1's set without Scell (O3), then the live icon proof, fs1, the TRAIN labels, T2-items, the cache, the training, the evaluation (I1-I5)."
+next_action: "Amendment O ACCEPTED (O1; Batt confirmed O7): a SEPARATE item model xmas02-fi. Done: the tools (O3), params v2 aea6f1d2 (O4), the icon proof + fs1 (O5, O6: TRAIN 878 boxes / 86 items, stopping rule met), the recordings shipped (O8). NOW: T2-items (pack seed 61, blind labellers I and J; O8). Next: the cache (T-O2), the training (20 epochs, init xmas02-gb, ~4.2 h on the Arc), the evaluation I1-I5 on fiT1 + fiT2, then the runner's --loot-sight with a shadow pilot first."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
