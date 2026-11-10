@@ -135,3 +135,47 @@ def test_pooled_summary_sums_runs() -> None:
     pooled = sl.summary([r, r])
     assert pooled["runs"] == 2 and pooled["reads"] == 26 and pooled["persistent"]["n"] == 2
     assert pooled["stale_walks"]["n"] == 2 and pooled["pos_unread_escapes"] == 2
+
+
+def test_lf4_unread_step_outcomes() -> None:
+    """LF-4 (dungeon@9.22): the runner's ``unread_step`` events as it writes them. Escape 1 waits
+    for a young walk click, steps once (sent; the client walks us 2 cells west) and ends FRESH;
+    escape 2 steps twice (the first unsent), then the wing; escape 3 is refused (no safe step)."""
+    a = (20, 10)
+    events = [ev(0.0, "run_start"), rd(1.0, "base", a),
+              ev(21.0, "unread_step", event="wait", why="walk_sent", age_s=0.1,
+                 since_read_s=20.0),
+              ev(23.0, "unread_step", event="step", n=1, rel=[-2, 0], u=572.5, v=362.0,
+                 verdicts=["clear"], dir={"by": "walk", "rel": [7, 0], "age_s": 2.1},
+                 held=list(a), cands=[list(a)], since_read_s=22.0),
+              ev(24.0, "unread_step", event="fresh", steps=1, s=3.0, at=[18, 10],
+                 held=list(a)),
+              rd(24.0, "base", (18, 10)),
+              ev(50.0, "unread_step", event="step", n=1, rel=[0, 2], verdicts=["clear"]),
+              ev(52.0, "unread_step", event="step", n=2, rel=[0, 2], verdicts=["clear"]),
+              ev(54.0, "unread_step", event="wing", steps=2, s=4.0, why="steps"),
+              ev(54.0, "stuck", why="pos_unread", at=[18, 10]),
+              ev(80.0, "unread_step", event="refused", steps=0, s=0.0, why="zone_near"),
+              ev(90.0, "run_end")]  # fmt: skip
+    b, c = (18, 10), (18, 12)
+    packets = [move(0.5, (21, 10), a),
+               pk(23.05, "self_move_request", x=18, y=10), move(23.05, a, b),
+               pk(52.1, "self_move_request", x=18, y=12), move(52.1, b, c)]  # fmt: skip
+    r = sl.analyse(events, packets, "syn")
+    st1, fresh, st2a, st2b, wing, refused = r["lf4"][1:]
+    assert r["lf4"][0] == {"t": 21.0, "event": "wait", "why": "walk_sent", "steps": None}
+    assert (st1["sent"], st1["req"], st1["err"], st1["true"]) == (True, [18, 10], 0, [20, 10])
+    assert (fresh["event"], fresh["steps"], fresh["err"]) == ("fresh", 1, 0)
+    assert (st2a["sent"], st2a["err"]) == (False, None)  # no request: not sent
+    assert (st2b["sent"], st2b["err"]) == (True, 0)
+    assert (wing["event"], wing["why"], wing["steps"]) == ("wing", "steps", 2)
+    assert (refused["why"], refused["steps"]) == ("zone_near", 0)
+    s = r["summary"]["lf4"]
+    assert s == {"events": {"wait": 1, "step": 3, "fresh": 1, "wing": 1, "refused": 1},
+                 "steps": 3, "steps_sent": 2, "step_err_p50": 0, "fresh_after_step": 1,
+                 "fresh_in_wait": 0, "fresh_err_gt2": 0, "wings": 1,
+                 "refused": {"zone_near": 1}}  # fmt: skip
+    # a run without the flag: an empty LF-4 block, nothing else changes
+    base = sl.analyse(*run())
+    assert base["lf4"] == [] and base["summary"]["lf4"]["steps"] == 0
+    assert sl.summary([base, r])["lf4"]["steps"] == 3

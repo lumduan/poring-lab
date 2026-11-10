@@ -41,6 +41,12 @@ study's, NAS scratch-archive/2026-11-10/study-lf-r1/), fixed before its numbers 
 - LF-1 / LF-2 (dungeon@9.21; read when the run logged them): each held-back read's value
   (``held``) against the packets, its ``held_dt``; the LF-2 outcomes (``lf2``) and the cells LF-2
   confirmed against the packets.
+- LF-4 (dungeon@9.22, ``--unread-step``; read when the run logged ``unread_step`` events): every
+  escape's events (``wait`` / ``step`` / ``fresh`` / ``wing`` / ``refused`` / ``fly``); each STEP
+  is SENT when a ``self_move_request`` lies within REQ_WIN of it, and its LANDING ERROR =
+  Chebyshev(the request's cell, our packet cell at the step + its ``rel``); each FRESH end's read
+  against our packet cell (``err``). An escape that ends ``fresh`` with no step was ended by the
+  walk (a) waited for.
 
 Medians and quantiles are the study's: the sorted value at index int(p x n) (the upper median).
 The pooled block sums the given sessions (pass the base runs you mean, e.g. p40-p47 without p43).
@@ -297,6 +303,27 @@ def analyse(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, 
                      "err": None if true is None else cheb(true, r["held"]),
                      "standing": still is not None and still >= STAND_GUARD_S})  # fmt: skip
     lf2 = Counter(str(r["lf2"]) for r in reads if r.get("lf2") is not None)
+    lf4 = []
+    for e in events:
+        if e["kind"] != "unread_step":
+            continue
+        t = int(e["t_ns"])
+        true = tr.us(t)
+        row: dict[str, Any] = {"t": rel_s(t), "event": e.get("event"), "why": e.get("why"),
+                               "steps": e.get("steps", e.get("n"))}  # fmt: skip
+        if e.get("event") == "step":
+            r = request_at(reqs, req_t, t)
+            rel = e.get("rel") or [0, 0]
+            aim = None if true is None else (true[0] + rel[0], true[1] + rel[1])
+            got = None if r is None else (r["x"], r["y"])
+            row.update(rel=rel, sent=r is not None, true=None if true is None else list(true),
+                       req=None if got is None else list(got),
+                       err=None if got is None or aim is None else cheb(got, aim))  # fmt: skip
+        elif e.get("event") == "fresh":
+            at = e.get("at")
+            row.update(at=at, true=None if true is None else list(true),
+                       err=None if true is None or at is None else cheb(true, at))  # fmt: skip
+        lf4.append(row)
     for s in spans:
         s.pop("_open")
         s.pop("_close")
@@ -304,7 +331,8 @@ def analyse(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, 
         w.pop("t_ns")
     rows = {"reads": [{"rd": r["rd"]} for r in reads], "spans": spans, "walks": walks,
             "reach_skips": reach, "escapes": escapes, "wrong": wrong, "standing_fresh": n_stand,
-            "held": held, "lf2": dict(lf2), "jumps": sum(1 for e in events if e["kind"] == "jump"),
+            "held": held, "lf2": dict(lf2), "lf4": lf4,
+            "jumps": sum(1 for e in events if e["kind"] == "jump"),
             "minutes": round((t1 - t0) / NS / 60, 2)}  # fmt: skip
     return {"label": label, "minutes": rows["minutes"], "summary": summary([rows]), **rows}
 
@@ -336,6 +364,9 @@ def summary(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
     stale = [w for w in walks if w["class"] == "reader"]
     held = [h for run in runs for h in run["held"]]
+    lf4 = [x for run in runs for x in run.get("lf4", [])]
+    lf4_steps = [x for x in lf4 if x["event"] == "step"]
+    lf4_fresh = [x for x in lf4 if x["event"] == "fresh"]
     lf2: Counter[str] = Counter()
     for run in runs:
         lf2.update(run["lf2"])
@@ -376,6 +407,14 @@ def summary(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                  "within1": sum(1 for h in held if h["err"] is not None and h["err"] <= 1),
                  "err_p50": q([h["err"] for h in held if h["err"] is not None], 0.5)},
         "lf2": dict(lf2),
+        "lf4": {"events": dict(Counter(str(x["event"]) for x in lf4)),
+                "steps": len(lf4_steps), "steps_sent": sum(1 for x in lf4_steps if x["sent"]),
+                "step_err_p50": q([x["err"] for x in lf4_steps if x["err"] is not None], 0.5),
+                "fresh_after_step": sum(1 for x in lf4_fresh if (x["steps"] or 0) > 0),
+                "fresh_in_wait": sum(1 for x in lf4_fresh if not x["steps"]),
+                "fresh_err_gt2": sum(1 for x in lf4_fresh if (x["err"] or 0) > WRONG_CELLS),
+                "wings": sum(1 for x in lf4 if x["event"] == "wing"),
+                "refused": dict(Counter(str(x["why"]) for x in lf4 if x["event"] == "refused"))},
     }  # fmt: skip
 
 
