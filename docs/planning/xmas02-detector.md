@@ -2431,4 +2431,4 @@ decision and their own pre-registration (Amendment M).
   as accepted IF N1 is ever run. Its D2-D7 choices (FIT watch, D3, stands, epochs) would still need
   their own accepting amendment then.
 - Floor items (rogue-xmas02.md "Study after p44", 3a): Batt said yes, "เทรนแยกเลย" (train it
-  separately). Its plan follows as its own amendment (P), proposed by a study before any data.
+  separately). Its plan follows as its own amendment (Amendment O), proposed by a study before any data.
