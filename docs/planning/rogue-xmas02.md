@@ -4247,3 +4247,34 @@ does NOT join the base yet -> a replication, p49 (4BK).**
     p48 is noise (E1 129.6 against 136-158), one run cannot say.
 - **Items per hour (x 60 / 25.0):** Scell 17 (40.8), Zargon 16 (38.4), Piece of Cake 8 (19.2),
   Well-baked Cookie 7 (16.8), Candy 5 (12.0), Iron 2, Manacles 2 (4.8), Red Herb, Sandals, Hood 1 (2.4).
+
+**Pilot p49 (4BK; 18:52:30-19:18:24 ICT, 25 min; the MVP killed 18:22 (no respawn before 19:22);
+immunity OFF 18:52:09, ON 18:55; the base + `--late-confirm` REPEATED; RECORDED as fiT3).
+VERDICT: M1, M2, M3 PASS again; every base bar but Q1 PASSES; Q1 FAILS by its letter (9, bar <= 8;
+studied below: the Battle Log reader's "no hits" unlocks, not LF-2's). By 4BK's letter
+`--late-confirm` stays OFF. Both failed bars of p48 / p49 (E3, Q1) are studied as not the
+reader's: ADOPTING LF-2 IS BATT'S DECISION.**
+
+| | p48 | **p49 (+ --late-confirm, repeated)** | bar |
+|---|---|---|---|
+| M1 late unconfirmed-only spans | 0 | **0** | <= 15: PASS |
+| M2 stale walks | 8 | **2** | <= 12: PASS |
+| M3 wrong standing fresh reads / jumps | 0 / 0 | **0 of 2,378 / 0** | PASS |
+| reported: fresh share / lf2 outcomes / held within 1 cell | 97.9 % / ok 35, base 2 / 36 of 37 | **98.9 % / ok 67, base 4, no_read 1 / 72 of 72** | - |
+| W1 | 8 / 400 | **5 / 231 (2.16 %); pooled p49 + p48 + p47 + p46 = 22 / 1,163 (1.89 %)** | pooled <= 2.0 %: PASS |
+| L1 / L3 (start) / L4 | 95 % / 96 % / 0 | **92.3 % (24 / 26) / 96.9 % (62 / 64) / 0 of 98** | PASS |
+| K1 / K3 | 1.99 s / 96 % | **1.96 s / 95.3 % (61 / 64)** | PASS |
+| E1 kills | 129.6 / h | **64 (153.2 / h); p48 + p49 mean 141.4 / h** | PASS (mean above p40-p47's 136) |
+| U1 / D1 p95 | 5.4 s / 22.6 ms | **0 s / 22.1 ms** | PASS |
+| R1-A pooled p49 + p48 + p47 + p46 | | **0 + 0 + 1 + 2 = 3** | < 7: PASS |
+| Q1 quiet defend scans | 6 | **9 (found 1)** | <= 8: **FAIL** |
+| P2 / E3 / deaths | 0 / FAIL (stuck wing) / 0 | **0 / hard bars pass, 0 Fly Wings, 2 stalls, lowest HP 79.3 % / 0** | PASS |
+
+- **Q1 studied (the 9 scans):** 6 follow an `unlock` "no hits" from the Battle Log reader (the cause
+  upstream of S-R1's kind a). 3 start 5.1-5.6 s after the last act on us, just outside Q1's 5-s
+  window. None involves the position reader.
+- **The recording fiT3:** `20261110T185223-rdp-hunt-xmas02-fiT3`, beside p49, refused by name, not
+  opened.
+- **Items per hour (x 60 / 25.1):** Scell 18 (43.1), Zargon 9 (21.5), Red Herb 7 (16.8), Manacles 5 (12.0),
+  Candy, Well-baked Cookie, Piece of Cake 4 each (9.6), Candy Cane, Old Blue Box 2 (4.8), Rough
+  Oridecon, Iron, Chef King Orleans Vol.1 1 (2.4).
