@@ -3150,3 +3150,23 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
 - Next, in O.9's order: the ONNX export (M9's recipe), fiT1 + fiT2 labelled once with `--eval-test`,
   the eval pack (seed 63) and two NEW blind labellers, the predictions (GPU weights + ONNX, conf
   0.25), `fi_eval.py` I1-I5, once. The run is archived to the NAS (archive/train/xmas02-fi-20261110).
+
+### Amendment O12 (2026-11-10 18:29 ICT from `date`, BEFORE any labeller answer or prediction on fiT): the export; fiT3 is added
+
+- **The ONNX export (M9's recipe, a temporary RAM env, removed after):**
+  `/dev/shm/poring-lab-detector/model/xmas02fi-last-736x1280.onnx`, sha256 `d149b3a759dd1c31...`;
+  names `["floor_item"]` (d31e3c6c...).
+- **fiT1 + fiT2 labelled once with `--eval-test`** (the frozen model e24e8f57 re-hashed; params v2):
+  - fiT1: 946 candidate frames, 25 kept / 25 labels / 12 floor items (26 in packets), 67 kills, 21
+    with a drop;
+  - fiT2: 921, 18 / 20 / 8 (21 in packets), 60 kills, 19 with a drop.
+- **The seed-63 pack on them is SHORT:** 43 item crops (N 40, F 3; `short` X 60) + 20 E.
+  - I1's minimum (>= 40 evaluated crops) would hang on 3 crops; I2's (>= 20 episodes) is likely
+    short too.
+  - O.9's own remedy is **fiT3**. It is recorded NOW, beside the next pilot (p49).
+  - The eval pack is then rebuilt over fiT1 + fiT2 + fiT3 (seed 63, the same rule), and the two
+    NEW labellers judge that pack only.
+  - This is decided from counts alone. No labeller has seen the seed-63 pack and no prediction has
+    been made on any fiT frame. The 2-session pack is deleted unseen.
+- fiT3's pilot changes nothing in the loot behaviour (LF-2 / LF-4 are position-reader changes), so it
+  is a held-out of the same kind as fiT1 / fiT2; its run is recorded in rogue-xmas02.md.
