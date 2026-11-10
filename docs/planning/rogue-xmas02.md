@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-11 night: LF-2 (--late-confirm) and LS-2 (--still-target, p52+p53: late-failed strikes 11.7 -> 3 a run) are IN THE BASE; LF-4 (--unread-step) stays OFF (never came due in p50/p51: Batt). p53 found a 3-cell light misread at (104,192) (LF-5 family)."
+next_action: "2026-11-11 night: LF-2 (--late-confirm) and LS-2 (--still-target, p52+p53: late-failed strikes 11.7 -> 3 a run) are IN THE BASE; LF-4 (--unread-step) stays OFF (never came due in p50/p51: Batt). p53's 3-cell 'misread' at (104,192) was a client/server DESYNC with the reader right (Study S-LF5, 06:3x: no reader change; S1 scorer built, R2 for Batt)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -4736,6 +4736,10 @@ from `date`.**
     LS-2 did nothing), and lasted until the "no hits" unlock at 897.1 s;
   - so it is the light-floor reader on one spot, S-LF's dead-cell family (LF-5), not the hold.
     Reported to Batt beside the verdict.
+  - ➡️ SUPERSEDED the same morning by **Study S-LF5** (end of this file): NOT a misread. The client
+    DREW her on (104,189) (the camera, fitted from the runner's own monster boxes, sat there) while
+    the server held her on (104,192); the reader read the screen correctly. The "3-cell misread" and
+    "LF-5 family" above are the superseded reading.
 - **p53's E1 (132.0 / h)** came with the night's lowest supply: monsters seen 22.0 per 10 min (p50-p52:
   27.6-32.3), kills per sighting 1.0. E1 is a no-harm bar here, and it passes.
 - **The new base from p54:** 4BL's + `--still-target`. LF-4 stays OFF (4BM).
@@ -4754,6 +4758,8 @@ Batt's answers (quoted, then in English):
 3. "ศึกษาและแก้" -- **study and fix the light-floor misread at (104,192)** (p53: (104,189) read
    steadily for 2.6 s; S-LF's LF-5 family). Its fix is pre-registered on its own before any pilot of
    it.
+   - ➡️ Study S-LF5 (end of this file): it was a client/server DESYNC, not a misread; the fix is
+     on the scorer (S1, built) and the strike's re-click (R2, for Batt).
 4. "ลอง เพราะตอนนี้ใช้ gpu แล้ว น่าจะ เล็งได้เร็วขึ้น" -- **try LS-1** (the re-aim + capped lead at
    the press), because with the GPU detector the aim is fresher.
    - p14's `--lead-strike` (dropped, Amendment I) aimed from the CPU detector's older frames; LS-1
@@ -4765,3 +4771,196 @@ Batt's answers (quoted, then in English):
 offline) start now. The next MVP window runs p54 (the base, recorded fiT7), then p55 / p56
 (LS-1, recorded fiT8 / fiT9). Then round 3's evaluation.
 
+
+### Study S-LF5 (the (104,192) misread; 2026-11-11, analysis only)
+
+Written 2026-11-11 06:3x ICT from `date`, for Batt's 4BP item 3 ("study and fix"). It is offline
+only:
+- the banked base runs p40-p53 (NAS `scratch-archive/2026-11-09..11/demo-sessions/`);
+- the packets as ground truth;
+- no live action, no GPU, no runner change.
+
+The tool is new and committed before these numbers were written down:
+- `scripts/client_cell.py score SESSION...`;
+- its tests are in `services/backend/tests/test_client_cell.py`;
+- it needs the map's GAT in `/dev/shm`, as `late_strike.py fit-lag` does.
+
+**VERDICT: H2, a client/server DESYNC. The position reader was RIGHT.**
+- From 892.98 to 898.37 s the client DREW the Rogue on (104,189), while the server held her on
+  (104,192).
+- The reader read what the client drew.
+- H1 (something on screen corrupted "192" into "189") is rejected. No reader change is proposed.
+
+**The decisive test: the camera follows the client's own position.**
+- The method (`fit_centre`):
+  - take every camera centre within 5 cells of our server cell;
+  - project the server's monster cells onto the screen for each centre. The cells are taken 0.16
+    s before the grab, late_strike's fitted lag. The projection uses the runner's own camera
+    (camera_rdp.json) and the GAT altitudes;
+  - the centre whose projections land best on the runner's detected monster boxes (box feet,
+    capped at 60 px a box) is where the client drew her. This does not use the readout.
+- **The control, p40-p53:** 8,657 of 8,865 standing fits (97.7 %) put the centre within 1 cell of
+  the server's cell.
+- **p53, the episode.** Each cell is the distance (px) from a box's foot to that monster's
+  projection, for the two candidate centres:
+
+| grab (s) | Myst Case (117,185): centre (104,189) / (104,192) | Cruiser (105,189): (104,189) / (104,192) |
+|---|---|---|
+| 893.65 | **2** / 91 | not detected |
+| 894.65 | **9** / 82 | **9** / 76 |
+| 895.65 | **13** / 79 | not detected |
+| 896.65 | **4** / 97 | **10** / 75 |
+| 897.65 | **9** / 88 | **12** / 77 |
+
+- `client_cell` puts 7 matched boxes on (104,189) and none on (104,192). All 14 wrong reads are
+  judged `desync`.
+- **The client's own actions agree:**
+  - at 898.367 the client sent an attack request with NO walk first. So it held her adjacent to
+    the Cruiser on (105,189);
+  - the server answered in the same ms with our stop at (104,192). That stop is the resync;
+  - the client then walked to (105,190) (the request at 898.400). Her next hit came at 899.567.
+- **The reads:**
+  - all 22 light reads from 892.94 to 897.13 s gave (104,189);
+  - the first of them was held back and confirmed on a newer frame (LF-2 `ok`).
+- **Across the other desyncs (below), each read taken during one equals the camera's cell.** Both
+  readers did this:
+  - base reads in p47 (19 of 19) and p51;
+  - light reads in p49 (14 of 15; the other came before the walk ended) and p53.
+- **Against H1:**
+  - (a) the camera fit is independent of the readout, and it matches the read;
+  - (b) the 06:03 live collection (4BP) read (104,192) 8 / 8 and its 3 x 3 cells 72 / 72 exactly;
+  - (c) no frame of the episode exists, because p53 was not recorded. `strike-040.jpg` is an
+    earlier strike's (02:23 ICT): the runner saves at most 40 shots and keeps logging `"shot": 40`
+    after that. So there is no pixel evidence of an overlay, and none is needed.
+
+**What happened (p53, s from the run start; packets + events):**
+1. 889.09: engage by box. The Cruiser stood on (105,189) (server, from 887.57) and kept standing
+   there; it shoots from range.
+2. 891.004: the box strike `rel` (-1, 3) clicked (610.4, 252.1).
+   - At 891.365 the client walked her (106,186) -> (105,188) to reach it; it sent the attack request
+     at 891.632.
+   - Her hits landed at 891.800 (with our stop at (105,188)), 892.266 and 892.748 (a double hit).
+3. The strike's burst was still running. It ends only at the lock arrow or at OUR damage line in
+   the Battle Log, and that line came 1.35 s after the click (`damage_s`), while her first hit had
+   landed 0.80 s after the strike's stamp.
+   - So its 2nd click hit the SAME screen point.
+   - The camera had scrolled (-1, +2) cells with the walk-up, so the point now showed the floor.
+   - Result: a walk request to (104,192) at 892.764, 4 cells off the target. Her attack was
+     cancelled.
+4. 892.765: the server's walk ack (105,188) -> (104,192). It came 17 ms after her double hit (her
+   attack motion is 233 ms) and 20 ms before a Cruiser miss on her.
+   - The server walked all 4 cells, arriving ~893.43.
+   - **The client drew one step, (104,189) (the path's first cell), and stopped.**
+5. 892.94-897.13: the reader read (104,189). So did the runner's world: the Cruiser was drawn
+   adjacent to her, and she never hit it, being 3 cells away on the server. At 897.13 came the
+   "no hits" unlock (4.2 s).
+6. 897.96: the defend scan found the Cruiser at `rel` (0, 1) in the client's frame, and the runner
+   struck at 898.017.
+   - The client sent an attack request with no walk (898.367).
+   - The server stopped her at (104,192) and the client walked her into range.
+   - Her next hit came 6.8 s after the floor click.
+
+**How often a walk desyncs, and why (`walk_rows`, p40-p53):**
+- 5,098 server walks. 832 are DECIDED: fits after the walk's end with >= 2 matched boxes, and the
+  server's own confirmation of the end (the next walk's origin, or our stop).
+- 4 are SHORT: the client stopped >= 2 cells short of the end the server confirmed.
+- 1 more is unconfirmed: p51 ended in a map change, but its read is judged `desync` on 27 matched
+  boxes.
+
+| run | t (s) | server walk | the client stopped on | cells drawn | the ack's context | lasted (s) |
+|---|---|---|---|---|---|---|
+| p41 | 50.80 | (19,119) -> (26,119) | (24,119) | 5 of 7 | nothing noted | 2.4 (the next walk) |
+| p47 | 1225.48 | (115,173) -> (115,175) | (115,173) | 0 of 2 | in a FLINCH: hit 376 ms before, dmotion 400 | 5.8 (an attack's stop) |
+| p49 | 549.31 | (100,94) -> (97,95) | (99,95) | 1 of 3 | in HER attack motion: her hit 24 ms before (233 ms) | 4.1 |
+| p51 | 1486.77 | (200,168) -> (196,162) | (199,167) | 1 of 6 | nothing noted (a miss on her 282 ms after) | 15.9 (the run's end; unconfirmed) |
+| p53 | 892.76 | (105,188) -> (104,192) | (104,189) | 1 of 4 | in HER attack motion: her hit 17 ms before; a miss on her 20 ms after | 5.6 |
+
+- **The trigger: a walk ack that arrives while the client still plays her attack motion or a
+  flinch.**
+  - Of the 26 decided walks whose ack came inside one, 3 went short (11.5 %).
+  - Of the 806 others, 1 went short (0.12 %). One-sided Fisher p = 1.1e-4.
+  - The server accepted these walks at once (the ack within 2 ms of the request). The client cut
+    or dropped them.
+  - This is a measured client behaviour. Nothing here explains it further.
+- **A desync ends at the next walk ack (it carries the server's origin) or the next attack start.**
+  965 of 989 attack requests in p40-p53 brought our stop within 1.5 s.
+- **The cost so far:** 5 episodes in 13 runs, 2.4-15.9 s each.
+- **Wrong reads:** 15 of slf_score's 17 wrong standing reads in p40-p53 are desyncs (p53 14,
+  p51 1).
+  - The 2 others are `unjudged`:
+    - p43 14.99 s is the 15-s start-up stub, with no fit;
+    - p46 587.92 s has one matched box on each side: one fit on the read's (93,77), one on the
+      server's (93,73).
+  - **No standing read in p40-p53 is an established MISREAD.**
+
+**The p53 trigger is a larger, separate loss: the burst's re-click on the floor (`floor_walkoffs`,
+`strike_firsts`).** The mechanism is dungeon_hunt 9.8's, which `--far-single` fixed for 4+ cells:
+the burst re-clicks the same point after the camera scrolled with the walk-up. Strikes 2-3 cells
+away are still burst-clicked.
+
+| strikes, p40-p53 | n | re-clicked | re-clicks that walked her off a LIVE target | first click sent no request | first request p50 / max |
+|---|---|---|---|---|---|
+| 0-1 cells | 181 | 47 | 1 | 20 | 0.351 / 2.245 s |
+| **2-3 cells** | 168 | 68 | **26 (38 % of the re-clicked)** | 1 (a one-click strike) | 0.352 / **0.375 s** |
+| 4+ cells (`--far-single`: one click) | 734 | 0 | - | 15 | 0.352 / 0.563 s |
+
+- **At 2-3 cells the re-click never helped.** Every first click that sent anything sent it within
+  0.375 s, before any re-click.
+- **It hurt 26 times:**
+  - each time it walked her >= 2 cells off a target that lived on;
+  - her next hit on that target came 4.2-27.7 s later (median 7.5 s);
+  - that is 277.6 s over 13 runs, ~21 s a run, as an upper bound on the time lost.
+- **At 0-1 cells the burst stays.** 20 strikes there sent no request at all, and the slowest first
+  request came 2.2 s after the stamp, i.e. after a re-click.
+- **The later walks of one-click 4+ strikes are the client chasing a walker** (9 such, next hit
+  0.4-2.6 s). They are not counted.
+
+**What H2 means.**
+- **For the runner:** its position is the client's, and so are its pictures.
+  - Every pixel decision is made and resolved in the client's frame, consistently: walk targets,
+    strike points, box cells, the ring. A walk click names an absolute cell, and the server walks
+    there from wherever it holds her.
+  - What breaks during a desync is any judgement of distance from her:
+    - "adjacent, so hits should come" (p53: 4.2 s to the "no hits" unlock, then the scan);
+    - the server's walk reach (17 steps);
+    - ring-1 logic.
+- **For the scorer:**
+  - slf_score judges reads against the server (time_budget's track). So a correct read of the
+    client's drawn cell counts as WRONG.
+  - The track also assumes every walk completes. In p46, 166.8 s, the server itself ended a walk
+    elsewhere with no stop packet: its next walk began at (107,104), and the camera agreed.
+  - `client_cell`'s walk rows use the server's own confirmation instead.
+
+**Proposals, ranked:**
+
+| rank | change | kind | cost | risk | what it measures |
+|---|---|---|---|---|---|
+| 1 | **S1, the scorer correction (BUILT, `client_cell.py score`)**: run it beside slf_score on every base pilot. LF's "0 wrong" bars count MISREADS only (the server cell established by the camera, or `unjudged`). Desyncs are reported apart (`walks_short`, the `desync` reads). | scorer, offline | ~45 s for 14 runs; the GAT in /dev/shm | none to the runner. A read with fewer than 2 matched monster boxes around it stays `unjudged`. It changes what a pre-registered bar counts, so Batt's OK is needed (from the next pre-registration; past verdicts stand) | misread / desync / unjudged reads; desyncs a run |
+| 2 | **R2, no re-click for strikes 2-3 cells away**: extend `--far-single`'s one-click rule from FAR_CELLS 4 to 2. One click, then today's wait for the lock arrow or our damage line. The 0-1 band keeps its burst. | runner, behind a flag | one constant; pixels and our own commands only | a 2-3-cell first click the client ignores gets no second click (0 of 167 such first clicks needed one in p40-p53). R2b, more conservative: re-click only while the scene has not scrolled since the first click (`rp.scene_shift`, as `--walk-stop`) | floor walk-offs at 2-3 cells (base 26 in 13 runs, 2.0 a run, ~21 s a run); it also removes p53's desync path |
+| 3 | **R3, desyncs: monitor, no change**: report `walks_short` a run. The cheapest resync is any attack click (the server's stop of ours). | report | none | the runner cannot see the trigger: its own hit reaches it only through the Battle Log, ~1 s late | desyncs a run (base 5 in 13 runs) |
+| - | **No reader change** (H1 rejected) | - | - | - | - |
+
+**R2's pre-registration, a sketch.** It becomes a real one only after Batt's OK, after LS-1's p55 /
+p56 verdict, as a one-change pilot.
+- **The runs:** 2 pilots of the base + the change, pooled, against the 13 base runs p40-p53 (p43
+  left out).
+- **M1, the mechanism:** floor walk-offs at 2-3 cells (`client_cell.py score`,
+  `floor_walkoffs_by_dist["2-3"]`) <= 1 over the 2 runs. The base rate predicts 4.
+- **M2, no harm to the strike:**
+  - 2-3-cell strikes whose first click sent no request (`strikes["2-3"]["no_request"]`) <= 1 a
+    run (base: 1 in 13 runs);
+  - late-failed box strikes (`late_strike.py`) no worse than the base's pool.
+- **M3:** the base's standard bars (E1 >= 80 / h, deaths 0, W1, R1-A, L1 / L3 / L4, K1 / K3, U1,
+  D1, Q1, P2, E3).
+- **Reported:**
+  - the next hit after a walk-off;
+  - desyncs and the wrong reads by verdict (S1);
+  - box strikes a run.
+
+**Left for Batt:**
+1. Adopt S1 for the scoring, so that LF's wrong-read bars count misreads only.
+2. R2 (or R2b) as a pre-registered pilot after p55 / p56.
+
+The study's throwaway scratch scripts were not kept. The committed `client_cell.py` reproduces
+every number above except the Fisher p (it is computed from its `walks` rows: `own_motion_ms`,
+`flinch_ms`, `outcome`).
