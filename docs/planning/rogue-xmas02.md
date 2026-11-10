@@ -1895,7 +1895,7 @@ Batt's answers to the 09:21 report (quoted, then in English):
 - **Decisions:** C1 and every p45 bar pass -> `--garm-fly --garm-confirm 2` JOINS THE BASE. P1 with
   n = 0 is NO VERDICT and does not block. P2 fails -> off (studied). C1 fails -> no pilot; studied.
 
-### 4BF. Pilot p46 pre-registration: the base, unchanged, RECORDED as the floor items' held-out fiT1 (written BEFORE its run, 2026-11-10 10:4x ICT)
+### 4BF. Pilot p46 pre-registration: the base, unchanged, RECORDED as the floor items' held-out fiT1 (written BEFORE its run, 2026-11-10 10:29 ICT from `date`)
 
 - **Why:** xmas02-detector.md O1 needs fresh recorded base pilots as the floor-item model's
   held-out (fiT1, fiT2). The run is the base as it stands since p45 (p16 + `--reach-check

@@ -2827,7 +2827,7 @@ it can follow from (b)'s labels.
    Scell); DEV agrees on the anchor, the scale and the fit offsets but has one bad item (Manacles);
    p20 / p39 stay untouched.
 
-### Amendment O1 (2026-11-10 10:4x ICT, the parent, under Batt's go-ahead): Amendment O ACCEPTED with its proposed defaults
+### Amendment O1 (2026-11-10 10:29 ICT from `date`, the parent, under Batt's go-ahead): Amendment O ACCEPTED with its proposed defaults
 
 - **Authority:** Batt, before 09:40 ICT: "สอน เทรนแยกเลย เพื่อความมั่นใจและรวมเร็วในการเก็บของ" (teach
   it; train it separately, for confidence and faster looting). The parent accepts O.12's defaults:
