@@ -264,14 +264,22 @@
 .maps-legend li[data-k="monster"]::before { background: var(--mat-monster); }
 .maps-legend li[data-k="npc"]::before { background: var(--mat-npc); border-radius: 0.1rem; }
 .maps-legend li[data-k="warp"]::before { border: 2px solid var(--mat-warp); background: none; }
-.maps-legend li[data-k="decor"]::before { width: 0.5rem; height: 0.5rem; background: var(--mat-decor); opacity: 0.5; }
 /* round 5: the option in the legend row: "Show the map's other monsters (decoration)" */
 .maps-legend .maps-decor-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  min-height: 24px; /* a touch target (WCAG 2.2 2.5.8; matpilot round 5) */
   color: var(--text);
   cursor: pointer;
+}
+.maps-legend .maps-decor-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--mat-decor);
+  opacity: 0.5;
 }
 .maps-legend .maps-decor-toggle::before {
   display: none;

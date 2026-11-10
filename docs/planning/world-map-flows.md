@@ -323,3 +323,11 @@ Checks:
     step; no diagonal through a corner; inside the area; one output list;
   - never at the met monster's cell during any meeting of the fixture's run; off draws none.
 
+
+- **Round 5, matpilot's check (by 13:55 ICT):** PASSES.
+  - It reads as decoration: 39 dots on xmas_dun02, faint in light and dark, all on walkable cells.
+  - It does not change the run (the same steps, Python and checks with the box on or off).
+  - It is remembered; 0 console errors.
+  - Its one finding: on a phone the separate legend key wrapped the legend (73 -> 94 px, the map
+    -6 %). Fixed by the parent: the faint dot sits in the checkbox label, the key is gone, and the
+    label has a 24 px touch height (WCAG 2.2 2.5.8).

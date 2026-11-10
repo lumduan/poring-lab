@@ -846,10 +846,12 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                       }}
                       data-testid="maps-decor"
                     />
+                    {/* matpilot round 5: the dot lives in the label, so the legend's height never
+                        changes with the box (a separate key wrapped the phone legend, -6 % map) */}
+                    <span className="maps-decor-dot" aria-hidden="true" />
                     Show the map&apos;s other monsters (decoration)
                   </label>
                 </li>
-                {decorOn && <li data-k="decor">other monsters (decoration)</li>}
                 <li data-k="bot">the character</li>
                 <li data-k="trail">walked</li>
                 <li data-k="route">walking next</li>
