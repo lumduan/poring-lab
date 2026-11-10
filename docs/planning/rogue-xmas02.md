@@ -1943,6 +1943,33 @@ Batt's answers to the 09:21 report (quoted, then in English):
     strikes, where, why, and whether it is a trend or noise.
 - Each study ends in a proposal; any runner change gets its own pre-registration and pilot.
 
+### 4BI. Amendment R (2026-11-10, Batt's answers received by 14:55 ICT from `date`): R1 counted by lost attacks, its bar from the rate; LF-2 then LF-4
+
+Batt's answers to the 14:1x report (quoted, then in English):
+1. "นับแบบใหม่ได้เลย" -- count the new way: **R1-A**.
+   - An own-body strike counts as class D for R1 only if it LOST an attack (Study S-R1, 5).
+   - It does not count when we hit the same monster within 1.0 s before the click and our next
+     hit on it, or its death, came within 1.0 s after.
+   - The scorer change goes into `lock_study.py` with a test and a real positive case BEFORE the
+     next pilot. The old count stays reported beside it.
+2. "ทำตามที่แนะนำมาได้" -- do as recommended: **LF-2 first, then LF-4**, one change per pilot,
+   each pre-registered with S-LF's measures (its scorer committed with a test first).
+   - LF-2: confirm a late light read at once from a NEWER frame.
+   - LF-4: step 2 cells back before a pos_unread wing, and no wing while a sent walk click is
+     < 2 s old.
+   - LF-1 (logging only) may ride with LF-2: it changes no behaviour.
+3. "ตั้งใหม่จะอัตราที่วัดได้" -- **set the R1 bar from the measured rate.**
+   - The method is fixed here, before any R1-A number is computed: the rate lambda = R1-A strikes
+     per base run over p36-p47 (base runs only; p43 out).
+   - The 4-run pool's bar = the smallest k with P(Poisson(4 lambda) >= k) <= 0.05. R1 fails at
+     >= k.
+   - The value is computed once by the committed scorer and written into the next
+     pre-registration.
+4. "ทำได้เลย เราแยกเครื่องมาแล้ว ทำได้ตลอดไม่ต้องรอตลาดแล้ว gpu ใช้ได้เต็มที่ มีเราใช้แค่คนเดียว"
+   -- go ahead. This machine is separate, so there is no waiting for the market; the GPU is fully
+   ours. The recordings ship now (`dataset_ship.py ship --force-market`, Batt's OK), and the
+   floor-item pipeline (T2-items, the cache, the training) runs as soon as each step is ready.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
