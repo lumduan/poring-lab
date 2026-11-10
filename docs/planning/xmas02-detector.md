@@ -3356,3 +3356,55 @@ score):**
    study (Batt's other idea; rogue-xmas02.md);
 3. after it: the pilots p50-p52 (fiT4-fiT6; the detect server needs the GPU), then the
    evaluation.
+
+### Amendment O15b (2026-11-10 22:23 ICT from `date`, BEFORE the cache's dry run): the TRAIN's admissions, a finding, the epoch rule
+
+- **The TRAIN labels (v2, aea6f1d2; `fi_labels.py label --split train`):**
+
+| session | kept frames with items | labels | within 1 cell | floor items | G2 (median dx / dy, within 3 px, fits) | join |
+|---|---|---|---|---|---|---|
+| fiT1 | 25 | 25 | 22 | 12 | 0 / 1 px, 38 fits | ADMITTED |
+| fiT2 | 18 | 20 | 20 | 8 | 28 fits (< 30) | NOT admitted (G2 NOT_ENOUGH, by the letter) |
+| fiT3 | 24 | 24 | 8 | 5 | 30 fits | ADMITTED |
+| fs2 (the Rogue, aura) | 92 | 329 | 27 | 35 | 0 / 1 px, 96.4 %, 950 fits | ADMITTED |
+| fs3 (the Crusader, NO aura) | 61 | 210 | 37 | 27 | 0 / 1 px, 92.7 %, 1,259 fits | ADMITTED |
+
+- **A finding, recorded, NOT acted on tonight:** the near views give few labels within 1 cell
+  (fs2: 27 of 329).
+  - The rule excludes a WHOLE frame while any item lies under her self box (under_self, 198 frames
+    in fs2) or her HP bar (under_bar, 158). At the pile's centre, most frames carry such an item.
+  - So round 2 adds ~2x round 1's near-her boxes, not more: within 1 cell, fiT1 22 + fiT3 8 + fs2 27
+    + fs3 37 = 94 new, beside round 1's ~105 (12 % of its 878). A rule that ignores only the covered
+    item's region (not the frame) would be a v3 rule with its own T2: for Batt.
+- **fs2's run:** 21:17:04-21:44:06, rc 0, 12 spots, 72 items, one `@killmonster2` at each spot. The
+  recording `20261110T211705-rdp-xmas02-fs2`: 1,620 frames, 3.52 GB, shipped (rc 0, local
+  deleted).
+- **The Crusader's prep (fs3):**
+  - the client restart, card 2, `enter_game`. The chat window was standard; no aura on the
+    screenshot;
+  - `@monsterignore`: "You are now immune to attacks.";
+  - `@storeall` is NOT in group 20 (it came back as plain chat). Instead its Red Herb 507 x 40
+    stack (a staged id: clear_loot would have dropped it with the staged one) was dropped by
+    `clear_loot` restricted to the Red Herb icon. It is given back (`@item 507 40`) after the
+    Crusader's last staging;
+  - `held` rc 0 at 21:52:02.
+- **A slip, fixed before any label:** 20:2x's archive of `/dev/shm/poring-lab-tmp/xmas-fi` took its
+  run-time inputs too (the params, the item sprites, the GRF name table). They were restored from
+  the NAS copy at 21:18 (119 files, sha256 verified).
+- **The epoch rule (fixed here, BEFORE the dry run; O15 said 12):**
+  - epochs = min(12, max(5, floor(9,000 s / (0.64 s x N_train + 100 s)))), N_train the dry run's
+    TRAIN frame count;
+  - 0.64 s a frame + ~100 s of VAL is O10's measured epoch (687 frames in ~9 min);
+  - 9,000 s keeps the training's end ~2.5 h after its start, so the pilots p50-p53 (which need
+    the GPU) and the evaluation fit before 06:00;
+  - with the init already trained on this class (round 1's last.pt), fewer epochs are a
+    fine-tune.
+- **fs3's run:** 21:52:09-22:19:18, rc 0, 12 spots, 72 items. The
+  recording `20261110T215210-rdp-xmas02-fs3` shipped (rc 0).
+- **The dry run (22:2x):** TRAIN 955 frames (493 item frames, 1,466 boxes, 462 negatives), 165
+  floor items, about 2.04 GB in 11 shards, `would_refuse_join` empty. VAL p31 as round 1.
+- **So the epochs: floor(9,000 / (0.64 x 955 + 100)) = 12 -> 12** (O15's own number). The
+  training's estimated end is ~2.4 h after its start.
+- **Next, in order:** the cache (the dry run's command without `--dry-run`, guarded; its counts must
+  equal the dry run's), then the training (O15's recipe, 12 epochs), then fsTn's and fsTa's
+  stagings beside it.
