@@ -2850,3 +2850,60 @@ it can follow from (b)'s labels.
   - fiT1 is recorded beside the day's next base pilot (rogue-xmas02.md 4BF);
   - the tools T-O1..T-O5 are built offline in a tmpfs worktree;
   - then fs1, T2-items, the cache, the training, and the evaluation, in O's order.
+
+### O2 (2026-11-10 11:1x ICT from `date`, a subagent, branch `feat/fi-tools`): the tools as built (T-O1-T-O5, offline)
+
+> Tool usage only (O.11); nothing above is changed. Offline: FIT p31 and DEV p38 frames only (p20,
+> p39, p30, TEST, gw3 and fiT were not opened); no GPU, nothing live, nothing recorded.
+
+**The frozen params (O.3 (g), O-D2):** `fi_labels.py freeze` wrote
+`/dev/shm/poring-lab-tmp/xmas-fi/params.json` once, 11:08:32 ICT, commit `e4103675`, **sha256
+`d1c5606b1677d02bf494efd93bceef82fafefc78b1af7c8905efb9c965b4e315`**: anchor (-4, +2), scale 1.0,
+colour fit +-10, T_item 0.65, bar (-31, +10, +28, +18), 2.2 / 0.6 s, the sub table, the 1d 120 ms
+of the monster params `d4cc0a5d...`, the RSW's sha256, and the 33 drop ids' sprite files (28
+distinct sprites; none unsprited). A changed sprite file refuses every later run. (`b605a1d0`
+after it changes only `reference.png`'s tile colours: the rule's code is the frozen commit's.)
+
+**The tools (each with its tests in services/backend/tests; synthetic fixtures only):**
+
+| # | command | what |
+|---|---|---|
+| T-O1 | `fi_labels.py label PART --split train\|val --params P --out L.json` | O.3 per candidate frame (keep / exclude + reasons, the fitted boxes, each view's G2 flag, the session's G2); TEST / gw3 / fiT / p30 refused by NAME before any read; p31 is VAL only |
+| T-O1 | `fi_labels.py label PART --eval-test --model W --model-sha256 HEX --params P --out L.json` | fiT only, FROZEN params, the model re-hashed (no model: refused); adds every floor item's boxes, the 5 x 5, our kills with their drops and each no-drop kill's 2.0-3.0 s frame |
+| T-O1 | `fi_labels.py g2 L.json... --out J` | O.6's join rule per session |
+| T-O2 | `build_frame_cache.py --labels items --item-params P --item-params-sha256 HEX --fi-labels L... --class-list config/detector/classes-xmas02-fi.json --train S... [--neg-sessions xw2 xw3 gw2] --val p31 [--dry-run]` | item frames whole (class 0) + negatives (1 per 3 item frames; 300 pooled from the watches, which must be item-free); join verdicts G2_PASS / NEGATIVE_ONLY / VAL_MONITOR |
+| T-O3 | `fi_labels.py pack L... --params P --seed 61 --out J` (T2-items); `--eval-test --seed 63` (O.9's pack) | strata N / F / M (a partition, N first) + E (10 plain, 10 hard), <= 3 a floor item, `reference.png` from the sprites, the pinned instructions |
+| T-O3 | `fi_blind_score.py --key K A.json B.json [--both-good E.json]` | per stratum; PASS / FALLBACK_NEAR / FALLBACK_MODEL / FAIL |
+| T-O4 | `stage_items.py spots --map xmas_dun02 --n 18 --seed S --plan`; `cut-grf --map xmas_dun02 --table T --icons D [--check]` | stage@8: O.11's 12 ids in groups of 6, spots on the lattice's TRAIN stands with every stand off 3a's TEST blocks, one `@killmonster2` per spot after its warp |
+| T-O5 | `fi_labels.py refs L... --refs-out R.json` -> predict_dir; `fi_eval.py --labels L... --predictions gpu=P onnx=Q --key K --evaluated E [--gpu-timing P --cpu-latency C --cpu-item A --cpu-deployed B] --out J` | I1-I5, every prediction set; short counts NO VERDICT |
+
+**Positive cases (real data, frozen params):**
+- FIT p31 (`--split val`): 938 candidates, **204 kept frames / 233 labels / 15 floor items**, by id,
+  distance (61 / 59 / 113), under-model 15 and every exclusion count = O.4; **938 of 938 frames
+  identical** to the study's `rule3` dry run; **frame 1157: Scell 911 at (-6, -2), colour fit
+  0.9378 at (-1, +1) px**. Label file sha256 `32437d99...`.
+- DEV p38 (`--split train`): **91 / 95 / 10** = O.4; negatives 775, not O.4's 779: four item-free
+  frames now fail the layout read (O.3 (a); the dry run skipped it). Label file `e340c06c...`.
+- G2 under the frozen rule: FIT 253 clear fits, DEV 89, both median |dx| / |dy| 1 / 1 px: PASS
+  (O.4's 184 / 52 used the old 72 x 24 bar and the unanchored box).
+- Our kills (packets): p31 61 kills, 18 with a drop; p38 53, 15 (= O.1a).
+- The cache dry run on these files: p38 91 frames / 95 boxes + 30 negatives (G2_PASS), p31 204 /
+  233 + 68 (VAL_MONITOR): = the label files'.
+- T2-items' scorer, I1-I5: synthetic answer files per stratum and a staged frame list (tests).
+
+**Found (for the parent; nothing decided here):**
+- **The masked icon set cannot pass stage@6's write gate as it stands: Scell's icon compares 30
+  item pixels, below `MIN_ITEM_PX` 40** (`cut-grf --check`, every other masked check clean; the
+  set's nearest pair is Iron / Piece of Cake at 34.0, beyond 20.0). Options: a lower floor for
+  this icon with its own positive case, Scell left out of fs1 (it is already 51-75 % of FIT /
+  DEV's labels) with the 13th id in, or another rule. The screen-cut references of all 12 are
+  missing too (a live `give --frames` + `cut` makes them).
+- O.11 names 12001 "Holy Scroll": the KB's name is Level 3 Heal (aegis Holy_Scroll_1_3); same id.
+
+**T-O4's live chain (the parent's; gef10 AK / AK-1 / AK-5's order), from the main checkout:**
+the store step, then `stage_items.py held --map xmas_dun02` rc 0; `give --map xmas_dun02
+--frames`; the frames judged, the SPEC written, `cut SPEC --map xmas_dun02`; `cut-grf --map
+xmas_dun02 --table /dev/shm/poring-lab-tmp/xmas-fi/grf/data/idnum2itemresnametable.txt --icons
+'/dev/shm/poring-lab-tmp/xmas-fi/icons/data/texture/유저인터페이스/item'` (refuses today: Scell);
+the given copies stored, `held` rc 0; `give --map xmas_dun02` (no frames); **`drop --map
+xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**

@@ -1,0 +1,8 @@
+{
+ "scheme": "xmas02-fi",
+ "source": "docs/planning/xmas02-detector.md Amendment O.7 (O-D1 (b), O-D7; ACCEPTED by O1 2026-11-10 10:29 ICT): the SEPARATE one-class item model",
+ "note": "one class, no player: the item model answers 'something lies there' (O.3 (e)); the item's identity stays with the inventory icons. build_frame_cache.py --labels items requires exactly these names",
+ "names": [
+  "floor_item"
+ ]
+}

@@ -166,6 +166,30 @@ MAP LABELS: recorder sessions labelled by scripts/map_labels.py (docs/planning/p
 - ``--dry-run``: the label files and the packets only (no image, no directory): per session the
   frames considered, written, excluded by reason, boxes per class id, and the estimated shards and
   bytes (from the recorded PNG sizes); the linked cache's frames and boxes per class id beside.
+
+FLOOR ITEMS: the separate one-class item model ``xmas02-fi`` (docs/planning/xmas02-detector.md
+Amendment O.8, ACCEPTED by O1 2026-11-10; tool T-O2), from scripts/fi_labels.py label files:
+
+    build_frame_cache.py --labels items --item-params PARAMS --item-params-sha256 HEX
+                         --fi-labels FILE [FILE ...]
+                         --class-list config/detector/classes-xmas02-fi.json
+                         --train S [S ...] [--neg-sessions S [S ...] --neg-total 300]
+                         --val p31 [--neg-seed N] [--dry-run] --cache-id ID --image png
+
+- ONE class, ``floor_item`` (id 0; the class file names it, no player); every kept frame with item
+  labels is written WHOLE (every label of the rule, fail closed: O.3 (d) already excluded every
+  frame with an unlabelled visible item), its fitted boxes as class 0;
+- negatives (O.8): kept item-free frames, seeded: 1 per 3 written item frames of the same session
+  (floor), and ``--neg-total`` (300) pooled from the ``--neg-sessions`` (the immune watches xw2 /
+  xw3 / gw2: no drops; they write negatives only and must have no floor item in their packets);
+- the split (O.6): VAL = FIT p31 (monitor only, its own item frames + 1 per 3 negatives); TRAIN
+  by the join rule: a session's OWN G2 (fi_labels.g2_summary on its label file: PASS, median
+  |dx|, |dy| <= 3 px on >= 30 clear fits), or ``NEGATIVE_ONLY`` for a --neg-sessions one; a real
+  build refuses any other, a dry run reports it. TEST, gw3, fiT and p30 are refused by name (the
+  label files' roles, fi_labels.role_refusal), ``--test`` and --eval-test label files always;
+- the label files and the params must agree (rule, map, FROZEN, the sha256), one file per
+  session, every named session labelled; ``--dry-run`` reads no image: its counts are the label
+  files' (item frames, item boxes, the negatives drawn) and the estimated shards and bytes.
 """
 
 from __future__ import annotations
@@ -306,7 +330,7 @@ class ShardSink:
 
 RESUME_KEYS = ("labels", "k", "every", "every_png", "max_per_session", "shard_mb", "image",
                "quality", "split", "every_demo", "every_jpeg", "v2", "map_labels",
-               "link")  # fmt: skip
+               "link", "fi_labels")  # fmt: skip
 
 
 def write_json(directory: Path, name: str, doc: Any) -> None:
@@ -1578,13 +1602,305 @@ def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabe
     return 0
 
 
+# --- FLOOR ITEMS: the separate item model (xmas02-detector.md Amendment O.8, T-O2) -------------
+
+ITEM_RULE = "xmas02-fi-1"
+ITEM_CLASS = "floor_item"
+ITEM_NEG_PER = 3  # O.8: 1 negative per 3 written item frames of the same session
+ITEM_NEG_TOTAL = 300  # O.8: pooled from the immune watches (xw2 / xw3 / gw2)
+ITEM_NEG_SEED = 2611101  # the negatives' draw (recorded in the progress file and the manifest)
+G2_PASS, NEG_ONLY = "G2_PASS", "NEGATIVE_ONLY"
+
+
+def item_frame_rows(doc: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]],
+                                                  Counter[str]]:  # fmt: skip
+    """PURE: a fi_labels label file's (item frames, item-free kept frames, exclusions by reason)
+    in frame order. An item frame is kept with >= 1 label; every label is the rule's (a kept frame
+    carries no excluded or unfit item)."""
+    items, negs, why = [], [], Counter()
+    for f in sorted(doc["frames"], key=lambda f: int(f["frame_id"])):
+        if f["status"] != "keep":
+            why.update(dict.fromkeys(f["reasons"], 1))
+            continue
+        if f["reasons"] or any(it.get("unfit") for it in f["items"]):
+            raise SystemExit(f"{doc['session']} frame {f['frame_id']}: kept with reasons or an "
+                             "unfit label")  # fmt: skip
+        (items if f["items"] else negs).append(f)
+    return items, negs, why
+
+
+def draw_negatives(negs: Sequence[dict[str, Any]], n: int, seed: int, salt: str
+                   ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE (O.8): ``n`` of the item-free kept frames in a seeded order (``random.Random(
+    f"{salt}:{seed}")`` over frame order), all of them when fewer, returned in frame order."""
+    import random
+
+    order = sorted(negs, key=lambda f: (str(f.get("session", "")), int(f["frame_id"])))
+    random.Random(f"{salt}:{seed}").shuffle(order)
+    pick = order[: max(0, n)]
+    return sorted(pick, key=lambda f: (str(f.get("session", "")), int(f["frame_id"])))
+
+
+def item_yolo_lines(f: dict[str, Any], w: int, h: int) -> str:
+    """PURE: one item frame's YOLO text: every label's fitted box as class 0, clipped."""
+    boxes = [{"x1": it["box"][0], "y1": it["box"][1], "x2": it["box"][2], "y2": it["box"][3]}
+             for it in f["items"]]  # fmt: skip
+    return yolo_lines(boxes, w, h, [0] * len(boxes))
+
+
+@dataclass(frozen=True)
+class ItemLabelInputs:
+    """``--labels items``: the frozen fi params, one label file per session, the join verdicts."""
+
+    spec: Any  # fi_labels.FiSpec
+    params: dict[str, Any]
+    docs: dict[str, dict[str, Any]]
+    join: dict[str, str]
+    provenance: dict[str, Any]
+
+    @classmethod
+    def from_args(cls, a: argparse.Namespace) -> ItemLabelInputs:
+        import fi_labels as fl
+
+        if a.item_params is None or a.item_params_sha256 is None or not a.fi_labels:
+            raise SystemExit("--labels items needs --item-params, --item-params-sha256 and "
+                             "--fi-labels FILE ...")  # fmt: skip
+        sha = sha256_of(a.item_params)
+        if sha != a.item_params_sha256:
+            raise SystemExit(f"{a.item_params}: sha256 {sha}, not the frozen "
+                             f"{a.item_params_sha256}")  # fmt: skip
+        head = json.loads(a.item_params.read_text())
+        spec = fl.FI_MAPS.get(str(head.get("map")))
+        if spec is None:
+            raise SystemExit(f"{a.item_params}: map {head.get('map')!r} has no floor-item rule")
+        params = fl.load_params(a.item_params, spec)
+        neg_only = set(a.neg_sessions)
+        docs: dict[str, dict[str, Any]] = {}
+        files = []
+        for p in a.fi_labels:
+            doc = json.loads(p.read_text())
+            sid = str(doc.get("session"))
+            if doc.get("rule") != spec.rule or doc.get("map") != spec.name:
+                raise SystemExit(f"{p}: not {spec.rule} labels of {spec.name}")
+            if doc.get("params_sha256") != sha or doc.get("params_status") != "FROZEN":
+                raise SystemExit(f"{p}: labelled with other parameters than {a.item_params}")
+            if doc.get("eval_test"):
+                raise SystemExit(f"{p}: the held-out's --eval-test labels are never cached")
+            why = fl.role_refusal(spec, sid, doc.get("split"), False)
+            if why is not None:
+                raise SystemExit(f"{p}: {sid}: {why}: never cached")
+            if sid in docs:
+                raise SystemExit(f"{sid}: two label files")
+            docs[sid] = doc
+            files.append({"file": str(p), "sha256": sha256_of(p), "session": sid,
+                          "split": doc["split"], "frames": len(doc["frames"]),
+                          "labelled_at": doc.get("labelled_at"),
+                          "commit": doc.get("commit")})  # fmt: skip
+        join: dict[str, str] = {}
+        for sid, doc in docs.items():
+            if doc["split"] == "val":
+                join[sid] = VAL_MONITOR
+            elif sid in neg_only:
+                join[sid] = NEG_ONLY if int(doc.get("floor_items_in_packets", -1)) == 0 else \
+                    "NOT_ITEM_FREE"  # fmt: skip
+            else:  # O.6: the session's OWN G2, recomputed from its label file
+                v = fl.g2_summary(fl.g2_rows(doc["frames"], sid))["verdict"]
+                join[sid] = G2_PASS if v == "PASS" else f"G2_{v}"
+        prov = {"rule": spec.rule, "plan": spec.plan, "map": spec.name,
+                "params": str(a.item_params), "params_sha256": sha, "label_files": files,
+                "join": dict(sorted(join.items())), "neg_sessions": sorted(neg_only),
+                "neg_per": ITEM_NEG_PER, "neg_total": a.neg_total, "neg_seed": a.neg_seed,
+                "class": ITEM_CLASS}  # fmt: skip
+        return cls(spec, params, docs, join, prov)
+
+
+def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | None,
+                       ili: ItemLabelInputs, chosen_negs: Sequence[dict[str, Any]] | None = None
+                       ) -> dict[str, Any]:  # fmt: skip
+    """One labelled session's item frames + its negatives (``chosen_negs`` for a --neg-sessions
+    one: its share of the pooled draw); ``sink=None``: the dry run (label files only)."""
+    import map_labels as ml
+
+    doc = ili.docs[sid]
+    path = dataset_session(sid, a)
+    manifest = json.loads((path / "manifest.json").read_text())
+    ml.check_recording(manifest)
+    if qa_export.session_id(manifest) != sid:
+        raise SystemExit(f"{path}: its manifest names {qa_export.session_id(manifest)}")
+    items, negs, why = item_frame_rows(doc)
+    neg_only = sid in set(a.neg_sessions)
+    if neg_only:
+        if items:
+            raise SystemExit(f"{sid}: a --neg-sessions session with item frames")
+        picked = list(chosen_negs or [])
+    else:
+        picked = draw_negatives(negs, len(items) // ITEM_NEG_PER, a.neg_seed,
+                                f"{ITEM_RULE}:{sid}")  # fmt: skip
+    w, h = V2_SIZE
+    row: dict[str, Any] = {"split": part, "path": str(path),
+                           "format": recorded.session_format(manifest), "labels": ITEM_RULE,
+                           "join_rule": ili.join[sid], "shards": [],
+                           "label_item_frames": len(items),
+                           "label_item_boxes": sum(len(f["items"]) for f in items),
+                           "label_negatives": len(negs),
+                           "excluded": _keyed(why)}  # fmt: skip
+    tally = MapTally()
+    by_id: Counter[str] = Counter()
+    for f, neg in [(f, False) for f in items] + [(f, True) for f in picked]:
+        tally.seen += 1
+        text = "" if neg else item_yolo_lines(f, w, h)
+        fid = int(f["frame_id"])
+        info = {"session": sid, "frame_id": fid, "t_mono_ns": int(f["t"]), "map": ili.spec.name,
+                "labels": ITEM_RULE, "negative": neg,
+                "boxes": [[0, int(it["item_id"]), int(it["floor_id"])]
+                          for it in f["items"]]}  # fmt: skip
+        meta = json.dumps(info).encode()
+        tally.kept += 1
+        tally.source_bytes += int(f["size"])
+        tally.member_sizes.append(int(f["size"]) + len(text) + len(meta) + 3 * TAR_HEADER)
+        tally.boxes.update([0] * len(f["items"]))
+        if f["items"]:
+            tally.frames.update([0])
+        by_id.update(str(it["item_id"]) for it in f["items"])
+        if sink is not None:
+            img = ml.read_png(qa_export.JpegRef(fid, int(f["t"]), path / str(f["shard"]),
+                                                int(f["offset"]), int(f["size"])))  # fmt: skip
+            if img.shape[:2] != (h, w):
+                raise SystemExit(f"{sid}: frame {fid} is {img.shape[1]}x{img.shape[0]}, the "
+                                 f"labels are {w}x{h}")  # fmt: skip
+            image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
+                     if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
+            shard = sink.add(f"{sid}.{fid:09d}", {**image, "txt": text.encode(), "json": meta})
+            if shard not in row["shards"]:
+                row["shards"].append(shard)
+    d = tally.as_dict(a.shard_mb << 20)
+    row.update({"seen": d["seen"], "kept": d["kept"], "item_frames": len(items),
+                "item_boxes": d["boxes"], "negatives": len(picked),
+                "boxes_by_item_id": dict(by_id.most_common()),
+                "source_png_bytes": d["source_png_bytes"], "est_bytes": d["est_bytes"],
+                "est_shards": d["est_shards"]})  # fmt: skip
+    return row
+
+
+def pooled_negatives(ili: ItemLabelInputs, sids: Sequence[str], total: int, seed: int
+                     ) -> dict[str, list[dict[str, Any]]]:  # fmt: skip
+    """PURE (O.8): the ``total`` negatives pooled over the --neg-sessions, per session."""
+    pool = []
+    for sid in sids:
+        _items, negs, _why = item_frame_rows(ili.docs[sid])
+        pool += [{**f, "session": sid} for f in negs]
+    out: dict[str, list[dict[str, Any]]] = {s: [] for s in sids}
+    for f in draw_negatives(pool, total, seed, f"{ITEM_RULE}:neg-sessions"):
+        out[f["session"]].append(f)
+    return out
+
+
+def items_main(a: argparse.Namespace) -> int:
+    """``--labels items``: the floor-item cache (O.8), dry run or build."""
+    for flag in ("fix", "v1_species_sessions", "item_sessions", "map_labels", "link_cache"):
+        if getattr(a, flag):
+            raise SystemExit(f"--{flag.replace('_', '-')} does not belong to --labels items")
+    if a.test:
+        raise SystemExit("--labels items: no --test (the held-out fiT is never cached)")
+    if a.every_png != 1:
+        raise SystemExit("--labels items takes every labelled frame (--every-png 1)")
+    cl = json.loads(a.class_list.read_text())
+    if cl.get("names") != [ITEM_CLASS]:
+        raise SystemExit(f"{a.class_list}: the item model's class file names [{ITEM_CLASS}]")
+    ili = ItemLabelInputs.from_args(a)
+    own = {"train": list(a.train), "val": list(a.val), "test": []}
+    named = set(own["train"]) | set(own["val"])
+    if sorted(named ^ set(ili.docs)) or len(named) != len(own["train"]) + len(own["val"]):
+        raise SystemExit(f"--train / --val and the label files must name the same sessions, "
+                         f"each once: {sorted(named ^ set(ili.docs))}")  # fmt: skip
+    for sid in own["val"]:
+        if ili.docs[sid]["split"] != "val":
+            raise SystemExit(f"{sid}: --val takes the FIT label file (--split val) only")
+    for sid in own["train"]:
+        if ili.docs[sid]["split"] != "train":
+            raise SystemExit(f"{sid}: --train takes --split train label files only")
+    neg = [s for s in own["train"] if s in set(a.neg_sessions)]
+    if sorted(set(a.neg_sessions) - set(neg)):
+        raise SystemExit(f"--neg-sessions {sorted(set(a.neg_sessions) - set(neg))}: not in --train")
+    pooled = pooled_negatives(ili, neg, a.neg_total, a.neg_seed)
+    order = [("train", s) for s in own["train"]] + [("val", s) for s in own["val"]]
+    if a.dry_run:
+        if a.resume:
+            raise SystemExit("--dry-run without --resume")
+        rows = {sid: item_cache_session(sid, part, a, None, ili, pooled.get(sid))
+                for part, sid in order}  # fmt: skip
+        for r in rows.values():
+            r.pop("shards")
+        tr = [r for r in rows.values() if r["split"] == "train"]
+        out = {"dry_run": True, "labels": "items", "inputs": ili.provenance,
+               "names": {"0": ITEM_CLASS}, "sessions": rows,
+               "train_total": {k: sum(r[k] for r in tr) for k in
+                               ("kept", "item_frames", "item_boxes", "negatives", "est_bytes",
+                                "est_shards")},
+               "train_floor_items": sum(len({it["floor_id"] for f in item_frame_rows(
+                   ili.docs[s])[0] for it in f["items"]}) for s in own["train"]),
+               "would_refuse_join": sorted(s for s in own["train"]
+                                           if ili.join[s] not in (G2_PASS, NEG_ONLY))}  # fmt: skip
+        print(json.dumps(out, indent=1))
+        return 0
+    refused = {s: ili.join[s] for s in own["train"] if ili.join[s] not in (G2_PASS, NEG_ONLY)}
+    if refused:
+        raise SystemExit(f"O.6's join rule: not admitted {refused}")
+    cache_id = a.cache_id or f"items-{time.strftime('%Y%m%dT%H%M%S')}"
+    directory = a.out / cache_id
+    split = {k: list(v) for k, v in own.items()}
+    args = {"labels": a.labels, "k": None, "every": a.every, "every_png": a.every_png,
+            "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
+            "quality": a.quality if a.image == "jpeg" else None, "split": split,
+            "fi_labels": ili.provenance}  # fmt: skip
+    sessions: dict[str, Any] = {}
+    shards: dict[str, Any] = {}
+    if a.resume:
+        if not a.cache_id:
+            raise SystemExit("--resume needs the --cache-id of the interrupted build")
+        sessions, shards = resume_state(directory, args)
+        print(json.dumps({"resume": cache_id, "sessions_done": list(sessions)}), flush=True)
+    elif directory.exists():
+        raise SystemExit(f"{directory} exists: pick another --cache-id (or --resume it)")
+    else:
+        directory.mkdir(parents=True)
+    start = 1 + max((int(n[6:12]) for n in shards), default=-1)
+    sink = ShardSink(directory, a.shard_mb << 20, start, shards)
+    t0 = time.monotonic()
+    for part, sid in order:
+        if sid in sessions:
+            continue
+        row = item_cache_session(sid, part, a, sink, ili, pooled.get(sid))
+        sink.close()  # a session owns its shards: complete, or absent after a resume
+        sessions[sid] = row
+        write_json(directory, "progress.json",
+                   {"args": args, "sessions": sessions, "shards": sink.done})  # fmt: skip
+        print(json.dumps({sid: row}), flush=True)
+    sink.close()
+    manifest = {
+        "cache_id": cache_id, "labels": "items", "k": None, "every": a.every,
+        "every_png": a.every_png, "image": a.image,
+        "quality": a.quality if a.image == "jpeg" else None, "names": {"0": ITEM_CLASS},
+        "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,
+        "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "seconds": round(time.monotonic() - t0, 1), "class_list": str(a.class_list),
+        "class_list_sha256": sha256_of(a.class_list), "fi_labels": ili.provenance,
+    }  # fmt: skip
+    for name, doc in (("manifest.json", manifest), ("split.json", split)):
+        write_json(directory, name, doc)
+    print(json.dumps({"cache": str(directory),
+                      "frames": sum(int(r["kept"]) for r in sessions.values()),
+                      "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--train", nargs="*", default=[])
     ap.add_argument("--val", nargs="*", default=[])
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
-    ap.add_argument("--labels", choices=("v0", "v1", "v2", "map"), default="v0")
+    ap.add_argument("--labels", choices=("v0", "v1", "v2", "map", "items"), default="v0")
     ap.add_argument("--k", type=float, default=None, help="v1/v2: M4's k (default: nostalro)")
     ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
     ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
@@ -1762,7 +2078,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="map: map_labels.py check outputs (3c: own C1 = ADDED)")  # fmt: skip
     m.add_argument("--link-cache", default=None,
                    help="map: a finished cache id under --out, joined BY REFERENCE")  # fmt: skip
+    f = ap.add_argument_group("labels items (scripts/fi_labels.py label files; xmas02-detector.md "
+                              "Amendment O.8; local inputs, never committed)")  # fmt: skip
+    f.add_argument("--fi-labels", type=Path, nargs="*", default=[],
+                   help="items: fi_labels.py label outputs (one per session)")  # fmt: skip
+    f.add_argument("--item-params", type=Path, default=None,
+                   help="items: the FROZEN xmas02-fi-1 params the labels were made with "
+                        "(--item-params-sha256 pins it)")  # fmt: skip
+    f.add_argument("--neg-sessions", nargs="*", default=[],
+                   help="items: TRAIN sessions giving pooled negatives only (xw2 / xw3 / gw2)",
+                   )  # fmt: skip
+    f.add_argument("--neg-total", type=int, default=ITEM_NEG_TOTAL,
+                   help="items: the negatives drawn from --neg-sessions (O.8: 300)")  # fmt: skip
+    f.add_argument("--neg-seed", type=int, default=ITEM_NEG_SEED,
+                   help="items: the seed of every negative draw")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.labels == "items":
+        return items_main(a)
+    if a.fi_labels or a.item_params or a.neg_sessions:
+        raise SystemExit("--fi-labels / --item-params / --neg-sessions belong to --labels items")
     if a.labels == "map":
         return map_main(a)
     if a.map_labels or a.map_params or a.own_c1 or a.link_cache:

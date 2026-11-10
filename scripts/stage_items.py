@@ -41,6 +41,19 @@ own item icons (the GRF's item BMPs, extracted to /dev/shm) and compared on the 
 only (gm_state.ICON_MATCH_MASKED), so the slot background and the new-item glow stop counting:
 
     stage_items.py cut-grf --map gef_fild10 --table IDNUM2ITEMRESNAMETABLE --icons ITEM_BMP_DIR
+
+stage@8 (xmas02-detector.md Amendment O.6 / O.11, ACCEPTED by O1 2026-11-10; tool T-O4): xmas_dun02
+stages the 12 floor-item ids of O.11 in balanced groups of 6, its spots drawn ONLY from the watch
+lattice's TRAIN stands (watch_lattice.py's lattice-train.json, 3a) with every stand of a spot (the
+spot and its views) outside 3a's TEST blocks (so never a TEST stand, never gw3's: gw3 stood on
+TEST stands); ``clear="spot"``: one @killmonster2 at each spot right after its warp (every monster
+and a living MVP die, no drops of their own; the ICT clock times are the MVP clock; no species of
+the map loots, so no end pair). ``cut-grf --check`` runs the masked set's write gate offline
+WITHOUT writing: what is missing before it can pass (the screen-cut references of a live
+``give --frames`` + ``cut``) and every other refusal now:
+
+    stage_items.py spots --map xmas_dun02 --n 18 --seed S --plan                       OFFLINE
+    stage_items.py cut-grf --map xmas_dun02 --table TABLE --icons ITEM_BMP_DIR --check   OFFLINE
 """
 
 from __future__ import annotations
@@ -63,13 +76,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
-VERSION = "stage@7"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
+VERSION = "stage@8"  # @2: --open (target-items.md 9b); @3: refuses while targets are held;
 # @4: the character is a ROGUE (job "rogue", data/thief) and watch --spawn (rogue-gef10 A4);
 # @5: per-MAP item sets (gef_fild10's drop set, gef10-eyes-loot.md E3): groups per spot, the map's
 # offsets, the 3 x 3 pile inside the area, @killmonster2 at the end, canopy / drop / held commands;
 # @6: MASKED icon references from the client's own item icons (`cut-grf`, rogue-gef10.md AK-5)
 # @7: watch --recorder-state / --start-cell: dwell only while a pausing recorder banks frames
 # (Batt 2026-11-06, xmas02-detector.md Amendment D)
+# @8: xmas_dun02's set (Amendment O.11 / O1): spots on the lattice's TRAIN stands, outside 3a's TEST
+# blocks; clear "spot" (@killmonster2 at each spot); cut-grf --check (offline, writes nothing)
 # item id -> icon name (pinned pre-re item_db; Batt's four: Honey is Healing, Dead Branch Usable,
 # the Roughs Etc). Dead Branch is NEVER used (it summons a monster): this tool only drags it.
 TARGETS: dict[int, str] = {757: "rough_elunium", 756: "rough_oridecon", 604: "dead_branch",
@@ -105,6 +120,18 @@ GEF10_PER_SPOT = 6  # drops ~5.5 s apart: the first expires ~32 s after the last
 PILE: tuple[tuple[int, int], ...] = tuple((dx, dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1))
 LOOT_LIFE_S = 65.0  # a floor item lives 60 s (target-items.md 1: 40 of 48 lived exactly 60.0 s)
 SEARCH_MARGIN = 10  # cells: search_area's margin around every warp span (and NPC, npc_keep)
+# --- stage@8: xmas_dun02 (xmas02-detector.md Amendment O.11, ACCEPTED by O1 2026-11-10) -----------
+# The 12 ids with the most expected floor drops (drop rates x p44's sight mix; O.11's list, ids from
+# the local KB's items.json / drops.json, rAthena e985006): Etc tab Scell, Zargon, Manacles, Iron,
+# Pearl (aegis Scarlet_Jewel), Rough Oridecon; Use tab the Cookie, the Cake, Red Herb, Candy, Candy
+# Cane and the Holy Scroll (aegis Holy_Scroll_1_3). Typed in this order.
+XMAS02_ITEMS: dict[int, str] = {
+    911: "scell", 912: "zargon", 538: "well_baked_cookie", 539: "piece_of_cake",
+    1098: "manacles", 507: "red_herb", 529: "candy", 998: "iron", 722: "pearl",
+    530: "candy_cane", 756: "rough_oridecon", 12001: "holy_scroll",
+}  # fmt: skip
+XMAS02_PER_SPOT = 6  # O.6 / O.11: groups of 6 a spot (gef10 E3's design)
+XMAS02_LATTICE = Path("/dev/shm/poring-lab-tmp/xmas-det/lattice/lattice-train.json")  # 3a's TRAIN
 G10_DATA = Path("/dev/shm/poring-lab-tmp/gef10-det/grf/data")  # map_labels.GEF10's client data
 PAYF07_DATA = Path("/dev/shm/poring-lab-tmp/payf07/grf/data")  # map_labels.PAYF07's
 
@@ -120,9 +147,13 @@ class MapSet:
     pile: bool = False  # a spot needs its 3 x 3 drop pile inside the area too
     needs_open: bool = False  # spots / run refuse without --open (the canopy mask)
     npc_keep: bool = False  # SEARCH_MARGIN cells off every L3 NPC cell too (the Kafra, boards)
-    clear: str = "none"  # "end": two @killmonster2 LOOT_LIFE_S apart after the last spot
+    clear: str = "none"  # "end": two @killmonster2 LOOT_LIFE_S apart after the last spot;
+    # "spot" (stage@8): one @killmonster2 at each spot, right after its warp
     rsw: Path | None = None  # the map's RSW and model dir (client data in /dev/shm): `canopy`
     models: Path | None = None
+    stands: Path | None = None  # stage@8: spots ONLY on this lattice's cells (a list of {x, y})
+    test_rule: tuple[int, int, int] | None = None  # ... with every stand outside 3a's TEST blocks
+    spot_sep: int = SPOT_SEP
 
 
 DEFAULT_SET = MapSet(TARGETS, ICON_DIR, len(TARGETS), tuple(OFFSETS))
@@ -132,6 +163,8 @@ MAP_SETS: dict[str, MapSet] = {
     "gef_fild10": MapSet(GEF10_ITEMS, ICON_DIR / "gef_fild10", GEF10_PER_SPOT, GEF10_OFFSETS,
                          pile=True, needs_open=True, npc_keep=True, clear="end",
                          rsw=G10_DATA / "gef_fild10.rsw", models=G10_DATA / "model"),
+    "xmas_dun02": MapSet(XMAS02_ITEMS, ICON_DIR / "xmas_dun02", XMAS02_PER_SPOT, GEF10_OFFSETS,
+                         pile=True, clear="spot", stands=XMAS02_LATTICE, test_rule=(26, 3, 5)),
 }  # fmt: skip
 
 
@@ -186,6 +219,43 @@ def pick_spots(area: Any, n: int, seed: int, sep: int = SPOT_SEP,
             if len(out) == n:
                 break
     return out
+
+
+def pick_stands(cells: Sequence[tuple[int, int]], area: Any, n: int, seed: int,
+                cells_needed: Sequence[tuple[int, int]], views: Sequence[tuple[int, int]],
+                test_rule: Sequence[int] | None, sep: int) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE (stage@8): up to ``n`` spots among the lattice ``cells`` whose every ``cells_needed``
+    offset (the views and the drop pile) lies in ``area`` (bool [y, x]) and none of whose stands
+    (the spot + each of ``views``) is a TEST cell by ``test_rule`` (3a: (x // block + k (y //
+    block)) mod m == 0); in a seeded order, at least ``sep`` cells apart (Chebyshev)."""
+    import watch_lattice as wl
+
+    h, w = area.shape
+    cand = []
+    for x, y in sorted(set(cells)):
+        if not all(0 <= x + dx < w and 0 <= y + dy < h and area[y + dy, x + dx]
+                   for dx, dy in cells_needed):  # fmt: skip
+            continue
+        if test_rule is not None and any(wl.is_test((x + dx, y + dy), test_rule)
+                                         for dx, dy in views):  # fmt: skip
+            continue
+        cand.append((int(x), int(y)))
+    order = np.random.default_rng(seed).permutation(len(cand))
+    out: list[tuple[int, int]] = []
+    for i in order:
+        c = cand[int(i)]
+        if all(max(abs(c[0] - o[0]), abs(c[1] - o[1])) >= sep for o in out):
+            out.append(c)
+            if len(out) == n:
+                break
+    return out
+
+
+def lattice_cells(path: Path) -> list[tuple[int, int]]:
+    """A watch lattice file (watch_lattice.py: a list of {"x", "y"}; client-derived, /dev/shm)."""
+    if not path.exists():
+        raise SystemExit(f"stage_items refused: {path} is missing (watch_lattice.py build)")
+    return [(int(c["x"]), int(c["y"])) for c in json.loads(path.read_text())]
 
 
 CANOPY_NORTH, CANOPY_AROUND = 6, 3  # cells: a tall model hides what stands NORTH of its base on
@@ -305,7 +375,11 @@ def plan_spots(map_: str, n: int, seed: int, open_: Path | None) -> list[tuple[i
     area = search_area(map_, npc_keep=ms.npc_keep)
     if open_ is not None:  # target-items.md 9b: stage on OPEN ground (the RSW's tall models)
         area = open_area(area, np.load(open_))
-    spots = pick_spots(area, n, seed, offsets=spot_cells(ms))
+    if ms.stands is not None:  # stage@8: the lattice's TRAIN stands, outside 3a's TEST blocks
+        spots = pick_stands(lattice_cells(ms.stands), area, n, seed, spot_cells(ms), ms.offsets,
+                            ms.test_rule, ms.spot_sep)  # fmt: skip
+    else:
+        spots = pick_spots(area, n, seed, offsets=spot_cells(ms))
     plan = {"npcs": [{"stands": stands(spots, ms.offsets)}], "clicks": []}
     nct.check_warps(map_, plan, clicks=False)
     return spots
@@ -428,9 +502,29 @@ def masked_refusals(masked: dict[str, Any], screen: dict[str, Any],
     return why
 
 
-def cut_grf(map_: str, table: Path, icons: Path) -> dict[str, Any]:
+NO_SCREEN_REF = "no screen-cut reference to prove it on (cut first)"
+
+
+def own_set_nearest(masked: dict[str, Any]) -> dict[str, list[Any]]:
+    """PURE (stage@8, cut-grf --check): each masked template's nearest OTHER template of the set
+    (its own template, transparent pixels 0, read as an icon): two of the set within
+    gm_state.ICON_AMBIGUOUS of each other would make clear_loot call both "unknown"."""
+    import gm_state as gs
+
+    out: dict[str, list[Any]] = {}
+    for a, ma in sorted(masked.items()):
+        icon = np.asarray(ma.data, np.float32)
+        near = min((round(gs.icon_distance(icon, mb), 2), b) for b, mb in masked.items() if b != a)
+        out[a] = [near[1], near[0]]
+    return out
+
+
+def cut_grf(map_: str, table: Path, icons: Path, check: bool = False) -> dict[str, Any]:
     """OFFLINE (stage@6): the map set's MASKED references (loot-<name>.npz: template + item
-    mask) from the client's item BMPs. Refused, nothing written, on any masked_refusals."""
+    mask) from the client's item BMPs. Refused, nothing written, on any masked_refusals.
+    ``check`` (stage@8): nothing is written, and the gate's refusals are REPORTED, split into the
+    screen-cut references still missing (a live `give --frames` + `cut` makes them) and the rest,
+    with each template's nearest other template of the set."""
     import gm_state
     from PIL import Image
 
@@ -448,7 +542,18 @@ def cut_grf(map_: str, table: Path, icons: Path) -> dict[str, Any]:
         if (f := ms.icon_dir / f"loot-{name}.npy").exists():
             screen[name] = np.load(f)
     stock = {n: kr for n, kr in gm_state.load_loot_refs().items() if kr[0] in ("kept", "empty")}
-    if why := masked_refusals(masked, screen, stock):
+    why = masked_refusals(masked, screen, stock)
+    if check:
+        missing = sorted(w.split(":")[0] for w in why if w.endswith(NO_SCREEN_REF))
+        return {"check": True, "written": [], "map": map_, "dir": str(ms.icon_dir),
+                "items": {n: int((~np.ma.getmaskarray(m)).sum())
+                          for n, m in sorted(masked.items())},
+                "screen_refs_missing": missing,
+                "other_refusals": [w for w in why if not w.endswith(NO_SCREEN_REF)],
+                "own_set_nearest": own_set_nearest(masked),
+                "ambiguous_bar": gm_state.ICON_AMBIGUOUS,
+                "stock_refs": sorted(stock)}  # fmt: skip
+    if why:
         raise SystemExit(f"stage_items cut-grf refused (nothing written): {why}")
     own = {n: round(gm_state.icon_distance(screen[n], m), 2) for n, m in masked.items()}
     for name, m in masked.items():
@@ -692,6 +797,8 @@ def run(a: argparse.Namespace) -> int:
                 cr.gm_line(agent, screen, f"@warp {a.map} {x} {y}", JOB, CHAR)
                 ev({"kind": "warp", "spot": k, "at": [x, y], "settle_s": _settle(screen)})
                 bench.close_chat(agent, screen)
+                if clear == "spot":  # stage@8: the map's monsters (a living MVP too) die first
+                    kill_all(agent, screen, k)
                 for iid in groups[k]:
                     cr.gm_line(agent, screen, f"@item {iid} 1", JOB, CHAR)
                     time.sleep(0.8)
@@ -735,7 +842,9 @@ def run(a: argparse.Namespace) -> int:
     evf.close()
     print(json.dumps({"sid": sid, "reason": reason, "spots": len(spots),
                       **({"killmonster2_ict": kills} if clear != "none" else {})}))  # fmt: skip
-    return 0 if reason == "done" and (clear == "none" or not staged or len(kills) == 2) else 1
+    kills_ok = (clear == "none" or not staged or (len(kills) == len(spots) if clear == "spot"
+                                                  else len(kills) == 2))  # fmt: skip
+    return 0 if reason == "done" and kills_ok else 1
 
 
 WATCH_DWELL_S = 30.0  # payf07-detector.md: still frames of monsters around an immune Thief
@@ -957,6 +1066,8 @@ def main() -> int:
                    help="the client's item resource-name table (in /dev/shm)")  # fmt: skip
     p.add_argument("--icons", type=Path, required=True,
                    help="the extracted item BMP directory (/dev/shm)")  # fmt: skip
+    p.add_argument("--check", action="store_true",
+                   help="stage@8: report the write gate offline, write nothing")  # fmt: skip
     p = sub.add_parser("give")
     p.add_argument("--map", default="pay_fild07")
     p.add_argument("--frames", action="store_true",
@@ -1006,9 +1117,9 @@ def main() -> int:
                    help="a canopy mask .npy (client-derived, /dev/shm): open ground")  # fmt: skip
     p.add_argument("--per-spot", type=int, default=None,
                    help="stage@5: items per spot (default: the map set's)")  # fmt: skip
-    p.add_argument("--clear", choices=("none", "end"), default=None,
-                   help="stage@5: 'end' = two @killmonster2 65 s apart after the last spot "
-                        "(default: the map set's)")  # fmt: skip
+    p.add_argument("--clear", choices=("none", "end", "spot"), default=None,
+                   help="stage@5: 'end' = two @killmonster2 65 s apart after the last spot; "
+                        "stage@8: 'spot' = one at each spot (default: the map set's)")  # fmt: skip
     a = ap.parse_args()
     if a.cmd == "spots":
         spots = plan_spots(a.map, a.n, a.seed, a.open)
@@ -1033,7 +1144,7 @@ def main() -> int:
     elif a.cmd == "cut":
         print(json.dumps(cut(a.spec, a.map)))
     elif a.cmd == "cut-grf":
-        print(json.dumps(cut_grf(a.map, a.table, a.icons)))
+        print(json.dumps(cut_grf(a.map, a.table, a.icons, a.check)))
     elif a.cmd == "give":
         give(a.map, a.frames)
     elif a.cmd == "drop":
