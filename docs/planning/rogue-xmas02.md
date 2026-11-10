@@ -1832,6 +1832,21 @@ Batt's answers (quoted, then in English):
   5 s of max(the dog's first appearance, run_start)**, 0 acts of the dog on us. Nothing else
   changes; G0's own verdict stays FAIL as written.
 
+### 4BC. Pilot p44 pre-registration: the base with the newly deployed detector xmas02-gb (written BEFORE its run, 2026-11-10 ~07:1x ICT)
+
+- **Why:** M12 swapped the map's detector (xmas02 -> xmas02-gb: the four species' precision 0.87-0.88
+  -> 0.93-0.94; garm_baby its own class, never a target). The base's eyes changed, so one run of the
+  unchanged base flags under every base bar. Batt keeps `--garm-fly` off (xmas02-detector.md N).
+- **The run:** the base (p16 + `--reach-check --far-single --far-approach --explore --walk-pick
+  --kill-gap --loot-first --walk-pick-step --quiet-scan`), label `xmas02-p44`, 25 min, immunity
+  OFF, the MVP dead by the schedule (killed 07:00:54).
+- **Bars (Amendment O's):** W1 pooled (p44 + p42 + p41 + p40) <= 2.0 %, L1 >= 50 %, L3 >= 80 %, L4 <= 5 %,
+  K1 <= 3.0 s, K3 >= 70 %, E1 >= 80 / h, U1 <= 30 s, D1 p95 <= 35 ms, R1 pooled <= 6, Q1 <= 8, E3
+  (hard bars, 0 dead-end / stuck / idle Fly Wings), deaths 0. Reported: E1 against p40-p42 (136-154 /
+  h), class D strikes, the guard's Fly Wings (Battle Log), any garm_baby boxes (never struck).
+- **Decisions:** every bar passes -> xmas02-gb stays deployed for the base. A bar fails -> studied;
+  the rollback (MAP_MODELS back to xmas02) is Batt's call.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**

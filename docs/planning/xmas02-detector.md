@@ -1992,3 +1992,18 @@ decision and their own pre-registration (Amendment M).
   `--garm-fly` (9.19) acts on it. Nothing else in the base changes; the four species' boxes come
   from the better model (M11: precision 0.93-0.94 vs 0.87-0.88).
 - Next: rogue-xmas02.md 4BA -- G0 (the Rogue immune, one staged Garm Baby), then the pilot.
+
+### Amendment N (2026-11-10 ~07:1x ICT): Batt -- teach the detector the HIDDEN Garm Babies before "fly when seen"
+
+**Batt's answer** to the 07:08 report (the choice between (a) piloting `--garm-fly` now and (b)):
+"(b) ปิดไว้ก่อน แล้วสอนตัวตรวจจับให้รู้จักหมาที่โดนบังด้วย (ต้องอัดข้อมูลและเทรนใหม่) // ทำข้อนี้" -- keep
+`--garm-fly` off, and teach the detector Garm Babies that scenery partly hides (new data, a retrain).
+
+- **Why:** the frozen rule drops occluded labels (gw3: occluded_model 134 + occluded_terrain 68 of
+  the dogs' candidates), so xmas02-gb never trained on a partly hidden dog and M11 never scored
+  one; G0b (rogue-xmas02.md 4BB) met exactly that: a dog 3-11 cells away with no box for 4.5 s.
+- **What comes next, each pre-registered before its data (N1...):** a study of how occluded dogs can
+  be labelled reliably (the rule variant, its FIT test, T2 on occluded crops), the data (watches
+  that put dogs near the map's models and raised blocks), a FRESH held-out (gw3 is spent; 56 unused
+  TEST stands remain), the training (init xmas02-gb) and its bars (hidden-dog recall, the M11 bars
+  not worse). `--garm-fly` stays off until then; the deployed xmas02-gb stays.
