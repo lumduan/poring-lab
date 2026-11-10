@@ -3846,3 +3846,16 @@ rides on p46 (4BF).**
   Cookie 14, Christmas Cookie 13); kills per sighting 0.85.
 - **Items per hour (x 60 / 25.0):** Scell 18 (43.2 / h), Zargon 11 (26.4), Piece of Cake 8 (19.2),
   Candy 6 (14.4), Manacles 5 (12.0), Red Herb, Candy Cane, Well-baked Cookie, Pearl 2 each (4.8).
+
+**p47, first attempt (11:22:47-11:23:11 ICT): REFUSED at setup by the runner's own weight gate.**
+- The runner said: "weight None unread or red (>= 50 %) for the rogue: the setup never drops its Etc tab".
+  p46 ended red (share 0.498, then red), after three runs' loot.
+- Nothing ran: no setup line was typed.
+- The fiT2 recorder had started at 11:22:47. It was stopped by SIGTERM at 11:23:3x (45 frames,
+  85 MB, no pilot in it) and its directory deleted, so the real fiT2 can take the name.
+- The bag was cleared with `dungeon_hunt.py clear-bag --char rogue` (11:25:55-11:28:10, immune, on
+  prt_fild08). It dropped etc 6, use 9 and eqp 1 stacks, then restocked White Potion 504 x10 and Fly
+  Wing 601 x10: weight 320 -> 520 / 2430.
+- p47 runs after the MVP's next kill (its 10:52 kill allows no run past 11:52).
+- **Lesson for the next pilots:** check the weight before each run; it climbs ~0.06-0.08 a run
+  with the current loot (p44 0.33 -> 0.39; p46 ended 0.50).
