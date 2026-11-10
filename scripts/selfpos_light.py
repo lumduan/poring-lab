@@ -70,6 +70,17 @@ def scene_median(gray: np.ndarray) -> float:
     return float(np.median(scene)) if scene.size else float(np.median(gray))
 
 
+def parse_cells(specs: list[str]) -> list[tuple[int, int]]:
+    """PURE: ``X,Y`` cell specs -> cells, refusing anything else."""
+    out = []
+    for sp_ in specs:
+        x, _, y = sp_.partition(",")
+        if not (x.isdigit() and y.isdigit()):
+            raise SystemExit(f"--at {sp_!r}: X,Y")
+        out.append((int(x), int(y)))
+    return out
+
+
 def collect(a: argparse.Namespace) -> int:
     import crusader as cr
     import dungeon_hunt as dh
@@ -96,6 +107,9 @@ def collect(a: argparse.Namespace) -> int:
                     used.add(c)
                     out.append(c)
         wps = out
+    if getattr(a, "at", None):  # 2026-11-11 (rogue-xmas02.md 4BP, Batt: study + fix the misread
+        # at (104,192)): exactly these cells, in the given order
+        wps = parse_cells(a.at)
     stands = wps[:: a.every]
     first = a.start  # a resumed collection keeps the route's stand numbers (the split's parity)
     out: Path = a.out
@@ -106,7 +120,8 @@ def collect(a: argparse.Namespace) -> int:
     crops: list[np.ndarray] = []
     samples: list[dict[str, Any]] = []
     t0 = r.ns()
-    meta = {"map": a.map, "cells": a.cells, "stands": len(stands), "start": first,
+    meta = {"map": a.map, "cells": a.cells, "at": getattr(a, "at", None), "stands": len(stands),
+            "start": first,
             "per_stand": a.per_stand,
             "every": a.every,
             "rect": [rx, ry, rw, rh], "pad": PAD, "t0_mono_ns": t0,
@@ -302,6 +317,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--every", type=int, default=1)
     c.add_argument("--start", type=int, default=0, help="resume at this stand number")
     c.add_argument("--cells", choices=["waypoints", "midpoints", "quarters"], default="waypoints")
+    c.add_argument("--at", nargs="*", default=None, metavar="X,Y",
+                   help="exactly these cells (4BP: the (104,192) misread)")  # fmt: skip
     c.add_argument("--job", default="rogue")
     c.add_argument("--char", default="thief", help="crusader.py's data dir for the identity check")
     c.add_argument("--no-clear", dest="clear", action="store_false")

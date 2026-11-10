@@ -66,3 +66,10 @@ def test_the_scene_median_leaves_the_opaque_glyph_pixels_out(sl: ModuleType) -> 
     g[3:12, 9:39:2] = 0.0  # their shadows
     assert sl.scene_median(g) == 200.0
     assert sl.scene_median(g) >= sl.LIGHT_STRIP
+
+
+def test_at_cells_parse_and_refuse(sl: ModuleType) -> None:
+    """4BP (2026-11-11): collect --at X,Y ... (the (104,192) misread study)."""
+    assert sl.parse_cells(["104,192", "103,191"]) == [(104, 192), (103, 191)]
+    with pytest.raises(SystemExit, match="X,Y"):
+        sl.parse_cells(["104;192"])
