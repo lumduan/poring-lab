@@ -3105,3 +3105,19 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
 - **After it:** the scored model is frozen as M8 was. Then the evaluation, once: I1-I5 on fiT1 +
   fiT2 (`fi_labels.py label --eval-test`, `fi_eval.py`, the T2 pack seed 63 for I1's crops). Then
   `--loot-sight`'s pre-registration (a shadow pilot first).
+
+### Amendment O10 (2026-11-10 15:12 ICT from `date`): T2-items PASSES -> the cache and the training run (O9)
+
+`fi_blind_score.py --key <key> I.json J.json` (score sha256 9952dfc545cbcb76...), once:
+
+| labeller | good box, 40 item crops (>= 90 %) | item present right, 60 crops (>= 95 %) | E (empty) right | verdict |
+|---|---|---|---|---|
+| I | 95.0 % (N 93.3, F 93.3, M 100) | 96.7 % | 20 / 20 (10 hard) | PASS |
+| J | 95.0 % (N 93.3, F 93.3, M 100) | 96.7 % | 20 / 20 (10 hard) | PASS |
+
+- The two labellers agree on all 60 crops (q1 and q2). Their only misses are the same two "unsure"
+  item crops: 014, a brown blob at a monster's hand; 039, a dark item matching no reference.
+  No "loose", no "off".
+- Both labellers were blind: they saw only the pack (reference.png, 60 crops, the pinned
+  instructions), never the key or each other.
+- By O9: the cache step and the training run now.
