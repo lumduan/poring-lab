@@ -445,11 +445,19 @@ def grab_after(
     Without ``after_ns`` it is a plain grab, exactly as before."""
     if after_ns is None:
         return screen.grab(*region)[1]
+    return grab_after_meta(screen, region, after_ns)[1]
+
+
+def grab_after_meta(
+    screen: Screen, region: tuple[int, int, int, int], after_ns: int
+) -> tuple[int, np.ndarray, int, str]:
+    """grab_after with the frame's meta: (t_mono_ns, BGRA, the bus frame_id or -1, "bus" |
+    "x11"). dungeon@9.21 (LF-2) keeps the frame id of the frame it read."""
     end = time.monotonic() + FRESH_WAIT_S
     while True:
-        t, img, _, source = screen.grab_meta(*region)
+        t, img, frame_id, source = screen.grab_meta(*region)
         if source != "bus" or t > after_ns:
-            return img
+            return t, img, frame_id, source
         if time.monotonic() > end:
             raise FrozenStream(f"no frame newer than the action within {FRESH_WAIT_S} s")
         time.sleep(0.02)

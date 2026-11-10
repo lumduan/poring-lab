@@ -1711,3 +1711,162 @@ def test_garm_confirm_waits_for_consecutive_alarm_detections() -> None:
     src = Path(dh.__file__).read_text()
     assert "self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))" in src
     assert "boxes.alarm, tick, streak=streak_, need=a.garm_confirm" in src
+
+
+def _lf2_late_held() -> tuple[dh.PosConfirm, dh.Held]:
+    """A base read at 0.0 s, then a light read of the same cell 2.0 s later (after a blocking
+    action): PosConfirm holds it back for being LATE."""
+    from types import SimpleNamespace as R
+
+    pc = dh.PosConfirm()
+    assert pc.check(0.0, R(xy=(79, 93), mode="base")) == ((79, 93), None)
+    pos, held = pc.check(2.0, R(xy=(79, 93), mode="light"))
+    assert pos is None and held == dh.Held(2.0, (79, 93), 2.0)
+    return pc, held
+
+
+def test_late_confirm_takes_a_newer_frames_agreeing_read() -> None:
+    """dungeon@9.21 (--late-confirm, LF-2; rogue-xmas02.md 4BI, Study S-LF): a light read held
+    back for coming > 1.0 s after the read before it is confirmed at once by a read of a NEWER
+    frame (another bus frame id) that agrees by PosConfirm's own rule."""
+    from types import SimpleNamespace as R
+
+    pc, held = _lf2_late_held()
+    assert dh.late_confirm_due(held)
+    seen: list[int] = []
+
+    def newer(t_ns: int, fid: int) -> tuple[int, str, int, str]:
+        seen.append(fid)
+        return t_ns + 40_000_000, "img2", fid + 1, "bus"
+
+    pos, rec = dh.late_confirm(pc, held, (5_000_000_000, 10), newer,
+                               lambda img: R(xy=(79, 93), mode="light"), lambda: 2.05)  # fmt: skip
+    assert pos == (79, 93) and seen == [10]
+    assert rec == {"lf2": "ok", "lf2_fid": [10, 11], "lf2_ms": 40, "lf2_xy": [79, 93]}
+    assert pc.last == (2.05, (79, 93))  # the next tick is confirmed against the newer read
+    # one cell in 0.05 s is within the reach rule (dt / 0.15 s + 1)
+    pc, held = _lf2_late_held()
+    pos, rec = dh.late_confirm(pc, held, (0, 10), newer,
+                               lambda img: R(xy=(80, 93), mode="light"), lambda: 2.05)  # fmt: skip
+    assert pos == (80, 93) and rec is not None and rec["lf2"] == "ok"
+    # a BASE read on the newer frame counts on its own, as PosConfirm counts base reads today
+    pc, held = _lf2_late_held()
+    pos, rec = dh.late_confirm(pc, held, (0, 10), newer,
+                               lambda img: R(xy=(82, 93), mode="base"), lambda: 2.05)  # fmt: skip
+    assert pos == (82, 93) and rec is not None and rec["lf2"] == "base"
+
+
+def test_late_confirm_refuses_a_differing_read_the_same_frame_and_no_frame_id() -> None:
+    from types import SimpleNamespace as R
+
+    reads: list[str] = []
+
+    def read(img: str) -> R:
+        reads.append(img)
+        return R(xy=(79, 96), mode="light")  # 3 cells off after 0.05 s: beyond the reach rule
+
+    pc, held = _lf2_late_held()
+    pos, rec = dh.late_confirm(pc, held, (0, 10), lambda t, f: (t + 1, "img2", 11, "bus"), read,
+                               lambda: 2.05)  # fmt: skip
+    assert pos is None and rec is not None and rec["lf2"] == "differ" and rec["lf2_xy"] == [79, 96]
+    assert pc.unconfirmed == 2  # held back again, as PosConfirm does
+    # the stream repeated the frame: two reads of one picture are one read -- nothing is read
+    pc, held = _lf2_late_held()
+    pos, rec = dh.late_confirm(pc, held, (0, 10), lambda t, f: (t + 1, "img2", 10, "bus"), read,
+                               lambda: 2.05)  # fmt: skip
+    assert (pos, rec) == (None, {"lf2": "same_frame", "lf2_fid": [10, 10], "lf2_ms": 0})
+    # an X grab carries no frame id (-1): a new frame cannot be proven
+    pos, rec = dh.late_confirm(pc, held, (0, -1), lambda t, f: (t + 1, "img2", -1, "x11"), read,
+                               lambda: 2.05)  # fmt: skip
+    assert pos is None and rec is not None and rec["lf2"] == "no_bus"
+    pos, rec = dh.late_confirm(pc, held, (0, 10), lambda t, f: None, read, lambda: 2.05)
+    assert (pos, rec) == (None, {"lf2": "no_frame"})
+    assert reads == ["img2"]  # only the first case read anything
+    assert pc.last == (2.0, (79, 93))  # an unread second frame leaves PosConfirm as today
+    failed = R(xy=None, mode="light_failed")
+    pos, rec = dh.late_confirm(pc, held, (0, 10), lambda t, f: (t + 1, "img2", 11, "bus"),
+                               lambda img: failed, lambda: 2.05)  # fmt: skip
+    assert pos is None and rec is not None and rec["lf2"] == "no_read"
+    assert dh.late_confirm_refusal(10, 11, "bus") is None
+    assert dh.late_confirm_refusal(-1, 11, "bus") == "no_bus"
+
+
+def test_late_confirm_is_only_for_late_reads_and_keeps_the_jump_bar() -> None:
+    """A light read held back for DISAGREEING with a recent read (<= 1.0 s) is not LF-2's case;
+    and a cell LF-2 accepts meets the same position-jump hard bar as any read."""
+    from types import SimpleNamespace as R
+
+    pc, _held = _lf2_late_held()
+    assert pc.check(2.2, R(xy=(79, 94), mode="light"))[0] == (79, 94)
+    pos, held = pc.check(2.4, R(xy=(79, 84), mode="light"))  # 10 cells in 0.2 s: a misread
+    assert pos is None and held is not None and abs((held.dt or 0) - 0.2) < 1e-9
+    assert not dh.late_confirm_due(held) and not dh.late_confirm_due(None)
+    called: list[int] = []
+    out = dh.late_confirm(pc, held, (0, 1), lambda t, f: called.append(f) or None,  # type: ignore[func-returns-value]
+                          lambda img: None, lambda: 2.45)  # fmt: skip
+    assert out == (None, None) and called == []
+    assert dh.late_confirm_due(dh.Held(0.0, (1, 1), None))  # no read before it: late too
+    # the jump bar: a far read confirmed by a newer frame is still a jump for the main loop
+    pc, _held = _lf2_late_held()
+    pos2, held2 = pc.check(2.0, R(xy=(100, 93), mode="light"))
+    assert pos2 is None and held2 is not None
+    far, rec = dh.late_confirm(pc, dh.Held(2.0, (100, 93), 2.0), (0, 10),
+                               lambda t, f: (t + 1, "img2", 11, "bus"),
+                               lambda img: R(xy=(100, 93), mode="light"), lambda: 2.05)  # fmt: skip
+    assert far == (100, 93) and rec is not None and rec["lf2"] == "ok"
+    assert dh.is_jump((79, 93), far, 2.0)  # 21 cells in 2.0 s: the hard bar trips
+    src = Path(dh.__file__).read_text()
+    i_lf2 = src.index("pos, lf2_ = late_confirm(pos_ok, held, img_meta, newer_readout")
+    i_jump = src.index("if (here is not None and is_jump(here, p_, tick - last_pos_t)")
+    assert i_lf2 < src.index("rd_why = read_outcome(rd, pos)") < i_jump
+    assert "if late_confirm_on and held is not None:" in src
+    assert src.count("late_confirm(pos_ok") == 1  # the main HP read only (read_here() as today)
+
+
+def test_newer_frame_waits_for_another_frame_id() -> None:
+    class FakeScreen:
+        def __init__(self, frames: list[tuple[int, int, str]]) -> None:
+            self.frames = frames
+
+        def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, object, int, str]:
+            t, fid, src = self.frames.pop(0) if len(self.frames) > 1 else self.frames[0]
+            return t, np.zeros((h, w, 4), np.uint8), fid, src
+
+    got = dh.newer_frame(FakeScreen([(100, 7, "bus"), (100, 7, "bus"), (130, 8, "bus")]),
+                         (0, 0, 4, 2), 100, 7)  # fmt: skip
+    assert got is not None and (got[0], got[2], got[3]) == (130, 8, "bus")
+    assert got[1].shape == (2, 4, 3)
+    assert dh.newer_frame(FakeScreen([(100, 7, "bus")]), (0, 0, 4, 2), 100, 7, wait_s=0.03) is None
+    x11 = dh.newer_frame(FakeScreen([(5, -1, "x11")]), (0, 0, 4, 2), 100, -1)
+    assert x11 is not None and x11[2:] == (-1, "x11")  # at once; late_confirm refuses it
+
+
+def test_late_confirm_is_off_by_default_and_recorded_in_the_fixes() -> None:
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "late_confirm" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "late_confirm" not in dh.fixes_of(dh.argparse.Namespace(**base, late_confirm=False))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, late_confirm=True))
+    assert rec["late_confirm"] == [1.0, 0.25, "9.21"]
+    src = Path(dh.__file__).read_text()
+    flag = '"--late-confirm",\n        action=argparse.BooleanOptionalAction,\n'
+    flag += "        default=False,"
+    assert flag in src
+    assert 'late_confirm_on = getattr(a, "late_confirm", False)' in src
+    assert "9.20" not in dh.LATE_CONFIRM_VERSION  # 9.20 is --loot-sight's (xmas02-detector O.10)
+
+
+def test_lf1_each_hp_read_logs_the_held_read_and_the_age_of_here() -> None:
+    """LF-1 (logging only, ALWAYS on; Amendment R: it changes no behaviour): the held-back read's
+    cell and its gap to the read before, and the age of ``here`` (s since the last fresh read)."""
+    src = Path(dh.__file__).read_text()
+    assert 'lf_rec = {"held": list(held.cell), "held_dt": dt_h}' in src
+    hp = '"here_age_s": round(tick - last_pos_t, 2), **lf_rec,\n                    "rd": rd_why})'
+    assert hp in src
+    # PosConfirm.accept is check()'s first half: the same answers as before (the X1b test above)
+    from types import SimpleNamespace as R
+
+    pc = dh.PosConfirm()
+    assert pc.check(0.0, R(xy=(1, 1), mode="light")) == (None, dh.Held(0.0, (1, 1), None))
+    assert pc.check(0.1, R(xy=None, mode="light_failed")) == (None, None)

@@ -250,6 +250,9 @@ def test_an_actions_effect_is_judged_only_on_a_later_frame(ro: ModuleType) -> No
     with pytest.raises(ro.FrozenStream):
         ro.grab_after(FakeScreen(), (0, 0, 1, 1), after_ns=200)
     assert issubclass(ro.FrozenStream, ro.Stop)  # callers that retry on Stop retry on it too
+    # dungeon@9.21 (LF-2): the same wait, with the frame's meta (its bus frame id)
+    frames[:] = [(100, "old"), (250, "new")]
+    assert ro.grab_after_meta(FakeScreen(), (0, 0, 1, 1), after_ns=200) == (250, "new", 1, "bus")
 
 
 def test_ensure_window_opens_one_only_when_needed(
