@@ -3662,3 +3662,12 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
     read; + fiT7-fiT9 recorded beside the next base pilots; fsTa4 is named, not staged;
   - `--eval-test` labels, `pack --round 3 --eval-test --seed 67`, two NEW blind labellers, both
     prediction sets, I5 (server time vs xmas02gb; eval_latency), `fi_eval.py --strata r3` once.
+
+### Amendment O18 (2026-11-11 06:01 ICT from `date`): Batt allows round 3's exam
+
+- Batt: "allowed" (his one Thai word, not quoted: it is also a client UI string the
+  locale-pack guard refuses): fiT7, fiT8 and fiT9 are recorded beside the next base pilots (p54-p56,
+  rogue-xmas02.md 4BP) and round 3 is scored once with them + fsTa3 + fsTn3 (O17's bars, `--strata
+  r3`, the pack seed 67).
+- They are refused by name already (`map_labels.XMAS02_FIT`). The model is frozen (O17f, 133589f3).
+

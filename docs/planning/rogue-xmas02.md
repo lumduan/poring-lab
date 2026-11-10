@@ -4699,3 +4699,24 @@ from `date`.**
   Piece of Cake, Manacles 5 (12.0), Red Herb, Candy, Candy Cane 2 (4.8), Rough Oridecon, Iron, Chef
   King Orleans Vol.1 1 (2.4). p53: Scell 12 (28.8), Zargon 11 (26.4), Piece of Cake 4 (9.6), Red Herb 3
   (7.2), Candy, Well-baked Cookie, Pearl, Iron, Manacles 1 (2.4).
+
+### 4BP. Amendment U (2026-11-11, Batt's answers to the 05:2x report, written 06:01 ICT from `date`): LF-4 off, round 3's exam, the (104,192) misread, LS-1
+
+Batt's answers (quoted, then in English):
+1. "ปิดไว้" -- **LF-4 (`--unread-step`) stays OFF.**
+2. (Batt's one Thai word for "allowed"; not quoted, because it is also a client UI string the
+   locale-pack guard refuses) -- the floor-item round 3's held-out **fiT7-fiT9 are recorded beside the next base
+   pilots** and scored (xmas02-detector.md O18).
+3. "ศึกษาและแก้" -- **study and fix the light-floor misread at (104,192)** (p53: (104,189) read
+   steadily for 2.6 s; S-LF's LF-5 family). Its fix is pre-registered on its own before any pilot of
+   it.
+4. "ลอง เพราะตอนนี้ใช้ gpu แล้ว น่าจะ เล็งได้เร็วขึ้น" -- **try LS-1** (the re-aim + capped lead at
+   the press), because with the GPU detector the aim is fresher.
+   - p14's `--lead-strike` (dropped, Amendment I) aimed from the CPU detector's older frames; LS-1
+     leads from a D2 detection ~21 ms old.
+   - It is built behind its own flag, OFF by default, and pre-registered as 4BQ before its pilots.
+
+**The order:** the LS-1 build (a subagent) and the misread study (live frames at (104,192), then
+offline) start now. The next MVP window runs p54 (the base, recorded fiT7), then p55 / p56
+(LS-1, recorded fiT8 / fiT9). Then round 3's evaluation.
+
