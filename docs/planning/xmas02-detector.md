@@ -2980,3 +2980,35 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   clear_loot could drop neither. The parent confirms "the next USABLE id by the ranking". cut-grf
   --check passes offline. The 12 screen-cut references come from the live chain (O2 section 6).
 - Merged: feat/fi-tools again (O2 addendum, 36 + 9 tests). The worktree is removed.
+
+### Amendment O5 (2026-11-10 12:39 ICT from `date`, the parent, BEFORE its run): the icon proof passed; fs1 pre-registered
+
+- **The live icon proof (O2 section 6, AK-1's order), on prt_fild08 (268,107), the Rogue immune
+  (12:28:31):**
+  - `clear-bag` (12:30:05-12:31:55) -> `held` rc 0;
+  - `give --frames` (12:32-12:33): the 12 in the @item order. Etc row 0: zargon, manacles, iron,
+    pearl, rough_oridecon, orleans_book. Use: well_baked_cookie .. candy_cane at (2-6, 0),
+    holy_scroll (0, 1). Eqp empty;
+  - `cut` (the parent's SPEC, `/dev/shm/poring-lab-tmp/xmas-fi/icons-spec.json`): 12 cut, none
+    missing;
+  - `cut-grf`: every screen-cut icon against its own GRF icon at 0.81-4.35 (bar 10.0), rc 0;
+  - the viewed copies cleared (`clear-bag` 12:34:37-12:36:30), `held` rc 0, a FRESH `give`, then
+    `drop` (12:38:39): **rc 0, `all_and_only_the_set` true** (12 dropped, the stock kept). THE ICON
+    PROOF PASSES.
+- **fs1 (O.6's staged-drop watch), as follows:**
+  - when `held --map xmas_dun02` returns rc 0 (the DB's save catches up);
+  - the recorder first: `record_session.py --backend rdp --label xmas02-fs1 --seconds 3300 --fps 1
+    --format png --max-bytes 8G`, stopped by SIGTERM after the run ends;
+  - then `stage_items.py run --map xmas_dun02 --n 18 --seed 2611101 --immune-confirmed --label
+    fs1`;
+  - 18 spots, 54 stands, 108 floor items (9 per id, groups of 6), the spots of `spots --plan`
+    (seed 2611101): 159,38 49,60 203,225 49,104 74,72 236,48 138,115 236,82 25,173 225,181
+    192,194 82,192 104,138 104,236 138,170 71,137 170,115 203,148; one `@killmonster2` at each
+    spot (the MVP clock);
+  - **its use:** TRAIN, by the join rule (v2 params aea6f1d2, its own G2 <= 3 px on >= 30 fits),
+    then O.6's stopping rule (>= 300 boxes from >= 40 floor items, >= 8 ids at >= 10 each, with the
+    banked TRAIN). Short of it: fs2 on the next 18 stands;
+  - a run that stops early (rc 1) is reported as is, and not re-run without a reason.
+- **Disk:** ~45 min of 1-fps PNG, ~5.7 GB, on top of fiT1 3.42 + fiT2 3.50 GB unshipped. That is
+  under the 20 GB cap and far over the 30 GB floor (73.8 GB free at 12:30). It ships after the
+  SET close with the others.
