@@ -298,6 +298,12 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                            "e24e8f57548a3a6791b9756207fb2ffb11a8a0273c92db07f3bbcbe2196011a5",
                            "xmas02fi-last-736x1280.onnx",
                            "d149b3a759dd1c318907ec8db6634bcfabd06c70f2f54b88e998697c30af6038"),
+    # xmas02-detector.md Amendment O15 / O15e: round 2 of the floor-item model (the aura + no-aura
+    # data), served for its I5 only; NOT in MAP_MODELS, like round 1's
+    "xmas02fi2": GpuWeights("/datasets/archive/train/xmas02-fi-r2-20261110/weights/last.pt",
+                            "e381d68982fd4362569dcd405841624687f0e0faa2e9700847469ce2220bdc2b",
+                            "xmas02fi2-last-736x1280.onnx",
+                            "7f148f3f63d56ddd7a3ac3fba35b51fa129f9c17318eefb14bc68ccfee1f1ae2"),
 }  # fmt: skip
 
 
