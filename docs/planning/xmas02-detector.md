@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "O17f (2026-11-11 05:2x): round 3 FROZEN (133589f3 / ONNX c0ca01be, fight negatives near her). Its evaluation is the next session: record fiT7-fiT9 beside the next base pilots, label fsTa3 / fsTn3 / fiT7-9 --eval-test, pack --round 3 seed 67, two blind labellers, fi_eval --strata r3 once."
+next_action: "O19 (2026-11-11 10:2x): round 3 FAILS -- false boxes fixed (I3 0.42 %, I4 0.9 %, precision 0.994) but recall fell (aura 0.806, no aura 0.854); natural pilot drops stay at 62 % in rounds 2-3. A round 4 (more natural drops in TRAIN, balanced fight negatives) is Batt's decision."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -3699,3 +3699,34 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   - **EVALUATED (both yes / good): 110 crops.** Aura 62 (fiT7 11, fiT8 14, fiT9 4 natural; fsTa3
     33 staged; minimum 40). No aura 48 (fsTn3; minimum 30).
 
+### Amendment O19 (2026-11-11 10:25 ICT from `date`): THE ROUND-3 RESULT (scored once) -- FALSE BOXES FIXED, RECALL FELL
+
+`fi_eval.py --strata r3` once at 10:25:15 (score sha256 6ae33fd8...). Inputs: both prediction sets
+over the five sessions (4,003 frames); I5 from the detect server and eval_latency. The GPU and the
+ONNX sets give IDENTICAL I1-I4.
+
+| bar | round 3 | round 2 (O16) | round 1 (O14) | bar value | verdict |
+|---|---|---|---|---|---|
+| I1a recall, AURA | **50 / 62 = 0.806** (fsTa3 32 / 33; pilots fiT7 6 / 11, fiT8 12 / 14, fiT9 0 / 4) | 0.928 | 0.696 | >= 0.85 on >= 40 | **FAIL** |
+| I1n recall, NO AURA | 41 / 48 = 0.854 | 0.980 | - | >= 0.85 on >= 30 | PASS (95 %: no) |
+| I1 precision | 2,668 / 2,684 = 0.994 | 0.962 | 0.864 | >= 0.85 | PASS |
+| I2 | 7 / 16 = 0.44 | 0.75 | 0.56 | >= 0.80 on >= 20 | NO VERDICT (short) |
+| I3 any / her 5 x 5 | 0.42 % / **0.27 %** (7 / 2,598) | 4.29 / 3.22 % | 0.49 / 0.12 % | <= 0.5 % / <= 0.2 % | **FAIL** (5 x 5) |
+| I4 | 1 / 112 = 0.9 % | 11.3 % | 0 % | <= 5 % | PASS |
+| I5 GPU, server p95 vs xmas02gb | 16.84 vs 16.89 ms = 0.997 x | 0.979 x | - | <= 1.10 x, <= 35 ms | PASS |
+| I5 CPU p95 vs xmas02gb | 730.8 vs 785.1 ms = 0.931 x | 0.953 x | 1.043 x | <= 1.10 x | PASS |
+
+- **VERDICT: FAIL** (I1a; I3's 5 x 5). Not deployed.
+- **What the fight negatives did:**
+  - false boxes fell about tenfold: I3 4.29 % -> 0.42 %, I4 11.3 % -> 0.9 %, precision 0.962 ->
+    0.994;
+  - but the model became more cautious near her: recall aura 0.928 -> 0.806, no aura 0.980 ->
+    0.854.
+- **The lasting weak spot: NATURAL drops in the pilots.** Round 2's pilots 8 / 13 (62 %), round
+  3's 18 / 29 (62 %), against the stagings' 97-100 %. A dropped item in a fight (corpses, hit
+  effects, the item just landing) is not what the staged piles show.
+- **For a round 4 (Batt's decision, own amendment):**
+  - more NATURAL drops in TRAIN: label the pilots' kill drops (every base pilot's recording is a
+    source; fiT4-fiT9 are scored once and TRAIN-eligible after their round);
+  - keep the fight negatives but balance them: e.g. 75 a pilot, not 150;
+  - or an operating threshold per stratum chosen on a VAL set of natural drops.
