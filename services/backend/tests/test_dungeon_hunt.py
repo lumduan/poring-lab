@@ -3988,3 +3988,23 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
         body = body[: body.index("\n        def ", 10)]
         assert "bq_" not in body and "q_book" not in body  # never inside a loot step
     assert "queue" in dh.WALK_STOP_BY  # a fight path: --walk-stop watches its ring-1 strikes
+
+
+def test_hud_fast_feeds_the_hud_only_never_the_decisions() -> None:
+    """dungeon@9.29b (--hud-fast, Batt 2026-11-11: the HUD boxes came 1-1.5 s late): HUD-only
+    detections between the watcher's own go to hud_last; the sender shows the fresher set; the
+    decisions' last / alarm / meta are written only by the regular detection; refused without
+    --hud or out of range; recorded in the fixes."""
+    a, b = (1.0, ["old"]), (1.4, ["new"])
+    assert dh.hud_fresher(a, b) == b and dh.hud_fresher(b, a) == b
+    src = Path(dh.__file__).read_text()
+    loop = src[src.index("while hud_every and not self.halt.is_set():") :]
+    loop = loop[: loop.index("def kick(self, prefer")]
+    assert "self.hud_last = (t_h," in loop
+    for decision in ("self.last =", "self.alarm =", "self.meta =", "self.n += 1"):
+        assert decision not in loop, decision
+    assert "dungeon@9.29b refused: --hud-fast" in src
+    base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
+                npc_guard=False, miss_cue=False)  # fmt: skip
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, hud=True, hud_fast=0.2))
+    assert rec["hud_fast"] == [0.2, dh.HUD_FAST_TTL_MS, "9.29b"]

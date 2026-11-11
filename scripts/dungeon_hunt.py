@@ -1215,6 +1215,7 @@ class BoxSpots:
 
 
 HUD_EVERY_S = 0.5  # dungeon@9.29: at most 2 HUD messages a second
+HUD_FAST_TTL_MS = 600  # dungeon@9.29b: a box lingers at most this long on the HUD
 
 
 def hud_boxes(got: Sequence[Any]) -> list[Any]:
@@ -1232,11 +1233,16 @@ def hud_boxes(got: Sequence[Any]) -> list[Any]:
     return out
 
 
+def hud_fresher(a: tuple[float, list[Any]], b: tuple[float, list[Any]]) -> tuple[float, list[Any]]:
+    """PURE (dungeon@9.29b): the fresher of two (grab time, boxes) sets."""
+    return b if b[0] > a[0] else a
+
+
 def hud_send(tx: Any, boxes: Any, mode: str, locked: bool) -> bool:
     """dungeon@9.29 (--hud): the boxes the runner holds now, to the console HUD (its own rate
     limit; operator_hud never raises). DISPLAY ONLY: no input, no decision reads it."""
     with boxes.lock:
-        _t, got = boxes.last
+        _t, got = hud_fresher(boxes.last, getattr(boxes, "hud_last", (0.0, [])))
     line = f"{mode}{' (locked)' if locked else ''}"
     if not tx.log or tx.log[-1] != line:  # a line on each change of mode, not each tick
         tx.note(line)
@@ -2074,6 +2080,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
     if getattr(a, "hud", False):  # dungeon@9.29: display only (the operator HUD)
         out["hud"] = ["9.29"]
+    if getattr(a, "hud_fast", None):  # dungeon@9.29b: the HUD-only detection rate
+        out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
     if getattr(a, "queue", False):  # dungeon@9.30 (rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x)
@@ -2654,6 +2662,11 @@ class BoxWatch:
         self.paths: Counter[str] = Counter()  # which path gave each detection
         self.halt = threading.Event()
         self.every_s = float(every_s)  # dungeon@9.11 (--box-every): the watcher's rhythm
+        # dungeon@9.29b (--hud-fast, Batt 2026-11-11: "the boxes come late"): HUD-ONLY detections
+        # between the rhythm's own, into hud_last; last / alarm / meta / n never see them
+        self.hud_every_s: float | None = None
+        self.hud_last: tuple[float, list[Any]] = (0.0, [])
+        self.n_hud = 0
         self.n = 0
         self.n_self = 0
         self.n_skip = 0
@@ -2686,6 +2699,21 @@ class BoxWatch:
                 self.paths[path] += 1
                 self.cond.notify_all()
             every = getattr(self, "every_s", BOX_EVERY_S)  # (a test builds it without __init__)
+            hud_every = getattr(self, "hud_every_s", None)
+            while hud_every and not self.halt.is_set():  # dungeon@9.29b: HUD-only detections
+                left = every - (time.monotonic() - t)
+                if left <= hud_every or self.kick_ev.wait(hud_every):
+                    break  # the rhythm's slot is near, or a kick: the regular detection first
+                try:
+                    t_h = time.monotonic()
+                    img_h = np.ascontiguousarray(self.screen.grab(*self.region)[1][..., :3])
+                    raw_h = self.det.detect(img_h, prefer="gpu") if self.gpu else \
+                        self.det.detect(img_h)  # fmt: skip
+                except Exception:  # noqa: BLE001 -- display only: the HUD stream just stops
+                    break
+                with self.lock:
+                    self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
+                    self.n_hud += 1
             self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))
             self.kick_ev.clear()
 
@@ -3937,6 +3965,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         why_bs = bare_steal_refused(a.char, a.steal, keys_)
         if why_bs:
             raise SystemExit(f"dungeon@9.27 refused: {why_bs}")
+    hf_ = getattr(a, "hud_fast", None)  # dungeon@9.29b
+    if hf_ is not None and (not getattr(a, "hud", False) or not 0.1 <= hf_ < BOX_EVERY_S):
+        raise SystemExit(f"dungeon@9.29b refused: --hud-fast {hf_} goes with --hud, "
+                         f"0.1 <= S < {BOX_EVERY_S}")  # fmt: skip
     vt_values: dict[str, float] | None = None  # dungeon@9.28 (--value-target, 4CB)
     if getattr(a, "value_target", False):
         import value_target as vt_mod
@@ -4383,9 +4415,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         if getattr(a, "hud", False):
             import operator_hud as oh
 
+            hud_fast = getattr(a, "hud_fast", None)  # dungeon@9.29b
             hud_tx = oh.HudSender(agent_raw, (gx0, gy0, gw, gh), r.desktop(),
                                   label=f"dungeon {a.strategy} {a.label or ''}".strip(),
-                                  min_interval_s=HUD_EVERY_S)  # fmt: skip
+                                  min_interval_s=min(HUD_EVERY_S, hud_fast or HUD_EVERY_S),
+                                  ttl_ms=(HUD_FAST_TTL_MS if hud_fast
+                                          else oh.DEFAULT_TTL_MS))  # fmt: skip
+            if hud_fast and boxes is not None:
+                boxes.hud_every_s = float(hud_fast)
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
         ours_used = -2e9
@@ -7573,6 +7610,15 @@ def main() -> int:
         default=False,
         help="dungeon@9.29 (Batt 2026-11-11): send the boxes the runner holds (by species) to the "
         "console's operator HUD, at its own rate limit; DISPLAY ONLY (no input, no decision)",
+    )
+    t.add_argument(
+        "--hud-fast",
+        type=float,
+        default=None,
+        metavar="S",
+        help="dungeon@9.29b (with --hud; Batt 2026-11-11: the boxes come late, sometimes where "
+        "the monster was): HUD-ONLY GPU detections every S seconds between the watcher's own, "
+        "sent as they come (a box lives 600 ms); the decisions never read them",
     )
     t.add_argument(
         "--value-target",
