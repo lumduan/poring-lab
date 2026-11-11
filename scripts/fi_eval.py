@@ -76,7 +76,13 @@ R2_PILOTS = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02
 R3_PILOTS = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9")
 R3_AURA = (*R3_PILOTS, "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTa4")  # O17e: fsTa4 too
 R3_NOAURA = ("-rdp-xmas02-fsTn3",)
-STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS)}
+# Amendment O20 (round 4): its fresh held-out
+R4_PILOTS = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-xmas02-fiT12",
+             "-rdp-hunt-xmas02-fiT13")  # fmt: skip
+R4_AURA = (*R4_PILOTS, "-rdp-xmas02-fsTa4")
+R4_NOAURA = ("-rdp-xmas02-fsTn4",)
+STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
+          "r4": (R4_AURA, R4_NOAURA, R4_PILOTS)}  # fmt: skip
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
 MINS = {
     "i1_recall": 40,

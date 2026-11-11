@@ -230,7 +230,7 @@ def test_the_join_rule_and_the_roles(bfc: ModuleType, world: dict[str, Any],
     with pytest.raises(SystemExit, match="sha256"):
         bfc.main(wrong)
     held = json.loads(world["files"][P38].read_text())
-    held.update(session="20261111T090000-rdp-hunt-xmas02-fiT7", eval_test=False)
+    held.update(session="20261111T090000-rdp-hunt-xmas02-fiT10", eval_test=False)
     write(world["tmp"] / "fit1.json", held)
     with pytest.raises(SystemExit, match="held-out"):
         bfc.main(

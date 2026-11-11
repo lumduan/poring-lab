@@ -325,9 +325,13 @@ XMAS02_FIT_R1 = ("-rdp-hunt-xmas02-fiT1", "-rdp-hunt-xmas02-fiT2", "-rdp-hunt-xm
 # near stagings fsTa3 / fsTn3
 XMAS02_FIT_R2 = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xmas02-fiT6",
                  "-rdp-xmas02-fsTa", "-rdp-xmas02-fsTn")  # fmt: skip
-XMAS02_FIT = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9",
-              "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3", "-rdp-xmas02-fsTa4")  # fmt: skip
-# O17e: fsTa4, a second aura staging (fsTa3 stopped at spot 7), named BEFORE it records
+# O17e: fsTa4 was named as round 3's (never staged). O20 (round 4): round 3's held-out was scored
+# ONCE (O19) and is TRAIN-eligible (XMAS02_FIT_R3, history); round 4's held-out is fresh: pilots
+# fiT10-fiT13 and the near stagings fsTa4 / fsTn4 (6 spots each)
+XMAS02_FIT_R3 = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9",
+                 "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3")  # fmt: skip
+XMAS02_FIT = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-xmas02-fiT12",
+              "-rdp-hunt-xmas02-fiT13", "-rdp-xmas02-fsTa4", "-rdp-xmas02-fsTn4")  # fmt: skip
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),

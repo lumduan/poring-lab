@@ -3730,3 +3730,26 @@ ONNX sets give IDENTICAL I1-I4.
     source; fiT4-fiT9 are scored once and TRAIN-eligible after their round);
   - keep the fight negatives but balance them: e.g. 75 a pilot, not 150;
   - or an operating threshold per stratum chosen on a VAL set of natural drops.
+
+### Amendment O20 (2026-11-11 10:56 ICT from `date`, BEFORE its cache): ROUND 4 pre-registered -- more natural drops, half the fight negatives
+
+- **Batt (11-11, to the 10:2x report):** "เทรน" (train). The agreed recipe: more drops that fell
+  in real fights, and half the fight negatives.
+- **TRAIN r4** (params v2; each new session by the join rule G2):
+  - round 3's TRAIN (O17b);
+  - round 3's held-out, scored ONCE (O19) and TRAIN-eligible from here (`map_labels.XMAS02_FIT_R3`):
+    fiT7, fiT8, fiT9 (natural drops) and fsTa3, fsTn3, relabelled `--split train`;
+  - `--session-negs` for every pilot in TRAIN, at **75** (round 3: 150).
+- **The training:** init = round 3's `last.pt` (133589f3: it knows the fight negatives); O15's
+  recipe otherwise.
+  - Epochs = min(12, max(3, floor(5,400 s / (0.64 s x N_train + 100 s)))): the pilots wait for
+    the GPU.
+  - The model is frozen and sha256-recorded before any held-out file is read.
+- **The held-out r4, fresh (refused by name, `map_labels.XMAS02_FIT`):**
+  - fiT10-fiT13: the next base pilots (the escape's and R2b's, rogue-xmas02.md 4BU / 4BV)
+    recorded beside them; natural drops, the stratum that failed;
+  - fsTa4 (Rogue) and fsTn4 (Crusader): near stagings of 6 spots each, on cells sharing none with
+    any TRAIN staging, staged during the training.
+- **The bars: O15's, unchanged** (`--strata r4`, `pack --round 4 --eval-test --seed 68`). Batt's
+  95 % is reported. Also reported: I1a on the pilots' natural drops alone (rounds 2 and 3: 62 %).
+

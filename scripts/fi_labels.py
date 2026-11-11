@@ -132,6 +132,8 @@ R2_NOAURA = ("-rdp-xmas02-fsTn",)  # fi_eval.R2_NOAURA (a test pins the two equa
 # Amendment O17 (round 3, `pack --round 3 --eval-test`): seed 67, the same sizes, its no-aura name
 R3_EVAL_SEED = 67
 R3_NOAURA = ("-rdp-xmas02-fsTn3",)  # fi_eval.R3_NOAURA
+R4_EVAL_SEED = 68  # O20 (round 4, `pack --round 4 --eval-test`)
+R4_NOAURA = ("-rdp-xmas02-fsTn4",)  # fi_eval.R4_NOAURA
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -1293,11 +1295,11 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
 
     spec = FI_MAPS[a.map]
     rnd = getattr(a, "round", 1)
-    r2 = rnd in (2, 3)  # round 3 (O17) packs as round 2, its own seed and no-aura name
-    if rnd == 3:
+    r2 = rnd in (2, 3, 4)  # rounds 3 / 4 (O17 / O20) pack as round 2, their own seed + no-aura
+    if rnd in (3, 4):
         if not a.eval_test:
-            raise SystemExit("--round 3: the evaluation's pack only (--eval-test)")
-        want = R3_EVAL_SEED
+            raise SystemExit(f"--round {rnd}: the evaluation's pack only (--eval-test)")
+        want = R3_EVAL_SEED if rnd == 3 else R4_EVAL_SEED
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
@@ -1316,7 +1318,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     cands = pool_labels(docs)
     if r2:
         picks = r2_picks(cands, a.eval_test, a.seed, spec.salt,
-                         R3_NOAURA if rnd == 3 else R2_NOAURA)  # fmt: skip
+                         {3: R3_NOAURA, 4: R4_NOAURA}.get(rnd, R2_NOAURA))  # fmt: skip
     elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
                             spec.salt)  # fmt: skip
@@ -1464,7 +1466,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
-    p.add_argument("--round", type=int, choices=(1, 2, 3), default=1,
+    p.add_argument("--round", type=int, choices=(1, 2, 3, 4), default=1,
                    help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
