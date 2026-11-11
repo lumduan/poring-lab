@@ -6050,3 +6050,21 @@ recent two-run pair of that same base (named in the result).
   character, that takes damage.
 - No harm: every bar passes but W1, by the letter: pooled with p67 + p68, 26 / 1,019 = 2.55 %.
 
+### 4CP. 4CM's result: the final configuration (p81 + p82 + p83; written 2026-11-12 06:00 ICT from `date`)
+
+- **The runs:** p81 04:21:50-04:47:38 (fiT32), p82 05:00:3x-05:26:xx (fiT33), p83 05:29:1x-05:55:xx
+  (fiT34). All rc 0, her NOT immune, after MVP kills (03:52:11, 04:59:38). Smoke s81 (03:45:37,
+  immune, rc 0) passed first. Flags: the base + `--bare-steal --bare-ready --steal-opener F4
+  --swap-gap --value-target --queue --hud`. Export `xmas02-p81-p83-final`.
+- **Result (an exhibition: reported, not a base change):**
+  - 176 kills = 140.7 / h (p81 151.0, p82 153.3, p83 117.6); 0.72 stolen a kill; 143 items / h.
+  - Gross **70,620 z/h** at Overcharge (p81 73,382, p82 88,597, p83 49,854). Common items only:
+    **58,729**, the aura-off base's 58,820. Rare: 4 Pearls.
+  - Consumables: 4 Fly Wings + 2 White Potions (2,110 z/h).
+- **No harm:** deaths 0; every per-run bar passes; W1 pooled with p67 + p68 = 23 / 1,166 = 1.97 %
+  (passes). R1-A pooled over the five runs is 8: the rule pools 4 runs, and over p81-p83 alone it
+  is 6.
+- **Reading:** the three flags' gains did not add up. Together they equal the base on common items,
+  and below it on gross, by rare-drop luck. The night's best: single run p73 111,985 z/h (a stolen
+  2carat Diamond); pair p73 + p74 85,286; the base pair 79,650.
+
