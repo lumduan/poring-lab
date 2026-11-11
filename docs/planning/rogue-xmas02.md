@@ -5909,3 +5909,40 @@ recent two-run pair of that same base (named in the result).
   that holds its cell (or the natural trap again). This is a study item for Batt, not retried
   tonight.
 
+### 4CK. 4CE's verdict: the Knife + `--steal-cue popup --swap-gap` (p73 + p74; written 2026-11-12 00:59 ICT from `date`)
+
+- **The runs:** p73 23:21:06-23:47:xx (fiT24) and p74 00:27:4x-00:53:xx (fiT25). Both rc 0, her
+  NOT immune (read back), each after an MVP kill (23:20:06, 00:26:48). Dashboard export
+  `xmas02-p73-p74-knifefix`; bars by `verdict/pair.py`.
+- **VERDICT: B1-B4 pass; W1 and P2 fail by the letter -> it STAYS A FLAG** (4CE's rule). Its B2 goes
+  to Batt.
+  - W1: pooled p73 + p74 + p67 + p68 = 30 / 1,053 = 2.85 % > 2.0 % (p74 alone 14 / 272). The
+    aura-off base fails W1 too (4BZ).
+  - P2: p74's Fly Wing was another false Garm alarm (the detector, as p70).
+- **B2 rests on luck.** p73 stole a **2carat Diamond** (15,500 z at Overcharge = 37,151 z/h of its
+  111,985). On COMMON items only (sell < 3,000 z), the pair makes 57,825 z/h against the base's
+  58,820 (-1.7 %) and the plain Knife's 61,076.
+- **The trade:** kills fall 27 % (119.7 / h against 163.2); steals a kill rise 40 % (0.84 against
+  0.60). The popup-only cue keeps the Knife on until a popup or the 8-s cap: 19 of 84 phases hit
+  the cap.
+- **Steal timing (`steal_timing.py`):** a steal comes at a median 3.7 s into the phase (p25 2.5,
+  p75 4.9, p90 5.8 s). A 5-s cap would keep 78 % of the steals and save ~37 s a run, about even,
+  so it is not proposed.
+- **`--swap-gap`:** the 0.0-0.11-s false kills after an equip are gone. The general false kills
+  remain: the attack really pauses >= 1.6 s, no packets. Swaps back onto a monster already stolen
+  from: p73 18 / 50, p74 7 / 46.
+
+| | **p73** | **p74** | bar |
+|---|---|---|---|
+| B1 stolen a kill | 44 / 51 | 40 / 49 | pooled 0.84 >= 0.703: PASS |
+| B2 gross z/h at Overcharge | 111,985 | 58,647 | pooled **85,286 >= 79,650: PASS** (common items only 57,825) |
+| items / h | -- | -- | 137.7 (base 134, the Knife 152) |
+| B3 swaps | 50 / 50 equips read back | 46 / 47 | 0 swap-fail stops: PASS |
+| B4 cue equips with a packet steal | 38 / 38 | 34 / 34 | 100 %: PASS |
+| E1 kills / deaths / lowest HP / Fly Wings | 51 (122.2 / h) / 0 / 68.7 % / 0 | 49 (117.2 / h) / 0 / 73.7 % / 1 | PASS |
+| P2 false Fly Wings | 0 | **1** | **FAIL on p74** (the detector) |
+| W1 unsent walk clicks | 1 / 251 | 14 / 272 | pooled with p67 + p68: **2.85 %: FAIL** |
+| R1-A | 2 | 2 | pooled 6 < 7: PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 91.3 % / 94.3 % / 0 / 1.97 s / 70.0 % / 4 | 100 % / 90.7 % / 0 / 1.99 s / 83.3 % / 10 | PASS |
+| U1-stuck / D1 p95 | 3.6 s / 22.1 ms | 7.4 s / 22.0 ms | PASS |
+
