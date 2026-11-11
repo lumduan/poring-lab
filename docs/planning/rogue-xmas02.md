@@ -5632,6 +5632,33 @@ Batt's answers (quoted, then in English):
 | U1-stuck / D1 p95 / P2 | 14.5 s / 22.9 ms / 0 | 4.8 s / 22.6 ms / 0 | PASS |
 | reported: gross z/h at Overcharge / items / h | 75,809 / 142 | 83,491 / 126 | (dashboard `xmas02-p67-p68-auraoff`) |
 
+**Pilots p69 + p70 (4CA, the KNIFE: `--bare-steal --bare-ready --steal-opener F4`), written
+2026-11-11 22:38 ICT from `date`.**
+- p69 20:36:08-21:01:09 (fiT20), p70 21:04:42-21:29:42 (fiT21), both rc 0, her NOT immune (read
+  back), after an MVP kill. Dashboard export `xmas02-p69-p70-knife`.
+- **VERDICT: B1, B2 and B3 pass; B4 FAILS (44.5 % < 90 %); P2 fails on p70 (a detector false
+  alarm); W1 fails by the letter, as the base itself does (4BZ). By the rule, the Knife STAYS A
+  FLAG.** Its B2 is above the base: the Knife alone is +2.8 % z/h and +13 % items / h.
+- **Why B4 fails:** 55 % of the F5 swaps came on a cyan Battle Log line with NO packet steal in
+  (t - 3 s, t]. So the Damascus went on BEFORE any steal, and that monster's steal chance was
+  lost. 4CE (below) tests the repair: the item popup alone ends the bare phase (`--steal-cue
+  popup`, 9.27d, d48cd6fc).
+- **Kills fall, value per kill rises:** 143.9 kills / h against 163.2 (-11.8 %), 569 z a kill
+  against 488.
+
+| | **p69** | **p70** | bar |
+|---|---|---|---|
+| B1 stolen a kill | 43 steals / 60 kills | 42 / 60 | pooled 85 / 120 = **0.708 >= 0.703** (the base 0.603 + 0.10): PASS |
+| B2 gross z/h at Overcharge / items / h | 78,308 / -- | 85,478 / -- | pooled **81,893 >= 79,650**: PASS; items 152 / h (base 134) |
+| B3 swaps | F5 61 / 61 read back, F4 61 | F5 58 / 58, F4 58 | 0 swap-fail stops: PASS (no Alt+Q in this technique) |
+| B4 cue equips with a packet steal in (t - 3 s, t] | 23 / 53 | 26 / 57 | 49 / 110 = **44.5 % < 90 %: FAIL** |
+| E1 kills / deaths / lowest HP / Fly Wings | 60 (143.9 / h) / 0 / 69.1 % / 0 | 60 (143.9 / h) / 0 / 37.0 % / 1 | PASS |
+| P2 Fly Wing false alarms | 0 | **1** (120.4 s: dog boxes at 119.3 / 120.3 s, no live Garm Baby within 15 cells) | **FAIL on p70**: the detector, the same model in every arm |
+| W1 unsent walk clicks | 6 / 263 | 3 / 253 | pooled p70 + p69 + p68 + p67: 24 / 1,046 = **2.29 % > 2.0 %: FAIL by the letter** (the aura-off base fails it too; a study item) |
+| R1-A | 1 | 1 | pooled p70 + p69 + p68 + p67: 4 < 7: PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 96.2 % / 91.9 % / 0 / 2.01 s / 83.9 % / 6 | 85.0 % / 95.0 % / 0 / 1.98 s / 90.0 % / 3 | PASS |
+| U1-stuck / D1 p95 | 0 s / 23.5 ms | 7.0 s / 23.0 ms | PASS |
+
 ### 4CB / 4CC. Pre-registrations: `--value-target` and `--queue` (written BEFORE any of their runs, 2026-11-11 20:37 ICT from `date`)
 
 Both serve Batt's goal for the night (100,000 z/h, 4CA). Each pair runs on THE BASE CURRENT WHEN IT
@@ -5676,3 +5703,55 @@ recent two-run pair of that same base (named in the result).
   `@monster`'s placement).
 - **Decision:** U3 + U1 pass -> `--unreach-escape` JOINS THE BASE (4BU's "harmless" verdict plus
   this positive case); else studied.
+
+### 4CE. Pilots p73 + p74 pre-registration: the Knife with the POPUP cue (`--steal-cue popup`, 9.27d), and Amendment Y (`--hud-fast`, the queue order, the chain's p71 failure) (written BEFORE either run, 2026-11-11 22:38 ICT from `date`)
+
+- **Why:** the Knife pair (4CA) passed B1-B3 and Batt's B2. It failed B4: 55 % of its F5 swaps
+  came on a cyan line without a steal. `--steal-cue popup` (d48cd6fc) ends the bare phase on the
+  item popup ALONE: it is the frame-detected popup, rows 76-105, with the 2-px white border.
+  The cyan line no longer counts.
+- **The runs:** the base + `--bare-steal --bare-ready --steal-opener F4 --steal-cue popup`
+  (+ `--hud --hud-fast 0.2`, Amendment Y below). Labels `xmas02-p73` (recorded
+  `hunt-xmas02-fiT24`) and `xmas02-p74` (`-fiT25`), 25 min each, her NOT immune, after an MVP
+  kill, from the night chain.
+- **The flags are fixed HERE, whatever p71 + p72 (bare hands) show.** The queue starts p73 before
+  p72's scores exist. If bare hands joins the base by 4CA, this pair's flags are the same
+  (`--steal-opener F4` on top of `--bare-steal --bare-ready` IS the Knife).
+- **Bars: 4CA's B1-B4 and its no-harm bars, against 4CA's base p67 + p68** (0.603 stolen a kill,
+  79,650 z/h). The Knife without the popup cue (p69 + p70: 0.708, 81,893 z/h, B4 44.5 %) is
+  reported beside it, as the popup's own effect.
+  - The mechanism bar is **B4 >= 90 %**: an equip's cue is now the popup, so B4 asks whether a
+    popup really was a steal.
+  - Also reported: the equips by timeout (`time`). Whenever no popup comes, the bare phase now
+    ends only at its cap, `BARE_MAX_S` = 8.0 s with no steal cue. That cap is the popup cue's
+    cost: up to 8 s of bare-handed hits on a monster that was not stolen from. **The `time`
+    equips and kills / h are where that cost shows.**
+- **Decision:** all bars pass -> the Knife + popup JOINS THE BASE. If bare hands (p71 + p72) also
+  passed all of 4CA's bars, the higher B2 of the two pairs joins. Otherwise it stays a flag, and
+  the B2 of each version goes to Batt.
+
+**Amendment Y (written 2026-11-11 22:38 ICT from `date`, before p73):**
+1. **`--hud-fast 0.2` (dungeon@9.29b, b26befa9) on every run from p73.** Batt 2026-11-11 21:01:
+   "the boxes come late ... anything the GPU can do faster, use the GPU".
+   - It adds HUD-ONLY GPU detections between the watcher's own, one every 0.2 s; a box lives
+     600 ms on the HUD. DISPLAY ONLY: no decision reads them (as `--hud`, 4CA's amendment).
+   - Its one possible harm is GPU queueing in front of the decision calls. **D1 p95 <= 35 ms on
+     each run is its check.** A D1 failure takes it off again, for the next pilot in the queue.
+2. **The queue order.** The MVP rule (no pilot may run past its last kill + 60 min) means two
+   25-min pilots fill each window. U0 (4CD, 10 min) fits a window only beside one pilot, and it
+   would waste the other slot. So U0 moves to the END of the night, into the first window too
+   short for a 25-min pilot. **4CB (`--value-target`) becomes p75 + p76** (recorded fiT26 /
+   fiT27), on the base current when p75 starts; then 4CC (`--queue`), then the winners combined.
+3. **The chain's p71 failure, 22:29 (no pilot data lost; p71 re-ran).**
+   - The chain's first environment was a bare `PATH` without `~/.local/bin`. run_pilot_v3's `uv`
+     was not found: rc 127 in 0 s.
+   - That PATH also had no `TZ`, so the recorder named its folder in UTC.
+   - The detect server then held the worker for its whole time box. I ended it, and the refused
+     22:18 server before it, by PID (our own processes, uid bot; their command lines checked
+     first).
+   - Two setup-only fiT22 folders were renamed `-ABORTED` (12 MB and 18 MB) and are not
+     shipped as data. The refused session's demo folder was renamed `-REFUSED`, so a scorer's
+     glob cannot pick it.
+   - The fix: the chain inherits the launching shell's environment (PATH incl. `~/.local/bin`,
+     TZ=Asia/Bangkok). It also ends its own detect server 30 s after a non-zero run rc, instead of
+     waiting out the time box. The chain restarted 22:35.
