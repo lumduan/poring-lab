@@ -4008,3 +4008,43 @@ def test_hud_fast_feeds_the_hud_only_never_the_decisions() -> None:
                 npc_guard=False, miss_cue=False)  # fmt: skip
     rec = dh.fixes_of(dh.argparse.Namespace(**base, hud=True, hud_fast=0.2))
     assert rec["hud_fast"] == [0.2, dh.HUD_FAST_TTL_MS, "9.29b"]
+
+
+def test_heal_candy_picks_the_cane_then_candy_then_the_potion() -> None:
+    """dungeon@9.31 (--heal-candy, Batt 2026-11-11: candies instead of White Potions): a due potion
+    presses the Candy Cane while its count is not known 0 (an unread count is stocked), then
+    Candy, then the White Potion; the heal stock ends the run only when all three read 0."""
+    assert dh.heal_pick({530: 20, 529: 20, 504: 10}) == "cane"
+    assert dh.heal_pick({530: None, 529: 20, 504: 10}) == "cane"  # unread: the re-read settles it
+    assert dh.heal_pick({530: 0, 529: 3, 504: 10}) == "candy"
+    assert dh.heal_pick({530: 0, 529: 0, 504: 2}) == "potion"
+    assert dh.heal_pick({530: 0, 529: 0, 504: 0}) == "potion"
+    assert dh.heal_pick({}) == "cane"
+    assert dh.heal_out({530: 0, 529: 0, 504: 0}) is True
+    assert dh.heal_out({530: 0, 529: 0, 504: None}) is False  # an unread count is never 0
+    assert dh.heal_out({530: 0, 529: 1, 504: 0}) is False
+    assert dh.heal_out({530: 0, 529: 0}) is False  # the potion never read: not out
+
+
+def test_heal_candy_refusals_and_its_record() -> None:
+    """dungeon@9.31: the Rogue only (the hotbar stock read), F6 / F7 free of the run's other keys
+    (the Knife opener's F4 and the dagger's F5 stay theirs); recorded in the run's fixes."""
+    conf = dh.CHARS_CONF["rogue"]
+    assert dh.heal_candy_refused("rogue", conf, conf["keys"], None) is None
+    assert dh.heal_candy_refused("rogue", conf, conf["keys"], "F4") is None
+    assert "Rogue" in str(dh.heal_candy_refused("thief", dh.CHARS_CONF["thief"],
+                                                dh.CHARS_CONF["thief"]["keys"], None))  # fmt: skip
+    assert "taken" in str(dh.heal_candy_refused("rogue", conf, {**conf["keys"], "x": "F6"}, None))
+    assert "taken" in str(dh.heal_candy_refused("rogue", conf, conf["keys"], "F7"))
+    assert set(dh.HEAL_CANDY_KEYS.values()).isdisjoint(conf["keys"].values())
+    assert dh.HEAL_CANDY_ITEMS == {"cane": 530, "candy": 529}
+    assert [i for _, i in dh.HEAL_ORDER] == [530, 529, 504]
+    a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                              rest="spot", npc_guard=False, heal_candy=True)  # fmt: skip
+    assert dh.fixes_of(a)["heal_candy"] == [dh.HEAL_CANDY_KEYS, {"530": 20, "529": 20}, "9.31"]
+    off = dh.argparse.Namespace(**{**vars(a), "heal_candy": False})
+    assert "heal_candy" not in dh.fixes_of(off)
+    src = Path(dh.__file__).read_text()
+    assert "what = heal_pick(heal_left)" in src  # the substitution sits in press()
+    assert "if inv.get(504, 0) < p_to and not heal_candy:" in src  # no potion top-up
+    assert "excess = 0 if heal_candy else true_potions - p_to" in src  # nor a drink-down

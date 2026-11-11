@@ -5755,3 +5755,39 @@ recent two-run pair of that same base (named in the result).
    - The fix: the chain inherits the launching shell's environment (PATH incl. `~/.local/bin`,
      TZ=Asia/Bangkok). It also ends its own detect server 30 s after a non-zero run rc, instead of
      waiting out the time box. The chain restarted 22:35.
+
+### 4CF. `--heal-candy` (dungeon@9.31) pre-registration: Candy Cane and Candy instead of White Potions (written BEFORE its setup and runs, 2026-11-11 22:47 ICT from `date`)
+
+- **Batt (2026-11-11 evening, translated):** "another technique: we need not carry White Potions;
+  we can eat Candy and Candy Cane for HP instead. It also cuts the weight, because those two do
+  not sell to the NPC for as much as Piece of Cake and Well-baked Cookie."
+- **The code (OFF by default):**
+  - A due potion (P2: HP below 40 %) presses the Candy Cane (530, heals 105-145, weight 4) on F6
+    while its hotbar count is not known 0. Then Candy (529, 45-65, weight 3) on F7. Then the
+    White Potion (504) on F1, as the fallback.
+  - The setup tops the candies up to 20 + 20 (`@item`; ~3,600 HP, about 10 White Potions' worth,
+    weight 140 against 150). It no longer tops up, or drinks down, the potions.
+  - The run ends on the heal stock only when cane, candy AND potion all read 0. The Fly Wing's own
+    stock rule is unchanged.
+  - Refused for any character but the Rogue, or when F6 / F7 is another key of the run.
+  - The dashboard prices an eaten candy at the NPC sale it forgoes (530: 10 z, 529: 5 z;
+    `price_basis` "forgone_sale"; the page shows "own drops: the NPC sale given up"). Neither
+    candy has an NPC shop: a real player eats looted ones.
+- **The live setup, once (unscored, her IMMUNE, in a gap between pilots):** `@item 530 20`,
+  `@item 529 20`, and a drag of each from the Use tab onto hotbar row 1, slots 5 (F6) and 6 (F7).
+  Both slots read back with their counts. Screenshots before and after.
+- **The pair:** the base current when it runs + `--heal-candy`. Two 25-min runs, her NOT immune,
+  after an MVP kill, recorded. Its labels are given when its lines join the chain's queue (after
+  4CB / 4CC).
+- **Bars (pooled pair; the comparison base is the most recent two-run pair of the same base):**
+  - **H1, the mechanism:** >= 90 % of the heal presses are candies while a candy reads > 0, and
+    >= 95 % of the candy presses have a successful `use_item_result` of that item (ours) within
+    1.5 s (the packets: econ_dash's own count of item uses);
+  - **H2 (the decision bar), Batt's P&L:** net z/h at the dashboard's best case (gross at
+    Overcharge - cost at Discount) >= the base's. Gross is reported beside it; the change should
+    show in the cost;
+  - **no harm:** deaths 0; the lowest HP is not below the base pair's lowest by more than 10
+    points; Fly Wings no more than the base's + 2; E1 >= 80 / h; the base's other bars.
+- **Decision:** H1, H2 and no harm pass -> `--heal-candy` JOINS THE BASE. Else it stays a flag
+  and its numbers go to Batt.
+

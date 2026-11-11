@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  basisText,
   buyPrice,
   consumableLines,
   dcPrice,
@@ -254,4 +255,18 @@ test("a run's flow and wall times parse as text; an older export has none (Batt 
   assert.equal(flowText(f), "xmas02-p63 (dungeon@8.7, P2 patrol)");
   assert.equal(flowOf(null), null);
   assert.equal(flowText(null), "-");
+});
+
+test("candies eaten from our own drops say their price basis (dungeon@9.31)", () => {
+  assert.equal(basisText({ price_basis: "forgone_sale" }), "own drops: the NPC sale given up");
+  assert.equal(basisText({ price_basis: "npc_buy" }), null);
+  assert.equal(basisText({ price_basis: null }), null);
+  assert.equal(basisText({}), null); // an older export has no basis
+  const raw = JSON.parse(JSON.stringify(DOC));
+  raw.runs[0].consumables.push({ item_id: 530, name: "Candy Cane", type: "Healing", kind: "potion", used: 3, npc_buy: 10, npc_buy_dc: 10, price_basis: "forgone_sale" });
+  const parsed = parseExport(raw);
+  const cane = parsed.runs[0].consumables.find((c) => c.item_id === 530);
+  assert.ok(cane);
+  assert.equal(cane.price_basis, "forgone_sale");
+  assert.equal(buyPrice(cane, NO_EDITS), 10);
 });

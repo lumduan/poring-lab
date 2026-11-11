@@ -80,6 +80,9 @@ export interface ConsumableRow {
   used: number;
   npc_buy: number | null; // the cheapest loaded shop; null: no NPC sells it
   npc_buy_dc: number | null; // Discount Lv 10 at the cheapest shop that gives it
+  // "npc_buy" (bought from a shop) or "forgone_sale" (dungeon@9.31: Candy / Candy Cane, eaten from
+  // our own drops: the price is the NPC sale they give up); null: no price; absent in older exports
+  price_basis?: string | null;
 }
 
 export interface RunFlow {
@@ -192,7 +195,13 @@ function consumable(x: unknown, i: number): ConsumableRow {
     used: num(x.used, `${w} used`),
     npc_buy: numOrNull(x.npc_buy, `${w} npc_buy`),
     npc_buy_dc: numOrNull(x.npc_buy_dc, `${w} npc_buy_dc`),
+    price_basis: strOrNull(x.price_basis),
   };
+}
+
+/** The consumable's price basis in words (plain text; null: the shop price, said by the column). */
+export function basisText(c: Pick<ConsumableRow, "price_basis">): string | null {
+  return c.price_basis === "forgone_sale" ? "own drops: the NPC sale given up" : null;
 }
 
 /** A run's flow (Batt 2026-11-11: "which flow the bot ran, when it started, when it ended"); null

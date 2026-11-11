@@ -446,6 +446,35 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
               "potions_win": True},
 }  # fmt: skip
 STOCK_ITEMS = {"potion": 504, "fly": 601}  # the hotbar key -> its item (White Potion, Fly Wing)
+# dungeon@9.31 (--heal-candy; Batt 2026-11-11 evening: "we need not carry White Potions: we can eat
+# Candy and Candy Cane for HP instead -- it also cuts the weight, because those two do not sell to
+# the NPC for as much as Piece of Cake and Well-baked Cookie"). A due potion becomes the Candy Cane
+# (530, heals 105-145, weight 4) while its hotbar count is not known 0, then Candy (529, 45-65,
+# weight 3), then the White Potion (504, 325-405, weight 15) as the fallback; the White Potions are
+# no longer topped up (nor drunk down at the stand). Neither candy has an NPC shop: in a real game
+# they come from drops (the dashboard prices them at the NPC sale they forgo); in the lab the setup
+# tops them up with @item.
+HEAL_CANDY_VERSION = "9.31"
+HEAL_CANDY_KEYS = {"cane": "F6", "candy": "F7"}  # hotbar row 1, slots 5 and 6 (dragged once)
+HEAL_CANDY_ITEMS = {"cane": 530, "candy": 529}
+HEAL_CANDY_TO = {530: 20, 529: 20}  # 20 x 125 + 20 x 55 HP ~ 10 White Potions; weight 140 vs 150
+HEAL_ORDER = (("cane", 530), ("candy", 529), ("potion", 504))
+
+
+def heal_pick(left: Mapping[int, int | None]) -> str:
+    """PURE (dungeon@9.31): the key for a due potion -- the first of HEAL_ORDER whose hotbar count
+    is not known to be 0 (an unread count counts as stocked: the re-read after the press settles
+    it); all known 0 -> "potion" (its own stock guard then ends the run)."""
+    for what, item in HEAL_ORDER:
+        if left.get(item) != 0:
+            return what
+    return "potion"
+
+
+def heal_out(left: Mapping[int, int | None]) -> bool:
+    """PURE (dungeon@9.31): under --heal-candy a heal item at 0 ends the run only when EVERY heal
+    item (cane, candy, potion) reads 0; an unread count is never 0."""
+    return all(left.get(item) == 0 for _, item in HEAL_ORDER)
 
 
 def stock_plan(counts: dict[int, int | None], targets: dict[int, int]) -> dict[int, int]:
@@ -2086,6 +2115,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
+    if getattr(a, "heal_candy", False):  # dungeon@9.31 (Batt 2026-11-11: candies, not potions)
+        out["heal_candy"] = [HEAL_CANDY_KEYS, {str(k): v for k, v in HEAL_CANDY_TO.items()},
+                             HEAL_CANDY_VERSION]  # fmt: skip
     if getattr(a, "queue", False):  # dungeon@9.30 (rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x)
         out["queue"] = [QUEUE_MAX, QUEUE_STALE_S, QUEUE_MATCH_PX, QUEUE_VERSION]
     if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
@@ -3192,6 +3224,21 @@ def bare_steal_refused(char: str, steal: bool, keys: Mapping[str, str]) -> str |
     return None
 
 
+def heal_candy_refused(char: str, conf: Mapping[str, Any], keys: Mapping[str, str],
+                       opener: str | None) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.31): why --heal-candy cannot run (None: it can). It needs the hotbar stock
+    read (the Rogue's), and its F6 / F7 must not be another key of the run (the Knife opener's
+    F4 / the dagger's F5 stay theirs)."""
+    if char != "rogue" or not conf.get("hotbar_stock"):
+        return f"--heal-candy reads the hotbar stock (the Rogue's), not the {char}'s"
+    taken = {k: v for k, v in keys.items() if v in HEAL_CANDY_KEYS.values()}
+    if opener in HEAL_CANDY_KEYS.values():
+        taken["opener"] = opener
+    if taken:
+        return f"--heal-candy's keys {sorted(HEAL_CANDY_KEYS.values())} are taken: {taken}"
+    return None
+
+
 def bare_ref_cut(gray: Any) -> tuple[Any, dict[str, Any], str | None]:
     """PURE (the run's start): (the ARMED reference crop of the F5 slot, its record, a refusal).
     The slot must read EMPTY by hotbar_count's own rule (no icon, no digit): the dagger is worn.
@@ -3989,6 +4036,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_so = steal_opener_refused(opener_key, bare_on, keys_)
     if why_so:
         raise SystemExit(f"dungeon@9.27c refused: {why_so}")
+    heal_candy = bool(getattr(a, "heal_candy", False))  # dungeon@9.31 (Batt: candies, no potions)
+    if heal_candy:
+        why_hc = heal_candy_refused(a.char, conf, keys_, opener_key)
+        if why_hc:
+            raise SystemExit(f"dungeon@9.31 refused: {why_hc}")
+        keys_ = {**keys_, **HEAL_CANDY_KEYS}
+    stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
+    heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
@@ -4207,7 +4262,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]  # the hold, then heal
         p_to = potions_target(strat, conf)
         w_to = int(strat.get("wings_to") or conf["wings_to"])
-        if inv.get(504, 0) < p_to:
+        if inv.get(504, 0) < p_to and not heal_candy:  # 9.31: no White Potion top-up with candies
             setup.append(f"@item 504 {p_to - inv.get(504, 0)}")
         if inv.get(601, 0) < w_to:
             setup.append(f"@item 601 {w_to - inv.get(601, 0)}")
@@ -4266,8 +4321,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 tpl = hb.load()
             except OSError as exc:
                 raise r.Stop(f"dungeon@8.3: no hotbar digit templates ({exc})") from exc
-            slots = {STOCK_ITEMS[k]: hotbar_slot(keys_[k]) for k in STOCK_ITEMS}
+            slots = {stock_items[k]: hotbar_slot(keys_[k]) for k in stock_items}  # 9.31: + candies
             targets = {504: p_to, 601: w_to}
+            if heal_candy:  # dungeon@9.31: the potions are read (the fallback), never topped up
+                targets = {601: w_to, **HEAL_CANDY_TO}
 
             def read_stock() -> dict[int, int | None]:
                 time.sleep(0.8)
@@ -4284,17 +4341,20 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     setup_line(f"@item {item} {n}")
             bench.close_chat(agent_raw, screen)
             after = read_stock()
-            short = {i: c for i, c in after.items() if c is None or c < targets[i]}
+            short = {i: c for i, c in after.items()
+                     if i in targets and (c is None or c < targets[i])}  # fmt: skip
             stock = {"before": before, "added": add, "after": after}
             if short:
                 raise r.Stop(f"dungeon@8.3: the stock is short after the top-up {stock}")
             true_potions = int(after[504] or 0)
             setup = []  # the stand lines are typed; the map lines follow
             stock_watch = (tpl, slots)
+            if heal_candy:  # dungeon@9.31: the heal items' counts, as read after the top-up
+                heal_left.update({i: after.get(i) for _, i in HEAL_ORDER})
         # Amendment I: the potions over the strategy's stock are DRUNK at the stand (its hotkey,
         # paced; outside the measured window): carried weight is loot room before 50 %
         drunk = 0
-        excess = true_potions - p_to
+        excess = 0 if heal_candy else true_potions - p_to  # 9.31: the fallback potions stay
         if excess > 0:
             ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
             r.activate_client(agent_raw, screen)
@@ -4592,12 +4652,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 unread_end("fly", why=why)  # 9.22: a teleport ends an escape (no-op without one)
             if what == "fly" and bare is not None:  # dungeon@9.27: never fly away bare -- the
                 bare.escape()  # dagger's key first (no read-back here: the wing is not delayed)
+            if what == "potion" and heal_candy:  # dungeon@9.31: a candy first while one is left
+                what = heal_pick(heal_left)
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
             if stock_watch is not None and what in STOCK_ITEMS:  # dungeon@8.4
                 stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S
                 stock_tries[STOCK_ITEMS[what]] = 0
+            elif stock_watch is not None and what in stock_items:  # dungeon@9.31: the candies
+                stock_due[stock_items[what]] = time.monotonic() + STOCK_READ_S
+                stock_tries[stock_items[what]] = 0
 
         last_click_t = [-1e9]  # dungeon@9.27b (--bare-ready): when click_at last clicked
 
@@ -6201,7 +6266,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         del stock_due[item_]
                         ev({"kind": "stock", "item": item_, "count": n_,
                             "tries": stock_tries[item_]})  # fmt: skip
-                        if out_item is None and stock_out({item_: n_}) is not None:
+                        if heal_candy and item_ in heal_left:  # dungeon@9.31: the heal items end
+                            heal_left[item_] = n_  # the run only when every one reads 0
+                            if out_item is None and heal_out(heal_left):
+                                out_item = item_
+                        elif out_item is None and stock_out({item_: n_}) is not None:
                             out_item = item_
                     if out_item is not None:  # no escape (or no potion) left: end, warp home
                         reason = f"stock_out: item {out_item} reads 0 on the hotbar"
@@ -7655,6 +7724,16 @@ def main() -> int:
         "detection within 60 px of its last foot, passing the box path's skips, hovered for its "
         "SWORD and struck through strike(); an empty queue, a failed re-find or no SWORD -> "
         "today's search path. Never during a loot step, a rest, an escape or a bare-steal swap",
+    )
+    t.add_argument(
+        "--heal-candy",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.31 (Batt 2026-11-11: no White Potions, eat Candy and Candy Cane instead; "
+        "OFF by default; the Rogue): a due potion presses the Candy Cane (F6) while its hotbar "
+        "count is not 0, then Candy (F7), then the White Potion (F1) as the fallback; the setup "
+        "tops the candies up to 20 + 20 and no longer tops up (or drinks down) the potions; the "
+        "run ends on the heal stock only when all three read 0",
     )
     t.add_argument(
         "--bare-steal",

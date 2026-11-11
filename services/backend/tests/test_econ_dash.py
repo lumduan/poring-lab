@@ -390,3 +390,19 @@ def test_run_clock_gives_wall_start_end_and_the_flow() -> None:
                            "label": "xmas02-p63", "flags": ["bare_steal", "walk_pick"]}  # fmt: skip
     none = ed.run_clock("not-a-session", [], w, {})
     assert none["started"] is None and none["ended"] is None
+
+
+def test_candies_eaten_cost_the_npc_sale_they_forgo() -> None:
+    """dungeon@9.31 (--heal-candy): Candy (529) and Candy Cane (530) have no NPC shop; a run eats
+    looted ones, so each costs its NPC sale (no Discount on a sale). Other no-shop items stay
+    unpriced."""
+    table = {**TABLE, "530": _row(10, "Healing", 4.0), "529": _row(5, "Healing", 3.0)}
+    rows, no_price = ed.consumable_rows([530, 530, 529, NO_SHOP], table, NAMES)
+    got = {r["item_id"]: (r["used"], r["npc_buy"], r["npc_buy_dc"], r["price_basis"]) for r in rows}
+    assert got[530] == (2, 10, 10, "forgone_sale")
+    assert got[529] == (1, 5, 5, "forgone_sale")
+    assert got[NO_SHOP] == (1, None, None, None)
+    assert no_price == [NO_SHOP]
+    assert sorted(ed.FORGONE_SALE_IDS) == [529, 530]
+    potion = ed.consumable_rows([POTION_X], TABLE, NAMES)[0][0]
+    assert potion["price_basis"] == "npc_buy"

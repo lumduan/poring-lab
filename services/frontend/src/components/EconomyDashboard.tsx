@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
+  basisText,
   consumableLines,
   type DashExport,
   DASH,
@@ -367,7 +368,7 @@ export function RunView({
             {cons.map((l) => (
               <tr key={l.c.item_id} className="border-b border-neutral-900">
                 <td className={TD}>
-                  <Named name={l.c.name} id={l.c.item_id} kind="item" sub={[l.c.type, l.c.kind].filter(Boolean).join(" · ")} />
+                  <Named name={l.c.name} id={l.c.item_id} kind="item" sub={[l.c.type, l.c.kind, basisText(l.c)].filter(Boolean).join(" · ")} />
                 </td>
                 <td className={TDR}>{fmtInt(l.c.used)}</td>
                 <td className={TDR}>{fmtOne(l.perH)}</td>

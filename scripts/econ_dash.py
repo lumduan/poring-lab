@@ -157,11 +157,18 @@ def species_rows(kill_mix: Mapping[str, int], mobs: Mapping[str, str]) -> list[d
     return sorted(rows, key=lambda r: (-r["kills"], r["mob_id"]))
 
 
+# dungeon@9.31 (--heal-candy; Batt 2026-11-11: heal with Candy and Candy Cane, not White Potions):
+# no NPC sells either, so a run eats ones it LOOTED -- their cost is the NPC sale it gives up (the
+# table's `sell`; no Discount applies to a sale). Every other item no NPC sells keeps no price.
+FORGONE_SALE_IDS = frozenset({529, 530})  # Candy, Candy Cane
+
+
 def consumable_rows(
     used: Iterable[int], table: Mapping[str, Mapping[str, Any]], names: Mapping[str, str]
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """PURE: one row per item id we used (econ_row.uses' ids), with the NPC buy prices; returns
-    (rows, ids no NPC sells -- their cost is left out, as econ_row.measure does)."""
+    (rows, ids no NPC sells -- their cost is left out, as econ_row.measure does). The candies of
+    FORGONE_SALE_IDS are priced at the NPC sale they forgo (`price_basis` says which)."""
     import econ_row as er
 
     n = Counter(int(i) for i in used)
@@ -169,6 +176,9 @@ def consumable_rows(
     for iid, k in n.items():
         t = table.get(str(iid))
         buy = None if t is None or t.get("npc_buy") is None else int(t["npc_buy"])
+        basis = "npc_buy"
+        if buy is None and iid in FORGONE_SALE_IDS and t is not None and t.get("sell") is not None:
+            buy, basis = int(t["sell"]), "forgone_sale"
         if buy is None:
             no_price.append(iid)
         dc = None if buy is None else int((t or {}).get("npc_buy_dc10") or buy)
@@ -181,6 +191,7 @@ def consumable_rows(
                 "used": k,
                 "npc_buy": buy,
                 "npc_buy_dc": dc,
+                "price_basis": basis if buy is not None else None,
             }
         )
     rows.sort(key=lambda r: (-r["used"], r["item_id"]))
