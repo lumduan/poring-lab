@@ -5849,6 +5849,13 @@ recent two-run pair of that same base (named in the result).
     - A strike that ended `bound` (no arrow, no damage within its bound) ends in "no hits" 34 times
       in 41 (83 %), ~3.7 s after the strike.
     - Releasing such a lock at once (and re-finding the target) would save ~30 s a run (~2 %).
+  - **W1 with the aura off (`w1.py`, p67 + p68 + p73 + p74: 30 unsent walk clicks):**
+    - Every one was ignored by the client outright: no pickup request, no attack request. So the
+      aura-off floor items do NOT turn walk clicks into pickups.
+    - All are search walks, 22 of 30 the first click after a new walk `goal`. The most common
+      offset is (+1, +7), the north-column dodge itself (5).
+    - The cost is the next walk click, 1.2 s later: ~10 s a run. W1's 2 % bar fails by the letter
+      on every aura-off pair; whether it should still decide is Batt's call.
   - **Ranking for Batt (the time lost a run):** loot sweep ~250 s (a direction-first sweep saves
     ~80) > dead strikes ~120 s (a `bound` release saves ~30) > the queue study's 2-3 % (4CC). Each
     is a pre-registered pair of its own.
