@@ -6032,3 +6032,21 @@ recent two-run pair of that same base (named in the result).
 | L1 / L3 / L4 / K1 / K3 / Q1 | 96.0 % / 95.7 % / 0 / 1.97 s / 97.1 % / 4 | 100 % / 91.5 % / 0 / 2.00 s / 96.6 % / 6 | PASS |
 | U1-stuck / D1 p95 | 11.4 s / 22.3 ms | 8.8 s / 22.2 ms | PASS |
 
+### 4CO. 4CF's result: `--heal-candy` (p79 + p80; written 2026-11-12 04:23 ICT from `date`)
+
+- **The runs:** p79 03:14:5x-03:40:xx (fiT30) and p80 03:53:1x-04:19:xx (fiT31). Both rc 0, her NOT
+  immune, each after an MVP kill (02:45:12, 03:52:11). On the aura-off base. Export
+  `xmas02-p79-p80-candy`.
+  - The setup's top-up worked both times: F6 / F7 read the looted candies, `@item` brought them
+    to 20 + 20, and the White Potions stayed at 10.
+  - The shortcuts survive a clear-bag (hidden at 0; tested 00:05).
+- **VERDICT: H1 UNEXERCISED -> `--heal-candy` stays OFF ("harmless, unexercised").** There were 0
+  heal presses in either run: the lowest HP was 50.2 % and 77.7 %, never under P2's 40 % potion
+  line. No candy was eaten, the cost was 0, and the runs' money (68,181 z/h pooled; common items
+  only) says nothing about candies.
+- **The useful fact for Batt's P&L:** at Base 99 (5,070 HP) on xmas_dun02 she almost never heals.
+  Over the night's 13 scored runs the consumables were 2 White Potions + 2 Fly Wings in all: cost
+  0-2,950 z/h a pair. Healing with candies can save at most that here. It matters on a map, or a
+  character, that takes damage.
+- No harm: every bar passes but W1, by the letter: pooled with p67 + p68, 26 / 1,019 = 2.55 %.
+
