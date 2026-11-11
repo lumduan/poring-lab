@@ -5604,3 +5604,7 @@ Batt's answers (quoted, then in English):
     + p68 + p67; L1 >= 50 %, L3 >= 80 %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %; D1 p95 <= 35 ms; P2 0.
 - **Decision:** a technique whose bars all pass JOINS THE BASE; if both pass, the higher B2 joins.
   B2 below the base -> it stays a flag and its costs go to Batt.
+- **4CA amendment (written 20:0x ICT from `date`, BEFORE p69):** every run from p69 also carries
+  `--hud` (dungeon@9.29, 282cdb03): the runner's own boxes, by species, to the console's operator
+  HUD at <= 2 messages / s (Batt 2026-11-11: "with HUD on I see lines, not boxes"). DISPLAY ONLY
+  (no input, no decision reads it); its one difference from the p67 / p68 base is that traffic.
