@@ -256,3 +256,13 @@ def test_the_swap_geometry_is_the_live_measurement(bs: ModuleType) -> None:
     assert (bs.OPEN_S, bs.LATE_S, bs.OFF_S, bs.CLOSE_S, bs.ON_S) == (1.2, 0.8, 1.0, 1.0, 0.8)
     assert bs.POLL_S == 0.1
     assert bs.FAIL_STOP == 3
+
+
+def test_the_popup_only_cue_ignores_the_battle_log(bs: ModuleType) -> None:
+    """dungeon@9.27d (--steal-cue popup, rogue-xmas02.md 4CE): a new cyan line is no cue (p69:
+    57 % of cyan equips had no steal: old lines re-read); a new popup still is."""
+    st = bs.BareSteal(cue="popup")
+    st.unequipped(0.0, n_lines=0, sig=None, box=None)
+    assert st.tick(0.5, [{"colour": "cyan"}], scene(), 0.9) == (None, None)
+    assert st.tick(1.0, [{"colour": "cyan"}], draw_popup(scene(), bs), 0.9) == ("equip", "popup")
+    assert bs.BareSteal().cue == "both" and bs.STEAL_CUES == ("both", "popup")

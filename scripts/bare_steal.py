@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hotbar_count as hb  # noqa: E402 -- the hotbar's calibrated slot boxes (pure, numpy only)
 
 BARE_STEAL_VERSION = "9.27"
+STEAL_CUES = ("both", "popup")  # dungeon@9.27d (--steal-cue)
 
 # The item-obtained popup (game-region px; fiT14 frames 61-64, 103-106, 135-138, 2026-11-11)
 POPUP_TOP, POPUP_BOTTOM = 76, 105  # its white rows, inclusive
@@ -262,6 +263,7 @@ class BareSteal:
     popup_sig0: np.ndarray | None = None
     popup_box0: tuple[int, int] | None = None
     stolen: bool = False  # this fight's steal cue came
+    cue: str = "both"  # dungeon@9.27d (--steal-cue): "both" (as merged) or "popup" (no cyan line)
     log: list[dict[str, Any]] = field(default_factory=list)
 
     def engage(self) -> str | None:
@@ -291,10 +293,13 @@ class BareSteal:
     def tick(self, t: float, lines: Sequence[Mapping[str, Any]], cur_rgb: np.ndarray | None,
              hp_share: float | None) -> tuple[str | None, str | None]:  # fmt: skip
         """("equip", why) when the dagger must go back on, else (None, None). why: "cyan" / "popup"
-        (a steal cue), "time" (BARE_MAX_S), "hp" (BARE_HP_MIN)."""
+        (a steal cue; "popup" only when ``cue`` is "popup"), "time" (BARE_MAX_S), "hp"
+        (BARE_HP_MIN)."""
         if self.armed or self.t_bare is None:
             return None, None
-        if cyan_new(lines, self.n_lines0):
+        # 9.27d: "popup" ignores the Battle Log -- 4BY / p69: the live reader re-emits OLD cyan
+        # lines (a "put on", a loot gain line), 57 % of p69's cyan equips came with no steal
+        if self.cue != "popup" and cyan_new(lines, self.n_lines0):
             self.stolen = True
             return "equip", "cyan"
         if cur_rgb is not None:

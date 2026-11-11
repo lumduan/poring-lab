@@ -2078,6 +2078,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
     if getattr(a, "lead_press", False):  # dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP)
         out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
+    if getattr(a, "bare_steal", False) and getattr(a, "steal_cue", "both") != "both":
+        out["steal_cue"] = [a.steal_cue, "9.27d"]  # dungeon@9.27d
     if getattr(a, "hud", False):  # dungeon@9.29: display only (the operator HUD)
         out["hud"] = ["9.29"]
     if getattr(a, "hud_fast", None):  # dungeon@9.29b: the HUD-only detection rate
@@ -3589,10 +3591,10 @@ class BareCtl:
     def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
                  ev: Callable[[dict[str, Any]], None],
                  stop: type[Exception] = RuntimeError, *, ready: bool = False,
-                 opener: OpenerRead | None = None) -> None:  # fmt: skip
+                 opener: OpenerRead | None = None, cue: str = "both") -> None:  # fmt: skip
         self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
         self.opener = opener
-        self.st = bs.BareSteal()
+        self.st = bs.BareSteal(cue=cue)  # 9.27d: --steal-cue
         self.tgt: dict[str, Any] | None = None
         self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
         self.fails = 0  # failed swaps in a row (FAIL_STOP)
@@ -4807,7 +4809,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                        opener=bare_opener if opener_key is not None else None),
                 bare_ref, counts, ev, r.Stop, ready=bare_ready_on,
                 opener=None if opener_key is None else OpenerRead(opener_key, bare_ref,
-                                                                  opener_ref))  # fmt: skip
+                                                                  opener_ref),
+                cue=getattr(a, "steal_cue", "both"))  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -7610,6 +7613,14 @@ def main() -> int:
         default=False,
         help="dungeon@9.29 (Batt 2026-11-11): send the boxes the runner holds (by species) to the "
         "console's operator HUD, at its own rate limit; DISPLAY ONLY (no input, no decision)",
+    )
+    t.add_argument(
+        "--steal-cue",
+        choices=["both", "popup"],
+        default="both",
+        help="dungeon@9.27d (with --bare-steal; rogue-xmas02.md 4CE): the steal cue -- both (the "
+        "popup or a new cyan Battle Log line, as merged) or popup (the item popup only: the live "
+        "reader re-emits old cyan lines; p69: 57 %% of cyan equips had no steal)",
     )
     t.add_argument(
         "--hud-fast",
