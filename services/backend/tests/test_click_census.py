@@ -154,6 +154,12 @@ ALLOWED = {
                                    "double-click, through the same reads, at IDLE time (no lock, "
                                    "no fight, no world click for 1.2 s) instead of at a strike; "
                                    "with --steal-opener (9.27c) no click at all (a hotbar key). "
+                                   "With --queue (OFF by default, dungeon@9.30, rogue-xmas02.md "
+                                   "4CC; the count is unchanged: no click of its own, strike()'s "
+                                   "click_at) the next target after a fight's loot step is a box "
+                                   "queued during that fight, re-found on a fresh detection, "
+                                   "passing the box path's skips, and struck only where "
+                                   "cursor_sword read SWORD at its hover point. "
                                    "And the death dialog's known step (its second button), as "
                                    "survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
