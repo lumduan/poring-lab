@@ -651,3 +651,35 @@ def test_the_servers_own_forward_time_is_kept_per_gpu_call(worker: Path, tmp_pat
             assert det.last_path == "cpu" and det.last_server_ms is None
     finally:
         srv.stop()
+
+
+def test_a_hud_twin_is_refused_by_a_server_without_the_gate(worker: Path, tmp_path: Path,
+                                                             private: Path) -> None:  # fmt: skip
+    """dungeon@9.29c: a server before the gate ignores the hello's "prio" (it would serve the HUD
+    calls as decisions, one connection at a time): its reply lacks the echo, so the twin is
+    refused for the run and gives no boxes -- never the CPU's."""
+    sock = private / "detect.sock"
+    srv = FakeServer(sock, ONE_MONSTER)  # the old protocol: no "prio" in its reply
+    try:
+        with gpu_det(model_answering(tmp_path, [1]), sock) as det:
+            twin = det.hud_twin()
+            assert twin.detect(FRAME) == [] and twin.last_path == "none"
+            assert twin.disabled is not None and "prio" in twin.disabled
+            assert twin.counts == {"none": 1} and twin.reasons == {"refused": 1}
+            assert det.detect(FRAME) and det.last_path == "gpu"  # the decisions' path: unchanged
+            twin.close()
+            assert det.detect(FRAME, prefer="cpu") and det.last_path == "cpu"  # CPU still open
+    finally:
+        srv.stop()
+
+
+def test_a_detectors_priority_is_none_or_hud(worker: Path, tmp_path: Path, private: Path) -> None:
+    cpu = ud.UnitDetector(model=model_answering(tmp_path, [1]), python=Path(sys.executable))
+    try:
+        with pytest.raises(ud.DetectorUnavailable, match="prio"):
+            ud.GpuDetector(cpu, "v1", socket_path=private / "detect.sock", prio="urgent")
+        det = ud.GpuDetector(cpu, None, socket_path=private / "detect.sock")
+        twin = det.hud_twin()  # a model without GPU weights: the twin is disabled as well
+        assert twin.detect(FRAME) == [] and twin.last_reason == "disabled"
+    finally:
+        cpu.close()

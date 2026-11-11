@@ -540,3 +540,365 @@ def test_the_start_and_stats_lines_name_the_mode(tmp_path: Path) -> None:
     stats = [r for r in rest if r["detect_server"] == "stats"]
     assert stats and all(r["ov_preproc"] == "gpu" for r in stats)
     assert all(r["precision"] == "f32" and "gpu_clock" in r for r in stats)
+
+
+# --- the gate (dungeon@9.29c; Batt 2026-11-11: a fast HUD that does not slow the decisions) -----
+
+
+def gate_server(max_hz: float = 1e6, hud_wait_s: float = 5.0) -> ds.Server:
+    return ds.Server(Path("/nonexistent"), {}, max_hz=max_hz, log=lambda _m: None,
+                     hud_wait_s=hud_wait_s)  # fmt: skip
+
+
+def until(cond, timeout: float = 3.0) -> bool:  # type: ignore[no-untyped-def]
+    t0 = time.monotonic()
+    while not cond():
+        if time.monotonic() - t0 > timeout:
+            return False
+        time.sleep(0.005)
+    return True
+
+
+def test_a_decision_goes_before_hud_calls_that_have_not_started() -> None:
+    """One HUD forward runs, two more HUD calls wait, then a decision call arrives: the decision
+    gets the card next, the waiting HUD calls after it."""
+    srv = gate_server()
+    order: list[str] = []
+    go = {k: threading.Event() for k in ("h2", "h3", "d")}
+
+    def hud(name: str) -> None:
+        assert srv.enter_hud(srv.clock()) is None
+        order.append(name)
+        go[name].wait(5)
+        srv.leave(ds.HUD)
+
+    def decision() -> None:
+        srv.enter_decision()
+        order.append("d")
+        go["d"].wait(5)
+        srv.leave(ds.DECISION)
+
+    assert srv.enter_hud(srv.clock()) is None  # H1 has the card
+    ths = [threading.Thread(target=hud, args=(n,), daemon=True) for n in ("h2", "h3")]
+    for th in ths:
+        th.start()
+    time.sleep(0.1)  # both HUD calls are at the gate before the decision
+    td = threading.Thread(target=decision, daemon=True)
+    td.start()
+    assert until(lambda: srv.waiting == 1)
+    assert order == []  # nobody runs beside H1
+    srv.leave(ds.HUD)  # H1's forward ends
+    assert until(lambda: order == ["d"])
+    time.sleep(0.05)
+    assert order == ["d"]  # the HUD calls still wait: the card is the decision's
+    go["d"].set()
+    assert until(lambda: len(order) == 2)
+    first = order[1]
+    go[first].set()
+    assert until(lambda: len(order) == 3) and sorted(order[1:]) == ["h2", "h3"]
+    go[order[2]].set()
+    for th in (*ths, td):
+        th.join(timeout=5)
+    assert not srv.busy and srv.waiting == 0
+
+
+def test_a_hud_call_that_cannot_start_in_time_is_skipped_with_its_reason() -> None:
+    srv = gate_server(max_hz=10.0, hud_wait_s=0.05)  # the --max-hz gap: 100 ms
+    srv.enter_decision()  # a decision forward runs
+    t0 = time.monotonic()
+    assert srv.enter_hud(srv.clock()) == "busy"
+    assert 0.04 <= time.monotonic() - t0 < 1.0  # it waited its bound, then gave up
+    srv.leave(ds.DECISION)
+    assert srv.enter_hud(srv.clock()) == "gap"  # 50 ms < the 100-ms gap after that forward
+    srv.waiting = 1  # a decision call at the gate (between its wake-up and taking the card)
+    srv.last_fwd = -1e18
+    assert srv.enter_hud(srv.clock()) == "decision"
+    srv.waiting = 0
+    assert not srv.busy  # a skipped HUD call never holds the card
+    srv2 = gate_server(max_hz=10.0, hud_wait_s=0.3)
+    srv2.enter_decision()
+    srv2.leave(ds.DECISION)
+    t1 = time.monotonic()
+    assert srv2.enter_hud(srv2.clock()) is None  # inside its bound: it waits the gap out
+    assert 0.08 <= time.monotonic() - t1 < 0.3 and srv2.busy
+
+
+def frame_client(sock: Path, hello: dict[str, object]) -> tuple[socket.socket, object]:
+    c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    c.settimeout(5)
+    c.connect(str(sock))
+    c.sendall(json.dumps(hello).encode() + b"\n")
+    f = c.makefile("rb")
+    assert json.loads(f.readline())["ok"] is True
+    return c, f
+
+
+def send_frame(c: socket.socket, f, value: int, body: int) -> dict[str, object]:  # type: ignore[no-untyped-def]
+    c.sendall(struct.pack("<HHI", 736, 1280, 0) + bytes([value]) * (736 * 1280 * 3))
+    head = json.loads(f.readline())
+    if "skipped" not in head:
+        assert len(f.read(body)) == body
+    return head  # type: ignore[no-any-return]
+
+
+def run_server(tmp_path: Path, net: object, **kw: object):  # type: ignore[no-untyped-def]
+    d = tmp_path / "gd"
+    d.mkdir(mode=0o700)
+    d.chmod(0o700)
+    srv = ds.Server(d / "detect.sock", {"v1": net}, log=lambda _m: None, **kw)  # type: ignore[arg-type]
+    th = threading.Thread(target=srv.serve, daemon=True)
+    th.start()
+    assert until(lambda: (d / "detect.sock").exists())
+    return srv, th, d / "detect.sock"
+
+
+class SlowNet(FakeNet):
+    """A forward of ``fwd_s``: the canvas's first byte says whose frame it was."""
+
+    def __init__(self, sha256: str, fwd_s: float) -> None:
+        super().__init__(sha256)
+        self.fwd_s = fwd_s
+        self.runs: list[tuple[int, float, float]] = []
+        self.inside = 0
+        self.most_inside = 0
+
+    def forward(self, canvas: np.ndarray) -> np.ndarray:
+        self.inside += 1
+        self.most_inside = max(self.most_inside, self.inside)
+        t0 = time.monotonic()
+        time.sleep(self.fwd_s)
+        self.inside -= 1
+        self.runs.append((int(canvas[0, 0, 0]), t0, time.monotonic()))
+        return np.zeros(self.shape, "<f4")
+
+
+def hud_storm(sock: Path, n: int, halt: threading.Event, heads: list[dict[str, object]],
+              body: int) -> list[threading.Thread]:  # fmt: skip
+    def one() -> None:
+        c, f = frame_client(sock, {"v": 1, "model": "v1", "prio": "hud"})
+        with c:
+            while not halt.is_set():
+                heads.append(send_frame(c, f, 200, body))
+
+    ths = [threading.Thread(target=one, daemon=True) for _ in range(n)]
+    for th in ths:
+        th.start()
+    return ths
+
+
+# the decision client's pauses before each call: every phase of the HUD forward in flight
+PAUSES = (0.0, 0.013, 0.031, 0.047, 0.059, 0.071, 0.083, 0.097)
+
+
+def decision_waits(sock: Path, body: int) -> list[float]:
+    c, f = frame_client(sock, {"v": 1, "model": "v1"})  # a client before the gate: no prio
+    out = []
+    with c:
+        for pause in PAUSES:
+            time.sleep(pause)
+            head = send_frame(c, f, 10, body)
+            assert "skipped" not in head  # a decision frame is never skipped
+            out.append(float(head["wait_ms"]))  # type: ignore[arg-type]
+    return out
+
+
+FWD_S = 0.08  # a slow stand-in forward, so one forward stands well apart from two or three
+
+
+def test_decisions_wait_for_at_most_one_hud_forward_while_hud_clients_hammer(
+    tmp_path: Path,
+) -> None:
+    """Three HUD clients send frames back to back; a decision client's every call waits at the
+    gate for at most the ONE HUD forward in flight (+ scheduling slack), and the card never runs
+    two forwards at once. The HUD clients really competed: HUD forwards ran between."""
+    net = SlowNet(ud.GPU_WEIGHTS["v1"].sha256, FWD_S)
+    srv, th, sock = run_server(tmp_path, net, max_hz=1e6, hud_wait_s=1.0)
+    body = 4 * 7 * N_ANCH
+    halt, heads = threading.Event(), []  # type: ignore[var-annotated]
+    storm = hud_storm(sock, 3, halt, heads, body)
+    try:
+        assert until(lambda: srv.n["hud"] >= 3)
+        waits = decision_waits(sock, body)
+    finally:
+        halt.set()
+        for t in storm:
+            t.join(timeout=5)
+        srv.stop.set()
+        th.join(timeout=10)
+    assert max(waits) <= FWD_S * 1000.0 + 45.0, waits  # one HUD forward, never two or three
+    assert net.most_inside == 1  # one forward at a time on the card
+    tags = [tag for tag, _t0, _t1 in net.runs]
+    n_dec = len(PAUSES)
+    assert tags.count(10) == n_dec and tags.count(200) >= n_dec  # HUD forwards ran between them
+    assert srv.n["bad"] == 0 and srv.fatal is None
+
+
+def test_the_same_check_fails_without_the_gate(tmp_path: Path) -> None:
+    """The positive case: with HUD calls queued like decision calls (no priority), a decision
+    waits behind more than one HUD forward."""
+    net = SlowNet(ud.GPU_WEIGHTS["v1"].sha256, FWD_S)
+    srv, th, sock = run_server(tmp_path, net, max_hz=1e6, hud_wait_s=1.0)
+
+    def no_priority(_t_in: float) -> None:
+        srv.enter_decision()  # a HUD call takes its turn like any decision call
+
+    srv.enter_hud = no_priority  # type: ignore[method-assign,assignment]
+    body = 4 * 7 * N_ANCH
+    halt, heads = threading.Event(), []  # type: ignore[var-annotated]
+    storm = hud_storm(sock, 3, halt, heads, body)
+    try:
+        assert until(lambda: srv.n["hud"] >= 3)
+        waits = decision_waits(sock, body)
+    finally:
+        halt.set()
+        for t in storm:
+            t.join(timeout=5)
+        srv.stop.set()
+        th.join(timeout=10)
+    assert max(waits) > FWD_S * 1000.0 + 45.0, waits
+
+
+def decision_sleeps(tmp_path: Path, last_hud: float, last_fwd: float) -> list[float]:
+    """One old-style decision frame through handle() at t = 40 ms (fake clock): its sleeps."""
+    sleeps: list[float] = []
+    srv = ds.Server(tmp_path / "s.sock", {}, max_hz=10.0, log=lambda _m: None,
+                    clock=lambda: 0.04, sleep=sleeps.append)  # fmt: skip
+    srv.last_hud, srv.last_fwd = last_hud, last_fwd
+    net = FakeNet("a" * 64)
+    srv.nets = {"x": net}
+    a, b = socket.socketpair()
+
+    def client() -> None:
+        a.sendall(json.dumps({"v": 1, "model": "x"}).encode() + b"\n")
+        a.sendall(struct.pack("<HHI", 736, 1280, 0) + bytes(736 * 1280 * 3))
+        a.shutdown(socket.SHUT_WR)
+        while a.recv(1 << 20):
+            pass
+
+    th = threading.Thread(target=client, daemon=True)
+    th.start()
+    srv.handle(b)
+    b.close()
+    th.join(timeout=5)
+    a.close()
+    assert len(net.seen) == 1
+    return sleeps
+
+
+def test_a_decision_never_sleeps_out_a_gap_a_hud_forward_started(tmp_path: Path) -> None:
+    """s73 (rogue-xmas02.md 4CI): a decision right after a HUD forward slept the rest of the
+    100-ms --max-hz gap. Now the gap runs from the last DECISION forward only."""
+    assert decision_sleeps(tmp_path, 0.0, -1e18) == []  # a HUD forward ended 40 ms ago
+    assert decision_sleeps(tmp_path, 0.0, -0.05) == [pytest.approx(0.01)]  # a decision 90 ms ago
+    assert decision_sleeps(tmp_path, -1e18, 0.0) == [pytest.approx(0.06)]  # as before the gate
+
+
+def test_hellos_old_and_new(served) -> None:  # type: ignore[no-untyped-def]
+    """An old client's hello (no prio) gets exactly the old reply; a "hud" or "decision" hello
+    gets its prio echoed; anything else is refused."""
+    _srv, _net, sock = served
+    c, doc = raw_client(sock, {"v": 1, "model": "v1"})
+    assert set(doc) == {"ok", "model", "sha256", "imgsz", "shape"} and doc["ok"] is True
+    c.close()
+    for prio in ("hud", "decision"):
+        c, doc = raw_client(sock, {"v": 1, "model": "v1", "prio": prio})
+        assert doc["ok"] is True and doc["prio"] == prio
+        c.close()
+    for bad in ({"v": 1, "model": "v1", "prio": "urgent"}, {"v": 1, "model": ["v1"]}):
+        c, doc = raw_client(sock, bad)
+        assert doc["ok"] is False
+        c.close()
+
+
+def test_a_skipped_hud_frame_keeps_its_connection(tmp_path: Path) -> None:
+    net = FakeNet(ud.GPU_WEIGHTS["v1"].sha256)
+    srv, th, sock = run_server(tmp_path, net, hud_wait_s=0.03)
+    body = 4 * 7 * N_ANCH
+    try:
+        c, f = frame_client(sock, {"v": 1, "model": "v1", "prio": "hud"})
+        with c:
+            srv.enter_decision()  # the card is a decision's
+            head = send_frame(c, f, 200, body)
+            assert head["skipped"] == "busy" and set(head) == {"skipped", "wait_ms"}
+            srv.leave(ds.DECISION)
+            time.sleep(0.12)  # past the --max-hz gap after that forward
+            head = send_frame(c, f, 200, body)  # the same connection, served this time
+            assert head["shape"] == [1, 7, N_ANCH] and "wait_ms" in head
+    finally:
+        srv.stop.set()
+        th.join(timeout=10)
+    assert srv.n["hud_skipped"] == 1 and srv.n["hud"] == 1 and len(net.seen) == 1
+
+
+def test_a_failing_forward_still_ends_the_server(tmp_path: Path) -> None:
+    """As before the threads: an unexpected failure of the forward stops the server (the guarded
+    step ends, serve() raises it) instead of only its connection."""
+
+    class Broken(FakeNet):
+        def forward(self, canvas: np.ndarray) -> np.ndarray:
+            raise RuntimeError("device lost")
+
+    d = tmp_path / "gd"
+    d.mkdir(mode=0o700)
+    d.chmod(0o700)
+    srv = ds.Server(d / "detect.sock", {"v1": Broken(ud.GPU_WEIGHTS["v1"].sha256)},
+                    log=lambda _m: None)  # fmt: skip
+    raised: list[BaseException] = []
+
+    def serve() -> None:
+        try:
+            srv.serve()
+        except RuntimeError as exc:
+            raised.append(exc)
+
+    th = threading.Thread(target=serve, daemon=True)
+    th.start()
+    assert until(lambda: (d / "detect.sock").exists())
+    c, f = frame_client(d / "detect.sock", {"v": 1, "model": "v1"})
+    with c:
+        c.sendall(struct.pack("<HHI", 736, 1280, 0) + bytes(736 * 1280 * 3))
+        assert f.readline() == b""  # closed, no reply
+    th.join(timeout=10)
+    assert not th.is_alive() and not (d / "detect.sock").exists()
+    assert [str(e) for e in raised] == ["device lost"] and srv.fatal is raised[0]
+
+
+def test_the_hud_twin_end_to_end_skipped_frames_and_never_the_cpu(  # type: ignore[no-untyped-def]
+    served, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """unit_detector.GpuDetector.hud_twin (dungeon@9.29c): a second connection that declares
+    "hud"; a skipped frame gives no boxes and no CPU call, keeps the connection and does not mark
+    the GPU down; closing the twin leaves the decisions' detector and its CPU worker running."""
+    srv, _net, sock = served
+    srv.hud_wait_s = 0.03
+    frame = np.full((720, 1280, 3), 10, np.uint8)
+    with ud.GpuDetector(cpu_detector(tmp_path, monkeypatch), "v1", socket_path=sock) as det:
+        assert det.prio is None and "prio" not in det.info()
+        twin = det.hud_twin()
+        assert twin.prio == "hud" and twin.cpu is det.cpu and twin.info()["prio"] == "hud"
+        assert twin.detect(frame) == det.detect(frame)  # the same model, the same decoding
+        assert twin.last_path == "gpu" and det.last_path == "gpu" and srv.n["conn"] == 2
+        assert isinstance(twin.last_wait_ms, float) and isinstance(det.last_wait_ms, float)
+        time.sleep(0.12)  # past the --max-hz gap after the decision's forward
+        srv.enter_decision()  # the card is a decision's: the twin's next frame is skipped
+        sock_before = twin.sock
+        assert twin.detect(frame) == []
+        srv.leave(ds.DECISION)
+        assert twin.last_path == "none" and str(twin.last_reason).startswith("skipped: busy")
+        assert twin.sock is sock_before and twin.down_until < 0  # kept, not marked down
+        assert twin.counts == {"gpu": 1, "none": 1} and twin.reasons == {"skipped": 1}
+        assert twin.detect(frame, prefer="cpu") == [] and twin.last_path == "none"  # never CPU
+        time.sleep(0.12)
+        assert twin.detect(frame) and twin.last_path == "gpu"  # the same connection again
+        assert srv.n["conn"] == 2
+        log = tmp_path / "hud.jsonl"
+        twin.log_path = log
+        time.sleep(0.12)  # HUD after HUD: the --max-hz gap as well
+        twin.detect(frame)
+        row = json.loads(log.read_text())
+        assert row["path"] == "gpu" and isinstance(row["wait_ms"], float)
+        twin.close()
+        assert twin.sock is None
+        assert det.detect(frame, prefer="cpu")[0].x0 == 1.0  # the CPU worker still runs
+        assert det.detect(frame) and det.last_path == "gpu"
+    assert srv.n["hud_skipped"] == 1 and srv.n["bad"] == 0

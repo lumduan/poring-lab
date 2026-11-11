@@ -28,15 +28,34 @@ process runs only the model's forward pass (FP32; OpenVINO may run --ov-precisio
 the head's raw output. No input, no
 X, no network, no packet data.
 
-Protocol, one client at a time, per connection:
-  1. hello: one JSON line {"v": 1, "model": NAME} from the client. The reply is one JSON line,
-     {"ok": true, "model": NAME, "sha256": ..., "imgsz": [H, W], "shape": [1, C, N]}, or
+Protocol, per connection (several at once since dungeon@9.29c, a thread each; ONE forward at a
+time on the card):
+  1. hello: one JSON line {"v": 1, "model": NAME} from the client, optionally with
+     "prio": "decision" | "hud" (none = "decision": every client before 9.29c). The reply is one
+     JSON line, {"ok": true, "model": NAME, "sha256": ..., "imgsz": [H, W], "shape": [1, C, N]}
+     (plus "prio" only when the hello named one, so an older client's reply is unchanged), or
      {"ok": false, "error": ...} and the connection closes.
   2. each frame: an 8-byte header ``<HHI`` (H, W, 0), then H*W*3 uint8 BGR bytes: the
      letterboxed canvas at exactly the model's input size. The reply is one JSON line
-     {"shape": [1, C, N], "ms": forward ms}, then C*N float32 little-endian bytes.
+     {"shape": [1, C, N], "ms": forward ms, "wait_ms": its wait at the gate}, then C*N float32
+     little-endian bytes. A "hud" connection may instead get {"skipped": WHY, "wait_ms": ...} and
+     no body: that frame was not computed (WHY: busy | decision | gap, what held it last).
 Anything malformed closes the connection. Weights load only from ``--model``, each checked against
 its sha256 BEFORE it is unpickled. ``--max-hz`` bounds the GPU load whatever the client does.
+
+The gate (dungeon@9.29c; Batt 2026-11-11: a fast HUD that does not slow the bot's decisions; s73's
+``--hud-fast 0.2`` took D1 p95 from 22-24 to 93.5 ms, rogue-xmas02.md 4CI). Decision calls go
+before HUD-only calls:
+- a decision call waits only for the forward in flight (at most ONE HUD forward), then for
+  ``--max-hz``'s gap after the last DECISION forward. A HUD forward never starts that gap: in s73 a
+  decision right after a HUD forward slept out the rest of the 100 ms here;
+- a HUD call starts only while no decision call waits or runs and the gap after the last forward
+  of either kind has passed. One that cannot start within ``--hud-wait-ms`` of its frame's arrival
+  is skipped, never queued (the client sends a newer frame soon after);
+- so the card runs at most ``--max-hz`` decision forwards a second, plus HUD forwards in the gaps
+  between them, at most ``--max-hz`` of those: 2 x ``--max-hz`` in all.
+A client that names no priority is a decision client: with no "hud" connection the server
+behaves as before (one gap after each forward).
 """
 
 from __future__ import annotations
@@ -68,6 +87,14 @@ IDLE_S = 60.0  # a connection silent this long is closed (the client reconnects 
 MSG_S = 5.0  # a started message must arrive whole within this
 HELLO_MAX = 512
 STATS_EVERY_S = 60.0
+# dungeon@9.29c, the gate (module docstring): the request classes, and how long a HUD frame may
+# wait for the card before it is skipped. 150 ms: past one --max-hz gap (100 ms) after a decision
+# forward, and under the host client's 250 ms call timeout (unit_detector.GPU_CALL_S) with a
+# forward to spare; a HUD frame older than that is replaced 0.2 s later anyway (--hud-fast).
+DECISION, HUD = "decision", "hud"
+PRIOS = (DECISION, HUD)
+HUD_WAIT_S = 0.15
+MAX_CONN = 8  # connections served at once (the runner holds two: its decisions' and its HUD's)
 OV_PREPROC = ("cpu", "gpu")
 OV_PREPROC_DEFAULT = "gpu"  # since its parity run, 2026-11-08 (bot-server-migration.md 16a)
 OV_PRECISIONS = ("f32", "f16")
@@ -279,25 +306,38 @@ def recv_line(conn: socket.socket, limit: int = HELLO_MAX) -> bytes:
 
 
 class Server:
-    """Serve ``nets`` on ``path`` until ``stop`` is set. ``clock`` / ``sleep``: tests."""
+    """Serve ``nets`` on ``path`` until ``stop`` is set. ``clock`` / ``sleep``: tests.
+    ``hud_wait_s``: how long a HUD frame may wait for the card (the gate, module docstring)."""
 
     def __init__(self, path: Path, nets: Mapping[str, Net], imgsz: tuple[int, int] = IMGSZ,
                  max_hz: float = MAX_HZ, log: Callable[[str], None] = print,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep,
-                 mode: Mapping[str, Any] | None = None) -> None:  # fmt: skip
+                 mode: Mapping[str, Any] | None = None,
+                 hud_wait_s: float = HUD_WAIT_S) -> None:  # fmt: skip
         """``mode``: how the nets run (backend, device, ov_preproc, precision), for the start line;
         ``ov_preproc`` is in every stats line too."""
         self.path, self.nets, self.imgsz = path, dict(nets), imgsz
         self.mode = dict(mode or {})
         self.min_gap = 1.0 / max_hz
+        self.hud_wait_s = float(hud_wait_s)
         self.log, self.clock, self.sleep = log, clock, sleep
         self.stop = threading.Event()
-        self.last_fwd = -1e18
+        # the gate (dungeon@9.29c): one forward at a time, decisions first
+        self.gate = threading.Condition()
+        self.busy = False  # a forward runs (or a decision sleeps out its gap, holding the card)
+        self.waiting = 0  # decision calls waiting for the card
+        self.last_fwd = -1e18  # the last DECISION forward's end: the decisions' --max-hz gap
+        self.last_hud = -1e18  # the last HUD forward's end
+        self.mu = threading.Lock()  # the counters and the stats lists (one thread a connection)
         self.ms: list[float] = []
-        self.n = {"conn": 0, "frames": 0, "closed": 0, "gone": 0, "bad": 0}
+        self.waits: list[float] = []  # each decision call's wait at the gate (ms)
+        self.n = {"conn": 0, "frames": 0, "closed": 0, "gone": 0, "bad": 0, "hud": 0,
+                  "hud_skipped": 0, "refused": 0}  # fmt: skip
         self.t_stats = clock()
         self.clock_now: Callable[[], dict[str, int] | None] = gpu_clock
+        self.threads: set[threading.Thread] = set()
+        self.fatal: BaseException | None = None
 
     def bind(self) -> socket.socket:
         with contextlib.suppress(FileNotFoundError):
@@ -308,7 +348,7 @@ class Server:
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         srv.bind(str(self.path))
         os.chmod(self.path, 0o600)
-        srv.listen(1)
+        srv.listen(MAX_CONN)
         srv.settimeout(1.0)
         return srv
 
@@ -318,6 +358,7 @@ class Server:
                              "socket": str(self.path),
                              "models": {k: n.sha256[:12] for k, n in self.nets.items()},
                              "imgsz": list(self.imgsz), **self.mode,
+                             "hud_wait_ms": round(self.hud_wait_s * 1000.0),
                              "gpu_clock": self.clock_now()}))  # fmt: skip
         try:
             while not self.stop.is_set():
@@ -326,50 +367,142 @@ class Server:
                     conn, _ = srv.accept()
                 except TimeoutError:
                     continue
-                self.n["conn"] += 1
-                with conn:
-                    self.handle(conn)
+                self.count("conn")
+                self.threads = {th for th in self.threads if th.is_alive()}
+                if len(self.threads) >= MAX_CONN:
+                    self.count("refused")
+                    conn.close()
+                    continue
+                th = threading.Thread(target=self.serve_conn, args=(conn,), daemon=True,
+                                      name="detect-conn")  # fmt: skip
+                self.threads.add(th)
+                th.start()
         finally:
+            self.stop.set()
+            for th in list(self.threads):
+                th.join(timeout=MSG_S + 1.0)
             srv.close()
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(self.path)
             self.stats(force=True)
+        if self.fatal is not None:
+            raise self.fatal  # as before the threads: a failure of the forward ends the server
+
+    def serve_conn(self, conn: socket.socket) -> None:
+        """One connection's thread. Anything handle() does not expect (the forward itself failed)
+        stops the whole server, as it did when connections were served one at a time."""
+        with conn:
+            try:
+                self.handle(conn)
+            except BaseException as exc:  # noqa: BLE001 -- recorded, then re-raised by serve()
+                self.fatal = exc
+                self.log(json.dumps({"detect_server": "fatal", "error": repr(exc)[:300]}))
+                self.stop.set()
+
+    def count(self, key: str) -> None:
+        with self.mu:
+            self.n[key] += 1
 
     def handle(self, conn: socket.socket) -> None:
         try:
             conn.settimeout(MSG_S)
-            net = self.hello(conn)
-            if net is None:
+            got = self.hello(conn)
+            if got is None:
                 return
+            net, prio = got
             h0, w0 = self.imgsz
             while not self.stop.is_set():
                 first = self.wait_first(conn)
                 if not first:
-                    self.n["closed"] += 1  # the client closed, went silent, or we stop
+                    self.count("closed")  # the client closed, went silent, or we stop
                     return
                 conn.settimeout(MSG_S)
                 h, w, z = HEADER.unpack(first + recv_exact(conn, HEADER.size - 1))
                 if (h, w, z) != (h0, w0, 0):
                     raise BadMessage(f"frame {h}x{w} ({z}): the canvas must be {h0}x{w0}")
                 canvas = np.frombuffer(recv_exact(conn, h * w * 3), np.uint8).reshape(h, w, 3)
-                wait = self.last_fwd + self.min_gap - self.clock()
-                if wait > 0:
-                    self.sleep(wait)
-                t = time.perf_counter()
-                y = net.forward(canvas)
-                ms = (time.perf_counter() - t) * 1000.0
-                self.last_fwd = self.clock()
-                head = {"shape": list(y.shape), "ms": round(ms, 2)}
+                t_in = self.clock()
+                if prio == HUD:
+                    why = self.enter_hud(t_in)
+                    if why is not None:  # not computed: the decisions' calls went first
+                        skip = {"skipped": why,
+                                "wait_ms": round((self.clock() - t_in) * 1000.0, 2)}  # fmt: skip
+                        conn.sendall(json.dumps(skip).encode() + b"\n")
+                        self.count("hud_skipped")
+                        continue
+                else:
+                    self.enter_decision()
+                try:
+                    if prio == DECISION:  # --max-hz's gap after the last DECISION forward
+                        wait = self.last_fwd + self.min_gap - self.clock()
+                        if wait > 0:
+                            self.sleep(wait)
+                    wait_ms = (self.clock() - t_in) * 1000.0
+                    t = time.perf_counter()
+                    y = net.forward(canvas)
+                    ms = (time.perf_counter() - t) * 1000.0
+                finally:
+                    self.leave(prio)
+                head = {"shape": list(y.shape), "ms": round(ms, 2), "wait_ms": round(wait_ms, 2)}
                 conn.sendall(json.dumps(head).encode() + b"\n")
                 conn.sendall(memoryview(np.ascontiguousarray(y, dtype="<f4")).cast("B"))
-                self.ms.append(ms)
-                self.n["frames"] += 1
+                with self.mu:
+                    self.ms.append(ms)
+                    self.n["frames"] += 1
+                    if prio == HUD:
+                        self.n["hud"] += 1
+                    else:
+                        self.waits.append(wait_ms)
                 self.stats()
         except (EOFError, BrokenPipeError, ConnectionResetError, TimeoutError):
-            self.n["gone"] += 1  # the client left, or gave up (it falls back to the CPU)
+            self.count("gone")  # the client left, or gave up (it falls back to the CPU)
         except (BadMessage, struct.error, ValueError) as exc:
-            self.n["bad"] += 1
+            self.count("bad")
             self.log(json.dumps({"detect_server": "bad message", "error": str(exc)[:200]}))
+
+    def enter_decision(self) -> None:
+        """A decision call takes the card as soon as the forward in flight ends: a HUD call that
+        has not started never goes before it."""
+        with self.gate:
+            self.waiting += 1
+            try:
+                while self.busy:
+                    self.gate.wait()
+            finally:
+                self.waiting -= 1
+            self.busy = True
+
+    def enter_hud(self, t_in: float) -> str | None:
+        """A HUD call takes the card only while it is free, no decision call waits, and the gap
+        after the last forward of either kind has passed. None: it has the card; else why it
+        could not start within ``hud_wait_s`` of ``t_in`` (it is skipped)."""
+        end = t_in + self.hud_wait_s
+        with self.gate:
+            while True:
+                now = self.clock()
+                ready = max(self.last_fwd, self.last_hud) + self.min_gap
+                if self.busy:
+                    why = "busy"
+                elif self.waiting:
+                    why = "decision"
+                elif now < ready:
+                    why = "gap"
+                else:
+                    self.busy = True
+                    return None
+                if now >= end:
+                    return why
+                until = min(end, ready) if why == "gap" else end
+                self.gate.wait(max(until - now, 1e-4))
+
+    def leave(self, prio: str) -> None:
+        with self.gate:
+            if prio == HUD:
+                self.last_hud = self.clock()
+            else:
+                self.last_fwd = self.clock()
+            self.busy = False
+            self.gate.notify_all()
 
     def wait_first(self, conn: socket.socket) -> bytes:
         """The next message's first byte; b"" when the client closed, went silent for IDLE_S, or
@@ -383,38 +516,50 @@ class Server:
                 if self.stop.is_set() or self.clock() >= end:
                     return b""
 
-    def hello(self, conn: socket.socket) -> Net | None:
+    def hello(self, conn: socket.socket) -> tuple[Net, str] | None:
         try:
             doc = json.loads(recv_line(conn))
         except json.JSONDecodeError as exc:
             raise BadMessage(f"hello: {exc}") from None
         name = doc.get("model") if isinstance(doc, dict) else None
-        if not isinstance(doc, dict) or doc.get("v") != PROTOCOL or name not in self.nets:
+        prio = doc.get("prio", DECISION) if isinstance(doc, dict) else None
+        if (not isinstance(doc, dict) or doc.get("v") != PROTOCOL or not isinstance(name, str)
+                or name not in self.nets or prio not in PRIOS):  # fmt: skip
             err = {"ok": False, "error": f"hello {str(doc)[:80]}: v {PROTOCOL}, a served model "
-                                         f"{sorted(self.nets)}"}  # fmt: skip
+                                         f"{sorted(self.nets)}, prio one of "
+                                         f"{list(PRIOS)}"}  # fmt: skip
             conn.sendall(json.dumps(err).encode() + b"\n")
-            self.n["bad"] += 1
+            self.count("bad")
             return None
         net = self.nets[name]
         ok = {"ok": True, "model": name, "sha256": net.sha256, "imgsz": list(self.imgsz),
               "shape": list(net.shape)}  # fmt: skip
+        if "prio" in doc:
+            ok["prio"] = prio  # echoed only when asked: a client before 9.29c checks every key
         conn.sendall(json.dumps(ok).encode() + b"\n")
-        return net
+        return net, str(prio)
 
     def stats(self, force: bool = False) -> None:
-        now = self.clock()
-        if not force and now - self.t_stats < STATS_EVERY_S:
-            return
-        self.t_stats = now
-        ms = sorted(self.ms)
+        with self.mu:
+            now = self.clock()
+            if not force and now - self.t_stats < STATS_EVERY_S:
+                return
+            self.t_stats = now
+            ms, waits = sorted(self.ms), sorted(self.waits)
+            self.ms.clear()
+            self.waits.clear()
+            n = dict(self.n)
         p = (lambda q: round(ms[min(len(ms) - 1, int(q * len(ms)))], 2)) if ms else None
         row = {"detect_server": "stats", "t": time.strftime("%FT%T%z"),
                "ov_preproc": self.mode.get("ov_preproc"),
-               "precision": self.mode.get("precision"), "gpu_clock": self.clock_now(), **self.n,
+               "precision": self.mode.get("precision"), "gpu_clock": self.clock_now(), **n,
                "ms_p50": p(0.5) if p else None, "ms_p95": p(0.95) if p else None,
-               "ms_mean": round(statistics.fmean(ms), 2) if ms else None}  # fmt: skip
+               "ms_mean": round(statistics.fmean(ms), 2) if ms else None,
+               # dungeon@9.29c: the decision calls' wait at the gate (a HUD forward in flight,
+               # or --max-hz's gap after the last decision forward)
+               "decision_wait_p95": (round(waits[min(len(waits) - 1, int(0.95 * len(waits)))], 2)
+                                     if waits else None)}  # fmt: skip
         self.log(json.dumps(row))
-        self.ms.clear()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -433,7 +578,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ov-precision", choices=list(OV_PRECISIONS), default=None,
                     help="--backend openvino: the inference precision hint; default "
                     f"{OV_PRECISION}")  # fmt: skip
+    ap.add_argument("--hud-wait-ms", type=float, default=None,
+                    help="dungeon@9.29c: how long a HUD-only frame may wait for the card before "
+                    f"it is skipped; default {HUD_WAIT_S * 1000:.0f}")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.hud_wait_ms is not None and not 0.0 <= a.hud_wait_ms <= 1000.0:
+        ap.error("--hud-wait-ms: 0..1000")
     if a.backend != "openvino" and a.ov_preproc is not None:
         ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
     if a.backend != "openvino" and a.ov_precision is not None:
@@ -456,7 +606,8 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("no GPU: nothing to serve (the host's CPU detector serves alone)")
         mode = {"backend": "torch", "device": str(device), "ov_preproc": None, "precision": "f32"}
         nets = {name: TorchNet(path, sha, device, imgsz) for name, (path, sha) in models.items()}
-    srv = Server(a.socket, nets, imgsz, a.max_hz, mode=mode)
+    hud_kw = {} if a.hud_wait_ms is None else {"hud_wait_s": a.hud_wait_ms / 1000.0}
+    srv = Server(a.socket, nets, imgsz, a.max_hz, mode=mode, **hud_kw)
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: srv.stop.set())
     srv.serve()
