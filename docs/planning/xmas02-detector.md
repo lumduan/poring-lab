@@ -3823,3 +3823,36 @@ ONNX sets give IDENTICAL I1-I4.
     + 20 E (10 plain, 10 hard); SHORT 6 in the no-aura stratum. Two NEW blind labellers, **S and
     T** (none of A-R), are judging it; each sees only the pack and its own answers file.
   - Nothing of either prediction set has been compared with any label.
+
+### Amendment O21 (2026-11-11 16:5x ICT from `date`): THE ROUND-4 RESULT (scored once) -- NATURAL DROPS UP, NO AURA 100 %, STILL A FAIL
+
+`fi_eval.py --strata r4` once at 16:51:09 (score sha256 0a58ac47...). Inputs: both prediction sets
+over the seven sessions (4,261 frames), the pack seed 68's key, labellers S and T (agreement q1 /
+q2 133 / 134; **113 crops both yes / good = EVALUATED**), I5 from a 600-s detect server holding
+xmas02fi4 (registered IN MEMORY for it: today's pilots' servers stay as the base's) and
+eval_latency (300 frames, every 14th ref, 16 threads, a quiet host). The GPU and ONNX sets give the
+same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
+
+| bar | round 4 | round 3 (O19) | round 2 (O16) | bar value | verdict |
+|---|---|---|---|---|---|
+| I1a recall, AURA | **54 / 69 = 0.783** (fsTa4 staged 14 / 16; pilots fiT10 7 / 11, fiT11 13 / 15, fiT12 8 / 14, fiT13 12 / 13) | 0.806 | 0.928 | >= 0.85 on >= 40 | **FAIL** |
+| reported: the pilots' NATURAL drops alone | **40 / 53 = 0.755** | 0.62 | 0.62 | - | (the round's aim) |
+| I1n recall, NO AURA | **44 / 44 = 1.000** (fsTn4) | 0.854 | 0.980 | >= 0.85 on >= 30 | PASS (Batt's 95 %: yes) |
+| I1 precision | 2,028 / 2,044 = 0.992 | 0.994 | 0.962 | >= 0.85 | PASS |
+| I2 | **18 / 25 = 0.72** | 7 / 16 (short) | 0.75 | >= 0.80 on >= 20 | **FAIL** |
+| I3 any / her 5 x 5 | 0.37 % / **0.24 %** (7 / 2,975) | 0.42 / 0.27 % | 4.29 / 3.22 % | <= 0.5 % / <= 0.2 % | **FAIL** (5 x 5) |
+| I4 | 2 / 170 = 1.2 % | 0.9 % | 11.3 % | <= 5 % | PASS |
+| I5 GPU, server p95 vs xmas02gb | 16.62 vs 16.80 ms = 0.989 x | 0.997 x | 0.979 x | <= 1.10 x, <= 35 ms | PASS |
+| I5 CPU p95 vs xmas02gb | 780.1 vs 797.7 ms = 0.978 x | 0.931 x | 0.953 x | <= 1.10 x | PASS |
+
+- **VERDICT: FAIL** (I1a, I2, I3's 5 x 5). Not deployed; `xmas02fi4` is registered for I5 only
+  (GPU_WEIGHTS after today's pilots, never in MAP_MODELS).
+- **What round 4's change did (more natural fight drops in TRAIN, the fight negatives halved):**
+  natural drops 62 % -> 75.5 %, the no-aura staging 85.4 % -> 100 %, false boxes stayed down
+  (I3 any 0.37 %, I4 1.2 %, precision 0.992).
+- **Why I1a fell anyway:** its rows changed. Round 3's aura stratum was half staged (fsTa3 33 of
+  62, 32 hit); round 4's is three quarters natural (53 of 69). Staged aura items: 14 / 16 = 0.875.
+  The missed rows sit in the pilots' fights (fiT12 6 of 14 missed); each missed row is listed in
+  the score file.
+- The next lever is again the natural drops beside fights (the stratum the bar now reads);
+  Batt's 95 % is met by the no-aura stratum only.
