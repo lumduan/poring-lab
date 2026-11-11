@@ -3876,3 +3876,22 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
   item crops (the natural drops and the staging pooled, >= 40 crops) >= 0.85; reported apart: the
   natural drops alone and the staging alone; I1 precision, I2, I3, I4, I5 as before. Batt's 95 %
   is reported. `fi_eval` gains `--strata r5` for this (a test first).
+
+### Amendment O23 (2026-11-12 06:36 ICT from `date`, BEFORE round 5's cache and before the staging it adds): more aura-off TRAIN data
+
+- **Batt (2026-11-12 ~06:2x, translated):** "do round 5 now, and make it more accurate: I see the
+  bot spend time looking for items every time." And: "the GPU may be used at any time."
+- **Why more data:** natural drops are scarce per pilot (13-30 floor items).
+  - Of the round-5 TRAIN label files labelled so far, fiT14, fiT16, fiT18, fiT19 and fiT22 fail G2
+    (fewer than 30 verified fits) and are not admitted.
+  - The aura-off stratum (the one Batt plays in, O22) has little item data in TRAIN.
+- **Added to round 5's TRAIN (only this):** one aura-off near staging of the Rogue, `fsTa5`.
+  `stage_items.py run --map xmas_dun02 --views near --n 12 --seed 2611250 --immune-confirmed`,
+  her IMMUNE (read back), the aura off, recorded (`xmas02-fsTa5`), labelled `--split train` with
+  params v2 (aea6f1d2), admitted only by G2.
+- **The held-out stays fresh:** fsH1's cells (recorded after the freeze) must share no cell with
+  fsTa5 or any earlier staging (the check runs before fsH1). fiH1 / fiH2 are pilots after the
+  freeze.
+- **Nothing else changes:** O22's init (round 4, 32e8afae), epochs, fight negatives, the freeze
+  and the bars.
+
