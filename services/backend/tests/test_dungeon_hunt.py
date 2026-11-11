@@ -2679,12 +2679,12 @@ class _Stop(Exception):
     pass
 
 
-def _ctl(sim: _BareSim) -> tuple[dh.BareCtl, Any, list[dict[str, Any]]]:
+def _ctl(sim: _BareSim, **kw: Any) -> tuple[dh.BareCtl, Any, list[dict[str, Any]]]:
     from collections import Counter
 
     counts: Counter[str] = Counter()
     evs: list[dict[str, Any]] = []
-    return dh.BareCtl(sim.io(), _armed_ref(), counts, evs.append, _Stop), counts, evs
+    return dh.BareCtl(sim.io(), _armed_ref(), counts, evs.append, _Stop, **kw), counts, evs
 
 
 def _kinds(sim: _BareSim) -> list[str]:
@@ -3030,3 +3030,637 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     assert 'press=lambda why_: press("equip", why_)' in src
     assert "ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)" in src
     assert src.count("ui_double_click(") == 2  # its definition + the one call
+
+
+# --- --bare-ready (dungeon@9.27b, Batt 2026-11-11 after rogue-xmas02.md 4BY's p65 / p66) ---------
+
+
+def _ready_bare(sim: _BareSim) -> tuple[dh.BareCtl, Any, list[dict[str, Any]]]:
+    """A --bare-ready controller after its idle unequip (a loot step just ended): bare, no phase."""
+    ctl, counts, evs = _ctl(sim, ready=True)
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"
+    assert sim.bag and not ctl.st.armed and ctl.st.t_bare is None
+    return ctl, counts, evs
+
+
+def test_bare_ready_flag_refusals_and_the_run_start_record(monkeypatch, capsys) -> None:
+    import pytest
+
+    got: dict[str, Any] = {}
+
+    def fake_run(a: Any) -> int:
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "P2", "--seed", "1", "--char", "rogue"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].bare_ready is False  # OFF by default
+    monkeypatch.setattr(sys, "argv", [*argv, "--bare-steal", "--bare-ready"])
+    assert dh.main() == 0 and got["a"].bare_ready is True
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--help"])
+    with pytest.raises(SystemExit):
+        dh.main()
+    help_ = " ".join(capsys.readouterr().out.split())
+    assert "rogue-xmas02.md 4BY" in help_ and "dungeon@9.27b" in help_
+    # refused unless --bare-steal (it only moves the bare-steal swap)
+    assert dh.bare_ready_refused(True, True) is None
+    assert dh.bare_ready_refused(False, False) is None
+    assert dh.bare_ready_refused(True, False) is None
+    assert "--bare-steal" in str(dh.bare_ready_refused(False, True))
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    rec0 = dh.fixes_of(dh.argparse.Namespace(**base, bare_steal=True))
+    assert "bare_ready" not in rec0
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, bare_steal=True, bare_ready=True))
+    assert rec["bare_ready"] == ["9.27b"] and rec["bare_steal"] == rec0["bare_steal"]
+    assert {k: v for k, v in rec.items() if k != "bare_ready"} == rec0
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.27b refused: {why_bry}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    i_start = src.index('ev({"kind": "run_start", "strategy": a.strategy')
+    rec_line = '**({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),'
+    assert rec_line in src[i_start:]
+    assert "bare_ref, counts, ev, r.Stop, ready=bare_ready_on" in src
+
+
+def test_bare_idle_is_a_search_tick_with_no_lock_no_sit_a_position_and_no_escape() -> None:
+    ok = {"mode": "search", "locked": False, "sitting": False, "here_known": True,
+          "since_fly": 9.0, "boss_avoid": False, "unread": False}  # fmt: skip
+    assert dh.bare_idle(**ok)
+    for k, v in (("mode", "fight"), ("mode", "after"), ("mode", "rest"), ("locked", True),
+                 ("sitting", True), ("here_known", False), ("since_fly", 1.5),
+                 ("boss_avoid", True), ("unread", True)):  # fmt: skip
+        assert not dh.bare_idle(**{**ok, k: v}), (k, v)
+    assert dh.BARE_READY_SETTLE_S == dh.BOX_SETTLE_S == 1.2 and dh.BARE_READY_RETRY_S == 5.0
+
+
+def test_bare_ready_takes_the_dagger_off_while_idle_and_holds_the_walk_until_settled() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim, ready=True)
+    assert ctl.ready_tick(sim.t, True, False, 0.9) == "hold"  # a click may be in flight: wait
+    assert sim.log == []
+    for idle, hp in ((False, 0.9), (True, None), (True, 0.45)):  # in a fight / HP unread / low
+        assert ctl.ready_tick(sim.t, idle, True, hp) is None
+    assert sim.log == []
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"
+    assert _kinds(sim) == ["chord", "dclick", "chord"]  # the same reads and inputs as at a strike
+    assert sim.log[0][1] == () and "equipment" in sim.log[1][2] and sim.read == ()
+    assert sim.bag and not ctl.st.armed and ctl.st.t_bare is None  # bare, NO phase yet
+    assert counts["bare_ready"] == 1 and counts["bare_unequip"] == 1
+    assert counts["bare_ready_fail"] == 0
+    assert evs[-1]["what"] == "unequip" and evs[-1]["by"] == "ready" and evs[-1]["ok"]
+    assert ctl.ready_tick(sim.t, True, True, 0.9) is None  # bare already: nothing due
+    ctl.tick(sim.t + 30.0, False, False, sim.frame(), 0.9)  # idle bare: no cue, no 8 s, stays bare
+    assert not ctl.st.armed and _kinds(sim) == ["chord", "dclick", "chord"]
+    # a target in hand (never mid-fight) or a read-back pending: nothing due either
+    held = _BareSim()
+    ctl2, _c2, _e2 = _ctl(held, ready=True)
+    ctl2.tgt = {"t": 0.0, "by": "box", "locked": True, "phase": False}
+    assert ctl2.ready_tick(held.t, True, True, 0.9) is None and held.log == []
+    ctl2.tgt, ctl2.pending = None, "safety"
+    assert ctl2.ready_tick(held.t, True, True, 0.9) is None and held.log == []
+    # without --bare-ready nothing is ever due
+    off = _BareSim()
+    ctl3, counts3, _e3 = _ctl(off)
+    assert ctl3.ready_tick(off.t, True, True, 0.9) is None and off.log == [] and not counts3
+
+
+def test_bare_ready_never_clicks_a_window_it_did_not_read_open_and_backs_off() -> None:
+    sim = _BareSim(others=("inventory",))  # a window open at idle: no chord, no click
+    ctl, counts, _evs = _ctl(sim, ready=True)
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"
+    assert sim.log == [] and ctl.st.armed
+    assert counts["bare_ready_fail"] == 1 and counts["bare_skip_ui"] == 1
+    assert ctl.ready_tick(sim.t + 1.0, True, True, 0.9) is None  # within BARE_READY_RETRY_S
+    assert ctl.ready_tick(sim.t + 1.0, True, False, 0.9) is None  # no hold either
+    shut = _BareSim(chord_ok=False)  # the window never opens: the chord, no double-click
+    ctl2, counts2, _e2 = _ctl(shut, ready=True)
+    assert ctl2.ready_tick(shut.t, True, True, 0.9) == "swap"
+    assert _kinds(shut) == ["chord"] and ctl2.st.armed
+    assert counts2["bare_ready_fail"] == 1 and counts2["bare_fail_open"] == 1
+    t_next = ctl2.ready_next
+    assert t_next == shut.t + dh.BARE_READY_RETRY_S
+    assert ctl2.ready_tick(t_next, True, True, 0.9) == "swap"  # tried again after the back-off
+
+
+def test_bare_ready_strikes_a_new_target_bare_at_once_then_equips_on_the_cue() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ready_bare(sim)
+    n = len(sim.log)
+    aims: list[int] = []
+    t_strike = sim.t
+    assert ctl.before_strike("box", 0.9, lambda: aims.append(1) is None)
+    assert len(sim.log) == n and aims == []  # NO Alt+Q, NO double-click, no re-aim: at once
+    assert ctl.st.t_bare is not None and ctl.st.t_bare >= t_strike  # the phase from THIS strike
+    assert counts["bare_ready_strike"] == 1 and counts["bare_unequip"] == 1  # the idle one only
+    assert evs[-1]["what"] == "begin" and evs[-1]["ok"] and evs[-1]["state"] == "bare"
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert not ctl.st.armed  # bare, locked, no cue yet
+    sim.lines.append({"colour": "cyan"})  # a steal
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert ctl.st.armed and not sim.bag and counts["bare_equip_cyan"] == 1
+    assert _kinds(sim)[n:] == ["press"] and sim.log[-1][1] == "cyan"  # F5 exactly as today
+    # BARE_MAX_S counts from the first BARE STRIKE, not from the idle unequip
+    late = _BareSim()
+    ctl2, counts2, _e2 = _ready_bare(late)
+    late.t += 30.0  # she waited bare for 30 s
+    t_s = late.t
+    ctl2.before_strike("scan", 0.9, None)
+    ctl2.struck()
+    late.t = t_s + dh.bs.BARE_MAX_S - 1.0
+    ctl2.tick(late.t, True, True, late.frame(), 0.9)
+    assert not ctl2.st.armed  # 7 s after the strike: still bare
+    late.t = t_s + dh.bs.BARE_MAX_S + 0.5
+    ctl2.tick(late.t, True, True, late.frame(), 0.9)
+    assert ctl2.st.armed and counts2["bare_equip_time"] == 1
+
+
+def test_bare_ready_a_fight_ending_bare_stays_bare_and_the_next_target_has_its_own_phase() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ready_bare(sim)
+    n = len(sim.log)
+    ctl.before_strike("box", 0.9, None)
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # killed bare-handed: its lock went
+    assert not ctl.st.armed and sim.bag and len(sim.log) == n  # STAYS bare: no F5
+    assert ctl.tgt is None and ctl.st.t_bare is None and counts["bare_equip_fight_end"] == 0
+    assert counts["bare_ready_wait"] == 1 and evs[-1]["what"] == "wait"
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)  # the fight is over: still bare
+    assert not ctl.st.armed and len(sim.log) == n
+    assert ctl.ready_tick(sim.t, True, True, 0.9) is None  # bare: no idle swap
+    sim.lines.append({"colour": "cyan"})  # the loot step's item line: no phase, no cue
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)
+    assert not ctl.st.armed and len(sim.log) == n
+    t2 = sim.t
+    ctl.before_strike("scan", 0.9, None)  # the next monster: its own phase, from its strike
+    assert ctl.st.t_bare is not None and ctl.st.t_bare >= t2 and len(sim.log) == n
+    assert ctl.st.n_lines0 == len(sim.lines)  # the old item line is no cue
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert not ctl.st.armed and counts["bare_ready_strike"] == 2
+
+
+def test_bare_ready_an_armed_fight_end_is_taken_off_again_after_the_loot() -> None:
+    sim = _BareSim()
+    ctl, counts, _evs = _ready_bare(sim)
+    ctl.before_strike("box", 0.9, None)
+    ctl.struck()
+    sim.lines.append({"colour": "cyan"})
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)  # the steal: the dagger on (F5)
+    assert ctl.st.armed
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # the kill, armed: nothing to do
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)
+    assert ctl.st.armed and ctl.tgt is None
+    n = len(sim.log)
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"  # after the loot step: off again
+    assert _kinds(sim)[n:] == ["chord", "dclick", "chord"] and not ctl.st.armed
+    assert counts["bare_ready"] == 2
+
+
+def test_bare_ready_puts_the_dagger_on_before_a_fly_wing_and_under_half_hp() -> None:
+    sim = _BareSim()
+    ctl, counts, _evs = _ready_bare(sim)
+    ctl.escape()  # press("fly") calls it before the Fly Wing's key, bare with no phase too
+    sim.log.append(("fly",))
+    assert _kinds(sim)[-2:] == ["press", "fly"] and sim.log[-2][1] == "safety"
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)  # the read-back on the next tick
+    assert ctl.st.armed and counts["bare_equip_safety"] == 1 and not sim.bag
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"  # idle again: off again
+    assert not ctl.st.armed
+    # waiting bare, the HP falls under BARE_HP_MIN (no target struck yet): the dagger on
+    ctl.tick(sim.t, False, True, sim.frame(), 0.4)
+    assert ctl.st.armed and counts["bare_equip_hp"] == 1
+    low = _BareSim()
+    ctl2, counts2, _e2 = _ready_bare(low)
+    n = len(low.log)
+    assert ctl2.before_strike("box", 0.4, None)  # a strike under 50 %: armed first, no bare hit
+    assert _kinds(low)[n:] == ["press"] and ctl2.st.armed and counts2["bare_equip_hp"] == 1
+    assert counts2["bare_ready_strike"] == 0
+    # the run's end and a death: as --bare-steal (F5 at the end; nothing pressed while dead)
+    end = _BareSim()
+    ctl3, counts3, _e3 = _ready_bare(end)
+    n3 = len(end.log)
+    assert ctl3.run_end(dead=True)["armed"] is False and len(end.log) == n3
+    rec = ctl3.run_end()
+    assert rec["armed"] and rec["slot"] == "armed" and counts3["bare_equip_run_end"] == 1
+
+
+def test_bare_ready_reads_the_state_at_the_strike_and_swaps_when_armed_after_all() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ready_bare(sim)
+    sim.bag = sim.bag_to = False  # the dagger went on by itself (a person, another press)
+    n = len(sim.log)
+    assert ctl.before_strike("box", 0.9, lambda: True)
+    assert [e["what"] for e in evs[-2:]] == ["begin", "unequip"] and evs[-2]["ok"] is False
+    assert _kinds(sim)[n:] == ["chord", "dclick", "chord"]  # today's swap at the strike
+    assert counts["bare_ready_lost"] == 1 and sim.bag and ctl.st.t_bare is not None
+
+
+def test_without_bare_ready_the_merged_bare_steal_is_unchanged() -> None:
+    """p65 / p66's behaviour (dungeon@9.27): the swap at the strike, F5 at the fight's end and the
+    safety net outside a fight -- the ready hooks never act."""
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim)
+    assert ctl.ready is False
+    assert ctl.ready_tick(sim.t, True, True, 0.9) is None and sim.log == []
+    assert ctl.before_strike("box", 0.9, lambda: True)
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # killed bare: F5 at once
+    assert ctl.st.armed and counts["bare_equip_fight_end"] == 1
+    assert ctl.ready_tick(sim.t, True, True, 0.9) is None  # never an idle swap
+    assert ctl.before_strike("scan", 0.9, lambda: True)  # the next target: swapped at its strike
+    ctl.struck()
+    ctl.tgt = None
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)  # bare outside a fight: the safety net
+    assert ctl.st.armed and counts["bare_equip_fight_end"] == 2
+    assert _kinds(sim) == ["chord", "dclick", "chord", "press"] * 2
+    assert [e["what"] for e in evs] == ["unequip", "equip"] * 2
+    assert not any(k.startswith("bare_ready") for k in counts)
+
+
+def test_bare_ready_is_wired_after_the_loot_step_and_holds_only_the_search_walk() -> None:
+    src = Path(dh.__file__).read_text()
+    i_loot = src.index("got_ = loot_step(loot_list, fight_ref)")
+    i_after = src.index('if mode == "after":\n                    mode = "search"\n')
+    i_hook = src.index("got_r = bare.ready_tick(")
+    i_rest = src.index("# --- REST (B / C): to the nearest spot, sit until HP 100 %")
+    assert i_loot < i_after < i_hook < i_rest  # after the loot step and the rest decision
+    assert src.count("bare.ready_tick(") == 1
+    hook = src[i_hook - 400 : i_rest]
+    assert "if bare is not None and bare.ready:" in hook
+    assert ("bare_idle(mode, lock is not None, sitting, here is not None,\n"
+            "                                  tick - fly_at, tick < boss_until, unread_active())"
+            ) in hook  # fmt: skip
+    assert "tick - last_click_t[0] >= BARE_READY_SETTLE_S, frac)" in hook
+    assert 'if got_r == "swap":\n                        continue' in hook
+    assert "and not ready_hold \\\n" in src[i_rest:]  # the search walk's click waits
+    body = src[src.index("        def click_at(u: float, v: float, why: str) -> None:") :]
+    body = body[: body.index("\n        def ", 10)]
+    assert body.index("agent.click(x, y)") < body.index("last_click_t[0] = time.monotonic()")
+    assert body.index("return\n") < body.index("last_click_t[0]")  # a refused click is no click
+
+
+# --- U0's staged setup (TRIAL ONLY: rogue-xmas02.md 4BU, U0; Study S-UA) -------------------------
+
+
+def test_u0_cells_parse_and_their_flags_are_recorded(monkeypatch, capsys) -> None:
+    import pytest
+
+    assert dh.cell_arg("100,207") == (100, 207) and dh.cell_arg(" 98 , 205 ") == (98, 205)
+    for bad in ("100", "100;207", "a,b", "-1,5", "1,2,3"):
+        with pytest.raises(dh.argparse.ArgumentTypeError):
+            dh.cell_arg(bad)
+    got: dict[str, Any] = {}
+
+    def fake_run(a: Any) -> int:
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "P2", "--seed", "1", "--char", "rogue"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].start_cell is None and got["a"].stage_at is None
+    monkeypatch.setattr(sys, "argv", [*argv, "--start-cell", "100,207", "--stage-mob", "1002:1",
+                                      "--stage-at", "98,205"])  # fmt: skip
+    assert dh.main() == 0
+    assert got["a"].start_cell == (100, 207) and got["a"].stage_at == (98, 205)
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--help"])
+    with pytest.raises(SystemExit):
+        dh.main()
+    help_ = " ".join(capsys.readouterr().out.split())
+    assert help_.count("TRIAL ONLY (rogue-xmas02.md 4BU, U0") == 2
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    rec0 = dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "start_cell" not in rec0 and "stage_at" not in rec0
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, stage_mob="1002:1", stage_at=(98, 205),
+                                            start_cell=(100, 207)))  # fmt: skip
+    assert rec["stage_at"] == [98, 205] and rec["start_cell"] == [100, 207]
+    assert rec["stage_mob"] == "1002:1"
+    src = Path(dh.__file__).read_text()
+    i_start = src.index('ev({"kind": "run_start", "strategy": a.strategy')
+    rs = src[i_start:]
+    assert '**({"start_cell": list(start_cell)} if start_cell is not None else {}),' in rs
+    assert '**({"stage_at": list(stage_at)} if stage_at is not None else {}),' in rs
+
+
+def test_u0_refuses_a_stage_without_a_mob_and_cells_off_the_grid_or_the_server() -> None:
+    okr = np.zeros((260, 260), bool)
+    okr[207, 100] = True  # her start cell is on the route grid; the Cruiser's (98,205) is not
+    passes = lambda m, cells: None  # noqa: E731
+    assert dh.u0_setup_refused("xmas_dun02", None, None, None, okr, passes) is None  # both off
+    assert dh.u0_setup_refused("xmas_dun02", (100, 207), (98, 205), "1002:1", okr, passes) is None
+    why = dh.u0_setup_refused("xmas_dun02", None, (98, 205), None, okr, passes)
+    assert "--stage-mob" in str(why)
+    assert "route grid" in str(dh.u0_setup_refused("xmas_dun02", (98, 205), None, None, okr,
+                                                   passes))  # fmt: skip
+    assert "off xmas_dun02" in str(dh.u0_setup_refused("xmas_dun02", (300, 5), None, None, okr,
+                                                       passes))  # fmt: skip
+    assert "off xmas_dun02" in str(dh.u0_setup_refused("xmas_dun02", None, (5, 260), "1002:1",
+                                                       okr, passes))  # fmt: skip
+    seen: list[list[Any]] = []
+
+    def server(m: str, cells: list[Any]) -> str | None:
+        seen.append(list(cells))
+        return "the server does not let the GM stand on: [(98, 205)] (refused)"
+
+    why2 = dh.u0_setup_refused("xmas_dun02", None, (98, 205), "1002:1", okr, server)
+    assert str(why2).startswith("--stage-at (98, 205): the server") and seen == [[(98, 205)]]
+    why3 = dh.u0_setup_refused("xmas_dun02", (100, 207), None, None, okr, server)
+    assert str(why3).startswith("--start-cell (100, 207): the server")
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.26 U0 refused: {why_u0}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    i_p = src.index("        start = patrol_start(map_, okr, map_prep.stand_check)\n")
+    assert i_p < i_ref < src.index("            start = start_cell\n")
+    assert "okr, mp_u0.stand_check)" in src  # the three stand-cell checks (map_prep)
+
+
+def test_u0_setup_lines_spawn_at_the_stage_cell_then_warp_to_the_start() -> None:
+    import pytest
+
+    m, s = "xmas_dun02", (100, 207)
+    assert dh.map_setup_lines(m, s, False, None) == ["@warp xmas_dun02 100 207"]
+    assert dh.map_setup_lines(m, s, True, "1002:2") == [  # as before: on the start, after it
+        "@warp xmas_dun02 100 207", "@killmonster2", "@monster 1002 2"]  # fmt: skip
+    one = dh.map_setup_lines(m, s, False, "1002")
+    assert one == ["@warp xmas_dun02 100 207", "@monster 1002 1"]
+    assert dh.map_setup_lines(m, s, True, "1002:1", (98, 205)) == [
+        "@warp xmas_dun02 98 205", "@killmonster2", "@monster 1002 1",
+        "@warp xmas_dun02 100 207"]  # fmt: skip
+    assert dh.map_setup_lines(m, s, False, "1002:1", (98, 205)) == [
+        "@warp xmas_dun02 98 205", "@monster 1002 1", "@warp xmas_dun02 100 207"]  # fmt: skip
+    with pytest.raises(ValueError):
+        dh.map_setup_lines(m, s, False, None, (98, 205))
+    src = Path(dh.__file__).read_text()
+    i_set = src.index("setup.extend(map_setup_lines(map_, start, a.clear_map, "
+                      'getattr(a, "stage_mob", None),')  # fmt: skip
+    assert i_set < src.index("for cmd in setup:\n            setup_line(cmd)\n        bench.close")
+    assert src.count("map_setup_lines(") == 2  # its definition + the setup's one call
+
+
+def test_u0_cells_pass_on_the_real_xmas_dun02() -> None:
+    """The real grids (the client GAT in /dev/shm, the zones, the KB): p57's two cells pass."""
+    import pytest
+
+    gat = Path("/dev/shm/poring-lab-tmp/gat/data/xmas_dun02.gat")
+    if not gat.exists() or not (ROOT / "data/kb/warps.json").exists():
+        pytest.skip("xmas_dun02's GAT or the KB is not on this host")
+    import anim_region as ar
+    import map_prep
+    import map_zones as mz
+
+    from poring_dataset import gat as gatmod
+
+    stand = np.asarray(ar.stand_grid("xmas_dun02", gatmod.parse(gat.read_bytes())), dtype=bool)
+    okr = mz.route_grid(stand, mz.load("xmas_dun02", shape=stand.shape))
+    okr = okr & ~mz.sealed_off(stand, okr)
+    assert dh.u0_setup_refused("xmas_dun02", (100, 207), (98, 205), "1002:1", okr,
+                               map_prep.stand_check) is None  # fmt: skip
+
+
+# --- --steal-opener (dungeon@9.27c, Batt 2026-11-11 ~19:15: the Knife on F4, the Damascus on F5) -
+
+
+def _opener_frame(dagger_bag: bool, opener_bag: bool, dark: bool = False,
+                  popup: int | None = None) -> np.ndarray:  # fmt: skip
+    """_hotbar_frame + the opener's icon (8 x 6 dark px) on F4 (slot 3) while it is in the bag."""
+    img = _hotbar_frame(dagger_bag, dark, popup)
+    if opener_bag and not dark:
+        x0 = 246 + 29 * 3
+        img[9:15, x0 + 8 : x0 + 16] = 50
+    return img
+
+
+def _opener_read() -> dh.OpenerRead:
+    g = BS.slot_gray(_opener_frame(False, True))
+    return dh.OpenerRead("F4", BS.slot_crop(g), BS.slot_crop(g, 3))
+
+
+class _OpenerSim(_BareSim):
+    """--steal-opener's client: F4 wears the opener ``on_s`` later (the dagger to the bag: F5
+    shows it, F4 empty); F5 wears the dagger back (the opener to the bag: F4 shows it again).
+    ``opener_ok`` False: F4 does nothing. The opener is in the bag exactly while the dagger is
+    worn."""
+
+    def __init__(self, *, opener_ok: bool = True, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.opener_ok = opener_ok
+        self.hide_opener = False  # True: the opener's icon is not drawn (a redraw that lags)
+
+    def frame(self) -> _SimFrame:
+        self.t += 0.03
+        self._now()
+        dark = self.dark > 0
+        self.dark -= int(dark)
+        f = _opener_frame(self.bag, not self.bag and not self.hide_opener, dark,
+                          self.popup).view(_SimFrame)  # fmt: skip
+        f.win = tuple(sorted((("equipment",) if self.vis else ()) + self.others))
+        f.org = self.origin if self.vis else None
+        return f
+
+    def opener(self, why: str) -> None:
+        self._now()
+        self.log.append(("opener", why))
+        if self.opener_ok and not self.bag_to:
+            self.bag_to, self.bag_t = True, self.t + self.on_s
+
+    def io(self) -> dh.BareIo:
+        io = super().io()
+        io.opener = self.opener
+        return io
+
+
+def _octl(sim: _OpenerSim, **kw: Any) -> tuple[dh.BareCtl, Any, list[dict[str, Any]]]:
+    return _ctl(sim, opener=_opener_read(), **kw)
+
+
+def test_steal_opener_refusals_and_the_run_start_record(monkeypatch, capsys) -> None:
+    import pytest
+
+    got: dict[str, Any] = {}
+
+    def fake_run(a: Any) -> int:
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "P2", "--seed", "1", "--char", "rogue"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].steal_opener is None  # OFF by default
+    monkeypatch.setattr(sys, "argv", [*argv, "--bare-steal", "--steal-opener", "F4"])
+    assert dh.main() == 0 and got["a"].steal_opener == "F4"
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--help"])
+    with pytest.raises(SystemExit):
+        dh.main()
+    help_ = " ".join(capsys.readouterr().out.split())
+    assert "dungeon@9.27c" in help_ and "the Knife on F4" in help_
+    rogue = dh.CHARS_CONF["rogue"]["keys"]
+    assert dh.steal_opener_refused(None, False, rogue) is None  # off
+    assert dh.steal_opener_refused("F4", True, rogue) is None
+    assert "--bare-steal" in str(dh.steal_opener_refused("F4", False, rogue))
+    assert "dagger" in str(dh.steal_opener_refused("F5", True, rogue))
+    for k, used in (("F1", "potion"), ("F2", "fly"), ("F3", "steal")):
+        assert used in str(dh.steal_opener_refused(k, True, rogue)), k
+    for bad in ("F0", "F10", "G4", "4", "Insert"):
+        assert "F1-F9" in str(dh.steal_opener_refused(bad, True, rogue)), bad
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    rec0 = dh.fixes_of(dh.argparse.Namespace(**base, bare_steal=True))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, bare_steal=True, steal_opener="F4"))
+    assert rec["steal_opener"] == ["F4", "9.27c"] and "steal_opener" not in rec0
+    assert {k: v for k, v in rec.items() if k != "steal_opener"} == rec0
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.27c refused: {why_so}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    i_cut = src.index('raise r.Stop(f"dungeon@9.27c refused: --steal-opener: {why_op} {op_rec}")')
+    i_start = src.index('ev({"kind": "run_start", "strategy": a.strategy')
+    i_f5 = src.index('raise r.Stop(f"dungeon@9.27 refused: --bare-steal: {why_br} {bare_rec}")')
+    assert i_f5 < i_cut < i_start  # the dagger's slot first, then the opener's, then the start
+    rs = src[i_start:]
+    rec_l = '**({"steal_opener": fixes_of(a)["steal_opener"]} if opener_key is not None else {})'
+    assert rec_l in rs
+    assert "opener=bare_opener if opener_key is not None else None)," in src
+    assert "opener=None if opener_key is None else OpenerRead(opener_key, bare_ref," in src
+    assert "agent_raw.keys(opener_key)" in src  # the agent's own key path, as press()
+
+
+def test_the_run_start_needs_the_dagger_worn_and_the_opener_in_the_bag() -> None:
+    ok_g = BS.slot_gray(_opener_frame(False, True))
+    ref, rec, why = dh.opener_ref_cut(ok_g, "F4")
+    assert why is None and ref is not None and rec["empty"] is False and rec["slot"] == 3
+    worn = BS.slot_gray(_opener_frame(True, False))  # the opener worn (F4 empty)
+    ref2, rec2, why2 = dh.opener_ref_cut(worn, "F4")
+    assert ref2 is None and "EMPTY" in str(why2) and rec2["empty"] is True
+    # and bare_ref_cut refuses that frame first: the dagger's icon on F5 (it is in the bag)
+    assert "in the bag" in str(dh.bare_ref_cut(worn)[2])
+    stack = _opener_frame(False, True)
+    stack[25:32, 259 + 29 * 3 + 8 : 259 + 29 * 3 + 10] = 0  # a count on F4: a stack
+    assert "stack" in str(dh.opener_ref_cut(BS.slot_gray(stack), "F4")[2])
+    dark = BS.slot_gray(_opener_frame(False, True, dark=True))
+    ref4, rec4, why4 = dh.opener_ref_cut(dark, "F4")
+    assert ref4 is None and why4 is None and rec4["empty"] is None  # unreadable: read again
+    rd = dh.OpenerRead("F4", BS.slot_crop(ok_g), ref)
+    assert rd.slot == 3 and rd.state(_opener_frame(False, True)) == "armed"
+    assert rd.state(_opener_frame(True, False)) == "opener"
+    assert rd.state(_opener_frame(True, True)) == "bare"
+    assert rd.state(_opener_frame(False, False, dark=True)) is None
+
+
+def test_steal_opener_never_opens_a_window_or_clicks_and_reads_both_slots_back() -> None:
+    sim = _OpenerSim()
+    ctl, counts, evs = _octl(sim)
+    aims: list[int] = []
+    assert ctl.before_strike("box", 0.9, lambda: aims.append(1) is None)
+    assert _kinds(sim) == ["opener"] and sim.log[0][1] == "box" and aims == [1]
+    assert sim.bag and not ctl.st.armed and ctl.st.t_bare is not None  # the opener on: phase
+    assert counts["bare_opener"] == 1 and counts["bare_unequip"] == 0
+    assert evs[-1]["what"] == "opener" and evs[-1]["ok"] and evs[-1]["state"] == "opener"
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert not ctl.st.armed
+    sim.lines.append({"colour": "cyan"})  # the steal: F5, read back armed (F5 empty, F4 shows)
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert ctl.st.armed and not sim.bag and counts["bare_equip_cyan"] == 1
+    assert _kinds(sim) == ["opener", "press"] and sim.log[-1][1] == "cyan"
+    assert evs[-1]["what"] == "equip" and evs[-1]["state"] == "armed"
+    assert not any(k in ("chord", "dclick") for k in _kinds(sim)) and sim.read == ()
+    rec = ctl.run_end()
+    assert rec["armed"] and rec["state"] == "armed" and rec["slot"] == "armed"
+
+
+def test_steal_opener_fails_cleanly_and_presses_again_only_on_a_readable_miss() -> None:
+    import pytest
+
+    sim = _OpenerSim(opener_ok=False)  # F4 does nothing (no Knife? another key?)
+    ctl, counts, _evs = _octl(sim)
+    for _k in range(2):
+        assert ctl.before_strike("box", 0.9, None)  # armed: the strike goes on with the dagger
+        ctl.struck()
+        ctl.tick(sim.t, False, True, sim.frame(), 0.9)
+    assert _kinds(sim) == ["opener", "opener"] * 2  # ONE more press on a readable "armed"
+    assert ctl.st.armed and counts["bare_opener_fail"] == 2
+    with pytest.raises(_Stop):
+        ctl.before_strike("box", 0.9, None)  # the 3rd in a row: the run stops
+    dark = _OpenerSim(opener_ok=False)
+    dark.dark = 99  # unreadable: no second press, a failure, the dagger never pressed
+    ctl2, counts2, _e2 = _octl(dark)
+    ctl2.before_strike("box", 0.9, None)
+    assert _kinds(dark) == ["opener"] and counts2["bare_opener_fail"] == 1 and ctl2.st.armed
+    stuck = _OpenerSim(puts_on=False)  # F5 does nothing: ONE more F5 while F5 shows the dagger
+    ctl3, counts3, _e3 = _octl(stuck)
+    ctl3.before_strike("box", 0.9, None)
+    ctl3.struck()
+    stuck.lines.append({"colour": "cyan"})
+    ctl3.tick(stuck.t, True, True, stuck.frame(), 0.9)
+    assert _kinds(stuck) == ["opener", "press", "press"] and counts3["bare_fail_on"] == 1
+    assert not ctl3.st.armed  # F5 still shows the dagger: the truth kept
+    # F5 read EMPTY (the dagger worn) but the opener's icon not back on F4: ok (F5 is never
+    # pressed onto a worn dagger again), recorded as opener_back False
+    lag = _OpenerSim()
+    ctl4, counts4, evs4 = _octl(lag)
+    ctl4.before_strike("box", 0.9, None)
+    ctl4.struck()
+    lag.hide_opener = True
+    lag.lines.append({"colour": "cyan"})
+    ctl4.tick(lag.t, True, True, lag.frame(), 0.9)
+    assert _kinds(lag) == ["opener", "press"] and ctl4.st.armed  # ONE press, no second
+    assert evs4[-1]["opener_back"] is False and evs4[-1]["state"] == "odd"
+    assert counts4["bare_opener_back_miss"] == 1 and counts4["bare_equip_cyan"] == 1
+
+
+def test_steal_opener_with_bare_ready_keys_the_opener_after_the_loot_and_strikes_at_once() -> None:
+    sim = _OpenerSim()
+    ctl, counts, evs = _octl(sim, ready=True)
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"  # the idle moment: F4
+    assert _kinds(sim) == ["opener"] and sim.log[0][1] == "ready"
+    assert not ctl.st.armed and ctl.st.t_bare is None  # the opener on, no phase yet
+    assert counts["bare_ready"] == 1 and counts["bare_opener"] == 1
+    assert ctl.before_strike("scan", 0.9, None)  # the next monster: opened with the Knife AT ONCE
+    assert _kinds(sim) == ["opener"] and ctl.st.t_bare is not None
+    assert evs[-1]["what"] == "begin" and evs[-1]["state"] == "opener"
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # killed with the Knife: it stays on
+    assert not ctl.st.armed and _kinds(sim) == ["opener"]
+    ctl.escape()  # a Fly Wing: F5 first, as every safety equip
+    assert _kinds(sim) == ["opener", "press"] and sim.log[-1][1] == "safety"
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)
+    assert ctl.st.armed and counts["bare_equip_safety"] == 1
+    assert ctl.ready_tick(sim.t, True, True, 0.9) == "swap"  # idle again: F4 again
+    assert _kinds(sim) == ["opener", "press", "opener"] and not ctl.st.armed
+    rec = ctl.run_end()  # the run's end: F5, read back with both slots
+    assert rec["armed"] and rec["state"] == "armed" and counts["bare_equip_run_end"] == 1
+    assert not any(k in ("chord", "dclick") for k in _kinds(sim))
+
+
+def test_clear_bag_never_drops_the_opener_from_the_eqp_tab() -> None:
+    """The opener sits in the bag with its icon on a key none of the character's keys names:
+    clear-bag reads the hotbar and refuses the Eqp tab then (a person passes --tabs etc,use)."""
+    rogue = dh.CHARS_CONF["rogue"]["keys"]
+    g_op = BS.slot_gray(_opener_frame(False, True))
+    tabs = list(dh.BAG_TABS)
+    assert "eqp" in tabs and "opener" in str(dh.clear_bag_eqp_refused(g_op, rogue, tabs))
+    assert "F4" in str(dh.clear_bag_eqp_refused(g_op, rogue, tabs))
+    assert dh.clear_bag_eqp_refused(g_op, rogue, ["etc", "use"]) is None  # Eqp skipped: fine
+    g_plain = BS.slot_gray(_hotbar_frame(False))  # no opener: as before
+    assert dh.clear_bag_eqp_refused(g_plain, rogue, tabs) is None
+    dark = BS.slot_gray(_opener_frame(False, True, dark=True))
+    assert "unreadable" in str(dh.clear_bag_eqp_refused(dark, rogue, tabs))
+    assert dh.clear_bag_eqp_refused(g_op, dh.KEYS, tabs) is None  # no equip key: not the Rogue
+    # the opener WORN (the dagger in the bag): clear_bag_bare_refused refuses the whole step
+    assert "drop it" in str(dh.clear_bag_bare_refused(BS.slot_gray(_opener_frame(True, False)),
+                                                      rogue))  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    body = src[src.index("def clear_bag(a: argparse.Namespace) -> int:") :]
+    body = body[: body.index("\ndef load_rest_spots(")]
+    i_be = body.index("raise r.Stop(why_be)")
+    assert body.index("raise r.Stop(why_bb)") < i_be < body.index("@warp")
+    assert "clear_bag_eqp_refused(g_be, keys_, tabs)" in body
