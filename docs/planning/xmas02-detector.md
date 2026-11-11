@@ -3768,4 +3768,13 @@ ONNX sets give IDENTICAL I1-I4.
 - **Epochs = min(12, max(3, floor(5,400 / (0.64 x 2,048 + 100)))) = 3.**
 - **The held-out stagings (6 spots each, cells shared with no staging so far):** fsTa4 = the
   Rogue, seed 2612104; fsTn4 = the Crusader, seed 2612190.
+- **O20c (11:36 ICT):**
+  - fsTa4 (Rogue, seed 2612104): 11:07:18-11:21:03, rc 0, 6 / 6 spots, shipped;
+  - fsTn4 (Crusader, seed 2612190) STOPPED after spot 1 of 6: the chat-window check found no window
+    over the busy orange floor (`chat-window/20261111-113449-no-window.png`; the window is plainly
+    there). It stopped before typing, as built; the 1-spot recording is shipped and stays
+    held-out (refused by name);
+  - so the no-aura held-out is re-staged under the SAME label (`xmas02-fsTn4`, refused by name) on
+    a new 6-spot plan, seed 2612601, which shares no cell with any staging so far;
+  - round 4's training runs since 11:17 (3 epochs, 499 / 499 transferred).
 
