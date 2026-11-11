@@ -3856,3 +3856,23 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
   the score file.
 - The next lever is again the natural drops beside fights (the stratum the bar now reads);
   Batt's 95 % is met by the no-aura stratum only.
+
+### Amendment O22 (2026-11-11 20:4x ICT from `date`, BEFORE any round-5 label): ROUND 5 -- the aura OFF
+
+- **Batt (2026-11-11 ~19:0x):** "do round 5, and importantly turn the light under her feet OFF
+  (/aura, /aura2); when I play I always turn it off." Done 19:0x (rogue-xmas02.md 4BZ); every run
+  from p67 is aura-off. So round 5's held-out is the AURA-OFF Rogue (the stratum Batt plays in),
+  and the aura stratum of rounds 3-4 is retired.
+- **TRAIN (relabelled `--split train`, params v2 aea6f1d2, each admitted only by G2: >= 30 fits):**
+  round 4's TRAIN + round 4's spent held-out (fiT10-fiT13, fsTa4, both fsTn4) + fiT14-fiT17 (aura on)
+  + the aura-off recordings before the freeze (fiT18-fiT23 and the next pilots' as they come).
+  Fight negatives as round 4 (`--session-negs-n 75`, the same names + the new pilots).
+- **The model:** init from round 4 (32e8afae), epochs by O20's rule, FROZEN (sha256) before any
+  held-out file is read.
+- **The held-out (fresh, refused by name, recorded AFTER the freeze):** two aura-off base pilots
+  (natural drops; labels `hunt-xmas02-fiH1`, `-fiH2`) and one aura-off near staging of the Rogue
+  (`xmas02-fsH1`, 6 spots, cells shared with no staging so far).
+- **The bars: O15's, with the strata re-read for the aura off:** **I1h** recall on the held-out's
+  item crops (the natural drops and the staging pooled, >= 40 crops) >= 0.85; reported apart: the
+  natural drops alone and the staging alone; I1 precision, I2, I3, I4, I5 as before. Batt's 95 %
+  is reported. `fi_eval` gains `--strata r5` for this (a test first).
