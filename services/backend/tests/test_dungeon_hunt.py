@@ -2528,3 +2528,21 @@ def test_near_single_9_25_moves_the_one_click_rule_to_two_cells() -> None:
     on = dh.argparse.Namespace(**{**vars(base), "near_single": True})
     assert dh.fixes_of(on)["near_single"] == [2, "9.25"]
     assert dh.fixes_of(on)["far_single"] == dh.fixes_of(base)["far_single"]
+
+
+def test_near_single_still_9_25b_gates_the_two_three_cell_reclick_on_the_scroll() -> None:
+    """dungeon@9.25b (R2b, 4BT): only 2-3-cell strikes are scroll-gated; a re-click goes out
+    while the scene moved < WALK_STOP_PX; it refuses with --near-single; fixes only when on."""
+    assert dh.near_still_cells((2, -1), True) and dh.near_still_cells((0, 3), True)
+    assert not dh.near_still_cells((1, 1), True) and not dh.near_still_cells((4, 0), True)
+    assert not dh.near_still_cells((2, 0), False)
+    assert dh.near_still_reclick((3.0, 4.0)) and not dh.near_still_reclick((6.0, 8.0))
+    assert dh.NEAR_STILL_VERSION == "9.25b"
+    base = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                                 rest="spot", npc_guard=False, far_single=True)  # fmt: skip
+    assert "near_single_still" not in dh.fixes_of(base)
+    on = dh.argparse.Namespace(**{**vars(base), "near_single_still": True})
+    assert dh.fixes_of(on)["near_single_still"] == [2, 4, 10.0, "9.25b"]
+    src = Path(dh.__file__).read_text()
+    assert 'if still_rec is None or still_rec["stopped_s"] is None:' in src
+    assert src.count('click_at(u, v, "strike_burst")') == 1

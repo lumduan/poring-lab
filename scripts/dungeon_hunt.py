@@ -349,6 +349,12 @@ FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S = 4, 1.0, 0.2, 3.5
 # client / server desync of p53. 0-1 cells keep the burst (20 strikes there sent nothing at first).
 NEAR_SINGLE_VERSION = "9.25"
 NEAR_SINGLE_CELLS = 2
+# --near-single-still (dungeon@9.25b, R2b; rogue-xmas02.md 4BT, Batt 2026-11-11 "adjust and
+# retry"): R2 dropped EVERY 2-3-cell re-click and its late-failed strikes rose (6 vs 3, p57 + p58).
+# The floor walk-off needs the camera to have SCROLLED with her walk-up; a re-click on a still
+# scene re-aims at a sprite that is still there. So a 2-3-cell strike re-clicks only while the
+# scene moved less than WALK_STOP_PX since its first click; once it scrolled, no more re-clicks.
+NEAR_STILL_VERSION = "9.25b"
 # --far-approach (dungeon@9.10, rogue-xmas02.md 4AC): p19 (--far-single) still missed 26 of 28
 # strikes 9+ cells away (7-8 cells: 6 of 20; 2-6: 4 of 24): too far for one click to carry. So a
 # box target APPROACH_CELLS or more away is walked toward first -- a walk click on the cell
@@ -1659,6 +1665,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
     if getattr(a, "near_single", False):  # dungeon@9.25 (S-LF5 R2)
         out["near_single"] = [NEAR_SINGLE_CELLS, NEAR_SINGLE_VERSION]
+    if getattr(a, "near_single_still", False):  # dungeon@9.25b (R2b)
+        out["near_single_still"] = [NEAR_SINGLE_CELLS, FAR_CELLS, WALK_STOP_PX, NEAR_STILL_VERSION]
     if getattr(a, "box_every", BOX_EVERY_S) != BOX_EVERY_S:  # dungeon@9.11 (rogue-xmas02.md 4AD)
         out["box_every"] = float(a.box_every)
     if getattr(a, "far_approach", False):  # dungeon@9.10 (rogue-xmas02.md 4AC)
@@ -1913,6 +1921,17 @@ def far_window(rel: Sequence[int], from_cells: int = FAR_CELLS) -> float | None:
     if cells < from_cells:
         return None
     return min(FAR_MAX_S, FAR_BASE_S + FAR_PER_CELL_S * cells)
+
+
+def near_still_cells(rel: Sequence[int], on: bool) -> bool:
+    """PURE (--near-single-still, 9.25b): this strike's re-clicks are scroll-gated (2-3 cells)."""
+    cells = max(abs(int(rel[0])), abs(int(rel[1])))
+    return on and NEAR_SINGLE_CELLS <= cells < FAR_CELLS
+
+
+def near_still_reclick(shift: tuple[float, float], px: float = WALK_STOP_PX) -> bool:
+    """PURE (9.25b): a scroll-gated re-click goes out only while the scene moved < ``px``."""
+    return math.hypot(float(shift[0]), float(shift[1])) < px
 
 
 def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: float,
@@ -2630,6 +2649,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                       getattr(a, "lead_strike", False))  # fmt: skip
         if why_st:
             raise SystemExit(f"dungeon@9.23 refused: {why_st}")
+    if getattr(a, "near_single_still", False) and getattr(a, "near_single", False):
+        raise SystemExit("dungeon@9.25b refused: --near-single-still replaces --near-single "
+                         "(R2b keeps the still-scene re-click R2 drops)")  # fmt: skip
     if getattr(a, "near_single", False) and not getattr(a, "far_single", False):
         raise SystemExit("dungeon@9.25 refused: --near-single needs --far-single (it moves its "
                          "one-click rule from 4 cells to 2)")  # fmt: skip
@@ -3483,6 +3505,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             far_w = far_window(rel, far_from) if getattr(a, "far_single", False) else None
             if far_w is not None:  # dungeon@9.8: one click, the walk-up's own time
                 burst_s = far_w
+            gated = far_w is None and near_still_cells(rel, getattr(a, "near_single_still", False))
+            ref_g = np.ascontiguousarray(np.asarray(ref)[..., :3]) if gated else None
+            still_rec: dict[str, Any] | None = {"reclicks": 0, "stopped_s": None,
+                                                "shift": None} if gated else None  # fmt: skip
             while time.monotonic() - t_c < burst_s:
                 time.sleep(0.06)
                 cur = frame()
@@ -3505,8 +3531,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if guard_tick():
                     break
                 if far_w is None and n < BURST_MAX and time.monotonic() - t_c >= n * gap:
-                    click_at(u, v, "strike_burst")
-                    n += 1
+                    if still_rec is not None and still_rec["stopped_s"] is None:  # 9.25b
+                        sh_ = rp.scene_shift(ref_g, np.ascontiguousarray(np.asarray(cur)[..., :3]))
+                        still_rec["shift"] = [round(sh_[0], 1), round(sh_[1], 1)]
+                        if not near_still_reclick(sh_):
+                            still_rec["stopped_s"] = round(time.monotonic() - t_c, 2)
+                            counts["near_still_stop"] += 1
+                    if still_rec is None or still_rec["stopped_s"] is None:
+                        click_at(u, v, "strike_burst")
+                        n += 1
+                        if still_rec is not None:
+                            still_rec["reclicks"] += 1
             if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
                 n_shots[0] += 1
                 from PIL import Image
@@ -3521,7 +3556,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "shift": [round(x_, 1) for x_ in shifts[-1]] if shifts else None,
                 "end": "arrow" if arrow is not None else "damage" if dmg is not None else
                 "walked" if walked is not None else ("escape" if escaped[0] else "bound"),
-                "by": by, "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None})  # fmt: skip
+                "by": by, "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None,
+                **({"near_still": still_rec} if still_rec is not None else {})})  # fmt: skip
             if walked is not None:
                 time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
                 return False  # the click hit the ground: no lock (the caller scans again)
@@ -5660,6 +5696,13 @@ def main() -> int:
         help="dungeon@9.8 (rogue-xmas02.md 4Z, pilot p18; OFF by default): a strike 4+ cells away "
         "clicks ONCE and waits 1.0 s + 0.2 s a cell (<= 3.5 s) for the arrow / damage, never "
         "re-clicking while the camera scrolls (a re-click landed on the floor)",
+    )
+    t.add_argument(
+        "--near-single-still",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.25b (rogue-xmas02.md 4BT, R2b; OFF by default): a 2-3-cell strike "
+        "re-clicks only while the scene has not scrolled since its first click",
     )
     t.add_argument(
         "--near-single",
