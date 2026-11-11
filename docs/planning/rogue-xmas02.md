@@ -5477,3 +5477,29 @@ state.", `p63/imm-off-chat.png`). p63 started 13:20:24 (fiT14).
 - **Decision:** B1, B3, B4 and no harm pass AND B2 >= the base -> `--bare-steal` JOINS THE BASE.
   B2 below the base -> it stays a flag and goes to Batt with its costs (the 1.9 s unequip, the
   aim lost, fewer kills) and what could shorten them; B3 / B4 failing -> studied.
+
+**Pilots p61 + p62 (4BV: the base + `--near-single-still`, R2b), written 2026-11-11 16:1x ICT from
+`date`.** p61 14:23:27-14:49:16 (fiT12), p62 15:34:37-16:00:26 (fiT13; a first p62 at 14:51 was
+refused by the setup's weight gate, 50.5 % -- `clear-bag` 14:54-14:56, weight 1227 -> 520; its
+recorder ran on through the bag clear and the swap setup and is archived as ABORTED, not data).
+Both rc 0, immunity OFF read back; the MVP killed 14:22:14 and 15:32:52. Run record
+`"near_single_still": [2, 4, 10.0, "9.25b"]`.
+- **VERDICT: M2 FAILS (late-failed 5 + 7 = 12 >= 10): `--near-single-still` STAYS OFF.**
+  - **The mechanism, measured:** R2b's re-click NEVER fired: 0 re-clicks in 31 strikes at 2-3
+    cells (p61 16, p62 15; the base re-clicks some). At the burst's re-click time the scene had
+    always moved >= 10 px already (or the arrow / damage came first), so R2b behaved as R2 (no
+    re-click) and failed the same way (R2: 6 > 3).
+
+| | **p61** | **p62** | bar (pooled) |
+|---|---|---|---|
+| M1 floor walk-offs, 2-3-cell strikes | 0 (16 strikes, 0 re-clicked) | 0 (15, 0 re-clicked) | 0 <= 1: PASS |
+| M2 late-failed box strikes | 5 (of 68) | 7 (of 75) | **12 >= 10: FAIL** |
+| M2b 2-3-cell strikes sending no request | 0 | 1 | <= 1 a run: PASS |
+| E1 | 68 (163.2 / h) | 69 (165.6 / h) | >= 80: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 / 89.2 % / 0 / 0 | 0 / 88.6 % / 0 / 0 | PASS |
+| W1 / R1-A | 2 / 288; 0 | 9 / 271; 1 | pooled p62 + p61 + p64 + p63: 19 / 1,081 = 1.76 %; 5 < 7: PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 91.7 % / 97.0 % / 0 / 1.99 s / 100 % / 5 | 92.0 % / 97.1 % / 0 / 1.96 s / 98.5 % / 4 | PASS |
+| U1-stuck / D1 p95 / P2 | 8.4 s / 23.1 ms / 0 | 6.7 s / 22.4 ms / 0 | PASS |
+
+- R2 and R2b are both off; the floor walk-off (S-LF5's desync) stays as the base has it (~4 a
+  run by the earlier count, 0-5 in p61-p64).
