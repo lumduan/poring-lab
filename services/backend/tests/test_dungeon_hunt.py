@@ -997,6 +997,7 @@ def _watch(gpu: bool = True) -> dh.BoxWatch:
     bw.cond = threading.Condition(bw.lock)
     bw.last, bw.meta, bw.paths = (0.0, []), {"kick": 0}, Counter()
     bw.alarm, bw.alarm_n = (0.0, []), 0  # 9.19 / 9.19b
+    bw.hist = dh.deque(maxlen=dh.LOOT_AIM_HIST)  # 9.32 (--loot-aim)
     bw.kick_ev, bw.kick_seq, bw.kick_prefer = threading.Event(), 0, None
     bw.halt, bw.n, bw.n_self, bw.n_skip = threading.Event(), 0, 0, 0
     bw.th = threading.Thread(target=bw._loop, daemon=True)
@@ -4078,3 +4079,62 @@ def test_swap_gap_marks_the_end_of_every_swap_and_restarts_the_no_hit_clocks() -
                               swap_gap=True)  # fmt: skip
     assert dh.fixes_of(a)["swap_gap"] == ["9.27e"]
     assert "swap_gap" not in dh.fixes_of(dh.argparse.Namespace(**{**vars(a), "swap_gap": False}))
+
+
+def test_loot_aim_picks_the_nearest_box_cell_and_orders_the_sweep() -> None:
+    """dungeon@9.32 (--loot-aim, Study S-IDLE): the nearest monster box's cell within LOOT_AIM_R
+    (its foot within LOOT_AIM_PX of the cell's projected point) is the aim; the sweep hovers it,
+    then its neighbours, then the rest (each group in its own order); every kill aimed -> at most
+    LOOT_AIM_HOVERS hovers a kill (never above LOOT_TRIM_HOVERS)."""
+    assert (0, 0) not in dh.AIM_GRID and len(dh.AIM_GRID) == 24
+    uv = [(600.0 + 34 * dx, 360.0 + 24 * dy) for dx, dy in dh.AIM_GRID]  # a flat synthetic camera
+    foot_e = uv[dh.AIM_GRID.index((1, 0))]
+    foot_far = uv[dh.AIM_GRID.index((2, -2))]
+    box = lambda f: (f[0] - 20, f[1] - 60, f[0] + 20, f[1])  # noqa: E731
+    assert dh.aim_rel([box(foot_e)], uv) == (1, 0)
+    assert dh.aim_rel([box(foot_far), box(foot_e)], uv) == (1, 0)  # the nearer cell wins
+    assert dh.aim_rel([box((foot_e[0] + 200, foot_e[1]))], uv) is None  # no point within 40 px
+    assert dh.aim_rel([], uv) is None
+    todo = [(10, 10), (11, 10), (9, 9), (11, 11), (12, 12), (8, 10)]
+    assert dh.aim_order(todo, [(11, 11)]) == [(11, 11), (10, 10), (11, 10), (12, 12), (9, 9),
+                                              (8, 10)]  # fmt: skip
+    assert dh.aim_order(todo, []) == todo
+    assert dh.aim_cap(1, 1) == 5 and dh.aim_cap(2, 2) == 9 and dh.aim_cap(2, 1) is None
+    assert dh.aim_cap(0, 0) is None
+
+
+def test_loot_aim_is_wired_at_the_kills_and_in_the_trim_step() -> None:
+    """dungeon@9.32: OFF by default; refused without --loot trim / --box-strike; the aim is kept at
+    the exp-line and hit-gap kills (not at a pickup scan); the trim step keeps its pinned lines and
+    only re-orders / caps after them; recorded in the run's fixes."""
+    src = Path(dh.__file__).read_text()
+    assert src.count("kill_aim_set(tick)") == 2
+    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))" in src
+    i_sort = src.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))")
+    assert i_sort < src.index("todo = aim_order(todo, aims)") < src.index(
+        'counts["loot_aim_capped"] += 1')  # fmt: skip
+    assert "--loot-aim goes with --loot trim and --box-strike" in src
+    a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                              rest="spot", npc_guard=False, loot_aim=True)  # fmt: skip
+    assert dh.fixes_of(a)["loot_aim"] == [5, 2, 40.0, "9.32"]
+    assert "loot_aim" not in dh.fixes_of(dh.argparse.Namespace(**{**vars(a), "loot_aim": False}))
+
+
+def test_boxwatch_keeps_its_recent_detections_newest_first() -> None:
+    """dungeon@9.32: the watcher keeps the last LOOT_AIM_HIST detections; recent() returns their
+    boxes newest first, none older than the age bound, our own sprite's boxes kept."""
+    import time
+    from types import SimpleNamespace as NS_
+
+    w = dh.BoxWatch.__new__(dh.BoxWatch)
+    w.lock = dh.threading.Lock()
+    w.hist = dh.deque(maxlen=dh.LOOT_AIM_HIST)
+    now = time.monotonic()
+    box = lambda x: NS_(x0=x, y0=300.0, x1=x + 40, y1=360.0)  # noqa: E731
+    for k, age in enumerate((9.0, 3.0, 2.0, 1.0, 0.0)):
+        w.hist.append((now - age, [box(100.0 + k)]))
+    got = w.recent(dh.LOOT_AIM_AGE_S)
+    assert [b[0][0] for b in got] == [104.0, 103.0, 102.0, 101.0]  # 9 s old: out (and maxlen 4)
+    own = (dh.FOOT_PX[0] - 20, dh.FOOT_PX[1] - 70, dh.FOOT_PX[0] + 20, dh.FOOT_PX[1])
+    w.hist.append((now, [NS_(x0=own[0], y0=own[1], x1=own[2], y1=own[3])]))
+    assert w.recent(1.0)[0] == [own]

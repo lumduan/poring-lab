@@ -375,6 +375,66 @@ LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bo
 # capped at this many cell HOVERS (cells out of view not counted), and no sweep. 80 of 84 pickups
 # of c5b-c7 came within the first 9 hovers; 1,180 of 1,379 loot-step seconds came after the last
 LOOT_TRIM_HOVERS = 9
+# dungeon@9.32 (--loot-aim; rogue-xmas02.md Study S-IDLE, Batt 2026-11-12 "build them"): the trim
+# sweep hovers her 3 x 3 nearest-first in coordinate order, but a natural drop lands ON the death
+# cell (74 / 77, packets p67-p70), one cell from her (224 / 238 kills). The nearest monster box
+# (within LOOT_AIM_R cells) in the watcher's recent detections is mostly that cell (below). So: its
+# cell first, then its neighbours, and at most LOOT_AIM_HOVERS hovers a kill when every kill of
+# the step has an aim (else today's 9).
+LOOT_AIM_VERSION = "9.32"
+LOOT_AIM_HOVERS = 5
+LOOT_AIM_R = 2  # the box's cell within this many cells (Chebyshev) of her cell
+LOOT_AIM_PX = 40.0  # the box's foot within this many px of that cell's projected point
+LOOT_AIM_HIST = 4  # the watcher's last detections looked back through (newest first) ...
+LOOT_AIM_AGE_S = 4.5  # ... no older than this: a kill is inferred ~1.5 s after the last hit,
+# when the dead monster is often gone from the newest detection. Replayed on p69 + p70 + p73 (the
+# runner's own aim_rel, flat ground): the last 4 detections, our own sprite NOT left out (a
+# monster next to her overlaps it; with self_box 80 kills had no aim, without 39) -> the death cell
+# exact 57, within one cell 55, off 11, no aim 39; kills with a natural drop: 42 / 46 within one.
+AIM_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-LOOT_AIM_R, LOOT_AIM_R + 1)
+                                   for dy in range(-LOOT_AIM_R, LOOT_AIM_R + 1)
+                                   if (dx, dy) != (0, 0)]  # fmt: skip
+
+
+def aim_rel(boxes_xyxy: Sequence[Sequence[float]], uv: Any) -> tuple[int, int] | None:
+    """PURE (dungeon@9.32): the cell (relative to her) of the nearest monster box -- its foot (the
+    box's bottom centre) within LOOT_AIM_PX of an AIM_GRID cell's projected point ``uv`` (one row
+    per AIM_GRID entry); the smallest Chebyshev distance wins, then the pixel distance. None: no
+    box near her."""
+    pts = np.asarray(uv, dtype=float)
+    best: tuple[tuple[int, float], tuple[int, int]] | None = None
+    for x0, _y0, x1, y1 in boxes_xyxy:
+        d = np.hypot(pts[:, 0] - (x0 + x1) / 2, pts[:, 1] - y1)
+        i = int(np.argmin(d))
+        if float(d[i]) > LOOT_AIM_PX:
+            continue
+        rel = AIM_GRID[i]
+        key = (max(abs(rel[0]), abs(rel[1])), float(d[i]))
+        if best is None or key < best[0]:
+            best = (key, rel)
+    return None if best is None else best[1]
+
+
+def aim_order(todo: Sequence[Cell], aims: Sequence[Cell]) -> list[Cell]:
+    """PURE (dungeon@9.32): the aimed cells first, then their neighbours (Chebyshev 1), then the
+    rest; each group keeps ``todo``'s own order (nearest-first)."""
+
+    def group(c: Cell) -> int:
+        if c in aims:
+            return 0
+        return 1 if any(max(abs(c[0] - a_[0]), abs(c[1] - a_[1])) <= 1 for a_ in aims) else 2
+
+    return sorted(todo, key=group)
+
+
+def aim_cap(n_kills: int, n_aims: int) -> int | None:
+    """PURE (dungeon@9.32): the hover cap of a loot step whose ``n_kills`` (<= 55 s old) all have an
+    aim: LOOT_AIM_HOVERS a kill, never above LOOT_TRIM_HOVERS; None (today's cap) otherwise."""
+    if n_kills <= 0 or n_aims < n_kills:
+        return None
+    return min(LOOT_TRIM_HOVERS, LOOT_AIM_HOVERS * n_aims)
+
+
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
@@ -2115,6 +2175,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
+    if getattr(a, "loot_aim", False):  # dungeon@9.32 (Study S-IDLE)
+        out["loot_aim"] = [LOOT_AIM_HOVERS, LOOT_AIM_R, LOOT_AIM_PX, LOOT_AIM_VERSION]
     if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
         out["swap_gap"] = ["9.27e"]
     if getattr(a, "heal_candy", False):  # dungeon@9.31 (Batt 2026-11-11: candies, not potions)
@@ -2688,6 +2750,7 @@ class BoxWatch:
         self.cond = threading.Condition(self.lock)
         self.last: tuple[float, list[Any]] = (0.0, [])
         self.alarm: tuple[float, list[Any]] = (0.0, [])  # 9.19: boxes of ALARM_CLASSES
+        self.hist: deque[tuple[float, list[Any]]] = deque(maxlen=LOOT_AIM_HIST)  # 9.32
         self.alarm_n = 0  # 9.19b: consecutive detections that held one (alarm_streak)
         # dungeon@8.9 (--box-now): a detection on demand. kick() numbers the request; the loop's
         # next detection takes it (its grab starts after the kick) and records the number
@@ -2726,6 +2789,7 @@ class BoxWatch:
             path = str(getattr(self.det, "last_path", "")) or "cpu"
             with self.cond:
                 self.last = (t, got)
+                self.hist.append((t, got))  # dungeon@9.32 (--loot-aim): the recent detections
                 self.alarm = (t, alarm)
                 self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))
                 self.meta = {"kick": seq, "t": t, "t_done": time.monotonic(), "path": path,
@@ -2783,6 +2847,16 @@ class BoxWatch:
             t, got = self.last
         return t, [(b.x0, b.y0, b.x1, b.y1) for b in got
                    if not self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2)]  # fmt: skip
+
+    def recent(self, max_age_s: float) -> list[list[tuple[float, float, float, float]]]:
+        """dungeon@9.32 (--loot-aim): the monster boxes (x0, y0, x1, y1) of the last detections,
+        newest first, none older than ``max_age_s``. Our own sprite's boxes are NOT left out: a
+        monster next to her overlaps it (the replay on p69 / p70 / p73)."""
+        now = time.monotonic()
+        with self.lock:
+            h = list(self.hist)
+        return [[(b.x0, b.y0, b.x1, b.y1) for b in got] for t, got in reversed(h)
+                if now - t <= max_age_s]  # fmt: skip
 
     def wait_fresh(self, since: float, timeout: float) -> bool:
         """dungeon@8.8: wait until the watcher holds boxes from a grab started at or after
@@ -4046,6 +4120,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_so = steal_opener_refused(opener_key, bare_on, keys_)
     if why_so:
         raise SystemExit(f"dungeon@9.27c refused: {why_so}")
+    loot_aim = bool(getattr(a, "loot_aim", False))  # dungeon@9.32 (Study S-IDLE)
+    if loot_aim and (a.loot != "trim" or not a.box_strike):
+        raise SystemExit("dungeon@9.32 refused: --loot-aim goes with --loot trim and --box-strike")
+    kill_aim: dict[float, Cell] = {}  # 9.32: a kill's time -> the aimed cell (absolute)
     swap_gap = bool(getattr(a, "swap_gap", False))  # dungeon@9.27e (Batt's 22:53 clip)
     if swap_gap and not bare_on:
         raise SystemExit("dungeon@9.27e refused: --swap-gap goes with --bare-steal")
@@ -5981,6 +6059,22 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "end": end, "ms": round(used * 1e3)})  # fmt: skip
             return "fight" if end == "fight" else "done"
 
+        def kill_aim_set(t_k: float) -> None:
+            """dungeon@9.32 (--loot-aim): at a kill, the nearest monster box's cell in the watcher's
+            recent detections (aim_rel over AIM_GRID, projected from our cell; the newest that
+            has one), kept for the loot step; nothing kept when no box is near her."""
+            if boxes is None or here is None:
+                return
+            uv_a = project(here, AIM_GRID)
+            rel_ = None
+            for bx_ in boxes.recent(LOOT_AIM_AGE_S):  # newest first: the first detection with one
+                rel_ = aim_rel(bx_, uv_a)
+                if rel_ is not None:
+                    break
+            counts["loot_aim_set" if rel_ is not None else "loot_aim_none"] += 1
+            if rel_ is not None:
+                kill_aim[t_k] = (here[0] + rel_[0], here[1] + rel_[1])
+
         def loot_step_v1(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
             """Batt 2026-10-22 11:5x (his 11:44 clip: an item left in a mob fight). After the
             fight: (1) the LOOT LIST -- the union of the 5 x 5 around our cell at EVERY kill of
@@ -6033,10 +6127,23 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     here = read_here() or c
                 return "ok"
 
+            aims: list[Cell] = []  # dungeon@9.32 (--loot-aim)
+            cap_aim: int | None = None
+            if loot_aim:
+                fresh_k = [t_ for _g, t_ in lst if t_s - t_ <= 55.0]
+                aims = [kill_aim[t_] for t_ in fresh_k if t_ in kill_aim]
+                cap_aim = aim_cap(len(fresh_k), len(aims))
+                out_["aim"] = {"aims": [list(c_) for c_ in aims], "kills": len(fresh_k),
+                               "cap": cap_aim}  # fmt: skip
             end = "done"
             while picks < LOOT_MAX_PICKS and len(hovered) < LOOT_MAX_HOVERS and not (
                     loot_trim and n_hov >= LOOT_TRIM_HOVERS):  # fmt: skip
                 todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))
+                if aims:  # 9.32: the aimed cells first, then their neighbours
+                    todo = aim_order(todo, aims)
+                if cap_aim is not None and n_hov >= cap_aim:
+                    counts["loot_aim_capped"] += 1
+                    break
                 if not todo or time.monotonic() - t_s > LOOT_MAX_S:
                     break
                 if time.monotonic() - last_taken < 1.0:
@@ -6381,6 +6488,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             else list(here)})  # fmt: skip
                         if here is not None:  # the loot list: the 5 x 5 around us at this death
                             loot_list.append((here, tick))
+                            if loot_aim:  # dungeon@9.32: the nearest box's cell at this death
+                                kill_aim_set(tick)
                         if mr and lock is not None and lock.get("cell"):  # it died: off the queue
                             queue[:] = [q for q in queue if list(q["cell"]) != list(lock["cell"])]
                         lock = None
@@ -6640,6 +6749,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 else list(here)})  # fmt: skip
                             if here is not None:  # the loot list, as for an exp line's kill
                                 loot_list.append((here, tick))
+                                if loot_aim:  # dungeon@9.32: the nearest box's cell here
+                                    kill_aim_set(tick)
                             if mr and lock.get("cell"):  # it died: off the queue
                                 queue[:] = [q for q in queue
                                             if list(q["cell"]) != list(lock["cell"])]  # fmt: skip
@@ -7739,6 +7850,16 @@ def main() -> int:
         "detection within 60 px of its last foot, passing the box path's skips, hovered for its "
         "SWORD and struck through strike(); an empty queue, a failed re-find or no SWORD -> "
         "today's search path. Never during a loot step, a rest, an escape or a bare-steal swap",
+    )
+    t.add_argument(
+        "--loot-aim",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.32 (rogue-xmas02.md Study S-IDLE; Batt 2026-11-12; OFF by default; with "
+        "--loot trim and --box-strike): at a kill, the nearest monster box's cell (within 2 cells "
+        "of her, in the watcher's last detection) is kept; the trim loot step hovers it first, "
+        "then its neighbours, and at most 5 hovers a kill when every kill of the step has one "
+        "(else today's 9). Natural drops land on the death cell (74 / 77)",
     )
     t.add_argument(
         "--swap-gap",
