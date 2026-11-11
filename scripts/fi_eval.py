@@ -81,8 +81,12 @@ R4_PILOTS = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-xmas
              "-rdp-hunt-xmas02-fiT13")  # fmt: skip
 R4_AURA = (*R4_PILOTS, "-rdp-xmas02-fsTa4")
 R4_NOAURA = ("-rdp-xmas02-fsTn4",)
+# O22 (round 5, Batt 2026-11-11: the aura OFF): the whole held-out is aura-off -- ONE stratum
+R5_PILOTS = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2")
+R5_AURA_OFF = (*R5_PILOTS, "-rdp-xmas02-fsH1")
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
-          "r4": (R4_AURA, R4_NOAURA, R4_PILOTS)}  # fmt: skip
+          "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS)}  # fmt: skip
+STRATA_NAMES = {"r5": ("aura_off", "")}  # the default: ("aura", "no_aura")
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
 MINS = {
     "i1_recall": 40,
@@ -364,8 +368,11 @@ def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Bo
     if other:
         raise SystemExit(f"--strata {rnd}: crops of no stratum: {other}")
     out: dict[str, Any] = {}
-    for name, sfx, mins in (("aura", STRATA[rnd][0], MINS["i1_recall"]),
-                            ("no_aura", STRATA[rnd][1], MINS["i1n_recall"])):  # fmt: skip
+    names = STRATA_NAMES.get(rnd, ("aura", "no_aura"))
+    for name, sfx, mins in ((names[0], STRATA[rnd][0], MINS["i1_recall"]),
+                            (names[1], STRATA[rnd][1], MINS["i1n_recall"])):  # fmt: skip
+        if not sfx:  # O22: a round with one stratum
+            continue
         cs = [c for c in crops if on_suffix(c["session"], sfx)]
         r = i1_recall(cs, pred)
         r.update(ratio_bar(r["num"], r["den"], BARS["i1_recall"], mins, True))  # its own minimum
@@ -420,7 +427,7 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
         if strata in STRATA:
             r["i1_strata"] = i1_strata(crops, pr, strata)
             r["i1_recall"]["note"] = "pooled, reported only (O15: I1a / I1n decide)"
-            i1v = [r["i1_strata"]["aura"]["verdict"], r["i1_strata"]["no_aura"]["verdict"]]
+            i1v = [v["verdict"] for v in r["i1_strata"].values()]  # O22: one or two strata
         else:
             i1v = [r["i1_recall"]["verdict"]]
         per[name] = r

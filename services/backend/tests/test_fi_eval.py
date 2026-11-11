@@ -308,3 +308,23 @@ def test_o17_round3_strata_name_its_fresh_held_out() -> None:
     assert got["no_aura"]["by_source"] == {"fsTn3": {"hit": 30, "n": 30}}
     with pytest.raises(SystemExit, match="no stratum"):  # round 2's names are not round 3's
         fe.i1_strata([_crop("20261110T221931-rdp-xmas02-fsTn", 1, box)], pred, "r3")
+
+
+def test_o22_round5_has_one_aura_off_stratum_with_its_sources() -> None:
+    """O22 (round 5, the aura OFF): ONE pooled stratum "aura_off" (the fresh pilots fiH1 / fiH2 and
+    the staging fsH1, >= 40 crops, >= 0.85), its sources counted apart; no no-aura stratum (the
+    whole held-out is aura-off); a crop of another round refuses."""
+    box = [10.0, 10.0, 30.0, 30.0]
+    h1, s1 = "20261112T010000-rdp-hunt-xmas02-fiH1", "20261112T013000-rdp-xmas02-fsH1"
+    crops = [_crop(h1, i, box) for i in range(25)] + [_crop(s1, 100 + i, box) for i in range(20)]
+    pred = {fe.frame_key(c["session"], c["frame_id"]): [box] for c in crops}
+    for c in crops[:3]:
+        pred[fe.frame_key(c["session"], c["frame_id"])] = []
+    got = fe.i1_strata(crops, pred, "r5")
+    assert set(got) == {"aura_off"}
+    assert got["aura_off"]["num"] == 42 and got["aura_off"]["den"] == 45
+    assert got["aura_off"]["verdict"] == "PASS" and got["aura_off"]["min_rows"] == 40
+    assert got["aura_off"]["by_source"] == {"fiH1": {"hit": 22, "n": 25},
+                                            "fsH1": {"hit": 20, "n": 20}}  # fmt: skip
+    with pytest.raises(SystemExit, match="no stratum"):
+        fe.i1_strata([_crop("20261111T153427-rdp-hunt-xmas02-fiT13", 1, box)], pred, "r5")
