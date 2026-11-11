@@ -5631,3 +5631,30 @@ Batt's answers (quoted, then in English):
 | L1 / L3 / L4 / K1 / K3 / Q1 | 92.9 % / 94.0 % / 0 / 1.96 s / 97.0 % / 7 | 100 % / 92.1 % / 0 / 1.96 s / 98.4 % / 3 | PASS |
 | U1-stuck / D1 p95 / P2 | 14.5 s / 22.9 ms / 0 | 4.8 s / 22.6 ms / 0 | PASS |
 | reported: gross z/h at Overcharge / items / h | 75,809 / 142 | 83,491 / 126 | (dashboard `xmas02-p67-p68-auraoff`) |
+
+### 4CB / 4CC. Pre-registrations: `--value-target` and `--queue` (written BEFORE any of their runs, 2026-11-11 20:37 ICT from `date`)
+
+Both serve Batt's goal for the night (100,000 z/h, 4CA). Each pair runs on THE BASE CURRENT WHEN IT
+RUNS (the aura-off base + `--hud`, plus 4CA's winner if one joins), one change a pair, after an MVP
+kill, her NOT immune, 25 min, recorded (round 5's aura-off data). The comparison base is the most
+recent two-run pair of that same base (named in the result).
+- **4CB, `--value-target` (dungeon@9.28, 8f49426f):** the box target is the box worth the most a
+  kill (the map model's drops x Overcharge: Myst Case 270 z, Christmas Cookie 126, Cookie 101,
+  Cruiser 82; `data/econ/maps.json` at run time), discounted by distance (value / (1 + d / 150
+  px)), among the runner's own candidates. Measured: the share of kills that are Myst Cases (the
+  base: 33 of 72 and ~44 % in p63 / p64), value a kill, kills / h.
+  - **V1 (the mechanism):** the Myst Case share of kills >= the base's + 10 points;
+  - **V2 (the decision bar):** gross z/h at Overcharge >= the base's;
+  - no harm: the base's bars (E1 >= 80 / h, deaths 0, W1 / R1-A pooled with the base pair, L1,
+    L3, L4, K1, K3, D1, P2).
+- **4CC, `--queue` (dungeon@9.30, 540cbf60; Batt's queue study):** after the loot step, the next
+  monster already in view is struck at once (attacking first, then nearest, by value with 4CB).
+  Its offline replay on p61-p64 expects a pick at 19-31 % of fight ends, ~2.4 s saved each
+  (+2-3 % kills / h).
+  - **Q-a (the mechanism):** median gap from a fight's end to the next strike on queue picks <=
+    the base's median for boxes in view at the fight's end (today 7.8-8.2 s from the kill);
+  - **Q-b (the decision bar):** gross z/h at Overcharge >= the base's;
+  - **Q-c:** the landing of queue strikes (arrow / damage within the burst) >= 80 % of box
+    strikes' landing in the same runs; no harm as 4CB.
+- **Decision (each):** its mechanism bar, its decision bar and no harm pass -> it JOINS THE BASE;
+  else it stays a flag and is reported.
