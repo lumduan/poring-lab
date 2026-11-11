@@ -149,6 +149,11 @@ ALLOWED = {
                                    "rogue-xmas02.md 4BX; the count is unchanged: it is a raw "
                                    "button send, RAW_BUTTONS below) the UI double-click on the "
                                    "equipment window's weapon slot. "
+                                   "With --bare-ready (OFF by default, dungeon@9.27b, after "
+                                   "rogue-xmas02.md 4BY; the count is unchanged) that same "
+                                   "double-click, through the same reads, at IDLE time (no lock, "
+                                   "no fight, no world click for 1.2 s) instead of at a strike; "
+                                   "with --steal-opener (9.27c) no click at all (a hotbar key). "
                                    "And the death dialog's known step (its second button), as "
                                    "survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "

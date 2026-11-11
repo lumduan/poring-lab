@@ -202,6 +202,50 @@ def test_the_f5_slot_reads_armed_bare_or_unreadable_against_its_armed_reference(
     assert (bs.SLOT_PX, bs.SLOT_SHARE, bs.SLOT_DARK) == (40.0, 0.05, 40.0)
 
 
+def two_slots(dagger_bag: bool, opener_bag: bool, noise: int = 0, seed: int = 0,
+              count: bool = False) -> np.ndarray:  # fmt: skip
+    """--steal-opener's hotbar (dungeon@9.27c): the dagger's icon on F5 (slot 4) while it is in the
+    bag, the opener's (a Knife: 8 x 6 dark px) on F4 (slot 3) while it is in the bag; ``count``
+    draws a stack's digit in F4's count box instead (not a weapon)."""
+    img = hotbar(bag=dagger_bag, noise=0).astype(np.int16)
+    x0 = 246 + 29 * 3
+    if opener_bag:
+        img[9:15, x0 + 8 : x0 + 16] = 50
+    if count:
+        img[9:15, x0 + 8 : x0 + 16] = 50
+        img[25:32, 259 + 29 * 3 + 8 : 259 + 29 * 3 + 10] = 0  # a black "1"
+    if noise:
+        img += np.random.default_rng(seed).integers(-noise, noise + 1, img.shape).astype(np.int16)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def test_the_opener_and_the_dagger_slots_read_as_one_weapon_state(bs: ModuleType) -> None:
+    """dungeon@9.27c: a worn item's icon is not drawn, so the dagger worn = F5 empty and the
+    opener in the bag = its icon on F4 (the run's start), and the opener worn = F4 empty and the
+    dagger's icon on F5."""
+    start = bs.slot_gray(two_slots(False, True))
+    ref5, refk = bs.slot_crop(start), bs.slot_crop(start, 3)
+    assert bs.slot_empty(start) and not bs.slot_empty(start, 3) and not bs.slot_counted(start, 3)
+
+    def state(img: np.ndarray) -> str | None:
+        g = bs.slot_gray(img)
+        return bs.weapon_state(bs.slot_bare(bs.slot_crop(g), ref5), bs.opener_worn(g, 3, refk))
+
+    assert state(two_slots(False, True)) == "armed"
+    assert state(two_slots(False, True, noise=6, seed=4)) == "armed"
+    assert state(two_slots(True, False)) == "opener"  # the Knife worn, the dagger in the bag
+    assert state(two_slots(True, False, noise=6, seed=5)) == "opener"
+    assert state(two_slots(True, True)) == "bare"  # both in the bag
+    assert state(two_slots(False, False)) == "odd"  # both slots empty: cannot be
+    assert state(np.full((40, 600, 3), 10, np.uint8)) is None  # dark: unreadable
+    other = two_slots(False, False)
+    other[6:20, 246 + 29 * 3 + 2 : 246 + 29 * 3 + 20] = 90  # ANOTHER icon on F4: neither
+    assert bs.opener_worn(bs.slot_gray(other), 3, refk) is None and state(other) is None
+    assert bs.slot_counted(bs.slot_gray(two_slots(False, False, count=True)), 3)
+    assert [bs.weapon_state(a, b) for a, b in ((None, True), (True, None))] == [None, None]
+    assert bs.OPENER_VERSION == "9.27c"
+
+
 def test_the_swap_geometry_is_the_live_measurement(bs: ModuleType) -> None:
     """The parent's live numbers (2026-11-11): the equipment window at home (185, 300), its
     weapon slot at window (18, 102) = game-region (203, 402), the dagger on F5 = hotbar slot 4."""

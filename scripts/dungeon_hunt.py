@@ -1794,6 +1794,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                              bs.BARE_STEAL_VERSION]  # fmt: skip
     if getattr(a, "bare_ready", False):  # dungeon@9.27b (Batt 2026-11-11, after 4BY's p65 / p66)
         out["bare_ready"] = [BARE_READY_VERSION]
+    if getattr(a, "steal_opener", None):  # dungeon@9.27c (Batt 2026-11-11 ~19:15: the Knife)
+        out["steal_opener"] = [str(a.steal_opener), bs.OPENER_VERSION]
     return out
 
 
@@ -2652,6 +2654,11 @@ def clear_bag(a: argparse.Namespace) -> int:
             bs.slot_gray(np.asarray(r.grab_after(screen, region, r.ns()))), keys_)  # fmt: skip
         if why_bb is not None:
             raise r.Stop(why_bb)
+        # dungeon@9.27c: nor a weapon the runner swaps to (--steal-opener's opener in the bag)
+        g_be = bs.slot_gray(np.asarray(r.grab_after(screen, region, r.ns())))
+        why_be = clear_bag_eqp_refused(g_be, keys_, tabs)
+        if why_be is not None:
+            raise r.Stop(why_be)
         ui_gate.ensure_clear(agent, screen, why="clear-bag")
         cr.gm_line(agent, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} {CLEAR_STAND[2]}",
                    conf["job"], crk)  # fmt: skip
@@ -2872,6 +2879,75 @@ def bare_ref_cut(gray: Any) -> tuple[Any, dict[str, Any], str | None]:
     return crop, rec, None
 
 
+def steal_opener_refused(key: str | None, bare_steal: bool,
+                         keys: Mapping[str, str]) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.27c): why --steal-opener KEY cannot run (None: it can, or it is off). It
+    replaces --bare-steal's bare hands, so it needs --bare-steal; KEY is a row-1 hotbar key
+    (F1-F9), never the dagger's (bare_steal.EQUIP_KEY) nor one the character already uses (the
+    Rogue's F1 potion, F2 Fly Wing, F3 Steal)."""
+    if key is None:
+        return None
+    if not bare_steal:
+        return "--steal-opener goes with --bare-steal (the opener replaces its bare hands)"
+    try:
+        hotbar_slot(key)
+    except ValueError:
+        return f"--steal-opener {key!r} is not a row-1 hotbar key (F1-F9)"
+    if key == bs.EQUIP_KEY:
+        return f"--steal-opener {key}: that is the dagger's key ({bs.EQUIP_KEY})"
+    used = sorted(w for w, k in keys.items() if k == key)
+    if used:
+        return f"--steal-opener {key}: the character already uses it ({', '.join(used)})"
+    return None
+
+
+def opener_ref_cut(gray: Any, key: str) -> tuple[Any, dict[str, Any], str | None]:
+    """PURE (the run's start, --steal-opener): (slot ``key``'s "shows the opener" reference crop,
+    its record, a refusal). The opener must sit in the BAG: its slot shows an icon and no count
+    (equipment has none). EMPTY = the opener is worn, or nothing is on the key; a count = a stack,
+    not a weapon: refused (a person first). A dark crop = unreadable: (None, rec, None)."""
+    slot = hotbar_slot(key)
+    crop = bs.slot_crop(gray, slot)
+    rec: dict[str, Any] = {"key": key, "slot": slot, "empty": None, "counted": None,
+                           **bs.slot_stats(crop)}  # fmt: skip
+    if rec["mean"] < bs.SLOT_DARK:
+        return None, rec, None
+    rec["empty"], rec["counted"] = bs.slot_empty(gray, slot), bs.slot_counted(gray, slot)
+    if rec["empty"]:
+        return None, rec, (f"the {key} slot is EMPTY: the opener is worn (not in the bag) or "
+                           f"{key} holds nothing -- a person first")  # fmt: skip
+    if rec["counted"]:
+        return None, rec, f"the {key} slot draws a count: a stack, not a weapon -- a person first"
+    return crop, rec, None
+
+
+def clear_bag_eqp_refused(gray: Any, keys: Mapping[str, str],
+                          tabs: Sequence[str]) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.27c): clear-bag's Eqp tab must NEVER drop a weapon the runner swaps to.
+    --steal-opener's opener (the Knife on F4) sits in the bag with its icon on a key that none of
+    the character's own keys names; nothing tells clear-bag that an opener is configured, so it
+    reads the hotbar itself: for a character with an equip key (the Rogue), clearing "eqp" is
+    refused while any OTHER row-1 slot shows an icon or is unreadable -- a person passes --tabs
+    without eqp (e.g. etc,use). No equip key or no eqp tab: None."""
+    if "equip" not in keys or "eqp" not in tabs:
+        return None
+    own: set[int] = set()
+    for k in keys.values():
+        with contextlib.suppress(ValueError):
+            own.add(hotbar_slot(k))
+    for slot in range(9):
+        if slot in own:
+            continue
+        key = f"F{slot + 1}"
+        if float(bs.slot_crop(gray, slot).mean()) < bs.SLOT_DARK:
+            return f"clear-bag refused: the {key} slot is unreadable (a weapon on it unknown)"
+        if not bs.slot_empty(gray, slot):
+            return (f"clear-bag refused: the {key} slot shows an item none of the {sorted(keys)} "
+                    "keys names -- it may be the steal opener (a weapon) in the bag and the Eqp "
+                    "tab would drop it; pass --tabs without eqp (e.g. etc,use)")  # fmt: skip
+    return None
+
+
 def clear_bag_bare_refused(gray: Any, keys: Mapping[str, str]) -> str | None:
     """PURE (dungeon@9.27): clear-bag drops EVERY inventory stack, so with the dagger in the bag
     (its key's hotbar slot shows its icon: the Rogue BARE) it would drop the dagger. Refused unless
@@ -2937,7 +3013,8 @@ class BareIo:
     """--bare-steal's I/O: the runner's own reads and inputs, injected (a test simulates them).
     ``chord``: agent.chord of the equipment window's keys (ui_gate.window_keys, a TOGGLE);
     ``double_click``: ui_double_click at a game-region point; ``press``: press("equip", why);
-    ``guard``: guard_tick (the HP and the escapes inside a long action; True once we flew)."""
+    ``guard``: guard_tick (the HP and the escapes inside a long action; True once we flew);
+    ``opener``: --steal-opener's key press (dungeon@9.27c; None without it)."""
 
     frame: Callable[[], Any]  # a fresh game-region frame (BGR, the runner's frame())
     windows: Callable[[Any], list[str]]  # ui_gate.windows_at_home on that frame
@@ -2949,6 +3026,31 @@ class BareIo:
     guard: Callable[[], bool] = lambda: False
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    opener: Callable[[str], None] | None = None
+
+
+@dataclass
+class OpenerRead:
+    """--steal-opener's weapon readout (dungeon@9.27c): the F5 slot against its EMPTY reference
+    (the dagger worn; bare_ref_cut's) and the opener's slot against its "shows the opener"
+    reference (in the bag; opener_ref_cut's), both cut at the run's start. ``state``:
+    bare_steal.weapon_state's "armed" / "opener" / "bare" / "odd" / None."""
+
+    key: str
+    ref5: Any  # F5 EMPTY: the dagger worn
+    refk: Any  # the opener's slot showing the opener: in the bag
+
+    @property
+    def slot(self) -> int:
+        return hotbar_slot(self.key)
+
+    def state(self, frame: Any) -> str | None:
+        g = bs.slot_gray(frame)
+        return bs.weapon_state(bs.slot_bare(bs.slot_crop(g), self.ref5),
+                               bs.opener_worn(g, self.slot, self.refk))  # fmt: skip
+
+    def stats(self, frame: Any) -> dict[str, Any]:
+        return bs.slot_stats(bs.slot_crop(bs.slot_gray(frame), self.slot), self.refk)
 
 
 def bare_read(frame: Any, ref: Any) -> bool | None:
@@ -3052,29 +3154,79 @@ def bare_unequip_seq(io: BareIo, ref: Any) -> dict[str, Any]:
     return out
 
 
-def bare_equip_seq(io: BareIo, ref: Any, why: str, *, press: bool = True) -> dict[str, Any]:
+def bare_state(frame: Any, ref: Any) -> str | None:
+    """PURE: the bare-hands readout as a state: "armed" / "bare" (the dagger in the bag) / None."""
+    b = bare_read(frame, ref)
+    return None if b is None else ("bare" if b else "armed")
+
+
+def bare_equip_seq(io: BareIo, ref: Any, why: str, *, press: bool = True,
+                   opener: OpenerRead | None = None) -> dict[str, Any]:  # fmt: skip
     """The EQUIP: the dagger's hotkey, then the F5 slot must read ARMED within ON_S; a READABLE
     bare read then -> ONE more press and ON_S again. ok: True (armed) / False (still bare) / None
     (no readable frame: a teleport's dark frames -- read again later, never a failure).
-    ``press`` False: the read-back alone (after a key-only equip before an escape)."""
+    ``press`` False: the read-back alone (after a key-only equip before an escape).
+    ``opener`` (--steal-opener): ARMED = F5 empty AND the opener's slot shows the opener again
+    (OpenerRead.state "armed"); the second press only while F5 still shows the dagger (readable:
+    "opener" / "bare"), never on an unreadable or "odd" read. F5 read empty at the end while the
+    opener's slot did not read its icon -> ok all the same (the dagger IS worn: F5 is never
+    pressed onto it again), with ``opener_back`` False (counted: bare_opener_back_miss)."""
     t0 = io.clock()
     n = 0
     if press:
         io.press(why)
         n += 1
 
+    def state(f_: Any) -> str | None:
+        return bare_state(f_, ref) if opener is None else opener.state(f_)
+
     def armed(f_: Any) -> bool:
-        return bare_read(f_, ref) is False
+        return state(f_) == "armed"
 
     ok, f, _e = bare_poll(io, armed, bs.ON_S)
-    if not ok and bare_read(f, ref) is True:
+    if not ok and state(f) in ("bare", "opener"):
         io.press(why)
         n += 1
         ok, f, _e = bare_poll(io, armed, bs.ON_S)
-    b = bare_read(f, ref)
+    b = state(f)
+    if not ok and opener is not None and bare_read(f, ref) is False:
+        ok = True  # the dagger worn (F5 empty); the opener's icon not read back (opener_back)
     return {"ok": True if ok else (None if b is None else False), "presses": n,
             "ms": round((io.clock() - t0) * 1e3),
-            "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), ref)}  # fmt: skip
+            "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), ref),
+            **({"state": b, "opener_back": b == "armed", "opener_slot": opener.stats(f)}
+               if opener is not None else {})}  # fmt: skip
+
+
+def opener_seq(io: BareIo, opener: OpenerRead, why: str) -> dict[str, Any]:
+    """--steal-opener's "unequip" (dungeon@9.27c): the opener's KEY (no Alt+Q, no window, no
+    click), then the state must read "opener" (its slot EMPTY: worn; F5 shows the dagger: in the
+    bag) within ON_S; a READABLE read with the opener still in the bag ("armed" / "bare") -> ONE
+    more press and ON_S again. ok: True / False / None (unreadable). ``bare``: the dagger read in
+    the bag on the last readable frame (the truth the runner keeps, as bare_unequip_seq's)."""
+    assert io.opener is not None
+    t0 = io.clock()
+    io.opener(why)
+    n = 1
+    last: list[str | None] = [None]
+
+    def on(f_: Any) -> bool:
+        s_ = opener.state(f_)
+        if s_ is not None:
+            last[0] = s_
+        return s_ == "opener"
+
+    ok, f, _e = bare_poll(io, on, bs.ON_S)
+    if not ok and opener.state(f) in ("armed", "bare"):
+        io.opener(why)
+        n += 1
+        ok, f, _e = bare_poll(io, on, bs.ON_S)
+    s = opener.state(f)
+    return {"ok": True if ok else (None if s is None else False), "presses": n,
+            "ms": round((io.clock() - t0) * 1e3), "state": s, "frame": f,
+            "bare": last[0] in ("opener", "bare"),
+            "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), opener.ref5),
+            "opener_slot": opener.stats(f)}  # fmt: skip
 
 
 class BareCtl:
@@ -3089,12 +3241,19 @@ class BareCtl:
     bare_ready / bare_ready_fail), a new target struck while bare starts its phase there with no
     swap (_begin: bare_ready_strike), and a target's end while bare STAYS bare (no "fight_end"
     equip; BareSteal.wait_bare). Every other equip (the cues, BARE_MAX_S, BARE_HP_MIN, escape,
-    run_end) is unchanged. Off: exactly 9.27."""
+    run_end) is unchanged. Off: exactly 9.27.
+
+    ``opener`` (--steal-opener, dungeon@9.27c): the "unequip" is the opener's KEY (opener_seq:
+    no Alt+Q, no window, no click; counters bare_opener / bare_opener_fail), read back as the
+    opener worn AND the dagger in the bag; every equip stays F5, read back as the dagger worn AND
+    the opener in the bag (bare_equip_seq's ``opener``). "Bare" below means the dagger is OFF."""
 
     def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
                  ev: Callable[[dict[str, Any]], None],
-                 stop: type[Exception] = RuntimeError, *, ready: bool = False) -> None:  # fmt: skip
+                 stop: type[Exception] = RuntimeError, *, ready: bool = False,
+                 opener: OpenerRead | None = None) -> None:  # fmt: skip
         self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
+        self.opener = opener
         self.st = bs.BareSteal()
         self.tgt: dict[str, Any] | None = None
         self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
@@ -3104,9 +3263,9 @@ class BareCtl:
         self.ready_next = -1e9  # --bare-ready: no idle unequip before this (after a failed one)
 
     def state_of(self, frame: Any) -> str | None:
-        """The weapon state READ on ``frame``: "armed" / "bare" / None (unreadable)."""
-        b = bare_read(frame, self.ref)
-        return None if b is None else ("bare" if b else "armed")
+        """The weapon state READ on ``frame``: "armed" / "bare" / None (unreadable); with the
+        opener OpenerRead.state ("opener" too, and "odd")."""
+        return bare_state(frame, self.ref) if self.opener is None else self.opener.state(frame)
 
     def _failed(self, key: str) -> None:
         self.counts[key] += 1
@@ -3118,11 +3277,15 @@ class BareCtl:
     def _equip_done(self, why: str, res: Mapping[str, Any], verify: bool = False) -> None:
         self.ev({"kind": "bare", "what": "equip", "why": why, "ok": res["ok"], "ms": res["ms"],
                  "presses": res["presses"], "slot": res["slot"],
+                 **({"state": res["state"], "opener_back": res["opener_back"],
+                     "opener_slot": res["opener_slot"]} if "opener_slot" in res else {}),
                  **({"verify": True} if verify else {})})  # fmt: skip
         if res["ok"]:
             self.st.equipped()
             self.pending, self.fails = None, 0
             self.counts[f"bare_equip_{why}"] += 1
+            if res.get("opener_back") is False:  # --steal-opener: F5 empty, the icon not back
+                self.counts["bare_opener_back_miss"] += 1
         elif res["ok"] is None:
             self.pending = why  # unreadable (dark frames): read again on the next tick
         else:
@@ -3135,7 +3298,7 @@ class BareCtl:
             return True
         self.busy = True
         try:
-            res = bare_equip_seq(self.io, self.ref, why)
+            res = bare_equip_seq(self.io, self.ref, why, opener=self.opener)
         finally:
             self.busy = False
         self._equip_done(why, res)
@@ -3145,7 +3308,7 @@ class BareCtl:
         why = self.pending or "safety"
         self.busy = True
         try:
-            res = bare_equip_seq(self.io, self.ref, why, press=False)
+            res = bare_equip_seq(self.io, self.ref, why, press=False, opener=self.opener)
         finally:
             self.busy = False
         self._equip_done(why, res, verify=True)
@@ -3164,7 +3327,10 @@ class BareCtl:
         """bare_unequip_seq; the phase starts only when the slot READ bare (BareSteal.unequipped
         with the Battle Log's line count and the popup shown NOW, so neither is a cue). True: bare
         and still here (no escape inside). ``idle`` (--bare-ready): bare with NO phase
-        (BareSteal.wait_bare): the next target's first strike begins it."""
+        (BareSteal.wait_bare): the next target's first strike begins it. With the opener:
+        _opener_on (its key, never the window)."""
+        if self.opener is not None:
+            return self._opener_on(by, idle)
         self.busy = True
         try:
             res = bare_unequip_seq(self.io, self.ref)
@@ -3197,6 +3363,37 @@ class BareCtl:
         if res["escaped"] and not self.st.armed:
             self.escape()  # we flew away bare (guard_tick inside the swap): the dagger at once
         return bool(res["ok"]) and not res["escaped"]
+
+    def _opener_on(self, by: str, idle: bool) -> bool:
+        """--steal-opener's swap (opener_seq): the phase starts (or, ``idle``, she waits with the
+        opener on: wait_bare) when the dagger READ in the bag, as bare_unequip_seq's ``bare``;
+        ok = the opener read worn too (else bare_opener_fail, FAIL_STOP in a row stop). True: the
+        opener on."""
+        assert self.opener is not None
+        self.busy = True
+        try:
+            res = opener_seq(self.io, self.opener, by)
+        finally:
+            self.busy = False
+        if res["bare"]:
+            if idle:
+                self.st.wait_bare()
+            else:
+                rgb = np.asarray(res["frame"])[: bs.POPUP_BOTTOM + 1, :, ::-1]
+                box = bs.popup_box(rgb)
+                sig = None if box is None else bs.popup_sig(rgb)
+                self.st.unequipped(self.io.clock(), len(self.io.lines()), sig, box)
+            if self.tgt is not None:
+                self.tgt["phase"] = True
+        self.ev({"kind": "bare", "what": "opener", "ok": res["ok"], "ms": res["ms"], "by": by,
+                 "presses": res["presses"], "state": res["state"], "slot": res["slot"],
+                 "opener_slot": res["opener_slot"]})  # fmt: skip
+        if res["ok"]:
+            self.counts["bare_opener"] += 1
+            self.fails = 0
+            return True
+        self._failed("bare_opener_fail")
+        return False
 
     def _end(self) -> None:
         """The target's engagement is over: bare -> the dagger back on at once ("fight_end");
@@ -3340,9 +3537,11 @@ class BareCtl:
                 self._verify()
             if not self.st.armed:
                 self.equip("run_end")
-        b = bare_read(self.io.frame(), self.ref)
+        f = self.io.frame()
+        b = bare_read(f, self.ref)
         return {"armed": self.st.armed, "slot": None if b is None else ("bare" if b else "armed"),
-                "dead": dead, "pending": self.pending, "fails": self.fails}  # fmt: skip
+                "dead": dead, "pending": self.pending, "fails": self.fails,
+                **({"state": self.opener.state(f)} if self.opener is not None else {})}  # fmt: skip
 
 
 def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
@@ -3432,6 +3631,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_bry = bare_ready_refused(bare_on, bare_ready_on)
     if why_bry:
         raise SystemExit(f"dungeon@9.27b refused: {why_bry}")
+    opener_key: str | None = getattr(a, "steal_opener", None)  # dungeon@9.27c (the Knife on F4)
+    why_so = steal_opener_refused(opener_key, bare_on, keys_)
+    if why_so:
+        raise SystemExit(f"dungeon@9.27c refused: {why_so}")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
@@ -3780,6 +3983,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         bare_rec: dict[str, Any] | None = None
         bare_reg: Any = None
         bare_keys: list[str] = []
+        opener_ref: Any = None  # dungeon@9.27c: the opener's slot SHOWING it (opener_ref_cut)
         if bare_on:  # the slot must read EMPTY (the dagger worn), else no run: a person first
             bare_reg = ui_gate._registry(ui_gate._require_ready())  # the gate's own template set
             bare_keys = ui_gate.window_keys(bs.EQUIP_WINDOW)  # Alt+Q (open_window@1's L2 chord)
@@ -3796,6 +4000,24 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                  f"unreadable {BARE_REF_WAIT_S} s {bare_rec}")  # fmt: skip
                 time.sleep(0.2)
             bare_rec["windows"] = ui_gate.windows_at_home(f_br, bare_reg)
+            if opener_key is not None:  # dungeon@9.27c: the opener sits in the bag, its icon on
+                t_op = time.monotonic()  # its key; the dagger worn (F5 empty, just read)
+                while True:
+                    f_op = frame()
+                    opener_ref, op_rec, why_op = opener_ref_cut(bs.slot_gray(f_op), opener_key)
+                    if why_op is not None:
+                        raise r.Stop(f"dungeon@9.27c refused: --steal-opener: {why_op} {op_rec}")
+                    if opener_ref is not None:
+                        break
+                    if time.monotonic() - t_op > BARE_REF_WAIT_S:
+                        raise r.Stop("dungeon@9.27c refused: --steal-opener: the opener's slot "
+                                     f"stayed unreadable {BARE_REF_WAIT_S} s {op_rec}")  # fmt: skip
+                    time.sleep(0.2)
+                if bare_read(f_op, bare_ref) is not False:  # F5 must still read the dagger worn
+                    st_op = bs.slot_stats(bs.slot_crop(bs.slot_gray(f_op)), bare_ref)
+                    raise r.Stop("dungeon@9.27c refused: --steal-opener: the F5 slot no longer "
+                                 f"reads the dagger worn {st_op}")  # fmt: skip
+                bare_rec["opener"] = op_rec
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
@@ -3816,6 +4038,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),
             **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
+            **({"steal_opener": fixes_of(a)["steal_opener"]} if opener_key is not None else {}),
             **({"house": house_rec} if house_on else {})})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
@@ -4196,6 +4419,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)
                 counts["click_bare_dclick"] += 1
 
+            def bare_opener(why_: str) -> None:
+                """--steal-opener (dungeon@9.27c): the opener's hotbar key, sent as press() sends
+                a key (agent_raw.keys: the agent's own input path, through the mux)."""
+                assert opener_key is not None
+                agent_raw.keys(opener_key)
+                counts["opener"] += 1
+                ev({"kind": "press", "what": "opener", "key": opener_key, "why": why_})
+
             bare = BareCtl(
                 BareIo(frame=frame,
                        windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg),
@@ -4203,8 +4434,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                        chord=lambda: agent_raw.chord(*bare_keys),
                        double_click=bare_dclick,
                        press=lambda why_: press("equip", why_),
-                       lines=bare_lines, guard=guard_tick),
-                bare_ref, counts, ev, r.Stop, ready=bare_ready_on)  # fmt: skip
+                       lines=bare_lines, guard=guard_tick,
+                       opener=bare_opener if opener_key is not None else None),
+                bare_ref, counts, ev, r.Stop, ready=bare_ready_on,
+                opener=None if opener_key is None else OpenerRead(opener_key, bare_ref,
+                                                                  opener_ref))  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -6852,6 +7086,18 @@ def main() -> int:
         "a new target is hit bare-handed AT ONCE, with no swap at the strike; a fight ending bare "
         "stays bare; the steal cues, 8 s, under 50 %% HP, every escape and the run's end put it "
         "on with F5 as --bare-steal does",
+    )
+    t.add_argument(
+        "--steal-opener",
+        default=None,
+        metavar="KEY",
+        help="dungeon@9.27c (Batt 2026-11-11 ~19:15; OFF by default; with --bare-steal; KEY in "
+        "F1-F9, not F5 nor a key the character uses): open with the weak item on hotbar KEY (the "
+        "Knife on F4) instead of bare hands -- the swap is that key (no window, no click), read "
+        "back as KEY's slot EMPTY (worn) and F5 showing the dagger (in the bag); every equip "
+        "stays F5, read back as F5 empty and KEY showing the opener. The run's start needs the "
+        "dagger worn and the opener in the bag. With --bare-ready the key goes at the idle "
+        "moment, else at a new target's first strike",
     )
     t.add_argument(
         "--clear-map",

@@ -22,6 +22,12 @@ Thai and Korean are coming"; also feedback-no-english-text-cues, 10-26). Neither
   within 0.13 s and the popup).
 Offline, the packets judge every cue (a pickup_result with no pickup_request of ours = a steal).
 
+Two variants (dungeon_hunt.py, both OFF by default):
+- 9.27b --bare-ready (Batt 2026-11-11 after p65 / p66): the dagger comes off while IDLE (after the
+  loot), so a new target is struck bare at once: BareSteal.wait_bare, then begin at that strike;
+- 9.27c --steal-opener KEY: a weak opener weapon (a Knife) on hotbar KEY instead of bare hands --
+  its key puts it on, F5 the dagger back; the two slots read together (weapon_state).
+
 Everything here is PURE (no input, no grabs): the runner (dungeon_hunt.py) does the clicks.
 """
 
@@ -123,6 +129,45 @@ def slot_stats(crop: np.ndarray, ref: np.ndarray | None = None) -> dict[str, flo
     return out
 
 
+# --- --steal-opener (dungeon@9.27c, Batt 2026-11-11 ~19:15): a weak OPENER weapon (a Knife, ATK 17)
+# on its own hotbar key instead of bare hands. Its key puts it on (the dagger goes to the bag: F5
+# shows the dagger), F5 puts the dagger back (the opener goes to the bag: its key shows it again).
+# A worn item's hotbar icon is not drawn (measured live for the F5 dagger, 11-11), so the two slots
+# together are the weapon state's readout.
+OPENER_VERSION = "9.27c"
+
+
+def slot_counted(gray: np.ndarray, slot: int) -> bool:
+    """PURE: the slot draws a COUNT (hotbar_count's black digits in its count box): a stack, never
+    a weapon (equipment has no count)."""
+    x0, y0, x1, y1 = hb.box(slot)
+    return bool((np.asarray(gray)[y0:y1, x0:x1] < hb.INK).any())
+
+
+def opener_worn(gray: np.ndarray, slot: int, ref_shows: np.ndarray) -> bool | None:
+    """PURE: the opener's slot -- False = it looks as at the run's start (the opener's icon: in
+    the bag), True = it reads EMPTY by hotbar_count's rule (no digit, no icon: the opener worn),
+    None = unreadable (dark) or neither (another icon)."""
+    crop = slot_crop(gray, slot)
+    if not crop.size or float(crop.mean()) < SLOT_DARK:
+        return None
+    if slot_bare(crop, ref_shows) is False:
+        return False
+    return True if slot_empty(gray, slot) else None
+
+
+def weapon_state(dagger_in_bag: bool | None, opener_on: bool | None) -> str | None:
+    """PURE (--steal-opener): the two slots as ONE state -- "armed" (the dagger worn: F5 empty, the
+    opener's icon on its key), "opener" (the opener worn: F5 shows the dagger, the opener's slot
+    empty), "bare" (both in the bag), "odd" (both slots empty: cannot be with one weapon hand),
+    None (a slot unreadable)."""
+    if dagger_in_bag is None or opener_on is None:
+        return None
+    if dagger_in_bag:
+        return "opener" if opener_on else "bare"
+    return "odd" if opener_on else "armed"
+
+
 def _luma(rgb: np.ndarray) -> np.ndarray:
     a = np.asarray(rgb)[..., :3].astype(np.float32)
     return a[..., 0] * 0.299 + a[..., 1] * 0.587 + a[..., 2] * 0.114
@@ -208,7 +253,8 @@ def cyan_new(lines: Sequence[Mapping[str, Any]], n0: int) -> bool:
 class BareSteal:
     """PURE state of the bare-hand phase (one fight at a time). The runner calls ``engage`` on a
     new target's first strike, ``tick`` every loop, ``equipped`` / ``unequipped`` after each swap
-    it read back, and ``fight_end`` when the fight ends."""
+    it read back, and ``fight_end`` when the fight ends. --bare-ready: ``wait_bare`` (bare, no
+    phase) after an idle unequip or a fight ended bare, ``begin`` at the next first strike."""
 
     armed: bool = True  # the dagger is on (the run starts armed)
     t_bare: float | None = None  # when the bare phase began (the unequip read back)
