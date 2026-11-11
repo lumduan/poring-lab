@@ -6004,3 +6004,31 @@ recent two-run pair of that same base (named in the result).
 - **Reported:** gross z/h at Overcharge (actual), the same on common items only, kills / h, stolen a
   kill, items / h, the no-harm bars, against the aura-off base (p67 + p68) and each pair tonight.
 
+### 4CN. 4CC's verdict: `--queue` (p77 + p78; written 2026-11-12 03:16 ICT from `date`)
+
+- **The runs:** p77 02:03:5x-02:29:xx (fiT28) and p78 02:46:1x-03:12:xx (fiT29). Both rc 0, her NOT
+  immune, each after an MVP kill (01:34:20, 02:45:12). On the aura-off base. Export
+  `xmas02-p77-p78-queue`.
+- **VERDICT: Q-a passes, Q-b FAILS -> it STAYS A FLAG.**
+  - Q-a: on queue picks the gap from the loot step's end to the next strike is 2.58 s (p77, 16
+    picks), against 7.67 s for other strikes and 6.6-7.3 s in the base.
+  - Q-b: pooled 52,783 z/h against 79,650 (p77 55,306, p78 50,260); common items only 48,320
+    against 58,820.
+  - No harm passes but W1, by the letter: 25 / 1,109 = 2.25 % (pooled with p67 + p68).
+- **Why it does not pay:** picks are rare. p77 made 16 picks and p78 3, against 48 and 50 failed
+  re-finds and 19 / 15 empty queues. Kills rose in p77 only (172.8 / h; p78 144.0, the pair 158.4
+  against 163.2). Stolen a kill fell to 0.46 (base 0.60); two runs cannot say whether that is the
+  queue.
+- **4CM's rule keeps `--queue` in the final configuration** (no harm other than W1 by the letter).
+  That rule was written before p78's numbers, and it is kept as written.
+
+| | **p77** | **p78** | bar |
+|---|---|---|---|
+| E1 kills / deaths / lowest HP / Fly Wings | 72 (172.8 / h) / 0 / 89.0 % / 0 | 60 (144.0 / h) / 0 / 87.2 % / 0 | PASS |
+| queue picks / re-find fails / empty | 16 / 48 / 19 | 3 / 50 / 15 | -- |
+| Q-b gross z/h at Overcharge | 55,306 | 50,260 | 52,783 < 79,650: FAIL |
+| W1 | 5 / 216 | 5 / 363 | pooled with p67 + p68: 2.25 %: FAIL by the letter |
+| R1-A / P2 | 0 / 0 | 0 / 0 | PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 96.0 % / 95.7 % / 0 / 1.97 s / 97.1 % / 4 | 100 % / 91.5 % / 0 / 2.00 s / 96.6 % / 6 | PASS |
+| U1-stuck / D1 p95 | 11.4 s / 22.3 ms | 8.8 s / 22.2 ms | PASS |
+
