@@ -5542,3 +5542,31 @@ from `date`.** The MVP killed 16:48:12 ("1[dead]"). p65 16:50:12-17:15:58 (fiT16
   0.8 s; the double-click and the read back ~1.1 s); (c) bare hands only on the species worth
   stealing from (the box detector names Cruiser / Myst Case / Cookie / Christmas Cookie); (d)
   unequip while looting, so the swap overlaps time already spent.
+
+### 4BZ. Amendment X (Batt's answers to the 17:5x report; written 2026-11-11 19:2x ICT from `date`) and pilots p67 + p68 pre-registration: the base with the aura OFF
+
+Batt's answers (quoted, then in English):
+1. "ทำต่อ มันช้าตรงถอดมีด เพราะคุณไม่ถอดเตรียมไว้ก่อน ... ให้ถอดมีดรอเลย" -- continue the bare
+   steal: take the dagger off IN ADVANCE, when the monster is dead and the loot collected; strike
+   the next monster bare at once; on a steal just press the dagger's key. -> `--bare-ready`
+   (dungeon@9.27b), being built; its pilots come in 4CA, after this base.
+2. "ทำรอบ 5 ... ปิดแสงใต้เท้าด้วย ลองคำสั่ง /aura หรือ /aura2" -- floor-item round 5, and turn
+   the aura under her feet OFF (he always plays with it off). Done 19:1x: `/aura` removed the disc,
+   `/aura2` the sparkles (screenshots judged; neither prints an answer).
+3. "ลองดูได้" -- U0, the staged unreachable attacker, may be tried (`--start-cell` / `--stage-at`,
+   being built).
+4. "ok ใช้ได้" -- the dashboard's three defaults stand.
+
+**p67 + p68 pre-registration (written BEFORE either run): the aura OFF on the base.**
+- **Why a check:** every pixel model and reader was built on frames with her Base 99 aura (the
+  box detector xmas02gb, the own-body checks, the HP / position readers). Turning it off is an
+  environment change for all of them.
+- **The runs:** the base (4BL + `--late-confirm --still-target --lead-press`), the aura OFF, 25 min
+  each, her NOT immune (read back), after an MVP kill; labels `xmas02-p67` (recorded
+  `hunt-xmas02-fiT18`) and `xmas02-p68` (`hunt-xmas02-fiT19`): round 5's first aura-off data.
+- **Bars (the base's, unchanged):** E1 >= 80 / h each run; deaths 0; the hard bars; W1 and R1-A
+  pooled over p68 + p67 + p64 + p63; L1 >= 50 %, L3 >= 80 %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %,
+  Q1 <= 8, U1-stuck <= 30 s, D1 p95 <= 35 ms, P2 0. Reported: own-body strikes and class D, the
+  dashboard's z/h (the aura-off base for 4CA).
+- **Decision:** every bar passes -> the aura stays OFF for every run from now on (Batt's way of
+  playing); a bar failing -> studied and reported, the aura question goes back to Batt.
