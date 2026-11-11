@@ -2981,7 +2981,15 @@ def opener_ref_cut(gray: Any, key: str) -> tuple[Any, dict[str, Any], str | None
         return None, rec, (f"the {key} slot is EMPTY: the opener is worn (not in the bag) or "
                            f"{key} holds nothing -- a person first")  # fmt: skip
     if rec["counted"]:
-        return None, rec, f"the {key} slot draws a count: a stack, not a weapon -- a person first"
+        # live 2026-11-11 20:19 (ko0): this client draws "1" under ONE equipment item too (the
+        # Knife on F4, the Damascus on F5 while in the bag): a count of exactly 1 is a weapon; a
+        # count above 1 is a stack; an unreadable count refuses
+        import hotbar_count as hb
+
+        rec["count"] = hb.read_count(np.asarray(gray), slot, hb.load())
+        if rec["count"] != 1:
+            return None, rec, (f"the {key} slot draws a count {rec['count']}: a stack or "
+                               "unreadable, not one weapon -- a person first")  # fmt: skip
     return crop, rec, None
 
 
