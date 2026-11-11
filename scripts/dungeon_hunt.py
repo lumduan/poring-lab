@@ -128,7 +128,7 @@ import threading
 import time
 from collections import Counter, deque
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -1268,6 +1268,242 @@ def self_box(cx: float, cy: float) -> bool:
     return x0 <= cx <= x1 and y0 <= cy <= y1
 
 
+# --queue (dungeon@9.30, rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x: "when there are many
+# monsters, while we hit the current one we can build a QUEUE: the one near and attacking us
+# first, then on down the queue until they are all gone, so play is more continuous"). p61-p64
+# (264 kills): after a kill the next strike came 7.8-8.2 s later (median) when a box was already
+# in view, 15.2 s when none was; from the loot step's end to that strike 2.9 s (median), nearly
+# all of it the search walk's click on the loot tick and box_target's settle + still wait after
+# it. With the flag, while a fight runs the OTHER monster boxes in view (not the target, not our
+# own body) are kept as a queue; once the fight AND its loot step have ended the next target is
+# taken from it at once (attacking first, then the nearest), re-found on the next fresh detection
+# near its last foot and struck through strike(); an empty queue or a failed re-find -> today's
+# search path. QUEUE_STALE_S is detection time: the stale rule runs on the detections the fight's
+# bookkeeping takes; the loot step takes none, so the queue it hands to the pick is the fight's
+# last, and the re-find on a fresh detection is the pick's freshness check.
+QUEUE_VERSION = "9.30"
+QUEUE_MAX = 6  # entries kept (the order below decides which)
+QUEUE_STALE_S = 2.0  # an entry not seen in the fight's detections for this long drops
+QUEUE_MATCH_PX = 60.0  # one sprite across detections / the re-find: its foot within this
+QUEUE_ATTACK_CELLS = 2  # an attacked sign marks the nearest entry within this many cells of her
+
+
+@dataclass
+class QEntry:
+    """dungeon@9.30 (--queue): one queued monster box -- its foot pixel (the box's bottom centre,
+    as BoxWatch.near measures), the detector's own species, the grab times it was first and last
+    seen at, its cell relative to her at that detection (None: no position), and whether an
+    attacked sign was put on it (bq_mark)."""
+
+    foot: tuple[float, float]
+    species: str | None
+    t: float
+    t0: float
+    rel: Cell | None = None
+    attacking: bool = False
+    seen: int = 1
+
+
+def bq_foot(b: Any) -> tuple[float, float]:
+    """PURE: a box's foot pixel (its bottom centre)."""
+    return ((float(b.x0) + float(b.x1)) / 2, float(b.y1))
+
+
+def bq_d(foot: Sequence[float], px: Sequence[float] = FOOT_PX) -> float:
+    """PURE: a foot's distance (px) to our own cell's point (BoxWatch.near's distance)."""
+    return math.hypot(foot[0] - px[0], foot[1] - px[1])
+
+
+def bq_order(queue: Sequence[QEntry], values: Mapping[str, float] | None = None
+             ) -> list[QEntry]:  # fmt: skip
+    """PURE: the pick order -- the entries marked attacking first (nearest first), then the rest
+    nearest first; with ``values`` (--value-target) the rest by value_target.score (ties: the
+    nearer), the attacking ones still first."""
+    import value_target as vt
+
+    att = sorted((e for e in queue if e.attacking), key=lambda e: bq_d(e.foot))
+    rest = [e for e in queue if not e.attacking]
+    if values:
+        rest.sort(key=lambda e: (-vt.score(vt.value_of(e.species, values), bq_d(e.foot)),
+                                 bq_d(e.foot)))  # fmt: skip
+    else:
+        rest.sort(key=lambda e: bq_d(e.foot))
+    return att + rest
+
+
+def bq_refresh(
+    queue: Sequence[QEntry],
+    boxes: Sequence[Any],
+    t: float,
+    *,
+    target_px: Sequence[float] | None = None,
+    rel_of: Callable[[tuple[float, float]], Cell | None] | None = None,
+    keep: Callable[[tuple[float, float]], bool] | None = None,
+    values: Mapping[str, float] | None = None,
+    match_px: float = QUEUE_MATCH_PX,
+    stale_s: float = QUEUE_STALE_S,
+    cap: int = QUEUE_MAX,
+) -> list[QEntry]:
+    """PURE (dungeon@9.30): the queue after one detection (``boxes``, grabbed at ``t``). Our own
+    sprite's boxes (self_box) and boxes ``keep`` refuses (not in view) are left out, and so is
+    the CURRENT TARGET: the box whose foot is nearest ``target_px`` (the lock's cell projected),
+    within ``match_px``. Each entry takes the nearest remaining box within ``match_px`` of its
+    foot (pairs by distance, one box per entry): its foot, species, time and cell refreshed;
+    every unmatched box is a new entry. Entries last seen more than ``stale_s`` before ``t``
+    drop; the first ``cap`` by bq_order stay. A new list (the old one is not changed)."""
+    cands: list[tuple[tuple[float, float], Any]] = []
+    for b in boxes:
+        if self_box((float(b.x0) + float(b.x1)) / 2, (float(b.y0) + float(b.y1)) / 2):
+            continue
+        f = bq_foot(b)
+        if keep is not None and not keep(f):
+            continue
+        cands.append((f, b))
+    if target_px is not None and cands:
+        k_t = min(range(len(cands)), key=lambda k: bq_d(cands[k][0], target_px))
+        if bq_d(cands[k_t][0], target_px) <= match_px:
+            del cands[k_t]
+    out = [replace(e) for e in queue]
+    pairs = sorted((bq_d(e.foot, f), i, k) for i, e in enumerate(out)
+                   for k, (f, _b) in enumerate(cands) if bq_d(e.foot, f) <= match_px)  # fmt: skip
+    used_e: set[int] = set()
+    used_b: set[int] = set()
+    for _d, i, k in pairs:
+        if i in used_e or k in used_b:
+            continue
+        used_e.add(i)
+        used_b.add(k)
+        f, b = cands[k]
+        out[i] = replace(out[i], foot=f, species=box_species(b), t=t,
+                         rel=rel_of(f) if rel_of is not None else None,
+                         seen=out[i].seen + 1)  # fmt: skip
+    for k, (f, b) in enumerate(cands):
+        if k not in used_b:
+            out.append(QEntry(foot=f, species=box_species(b), t=t, t0=t,
+                              rel=rel_of(f) if rel_of is not None else None))  # fmt: skip
+    return bq_order([e for e in out if t - e.t <= stale_s], values)[:cap]
+
+
+def bq_mark(queue: Sequence[QEntry], cells: int = QUEUE_ATTACK_CELLS
+            ) -> tuple[list[QEntry], QEntry | None, bool]:  # fmt: skip
+    """PURE (dungeon@9.30): an attacked sign was read (a hit line on us, a Miss at us, an HP
+    drop): the NEAREST entry within ``cells`` of her (Chebyshev, by its cell at its last
+    detection; ties by pixel distance) is marked attacking -- the simple, honest attribution:
+    the sign's source is plausibly the nearest monster beside her that is not the target. An
+    entry with no cell (no position) is never marked. (the new queue, the marked entry or None,
+    True when it was not marked before)."""
+    near = [(max(abs(e.rel[0]), abs(e.rel[1])), bq_d(e.foot), i) for i, e in enumerate(queue)
+            if e.rel is not None and max(abs(e.rel[0]), abs(e.rel[1])) <= cells]  # fmt: skip
+    out = [replace(e) for e in queue]
+    if not near:
+        return out, None, False
+    i = min(near)[2]
+    new = not out[i].attacking
+    out[i] = replace(out[i], attacking=True)
+    return out, out[i], new
+
+
+def bq_refind(entry: QEntry, boxes: Sequence[Any], match_px: float = QUEUE_MATCH_PX
+              ) -> tuple[float, Any] | None:  # fmt: skip
+    """PURE: (the distance it moved, the box) -- the box of a fresh detection whose foot is
+    nearest the entry's last foot, within ``match_px``, our own sprite's boxes left out; None:
+    gone."""
+    best: tuple[float, Any] | None = None
+    for b in boxes:
+        if self_box((float(b.x0) + float(b.x1)) / 2, (float(b.y0) + float(b.y1)) / 2):
+            continue
+        d = bq_d(bq_foot(b), entry.foot)
+        if d <= match_px and (best is None or d < best[0]):
+            best = (d, b)
+    return best
+
+
+def bq_pick(order: Sequence[QEntry], boxes: Sequence[Any],
+            accept: Callable[[tuple[float, float]], str | None],
+            match_px: float = QUEUE_MATCH_PX,
+            ) -> tuple[tuple[int, QEntry, Any, float] | None, list[str]]:  # fmt: skip
+    """PURE: down the queue in ``order``, the first entry re-found in ``boxes`` (bq_refind) whose
+    box ``accept`` passes (None; else its reason: the box path's skips). ((rank, entry, box, px
+    moved) or None, the reason for each entry passed over: "gone" or accept's)."""
+    why: list[str] = []
+    for rank, e in enumerate(order):
+        got = bq_refind(e, boxes, match_px)
+        if got is None:
+            why.append("gone")
+            continue
+        refused = accept(bq_foot(got[1]))
+        if refused is not None:
+            why.append(refused)
+            continue
+        return (rank, e, got[1], got[0]), why
+    return None, why
+
+
+def bq_due_state(mode: str, locked: bool, sitting: bool, flown: bool, boss_avoid: bool,
+                 unread: bool, here_known: bool, swap: bool, ready_hold: bool) -> str:  # fmt: skip
+    """PURE (dungeon@9.30): whether the pick due after a fight's loot step runs on this tick:
+    "go"; "hold" (a bare-steal swap is running or its read-back pending, or --bare-ready's idle
+    unequip is due and waiting for its settle: the pick waits for it, never strikes across it);
+    "skip:<why>" (the pick is off, today's path follows): not searching (a rest, a fight), a
+    lock, sitting, a Fly Wing since the fight's end, the boss guard's avoid window (a walk-away,
+    --garm-fly), an --unread-step escape, no position."""
+    for bad, why in ((mode != "search", "mode"), (locked, "lock"), (sitting, "sitting"),
+                     (flown, "fly"), (boss_avoid, "boss"), (unread, "unread"),
+                     (not here_known, "no_position")):  # fmt: skip
+        if bad:
+            return f"skip:{why}"
+    if swap or ready_hold:
+        return "hold"
+    return "go"
+
+
+def bq_next(
+    queue: Sequence[QEntry],
+    values: Mapping[str, float] | None,
+    detect: Callable[[], Sequence[Any] | None],
+    accept: Callable[[tuple[float, float]], str | None],
+    aim: Callable[[Any], tuple[tuple[float, float] | None, list[str]]],
+    match_px: float = QUEUE_MATCH_PX,
+) -> dict[str, Any]:
+    """PURE decision of the pick (dungeon@9.30), its I/O injected: ``detect`` = the next fresh
+    detection's boxes (None: none came), ``accept`` = the box path's skips on a foot, ``aim`` =
+    the box's hover points hovered for a SWORD ((the point, the verdicts); the point None: no
+    SWORD). "empty" (no queue: nothing detected, nothing hovered); "refind_fail" (no detection,
+    no entry re-found / passing the skips, or no SWORD: ``why``); "pick" (``point``: strike
+    there). ``entry`` is the picked entry, else the head of the order."""
+    if not queue:
+        return {"what": "empty", "n": 0, "entry": None, "why": []}
+    order = bq_order(queue, values)
+    rec: dict[str, Any] = {"n": len(order), "entry": order[0], "why": []}
+    got = detect()
+    if got is None:
+        return {**rec, "what": "refind_fail", "why": ["no_detection"]}
+    pk, why = bq_pick(order, got, accept, match_px)
+    if pk is None:
+        return {**rec, "what": "refind_fail", "why": why}
+    rank, e, b, moved = pk
+    point, verdicts = aim(b)
+    rec.update(entry=e, box=b, rank=rank, moved_px=moved, verdicts=verdicts, why=why)
+    if point is None:
+        return {**rec, "what": "refind_fail", "why": [*why, "verdict"]}
+    return {**rec, "what": "pick", "point": point}
+
+
+def queue_refused(queue: bool, box_strike: bool, boxes: bool, melee_ring: bool) -> str | None:
+    """PURE: why --queue cannot run (None: it can, or it is off). It strikes through the box
+    path's hover and strike (--box-strike) on the box watcher's detections; melee_ring has no
+    box watcher (its own SWORD-cell queue)."""
+    if not queue:
+        return None
+    if melee_ring:
+        return "--queue is not for --engage melee_ring (it has its own SWORD-cell queue)"
+    if not boxes:
+        return "--queue needs the box watcher (--boxes)"
+    if not box_strike:
+        return "--queue goes with --box-strike (its pick is the box path's hover and strike)"
+    return None
+
+
 def red_px(crop: Any) -> int:
     """PURE: the no-entry ring's red pixels in a cursor crop (BGR): R high, G and B low."""
     a = np.asarray(crop)[..., :3].astype(np.int16)
@@ -1840,6 +2076,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud"] = ["9.29"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
+    if getattr(a, "queue", False):  # dungeon@9.30 (rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x)
+        out["queue"] = [QUEUE_MAX, QUEUE_STALE_S, QUEUE_MATCH_PX, QUEUE_VERSION]
     if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
         out["bare_steal"] = [bs.BARE_MAX_S, bs.BARE_HP_MIN, bs.EQUIP_KEY, bs.EQUIP_SLOT,
                              bs.BARE_STEAL_VERSION]  # fmt: skip
@@ -3720,6 +3958,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
+    q_on = bool(getattr(a, "queue", False))  # dungeon@9.30 (--queue, rogue-xmas02.md 4CC)
+    why_q = queue_refused(q_on, a.box_strike, a.boxes, a.engage == "melee_ring")
+    if why_q:
+        raise SystemExit(f"dungeon@9.30 refused: {why_q}")
     if getattr(a, "still_target", False):  # dungeon@9.23 (LS-2): never silently the base run
         why_st = still_target_refused(a.box_strike, a.box_now,
                                       getattr(a, "still_strike", False),
@@ -5255,6 +5497,156 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             rd = selfpos.read_minimap(frame(), digits, light=True)  # X1b: opt-in, confirmed
             return pos_ok.accept(time.monotonic(), rd)
 
+        # --- --queue (dungeon@9.30, rogue-xmas02.md 4CC): the fight's box queue (q_book, in the
+        # fight branch) and the pick after its loot step (queue_next); the rules are bq_* above
+        bq_st: dict[str, Any] = {"q": [], "t": 0.0, "fly": fly_at, "due": None}
+
+        def q_rel(foot: Sequence[float]) -> Cell | None:
+            """9.30: a foot's cell relative to her (box_spot's projection, cached per cell)."""
+            if here is None:
+                return None
+            if reach_proj["here"] != here:
+                reach_proj.update(here=here, uv=project(here, BOX_GRID))
+            return nearest_rel(reach_proj["uv"], BOX_GRID, foot)
+
+        def q_target_px() -> tuple[float, float] | None:
+            """9.30: the current target's point -- the lock's cell projected from her cell now
+            (the strike's rel when the lock has no cell); None: no lock (no target to leave out)."""
+            if lock is None:
+                return None
+            c_, r_ = lock.get("cell"), lock.get("rel")
+            if c_ is not None and here is not None:
+                rel_t = (int(c_[0]) - here[0], int(c_[1]) - here[1])
+            elif r_ is not None:
+                rel_t = (int(r_[0]), int(r_[1]))
+            else:
+                return None
+            u_t, v_t = project(here, [rel_t])[0]
+            return float(u_t), float(v_t)
+
+        def q_book(sign_: bool) -> None:
+            """dungeon@9.30 (--queue): a fight tick's bookkeeping -- no input, no event. A Fly
+            Wing since the last one empties the queue; a detection newer than the last one taken
+            refreshes it (bq_refresh: the boxes in view, the target and our own body left out);
+            an attacked sign read on this tick marks the nearest entry within 2 cells (bq_mark)."""
+            assert boxes is not None
+            if bq_st["fly"] != fly_at:  # a new spot: the old queue is gone
+                bq_st.update(q=[], t=0.0, fly=fly_at)
+            with boxes.lock:
+                t_b, got_b = boxes.last
+            if t_b > bq_st["t"]:
+                bq_st["t"] = t_b
+                bq_st["q"] = bq_refresh(bq_st["q"], got_b, t_b, target_px=q_target_px(),
+                                        rel_of=q_rel, keep=lambda f: in_view(f[0], f[1] - BODY_UP),
+                                        values=vt_values)  # fmt: skip
+            if sign_ and bq_st["q"]:
+                bq_st["q"], _m, new_m = bq_mark(bq_st["q"])
+                if new_m:
+                    counts["queue_attacking"] += 1
+
+        def queue_next(tick_: float, hold_: bool) -> bool:
+            """dungeon@9.30 (--queue): the pick due after a fight's loot step (bq_st["due"]).
+            bq_due_state: go / hold / skip on this tick. Then bq_next: the next fresh detection
+            (box_target's own way: --box-now asks for one now, else the rhythm's next one), the
+            queue in its order re-found within QUEUE_MATCH_PX of its last foot, the box path's
+            skips (the screen limit, in view, ignored box spots, --reach-check / --unreach-escape's
+            unreachable, --far-approach's far boxes), the box's hover points hovered for a SWORD;
+            on a pick ONE strike() (by "queue"), engaged as a box fight. True: struck (the caller
+            ends the tick); False: today's path goes on (held, skipped, empty or failed)."""
+            nonlocal lock, mode, goal_path, fight_t0, fight_ref
+            assert boxes is not None
+            due_ = bq_st["due"]
+            state_ = bq_due_state(mode, lock is not None, sitting, due_["fly"] != fly_at,
+                                  tick_ < boss_until, unread_active(), here is not None,
+                                  bare is not None and (bare.busy or bare.pending is not None),
+                                  hold_)  # fmt: skip
+            if state_ == "hold":
+                counts["queue_hold"] += 1  # a bare-steal swap first: the pick waits a tick
+                return False
+            bq_st["due"] = None
+            if state_ != "go":
+                counts["queue_" + state_.replace(":", "_")] += 1
+                return False
+            bw_ = boxes
+
+            def detect_() -> list[Any] | None:
+                t_q = time.monotonic()
+                if a.box_now:
+                    fresh_ = bw_.fresh_now(box_arm(a.box_detector, n_box_target[0]),
+                                           BOX_TARGET_WAIT_S) is not None  # fmt: skip
+                else:
+                    fresh_ = bw_.wait_fresh(t_q, BOX_TARGET_WAIT_S)
+                if not fresh_:
+                    return None
+                with bw_.lock:
+                    return list(bw_.last[1])
+
+            def accept_(foot_: tuple[float, float]) -> str | None:
+                lim_ = BOX_SCREEN_PX if getattr(a, "engage_screen", False) else BOX_TARGET_PX
+                if bq_d(foot_) > lim_:
+                    return "far_px"
+                if not in_view(foot_[0], foot_[1] - BODY_UP):
+                    return "off"
+                sp_ = box_spot(here, foot_)
+                if box_spots is not None and sp_ is not None and box_spots.ignored(sp_):
+                    return "spot"
+                if unreachable(here, foot_):
+                    return "unreachable"
+                far_on = getattr(a, "far_approach", False) and here is not None
+                if far_on and sp_ is not None and cheb2(sp_, here) >= APPROACH_CELLS:
+                    return "far"  # box_target walks toward it first (today's path)
+                return None
+
+            def aim_(b_: Any) -> tuple[tuple[float, float] | None, list[str]]:
+                pts_ = box_hover_points((b_.x0, b_.y0, b_.x1, b_.y1))
+                vds_: list[str] = []
+                for u_, v_ in pts_[: 1 if a.box_now else len(pts_)]:  # box_target's hovers
+                    if not in_view(u_, v_):
+                        vds_.append("off")
+                        continue
+                    vds_.append(str(hover(u_, v_)["verdict"]))
+                    if vds_[-1] == "sword":
+                        return (u_, v_), vds_
+                return None, vds_
+
+            got_ = bq_next(bq_st["q"], vt_values, detect_, accept_, aim_)
+            e_, b_ = got_["entry"], got_.get("box")
+            d_q = None if e_ is None else round(bq_d(e_.foot if b_ is None else bq_foot(b_)))
+            rec_: dict[str, Any] = {"kind": "queue", "what": got_["what"], "n": got_["n"],
+                                    "attacking": bool(e_ is not None and e_.attacking),
+                                    "species": None if e_ is None else e_.species, "d_px": d_q,
+                                    "gap_ms": round((time.monotonic() - float(due_["t"])) * 1e3),
+                                    "why": got_["why"]}  # fmt: skip
+            if "rank" in got_:
+                rec_.update(rank=got_["rank"], moved_px=round(got_["moved_px"]),
+                            verdicts=got_["verdicts"])  # fmt: skip
+            counts[f"queue_{got_['what']}"] += 1
+            if got_["what"] != "pick":
+                ev(rec_)
+                return False
+            u_p, v_p = got_["point"]
+            sp_p = box_spot(here, bq_foot(b_))
+            rel_p = (0, 0) if sp_p is None or here is None else \
+                (sp_p[0] - here[0], sp_p[1] - here[1])  # fmt: skip
+            bq_st["q"] = [x_ for x_ in bq_st["q"] if x_ is not e_]  # it is the target now
+            ev({**rec_, "rel": list(rel_p)})  # gap_ms: the fight's end -> this strike
+            box_q = [round(float(x_), 1) for x_ in (b_.x0, b_.y0, b_.x1, b_.y1)]
+            ev({"kind": "engage", "by": "queue", "name": None, "box": box_q,
+                "spot": None if sp_p is None else list(sp_p)})  # fmt: skip
+            box_fight.clear()  # a box fight, its box already tried (box_target's once per fight)
+            box_fight.update({"spot": sp_p, "n0": n_strike[0], "box": box_q, "tried": True})
+            mode, goal_path = "fight", None
+            fight_t0 = time.monotonic()
+            if fight_ref is None and here is not None:
+                fight_ref = {"img": frame(), "here": here, "t": fight_t0}
+            if strike(u_p, v_p, rel_p, "queue"):  # False: --walk-stop / --quick-drop / a swap
+                lock = {"t": time.monotonic(), "rel": rel_p,
+                        "cell": None if here is None else
+                        [here[0] + rel_p[0], here[1] + rel_p[1]]}  # fmt: skip
+            else:
+                counts["queue_no_lock"] += 1
+            return True
+
         def unread_active() -> bool:
             """9.22: an escape runs for THIS stale span (no fresh read, no Fly Wing since it came
             due): the search walk holds its clicks meanwhile. The pos_unread rule is checked on
@@ -6105,6 +6497,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     bare.tick(tick, lock is not None, mode == "fight", img, frac)
                 # --- FIGHT: locked, or scan for the attacker
                 if mode == "fight":
+                    if q_on and boxes is not None:  # dungeon@9.30 (--queue): bookkeeping only
+                        if bq_st["due"] is not None:  # a held pick (a swap's tick): a hit / a box
+                            counts["queue_skip_fight"] += 1  # started the next fight first
+                        bq_st["due"] = None  # a fight runs: no pick is due
+                        q_book(taken_new is not None or last_swing == tick or dropped)
                     if lock is not None:
                         since = tick - lock["t"]
                         idle = tick - max(last_ours, lock["t"])
@@ -6266,6 +6663,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         continue
                     loot_list, fight_ref = [], None
                     empty_cells.clear()  # loot v2: a new fight series starts clean
+                if q_on and mode == "after":  # dungeon@9.30 (--queue): the fight and its loot step
+                    bq_st["due"] = {"t": swing_floor, "fly": fly_at}  # ended: a pick is due
                 if sitting and overweight:  # Amendment I: sitting regenerates nothing
                     press("stand", "overweight")
                     sitting = False
@@ -6306,6 +6705,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if got_r == "swap":
                         continue  # the swap took ~2 s: a fresh tick reads the fight signs first
                     ready_hold = got_r == "hold"
+                # dungeon@9.30 (--queue): the next target from the fight's queue, AFTER its loot
+                # step and the rest decision and --bare-ready's idle swap, BEFORE the search walk
+                if q_on and bq_st["due"] is not None and queue_next(tick, ready_hold):
+                    continue  # struck: a fresh tick reads the fight's signs first
                 # --- REST (B / C): to the nearest spot, sit until HP 100 %
                 if mode == "rest":
                     if sitting:
@@ -7179,6 +7582,22 @@ def main() -> int:
         "OFF by default): the box target is the box worth the most a kill (the map model's drops "
         "at Overcharge, data/econ/maps.json, by the detector's own species), discounted by "
         "distance (value / (1 + d / 150 px)), not simply the nearest; the same candidates",
+    )
+    t.add_argument(
+        "--queue",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.30 (rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x: a queue of the monsters "
+        "in the scene, the one near and attacking us first, then on down the queue; OFF by "
+        "default; with --box-strike): while a fight runs, the OTHER monster boxes in view (not "
+        "the target, not our own body) are kept as a queue of at most 6, an entry not seen in "
+        "the fight's detections for 2 s dropped, the nearest within 2 cells of her marked "
+        "attacking when a hit / Miss / HP drop is read; once the fight AND its loot step have "
+        "ended, the next target comes from the queue at once -- attacking first, then the "
+        "nearest (with --value-target the rest by value) -- re-found on the next fresh "
+        "detection within 60 px of its last foot, passing the box path's skips, hovered for its "
+        "SWORD and struck through strike(); an empty queue, a failed re-find or no SWORD -> "
+        "today's search path. Never during a loot step, a rest, an escape or a bare-steal swap",
     )
     t.add_argument(
         "--bare-steal",

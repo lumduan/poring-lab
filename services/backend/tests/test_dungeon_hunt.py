@@ -3719,3 +3719,272 @@ def test_hud_sends_the_runners_boxes_by_species_display_only() -> None:
                 npc_guard=False, miss_cue=False)  # fmt: skip
     assert dh.fixes_of(dh.argparse.Namespace(**base, hud=True))["hud"] == ["9.29"]
     assert "hud" not in dh.fixes_of(dh.argparse.Namespace(**base, hud=False))
+
+
+# --- --queue (dungeon@9.30, rogue-xmas02.md 4CC; Batt 2026-11-11 ~19:3x: the monsters' queue) ----
+
+
+def _qb(fx: float, fy: float, sp: str | None = "cookie", w: float = 30.0, h: float = 50.0) -> Any:
+    """A detector box (BoxWatch keeps only "monster" boxes) whose FOOT is (fx, fy)."""
+    from types import SimpleNamespace as NS
+
+    return NS(x0=fx - w / 2, y0=fy - h, x1=fx + w / 2, y1=fy, score=0.9, cls="monster", species=sp)
+
+
+def test_queue_refresh_keeps_the_other_boxes_in_view_and_drops_stale_ones() -> None:
+    """The fight's bookkeeping: our own sprite, the target (nearest the lock's point, <= 60 px)
+    and boxes out of view are left out; an entry takes the nearest box within 60 px (one box an
+    entry); an entry not seen for > 2.0 s of DETECTION time drops; at most 6, nearest first."""
+    me = _qb(641, 362, None, h=70)  # centred on our own drawn body: self_box
+    assert dh.self_box(641, 327)
+    tgt, a1, b1 = _qb(680, 380), _qb(400, 300, "mystcase"), _qb(900, 500)
+    off = _qb(1260, 700)
+
+    def keep(f: Any) -> bool:
+        return f[0] < 1250 and f[1] < 690
+
+    def rel_of(f: Any) -> tuple[int, int]:
+        return (round((f[0] - 641) / 34), round((f[1] - 362) / 24))
+
+    q1 = dh.bq_refresh([], [me, tgt, a1, b1, off], 10.0, target_px=(685, 378), keep=keep,
+                       rel_of=rel_of)  # fmt: skip
+    assert [e.foot for e in q1] == [(400.0, 300.0), (900.0, 500.0)]  # nearest first
+    assert [e.species for e in q1] == ["mystcase", "cookie"] and q1[0].rel == (-7, -3)
+    assert all(e.t == e.t0 == 10.0 and e.seen == 1 and not e.attacking for e in q1)
+    # the target is left out only when a box lies within 60 px of its point
+    assert len(dh.bq_refresh([], [tgt, a1], 10.0, target_px=(100, 100))) == 2
+    # A walked 40 px: the same entry (first seen 10.0), B not in this detection but kept (1 s)
+    q2 = dh.bq_refresh(q1, [_qb(440, 300, "mystcase")], 11.0)
+    assert [(e.foot, e.t, e.t0, e.seen) for e in q2] == [
+        ((440.0, 300.0), 11.0, 10.0, 2), ((900.0, 500.0), 10.0, 10.0, 1)]  # fmt: skip
+    assert q1[0].foot == (400.0, 300.0)  # a new list: the old queue is unchanged
+    # 2.5 s after B's last detection it drops; A (1.5 s) stays unseen; a new box joins
+    q3 = dh.bq_refresh(q2, [_qb(300, 600)], 12.5)
+    assert [e.foot for e in q3] == [(440.0, 300.0), (300.0, 600.0)]
+    # a jump of 70 px is another sprite: a new entry; the old one waits out its 2.0 s
+    q4 = dh.bq_refresh(q3, [_qb(510, 300)], 13.0)
+    assert [e.foot for e in q4] == [(510.0, 300.0), (440.0, 300.0), (300.0, 600.0)]
+    assert [e.foot for e in dh.bq_refresh(q4, [], 13.01)] == [(510.0, 300.0), (300.0, 600.0)]
+    # one box refreshes ONE entry (the nearer); the other is not doubled
+    two = dh.bq_refresh([], [_qb(400, 300), _qb(450, 300)], 1.0)
+    got = dh.bq_refresh(two, [_qb(420, 300)], 2.0)
+    assert sorted((e.foot, e.t) for e in got) == [((420.0, 300.0), 2.0), ((450.0, 300.0), 1.0)]
+    # at most QUEUE_MAX, the nearest kept
+    many = [_qb(641 + dx, 200) for dx in (-400, -300, -200, -100, 100, 200, 300, 400)]
+    capped = dh.bq_refresh([], many, 1.0)
+    assert dh.QUEUE_MAX == 6 and len(capped) == 6
+    assert sorted(e.foot[0] for e in capped) == [341.0, 441.0, 541.0, 741.0, 841.0, 941.0]
+
+
+def test_queue_marks_the_nearest_entry_beside_her_and_orders_attacking_first() -> None:
+    """An attacked sign marks the NEAREST entry within 2 cells (its cell at its last detection;
+    ties by px); no cell, no mark. The order: attacking first, then the nearest -- with
+    --value-target's values the rest by value_target.score, the attacking ones still first."""
+    E = dh.QEntry
+    a_ = E(foot=(700, 380), species="a", t=1, t0=1, rel=(2, 1))
+    b_ = E(foot=(680, 370), species="b", t=1, t0=1, rel=(1, 0))
+    c_ = E(foot=(900, 500), species="c", t=1, t0=1, rel=(3, 0))
+    d_ = E(foot=(650, 365), species="d", t=1, t0=1, rel=None)  # no position: never marked
+    q, m, new = dh.bq_mark([a_, b_, c_, d_])
+    assert m is not None and m.species == "b" and new and not b_.attacking
+    assert [e.species for e in q if e.attacking] == ["b"]
+    q, m, new = dh.bq_mark(q)
+    assert m is not None and m.species == "b" and not new  # marked once
+    assert dh.bq_mark([c_, d_])[1:] == (None, False)  # 3 cells away / no cell
+    near_, far_ = E(foot=(680, 370), species="x", t=1, t0=1, rel=(1, 0)), \
+        E(foot=(600, 362), species="y", t=1, t0=1, rel=(-1, 0))  # fmt: skip
+    assert dh.bq_mark([far_, near_])[1].species == "x"  # the same cell distance: the nearer px
+    assert dh.QUEUE_ATTACK_CELLS == 2
+    order = dh.bq_order(q)
+    assert [e.species for e in order] == ["b", "d", "a", "c"]  # b attacking, then nearest
+    poor0 = E(foot=(641, 362), species="poor", t=1, t0=1)
+    rich300 = E(foot=(941, 362), species="rich", t=1, t0=1)
+    rich450 = E(foot=(1091, 362), species="rich", t=1, t0=1)
+    atk = E(foot=(1141, 362), species="poor", t=1, t0=1, attacking=True)
+    values = {"rich": 262.0, "poor": 76.0, "*": 166.0}
+    assert [e.foot for e in dh.bq_order([poor0, rich300])] == [(641, 362), (941, 362)]
+    assert dh.bq_order([poor0, rich300, atk], values) == [atk, rich300, poor0]
+    assert dh.bq_order([poor0, rich450, atk], values) == [atk, poor0, rich450]
+
+
+def test_queue_pick_refinds_down_the_queue_through_the_box_paths_skips() -> None:
+    """The re-find: the fresh box nearest an entry's last foot within 60 px (our own sprite's
+    boxes never); down the order, the first one the skips accept; each passed one says why."""
+    E = dh.QEntry
+    e1, e2, e3 = (E(foot=f, species=None, t=1, t0=1) for f in ((400, 300), (900, 500), (300, 600)))
+    b2, b3 = _qb(910, 505), _qb(330, 600)
+
+    def accept(f: Any) -> str | None:
+        return "unreachable" if f[0] > 800 else None
+
+    got, why = dh.bq_pick([e1, e2, e3], [b2, b3], accept)
+    assert got is not None and got[:3] == (2, e3, b3) and got[3] == 30.0
+    assert why == ["gone", "unreachable"]
+    assert dh.bq_pick([e1, e2, e3], [b2, b3], lambda f: "off") == (None, ["gone", "off", "off"])
+    assert dh.bq_refind(e1, [_qb(459, 300)]) is not None
+    assert dh.bq_refind(e1, [_qb(461, 300)]) is None  # 61 px: gone
+    mine = E(foot=(641, 362), species=None, t=1, t0=1)
+    assert dh.bq_refind(mine, [_qb(641, 362, None, h=70)]) is None  # her own body: never
+    assert dh.QUEUE_MATCH_PX == 60.0
+
+
+def test_queue_next_picks_after_the_loot_step_or_falls_back_to_todays_path() -> None:
+    """bq_next, the pick's decision with its I/O injected: an empty queue detects and hovers
+    nothing ("empty"); no fresh detection, no re-find or no SWORD -> "refind_fail" (the runner
+    goes on with today's search path); a pick strikes at the SWORD point, attacking first, then
+    the nearest (by value with --value-target)."""
+    E = dh.QEntry
+    calls: list[str] = []
+
+    def det(boxes: Any) -> Any:
+        def f() -> Any:
+            calls.append("detect")
+            return boxes
+
+        return f
+
+    def aim(point: Any, verdicts: list[str]) -> Any:
+        def f(b: Any) -> Any:
+            calls.append("aim")
+            return point, verdicts
+
+        return f
+
+    ok = lambda f: None  # noqa: E731
+    sword = aim((10.0, 20.0), ["sword"])
+    got = dh.bq_next([], None, det([]), ok, sword)
+    assert got["what"] == "empty" and got["n"] == 0 and got["entry"] is None and calls == []
+    near_ = E(foot=(700, 400), species="poor", t=1, t0=1)
+    far_ = E(foot=(1000, 300), species="rich", t=1, t0=1)
+    got = dh.bq_next([near_, far_], None, det(None), ok, sword)
+    assert (got["what"], got["why"], got["entry"]) == ("refind_fail", ["no_detection"], near_)
+    assert calls == ["detect"]  # no hover without a detection
+    calls.clear()
+    got = dh.bq_next([near_, far_], None, det([_qb(200, 650)]), ok, sword)
+    assert (got["what"], got["why"]) == ("refind_fail", ["gone", "gone"]) and calls == ["detect"]
+    calls.clear()
+    fresh = [_qb(710, 400), _qb(1000, 310)]
+    got = dh.bq_next([near_, far_], None, det(fresh), ok, aim(None, ["walk"]))
+    assert (got["what"], got["why"], got["entry"], got["verdicts"]) == (
+        "refind_fail", ["verdict"], near_, ["walk"])  # fmt: skip
+    got = dh.bq_next([near_, far_], None, det(fresh), ok, sword)
+    assert got["what"] == "pick" and got["entry"] is near_ and got["point"] == (10.0, 20.0)
+    assert got["rank"] == 0 and got["moved_px"] == 10.0 and got["box"] is fresh[0]
+    far_atk = dh.replace(far_, attacking=True)
+    got = dh.bq_next([near_, far_atk], None, det(fresh), ok, sword)
+    assert got["what"] == "pick" and got["entry"] is far_atk  # attacking first
+    got = dh.bq_next([near_, far_], {"rich": 900.0, "poor": 10.0}, det(fresh), ok, sword)
+    assert got["entry"] is far_  # --value-target: the value score among the non-attacking
+    got = dh.bq_next([near_, far_], None, det(fresh), lambda f: "far" if f[0] < 800 else None,
+                     sword)  # fmt: skip
+    assert got["entry"] is far_ and got["why"] == ["far"]  # the skips pass over the near one
+
+
+def test_queue_pick_waits_for_a_swap_and_never_runs_in_a_rest_a_fight_or_an_escape() -> None:
+    """bq_due_state: the pick due after the loot step runs only while searching, with no lock,
+    standing, no Fly Wing since the fight's end, no boss avoid window (walk-away, --garm-fly),
+    no --unread-step escape and a position; a bare-steal swap (running, its read-back pending,
+    or --bare-ready's idle unequip due) HOLDS it: never a strike across a swap."""
+    go = dict(mode="search", locked=False, sitting=False, flown=False, boss_avoid=False,
+              unread=False, here_known=True, swap=False, ready_hold=False)  # fmt: skip
+    assert dh.bq_due_state(**go) == "go"  # type: ignore[arg-type]
+    cases = {("mode", "rest"): "skip:mode", ("mode", "fight"): "skip:mode",
+             ("mode", "after"): "skip:mode", ("locked", True): "skip:lock",
+             ("sitting", True): "skip:sitting", ("flown", True): "skip:fly",
+             ("boss_avoid", True): "skip:boss", ("unread", True): "skip:unread",
+             ("here_known", False): "skip:no_position", ("swap", True): "hold",
+             ("ready_hold", True): "hold"}  # fmt: skip
+    for (k, v), want in cases.items():
+        assert dh.bq_due_state(**{**go, k: v}) == want, (k, v)  # type: ignore[arg-type]
+    rest_swap = {**go, "mode": "rest", "swap": True}
+    assert dh.bq_due_state(**rest_swap) == "skip:mode"  # type: ignore[arg-type]
+
+
+def test_queue_is_refused_without_its_box_path_and_recorded_in_the_fixes() -> None:
+    assert dh.queue_refused(False, False, False, True) is None  # off: nothing to refuse
+    assert "melee_ring" in str(dh.queue_refused(True, True, True, True))
+    assert "--boxes" in str(dh.queue_refused(True, True, False, False))
+    assert "--box-strike" in str(dh.queue_refused(True, False, True, False))
+    assert dh.queue_refused(True, True, True, False) is None
+    base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
+                npc_guard=False, miss_cue=False)  # fmt: skip
+    assert dh.fixes_of(dh.argparse.Namespace(**base, queue=True))["queue"] == [
+        6, 2.0, 60.0, "9.30"]  # fmt: skip
+    assert "queue" not in dh.fixes_of(dh.argparse.Namespace(**base, queue=False))
+    assert "queue" not in dh.fixes_of(dh.argparse.Namespace(**base))  # OFF by default
+    src = Path(dh.__file__).read_text()
+    flag = '"--queue",\n        action=argparse.BooleanOptionalAction,\n        default=False,'
+    assert flag in src
+    assert "rogue-xmas02.md 4CC" in src[src.index('"--queue",') :][:300]
+    i_ref = src.index('raise SystemExit(f"dungeon@9.30 refused: {why_q}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    assert 'q_on = bool(getattr(a, "queue", False))' in src
+    assert src.count('"fixes": fixes_of(a)') == 2  # run_start and the manifest record it
+
+
+def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strike_only() -> None:
+    """The flag off: every hook is behind q_on (today's run). On: the bookkeeping runs at the top
+    of the fight branch only (no input, no event); the pick is due once the after block's loot
+    step ended without a new fight, and runs after the rest decision and --bare-ready's idle
+    swap, before the REST block and the search walk; its input is ONE strike() by "queue" after a
+    SWORD hover, through the box path's skips; no click path of its own."""
+    src = Path(dh.__file__).read_text()
+    i_loot = src.index("got_ = loot_step(loot_list, fight_ref)")
+    i_due = src.index('if q_on and mode == "after":  # dungeon@9.30 (--queue)')
+    i_set = src.index('bq_st["due"] = {"t": swing_floor, "fly": fly_at}')
+    i_after = src.index('if mode == "after":\n                    mode = "search"\n')
+    i_ready = src.index("got_r = bare.ready_tick(")
+    i_pick = src.index('if q_on and bq_st["due"] is not None and queue_next(tick, ready_hold):')
+    i_rest = src.index("# --- REST (B / C): to the nearest spot, sit until HP 100 %")
+    i_walk = src.index("and not ready_hold \\\n", i_rest)  # the search walk's click
+    assert i_loot < i_due < i_set < i_after < i_ready < i_pick < i_rest < i_walk
+    assert src[i_loot:i_due].count("continue") == 1  # a loot SWORD (a new fight): no pick due
+    assert src[i_pick:i_rest].count("continue") == 1
+    i_fight = src.index("                # --- FIGHT: locked, or scan for the attacker")
+    book = ('if mode == "fight":\n                    if q_on and boxes is not None:  # '
+            "dungeon@9.30 (--queue): bookkeeping only\n"
+            '                        if bq_st["due"] is not None:  # a held pick (a swap\'s tick): '
+            "a hit / a box\n"
+            '                            counts["queue_skip_fight"] += 1  # started the next fight '
+            "first\n"
+            '                        bq_st["due"] = None  # a fight runs: no pick is due\n'
+            "                        q_book(taken_new is not None or last_swing == tick or dropped)"
+            '\n                    if lock is not None:\n')  # fmt: skip
+    assert src.index(book) == i_fight + len("                # --- FIGHT: locked, or scan for "
+                                            "the attacker\n                ")  # fmt: skip
+    assert src.count("q_book(") == 2 and src.count("queue_next(") == 2  # a def + one call each
+    qb = src[src.index("        def q_book(sign_: bool) -> None:") :]
+    qb = qb[: qb.index("\n        def ", 10)]
+    for word in ("click_at(", "hover(", "strike(", "agent.", "keys(", "sleep(", "ev("):
+        assert word not in qb, word  # bookkeeping only
+    assert "bq_refresh(" in qb and "bq_mark(" in qb and "target_px=q_target_px()" in qb
+    qn = src[src.index("        def queue_next(tick_: float, hold_: bool) -> bool:") :]
+    qn = qn[: qn.index("\n        def unread_active(")]
+    for word in ("click_at(", "agent.", ".click(", "keys(", "press("):
+        assert word not in qn, word  # no input path of its own
+    import re
+
+    calls_ = re.findall(r"\bstrike\((?!\))", qn)  # calls, not the docstring's "strike()"
+    assert len(calls_) == 1 and 'if strike(u_p, v_p, rel_p, "queue"):' in qn
+    assert qn.count("hover(") == 1 and 'vds_.append(str(hover(u_, v_)["verdict"]))' in qn
+    assert 'if vds_[-1] == "sword":' in qn  # the strike only where the cursor read SWORD
+    for skip in (
+        "if not in_view(foot_[0], foot_[1] - BODY_UP):",
+        "box_spots.ignored(sp_)",
+        "if unreachable(here, foot_):",
+        "cheb2(sp_, here) >= APPROACH_CELLS",
+    ):
+        assert skip in qn, skip  # fmt: skip
+    assert "bw_.fresh_now(" in qn and "bw_.wait_fresh(t_q, BOX_TARGET_WAIT_S)" in qn
+    assert "bare is not None and (bare.busy or bare.pending is not None)" in qn  # swaps hold
+    assert "counts[f\"queue_{got_['what']}\"] += 1" in qn  # queue_pick / _refind_fail / _empty
+    assert '"kind": "queue", "what": got_["what"], "n": got_["n"],' in qn
+    assert '"gap_ms": round((time.monotonic() - float(due_["t"])) * 1e3),' in qn
+    i_ev = qn.index('ev({**rec_, "rel": list(rel_p)})')
+    assert i_ev < qn.index('ev({"kind": "engage", "by": "queue"') < qn.index("if strike(")
+    assert '"tried": True})' in qn  # a box fight whose box was tried (box_target's once)
+    for fn in ("        def loot_step_v1(", "        def loot_step_v2("):
+        body = src[src.index(fn) :]
+        body = body[: body.index("\n        def ", 10)]
+        assert "bq_" not in body and "q_book" not in body  # never inside a loot step
+    assert "queue" in dh.WALK_STOP_BY  # a fight path: --walk-stop watches its ring-1 strikes
