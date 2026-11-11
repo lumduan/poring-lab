@@ -5953,3 +5953,32 @@ recent two-run pair of that same base (named in the result).
 | L1 / L3 / L4 / K1 / K3 / Q1 | 91.3 % / 94.3 % / 0 / 1.97 s / 70.0 % / 4 | 100 % / 90.7 % / 0 / 1.99 s / 83.3 % / 10 | PASS |
 | U1-stuck / D1 p95 | 3.6 s / 22.1 ms | 7.4 s / 22.0 ms | PASS |
 
+### 4CL. 4CB's verdict: `--value-target` (p75 + p76; written 2026-11-12 02:05 ICT from `date`)
+
+- **The runs:** p75 00:56:2x-01:22:xx (fiT26) and p76 01:35:1x-02:01:xx (fiT27). Both rc 0, her NOT
+  immune, each after an MVP kill (00:26:48, 01:34:20). On the aura-off base (+ `--hud`). Export
+  `xmas02-p75-p76-value`.
+- **VERDICT: V1 and V2 FAIL -> it STAYS A FLAG.**
+  - V1: the Myst Case share of kills is 52 / 124 = 41.9 %. The bar is the base's 44.9 % + 10 =
+    54.9 %.
+  - V2: pooled 75,680 z/h against 79,650 (p75 69,168, p76 82,191).
+  - No harm passes but W1, which fails by the letter at 22 / 1,091 = 2.02 % (pooled with p67 +
+    p68).
+- **The mechanism acted, weakly.** In p75 the pick changed the target from the nearest box in 12
+  of 76 picks (9 toward a Myst Case). Most kills start from monsters that engage HER (the defend
+  path), where no pick is made.
+- **On COMMON items only (sell < 3,000 z) it is the best pair of the night:** 63,781 z/h against the
+  base's 58,820 (+8.4 %) and the plain Knife's 61,076. The base pair had more rare luck (20,830 z/h
+  of Pearls and an Old Blue Box) than this one (11,898). Two runs cannot separate that luck; it
+  goes to Batt with the numbers.
+
+| | **p75** | **p76** | bar |
+|---|---|---|---|
+| E1 kills / deaths / lowest HP / Fly Wings | 59 (141.5 / h) / 0 / 46.5 % / 0 | 65 (155.9 / h) / 0 / 66.0 % / 0 | PASS |
+| V1 Myst Case share | 22 / 59 | 30 / 65 | 41.9 % < 54.9 %: FAIL |
+| V2 gross z/h at Overcharge | 69,168 | 82,191 | 75,680 < 79,650: FAIL (common items 63,781 vs 58,820) |
+| W1 | 5 / 309 | 2 / 252 | pooled with p67 + p68: 2.02 %: FAIL by the letter |
+| R1-A / P2 | 2 / 0 | 0 / 0 | pooled R1-A 4 < 7: PASS; P2 PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 100 % / 96.7 % / 0 / 1.96 s / 91.8 % / 5 | 95.2 % / 97.0 % / 0 / 1.98 s / 91.0 % / 2 | PASS |
+| U1-stuck / D1 p95 | 9.7 s / 22.3 ms | 3.6 s / 22.0 ms | PASS |
+
