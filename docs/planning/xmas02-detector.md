@@ -3895,3 +3895,21 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
 - **Nothing else changes:** O22's init (round 4, 32e8afae), epochs, fight negatives, the freeze
   and the bars.
 
+### Amendment O23b (2026-11-12 06:51 ICT from `date`, BEFORE round 5's cache): fsTa5 deferred; the TRAIN list fixed
+
+- **Why:** the Windows PC restarted at 06:29 (an update). The lab account shows a full-screen Windows
+  "back up your PC" prompt that is Batt's to answer, and the game client is closed. The staging fsTa5
+  (O23) cannot be recorded now.
+  - Batt: the GPU may be used at any time. So round 5 trains NOW without fsTa5.
+  - fsTa5 is recorded when the client is back and joins the NEXT round's TRAIN. It is never part
+    of a held-out.
+- **G2 on the round-5 labels** (params v2 aea6f1d2, `fi_labels.py label --split train`):
+  - PASS (admitted): fsTa4; fsTn4 (113216, 115807); fiT10, fiT11, fiT12, fiT13, fiT15, fiT17;
+    fiT20, fiT21, fiT24, fiT26, fiT27, fiT28, fiT32, fiT34.
+  - NOT_ENOUGH (< 30 fits; not admitted): fiT14, fiT16, fiT18, fiT19, fiT22, fiT25, fiT29, fiT30,
+    fiT31, fiT33.
+  - The invalid fsTn4 113618 has no label file.
+- **Round 5's TRAIN** = round 4's TRAIN (its label files unchanged) + the admitted list above.
+  Session negatives: round 4's names + the admitted pilots. Val: p31 (as round 4). Cache id
+  `xmas02-fi-r5-20261112`.
+
