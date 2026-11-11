@@ -2270,6 +2270,48 @@ the detect server, come after the training):
 - **The recordings fiT10 / fiT11 stay in round 4's held-out** (`map_labels.XMAS02_FIT`): a floor
   item's pixels do not depend on immunity. fiT14 / fiT15 are not held-out (TRAIN-eligible later).
 
+### 4BX. Batt's bare-hand steal (dungeon@9.27, `--bare-steal`): the technique, the build, the live measurements (written 2026-11-11 15:36 ICT from `date`; its pilots' bars come in 4BY, after the live smoke check)
+
+- **Batt, 2026-11-11 (translated):** "I chose the Rogue for its auto steal: it gets more items,
+  and this map's drops sell well. The technique: when we see a monster we do not wear the dagger;
+  we hit bare-handed, because it is faster and the monster does not die before auto steal gets
+  its item. After the steal succeeds (the Battle Log, or the popup that always appears at the
+  same place mid-screen; look at the Battle Log first, the popup too) switch to the dagger at
+  once. Unequip: Alt+Q, double-click the dagger. Equip: put it on a free F1-F9 hotkey (e.g. F5)
+  and press it." Then: **"do not fix anything to English only: I will put up bot-testing dev
+  servers in Thai and Korean (Thai first)."** And: the console's own UI stays English.
+- **The base rate it attacks (packets: a `pickup_result` with no `pickup_request` of ours within
+  2 s = a Snatcher steal):** with the dagger on, p63 + p64 stole 82 items in 127 kills (0.65 a
+  kill; 82 of the 133 items gained). Snatcher (Lv 10) + Steal (Lv 10) give each melee hit
+  (10 x 15 + 55 + 10 x 10) / 1000 = 30.5 % to try a steal; a monster can be stolen from once.
+- **The cues are language-free (scripts/bare_steal.py, 1d71d1f3):**
+  - the item-obtained POPUP, read by its frame at a fixed place: rows 76-105 of the game region,
+    a 2-px white border column at x 541, white top / bottom border rows to its right end; its
+    text is never read. On the p63 recording (fiT14, where it was tuned): 62 / 62 item gains, 0
+    false onsets; on p64's (fiT15, held out): 69 / 71, 0 false (the 2 misses: likely the same
+    item twice in a row, or two gains inside one 1-fps frame);
+  - a NEW Battle Log line of the item-gain COLOUR (cyan, read from pixels). In p63 all 81 typed
+    item lines were cyan; cyan is also "you dropped" and the equip ("put on") line, neither of
+    which happens during the bare phase.
+- **The swap, measured live 2026-11-11 14:56-15:00 on prt_fild08 (immune):**
+  - Alt+Q: the equipment window reads open at its home (185, 300) after 0.8 s; the weapon slot is
+    window point (18, 102); a double-click there takes the Damascus +8 off (the slot shows its
+    grey placeholder; a RED "taken off" Battle Log line);
+  - the Damascus was dragged from the inventory's Eqp tab to hotbar row 1 slot 4 (F5); F5 puts
+    it back on (a CYAN "put on" line). Done twice: the hotkey stays;
+  - **the state readout:** the F5 slot shows the dagger's icon ONLY while it is in the bag;
+    worn, the slot is empty. So the always-visible hotbar says armed / bare with no window open
+    and no word read.
+- **The build (58b91fc2, merged 719a3930; OFF by default; test_dungeon_hunt 147, bare_steal 9,
+  click census 3 pass):** the first strike on a new target unequips (only with no window open;
+  every window state read before and after each chord); each tick of the bare phase equips on a
+  cue ("cyan" / "popup"), after BARE_MAX_S 8 s ("time"), under 50 % HP ("hp"), at the fight's end
+  ("fight_end"), before any Fly Wing or walk-away ("safety"), and at the run's end ("run_end");
+  3 failed swaps in a row stop the run; `clear-bag` refuses while the F5 slot shows the dagger (a
+  bare state there would DROP it). run_start records `"bare_steal": [8.0, 0.5, "F5", 4, "9.27"]`.
+- **Next:** a short live smoke run (unscored) to check the swap and the cues in a real fight,
+  then 4BY pre-registers two pilots.
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
