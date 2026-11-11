@@ -6490,6 +6490,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # --- FIGHT: locked, or scan for the attacker
                 if mode == "fight":
                     if q_on and boxes is not None:  # dungeon@9.30 (--queue): bookkeeping only
+                        if bq_st["due"] is not None:  # a held pick (a swap's tick): a hit / a box
+                            counts["queue_skip_fight"] += 1  # started the next fight first
                         bq_st["due"] = None  # a fight runs: no pick is due
                         q_book(taken_new is not None or last_swing == tick or dropped)
                     if lock is not None:

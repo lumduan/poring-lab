@@ -3943,6 +3943,10 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
     i_fight = src.index("                # --- FIGHT: locked, or scan for the attacker")
     book = ('if mode == "fight":\n                    if q_on and boxes is not None:  # '
             "dungeon@9.30 (--queue): bookkeeping only\n"
+            '                        if bq_st["due"] is not None:  # a held pick (a swap\'s tick): '
+            "a hit / a box\n"
+            '                            counts["queue_skip_fight"] += 1  # started the next fight '
+            "first\n"
             '                        bq_st["due"] = None  # a fight runs: no pick is due\n'
             "                        q_book(taken_new is not None or last_swing == tick or dropped)"
             '\n                    if lock is not None:\n')  # fmt: skip
