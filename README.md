@@ -110,7 +110,7 @@ To switch to the Thai-data server and back (stop needs no guard; start does):
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:8888` | rathena | web-server (`RATHENA_WEB_SERVER=true`): the client's account / character UI settings and emblems over HTTP, at its `AssistAddr` (2026-11-05). Its load routes are **unauthenticated** upstream | LAN |
 | `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
-| `HOST_LAN_IP:8000` | backend | `/health`, `/hardware` (the host's CPU/RAM/GPU/temps/power; this listener only), `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
+| `HOST_LAN_IP:8000` | backend | `/health`, `/hardware` (the host's CPU/RAM/GPU/temps/power; this listener only), `/economy/*` (the economy dashboard's exports, read-only; this listener only), `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
 | — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose networks only (`default` + the internal `agent` network) |
 | — (`:3306`) | db | MariaDB | compose network only |
@@ -163,7 +163,8 @@ Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-
   - Turning it on first releases what the tab holds. Off restores instant takeover, and every
     page load starts with it off.
   - An amber WATCH ONLY chip shows on the screen and in the header.
-- **Top bar (every page):** Console / Settings / Label QA / Hardware, and the **mode badge**, always
+- **Top bar (every page):** Console / Flows / Maps / Settings / Hardware / Economy (Label QA left the
+  bar 2026-11-10; `/qa` remains), and the **mode badge**, always
   visible: **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no
   status.
 - **Hardware** (`/hardware`, Batt 2026-11-08): the lab host's CPU (total and per core, MHz, load),
@@ -177,6 +178,14 @@ Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-
     root only on the host and masked in containers; i915 has no unprivileged VRAM figure). The
     host's `/dev/shm` is not mounted in the backend, so it shows `n/a` there unless
     `HARDWARE_SHM_PATH` names a path on it. A sample older than 6 s is marked STALE.
+- **Economy** (`/economy`, Batt 2026-11-11): banked runs' business results at fixed NPC prices (course
+  material too): Income (picked / stolen / total per item, an editable NPC sell price, Overcharge),
+  Kills per species, Drops of our kills, Consumables (an editable NPC buy price, Discount) and the
+  P&L per hour (gross, cost and net, plain and "best").
+  - A run shows only after it is exported: `scripts/econ_dash.py export SESSION_DIR ... --name NAME`
+    writes `data/econ/dashboard/NAME.json`; the backend serves it read-only (`GET /economy/list`,
+    `GET /economy/data/NAME`, `:8000` only). Formulas and checks: `docs/econ/economics.md` section 10.
+  - Edited prices stay in the browser (localStorage) and are never sent to the server.
 - **Route preview** (2026-10-08): the LIVE, world-anchored route of every walk run: a green line
   from the character's feet with square corner nodes, a box on the next click and arrows
   converging on the goal (the RA2 look), re-projected about 20 times a second and matched to the

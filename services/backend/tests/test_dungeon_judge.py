@@ -385,6 +385,28 @@ def test_real_positive_cases_agree_with_the_judges_that_own_each_column() -> Non
         assert got["hunt v55: gross / cost / net z/h == econ_row"] == (802.3, 0.0, 802.3)
 
 
+def test_a_session_directory_is_loaded_as_given(tmp_path: Path) -> None:
+    """2026-11-11 (econ_dash): an ARCHIVED session (the NAS's scratch-archive/<date>/
+    demo-sessions/<sid>) is read from its directory; its sid is the directory's name. A plain
+    sid keeps the old lookup (/dev/shm, else the NAS)."""
+    import gzip
+    import json
+
+    d = tmp_path / "scratch-archive" / "20261111T000000-demo-x"
+    d.mkdir(parents=True)
+    (d / "events.jsonl").write_text(json.dumps({"t_ns": 2, "kind": "b"}) + "\n"
+                                    + json.dumps({"t_ns": 1, "kind": "a"}) + "\n")  # fmt: skip
+    with gzip.open(d / "packets.jsonl.gz", "wt") as fh:
+        fh.write(json.dumps({"t_mono_ns": 5, "type": "x"}) + "\n")
+    (d / "manifest.json").write_text(json.dumps({"map": "m"}))
+    assert dj.session_dir(str(d)) == d
+    ev_, pk_, man = dj.load(str(d))
+    assert [e["kind"] for e in ev_] == ["a", "b"] and pk_ == [{"t_mono_ns": 5, "type": "x"}]
+    assert man == {"map": "m", "sid": "20261111T000000-demo-x"}
+    sid = "20261111T000000-demo-x"
+    assert dj.session_dir(sid) in (dj.DEMO / sid, dj.NAS / sid)
+
+
 def test_live_window_is_first_input_plus_seconds_capped_at_the_end() -> None:
     man = {"t0_live_ns": 10 * dj.NS, "t_end_ns": 900 * dj.NS}
     assert dj.live_window(man, 600) == (10 * dj.NS, 610 * dj.NS)

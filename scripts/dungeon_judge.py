@@ -594,6 +594,23 @@ def items_value(items: Sequence[Mapping[str, Any]], table: Mapping[str, Mapping[
             "unpriced": unpriced}  # fmt: skip
 
 
+def kills_loot(packets: Sequence[Mapping[str, Any]], w0: int, w1: int, aid: int = AID
+               ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:  # fmt: skip
+    """PURE: (our kills in [w0, w1] as loot_complete.kill_rows, every floor item's fate as
+    arm_judge.item_fates) -- the rows judge() measures the loot and the economics on (econ_dash
+    reads the same rows per item)."""
+    import arm_judge as aj
+    import flow_judge as fj
+    import hunt_core as hc
+    import loot_complete as lc
+
+    kills = aj.kills_of(packets, aid)
+    pos = hc.walk_positions(packets)
+    items = aj.item_fates(packets, pos, fj.mob_at)
+    krows = lc.kill_rows(kills, items, lambda g, t: fj.mob_at(pos, g, t), [], {}, w0, w1)
+    return krows, items
+
+
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]],
           table: Mapping[str, Mapping[str, Any]] | None, manifest: Mapping[str, Any] | None = None,
           map_name: str | None = None, t0: int | None = None, t1: int | None = None,
@@ -601,10 +618,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
           ) -> dict[str, Any]:  # fmt: skip
     """PURE: one run's row. ``table``: econ_items' items (None: no economics, said in "why");
     ``t0`` / ``t1``: override the window (the positive cases use the other judges' windows)."""
-    import arm_judge as aj
     import econ_row as er
-    import flow_judge as fj
-    import hunt_core as hc
     import loot_complete as lc
     import survive_judge as sj
 
@@ -656,10 +670,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     pots = [t for t in sj.items_used(packets, POTION, aid) if w0 <= t <= w1]
     flys = [t for t in sj.items_used(packets, FLY, aid) if w0 <= t <= w1]
     # kills, loot, economics
-    kills = aj.kills_of(packets, aid)
-    pos = hc.walk_positions(packets)
-    items = aj.item_fates(packets, pos, fj.mob_at)
-    krows = lc.kill_rows(kills, items, lambda g, t: fj.mob_at(pos, g, t), [], {}, w0, w1)
+    krows, items = kills_loot(packets, w0, w1, aid)
     ls = lc.summary(krows)
     econ: dict[str, Any]
     if table is None:
@@ -1006,12 +1017,18 @@ def run_label(r: Mapping[str, Any]) -> str:
 
 
 def session_dir(sid: str) -> Path:
-    """The session's directory: /dev/shm while fresh, else the NAS."""
+    """The session's directory: /dev/shm while fresh, else the NAS. A PATH (anything with a "/",
+    e.g. an archived session under the NAS's scratch-archive/<date>/demo-sessions/, 2026-11-11
+    econ_dash) is taken as the directory itself."""
+    if "/" in sid:
+        return Path(sid)
     d = DEMO / sid
     return d if (d / "packets.jsonl.gz").exists() else NAS / sid
 
 
 def load(sid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """(events, packets, manifest) of a session id or directory; the manifest's ``sid``
+    defaults to the directory's name."""
     d = session_dir(sid)
     ev_path = d / "events.jsonl"
     ev = ([json.loads(x) for x in ev_path.read_text().splitlines() if x]
@@ -1023,7 +1040,7 @@ def load(sid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
         man = json.loads((d / "manifest.json").read_text())
     except (OSError, ValueError):
         man = {}
-    man.setdefault("sid", sid)
+    man.setdefault("sid", d.name)
     return ev, pk, man
 
 
@@ -1076,7 +1093,7 @@ def row(sid: str, table: Mapping[str, Mapping[str, Any]] | None, map_name: str |
         or MAP
     )
     out = judge(ev, pk, table, man, map_name=mp, drop_order=drop_order_of(mp, maps_path), **kw)
-    out["session"] = sid
+    out["session"] = session_dir(sid).name
     return out
 
 
