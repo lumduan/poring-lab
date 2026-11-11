@@ -3664,3 +3664,25 @@ def test_clear_bag_never_drops_the_opener_from_the_eqp_tab() -> None:
     i_be = body.index("raise r.Stop(why_be)")
     assert body.index("raise r.Stop(why_bb)") < i_be < body.index("@warp")
     assert "clear_bag_eqp_refused(g_be, keys_, tabs)" in body
+
+
+def test_value_target_ranks_the_runners_own_candidates_by_value() -> None:
+    """dungeon@9.28 (rogue-xmas02.md 4CB): --value-target changes only the CHOICE among the boxes
+    BoxWatch.near already accepts (the same self / skip filters), by value_target.score; the
+    detector's own species is the key; recorded in the fixes; OFF by default."""
+    from types import SimpleNamespace as NS
+
+    rich, poor = NS(x0=0, y0=0, x1=10, y1=10, species="rich", cls="monster"), \
+        NS(x0=0, y0=0, x1=10, y1=10, species=None, cls="poor")  # fmt: skip
+    values = {"rich": 262.0, "poor": 76.0, "*": 166.0}
+    assert dh.box_species(rich) == "rich" and dh.box_species(poor) == "poor"
+    assert dh.value_pick([(0.0, poor), (300.0, rich)], values)[1] is rich
+    assert dh.value_pick([(0.0, poor), (450.0, rich)], values)[1] is poor
+    src = Path(dh.__file__).read_text()
+    assert "if es_ else None, values=vt_values)" in src and 'rec["pick"] = boxes.last_pick' in src
+    assert "dungeon@9.28 refused: no species values" in src
+    base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
+                npc_guard=False, miss_cue=False)  # fmt: skip
+    assert dh.fixes_of(dh.argparse.Namespace(**base, value_target=True))["value_target"] == [
+        "9.28", 150.0]  # fmt: skip
+    assert "value_target" not in dh.fixes_of(dh.argparse.Namespace(**base, value_target=False))
