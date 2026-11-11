@@ -137,3 +137,58 @@ def test_a_real_steal_frame_shows_the_popup_and_the_frame_before_does_not(bs: Mo
                            .convert("RGB"))  # fmt: skip
     assert bs.popup_box(after) is not None
     assert bs.popup_box(before) is None
+
+
+# --- the weapon state readout: the F5 slot (dungeon@9.27; the parent's live finding 2026-11-11:
+# the slot draws the dagger only while it is in the bag) ------------------------------------------
+
+
+def hotbar(bag: bool = False, noise: int = 0, seed: int = 0) -> np.ndarray:
+    """A game-region frame's hotbar: white slots (hotbar_count: an empty slot is white, its frame
+    ~192), the dagger's icon in slot 4 while it is in the BAG (a thin blade: 6 x 10 dark px in the
+    24 x 17 icon box), optional codec noise."""
+    img = np.full((40, 600, 3), 120, np.int16)
+    img[3:34, 240:520] = 235
+    for k in range(9):  # each slot's frame line
+        img[3:34, 245 + 29 * k] = 192
+    if bag:
+        x0 = 246 + 29 * 4 + 9
+        img[8:18, x0 : x0 + 6] = 60
+    if noise:
+        img += np.random.default_rng(seed).integers(-noise, noise + 1, img.shape).astype(np.int16)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def test_the_f5_slot_reads_armed_bare_or_unreadable_against_its_armed_reference(
+        bs: ModuleType) -> None:  # fmt: skip
+    worn = bs.slot_gray(hotbar())
+    assert bs.slot_empty(worn)  # hotbar_count's rule: no icon, no digit = the dagger worn
+    ref = bs.slot_crop(worn)
+    assert ref.shape == (17, 24)
+    assert bs.slot_bare(bs.slot_crop(bs.slot_gray(hotbar(noise=6, seed=1))), ref) is False
+    bag = bs.slot_gray(hotbar(bag=True))
+    assert not bs.slot_empty(bag)
+    assert bs.slot_bare(bs.slot_crop(bag), ref) is True
+    noisy_bag = bs.slot_crop(bs.slot_gray(hotbar(bag=True, noise=6, seed=2)))
+    assert bs.slot_bare(noisy_bag, ref) is True
+    dark = np.full((40, 600, 3), 10, np.uint8)  # a teleport's dark frame: no hotbar drawn
+    assert bs.slot_bare(bs.slot_crop(bs.slot_gray(dark)), ref) is None
+    assert bs.slot_bare(ref[:5], ref) is None  # another shape: unreadable, never a guess
+    # the numbers behind SLOT_PX / SLOT_SHARE (the comment at the constants)
+    st_noise = bs.slot_stats(bs.slot_crop(bs.slot_gray(hotbar(noise=6, seed=3))), ref)
+    st_bag = bs.slot_stats(bs.slot_crop(bag), ref)
+    assert st_noise["changed"] == 0.0 and st_bag["changed"] == round(60 / 408, 3)
+    assert st_bag["changed"] / 2.5 >= bs.SLOT_SHARE and st_bag["diff"] < 30  # a mean misses it
+    assert (bs.SLOT_PX, bs.SLOT_SHARE, bs.SLOT_DARK) == (40.0, 0.05, 40.0)
+
+
+def test_the_swap_geometry_is_the_live_measurement(bs: ModuleType) -> None:
+    """The parent's live numbers (2026-11-11): the equipment window at home (185, 300), its
+    weapon slot at window (18, 102) = game-region (203, 402), the dagger on F5 = hotbar slot 4."""
+    assert bs.EQUIP_WINDOW == "equipment" and bs.EQUIP_HOME == (185, 300)
+    (hx, hy), (sx, sy) = bs.EQUIP_HOME, bs.WEAPON_SLOT
+    assert (hx + sx, hy + sy) == (203, 402)
+    assert (bs.EQUIP_KEY, bs.EQUIP_SLOT) == ("F5", 4)
+    assert (bs.OPEN_S, bs.LATE_S, bs.OFF_S, bs.CLOSE_S, bs.ON_S) == (1.2, 0.8, 1.0, 1.0, 0.8)
+    assert bs.POLL_S == 0.1
+    assert bs.FAIL_STOP == 3

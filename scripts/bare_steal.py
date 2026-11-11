@@ -27,11 +27,16 @@ Everything here is PURE (no input, no grabs): the runner (dungeon_hunt.py) does 
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hotbar_count as hb  # noqa: E402 -- the hotbar's calibrated slot boxes (pure, numpy only)
 
 BARE_STEAL_VERSION = "9.27"
 
@@ -52,6 +57,70 @@ BARE_MAX_S = 8.0  # bare-handed this long with no steal cue: the dagger goes on 
 BARE_HP_MIN = 0.5  # HP share under which the dagger goes on at once
 EQUIP_KEY = "F5"  # the hotbar slot holding the dagger (Batt: "any free F1-F9, e.g. F5")
 EQUIP_SLOT = 4  # hotbar row 1 index of EQUIP_KEY (F1 = 0)
+
+# --- the swaps (dungeon@9.27; measured LIVE 2026-11-11 on the lab client by the parent agent,
+# 1280 x 720 game region, RDP) ------------------------------------------------------------------
+EQUIP_WINDOW = "equipment"  # ui_anchors / ui_gate's name; its own chord (Alt+Q) is a TOGGLE
+EQUIP_HOME = (185, 300)  # where it reads open (ui_anchors.CAPTURE_ORIGINS; ~0.8 s after the chord)
+WEAPON_SLOT = (18, 102)  # the weapon slot, window px (game-region (203, 402) at its home): a
+# double-click there takes the dagger off (the Battle Log shows a RED line)
+OPEN_S = 1.2  # the window must read open this soon after the chord (measured ~0.8 s)
+LATE_S = 0.8  # not open by OPEN_S: watched this much longer, so a LATE one is closed again
+OFF_S = 1.0  # the F5 slot must read BARE this soon after the double-click
+CLOSE_S = 1.0  # the window must read closed this soon after the closing chord
+ON_S = 0.8  # the F5 slot must read ARMED this soon after an equip press (a CYAN line follows)
+POLL_S = 0.1  # the reads' rhythm (the RDP bus sends a frame at least every 0.1 s)
+FAIL_STOP = 3  # this many failed swaps IN A ROW stop the run (never fight in an unknown state)
+# THE WEAPON STATE READOUT (the parent, live 11-11): the F5 slot draws the dagger's icon ONLY while
+# the dagger is in the bag (bare); worn, the slot is EMPTY (white: hotbar_count's empty slot). So
+# armed <=> the slot looks as it did at the run's start, when the setup read it EMPTY. The crop is
+# hotbar_count's calibrated ICON box of the slot; a pixel CHANGED when its grey moved by more than
+# SLOT_PX from the reference, and the slot reads BARE when at least SLOT_SHARE of the crop changed.
+# Picked on synthetic crops (test_bare_steal): on a 24 x 17 white slot, codec noise of +-6 grey
+# changes 0 % of it; an icon of 6 x 10 dark px (a thin blade, 15 % of the crop) changes 15 %; the
+# threshold sits at a third of that. A per-pixel share, not a mean: a thin icon moves the crop's
+# MEAN by ~26 grey. The parent checks both numbers live (slot_stats is logged with each read).
+SLOT_PX = 40.0
+SLOT_SHARE = 0.05
+SLOT_DARK = 40.0  # a crop darker than this on average is unreadable (a teleport's dark frames)
+
+
+def slot_gray(frame: np.ndarray) -> np.ndarray:
+    """PURE: a game-region frame as hotbar_count's grey (the channels' mean: BGR or RGB alike)."""
+    return hb.gray(np.asarray(frame))
+
+
+def slot_crop(gray: np.ndarray, slot: int = EQUIP_SLOT) -> np.ndarray:
+    """PURE: hotbar row 1 slot ``slot``'s icon box (hotbar_count.ICON, its PITCH) from a game-region
+    grey frame, as a copy (the reference must not follow the frame buffer)."""
+    x0, y0, x1, y1 = hb.ICON
+    return np.asarray(gray[y0:y1, x0 + hb.PITCH * slot : x1 + hb.PITCH * slot], np.float64).copy()
+
+
+def slot_empty(gray: np.ndarray, slot: int = EQUIP_SLOT) -> bool:
+    """PURE: hotbar_count's EMPTY slot (no digit and no icon): read_count's 0 with no digit
+    templates (a digit then reads None, never 0)."""
+    return hb.read_count(gray, slot, {}) == 0
+
+
+def slot_bare(crop: np.ndarray, ref: np.ndarray) -> bool | None:
+    """PURE: True = the slot shows the dagger (it is in the bag: BARE), False = it looks as the
+    armed reference, None = unreadable (a dark frame, or a crop of another shape)."""
+    c, r_ = np.asarray(crop, np.float64), np.asarray(ref, np.float64)
+    if c.shape != r_.shape or not c.size or float(c.mean()) < SLOT_DARK:
+        return None
+    return float((np.abs(c - r_) > SLOT_PX).mean()) >= SLOT_SHARE
+
+
+def slot_stats(crop: np.ndarray, ref: np.ndarray | None = None) -> dict[str, float]:
+    """PURE: the numbers logged with the reads (the parent checks the thresholds live)."""
+    c = np.asarray(crop, np.float64)
+    out = {"mean": round(float(c.mean()), 1),
+           "dark_share": round(float((c < hb.ICON_DARK).mean()), 3)}  # fmt: skip
+    if ref is not None and np.shape(ref) == c.shape:
+        d = np.abs(c - np.asarray(ref, np.float64))
+        out.update(diff=round(float(d.mean()), 1), changed=round(float((d > SLOT_PX).mean()), 3))
+    return out
 
 
 def _luma(rgb: np.ndarray) -> np.ndarray:
