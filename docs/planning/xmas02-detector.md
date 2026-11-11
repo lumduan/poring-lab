@@ -3793,4 +3793,19 @@ ONNX sets give IDENTICAL I1-I4.
     unchanged (1,276 standard, 11 "f10", 1 "unknown", as before);
   - the 28-frame re-run recording (`20261111T113618-rdp-xmas02-fsTn4`, 0 spots) is shipped and
     marked INVALID (`dataset_ship.py mark-invalid`); fsTn4 is staged again on seed 2612601.
+- **O20e (12:1x ICT): fsTn4 done; round 4 trained and FROZEN.**
+  - fsTn4 (Crusader, seed 2612601): 11:58:17-12:11:39, rc 0, **6 / 6 spots**, session
+    `20261111T115807-rdp-xmas02-fsTn4` (812 frames), shipped. The no-aura held-out is that session
+    plus the 1-spot `20261111T113216` (both `-rdp-xmas02-fsTn4`); the INVALID 11:36 one is not
+    labelled;
+  - the training ended 12:12:32, rc 0 (3 epochs; 2,048 TRAIN / 272 val frames). Its own val (the
+    TRAIN distribution, NOT a bar): P 0.983, R 0.940, mAP50 0.989, mAP50-95 0.739 (round 3:
+    0.946 / 0.949 / 0.980 / 0.733);
+  - **FROZEN 12:16:42: `last.pt` sha256 32e8afae15080d0373a987902f67d99e1619e30928da6aa8bae9725c45107656**
+    (5,529,242 bytes), before any held-out file was read. The held-out labels (`--eval-test`, params
+    v2) began 12:16:56 against it: fsTa4, then both fsTn4 sessions; fiT10-fiT13 follow their
+    pilots.
+  - The staging's last `@killmonster2` (12:09:42) did NOT leave the MVP dead: `@mobsearch` at 12:14
+    found it alive at (29,142) (a respawn after an earlier staging kill). Killed 12:15:15, "1[dead]"
+    read back; p59 started 12:16.
 
