@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-11 08:1x: LS-1 (--lead-press) JOINED the base after p55 + p56 (led hits 11/13, late-failed 3); next p57 + p58 = --near-single (S-LF5 R2: the p53 desync was the 2-3-cell re-click), p57 recorded fiT7 for floor-item round 3."
+next_action: "2026-11-11 09:2x: base = LF-2 + LS-2 + LS-1 (all joined); --near-single (R2) stays OFF (late-failed 6 > 3); p57 found an UNREACHABLE-ATTACKER trap (11 min, no escape rule): Batt decides a fix. Floor-item round 3 scored next (fiT7-9 recorded)."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -5024,3 +5024,41 @@ every number above except the Fisher p (it is computed from its `walks` rows: `o
   inside the noise.
 - **The base from p57:** 4BL's + `--late-confirm` + `--still-target` + `--lead-press`. 4BS (R2,
   `--near-single`) runs on it.
+
+**Pilots p57 + p58 (4BS: the base with LS-1 + `--near-single`, S-LF5 R2), written 2026-11-11 09:17
+ICT from `date`.**
+- **The runs:** the MVP was polled alive 08:18:27 and killed 08:19:27 ("1[dead]"). p57
+  08:20:33-08:46:28 (fiT7), p58 08:49:04-09:14:56; both rc 0, immunity read each time. The run
+  record: `"near_single": [2, "9.25"]`.
+- **VERDICT: M1 PASSES (0 floor walk-offs from 2-3-cell strikes, the base rate ~4), but M2's
+  late-failed comparison FAILS by the letter: 1 + 5 = 6 against the runs just before (LS-1's p55 +
+  p56: 3). `--near-single` STAYS OFF and is studied.**
+  - A plausible mechanism, not proven: without the re-click, a LATE first click at 2-3 cells has
+    no second chance. With counts this small (3 vs 6) noise is possible too.
+
+| | LS-1 p55 / p56 | **p57** | **p58** | bar (pooled p57 + p58) |
+|---|---|---|---|---|
+| M1 floor walk-offs, 2-3-cell strikes (`client_cell.py`) | - | **0** (8 strikes, 0 re-clicked) | **0** (17 strikes, 0 re-clicked) | **0 <= 1: PASS** |
+| M2 2-3-cell strikes sending no request | - | **1** | **1** | <= 1 a run: PASS |
+| M2 late-FAILED box strikes | 1 / 2 | **1** | **5** | **6 > 3: FAIL** |
+| E1 | 127.0 / 153.4 | **35 (84.0 / h)** | **65 (155.8 / h)** | >= 80: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 | **0 / 44.9 % / 0 / 1** | **0 / 91.3 % / 0 / 1** | PASS |
+| W1 / R1-A | | | pooled p58 + p57 + p56 + p55: 20 / 1,222 (1.64 %) / 2 | PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | | 100 % / 97.1 % / 0 / 1.96 s / 100 % / 2 | 100 % / 92.2 % / 0 / 2.01 s / 98.4 % / 4 | PASS |
+| reported: LS-1's led clicks (target / other / walk) | 3/0/1, 8/0/1 | 7 / 1 / 0 | 7 / 1 / 1 | - |
+| reported: desyncs (walks cut short) / wrong reads | | 0 / 0 | 0 / 0 | - |
+| reported: LF-2's M2 stale walks | | 4 | **13** | (its guard was <= 12) |
+
+- **p57's E1 (84 / h): AN UNREACHABLE ATTACKER, 11 minutes (819-1496 s). Not R2's.**
+  - She stood on (100,207). A monster on (98,205), two cells diagonal, attacked her: mostly misses
+    (damage 0), some hits of ~159.
+  - The client sent an attack request every ~1.2 s (`attack_request` "repeat"), and the server
+    answered each with her `entity_stop` on (100,207). She could not reach it and never hit it.
+  - The runner's ring scan re-struck it at (-1,-1) / (0,-1) every ~7 s (91 strikes), each ending
+    "no hits", with a Miss cue in between. Nothing ended the loop until the run's time ran out.
+  - R2 changed nothing here: she never moved, so a burst re-click would have hit the same sprite.
+    The base would likely have stuck the same way.
+  - **A new gap, for Batt:** nothing gets her out of a fight with an attacker she cannot reach. A
+    proposal: after N "no hits" unlocks in a row on the same cell with Miss cues (or a fixed span
+    with no damage of ours), step away or fly.
+- **The base stays:** 4BL's + `--late-confirm` + `--still-target` + `--lead-press`.
