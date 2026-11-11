@@ -3753,3 +3753,19 @@ ONNX sets give IDENTICAL I1-I4.
 - **The bars: O15's, unchanged** (`--strata r4`, `pack --round 4 --eval-test --seed 68`). Batt's
   95 % is reported. Also reported: I1a on the pilots' natural drops alone (rounds 2 and 3: 62 %).
 
+### Amendment O20b (2026-11-11 11:04 ICT from `date`, BEFORE the cache): round 4's admissions, the dry run, the epochs, the staging seeds
+
+- **The relabels (`--split train`, v2):**
+  - fiT8 27 labels, G2 PASS (43 fits): ADMITTED;
+  - fsTa3 87, PASS (439): ADMITTED;
+  - fsTn3 368, PASS (1,148): ADMITTED;
+  - **fiT7 (12 fits) and fiT9 (15) NOT admitted** (G2 NOT_ENOUGH, by the letter).
+  - A structural limit: a single pilot gives few still frames with a drop, so natural drops pile
+    up slowly, ~5-27 labels a pilot. `--session-negs` 75 names p38, p20, fiT1, fiT3, fiT6,
+    fiT8.
+- **The dry run:** TRAIN 2,048 frames (1,038 item frames, 3,218 boxes, 1,010 negatives), 385 floor
+  items, `would_refuse_join` empty.
+- **Epochs = min(12, max(3, floor(5,400 / (0.64 x 2,048 + 100)))) = 3.**
+- **The held-out stagings (6 spots each, cells shared with no staging so far):** fsTa4 = the
+  Rogue, seed 2612104; fsTn4 = the Crusader, seed 2612190.
+
