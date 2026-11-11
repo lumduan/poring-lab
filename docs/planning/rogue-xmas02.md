@@ -5543,7 +5543,7 @@ from `date`.** The MVP killed 16:48:12 ("1[dead]"). p65 16:50:12-17:15:58 (fiT16
   stealing from (the box detector names Cruiser / Myst Case / Cookie / Christmas Cookie); (d)
   unequip while looting, so the swap overlaps time already spent.
 
-### 4BZ. Amendment X (Batt's answers to the 17:5x report; written 2026-11-11 19:2x ICT from `date`) and pilots p67 + p68 pre-registration: the base with the aura OFF
+### 4BZ. Amendment X (Batt's answers to the 17:5x report; written 2026-11-11 19:13 ICT from `date`) and pilots p67 + p68 pre-registration: the base with the aura OFF
 
 Batt's answers (quoted, then in English):
 1. "ทำต่อ มันช้าตรงถอดมีด เพราะคุณไม่ถอดเตรียมไว้ก่อน ... ให้ถอดมีดรอเลย" -- continue the bare
@@ -5551,7 +5551,7 @@ Batt's answers (quoted, then in English):
    the next monster bare at once; on a steal just press the dagger's key. -> `--bare-ready`
    (dungeon@9.27b), being built; its pilots come in 4CA, after this base.
 2. "ทำรอบ 5 ... ปิดแสงใต้เท้าด้วย ลองคำสั่ง /aura หรือ /aura2" -- floor-item round 5, and turn
-   the aura under her feet OFF (he always plays with it off). Done 19:1x: `/aura` removed the disc,
+   the aura under her feet OFF (he always plays with it off). Done 19:0x-19:1x: `/aura` removed the disc,
    `/aura2` the sparkles (screenshots judged; neither prints an answer).
 3. "ลองดูได้" -- U0, the staged unreachable attacker, may be tried (`--start-cell` / `--stage-at`,
    being built).
