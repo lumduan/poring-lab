@@ -3303,3 +3303,123 @@ def test_bare_ready_is_wired_after_the_loot_step_and_holds_only_the_search_walk(
     body = body[: body.index("\n        def ", 10)]
     assert body.index("agent.click(x, y)") < body.index("last_click_t[0] = time.monotonic()")
     assert body.index("return\n") < body.index("last_click_t[0]")  # a refused click is no click
+
+
+# --- U0's staged setup (TRIAL ONLY: rogue-xmas02.md 4BU, U0; Study S-UA) -------------------------
+
+
+def test_u0_cells_parse_and_their_flags_are_recorded(monkeypatch, capsys) -> None:
+    import pytest
+
+    assert dh.cell_arg("100,207") == (100, 207) and dh.cell_arg(" 98 , 205 ") == (98, 205)
+    for bad in ("100", "100;207", "a,b", "-1,5", "1,2,3"):
+        with pytest.raises(dh.argparse.ArgumentTypeError):
+            dh.cell_arg(bad)
+    got: dict[str, Any] = {}
+
+    def fake_run(a: Any) -> int:
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "P2", "--seed", "1", "--char", "rogue"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].start_cell is None and got["a"].stage_at is None
+    monkeypatch.setattr(sys, "argv", [*argv, "--start-cell", "100,207", "--stage-mob", "1002:1",
+                                      "--stage-at", "98,205"])  # fmt: skip
+    assert dh.main() == 0
+    assert got["a"].start_cell == (100, 207) and got["a"].stage_at == (98, 205)
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--help"])
+    with pytest.raises(SystemExit):
+        dh.main()
+    help_ = " ".join(capsys.readouterr().out.split())
+    assert help_.count("TRIAL ONLY (rogue-xmas02.md 4BU, U0") == 2
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    rec0 = dh.fixes_of(dh.argparse.Namespace(**base))
+    assert "start_cell" not in rec0 and "stage_at" not in rec0
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, stage_mob="1002:1", stage_at=(98, 205),
+                                            start_cell=(100, 207)))  # fmt: skip
+    assert rec["stage_at"] == [98, 205] and rec["start_cell"] == [100, 207]
+    assert rec["stage_mob"] == "1002:1"
+    src = Path(dh.__file__).read_text()
+    i_start = src.index('ev({"kind": "run_start", "strategy": a.strategy')
+    rs = src[i_start:]
+    assert '**({"start_cell": list(start_cell)} if start_cell is not None else {}),' in rs
+    assert '**({"stage_at": list(stage_at)} if stage_at is not None else {}),' in rs
+
+
+def test_u0_refuses_a_stage_without_a_mob_and_cells_off_the_grid_or_the_server() -> None:
+    okr = np.zeros((260, 260), bool)
+    okr[207, 100] = True  # her start cell is on the route grid; the Cruiser's (98,205) is not
+    passes = lambda m, cells: None  # noqa: E731
+    assert dh.u0_setup_refused("xmas_dun02", None, None, None, okr, passes) is None  # both off
+    assert dh.u0_setup_refused("xmas_dun02", (100, 207), (98, 205), "1002:1", okr, passes) is None
+    why = dh.u0_setup_refused("xmas_dun02", None, (98, 205), None, okr, passes)
+    assert "--stage-mob" in str(why)
+    assert "route grid" in str(dh.u0_setup_refused("xmas_dun02", (98, 205), None, None, okr,
+                                                   passes))  # fmt: skip
+    assert "off xmas_dun02" in str(dh.u0_setup_refused("xmas_dun02", (300, 5), None, None, okr,
+                                                       passes))  # fmt: skip
+    assert "off xmas_dun02" in str(dh.u0_setup_refused("xmas_dun02", None, (5, 260), "1002:1",
+                                                       okr, passes))  # fmt: skip
+    seen: list[list[Any]] = []
+
+    def server(m: str, cells: list[Any]) -> str | None:
+        seen.append(list(cells))
+        return "the server does not let the GM stand on: [(98, 205)] (refused)"
+
+    why2 = dh.u0_setup_refused("xmas_dun02", None, (98, 205), "1002:1", okr, server)
+    assert str(why2).startswith("--stage-at (98, 205): the server") and seen == [[(98, 205)]]
+    why3 = dh.u0_setup_refused("xmas_dun02", (100, 207), None, None, okr, server)
+    assert str(why3).startswith("--start-cell (100, 207): the server")
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.26 U0 refused: {why_u0}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    i_p = src.index("        start = patrol_start(map_, okr, map_prep.stand_check)\n")
+    assert i_p < i_ref < src.index("            start = start_cell\n")
+    assert "okr, mp_u0.stand_check)" in src  # the three stand-cell checks (map_prep)
+
+
+def test_u0_setup_lines_spawn_at_the_stage_cell_then_warp_to_the_start() -> None:
+    import pytest
+
+    m, s = "xmas_dun02", (100, 207)
+    assert dh.map_setup_lines(m, s, False, None) == ["@warp xmas_dun02 100 207"]
+    assert dh.map_setup_lines(m, s, True, "1002:2") == [  # as before: on the start, after it
+        "@warp xmas_dun02 100 207", "@killmonster2", "@monster 1002 2"]  # fmt: skip
+    one = dh.map_setup_lines(m, s, False, "1002")
+    assert one == ["@warp xmas_dun02 100 207", "@monster 1002 1"]
+    assert dh.map_setup_lines(m, s, True, "1002:1", (98, 205)) == [
+        "@warp xmas_dun02 98 205", "@killmonster2", "@monster 1002 1",
+        "@warp xmas_dun02 100 207"]  # fmt: skip
+    assert dh.map_setup_lines(m, s, False, "1002:1", (98, 205)) == [
+        "@warp xmas_dun02 98 205", "@monster 1002 1", "@warp xmas_dun02 100 207"]  # fmt: skip
+    with pytest.raises(ValueError):
+        dh.map_setup_lines(m, s, False, None, (98, 205))
+    src = Path(dh.__file__).read_text()
+    i_set = src.index("setup.extend(map_setup_lines(map_, start, a.clear_map, "
+                      'getattr(a, "stage_mob", None),')  # fmt: skip
+    assert i_set < src.index("for cmd in setup:\n            setup_line(cmd)\n        bench.close")
+    assert src.count("map_setup_lines(") == 2  # its definition + the setup's one call
+
+
+def test_u0_cells_pass_on_the_real_xmas_dun02() -> None:
+    """The real grids (the client GAT in /dev/shm, the zones, the KB): p57's two cells pass."""
+    import pytest
+
+    gat = Path("/dev/shm/poring-lab-tmp/gat/data/xmas_dun02.gat")
+    if not gat.exists() or not (ROOT / "data/kb/warps.json").exists():
+        pytest.skip("xmas_dun02's GAT or the KB is not on this host")
+    import anim_region as ar
+    import map_prep
+    import map_zones as mz
+
+    from poring_dataset import gat as gatmod
+
+    stand = np.asarray(ar.stand_grid("xmas_dun02", gatmod.parse(gat.read_bytes())), dtype=bool)
+    okr = mz.route_grid(stand, mz.load("xmas_dun02", shape=stand.shape))
+    okr = okr & ~mz.sealed_off(stand, okr)
+    assert dh.u0_setup_refused("xmas_dun02", (100, 207), (98, 205), "1002:1", okr,
+                               map_prep.stand_check) is None  # fmt: skip

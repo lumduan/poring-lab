@@ -493,6 +493,67 @@ def patrol_start(map_: str, okr: Any, check: Any) -> Cell:
     raise SystemExit(f"dungeon@4 refused: no patrol start for {map_} passes: {why}")
 
 
+# --- U0's staged setup (TRIAL ONLY: rogue-xmas02.md 4BU, U0 -- the staged unreachable attacker;
+# Study S-UA: in p57 she stood on (100,207) and a Cruiser on (98,205) shot her across cliff cells
+# she cannot walk). Batt OK'd a staged monster beside her, 2026-11-11.
+def cell_arg(s: str) -> Cell:
+    """argparse type: "X,Y" -> (X, Y), two non-negative integers."""
+    xs, sep, ys = s.partition(",")
+    try:
+        if not sep:
+            raise ValueError(s)
+        x, y = int(xs.strip()), int(ys.strip())
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{s!r} is not a cell X,Y") from None
+    if x < 0 or y < 0:
+        raise argparse.ArgumentTypeError(f"{s!r}: a cell is never negative")
+    return x, y
+
+
+def u0_setup_refused(map_: str, start_cell: Cell | None, stage_at: Cell | None,
+                     stage_mob: str | None, okr: Any,
+                     check: Callable[[str, list[Cell]], str | None]) -> str | None:  # fmt: skip
+    """PURE: why --start-cell / --stage-at cannot run (None: they can, or both are off).
+    --stage-at moves where --stage-mob's mob spawns, so it needs --stage-mob. The start cell must
+    be on the run's route grid ``okr`` AND pass the three stand-cell checks (``check`` =
+    map_prep.stand_check: no warp span, no NPC touch area, the server's map cache lets her stand
+    there); the stage cell is a @warp stand too, so it must pass the same three."""
+    if stage_at is not None and not stage_mob:
+        return "--stage-at goes with --stage-mob (it moves where the staged mob spawns)"
+    h, w = np.shape(okr)[:2]
+    for name, c in (("--start-cell", start_cell), ("--stage-at", stage_at)):
+        if c is None:
+            continue
+        if not (0 <= c[0] < w and 0 <= c[1] < h):
+            return f"{name} {c}: off {map_} ({w} x {h})"
+        if name == "--start-cell" and not okr[c[1], c[0]]:
+            return f"{name} {c}: off the route grid (a wall, a zone or a sealed-off part)"
+        if (why := check(map_, [c])) is not None:
+            return f"{name} {c}: {why}"
+    return None
+
+
+def map_setup_lines(map_: str, start: Cell, clear_map: bool, stage_mob: str | None,
+                    stage_at: Cell | None = None) -> list[str]:  # fmt: skip
+    """PURE: the setup's lines on the map, in order. Without --stage-at (as before): @warp to the
+    start, @killmonster2 (--clear-map: dungeon@8, Amendment A4 -- the experimenter's step, never
+    the bot's), @monster ID N (--stage-mob, 9.18's TRIAL only: spawned on the start cell). With
+    --stage-at X,Y (U0's TRIAL only): @warp to X,Y, @killmonster2, @monster ID N (spawned at X,Y,
+    not on her), then @warp to the start."""
+    if stage_at is not None and not stage_mob:
+        raise ValueError("--stage-at goes with --stage-mob")
+    at = start if stage_at is None else stage_at
+    setup = [f"@warp {map_} {at[0]} {at[1]}"]
+    if clear_map:
+        setup.append("@killmonster2")
+    if stage_mob:
+        mob_id, _, n_mob = str(stage_mob).partition(":")
+        setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")
+    if stage_at is not None:
+        setup.append(f"@warp {map_} {start[0]} {start[1]}")
+    return setup
+
+
 def potions_target(strat: Mapping[str, Any], conf: Mapping[str, Any]) -> int:
     """PURE: the run's White Potion stock: the strategy's, else the character's, else POTIONS_TO;
     a character with ``potions_win`` (the Rogue, Batt 2026-11-08) keeps her own."""
@@ -1709,6 +1770,10 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                                  UNREACH_VERSION]  # fmt: skip
     if getattr(a, "stage_mob", None):  # 9.18's trial: a staged encounter (setup only)
         out["stage_mob"] = str(a.stage_mob)
+    if getattr(a, "stage_at", None) is not None:  # U0's TRIAL only (rogue-xmas02.md 4BU)
+        out["stage_at"] = list(a.stage_at)
+    if getattr(a, "start_cell", None) is not None:  # U0's TRIAL only
+        out["start_cell"] = list(a.start_cell)
     if getattr(a, "quiet_scan", False):  # dungeon@9.17 (rogue-xmas02.md 4AW)
         out["quiet_scan"] = [QUIET_SCAN_S, "9.17"]
     if getattr(a, "loot_first", False):  # dungeon@9.16 (rogue-xmas02.md 4AT)
@@ -3482,6 +3547,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         import map_prep
 
         start = patrol_start(map_, okr, map_prep.stand_check)
+    start_cell: Cell | None = getattr(a, "start_cell", None)  # U0's TRIAL only (4BU)
+    stage_at: Cell | None = getattr(a, "stage_at", None)
+    if start_cell is not None or stage_at is not None:
+        import map_prep as mp_u0
+
+        why_u0 = u0_setup_refused(map_, start_cell, stage_at, getattr(a, "stage_mob", None),
+                                  okr, mp_u0.stand_check)  # fmt: skip
+        if why_u0:
+            raise SystemExit(f"dungeon@9.26 U0 refused: {why_u0}")
+        if start_cell is not None:
+            start = start_cell
     ex_anchors: dict[tuple[int, int], Cell] = {}
     ex_reach: Any = None
     ex_know0: Any = None
@@ -3666,12 +3742,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 drunk += 1
                 time.sleep(0.35)
             time.sleep(1.0)
-        setup.append(f"@warp {map_} {start[0]} {start[1]}")
-        if a.clear_map:  # dungeon@8, Amendment A4: the experimenter's step, never the bot's
-            setup.append("@killmonster2")
-        if getattr(a, "stage_mob", None):  # 9.18's TRIAL only: a staged encounter at the start
-            mob_id, _, n_mob = str(a.stage_mob).partition(":")
-            setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")
+        # the map's lines: @warp, --clear-map's @killmonster2, --stage-mob's @monster (9.18's
+        # TRIAL only), and with --stage-at (U0's TRIAL only) the spawn at X,Y and the @warp back
+        setup.extend(map_setup_lines(map_, start, a.clear_map, getattr(a, "stage_mob", None),
+                                     getattr(a, "stage_at", None)))  # fmt: skip
         for cmd in setup:
             setup_line(cmd)
         bench.close_chat(agent_raw, screen)
@@ -3730,6 +3804,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "tag_templates": sorted(tag_tpl), "potions_to_char": conf["potions_to"],
             "wings_to": w_to,
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
+            **({"start_cell": list(start_cell)} if start_cell is not None else {}),
+            **({"stage_at": list(stage_at)} if stage_at is not None else {}),
             "level_db": level_db, "level_hold": conf.get("level_hold"),
             # the judge's MaxHP / MaxSP when no packet gives them (2026-11-05: the Rogue at 99)
             "max_hp": conf["max_hp"], "max_sp": conf.get("max_sp"),
@@ -6554,7 +6630,28 @@ def main() -> int:
         default=None,
         metavar="ID:N",
         help="dungeon@9.18 TRIAL ONLY (rogue-xmas02.md 4AZ): the setup's last line spawns N of "
-        "mob ID at the start (@monster ID N), a staged encounter for a pre-registered trial",
+        "mob ID at the start (@monster ID N; at --stage-at's cell when given), a staged encounter "
+        "for a pre-registered trial",
+    )
+    t.add_argument(
+        "--start-cell",
+        type=cell_arg,
+        default=None,
+        metavar="X,Y",
+        help="TRIAL ONLY (rogue-xmas02.md 4BU, U0: the staged unreachable attacker): the run "
+        "starts on X,Y instead of the map's patrol start (or the seed's cell); the setup's @warp "
+        "goes there. Refused unless X,Y is on the run's route grid and passes the three "
+        "stand-cell checks (no warp span, no NPC touch area, the server's map cache)",
+    )
+    t.add_argument(
+        "--stage-at",
+        type=cell_arg,
+        default=None,
+        metavar="X,Y",
+        help="TRIAL ONLY (rogue-xmas02.md 4BU, U0; refused without --stage-mob): the staged mob "
+        "spawns at X,Y, not on her -- the setup types @warp MAP X Y, @killmonster2 (with "
+        "--clear-map), @monster ID N, then @warp MAP to the start. X,Y must pass the three "
+        "stand-cell checks",
     )
     t.add_argument(
         "--late-confirm",
