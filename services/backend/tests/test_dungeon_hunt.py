@@ -7,6 +7,7 @@ import ast
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -399,7 +400,9 @@ def test_the_rogue_is_the_thiefs_character_with_its_own_job_and_numbers() -> Non
     assert rogue["job"] == "rogue" and rogue["data"] == "thief"
     # Base 99 since 2026-11-05 (xmas_dun02; 2209 / 341 at the held Base 63, 2146 / 336 at 62)
     assert (rogue["max_hp"], rogue["max_sp"]) == (5070, 530)
-    assert rogue["keys"] == thief["keys"] and rogue["keys"]["steal"] == "F3"
+    # dungeon@9.27 (--bare-steal): the Rogue's dagger on F5 is her one key the Thief lacks
+    assert {k: v for k, v in rogue["keys"].items() if k != "equip"} == thief["keys"]
+    assert rogue["keys"]["steal"] == "F3" and rogue["keys"]["equip"] == "F5"
     assert rogue["clear_etc"] is False and "data" not in thief
     done = [((100, 100), 10.0)]
     assert not dh.steal_forgotten(done, (101, 102), 20.0)  # within 2 cells, 10 s later
@@ -2547,3 +2550,483 @@ def test_near_single_still_9_25b_gates_the_two_three_cell_reclick_on_the_scroll(
     src = Path(dh.__file__).read_text()
     assert 'if still_rec is None or still_rec["stopped_s"] is None:' in src
     assert src.count('click_at(u, v, "strike_burst")') == 1
+
+
+# --- --bare-steal (dungeon@9.27, rogue-xmas02.md 4BX; Batt 2026-11-11) ----------------------------
+
+BS = dh.bs
+
+
+def _hotbar_frame(bag: bool, dark: bool = False, popup: int | None = None) -> np.ndarray:
+    """A game-region frame's top rows (BGR): the hotbar's white slots with the dagger's icon in
+    slot 4 while it is in the BAG, and optionally the item popup of width ``popup``."""
+    img = np.full((110, 800, 3), 120, np.uint8)
+    if dark:
+        img[:] = 10
+        return img
+    img[3:34, 240:520] = 235
+    for k in range(9):
+        img[3:34, 245 + 29 * k] = 192
+    if bag:
+        x0 = 246 + 29 * 4 + 9
+        img[8:18, x0 : x0 + 6] = 60
+    if popup is not None:  # test_bare_steal.draw_popup's frame
+        x0, t, b = BS.POPUP_LEFT, BS.POPUP_TOP, BS.POPUP_BOTTOM
+        x1 = x0 + popup - 1
+        img[t + 2 : b - 1, x0 : x0 + 2] = 255
+        img[t + 2 : b - 1, x0 + 2] = 190
+        img[t + 2 : b - 1, x0 + 3 : x1 - 1] = 254
+        img[t, x0 + 3 : x1 - 1] = 255
+        img[b, x0 + 3 : x1 - 1] = 255
+        img[t + 8 : t + 22, x0 + 8 : x0 + 22] = 40
+        img[t + 10 : t + 20, x0 + 30 : x0 + 30 + popup // 2 : 3] = 40
+    return img
+
+
+def _armed_ref() -> np.ndarray:
+    return BS.slot_crop(BS.slot_gray(_hotbar_frame(False)))
+
+
+class _SimFrame(np.ndarray):
+    """A simulated frame that also carries what the client SHOWED (the windows, the origin)."""
+
+    win: tuple[str, ...] = ()
+    org: tuple[int, int] | None = None
+
+
+class _BareSim:
+    """A simulated client for the swaps, on SIM time: the equipment window TOGGLES on its chord
+    and shows ``open_s`` / ``close_s`` later; a double-click on its weapon slot while it SHOWS
+    puts the dagger in the bag ``off_s`` later; the equip key wears it ``on_s`` later. Every
+    input is logged with the windows the runner had READ last."""
+
+    def __init__(self, *, open_s: float = 0.8, close_s: float = 0.3, off_s: float = 0.2,
+                 on_s: float = 0.2, chord_ok: bool = True, close_ok: bool = True,
+                 takes_off: bool = True, puts_on: bool = True,
+                 origin: tuple[int, int] = (185, 300), others: tuple[str, ...] = (),
+                 bag: bool = False, popup: int | None = None) -> None:  # fmt: skip
+        self.open_s, self.close_s, self.off_s, self.on_s = open_s, close_s, off_s, on_s
+        self.chord_ok, self.close_ok = chord_ok, close_ok
+        self.takes_off, self.puts_on = takes_off, puts_on
+        self.origin, self.others, self.popup = origin, others, popup
+        self.t, self.want, self.vis, self.chord_t = 0.0, False, False, -1e9
+        self.bag = self.bag_to = bag
+        self.bag_t = -1e9
+        self.dark = 0  # this many next frames are dark (a teleport)
+        self.log: list[tuple[Any, ...]] = []
+        self.read: tuple[str, ...] = ()
+        self.lines: list[dict[str, Any]] = []
+        self.fly_at: float | None = None  # guard() is True from then (a Fly Wing inside a swap)
+
+    def _now(self) -> None:
+        if self.want != self.vis and self.t - self.chord_t >= (
+                self.open_s if self.want else self.close_s):  # fmt: skip
+            self.vis = self.want
+        if self.bag != self.bag_to and self.t >= self.bag_t:
+            self.bag = self.bag_to
+
+    def chord(self) -> None:
+        self._now()
+        self.log.append(("chord", self.read))
+        if not self.chord_ok or (self.want and not self.close_ok):
+            return
+        self.want, self.chord_t = not self.want, self.t
+
+    def frame(self) -> _SimFrame:
+        self.t += 0.03
+        self._now()
+        dark = self.dark > 0
+        self.dark -= int(dark)
+        f = _hotbar_frame(self.bag, dark, self.popup).view(_SimFrame)
+        f.win = tuple(sorted((("equipment",) if self.vis else ()) + self.others))
+        f.org = self.origin if self.vis else None
+        return f
+
+    def windows(self, f: _SimFrame) -> list[str]:
+        self.read = f.win
+        return list(f.win)
+
+    def origin_of(self, f: _SimFrame) -> tuple[int, int] | None:
+        return f.org
+
+    def double_click(self, x: int, y: int) -> None:
+        self._now()
+        self.log.append(("dclick", (x, y), self.read))
+        slot = (self.origin[0] + BS.WEAPON_SLOT[0], self.origin[1] + BS.WEAPON_SLOT[1])
+        if self.vis and (x, y) == slot and self.takes_off and not self.bag_to:
+            self.bag_to, self.bag_t = True, self.t + self.off_s
+
+    def press(self, why: str) -> None:
+        self._now()
+        self.log.append(("press", why))
+        if self.bag_to and self.puts_on:
+            self.bag_to, self.bag_t = False, self.t + self.on_s
+
+    def guard(self) -> bool:
+        return self.fly_at is not None and self.t >= self.fly_at
+
+    def sleep(self, s: float) -> None:
+        self.t += s
+
+    def io(self) -> dh.BareIo:
+        return dh.BareIo(frame=self.frame, windows=self.windows, origin=self.origin_of,
+                         chord=self.chord, double_click=self.double_click, press=self.press,
+                         lines=lambda: self.lines, guard=self.guard, sleep=self.sleep,
+                         clock=lambda: self.t)  # fmt: skip
+
+
+class _Stop(Exception):
+    pass
+
+
+def _ctl(sim: _BareSim) -> tuple[dh.BareCtl, Any, list[dict[str, Any]]]:
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+    evs: list[dict[str, Any]] = []
+    return dh.BareCtl(sim.io(), _armed_ref(), counts, evs.append, _Stop), counts, evs
+
+
+def _kinds(sim: _BareSim) -> list[str]:
+    return [str(e[0]) for e in sim.log]
+
+
+def test_bare_steal_flag_refusals_and_the_run_start_record(monkeypatch, capsys) -> None:
+    import pytest
+
+    got: dict[str, Any] = {}
+
+    def fake_run(a: Any) -> int:
+        got["a"] = a
+        return 0
+
+    monkeypatch.setattr(dh, "run", fake_run)
+    argv = ["dungeon_hunt.py", "run", "--strategy", "P2", "--seed", "1", "--char", "rogue"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert dh.main() == 0 and got["a"].bare_steal is False  # OFF by default
+    monkeypatch.setattr(sys, "argv", [*argv, "--bare-steal"])
+    assert dh.main() == 0 and got["a"].bare_steal is True
+    monkeypatch.setattr(sys, "argv", ["dungeon_hunt.py", "run", "--help"])
+    with pytest.raises(SystemExit):
+        dh.main()
+    help_ = " ".join(capsys.readouterr().out.split())
+    assert "rogue-xmas02.md 4BX" in help_ and "under 50 % HP" in help_
+    # the refusals (the Rogue only; never with the Steal opening; the dagger's key is F5)
+    rogue = dh.CHARS_CONF["rogue"]["keys"]
+    assert dh.bare_steal_refused("rogue", False, rogue) is None
+    thief = dh.CHARS_CONF["thief"]["keys"]
+    assert "the thief's" in str(dh.bare_steal_refused("thief", False, thief))
+    assert "the crusader's" in str(dh.bare_steal_refused("crusader", False, dh.KEYS))
+    assert "--steal" in str(dh.bare_steal_refused("rogue", True, rogue))
+    assert "F5" in str(dh.bare_steal_refused("rogue", False, {**rogue, "equip": "F6"}))
+    assert rogue["equip"] == BS.EQUIP_KEY and dh.hotbar_slot(rogue["equip"]) == BS.EQUIP_SLOT
+    # the record: fixes_of (run_start's "fixes" and the manifest) and run_start's own key
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "bare_steal" not in dh.fixes_of(dh.argparse.Namespace(**base))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, bare_steal=True))
+    assert rec["bare_steal"] == [8.0, 0.5, "F5", 4, "9.27"]
+    assert {k: v for k, v in rec.items() if k != "bare_steal"} == dh.fixes_of(
+        dh.argparse.Namespace(**base))  # fmt: skip
+    src = Path(dh.__file__).read_text()
+    i_ref = src.index('raise SystemExit(f"dungeon@9.27 refused: {why_bs}")')
+    assert i_ref < src.index("typed: list[str] = []")  # before the setup types anything
+    i_cut = src.index('raise r.Stop(f"dungeon@9.27 refused: --bare-steal: {why_br} {bare_rec}")')
+    i_start = src.index('ev({"kind": "run_start", "strategy": a.strategy')
+    assert src.index("for cmd in setup:\n            setup_line(cmd)\n        bench.close") < i_cut
+    assert i_cut < i_start  # the reference is cut after the setup, before the run's start
+    assert '**({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,' in src[i_start:]
+
+
+def test_the_run_start_cuts_the_armed_reference_only_from_an_empty_f5_slot() -> None:
+    ref, rec, why = dh.bare_ref_cut(BS.slot_gray(_hotbar_frame(False)))
+    assert why is None and ref is not None and rec["empty"] is True
+    ref2, rec2, why2 = dh.bare_ref_cut(BS.slot_gray(_hotbar_frame(True)))
+    assert ref2 is None and "in the bag" in str(why2) and rec2["empty"] is False
+    ref3, rec3, why3 = dh.bare_ref_cut(BS.slot_gray(_hotbar_frame(False, dark=True)))
+    assert ref3 is None and why3 is None and rec3["empty"] is None  # unreadable: read again
+    assert dh.BARE_REF_WAIT_S == 3.0
+    assert dh.bare_read(_hotbar_frame(False), ref) is False
+    assert dh.bare_read(_hotbar_frame(True), ref) is True
+    assert dh.bare_read(_hotbar_frame(False, dark=True), ref) is None
+
+
+def test_clear_bag_refuses_while_the_dagger_is_in_the_bag() -> None:
+    """clear-bag drops every inventory stack: the Rogue BARE (the dagger in the bag, its icon on
+    F5) would lose the dagger. Refused before the warp and before any tab is touched."""
+    rogue = dh.CHARS_CONF["rogue"]["keys"]
+    assert dh.clear_bag_bare_refused(BS.slot_gray(_hotbar_frame(False)), rogue) is None
+    assert "drop it" in str(dh.clear_bag_bare_refused(BS.slot_gray(_hotbar_frame(True)), rogue))
+    dark = BS.slot_gray(_hotbar_frame(False, dark=True))
+    assert "unreadable" in str(dh.clear_bag_bare_refused(dark, rogue))
+    assert dh.clear_bag_bare_refused(BS.slot_gray(_hotbar_frame(True)), dh.KEYS) is None
+    src = Path(dh.__file__).read_text()
+    body = src[src.index("def clear_bag(a: argparse.Namespace) -> int:") :]
+    body = body[: body.index("\ndef load_rest_spots(")]
+    i_ref = body.index("raise r.Stop(why_bb)")
+    assert body.index('raise r.Stop(f"identity {got}")') < i_ref < body.index("@warp")
+    assert i_ref < body.index("clear_tab(agent, screen, tab=tab")
+
+
+def test_bare_unequip_reads_each_step_and_clicks_only_into_the_open_window() -> None:
+    sim = _BareSim()
+    res = dh.bare_unequip_seq(sim.io(), _armed_ref())
+    assert res["ok"] and res["bare"] and res["why"] == "off" and res["fail"] is None
+    assert res["stop"] is None and res["chords"] == 2 and res["ms"] < 3000
+    assert _kinds(sim) == ["chord", "dclick", "chord"]
+    assert sim.log[0][1] == ()  # the chord only after NO window read open
+    assert sim.log[1][1] == (203, 402) and "equipment" in sim.log[1][2]  # read OPEN first
+    assert res["at"] == [203, 402] and res["origin"] == [185, 300]
+    assert sim.read == () and not sim.vis and sim.bag  # read CLOSED at the end; the dagger off
+    moved = _BareSim(origin=(190, 305))  # the window found 5 px off its home: aimed from there
+    res2 = dh.bare_unequip_seq(moved.io(), _armed_ref())
+    assert res2["ok"] and moved.log[1][1] == (208, 407) and res2["origin"] == [190, 305]
+
+
+def test_bare_unequip_never_clicks_when_the_window_does_not_open_and_closes_a_late_one() -> None:
+    sim = _BareSim(chord_ok=False)
+    res = dh.bare_unequip_seq(sim.io(), _armed_ref())
+    assert not res["ok"] and res["fail"] == "bare_fail_open" and res["why"] == "not_open"
+    assert _kinds(sim) == ["chord"] and not sim.bag and res["bare"] is False
+    assert res["stop"] is None
+    late = _BareSim(open_s=1.5)  # shows after OPEN_S (1.2), within LATE_S more
+    res2 = dh.bare_unequip_seq(late.io(), _armed_ref())
+    assert res2["fail"] == "bare_fail_open" and res2.get("late") is True
+    assert _kinds(late) == ["chord", "chord"]  # no double-click: ONE more chord closes it
+    assert not late.vis and late.read == () and not late.bag and res2["stop"] is None
+
+
+def test_bare_unequip_skips_while_a_window_is_open() -> None:
+    sim = _BareSim(others=("inventory",))
+    res = dh.bare_unequip_seq(sim.io(), _armed_ref())
+    assert res["fail"] == "bare_skip_ui" and res["windows"] == ["inventory"]
+    assert sim.log == [] and not res["ok"]  # no chord into an unknown UI
+
+
+def test_bare_unequip_fails_off_cleanly_and_stops_on_a_window_that_stays() -> None:
+    sim = _BareSim(takes_off=False)
+    res = dh.bare_unequip_seq(sim.io(), _armed_ref())
+    assert not res["ok"] and res["fail"] == "bare_fail_off" and res["why"] == "not_off"
+    assert _kinds(sim) == ["chord", "dclick", "chord"] and not sim.vis and sim.read == ()
+    stuck = _BareSim(close_ok=False)
+    res2 = dh.bare_unequip_seq(stuck.io(), _armed_ref())
+    assert res2["stop"] is not None and "equipment" in res2["stop"]
+    assert _kinds(stuck) == ["chord", "dclick", "chord", "chord"]  # ONE more chord, then stop
+    assert res2["bare"]  # the dagger came off: the runner keeps that truth before it stops
+
+
+def test_bare_equip_reads_the_dagger_back_on_and_presses_again_only_on_a_readable_bare() -> None:
+    sim = _BareSim(bag=True)
+    res = dh.bare_equip_seq(sim.io(), _armed_ref(), "cyan")
+    assert res["ok"] is True and res["presses"] == 1 and not sim.bag
+    stuck = _BareSim(bag=True, puts_on=False)
+    res2 = dh.bare_equip_seq(stuck.io(), _armed_ref(), "time")
+    assert res2["ok"] is False and res2["presses"] == 2 and _kinds(stuck) == ["press", "press"]
+    dark = _BareSim(bag=True, puts_on=False)
+    dark.dark = 99  # a teleport's dark frames: unreadable -- no second press, no failure
+    res3 = dh.bare_equip_seq(dark.io(), _armed_ref(), "safety", press=False)
+    assert res3["ok"] is None and res3["presses"] == 0 and dark.log == []
+
+
+def test_bare_ctl_one_target_unequips_once_equips_on_the_cue_and_at_its_end() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim)
+    aims: list[int] = []
+    assert ctl.before_strike("box", 0.9, lambda: aims.append(1) is None)
+    assert sim.bag and not ctl.st.armed and aims == [1] and counts["bare_unequip"] == 1
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert not ctl.st.armed  # bare, locked, no cue yet
+    sim.lines.append({"colour": "cyan"})  # a steal: a NEW item-colour Battle Log line
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert ctl.st.armed and not sim.bag and counts["bare_equip_cyan"] == 1
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # its lock went (a kill): the target is over
+    assert ctl.tgt is None and counts["bare_equip_fight_end"] == 0  # armed: nothing pressed
+    assert ctl.before_strike("scan", 0.9, lambda: True) and counts["bare_unequip"] == 2
+    ctl.struck()
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # killed bare-handed: the dagger on at once
+    assert ctl.st.armed and not sim.bag and counts["bare_equip_fight_end"] == 1
+    whats = [(e["what"], e["why"]) for e in evs]
+    assert whats == [("unequip", "off"), ("equip", "cyan")] + [("unequip", "off"),
+                                                                ("equip", "fight_end")]  # fmt: skip
+    assert _kinds(sim) == ["chord", "dclick", "chord", "press"] * 2
+
+
+def test_bare_ctl_drops_the_click_when_the_target_left_and_swaps_once_per_target() -> None:
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim)
+    assert ctl.before_strike("box", 0.9, lambda: False) is False  # no SWORD after the swap
+    assert counts["bare_aim_lost"] == 1 and sim.bag and evs[-1]["what"] == "aim"
+    n = len(sim.log)
+    assert ctl.before_strike("scan", 0.9, lambda: False) is True  # bare already: no 2nd swap,
+    assert len(sim.log) == n  # and no aim check (the scan's own SWORD read just found it)
+    ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # no lock yet, still fighting: stays bare
+    assert not ctl.st.armed and ctl.tgt is not None
+    plain = _BareSim()
+    ctl2, counts2, _ = _ctl(plain)
+    assert ctl2.before_strike("plant", 0.9, None) and plain.log == []  # a plant: as it is
+    assert ctl2.before_strike("box", 0.4, None) and counts2["bare_skip_hp"] == 1
+    assert plain.log == []  # under BARE_HP_MIN nothing comes off
+
+
+def test_bare_ctl_puts_the_dagger_on_before_a_fly_wing_and_never_stays_bare_outside_a_fight(
+) -> None:  # fmt: skip
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim)
+    ctl.before_strike("box", 0.9, None)
+    ctl.struck()
+    assert sim.bag
+    ctl.escape()  # press("fly") calls it before the Fly Wing's key
+    sim.log.append(("fly",))
+    assert _kinds(sim)[-2:] == ["press", "fly"] and sim.log[-2][1] == "safety"
+    assert ctl.pending == "safety" and evs[-1]["pending"] is True
+    sim.dark = 40  # the teleport's dark frames: the read-back waits, no failure counted
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)
+    assert ctl.pending == "safety" and counts["bare_fail_on"] == 0
+    sim.dark = 0
+    ctl.tick(sim.t, False, False, sim.frame(), 0.9)  # mode search now: read back, target over
+    assert ctl.st.armed and ctl.pending is None and counts["bare_equip_safety"] == 1
+    assert ctl.tgt is None and sum(k == "press" for k in _kinds(sim)) == 1  # ONE key press
+    # the safety net: bare with no target in hand and no fight -> on at once
+    net = _BareSim()
+    ctl2, counts2, _ = _ctl(net)
+    ctl2.before_strike("box", 0.9, None)
+    ctl2.tgt = None
+    ctl2.tick(net.t, False, False, net.frame(), 0.9)
+    assert ctl2.st.armed and counts2["bare_equip_fight_end"] == 1
+
+
+def test_bare_ctl_a_popup_shown_at_the_unequip_is_no_cue_a_new_one_is() -> None:
+    sim = _BareSim(popup=188)  # the last fight's loot popup is still drawn
+    ctl, counts, _ = _ctl(sim)
+    ctl.before_strike("box", 0.9, None)
+    ctl.struck()
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert not ctl.st.armed  # the same popup: no steal
+    sim.popup = 240  # another item's popup (a longer name): a steal
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)
+    assert ctl.st.armed and counts["bare_equip_popup"] == 1
+
+
+def test_bare_ctl_stops_after_three_failed_swaps_in_a_row_and_ends_armed() -> None:
+    import pytest
+
+    sim = _BareSim(takes_off=False)  # the dagger never comes off (not worn? another key?)
+    ctl, counts, _ = _ctl(sim)
+    for _k in range(2):
+        assert ctl.before_strike("box", 0.9, None)  # armed: the strike goes on with the dagger
+        ctl.struck()
+        ctl.tick(sim.t, False, True, sim.frame(), 0.9)  # that target's end
+    with pytest.raises(_Stop):
+        ctl.before_strike("box", 0.9, None)
+    assert counts["bare_fail_off"] == 3
+    ok = _BareSim()
+    ctl2, counts2, _ = _ctl(ok)
+    ctl2.before_strike("box", 0.9, None)
+    n = len(ok.log)
+    assert ctl2.run_end(dead=True)["armed"] is False and len(ok.log) == n  # dead: nothing pressed
+    rec = ctl2.run_end()
+    assert rec["armed"] and rec["slot"] == "armed" and counts2["bare_equip_run_end"] == 1
+
+
+def test_bare_ctl_a_fly_wing_inside_the_swap_ends_it_closed_and_keys_the_dagger() -> None:
+    """guard_tick runs on every poll of the swap: a Fly Wing there ends the swap -- the window is
+    still read closed (a late one too), and when the dagger had come off its key goes at once."""
+    sim = _BareSim()
+    sim.fly_at = 0.9  # after the double-click (0.84), before the dagger reads off (1.04)
+    ctl, counts, evs = _ctl(sim)
+    assert ctl.before_strike("box", 0.9, lambda: True)  # strike() then sees escaped[0]
+    unequip = next(e for e in evs if e["what"] == "unequip")
+    assert unequip["escaped"] is True and unequip["why"] == "late_off" and sim.bag
+    assert _kinds(sim) == ["chord", "dclick", "chord", "press"] and sim.log[-1][1] == "safety"
+    assert not sim.vis and sim.read == () and ctl.pending == "safety"
+    early = _BareSim()
+    early.fly_at = 0.5  # before the window showed (0.83): no double-click, the late one closed
+    ctl2, counts2, evs2 = _ctl(early)
+    assert ctl2.before_strike("box", 0.9, lambda: True)
+    assert evs2[0]["why"] == "escaped" and evs2[0]["escaped"] is True
+    assert _kinds(early) == ["chord", "chord"] and not early.vis and early.read == ()
+    assert ctl2.st.armed and ctl2.pending is None and counts2["bare_fail_open"] == 0
+
+
+def test_ui_double_click_is_two_motions_then_two_paced_presses() -> None:
+    moves: list[tuple[int, int]] = []
+    sent: list[dict[str, Any]] = []
+    naps: list[float] = []
+
+    class _Agent:
+        def move(self, x: int, y: int) -> None:
+            moves.append((x, y))
+
+        def send(self, events: list[dict[str, Any]]) -> None:
+            sent.extend(events)
+
+    dh.ui_double_click(_Agent(), 300, 450, (1440, 900), lambda: 7, naps.append)
+    assert moves == [(303, 453), (300, 450)]
+    assert [e["action"] for e in sent] == ["down", "up", "down", "up"]
+    assert all(e["type"] == "mouse_button" and e["button"] == "left" for e in sent)
+    assert all((e["x"], e["y"]) == (300 / 1440, 450 / 900) for e in sent)
+    assert naps == [0.05, 0.1, 0.04, 0.04, 0.04, 0.04]
+
+
+def test_window_origin_finds_the_window_near_its_home_with_the_gates_own_match() -> None:
+    from types import SimpleNamespace
+
+    from poring_env import ui_anchors as ua
+
+    tmpl = np.random.default_rng(0).integers(0, 255, (13, 60)).astype(np.float32)
+    reg = SimpleNamespace(windows={"equipment": ua.WINDOWS["equipment"]},
+                          templates={"equipment": tmpl}, masks={})  # fmt: skip
+    ox, oy = ua.WINDOWS["equipment"].template_offset
+
+    def frame_at(dx: int, dy: int) -> np.ndarray:
+        img = np.full((720, 1280, 3), 100, np.uint8)
+        x, y = 185 + ox + dx, 300 + oy + dy
+        img[y : y + 13, x : x + 60] = tmpl.astype(np.uint8)[..., None]
+        return img
+
+    assert dh.window_origin(frame_at(0, 0), reg, "equipment") == (185, 300)
+    assert dh.window_origin(frame_at(5, 5), reg, "equipment") == (190, 305)
+    assert dh.window_origin(frame_at(40, 0), reg, "equipment") is None  # beyond HOME_PX
+    assert dh.window_origin(np.full((720, 1280, 3), 100, np.uint8), reg, "equipment") is None
+
+
+def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> None:
+    """The flag off: ``bare`` stays None and every hook is a no-op (today's run). On: the swap is
+    strike()'s FIRST step, before its frame and its click; the lock is marked on its last
+    return; the dagger's key goes BEFORE every Fly Wing (press) and before both walk-aways; the
+    tick runs before the fight branch; the run_end record carries the final state."""
+    src = Path(dh.__file__).read_text()
+    assert src.count("bare = BareCtl(") == 1
+    i_on = src.index("        if bare_on:  # dungeon@9.27: every input is the runner's own")
+    assert i_on < src.index("bare = BareCtl(") < src.index("        def strike(u: float")
+    assert "bare: BareCtl | None = None" in src
+    body = src[src.index("        def strike(u: float, v: float, rel: Cell, by: str) -> bool:") :]
+    body = body[: body.index("\n        def box_target(")]
+    hook = 'if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword"):'
+    i_b = body.index(hook)
+    assert i_b < body.index("if escaped[0]:\n                    return True") < body.index(
+        "ref = frame()") < body.index('click_at(u, v, "strike")')  # fmt: skip
+    assert body.rstrip().endswith("bare.struck()  # dungeon@9.27: the caller holds this target's "
+                                  "lock now\n            return True")  # fmt: skip
+    pb = src[src.index("        def press(what: str, why: str) -> None:") :]
+    pb = pb[: pb.index("\n        def ", 10)]
+    assert pb.index("bare.escape()") < pb.index("agent_raw.keys(keys_[what])")
+    assert 'if what == "fly" and bare is not None:' in pb
+    assert src.count("bare.escape()") == 3  # press + the boss walk-away + the unreach walk
+    for ind in (" " * 24, " " * 16):  # the boss guard's walk-away; --unreach-escape's walk
+        assert (f"{ind}bare.escape()  # dungeon@9.27: never walk away bare\n{ind}"
+                'click_at(u_w, v_w, "walk")') in src  # fmt: skip
+    assert ('bare.tick(tick, lock is not None, mode == "fight", img, frac)\n'
+            "                # --- FIGHT: locked, or scan for the attacker") in src  # fmt: skip
+    i_end = src.index('bare_final = bare.run_end(dead=reason == "death")')
+    assert i_end < src.index('ev({"kind": "run_end", "reason": reason')
+    assert '**({"bare": bare_final} if bare_final is not None else {})' in src
+    assert 'ev({"kind": "bare_after_alive", **bare.run_end()})' in src
+    # the I/O is the runner's own: the gate's window read, its chord, press(), ui_double_click
+    assert "windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg)" in src
+    assert "chord=lambda: agent_raw.chord(*bare_keys)" in src
+    assert 'press=lambda why_: press("equip", why_)' in src
+    assert "ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)" in src
+    assert src.count("ui_double_click(") == 2  # its definition + the one call
