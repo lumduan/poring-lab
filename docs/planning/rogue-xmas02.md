@@ -6068,3 +6068,36 @@ recent two-run pair of that same base (named in the result).
   and below it on gross, by rare-drop luck. The night's best: single run p73 111,985 z/h (a stolen
   2carat Diamond); pair p73 + p74 85,286; the base pair 79,650.
 
+### 4CQ. Amendment AC (Batt's answers to the 06:00 report; written 2026-11-12 06:33 ICT from `date`)
+
+Batt (2026-11-12 ~06:2x, translated; to the report's six decisions):
+1. **"Try value-target (+8.4 %); from now on we no longer use bare hands."** `--value-target` JOINS
+   THE BASE by Batt's decision (its bars failed by luck; on common items it was the best pair). The
+   bare-hands technique (`--bare-steal` without `--steal-opener`) is retired: no more runs. The
+   Knife opener stays a flag.
+2. **"From now on never switch it off -- in real play we are not a GM -- escape instead: when you
+   see it, Fly Wing at once; if it is far, walk away in another direction."** The MVP's spawn stays
+   on.
+   - The bot must ESCAPE Stormy Knight. That means a detector class for it (like the Garm Baby
+     class, xmas02-detector.md Amendment M) on `--garm-fly`'s alarm list: Fly Wing when it is
+     near, a walk-away (`--boss-walk`'s step) when it is far.
+   - Until that escape passes its own pre-registered tests, the chain keeps its kill-before-window
+     protocol for scored runs. Without it, Stormy Knight kills her in 0.4 s (11-08).
+3. **"Keep W1 and adjust it; from now on the aura stays off -- in real play I always turn it off."**
+   - The aura is OFF for every run from here.
+   - **W1 revised (the aura-off bar):** unsent walk clicks pooled <= **3.5 %**. The aura-off pairs
+     measured 1.97-2.85 %, each click costing ~1.2 s (~10 s a run); 3.5 % still catches a
+     regression to ~1.5x tonight's worst.
+4. **"Do it now, and make it more accurate -- I see the bot spend time looking for items every
+   time."** Item-model round 5 (xmas02-detector.md O22) starts now. Then a loot path that uses
+   the model (`--loot-items`: hover only where an item is seen, skip the empty sweep) is built
+   and pre-registered.
+5. **"Build them."** The direction-first loot sweep, the `bound` strike release, and the detect
+   server's priority queue (a fast HUD that does not slow the decisions).
+6. **"Delete them."** Done 06:31: the archived scratch, the night's demo sessions, the two ABORTED
+   folders.
+
+Also: **"The GPU may be used at any time -- full rights."** **The goal stays > 100,000 z/h.** Batt
+will play 20-30 min himself as an example when he is free (he will say when). And **"make the
+flows of this map, so I can see how the bot works"** (/flows, the xmas_dun02 Rogue).
+
