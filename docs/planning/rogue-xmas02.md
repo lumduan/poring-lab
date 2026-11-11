@@ -5436,3 +5436,44 @@ state.", `p63/imm-off-chat.png`). p63 started 13:20:24 (fiT14).
 | reported: late box strikes / late-failed | 9 / 1 (of 66) | 15 / 8 (of 68) | - |
 | reported: floor walk-offs (client_cell) / misreads | 1 / 0 | 5 / 0 | - |
 | reported: items (NPC-sell kinds) | Zargon 14, Scell 11, Manacles 10, Well-baked Cookie 8, Piece of Cake 5, Iron 5, Red Herb 3, Candy Cane 3, Candy 2, Old Blue Box 1 | Scell 22, Zargon 14, Piece of Cake 8, Well-baked Cookie 7, Manacles 6, Red Herb 5, Candy 4, Pearl 2, Iron 2, Level 3 Heal 1 | - |
+
+**The bare-steal smoke run bs0 (4BX's live check, UNSCORED; 16:02:59-16:11:45, 8 min, the base +
+`--bare-steal`, her NOT immune, recorded `hunt-xmas02-bs0`; written 16:1x ICT from `date`).**
+- The swap works: 20 unequips, 20 read back bare (1.90-1.96 s each); 20 equips, 20 read back
+  armed (~0.36 s): cyan 9, popup 3, time 3, fight_end 5; 0 failed swaps; the run ended armed.
+  The F5 slot readout: 22.5 % of the slot changed when bare, 0.0 % when armed.
+- The cues against the packets: 11 of the 12 cue equips (cyan / popup) had a real steal 0.58-0.87
+  s before; the 12th followed a cyan "item" line with no `pickup_result` near it (likely a
+  re-read line). The popup cue: 3 / 3.
+- 13 steals, 11 in a bare phase (106.6 s bare in all). `bare_aim_lost` 6 of 20: the target moved
+  during the 1.9 s unequip, so the strike found no sword and the fight loop's scan took over.
+- Bare hands hit for ~17 (the Damascus +8 ~184): fights last longer, as Batt meant.
+- 8 minutes judge nothing: 16 kills (119.8 / h), 13 stolen (0.81 a kill, 97.3 / h), 42,946 z/h
+  gross at Overcharge (the dashboard export `xmas02-bs0-smoke`).
+
+### 4BY. Pilots p65 + p66 pre-registration: `--bare-steal` (Batt's technique, dungeon@9.27) on the base, two runs pooled (written BEFORE either run, 2026-11-11 16:14 ICT from `date`)
+
+- **Authority:** Batt 2026-11-11 ("use this technique in playing the Rogue with auto steal").
+- **The runs:** the base (4BL's flags + `--late-confirm --still-target --lead-press`) +
+  `--bare-steal`, labels `xmas02-p65` (recorded `hunt-xmas02-fiT16`) and `xmas02-p66`
+  (`hunt-xmas02-fiT17`), 25 min each, her NOT immune (read back), after an MVP kill. fiT16 / fiT17
+  are not held-out.
+- **The base it is judged against (dagger always on), fixed here from the dashboard exports:**
+  p57, p58, p61, p62, p63, p64 (2.501 h): 364 kills, 211 stolen = **0.58 stolen a kill**, gross
+  **67,201 z/h at Overcharge** (`econ_dash.py`: picked + stolen at NPC sell x Overcharge 10).
+- **Bars (pooled p65 + p66):**
+  - **B1, the mechanism:** stolen a kill >= 0.68 (the base + 0.10; the smoke 0.81);
+  - **B2, Batt's goal (the decision bar):** gross z/h at Overcharge >= 67,201 (the base). The
+    base's runs spread 57,118-80,449 a pair, so the two-run pool is reported with that spread;
+  - **B3, the swaps:** unequips read back bare >= 95 %; every equip read back armed; 0 swap-fail
+    stops; 0 walk requests (`self_move_request`) inside an unequip's window (a click into a window
+    that was not open);
+  - **B4, the cues:** cue equips (cyan / popup) with a packet steal in (t - 3 s, t] >= 90 %;
+  - **no harm:** deaths 0; E1 >= 80 / h each run; the hard bars; W1 and R1-A pooled over p66 +
+    p65 + p64 + p63; L1 >= 50 %, L3 >= 80 %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %; D1 p95 <= 35 ms;
+    P2 0. (Q1 is reported, not a bar: a bare fight's longer span changes the scan rhythm.)
+  - Reported: kills / h, picked / h, stolen / h, items / h per item (the dashboard), bare seconds,
+    unequip time, `bare_aim_lost`, the lowest HP.
+- **Decision:** B1, B3, B4 and no harm pass AND B2 >= the base -> `--bare-steal` JOINS THE BASE.
+  B2 below the base -> it stays a flag and goes to Batt with its costs (the 1.9 s unequip, the
+  aim lost, fewer kills) and what could shorten them; B3 / B4 failing -> studied.
