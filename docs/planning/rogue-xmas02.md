@@ -5658,3 +5658,21 @@ recent two-run pair of that same base (named in the result).
     strikes' landing in the same runs; no harm as 4CB.
 - **Decision (each):** its mechanism bar, its decision bar and no harm pass -> it JOINS THE BASE;
   else it stays a flag and is reported.
+
+### 4CD. U0 pre-registration: the staged unreachable attacker (written BEFORE its run, 2026-11-11 20:41 ICT from `date`)
+
+- **Authority:** Batt 2026-11-11 (4BZ item 3): "ลองดูได้" -- a staged monster beside her may be
+  tried.
+- **The setup (84ba7ae2, TRIAL ONLY):** `--start-cell 100,207 --stage-at 98,205 --stage-mob
+  1248:1` -- the setup warps to (98,205), clears the map (`--clear-map`), spawns ONE Cruiser
+  there, warps her to (100,207): p57's trap (the cliff cells (98,206) / (99,206) between them; the
+  Cruiser shoots across, range 7; her straight path is blocked).
+- **The run:** the base (as it stands when it runs) + `--unreach-escape`, her NOT immune, 10 min,
+  after an MVP kill (`--stage-mob` keeps the setup's clear first). Label `xmas02-u0`, not recorded.
+- **Bars (4BU's, on this one run):** U3 -- a true trigger fires and its escape ends the
+  Cruiser's acts on her (none in t + 10..60 s), with a walk sent within 1.5 s landing within 1
+  cell of its target, no death within 60 s; U1 -- the trap span <= 60 s; U2 -- 0 harmful false
+  triggers. The staged Cruiser's spawn cell is read from the packets (the parent's check of
+  `@monster`'s placement).
+- **Decision:** U3 + U1 pass -> `--unreach-escape` JOINS THE BASE (4BU's "harmless" verdict plus
+  this positive case); else studied.
