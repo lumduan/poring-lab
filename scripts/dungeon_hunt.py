@@ -2115,6 +2115,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
+    if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
+        out["swap_gap"] = ["9.27e"]
     if getattr(a, "heal_candy", False):  # dungeon@9.31 (Batt 2026-11-11: candies, not potions)
         out["heal_candy"] = [HEAL_CANDY_KEYS, {str(k): v for k, v in HEAL_CANDY_TO.items()},
                              HEAL_CANDY_VERSION]  # fmt: skip
@@ -3648,6 +3650,9 @@ class BareCtl:
         self.busy = False  # inside a swap: a Fly Wing pressed by guard_tick needs no hook
         self.ready = ready
         self.ready_next = -1e9  # --bare-ready: no idle unequip before this (after a failed one)
+        # dungeon@9.27e (--swap-gap): when the last swap (equip / unequip / opener) ENDED -- our
+        # hits pause through a swap, so the no-hit clocks restart there (Batt's 22:53 clip, p71)
+        self.swap_t = -1e9
 
     def state_of(self, frame: Any) -> str | None:
         """The weapon state READ on ``frame``: "armed" / "bare" / None (unreadable); with the
@@ -3688,6 +3693,7 @@ class BareCtl:
             res = bare_equip_seq(self.io, self.ref, why, opener=self.opener)
         finally:
             self.busy = False
+            self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
         self._equip_done(why, res)
         return res["ok"]
 
@@ -3698,6 +3704,7 @@ class BareCtl:
             res = bare_equip_seq(self.io, self.ref, why, press=False, opener=self.opener)
         finally:
             self.busy = False
+            self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
         self._equip_done(why, res, verify=True)
 
     def escape(self) -> None:
@@ -3707,6 +3714,7 @@ class BareCtl:
             return
         self.io.press("safety")
         self.pending = "safety"
+        self.swap_t = self.io.clock()  # 9.27e
         self.ev({"kind": "bare", "what": "equip", "why": "safety", "ok": None, "ms": 0,
                  "presses": 1, "pending": True})  # fmt: skip
 
@@ -3723,6 +3731,7 @@ class BareCtl:
             res = bare_unequip_seq(self.io, self.ref)
         finally:
             self.busy = False
+            self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
         if res["bare"]:
             if idle:
                 self.st.wait_bare()
@@ -3762,6 +3771,7 @@ class BareCtl:
             res = opener_seq(self.io, self.opener, by)
         finally:
             self.busy = False
+            self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
         if res["bare"]:
             if idle:
                 self.st.wait_bare()
@@ -4036,6 +4046,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_so = steal_opener_refused(opener_key, bare_on, keys_)
     if why_so:
         raise SystemExit(f"dungeon@9.27c refused: {why_so}")
+    swap_gap = bool(getattr(a, "swap_gap", False))  # dungeon@9.27e (Batt's 22:53 clip)
+    if swap_gap and not bare_on:
+        raise SystemExit("dungeon@9.27e refused: --swap-gap goes with --bare-steal")
     heal_candy = bool(getattr(a, "heal_candy", False))  # dungeon@9.31 (Batt: candies, no potions)
     if heal_candy:
         why_hc = heal_candy_refused(a.char, conf, keys_, opener_key)
@@ -6612,6 +6625,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         bq_st["due"] = None  # a fight runs: no pick is due
                         q_book(taken_new is not None or last_swing == tick or dropped)
                     if lock is not None:
+                        if swap_gap and bare is not None and bare.swap_t > last_ours:  # 9.27e
+                            last_ours = bare.swap_t  # a swap restarts the no-hit clocks
                         since = tick - lock["t"]
                         idle = tick - max(last_ours, lock["t"])
                         n_lock = (sum(1 for t_o in ours_ticks if t_o >= lock["t"])
@@ -7724,6 +7739,16 @@ def main() -> int:
         "detection within 60 px of its last foot, passing the box path's skips, hovered for its "
         "SWORD and struck through strike(); an empty queue, a failed re-find or no SWORD -> "
         "today's search path. Never during a loot step, a rest, an escape or a bare-steal swap",
+    )
+    t.add_argument(
+        "--swap-gap",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.27e (with --bare-steal; Batt 2026-11-11 22:53, p71: the dagger went on "
+        "after a steal, then the runner called the monster dead and went bare on it again): a swap "
+        "(equip / unequip / opener, read back) restarts the no-hit clocks -- our hit lines pause "
+        "through a swap, so the kill gap (--kill-gap) and the lock's no-hit timer count from the "
+        "swap's end, not from the last hit before it",
     )
     t.add_argument(
         "--heal-candy",

@@ -5791,3 +5791,49 @@ recent two-run pair of that same base (named in the result).
 - **Decision:** H1, H2 and no harm pass -> `--heal-candy` JOINS THE BASE. Else it stays a flag
   and its numbers go to Batt.
 
+### 4CG. Amendment Z (written 2026-11-11 23:04 ICT from `date`, BEFORE p73): Batt's 22:53 clip -- a swap back onto a monster already stolen from; `--swap-gap` (9.27e) joins 4CE; Study S-IDLE
+
+- **Batt (22:5x, his clip of p71 at 22:53:15, translated):** "why bare hands only? It already stole
+  with the auto steal, it already switched to the dagger, and then it went back to bare hands.
+  Isn't that wrong?" **He is right.** p71's events at that moment:
+  - 22:53:13.9: a bare strike on monster A;
+  - 22:53:16.9: the steal popup -> F5, the dagger on at 17.1;
+  - 22:53:17.2: a "kill" by `kill_gap` (no hit line for 1.91 s; the gap had begun BEFORE the steal);
+  - 22:53:18.3: the loot step's hover read a SWORD, an engage (`loot_sword`);
+  - 22:53:20.3: `--bare-ready` took the dagger off for that "new" target (1.98 s) and struck bare,
+    "no hits" 3.6 s later.
+- **Measured on the Knife pair (packets; `/dev/shm/poring-lab-tmp/idle/swap_back.py`):**
+  - 11 of 60 (p69) and 13 of 58 (p70) swaps back to the opener were followed by attacks on a
+    monster ALREADY stolen from. A steal succeeds once per monster, so each was a weak-opener fight
+    for nothing: 1.5-49 s, median ~9 s.
+  - Most of them (`swap_rule.py`) are idle swaps ~4 s after a fight's end, whose next strike was
+    5-8 cells away: the stolen-from monster walked or teleported off and was found again. Pixels
+    carry no identity across that. A "same place within N s" hold caught only 2 of 24 (and wrongly
+    5 of 92 good swaps), so it is NOT built.
+- **The runner's inferred kills (`false_kills.py`):** about a quarter are false even with no swaps
+  (p67 15 / 67, p68 17 / 63: the target lived and we hit it again). Without swaps that costs
+  little: the client keeps attacking. Within 3 s after a swap it is 6 of 13 (p69 + p70). A swap
+  pauses our hit lines, and the kill gap counted straight through it.
+- **The fix, `--swap-gap` (dungeon@9.27e, OFF by default, with `--bare-steal` only):** every swap
+  restarts the no-hit clocks (the kill gap and the lock's no-hit timer) at the swap's END.
+  BareCtl.swap_t is set when each swap sequence (equip, unequip, opener, the escape's key) ends.
+  In Batt's clip, the false kill 0.1 s after the equip could not have fired.
+- **4CE changes, before p73:** p73 + p74 run the Knife with BOTH repairs: `--steal-cue popup
+  --swap-gap`. Both repair the swap logic. **This pair cannot separate their effects**: B4 is the
+  popup's bar; the swap-gap's own measure is reported beside it (swap-backs onto a monster already
+  stolen from, and false kills within 3 s after a swap). 4CE's bars and decision are otherwise
+  unchanged. **p72 (bare hands) runs as pre-registered**: the Knife pair had the same bug, so 4CA's
+  comparison stays like with like.
+- **Study S-IDLE (analysis only; `time_budget.py` with `--map xmas_dun02`):** score_full ran it
+  without the map, so every second read "off map / rest". With the map, p67-p70 stand IDLE 40-49 % of
+  each run, ~10 s a kill.
+  - ~27 % of the run is idle while the runner is in no named activity.
+  - **The loot step** (logged at its end): median 3.7 s after every fight's end, ~250 s a run
+    (~17 %). It hovers up to 9 cells of her 3 x 3. Only ~25-30 % of loot steps pick anything.
+  - **Natural drops land ON the death cell:** 74 of 77 (3 one cell off). That cell is one cell from
+    her in 74 of 77, and the item appears ~0.25 s BEFORE the death packet.
+  - **Strikes that never connected** ("unlock: no hits", ~6.3 s each): 16-21 a run, ~94-139 s.
+  - A loot sweep that hovers the cell facing the target first and stops after a few empty hovers
+    would save ~2.4 s on each of ~60 empty loot steps (~140 s a run, ~10 %). It is a proposal for
+    Batt, not built tonight.
+

@@ -4048,3 +4048,33 @@ def test_heal_candy_refusals_and_its_record() -> None:
     assert "what = heal_pick(heal_left)" in src  # the substitution sits in press()
     assert "if inv.get(504, 0) < p_to and not heal_candy:" in src  # no potion top-up
     assert "excess = 0 if heal_candy else true_potions - p_to" in src  # nor a drink-down
+
+
+def test_swap_gap_marks_the_end_of_every_swap_and_restarts_the_no_hit_clocks() -> None:
+    """dungeon@9.27e (--swap-gap; Batt 2026-11-11 22:53, p71): our hit lines pause through a swap;
+    p71's runner called a monster dead 0.1 s after the dagger went on (no hit line for 1.91 s, the
+    gap begun before the steal), then struck it bare again. BareCtl.swap_t = when the last swap
+    ENDED; with the flag the loop takes it as the last hit (kill gap + the lock's no-hit timer)."""
+    sim = _BareSim()
+    ctl, counts, evs = _ctl(sim)
+    assert ctl.swap_t == -1e9
+    assert ctl.before_strike("box", 0.9, lambda: True)  # the unequip
+    t_off = ctl.swap_t
+    assert t_off > 0 and abs(t_off - sim.t) < 1.0
+    ctl.struck()
+    sim.lines.append({"colour": "cyan"})
+    ctl.tick(sim.t, True, True, sim.frame(), 0.9)  # the cue: the dagger on
+    assert ctl.st.armed and ctl.swap_t > t_off
+    # a hit 1.9 s before the equip ended no longer makes the gap: it counts from the swap's end
+    last_hit = ctl.swap_t - 1.9
+    assert dh.kill_gapped(9, ctl.swap_t + 0.1 - last_hit) is True  # without --swap-gap: a kill
+    assert dh.kill_gapped(9, ctl.swap_t + 0.1 - max(last_hit, ctl.swap_t)) is False  # with it
+    src = Path(dh.__file__).read_text()
+    i_hook = src.index("if swap_gap and bare is not None and bare.swap_t > last_ours:  # 9.27e")
+    assert i_hook < src.index("and kill_gapped(n_lock, tick - last_ours):")  # before the kill gap
+    assert src.count("self.swap_t = self.io.clock()") == 5  # 4 swap sequences + the escape
+    a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                              rest="spot", npc_guard=False, bare_steal=True,
+                              swap_gap=True)  # fmt: skip
+    assert dh.fixes_of(a)["swap_gap"] == ["9.27e"]
+    assert "swap_gap" not in dh.fixes_of(dh.argparse.Namespace(**{**vars(a), "swap_gap": False}))
