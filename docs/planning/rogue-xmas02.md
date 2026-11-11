@@ -5503,3 +5503,42 @@ Both rc 0, immunity OFF read back; the MVP killed 14:22:14 and 15:32:52. Run rec
 
 - R2 and R2b are both off; the floor walk-off (S-LF5's desync) stays as the base has it (~4 a
   run by the earlier count, 0-5 in p61-p64).
+
+**Pilots p65 + p66 (4BY: the base + `--bare-steal`, Batt's technique), written 2026-11-11 17:5x ICT
+from `date`.** The MVP killed 16:48:12 ("1[dead]"). p65 16:50:12-17:15:58 (fiT16), p66
+17:18:33-17:44:2x (fiT17), both rc 0, immunity OFF read back before each. Run record `"bare_steal":
+[8.0, 0.5, "F5", 4, "9.27"]`. Dashboard exports `xmas02-p65`, `xmas02-p65-p66-bare`.
+- **VERDICT: B2 FAILS (48,891 z/h at Overcharge < the base's 67,201) and B4 FAILS (cues 72.7 % <
+  90 %): `--bare-steal` STAYS A FLAG and goes to Batt.** B1 (0.81 stolen a kill), B3 (131 / 131
+  swaps, 0 fails, 0 stray walks) and every no-harm bar pass.
+
+| | **p65** | **p66** | pooled | bar |
+|---|---|---|---|---|
+| B1 stolen a kill (packets) | 35 / 44 = 0.80 | 38 / 46 = 0.83 | **73 / 90 = 0.81** | >= 0.68: PASS (base 0.58) |
+| B2 gross z/h at Overcharge (dashboard) | 55,607 | 42,182 | **48,891** | >= 67,201: **FAIL** (base pairs 57,118-80,449) |
+| net z/h, best (Overcharge, Discount) | 51,122 (cost 5,903 / h: potions) | 42,074 | 46,596 | reported |
+| B3 unequips read bare / equips read armed | 60 / 60; 60 / 60 | 71 / 71; 71 / 71 | 131 / 131 | >= 95 %: PASS |
+| B3 swap-fail stops / walk requests inside an unequip | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0: PASS |
+| B4 cue equips with a packet steal in (t - 3 s, t] | 18 / 27 | 30 / 39 | **48 / 66 = 72.7 %** | >= 90 %: **FAIL** |
+| equips by cause (cyan / popup / time / fight_end) | 25 / 2 / 11 / 22 | 36 / 3 / 6 / 26 | 61 / 5 / 17 / 48 | reported |
+| E1 kills | 44 (105.6 / h) | 46 (110.3 / h) | 107.9 / h | >= 80: PASS (base 145.6) |
+| deaths / lowest HP / Fly Wings | 0 / **37.4 %** / 1 (an HP-rate escape) | 0 / 91.0 % / 1 (pos_unread) | | deaths 0: PASS |
+| W1 / R1-A | 3 / 212; 0 | 6 / 244; 0 | pooled p66 + p65 + p64 + p63: 17 / 978 = 1.74 %; 4 < 7 | PASS |
+| L1 / L3 / L4 / K1 / K3 | 100 % / 90.4 % / 0 / 2.00 s / 76.9 % | 88.2 % / 94.6 % / 0 / 2.04 s / 73.2 % | | PASS |
+| D1 p95 / P2 / Q1 (reported) | 22.1 ms / 0 / 13 | 22.3 ms / 0 / 12 | | PASS |
+| reported: unequip p50 / aim lost / bare seconds | 1.93 s / 25 of 60 / 334.9 s | 1.94 s / 28 of 71 / 366.2 s | | - |
+
+- **The economics (the dashboard's numbers; a lesson by itself):**
+  - value a KILL is the same: dagger 67,201 / 145.6 = 462 z; bare hands 48,891 / 107.9 = 453 z.
+    The extra steals (+0.23 a kill) are paid for by fewer picked items a kill (0.29 vs 0.35);
+  - so value an HOUR falls with kills an hour (-26 %): the 1.9 s unequip on every target, the
+    target walking off during it (aim lost 40 %), and the bare fights' length.
+- **Why B4 failed (measured):** every false cue is the live Battle Log reader re-emitting an OLD
+  cyan line (the previous equip's "put on" line read 2-3 times, or one "item" line read 3 times
+  with no packet). The popup cue: 5 / 5 here, 3 / 3 in the smoke. A false cue puts the dagger on
+  before a steal.
+- **What could shorten the costs, for Batt (none built):** (a) the popup as the steal cue, or
+  cyan lines de-duplicated by their pixel shape; (b) a faster unequip (the window reads open after
+  0.8 s; the double-click and the read back ~1.1 s); (c) bare hands only on the species worth
+  stealing from (the box detector names Cruiser / Myst Case / Cookie / Christmas Cookie); (d)
+  unequip while looting, so the swap overlaps time already spent.
