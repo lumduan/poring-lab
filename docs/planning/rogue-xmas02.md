@@ -5062,3 +5062,23 @@ ICT from `date`.**
     proposal: after N "no hits" unlocks in a row on the same cell with Miss cues (or a fixed span
     with no damage of ours), step away or fly.
 - **The base stays:** 4BL's + `--late-confirm` + `--still-target` + `--lead-press`.
+
+### 4BT. Amendment V (2026-11-11, Batt's answers to the 10:2x report, written 10:53 ICT from `date`)
+
+Batt's answers (quoted, then in English):
+1. "ทำและตั้งเกณฑ์ด้วย" -- **build the unreachable-attacker escape and set its bars.** It gets a
+   study of the trigger in the base runs (p40-p58) and a build behind its own flag (OFF), then
+   its own pre-registration (4BU) before any pilot.
+2. "เทรน" -- **train the floor-item round 4** (xmas02-detector.md O20).
+3. "รับเฉพาะที่อ่านผิดจริง" -- **S1 is ADOPTED.** From now on LF-2's M3 ("wrong standing reads")
+   counts only MISREADS: wrong reads that `client_cell.py score` does NOT judge a client / server
+   desync (`wrong_verdicts`). Desyncs are reported apart. Verdicts already given stand as written.
+4. "ปรับแล้วลองใหม่" -- **adjust R2 and retry: R2b.** The 2-3-cell re-click is kept while the
+   scene has NOT scrolled since the first click, and dropped once it has. The floor walk-off
+   needed the scroll; R2's late-failed rise suggests the still-scene re-click is a useful second
+   chance. Its own flag and pre-registration (4BV).
+
+**The order (one Windows session, one GPU):** both builds start now (two agents). Round 4 trains
+meanwhile, and the game stages round 4's fresh held-out. Then the escape's pilots and R2b's
+pilots, recorded as round 4's natural-drop held-out (fiT10-fiT13). Then round 4's score.
+
