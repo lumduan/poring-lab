@@ -1442,12 +1442,16 @@ def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
     records (labels, T2's pool), like gw3; other hunt recordings are not. O15 (round 2): the
     held-out is fiT4-fiT6 + the near stagings fsTa / fsTn; round 1's fiT1-fiT3 are TRAIN."""
     spec = ml.XMAS02
-    for sid in [f"20261111T120000-rdp-hunt-xmas02-fiT{n}" for n in (10, 11, 12, 13)] + [
-            "20261111T110000-rdp-xmas02-fsTa4", "20261111T113000-rdp-xmas02-fsTn4"]:  # fmt: skip
+    # O22 (round 5, the aura OFF): the fresh held-out fiH1, fiH2, fsH1
+    for sid in ("20261112T010000-rdp-hunt-xmas02-fiH1", "20261112T020000-rdp-hunt-xmas02-fiH2",
+                "20261112T013000-rdp-xmas02-fsH1"):  # fmt: skip
         assert spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
-    # O20: round 3's held-out (fiT7-9, fsTa3, fsTn3) is TRAIN-eligible since its score (O19)
+    # O20 / O22: round 3's (fiT7-9, fsTa3, fsTn3) and round 4's held-out (fiT10-13, fsTa4, fsTn4)
+    # are TRAIN-eligible since their scores (O19, O21)
     for sid in ("20261111T082022-rdp-hunt-xmas02-fiT7", "20261111T035548-rdp-xmas02-fsTa3",
-                "20261111T041708-rdp-xmas02-fsTn3"):  # fmt: skip
+                "20261111T041708-rdp-xmas02-fsTn3", "20261111T121558-rdp-hunt-xmas02-fiT10",
+                "20261111T110719-rdp-xmas02-fsTa4",
+                "20261111T115807-rdp-xmas02-fsTn4"):  # fmt: skip
         assert not spec.is_test(sid, None), sid
     # O17: round 2's held-out (fiT4-6, fsTa, fsTn) is TRAIN-eligible since its score (O16)
     for sid in ("20261109T133046-rdp-hunt-xmas02-p38", "20261110T110000-rdp-hunt-xmas02-fiT21",
@@ -1457,7 +1461,7 @@ def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
                 "20261110T221931-rdp-xmas02-fsTn",
                 "20261110T220000-rdp-xmas02-fs2", "20261110T224000-rdp-xmas02-fs3"):  # fmt: skip
         assert not spec.is_test(sid, None), sid
-    t1 = "20261111T120000-rdp-hunt-xmas02-fiT10"
+    t1 = "20261112T120000-rdp-hunt-xmas02-fiH1"
     with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
         ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{t1}"))
     with pytest.raises(SystemExit, match="TEST is not in T2's pool"):

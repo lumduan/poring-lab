@@ -330,8 +330,12 @@ XMAS02_FIT_R2 = ("-rdp-hunt-xmas02-fiT4", "-rdp-hunt-xmas02-fiT5", "-rdp-hunt-xm
 # fiT10-fiT13 and the near stagings fsTa4 / fsTn4 (6 spots each)
 XMAS02_FIT_R3 = ("-rdp-hunt-xmas02-fiT7", "-rdp-hunt-xmas02-fiT8", "-rdp-hunt-xmas02-fiT9",
                  "-rdp-xmas02-fsTa3", "-rdp-xmas02-fsTn3")  # fmt: skip
-XMAS02_FIT = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-xmas02-fiT12",
-              "-rdp-hunt-xmas02-fiT13", "-rdp-xmas02-fsTa4", "-rdp-xmas02-fsTn4")  # fmt: skip
+XMAS02_FIT_R4 = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-xmas02-fiT12",
+                 "-rdp-hunt-xmas02-fiT13", "-rdp-xmas02-fsTa4", "-rdp-xmas02-fsTn4")  # fmt: skip
+# Amendment O22 (2026-11-11 night, round 5, the aura OFF): round 4's held-out was scored ONCE (O21)
+# and is TRAIN-eligible (XMAS02_FIT_R4, history); round 5's held-out is FRESH, recorded after the
+# freeze: two aura-off base pilots (fiH1, fiH2) and one aura-off near staging of the Rogue (fsH1)
+XMAS02_FIT = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2", "-rdp-xmas02-fsH1")  # fmt: skip
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),
