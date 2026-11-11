@@ -2104,8 +2104,9 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
     assert "and tick - last_walk >= a.walk_every and not unread_active() \\\n" in src
     hook = 'if what == "fly" and why != "pos_unread":\n                unread_end("fly", why=why)'
     assert hook in src
-    # the way she came: the walk click, the boss walk-away, the far approach, a far strike
-    assert src.count("note_move(") == 5  # the definition + 4 sources
+    # the way she came: the walk click, the boss walk-away, the far approach, a far strike, and
+    # --unreach-escape's walk click (dungeon@9.26, a "walk")
+    assert src.count("note_move(") == 6  # the definition + 5 sources
     for s_ in ('note_move(rel, "walk")', '"boss_walk")', 'note_move(cell_a, "approach")',
                'note_move(rel, "strike")'):  # fmt: skip
         assert s_ in src

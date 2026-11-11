@@ -1700,6 +1700,10 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
+    if getattr(a, "unreach_escape", False):  # dungeon@9.26 (rogue-xmas02.md Study S-UA)
+        out["unreach_escape"] = [UNREACH_K, UNREACH_W_S, UNREACH_TOL, UNREACH_MARK_S,
+                                 UNREACH_WALK_R, UNREACH_AWAY, UNREACH_AGAIN_S,
+                                 UNREACH_VERSION]  # fmt: skip
     if getattr(a, "stage_mob", None):  # 9.18's trial: a staged encounter (setup only)
         out["stage_mob"] = str(a.stage_mob)
     if getattr(a, "quiet_scan", False):  # dungeon@9.17 (rogue-xmas02.md 4AW)
@@ -1902,13 +1906,14 @@ def walk_away_target(here: Cell, fits: Callable[[Cell], bool], reach: Callable[[
 # and none of our damage lines. THE ESCAPE: (c) the chain's cells (+ UNREACH_MARK_R) are skipped by
 # the defend scan and the box path for UNREACH_MARK_S, and (a) ONE walk click to the pickable,
 # one-click cell in view farthest from them, at least UNREACH_AWAY cells (out of a Cruiser's 7 +
-# the pixel cell's 1-cell slip); (b) the Fly Wing when there is no such cell, no position, or the
-# trigger fires again within UNREACH_AGAIN_S of an unreach walk.
+# the pixel cell's 1-cell slip), where the cursor reads clear (the first of UNREACH_TRIES such
+# cells); (b) the Fly Wing when there is no such cell, no position, or the trigger fires again
+# within UNREACH_AGAIN_S of an unreach walk.
 UNREACH_VERSION = "9.26"
-UNREACH_K, UNREACH_W_S, UNREACH_TOL = 3, 45.0, 1
-UNREACH_MARK_S, UNREACH_MARK_R = 60.0, 1
+UNREACH_K, UNREACH_W_S, UNREACH_TOL = 3, 90.0, 1
+UNREACH_MARK_S, UNREACH_MARK_R = 120.0, 1
 UNREACH_WALK_R, UNREACH_AWAY = 12, 9
-UNREACH_GRACE_S, UNREACH_AGAIN_S = 2.5, 120.0
+UNREACH_GRACE_S, UNREACH_AGAIN_S, UNREACH_TRIES = 2.5, 120.0, 3
 
 
 @dataclass(frozen=True)
@@ -1985,16 +1990,17 @@ def unreach_scan_cells(cells: Sequence[Cell], here: Cell | None, marks: Mapping[
     return [c for c in cells if not unreach_marked(marks, (here[0] + c[0], here[1] + c[1]), now)]
 
 
-def unreach_walk_target(here: Cell, cells: Sequence[Sequence[int]], fits: Callable[[Cell], bool],
-                        reach: Callable[[Cell], bool], radius: int = UNREACH_WALK_R,
-                        away: int = UNREACH_AWAY) -> Cell | None:  # fmt: skip
-    """PURE (9.26, escape (a)): the cell within ``radius`` (Chebyshev) of ``here``, at least
-    ``away`` from EVERY chain cell, that ``fits`` (in view, off the UI and zones, the client's pick
-    near it) and ``reach`` (one click the server answers): the farthest from the nearest chain
-    cell first, then the nearest to us, then the smaller cell (a fixed order); None: there is
-    none."""
-    if not cells:
-        return None
+def unreach_walk_targets(here: Cell, cells: Sequence[Sequence[int]], fits: Callable[[Cell], bool],
+                         reach: Callable[[Cell], bool], radius: int = UNREACH_WALK_R,
+                         away: int = UNREACH_AWAY,
+                         limit: int = UNREACH_TRIES) -> list[Cell]:  # fmt: skip
+    """PURE (9.26, escape (a)): up to ``limit`` cells within ``radius`` (Chebyshev) of ``here``, at
+    least ``away`` from EVERY chain cell, that ``fits`` (in view, off the UI and zones, the
+    client's pick near it) and ``reach`` (one click the server answers), in order: the farthest
+    from the nearest chain cell first, then the nearest to us, then the smaller cell (a fixed
+    order). The runner hovers them in this order and clicks the first that reads clear."""
+    if not cells or limit < 1:
+        return []
 
     def gap(c: Cell) -> int:
         return min(max(abs(c[0] - int(a[0])), abs(c[1] - int(a[1]))) for a in cells)
@@ -2004,10 +2010,13 @@ def unreach_walk_target(here: Cell, cells: Sequence[Sequence[int]], fits: Callab
     cands = [c for c in cands if gap(c) >= away]
     order = sorted(cands, key=lambda c: (-gap(c), max(abs(c[0] - here[0]), abs(c[1] - here[1])),
                                          c))  # fmt: skip
+    out: list[Cell] = []
     for c in order:
         if fits(c) and reach(c):
-            return c
-    return None
+            out.append(c)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def unreach_action(here: Cell | None, walk_to: Cell | None, walks: Sequence[float], now: float,
@@ -2782,6 +2791,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 walk_grid = wk_w.server_grid(map_)
             except LookupError as e:  # walkability unknown -> refuse, never guess
                 raise SystemExit(f"dungeon@9.18 refused: --boss-walk: {e}") from None
+    if getattr(a, "unreach_escape", False):  # dungeon@9.26: never silently the base run
+        why_ua = unreach_refused(getattr(a, "reach_check", False),
+                                 getattr(a, "engage_screen", False))  # fmt: skip
+        if why_ua:
+            raise SystemExit(f"dungeon@9.26 refused: {why_ua}")
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
@@ -3192,6 +3206,80 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         boss_grace_until = -1e9  # 9.18: boss lines read while walking away are the dog's last
         fight_t0 = -1e9  # 9.16: when the current fight began (the engage below)
         ours_ticks: deque[float] = deque(maxlen=256)  # dungeon@9.13: our recent hits' ticks
+        unreach_on = getattr(a, "unreach_escape", False)  # dungeon@9.26 (Study S-UA)
+        ua_locks: deque[NoHitLock] = deque(maxlen=8)  # 9.26: the latest no-hit locks
+        ua_marks: dict[Cell, float] = {}  # 9.26 (c): cells the scan and the box path skip, until
+        ua_walks: deque[float] = deque(maxlen=8)  # 9.26: the unreach walks' ticks
+        ua_drop_t = -1e9  # 9.26: the last tick the HP read as dropped (an attacked sign)
+
+        def ua_lock(lock_: Mapping[str, Any], tick_: float) -> NoHitLock:
+            """9.26: the lock that just ended "no hits", as the trigger's record (no input)."""
+            c_ = lock_.get("cell")
+            sign_ = max(last_swing, last_taken, ua_drop_t)  # a Miss, a hit line, an HP drop
+            return NoHitLock(t0=float(lock_["t"]), t1=tick_,
+                             cell=None if c_ is None else (int(c_[0]), int(c_[1])),
+                             n=n_strike[0], sign_t=sign_)  # fmt: skip
+
+        def unreach_escape(tr: Mapping[str, Any], tick_: float) -> str:
+            """dungeon@9.26 (--unreach-escape): the trigger fired. (c) its cells are marked for the
+            defend scan and the box path; then (a) ONE walk click through click_at to the first
+            of unreach_walk_targets' cells (the boss walk's checks: the route grid, no carve, no
+            zone crossing, in view, the client's pick; one click the server answers) where the
+            cursor reads clear (the search walk's gate: never a SWORD, a no-entry ring or an
+            unknown read), or (b) the Fly Wing (unreach_action). The event; returns the action
+            ("walk" / "fly" / "none": a Fly Wing went off < 2 s ago)."""
+            nonlocal ua_marks
+            ua_marks = unreach_marks({c_: u_ for c_, u_ in ua_marks.items() if u_ > tick_},
+                                     tr["cells"], tick_ + UNREACH_MARK_S)  # fmt: skip
+            to_: Cell | None = None
+            tried_: list[list[Any]] = []  # the walk targets hovered, with their verdicts
+            h_ = here
+            if h_ is not None and not any(tick_ - t_ < UNREACH_AGAIN_S for t_ in ua_walks):
+
+                def ua_fits(c_: Cell, h: Cell = h_) -> bool:
+                    hh, ww = okr.shape
+                    if not (0 <= c_[0] < ww and 0 <= c_[1] < hh) or not okr[c_[1], c_[0]]:
+                        return False
+                    if carved[c_[1], c_[0]] or mz.segment_violates(h, c_, zones) is not None:
+                        return False
+                    u_, v_ = project(h, [(c_[0] - h[0], c_[1] - h[1])])[0]
+                    if not in_view(u_, v_):
+                        return False
+                    return walk_pick_ok(picked_cell(camera, gat, h, (u_, v_)), c_, okr)
+
+                def ua_reach(c_: Cell, h: Cell = h_) -> bool:
+                    from poring_dataset import walk as wkp_u
+
+                    return bool(wkp_u.click_walk_ok(reach_grid, h[0], h[1], c_[0], c_[1]))
+
+                for c_t in unreach_walk_targets(h_, tr["cells"], ua_fits, ua_reach):
+                    u_t, v_t = project(h_, [(c_t[0] - h_[0], c_t[1] - h_[1])])[0]
+                    vd_ = str(hover(u_t, v_t)["verdict"])  # the walk gate: clear only
+                    tried_.append([list(c_t), vd_])
+                    if vd_ == "clear":
+                        to_ = c_t
+                        break
+            action, why_ = unreach_action(h_, to_, ua_walks, tick_)
+            if action == "walk" and h_ is not None and to_ is not None:
+                rel_ = (to_[0] - h_[0], to_[1] - h_[1])
+                u_w, v_w = project(h_, [rel_])[0]
+                click_at(u_w, v_w, "walk")
+                note_move(rel_, "walk")  # 9.22's bookkeeping: a walk click (UNREAD_WALK_BY)
+                ua_walks.append(tick_)
+            elif tick_ - fly_at > 2.0:  # the boss guard's own Fly Wing path
+                press("fly", "unreach")
+            else:  # a Fly Wing went off < 2 s ago: she is away already
+                action, why_ = "none", "fly_recent"
+            counts["unreach"] += 1
+            counts[f"unreach_{action}"] += 1
+            ev({"kind": "unreach", "t0_ns": round(float(tr["t0"]) * 1e9), "locks": tr["locks"],
+                "cells": tr["cells"], "span_s": tr["span_s"], "n": tr["n"],
+                "here": None if h_ is None else list(h_), "action": action, "why": why_,
+                "to": None if to_ is None else list(to_), "tried": tried_,
+                "marked": sum(1 for u_ in ua_marks.values() if u_ > tick_),
+                "mark_s": UNREACH_MARK_S})  # fmt: skip
+            return action
+
         ex_rec: Any = None  # dungeon@9.14 (--explore): the passive knowledge recorder
         if explore_on:
             ex_rec = em.Recorder(map_, sid, lambda t0_, t1_: sum(
@@ -3458,6 +3546,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     reach_proj.update(here=here_, uv=project(here_, BOX_GRID))
                 c_r = nearest_rel(reach_proj["uv"], BOX_GRID, foot)
                 sp_ = (here_[0] + c_r[0], here_[1] + c_r[1])  # == box_spot(here_, foot)
+            if unreach_on and unreach_marked(ua_marks, sp_, time.monotonic()):
+                counts["unreach_skip_box"] += 1  # dungeon@9.26 (c): a marked attacker's cell
+                return True
             key_ = (here_, sp_)
             if key_ not in reach_cache:
                 if len(reach_cache) > 4000:
@@ -4043,6 +4134,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 kept = drop_false(cells, false_rel, t_s)
                 verdicts["walked_skip"] += len(cells) - len(kept)
                 cells = kept
+            if purpose == "defend" and unreach_on and ua_marks:  # dungeon@9.26 (c): marked cells
+                kept_u = unreach_scan_cells(cells, here, ua_marks, t_s)
+                verdicts["unreach_skip"] += len(cells) - len(kept_u)
+                counts["unreach_skip_scan"] += len(cells) - len(kept_u)
+                cells = kept_u
+                if not cells:  # every cell marked: nothing to hover
+                    ev({"kind": "scan", "purpose": purpose, "cells": 0, "verdicts": dict(verdicts),
+                        "found": None, "found_rel": None, "ms": 0})  # fmt: skip
+                    return None
             uv = project(here, cells)
             found = None
             for c, (u, v) in zip(cells, uv, strict=True):
@@ -4790,6 +4890,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 hit_now = tick - last_taken < FIGHT_TAKEN_S
                 swing_now = swing_engages(tick, last_swing, swing_floor)  # 9.1b, --miss-cue
                 dropped = hp_dropped(st.hist, tick) and tick - fly_at > 2.0
+                if unreach_on and dropped:
+                    ua_drop_t = tick  # dungeon@9.26: an attacked sign
                 near_ = None
                 if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
                     streak_ = boxes.alarm_n  # 9.19b: --garm-confirm's consecutive detections
@@ -4975,6 +5077,23 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         elif since > LOCK_MAX_S or (since > LOCK_NO_HIT_S and idle > LOCK_NO_HIT_S):
                             ev({"kind": "unlock", "why": "no hits" if since <= LOCK_MAX_S
                                 else "max", "s": round(since, 1)})  # fmt: skip
+                            if unreach_on and since <= LOCK_MAX_S:  # dungeon@9.26 (Study S-UA)
+                                ua_locks.append(ua_lock(lock, tick))
+                                tr_u = unreach_trigger(ua_locks, ours_ticks)
+                                if tr_u is not None:  # an unreachable attacker: get away
+                                    ua_locks.clear()
+                                    act_u = unreach_escape(tr_u, tick)
+                                    lock, goal_path = None, None
+                                    loot_list, fight_ref = [], None
+                                    mode = "search"
+                                    box_fight.clear()
+                                    if act_u == "fly":
+                                        fly_at = time.monotonic()
+                                        here, last_taken = None, -1e9
+                                        time.sleep(1.0)
+                                    else:  # no other walk click meanwhile
+                                        last_walk = tick + UNREACH_GRACE_S
+                                    continue
                             lock = None
                         elif getattr(a, "quick_drop", False) and last_strike and quick_no_hit(
                                 last_strike.get("arrow_t"), last_ours, last_strike["t_click"],
@@ -5752,6 +5871,19 @@ def main() -> int:
         "guard WALKS AWAY from one of the boss's summons (one click, the farthest pickable "
         "cell >= 8 away) instead of a Fly Wing; a new boss line after 2.5 s, a 3rd walk-away "
         "in 60 s, no cell, or the boss itself -> the Fly Wing as before",
+    )
+    t.add_argument(
+        "--unreach-escape",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.26 (rogue-xmas02.md Study S-UA; OFF by default; with --reach-check and "
+        "--engage-screen): 3 consecutive locks ending 'no hits' on the same cells (within 1) "
+        "within 90 s, an attacked sign (Miss cue / hit line / HP drop) in each lock's window "
+        "and no damage line of ours = an UNREACHABLE attacker: its cells are skipped by the "
+        "defend scan and the box path for 120 s, and ONE walk click takes her >= 9 cells from "
+        "them (the farthest pickable one-click cell within 12 whose cursor reads clear, of 3 "
+        "tried); no cell, no position, or a 2nd trigger within 120 s of such a walk -> the "
+        "Fly Wing",
     )
     t.add_argument(
         "--stage-mob",

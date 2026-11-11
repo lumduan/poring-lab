@@ -292,10 +292,11 @@ def triggers(r: dict[str, Any], locks: Sequence[dh.NoHitLock], k: int,
 def catch_s(trap: dict[str, Any], trigs: Sequence[dict[str, Any]]) -> float | None:
     """PURE: seconds from the trap's first request to the first trigger fired inside it (its end
     + 2 s at most), else None."""
-    a, b = trap["start_ns"] / NS, trap["end_ns"] / NS + 2.0
+    a, b = float(trap["start_ns"]) / NS, float(trap["end_ns"]) / NS + 2.0
     for tr in trigs:
-        if a <= tr["t1"] <= b:
-            return round(tr["t1"] - a, 1)
+        t1 = float(tr["t1"])
+        if a <= t1 <= b:
+            return round(t1 - a, 1)
     return None
 
 
@@ -393,10 +394,14 @@ def outcome(ev: dict[str, Any], r: dict[str, Any], attacker: int | None) -> dict
     return out
 
 
+def _strip_ns(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{a: b for a, b in x.items() if not a.endswith("_ns")} for x in rows]
+
+
 def score(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
     res = []
     for r in runs:
-        start = next((e for e in r["events"] if e.get("kind") == "run_start"), {})
+        start: dict[str, Any] = next((e for e in r["events"] if e.get("kind") == "run_start"), {})
         fx = (start.get("fixes") or {}).get("unreach_escape")
         k, w = (int(fx[0]), float(fx[1])) if fx else (dh.UNREACH_K, dh.UNREACH_W_S)
         esc = []
@@ -410,10 +415,9 @@ def score(runs: Sequence[dict[str, Any]]) -> dict[str, Any]:
         locks = no_hit_locks(r["events"], r["lines"])
         rep = triggers(r, locks, k, w)
         tps, sps = run_traps(r, TRAP_S), run_traps(r, SPAN_S)
-        strip = lambda v: [{a: b for a, b in x.items() if not a.endswith("_ns")} for x in v]  # noqa: E731
         res.append({"run": r["name"], "unreach_fixes": fx, "k": k, "w": w,
-                    "traps": strip(tps), "trap_s": round(sum(x["s"] for x in tps), 1),
-                    "spans": strip(sps), "span_s": round(sum(x["s"] for x in sps), 1),
+                    "traps": _strip_ns(tps), "trap_s": round(sum(x["s"] for x in tps), 1),
+                    "spans": _strip_ns(sps), "span_s": round(sum(x["s"] for x in sps), 1),
                     "escapes": esc,
                     "escapes_false": sum(1 for x in esc if x["verdict"] != "trap"),
                     "replay": [{a: b for a, b in x.items() if a not in ("t0", "t1")}
