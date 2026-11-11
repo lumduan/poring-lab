@@ -3809,3 +3809,17 @@ ONNX sets give IDENTICAL I1-I4.
     found it alive at (29,142) (a respawn after an earlier staging kill). Killed 12:15:15, "1[dead]"
     read back; p59 started 12:16.
 
+- **O20f (16:26 ICT, BEFORE any score): round 4's held-out complete, the predictions, the pack.**
+  - The held-out labels (`--eval-test`, params v2, against the frozen 32e8afae; G2 PASS in every
+    session): fsTa4 22 kept frames / 29 labels / 9 floor items; fsTn4 49 / 158 / 16 (and its
+    1-spot part 0 / 0 / 0, 45 negatives); fiT10 29 / 32 / 9; fiT11 31 / 31 / 10; fiT12 31 / 31 /
+    8; fiT13 20 / 24 / 9. fiT10 / fiT11 come from p59 / p60 (the Rogue IMMUNE, rogue-xmas02.md 4BW:
+    a floor item's pixels do not depend on immunity); fiT12 / fiT13 from p61 / p62.
+  - The GPU set (predict_dir in the worker, the NAS weights 32e8afae): 4,261 frames over the seven
+    sessions, made in four parts (staged 12:11, fiT10-11 13:15, fiT12 15:32, fiT13 16:18) and merged
+    (`fi_merge_preds.py`, one weights path). The ONNX set (3647fd35, fi_onnx_pred.py) in three parts:
+    staged and fiT10-11 done, fiT12-13 running; never beside a scored pilot.
+  - **The pack (seed 68, `pack --round 4 --eval-test`):** 134 crops = 114 item crops (F 76, N 38)
+    + 20 E (10 plain, 10 hard); SHORT 6 in the no-aura stratum. Two NEW blind labellers, **S and
+    T** (none of A-R), are judging it; each sees only the pack and its own answers file.
+  - Nothing of either prediction set has been compared with any label.
