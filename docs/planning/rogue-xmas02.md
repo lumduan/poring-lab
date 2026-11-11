@@ -5982,3 +5982,25 @@ recent two-run pair of that same base (named in the result).
 | L1 / L3 / L4 / K1 / K3 / Q1 | 100 % / 96.7 % / 0 / 1.96 s / 91.8 % / 5 | 95.2 % / 97.0 % / 0 / 1.98 s / 91.0 % / 2 | PASS |
 | U1-stuck / D1 p95 | 9.7 s / 22.3 ms | 3.6 s / 22.0 ms | PASS |
 
+### 4CM. The night's final configuration, p81-p83 (pre-registered 2026-11-12 03:06 ICT from `date`, BEFORE its smoke and runs): an EXHIBITION toward Batt's 100,000 z/h
+
+- **Why an exhibition:** no single change tonight passed every bar, but three changes each helped a
+  different factor (common items only; rare-drop luck swings a pair by +-10-40 %):
+  - the plain Knife (`--steal-opener F4`, the default cue "both"): z a kill +18 %, kills -12 %;
+  - `--value-target`: z a kill +19 %, kills -9 % (common items, 4CL);
+  - `--queue`: kills +6 % in p77 (loot end -> next strike 2.58 s on its picks, against ~7 s).
+  Combining them is the best guess at the highest z/h. With several changes at once **it decides
+  nothing for the base**: its numbers go to Batt beside every pair of the night.
+- **The flags:** the base + `--bare-steal --bare-ready --steal-opener F4 --swap-gap --value-target
+  --queue --hud`.
+  - `--queue` stays in only if 4CC (p77 + p78) shows no harm other than W1 by the letter: deaths
+    0, E1 >= 80 / h, the hard bars, L1 / L3 / K1 / K3, D1, P2. Otherwise it is dropped from these
+    runs (decided from p78's scores, before p81, written beside this).
+  - `--heal-candy` is not in: 4CF's verdict comes after p81 has started.
+- **The runs:** p81, p82, p83 (recorded fiT32, fiT33, fiT34), 25 min each, her NOT immune, after an
+  MVP kill, from the night chain. A 3-min IMMUNE smoke `s81` of the exact flags comes first, in an
+  MVP wait (this exact combination has never run). A run that would end after 06:00 still runs; the
+  report states what was finished.
+- **Reported:** gross z/h at Overcharge (actual), the same on common items only, kills / h, stolen a
+  kill, items / h, the no-harm bars, against the aura-off base (p67 + p68) and each pair tonight.
+
