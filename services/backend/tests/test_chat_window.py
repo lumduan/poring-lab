@@ -198,6 +198,23 @@ def test_a_bright_scene_continuing_the_top_border_does_not_move_the_window() -> 
         }
 
 
+def test_a_border_pixel_just_under_white_does_not_hide_the_window() -> None:
+    """2026-11-11 11:36, the Crusader at xmas_dun02 (37,62): one top-border pixel at x 583 read
+    luma 224 (WHITE is 225), the run split 68..582 + 584..592, and the standard window read as
+    "none found" (the staging stopped twice). A gap of <= TOP_GAP px joins the run; a wider one
+    still splits it, and the scene's run beyond a wider gap never joins the border."""
+    g = cw.STANDARD
+    want = {"left": 0, "text_top": g.text_top, "bottom": g.bottom, "lines": 6, "input": "closed"}
+    for gap in range(1, cw.TOP_GAP + 1):
+        img = draw(g, input_open=False)
+        img[g.text_top, 583 : 583 + gap] = 224
+        assert cw.find(img) == want, gap
+    wide = draw(g, input_open=False)
+    wide[g.text_top, 583 : 583 + cw.TOP_GAP + 1] = 224
+    assert cw.find(wide) is None
+    assert cw._white_runs(np.array([1, 1, 0, 0, 1, 0, 0, 0, 1], bool)) == [(0, 5), (8, 9)]
+
+
 def test_white_scene_rows_without_the_window_frame_are_no_window() -> None:
     img = draw(None)
     img[300:303, 0:1280] = 255  # snow, a white wall: a long white row, but no right border

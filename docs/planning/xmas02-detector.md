@@ -3777,4 +3777,20 @@ ONNX sets give IDENTICAL I1-I4.
   - so the no-aura held-out is re-staged under the SAME label (`xmas02-fsTn4`, refused by name) on
     a new 6-spot plan, seed 2612601, which shares no cell with any staging so far;
   - round 4's training runs since 11:17 (3 epochs, 499 / 499 transferred).
+- **O20d (11:5x ICT): the re-run stopped at its start (11:36:43, rc 1) on the same check, and the
+  CAUSE is found and fixed in the reader (`chat_window.find`, `TOP_GAP`):**
+  - at the Crusader's stand (37,62) ONE pixel of the window's white top border, x 583, read luma
+    224 (RGB 226,221,231; WHITE is 225). The border's run split into 68..582 + 584..592, neither
+    long enough, so a frame showing the standard window read "none found". Both stop frames
+    (11:34:49, 11:36:41) were the same;
+  - since: white runs at most 2 px apart join (`_white_runs`); the right border, the separator
+    and the line pitch still decide. Both stop frames now read 6 lines, docked, LOCKED, tabs in
+    order (next step: none);
+  - the check against recorded frames (old reader at 19670419 vs new, offline, one frame per 30,
+    at most 40 a session): 1,290 frames of the 36 xmas_dun02 sessions since 11-05. 2 change, both
+    viewed: fsTa3 frame 839 ("seen in part" -> the standard window, input open; that is fsTa3's
+    spot-7 stop) and fsTn4 frame 149 (none -> the standard window). The other 1,288 are
+    unchanged (1,276 standard, 11 "f10", 1 "unknown", as before);
+  - the 28-frame re-run recording (`20261111T113618-rdp-xmas02-fsTn4`, 0 spots) is shipped and
+    marked INVALID (`dataset_ship.py mark-invalid`); fsTn4 is staged again on seed 2612601.
 

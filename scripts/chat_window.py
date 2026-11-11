@@ -202,6 +202,26 @@ def _sep(lum: np.ndarray, y: int, left: int, band: tuple[float, float]) -> bool:
     )
 
 
+# The top border's white run may carry a pixel or two just under WHITE (2026-11-11 11:36, the
+# Crusader at xmas_dun02 (37,62): ONE border pixel at x 583 read luma 224, RGB 226,221,231, so the
+# run split 68..582 + 584..592 and no window was "found" on a frame showing the standard one; the
+# staging stopped twice there). Gaps of at most TOP_GAP px BETWEEN white pixels join the run; the
+# right border, the separator and the line pitch still decide.
+TOP_GAP = 2
+
+
+def _white_runs(row: np.ndarray, gap: int = TOP_GAP) -> list[tuple[int, int]]:
+    """The [start, end) runs of a boolean row, runs at most ``gap`` px apart joined."""
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], row.astype(np.int8), [0]))))
+    runs: list[tuple[int, int]] = []
+    for s, e in zip(edges[0::2].tolist(), edges[1::2].tolist(), strict=True):
+        if runs and s - runs[-1][1] <= gap:
+            runs[-1] = (runs[-1][0], e)
+        else:
+            runs.append((s, e))
+    return runs
+
+
 def _border_run(lum: np.ndarray, y0: int, left: int) -> int | None:
     """The last row of the right border's continuous run from ``y0``, None if it is not there."""
     col = lum[:, left + BORDER_X]
@@ -226,8 +246,7 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
     obscured: dict[str, Any] | None = None
     for y in np.nonzero(counts >= 450)[0]:
         y = int(y)
-        edges = np.flatnonzero(np.diff(np.concatenate(([0], white[y].astype(np.int8), [0]))))
-        for s, e in zip(edges[0::2], edges[1::2], strict=True):
+        for s, e in _white_runs(white[y]):
             if e - s < 450:
                 continue
             # the top border starts inside the window (x left + 3, or after the selected tab);
