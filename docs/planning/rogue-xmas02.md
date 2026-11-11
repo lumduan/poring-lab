@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-11 night: LF-2 (--late-confirm) and LS-2 (--still-target, p52+p53: late-failed strikes 11.7 -> 3 a run) are IN THE BASE; LF-4 (--unread-step) stays OFF (never came due in p50/p51: Batt). p53's 3-cell 'misread' at (104,192) was a client/server DESYNC with the reader right (Study S-LF5, 06:3x: no reader change; S1 scorer built, R2 for Batt)."
+next_action: "2026-11-11 08:1x: LS-1 (--lead-press) JOINED the base after p55 + p56 (led hits 11/13, late-failed 3); next p57 + p58 = --near-single (S-LF5 R2: the p53 desync was the 2-3-cell re-click), p57 recorded fiT7 for floor-item round 3."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -4993,3 +4993,34 @@ p56 verdict, as a one-change pilot.
 The study's throwaway scratch scripts were not kept. The committed `client_cell.py` reproduces
 every number above except the Fisher p (it is computed from its `walks` rows: `own_motion_ms`,
 `flinch_ms`, `outcome`).
+
+**Pilots p55 + p56 (4BR: the base + `--lead-press`, LS-1), written 2026-11-11 08:12 ICT from `date`.**
+- **The runs:** the MVP was killed 07:14:04 ("1[dead]"; it had died at 06:03:37 to the readout
+  collection's own `@killmonster2`, found in the server's atcommandlog, and respawned 07:13:14).
+  p55 07:15:09-07:41:00 (fiT8), p56 07:43:40-08:09:27 (fiT9); both rc 0, immunity read each
+  time. The run record: `"lead_press": [15.0, 0.57, 32.0, 1.0, "9.24"]`.
+- **VERDICT: every 4BR bar passes -> `--lead-press` JOINS THE BASE (4BR's decision).**
+
+| | LS-2 p52 / p53 | **p55** | **p56** | bar (pooled p55 + p56) |
+|---|---|---|---|---|
+| M1 late-FAILED box strikes | 3 / 3 | **1** | **2** | **3 <= 6: PASS** |
+| M2 led clicks: hit their target / walked / another monster | - | **3 / 1 / 0 of 4** | **8 / 1 / 0 of 9** | **11 / 13 = 84.6 % >= 50 % (>= 10 clicks); another 0 <= 3 a run: PASS** |
+| press checks: strike / not_still / still / led / timeout / lost / no_match | | 30 / 10 / 6 / 4 / 2 / 1 / 4 | 30 / 17 / 7 / 9 / 2 / 1 / 1 | reported |
+| hold time a run | 12.8 / 19.3 s | **9.0 s** | **10.0 s** | reported |
+| lost to failed late strikes | 23.0 / 28.5 s | **28.6 s** | **30.9 s** | reported |
+| M3 box strikes / failed ON-TIME | 66, 52 / 3, 1 | **54 / 3** | **64 / 2** | >= 50, <= 4 a run: PASS |
+| E1 | 155.9 / 132.0 | **53 (127.0 / h)** | **64 (153.4 / h)** | >= 80 / h: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 | **0 / 70.6 % / 0 / 2** | **0 / 40.0 % / 1 escape / 2** | E3, deaths 0: PASS |
+| W1 / R1-A | | 3 / 498 req | | pooled p56 + p55 + p53 + p52: 27 / 1,393 (1.94 %) / 3: PASS |
+| L1 / L3 / L4 | | 88.9 % (16 / 18) / 94.3 % / 0 | 100 % (13 / 13) / 96.7 % / 0 of 109 | PASS |
+| K1 / K3 / Q1 | | 1.94 s / 98.1 % / 8 | 1.98 s / 100 % / 4 | PASS (Q1 <= 8: p55 at the bar) |
+| U1 / D1 p95 / P2 | | 0 s / 22.3 ms / 0 | 0 s / 22.2 ms / 0 | PASS |
+| LF-2's M1 / M2 / M3 (reported) | | | 0 / 6 / 3 | - |
+
+- **p56's Fly Wing** was the HP-rate escape ("rate 151 at hp 0.40", 971.8 s): the safety rule did
+  its job, and it is not a dead-end wing (E3 counts only those).
+- **What LS-1 adds over LS-2:** the led clicks hit 85 % and never a wrong monster, and the holds fell
+  to 9-10 s a run. The late-failed strikes (3 in 2 runs) and the lost seconds stay at LS-2's level,
+  inside the noise.
+- **The base from p57:** 4BL's + `--late-confirm` + `--still-target` + `--lead-press`. 4BS (R2,
+  `--near-single`) runs on it.
