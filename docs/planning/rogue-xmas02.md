@@ -5895,3 +5895,17 @@ recent two-run pair of that same base (named in the result).
   10 min) in the first window too short for a 25-min pilot. All with `--hud`, her NOT immune, after
   an MVP kill.
 
+### 4CJ. U0's result (written 2026-11-12 00:04 ICT from `date`)
+
+- **The run:** U0 ran 23:51:43-00:02:47 (rc 0, her NOT immune). It went in the first window too
+  short for a 25-min pilot, after the 23:51 clear-bag (the chain's new rule). Setup: `@warp
+  xmas_dun02 98 205`, `@killmonster2`, `@monster 1248 1`, `@warp xmas_dun02 100 207`.
+- **The staging did not make the trap.** The Cruiser (gid 110076654) was first seen at (101, 208),
+  one cell from her start, not across the cliff from (98, 205). Being aggressive, it had walked
+  around to her: reachable. It acted on her 15 times and was fought normally.
+- `unreach_score.py score`: 0 traps, 0 spans, 0 escapes, 0 false triggers.
+- **Verdict: U1-U3 UNEXERCISED -> `--unreach-escape` stays OFF** ("harmless, unexercised", 4BU).
+  A staged monster that walks cannot reproduce p57's trap. A real positive case needs a monster
+  that holds its cell (or the natural trap again). This is a study item for Batt, not retried
+  tonight.
+
