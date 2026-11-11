@@ -5837,3 +5837,23 @@ recent two-run pair of that same base (named in the result).
     would save ~2.4 s on each of ~60 empty loot steps (~140 s a run, ~10 %). It is a proposal for
     Batt, not built tonight.
 
+### 4CH. Amendment AA (written 2026-11-11 23:09 ICT from `date`, BEFORE p72 would run): p72 is DROPPED -- 4CA's bare-hands verdict is decided by arithmetic
+
+- **p71 (bare hands, `--bare-steal --bare-ready`), 22:36:21-23:02:10, rc 0, NOT immune:**
+  - 45 kills (108.0 / h). 42 steals (0.93 a kill), 39 of them while bare. Bare-handed 863 s
+    (57 % of the run).
+  - Gross **54,286 z/h** at Overcharge, 127 items / h (11 picked + 42 stolen). Dashboard
+    `xmas02-p71-bare`.
+  - Swaps: 53 unequips + 53 equips, all read back, 0 fails. B4 33 / 39 = 84.6 %.
+  - The swap bug (4CG): 15 of 53 swaps back went onto a monster already stolen from. All 4 false
+    kills after a swap fired within 0.11 s of the equip.
+- **The pooled pair cannot pass B2:** p72 would need >= 2 x 79,650 - 54,286 = **105,014 z/h**. The
+  best run so far is p70's 85,478.
+- Batt's own question (Knife or bare hands, items / h) is decided the same way. p72 would need
+  >= 177 items / h to pass the Knife's 152.
+- **So p72 is dropped. Bare hands, as built, STAYS A FLAG** (B2 fails: 54,286 < 79,650). Its slot
+  goes to 4CE (p73 + p74: the Knife + `--steal-cue popup --swap-gap`). A repaired bare-hands pair
+  (+ `--swap-gap`) is Batt's call (the report).
+- Before p73, a 3-min IMMUNE smoke `s73` of p73's exact flags ran (unscored): the first live run
+  of `--swap-gap`, `--steal-cue popup` and `--hud-fast` together.
+
