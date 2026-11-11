@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: "A run's and a map's economics can be measured from packets and modelled from the pinned rAthena db at FIXED NPC prices, closely enough to compare maps and setups by ratios (zeny per hour, zeny per weight, payback hours, a Sharpe-like ratio)."
-status: ACTIVE (instrumentation built 2026-10-21; prt_fild08 back-filled; orcsdun01 and the candidates modelled; nothing live)
+status: ACTIVE (instrumentation built 2026-10-21; prt_fild08 back-filled; orcsdun01 and the candidates modelled; the /economy dashboard built 2026-11-11, section 10; nothing live)
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -31,6 +31,7 @@ What exists now:
 | run_row | `scripts/run_row.py` | the standard row now carries an `economics` block and prints it as a second table; the standard columns are unchanged |
 | Survival trials | `scripts/survive_judge.py` | each trial's JSON gains an `economics` entry (costs only) |
 | Tests | `services/backend/tests/test_econ.py` | the price rules, the drop rules, the ratios by hand, the trips, the carry split, a synthetic run, and two REAL positive cases (v52 run 1) |
+| Dashboard | `scripts/econ_dash.py`, the console's `/economy` page | the counts of banked runs (per run and pooled) at these prices, with prices a person can edit in the browser (section 10) |
 
 ```
     econ_items.py build                     # the item table (12 s)
@@ -39,6 +40,7 @@ What exists now:
     econ_model.py table --L 0.9             # the map comparison (section 7)
     econ_model.py species gef_fild10        # value per kill per species, NPC sell and Overcharge (2026-10-25)
     run_row.py SID ...                      # the standard row + the economics block
+    econ_dash.py export SESSION_DIR ... --name NAME   # the /economy page's data (section 10)
 ```
 
 ---
@@ -487,3 +489,75 @@ The error column is in every run's economics block (run_row's second table: "MOD
 - **The Sharpe-like ratio** of a 1-hour run has 6 windows; the sample ratio misses the tail (an
   Unripe Apple, 500 z at 0.2 %, is in the model's variance whether or not a run saw one), so a
   run's measured ratio is usually ABOVE the model's.
+
+---
+
+## 10. The dashboard (`/economy`, Batt 2026-11-11)
+
+Batt: "make a dashboard page of business results (P&L), because I will teach economics too". The
+console's **Economy** page (`http://<host>:3000/economy`) shows banked runs at the fixed NPC prices of
+section 2. It reads exports, so a run appears there only after someone exports it:
+
+```
+    econ_dash.py export SESSION_DIR [SESSION_DIR ...] --name NAME   # -> data/econ/dashboard/NAME.json
+    econ_dash.py list                                               # the exports there
+```
+
+- SESSION_DIR is a session directory (`events.jsonl`, `packets.jsonl.gz`, `manifest.json`), e.g. an
+  archived run under the NAS's `scratch-archive/<date>/demo-sessions/`; a plain session id works too
+  (`/dev/shm`, else the NAS). NAME: letters, digits, `_ . -`, at most 64 characters.
+- A worktree has no `data/`: add `--data /home/bot/docker/poring-lab/data` (the item table, the KB
+  names, and the default output directory all live under it).
+- The backend serves the exports read-only: `GET /economy/list` and `GET /economy/data/NAME`
+  (`routes_economy.py`; the public listener only, as `/hardware`).
+
+**What an export holds** (one JSON, per run and pooled): the run's facts (session, map, character,
+judged window and hours, kills, deaths) and COUNTS, never only rates, so the page can recompute every
+rate with edited prices:
+
+| Table | Counted by | Columns on the page |
+|---|---|---|
+| Income | `dungeon_judge.item_gains`: every inventory gain by cause. picked = <= 2 s after our pickup request; **stolen = Steal** (<= 1.5 s after a Steal's SP fall) **+ Snatcher** (<= 1 s after our own attack act, dungeon@8). "Other" and "staged" gains are listed in the export and are NOT income | picked, stolen, total, per hour, NPC sell (editable), Overcharge, zeny / h plain and Overcharge |
+| Kills | `econ_row.kill_species` (section 3's kill rule) | species, kills, per hour |
+| Drops | the kill rows section 3 measures (`dungeon_judge.kills_loot`) | dropped by our kills, per hour, picked share |
+| Consumables | `econ_row.uses` (our successful item uses) | used, per hour, NPC buy (editable), Discount, cost / h plain and Discount |
+
+**The P&L per hour** (the page's six tiles), h = the judged hours:
+
+- gross plain = sum over items of (picked + stolen) x NPC sell / h; gross Overcharge the same at the
+  Overcharge price;
+- cost plain = sum over consumables of used x NPC buy / h; cost Discount the same at the Discount price;
+- **net plain = gross plain - cost plain; net best = gross Overcharge - cost Discount.**
+
+An edited sell price gives its Overcharge price by section 2's rule (per unit, x 1.24, truncated);
+an edited buy price its Discount price (x 0.76, truncated, at least 1). Unedited, the Discount price
+is the table's: the cheapest shop that gives the discount. `src/lib/econ.ts` repeats the rule and its
+tests pin it to the Python function's outputs. **Edited prices stay in the viewer's browser**
+(localStorage), with a reset per row and for all, and are never sent to the server.
+
+**Why the gross here is larger than section 3's `G`:** `G` counts the PICKED drops of our kills
+only. The dashboard counts every income gain, and on the Rogue most of it is Snatcher's. In the
+xmas_dun02 pilots p57 and p58 (2026-11-11) section 3's gross is 12,693 and 11,597 z/h; the dashboard's
+33,928 and 58,223 z/h (18 of p57's 29 gains, 37 of p58's 57 were Snatcher's).
+
+**Checks.** Every export cross-checks its own totals against `dungeon_judge.items_value` (the gross,
+plain and Overcharge), `econ_row.measure` (the costs) and the value of our kills' picked drops; on
+a mismatch nothing is written. The p57 + p58 export was also checked by hand against the RAW
+packets (`tests/test_econ_dash.py`):
+
+| | p57 | p58 |
+|---|---|---|
+| judged window (run_start..run_end) | 25.002 min | 25.035 min |
+| kills (a died vanish <= 1.5 s after our damaging act) / per h | 35 / 84.0 | 65 / 155.8 |
+| income gains: picked + stolen (all Snatcher; Steal was off) | 11 + 18 = 29 | 20 + 37 = 57 |
+| our item uses in the window | 0 (a Fly Wing 0.37 s after run_end is outside) | 0 |
+| gross plain / Overcharge, z | 14,138 / 17,523 | 24,294 / 30,111 |
+| per hour: gross plain / best = net plain / best (no cost) | 33,928 / 42,052 | 58,223 / 72,164 |
+
+The prices came from the db by hand (Sell, else Buy / 2; x 1.24 truncated) for all ten items and
+matched the table. A survival trial with 26 potions checks the consumable path (its uses per item id
+equal survive_judge's count; its cost equals econ_row's).
+
+**Limits:** everything in section 9, plus: the values are mark-to-market (nothing is sold); items
+used later (a healing item that was income) are not netted; names come from the run-time KB in the
+server's language, while the page's own text is English.
