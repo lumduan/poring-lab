@@ -2250,6 +2250,26 @@ the detect server, come after the training):
   - **no harm:** the base's bars as 4BU.
 - **Decision:** every bar passes -> `--near-single-still` JOINS THE BASE; else studied, stays off.
 
+### 4BW. Amendment W (written 2026-11-11 12:47 ICT from `date`, BEFORE any re-run): p59 and p60 ran with the Rogue IMMUNE -- not admissible for 4BU; 4BU re-runs as p63 + p64
+
+- **The slip (mine):** the base pilots run her NOT immune (the setup turns `@monsterignore` on for
+  the MVP check, then off, read back as "Returned to normal state": p58's `imm-off-chat.png`).
+  After the 12:13 switch back to the Rogue (a relog clears immunity) I turned it on (12:13, "You
+  are now immune to attacks.") for the MVP check and did NOT turn it off before p59 (12:16) or
+  p60 (12:43:52).
+- **What it changed (packets, p59):** 0 acts on her (all 375 acts are hers); p55-p58 had 357 /
+  486 / 949 / 271 acts on her (14 / 34 / 45 / 17 damaging). So no attacker could exist and
+  `--unreach-escape` could not be exercised (no trap, no trigger: `unreach_score` 0 / 0); the
+  base's fight bars move with it (Q1 26: every defend scan after our own damage line counts as
+  "quiet" when nothing ever acts on her).
+- **So:** p59 and p60 are reported as "immune, NOT admissible" and judge nothing. **4BU's bars and
+  decision are unchanged and are judged on p63 + p64**: the same flags (the base + `--unreach-escape`),
+  25 min each, her NOT immune (read back before each run), labels `xmas02-p63` (recorded `--label
+  hunt-xmas02-fiT14`) and `xmas02-p64` (`hunt-xmas02-fiT15`); W1 and R1-A pooled over p64 + p63 +
+  p58 + p57. Then 4BV (p61 + p62, unchanged).
+- **The recordings fiT10 / fiT11 stay in round 4's held-out** (`map_labels.XMAS02_FIT`): a floor
+  item's pixels do not depend on immunity. fiT14 / fiT15 are not held-out (TRAIN-eligible later).
+
 ## 5. Results
 
 **X0 (2026-11-05, ICT from `date`):**
