@@ -1891,6 +1891,150 @@ def walk_away_target(here: Cell, fits: Callable[[Cell], bool], reach: Callable[[
     return None
 
 
+# --unreach-escape (dungeon@9.26, rogue-xmas02.md Study S-UA; Batt 2026-11-11, 4BT item 1: "build
+# it and set its bars"): p57's UNREACHABLE ATTACKER. A Cruiser (the KB: attack range 7) on
+# (98,205) shot the Rogue on (100,207), two cells diagonal across two CLIFF cells (no walk, no wall
+# for a shot), for 11 min. Her client sent an attack request every ~1.2 s, the server stopped her
+# on her own cell each time (a walk click round the cliff, 4-7 steps, was never tried), and the
+# ring scan re-struck it 91 times, every lock ending "no hits". THE TRIGGER (the study's rule):
+# UNREACH_K consecutive locks ending "no hits" on cells within UNREACH_TOL of each other, within
+# UNREACH_W_S, an attacked sign (a Miss cue, a hit line on us, an HP drop) in each lock's window,
+# and none of our damage lines. THE ESCAPE: (c) the chain's cells (+ UNREACH_MARK_R) are skipped by
+# the defend scan and the box path for UNREACH_MARK_S, and (a) ONE walk click to the pickable,
+# one-click cell in view farthest from them, at least UNREACH_AWAY cells (out of a Cruiser's 7 +
+# the pixel cell's 1-cell slip); (b) the Fly Wing when there is no such cell, no position, or the
+# trigger fires again within UNREACH_AGAIN_S of an unreach walk.
+UNREACH_VERSION = "9.26"
+UNREACH_K, UNREACH_W_S, UNREACH_TOL = 3, 45.0, 1
+UNREACH_MARK_S, UNREACH_MARK_R = 60.0, 1
+UNREACH_WALK_R, UNREACH_AWAY = 12, 9
+UNREACH_GRACE_S, UNREACH_AGAIN_S = 2.5, 120.0
+
+
+@dataclass(frozen=True)
+class NoHitLock:
+    """--unreach-escape (9.26): one lock that ended "no hits" -- its start (the lock's clock), its
+    end (the unlock), the cell it struck (our cell + the strike's rel; None unknown), the strike
+    count after its strike (consecutive locks: + 1 each, no strike between them) and the latest
+    attacked sign (a Miss cue read, a hit line on us, an HP drop) at its end."""
+
+    t0: float
+    t1: float
+    cell: Cell | None
+    n: int
+    sign_t: float
+
+
+def unreach_trigger(locks: Sequence[NoHitLock], ours: Sequence[float], k: int = UNREACH_K,
+                    w: float = UNREACH_W_S,
+                    tol: int = UNREACH_TOL) -> dict[str, Any] | None:  # fmt: skip
+    """PURE (--unreach-escape, 9.26): the evidence when the newest ``k`` no-hit locks are ONE
+    chain, else None. A chain: consecutive strikes (``n`` + 1 each); every cell known and all
+    within ``tol`` of each other (Chebyshev, pairwise: the x and the y spread each <= ``tol``); the
+    first lock's start to the last one's end at most ``w`` s; an attacked sign in every lock's
+    window (the first: its own span; each other: after the previous lock's end); and none of our
+    damage lines (``ours``: their ticks) from the first start to the last end."""
+    if k < 1 or len(locks) < k:
+        return None
+    ch = list(locks)[-k:]
+    cells = [c.cell for c in ch if c.cell is not None]
+    if len(cells) < k:
+        return None
+    xs, ys = [c[0] for c in cells], [c[1] for c in cells]
+    if max(xs) - min(xs) > tol or max(ys) - min(ys) > tol:
+        return None
+    if any(b.n != a.n + 1 for a, b in zip(ch, ch[1:], strict=False)):
+        return None
+    t0, t1 = ch[0].t0, ch[-1].t1
+    if t1 - t0 > w:
+        return None
+    if not ch[0].t0 <= ch[0].sign_t <= ch[0].t1:
+        return None
+    if any(not a.t1 < b.sign_t <= b.t1 for a, b in zip(ch, ch[1:], strict=False)):
+        return None
+    if any(t0 <= t <= t1 for t in ours):
+        return None
+    return {"locks": k, "cells": [list(c) for c in cells], "span_s": round(t1 - t0, 1),
+            "n": [c.n for c in ch], "t0": t0, "t1": t1}  # fmt: skip
+
+
+def unreach_marks(marks: Mapping[Cell, float], cells: Sequence[Sequence[int]], until: float,
+                  r: int = UNREACH_MARK_R) -> dict[Cell, float]:  # fmt: skip
+    """PURE (9.26, escape (c)): ``marks`` (cell -> until) with every cell within ``r`` of the
+    chain's ``cells`` marked until ``until`` (a later until is kept)."""
+    out = dict(marks)
+    for c in cells:
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                m = (int(c[0]) + dx, int(c[1]) + dy)
+                out[m] = max(out.get(m, -1e9), until)
+    return out
+
+
+def unreach_marked(marks: Mapping[Cell, float], cell: Sequence[int] | None, now: float) -> bool:
+    """PURE (9.26, escape (c)): ``cell`` is marked unreachable at ``now``."""
+    return cell is not None and marks.get((int(cell[0]), int(cell[1])), -1e9) > now
+
+
+def unreach_scan_cells(cells: Sequence[Cell], here: Cell | None, marks: Mapping[Cell, float],
+                       now: float) -> list[Cell]:  # fmt: skip
+    """PURE (9.26, escape (c)): the defend scan's ring cells (relative to ``here``) without the
+    marked ones; all of them when our cell is unknown."""
+    if here is None:
+        return list(cells)
+    return [c for c in cells if not unreach_marked(marks, (here[0] + c[0], here[1] + c[1]), now)]
+
+
+def unreach_walk_target(here: Cell, cells: Sequence[Sequence[int]], fits: Callable[[Cell], bool],
+                        reach: Callable[[Cell], bool], radius: int = UNREACH_WALK_R,
+                        away: int = UNREACH_AWAY) -> Cell | None:  # fmt: skip
+    """PURE (9.26, escape (a)): the cell within ``radius`` (Chebyshev) of ``here``, at least
+    ``away`` from EVERY chain cell, that ``fits`` (in view, off the UI and zones, the client's pick
+    near it) and ``reach`` (one click the server answers): the farthest from the nearest chain
+    cell first, then the nearest to us, then the smaller cell (a fixed order); None: there is
+    none."""
+    if not cells:
+        return None
+
+    def gap(c: Cell) -> int:
+        return min(max(abs(c[0] - int(a[0])), abs(c[1] - int(a[1]))) for a in cells)
+
+    cands = [(here[0] + dx, here[1] + dy) for dy in range(-radius, radius + 1)
+             for dx in range(-radius, radius + 1)]  # fmt: skip
+    cands = [c for c in cands if gap(c) >= away]
+    order = sorted(cands, key=lambda c: (-gap(c), max(abs(c[0] - here[0]), abs(c[1] - here[1])),
+                                         c))  # fmt: skip
+    for c in order:
+        if fits(c) and reach(c):
+            return c
+    return None
+
+
+def unreach_action(here: Cell | None, walk_to: Cell | None, walks: Sequence[float], now: float,
+                   again_s: float = UNREACH_AGAIN_S) -> tuple[str, str]:  # fmt: skip
+    """PURE (9.26): the escape when the trigger fires -- ("fly", "again") after an unreach walk
+    within ``again_s``; ("fly", "no_position") without our cell; ("fly", "no_cell") without a walk
+    target; else ("walk", "away")."""
+    if any(now - t < again_s for t in walks):
+        return ("fly", "again")
+    if here is None:
+        return ("fly", "no_position")
+    if walk_to is None:
+        return ("fly", "no_cell")
+    return ("walk", "away")
+
+
+def unreach_refused(reach_check: bool, engage_screen: bool) -> str | None:
+    """PURE (9.26): why the flag cannot work as built -- its box-path skip lives in --reach-check's
+    reach test (the box paths of --engage-screen), and its walk needs the server grid. None: it can
+    run."""
+    if not reach_check:
+        return "--unreach-escape needs --reach-check (the server grid; the box path's skip)"
+    if not engage_screen:
+        return "--unreach-escape needs --engage-screen (its box paths honour the marks)"
+    return None
+
+
 def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]) -> str | None:
     """PURE: the boss a Battle Log line's bracketed name reads as, or None. The fit is the
     reader's own (battle_log.species_of: '?' = 1-2 unread letters) over the bosses AND the map's
