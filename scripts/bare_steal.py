@@ -229,6 +229,19 @@ class BareSteal:
         self.armed, self.t_bare, self.n_lines0 = False, t, n_lines
         self.popup_sig0, self.popup_box0 = sig, box
 
+    def wait_bare(self) -> None:
+        """dungeon@9.27b (--bare-ready): bare with NO phase -- the dagger came off while idle, or a
+        target's fight ended bare. No cue, no BARE_MAX_S runs until ``begin`` (the next target's
+        first strike)."""
+        self.armed, self.t_bare = False, None
+        self.popup_sig0, self.popup_box0 = None, None
+
+    def begin(self, t: float, n_lines: int, sig: np.ndarray | None,
+              box: tuple[int, int] | None) -> None:  # fmt: skip
+        """dungeon@9.27b: the bare phase starts at this first strike (the dagger already off):
+        BARE_MAX_S, the Battle Log's line count and the popup shown are all taken NOW."""
+        self.unequipped(t, n_lines, sig, box)
+
     def tick(self, t: float, lines: Sequence[Mapping[str, Any]], cur_rgb: np.ndarray | None,
              hp_share: float | None) -> tuple[str | None, str | None]:  # fmt: skip
         """("equip", why) when the dagger must go back on, else (None, None). why: "cyan" / "popup"

@@ -1727,6 +1727,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
         out["bare_steal"] = [bs.BARE_MAX_S, bs.BARE_HP_MIN, bs.EQUIP_KEY, bs.EQUIP_SLOT,
                              bs.BARE_STEAL_VERSION]  # fmt: skip
+    if getattr(a, "bare_ready", False):  # dungeon@9.27b (Batt 2026-11-11, after 4BY's p65 / p66)
+        out["bare_ready"] = [BARE_READY_VERSION]
     return out
 
 
@@ -2740,6 +2742,36 @@ def stolen(w0: Sequence[int] | None, w1: Sequence[int] | None) -> bool | None:
 # end. The weapon state is READ, never assumed: the F5 slot draws the dagger only while it is in
 # the bag (bare_steal.slot_bare against the armed reference cut at the run's start).
 BARE_REF_WAIT_S = 3.0  # the run's start: the F5 slot must become readable within this
+# --bare-ready (dungeon@9.27b, Batt 2026-11-11 after p65 / p66: "take the dagger off right away
+# when the loot is collected, and wait; the next monster is hit bare-handed at once"): the unequip
+# runs while IDLE (bare_idle + BareCtl.ready_tick), never at the strike, and a fight ending bare
+# STAYS bare. p65 + p66 lost 40 % of the aims during the 1.9 s unequip at the strike (4BY).
+BARE_READY_VERSION = "9.27b"
+BARE_READY_SETTLE_S = BOX_SETTLE_S  # no world click this long before an idle unequip: a 7-cell
+# walk (or a loot click's walk-up) has ended -- nothing in flight; the search walk HOLDS its next
+# click meanwhile (ready_tick's "hold"), so the idle moment comes within this long of the loot
+BARE_READY_RETRY_S = 5.0  # an idle unequip that did not end bare: no new one (and no hold) sooner
+
+
+def bare_ready_refused(bare_steal: bool, ready: bool) -> str | None:
+    """PURE: why --bare-ready cannot run (None: it can, or it is off). It changes WHEN
+    --bare-steal's swap runs, so it is nothing without it."""
+    if ready and not bare_steal:
+        return "--bare-ready goes with --bare-steal (it moves the bare-steal unequip to idle time)"
+    return None
+
+
+def bare_idle(mode: str, locked: bool, sitting: bool, here_known: bool, since_fly: float,
+              boss_avoid: bool, unread: bool) -> bool:  # fmt: skip
+    """PURE (dungeon@9.27b): the main loop is IDLE for --bare-ready's unequip: searching (not in
+    a fight, not before a pending loot step: the hook runs after the loot step and the rest
+    decision, so "after" became "search"; not resting), no lock, not sitting, our position read
+    (> 2 s after a Fly Wing: no teleport's dark frames), no boss guard's avoid window, no
+    --unread-step escape. BareCtl.ready_tick adds: armed, no read-back pending, no target in hand,
+    HP read and >= BARE_HP_MIN, no world click within BARE_READY_SETTLE_S; bare_unequip_seq adds
+    its own reads (no window open, the window read open before its click)."""
+    return (mode == "search" and not locked and not sitting and here_known and since_fly > 2.0
+            and not boss_avoid and not unread)  # fmt: skip
 
 
 def bare_steal_refused(char: str, steal: bool, keys: Mapping[str, str]) -> str | None:
@@ -2986,17 +3018,30 @@ class BareCtl:
     bare_fail_open / _off / _on) and one "bare" event per swap. A TARGET is one engagement: it
     begins at a strike with no lock held (before_strike) and ends when its lock goes (a kill, an
     unlock) or the fight ends (tick); each target gets ONE bare phase. ``stop``: the exception
-    that stops the run (r.Stop)."""
+    that stops the run (r.Stop).
+
+    ``ready`` (--bare-ready, dungeon@9.27b): the unequip runs while IDLE (ready_tick: counters
+    bare_ready / bare_ready_fail), a new target struck while bare starts its phase there with no
+    swap (_begin: bare_ready_strike), and a target's end while bare STAYS bare (no "fight_end"
+    equip; BareSteal.wait_bare). Every other equip (the cues, BARE_MAX_S, BARE_HP_MIN, escape,
+    run_end) is unchanged. Off: exactly 9.27."""
 
     def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
                  ev: Callable[[dict[str, Any]], None],
-                 stop: type[Exception] = RuntimeError) -> None:  # fmt: skip
+                 stop: type[Exception] = RuntimeError, *, ready: bool = False) -> None:  # fmt: skip
         self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
         self.st = bs.BareSteal()
         self.tgt: dict[str, Any] | None = None
         self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
         self.fails = 0  # failed swaps in a row (FAIL_STOP)
         self.busy = False  # inside a swap: a Fly Wing pressed by guard_tick needs no hook
+        self.ready = ready
+        self.ready_next = -1e9  # --bare-ready: no idle unequip before this (after a failed one)
+
+    def state_of(self, frame: Any) -> str | None:
+        """The weapon state READ on ``frame``: "armed" / "bare" / None (unreadable)."""
+        b = bare_read(frame, self.ref)
+        return None if b is None else ("bare" if b else "armed")
 
     def _failed(self, key: str) -> None:
         self.counts[key] += 1
@@ -3050,20 +3095,24 @@ class BareCtl:
         self.ev({"kind": "bare", "what": "equip", "why": "safety", "ok": None, "ms": 0,
                  "presses": 1, "pending": True})  # fmt: skip
 
-    def unequip(self, by: str) -> bool:
+    def unequip(self, by: str, idle: bool = False) -> bool:
         """bare_unequip_seq; the phase starts only when the slot READ bare (BareSteal.unequipped
         with the Battle Log's line count and the popup shown NOW, so neither is a cue). True: bare
-        and still here (no escape inside)."""
+        and still here (no escape inside). ``idle`` (--bare-ready): bare with NO phase
+        (BareSteal.wait_bare): the next target's first strike begins it."""
         self.busy = True
         try:
             res = bare_unequip_seq(self.io, self.ref)
         finally:
             self.busy = False
         if res["bare"]:
-            rgb = np.asarray(res["frame"])[: bs.POPUP_BOTTOM + 1, :, ::-1]
-            box = bs.popup_box(rgb)
-            sig = None if box is None else bs.popup_sig(rgb)
-            self.st.unequipped(self.io.clock(), len(self.io.lines()), sig, box)
+            if idle:
+                self.st.wait_bare()
+            else:
+                rgb = np.asarray(res["frame"])[: bs.POPUP_BOTTOM + 1, :, ::-1]
+                box = bs.popup_box(rgb)
+                sig = None if box is None else bs.popup_sig(rgb)
+                self.st.unequipped(self.io.clock(), len(self.io.lines()), sig, box)
             self.counts["bare_unequip"] += 1
             if self.tgt is not None:
                 self.tgt["phase"] = True
@@ -3086,18 +3135,69 @@ class BareCtl:
 
     def _end(self) -> None:
         """The target's engagement is over: bare -> the dagger back on at once ("fight_end");
-        the next target's phase is a new one (BareSteal.fight_end)."""
+        the next target's phase is a new one (BareSteal.fight_end). --bare-ready: bare STAYS
+        bare (its phase ends; she waits bare for the next monster)."""
         if not self.st.armed and self.pending is None:
-            self.equip("fight_end")
+            if self.ready:
+                self.st.wait_bare()
+                self.counts["bare_ready_wait"] += 1
+                self.ev({"kind": "bare", "what": "wait", "why": "target_end"})
+            else:
+                self.equip("fight_end")
         self.st.fight_end()
         self.tgt = None
+
+    def ready_tick(self, now: float, idle: bool, settled: bool,
+                   hp: float | None) -> str | None:  # fmt: skip
+        """--bare-ready's idle unequip (dungeon@9.27b): None = nothing due; "hold" = due but a
+        world click may still be in flight (``settled`` False: the caller holds its next walk
+        click); "swap" = bare_unequip_seq ran (its reads and safety, as at a strike), whatever
+        its result. Due = ``ready``, ``idle`` (bare_idle), ARMED, no read-back pending, no swap
+        running, no target in hand, not within BARE_READY_RETRY_S of a failed one, the HP read
+        and >= BARE_HP_MIN. Never inside a fight."""
+        if not (self.ready and idle and self.st.armed and self.pending is None
+                and not self.busy and self.tgt is None and now >= self.ready_next
+                and hp is not None and hp >= bs.BARE_HP_MIN):  # fmt: skip
+            return None
+        if not settled:
+            return "hold"
+        ok = self.unequip("ready", idle=True) and not self.st.armed
+        self.counts["bare_ready" if ok else "bare_ready_fail"] += 1
+        if not ok:
+            self.ready_next = self.io.clock() + BARE_READY_RETRY_S
+        return "swap"
+
+    def _begin(self, by: str) -> bool:
+        """--bare-ready: a new target's first strike while the dagger is already OFF -- no swap;
+        its phase starts HERE (BareSteal.begin: BARE_MAX_S, the Battle Log's line count and the
+        popup shown now). The state is READ on a fresh frame first: ARMED after all -> False (the
+        caller swaps as without --bare-ready); unreadable -> the last read (bare) stands."""
+        f = self.io.frame()
+        s = self.state_of(f)
+        if s == "armed":
+            self.st.equipped()
+            self.counts["bare_ready_lost"] += 1
+            self.ev({"kind": "bare", "what": "begin", "ok": False, "by": by, "state": s})
+            return False
+        rgb = np.asarray(f)[: bs.POPUP_BOTTOM + 1, :, ::-1]
+        box = bs.popup_box(rgb)
+        sig = None if box is None else bs.popup_sig(rgb)
+        self.st.begin(self.io.clock(), len(self.io.lines()), sig, box)
+        if self.tgt is not None:
+            self.tgt["phase"] = True
+        self.counts["bare_ready_strike"] += 1
+        self.ev({"kind": "bare", "what": "begin", "ok": True, "by": by, "state": s})
+        return True
 
     def before_strike(self, by: str, hp: float | None, aim: Callable[[], bool] | None) -> bool:
         """strike()'s FIRST step (strikes are made with no lock held): the previous target is over
         if its lock went (_end); a new target's first strike, armed, UNEQUIPS; then ``aim`` reads
         the strike point again -- the swap takes ~2 s and the target may have walked: no SWORD
         there -> no click (False, bare_aim_lost; the fight loop's scan finds it again, bare). A
-        plant is struck as it is; under BARE_HP_MIN nothing comes off (bare_skip_hp)."""
+        plant is struck as it is; under BARE_HP_MIN nothing comes off (bare_skip_hp).
+        --bare-ready: already bare (the idle unequip) -> NO swap, the phase begins at this strike
+        (_begin); under BARE_HP_MIN the dagger goes on first ("hp"); read armed after all -> the
+        swap below, as without it."""
         if by == "plant":
             return True
         if self.pending is not None:
@@ -3106,7 +3206,15 @@ class BareCtl:
             self._end()
         if self.tgt is None:
             self.tgt = {"t": self.io.clock(), "by": by, "locked": False, "phase": False}
-        if self.tgt["phase"] or self.pending is not None or self.st.engage() != "unequip":
+        if self.tgt["phase"] or self.pending is not None:
+            return True
+        if self.ready and not self.st.armed and self.st.t_bare is None:
+            if hp is not None and hp < bs.BARE_HP_MIN:
+                self.equip("hp")  # never a bare strike under BARE_HP_MIN: armed, as it is
+                return True
+            if self._begin(by):
+                return True  # bare already: struck at once (the point of --bare-ready)
+        if self.st.engage() != "unequip":
             return True
         if hp is not None and hp < bs.BARE_HP_MIN:
             self.counts["bare_skip_hp"] += 1
@@ -3128,7 +3236,9 @@ class BareCtl:
              hp: float | None) -> None:  # fmt: skip
         """Every main-loop tick, before the fight branch: a pending read-back first; the target's
         end (its lock went, or the fight ended) -> _end; bare outside a fight -> the dagger on
-        (the safety net); bare in a fight -> BareSteal.tick's cues (equip at the first)."""
+        (the safety net); bare in a fight -> BareSteal.tick's cues (equip at the first).
+        --bare-ready: bare with no phase (waiting for a target) -> only BARE_HP_MIN puts the
+        dagger on ("hp"); bare outside a fight STAYS bare (the phase, if any, ends)."""
         if self.pending is not None:
             self._verify()
             if self.pending is not None:
@@ -3141,7 +3251,14 @@ class BareCtl:
                 return
         if self.st.armed:
             return
+        if self.ready and self.st.t_bare is None:  # 9.27b: waiting bare (no target struck yet)
+            if hp is not None and hp < bs.BARE_HP_MIN:
+                self.equip("hp")
+            return
         if not fighting:
+            if self.ready:  # 9.27b: no "fight_end" equip -- she waits bare for the next monster
+                self.st.wait_bare()
+                return
             self.equip("fight_end")
             return
         rgb = np.asarray(frame)[: bs.POPUP_BOTTOM + 1, :, ::-1]  # the popup's rows, as RGB
@@ -3246,6 +3363,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         why_bs = bare_steal_refused(a.char, a.steal, keys_)
         if why_bs:
             raise SystemExit(f"dungeon@9.27 refused: {why_bs}")
+    bare_ready_on = bool(getattr(a, "bare_ready", False))  # dungeon@9.27b (after 4BY)
+    why_bry = bare_ready_refused(bare_on, bare_ready_on)
+    if why_bry:
+        raise SystemExit(f"dungeon@9.27b refused: {why_bry}")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
@@ -3618,6 +3739,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "params": strat, "rest_spots": spots,
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),
+            **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
             **({"house": house_rec} if house_on else {})})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
@@ -3807,6 +3929,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S
                 stock_tries[STOCK_ITEMS[what]] = 0
 
+        last_click_t = [-1e9]  # dungeon@9.27b (--bare-ready): when click_at last clicked
+
         def click_at(u: float, v: float, why: str) -> None:
             """Every world click of this runner: FrameGuard refuses one off the game frame."""
             if npc_guard_blocks(here, guard_npcs, why):  # dungeon@9.0b, --npc-guard
@@ -3819,6 +3943,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             agent.move(x, y)
             time.sleep(0.05)
             agent.click(x, y)
+            last_click_t[0] = time.monotonic()
             counts[f"click_{why}"] += 1
 
         def heal_self(why: str) -> None:
@@ -4003,7 +4128,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                        double_click=bare_dclick,
                        press=lambda why_: press("equip", why_),
                        lines=bare_lines, guard=guard_tick),
-                bare_ref, counts, ev, r.Stop)  # fmt: skip
+                bare_ref, counts, ev, r.Stop, ready=bare_ready_on)  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -5757,6 +5882,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         hplan, house_fb, house_tries = None, False, 0
                 if mode == "after":
                     mode = "search"
+                # dungeon@9.27b (--bare-ready): the dagger comes off while IDLE -- right after the
+                # loot step (this tick's "after" became "search" above), after a fight with
+                # nothing to loot, or on any search tick (bare_idle, BareCtl.ready_tick)
+                ready_hold = False  # True: the idle unequip waits for the settle (no walk click)
+                if bare is not None and bare.ready:
+                    got_r = bare.ready_tick(
+                        tick,
+                        bare_idle(mode, lock is not None, sitting, here is not None,
+                                  tick - fly_at, tick < boss_until, unread_active()),
+                        tick - last_click_t[0] >= BARE_READY_SETTLE_S, frac)  # fmt: skip
+                    if got_r == "swap":
+                        continue  # the swap took ~2 s: a fresh tick reads the fight signs first
+                    ready_hold = got_r == "hold"
                 # --- REST (B / C): to the nearest spot, sit until HP 100 %
                 if mode == "rest":
                     if sitting:
@@ -5936,6 +6074,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # 9.22 (--unread-step): no search walk click while a pos_unread escape runs
                 if mode in ("search", "rest") and here is not None and goal_path \
                         and tick - last_walk >= a.walk_every and not unread_active() \
+                        and not ready_hold \
                         and not loot_settling(loot_settle_t, last_pos_t, tick):  # fmt: skip
                     last_walk = tick
                     # the path from where we are now
@@ -6604,6 +6743,18 @@ def main() -> int:
         "popup or a new cyan Battle Log line: no words read), after 8 s, under 50 %% HP, when the "
         "fight ends, before any escape and at the run's end; the F5 slot (its icon = the dagger "
         "in the bag) is the weapon state's readout",
+    )
+    t.add_argument(
+        "--bare-ready",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.27b (Batt 2026-11-11 after rogue-xmas02.md 4BY's p65 / p66; OFF by "
+        "default; with --bare-steal): the dagger comes off while IDLE -- after the loot step, "
+        "after a fight with nothing to loot, or on a search tick with no lock, no window open and "
+        "no world click in the last 1.2 s (the search walk holds its next click meanwhile) -- so "
+        "a new target is hit bare-handed AT ONCE, with no swap at the strike; a fight ending bare "
+        "stays bare; the steal cues, 8 s, under 50 %% HP, every escape and the run's end put it "
+        "on with F5 as --bare-steal does",
     )
     t.add_argument(
         "--clear-map",

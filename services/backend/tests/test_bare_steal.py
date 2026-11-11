@@ -106,6 +106,26 @@ def test_the_phase_unequips_once_then_equips_on_a_cue_a_timeout_or_low_hp(bs: Mo
     assert st.tick(40.0 + bs.BARE_MAX_S, [], scene(), 0.9) == ("equip", "time")
 
 
+def test_bare_with_no_phase_waits_for_the_first_strike_to_begin_one(bs: ModuleType) -> None:
+    """dungeon@9.27b (--bare-ready): the dagger off while idle, or a fight ended bare -- no cue,
+    no BARE_MAX_S, no HP rule in the pure phase until ``begin`` (the first bare strike)."""
+    st = bs.BareSteal()
+    st.wait_bare()  # the idle unequip
+    assert not st.armed and st.t_bare is None and st.engage() is None  # no swap: bare already
+    lines = [{"colour": "cyan"}] * 2  # the loot step's item lines
+    assert st.tick(99.0, lines, draw_popup(scene(), bs), 0.3) == (None, None)
+    st.begin(100.0, n_lines=2, sig=None, box=None)
+    assert st.t_bare == 100.0 and st.n_lines0 == 2 and not st.armed
+    assert st.tick(100.5, lines, scene(), 0.9) == (None, None)  # the old lines are no cue
+    assert st.tick(100.0 + bs.BARE_MAX_S, lines, scene(), 0.9) == ("equip", "time")
+    st.begin(200.0, n_lines=2, sig=None, box=None)
+    assert st.tick(200.5, [*lines, {"colour": "cyan"}], scene(), 0.9) == ("equip", "cyan")
+    st.fight_end()
+    st.wait_bare()  # the target died bare: the phase ends, she stays bare
+    assert not st.armed and st.t_bare is None and st.popup_box0 is None
+    assert st.tick(300.0, [], scene(), 0.9) == (None, None)
+
+
 def test_a_popup_still_shown_from_before_the_bare_phase_is_no_cue(bs: ModuleType) -> None:
     """A loot popup from the last fight may still show when the bare phase begins: only a NEW
     one (other contents) is a steal."""
