@@ -5608,3 +5608,26 @@ Batt's answers (quoted, then in English):
   `--hud` (dungeon@9.29, 282cdb03): the runner's own boxes, by species, to the console's operator
   HUD at <= 2 messages / s (Batt 2026-11-11: "with HUD on I see lines, not boxes"). DISPLAY ONLY
   (no input, no decision reads it); its one difference from the p67 / p68 base is that traffic.
+
+**Pilots p67 + p68 (4BZ: the base with the aura OFF), written 2026-11-11 20:2x ICT from `date`.**
+- The MVP killed 19:21:05 ("1[dead]"). p67 19:22:23-19:47:2x (fiT18), p68 19:50:42-20:15:4x
+  (fiT19), both rc 0, immunity OFF read back. The bag was cleared (etc, use; the Knife kept) to
+  560 / 2430 at 19:19.
+- **VERDICT: every bar passes but W1, which fails by the letter: 23 / 1,052 = 2.19 % > 2.0 %
+  (p67 8 / 255, p68 7 / 275 unsent walk clicks; p63 / p64 4 + 4).** By the pre-registered rule the
+  aura question would go back to Batt -- and Batt has decided it already (he always plays with it
+  off; 4BZ item 2). So the aura STAYS OFF; the W1 rise is a study item (more walk clicks unanswered
+  with the aura off: the cause is not known yet).
+- **The aura-off base is the best base so far:** kills 72 + 64 = 163.2 / h (the aura-on base
+  145.6), gross **79,650 z/h** at Overcharge (p67 75,809, p68 83,491; the six aura-on runs 67,201),
+  0.60 stolen a kill, 134 items / h. This is 4CA's comparison base.
+
+| | **p67** | **p68** | bar |
+|---|---|---|---|
+| E1 kills | 72 (172.8 / h) | 64 (153.6 / h) | >= 80: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 / 82.1 % / 0 / 0 | 0 / 83.9 % / 0 / 2 | PASS |
+| W1 unsent walk clicks | 8 / 255 | 7 / 275 | pooled p68 + p67 + p64 + p63: 23 / 1,052 = **2.19 % > 2.0 %: FAIL** |
+| R1-A | 1 | 1 | pooled: 6 < 7: PASS |
+| L1 / L3 / L4 / K1 / K3 / Q1 | 92.9 % / 94.0 % / 0 / 1.96 s / 97.0 % / 7 | 100 % / 92.1 % / 0 / 1.96 s / 98.4 % / 3 | PASS |
+| U1-stuck / D1 p95 / P2 | 14.5 s / 22.9 ms / 0 | 4.8 s / 22.6 ms / 0 | PASS |
+| reported: gross z/h at Overcharge / items / h | 75,809 / 142 | 83,491 / 126 | (dashboard `xmas02-p67-p68-auraoff`) |
