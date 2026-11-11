@@ -5082,3 +5082,194 @@ Batt's answers (quoted, then in English):
 meanwhile, and the game stages round 4's fresh held-out. Then the escape's pilots and R2b's
 pilots, recorded as round 4's natural-drop held-out (fiT10-fiT13). Then round 4's score.
 
+### Study S-UA (the unreachable attacker; 2026-11-11, analysis only)
+
+Written 2026-11-11 11:2x ICT from `date`, for Batt's 4BT item 1 ("build it and set its bars").
+It is offline only:
+- the 17 base runs p40-p58 without p43: p40, p41, p42, p44-p53, p55-p58 (p54 was folded into
+  p57, 4BS). They are on the NAS, `scratch-archive/2026-11-09..11/demo-sessions/`;
+- the packets as ground truth: they judge, they never decide;
+- no live action, no GPU, no runner run.
+
+The tool is `scripts/unreach_score.py` (`study` and `score`). Its tests are in
+`services/backend/tests/test_unreach_escape.py`.
+- Its docstring states every definition below and THE RULE that picks K and W.
+- That docstring was committed (d178bf7b, 11:10 ICT) BEFORE the grid was computed.
+
+**VERDICT**
+- **Traps:** ONE in 17 runs, p57's. It lasted 689 s: no other span of 4 s or more has requests at
+  a monster that acts on her while she never damages it.
+- **The trigger:** K = 3 no-hit locks, W = 90 s, by the rule.
+  - It gives 0 false triggers over the 17 runs.
+  - It catches p57's trap 26.8 s after its first request (838.3 s, not the run's end at
+    1500.5 s).
+  - K = 2 gives 3 false triggers, 2 of them harmful.
+- **The escape:** (c) + (a), with (b) as the fallback.
+  - (c): the attacker's cells are marked, so the scan and the box path pass them by.
+  - (a): a walk of at least 9 cells, NOT 3. p57's attacker is a Cruiser, which shoots from 7
+    cells, and 11 of the 13 cells 3 steps away were still in its range and its line of fire.
+  - (b): the Fly Wing.
+- **Built:** dungeon@9.26 `--unreach-escape`, OFF by default.
+
+**1. The traps, by the packets** (`traps`).
+- **Definition:** a span of our `attack_request`s at ONE monster G.
+  - Consecutive requests are at most 10 s apart, with none of our damaging acts on G between
+    them.
+  - The span lasts at least 20 s (TRAP_S), while G acts on us at least twice.
+- **A shorter TRAP_S changes nothing:** at 4 s it adds only p42 at 1,436 s (5.3 s, a Myst Case
+  that never acted on her, so not a trap).
+
+| run | start (s) | s | requests | answered by her stop (same ms) | its acts on her | hits | damage | ended by |
+|---|---|---|---|---|---|---|---|---|
+| p57 | 811.5 | **689.0** | 564 | **564** | 492 | 19 | 2,690 | the run's end (+10.9 s) |
+
+**2. Why she could not reach it** (the server grid, the client's GAT types, the KB).
+- **Where they stood:** she on (100,207), the Cruiser on (98,205).
+- **The cells between them:** (98,206) and (99,206) are CLIFF cells (type 5 in the server's map
+  cache). A cliff cannot be walked on, but it does not block a shot; the block x 100-106,
+  y 204-206 is wall (type 1).
+- **Its reach:** the KB gives the Cruiser attack range 7 and chase range 12.
+- **Her straight path to it is blocked at (99,206).** Every one of her 564 requests was
+  answered within 2 ms by her `entity_stop` on her own cell (100,207). The data fit an attack
+  approach that does not detour.
+- **A walk round the cliff existed.** One walk click would have reached any of the 6 walkable
+  cells beside the Cruiser, in 4-7 steps (`walk.click_walk_ok`). None was ever clicked.
+- **The runner saw the Cruiser on the wrong cells.** Its sword was read at rel (-1,-1) and
+  (0,-1), i.e. (99,206) and (100,206): a cliff cell and a wall cell, one cell off its feet (the
+  defend scan hovers above a cell, BODY_UP).
+
+**3. The pixel trigger: what the runner itself sees** (`no_hit_locks`, `replay`,
+`dungeon_hunt.unreach_trigger`).
+- **A no-hit lock:** a strike, then an unlock "no hits" before any other strike or unlock.
+  - Its start is the strike's end, which is when the lock's clock starts.
+  - Its cell is the runner's held cell at the strike plus the strike's rel.
+  - Its sign is the latest attacked sign up to its end: a Miss cue, a Battle Log hit line on
+    her, or an HP drop.
+- **A chain:** the newest K locks, all of these:
+  - consecutive strikes;
+  - every cell within 1 of every other (the x spread and the y spread each at most 1);
+  - first start to last end at most W;
+  - a sign in each lock's window: the first lock's own span; for each later lock, after the
+    previous lock's end;
+  - none of our damage lines in the span.
+- **Firing:** the trigger fires at the K-th unlock. Offline it is re-armed after each firing,
+  because nothing escapes.
+- **The judge (packets, over the chain's span):**
+  - `trap`: requests at a monster that acts on her, and no damage of ours on anything;
+  - `harmful`: some damage of ours. The escape would leave a fight she was winning;
+  - `helpless`: no damage of ours, a monster acting on her, but no request at it;
+  - `quiet`: everything else.
+  - FALSE = anything but `trap`.
+- **THE RULE (committed before the grid):**
+  - ELIGIBLE = 0 false triggers in the 17 runs AND p57's trap caught within 60 s of its first
+    request;
+  - K = the smallest eligible K;
+  - W = the largest eligible W at that K, the most tolerant of a slower lock cycle at no false
+    cost;
+  - no eligible pair: the fewest false, then the smaller K, then the smaller W.
+
+Each cell gives true / false triggers, then (s from p57's first request to its first trigger).
+"True" counts re-armed firings inside p57's 689 s.
+
+| | W = 15 | W = 20 | W = 30 | W = 45 | W = 60 | W = 90 |
+|---|---|---|---|---|---|---|
+| K = 2 | 45 / 3 (21.0) | 45 / 3 (21.0) | 45 / 3 (21.0) | 45 / 3 (21.0) | 45 / 3 (21.0) | 45 / 3 (21.0) |
+| K = 3 | 2 / 0 (131.8) | 24 / 0 (26.8) | 30 / 0 (26.8) | 30 / 0 (26.8) | 30 / 0 (26.8) | **30 / 0 (26.8)** |
+| K = 4 | 0 / 0 (-) | 0 / 0 (-) | 21 / 0 (36.1) | 22 / 0 (36.1) | 22 / 0 (36.1) | 22 / 0 (36.1) |
+| K = 5 | 0 / 0 (-) | 0 / 0 (-) | 5 / 0 (99.2) | 18 / 0 (42.8) | 18 / 0 (42.8) | 18 / 0 (42.8) |
+
+- **THE PICK: K = 3, W = 90 s.** K = 2 is not eligible: it has 3 false triggers at every W.
+  - p41, 574.2 s, `helpless`: (154,61) / (154,60), 13.3 s. No request; a monster acting on her.
+  - p44, 224.4 s, `harmful`: (85,103) twice, 13.8 s. 2 hits of ours in the packets, 0 damage
+    lines.
+  - p50, 636.6 s, `harmful`: (116,88) / (117,88), 9.1 s. 15 hits of ours in the packets, 0
+    damage lines: the reader missed them (S-R1's kind a). K = 2 would have walked her off a
+    fight she was winning.
+- **p57's chain:** locks 2-4 at (99,206), (99,206), (100,206), from 819.4 to 838.3 s (span
+  18.9 s). Lock 1 was the box strike at 811.2 s; it used the stale held cell (107,208), so its
+  cell (105,206) is not the others'.
+- **The headroom at K = 3:** outside p57 the 17 runs have 27 chains of 3 consecutive no-hit
+  locks. Every one fails the cell rule (spread 2: 1; 4-8: 12; 9+: 14), 24 also fail the sign
+  rule, and 13 also hold a damage line of ours. Only 2 fail on the cells alone (p44 205.4 s,
+  p53 738.1 s).
+
+**4. The escape: which action ends the trap safely.**
+
+| option | what the data says | verdict |
+|---|---|---|
+| (c) alone: mark its cells for N s | the Cruiser acted on her 492 times in 689 s (one every ~1.4 s), so the fight never goes quiet (2.5 s without a hit); with its cells skipped, the ring scan finds nothing and she stands under fire with no strike and no end | needed (no re-strike, no box engagement of it), not enough |
+| (a) a walk of 3 cells away | of the 13 one-click cells exactly 3 from her, 11 stay within the Cruiser's 7 cells with a clear line (a Bresenham line over the wall cells; 5 of the 11 right beside it); only (103,207) / (103,208) are behind the wall block x 100-106, y 204-206 -- "3 cells opposite" works here by the wall's luck | rejected as stated |
+| (a') a walk >= 9 cells from the chain's cells (built) | 200 one-click cells lie within 12 of her; 87 are >= 9 from the chain's cells; NONE of the 87 is in the Cruiser's range with a clear line. The order picks (112,200), (112,201), (112,202): 12-14 steps (~2 s), 14 cells from it, beyond its chase of 12 (the runner adds the view, the client's pick and a clear cursor read) | **recommended** |
+| (b) the Fly Wing | the base's 7 in-run Fly Wings: 6 quiet for 30 s after; 1 (p48's "stuck") took 6 hits, 881 damage; her next own hit came 14.0-55.5 s after the press (median 24.5 s). It always ends contact, but costs a wing and lands her at random | **the fallback** |
+| (d) round the cliff (NOT built; for Batt) | 6 walkable cells beside the Cruiser that one walk click reaches (4-7 steps), none by a straight line: a kill instead of an escape. But the runner's chain cells are a cliff and a wall cell, not its (98,205): it does not know the attacker's cell to the 1 cell this needs | a later option |
+
+**Recommendation: (c) + (a'), with (b) as the fallback.**
+- **The fallback fires when:** there is no walk cell; or there is no position; or the trigger
+  fires again within 120 s of an unreach walk.
+- **Why (c):** it stops the 91-strike loop at the same sprite, and the box path's pick of it. The
+  marks are the chain's cells ± 1 for 120 s; they cover the Cruiser's true cell.
+- **Why (a'):** in the only trap, the attacker shoots from 7 cells.
+  - A walk that leaves its range ends contact. The Cruiser then has to find a path to her.
+  - The walk keeps her in the area and costs no wing.
+  - It follows Batt's 9.18 preference: "if you can walk away in another direction, walk".
+- **Why (b) as the fallback:** it ends any contact at once, and 6 of 7 base landings were quiet.
+- **If the Cruiser follows after the walk:** the expected state is the base's own RANGED-FIRE
+  spans, not a trap. A ranged-fire span: 15 s or more of acts on her (gaps of 5 s at most)
+  with no damage of ours.
+  - There are 49 such spans outside p57: 1,151 s, ~68 s a run, mean 23.5 s.
+  - All 50 (with p57's) ended as follows: 40 by her hit on the attacker, 7 on another monster,
+    2 by a Fly Wing, 1 at the run's end.
+  - 44 of the 49 hold no request at all and 5 hold one, and K = 3 fires on none of them. They
+    are NOT this flag's: a separate gap, reported for Batt (~68 s a run under fire without
+    hitting back).
+
+**5. The build (dungeon@9.26, `--unreach-escape`, OFF by default; `scripts/dungeon_hunt.py`).**
+- **Refused unless `--reach-check` and `--engage-screen` are on.** Both are in the base. The
+  box-path skip lives in --reach-check's reach test (the box paths of --engage-screen), and the
+  walk needs the server grid.
+- **PURE functions:** `NoHitLock`, `unreach_trigger`, `unreach_marks` / `unreach_marked` /
+  `unreach_scan_cells`, `unreach_walk_targets`, `unreach_action`, `unreach_refused`.
+- **Hook points:** each is behind `unreach_on`.
+  - the no-hit unlock: the record, the trigger, the escape, then `continue`;
+  - the HP-drop sign;
+  - the defend scan's skip;
+  - the box path's skip, inside `unreachable()`.
+- **The walk:**
+  - it takes the first of 3 ordered targets whose hover reads `clear`, the search walk's gate:
+    never a SWORD, a no-entry ring or an unknown read;
+  - it clicks through `click_at` (FrameGuard), so the click census count is unchanged;
+  - `last_walk` holds the next search click for 2.5 s.
+- **The Fly Wing:** `press("fly", "unreach")`, the boss guard's resets.
+- **The event:** `{"kind": "unreach", "t0_ns", "locks", "cells", "span_s", "n", "here",
+  "action", "why", "to", "tried", "marked", "mark_s"}`.
+- **The counts:** `unreach`, `unreach_walk` / `unreach_fly`, `unreach_skip_scan`,
+  `unreach_skip_box`.
+- **The fixes record:** `"unreach_escape": [3, 90.0, 1, 120.0, 12, 9, 120.0, "9.26"]`, only with
+  the flag.
+
+**6. A bar sketch for the pilots' pre-registration (4BU; the parent writes it). Two pilots,
+pooled; scored by `unreach_score.py score`.**
+- **U0, a POSITIVE CASE (needs Batt).**
+  - The natural trap came once in 17 runs (7.3 h of play), so two 25-min pilots will most
+    likely meet none.
+  - A verifier proves a positive case: we need a staged trap, e.g. the Rogue on (100,207) while
+    a Cruiser stands on (98,205).
+  - Batt decides whether to stage it (11-09: staged monsters killed the Rogue). A Cruiser hit
+    her 19 times in 689 s for 2,690 damage.
+  - Without it, U1-U3 are "not exercised" and the pilots test no harm only.
+- **U1, a trap's seconds (packets):**
+  - no trap span (5 s or more, the attacker acting on her) longer than 60 s in either pilot.
+    p57's was 689 s; the trigger's latency there was 26.8 s, then the walk;
+  - pooled trap seconds at most 120.
+- **U2, false triggers** (the runner's `unreach` events, judged by the packets):
+  - `harmful` = 0;
+  - all false at most 1, pooled. The base: 0 at K = 3 in 17 runs.
+- **U3, escape outcomes:** every true trigger's escape must show all of:
+  - it ends its attacker's acts on her (`ended`: none in (t + 10, t + 60] s);
+  - a walk sent within 1.5 s that lands within 1 cell of its `to` (`walk_err` at most 1);
+  - no death within 60 s.
+  - Fly Wings (the fallback) are reported.
+- **No harm:** the base's bars as 4BS. E1 >= 80 / h each run, deaths 0, W1 and R1-A pooled with
+  the latest base runs, L1 / L3 / L4 / K1 / K3 / Q1, M1 / M2 as the base. Reported beside them:
+  the `unreach_*` counts.
+
