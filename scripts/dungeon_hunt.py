@@ -135,6 +135,7 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bare_steal as bs  # noqa: E402 -- dungeon@9.27 (--bare-steal): the pure core
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
@@ -428,9 +429,11 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
     # ➡️ Batt 2026-11-05 (xmas_dun02, docs/planning/rogue-xmas02.md): base AGI 99 + DEX 99, so Base
     # 99 (@baselevelup 36, @agi 17, @dex 59 at 15:04); its status window 15:05: HP 5070, SP 530,
     # HIT 205, FLEE 246+1, ASPD 176. The hold is 99 now (a higher level cannot exist)
+    # dungeon@9.27 (Batt 2026-11-11, rogue-xmas02.md 4BX): the dagger sits on F5 (hotbar slot 4;
+    # bare_steal.EQUIP_KEY): --bare-steal presses it to put the dagger back on ("equip")
     "rogue": {"job": "rogue", "data": "thief", "max_hp": 5070, "max_sp": 530,
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
-                       "stand": "Insert"},
+                       "stand": "Insert", "equip": "F5"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
               "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
               "level_hold": 99,
@@ -1721,6 +1724,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
     if getattr(a, "lead_press", False):  # dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP)
         out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
+    if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
+        out["bare_steal"] = [bs.BARE_MAX_S, bs.BARE_HP_MIN, bs.EQUIP_KEY, bs.EQUIP_SLOT,
+                             bs.BARE_STEAL_VERSION]  # fmt: skip
     return out
 
 
@@ -2574,6 +2580,11 @@ def clear_bag(a: argparse.Namespace) -> int:
         got = cr.check(screen, conf["job"], crk)
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
+        # dungeon@9.27: the Rogue BARE (the dagger in the bag) would lose the dagger here
+        why_bb = clear_bag_bare_refused(
+            bs.slot_gray(np.asarray(r.grab_after(screen, region, r.ns()))), keys_)  # fmt: skip
+        if why_bb is not None:
+            raise r.Stop(why_bb)
         ui_gate.ensure_clear(agent, screen, why="clear-bag")
         cr.gm_line(agent, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} {CLEAR_STAND[2]}",
                    conf["job"], crk)  # fmt: skip
@@ -2720,6 +2731,438 @@ def stolen(w0: Sequence[int] | None, w1: Sequence[int] | None) -> bool | None:
     return int(w1[0]) > int(w0[0])
 
 
+# --- --bare-steal (dungeon@9.27, rogue-xmas02.md 4BX; Batt 2026-11-11) ---------------------------
+# Batt's bare-hand steal: on a new target the Rogue takes the dagger OFF (Alt+Q, a double-click on
+# the equipment window's weapon slot, Alt+Q again), hits bare-handed (faster, weaker: the monster
+# lives until Snatcher steals), and puts it back ON with its hotkey (F5) at the first steal cue
+# (bare_steal.BareSteal: a new item popup or a new cyan Battle Log line; language-free), after
+# BARE_MAX_S, under BARE_HP_MIN, when the target's fight ends, before any escape and at the run's
+# end. The weapon state is READ, never assumed: the F5 slot draws the dagger only while it is in
+# the bag (bare_steal.slot_bare against the armed reference cut at the run's start).
+BARE_REF_WAIT_S = 3.0  # the run's start: the F5 slot must become readable within this
+
+
+def bare_steal_refused(char: str, steal: bool, keys: Mapping[str, str]) -> str | None:
+    """PURE: why --bare-steal cannot run (None: it can). It is the ROGUE's (Snatcher, her auto
+    steal); the active Steal opening (--steal) strikes with the dagger; the dagger's key must be
+    bare_steal's EQUIP_KEY on EQUIP_SLOT (the hotbar slot the weapon readout reads)."""
+    if char != "rogue":
+        return f"--bare-steal is the Rogue's (Snatcher), not the {char}'s"
+    if steal:
+        return "--bare-steal does not go with --steal (its Steal opening strikes with the dagger)"
+    key = keys.get("equip")
+    if key != bs.EQUIP_KEY or hotbar_slot(key) != bs.EQUIP_SLOT:
+        return f"the equip key {key!r} is not {bs.EQUIP_KEY} on hotbar slot {bs.EQUIP_SLOT}"
+    return None
+
+
+def bare_ref_cut(gray: Any) -> tuple[Any, dict[str, Any], str | None]:
+    """PURE (the run's start): (the ARMED reference crop of the F5 slot, its record, a refusal).
+    The slot must read EMPTY by hotbar_count's own rule (no icon, no digit): the dagger is worn.
+    An icon there = the dagger is in the bag, or F5 holds another item: refused (never fight in
+    an unknown weapon state). A dark crop = unreadable: (None, rec, None), the caller reads again.
+    An empty F5 cannot tell "worn" from "nothing on F5": the first unequip's read-back (the slot
+    must turn BARE after the double-click; else bare_fail_off, FAIL_STOP in a row stop) tells."""
+    crop = bs.slot_crop(gray)
+    rec: dict[str, Any] = {"empty": None, **bs.slot_stats(crop)}
+    if rec["mean"] < bs.SLOT_DARK:
+        return None, rec, None
+    rec["empty"] = bs.slot_empty(gray)
+    if not rec["empty"]:
+        k_ = bs.EQUIP_KEY
+        return None, rec, (f"the {k_} slot shows an icon: the dagger is in the bag (not worn) or "
+                           f"{k_} holds another item -- a person first")  # fmt: skip
+    return crop, rec, None
+
+
+def clear_bag_bare_refused(gray: Any, keys: Mapping[str, str]) -> str | None:
+    """PURE (dungeon@9.27): clear-bag drops EVERY inventory stack, so with the dagger in the bag
+    (its key's hotbar slot shows its icon: the Rogue BARE) it would drop the dagger. Refused unless
+    that slot reads EMPTY (worn); an unreadable slot is refused too. No equip key: None."""
+    key = keys.get("equip")
+    if key is None:
+        return None
+    slot = hotbar_slot(key)
+    if float(bs.slot_crop(gray, slot).mean()) < bs.SLOT_DARK:
+        return f"clear-bag refused: the {key} slot is unreadable (the dagger's state unknown)"
+    if not bs.slot_empty(gray, slot):
+        return (f"clear-bag refused: the {key} slot shows the dagger's icon -- it is in the bag "
+                f"(bare) and clear-bag would drop it; put it on first ({key})")  # fmt: skip
+    return None
+
+
+def window_origin(frame: Any, reg: Any, name: str, home_px: int = 12) -> tuple[int, int] | None:
+    """The window's origin (game-region px) when it shows within ``home_px`` (ui_gate.HOME_PX) of
+    its home: ui_gate.home_distances' own match on the same small box, with the position kept.
+    None when it does not match (the caller then aims from the home)."""
+    from poring_env import ui_anchors as ua
+
+    tmpl = reg.templates.get(name)
+    if tmpl is None:
+        return None
+    spec = reg.windows[name]
+    gray = ua.to_gray(np.asarray(frame))
+    h, w = gray.shape
+    ox, oy = spec.template_offset
+    tx, ty = ua.CAPTURE_ORIGINS[name][0] + ox, ua.CAPTURE_ORIGINS[name][1] + oy
+    th, tw = tmpl.shape
+    x0, y0 = max(0, tx - home_px), max(0, ty - home_px)
+    x1, y1 = min(w, tx + tw + home_px), min(h, ty + th + home_px)
+    if x1 - x0 < tw or y1 - y0 < th:
+        return None
+    m = ua.match_template(gray[y0:y1, x0:x1], tmpl, reg.masks.get(name))
+    if m is None or m.distance > spec.max_distance:
+        return None
+    return x0 + m.origin[0] - ox, y0 + m.origin[1] - oy
+
+
+def ui_double_click(agent: Any, x: int, y: int, desktop: tuple[int, int],
+                    ns: Callable[[], int], sleep: Callable[[float], None] = time.sleep,
+                    ) -> None:  # fmt: skip
+    """dungeon@9.27: a UI double-click at desktop px (x, y) -- two motions first (the client draws
+    its cursor only where a SECOND motion leaves it; a cold-jump UI click is ignored:
+    gm_state._tab), then the left button down / up twice, 40 ms apart, through agent.send:
+    ro_agent.launch_client's double-click exactly (the parent's live check, 2026-11-11).
+    test_click_census registers it (RAW_BUTTONS)."""
+    agent.move(x + 3, y + 3)
+    sleep(0.05)
+    agent.move(x, y)
+    sleep(0.1)
+    w_d, h_d = desktop
+    for action in ("down", "up", "down", "up"):
+        agent.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1, "button": "left",
+                     "action": action, "x": x / w_d, "y": y / h_d}])  # fmt: skip
+        sleep(0.04)
+
+
+@dataclass
+class BareIo:
+    """--bare-steal's I/O: the runner's own reads and inputs, injected (a test simulates them).
+    ``chord``: agent.chord of the equipment window's keys (ui_gate.window_keys, a TOGGLE);
+    ``double_click``: ui_double_click at a game-region point; ``press``: press("equip", why);
+    ``guard``: guard_tick (the HP and the escapes inside a long action; True once we flew)."""
+
+    frame: Callable[[], Any]  # a fresh game-region frame (BGR, the runner's frame())
+    windows: Callable[[Any], list[str]]  # ui_gate.windows_at_home on that frame
+    origin: Callable[[Any], tuple[int, int] | None]  # the equipment window's origin, or None
+    chord: Callable[[], None]
+    double_click: Callable[[int, int], None]
+    press: Callable[[str], None]
+    lines: Callable[[], Sequence[Mapping[str, Any]]]  # the Battle Log's lines (a snapshot)
+    guard: Callable[[], bool] = lambda: False
+    sleep: Callable[[float], None] = time.sleep
+    clock: Callable[[], float] = time.monotonic
+
+
+def bare_read(frame: Any, ref: Any) -> bool | None:
+    """PURE: the F5 slot on ``frame``: True = bare (the dagger in the bag), False = armed, None =
+    unreadable."""
+    return bs.slot_bare(bs.slot_crop(bs.slot_gray(frame)), ref)
+
+
+def bare_poll(io: BareIo, cond: Callable[[Any], bool], limit_s: float, *,
+              guard: bool = False) -> tuple[bool, Any, bool]:  # fmt: skip
+    """Fresh frames every POLL_S until ``cond(frame)`` or ``limit_s``: (met, the last frame,
+    escaped). ``guard``: io.guard() on every poll (the sustain rules keep running inside a swap);
+    True from it (we flew away) ends the poll."""
+    t0 = io.clock()
+    while True:
+        f = io.frame()
+        if cond(f):
+            return True, f, False
+        if guard and io.guard():
+            return False, f, True
+        if io.clock() - t0 >= limit_s:
+            return False, f, False
+        io.sleep(bs.POLL_S)
+
+
+def bare_unequip_seq(io: BareIo, ref: Any) -> dict[str, Any]:
+    """The UNEQUIP, Batt's way, every step read back: (a) no window open, else nothing (skip_ui);
+    (b) the chord, then the equipment window must read OPEN within OPEN_S (else fail_open: one
+    that opens within LATE_S more is closed by ONE more chord and read closed); (c) the
+    double-click on the weapon slot, offset from where the window was found (its home when the
+    locate fails), ONLY after the window read open; (d) the F5 slot must read BARE within OFF_S
+    (else fail_off); (e) the chord again: no window may read open within CLOSE_S, else ONE more
+    chord while it is still the equipment window, and read again; still open -> ``stop`` (never
+    fight with it open). ``bare`` is the slot's LAST READABLE state (the truth kept); ``frame``
+    the last frame read."""
+    t0 = io.clock()
+    out: dict[str, Any] = {"ok": False, "why": None, "fail": None, "stop": None, "bare": False,
+                           "escaped": False, "chords": 0, "at": None, "origin": None}  # fmt: skip
+
+    def eq_open(f_: Any) -> bool:
+        return bs.EQUIP_WINDOW in io.windows(f_)
+
+    def none_open(f_: Any) -> bool:
+        return not io.windows(f_)
+
+    def close() -> Any:
+        io.chord()
+        out["chords"] += 1
+        ok_, f_, _e = bare_poll(io, none_open, bs.CLOSE_S)
+        if not ok_ and eq_open(f_):  # ONE more chord, only for the equipment window itself
+            io.chord()
+            out["chords"] += 1
+            ok_, f_, _e = bare_poll(io, none_open, bs.CLOSE_S)
+        if not ok_:
+            out["stop"] = (f"a window reads open after the closing chord(s): {io.windows(f_)} "
+                           f"({out['chords']} chords)")  # fmt: skip
+        return f_
+
+    def done(f_: Any) -> dict[str, Any]:
+        b_ = out["read"] = bare_read(f_, ref)
+        if b_ is not None:
+            out["bare"] = b_
+        out["frame"], out["ms"] = f_, round((io.clock() - t0) * 1e3)
+        out["slot"] = bs.slot_stats(bs.slot_crop(bs.slot_gray(f_)), ref)
+        return out
+
+    f = io.frame()
+    open0 = io.windows(f)
+    if open0:  # (a) never a chord into an unknown UI: the strike goes on armed
+        out.update(why="ui_open", fail="bare_skip_ui", windows=open0)
+        return done(f)
+    io.chord()  # (b)
+    out["chords"] += 1
+    opened, f, esc = bare_poll(io, eq_open, bs.OPEN_S, guard=True)
+    out["escaped"] = esc
+    if not opened:
+        out.update(why="escaped" if esc else "not_open", fail=None if esc else "bare_fail_open")
+        late, f, _e = bare_poll(io, eq_open, bs.LATE_S)  # the re-read: a LATE one is closed again
+        if late:
+            out["late"] = True
+            f = close()
+        elif io.windows(f):
+            out["stop"] = f"another window reads open after the chord: {io.windows(f)}"
+        return done(f)
+    org = io.origin(f)  # (c) where the window really is
+    out["origin"] = None if org is None else [int(org[0]), int(org[1])]
+    ox, oy = org if org is not None else bs.EQUIP_HOME
+    x, y = int(ox) + bs.WEAPON_SLOT[0], int(oy) + bs.WEAPON_SLOT[1]
+    out["at"] = [x, y]
+    io.double_click(x, y)
+    off, f, esc = bare_poll(io, lambda f_: bare_read(f_, ref) is True, bs.OFF_S, guard=True)  # (d)
+    out["escaped"] = esc
+    f = close()  # (e) always, read closed
+    done(f)
+    if out["read"] is None and off:
+        out["bare"] = True  # the closed frame unreadable: the read-back under the window stands
+    if out["bare"]:
+        out.update(ok=True, why="off" if off else "late_off")
+    else:
+        out.update(why="escaped" if esc else "not_off", fail=None if esc else "bare_fail_off")
+    return out
+
+
+def bare_equip_seq(io: BareIo, ref: Any, why: str, *, press: bool = True) -> dict[str, Any]:
+    """The EQUIP: the dagger's hotkey, then the F5 slot must read ARMED within ON_S; a READABLE
+    bare read then -> ONE more press and ON_S again. ok: True (armed) / False (still bare) / None
+    (no readable frame: a teleport's dark frames -- read again later, never a failure).
+    ``press`` False: the read-back alone (after a key-only equip before an escape)."""
+    t0 = io.clock()
+    n = 0
+    if press:
+        io.press(why)
+        n += 1
+
+    def armed(f_: Any) -> bool:
+        return bare_read(f_, ref) is False
+
+    ok, f, _e = bare_poll(io, armed, bs.ON_S)
+    if not ok and bare_read(f, ref) is True:
+        io.press(why)
+        n += 1
+        ok, f, _e = bare_poll(io, armed, bs.ON_S)
+    b = bare_read(f, ref)
+    return {"ok": True if ok else (None if b is None else False), "presses": n,
+            "ms": round((io.clock() - t0) * 1e3),
+            "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), ref)}  # fmt: skip
+
+
+class BareCtl:
+    """--bare-steal's runner side (dungeon@9.27): bare_steal.BareSteal's phase, the swaps through
+    BareIo, the counters (bare_unequip, bare_equip_<why>, bare_skip_ui / _hp, bare_aim_lost,
+    bare_fail_open / _off / _on) and one "bare" event per swap. A TARGET is one engagement: it
+    begins at a strike with no lock held (before_strike) and ends when its lock goes (a kill, an
+    unlock) or the fight ends (tick); each target gets ONE bare phase. ``stop``: the exception
+    that stops the run (r.Stop)."""
+
+    def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
+                 ev: Callable[[dict[str, Any]], None],
+                 stop: type[Exception] = RuntimeError) -> None:  # fmt: skip
+        self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
+        self.st = bs.BareSteal()
+        self.tgt: dict[str, Any] | None = None
+        self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
+        self.fails = 0  # failed swaps in a row (FAIL_STOP)
+        self.busy = False  # inside a swap: a Fly Wing pressed by guard_tick needs no hook
+
+    def _failed(self, key: str) -> None:
+        self.counts[key] += 1
+        self.fails += 1
+        if self.fails >= bs.FAIL_STOP:
+            raise self.stop(f"--bare-steal: {self.fails} swaps in a row failed (the last: {key}): "
+                            "the weapon state is not what the readout expects")  # fmt: skip
+
+    def _equip_done(self, why: str, res: Mapping[str, Any], verify: bool = False) -> None:
+        self.ev({"kind": "bare", "what": "equip", "why": why, "ok": res["ok"], "ms": res["ms"],
+                 "presses": res["presses"], "slot": res["slot"],
+                 **({"verify": True} if verify else {})})  # fmt: skip
+        if res["ok"]:
+            self.st.equipped()
+            self.pending, self.fails = None, 0
+            self.counts[f"bare_equip_{why}"] += 1
+        elif res["ok"] is None:
+            self.pending = why  # unreadable (dark frames): read again on the next tick
+        else:
+            self.pending = None
+            self._failed("bare_fail_on")
+
+    def equip(self, why: str) -> bool | None:
+        """The dagger back on, read back (bare_equip_seq); a no-op while armed."""
+        if self.st.armed:
+            return True
+        self.busy = True
+        try:
+            res = bare_equip_seq(self.io, self.ref, why)
+        finally:
+            self.busy = False
+        self._equip_done(why, res)
+        return res["ok"]
+
+    def _verify(self) -> None:
+        why = self.pending or "safety"
+        self.busy = True
+        try:
+            res = bare_equip_seq(self.io, self.ref, why, press=False)
+        finally:
+            self.busy = False
+        self._equip_done(why, res, verify=True)
+
+    def escape(self) -> None:
+        """Before a Fly Wing or a walk-away while BARE: the equip key at once ("safety"), its
+        read-back on the next tick -- the escape is never delayed for a read."""
+        if self.st.armed or self.busy or self.pending is not None:
+            return
+        self.io.press("safety")
+        self.pending = "safety"
+        self.ev({"kind": "bare", "what": "equip", "why": "safety", "ok": None, "ms": 0,
+                 "presses": 1, "pending": True})  # fmt: skip
+
+    def unequip(self, by: str) -> bool:
+        """bare_unequip_seq; the phase starts only when the slot READ bare (BareSteal.unequipped
+        with the Battle Log's line count and the popup shown NOW, so neither is a cue). True: bare
+        and still here (no escape inside)."""
+        self.busy = True
+        try:
+            res = bare_unequip_seq(self.io, self.ref)
+        finally:
+            self.busy = False
+        if res["bare"]:
+            rgb = np.asarray(res["frame"])[: bs.POPUP_BOTTOM + 1, :, ::-1]
+            box = bs.popup_box(rgb)
+            sig = None if box is None else bs.popup_sig(rgb)
+            self.st.unequipped(self.io.clock(), len(self.io.lines()), sig, box)
+            self.counts["bare_unequip"] += 1
+            if self.tgt is not None:
+                self.tgt["phase"] = True
+        self.ev({"kind": "bare", "what": "unequip", "ok": res["ok"], "ms": res["ms"],
+                 "why": res["why"], "by": by, "chords": res["chords"], "at": res["at"],
+                 "origin": res["origin"], "slot": res["slot"], "escaped": res["escaped"],
+                 **({"windows": res["windows"]} if "windows" in res else {}),
+                 **({"stop": res["stop"]} if res["stop"] else {})})  # fmt: skip
+        if res["stop"] is not None:
+            raise self.stop(f"--bare-steal: {res['stop']}")
+        if res["fail"] == "bare_skip_ui":
+            self.counts["bare_skip_ui"] += 1
+        elif res["fail"] is not None:
+            self._failed(res["fail"])
+        elif res["ok"]:
+            self.fails = 0
+        if res["escaped"] and not self.st.armed:
+            self.escape()  # we flew away bare (guard_tick inside the swap): the dagger at once
+        return bool(res["ok"]) and not res["escaped"]
+
+    def _end(self) -> None:
+        """The target's engagement is over: bare -> the dagger back on at once ("fight_end");
+        the next target's phase is a new one (BareSteal.fight_end)."""
+        if not self.st.armed and self.pending is None:
+            self.equip("fight_end")
+        self.st.fight_end()
+        self.tgt = None
+
+    def before_strike(self, by: str, hp: float | None, aim: Callable[[], bool] | None) -> bool:
+        """strike()'s FIRST step (strikes are made with no lock held): the previous target is over
+        if its lock went (_end); a new target's first strike, armed, UNEQUIPS; then ``aim`` reads
+        the strike point again -- the swap takes ~2 s and the target may have walked: no SWORD
+        there -> no click (False, bare_aim_lost; the fight loop's scan finds it again, bare). A
+        plant is struck as it is; under BARE_HP_MIN nothing comes off (bare_skip_hp)."""
+        if by == "plant":
+            return True
+        if self.pending is not None:
+            self._verify()
+        if self.tgt is not None and self.tgt["locked"]:
+            self._end()
+        if self.tgt is None:
+            self.tgt = {"t": self.io.clock(), "by": by, "locked": False, "phase": False}
+        if self.tgt["phase"] or self.pending is not None or self.st.engage() != "unequip":
+            return True
+        if hp is not None and hp < bs.BARE_HP_MIN:
+            self.counts["bare_skip_hp"] += 1
+            return True
+        if not self.unequip(by):
+            return True  # armed (skipped / failed: the strike goes on with the dagger) or flown
+        if aim is not None and not aim():
+            self.counts["bare_aim_lost"] += 1
+            self.ev({"kind": "bare", "what": "aim", "ok": False, "by": by})
+            return False
+        return True
+
+    def struck(self) -> None:
+        """strike() returned True: the caller holds a lock on this target now."""
+        if self.tgt is not None:
+            self.tgt["locked"] = True
+
+    def tick(self, now: float, locked: bool, fighting: bool, frame: Any,
+             hp: float | None) -> None:  # fmt: skip
+        """Every main-loop tick, before the fight branch: a pending read-back first; the target's
+        end (its lock went, or the fight ended) -> _end; bare outside a fight -> the dagger on
+        (the safety net); bare in a fight -> BareSteal.tick's cues (equip at the first)."""
+        if self.pending is not None:
+            self._verify()
+            if self.pending is not None:
+                return  # still unreadable: read again on the next tick
+        if self.tgt is not None:
+            if locked:
+                self.tgt["locked"] = True
+            elif self.tgt["locked"] or not fighting:
+                self._end()
+                return
+        if self.st.armed:
+            return
+        if not fighting:
+            self.equip("fight_end")
+            return
+        rgb = np.asarray(frame)[: bs.POPUP_BOTTOM + 1, :, ::-1]  # the popup's rows, as RGB
+        do, why = self.st.tick(now, self.io.lines(), rgb, hp)
+        if do == "equip" and why is not None:
+            self.equip(why)
+
+    def run_end(self, dead: bool = False) -> dict[str, Any]:
+        """ALWAYS before the run ends: bare -> the dagger back on ("run_end"), read back; the
+        final state for run_end's record. Dead: nothing is pressed (the caller retries after
+        @alive)."""
+        if not dead:
+            if self.pending is not None:
+                self._verify()
+            if not self.st.armed:
+                self.equip("run_end")
+        b = bare_read(self.io.frame(), self.ref)
+        return {"armed": self.st.armed, "slot": None if b is None else ("bare" if b else "armed"),
+                "dead": dead, "pending": self.pending, "fails": self.fails}  # fmt: skip
+
+
 def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     import bench
     import crusader as cr
@@ -2798,6 +3241,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise SystemExit(f"dungeon@9.26 refused: {why_ua}")
     if a.steal and ("steal" not in keys_ or not conf.get("max_sp")):
         raise SystemExit(f"dungeon@7 refused: --steal for the {a.char}, who has no Steal key / SP")
+    bare_on = bool(getattr(a, "bare_steal", False))  # dungeon@9.27 (rogue-xmas02.md 4BX)
+    if bare_on:
+        why_bs = bare_steal_refused(a.char, a.steal, keys_)
+        if why_bs:
+            raise SystemExit(f"dungeon@9.27 refused: {why_bs}")
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
         raise SystemExit(f"dungeon@8.9 refused: {why_box}")
@@ -3133,6 +3581,26 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         share = gm_state.weight_share(w_)
         if share is None and overweight_red(fr1[0]):  # Amendment I: fail closed on the red line
             raise r.Stop("dungeon@4: the weight line reads RED (>= 50 %) after the setup")
+        bare_ref: Any = None  # dungeon@9.27: the F5 slot's ARMED look (bare_ref_cut)
+        bare_rec: dict[str, Any] | None = None
+        bare_reg: Any = None
+        bare_keys: list[str] = []
+        if bare_on:  # the slot must read EMPTY (the dagger worn), else no run: a person first
+            bare_reg = ui_gate._registry(ui_gate._require_ready())  # the gate's own template set
+            bare_keys = ui_gate.window_keys(bs.EQUIP_WINDOW)  # Alt+Q (open_window@1's L2 chord)
+            t_br = time.monotonic()
+            while True:
+                f_br = frame()
+                bare_ref, bare_rec, why_br = bare_ref_cut(bs.slot_gray(f_br))
+                if why_br is not None:
+                    raise r.Stop(f"dungeon@9.27 refused: --bare-steal: {why_br} {bare_rec}")
+                if bare_ref is not None:
+                    break
+                if time.monotonic() - t_br > BARE_REF_WAIT_S:
+                    raise r.Stop("dungeon@9.27 refused: --bare-steal: the equip slot stayed "
+                                 f"unreadable {BARE_REF_WAIT_S} s {bare_rec}")  # fmt: skip
+                time.sleep(0.2)
+            bare_rec["windows"] = ui_gate.windows_at_home(f_br, bare_reg)
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
@@ -3148,6 +3616,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
+            **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
+                "bare_keys": bare_keys} if bare_on else {}),
             **({"house": house_rec} if house_on else {})})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
@@ -3263,6 +3733,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if action == "walk" and h_ is not None and to_ is not None:
                 rel_ = (to_[0] - h_[0], to_[1] - h_[1])
                 u_w, v_w = project(h_, [rel_])[0]
+                if bare is not None:
+                    bare.escape()  # dungeon@9.27: never walk away bare
                 click_at(u_w, v_w, "walk")
                 note_move(rel_, "walk")  # 9.22's bookkeeping: a walk click (UNREAD_WALK_BY)
                 ua_walks.append(tick_)
@@ -3321,9 +3793,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         gap_since: float | None = None  # on the field: Basic Info unread since (house mode only)
         pos_hist: deque[tuple[float, Cell]] = deque(maxlen=32)  # position reads (house mode)
 
+        bare: BareCtl | None = None  # dungeon@9.27 (--bare-steal): built below, once the I/O exists
+
         def press(what: str, why: str) -> None:
             if what == "fly" and why != "pos_unread":
                 unread_end("fly", why=why)  # 9.22: a teleport ends an escape (no-op without one)
+            if what == "fly" and bare is not None:  # dungeon@9.27: never fly away bare -- the
+                bare.escape()  # dagger's key first (no read-back here: the wing is not delayed)
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
@@ -3505,6 +3981,29 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 else:
                     press(what_, why_)
             return escaped[0]
+
+        if bare_on:  # dungeon@9.27: every input is the runner's own (chord, move, send, press)
+
+            def bare_lines() -> list[dict[str, Any]]:
+                with blt.lock:
+                    return list(blt.lines)
+
+            def bare_dclick(u_: int, v_: int) -> None:
+                """The weapon slot's double-click (game-region px): inside the game frame only."""
+                if not (0 <= u_ < gw and 0 <= v_ < gh):
+                    raise r.Stop(f"--bare-steal: the weapon slot point {(u_, v_)} is off the frame")
+                ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)
+                counts["click_bare_dclick"] += 1
+
+            bare = BareCtl(
+                BareIo(frame=frame,
+                       windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg),
+                       origin=lambda f_: window_origin(f_, bare_reg, bs.EQUIP_WINDOW),
+                       chord=lambda: agent_raw.chord(*bare_keys),
+                       double_click=bare_dclick,
+                       press=lambda why_: press("equip", why_),
+                       lines=bare_lines, guard=guard_tick),
+                bare_ref, counts, ev, r.Stop)  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -3697,7 +4196,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             dungeon@4 (decision 5): or until OUR first damage line in the Battle Log; the HP is
             read between the clicks (guard_tick). dungeon@6: the name tag read + banked first.
             dungeon@7: with --steal, ONE Steal first on every monster while the SP pays for it
-            (Batt ~16:0x); the strike then goes to where the target stands beside us."""
+            (Batt ~16:0x); the strike then goes to where the target stands beside us.
+            dungeon@9.27 (--bare-steal): a new target's first strike takes the dagger off first
+            (BareCtl.before_strike); the swap's aim check may drop the click (False: no lock)."""
+            if bare is not None:
+                hp_b = st.hist[-1][1] if st.hist else None
+                if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword"):
+                    return False  # the target left the point during the swap: the scan finds it
+                if escaped[0]:
+                    return True  # a Fly Wing inside the swap (guard_tick): the loop takes over
             ref = frame()
             if bank:
                 read_tag(ref, rel, u, v, r.ns(), by)
@@ -3805,6 +4312,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if quick and arrow is None and dmg is None and not escaped[0]:
                 quick_rearm("no_arrow")  # dungeon@9.6: nothing connected: no lock, the next box
                 return False
+            if bare is not None:
+                bare.struck()  # dungeon@9.27: the caller holds this target's lock now
             return True
 
         def box_target() -> tuple[Cell, tuple[float, float]] | None:
@@ -4941,6 +5450,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         wa_ = walk_away_target(here, wa_fits, wa_reach)
                     if wa_ is not None and here is not None:
                         u_w, v_w = project(here, [(wa_[0] - here[0], wa_[1] - here[1])])[0]
+                        if bare is not None:
+                            bare.escape()  # dungeon@9.27: never walk away bare
                         click_at(u_w, v_w, "walk")
                         note_move((wa_[0] - here[0], wa_[1] - here[1]), "boss_walk")  # 9.22
                         boss_walks.append(tick)
@@ -5054,6 +5565,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     idle_since = tick
                     if patrol:
                         wp_st["resume"] = True
+                if bare is not None:  # dungeon@9.27: a pending read-back, a target's end, the cues
+                    bare.tick(tick, lock is not None, mode == "fight", img, frac)
                 # --- FIGHT: locked, or scan for the attacker
                 if mode == "fight":
                     if lock is not None:
@@ -5653,8 +6166,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             reason = "stopped_by_parent"
             raise
         finally:
+            bare_final: dict[str, Any] | None = None
+            if bare is not None:  # dungeon@9.27: ALWAYS armed before the run ends, read back
+                try:
+                    bare_final = bare.run_end(dead=reason == "death")
+                except Exception as exc:  # noqa: BLE001 -- recorded; the end steps still run
+                    bare_final = {"armed": bare.st.armed, "error": repr(exc)[:300]}
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts),
-                "pos_light_unconfirmed": pos_ok.unconfirmed})  # fmt: skip
+                "pos_light_unconfirmed": pos_ok.unconfirmed,
+                **({"bare": bare_final} if bare_final is not None else {})})  # fmt: skip
             if ex_rec is not None:  # dungeon@9.14: this run's knowledge, merged into the map's
                 (out / "explore-run.json").write_text(json.dumps(ex_rec.know.to_json()))
                 merged_ = em.save_merged(ex_rec.know)
@@ -5693,6 +6213,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     cr.gm_line(agent_raw, screen, cmd, conf["job"], crk)
                     time.sleep(0.8)
                 bench.close_chat(agent_raw, screen)
+                if bare is not None and not bare.st.armed:  # dungeon@9.27: alive -> armed again
+                    try:
+                        ev({"kind": "bare_after_alive", **bare.run_end()})
+                    except Exception as exc:  # noqa: BLE001 -- recorded; the warp home follows
+                        print(f"bare-steal: the equip after @alive failed: {exc!r}", flush=True)
             # 13:19: a stopped run left the Crusader at 30 % HP among orcs with no runner: after
             # run_end (outside the measured window) it goes home. dungeon@8 (4.05 a1, 2026-10-25
             # 22:04): after a DEATH too -- @alive revives it on the spot, and the Orc Lord that
@@ -6067,6 +6592,18 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@7: Batt's steal-first, ONE Steal on every monster while the SP pays for it",
+    )
+    t.add_argument(
+        "--bare-steal",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11; OFF by default; the Rogue only, "
+        "not with --steal): a new target is hit BARE-HANDED so Snatcher steals before it dies -- "
+        "the dagger comes off first (Alt+Q, a double-click on the equipment window's weapon slot, "
+        "Alt+Q; each step read back) and goes back on with F5 at the first steal cue (a new item "
+        "popup or a new cyan Battle Log line: no words read), after 8 s, under 50 %% HP, when the "
+        "fight ends, before any escape and at the run's end; the F5 slot (its icon = the dagger "
+        "in the bag) is the weapon state's readout",
     )
     t.add_argument(
         "--clear-map",

@@ -145,6 +145,10 @@ ALLOWED = {
                                    "detections is held (<= 2.5 s) until it stands, then struck "
                                    "at its NEW box only where cursor_sword read SWORD there, "
                                    "else not struck. "
+                                   "With --bare-steal (OFF by default, dungeon@9.27, "
+                                   "rogue-xmas02.md 4BX; the count is unchanged: it is a raw "
+                                   "button send, RAW_BUTTONS below) the UI double-click on the "
+                                   "equipment window's weapon slot. "
                                    "And the death dialog's known step (its second button), as "
                                    "survive.py"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
@@ -183,6 +187,40 @@ GATED = {
     "scripts/regen_walk.py": (1, "crusader-regen@1 (3.96f): the W phase's walk click between two "
                                  "checked cells (WALK by robust2's series)"),
 }  # fmt: skip
+
+
+# RAW mouse-button sends (`send([{"type": "mouse_button"`): presses that bypass `.click(` and the
+# gate, each registered with why (dungeon@9.27, 2026-11-11: --bare-steal's double-click is one).
+RAW_BUTTONS = {
+    "scripts/ro_agent.py": (5, "Agent.click's own press / release (the path every `.click(` "
+                               "above goes through), Agent.drag's press and its release, and the "
+                               "two desktop-shortcut double-clicks: launch_client (the game "
+                               "client) and open_terminal (the agent's non-elevated shell), each "
+                               "only after the shortcut's icon read on pixels"),
+    "scripts/measure_motion.py": (1, "the motion benchmark's RIGHT-button camera drag (its own "
+                                     "press / release helper; no left click)"),
+    "scripts/dungeon_hunt.py": (1, "--bare-steal (dungeon@9.27, rogue-xmas02.md 4BX; OFF by "
+                                   "default): ui_double_click, the UI double-click on the "
+                                   "equipment window's weapon slot, made ONLY after that window "
+                                   "READ OPEN at its home (ui_gate.windows_at_home) on a frame "
+                                   "after its own chord, at the slot's point from where the "
+                                   "window was found, inside the game frame; the window is then "
+                                   "read CLOSED before the fight goes on (else the run stops)"),
+}  # fmt: skip
+
+
+def test_raw_button_sends_are_registered() -> None:
+    files = subprocess.run(["git", "ls-files", "scripts/*.py"], cwd=ROOT, capture_output=True,
+                           text=True, check=True).stdout.split()  # fmt: skip
+    files += [f for f in RAW_BUTTONS if f not in files]  # new, not yet committed
+    found = {}
+    for f in files:
+        path = ROOT / f
+        if path.exists():
+            n = len(re.findall(r'send\(\[\{"type": "mouse_button"', path.read_text()))
+            if n:
+                found[f] = n
+    assert found == {f: n for f, (n, _) in RAW_BUTTONS.items()}, found
 
 
 def test_gated_world_clicks_are_registered() -> None:
