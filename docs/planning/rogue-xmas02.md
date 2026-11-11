@@ -5836,6 +5836,22 @@ recent two-run pair of that same base (named in the result).
   - A loot sweep that hovers the cell facing the target first and stops after a few empty hovers
     would save ~2.4 s on each of ~60 empty loot steps (~140 s a run, ~10 %). It is a proposal for
     Batt, not built tonight.
+  - **Which cell faces the target (`spot_vs_death.py`, `box_dir.py`, p67-p70):** the fight's
+    engage `spot` is a poor guide (the monster moves: 0-1 cell off in only ~30 %). HER cell at the
+    kill is the good one: the death cell is exactly 1 cell from her in 224 of 238 kills (94 %).
+    - At p70's ring kills, the nearest monster box (within 2 cells) in the last detection before
+      the kill is 0 cells off in 20 of 38 and <= 1 cell off in 36 of 38. No such box in 17 of the
+      55.
+    - So a sweep of the box's cell + its ring neighbours (<= 5 hovers, else today's 9) would save
+      about 80 s a run (~5 %), not the ~140 s first estimated.
+  - **The no-hit strikes (`nohit.py`, `bound.py`):** in most of them the click did nothing. Only
+    3-7 of 16-21 a run sent an attack request, and almost none a move.
+    - A strike that ended `bound` (no arrow, no damage within its bound) ends in "no hits" 34 times
+      in 41 (83 %), ~3.7 s after the strike.
+    - Releasing such a lock at once (and re-finding the target) would save ~30 s a run (~2 %).
+  - **Ranking for Batt (the time lost a run):** loot sweep ~250 s (a direction-first sweep saves
+    ~80) > dead strikes ~120 s (a `bound` release saves ~30) > the queue study's 2-3 % (4CC). Each
+    is a pre-registered pair of its own.
 
 ### 4CH. Amendment AA (written 2026-11-11 23:09 ICT from `date`, BEFORE p72 would run): p72 is DROPPED -- 4CA's bare-hands verdict is decided by arithmetic
 
