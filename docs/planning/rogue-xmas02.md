@@ -5570,3 +5570,37 @@ Batt's answers (quoted, then in English):
   dashboard's z/h (the aura-off base for 4CA).
 - **Decision:** every bar passes -> the aura stays OFF for every run from now on (Batt's way of
   playing); a bar failing -> studied and reported, the aura question goes back to Batt.
+
+### 4CA. Pilots p69-p72 pre-registration: Batt's two swap techniques on the aura-off base (written BEFORE any of them, 2026-11-11 19:56 ICT from `date`)
+
+- **Batt (2026-11-11 ~19:15-19:30, translated):** (a) the KNIFE opener: "put the Knife (ATK 17)
+  on F4 and the Damascus on F5; always open with the Knife; when the steal succeeds press F5 to
+  deal damage; collect the drops; when done press F4 to go back to the Knife; loop"; (b) "compare
+  it with bare hands: which gives more items per hour"; and his goal for the night: **"I make
+  more than 100,000 zeny / h playing myself; run long tonight, report at 06:00, try to equal or
+  beat me."**
+- **The code (merged 1fb878b9, each OFF by default):** `--bare-ready` (9.27b: the dagger off when
+  idle after the loot, the next target struck bare at once, F5 on a steal; a fight ending bare
+  stays bare) and `--steal-opener F4` (9.27c: the Knife's hotkey instead of the equipment window:
+  F4 after the loot, F5 on a steal; both swaps are key presses, read back on the F4 / F5 slots).
+  Live setup 19:1x: a Knife (1201) given with `@item`, dragged to F4; F4 shows it, F5 empty (the
+  Damascus worn). The aura stays OFF (4BZ).
+- **The runs (25 min, NOT immune, after an MVP kill, recorded for round 5's aura-off data):**
+  - p69 + p70: the base + `--bare-steal --bare-ready --steal-opener F4` (recorded `hunt-xmas02-fiT20`,
+    `-fiT21`), the KNIFE;
+  - p71 + p72: the base + `--bare-steal --bare-ready` (recorded `-fiT22`, `-fiT23`), BARE HANDS,
+    pre-unequipped.
+  - A short immune smoke of each comes first (unscored; the swap mechanics and the cues only).
+- **The comparison base, fixed here by rule (its numbers are not yet known):** the aura-off base
+  p67 + p68, pooled, from the dashboard (`econ_dash.py`, picked + stolen at NPC sell x Overcharge 10).
+- **Bars (each technique's pair pooled):**
+  - **B1** stolen a kill >= the base's + 0.10;
+  - **B2 (Batt's goal, the decision bar)** gross z/h at Overcharge >= the base's; **items / h**
+    (picked + stolen units) reported beside it, as Batt asked;
+  - **B3** swaps: >= 95 % read back as intended, 0 swap-fail stops, 0 walk requests inside an
+    Alt+Q swap (bare hands only);
+  - **B4** cue equips with a packet steal in (t - 3 s, t] >= 90 %;
+  - **no harm:** deaths 0; E1 >= 80 / h each run; the hard bars; W1 and R1-A pooled over the pair
+    + p68 + p67; L1 >= 50 %, L3 >= 80 %, L4 <= 5 %, K1 <= 3.0 s, K3 >= 70 %; D1 p95 <= 35 ms; P2 0.
+- **Decision:** a technique whose bars all pass JOINS THE BASE; if both pass, the higher B2 joins.
+  B2 below the base -> it stays a flag and its costs go to Batt.
