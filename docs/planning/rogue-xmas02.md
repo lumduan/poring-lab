@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-gef10.md, gef10-prep.md, xmas02-prep.md, gef10-detector.md, ../benchmarks/gef10-eval.md, ../demonstrations.md, ../../scripts/dungeon_hunt.py, ../../scripts/dungeon_judge.py, ../../services/rathena/conf/import/groups.yml]
-next_action: "2026-11-11 09:2x: base = LF-2 + LS-2 + LS-1 (all joined); --near-single (R2) stays OFF (late-failed 6 > 3); p57 found an UNREACHABLE-ATTACKER trap (11 min, no escape rule): Batt decides a fix. Floor-item round 3 scored next (fiT7-9 recorded)."
+next_action: "2026-11-11 11:4x: base = LF-2 + LS-2 + LS-1. Next p59 + p60 = --unreach-escape (4BU; S-UA: trigger K3/W90, walk >= 9 cells) and p61 + p62 = --near-single-still (R2b, 4BV), recorded fiT10-13 for item round 4 (training). U0 (a staged trap) is Batt's call."
 title: "The Rogue on xmas_dun02: AGI 99 / DEX 99, the edge loop clockwise, Snatcher steals (planned)"
 date: 2026-11-05
 owner: Batt
@@ -2201,6 +2201,54 @@ the detect server, come after the training):
 - **Open for Batt (S-LF5 S1, not decided here):** LF-2's "0 wrong standing reads" bar counted
   desyncs as misreads. Counting only MISREADS changes what a pre-registered bar counts, so it
   needs his OK. Until then both counts are reported.
+
+### 4BU. Pilots p59 + p60 pre-registration: --unreach-escape (dungeon@9.26, Study S-UA) on the base, two runs pooled; recorded fiT10 / fiT11 (written BEFORE either run, 2026-11-11 11:34 ICT from `date`)
+
+- **Authority:** Batt, 4BT item 1 ("build it and set its bars").
+- **The change** (64ce38b2, OFF by default; Study S-UA):
+  - the trigger: 3 "no hits" locks in a row whose strikes hit the same cell (+-1), with a Miss cue
+    or HP loss between them, within 90 s. Chosen by the rule stated before the grid: 0 false
+    triggers in 17 base runs, p57 caught at 26.8 s;
+  - the escape: the chain's cells are marked unreachable for 120 s (the ring scan and the box
+    path skip them), then a walk of >= 9 cells away (route grid, in view, cursor "clear",
+    one click the server answers);
+  - the Fly Wing is the fallback (no cell / no position / a second trigger within 120 s).
+- **The runs:** the base (4BS's) + `--unreach-escape`, labels `xmas02-p59` (recorded `--label
+  hunt-xmas02-fiT10`) and `xmas02-p60` (`hunt-xmas02-fiT11`), 25 min each.
+- **Bars (pooled; `unreach_score.py score`):**
+  - **U1:** no trap span (>= 5 s of an attacker acting on her with no damage of ours while we
+    request) longer than 60 s in either run; pooled trap seconds <= 120 (p57: 689 s);
+  - **U2:** false triggers judged by the packets: `harmful` 0, all false <= 1 pooled;
+  - **U3:** every true trigger's escape ends the attacker's acts (none in t + 10..60 s), with a
+    walk sent within 1.5 s that lands within 1 cell of its target, and no death within 60 s;
+  - **no harm:** the base's bars (E1 >= 80 / h each run, deaths 0, W1 and R1-A pooled over p60 +
+    p59 + p58 + p57, L1, L3, L4, K1, K3, Q1, U1-stuck, D1, P2, E3).
+- **U0, the positive case, is OPEN (Batt's call):** the natural trap came once in 17 runs. A
+  staged one (her on (100,207), a Cruiser on (98,205)) needs a new start-cell tool and Batt's OK
+  for a staged monster beside her.
+- **Decision:**
+  - every bar passes AND a true trigger exercised U3 -> `--unreach-escape` JOINS THE BASE;
+  - no trigger came (U1-U3 unexercised) and no harm -> it stays OFF as "harmless, unexercised",
+    for Batt (as LF-4), with U0 as the way to prove it;
+  - a bar failing -> studied.
+
+### 4BV. Pilots p61 + p62 pre-registration: --near-single-still (R2b, dungeon@9.25b) on the base, two runs pooled; recorded fiT12 / fiT13 (written BEFORE either run, 11:34 ICT from `date`)
+
+- **Authority:** Batt, 4BT item 4 ("adjust and retry").
+- **The change** (de429442, OFF by default): a 2-3-cell strike keeps the burst's re-clicks while
+  the scene has moved < 10 px (WALK_STOP_PX) since its first click. Once it scrolled, no more
+  re-clicks. Refused with `--near-single`.
+- **The runs:** the base + `--near-single-still`, labels `xmas02-p61` (fiT12) and `xmas02-p62`
+  (fiT13), after p59 / p60.
+- **Bars (pooled):**
+  - **M1:** floor walk-offs from 2-3-cell strikes (`client_cell.py`) <= 1 (the base ~4; R2 0);
+  - **M2:** late-failed box strikes, the bar from the measured rate (Batt's R1-A method, 4BI):
+    the LS era p52, p53, p55-p58 gave 3, 3, 1, 2, 1, 5 = 15 in 6 runs, lambda 2.5 a run; for a
+    2-run pool k = the smallest k with P(Poisson(5) >= k) <= 0.05 = 10. **M2 fails at >= 10.**
+    Reported beside it: the comparison with LS-1's pool (3) that R2 failed;
+  - **M2b:** 2-3-cell strikes sending no request <= 1 a run;
+  - **no harm:** the base's bars as 4BU.
+- **Decision:** every bar passes -> `--near-single-still` JOINS THE BASE; else studied, stays off.
 
 ## 5. Results
 
