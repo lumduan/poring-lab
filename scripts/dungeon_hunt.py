@@ -1214,6 +1214,35 @@ class BoxSpots:
         return self.after > 0 and self._near(spot) >= self.after
 
 
+HUD_EVERY_S = 0.5  # dungeon@9.29: at most 2 HUD messages a second
+
+
+def hud_boxes(got: Sequence[Any]) -> list[Any]:
+    """PURE (dungeon@9.29): the runner's boxes for the operator HUD, each labelled by its own
+    species (the detector's class before the collapse), our own body left out (self_box)."""
+    from types import SimpleNamespace
+
+    out = []
+    for b in got:
+        if self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2):
+            continue
+        out.append(SimpleNamespace(x0=b.x0, y0=b.y0, x1=b.x1, y1=b.y1,
+                                   score=getattr(b, "score", 1.0),
+                                   cls=box_species(b) or "monster"))  # fmt: skip
+    return out
+
+
+def hud_send(tx: Any, boxes: Any, mode: str, locked: bool) -> bool:
+    """dungeon@9.29 (--hud): the boxes the runner holds now, to the console HUD (its own rate
+    limit; operator_hud never raises). DISPLAY ONLY: no input, no decision reads it."""
+    with boxes.lock:
+        _t, got = boxes.last
+    line = f"{mode}{' (locked)' if locked else ''}"
+    if not tx.log or tx.log[-1] != line:  # a line on each change of mode, not each tick
+        tx.note(line)
+    return bool(tx.send(boxes=hud_boxes(got)))
+
+
 def box_species(b: Any) -> str | None:
     """PURE (dungeon@9.28): a box's own species (the detector's class before the collapse to
     "monster"), else its class."""
@@ -1807,6 +1836,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
     if getattr(a, "lead_press", False):  # dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP)
         out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
+    if getattr(a, "hud", False):  # dungeon@9.29: display only (the operator HUD)
+        out["hud"] = ["9.29"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
     if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
@@ -4098,6 +4129,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "every_s": boxes.every_s})  # fmt: skip
             if boxes.gpu:  # dungeon@8.9: each detection's path + wall time (R3's windows, 4N G1)
                 boxes.det.log_path = out / "detections.jsonl"
+        hud_tx: Any = None  # dungeon@9.29 (--hud; Batt 11-11: "HUD on: lines, no boxes")
+        if getattr(a, "hud", False):
+            import operator_hud as oh
+
+            hud_tx = oh.HudSender(agent_raw, (gx0, gy0, gw, gh), r.desktop(),
+                                  label=f"dungeon {a.strategy} {a.label or ''}".strip(),
+                                  min_interval_s=HUD_EVERY_S)  # fmt: skip
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
         ours_used = -2e9
@@ -6053,6 +6091,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     idle_since = tick
                     if patrol:
                         wp_st["resume"] = True
+                if hud_tx is not None and boxes is not None:  # dungeon@9.29: DISPLAY ONLY
+                    hud_send(hud_tx, boxes, mode, lock is not None)
                 if bare is not None:  # dungeon@9.27: a pending read-back, a target's end, the cues
                     bare.tick(tick, lock is not None, mode == "fight", img, frac)
                 # --- FIGHT: locked, or scan for the attacker
@@ -7115,6 +7155,13 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@7: Batt's steal-first, ONE Steal on every monster while the SP pays for it",
+    )
+    t.add_argument(
+        "--hud",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.29 (Batt 2026-11-11): send the boxes the runner holds (by species) to the "
+        "console's operator HUD, at its own rate limit; DISPLAY ONLY (no input, no decision)",
     )
     t.add_argument(
         "--value-target",

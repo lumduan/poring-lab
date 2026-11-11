@@ -3686,3 +3686,36 @@ def test_value_target_ranks_the_runners_own_candidates_by_value() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, value_target=True))["value_target"] == [
         "9.28", 150.0]  # fmt: skip
     assert "value_target" not in dh.fixes_of(dh.argparse.Namespace(**base, value_target=False))
+
+
+def test_hud_sends_the_runners_boxes_by_species_display_only() -> None:
+    """dungeon@9.29 (--hud, Batt 2026-11-11: "with HUD on I see lines, not boxes"): the boxes the
+    runner holds go to the operator HUD labelled by species, our own body left out, a log line
+    only when the mode changes; OFF by default, recorded in the fixes."""
+    import threading
+    from types import SimpleNamespace as NS
+
+    me = NS(x0=620, y0=290, x1=660, y1=365, score=0.9, cls="player", species=None)
+    mon = NS(x0=100, y0=100, x1=140, y1=160, score=0.8, cls="monster", species="mystcase")
+    got = dh.hud_boxes([me, mon]) if not dh.self_box(640, 327) else dh.hud_boxes([mon])
+    assert [b.cls for b in got][-1] == "mystcase"
+
+    class Tx:
+        def __init__(self) -> None:
+            self.log: list[str] = []
+            self.sent: list[Any] = []
+
+        def note(self, line: str) -> None:
+            self.log.append(line)
+
+        def send(self, boxes: Any = ()) -> bool:
+            self.sent.append(list(boxes))
+            return True
+
+    tx, bw = Tx(), NS(lock=threading.Lock(), last=(0.0, [mon]))
+    assert dh.hud_send(tx, bw, "fight", True) and dh.hud_send(tx, bw, "fight", True)
+    assert tx.log == ["fight (locked)"] and len(tx.sent) == 2
+    base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
+                npc_guard=False, miss_cue=False)  # fmt: skip
+    assert dh.fixes_of(dh.argparse.Namespace(**base, hud=True))["hud"] == ["9.29"]
+    assert "hud" not in dh.fixes_of(dh.argparse.Namespace(**base, hud=False))
