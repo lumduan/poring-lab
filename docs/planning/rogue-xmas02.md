@@ -5341,3 +5341,30 @@ pooled; scored by `unreach_score.py score`.**
   the latest base runs, L1 / L3 / L4 / K1 / K3 / Q1, M1 / M2 as the base. Reported beside them:
   the `unreach_*` counts.
 
+
+**Pilots p59 + p60 (4BU as first run: the base + `--unreach-escape`), written 2026-11-11 13:2x ICT
+from `date`. NOT ADMISSIBLE (4BW): the Rogue was IMMUNE in both, so they judge nothing.**
+- The MVP: `@mobsearch` 12:14 found it ALIVE at (29,142) (a respawn after a staging's kill);
+  `@killmonster2` 12:15:15, "1[dead]". p59 12:16:11-12:42:02 (fiT10), p60 12:43:52-13:09:38 (fiT11),
+  both rc 0. The run record says `"unreach_fixes": [3, 90.0, 1, 120.0, 12, 9, 120.0, "9.26"]`.
+- **What immunity did:** 0 acts on her in either run (p55-p58: 271-949). No trap, no trigger, no
+  escape (`unreach_score`: traps 0, spans 0, escapes 0 in both).
+- Reported only (not a verdict on anything):
+
+| | p59 (immune) | p60 (immune) |
+|---|---|---|
+| E1 kills | 42 (100.7 / h) | 43 (103.1 / h) |
+| deaths / Fly Wings / stalls | 0 / 0 / 1 | 0 / 0 / 1 |
+| L1 / L3 (by start) / L4 / K1 / K3 | 84.6 % / 100 % / 0 / 1.91 s / 87.8 % | 94.1 % / 100 % / 0 / 2.00 s / 75.9 % |
+| Q1 (defend scans with no act on her) | 26 (every scan, nothing ever acted on her) | 24 |
+| D1 GPU p50 / p95 | 20.6 / 23.0 ms | 21.0 / 30.4 ms |
+| late box strikes / late-failed | 13 / 2 (of 60) | 17 / 5 (of 71) |
+| client_cell: floor walk-offs (2-3 cells) / misreads | 1 / 0 | 2 / 1 |
+| walk requests / ignored | 571 / 4 | 391 / 0 |
+
+- The recordings fiT10 (701 candidate frames, 32 labels, 9 floor items) and fiT11 (869, 31, 10)
+  are in round 4's held-out (xmas02-detector.md O20).
+
+**4BU's second start (p63 + p64, 4BW).** The MVP polled alive 13:18:19 at (94,109) (63 min after
+12:15:15); `@killmonster2` 13:19:10, "1[dead]". Immunity OFF read back ("Returned to normal
+state.", `p63/imm-off-chat.png`). p63 started 13:20:24 (fiT14).
