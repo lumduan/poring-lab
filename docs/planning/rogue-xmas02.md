@@ -5857,3 +5857,19 @@ recent two-run pair of that same base (named in the result).
 - Before p73, a 3-min IMMUNE smoke `s73` of p73's exact flags ran (unscored): the first live run
   of `--swap-gap`, `--steal-cue popup` and `--hud-fast` together.
 
+### 4CI. Amendment AB (written 2026-11-11 23:15 ICT from `date`, BEFORE p73): the smoke s73; `--hud-fast` OFF again (its D1 check failed)
+
+- **s73 (3 min, IMMUNE, unscored; 23:09:01-23:12:49, rc 0):** p73's exact flags. Every swap read
+  back: 5 openers, 5 equips (popup 1, the 8-s cap 3, run end 1), 0 fails. `--swap-gap` and
+  `--steal-cue popup` are recorded in the run's fixes. 5 kills.
+- **`--hud-fast 0.2` fails its own check (Amendment Y item 1).**
+  - D1 (`detect_speed.py`, as scored): p50 20.8 ms, **p95 93.5 ms**, 816 calls in 3 min. p69 /
+    p70 / p71 had p95 23.5 / 23.0 / 22.4 ms with ~1,600 calls in 25 min.
+  - The runner's own `box_target` reads above 50 ms: 9 of 18 (50 %), against 13 % / 5 % / 11 %.
+  - The HUD-only calls queue in front of the decisions' calls in the one detect server. **So it
+    is taken off every queued pilot (p73-p78) before p73.** `--hud` (the runner's own boxes,
+    <= 2 messages / s) stays.
+  - A faster HUD that does not slow the decisions needs the server to put the decision calls
+    first (a priority queue, or a second inference stream on the Arc). That is a proposal for
+    Batt.
+
