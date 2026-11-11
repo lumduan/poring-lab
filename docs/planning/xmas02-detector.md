@@ -3691,4 +3691,11 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
 - **I5 GPU (the detect server's forward time, one model a run, 300 frames, every 13th ref):**
   xmas02fi3 p95 16.84 ms vs xmas02gb 16.89 ms = 0.997 x. All 300 on the GPU path. I5 CPU
   (eval_latency, quiet host) comes after the ONNX set.
+- **O18c (10:02 ICT, BEFORE any score): labellers Q and R** (NEW, blind) answered all 133 and agree
+  on 132 / 133 (q1 and q2).
+  - Q: yes 111 / no 20 / unsure 2; R: yes 110 / no 20 / unsure 3; every yes judged good.
+  - Both flagged 084 / 128 (a grey cookie-like shape against the Crusader's robe) and 020 / 030
+    / 108 (a beige cookie on a fading corpse).
+  - **EVALUATED (both yes / good): 110 crops.** Aura 62 (fiT7 11, fiT8 14, fiT9 4 natural; fsTa3
+    33 staged; minimum 40). No aura 48 (fsTn3; minimum 30).
 
