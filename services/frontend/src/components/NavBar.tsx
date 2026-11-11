@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/settings", label: "Settings" },
   // "Label QA" (/qa) left the bar 2026-11-10 (Batt: no longer used); the page itself remains
   { href: "/hardware", label: "Hardware" },
+  { href: "/economy", label: "Economy" }, // 2026-11-11: the P&L of banked runs at fixed NPC prices
 ];
 
 /** The top bar on every page: navigation and the always-visible mode badge. The badge reads the
