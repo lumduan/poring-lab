@@ -59,7 +59,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SCHEMA = "poring-lab.econ-dashboard.v1"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")  # the backend's rule too
-INCOME_FIELDS = ("picked", "stolen_steal", "stolen_snatcher")  # dungeon_judge.INCOME, renamed
 
 
 def valid_name(name: str) -> bool:
@@ -102,7 +101,7 @@ def item_rows(
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """PURE: one row per item id that was gained (any cause) or dropped by our kills, with its
     counts and prices; ``gains``: dungeon_judge's items_rows. Returns (rows, unpriced ids). Rows
-    are ordered by income units, then id (never by a name)."""
+    are ordered by income units, then units dropped, then id (never by a name)."""
     by: dict[int, dict[str, Any]] = {}
     for g in gains:
         iid = int(g["item_id"])
