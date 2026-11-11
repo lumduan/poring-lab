@@ -5368,3 +5368,29 @@ from `date`. NOT ADMISSIBLE (4BW): the Rogue was IMMUNE in both, so they judge n
 **4BU's second start (p63 + p64, 4BW).** The MVP polled alive 13:18:19 at (94,109) (63 min after
 12:15:15); `@killmonster2` 13:19:10, "1[dead]". Immunity OFF read back ("Returned to normal
 state.", `p63/imm-off-chat.png`). p63 started 13:20:24 (fiT14).
+
+**Pilots p63 + p64 (4BU, 4BW's re-run: the base + `--unreach-escape`, her NOT immune), written
+2026-11-11 14:2x ICT from `date`.**
+- p63 13:20:24-13:46:09 (fiT14), p64 13:48:48-14:14:34 (fiT15), both rc 0. Immunity OFF read back
+  before each ("Returned to normal state.": `p63/imm-off-chat.png`; p64's toggled on then off,
+  `p64/imm-off-chat.png`). The MVP was killed 13:19:10 ("1[dead]").
+- **VERDICT (by the pre-registered decision): `--unreach-escape` STAYS OFF as "harmless,
+  unexercised".** No trap came in either run, so no trigger, no escape: U1 and U2 pass, U3 has no
+  case. Every no-harm bar passes. U0 (a staged trap) stays the way to prove it: Batt's call.
+
+| | **p63** | **p64** | bar |
+|---|---|---|---|
+| U1 trap spans (>= 5 s) / trap seconds | 0 / 0 | 0 / 0 | none > 60 s, pooled <= 120: PASS |
+| U2 false triggers (harmful / all) | 0 / 0 | 0 / 0 | 0 / <= 1: PASS |
+| U3 true triggers | 0 | 0 | no case (unexercised) |
+| E1 kills | 61 (146.4 / h) | 66 (158.4 / h) | >= 80 / h: PASS |
+| deaths / lowest HP / Fly Wings / stalls | 0 / 73.8 % / 0 / 0 | 0 / 63.9 % / 1 (a pos_unread escape) / 0 | PASS (0 dead-end) |
+| W1 unsent walk clicks | 4 / 290 | 4 / 232 | pooled p64 + p63 + p58 + p57: 15 / 1,023 = 1.47 % <= 2.0 %: PASS |
+| R1-A own-body D that lost an attack | 2 | 2 | pooled p64 + p63 + p58 + p57: 6 < 7: PASS |
+| L1 / L3 (by start) / L4 | 100 % / 90.3 % / 0 | 90.0 % / 88.2 % / 0 | >= 50 % / >= 80 % / <= 5 %: PASS |
+| K1 / K3 | 2.01 s / 90.3 % | 1.98 s / 94.1 % | <= 3.0 s / >= 70 %: PASS |
+| Q1 / S1 (hits on her / 10 min) | 8 / 7.6 | 2 / 11.6 | Q1 <= 8: PASS |
+| U1-stuck / D1 GPU p95 / P2 | 6.0 s / 22.3 ms / 0 | 9.8 s / 22.5 ms / 0 | <= 30 s / <= 35 ms / 0: PASS |
+| reported: late box strikes / late-failed | 9 / 1 (of 66) | 15 / 8 (of 68) | - |
+| reported: floor walk-offs (client_cell) / misreads | 1 / 0 | 5 / 0 | - |
+| reported: items (NPC-sell kinds) | Zargon 14, Scell 11, Manacles 10, Well-baked Cookie 8, Piece of Cake 5, Iron 5, Red Herb 3, Candy Cane 3, Candy 2, Old Blue Box 1 | Scell 22, Zargon 14, Piece of Cake 8, Well-baked Cookie 7, Manacles 6, Red Herb 5, Candy 4, Pearl 2, Iron 2, Level 3 Heal 1 | - |
