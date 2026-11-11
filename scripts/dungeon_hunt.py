@@ -1214,6 +1214,24 @@ class BoxSpots:
         return self.after > 0 and self._near(spot) >= self.after
 
 
+def box_species(b: Any) -> str | None:
+    """PURE (dungeon@9.28): a box's own species (the detector's class before the collapse to
+    "monster"), else its class."""
+    sp = getattr(b, "species", None)
+    return str(sp) if sp else (str(getattr(b, "cls", "")) or None)
+
+
+def value_pick(cands: Sequence[tuple[float, Any]],
+               values: Mapping[str, float]) -> tuple[float, Any]:  # fmt: skip
+    """PURE (dungeon@9.28, rogue-xmas02.md 4CB): the (distance, box) worth the most a kill,
+    discounted by distance (value_target.pick); ``cands`` is never empty here."""
+    import value_target as vt
+
+    got = vt.pick(cands, values, box_species)
+    assert got is not None
+    return got
+
+
 def self_box(cx: float, cy: float) -> bool:
     """PURE: a box centred on OUR drawn Crusader (the camera centres it: foot (641, 362), head ~280)
     -- v1 never saw a Crusader in training and boxes it as a monster (3.98 run 1, 12:11)."""
@@ -1789,6 +1807,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["still_target"] = [WALKER_PX, HOLD_GAP_S, HOLD_MAX_S, STILL_TARGET_VERSION]
     if getattr(a, "lead_press", False):  # dungeon@9.24 (rogue-xmas02.md Study S-LS, LS-1; 4BP)
         out["lead_press"] = [LEAD_PX, LEAD_AGE_S, LEAD_CAP_PX, LEAD_CAP_CELLS, LEAD_PRESS_VERSION]
+    if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
+        out["value_target"] = ["9.28", 150.0]
     if getattr(a, "bare_steal", False):  # dungeon@9.27 (rogue-xmas02.md 4BX, Batt 2026-11-11)
         out["bare_steal"] = [bs.BARE_MAX_S, bs.BARE_HP_MIN, bs.EQUIP_KEY, bs.EQUIP_SLOT,
                              bs.BARE_STEAL_VERSION]  # fmt: skip
@@ -2342,6 +2362,7 @@ class BoxWatch:
             # forward pass on the GPU's detect server, the CPU detector behind it (any failure)
             self.det = unit_detector.for_map_gpu(map_name)
         self.gpu = detector != "cpu"
+        self.last_pick: dict[str, Any] | None = None  # dungeon@9.28: --value-target's choice
         self.model = {"onnx": self.det.model.name, "collapse": sorted(self.det.collapse),
                       "threads": unit_detector.THREADS, "detector": detector}  # fmt: skip
         if self.gpu:
@@ -2443,14 +2464,18 @@ class BoxWatch:
         return False
 
     def near(self, px: Sequence[float], max_px: float, fresh_s: float,
-             skip: Any = None) -> tuple[float, ...] | None:  # fmt: skip
+             skip: Any = None, values: Mapping[str, float] | None = None,
+             ) -> tuple[float, ...] | None:  # fmt: skip
         """The nearest fresh monster box whose foot is within ``max_px`` of ``px``; a box whose
-        foot ``skip`` (dungeon@5: an ignored box spot) refuses is passed over."""
+        foot ``skip`` (dungeon@5: an ignored box spot) refuses is passed over. With ``values``
+        (dungeon@9.28, --value-target) the same candidates are ranked by value_target.score
+        instead (``last_pick`` records the choice)."""
         with self.lock:
             t, got = self.last
         if time.monotonic() - t > fresh_s:
             return None
         best = None
+        cands: list[tuple[float, Any]] = []  # dungeon@9.28: the same candidates, for --value-target
         for b in got:
             if self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2):
                 self.n_self += 1  # 3.98 run 1 (12:11): v1 boxes our OWN Crusader as a monster
@@ -2459,8 +2484,16 @@ class BoxWatch:
                 self.n_skip += 1
                 continue
             d = math.hypot((b.x0 + b.x1) / 2 - px[0], b.y1 - px[1])
+            if d <= max_px:
+                cands.append((d, b))
             if d <= max_px and (best is None or d < best[0]):
                 best = (d, b.x0, b.y0, b.x1, b.y1)
+        self.last_pick = None
+        if values and cands:  # dungeon@9.28 (--value-target): the box worth the most
+            d_v, b_v = value_pick(cands, values)
+            self.last_pick = {"species": box_species(b_v), "d": round(d_v),
+                              "nearest_d": None if best is None else round(best[0])}  # fmt: skip
+            return (b_v.x0, b_v.y0, b_v.x1, b_v.y1)
         return None if best is None else best[1:]
 
     def stop(self) -> None:
@@ -3627,6 +3660,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         why_bs = bare_steal_refused(a.char, a.steal, keys_)
         if why_bs:
             raise SystemExit(f"dungeon@9.27 refused: {why_bs}")
+    vt_values: dict[str, float] | None = None  # dungeon@9.28 (--value-target, 4CB)
+    if getattr(a, "value_target", False):
+        import value_target as vt_mod
+
+        vt_values = vt_mod.species_values(a.map) or None
+        if not vt_values:
+            raise SystemExit(
+                f"dungeon@9.28 refused: no species values for {a.map} "
+                "(econ_model.py build MAP first: data/econ/maps.json)"
+            )
     bare_ready_on = bool(getattr(a, "bare_ready", False))  # dungeon@9.27b (after 4BY)
     why_bry = bare_ready_refused(bare_on, bare_ready_on)
     if why_bry:
@@ -4028,6 +4071,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "minutes": a.minutes, "map": map_, "start": list(start), "inv_db": inv,
             **({"start_cell": list(start_cell)} if start_cell is not None else {}),
             **({"stage_at": list(stage_at)} if stage_at is not None else {}),
+            **({"value_target_values": vt_values} if vt_values else {}),
             "level_db": level_db, "level_hold": conf.get("level_hold"),
             # the judge's MaxHP / MaxSP when no packet gives them (2026-11-05: the Rogue at 99)
             "max_hp": conf["max_hp"], "max_sp": conf.get("max_sp"),
@@ -4793,6 +4837,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             else:
                 near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
                           else None)  # fmt: skip
+            if vt_values and fresh and near_b is not None:  # dungeon@9.28 (--value-target, 4CB)
+                es_ = getattr(a, "engage_screen", False)
+                near_v = boxes.near(  # the SAME candidates and skips, chosen by value
+                    FOOT_PX, BOX_SCREEN_PX if es_ else BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0,
+                    (lambda f: (not in_view(f[0], f[1] - BODY_UP) or unreachable(here, f)))
+                    if es_ else None, values=vt_values)  # fmt: skip
+                if near_v is not None:
+                    near_b = near_v
+                    rec["pick"] = boxes.last_pick
             if near_b is None:
                 ev({**rec, "box": None, "verdicts": [], "struck": False})
                 return None
@@ -7062,6 +7115,15 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="dungeon@7: Batt's steal-first, ONE Steal on every monster while the SP pays for it",
+    )
+    t.add_argument(
+        "--value-target",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.28 (rogue-xmas02.md 4CB; toward Batt's 2026-11-11 goal of 100,000 z/h; "
+        "OFF by default): the box target is the box worth the most a kill (the map model's drops "
+        "at Overcharge, data/econ/maps.json, by the detector's own species), discounted by "
+        "distance (value / (1 + d / 150 px)), not simply the nearest; the same candidates",
     )
     t.add_argument(
         "--bare-steal",
