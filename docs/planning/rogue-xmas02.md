@@ -5872,4 +5872,10 @@ recent two-run pair of that same base (named in the result).
   - A faster HUD that does not slow the decisions needs the server to put the decision calls
     first (a priority queue, or a second inference stream on the Arc). That is a proposal for
     Batt.
+- **The queue from p73 (fixed 23:16 ICT, each pair on the base current when its first run starts):**
+  p73 + p74 = 4CE (the Knife + `--steal-cue popup --swap-gap`, fiT24 / fiT25); p75 + p76 = 4CB
+  `--value-target` (fiT26 / fiT27); p77 + p78 = 4CC `--queue` (fiT28 / fiT29); p79 + p80 = 4CF
+  `--heal-candy` (fiT30 / fiT31; its candies are on F6 / F7 since 23:06, 21 + 23); then U0 (4CD,
+  10 min) in the first window too short for a 25-min pilot. All with `--hud`, her NOT immune, after
+  an MVP kill.
 
