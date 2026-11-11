@@ -3913,3 +3913,37 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
   Session negatives: round 4's names + the admitted pilots. Val: p31 (as round 4). Cache id
   `xmas02-fi-r5-20261112`.
 
+### Amendment S (2026-11-12 06:55 ICT from `date`, written BEFORE any of its data): a Stormy Knight class -- "when you see it, Fly Wing at once; if it is far, walk away" (Batt)
+
+- **Batt's words (2026-11-12 ~06:2x, translated; rogue-xmas02.md 4CQ item 2):** "from now on never
+  switch it off -- in real play we are not a GM -- escape instead: when you see it, Fly Wing at
+  once; if it is far, walk away in another direction." The same wish as 11-09 (Amendment L 2).
+  - The pixel recognizer of stormy-knight-recognizer.md failed its held-out (recall 5 / 16).
+  - The route that worked since is the GPU detector's own class: Garm Baby, Amendment M, deployed
+    as `xmas02gb`. This amendment adds Stormy Knight (1251) the same way.
+- **The data (immune watches, Amendment M's protocol, each beside `record_session.py --backend rdp
+  --fps 1 --format png`, the Rogue IMMUNE judged on the Chat tab, the aura off):**
+  - **(b), allowed now:** the NATURAL MVP. `@mobsearch` gives its cell; she is warped within ~6
+    cells of it and dwells; repeat as it moves. Two DEV sessions (`sk1`, `sk2`) and one HELD-OUT
+    (`sk3`, at least 30 min after sk2, the MVP elsewhere on the map), ~15 min each.
+  - **(a), only if Batt allows it:** Amendment M's lattice watch with `--spawn 1251 --spawn-n 1`
+    (DEV `sk1a` / `sk2a` on lattice-train.json; HELD-OUT `sk3a` on lattice-test.json; seeds 2611121
+    / 2611122 / 2611123), `@killmonster2` after each dwell. It is a strong monster staged beside
+    her, so it waits for his word (the standing rule).
+  - Her immunity makes the knight and its summons ignore her; there is no world click.
+- **The labels, T1 / T2, the class file, training:** as Amendment M.
+  - The label rule FROZEN (xmas02-o3h-t), with 1251 in the tier.
+  - T2 on a blind DEV pack by two NEW labellers: good >= 90 %, species >= 95 %.
+  - `classes-xmas02-sk.json` = classes-xmas02-gb + `8 Stormy Knight 1251`.
+  - The cache = xmas02gb's TRAIN + the sk DEV sessions. Init xmas02gb, the class head fresh, its
+    epochs committed BEFORE the GPU step.
+- **The bars (held-out, once):** Q1 for Stormy Knight on the held-out's frames with it in view:
+  recall >= 0.80 and precision >= 0.80. Garm Baby and the four species keep their Q1 (>= 0.80 each,
+  on their held-outs). D1 p95 <= 35 ms on the live server.
+- **Then the runner (rogue-xmas02.md, its own pre-registration):**
+  - Stormy Knight joins `ALARM_CLASSES` with distance tiers: within ~8 cells -> the Fly Wing at
+    once; farther -> `--boss-walk`'s walk-away (the farthest one-click cell away from it).
+  - A LIVE flee proof comes before any scored run without the kill-before-window protocol. The
+    Orc Lord's lesson (orclord-recognizer.md 12-13): a boss can hit ~1 s after it comes into view.
+  - Until that proof passes, the chain keeps killing the MVP before each window.
+
