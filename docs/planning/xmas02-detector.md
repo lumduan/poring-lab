@@ -3671,3 +3671,24 @@ The GPU and the ONNX sets give IDENTICAL I1-I4 results.
   r3`, the pack seed 67).
 - They are refused by name already (`map_labels.XMAS02_FIT`). The model is frozen (O17f, 133589f3).
 
+### Amendment O18b (2026-11-11 09:37 ICT from `date`, BEFORE any score): round 3's held-out complete, the pack, I5 GPU
+
+- **The held-out (`--eval-test`, 133589f3 re-hashed):**
+
+| session | candidate frames | kept with items | labels | floor items | within 1 cell |
+|---|---|---|---|---|---|
+| fsTa3 (Rogue, aura, partial: 6 spots) | 582 | 24 | 87 | 13 | 30 |
+| fsTn3 (Crusader, no aura) | 1,152 | 107 | 368 | 44 | 20 |
+| fiT7 (beside p57) | 1,193 | 11 | 11 | 6 | 11 |
+| fiT8 (beside p55) | 766 | 27 | 27 | 6 | 13 |
+| fiT9 (beside p56) | 874 | 5 | 5 | 4 | 3 |
+
+- Refs: 4,003 frames. GPU predictions 09:21-09:30 (predict_dir in the worker, the NAS weights
+  133589f3). The ONNX set is running.
+- **The pack (seed 67, `pack --round 3 --eval-test`):** 133 crops = 113 item crops (aura 63,
+  SHORT 7 of 70: fsTa3's partial run; no-aura 50; N 42, F 68, M 3) + 20 E. Two NEW blind
+  labellers, Q and R, are judging it.
+- **I5 GPU (the detect server's forward time, one model a run, 300 frames, every 13th ref):**
+  xmas02fi3 p95 16.84 ms vs xmas02gb 16.89 ms = 0.997 x. All 300 on the GPU path. I5 CPU
+  (eval_latency, quiet host) comes after the ONNX set.
+
