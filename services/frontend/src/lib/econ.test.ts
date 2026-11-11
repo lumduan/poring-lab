@@ -32,6 +32,8 @@ import {
   setPrice,
   skillRate,
   summary,
+  flowOf,
+  flowText,
 } from "./econ.ts";
 
 // The server's price rules. Every expected value below was computed with the PYTHON functions the
@@ -244,4 +246,12 @@ test("formatting: grouped, units stated by the page, null stays a dash", () => {
   }
   assert.equal(runLabel(doc().runs[0]), "p7 (20261111T000000)");
   assert.equal(runLabel({ ...doc().runs[0], session: "pooled (1 runs)" }), "pooled (1 runs)");
+});
+
+test("a run's flow and wall times parse as text; an older export has none (Batt 2026-11-11)", () => {
+  const f = flowOf({ runner: "dungeon@8.7", strategy: "P2", search: "patrol", label: "xmas02-p63", flags: ["a", 3, "b"] });
+  assert.deepEqual(f, { runner: "dungeon@8.7", strategy: "P2", search: "patrol", label: "xmas02-p63", flags: ["a", "b"] });
+  assert.equal(flowText(f), "xmas02-p63 (dungeon@8.7, P2 patrol)");
+  assert.equal(flowOf(null), null);
+  assert.equal(flowText(null), "-");
 });

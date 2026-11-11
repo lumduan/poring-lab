@@ -358,6 +358,9 @@ def pool_runs(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "session": f"pooled ({len(runs)} runs)",
         "runs": len(runs),
         "sessions": [r.get("session") for r in runs],
+        "started": min((str(r["started"]) for r in runs if r.get("started")), default=None),
+        "ended": max((str(r["ended"]) for r in runs if r.get("ended")), default=None),
+        "flow": None,  # each run's own flow is in its entry
         "map": ", ".join(sorted({str(r.get("map")) for r in runs})),
         "char": ", ".join(sorted({str(r.get("char")) for r in runs})),
         "minutes": round(sum(float(r.get("minutes") or 0) for r in runs), 3),
@@ -389,6 +392,47 @@ def _names(path: Path) -> dict[str, str]:
     return {str(k): str(v["name"]) for k, v in doc.items() if isinstance(v, dict) and v.get("name")}
 
 
+def run_clock(
+    session_name: str,
+    events: Sequence[Mapping[str, Any]],
+    window: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """PURE (Batt 2026-11-11: "show when each run started and ended, and which flow the bot ran"):
+    the judged window's start and end on the WALL clock (ICT, as the session id is written:
+    YYYYMMDDTHHMMSS), from the session id's time plus the window's offsets from run_start, and the
+    flow: the runner's version, strategy, search, the run's label (the session id's tail) and its
+    flags (the manifest's fixes). Missing parts are None, never guessed."""
+    import datetime as dt
+
+    out: dict[str, Any] = {"started": None, "ended": None, "flow": None}
+    rs = next((e for e in events if e.get("kind") == "run_start"), None)
+    try:
+        base = dt.datetime.strptime(session_name[:15], "%Y%m%dT%H%M%S")
+    except ValueError:
+        base = None
+    if base is not None and rs is not None and rs.get("t_ns") is not None:
+        t_rs = int(rs["t_ns"])
+        for key, t in (("started", window.get("t0")), ("ended", window.get("t1"))):
+            if t is not None:
+                out[key] = (base + dt.timedelta(seconds=(int(t) - t_rs) / 1e9)).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+    strategy = (rs or {}).get("strategy") or manifest.get("strategy")
+    search = (rs or {}).get("search") or manifest.get("search")
+    tail = session_name[16:]
+    if strategy and f"-{strategy}-" in tail:
+        tail = tail.split(f"-{strategy}-", 1)[1]
+    out["flow"] = {
+        "runner": manifest.get("version"),
+        "strategy": strategy,
+        "search": search,
+        "label": tail or None,
+        "flags": sorted((manifest.get("fixes") or {}).keys()),
+    }
+    return out
+
+
 def export_run(
     session: str,
     table: Mapping[str, Mapping[str, Any]],
@@ -411,9 +455,11 @@ def export_run(
     judged["session"] = dj.session_dir(session).name
     w = judged["window"]
     krows, fates = dj.kills_loot(pk, int(w["t0"]), int(w["t1"]))
-    return run_entry(
+    entry = run_entry(
         judged, krows, fates, pk, table, names, mobs, where=str(dj.session_dir(session))
     )
+    entry.update(run_clock(str(judged["session"]), ev, w, man))
+    return entry
 
 
 def build(

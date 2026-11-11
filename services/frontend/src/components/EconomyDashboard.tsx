@@ -28,6 +28,7 @@ import {
   saveEdits,
   setPrice,
   summary,
+  flowText,
 } from "@/lib/econ";
 import { browserStorage, readText, writeChoice } from "@/lib/flow/prefs";
 import { backendHttpBase } from "@/lib/ws";
@@ -188,6 +189,9 @@ export function RunView({
           <thead>
             <tr className="border-b border-neutral-800">
               <th scope="col" className={TH}>Run</th>
+              <th scope="col" className={TH}>Flow</th>
+              <th scope="col" className={TH}>Start</th>
+              <th scope="col" className={TH}>End</th>
               <th scope="col" className={TH}>Map</th>
               <th scope="col" className={TH}>Character</th>
               <th scope="col" className={THR}>Judged minutes</th>
@@ -200,6 +204,9 @@ export function RunView({
             {[...current.runs.map((r, i) => [r, i] as const), [current.pooled, -1] as const].map(([r, i]) => (
               <tr key={`${r.session}-${i}`} className={`border-b border-neutral-900 ${i === runIx ? "bg-neutral-800/60" : ""}`}>
                 <td className={`${TD} font-mono text-xs`}>{i === -1 ? `Pooled (${current.runs.length} runs)` : r.session}</td>
+                <td className={`${TD} text-xs`} title={r.flow ? r.flow.flags.join(", ") : undefined}>{flowText(r.flow)}</td>
+                <td className={`${TD} font-mono text-xs`}>{r.started ?? "-"}</td>
+                <td className={`${TD} font-mono text-xs`}>{r.ended ?? "-"}</td>
                 <td className={TD}>{r.map}</td>
                 <td className={TD}>{r.char}</td>
                 <td className={TDR}>{fmtOne(r.minutes)}</td>

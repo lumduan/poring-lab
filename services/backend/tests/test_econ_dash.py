@@ -377,3 +377,16 @@ def test_real_consumables_from_a_survival_trial() -> None:
     used = {c["item_id"]: c["used"] for c in r["consumables"]}
     assert used.get(dj.POTION) == 26
     assert r["totals"]["cost"] == r["econ_row"]["cost"] and ed.check(r) == []
+
+
+def test_run_clock_gives_wall_start_end_and_the_flow() -> None:
+    """Batt 2026-11-11: each run's start / end on the wall clock and the flow the bot ran."""
+    ev = [{"kind": "run_start", "t_ns": 1_000_000_000_000, "strategy": "P2", "search": "patrol"}]
+    w = {"t0": 1_000_000_000_000 + 12_500_000_000, "t1": 1_000_000_000_000 + 1_512_500_000_000}
+    man = {"version": "dungeon@8.7", "fixes": {"walk_pick": [1], "bare_steal": [8.0]}}
+    got = ed.run_clock("20261111T132028-demo-dungeon-rogue-m1-patrol-P2-xmas02-p63", ev, w, man)
+    assert got["started"] == "2026-11-11 13:20:40" and got["ended"] == "2026-11-11 13:45:40"
+    assert got["flow"] == {"runner": "dungeon@8.7", "strategy": "P2", "search": "patrol",
+                           "label": "xmas02-p63", "flags": ["bare_steal", "walk_pick"]}  # fmt: skip
+    none = ed.run_clock("not-a-session", [], w, {})
+    assert none["started"] is None and none["ended"] is None

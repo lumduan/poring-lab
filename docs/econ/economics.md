@@ -498,6 +498,11 @@ Batt: "make a dashboard page of business results (P&L), because I will teach eco
 console's **Economy** page (`http://<host>:3000/economy`) shows banked runs at the fixed NPC prices of
 section 2. It reads exports, so a run appears there only after someone exports it:
 
+Each run row also shows **when it ran and what ran** (Batt 2026-11-11: "show when each run started and
+ended; then in real use we know which flow the bot ran, from when to when"): its judged window's start
+and end on the wall clock (ICT; the session id's time plus the window's offsets from `run_start`)
+and its flow (the run's label, the runner's version, strategy and search; its flags on hover).
+
 ```
     econ_dash.py export SESSION_DIR [SESSION_DIR ...] --name NAME   # -> data/econ/dashboard/NAME.json
     econ_dash.py list                                               # the exports there

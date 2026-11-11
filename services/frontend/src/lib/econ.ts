@@ -82,8 +82,19 @@ export interface ConsumableRow {
   npc_buy_dc: number | null; // Discount Lv 10 at the cheapest shop that gives it
 }
 
+export interface RunFlow {
+  runner: string | null; // e.g. the runner's version
+  strategy: string | null;
+  search: string | null;
+  label: string | null; // the run's own label (the session id's tail)
+  flags: string[]; // the run's flags (its manifest's fixes)
+}
+
 export interface RunEntry {
   session: string | null;
+  started: string | null; // the judged window's start, wall clock (ICT), "YYYY-MM-DD HH:MM:SS"
+  ended: string | null; // its end
+  flow: RunFlow | null;
   map: string | null;
   char: string | null;
   minutes: number | null;
@@ -184,10 +195,34 @@ function consumable(x: unknown, i: number): ConsumableRow {
   };
 }
 
+/** A run's flow (Batt 2026-11-11: "which flow the bot ran, when it started, when it ended"); null
+ * for the pooled row or an older export. Every value is plain text. */
+export function flowOf(x: unknown): RunFlow | null {
+  if (!isObj(x)) return null;
+  const flags = Array.isArray(x.flags) ? x.flags.filter((f): f is string => typeof f === "string") : [];
+  return {
+    runner: strOrNull(x.runner),
+    strategy: strOrNull(x.strategy),
+    search: strOrNull(x.search),
+    label: strOrNull(x.label),
+    flags,
+  };
+}
+
+/** One line for the runs table: "label (runner, strategy search)". */
+export function flowText(f: RunFlow | null): string {
+  if (!f) return "-";
+  const how = [f.runner, [f.strategy, f.search].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [f.label ?? "", how ? `(${how})` : ""].filter(Boolean).join(" ") || "-";
+}
+
 function run(x: unknown, what: string): RunEntry {
   if (!isObj(x)) throw new Error(`${what}: not an object`);
   return {
     session: strOrNull(x.session),
+    started: strOrNull(x.started),
+    ended: strOrNull(x.ended),
+    flow: flowOf(x.flow),
     map: strOrNull(x.map),
     char: strOrNull(x.char),
     minutes: numOrNull(x.minutes, `${what} minutes`),
