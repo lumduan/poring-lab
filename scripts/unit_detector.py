@@ -309,6 +309,12 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                             "133589f32f802e5978f7c3b32bd9b8115a8694a0b319bbc7c64f86e69c633e5d",
                             "xmas02fi3-last-736x1280.onnx",
                             "c0ca01bea1d1d2e5e4e4e03bafc657117efab057e3283b012b2edbcc85d8f312"),
+    # O20e / O21: round 4 (more natural fight drops, the fight negatives halved), frozen 32e8afae,
+    # exported 3647fd35; served for its I5 only (O21 FAIL: not deployed); NOT in MAP_MODELS
+    "xmas02fi4": GpuWeights("/datasets/archive/train/xmas02-fi-r4-20261111/weights/last.pt",
+                            "32e8afae15080d0373a987902f67d99e1619e30928da6aa8bae9725c45107656",
+                            "xmas02fi4-last-736x1280.onnx",
+                            "3647fd3535b616f58565e0b0bd8a2ebfef2066b9f8b720f6a25eaedfe92e5f63"),
 }  # fmt: skip
 
 
