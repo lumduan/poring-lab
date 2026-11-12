@@ -6395,3 +6395,31 @@ the scorer before any trial runs.
 - **A next study (Batt's call):** the drop's trigger made stricter, so a hit landing at once does
   not lose the strike (Q2). It would be its own pre-registered pair.
 
+### 4CZ. `--loot-items xmas02fi5` (p90 + p91): a FLAG -- 15 % more kills, half the loot left; the item is asked for too early (recorded 14:47 ICT from `date`)
+
+| | base p84 + p85 | loot-items p90 + p91 | bar (4CR) | |
+|---|---|---|---|---|
+| I-a: loot steps with no item seen skip the sweep | - | 149 / 168 = **88.7 %** | >= 50 % | PASS |
+| I-b: L1 (picked / dropped by our kills, packets) | 97.4 % (37 / 38) | **52.8 %** (28 / 53) | >= base - 10 pts = 87.4 % | **FAIL** |
+| I-c: kills / h | 154.66 | **178.57** (+15.5 %) | >= base + 3 % = 159.30 | PASS |
+| I-c: common-item z/h | 52,686 | 42,912 (-18.6 %) | >= base | **FAIL** |
+| D1 p95 / W1 / deaths | 22.2 / 22.1 ms, 0.39 %, 0 | 22.5 / 22.3 ms, 1.68 % (14 / 835), 0 | | PASS |
+
+- **The verdict: `--loot-items` stays a FLAG** (I-b and I-c's income fail).
+- **What it shows:** the sweep the bot does after every kill is the biggest time cost left. Skipping
+  it on 89 % of the loot steps gave +15.5 % kills / h (the median loot step: 73 ms against
+  2,921 ms). But half the drops were left on the floor.
+- **Why the drops were missed (p90, packets against the runner's events):**
+  - For 12 dropped items the nearest loot step said "no items" **1.96-3.10 s after** the item's
+    `floor_item_appear` (the item WAS on the floor).
+  - The 7 picked items were seen by a later step, **~5.3 s** after their fall.
+  - 5 items had no loot step within 3 s before / 6 s after them.
+  - Every kill is inferred (`kill_gap`, Base 99): the step comes ~1.5 s after our last hit.
+  - The model passed its held-out (I1h 0.938, natural drops 0.956: O27), so it SEES items. It is
+    asked before they can be seen: most likely the monster's death animation still covers the
+    item.
+- **The next study** (pre-registered separately, 4DA): wait until the drop can be seen before
+  trusting "no items". The settle time is measured first, offline, on p90 / p91's own 1-fps
+  recordings (`settle_study.py`: per fall, the first frame after it in which the model boxes a
+  new floor item).
+
