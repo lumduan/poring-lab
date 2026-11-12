@@ -7012,3 +7012,33 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   p117).** The chain stops on any non-zero rc. A Knife run that refused at its start would
   otherwise end the night and take D with it; last, it can cost only itself. The bars are
   unchanged.
+
+### 4DN. 4DD's verdict: `--loot-items --loot-memory` against the base, 6 + 6 interleaved -- a FLAG (recorded 03:16 ICT from `date`)
+
+- **The runs:** p100-p111, all rc 0, the MVP alive (`--mvp-live`, but the runner's `--clear-map` at
+  each start: 4DI), not immune. p102 is the re-run after the CPU change (4DJ). Scored by
+  `series_score.py` (as named in 4DD).
+- **VERDICT: D1 passes, D2 fails -> B stays a FLAG.** Arm B kills 4.4 % more but earns 0.7 % less
+  on common items.
+
+| | arm A (p100, p102 ... p110) | arm B (p101, p103 ... p111) | bar | |
+|---|---|---|---|---|
+| D1: kills / h, pooled | 155.9 (390 kills) | **162.7** (407) | >= A + 3 % = 160.6 | PASS |
+| D2: common-item z/h, pooled | 62,584 | **62,129** | >= A | **FAIL** (-455 z/h) |
+| gross z/h (Overcharge) | 83,648 (a 2carat Diamond, 10 Pearls) | 82,944 (a Chef King book, an Old Blue Box, 11 Pearls) | reported | |
+| items / h | 150.7 | 128.3 | reported | |
+| deaths | 0 | 0 | B <= A | PASS |
+| W1 (unsent walk clicks) | 0.68 % (16 / 2,364) | 1.32 % (36 / 2,731) | <= 3.5 % | PASS |
+| D1 p95 (detector) | 21.9-22.7 ms | 22.2-23.9 ms | <= 35 ms each run | PASS |
+| MVP in view (packets) | 1 run (p104: 2 boss-guard escapes, 0 deaths) | 0 | reported | |
+
+- **As a share of Batt's run (4DK):** arm A 68 % of his kills / h and 46 % of his common z/h;
+  arm B 71 % and 46 %.
+- **Why B does not earn more:**
+  - it skips the sweep where the item model sees nothing, and loots 15 % fewer items an hour;
+  - the extra kills do not make that up.
+  - The settle study (4DA) says why: ~21 % of drops are still unseen 6 s after the kill.
+  - Batt loots 47 items in 30 min, at 0.13 s a kill. His pickups come within 10 s of the fight,
+    so he waits for the drops he SEES and walks on otherwise.
+- **The base stays arm A** (`--value-target --hud --hud-fast 0.2`) for 4DH and 4DM's pair D. Pair
+  K (the Knife) runs on arm B's flags as pre-registered, against arm B.
