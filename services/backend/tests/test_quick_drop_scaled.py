@@ -23,7 +23,8 @@ BASE = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": T
 
 
 def test_the_constants_are_the_walk_up_and_the_plain_unlock() -> None:
-    assert (dh.QUICK_PER_CELL, dh.QUICK_HIT_MAX_S, dh.QUICK_SCALED_VERSION) == (0.2, 3.5, "9.38")
+    assert (dh.QUICK_PER_CELL, dh.QUICK_HIT_MAX_S, dh.QUICK_SCALED_VERSION) == (0.2, 3.5, "9.38b")
+    assert dh.QUICK_ARROW_SCALED_S == 3.0 > dh.QUICK_ARROW_S  # 9.38b (4DH): the no-arrow window
     assert dh.QUICK_PER_CELL == dh.FAR_PER_CELL_S  # the walk-up's measured time a cell
     assert dh.QUICK_HIT_MAX_S == dh.LOCK_NO_HIT_S  # longer never fires: "no hits" comes first
     assert (dh.QUICK_ARROW_S, dh.QUICK_HIT_S, dh.QUICK_RETRY) == (2.0, 2.0, 2)  # unchanged
@@ -101,7 +102,7 @@ def test_run_refuses_it_without_quick_drop_before_any_input(monkeypatch: Any) ->
     monkeypatch.setattr(r, "session", no_session)
     with pytest.raises(SystemExit) as exc:
         dh.run(a)
-    assert "dungeon@9.38 refused" in str(exc.value) and "--quick-drop" in str(exc.value)
+    assert "dungeon@9.38b refused" in str(exc.value) and "--quick-drop" in str(exc.value)
     run_src = SRC[SRC.index("def run(") :]
     assert run_src.index("why_qs = quick_scaled_refused(a)") < run_src.index("with r.session(")
 
@@ -112,9 +113,9 @@ def test_the_record_carries_it_only_when_on() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**BASE, quick_drop=True,
                                              quick_drop_scaled=False)) == off  # fmt: skip
     on = dh.fixes_of(dh.argparse.Namespace(**BASE, quick_drop=True, quick_drop_scaled=True))
-    assert on["quick_drop_scaled"] == [0.2, 3.5, "9.38"]
-    assert on["quick_drop_scaled"] == [dh.QUICK_PER_CELL, dh.QUICK_HIT_MAX_S,
-                                       dh.QUICK_SCALED_VERSION]  # fmt: skip
+    assert on["quick_drop_scaled"] == [0.2, 3.5, 3.0, "9.38b"]  # 4DH: + the no-arrow window
+    want = [dh.QUICK_PER_CELL, dh.QUICK_HIT_MAX_S, dh.QUICK_ARROW_SCALED_S, dh.QUICK_SCALED_VERSION]
+    assert on["quick_drop_scaled"] == want
     assert {k: v for k, v in on.items() if k != "quick_drop_scaled"} == off
     assert on["quick_drop"] == [2.0, 2.0, 2]
 
@@ -151,7 +152,8 @@ def test_the_default_path_is_unchanged() -> None:
     ]
     assert len(writes) == 1
     # the flag is read only by the record, the refusal and the strike's window
-    assert SRC.count('"quick_drop_scaled"') == 4  # fixes_of (x2), quick_scaled_refused, strike
+    # fixes_of (x2), quick_scaled_refused, the strike, 9.38b's no-arrow window (4DH)
+    assert SRC.count('"quick_drop_scaled"') == 5
     # the strike event carries the window only when it is set
     assert '**({"quick_hit_s": round(qh_s, 2)} if qh_s is not None else {}),' in SRC
 
@@ -212,3 +214,14 @@ def test_the_study_reads_a_drop_and_judges_the_scaled_window() -> None:
     late = {**hit, "line_after_arrow": [4.0, 4.2]}
     assert qs.scaled_outcome(late, 1.0, 10.0) == "plain_unlock"
     assert qs.scaled_outcome(late, 0.2, 3.5) == "drops"
+
+
+def test_9_38b_the_no_arrow_window_is_longer_only_under_the_flag() -> None:
+    """4DH (before its pair): the near no-arrow given-ups came 1.95-2.49 s after the click."""
+    assert dh.QUICK_ARROW_SCALED_S == 3.0 > dh.QUICK_ARROW_S
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert "burst_s = QUICK_ARROW_S if quick else BURST_MAX_S" in src  # the default unchanged
+    assert (
+        'if quick and getattr(a, "quick_drop_scaled", False):  # 9.38b (4DH)\n'
+        "                burst_s = QUICK_ARROW_SCALED_S"
+    ) in src

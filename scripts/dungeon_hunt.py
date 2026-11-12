@@ -272,7 +272,11 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # fires, because the plain "no hits" unlock takes the lock 3.5 s after it anyway. The no-ARROW
 # drop (QUICK_ARROW_S / --far-single's window) is unchanged: 5 of the 10 were no-arrow drops.
 QUICK_PER_CELL, QUICK_HIT_MAX_S = 0.2, 3.5
-QUICK_SCALED_VERSION = "9.38"
+# 9.38b (rogue-xmas02.md 4DH, BEFORE its pair): 5 of 4CY's 10 given-up strikes were NO-ARROW
+# drops, the near ones' attack requests 1.95-2.49 s after the click: under --quick-drop-scaled
+# the no-arrow window is 3.0 s, not QUICK_ARROW_S (2.0); --far-single's own window stays as before
+QUICK_ARROW_SCALED_S = 3.0
+QUICK_SCALED_VERSION = "9.38b"  # b: the no-arrow window 3.0 s (4DH)
 # --kill-gap (dungeon@9.13, rogue-xmas02.md 4AF): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
@@ -2720,7 +2724,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "quick_drop", False):  # dungeon@9.6 (rogue-xmas02.md 4W)
         out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
     if getattr(a, "quick_drop_scaled", False):  # dungeon@9.38 (rogue-xmas02.md 4DG)
-        out["quick_drop_scaled"] = [QUICK_PER_CELL, QUICK_HIT_MAX_S, QUICK_SCALED_VERSION]
+        out["quick_drop_scaled"] = [QUICK_PER_CELL, QUICK_HIT_MAX_S, QUICK_ARROW_SCALED_S,
+                                    QUICK_SCALED_VERSION]  # fmt: skip  # 9.38b: + the arrow window
     if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
@@ -6049,6 +6054,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             cur = ref
             quick = bool(getattr(a, "quick_drop", False))
             burst_s = QUICK_ARROW_S if quick else BURST_MAX_S
+            if quick and getattr(a, "quick_drop_scaled", False):  # 9.38b (4DH)
+                burst_s = QUICK_ARROW_SCALED_S
             far_from = NEAR_SINGLE_CELLS if getattr(a, "near_single", False) else FAR_CELLS
             far_w = far_window(rel, far_from) if getattr(a, "far_single", False) else None
             if far_w is not None:  # dungeon@9.8: one click, the walk-up's own time
@@ -8964,8 +8971,9 @@ def main() -> int:
         default=False,
         help="dungeon@9.38 (rogue-xmas02.md 4DG; OFF by default; needs --quick-drop): the "
         "lock's no-hit window after the arrow grows with the strike's distance: 2.0 s + 0.2 s a "
-        "cell, at most 3.5 s (QUICK_HIT_S + QUICK_PER_CELL x cells, QUICK_HIT_MAX_S); the "
-        "no-arrow drop is unchanged",
+        "cell, at most 3.5 s (QUICK_HIT_S + QUICK_PER_CELL x cells, QUICK_HIT_MAX_S); 9.38b "
+        "(4DH): the no-arrow drop waits 3.0 s, not 2.0 (QUICK_ARROW_SCALED_S; --far-single's own "
+        "window is unchanged)",
     )
     t.add_argument(
         "--lead-strike",
