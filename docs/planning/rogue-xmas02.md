@@ -7043,7 +7043,7 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
 - **The base stays arm A** (`--value-target --hud --hud-fast 0.2`) for 4DH and 4DM's pair D. Pair
   K (the Knife) runs on arm B's flags as pre-registered, against arm B.
 
-### 4DO. 4DH's verdict: the stricter quick-drop (9.38b, p112 + p113) -- a FLAG by Q2', though it earned more (recorded 04:16 ICT from `date`)
+### 4DO. 4DH's verdict: the stricter quick-drop (9.38b, p112 + p113) -- a FLAG by Q2', though it earned more (recorded 04:15 ICT from `date`)
 
 - **The runs:** p112 03:15-03:40 (fiT61), p113 03:44-04:10 (fiT62). Both rc 0, 0 deaths, the
   record `quick_drop_scaled = [0.2, 3.5, 3.0, "9.38b"]`. p113 met the MVP: 1 in view by packets,
