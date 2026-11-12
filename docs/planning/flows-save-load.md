@@ -117,6 +117,28 @@ Written 2026-11-12 11:12 ICT from `date`.
    - github.com links only on a click, with rel=noreferrer;
    - downloads tested on a real iPhone (MatPilot has not verified iOS Safari).
 
+## Two more lessons (the matpilot session's follow-up, 2026-11-12; neither tested at scale by them)
+
+1. **A folder lists at most 1,000 files through the contents API.** GitHub's docs say it: "This API
+   has an upper limit of 1,000 files for a directory ... use the Git Trees API".
+   - MatPilot does not handle it: a bigger folder would quietly show only some files.
+   - Ours lists with the Git Trees API: `GET /repos/{owner}/{repo}/git/trees/{branch}`, then the
+     folder's sub-tree (limit 100,000 entries / 7 MB with `recursive`). ALWAYS check `truncated`
+     and say so in the UI, never showing a partial list as complete.
+   - The blob sha in a tree entry should equal the contents API's file sha, so the
+     compare-before-save keeps working. Verify it with one real file.
+   - The advice for classes: one folder per class (or per student), well under 1,000 files.
+2. **Thai file names.**
+   - Every path segment goes through `encodeURIComponent`, for API URLs and github.com links.
+   - The content is UTF-8-safe Base64.
+   - Names are normalised to **NFC** (Thai SARA AM, U+0E33, changes under NFKC, not under NFC).
+   - Names are capped by **bytes** as well as by characters: 60 characters AND at most 180 UTF-8
+     bytes. Thai is 3 bytes a character, and git and some file systems limit bytes.
+   - **To check on real GitHub before relying on it** (MatPilot only has mocked tests):
+     - save, list and reload a Thai-named file, and compare the name the API returns;
+     - clone the repository on Windows and macOS and open the files.
+     - Tell the matpilot session what we find; it records the result in its ADR 0011 too.
+
 ## Not in scope
 
 - History, diffs and merging inside poring-lab (github.com shows them).
