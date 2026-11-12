@@ -400,11 +400,22 @@ def parse_step(step: str) -> Step:
 # overlay comes LAST on every command that creates or builds vision; shared-nvidia has none, so
 # VM 103's commands are exactly what they were.
 PROFILE = host_profile.current()
+# Batt 2026-11-12 ("a pull must never overwrite a user's config"): THIS machine's own compose values
+# live in Docker's standard compose.override.yaml (gitignored). Compose loads it by itself when no
+# -f is given (RUNTIME, and run: without an overlay); every explicit -f list adds it LAST.
+LOCAL_OVERRIDE = "compose.override.yaml"
+
+
+def local_override(root: Path = Path(__file__).resolve().parents[1]) -> list[str]:
+    """`-f compose.override.yaml` when this machine has one, else nothing."""
+    return ["-f", LOCAL_OVERRIDE] if (root / LOCAL_OVERRIDE).is_file() else []
+
+
 VISION_DEV = host_profile.files("compose.yaml", "compose.vision-dev.yaml",
-                                overlay=PROFILE.vision_overlay)  # rundev: the overlay  # fmt: skip
+                                overlay=PROFILE.vision_overlay) + local_override()  # fmt: skip
 # run: and build:/pull:/target: take compose's default file set unless the profile adds an overlay
 VISION_FILES = (host_profile.files("compose.yaml", overlay=PROFILE.vision_overlay)
-                if PROFILE.vision_overlay else [])  # fmt: skip
+                + local_override() if PROFILE.vision_overlay else [])  # fmt: skip
 
 
 def container_name(step: Step) -> str:

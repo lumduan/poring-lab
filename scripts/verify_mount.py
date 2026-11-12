@@ -31,7 +31,9 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 
 def file_mounts(run: Runner = _run) -> list[tuple[str, Path, str]]:
     """(service, host file, container path) for every single-file bind mount of the dev overlay."""
-    cfg = run(["docker", "compose", "-f", "compose.yaml", "-f", "compose.dev.yaml",
+    local = (["-f", "compose.override.yaml"] if (ROOT / "compose.override.yaml").is_file()
+             else [])  # this machine's own values, last (Batt 2026-11-12)  # fmt: skip
+    cfg = run(["docker", "compose", "-f", "compose.yaml", "-f", "compose.dev.yaml", *local,
                "--profile", "*", "config", "--no-interpolate", "--format", "json"])  # fmt: skip
     out: list[tuple[str, Path, str]] = []
     for svc, spec in json.loads(cfg.stdout)["services"].items():

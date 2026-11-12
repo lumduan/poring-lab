@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# ---- THIS machine's own compose values (Batt 2026-11-12: a pull never overwrites a user's config) ---
+# Docker's standard override file: compose loads it LAST by itself, and scripts/dev.sh,
+# guarded_build.py and verify_mount.py add it last to their -f lists. The NAS volume, the GPU render
+# node, ports, limits of this host go here, never into the tracked compose files.
+/compose.override.yaml
+
 # ---- runtime data: datasets, captures, weights, input logs ------------------------------------------
 # `data/` at ANY depth (this also covers a Ragnarok client's own data/ folder), except the root
 # data/README.md. Order matters: re-include the root dir, ignore its contents, re-include the README.
