@@ -500,6 +500,111 @@ def items_plan(items: Sequence[Cell], plan: Sequence[Cell] | set[Cell],
     return out
 
 
+# dungeon@9.36 (--loot-recheck; rogue-xmas02.md 4DA, after 4CZ's flag: the loot step asked the item
+# model ~2-3 s after the kill, before ~43 % of the drops were drawn -- the settle study saw a fall's
+# item by 2 s in 25 / 53, 3 s 30, 4 s 32, 5 s 38, 6 s 42). The loot step stays 9.33. Each kill's
+# 5 x 5 cells (the loot list's cells around her at the kill, as the loot step plans them) then stay
+# PENDING for RECHECK_S; while one is and she is calm, the main loop asks the same item model on a
+# fresh frame at most every RECHECK_EVERY_S (never a sleep: not due -> no check). An item boxed in a
+# pending kill's cells -> those cells are looted as the loot step's seen-items path does
+# (items_plan's order, the hovers, its caps); that kill is then done. A fight (or a hit) during it
+# yields: the kill stays pending until it expires.
+LOOT_RECHECK_VERSION = "9.36"
+RECHECK_S = 7.0  # a kill's cells stay pending this long after the kill (the study: 42 / 53 by 6 s)
+RECHECK_EVERY_S = 1.0  # at most one item detection this often while a kill is pending
+RECHECK_R = 2  # a kill's cells: the (2R + 1)^2 around her cell at the kill (the loot step's plan)
+
+
+@dataclass(eq=False)
+class PendingKill:
+    """dungeon@9.36: a kill whose cells wait for a late drop -- her cell and the tick at the kill,
+    and the rechecks run while it waited. eq=False: two kills in one tick stay two."""
+
+    cell: Cell
+    t: float
+    checks: int = 0
+
+
+def kill_cells(cell: Cell, fits: Callable[[Cell], bool] | None = None,
+               r: int = RECHECK_R) -> set[Cell]:  # fmt: skip
+    """PURE (dungeon@9.36): the (2r + 1)^2 cells around ``cell`` that ``fits`` (the loot step's
+    filter: on the map, walkable, outside the no-enter zones); all of them without one."""
+    out = {(cell[0] + dx, cell[1] + dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1)}
+    return out if fits is None else {c for c in out if fits(c)}
+
+
+def recheck_split(pending: Sequence[PendingKill], now: float, escape_t: float,
+                  max_s: float = RECHECK_S) -> tuple[list[PendingKill],
+                                                     list[tuple[PendingKill, str]]]:  # fmt: skip
+    """PURE (dungeon@9.36): (the kills still pending, the kills leaving unseen with why) -- "time"
+    once ``max_s`` has passed since the kill; "escape" for a kill at or before ``escape_t`` (the
+    last Fly Wing, walk-away or door click: she left those cells on purpose)."""
+    keep: list[PendingKill] = []
+    gone: list[tuple[PendingKill, str]] = []
+    for k in pending:
+        if k.t <= escape_t:
+            gone.append((k, "escape"))
+        elif now - k.t >= max_s:
+            gone.append((k, "time"))
+        else:
+            keep.append(k)
+    return keep, gone
+
+
+def recheck_due(now: float, last: float, every_s: float = RECHECK_EVERY_S) -> bool:
+    """PURE (dungeon@9.36): the next item detection is due ``every_s`` after the last one (the
+    recheck's own, or the loot step's)."""
+    return now - last >= every_s
+
+
+def recheck_calm(mode: str, locked: bool, calm: bool, since_taken: float, avoiding: bool,
+                 taken_s: float = FIGHT_TAKEN_S) -> bool:  # fmt: skip
+    """PURE (dungeon@9.36): she may recheck now -- hunting (mode "search": where the loot step hands
+    her back; never a fight, its "after", a rest), no lock held, the runner's own ``calm`` (no hit
+    for CALM_S, not fighting, not sitting, no HP drop), no hit on her within ``taken_s``
+    (FIGHT_TAKEN_S), and no boss-avoid window."""
+    return mode == "search" and not locked and calm and since_taken > taken_s and not avoiding
+
+
+def recheck_match(pending: Sequence[PendingKill], seen: Sequence[Cell],
+                  fits: Callable[[Cell], bool] | None = None) -> list[PendingKill]:  # fmt: skip
+    """PURE (dungeon@9.36): the pending kills (in their order) with a seen item cell (absolute)
+    inside their cells (kill_cells, filtered by ``fits``)."""
+    return [k for k in pending if any(c in kill_cells(k.cell, fits) for c in seen)]
+
+
+def recheck_plan(pending: Sequence[PendingKill], seen: Sequence[Cell],
+                 fits: Callable[[Cell], bool] | None = None,
+                 ) -> tuple[list[PendingKill], list[Cell]]:  # fmt: skip
+    """PURE (dungeon@9.36): (the matched kills, the cells to hover) -- the loot step's seen-items
+    plan (items_plan: each seen item's cell, then its nearest plan neighbours, at most
+    LOOT_ITEMS_HOVERS an item) over the union of the matched kills' cells; ([], []) for none."""
+    hits = recheck_match(pending, seen, fits)
+    plan: set[Cell] = set()
+    for k in hits:
+        plan |= kill_cells(k.cell, fits)
+    return hits, items_plan(seen, plan)
+
+
+def recheck_outcome(end: str, picks: int, hovers: int) -> tuple[str, bool]:
+    """PURE (dungeon@9.36): (the recheck's end, its kills done?) -- a fight or a hit during it
+    YIELDS (they stay pending until they expire); otherwise they are done: "looted" (a pickup),
+    "empty" (hovered, no PICKUP hand read), "off" (no cell in view), "escape" (a Fly Wing)."""
+    if end in ("fight", "hit"):
+        return end, False
+    if end == "done":
+        end = "looted" if picks else "empty" if hovers else "off"
+    return end, True
+
+
+def loot_recheck_refused(recheck: bool, loot_items: str | None) -> str | None:
+    """PURE (dungeon@9.36): why --loot-recheck cannot run (None: it can, or it is off). It re-asks
+    --loot-items' model: without that model there is nothing to re-ask."""
+    if recheck and not loot_items:
+        return "--loot-recheck goes with --loot-items"
+    return None
+
+
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
@@ -2394,6 +2499,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "loot_items", None):  # dungeon@9.33 (Batt 2026-11-12)
         out["loot_items"] = [str(a.loot_items), LOOT_ITEMS_CONF, LOOT_ITEMS_PX, LOOT_ITEMS_HOVERS,
                              LOOT_ITEMS_VERSION]  # fmt: skip
+    if getattr(a, "loot_recheck", False):  # dungeon@9.36 (rogue-xmas02.md 4DA)
+        out["loot_recheck"] = [RECHECK_S, RECHECK_EVERY_S, LOOT_RECHECK_VERSION]
     if getattr(a, "loot_aim", False):  # dungeon@9.32 (Study S-IDLE)
         out["loot_aim"] = [LOOT_AIM_HOVERS, LOOT_AIM_R, LOOT_AIM_PX, LOOT_AIM_VERSION]
     if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
@@ -4422,6 +4529,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     if loot_aim and (a.loot != "trim" or not a.box_strike):
         raise SystemExit("dungeon@9.32 refused: --loot-aim goes with --loot trim and --box-strike")
     kill_aim: dict[float, Cell] = {}  # 9.32: a kill's time -> the aimed cell (absolute)
+    rk_on = bool(getattr(a, "loot_recheck", False))  # dungeon@9.36 (rogue-xmas02.md 4DA)
+    why_rk = loot_recheck_refused(rk_on, getattr(a, "loot_items", None))
+    if why_rk:
+        raise SystemExit(f"dungeon@{LOOT_RECHECK_VERSION} refused: {why_rk}")
+    rk_pending: list[PendingKill] = []  # 9.36: the kills whose cells wait for a late drop
+    rk_st: dict[str, float] = {"last": -1e9}  # 9.36: the last item detection (recheck / loot step)
     swap_gap = bool(getattr(a, "swap_gap", False))  # dungeon@9.27e (Batt's 22:53 clip)
     if swap_gap and not bare_on:
         raise SystemExit("dungeon@9.27e refused: --swap-gap goes with --bare-steal")
@@ -6452,6 +6565,126 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if rel_ is not None:
                 kill_aim[t_k] = (here[0] + rel_[0], here[1] + rel_[1])
 
+        # --- --loot-recheck (dungeon@9.36, rogue-xmas02.md 4DA): the deferred item re-check -------
+
+        def loot_fits(c: Cell) -> bool:
+            """9.36: the loot step's plan filter -- on the map, walkable, outside the zones."""
+            return bool(0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                        and ok[c[1], c[0]] and not mz.in_no_enter(zones, c))  # fmt: skip
+
+        def recheck_prune(tick_: float) -> None:
+            """9.36 (bookkeeping only, every tick): a pending kill past RECHECK_S, or from before
+            an escape (a Fly Wing, a boss / unreach walk-away, a house door click), leaves unseen
+            -- its recheck_expired event (why "time" / "escape")."""
+            esc_ = max(fly_at, house_click_t, max(boss_walks, default=-1e9),
+                       max(ua_walks, default=-1e9))  # fmt: skip
+            keep_, gone_ = recheck_split(rk_pending, tick_, esc_)
+            for k_, why_ in gone_:
+                counts[f"recheck_expired_{why_}"] += 1
+                ev({"kind": "recheck_expired", "kill_age_s": round(tick_ - k_.t, 2), "why": why_,
+                    "cell": list(k_.cell), "checks": k_.checks})  # fmt: skip
+            rk_pending[:] = keep_
+
+        def recheck_visit(c: Cell, rs: dict[str, Any]) -> str:
+            """9.36: loot_step_v1's visit(), step for step, for the recheck (the loot step's own
+            stays inside it, unchanged): the cell's ground point hovered; a SWORD engages
+            ("fight": the loot step's strike and lock), a PICKUP hand is clicked (the walk there
+            and the pickup, then a position read); "off" out of view; "escape" after a Fly Wing."""
+            nonlocal here, lock, mode
+            assert here is not None
+            rel = (c[0] - here[0], c[1] - here[1])
+            u, v = project(here, [rel])[0]
+            rs["hovered"].append(c)
+            if not in_view(u, v):
+                return "off"
+            rs["n_hov"] += 1
+            res_r = hover(u, v)
+            if guard_tick():
+                return "escape"
+            if res_r["verdict"] == "sword":
+                ev({"kind": "engage", "by": "loot_sword", "name": None, "recheck": True})
+                strike(u, v - BODY_UP, rel, "loot_sword")
+                lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
+                mode = "fight"
+                return "fight"
+            if pickup_seen(res_r["rec"]):
+                d_ = max(abs(rel[0]), abs(rel[1]))
+                click_at(u, v, "loot")
+                counts["loot_click"] += 1
+                ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
+                    "rel": list(rel), "cell": list(c), "why": "recheck"})  # fmt: skip
+                rs["picks"] += 1
+                rs["looted"].append(c)
+                time.sleep(0.45 + 0.2 * d_)  # the walk there and the pickup
+                here = read_here() or c
+            return "ok"
+
+        def recheck_tick(tick_: float, calm_: bool) -> bool:
+            """9.36 (--loot-recheck), in the main loop after the fight branch, before the AFTER
+            block. While a kill is pending and she is calm (recheck_calm: hunting, no lock, the
+            runner's calm, no hit for FIGHT_TAKEN_S, no boss window) and a detection is due
+            (RECHECK_EVERY_S since the last, the loot step's included): the item model ONCE on a
+            fresh frame. Items in a pending kill's cells -> those kills' cells looted the loot
+            step's seen-items way (items_plan's order, recheck_visit, its caps: LOOT_MAX_PICKS,
+            LOOT_MAX_HOVERS, LOOT_TRIM_HOVERS, LOOT_MAX_S, a hit in the last 1 s stops); the kills
+            are done unless a fight / a hit stopped it (they stay pending). Never sleeps: not due
+            -> nothing. True when it made input (the loop starts a fresh tick)."""
+            nonlocal loot_settle_t, idle_since
+            h_ = here  # (recheck_prune ran this tick, after its escapes: before the HUD send)
+            if not rk_pending or h_ is None or item_det is None:
+                return False
+            if not recheck_calm(mode, lock is not None, calm_, tick_ - last_taken,
+                                tick_ < boss_until):  # fmt: skip
+                return False
+            if not recheck_due(tick_, rk_st["last"]):
+                return False
+            t_s = time.monotonic()
+            rk_st["last"] = t_s
+            counts["recheck_checks"] += 1
+            for k_ in rk_pending:
+                k_.checks += 1
+            try:
+                found_r = item_rels(item_det.detect(frame()), project(h_, ITEM_GRID))
+            except Exception:  # noqa: BLE001 -- a failed detection: no recheck this time
+                counts["recheck_fail"] += 1
+                return False
+            seen_r = [(h_[0] + dx_, h_[1] + dy_) for dx_, dy_ in found_r]
+            hits_, order_r = recheck_plan(rk_pending, seen_r, loot_fits)
+            if not hits_:
+                return False
+            rs: dict[str, Any] = {"hovered": [], "n_hov": 0, "picks": 0, "looted": []}
+            end_ = "done"
+            while rs["picks"] < LOOT_MAX_PICKS and len(rs["hovered"]) < LOOT_MAX_HOVERS and not (
+                    loot_trim and rs["n_hov"] >= LOOT_TRIM_HOVERS):  # fmt: skip
+                todo_ = [c_ for c_ in order_r if c_ not in rs["hovered"]]
+                if not todo_ or time.monotonic() - t_s > LOOT_MAX_S:
+                    break
+                if time.monotonic() - last_taken < 1.0:
+                    end_ = "hit"
+                    break
+                got_r = recheck_visit(todo_[0], rs)
+                if got_r in ("fight", "escape"):
+                    end_ = got_r
+                    break
+            end_, done_ = recheck_outcome(end_, rs["picks"], rs["n_hov"])
+            if done_:  # a fight / a hit yields: those kills stay pending until they expire
+                rk_pending[:] = [k_ for k_ in rk_pending if k_ not in hits_]
+            counts[f"recheck_{end_}"] += 1
+            counts["recheck_picks"] += rs["picks"]
+            if rs["picks"] and getattr(a, "kill_gap", False):
+                loot_settle_t = time.monotonic()  # 9.13d: the next walk waits for a fresh read
+            if rs["n_hov"]:
+                idle_since = time.monotonic()  # Amendment E: a loot is activity, never idle
+            ev({"kind": "recheck", "kill_age_s": round(t_s - hits_[0].t, 2),
+                "kills": [[list(k_.cell), round(t_s - k_.t, 2), k_.checks] for k_ in hits_],
+                "seen": [list(c_) for c_ in seen_r], "hover": [list(c_) for c_ in order_r],
+                "hovered": [list(c_) for c_ in rs["hovered"]],
+                "looted": [list(c_) for c_ in rs["looted"]], "picks": rs["picks"],
+                "hovers": rs["n_hov"], "end": end_, "pending": len(rk_pending),
+                "path": getattr(item_det, "last_path", None),
+                "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+            return bool(rs["n_hov"]) or end_ in ("fight", "escape")
+
         def loot_step_v1(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
             """Batt 2026-10-22 11:5x (his 11:44 clip: an item left in a mob fight). After the
             fight: (1) the LOOT LIST -- the union of the 5 x 5 around our cell at EVERY kill of
@@ -6904,6 +7137,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             loot_list.append((here, tick))
                             if loot_aim:  # dungeon@9.32: the nearest box's cell at this death
                                 kill_aim_set(tick)
+                            if rk_on:  # dungeon@9.36: its cells stay pending for a late drop
+                                rk_pending.append(PendingKill(here, tick))
                         if mr and lock is not None and lock.get("cell"):  # it died: off the queue
                             queue[:] = [q for q in queue if list(q["cell"]) != list(lock["cell"])]
                         lock = None
@@ -7136,6 +7371,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     idle_since = tick
                     if patrol:
                         wp_st["resume"] = True
+                if rk_on and rk_pending:  # dungeon@9.36: the pending kills age out every tick
+                    recheck_prune(tick)
                 if hud_tx is not None and boxes is not None:  # dungeon@9.29: DISPLAY ONLY
                     hud_send(hud_tx, boxes, mode, lock is not None)
                 if bare is not None:  # dungeon@9.27: a pending read-back, a target's end, the cues
@@ -7168,6 +7405,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 loot_list.append((here, tick))
                                 if loot_aim:  # dungeon@9.32: the nearest box's cell here
                                     kill_aim_set(tick)
+                                if rk_on:  # dungeon@9.36: its cells stay pending, as above
+                                    rk_pending.append(PendingKill(here, tick))
                             if mr and lock.get("cell"):  # it died: off the queue
                                 queue[:] = [q for q in queue
                                             if list(q["cell"]) != list(lock["cell"])]  # fmt: skip
@@ -7302,12 +7541,17 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     continue
                 if mode == "fight" or (lock is not None):
                     continue
+                # dungeon@9.36 (--loot-recheck): a late drop in a pending kill's cells, while calm
+                if rk_on and rk_pending and recheck_tick(tick, calm):
+                    continue  # it hovered (or a fight began): a fresh tick reads the signs first
                 # --- AFTER a fight: loot, then rest or search
                 if mode == "after":
                     queue.clear()
                 if mode == "after" and (loot_list or fight_ref is not None):
                     clicks0_ = counts["loot_click"]
                     got_ = loot_step(loot_list, fight_ref)
+                    if rk_on:  # dungeon@9.36: the loot step just asked the item model (with a
+                        rk_st["last"] = time.monotonic()  # position): the recheck waits its 1 s
                     if getattr(a, "kill_gap", False) and counts["loot_click"] > clicks0_:
                         loot_settle_t = time.monotonic()  # 9.13d: wait for a fresh position
                     idle_since = time.monotonic()
@@ -7777,6 +8021,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     bare_final = bare.run_end(dead=reason == "death")
                 except Exception as exc:  # noqa: BLE001 -- recorded; the end steps still run
                     bare_final = {"armed": bare.st.armed, "error": repr(exc)[:300]}
+            if rk_on:  # dungeon@9.36: kills still pending at the end (neither looted nor expired)
+                counts["recheck_left"] = len(rk_pending)
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts),
                 "pos_light_unconfirmed": pos_ok.unconfirmed,
                 **({"bare": bare_final} if bare_final is not None else {})})  # fmt: skip
@@ -8305,6 +8551,19 @@ def main() -> int:
         "fallback) once on a fresh frame; it hovers only the seen items' cells (+ neighbours, at "
         "most 3 an item) near the kills, and SKIPS the sweep when none is seen; a failed "
         "detection -> today's sweep",
+    )
+    t.add_argument(
+        "--loot-recheck",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.36 (rogue-xmas02.md 4DA, after 4CZ: the loot step asked the item model "
+        "2-3 s after the kill, before ~43 %% of the drops were drawn; OFF by default; with "
+        "--loot-items): the loot step stays 9.33; each kill's 5 x 5 cells then stay pending for "
+        "7 s, and while one is and she is calm (hunting, no lock, no hit for 2.5 s, no boss "
+        "window) the same item model runs on a fresh frame at most once a second in the main "
+        "loop; an item boxed inside a pending kill's cells -> those cells are looted as the loot "
+        "step's seen-items path does (its order, hovers and caps) and that kill is done; a fight "
+        "or a hit during it yields (the kill stays pending until it expires)",
     )
     t.add_argument(
         "--loot-aim",
