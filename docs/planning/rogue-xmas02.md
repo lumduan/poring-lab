@@ -6335,3 +6335,35 @@ the scorer before any trial runs.
   Batt's crop is ~2x scaled, so `data/ui_anchors/battle_log/th/` holds his screenshots and the
   README only. He will send them when he can.
 
+### 4CX. The new base measured (p84 + p85) and `--loot-aim` (p86 + p87): a FLAG (recorded 12:08 ICT from `date`)
+
+- **The runs:** all four in KILL mode (4CU), 25 min each, aura off, NOT immune.
+  - Deaths 0, every hard bar passes.
+  - p84 is fiH1 and p85 is fiH2: round 5's held-out natural drops (O22 / O24).
+  - The scores come from `score_full.sh` and the economics exports `xmas02-p84-p85-base` /
+    `xmas02-p86-p87-lootaim`. Common items = sell_oc < 3000, as on the night.
+
+| | base p84 + p85 | loot-aim p86 + p87 | bar | |
+|---|---|---|---|---|
+| kills / h (pooled) | 154.66 | 153.55 | A3: >= base | FAIL (-0.7 %) |
+| common-item z/h | 52,686 | 48,902 | A3: >= base - 3 % = 51,105 | FAIL |
+| gross z/h (Overcharge) | 66,066 | 89,811 | reported | a 2carat Diamond + 5 Pearls vs 3 Pearls |
+| median loot-step | 2,921 ms (158 steps) | 1,744 ms (159 steps) | A1: <= base - 1.0 s | PASS (-1,177 ms) |
+| L1 (picked / dropped, our kills) | 97.4 % (37 / 38) | 93.3 % (42 / 45) | A2: >= base - 5 pts | PASS (-4.1) |
+| W1 (walk clicks with no move request) | 0.39 % (3 / 774) | 2.58 % (17 / 660) | <= 3.5 % | PASS |
+| D1 p95 per run | 22.2 / 22.1 ms | 22.5 / 24.1 ms | <= 35 ms (4CR amendment) | PASS, all four |
+| items / h | 121 | 131 | reported | |
+
+- **The verdict: `--loot-aim` stays a FLAG** (A3 fails, as pre-registered).
+  - The mechanism works: each loot step is 1.2 s shorter at about the same pickup share.
+  - The time saved did not turn into kills (153.6 vs 154.7 / h). Common income fell 7.2 %, but one
+    pair cannot separate that from the drop luck.
+  - W1 rose sevenfold (still under its bar): p87's refusals show two stuck spans (13.9 s, 7.3 s).
+    Look at it before any retry.
+- **`--hud-fast 0.2` on the detect-prio server: D1 holds** on all four runs (p95 22.1-24.1 ms
+  against 22-24 ms before it). The HUD costs the decisions nothing measurable (p84: 5,992 HUD calls
+  beside 1,644 decision calls, 1 skipped). It STAYS in the base.
+- **Next:** p88 + p89 (`--quick-drop`, 4CR), running now. Round 5's held-out (fsH1, fiH1, fiH2) is
+  complete: next come its predictions, the pack, two new blind labellers, and `fi_eval --strata r5`
+  (O22).
+
