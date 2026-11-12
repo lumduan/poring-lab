@@ -3948,3 +3948,21 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
     Orc Lord's lesson (orclord-recognizer.md 12-13): a boss can hit ~1 s after it comes into view.
   - Until that proof passes, the chain keeps killing the MVP before each window.
 
+### Amendment O24 (2026-11-12 08:04 ICT from `date`, BEFORE round 5's freeze): the fresh held-out fixed
+
+- **fsH1** (the aura-off Rogue, recorded AFTER the freeze, refused by name for TRAIN): `stage_items.py
+  --char thief run --map xmas_dun02 --views near --n 6 --seed 2611269 --immune-confirmed --label
+  fsH1`, recorded `xmas02-fsH1`.
+  - Its 6 spots: (137, 60), (71, 106), (38, 52), (71, 148), (93, 180), (170, 128).
+  - Their 72 cells (each spot's 3 x 3 pile + its 4 near stands) share NONE with the 1,584 cells of
+    the 13 earlier stagings on this map: fs1 (2611101, n 18), fs2, fs3, fsTa, fsTn, fs4, fs5,
+    fsTa3, fsTn3 (n 12 each), fsTa4, both fsTn4 (n 6), and fsTa5 (2611250, n 12; O23b's next-round
+    TRAIN). Checked with the tool's own `spots --plan`; the seeds 2611260-2611268 each shared a cell.
+- **fiH1 / fiH2:** the day's base pilots p84 / p85 (rogue-xmas02.md 4CR), recorded `hunt-xmas02-fiH1` /
+  `-fiH2`.
+- The labels (`fi_labels.py label --eval-test`), the predictions, the pack and the blind labellers
+  follow O22 once all three are recorded. `fi_eval --strata r5` is run once.
+- **fsTa5's record:** two setup-only attempts (07:59:18, 08:01:59) were refused by stage_items, the
+  Rogue holding target items in the DB's last save. Their recordings (24 MB, ~10 MB) were renamed
+  `-ABORTED` on the NAS. The bag was cleared at 08:01; the staging runs once the DB has saved.
+
