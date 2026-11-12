@@ -4195,3 +4195,39 @@ the knight's labels are right. It does not say whether there are enough of them 
   (>= 40); the natural drops alone and the staging alone are reported; I1 precision, I2-I5 as
   before; Batt's 95 % is reported.
 
+### O27 (2026-11-12 13:39 ICT from `date`): THE ROUND-5 RESULT (scored once) -- PASS on every bar
+
+`fi_eval.py --strata r5` ran once at 13:38:26 (score sha256 d07810c22430de58...).
+- **The inputs:**
+  - both prediction sets (GPU predict_dir and the ONNX set) over the three held-out sessions,
+    2,224 frames;
+  - the seed-69 pack's key;
+  - two NEW blind labellers, U and V (none of A-T), with identical totals: q1 81 yes / 20 no / 3
+    unsure. **81 crops both yes / good = EVALUATED.**
+  - I5 from a 900-s detect server holding every registered model (318 frames, every 7th ref), and
+    eval_latency on the same 318 frames.
+  - No pilot ran beside any of it.
+- The GPU and ONNX sets agree within one crop.
+
+| bar | round 5 (GPU) | round 4 (O21) | bar value | verdict |
+|---|---|---|---|---|
+| **I1h recall, the aura-off held-out pooled** | **76 / 81 = 0.938** | (I1a 0.783) | >= 0.85 on >= 40 | **PASS** |
+| reported: the NATURAL drops alone (fiH1 21 / 22, fiH2 22 / 23) | **43 / 45 = 0.956** | 0.755 | - | Batt's 95 % MET for the natural drops |
+| reported: the staging alone (fsH1) | 33 / 36 = 0.917 | - | - | |
+| I1 precision | 803 / 811 = 0.990 | 0.992 | >= 0.85 | PASS |
+| I2 | 17 / 20 = 0.85 | 0.72 | >= 0.80 on >= 20 | PASS |
+| I3 any / her 5 x 5 | 0.48 % / 0.12 % (2 / 1,682) | 0.37 / 0.24 % | <= 0.5 % / <= 0.2 % | PASS |
+| I4 | 1 / 97 = 1.0 % | 1.2 % | <= 5 % | PASS |
+| I5 GPU, server p95 vs xmas02gb | 16.67 vs 16.59 ms = 1.005 x | 0.989 x | <= 1.10 x, <= 35 ms | PASS |
+| I5 CPU p95 vs xmas02gb | 651.2 vs 686.7 ms = 0.948 x | 0.978 x | <= 1.10 x | PASS |
+
+- **VERDICT: PASS.**
+  - `xmas02fi5` is cleared for the runner's `--loot-items` (dungeon@9.33).
+  - It is NOT a map's monster model: MAP_MODELS stays xmas02gb.
+- **What round 5's change did:** the aura-off TRAIN data (O22 / O23), and the held-out read in the
+  stratum Batt plays in.
+  - The natural drops rose from 75.5 % to 95.6 %.
+  - The five misses are listed in the score file: fiH1 1, fiH2 1, fsH1 3.
+- **Next (rogue-xmas02.md 4CR, pre-registered):** the pair p90 + p91 with `--loot-items xmas02fi5`
+  on today's base, judged by bars I-a, I-b and I-c.
+
