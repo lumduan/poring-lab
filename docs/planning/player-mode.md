@@ -1,13 +1,13 @@
 ---
 doc_type: plan
 hypothesis: null
-status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); NOT live-verified
+status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; NOT live-verified (Batt 11-12: no lab live test of player mode)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../setup/new-lab-host.md, rogue-xmas02.md]
-next_action: "A first live --player-mode run on the LAB server, judged from packets (no GM line typed), then Batt's later steps: Kafra warps, NPC shops, selling."
+next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.)"
 ---
 
 # Player mode: the hunting bot without GM commands
@@ -112,9 +112,62 @@ The person's potions are never drunk down at the start (the lab drinks the ones 
   unchanged) presses the Fly Wing when a hit came within 3.5 s, the HP fell, or the HP is under
   50 %.
 - A run that ends during a rest stays SEATED (natural regen goes on); it stands only when that
-  escape is due, because a Fly Wing cannot be used sitting.
+  escape is due, because a Fly Wing cannot be used sitting. ➡️ 9.35b: it stands for the Butterfly
+  Wing home too, when one is pressed (below).
 - No sit is added after the end's Fly Wing (a key right after a teleport's load is an unverified
   step). A `player_end` event records what she was left as.
+
+## Built: the boss-map warning (dungeon@9.35b; written 2026-11-12 19:40 ICT from `date`)
+
+Batt (rogue-xmas02.md 4DF, translated): "player mode on public servers: a warning only, no
+refusal".
+
+- At the start, before any input, a `--player-mode` run reads the map's BOSS spawns from the KB
+  (`player_boss_spawns`: `data/kb/spawns.json` + `mobs.json`, the names `--boss-walk` uses,
+  `boss_spawn_names`).
+- When there is one and the boss guard is off (neither `--engage-screen`, whose Battle Log names
+  guard, nor `--garm-fly`, whose detector box guards), it prints ONE plain `WARNING:` line naming
+  them. It records `{"kind": "player_boss_warning", "bosses": [...], "guard": false}` right after
+  `run_start`.
+- A KB that does not read gives the same warning with the bosses unknown (`"bosses": null`).
+- **It never refuses:** the run goes on. With the guard on, or with no boss spawn, nothing is
+  printed.
+- Tests: `test_player_mode.py` (the line, the KB read on made-up names, the block's place before
+  the session, no raise in it).
+
+## Built: the Butterfly Wing home at the end (dungeon@9.35b; written 2026-11-12 19:45 ICT from `date`)
+
+Batt (rogue-xmas02.md 4DF): "add a Butterfly Wing home at the end".
+
+- **The key.** Each character in `CHARS_CONF` names its Butterfly Wing key, `home_key`: `HOME_KEY`
+  = **F8**, the first row-1 key no character uses (F1 potion, F2 Fly Wing, F3 Steal / Auto Guard,
+  F4 the Knife opener, F5 the dagger / Heal, F6 + F7 `--heal-candy`'s).
+  - `--player-home-key KEY` overrides it.
+  - It joins the run's keys (`keys_["home"]`) under `--player-mode` only, so the lab's own key
+    checks (clear-bag's Eqp guard, `--steal-opener`'s) are unchanged.
+  - Refused before any input (`player_home_refused`): `--player-home-key` without
+    `--player-mode`, a key that is not row 1 (F1-F9), or a key the run already uses (with the
+    candies' keys and the opener).
+  - The start record carries `player_home_key`.
+- **The end** (`player_home_end`), after the run's own end escape (the 8.5 Fly Wing):
+  - Its hotbar count is read up to 5 times, 1 s apart: an end Fly Wing's dark frames.
+  - **A count >= 1: ONE press**, through `press("home", "end")`: the runner's key path, the mux.
+  - A seated end stands first: no wing works sitting.
+  - Then it waits for the map change as the runner can see one, the load gap of
+    gef10-house-rest: Basic Info's HP gone within 3 s (`PLAYER_HOME_LOAD_S`), then back within
+    20 s (`PLAYER_HOME_WAIT_S`). It never presses again.
+  - **No press, recorded:** no key, an unread count, a count of 0, a death (the dialog is the
+    person's), or a hard bar (an unknown state gets no key, as the 8.5 escape).
+  - The record: `{"kind": "player_home", "pressed", "why", "key", "count", "stood", "load_s",
+    "back_s", "waited_s"}` (an exception inside adds `error`; the end goes on). `player_end`
+    gains `home`; its `seated` is false once she stood for the wing.
+- **The start checks nothing for it:** the Butterfly Wing is optional. Without one the end is
+  9.35's.
+- **No line is typed:** it is a key. The 9.35 scans stay green, and a new test checks that the one
+  `press("home", ...)` sits in the player-only branch.
+- Tests: `test_player_mode.py` (the key per character, the refusals, the end with fakes: one press
+  at a count >= 1, none at 0 / unread / no key / death / hard bar, a seated end stands first, the
+  capped wait).
 
 ## Not built yet
 
@@ -125,16 +178,18 @@ The person's potions are never drunk down at the start (the lab drinks the ones 
   active only with `--engage-screen`. Its live flee proof against Stormy Knight (rogue-xmas02.md
   4CS) FAILS as registered: F1 died in the runner's own setup before the loop ran (4CU), so the
   escape itself is unproven. A player-mode run on a map with an MVP is protected by nothing
-  proven.
-- **A "go home" item at the end:** a Butterfly Wing on a hotbar key would be a player's own way to
-  the save point. Nothing presses one today.
+  proven. Since 9.35b the start WARNS on such a map when the guard is off (above); it does not
+  refuse (Batt).
+- ~~**A "go home" item at the end:** a Butterfly Wing on a hotbar key would be a player's own way to
+  the save point. Nothing presses one today.~~ ➡️ BUILT in 9.35b (above).
 - **A learner's own character and data:** the identity check needs that character's name and job
   references (crusader.py's cut steps), and the hotbar digits, the KB, the GATs and the map's zones
   and route are local files built on the lab. None of that comes from the server.
 - **ADR-0023 decision 2 in the judges:** a player-mode run carries `fixes.player_mode`, but no
   judge or the economy page filters on it yet.
 - **No live run has been made** (the build had no live access): the first one should be on the
-  LAB server, where the packets can confirm that no GM line was typed.
+  LAB server, where the packets can confirm that no GM line was typed. ➡️ Batt 2026-11-12
+  (rogue-xmas02.md 4DF): no lab live test of player mode.
 
 ## Not in scope
 

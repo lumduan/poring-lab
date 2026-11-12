@@ -117,7 +117,10 @@ the account is no GM. The run types NO line (every line this runner types goes t
 which refuses first), reads nothing from the lab's DB, starts where the person left the character
 (her cell read on the minimap readout) with the stock she brought (read on the hotbar: at least
 PLAYER_MIN_WINGS Fly Wings and PLAYER_MIN_HEALS heal items), and ends by the run's own Fly Wing
-escape only: no warp home, no @alive / @heal, no level hold, no top-up, no staging.
+escape: no warp home, no @alive / @heal, no level hold, no top-up, no staging. dungeon@9.35b (Batt
+2026-11-12): then ONE Butterfly Wing home (its hotbar key, --player-home-key) when its count reads
+>= 1; and on a map whose KB lists a boss spawn, with the boss guard off, one WARNING line at the
+start (never a refusal).
 
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
@@ -197,6 +200,12 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 }  # fmt: skip
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "heal": "F5", "sit": "Insert",
         "stand": "Insert"}  # fmt: skip
+# dungeon@9.35b (--player-mode's Butterfly Wing home, Batt 2026-11-12): each character's hotbar key
+# for the Butterfly Wing (CHARS_CONF "home_key"), F8 -- the first row-1 key no character uses (F1
+# potion, F2 Fly Wing, F3 Steal / Auto Guard, F4 the Knife opener, F5 the dagger / Heal, F6 + F7
+# --heal-candy's). It joins the run's keys (keys_["home"]) under --player-mode only, so the lab's
+# own key checks (clear-bag's Eqp guard, --steal-opener's) are unchanged
+HOME_KEY = "F8"
 MAX_HP = 5260  # the Crusader's (CHARS_CONF holds each character's)
 READ_HZ = 5.0
 HEAL_GAP_S = 1.1  # Heal's after-cast delay is 1 s (pinned skill_db AL_HEAL AfterCastActDelay)
@@ -254,6 +263,16 @@ LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25
 # after it -> the lock drops; after either, the box path runs again (the nearest box), at most
 # QUICK_RETRY times a fight, before the ring scan.
 QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
+# --quick-drop-scaled (dungeon@9.38, rogue-xmas02.md 4DG; Batt 2026-11-12: "test a stricter
+# --quick-drop"; 4CY: in 10 of p88 + p89's 28 drops our attack came <= 2 s after the drop): with
+# --quick-drop, the lock's NO-HIT window after the arrow grows with the strike's distance (cells,
+# Chebyshev, the strike's rel): QUICK_HIT_S + QUICK_PER_CELL x cells, at most QUICK_HIT_MAX_S
+# (quick_hit_window). Chosen from those 28 drops (4DG): QUICK_PER_CELL is FAR_PER_CELL_S (the
+# walk-up's measured time a cell), and QUICK_HIT_MAX_S is LOCK_NO_HIT_S -- a longer window never
+# fires, because the plain "no hits" unlock takes the lock 3.5 s after it anyway. The no-ARROW
+# drop (QUICK_ARROW_S / --far-single's window) is unchanged: 5 of the 10 were no-arrow drops.
+QUICK_PER_CELL, QUICK_HIT_MAX_S = 0.2, 3.5
+QUICK_SCALED_VERSION = "9.38"
 # --kill-gap (dungeon@9.13, rogue-xmas02.md 4AF): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
@@ -776,13 +795,14 @@ CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand
 # HP-rate trigger), keys, Auto Guard or not, stock, and whether the setup may drop the Etc tab
 CHARS_CONF: dict[str, dict[str, Any]] = {
     "crusader": {"job": "crusader", "max_hp": 5260, "keys": KEYS, "autoguard": True,
-                 "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True},
+                 "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True,
+                 "home_key": HOME_KEY},
     "thief": {"job": "thief", "max_hp": 952, "max_sp": 112,  # its status window (thief-payon 4)
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10,
               # Rough Oridecon 756 / Rough Elunium 757 are Etc: never dropped by the setup
-              "clear_etc": False},
+              "clear_etc": False, "home_key": HOME_KEY},
     # dungeon@8 (Batt 2026-10-25, rogue-gef10.md): the SAME character (data/thief, Thief8fce) after
     # its job change; its status window 2026-10-25 19:3x: HP 2146, SP 336 (Base 62 / Rogue 50).
     # Loot is value now (his Overcharge merchant): never dropped; at 40 % the setup stops ("train
@@ -798,6 +818,7 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert", "equip": "F5"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
+              "home_key": HOME_KEY,  # dungeon@9.35b: the Butterfly Wing (--player-mode only)
               "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
               "level_hold": 99,
               # Batt 2026-11-08 (p11 refused at 40.7 %): the Rogue runs on up to WEIGHT_MAX
@@ -1106,6 +1127,152 @@ def player_wings_low(item: int, n: int | None, keep: int = PLAYER_WINGS_KEEP) ->
     fewer (an unread count never ends it), so the end's own escape still has one: no @warp takes a
     player home."""
     return item == STOCK_ITEMS["fly"] and n is not None and n <= keep
+
+
+# dungeon@9.35b (Batt 2026-11-12, rogue-xmas02.md 4DF: "player mode on public servers: a warning
+# only, no refusal"): a --player-mode run on a map whose KB lists a BOSS spawn, with the boss guard
+# off (no --engage-screen, whose Battle Log names guard; no --garm-fly, whose detector box guards),
+# prints ONE plain WARNING line at its start and records player_boss_warning. It never refuses.
+def player_boss_spawns(map_: str, kb: Path | None = None) -> tuple[str, ...] | None:
+    """dungeon@9.35b: the map's boss spawns by the KB, as --boss-walk names them
+    (boss_spawn_names: the spawn's name and the mob table's); None when the KB does not read."""
+    kb_ = ROOT / "data" / "kb" if kb is None else kb
+    try:
+        spawns = json.loads((kb_ / "spawns.json").read_text())
+        mobs = json.loads((kb_ / "mobs.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return boss_spawn_names(map_, spawns, mobs)
+
+
+def player_boss_warning(map_: str, bosses: Sequence[str] | None, guard: bool) -> str | None:
+    """PURE (dungeon@9.35b): the WARNING line of a --player-mode start (None: no warning) -- the
+    map has a boss spawn in the KB (``bosses``; None: the KB did not read, so they are unknown)
+    and the boss guard is off (``guard``: --engage-screen or --garm-fly). A warning only: the run
+    goes on."""
+    if guard or (bosses is not None and not bosses):
+        return None
+    off = "the boss guard is off (no --engage-screen / --garm-fly)"
+    if bosses is None:
+        return (f"WARNING: --player-mode on {map_}: the KB did not read, so its boss spawns are "
+                f"unknown, and {off}; the run goes on")  # fmt: skip
+    return (f"WARNING: --player-mode on {map_}: the KB lists a boss spawn here "
+            f"({', '.join(bosses)}) and {off}: nothing guards her from it; "
+            "the run goes on")  # fmt: skip
+
+
+# dungeon@9.35b (Batt 2026-11-12, rogue-xmas02.md 4DF: "add a Butterfly Wing home at the end"):
+# at the END of a --player-mode run, after the run's own end escape, ONE press of the Butterfly
+# Wing (to her save point) when its hotbar count reads >= 1 -- a key through press(), the mux,
+# never a line. Its key is the character's home_key (HOME_KEY) or --player-home-key. It is
+# optional: the start checks nothing for it, and an unread / 0 count, no key, a death or a hard bar
+# (an unknown state gets no key, as dungeon@8.5's end escape) mean no press, recorded.
+PLAYER_HOME_VERSION = "9.35b"
+PLAYER_HOME_ITEM = 602  # the Butterfly Wing (a Use item): to the save point
+PLAYER_HOME_LOAD_S = 3.0  # after the press, the load screen (Basic Info unread) starts by then ...
+PLAYER_HOME_WAIT_S = WARP_READY_S  # ... and Basic Info reads again (the new map drawn) by then
+PLAYER_HOME_POLL_S = 0.2
+PLAYER_STAND_S = 0.6  # a seated end stands first: no wing can be used sitting
+
+
+def player_home_refused(a: argparse.Namespace, conf: Mapping[str, Any], keys: Mapping[str, str],
+                        opener: str | None) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.35b): why the Butterfly Wing's key cannot be used (None: it can, or there is
+    none). --player-home-key goes with --player-mode; the key (it, else the character's
+    ``home_key``) is a row-1 hotbar key (F1-F9) that is no other key of the run (``keys``: the
+    character's, with --heal-candy's) and not --steal-opener's ``opener``."""
+    override = getattr(a, "player_home_key", None)
+    if not getattr(a, "player_mode", False):
+        return None if override is None else "--player-home-key goes with --player-mode"
+    key = override or conf.get("home_key")
+    if key is None:
+        return None
+    try:
+        hotbar_slot(key)
+    except ValueError:
+        return f"the Butterfly Wing key {key!r} is not a row-1 hotbar key (F1-F9)"
+    used = sorted(w for w, k in keys.items() if k == key)
+    if opener == key:
+        used.append("--steal-opener")
+    if used:
+        return f"the Butterfly Wing key {key} is already the run's ({', '.join(used)})"
+    return None
+
+
+def player_home_skip(reason: str, key: str | None) -> str | None:
+    """PURE (dungeon@9.35b): why the end presses no Butterfly Wing before its count is read (None:
+    read it). No key configured; a death (the dialog is the person's; no item works dead); a hard
+    bar (an unknown UI state gets no key, as dungeon@8.5's end escape)."""
+    if key is None:
+        return "no Butterfly Wing key configured"
+    if reason == "death":
+        return "dead: the death dialog is the person's"
+    if reason.startswith("hard_bar"):
+        return "a hard bar: an unknown state gets no key"
+    return None
+
+
+def player_home_count_why(count: int | None) -> str | None:
+    """PURE (dungeon@9.35b): why a read count presses no Butterfly Wing (None: press it once)."""
+    if count is None:
+        return "the Butterfly Wing's hotbar count did not read"
+    if count < 1:
+        return f"no Butterfly Wing on the hotbar (count {count})"
+    return None
+
+
+def player_home_end(key: str | None, reason: str, seated: bool, *,
+                    read_count: Callable[[], int | None], press: Callable[[], None],
+                    stand: Callable[[], None], basic_info: Callable[[], bool],
+                    sleep: Callable[[float], None] = time.sleep,
+                    now: Callable[[], float] = time.monotonic,
+                    rec: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.35b: the end of a --player-mode run -- the Butterfly Wing home, once, and the
+    record of what happened ({"pressed", "why", "key", "count", "stood", "load_s", "back_s",
+    "waited_s"}; filled IN PLACE in ``rec`` when given, so a failure midway keeps what was done).
+    The count is read up to STOCK_TRIES times STOCK_READ_S apart (an end Fly Wing's dark frames);
+    a seated end stands first. After the press it waits for the map change as the runner sees one
+    (gef10-house-rest's load gap): Basic Info (``basic_info``: the HP percent reads) gone within
+    PLAYER_HOME_LOAD_S, then back, at most PLAYER_HOME_WAIT_S; it never presses again."""
+    rec = {} if rec is None else rec
+    rec.update(pressed=False, key=key, count=None, stood=False)
+    why = player_home_skip(reason, key)
+    if why is not None:
+        rec["why"] = why
+        return rec
+    n: int | None = None
+    for i in range(STOCK_TRIES):
+        n = read_count()
+        if n is not None:
+            break
+        if i + 1 < STOCK_TRIES:
+            sleep(STOCK_READ_S)
+    rec["count"] = n
+    why = player_home_count_why(n)
+    if why is not None:
+        rec["why"] = why
+        return rec
+    if seated:
+        stand()
+        rec["stood"] = True
+        sleep(PLAYER_STAND_S)
+    press()
+    rec.update(pressed=True, why=f"{n} on the hotbar")
+    t0 = now()
+    load_s: float | None = None
+    back_s: float | None = None
+    while now() - t0 < PLAYER_HOME_WAIT_S:
+        sleep(PLAYER_HOME_POLL_S)
+        seen, t_ = basic_info(), now() - t0
+        if load_s is None and not seen:
+            load_s = round(t_, 2)
+        elif load_s is None and t_ > PLAYER_HOME_LOAD_S:
+            break  # no load screen: the map did not change (recorded, never a second press)
+        elif load_s is not None and seen:
+            back_s = round(t_, 2)
+            break
+    rec.update(load_s=load_s, back_s=back_s, waited_s=round(now() - t0, 2))
+    return rec
 
 
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
@@ -2552,6 +2719,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["lead_strike"] = [LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX]
     if getattr(a, "quick_drop", False):  # dungeon@9.6 (rogue-xmas02.md 4W)
         out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
+    if getattr(a, "quick_drop_scaled", False):  # dungeon@9.38 (rogue-xmas02.md 4DG)
+        out["quick_drop_scaled"] = [QUICK_PER_CELL, QUICK_HIT_MAX_S, QUICK_SCALED_VERSION]
     if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
@@ -3026,6 +3195,24 @@ def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: f
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
     our hits was seen since its click for ``hit_s`` after the arrow."""
     return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
+
+
+def quick_hit_window(rel: Sequence[int], far_w: float | None = None) -> float:
+    """PURE (--quick-drop-scaled, dungeon@9.38, rogue-xmas02.md 4DG): the no-hit window after the
+    arrow of a strike at ``rel`` (cells from us, Chebyshev): QUICK_HIT_S + QUICK_PER_CELL x cells,
+    at most QUICK_HIT_MAX_S, and never shorter than --far-single's own window ``far_w`` (so never
+    shorter than the default rule's hit_s)."""
+    cells = max(abs(int(rel[0])), abs(int(rel[1])))
+    w = min(QUICK_HIT_MAX_S, QUICK_HIT_S + QUICK_PER_CELL * cells)
+    return w if far_w is None else max(w, float(far_w))
+
+
+def quick_scaled_refused(a: argparse.Namespace) -> str | None:
+    """PURE (dungeon@9.38): --quick-drop-scaled changes --quick-drop's no-hit window, so it needs
+    --quick-drop (None: it can run, or it is off)."""
+    if getattr(a, "quick_drop_scaled", False) and not getattr(a, "quick_drop", False):
+        return "--quick-drop-scaled goes with --quick-drop (it scales that flag's no-hit window)"
+    return None
 
 
 def loot_settling(
@@ -4581,6 +4768,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_pm = player_mode_refused(a)  # before any input: the flags that type GM lines
     if why_pm:
         raise SystemExit(f"dungeon@{PLAYER_MODE_VERSION} refused: {why_pm}")
+    why_qs = quick_scaled_refused(a)  # dungeon@9.38: before any input
+    if why_qs:
+        raise SystemExit(f"dungeon@{QUICK_SCALED_VERSION} refused: {why_qs}")
     bosses: tuple[str, ...] = ()  # --engage-screen's boss guard (Amendment J)
     map_species: tuple[str, ...] = ()
     if getattr(a, "engage_screen", False):
@@ -4687,6 +4877,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise SystemExit(f"dungeon@9.31 refused: {why_hc}")
         keys_ = {**keys_, **HEAL_CANDY_KEYS}
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
+    why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
+    if why_hk:
+        raise SystemExit(f"dungeon@{PLAYER_HOME_VERSION} refused: {why_hk}")
+    home_key: str | None = None  # dungeon@9.35b: the Butterfly Wing's key (--player-mode only)
+    if player:
+        home_key = getattr(a, "player_home_key", None) or conf.get("home_key")
+        if home_key is not None:  # press("home") at the end; the lab's keys stay as they were
+            keys_ = {**keys_, "home": home_key}
     heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
@@ -4879,6 +5077,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     evf.write(json.dumps({"t_ns": r.ns(), "kind": "ev_hook_error",
                                           "error": repr(e)[:300]}) + "\n")  # fmt: skip
 
+    pb_rec: dict[str, Any] | None = None  # dungeon@9.35b: --player-mode on a boss map, no guard
+    if player:
+        pb_guard = bool(getattr(a, "engage_screen", False) or getattr(a, "garm_fly", False))
+        pb_bosses = player_boss_spawns(map_)
+        pb_line = player_boss_warning(map_, pb_bosses, pb_guard)
+        if pb_line is not None:  # a warning only (Batt 2026-11-12): the run goes on
+            print(pb_line, flush=True)
+            pb_rec = {"kind": "player_boss_warning",
+                      "bosses": None if pb_bosses is None else list(pb_bosses),
+                      "guard": pb_guard}  # fmt: skip
     counts: Counter[str] = Counter()
     reason = "time_box"
     t0 = r.ns()
@@ -5166,11 +5374,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
             **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
+            **({"player_home_key": home_key} if player else {}),
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),
             **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
             **({"steal_opener": fixes_of(a)["steal_opener"]} if opener_key is not None else {}),
             **({"house": house_rec} if house_on else {})})  # fmt: skip
+        if pb_rec is not None:  # dungeon@9.35b: the start's boss warning, in the run's record
+            ev(pb_rec)
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
@@ -5879,6 +6090,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         n += 1
                         if still_rec is not None:
                             still_rec["reclicks"] += 1
+            # dungeon@9.38 (--quick-drop-scaled): this strike's no-hit window, by its distance
+            qh_s = (quick_hit_window(rel, far_w)
+                    if quick and getattr(a, "quick_drop_scaled", False) else None)  # fmt: skip
             if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
                 n_shots[0] += 1
                 from PIL import Image
@@ -5894,6 +6108,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "end": "arrow" if arrow is not None else "damage" if dmg is not None else
                 "walked" if walked is not None else ("escape" if escaped[0] else "bound"),
                 "by": by, "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None,
+                **({"quick_hit_s": round(qh_s, 2)} if qh_s is not None else {}),
                 **({"near_still": still_rec} if still_rec is not None else {})})  # fmt: skip
             if walked is not None:
                 time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
@@ -5904,6 +6119,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 arrow_t=None if arrow is None else t_c + arrow,
                 hit_s=QUICK_HIT_S if far_w is None else max(QUICK_HIT_S, far_w),
             )
+            if qh_s is not None:  # dungeon@9.38: the fight loop's quick_no_hit reads it from here
+                last_strike["hit_s"] = qh_s
             if quick and arrow is None and dmg is None and not escaped[0]:
                 quick_rearm("no_arrow")  # dungeon@9.6: nothing connected: no lock, the next box
                 return False
@@ -8346,7 +8563,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 item_det.cpu.close()
             # dungeon@9.35 (--player-mode): a run that ends while she rests stays SEATED (natural
             # regen goes on); she stands only for the end's escape (no Fly Wing while sitting). It
-            # cannot turn due later: time only ages the hits and the HP reads (end_escape_needed)
+            # cannot turn due later: time only ages the hits and the HP reads (end_escape_needed).
+            # 9.35b: she stands for the Butterfly Wing home too, when one is pressed (below)
             seated_end = player and sitting and not end_escape_needed(
                 time.monotonic(), last_taken, st.hist, reason)  # fmt: skip
             if sitting and not seated_end:
@@ -8388,9 +8606,30 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     bench.close_chat(agent_raw, screen)
                 except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
                     print(f"end warp failed: {exc!r}", flush=True)
-            else:  # what she was left as: seated (a rest), standing, or dead with its dialog open
-                ev({"kind": "player_end", "reason": reason, "seated": seated_end,
-                    "dead": reason == "death"})  # fmt: skip
+            else:  # dungeon@9.35b: the Butterfly Wing home (a count >= 1), once, then what she
+                # was left as: seated (a rest, no wing), standing, home, or dead with its dialog
+                home_rec: dict[str, Any] = {"pressed": False, "stood": False}  # filled in place
+                try:
+                    import hotbar_count as hb_h
+
+                    def home_count() -> int | None:
+                        if stock_watch is None or home_key is None:
+                            return None
+                        g_h = hb_h.gray(np.asarray(frame()))
+                        return hb_h.read_count(g_h, hotbar_slot(home_key), stock_watch[0])
+
+                    player_home_end(
+                        home_key, reason, seated_end, read_count=home_count,
+                        press=lambda: press("home", "end"),
+                        stand=lambda: agent_raw.keys(keys_["stand"]),
+                        basic_info=lambda: hpp.read(frame(), glyphs) is not None,
+                        rec=home_rec)  # fmt: skip
+                except Exception as exc:  # noqa: BLE001 -- recorded; the end goes on
+                    home_rec["error"] = repr(exc)[:300]
+                ev({"kind": "player_home", **home_rec})
+                ev({"kind": "player_end", "reason": reason,
+                    "seated": seated_end and not home_rec.get("stood"),
+                    "home": bool(home_rec.get("pressed")), "dead": reason == "death"})  # fmt: skip
             print(r.to_png(screen.full(), out / "end.png"), flush=True)
     t1 = r.ns()
     evf.close()
@@ -8720,6 +8959,15 @@ def main() -> int:
         "of ours in 2.0 s drops; then the box path runs again (nearest box), twice a fight at most",
     )
     t.add_argument(
+        "--quick-drop-scaled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.38 (rogue-xmas02.md 4DG; OFF by default; needs --quick-drop): the "
+        "lock's no-hit window after the arrow grows with the strike's distance: 2.0 s + 0.2 s a "
+        "cell, at most 3.5 s (QUICK_HIT_S + QUICK_PER_CELL x cells, QUICK_HIT_MAX_S); the "
+        "no-arrow drop is unchanged",
+    )
+    t.add_argument(
         "--lead-strike",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -8960,9 +9208,22 @@ def main() -> int:
         "route grid), refuses below 5 Fly Wings / 5 heal items on the hotbar "
         "(PLAYER_MIN_WINGS / PLAYER_MIN_HEALS) or an unread weight / >= 48 %%, never warps, "
         "heals, tops up, drinks down, drops the bag or stages, ends when the Fly Wings read 1 "
-        "(PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape only (a rest stays "
-        "seated; a death's dialog stays for the person). Refused with --clear-map, --stage-mob, "
-        "--stage-at, --start-cell, --engage melee_ring",
+        "(PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape, then (9.35b) ONE "
+        "Butterfly Wing home when its hotbar count reads >= 1 (--player-home-key; without one a "
+        "rest stays seated; a death's dialog stays for the person). On a map whose KB lists a "
+        "boss spawn, with neither --engage-screen nor --garm-fly, it prints one WARNING line at "
+        "the start and goes on (9.35b). Refused with --clear-map, --stage-mob, --stage-at, "
+        "--start-cell, --engage melee_ring",
+    )
+    t.add_argument(
+        "--player-home-key",
+        default=None,
+        metavar="KEY",
+        help="dungeon@9.35b (Batt 2026-11-12; with --player-mode): the Butterfly Wing's row-1 "
+        "hotbar key (default: the character's home_key, F8). At the end of a --player-mode run, "
+        "after its own end escape, it is pressed ONCE when its hotbar count reads >= 1 (a seated "
+        "end stands first); no key, an unread or 0 count, a death or a hard bar: no press, "
+        "recorded (player_home). The start checks nothing for it",
     )
     t.add_argument(
         "--walk-ahead",

@@ -959,13 +959,16 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
   Potions on F1; with `--heal-candy`, Candy Canes and Candies count too). The bag must weigh less
   than 48 % on Basic Info. Below any of these the run refuses, and says why.
 - **It never warps, heals or restocks you.** It ends when only 1 Fly Wing is left. At the end it
-  uses only its own Fly Wing escape. It stays seated if it was resting. After a death it leaves
-  the death dialog for you.
+  uses its own Fly Wing escape. Then, if a Butterfly Wing shows a count on its key (F8, or
+  `--player-home-key KEY`), it presses it ONCE to send you to your save point. If it was resting,
+  it stands up for that. Without a Butterfly Wing it stays seated. After a death it leaves the
+  death dialog for you.
 - **Refused with it:** `--clear-map`, `--stage-mob`, `--stage-at`, `--start-cell`,
   `--engage melee_ring`.
 - **Not built yet:** Kafra warps, NPC shops and selling. Also nothing that keeps you away from an
   MVP: the only guard is the boss escape of `--engage-screen`, and it is unproven. A map with an
-  MVP is at your own risk.
+  MVP is at your own risk. On a map whose KB lists a boss, with neither `--engage-screen` nor
+  `--garm-fly`, the run prints one `WARNING:` line at its start and goes on.
 - **Not research:** a run on a declared server is never counted (ADR-0023 decision 2). Its record
   carries `fixes.player_mode`; no judge filters on it yet.
 

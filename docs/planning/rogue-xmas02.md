@@ -6387,6 +6387,8 @@ the scorer before any trial runs.
     (46.0 s against a 43.5-s bar).
   - In 10 of its 28 drops our own attack landed within 2 s after it: a strike that was working
     was given up.
+    ➡️ REFINED by 4DG (the offline analysis, 19:35): of those 10, 5 were the dropped strike's own
+    hit (+1 partial); 4 were the act of the NEXT, re-armed strike. 5 of the 10 were no-arrow drops.
 - **What it did to the hunt:** more kills (+2.4 %) and more common-item income (+9.7 %) than the
   base pair. One pair cannot separate that from luck: the base's own two runs differ by 21.3 kills
   / h.
@@ -6646,3 +6648,67 @@ the scorer before any trial runs.
   - The decision and no-harm bars are 4DD's. Deaths may now come from the MVP in either arm; they
     are reported per arm with their source (packets).
 
+
+### 4DG. `--quick-drop-scaled`: the analysis and the constants (BEFORE its pair) (written 19:35 ICT from `date`)
+
+Batt (4DF): "test a stricter `--quick-drop`". Built as dungeon@9.38, `--quick-drop-scaled` (OFF by
+default, needs `--quick-drop`; `fixes.quick_drop_scaled` = `[0.2, 3.5, "9.38"]` only when ON): the
+lock's NO-HIT window after the strike's arrow grows with the strike's distance,
+`hit_s = min(QUICK_HIT_MAX_S, QUICK_HIT_S + QUICK_PER_CELL x cells)`, never shorter than today's
+`hit_s`. The no-ARROW drop (`QUICK_ARROW_S`, or `--far-single`'s window) is unchanged. The strike
+event carries its `quick_hit_s` when ON. No bars here: the pair is pre-registered separately.
+
+**The analysis** (offline, `scripts/quick_drop_scaled_study.py` on p88 + p89; packets name our AID
+by `infer_self_aid`; "given up" is 4CR's Q2: our attack act <= 2 s after the drop). It reproduces
+4CY: **28 drops, 10 given up (5 + 5)**.
+
+- **Distances** (cells, Chebyshev, every strike's `rel` was recorded): given up 1, 1, 1, 2, 4, 6,
+  6, 7, 7, 8 (median 5); kept 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 5, 7, 7, 7, 8, 8 (median 2).
+  Distance does not separate them: both ends hold given-up strikes.
+- **The 10 by kind:** 5 no-hit drops and **5 no-ARROW drops**. A no-hit window cannot reach a
+  no-arrow drop: that strike never took a lock.
+- **What the 10 were** (the strike's own attack request between its click and the drop; our next
+  act after the drop; whether a NEW strike of ours came first):
+
+| run | why | cells | own request (s after click) | drop (s after click) | next act after the drop | a new strike first | what it was |
+|---|---|---|---|---|---|---|---|
+| p88 | no_hit | 8 | 2.38 | 3.65 (3.21 after the arrow) | 0.39 s, its target | no | working: walked up; our first hit's line 3.3-3.5 s after the arrow |
+| p89 | no_hit | 7 | 1.47 | 3.18 (3.03) | 0.46 s, its target | no | working: our first hit's line 2.65-2.85 s after the arrow |
+| p89 | no_hit | 1 | 0.35 | 3.09 (2.81) | 0.06 s, its target | no | working: we hit all along, the reader read our lines as type "other" for 16 s |
+| p88 | no_arrow | 1 | 2.49 | 3.08 | 0.05 s, its target | no | working: the attack began after the 4-click burst's 2.0 s |
+| p89 | no_arrow | 2 | 1.95 | 3.08 | 0.44 s, its target | no | working: the same |
+| p88 | no_arrow | 7 | 1.52 | 2.96 | 0.96 s, its target | yes (scan) | the request was out; the hit came with the next strike on the same monster |
+| p88 | no_hit | 6 | none | 3.68 (2.81) | 1.81 s, another target | yes | not this strike's: the re-armed strike connected |
+| p89 | no_hit | 1 | none | 2.94 (2.62) | 1.63 s, another target | yes | the same |
+| p89 | no_arrow | 6 | none | 2.69 | 1.44 s, another target | yes | the same |
+| p88 | no_arrow | 4 | none | 2.29 | 1.61 s, another target | no | not this strike's: a request 3.8 s after its click, no strike event between |
+
+- Times: the strike event's `t_ns` is taken BEFORE its click, whose input round trips take ~0.5 s;
+  the runner's own arrow -> drop time is its `hit_s` (2.0-2.6 s) + one 0.2-s tick. "After the
+  arrow" in the table is on the runner's clock (the unlock's own `s`), the drop column on the
+  event's.
+- **The ceiling of ANY no-hit window:** it can keep only the two far no-hit strikes (7 and 8
+  cells). A window past 3.5 s never fires: the plain "no hits" unlock (`LOCK_NO_HIT_S`) takes the
+  lock 3.5 s after the arrow anyway. The other 8: 5 are no-arrow drops, 1 a reader miss, 4 were not
+  the dropped strike's hit at all (Q2 counts the NEXT strike's act).
+
+**The constants: `QUICK_PER_CELL = 0.2` s a cell (= `FAR_PER_CELL_S`, the walk-up's measured
+time a cell) and `QUICK_HIT_MAX_S = 3.5` s (= `LOCK_NO_HIT_S`).** Windows: 2.0 s at 0 cells, 2.2 at
+1, 2.4 at 2, 3.2 at 6, 3.4 at 7, 3.5 from 8.
+
+- **(a) NOT MET: 1 of the 10 is kept for sure (p89, 7 cells: 3.4 s against its line at <= 2.95 s
+  with the reader's lag), 1 is borderline (p88, 8 cells: the 3.5-s cap against 3.3-3.5 s, right at
+  the plain unlock's own 3.5 s).** 9 of 10 is out of reach for this mechanism by the data above:
+  no choice of the two numbers keeps more than these two (swept 0.1-1.0 s a cell, caps 3.4-10 s).
+  0.15 s a cell keeps the 7-cell one only; 0.25 or more turns the 6-cell drop into the plain unlock.
+- **(b) 0 of the 18 kept drops lost.** 17 are no-arrow drops (untouched); the one kept no-hit drop
+  (1 cell) still drops, 0.2 s later. The cost: the no-hit drops that still drop are held longer --
+  +1.0 s (6 cells), +0.2, +0.2 and +0.2 s (1 cell each); +0.9 s on the 8-cell one if it is not
+  kept. About +2.5 s over the pair.
+- **Not built, for the pair's pre-registration (the parent's / Batt's call):**
+  - The near given-up strikes are no-ARROW drops of 4-click scan bursts at 1-2 cells. Their attack
+    began 2.1-2.7 s after the click, just past `QUICK_ARROW_S`. Distance does not explain them; a
+    longer no-arrow window would.
+  - Q2 as measured counts the re-armed strike's own act: 4 of the 10. "An act on the dropped
+    strike's own request target with no new strike between" counts 5 (+1 partial).
+  - One drop was a Battle Log reader miss (our hits read as type "other"): no window fixes that.
