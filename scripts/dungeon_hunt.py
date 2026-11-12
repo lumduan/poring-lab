@@ -254,6 +254,16 @@ LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX = 0.12, 40.0, 25
 # after it -> the lock drops; after either, the box path runs again (the nearest box), at most
 # QUICK_RETRY times a fight, before the ring scan.
 QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
+# --quick-drop-scaled (dungeon@9.38, rogue-xmas02.md 4DG; Batt 2026-11-12: "test a stricter
+# --quick-drop"; 4CY: in 10 of p88 + p89's 28 drops our attack came <= 2 s after the drop): with
+# --quick-drop, the lock's NO-HIT window after the arrow grows with the strike's distance (cells,
+# Chebyshev, the strike's rel): QUICK_HIT_S + QUICK_PER_CELL x cells, at most QUICK_HIT_MAX_S
+# (quick_hit_window). Chosen from those 28 drops (4DG): QUICK_PER_CELL is FAR_PER_CELL_S (the
+# walk-up's measured time a cell), and QUICK_HIT_MAX_S is LOCK_NO_HIT_S -- a longer window never
+# fires, because the plain "no hits" unlock takes the lock 3.5 s after it anyway. The no-ARROW
+# drop (QUICK_ARROW_S / --far-single's window) is unchanged: 5 of the 10 were no-arrow drops.
+QUICK_PER_CELL, QUICK_HIT_MAX_S = 0.2, 3.5
+QUICK_SCALED_VERSION = "9.38"
 # --kill-gap (dungeon@9.13, rogue-xmas02.md 4AF): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
@@ -2552,6 +2562,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["lead_strike"] = [LEAD_GAP_S, LEAD_MATCH_PX, LEAD_MIN_PX_S, LEAD_T_S, LEAD_MAX_PX]
     if getattr(a, "quick_drop", False):  # dungeon@9.6 (rogue-xmas02.md 4W)
         out["quick_drop"] = [QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY]
+    if getattr(a, "quick_drop_scaled", False):  # dungeon@9.38 (rogue-xmas02.md 4DG)
+        out["quick_drop_scaled"] = [QUICK_PER_CELL, QUICK_HIT_MAX_S, QUICK_SCALED_VERSION]
     if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
         out["engage_screen"] = [BOX_SCREEN_PX]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
@@ -3026,6 +3038,24 @@ def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: f
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
     our hits was seen since its click for ``hit_s`` after the arrow."""
     return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
+
+
+def quick_hit_window(rel: Sequence[int], far_w: float | None = None) -> float:
+    """PURE (--quick-drop-scaled, dungeon@9.38, rogue-xmas02.md 4DG): the no-hit window after the
+    arrow of a strike at ``rel`` (cells from us, Chebyshev): QUICK_HIT_S + QUICK_PER_CELL x cells,
+    at most QUICK_HIT_MAX_S, and never shorter than --far-single's own window ``far_w`` (so never
+    shorter than the default rule's hit_s)."""
+    cells = max(abs(int(rel[0])), abs(int(rel[1])))
+    w = min(QUICK_HIT_MAX_S, QUICK_HIT_S + QUICK_PER_CELL * cells)
+    return w if far_w is None else max(w, float(far_w))
+
+
+def quick_scaled_refused(a: argparse.Namespace) -> str | None:
+    """PURE (dungeon@9.38): --quick-drop-scaled changes --quick-drop's no-hit window, so it needs
+    --quick-drop (None: it can run, or it is off)."""
+    if getattr(a, "quick_drop_scaled", False) and not getattr(a, "quick_drop", False):
+        return "--quick-drop-scaled goes with --quick-drop (it scales that flag's no-hit window)"
+    return None
 
 
 def loot_settling(
@@ -4581,6 +4611,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_pm = player_mode_refused(a)  # before any input: the flags that type GM lines
     if why_pm:
         raise SystemExit(f"dungeon@{PLAYER_MODE_VERSION} refused: {why_pm}")
+    why_qs = quick_scaled_refused(a)  # dungeon@9.38: before any input
+    if why_qs:
+        raise SystemExit(f"dungeon@{QUICK_SCALED_VERSION} refused: {why_qs}")
     bosses: tuple[str, ...] = ()  # --engage-screen's boss guard (Amendment J)
     map_species: tuple[str, ...] = ()
     if getattr(a, "engage_screen", False):
@@ -5879,6 +5912,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         n += 1
                         if still_rec is not None:
                             still_rec["reclicks"] += 1
+            # dungeon@9.38 (--quick-drop-scaled): this strike's no-hit window, by its distance
+            qh_s = (quick_hit_window(rel, far_w)
+                    if quick and getattr(a, "quick_drop_scaled", False) else None)  # fmt: skip
             if n_shots[0] < MAX_SHOTS:  # evidence frames for the judge's eye (the session dir)
                 n_shots[0] += 1
                 from PIL import Image
@@ -5894,6 +5930,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "end": "arrow" if arrow is not None else "damage" if dmg is not None else
                 "walked" if walked is not None else ("escape" if escaped[0] else "bound"),
                 "by": by, "shot": n_shots[0] if n_shots[0] <= MAX_SHOTS else None,
+                **({"quick_hit_s": round(qh_s, 2)} if qh_s is not None else {}),
                 **({"near_still": still_rec} if still_rec is not None else {})})  # fmt: skip
             if walked is not None:
                 time.sleep(WALK_STOP_SETTLE_S)  # our short walk ends before the next scan
@@ -5904,6 +5941,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 arrow_t=None if arrow is None else t_c + arrow,
                 hit_s=QUICK_HIT_S if far_w is None else max(QUICK_HIT_S, far_w),
             )
+            if qh_s is not None:  # dungeon@9.38: the fight loop's quick_no_hit reads it from here
+                last_strike["hit_s"] = qh_s
             if quick and arrow is None and dmg is None and not escaped[0]:
                 quick_rearm("no_arrow")  # dungeon@9.6: nothing connected: no lock, the next box
                 return False
@@ -8718,6 +8757,15 @@ def main() -> int:
         help="dungeon@9.6 (rogue-xmas02.md 4W, pilot p15; OFF by default): a strike with no arrow "
         "and no damage 2.0 s after its click takes no lock, and a lock whose arrow brought no hit "
         "of ours in 2.0 s drops; then the box path runs again (nearest box), twice a fight at most",
+    )
+    t.add_argument(
+        "--quick-drop-scaled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.38 (rogue-xmas02.md 4DG; OFF by default; needs --quick-drop): the "
+        "lock's no-hit window after the arrow grows with the strike's distance: 2.0 s + 0.2 s a "
+        "cell, at most 3.5 s (QUICK_HIT_S + QUICK_PER_CELL x cells, QUICK_HIT_MAX_S); the "
+        "no-arrow drop is unchanged",
     )
     t.add_argument(
         "--lead-strike",
