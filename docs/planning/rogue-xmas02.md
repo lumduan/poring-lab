@@ -6556,3 +6556,26 @@ the scorer before any trial runs.
     step that would take it.
   - The bars do not change. p96 / p97 are queued after p95.
 
+### 4DC. `--loot-recheck` (p94 + p95): a FLAG by R-a; R-b passed (recorded 17:40 ICT from `date`)
+
+| | base p84 + p85 | base repeats p92 + p93 | recheck p94 + p95 | bar (4DA) | |
+|---|---|---|---|---|---|
+| R-a: L1 | 97.4 % | 86.4 % (38 / 44) | **56.9 %** (29 / 51) | >= 92.4 % | **FAIL** |
+| R-b: kills / h | 154.66 | 163.17 | **183.48** | >= 159.30 | PASS |
+| R-b: common-item z/h | 52,686 | 45,648 | **63,533** | >= 52,686 | PASS |
+| gross z/h (Overcharge) | 66,066 | 59,037 | **106,653** | reported | rares: 5 Pearls, 2 Old Blue Box, a Chef King Orleans book |
+| D1 p95 / W1 / deaths | | | 22.4 / 22.9 ms, 0.76 % (6 / 794), 0 | no harm | PASS |
+
+- **The verdict: a FLAG.** R-a fails, and every bar must pass (4CR). The recheck itself ran 3 times
+  in 153 kills (1 looted, 2 empty); 149 pending kills expired: its calm rule almost never holds on
+  this map (4DB). So this pair measures `--loot-items` alone, a second time.
+- **The two `--loot-items` pairs side by side (reported, NOT a decision; nothing pre-registered
+  pools them):**
+  - p90 + p91: 178.6 kills / h, common 42,912 z/h, L1 52.8 %.
+  - p94 + p95: 183.5 kills / h, common 63,533 z/h, L1 56.9 %.
+  - The same mechanism gave common income 20,600 z/h apart. One pair's income is that noisy.
+  - Pooled over the four runs each: loot-items ~181 kills / h against the base's 158.9 (the four
+    base runs). Common income ~53,200 against ~49,200 (the two base pairs' mean).
+- **Batt's > 100,000 z/h:** p94 + p95's gross passed it again, 106,653, on rare drops.
+- **Next:** p96 + p97 (`--loot-memory`, 4DB) are running.
+
