@@ -241,10 +241,11 @@ LAB_BUILDER = os.environ.get("LAB_BUILDX_BUILDER", "default")
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 RUN_ALLOWED = frozenset({"vision"})  # see run: in the docstring
 # measure:du= (the disk audit, Batt 2026-10-21): poring-lab's own paths only, never quant / system
+# (second-install-gaps.md row J, 2026-11-12: the running user's home, not /home/batt -- VM 103's)
 MEASURE_ROOTS = (
     Path(__file__).resolve().parents[1],
-    Path("/home/batt/poring-lab-shm-archive"),
-    Path("/home/batt/.cache/poring-lab"),
+    Path.home() / "poring-lab-shm-archive",
+    Path.home() / ".cache" / "poring-lab",
 )
 NAS_ARCHIVE_ROOT = Path("/mnt/poring-lab-datasets")  # archive: destinations (tank-main/poring-lab)
 ARCHIVE_BWLIMIT_KIB = 20000  # ~20 MB/s off the shared disk

@@ -938,9 +938,12 @@ def test_measure_du_only_under_our_roots(gb: ModuleType) -> None:
     assert step.kind == "measure" and step.command == [f"{gb.REPO}/data"]
     assert gb.measure_cmd(step)[:6] == ["nice", "-n", "19", "ionice", "-c3", "du"]
     assert gb.measure_cmd(step)[-1] == f"{gb.REPO}/data"
-    assert gb.parse_step("measure:du=/home/batt/poring-lab-shm-archive").command
+    home = Path.home()  # the running user's (gap J): /home/batt on VM 103, /home/bot here
+    assert gb.parse_step(f"measure:du={home}/poring-lab-shm-archive").command
+    assert gb.parse_step(f"measure:du={home}/.cache/poring-lab").command
     for bad in (
-        "measure:du=/home/batt/docker/quant-orderbook-engine",  # not ours
+        f"measure:du={home}/docker/quant-orderbook-engine",  # not ours
+        "measure:du=/home/batt-other/poring-lab-shm-archive",  # another user's home
         "measure:du=/",
         "measure:du=/var/lib/docker",
         f"measure:du={gb.REPO}/../quant-ticker-engine",  # '..' out of the repo
@@ -961,16 +964,17 @@ def test_measure_docker_steps_are_fixed_read_only_commands(gb: ModuleType) -> No
 
 def test_archive_only_from_our_roots_to_the_nas(gb: ModuleType) -> None:
     """The disk audit's move (Batt 2026-10-21): ours -> the NAS, copy, size+count check, delete."""
-    src = "/home/batt/poring-lab-shm-archive/poring-lab-demo/S1"
+    home = Path.home()  # gap J: the running user's home
+    src = f"{home}/poring-lab-shm-archive/poring-lab-demo/S1"
     step = gb.parse_step(f"archive:{src}=/mnt/poring-lab-datasets/S1")
     copy, check, delete = gb.archive_cmds(step)
     assert "rsync" in copy and any(a.startswith("--bwlimit=") for a in copy)
     assert {"-n", "--itemize-changes"} <= set(check)
     assert delete[-2:] == ["--", src] and "rm" in delete
     for bad in (
-        f"archive:{src}=/home/batt/elsewhere",  # dst not on the NAS
-        "archive:/home/batt/docker/quant-x/data=/mnt/poring-lab-datasets/x",  # not ours
-        "archive:/home/batt/poring-lab-shm-archive=/mnt/poring-lab-datasets/x",  # a root itself
+        f"archive:{src}={home}/elsewhere",  # dst not on the NAS
+        f"archive:{home}/docker/quant-x/data=/mnt/poring-lab-datasets/x",  # not ours
+        f"archive:{home}/poring-lab-shm-archive=/mnt/poring-lab-datasets/x",  # a root itself
         f"archive:{src}=/mnt/poring-lab-datasets",  # the share root itself
         f"archive:{src}=/mnt/poring-lab-datasets/../x",
         f"archive:{src}",
