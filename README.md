@@ -395,6 +395,9 @@ down rm`, any `--force-recreate`, and an interpolated `config` unless `scripts/g
 parent process. For agent sessions, the repo's `.claude/settings.json` PreToolUse hook
 (`scripts/hooks/guard_docker.py`) also refuses the same verbs typed as raw `docker` / `docker compose`.
 Read-only commands (`ps logs exec inspect config --no-interpolate`) and `stop` stay allowed.
+The raw `docker compose ...` lines elsewhere in this README are for a person on a plain (non-dev)
+install; in dev mode use the matching guarded step (`start:`, `restart:`, `recreate:`) instead
+(second-install-gaps.md row O).
 A second hook (`scripts/hooks/guard_bigread.py`, 2026-10-03) refuses whole-file reads (grep, rg,
 cat, awk, sed, sort, …) of session transcripts (`~/.claude/**/*.jsonl`) and of files over 50 MB on
 the shared disk; a byte-bounded `head -c`/`tail -c`/`dd count=` (≤ 64 MB) passes.
@@ -452,7 +455,7 @@ does the same thing unguarded.
   ```
   Set `VISION_DEBUG_BOX=true` to see a box on the overlay without a model.
 - **RDP:** without `WIN_HOST`/`RDP_USER`/`RDP_PASSWORD` in `.env`, the desktop runs Xvfb-only (a black
-  screen). Everything else still works. Fill them in, then `docker compose restart desktop`.
+  screen). Everything else still works. Fill them in, then recreate the desktop: `docker compose up -d desktop` on a plain install, or `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop@90` in dev mode (a `restart` keeps the container's old environment, so a new `.env` value would not take effect).
 
 **Game accounts:** `RATHENA_NEW_ACCOUNT=yes` lets you create an account from the client login screen by
 suffixing a new username with `_M` or `_F` (e.g. `bot01_M`). `RATHENA_TEST_USER` / `RATHENA_TEST_PASSWORD`
@@ -568,7 +571,7 @@ interactive session. `rdp-loop` reacts to xfreerdp3's exit code:
 | Exit | Meaning | What happens |
 |---|---|---|
 | **5** | someone else took the session | backs off for 10 minutes. Don't use `mstsc` against the Windows host while the stack runs. |
-| **132 / 134 / 135 / 148–159** | authentication or account failure | **stops retrying** (account-lockout risk). Fix `.env`, then `docker compose restart desktop`. |
+| **132 / 134 / 135 / 148–159** | authentication or account failure | **stops retrying** (account-lockout risk). Fix `.env`, then recreate the desktop (see RDP above: a restart keeps the old environment). |
 | 16–26 | licensing, or a bad command-line flag | stops |
 | anything else | network trouble, host booting | backs off, 2 s → 60 s |
 
@@ -590,7 +593,7 @@ rebuilding 3.15 from git history, not byte-identical: docs/operations/freerdp-31
 about every six months, so the pinned fingerprint no longer matches. `rdp-loop` treats that as a
 TLS failure and backs off; no credentials are sent. Re-pin:
 `python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>`, update `.env`, then
-`docker compose restart desktop`.
+recreate the desktop: `docker compose up -d desktop` on a plain install, or `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop@90` in dev mode (a `restart` keeps the container's old environment, so a new `.env` value would not take effect).
 
 **noVNC is black.** That's normal without RDP credentials: Xvfb is empty. Check the `RDP window` field
 in the console's stats panel.

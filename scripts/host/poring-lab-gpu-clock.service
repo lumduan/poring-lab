@@ -7,7 +7,9 @@
 # instruction. Idle cost: none measured (16.1 W at floor 300 and at 2450: the card sits in RC6,
 # power-gated, 99.9 % of the time between calls).
 #
-# Install (root; bot-server is the bot's sandbox, Batt 2026-11-07):
+# Install (root; bot-server is the bot's sandbox, Batt 2026-11-07). The helper FIRST: the unit
+# runs it from /usr/local/libexec (second-install-gaps.md row L: without it the unit fails):
+#     install -D -m 755 scripts/host/poring-lab-gpu-clock.sh /usr/local/libexec/poring-lab-gpu-clock.sh
 #     install -m 644 scripts/host/poring-lab-gpu-clock.service /etc/systemd/system/
 #     systemctl daemon-reload && systemctl enable --now poring-lab-gpu-clock.service
 # Undo: systemctl disable --now poring-lab-gpu-clock.service (ExecStop puts the floor back at RPn).
