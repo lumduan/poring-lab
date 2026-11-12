@@ -3,6 +3,12 @@
 // ('strict-dynamic' lets Next's own chunks load), workers only from this origin, no plugins, no
 // framing, no <base> tricks. The page may talk to this origin and to the backend (http + ws).
 // Styles keep 'unsafe-inline': two components set style attributes, and CSS cannot run script.
+//
+// ONE outside origin, in connect-src only (2026-11-12, docs/planning/flows-save-load.md section 3):
+// GitHub's REST API, for Save and Load on GitHub on /flows and /maps (lib/github/client.ts). The
+// page sends nothing there until a person opens GitHub settings, Save or Load; scripts, styles,
+// fonts and images still come from this site only. csp.test.ts pins it.
+export const GITHUB_API_ORIGIN = "https://api.github.com";
 
 /** "http://h:p" + "ws://h:p" of the backend, from BACKEND_PUBLIC_URL, else the request's host on
  * :8000 (as backendHttpBase does in the browser). Anything that does not parse adds nothing. */
@@ -30,7 +36,7 @@ export function cspHeader(o: { nonce: string; dev: boolean; backend: string[]; h
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     "font-src 'self'",
-    ["connect-src 'self'", ...o.backend, ...dev].join(" "),
+    ["connect-src 'self'", ...o.backend, ...dev, GITHUB_API_ORIGIN].join(" "),
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

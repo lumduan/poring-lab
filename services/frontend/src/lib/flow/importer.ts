@@ -86,7 +86,8 @@ export function exportText(flow: Flow): string {
   return JSON.stringify(sorted(flow), null, 2) + "\n";
 }
 
-function sorted(v: unknown): unknown {
+/** A copy with every object's keys sorted (the canonical key order; file.ts writes the flow so). */
+export function sorted(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sorted);
   if (isObj(v)) return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted(v[k])]));
   return v;
