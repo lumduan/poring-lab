@@ -6603,6 +6603,11 @@ the scorer before any trial runs.
   - A death in B that A never had stops the series for a person to look.
   - If the night ends early, the series is decided only on COMPLETE A / B pairs, with at least 4
     of each; fewer is NO_VERDICT.
+- **Scored by** `scripts/series_score.py` (committed 20:1x ICT, before the counted series had any
+  result): `--arm A=<p100,p102,...> --arm B=<p101,p103,...> --decide B:A`, over each run's
+  `judge.json` / `speed.json` / `refusals.json` (the chain's score.sh). Pooled = counts over hours;
+  common = the judge's income at Overcharge below 3,000 z. On the day's pairs it reproduces the
+  recorded figures within 5 z/h. The bars are as above.
 
 ### 4DE. `--loot-memory` (p96 + p97): a FLAG; it lifted L1 by ~15 points (recorded 18:44 ICT from `date`)
 
