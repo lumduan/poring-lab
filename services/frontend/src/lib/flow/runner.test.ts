@@ -60,10 +60,11 @@ test("the numbers are the code's: each constant in the Python outline carries th
     const literal = line.slice(name.length + 3).split("  #")[0];
     assert.deepEqual(JSON.parse(literal), p.value, name); // a number or a double-quoted string
   }
-  // a block's words show the code's numbers: the kill gap's block names KILL_GAP_HITS and KILL_GAP_S
+  // a block's words show the code's numbers: the kill gap's branch names KILL_GAP_HITS and KILL_GAP_S
+  // (its 2nd branch since dungeon@9.34: Batt's EXP / Job EXP rule comes first)
   const kill = findNode(DOC, "killgap");
   assert.ok(kill?.branches);
-  const shown = kill.branches[0].parts.filter((p): p is { param: string; shown: string } => "param" in p);
+  const shown = kill.branches[1].parts.filter((p): p is { param: string; shown: string } => "param" in p);
   assert.deepEqual(
     shown.map((p) => p.param),
     ["KILL_GAP_HITS", "KILL_GAP_S"],
@@ -108,7 +109,8 @@ test("the Python mark of a block is its own lines; a line finds its innermost bl
   assert.equal(nodeAtLine(DOC, kill.lines[0])?.id, "kill");
   const gap = findNode(DOC, "killgap");
   assert.ok(gap);
-  assert.match(pyLines[gap.head[0] - 1], /kill_gapped\(/);
+  assert.match(pyLines[gap.head[0] - 1], /exp_kill\(/); // dungeon@9.34: Batt's rule FIRST (11-12)
+  assert.ok(pyLines.slice(gap.lines[0] - 1, gap.lines[1]).some((l) => /kill_gapped\(/.test(l)));
   assert.equal(nodeAtLine(DOC, gap.head[0])?.id, "killgap");
 });
 

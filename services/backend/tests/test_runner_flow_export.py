@@ -63,7 +63,9 @@ def test_the_outline_is_python_and_every_block_owns_its_lines(doc: dict[str, Any
         assert 1 <= a <= h0 <= h1 <= b <= n_lines, n["id"]
     lines = doc["python"].split("\n")
     kill = next(n for n in _nodes(doc) if n["id"] == "killgap")
-    assert "kill_gapped(" in lines[kill["head"][0] - 1]
+    assert "exp_kill(" in lines[kill["head"][0] - 1]  # dungeon@9.34: Batt's rule FIRST (11-12)
+    k0, k1 = kill["lines"]
+    assert any("kill_gapped(" in ln for ln in lines[k0 - 1 : k1])  # the gap rule, after it
 
 
 def test_the_numbers_are_the_modules_own(doc: dict[str, Any]) -> None:

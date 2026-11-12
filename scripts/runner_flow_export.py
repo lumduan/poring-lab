@@ -364,8 +364,28 @@ def fight() -> list[Node]:
         S_DECIDE,
         [
             Branch(
-                "{KILL_GAP_HITS}+ of our hits, then none for {KILL_GAP_S} s: it died",
-                "if kill_gapped(lock.hits, now - lock.last_hit):  # KILL_GAP_HITS, KILL_GAP_S",
+                "an EXP or Job EXP line in the Battle Log: it died (FIRST)",
+                "if exp_line and exp_kill(exp_line.type, now, pair)[0]:  # EXP_PAIR_S",
+                [
+                    step(
+                        "kill_exp",
+                        S_DECIDE,
+                        "count the kill; its cells join the loot list",
+                        [
+                            "kills.append(now)",
+                            "loot_list.append((here, now))  # the 5 x 5 cells around her",
+                            "lock = None",
+                        ],
+                        "Batt's rule (2026-11-12): when the game prints an EXP or Job EXP line, "
+                        "the monster is dead -- this is checked FIRST. One kill prints both lines, "
+                        "so the second within {EXP_PAIR_S} s is the same kill.",
+                    )
+                ],
+            ),
+            Branch(
+                "else, no exp line in this game: {KILL_GAP_HITS}+ of our hits, then none for "
+                "{KILL_GAP_S} s: it died",
+                "elif not exp_seen and kill_gapped(lock.hits, now - lock.last_hit):",
                 [
                     step(
                         "kill",
@@ -395,14 +415,16 @@ def fight() -> list[Node]:
                 ],
             ),
         ],
-        "--kill-gap: at Base 99 the Battle Log shows no experience line, so the runner cannot SEE "
-        "a "
+        "--exp-first (ON by default, Batt 2026-11-12): an EXP / Job EXP line is the kill. "
+        "Where the game prints none (the lab's Base 99 Rogue: its 2021 client hides EXP 0; the "
+        "Thai server's client prints EXP '0'), --kill-gap: at Base 99 the Battle Log shows no "
+        "experience line, so the runner cannot SEE a "
         "kill. It infers one: her hits on a living monster come about every half second, so after "
         "{KILL_GAP_HITS} or more hits a silence of {KILL_GAP_S} s means it died. (A real kill "
         "took 3-22 "
         "hits in the pilots; 5 keeps nearly all real kills and few false ones.)",
-        flags=["--kill-gap"],
-        code=["kill_gapped"],
+        flags=["--kill-gap"],  # --exp-first is ON by default: in no command line
+        code=["exp_kill", "kill_gapped"],
     )
     choose = step(
         "choose",
@@ -1110,6 +1132,7 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("HP_DROP_S", "... within this long (s) = a hit the log did not show"),
         const("BOX_EVERY_S", "the box watcher's rhythm (s)"),
         const("BOX_FRESH_S", "a box older than this is not used (s)"),
+        const("EXP_PAIR_S", "a Base and a Job EXP line this close = one kill (s)"),
         const("KILL_GAP_S", "no hit of ours for this long after KILL_GAP_HITS = the kill (s)"),
         const("KILL_GAP_HITS", "our hits on the target before the gap counts"),
         const("LOCK_NO_HIT_S", "locked, but none of our hits for this long: let go (s)"),
