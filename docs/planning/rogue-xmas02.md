@@ -7042,3 +7042,36 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
     so he waits for the drops he SEES and walks on otherwise.
 - **The base stays arm A** (`--value-target --hud --hud-fast 0.2`) for 4DH and 4DM's pair D. Pair
   K (the Knife) runs on arm B's flags as pre-registered, against arm B.
+
+### 4DO. 4DH's verdict: the stricter quick-drop (9.38b, p112 + p113) -- a FLAG by Q2', though it earned more (recorded 04:16 ICT from `date`)
+
+- **The runs:** p112 03:15-03:40 (fiT61), p113 03:44-04:10 (fiT62). Both rc 0, 0 deaths, the
+  record `quick_drop_scaled = [0.2, 3.5, 3.0, "9.38b"]`. p113 met the MVP: 1 in view by packets,
+  5 Fly Wings, no death.
+- **VERDICT: Q2' FAILS (6 > 2) -> a FLAG** (4DH: all bars must pass). Q1, Q3 and no harm pass.
+
+| | arm A (6 runs, 4DN) | 9.38b pair | bar (4DH) | |
+|---|---|---|---|---|
+| Q2': given up by their OWN hit, pooled | (quick-drop alone on p88 + p89: 5) | **6** | <= 2 | **FAIL** |
+| Q2 (4CR's letter): any act <= 2 s after a drop | | 10 of 27 drops | reported | |
+| Q1: "no hits" hold per 50 min | 106.7 s (320.2 s / 150 min) | **38.8 s** | <= 0.75 x A = 80.0 s | PASS |
+| Q3: kills / h | 155.9 | **163.2** (+4.7 %) | >= A | PASS |
+| common-item z/h | 62,584 | **84,646** (+35 %) | reported | |
+| gross z/h | 83,648 | 130,026 (a 2carat Diamond, 6 Pearls) | reported | |
+| R1-A pooled / W1 / D1 p95 / deaths | | 2 / 1.04 % / 22.1-22.5 ms / 0 | < 7 / <= 3.5 % / <= 35 / 0 | PASS |
+
+- **Why Q2' fails:**
+  - 8 of the 10 give-ups were no-ARROW drops; the other 2 were no-hit drops.
+  - 8 were at `--far-single`'s distances (4+ cells), whose own window 9.38b leaves alone (the
+    study: "unchanged").
+  - The predicted near cases did not recur in this pair: 0 may-lock, 0 borderline.
+  - So the near fix was right but small. The give-ups live at the far-single distances.
+- **For Batt:** by its own bar it stays a flag. The quick-drop family is now +4.7 % kills and
+  +35 % common z/h on this pair, and +2.4 % / +9.7 % on 4CY.
+  - Each time it gave up a working strike or two, yet made more.
+  - Whether it joins the base despite Q2' is Batt's decision: two runs, and the base's own runs
+    range widely.
+  - The next repair, if wanted, is the far-single no-arrow window (`far_window`), measured the
+    same way.
+- **As a share of Batt's run (4DK):** kills 71 %, common z/h 62 %. The best common share of the
+  night so far.
