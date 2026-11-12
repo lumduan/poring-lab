@@ -4173,3 +4173,25 @@ the knight's labels are right. It does not say whether there are enough of them 
   - **The rule from now on:** a round's ONNX goes to `archive/models` BEFORE its `GPU_WEIGHTS`
     entry is committed, and a serve test listens before any pilot.
 
+### O26 (2026-11-12 12:09 ICT from `date`, BEFORE round 5's pack is drawn): round 5's evaluation pack
+
+- **The held-out is complete:**
+  - fsH1: the staging, `20261112T085856-rdp-xmas02-fsH1`, G2 PASS, 216 item labels;
+  - fiH1: p84, `20261112T093311-rdp-hunt-xmas02-fiH1`, G2 PASS, 26 item labels;
+  - fiH2: p85, `20261112T102557-rdp-hunt-xmas02-fiH2`.
+  All are labelled `--eval-test` against the FROZEN round-5 model (331b1927; O25).
+- **The pack (`fi_labels.py pack --round 5 --eval-test --seed 69`):**
+  - Round 2's method, unchanged: <= 3 crops per floor item, each crop with its E crops as in
+    round 1, the pinned instructions.
+  - It draws up to **70 crops of the natural drops** (fiH1 + fiH2) and up to **50 of the staging**
+    (fsH1), by session NAME. These are round 2's two size slots: here they mean natural / staging,
+    NOT aura / no aura. Round 5 is aura-off throughout (O22).
+  - The seed is **69** (rounds 2-4 used 66, 67, 68).
+- **The predictions:** `poring_vision.predict_dir` with the frozen round-5 weights over the three
+  held-out sessions' frames (round 3's chain, `eval_chain_r3.sh`).
+  - They run in the vision worker when no detect server of a pilot is in it.
+- **Then:** two NEW blind labellers on the pack (never shown the predictions), and
+  `fi_eval --strata r5` once. The bars are O22's: I1h recall >= 0.85 on the pooled item crops
+  (>= 40); the natural drops alone and the staging alone are reported; I1 precision, I2-I5 as
+  before; Batt's 95 % is reported.
+
