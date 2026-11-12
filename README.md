@@ -185,6 +185,9 @@ Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-
   - A run shows only after it is exported: `scripts/econ_dash.py export SESSION_DIR ... --name NAME`
     writes `data/econ/dashboard/NAME.json`; the backend serves it read-only (`GET /economy/list`,
     `GET /economy/data/NAME`, `:8000` only). Formulas and checks: `docs/econ/economics.md` section 10.
+  - The runs' counts can also live in one local SQLite file, `data/econ/lab.sqlite`
+    (`scripts/econ_db.py build / update / export / dashboard`, ADR-0025). The page still reads
+    the JSON exports.
   - Edited prices stay in the browser (localStorage) and are never sent to the server.
 - **Route preview** (2026-10-08): the LIVE, world-anchored route of every walk run: a green line
   from the character's feet with square corner nodes, a box on the next click and arrows

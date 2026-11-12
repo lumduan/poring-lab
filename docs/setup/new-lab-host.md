@@ -6,7 +6,7 @@ role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [../../README.md, ../../CLAUDE.md, ../windows-setup.md, ../client/rathena-client.md, ../operations/bot-server-handover.md, ../planning/bot-server-cutover.md, ../adr/0006-sanctioned-test-environments.md, ../adr/0016-environment-interlock.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0023-learner-mode.md, ../operations/detector-cpu.md]
+related: [../../README.md, ../../CLAUDE.md, ../windows-setup.md, ../client/rathena-client.md, ../operations/bot-server-handover.md, ../planning/bot-server-cutover.md, ../adr/0006-sanctioned-test-environments.md, ../adr/0016-environment-interlock.md, ../adr/0019-windows-stays-clean.md, ../adr/0022-vendor-neutral-accelerators.md, ../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../operations/detector-cpu.md]
 next_action: "Batt follows it on the new machine; every step that fails or reads differently is fixed HERE in the same session. Section 4.1 grows as more host values become override or .env settings; section 11 changes when ADR-0023's declared mode is built."
 title: "A second poring-lab host from scratch: Docker, the services, the Windows PC, the detector"
 date: 2026-11-12
@@ -304,8 +304,8 @@ must never overwrite them. Everything that belongs to YOUR machine lives outside
 3. Then, as the change needs it: `uv sync` (if `uv.lock` changed); a guarded `restart:backend@30`
    (backend code); `recreate:sniffer@120` (`packages/poring_packets` code); `recreate:rathena@240`
    (its entrypoint or conf templates); a guarded `build:<svc>` (an image's dependencies).
-4. Never run `git clean -x` or `-X`: they delete gitignored files, i.e. your `.env`, `data/` and
-   `settings/`.
+4. Never run `git clean -x` or `-X`: they delete gitignored files, i.e. your `.env`, `data/`
+   (with your run records, `data/econ/lab.sqlite`, section 10.1) and `settings/`.
 
 Do not edit `compose.yaml` or `config/*.yaml` for your machine. A pull would conflict with your
 edit, or silently replace it.
@@ -815,6 +815,59 @@ monsters next to her without Batt.
 - recordings and sessions go to the NAS with `scripts/dataset_ship.py ship` (a 30 GB local floor
   on dedicated-intel). Recording on the RDP path needs the `media-rec` sidecar (an Intel GPU
   encoder); without one, `record_session.py --format png --fps 1`.
+
+### 10.1 Run records in SQLite (ADR-0025)
+
+Every judged run's counts can be kept in ONE local file,
+`data/econ/lab.sqlite` ([ADR-0025](../adr/0025-run-records-sqlite.md)). It uses Python's built-in
+`sqlite3`, so there is nothing to install. The raw session folders stay the source of truth: the
+file is built from them, and it can always be rebuilt.
+
+**Where it lives:** in `data/econ/`, beside the item table. It is gitignored, so a `git pull` never
+touches it.
+- Back it up by copying `lab.sqlite`, with its `lab.sqlite-wal` / `-shm` if present, while no
+  `econ_db.py` command is running.
+- Never run `git clean -x` (section 4): it deletes the file.
+
+**Build, update, list, export:**
+
+```bash
+uv run python scripts/econ_db.py build  <SESSION_DIR_OR_ID> [...]    # (re)judge these runs into the file
+uv run python scripts/econ_db.py update <SESSION_DIR_OR_ID> [...]    # only runs not in the file yet
+uv run python scripts/econ_db.py list                                # one line per run
+uv run python scripts/econ_db.py export --format csv --out ~/share/runs.csv   # ids and counts, for sharing
+uv run python scripts/econ_db.py dashboard --runs <SID> [...] --name <NAME>   # the /economy page's JSON
+```
+
+- `build` and `update` need the item table, `data/econ/items.json`
+  (`uv run python scripts/econ_items.py build`; docs/econ/economics.md section 2). Without it they
+  refuse and create no file.
+- A run that disagrees with the judges' cross-check is refused, and nothing is written for it.
+- A CSV export writes four files: `runs.csv`, `runs_items.csv`, `runs_species.csv` and
+  `runs_consumables.csv`. They are UTF-8 with a BOM, so Excel opens them correctly.
+- `--format json` writes one file instead.
+- An export carries numeric ids and counts only. `--with-names` adds item and monster names from
+  YOUR `data/`. Those names are rAthena- or client-derived: keep such a file local, and never
+  commit or publish it.
+- `dashboard` writes the same JSON as `econ_dash.py export`. If the item table changed after a run
+  was built, it says so: `build` that run again.
+
+**Open it** in [DB Browser for SQLite](https://sqlitebrowser.org/) (File > Open Database, Browse
+Data, Execute SQL), or in Python (pandas is not a lab dependency: install it in your own Python):
+
+```python
+import sqlite3, pandas as pd
+con = sqlite3.connect("file:data/econ/lab.sqlite?mode=ro", uri=True)  # read-only
+runs = pd.read_sql("SELECT session, map, kills, hours, kills / hours AS kills_h FROM runs", con)
+items = pd.read_sql("SELECT session, item_id, income, dropped FROM run_items", con)
+```
+
+- Open it read-only, as above. The file is in WAL mode, so a reader does not block a running
+  build.
+- **A file made by a NEWER poring-lab is refused** with "made by a newer poring-lab: pull the
+  update". It is never changed. Pull the update, and the newer code reads it.
+- An older file is upgraded forward by itself the next time `econ_db.py` opens it. Your rows are
+  kept.
 
 ## 11. A new game server (e.g. the Thai dev server): the rules
 
