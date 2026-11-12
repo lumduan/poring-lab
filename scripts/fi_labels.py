@@ -178,6 +178,8 @@ class FiSpec:
     # params v2 (Amendment O3): the absent rule's sessions (FIT, DEV) and its output file
     absent_suffixes: tuple[str, ...] = ()
     params_v2: Path | None = None
+    # the species whose drop tables name the floor items (drop_ids); empty: the monster MapSpec's
+    drop_species: tuple[int, ...] = ()
 
 
 XMAS02_FI = FiSpec(
@@ -206,6 +208,10 @@ XMAS02_FI = FiSpec(
     plan="docs/planning/xmas02-detector.md Amendment O / O1",
     absent_suffixes=("-rdp-hunt-xmas02-p31", "-rdp-hunt-xmas02-p38"),
     params_v2=FI / "params-v2.json",
+    # O.3 (g)'s species, pinned: xmas02-detector.md Amendment S (2026-11-12) put Stormy Knight
+    # (1251) in the monster MapSpec's species; its drops join the floor items only by an item
+    # amendment of their own
+    drop_species=(1249, 1248, 1265, 1246, 1515, 1607),
 )  # fmt: skip
 FI_MAPS = {"xmas_dun02": XMAS02_FI}
 
@@ -593,9 +599,11 @@ def sha256_bytes(data: bytes) -> str:
 
 def drop_ids(spec: FiSpec, drops: Path | None = None) -> list[int]:
     """The map's floor items: every item id in its species' drop tables (the local KB's
-    drops.json, rAthena-derived, never committed)."""
+    drops.json, rAthena-derived, never committed); the species are ``drop_species`` when the spec
+    pins them (xmas_dun02: O.3 (g)'s six), else the monster MapSpec's."""
     d = json.loads((drops or ROOT / "data" / "kb" / "drops.json").read_text())
-    return sorted({int(x["item_id"]) for s in spec.mspec.species for x in (d.get(str(s)) or [])})
+    species = spec.drop_species or spec.mspec.species
+    return sorted({int(x["item_id"]) for s in species for x in (d.get(str(s)) or [])})
 
 
 def sprite_table(ids: Iterable[int], sprites: Path, resnames: Path) -> dict[str, Any]:

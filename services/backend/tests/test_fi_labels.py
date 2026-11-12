@@ -600,3 +600,17 @@ def test_o17_round3_pack_reads_fsTn3_as_no_aura() -> None:
     got = fl.r2_picks(ev, True, 67, "xmas02-fi", fl.R3_NOAURA)
     assert all(not g["aura"] for g in got)
     assert all(g["aura"] for g in fl.r2_picks(ev, True, 67, "xmas02-fi"))  # round 2's names
+
+
+def test_s_the_floor_items_keep_o3s_species(tmp_path: Path) -> None:
+    """xmas02-detector.md Amendment S (2026-11-12) put Stormy Knight (1251) in the monster
+    MapSpec's species; the floor items' drop tables stay O.3 (g)'s six species, so 1251's drops
+    are not floor items until an item amendment adds them."""
+    assert 1251 in ml.XMAS02.species and 1251 not in SPEC.drop_species
+    assert SPEC.drop_species == (1249, 1248, 1265, 1246, 1515, 1607)
+    drops = tmp_path / "drops.json"
+    drops.write_text(json.dumps({"1249": [{"item_id": 7}], "1607": [{"item_id": 9}],
+                                 "1251": [{"item_id": 1124}, {"item_id": 7}]}))  # fmt: skip
+    assert fl.drop_ids(SPEC, drops) == [7, 9]
+    unpinned = fl.FiSpec(**{**SPEC.__dict__, "drop_species": ()})  # the MapSpec's species
+    assert fl.drop_ids(unpinned, drops) == [7, 9, 1124]

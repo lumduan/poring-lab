@@ -53,7 +53,11 @@ T-1, T-2, T-3, T-8, T-9 of 1f): ``--map xmas_dun02``. FIT is xw1 and TEST is xw5
 by session NAME (the sessions are recorded after the plan: ``<stamp>-rdp-xmas02-xw1``); a part is
 refused by its NAME before anything of it is read. Amendment M (2026-11-09, the Garm Baby class):
 the held-out watch gw3 (``<stamp>-rdp-gb-gw3``) is refused like TEST, and Garm Baby (1515) is in
-T2's tier whatever its pool (the Goblin stays conditional). Engaged units are EXCLUDED (E0, D11)
+T2's tier whatever its pool (the Goblin stays conditional). Amendment S (2026-11-12, the Stormy
+Knight class): the held-out watch sk3a (``<stamp>-rdp-xmas02-sk3a``) is refused like TEST, Stormy
+Knight (1251) is a species of the map and in T2's tier whatever its pool, and a measured Windows
+overlay in a session (MapSpec.screen_overlays: sk1a's OneDrive toast) drops its frames from the
+candidates (``screen_overlay``). Engaged units are EXCLUDED (E0, D11)
 with gef10's Amendments B (``crowded``, T_h's set) and C (``facing_unknown``); ``dying_in_view``
 (D8); one T2 stratum, seed 51, salt ``xmas02``. Its C1 always has the pickup-notice rule (``check
 --c1-rule round2``, 4h / 5; ``round1`` is refused there). Its evaluation reads TEST under its own
@@ -150,6 +154,7 @@ LABELS = "payf07-o3h"
 ENGAGED = "engaged"  # Amendment B (18:54:50): a fight with our character near the label's time
 ENGAGED_BACK_NS = 3_000_000_000
 ENGAGED_FWD_NS = 1_000_000_000
+SCREEN_OVERLAY = "screen_overlay"  # xmas02 Amendment S: a candidate drop (MapSpec.screen_overlays)
 
 
 REFERENCE_PRT = (1002, 1082, 1063, 1008, 1113, 1018)  # Poring, White Plant + prt_fild08's others
@@ -208,6 +213,11 @@ class MapSpec:
     # map's GAT in camera.GAT_DIR) beside the models: ``threshold`` and ``check`` report o3h AND
     # o3h-t, ``freeze`` takes the rule 4f's adoption test chose. Off: every rule as before
     terrain: bool = False
+    # xmas02-detector.md Amendment S (2026-11-12): a Windows overlay drawn over the client in a
+    # recorded session, measured from its frames: session id -> (first, last) frame t_mono_ns,
+    # both included, and why. A frame in a span is not a candidate (``screen_overlay``) for
+    # ``labels`` and ``check`` alike. Empty (every other session): the candidates as before
+    screen_overlays: dict[str, tuple[tuple[int, int, str], ...]] = field(default_factory=dict)
 
     def staged_kind_of(self, sid: str) -> str | None:
         """The staged kind of session ``sid`` (its spots exist), or None (no spots)."""
@@ -336,6 +346,16 @@ XMAS02_FIT_R4 = ("-rdp-hunt-xmas02-fiT10", "-rdp-hunt-xmas02-fiT11", "-rdp-hunt-
 # and is TRAIN-eligible (XMAS02_FIT_R4, history); round 5's held-out is FRESH, recorded after the
 # freeze: two aura-off base pilots (fiH1, fiH2) and one aura-off near staging of the Rogue (fsH1)
 XMAS02_FIT = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2", "-rdp-xmas02-fsH1")  # fmt: skip
+# Amendment S (2026-11-12, the Stormy Knight class): the held-out lattice watch sk3a (3a's TEST
+# stands, `--label xmas02-sk3a`) is refused by NAME like TEST, before it records (labels, T2's
+# pool, the cache); not in eval_suffixes (its scoring is the amendment after the model is frozen)
+XMAS02_SK3A = "-rdp-xmas02-sk3a"
+# Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
+# (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
+# against frame 30's panel: mean abs difference 0.00-0.08 on those 25 frames, >= 26.16 on every
+# other frame of the session)
+XMAS02_SK1A = "20261112T070331-rdp-xmas02-sk1a"
+XMAS02_SK1A_TOAST = (406689558430974, 406713548667487, "onedrive_toast")
 XMAS02 = MapSpec(
     name="xmas_dun02",
     cells=(260, 260),
@@ -343,8 +363,9 @@ XMAS02 = MapSpec(
     models=XD / "grf" / "data" / "model",
     # 1b / D3: the tier (Myst Case, Cruiser, Cookie, Christmas Cookie) + Garm Baby and Christmas
     # Goblin CONDITIONAL (Amendment M, 2026-11-09: Garm Baby in the tier); Stormy Knight (1251)
-    # OUT: its frames are unchecked_species (4h)
-    species=(1249, 1248, 1265, 1246, 1515, 1607),
+    # was OUT (its frames unchecked_species, 4h) until Amendment S (2026-11-12): IN the tier, last
+    # so the reference sheet's list (species + reference) keeps its 11-06 order and letters
+    species=(1249, 1248, 1265, 1246, 1515, 1607, 1251),
     walkers=(1249, 1248, 1265, 1246, 1515),  # 4b: Garm Baby counts when seen
     fit_px=6,  # 4c-4d: +-6 px for every species, no anchor (no species flies)
     staged="",  # no staged session: every part is a whole session
@@ -359,12 +380,17 @@ XMAS02 = MapSpec(
     terrain=True,  # 4f (D10): o3h-t is reported beside o3h; freeze takes the rule 4f chose
     t2_salt="xmas02",
     # 3b: TEST by NAME; Amendment M (2026-11-09): + gw3, the Garm Baby watch on 3a's TEST stands,
-    # held out until the model is frozen (refused by labels / pack / the cache like xw5)
-    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT),
-    # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier
+    # held out until the model is frozen (refused by labels / pack / the cache like xw5);
+    # Amendment S (2026-11-12): + sk3a, the Stormy Knight watch on 3a's TEST stands, the same way
+    test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT,
+                   XMAS02_SK3A),
+    # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier;
+    # Amendment S: Stormy Knight (1251) IN the tier (not conditional); the Goblin unchanged
     conditional=(1607,),
-    # 6: the multi-view reference beside the map's species: Stormy Knight, Poring, Santa Poring
-    reference=(1251, 1002, 1062),
+    # 6: the multi-view reference beside the map's species: Poring, Santa Poring (Stormy Knight,
+    # first here, is a species since Amendment S: the sheet's 9 species and order are unchanged)
+    reference=(1002, 1062),
+    screen_overlays={XMAS02_SK1A: (XMAS02_SK1A_TOAST,)},  # Amendment S: sk1a's toast
     dying_rule=True,  # D8 (gef10 4g)
     tmp=XD,
     plan="docs/planning/xmas02-detector.md",
@@ -481,6 +507,12 @@ def still_times(tw: int, t: int, back: int = STILL_BACK_NS,
 
 def same_place(points: Sequence[tuple[float, float] | None]) -> bool:
     return bool(points) and points[0] is not None and all(p == points[0] for p in points)
+
+
+def in_overlay(t: int, spans: Sequence[tuple[int, int, str]]) -> bool:
+    """PURE (xmas02 Amendment S): ``t`` lies in a screen-overlay span (first, last, why), both
+    ends included."""
+    return any(a <= t <= b for a, b, _why in spans)
 
 
 def recent(times: Sequence[int], t: int, window: int) -> bool:
@@ -1027,6 +1059,8 @@ class RecSession:
         pts = [tl.frame_world(x).self_pos for x in still_times(tw, t)[1:-1]]
         if not same_place([first.self_pos, *pts, last.self_pos]):
             return "self_moving"
+        if in_overlay(t, self.spec.screen_overlays.get(self.sid, ())):  # Amendment S: last, so
+            return SCREEN_OVERLAY  # its count is the frames the overlay alone takes away
         return None
 
     def candidates_at(self, offset_ms: float) -> list[qa_export.JpegRef]:

@@ -1247,13 +1247,19 @@ def test_t3_positive_case_x2s_manifest_passes() -> None:
 def test_t2_xmas02_spec() -> None:
     spec = ml.MAPS["xmas_dun02"]
     assert spec is ml.XMAS02 and spec.name == "xmas_dun02" and spec.cells == (260, 260)
-    assert spec.species == (1249, 1248, 1265, 1246, 1515, 1607)  # 1b / D3; 1251 is OUT
-    # Amendment M (2026-11-09): Garm Baby IN the tier; the Goblin stays conditional
-    assert spec.conditional == (1607,) and 1251 not in spec.species
+    # 1b / D3; Amendment S (2026-11-12): Stormy Knight (1251) joins, LAST
+    assert spec.species == (1249, 1248, 1265, 1246, 1515, 1607, 1251)
+    # Amendment M (2026-11-09): Garm Baby IN the tier; the Goblin stays conditional; Amendment S:
+    # Stormy Knight IN the tier too
+    assert spec.conditional == (1607,) and 1251 not in spec.conditional
     assert spec.walkers == (1249, 1248, 1265, 1246, 1515) and spec.fit_px == 6
     assert spec.labels == "xmas02-o3h-t" and spec.t2_salt == "xmas02" and spec.t2_seed == 51
     assert spec.dying_rule and not spec.engaged_labels and spec.engaged_fixed == "E0"
-    assert spec.reference == (1251, 1002, 1062)  # 6: + Stormy Knight, Poring, Santa Poring
+    assert spec.reference == (1002, 1062)  # 6: + Poring, Santa Poring (Stormy Knight: species)
+    # the reference sheet's species, in the 11-06 order (species + reference): the same 9 species
+    # and, by letters_for(mobs, 51), the same letters as every xmas02 T2 pack before Amendment S
+    assert list(spec.species) + list(spec.reference) == [1249, 1248, 1265, 1246, 1515, 1607, 1251,
+                                                         1002, 1062]  # fmt: skip
     assert len(list(spec.species) + list(spec.reference)) <= 12  # cmd_pack's reference cap
     x = Path("/dev/shm/poring-lab-tmp/xmas-det")
     assert spec.rsw == x / "grf/data/xmas_dun02.rsw" and spec.models == x / "grf/data/model"
@@ -1437,6 +1443,88 @@ def test_m_gw3_is_refused_by_name_and_gw1_gw2_are_train(
     olf._JOB.clear()
 
 
+SK1A = ml.XMAS02_SK1A  # Amendment S's watches: `--label xmas02-sk<n>a`
+SK2A = "20261112T072541-rdp-xmas02-sk2a"
+SK3A = "20261112T080000-rdp-xmas02-sk3a"
+
+
+def test_s_sk3a_is_refused_by_name_and_sk1a_sk2a_are_train(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Amendment S (2026-11-12): sk3a (3a's TEST stands) is held out until the model is frozen:
+    labels refuse it by its NAME before reading, T2's pool and the cache refuse its label file, the
+    evaluation flag does not read it (yet); sk1a / sk2a (DEV = TRAIN) are neither TEST nor FIT, and
+    labelled. Stormy Knight is in T2's pool."""
+    import hashlib
+
+    import build_frame_cache as bfc
+
+    spec = ml.XMAS02
+    assert spec.is_test(SK3A, None) and not spec.is_fit(SK3A, None)
+    for sid in (SK1A, SK2A, "20261112T080000-rdp-xmas02-sk3", "20261112T080000-rdp-xmas02-sk13a",
+                "20261112T080000-rdp-xmas02-sk3ab"):  # fmt: skip
+        assert not spec.is_test(sid, None) and not spec.is_fit(sid, None), sid
+    with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{SK3A}"))
+    with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+        ml.pack_pool([_xdoc(tmp_path, SK1A, [1251]), _xdoc(tmp_path, SK3A, [1251])], spec, "/nas")
+    pool, *_ = ml.pack_pool([_xdoc(tmp_path, SK1A, [1251, 1515]), _xdoc(tmp_path, SK2A, [1251])],
+                            spec, "/nas")  # fmt: skip
+    assert sorted(pool) == [1251, 1515] and len(pool[1251]) == 2
+    # the evaluation flag does not read sk3a (its scoring is a later amendment's, as gw3's was M7)
+    assert "not a TEST part" in str(ml.eval_part_refusal(spec, SK3A, None, "eval_test"))
+    params = _xparams(tmp_path)
+    sha = hashlib.sha256(params.read_bytes()).hexdigest()
+
+    def doc(sid: str) -> Path:
+        p = _xdoc(tmp_path, sid, [1251])
+        p.write_text(json.dumps({**json.loads(p.read_text()), "params_sha256": sha}))
+        return p
+
+    def args(*docs: Path) -> Any:
+        return _ns(map_params=params, map_params_sha256=sha, map_labels=list(docs), own_c1=None)
+
+    assert list(bfc.MapLabelInputs.from_args(args(doc(SK1A), doc(SK2A))).docs) == [SK1A, SK2A]
+    with pytest.raises(SystemExit, match="never cached"):
+        bfc.MapLabelInputs.from_args(args(doc(SK1A), doc(SK3A)))
+    for sid in (SK1A, SK2A):
+        opened = _fake_session(monkeypatch, sid, spec)
+        out = ml.cmd_labels(_xlabels_args(tmp_path, f"/x/{sid}"))
+        assert opened == [f"/x/{sid}"] and out["session"] == sid
+    olf._JOB.clear()
+
+
+def _overlay_session(sid: str, refs: list[Any]) -> Any:
+    """A RecSession whose packets make EVERY frame a candidate (xmas_dun02, standing still, no GM
+    window, no map change): only the screen overlay can drop one."""
+    world = SimpleNamespace(map="xmas_dun02", self_pos=(100, 100))
+    lab = SimpleNamespace(timeline=SimpleNamespace(events=[], frame_world=lambda t: world),
+                          windows=[], size=(1280, 720))  # fmt: skip
+    return ml.RecSession(Path("/x") / sid, ml.XMAS02, None, lab, refs, sid, None)
+
+
+def test_s_sk1a_toast_frames_are_not_candidates() -> None:
+    """Amendment S (2026-11-12): sk1a's OneDrive toast (frames 22-46, measured) drops exactly its
+    span's frames, both ends included, as ``screen_overlay``, counted apart; the same times in
+    another session (sk2a) and every other map are untouched."""
+    a, b, why = ml.XMAS02_SK1A_TOAST
+    assert (a, b, why) == (406689558430974, 406713548667487, "onedrive_toast") and a < b
+    assert ml.XMAS02.screen_overlays == {SK1A: (ml.XMAS02_SK1A_TOAST,)}
+    assert ml.GEF10.screen_overlays == {} and ml.PAYF07.screen_overlays == {}
+    times = [a - 1_002_000_000, a - 1, a, (a + b) // 2, b, b + 1, b + 1_001_000_000]
+    refs = [SimpleNamespace(frame_id=i, t_mono_ns=t) for i, t in enumerate(times)]
+    sess = _overlay_session(SK1A, refs)
+    assert [sess.candidate(r, 120.0) for r in refs] == [None, None, ml.SCREEN_OVERLAY,
+                                                        ml.SCREEN_OVERLAY, ml.SCREEN_OVERLAY,
+                                                        None, None]  # fmt: skip
+    kept = sess.candidates_at(120.0)
+    assert [r.frame_id for r in kept] == [0, 1, 5, 6] and sess.dropped == {"screen_overlay": 3}
+    other = _overlay_session(SK2A, refs)
+    assert other.candidates_at(120.0) == refs and other.dropped == {}
+    assert ml.in_overlay(a, [(a, b, why)]) and not ml.in_overlay(b + 1, [(a, b, why)])
+    assert not ml.in_overlay(a, [])
+
+
 def test_o1_the_floor_item_held_out_is_refused_by_name(tmp_path: Path) -> None:
     """Amendment O1 (2026-11-10): the floor items' held-out is refused by NAME before any of it
     records (labels, T2's pool), like gw3; other hunt recordings are not. O15 (round 2): the
@@ -1495,20 +1583,25 @@ def test_t2_the_cache_refuses_test_label_files(tmp_path: Path) -> None:
             bfc.MapLabelInputs.from_args(args(doc(XW2), doc(sid)))
 
 
-def test_t2_frame_exclusions_stormy_knight_is_unchecked(monkeypatch: pytest.MonkeyPatch) -> None:
-    """4h: Stormy Knight (OUT of the tier) makes its frame unchecked_species; Garm Baby and the
-    Goblin are the map's (conditional) species, labelled; Santa Poring's model is scenery."""
+def test_t2_frame_exclusions_unchecked_species(monkeypatch: pytest.MonkeyPatch) -> None:
+    """4h: a monster of a species outside the map's (and the classes') makes its frame
+    unchecked_species; Garm Baby and the Goblin are the map's species, labelled; Amendment S
+    (2026-11-12): so is Stormy Knight (it was unchecked_species before); a Poring is not."""
     monkeypatch.setattr(ml, "anchor_and_depth", lambda scene, cell: ((cell[0], cell[1]), 0.0))
 
     def ent(gid: int, job: int) -> Any:
         return SimpleNamespace(gid=gid, objtype=5, job=job, x=50, y=50, hidden=False)
 
     tier = [1249, 1248, 1265, 1246]
-    world = SimpleNamespace(entities=[ent(1, 1249), ent(2, 1515), ent(3, 1607)])
+    world = SimpleNamespace(entities=[ent(1, 1249), ent(2, 1515), ent(3, 1607), ent(4, 1251)])
     assert ml.frame_exclusions(world, None, (1280, 720), ml.XMAS02.species, tier, 9) == []
-    world.entities.append(ent(4, 1251))
-    got = ml.frame_exclusions(world, None, (1280, 720), ml.XMAS02.species, tier, 9)
+    # the rule itself is unchanged: with the 11-06 species (1251 OUT) the knight's frame is out
+    old = (1249, 1248, 1265, 1246, 1515, 1607)
+    got = ml.frame_exclusions(world, None, (1280, 720), old, tier, 9)
     assert got == ["unchecked_species:1251"]
+    world.entities.append(ent(5, 1002))  # a Poring (never on this map): the positive case
+    got = ml.frame_exclusions(world, None, (1280, 720), ml.XMAS02.species, tier, 9)
+    assert got == ["unchecked_species:1002"]
 
 
 def test_t2_t2_sample_conditional_species_need_30_and_one_stratum() -> None:
@@ -1518,14 +1611,21 @@ def test_t2_t2_sample_conditional_species_need_30_and_one_stratum() -> None:
     chosen, per, tier = ml.t2_sample(pool, ml.XMAS02, 51)
     # the four common species are always the tier (in the spec's order); D3: a conditional one
     # with >= 30 kept labels joins it (the Goblin's 30); Amendment M (2026-11-09): Garm Baby is IN
-    # the tier, with 29 too ("fewer: all")
-    assert tier == [1249, 1248, 1265, 1246, 1515, 1607]
+    # the tier, with 29 too ("fewer: all"); Amendment S (2026-11-12): Stormy Knight too, last
+    assert tier == [1249, 1248, 1265, 1246, 1515, 1607, 1251]
     assert per["1249"] == {"pool": 40, "sampled": 30}
     assert per["1515"] == {"pool": 29, "sampled": 29}
     assert per["1607"] == {"pool": 30, "sampled": 30}
     assert all(c["stratum"] is None for c in chosen) and len(chosen) == 89
     pool[1607] = pool[1607][:29]  # the Goblin with 29 stays out (D3, unchanged)
-    assert ml.t2_sample(pool, ml.XMAS02, 51)[2] == [1249, 1248, 1265, 1246, 1515]
+    assert ml.t2_sample(pool, ml.XMAS02, 51)[2] == [1249, 1248, 1265, 1246, 1515, 1251]
+    # Amendment S (2026-11-12): Stormy Knight is IN the tier whatever its pool (0 here: drawn 0)
+    assert per["1251"] == {"pool": 0, "sampled": 0}
+    pool[1251] = [_item(XW2, f, 4, 1251) for f in range(12)]
+    chosen, per, tier = ml.t2_sample(pool, ml.XMAS02, 51)
+    assert tier == [1249, 1248, 1265, 1246, 1515, 1251]
+    assert per["1251"] == {"pool": 12, "sampled": 12}
+    assert sum(1 for c in chosen if c["mob"] == 1251) == 12
     want = ml.t2_order(pool[1249], 51, 1249, "xmas02")[:30]
     assert {(c["frame_id"], c["gid"]) for c in chosen if c["mob"] == 1249} == {
         (w["frame_id"], w["gid"]) for w in want}  # fmt: skip
@@ -1712,8 +1812,10 @@ def test_t9_eval_flags_are_per_map() -> None:
     # TEST's names are the evaluation's, plus Amendment M's held-out gw3: refused like TEST, its
     # scoring (and the flag that reads it) left to the amendment after the model is frozen
     # Amendment O1 (2026-11-10): + the floor items' held-out names, refused like TEST but not M7's
-    assert set(x.test_suffixes) - set(ml.XMAS02_FIT) == set(x.eval_suffixes)
+    # Amendment S (2026-11-12): + sk3a, refused like TEST, read by no flag yet (like gw3 before M7)
+    assert set(x.test_suffixes) - set(ml.XMAS02_FIT) - {ml.XMAS02_SK3A} == set(x.eval_suffixes)
     assert ml.XMAS02_GW3 in x.eval_suffixes  # M7
+    assert ml.XMAS02_SK3A in x.test_suffixes and ml.XMAS02_SK3A not in x.eval_suffixes
     assert not set(ml.XMAS02_FIT) & set(x.eval_suffixes)
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
