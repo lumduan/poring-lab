@@ -126,3 +126,10 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
 - Built 2026-11-12 on the branch `feat/dedicated-nvidia` (commit da115f3f): the profile, the two
   overlays, the floor, and their tests (`test_host_profile.py`, `test_dataset_ship.py`,
   `test_guards.py`).
+
+
+- ➡️ 2026-11-12 (Batt: "write it in the docs"): training on a dedicated-NVIDIA host needs more than the
+  worker's 6 GB (bot-server's trainer was OOM-killed at 6 GB; its Intel overlay gives 11 GB). Raise it in
+  the machine's own `compose.override.yaml` (`mem_limit` == `memswap_limit`), never in a tracked file:
+  docs/setup/new-lab-host.md section 5.
+\n

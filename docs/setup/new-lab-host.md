@@ -417,6 +417,26 @@ only on the old VM 103):**
 
   It checks that torch sees the card, the VRAM cap, that the build has the card's sm_ kernels, and
   that matmul + conv2d run.
+- **Training needs more worker memory (Batt 2026-11-12: "write it in the docs").**
+  - The vision worker is capped at **6 GB** (`compose.vision-worker.yaml`: `mem_limit` ==
+    `memswap_limit`, no swap). That is enough to SERVE detections.
+  - On bot-server the trainer's data-loader workers were OOM-killed at 6 GB
+    (bot-server-migration.md 17a). The Intel overlay gives bot-server's worker 11 GB for that
+    reason. The NVIDIA overlay keeps 6 GB, so a dedicated-NVIDIA host that TRAINS will most likely
+    hit the same.
+  - Raise it for your machine in `compose.override.yaml` (never in a tracked file), keeping the two
+    values equal, then restart the worker (`worker-stop:vision`, `worker:vision`):
+
+    ```yaml
+    services:
+      vision-worker:
+        mem_limit: 12g
+        memswap_limit: 12g
+    ```
+
+  - Pick a value that leaves the host room: the backend, desktop and the runner need ~4-6 GB, so a
+    16 GB machine can give the worker ~8-10 GB, a 32 GB one 12-16 GB (unverified on an NVIDIA
+    host).
 
 ## 6. Starting the services
 
