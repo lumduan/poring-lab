@@ -6971,7 +6971,7 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
 - And the second-largest idle loss, the reaction to a monster that hit first (2.31 vs 0.38 s a
   kill), gets its own one-change pair: `--defend-box` (dungeon@9.39, 8a85bb9d).
 
-**Pair K, p114 + p115 (recorded `hunt-xmas02-fiT64` / `-fiT65`):**
+**Pair K, p116 + p117 (recorded `hunt-xmas02-fiT66` / `-fiT67`):**
 - Flags: arm B's (`--value-target --hud --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory`) +
   the Knife as 4CE ran it (`--bare-steal --bare-ready --steal-opener F4 --steal-cue popup
   --swap-gap`). F4 holds the Knife, and Damascus +8 is worn at the start (F5 reads empty, the
@@ -6988,7 +6988,7 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   after the steal (s), and each figure as a share of Batt's run.
 - **No harm:** deaths <= arm B's; W1 <= 3.5 % pooled; D1 p95 <= 35 ms on each run; hard bars.
 
-**Pair D, p116 + p117 (recorded `-fiT66` / `-fiT67`):**
+**Pair D, p114 + p115 (recorded `hunt-xmas02-fiT64` / `-fiT65`):**
 - Flags: arm A's (`--value-target --hud --hud-fast 0.2`) + `--defend-box`.
 - **Its base: the night series' arm A pooled** (p100, p102, p104, p106, p108, p110; p102 is the
   re-run).
@@ -7008,3 +7008,7 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
 - The chain's own stop rules apply. A death of a kind its base arm never had stops the chain for
   a person.
 - Order: K first (Batt's priority), then D. Expected end ~05:55.
+  ➡️ **AMENDED 22:45 ICT from `date`, BEFORE either pair: D first (p114 + p115), K last (p116 +
+  p117).** The chain stops on any non-zero rc. A Knife run that refused at its start would
+  otherwise end the night and take D with it; last, it can cost only itself. The bars are
+  unchanged.
