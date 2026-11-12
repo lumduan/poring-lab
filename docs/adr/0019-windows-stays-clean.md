@@ -320,6 +320,30 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   a safe moment (no stream running), then a read-back from the agent's shell: service Running, the
   process up, no new 3033. A stream follows in the next S2 session.
 
+### 2026-11-12: the backup prompt answered; the setup / welcome / tips screens and OneDrive's toasts OFF (the lab account, per user)
+- **What happened:** Windows restarted at ~06:29 ICT (an update). The RDP session ended (exit 1,
+  then exit 131), and after the restart the lab account `poring-lab` showed a full-screen "Protect
+  your files and memories by backing up your PC" prompt. The game client was closed.
+- **Batt's answers** (AskUserQuestion, ~06:5x): "Continue". That led to "Let's add your Microsoft
+  account"; no account was typed (Batt's credential stays off the bot server). Then "Back, then
+  Opt out": the agent clicked Back, then "Opt-out of backup" (06:58). No account was added; the
+  backup stays off. A OneDrive "Turn On Windows Backup" toast came at 07:04; the agent closed it
+  with its X (no choice made).
+- **Batt's word for the settings** (~07:1x): "prevent this window from coming up again, it
+  disturbs the work." Set from the agent's STANDARD shell (`ro_agent.py open-terminal` /
+  `console`, not elevated, through the mux, between two recorded watches) at 07:22-07:24 ICT. All
+  are HKCU (this account only); no admin, no UAC. Existing keys were never recreated.
+  - `HKCU\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement`
+    `ScoobeSystemSettingEnabled` = 0: "suggest ways to finish setting up my device" (the
+    full-screen prompt after updates).
+  - `...\ContentDeliveryManager` `SubscribedContent-310093Enabled` = 0: the welcome experience
+    after updates. `SubscribedContent-338389Enabled` = 0: tips and suggestions.
+  - `...\Notifications\Settings\Microsoft.SkyDrive.Desktop` `Enabled` = 0: OneDrive's
+    notifications.
+- **Read back (07:25:0x ICT, the shell's output, screenshot judged):** SCOOBE=0, WELCOME=0,
+  TIPS=0, ONEDRIVE=0. The shell was minimised; the client in front.
+- **To undo:** set each value back to 1 (or delete it), from the same standard shell.
+
 ## One-off exceptions (each by Batt's word, logged BEFORE it runs, removed and read back after)
 
 ### 2026-11-07: the teaching kit's `--bench`, once, on the lab PC
