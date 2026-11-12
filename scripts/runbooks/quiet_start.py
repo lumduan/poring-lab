@@ -15,6 +15,10 @@ been quiet for --quiet-min minutes, measured each second exactly as scripts/io_b
 --limit % (the guard's spike threshold). It never starts inside the market-open windows
 (09:30-10:15, 14:00-14:45 ICT, Monday to Friday: not on Saturday or Sunday, Batt 2026-10-09). It
 runs COMMAND once, returns its exit code, logs every decision.
+
+On a DEDICATED host profile (dedicated-intel / dedicated-nvidia; ADR-0022) there is no capture
+stack to protect and no market wait (Batt 2026-11-10, bot-server: "we no longer wait for anything
+of the quant work"; second-install-gaps.md row E): it logs that and runs COMMAND at once.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import host_profile as hp  # noqa: E402
 import io_baseline as iob  # noqa: E402
 
 ICT = timezone(timedelta(hours=7))
@@ -40,6 +45,11 @@ def in_market(now: datetime) -> bool:
     t = now.astimezone(ICT)
     hhmm = t.hour * 100 + t.minute
     return t.weekday() < 5 and any(a <= hhmm < b for a, b in MARKET)
+
+
+def waits_apply(profile: hp.HostProfile) -> bool:
+    """PURE: the quiet and market-open windows guard a SHARED host's capture stack only."""
+    return bool(profile.shared)
 
 
 def quiet(window: deque[tuple[float, float]], now: float, need_s: float, limit: float) -> bool:
@@ -78,6 +88,13 @@ def main() -> int:
     worst: tuple[float, str] = (0.0, "")
     watched = list(WATCHED)
     with a.log.open("a") as fh:
+        prof = hp.current()
+        if not waits_apply(prof):
+            log(f"host profile {prof.name}: dedicated, no capture stack and no market wait (Batt "
+                f"2026-11-10): starting ONCE now: {cmd}", fh)  # fmt: skip
+            rc = subprocess.run(cmd, check=False).returncode
+            log(f"command exited rc={rc}", fh)
+            return rc
         if iob.frigate_io_ignored(cmd, time.time()):  # Batt 2026-11-07: that day only
             watched = [w for w in watched if w != "frigate"]
             log("frigate's IO stall is NOT watched for this worker:vision start (Batt 2026-11-07, "

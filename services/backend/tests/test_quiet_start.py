@@ -68,3 +68,15 @@ def test_batts_one_day_frigate_exclusion_is_a_worker_start_on_that_day_only() ->
     gb = (root / "scripts/guarded_build.py").read_text()
     assert 'if all(s.kind == "worker" for s in steps) and io_baseline.frigate_io_ignored(' in gb
     assert 'paths.pop("frigate", None)' in gb
+
+
+def test_a_dedicated_host_never_waits(qs: ModuleType) -> None:
+    """second-install-gaps.md row E (Batt 2026-11-10: no market waits on bot-server)."""
+    import host_profile as hp
+
+    assert qs.waits_apply(hp.PROFILES["shared-nvidia"]) is True
+    for name in ("dedicated-intel", "dedicated-nvidia"):
+        assert qs.waits_apply(hp.PROFILES[name]) is False
+    src = (RUNBOOKS / "quiet_start.py").read_text()
+    # the dedicated branch runs the command BEFORE any IO sample or market check
+    assert src.index("if not waits_apply(prof):") < src.index("while time.monotonic() < deadline:")
