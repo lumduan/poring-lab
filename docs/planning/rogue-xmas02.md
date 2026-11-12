@@ -6144,3 +6144,33 @@ with **W1 <= 3.5 %** (4CQ item 3).
     `hud_watch` skip counts.
   - Batt's ask (2026-11-11 21:01: "the boxes come late ... use the GPU").
 
+### 4CS. F1-F5: the live flee proof against a staged Stormy Knight (pre-registered 2026-11-12 08:34 ICT from `date`, BEFORE any trial)
+
+- **Batt (AskUserQuestion, ~08:3x):** "Yes, 5 staged trials". The context:
+  - xmas02-detector.md S3: the deployed `--garm-fly` alarm boxes the knight's Garm Babies in ~87 % of
+    the frames the knight is in view.
+  - 4CQ item 2: "never switch the MVP off; escape it instead".
+- **Each trial (one knight, her NOT immune for the run):**
+  1. Immunity ON, judged.
+  2. `@warp xmas_dun02 <knight cell>`, `@killmonster2`, `@monster 1251 1` (the knight spawns with its
+     summons).
+  3. `@warp xmas_dun02 <her cell>`, 12-14 cells away.
+  4. Immunity OFF, judged ("Returned to normal state").
+  5. The day's base runner (4CR) for 3 min, `--start-cell <her cell>`, WITHOUT `--clear-map`.
+  6. After: immunity ON, `@killmonster2`.
+- **The five pairs (lattice-train stands; the knight's direction from her):**
+  - F1 E: knight (173, 16), her (159, 16), 14 cells;
+  - F2 W: knight (225, 16), her (237, 16), 12;
+  - F3 N: knight (27, 38), her (27, 25), 13;
+  - F4 S: knight (38, 25), her (38, 37), 12;
+  - F5 NE: knight (94, 71), her (82, 59), 12.
+- **PASS (each trial, from the packets):** her Fly Wing (or a map change of her own) comes BEFORE the
+  knight's first damaging act on her. Also reported: the summons' hits before it, the alarm's cause
+  (the runner's `escape` event), the seconds from the party's first frame in view to the fly, deaths.
+- **The proof PASSES when 5 / 5 pass.** Then the chain stops killing the MVP before its windows: the
+  bot escapes it as in real play (Batt's rule), and every scored run reports its MVP encounters. Any
+  failure -> the kill-before-window protocol stays, and the failure is studied (its frames and
+  packets).
+- A death respawns her at her save point. At Base 99 (held) there is no level to lose, only time; it
+  ends that trial (FAIL).
+
