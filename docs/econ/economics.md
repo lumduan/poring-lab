@@ -515,6 +515,13 @@ and its flow (the run's label, the runner's version, strategy and search; its fl
   names, and the default output directory all live under it).
 - The backend serves the exports read-only: `GET /economy/list` and `GET /economy/data/NAME`
   (`routes_economy.py`; the public listener only, as `/hardware`).
+- **Run records in one SQLite file** (ADR-0025 phase 1, 2026-11-12): `econ_db.py build / update
+  SESSION ...` keeps the same per-run counts in `data/econ/lab.sqlite`, and
+  `econ_db.py dashboard --runs SID ... --name NAME` writes this very export from the file (through
+  econ_dash's own functions).
+  - `econ_db.py export --format csv|json` shares ids and counts.
+  - The page itself still reads the JSON exports (ADR-0025 phase 2).
+  - How to use the file: `docs/setup/new-lab-host.md` section 10.1.
 
 **What an export holds** (one JSON, per run and pooled): the run's facts (session, map, character,
 judged window and hours, kills, deaths) and COUNTS, never only rates, so the page can recompute every
