@@ -96,3 +96,15 @@ def test_a_new_environment_with_a_declaration_and_a_type_change_that_drops_it() 
     kinds = {(c.action, c.kind)
              for c in envstore.classify(es(entry(declared=declaration())), dropped)}  # fmt: skip
     assert kinds == {("env_type", "easy"), ("withdraw", "easy")}  # both tightening
+
+
+def test_an_attested_environment_takes_no_declaration() -> None:
+    """The parent's review (2026-11-12): the lab's packet-verified environments keep their check
+    alone; a declaration on one (a crafted PUT: the page never offers it) is refused."""
+    lab = entry("lab-rathena", declared=declaration()).model_copy(
+        update={"signals": ["lab_host", "session"]}
+    )
+    assert envstore.validate(es(lab), {}) == ("declaration_not_for_attested", "lab-rathena")
+    assert (
+        envstore.validate(es(entry("class", declared=declaration())), {}) is None
+    )  # no signals: ok

@@ -91,6 +91,14 @@ Batt's decision came from teaching, not from the lab (2026-11-07, during the bot
   per-target identity are still not built.
 
 ## Implementation (2026-11-12): decision 1
+
+- **The parent's review (2026-11-12):** a declaration is REFUSED on an environment the lab verifies
+  by packets (one with `signals`, e.g. the lab's own rAthena): `declaration_not_for_attested`.
+  - Such an environment keeps its packet check alone.
+  - A declaration there would have turned it green whenever its attestation fails (a non-lab
+    account, character select).
+  - Declarations are for the servers the lab CANNOT verify: a learner's class server, or a public
+    rAthena whose owner permits bots.
 Why now, in Batt's words (2026-11-12, translated): "Don't lock: we cannot control other people
 anyway; just write a warning." and "The more we lock, the more it breaks later: a user configures
 their own rAthena on a public IP, but we lock it, and when they pull our git again their config

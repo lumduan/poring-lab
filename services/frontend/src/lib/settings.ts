@@ -141,6 +141,7 @@ export const REASON_TEXT: Record<string, string> = {
   statement_required: "Write the declaration in your own words (at least 10 characters).",
   declaration_not_importable: "A declaration cannot come from a file: declare it on this page yourself.",
   declaration_not_allowed_here: "Only an allowed environment can carry a declaration.",
+  declaration_not_for_attested: "This environment is verified by the lab's own packet check; it takes no declaration.",
 };
 
 export function reasonText(reason: string): string {

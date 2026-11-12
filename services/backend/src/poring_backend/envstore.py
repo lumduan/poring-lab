@@ -356,6 +356,11 @@ def validate(new: EnvSet, resolved: dict[str, list[str]],
             return "duplicate_name", env.name
         if env.declared is not None and env.type != "allowed":
             return "declaration_not_allowed_here", env.id  # only an allowed one (ADR-0023)
+        if env.declared is not None and env.signals:
+            # 2026-11-12 (the parent's review): an environment the lab VERIFIES by packets (the
+            # lab's own rAthena) keeps that check alone -- a declaration there would turn it green
+            # whenever its attestation fails (a non-lab account, character select)
+            return "declaration_not_for_attested", env.id
         ids.add(env.id)
         names.add(env.name.strip().lower())
         keys = set()
