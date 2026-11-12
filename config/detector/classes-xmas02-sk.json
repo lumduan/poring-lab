@@ -1,0 +1,20 @@
+{
+ "scheme": "xmas02-sk",
+ "source": "docs/planning/xmas02-detector.md Amendment S (2026-11-12, Batt: escape the Stormy Knight -- Fly Wing when seen, walk away when far) + S2 (the alarm learns its PARTY: the Christmas Goblin, summons only on this map) + S3 (T2 for 1607 and 1251 PASSED, blind labellers G and H): classes-xmas02-gb.json (Amendment M, the deployed model's) plus 8 Christmas Goblin 1607 and 9 Stormy Knight 1251; map-scoped (D1); npc and warp kept as EMPTY fixed classes, so the species start at id 3",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR); 3 Myst Case 1249, 4 Cruiser 1248, 5 Cookie 1265, 6 Christmas Cookie 1246, 7 Garm Baby 1515, 8 Christmas Goblin 1607, 9 Stormy Knight 1251",
+ "fixed": {
+  "player": 0,
+  "npc": 1,
+  "warp": 2
+ },
+ "monster_first_id": 3,
+ "monsters": [
+  1249,
+  1248,
+  1265,
+  1246,
+  1515,
+  1607,
+  1251
+ ]
+}

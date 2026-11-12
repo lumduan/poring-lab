@@ -4112,3 +4112,32 @@ the knight's labels are right. It does not say whether there are enough of them 
   its party. Spawning knights apart from their summons is not possible with the GM commands
   allowed (the summons are its own skill).
 
+#### S3 (2026-11-12 08:32 ICT from `date`): T2 PASSES, the cache cannot use it, and the deployed alarm already sees the party
+
+- **T2 (S1's pack; blind labellers G and H, each alone, answers 08:1x, scored by `blind_score.py`
+  against the hidden key d9c5a2b4):** all seven species pass for BOTH labellers -- good 1.00 and
+  species 1.00 on 30 crops each, Christmas Goblin 1607 and Stormy Knight 1251 included. The pack
+  holds only labels at or above the T_h floor (0.536), which is why every box reads good.
+- **The cache's dry run (`classes-xmas02-sk.json` b871a2f6...: + 8 Goblin, 9 Knight):** TRAIN would
+  get only **12 Goblin boxes (5 frames) and 8 knight boxes**. Garm Baby gets 408.
+  - A frame is written only when it is WHOLE (no excluded label of any species in it), and the
+    knight's party (2 Garm Babies + ~6 Goblins) almost never leaves a frame whole.
+  - S2's premise holds for the labels (plentiful) but not for the cache. **No class is trained**:
+    the data cannot carry one under the frozen rule, and S2's T2 PASS stands as a label-quality
+    result only.
+- **The deployed model's alarm on the same recordings (`xmas-sk/alarm/garm_proxy.py`, the CPU twin
+  of the live xmas02gb, every frame holding a knight label):**
+  - Frames where it boxes a Garm Baby (the class `--garm-fly` flies on): sk1a 452 / 524 (86.3 %),
+    sk2a 499 / 569 (87.7 %).
+  - Two frames in a row (`--garm-confirm 2`): 394 and 449 pairs.
+  - With the knight more than 8 cells away: 100 / 119 and 84 / 91.
+  - The knight always spawns with 2 Garm Babies (packets, S1), so **the alarm already in the base
+    sees the knight's party in ~87 % of the frames it is in view**.
+- **So the escape Batt asked for already exists in the base: `--garm-fly` (Fly Wing on a confirmed
+  Garm Baby).** What it has never had is a LIVE proof against the knight itself, with her NOT
+  immune: does she fly before its first hit (0.4 s apart on 11-08)?
+  - That proof is a strong monster staged beside her, and needs Batt's word.
+  - Until it passes, the chain keeps the kill-before-window protocol.
+- sk3a stays unread (refused by name); it is kept for a later class round if the label rule ever
+  changes.
+
