@@ -20,7 +20,7 @@ file, and a pull never breaks them.
 | # | Gap | Effect on a new install | Status |
 |---|---|---|---|
 | A | The game PC's address 192.168.1.169 is hard-coded: capture.py's COMPILED BPF constants, sniffer.py's CLIENT_IP default, config/environments.yaml `windows_host` (a seed-only TECHNICAL field) | A second game PC can never be packet-attested for the lab rAthena (its presses are refused). ADR-0023's declared mode does not use it; the lab's own attested path does | OPEN (needs a BPF built from a setting; ADR-0023 decision 4) |
-| B | VIEWER_NETWORKS (default 192.168.0.0/16) is not passed by compose.yaml nor in .env.example | On another LAN range the Settings writes and /ws/packets refuse | OPEN |
+| B | VIEWER_NETWORKS (default 192.168.0.0/16) is not passed by compose.yaml nor in .env.example | On another LAN range the Settings writes and /ws/packets refuse | FIXED 2026-11-12: `VIEWER_NETWORKS` from .env (compose passes it, default unchanged; overlaps with our Docker subnets dropped) |
 | C | The Settings seed suggests 192.168.1.228 servers | Wrong suggestion for every other host (they are added by hand) | OPEN |
 | D | No `dedicated-nvidia` and no CPU-only host profile | A new NVIDIA host refuses every GPU step (shared-nvidia's R3 needs Frigate); a CPU-only host must declare dedicated-intel | OPEN |
 | E | quiet_start.py ignores the host profile (10 quiet minutes, SET windows) | Contradicts "no market waits on bot-server" (Batt 11-10) | OPEN |

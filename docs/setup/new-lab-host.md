@@ -347,16 +347,11 @@ volumes:
       device: /srv/poring-lab-datasets
 ```
 
-**A LAN outside 192.168.0.0/16:** the backend accepts Settings-page writes and the packet viewer
-only from `VIEWER_NETWORKS` (default `192.168.0.0/16`, `poring_backend/config.py`), and compose
-does not pass that variable today. An override can **(unverified)**:
-
-```yaml
-services:
-  backend:
-    environment:
-      VIEWER_NETWORKS: "<your LAN>/24"
-```
+**A LAN outside 192.168.0.0/16:** set `VIEWER_NETWORKS` in your `.env` (since 2026-11-12;
+`.env.example` lists it), e.g. `VIEWER_NETWORKS=10.0.1.0/24`. Settings-page writes and the packet
+viewer accept only browsers on these networks (comma-separated CIDRs; default `192.168.0.0/16`). An
+entry that overlaps the lab's own Docker subnets is dropped with a warning in the backend's log,
+never admitted. Recreate the backend after changing it (a guarded `recreate:backend`).
 
 Notes:
 - Docker fixes a named volume's options when the volume is first created. Write the override

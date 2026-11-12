@@ -1,12 +1,15 @@
 """Backend settings, read from the environment (names are case-insensitive)."""
 
 import ipaddress
+import logging
 import re
 from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_log = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -160,9 +163,21 @@ class Settings(BaseSettings):
 
     @property
     def viewer_nets(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
-        return tuple(
-            ipaddress.ip_network(n.strip()) for n in self.viewer_networks.split(",") if n.strip()
-        )
+        """The LAN viewer networks (VIEWER_NETWORKS, a user's .env since 2026-11-12). An entry
+        that overlaps the lab's own Docker subnets (the compose subnet, the agent network) is
+        DROPPED with a warning: a typo can never admit containers, and it never stops the
+        backend (Batt 2026-11-12: no hard locks)."""
+        own = [ipaddress.ip_network(self.compose_subnet), *self.agent_nets]
+        out = []
+        for n in self.viewer_networks.split(","):
+            if not n.strip():
+                continue
+            net = ipaddress.ip_network(n.strip(), strict=False)
+            if any(net.version == o.version and net.overlaps(o) for o in own):
+                _log.warning("VIEWER_NETWORKS: %s overlaps the lab's Docker subnets: dropped", net)
+                continue
+            out.append(net)
+        return tuple(out)
 
     @property
     def debug_clients(self) -> frozenset[str]:
