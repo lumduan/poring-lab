@@ -131,6 +131,7 @@ test("the interlock shows a window or a refusal while the bot could act, and not
     window: state === "window" ? ("login" as const) : null,
     window_left_s: state === "window" ? 87.4 : null,
     attest_age_s: null,
+    verified: state === "green" ? true : null,
     ...extra,
   });
   const at = (mode: "HUMAN" | "BOT" | "ASSIST", e: ReturnType<typeof env>) =>
@@ -139,6 +140,28 @@ test("the interlock shows a window or a refusal while the bot could act, and not
   assert.ok(at("ASSIST", env("window")).some((p) => p.includes("operator window open (login, 87 s left)")));
   assert.ok(!at("BOT", env("green")).some((p) => p.startsWith("Interlock")));
   assert.ok(!at("HUMAN", env("red")).some((p) => p.startsWith("Interlock"))); // the human is never gated
+});
+
+test("a green by a person's DECLARATION says so, naming the environment, never as verified (ADR-0023)", () => {
+  type Green = {
+    state: "green"; reason: string; env_id: string; window: null; window_left_s: null;
+    attest_age_s: null; verified: boolean | null;
+  };
+  const declared: Green = {
+    state: "green", reason: "declared", env_id: "class-server", window: null,
+    window_left_s: null, attest_age_s: null, verified: false,
+  };
+  const at = (mode: "HUMAN" | "BOT" | "ASSIST", e: Green) =>
+    bannerProblems({ links: LINKS, status: status({ backend: "rdp", seq: 1, phase: "steady" }, { mode, environment: e }) });
+  for (const mode of ["BOT", "ASSIST"] as const) {
+    const line = at(mode, declared).find((p) => p.startsWith("Interlock"));
+    assert.ok(line, mode);
+    assert.match(line, /allowed on "class-server" by a person's DECLARATION, not verified/);
+  }
+  assert.ok(!at("HUMAN", declared).some((p) => p.startsWith("Interlock"))); // as every interlock line
+  // packet-verified green (true) and an old backend without the field (null) stay silent
+  assert.ok(!at("BOT", { ...declared, reason: "ok", verified: true }).some((p) => p.startsWith("Interlock")));
+  assert.ok(!at("BOT", { ...declared, reason: "ok", verified: null }).some((p) => p.startsWith("Interlock")));
 });
 
 test("the console says when the GM is being re-logged in automatically after a sniffer restart", () => {

@@ -11,7 +11,13 @@ Inputs, none of them reachable by the agent:
     data;
   * an operator WINDOW (state/interlock-window, written only by capture_backend.py window; <= 120 s,
     tied to the lock's SEQ). It counts in ASSIST only -- never in BOT mode -- for the phases before
-    a session exists (login) and desktop work (the agent's own shell).
+    a session exists (login) and desktop work (the agent's own shell);
+  * a person's DECLARATION (ADR-0023 decision 1, built 2026-11-12): on the Settings page a person
+    states that an allowed environment's owner permits bots (envstore.Declaration; human-only
+    writes). A declared environment is green without packets -- servers + a steady lock (+ the
+    Windows host, when it names one) -- but only when NO environment is packet-attested, and it is
+    labelled: reason "declared", ``verified`` False. The attested path is tried first and is
+    unchanged.
 
 The verdict is pure (``evaluate``): tests drive it with explicit times. Reasons are short words for
 /health, the Status line and the refusal counters.
@@ -72,6 +78,9 @@ class Environment(BaseModel):
     # never green: "allowed" means the client is connected to one of its servers.
     servers: list[str] = Field(default_factory=list)
     note: str | None = None
+    # ADR-0023: a person declared the owner's permission on the Settings page (envstore.to_config
+    # sets it from the store, allowed environments only). Never from a shipped file (load_config).
+    declared: bool = False
 
 
 class EnvironmentsConfig(BaseModel):
@@ -91,9 +100,12 @@ def load_config(path: Path) -> tuple[EnvironmentsConfig | None, str]:
     except yaml.YAMLError:
         return None, "config_invalid"
     try:
-        return EnvironmentsConfig.model_validate(raw), ""
+        cfg = EnvironmentsConfig.model_validate(raw)
     except ValidationError:
         return None, "config_invalid"
+    if any(env.declared for env in cfg.environments):
+        return None, "config_invalid"  # a declaration is a person's act (ADR-0023), never a file
+    return cfg, ""
 
 
 @dataclass(frozen=True)
@@ -106,12 +118,13 @@ class Window:
 
 @dataclass(frozen=True)
 class Verdict:
-    green: bool  # an allowed environment's signals all hold
+    green: bool  # an allowed environment's signals all hold, or its declaration (ADR-0023)
     bot_allowed: bool  # what the mux uses (green, or a window in ASSIST)
-    reason: str  # "ok", "window:<kind>", or why not
+    reason: str  # "ok" (attested), "declared", "window:<kind>", or why not
     env_id: str | None
     window: Window | None
     attest_age_s: float | None
+    verified: bool = False  # green by packet attestation (True) or by a declaration (False)
 
     def status(self) -> EnvironmentStatus:
         state: Literal["green", "window", "red"] = (
@@ -122,6 +135,7 @@ class Verdict:
             window=self.window.kind if self.window else None,  # type: ignore[arg-type]
             window_left_s=round(self.window.left_s, 1) if self.window else None,
             attest_age_s=None if self.attest_age_s is None else round(self.attest_age_s, 1),
+            verified=self.verified if self.green else None,
         )  # fmt: skip
 
 
@@ -132,10 +146,27 @@ def _env_signals(
     win_host: str,
     attest: Attestation | None,
     attest_age_s: float | None,
+    *,
+    declared: bool = False,
 ) -> str:
-    """ "" when every required signal of ``env`` holds, else the first failing reason."""
+    """ "" when every required signal of ``env`` holds, else the first failing reason.
+
+    ``declared``: judge the DECLARED path instead (ADR-0023 decision 1): a person declared the
+    owner's permission, so no packet attestation and no signals list are needed -- but the
+    environment needs servers, the capture lock must be steady, and when the environment names a
+    Windows host, it must be the one this backend drives."""
     if env.status != "allowed":
         return f"env_{env.status}"
+    if declared:
+        if not env.declared:
+            return "not_declared"
+        if not env.servers:
+            return "no_servers"
+        if lock.backend not in ("rdp", "console") or lock.phase != "steady":
+            return "lock_not_steady"
+        if env.windows_host and win_host != env.windows_host:
+            return "host_mismatch"
+        return ""
     if not env.signals:
         return "no_signals_configured"
     if not env.servers:
@@ -177,11 +208,18 @@ def evaluate(
     if cfg is None:
         return Verdict(False, False, cfg_error or "config_missing", None, None, attest_age_s)
     reasons = []
-    for env in cfg.environments:
+    for env in cfg.environments:  # packet-attested (verified) environments FIRST
         why = _env_signals(env, cfg, lock, win_host, attest, attest_age_s)
         if not why:
-            return Verdict(True, True, "ok", env.id, window, attest_age_s)
+            return Verdict(True, True, "ok", env.id, window, attest_age_s, verified=True)
         reasons.append(why)
+    for i, env in enumerate(cfg.environments):  # then a person's declaration (ADR-0023)
+        if not env.declared:
+            continue
+        why = _env_signals(env, cfg, lock, win_host, attest, attest_age_s, declared=True)
+        if not why:
+            return Verdict(True, True, "declared", env.id, window, attest_age_s, verified=False)
+        reasons[i] = why  # a declared environment's own refusal says more than "no signals"
     # the most informative refusal: the allowed environments' (a pending one always says so)
     allowed = [r for r in reasons if not r.startswith("env_")]
     reason = allowed[0] if allowed else (reasons[0] if reasons else "no_environment")

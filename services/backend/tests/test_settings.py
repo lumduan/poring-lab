@@ -11,6 +11,7 @@ typed again, one per save). Everything is audited.
 
 import json
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -135,10 +136,11 @@ def env(view: dict[str, Any], env_id: str) -> dict[str, Any]:
 
 
 def as_input(view: dict[str, Any]) -> list[dict[str, Any]]:
-    """The page's request: every environment's user fields."""
+    """The page's request: every environment's user fields (a kept declaration: its statement)."""
     return [{"id": e["id"], "name": e["name"], "type": e["type"], "summary": e["summary"],
              "why": e["why"], "servers": [{"host": s["host"], "port": s["port"], "note": s["note"]}
-                                          for s in e["servers"]]}
+                                          for s in e["servers"]],
+             "declared": e["declared"]["statement"] if e["declared"] else None}
             for e in view["environments"]]  # fmt: skip
 
 
@@ -610,3 +612,180 @@ def test_a_malformed_content_length_is_refused_not_a_crash(make: Make) -> None:
            "content-type": "application/json"}  # fmt: skip
     r = client.put("/settings/environments", headers=hdr, content=b"{}" + b" " * 10)
     assert r.status_code == 413
+
+
+# --- ADR-0023 decision 1: a person's DECLARATION (Batt 2026-11-12: a warning, not a lock) ---------
+
+STATEMENT = "Our teacher owns the class server and runs it for bots."
+CLASS = {"name": "Class server", "type": "allowed",
+         "servers": [{"host": "203.0.113.7", "port": 6900}]}  # fmt: skip
+
+
+def with_class(client: TestClient) -> None:
+    r = edit(client, lambda envs: envs.append(dict(CLASS)))
+    assert r.status_code == 200, r.text
+
+
+def declare(statement: str | None, env_id: str = "class-server") -> Callable[[list[Any]], None]:
+    def change(envs: list[dict[str, Any]]) -> None:
+        find(envs, env_id)["declared"] = statement
+
+    return change
+
+
+def interlock_env(client: TestClient, env_id: str) -> Any:
+    state = client.app.state.poring  # type: ignore[attr-defined]
+    return next(e for e in state.interlock.config.environments if e.id == env_id)
+
+
+def test_a_person_declares_and_the_backend_stamps_time_and_peer(make: Make, tmp_path: Path) -> None:
+    client = make()
+    with_class(client)
+    assert env(get(client), "class-server")["declared"] is None
+    assert env(get(client), "class-server")["ready"] is False  # no way to check, nothing declared
+    r = edit(client, declare(STATEMENT))
+    assert r.status_code == 200, r.text
+    d = env(r.json(), "class-server")["declared"]
+    assert (d["statement"], d["peer"]) == (STATEMENT, LAN[0])  # the write gate's peer
+    stamped = datetime.fromisoformat(d["at"])
+    assert stamped.utcoffset() is not None
+    assert abs((datetime.now(UTC) - stamped).total_seconds()) < 60  # the backend's own clock
+    assert env(r.json(), "class-server")["ready"] is True
+    assert interlock_env(client, "class-server").declared is True  # the interlock reads it at once
+    rec = audit(tmp_path)[-1]
+    assert (rec["action"], rec["kind"], rec["env_id"], rec["entry"], rec["note"], rec["client"],
+            rec["ok"]) == ("declare", "declare", "class-server", "Class server", STATEMENT, LAN[0],
+                           True)  # fmt: skip
+    stored = json.loads((tmp_path / "settings" / "environments.json").read_text())
+    assert find(stored["environments"], "class-server")["declared"] == d
+
+
+def test_the_client_never_supplies_the_time_or_the_peer(make: Make, tmp_path: Path) -> None:
+    client = make()
+    with_class(client)
+    forged = {"at": "2020-01-01T00:00:00+00:00", "peer": "192.168.1.99", "statement": STATEMENT}
+    r = edit(client, declare(forged))  # type: ignore[arg-type]
+    assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid"
+    assert env(get(client), "class-server")["declared"] is None
+    assert audit(tmp_path)[-1]["reason"] == "invalid"
+
+
+@pytest.mark.parametrize("statement", ["", "   ", "too short", "\x1b\x1b\x1b\x1b\x1b\x1bshort"])
+def test_a_declaration_needs_the_persons_own_words(make: Make, tmp_path: Path,
+                                                   statement: str) -> None:  # fmt: skip
+    client = make()
+    with_class(client)
+    r = edit(client, declare(statement))
+    if statement.strip() == "":
+        assert r.json()["saved"] is False  # nothing declared, nothing changed
+    else:
+        assert r.status_code == 422 and r.json()["detail"]["reason"] == "statement_required"
+        assert audit(tmp_path)[-1]["reason"] == "statement_required"
+    assert env(get(client), "class-server")["declared"] is None
+
+
+def test_a_kept_declaration_is_unchanged_a_new_statement_is_a_new_declaration(
+    make: Make, tmp_path: Path
+) -> None:
+    client = make()
+    with_class(client)
+    first = env(edit(client, declare(STATEMENT)).json(), "class-server")["declared"]
+    r = edit(client, lambda envs: None)  # the page sends the whole set back, statement included
+    assert r.json()["saved"] is False
+    r = edit(client, lambda envs: find(envs, "class-server").update(name="Our class server"))
+    assert env(r.json(), "class-server")["declared"] == first  # its time and peer are kept
+    r = edit(client, declare("The owner wrote it on the server's home page."))
+    second = env(r.json(), "class-server")["declared"]
+    assert second["statement"] != first["statement"] and second["at"] >= first["at"]
+    assert [a["action"] for a in audit(tmp_path)].count("declare") == 2
+
+
+def test_withdrawing_is_easy_and_leaving_allowed_drops_it(make: Make, tmp_path: Path) -> None:
+    client = make()
+    with_class(client)
+    edit(client, declare(STATEMENT))
+    r = edit(client, declare(None))
+    assert r.status_code == 200, r.text
+    assert env(r.json(), "class-server")["declared"] is None
+    rec = audit(tmp_path)[-1]
+    assert (rec["action"], rec["kind"], rec["note"]) == ("withdraw", "easy", STATEMENT)
+    assert interlock_env(client, "class-server").declared is False
+    edit(client, declare(STATEMENT))
+    seen = len(audit(tmp_path))
+    r = edit(client, lambda envs: find(envs, "class-server").update(type="pending"))
+    assert r.status_code == 200, r.text  # the page still sends the statement: it is dropped
+    assert env(r.json(), "class-server")["declared"] is None
+    assert {(a["action"], a["kind"]) for a in audit(tmp_path)[seen:]} == {
+        ("env_type", "easy"), ("withdraw", "easy")}  # fmt: skip
+    r = edit(client, lambda envs: find(envs, "class-server").update(declared=STATEMENT))
+    assert env(r.json(), "class-server")["declared"] is None  # a pending one never carries one
+
+
+def test_an_import_never_carries_or_sets_a_declaration(make: Make, tmp_path: Path) -> None:
+    client = make()
+    with_class(client)
+    edit(client, declare(STATEMENT))
+    doc = client.get("/settings/environments/export", headers=H).json()
+    assert "declared" not in json.dumps(doc) and STATEMENT not in json.dumps(doc)
+    find(doc["environments"], "class-server")["declared"] = "Imported: the owner permits bots."
+    view = get(client)
+    r = put(client, doc["environments"], view["revision"], source="import")
+    assert r.status_code == 422
+    assert r.json()["detail"] == {"reason": "declaration_not_importable", "entry": "class-server"}
+    del find(doc["environments"], "class-server")["declared"]
+    find(doc["environments"], "class-server")["summary"] = "Shared by the course."
+    r = put(client, doc["environments"], view["revision"], source="import")
+    assert r.status_code == 200, r.text
+    kept = env(r.json(), "class-server")["declared"]
+    assert kept is not None and kept["statement"] == STATEMENT  # technical: stays from the store
+
+
+def test_creating_an_allowed_environment_with_a_declaration_is_two_changes(
+    make: Make, tmp_path: Path
+) -> None:
+    client = make()
+    r = edit(client, lambda envs: envs.append(dict(CLASS) | {"declared": STATEMENT}))
+    assert r.status_code == 200, r.text
+    assert env(r.json(), "class-server")["declared"]["statement"] == STATEMENT
+    kinds = {(a["action"], a["kind"]) for a in audit(tmp_path)[1:]}
+    assert kinds == {("env_create", "normal"), ("server_add", "normal"), ("declare", "declare")}
+
+
+@pytest.mark.parametrize(
+    ("peer", "overrides", "headers", "csrf", "reason"),
+    [
+        (LAN, {}, {}, True, "origin_required"),
+        (("10.210.96.1", 1), {}, H, True, "compose_peer"),
+        (LAN, {"public_port": 8000, "internal_port": 80}, H, True, "not_public_listener"),
+        (("192.168.1.13", 1), {}, H, True, "lab_host_peer"),
+        (("192.168.1.169", 1), {}, H, True, "windows_host_peer"),
+        (LAN, {}, H, False, "csrf_invalid"),
+    ],
+)  # fmt: skip
+def test_a_declaration_passes_the_same_human_only_write_gate(
+    make: Make, tmp_path: Path, peer: tuple[str, int], overrides: dict[str, Any],
+    headers: dict[str, str], csrf: bool, reason: str,
+) -> None:  # fmt: skip
+    with_class(make())  # a person made the environment first, from their own browser
+    client = make(peer=peer, **overrides)
+    envs = [dict(e) for e in as_input(get(make()))]
+    find(envs, "class-server")["declared"] = STATEMENT
+    r = put(client, envs, 1, headers=headers, csrf=csrf)
+    assert r.json()["detail"]["reason"] == reason
+    rec = audit(tmp_path)[-1]
+    assert (rec["action"], rec["ok"], rec["reason"]) == ("refused", False, reason)
+    stored = json.loads((tmp_path / "settings" / "environments.json").read_text())
+    assert find(stored["environments"], "class-server")["declared"] is None
+
+
+def test_the_agent_can_read_a_declaration_but_never_make_one(make: Make) -> None:
+    person = make()
+    with_class(person)
+    edit(person, declare(STATEMENT))
+    agent = make(public_port=8000, internal_port=80)  # the agent's own listener
+    shown = env(agent.get("/settings/environments").json(), "class-server")["declared"]
+    assert shown["statement"] == STATEMENT
+    envs = as_input(get(person))
+    find(envs, "class-server")["declared"] = "The agent says the owner permits bots."
+    r = agent.put("/settings/environments", json={"base_revision": 2, "environments": envs})
+    assert r.status_code == 404 and r.json()["detail"]["reason"] == "not_public_listener"

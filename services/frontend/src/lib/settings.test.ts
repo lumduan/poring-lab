@@ -5,6 +5,9 @@ import {
   auditText,
   badgeText,
   cdnWarning,
+  DECLARE_WARNING,
+  declaredText,
+  declareReady,
   describeServer,
   groupSuggestions,
   isForbidden,
@@ -14,6 +17,8 @@ import {
   toInputs,
   unblockReady,
   validateEntry,
+  withDeclaration,
+  type Declaration,
   type EnvView,
   type ServerView,
 } from "./settings.ts";
@@ -91,9 +96,71 @@ test("suggestions of one server are grouped for Confirm all", () => {
 
 test("the request carries user fields only", () => {
   const env: EnvView = { id: "lab", name: "Lab", type: "allowed", summary: "s", why: "w",
-    servers: [server("192.168.1.13", 6900)], suggestions: [], ready: true, signals: ["session"] };
+    servers: [server("192.168.1.13", 6900)], suggestions: [], ready: true, signals: ["session"], declared: null };
   assert.deepEqual(toInputs({ environments: [env] }), [{ id: "lab", name: "Lab", type: "allowed", summary: "s",
-    why: "w", servers: [{ host: "192.168.1.13", port: 6900, note: "" }] }]);
+    why: "w", servers: [{ host: "192.168.1.13", port: 6900, note: "" }], declared: null }]);
+});
+
+// --- ADR-0023 decision 1: a person's declaration (Batt 2026-11-12: a warning, not a lock) ----------
+
+const DECLARED: Declaration = {
+  at: "2026-11-12T07:03:41.123456+00:00", peer: "192.168.1.50",
+  statement: "The class server's owner (our teacher) runs it for bots.",
+};
+
+function allowedEnv(extra: Partial<EnvView> = {}): EnvView {
+  return { id: "class", name: "Class server", type: "allowed", summary: "", why: "",
+    servers: [server("203.0.113.7", 6900)], suggestions: [], ready: false, signals: [], ...extra };
+}
+
+test("the declaration warning is Batt's wording, in full", () => {
+  assert.equal(DECLARE_WARNING,
+    "Declare only for a server whose owner permits bots. The lab cannot check this: once you declare, " +
+    "the bot will act there on your word. Official servers stay blocked by default; lifting that block " +
+    "can get your account banned and is your own responsibility. Never collect other players' data.");
+});
+
+test("declaring needs the person's own words, as the backend's minimum", () => {
+  assert.equal(declareReady(""), false);
+  assert.equal(declareReady("   ok it is   "), false); // 8 characters after trim
+  assert.equal(declareReady("123456789"), false); // 9 characters
+  assert.equal(declareReady(" 1234567890 "), true); // 10 after trim
+  assert.equal(declareReady("x".repeat(501)), false); // over the backend's maximum
+});
+
+test("a declaration is shown as declared by a person, never as verified", () => {
+  const text = declaredText(DECLARED);
+  assert.equal(text, "Declared by a person, not verified — 2026-11-12 07:03 UTC, from 192.168.1.50");
+  assert.doesNotMatch(text.replace("not verified", ""), /verified/);
+});
+
+test("a kept declaration is sent back as its statement; declare and withdraw change only one", () => {
+  const view = { environments: [allowedEnv({ declared: DECLARED }), allowedEnv({ id: "other", name: "Other" })] };
+  const envs = toInputs(view);
+  assert.deepEqual(envs.map((e) => e.declared), [DECLARED.statement, null]);
+  const declared = withDeclaration(envs, "other", "  The owner said so on their Discord.  ");
+  assert.deepEqual(declared.map((e) => e.declared), [DECLARED.statement, "The owner said so on their Discord."]);
+  const withdrawn = withDeclaration(envs, "class", null);
+  assert.deepEqual(withdrawn.map((e) => e.declared), [null, null]);
+  assert.deepEqual(envs.map((e) => e.declared), [DECLARED.statement, null]); // the input is untouched
+});
+
+test("an allowed environment without a packet check can be declared; a declared one is ready", () => {
+  assert.match(notReadyText(allowedEnv()) ?? "", /no way to check.*declare it below/);
+  assert.equal(notReadyText(allowedEnv({ declared: DECLARED })), null);
+  assert.match(notReadyText(allowedEnv({ declared: DECLARED, servers: [] })) ?? "", /confirm at least one server/);
+});
+
+test("declare and withdraw history lines quote the person's statement", () => {
+  const base = { t_wall: "2026-11-12T07:03:41+00:00", env_id: "class", entry: "Class server",
+    revision_before: 4, revision_after: 5, ok: true, reason: "page", client: "192.168.1.50" };
+  const declare = auditText({ ...base, action: "declare", kind: "declare", note: DECLARED.statement });
+  assert.match(declare, /^Declared the owner's permission \(not verified\): Class server — statement: "The class server's owner/);
+  assert.match(declare, /\[from 192\.168\.1\.50\]$/);
+  const withdraw = auditText({ ...base, action: "withdraw", kind: "easy", note: DECLARED.statement });
+  assert.match(withdraw, /^Withdrew the declaration: Class server — withdrawn statement: "/);
+  assert.match(reasonText("statement_required"), /own words \(at least 10 characters\)/);
+  assert.match(reasonText("declaration_not_importable"), /cannot come from a file/);
 });
 
 test("a CDN address gets the firewall warning; a plain one does not", () => {

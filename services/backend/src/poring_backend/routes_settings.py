@@ -14,6 +14,13 @@ forbidden list: deleting a forbidden environment, removing a forbidden endpoint,
 allowed/pending) also needs a typed reason (>= 10 characters) and its subject typed again, one hard
 change per save. Every change is audited with its rule; the interlock re-reads the set at once.
 
+A person's DECLARATION (ADR-0023 decision 1, 2026-11-12) rides in the same PUT: each allowed
+environment's ``declared`` is the person's statement (the page sends the whole set, so a kept
+declaration is sent back unchanged; null withdraws it). The backend stamps WHEN and FROM WHERE
+(the write gate's peer) itself -- never the client's word for those. A new or changed statement is
+a "declare" change (>= 10 characters); withdrawing is easy. An import never sets one (a request
+that tries is refused): the current declarations stay, like the other technical fields.
+
 Who may READ: the console browser (public listener, a LAN viewer, an allowlisted Origin), and the
 agent on its own listener :8001 (GET /settings/environments only).
 
@@ -82,6 +89,8 @@ class EnvIn(BaseModel):
     summary: str = Field(default="", max_length=400)
     why: str = Field(default="", max_length=300)
     servers: list[ServerIn] = Field(default_factory=list, max_length=envstore.MAX_SERVERS)
+    # ADR-0023: the person's statement only (the backend stamps the time and the peer); null = none
+    declared: str | None = Field(default=None, max_length=envstore.MAX_STATEMENT)
 
 
 class PutBody(BaseModel):
@@ -261,9 +270,13 @@ def view(state: AppState) -> dict[str, Any]:
                     s.host, s.port, state.allowlist_resolved.get(s.host, [])),
             } for s in env.servers],
             "suggestions": [{"host": s.host, "port": s.port} for s in suggested.get(env.id, [])],
-            # the bot can act here only with servers AND a way to verify a session (signals)
-            "ready": env.type == "allowed" and bool(env.servers) and bool(env.signals),
+            # the bot can act here only with servers AND a way to verify a session (signals) or a
+            # person's declaration (ADR-0023)
+            "ready": env.type == "allowed" and bool(env.servers) and (
+                bool(env.signals) or env.declared is not None),
             "signals": list(env.signals),
+            # ADR-0023: a person's declaration -- shown as "declared by a person, not verified"
+            "declared": env.declared.model_dump() if env.declared is not None else None,
         })  # fmt: skip
     return {
         "revision": es.revision if es is not None else None,
@@ -308,9 +321,32 @@ def get_audit(days: int = 7, state: AppState = Depends(browser_gate)) -> dict[st
     return {"records": state.allowlist_audit.tail(min(max(days, 1), 90))}
 
 
+def _declared(e: EnvIn, current: envstore.Declaration | None, source: str, who: Who,
+              now: str) -> envstore.Declaration | None | str:  # fmt: skip
+    """ADR-0023: the environment's declaration after this request, or a refusal reason. The
+    statement is the person's; the time and the peer are the backend's own."""
+    if source == "import" and e.declared is not None:
+        return "declaration_not_importable"  # a person's own act, never a file's
+    if e.type != "allowed":
+        return None  # only an allowed environment carries one: changing away from it drops it
+    if source == "import":
+        return current  # kept, like the other technical fields
+    statement = clean(e.declared).strip() if e.declared is not None else ""
+    if not statement:
+        return None  # none, or withdrawn
+    if current is not None and statement == current.statement:
+        return current  # the page sends the whole set back: unchanged, keep its time and peer
+    if len(statement) < envstore.MIN_REASON:
+        return "statement_required"
+    if not who.client:
+        return "invalid"
+    return envstore.Declaration(at=now, peer=who.client, statement=statement)
+
+
 def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet | tuple[str, str]:
     """The new set from the request: stable ids, kept metadata, technical fields from the current
-    set only; (reason, subject) for a request that cannot be one."""
+    set only (a declaration: the page's statement, stamped here; ``_declared``); (reason, subject)
+    for a request that cannot be one."""
     by_id = {e.id: e for e in current.environments}
     used: set[str] = set()
     envs: list[envstore.EnvEntry] = []
@@ -346,6 +382,10 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
                 host=host, port=srv.port, note=clean(srv.note).strip(), source=source, added_at=now,
                 added_by=who.client or ""))  # fmt: skip
         technical = {k: getattr(base, k) for k in envstore.TECHNICAL} if base else {}
+        declared = _declared(e, base.declared if base else None, body.source, who, now)
+        if isinstance(declared, str):
+            return declared, env_id
+        technical["declared"] = declared
         envs.append(envstore.EnvEntry(id=env_id, name=clean(e.name).strip(), type=e.type,
                                       summary=clean(e.summary).strip(), why=clean(e.why).strip(),
                                       servers=servers, **technical))  # fmt: skip
@@ -412,6 +452,10 @@ async def put_environments(request: Request,
             if body.confirm.strip().lower() != subject.lower():
                 raise _refuse(request, 422, "confirm_mismatch", audit=True, env_id=hard[0].env_id,
                               entry=subject, extra={"subject": subject})  # fmt: skip
+        for c in changes:  # ADR-0023: a declaration needs the person's own words
+            if c.kind == "declare" and len(c.note.strip()) < envstore.MIN_REASON:
+                raise _refuse(request, 422, "statement_required", audit=True, env_id=c.env_id,
+                              entry=c.subject, extra={"subject": c.subject})  # fmt: skip
         rev_before = current.revision
         new.revision = current.revision + 1
         try:
@@ -426,7 +470,7 @@ async def put_environments(request: Request,
                 action=c.action, kind=c.kind, env_id=c.env_id, entry=c.subject,
                 revision_before=rev_before, revision_after=saved.revision, before=names_before,
                 after=names_after, ok=True, reason=body.source,
-                note=clean(body.reason).strip() if c.kind == "hard" else c.text,
+                note=clean(body.reason).strip() if c.kind == "hard" else c.note or c.text,
                 **who.model_dump(),
             )  # fmt: skip
         summary = clean("; ".join(f"[{c.kind}] {c.text}" for c in changes))

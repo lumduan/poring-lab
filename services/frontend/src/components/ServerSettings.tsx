@@ -8,11 +8,16 @@ import {
   auditText,
   badgeText,
   cdnWarning,
+  DECLARE_WARNING,
+  declaredText,
+  declareReady,
   describeServer,
   type EnvInput,
   type EnvType,
   type EnvView,
   groupSuggestions,
+  MAX_DECLARE_STATEMENT,
+  MIN_DECLARE_STATEMENT,
   notReadyText,
   parseForbidden,
   reasonText,
@@ -20,6 +25,7 @@ import {
   toInputs,
   unblockReady,
   validateEntry,
+  withDeclaration,
 } from "@/lib/settings";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -121,6 +127,57 @@ function HardPanel({
   );
 }
 
+/** ADR-0023 decision 1 (Batt 2026-11-12: "don't lock; write a warning"): a person may declare that
+ * the server's owner permits bots. The lab cannot check it, so it is always shown as declared by a
+ * person, not verified. The statement form is offered where the lab has no packet check of its own;
+ * a declaration that exists can always be withdrawn. Text only: nothing here is rendered as HTML. */
+function DeclarePanel({ env, onSave }: { env: EnvView; onSave: (statement: string | null) => Promise<string | null> }) {
+  const [statement, setStatement] = useState("");
+  if (env.declared) {
+    return (
+      <div className="mt-3 rounded border border-amber-700 bg-amber-950/40 p-3 text-sm" data-testid="declared">
+        <p className="font-semibold text-amber-100">{declaredText(env.declared)}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-amber-100/80">“{env.declared.statement}”</p>
+        <p className="mt-1 text-xs text-amber-200/70">The bot may act on these servers on this word alone: the lab cannot check it.</p>
+        <button
+          type="button"
+          onClick={() => void onSave(null)}
+          className="mt-2 rounded border border-amber-700 px-3 py-1 text-xs text-amber-100 hover:bg-amber-950"
+        >
+          Withdraw
+        </button>
+      </div>
+    );
+  }
+  if (env.signals.length > 0) return null; // the lab checks sessions here from packets
+  return (
+    <div className="mt-3 rounded border border-amber-800 bg-amber-950/30 p-3 text-sm" data-testid="declare">
+      <h3 className="font-semibold text-amber-100">Declare permission</h3>
+      <p className="mt-1 text-xs text-amber-100/90">{DECLARE_WARNING}</p>
+      <label className="mt-2 flex flex-col text-xs text-neutral-300">
+        In your own words: who owns this server, and how do you know they permit bots? (at least {MIN_DECLARE_STATEMENT} characters)
+        <textarea
+          value={statement}
+          onChange={(e) => setStatement(e.target.value)}
+          maxLength={MAX_DECLARE_STATEMENT}
+          rows={3}
+          className="mt-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={!declareReady(statement)}
+        onClick={async () => {
+          if (!(await onSave(statement))) setStatement("");
+        }}
+        className="mt-2 rounded bg-amber-600 px-3 py-1 text-sm font-semibold text-neutral-950 hover:bg-amber-500 disabled:opacity-40"
+      >
+        Declare
+      </button>
+    </div>
+  );
+}
+
 type Hard = { title: string; subject: string; envs: EnvInput[] } | null;
 
 function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: Save }) {
@@ -196,6 +253,8 @@ function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: 
     }
   };
 
+  const declare = (statement: string | null) => run(withDeclaration(all, env.id, statement));
+
   const notReady = notReadyText(env);
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
@@ -268,6 +327,8 @@ function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: 
           ))}
         </div>
       )}
+
+      {env.type === "allowed" && <DeclarePanel env={env} onSave={declare} />}
 
       <form
         className="mt-3 flex flex-wrap items-end gap-2"

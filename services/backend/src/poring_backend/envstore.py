@@ -30,6 +30,12 @@ Asymmetric rules (``classify``):
   * hard (loosening a forbidden list): delete a forbidden environment, remove a forbidden endpoint,
     forbidden -> allowed/pending -- a typed reason (>= 10 characters) AND the subject typed again,
     one hard change per save. All of it is audited.
+  * declare (ADR-0023 decision 1, 2026-11-12): a person DECLARES that an allowed environment's
+    owner permits bots -- the person's own words (>= 10 characters), stamped by the backend with the
+    time and the browser's address. Then the interlock may make it green WITHOUT packets, labelled
+    "declared by a person, not verified". Only an allowed environment carries one; changing it away
+    from allowed drops it. Withdrawing it is easy (tightening). A declaration is a technical field:
+    an import never carries or sets it (it is a person's own act on their own machine).
 """
 
 from __future__ import annotations
@@ -39,10 +45,11 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from poring_backend import allowlist
 from poring_backend.interlock import ClientProfile, Environment, EnvironmentsConfig
@@ -52,6 +59,7 @@ MARKER_NAME = ".environments-seeded"
 MAX_ENVS = 50
 MAX_SERVERS = 64
 MIN_REASON = 10
+MAX_STATEMENT = 500
 EnvType = Literal["allowed", "forbidden", "pending"]
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
@@ -71,6 +79,23 @@ class ServerEntry(BaseModel):
         return allowlist.entry_key(self.host, self.port)
 
 
+class Declaration(BaseModel):
+    """ADR-0023 decision 1: a person declared that the server's owner permits bots. The lab cannot
+    check it; it is shown as "declared by a person, not verified", never as verified."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    at: str = Field(max_length=40)  # ISO 8601 with offset, stamped by the backend
+    peer: str = Field(min_length=1, max_length=64)  # the browser's address (the write gate)
+    statement: str = Field(min_length=MIN_REASON, max_length=MAX_STATEMENT)  # the person's words
+
+    @field_validator("at")
+    @classmethod
+    def _iso_with_offset(cls, v: str) -> str:
+        if datetime.fromisoformat(v).utcoffset() is None:
+            raise ValueError("the declaration's time needs a UTC offset")
+        return v
+
+
 class EnvEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=ID_RE.pattern)  # stable; the sniffer names its server by it
@@ -84,6 +109,8 @@ class EnvEntry(BaseModel):
     accounts: list[int] = Field(default_factory=list)
     signals: list[Literal["lab_host", "session"]] = Field(default_factory=list)
     client: ClientProfile | None = None
+    # Technical too, but a PERSON's: set only through the page's write gate (routes_settings).
+    declared: Declaration | None = None
 
 
 class EnvSet(BaseModel):
@@ -96,7 +123,7 @@ class EnvSet(BaseModel):
     environments: list[EnvEntry] = Field(default_factory=list, max_length=MAX_ENVS)
 
 
-TECHNICAL = ("windows_host", "accounts", "signals", "client")
+TECHNICAL = ("windows_host", "accounts", "signals", "client", "declared")
 
 
 # --- the defaults ---------------------------------------------------------------------------------
@@ -225,6 +252,7 @@ def to_config(es: EnvSet) -> EnvironmentsConfig:
             windows_host=env.windows_host, accounts=env.accounts, signals=env.signals,
             client=env.client, servers=usable(env, blocked),
             forbidden_endpoints=[s.key for s in env.servers] if env.type == "forbidden" else [],
+            declared=env.type == "allowed" and env.declared is not None,
         ) for env in es.environments],
     )  # fmt: skip
 
@@ -232,13 +260,31 @@ def to_config(es: EnvSet) -> EnvironmentsConfig:
 # --- validation and the asymmetric rules ----------------------------------------------------------
 
 
+ChangeKind = Literal["easy", "normal", "hard", "declare"]
+
+
 @dataclass(frozen=True)
 class Change:
-    kind: Literal["easy", "normal", "hard"]
-    action: str  # env_create/_delete/_rename/_type/_text, server_add/_remove (AuditRecord.action)
+    kind: ChangeKind
+    action: str  # env_create/_delete/_rename/_type/_text, server_add/_remove, declare, withdraw
     env_id: str
     subject: str  # what a hard change must be confirmed with (the endpoint, or the env's name)
     text: str  # plain words for the audit log and the page
+    note: str = ""  # declare / withdraw: the person's statement (the audit's note)
+
+
+def _declaration_change(env_id: str, name: str, old: Declaration | None,
+                        new: Declaration | None) -> Change | None:  # fmt: skip
+    """ADR-0023: adding or replacing a declaration is its own kind (the typed statement);
+    removing it is easy (tightening)."""
+    if new is not None and new != old:
+        return Change("declare", "declare", env_id, name,
+                      f"declared that the owner of {name!r} permits bots (not verified)",
+                      new.statement)  # fmt: skip
+    if new is None and old is not None:
+        return Change("easy", "withdraw", env_id, name,
+                      f"withdrew the declaration for {name!r}", old.statement)  # fmt: skip
+    return None
 
 
 def classify(old: EnvSet, new: EnvSet) -> list[Change]:
@@ -261,6 +307,9 @@ def classify(old: EnvSet, new: EnvSet) -> list[Change]:
             for s in n.servers:
                 out.append(Change("easy" if n.type == "forbidden" else "normal", "server_add",
                                   env_id, s.key, f"added {s.key} to {n.name!r}"))  # fmt: skip
+            declared = _declaration_change(env_id, n.name, None, n.declared)
+            if declared is not None:
+                out.append(declared)
             continue
         if n.name != o.name:
             out.append(Change("normal", "env_rename", env_id, n.name,
@@ -287,6 +336,9 @@ def classify(old: EnvSet, new: EnvSet) -> list[Change]:
             kind = "hard" if o.type == "forbidden" else "easy" if o.type == "allowed" else "normal"
             out.append(Change(kind, "server_remove", env_id, key,
                               f"removed {key} from {n.name!r}"))  # fmt: skip
+        declared = _declaration_change(env_id, n.name, o.declared, n.declared)
+        if declared is not None:
+            out.append(declared)
     return out
 
 
@@ -302,6 +354,8 @@ def validate(new: EnvSet, resolved: dict[str, list[str]],
             return "duplicate_environment", env.id
         if env.name.strip().lower() in names:
             return "duplicate_name", env.name
+        if env.declared is not None and env.type != "allowed":
+            return "declaration_not_allowed_here", env.id  # only an allowed one (ADR-0023)
         ids.add(env.id)
         names.add(env.name.strip().lower())
         keys = set()
