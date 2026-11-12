@@ -89,6 +89,9 @@ Batt's decision came from teaching, not from the lab (2026-11-07, during the bot
 - The code to build it does not exist yet; the lab runs under ADR-0006 / ADR-0016 until it does.
   ➡️ SUPERSEDED 2026-11-12 for decision 1: it is built (next section). Decisions 3 and 4 and the
   per-target identity are still not built.
+- ➡️ 2026-11-12: on a declared server the account is no GM, so the hunting runner has a
+  `--player-mode` that types no line and reads no lab DB (docs/planning/player-mode.md, first cut
+  BUILT, not live-verified; docs/setup/new-lab-host.md section 11.1).
 
 ## Implementation (2026-11-12): decision 1
 

@@ -111,9 +111,17 @@ that exit's return cell; then the patrol re-joins its loop. Its steps follow hou
 closed table; anything unexpected STOPS the run (never a Fly Wing inside: in_orcs01 is
 noteleport). The default (--rest spot) is today's rest.
 
+--player-mode (dungeon@9.35, OFF by default; docs/planning/player-mode.md, Batt 2026-11-12): the
+hunt as a NORMAL PLAYER, for a public rAthena that permits bots (ADR-0023's declared mode), where
+the account is no GM. The run types NO line (every line this runner types goes through typed_line,
+which refuses first), reads nothing from the lab's DB, starts where the person left the character
+(her cell read on the minimap readout) with the stock she brought (read on the hotbar: at least
+PLAYER_MIN_WINGS Fly Wings and PLAYER_MIN_HEALS heal items), and ends by the run's own Fly Wing
+escape only: no warp home, no @alive / @heal, no level hold, no top-up, no staging.
+
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
-                        [--walk-trust] [--rest spot|house]
+                        [--walk-trust] [--rest spot|house] [--player-mode]
     (dungeon@7: --steal = Batt's steal-first on every monster, SP permitting)
 """
 
@@ -713,6 +721,153 @@ def hotbar_slot(key: str) -> int:
     if len(key) == 2 and key[0] == "F" and key[1] in "123456789":
         return int(key[1]) - 1
     raise ValueError(f"not a row-1 hotbar key: {key!r}")
+
+
+# --- dungeon@9.35 --player-mode (docs/planning/player-mode.md; Batt 2026-11-12: "do player mode
+# after SQLite"). On a public rAthena that permits bots (ADR-0023's declared mode) the learner is a
+# normal player, not a GM: the lab setup's GM lines would fail there or, worse, show up in public
+# chat. Under the flag the run types NO line at all -- not in the setup, the loop or the end. That
+# is STRUCTURAL: every line this runner types goes through typed_line, which refuses first (a Stop
+# before any key), and a source scan (test_player_mode.py) fails on any other typing call in this
+# file. The run reads nothing from the lab's DB; the person brings the character to the map with
+# her stock, the run starts where she stands, reads the stock from the hotbar's pixels and refuses
+# below these minimums.
+PLAYER_MODE_VERSION = "9.35"
+# Fly Wings on the hotbar at the start: POS_FLY_MAX (3) wings for an unread position, one escape,
+# and PLAYER_WINGS_KEEP for the end's own escape (no @warp takes her home)
+PLAYER_MIN_WINGS = 5
+PLAYER_MIN_HEALS = 5  # heal items at the start: White Potions (with --heal-candy + canes + candies)
+PLAYER_WINGS_KEEP = 1  # the run ENDS when the Fly Wings read this many: one stays for the end
+PLAYER_POS_S = 5.0  # the start: her cell must read on the minimap readout within this long
+# the flags whose whole point is a GM line or a GM's start (refused under --player-mode). The
+# runner itself has no immunity flag: immunity (@monsterignore) is toggled OUTSIDE it, by
+# crusader.py's gm command in the lab's chain, never by this runner
+PLAYER_REFUSED: tuple[tuple[str, str, str], ...] = (
+    ("clear_map", "--clear-map", "it types @killmonster2"),
+    ("stage_mob", "--stage-mob", "it types @monster"),
+    ("stage_at", "--stage-at", "it types @warp and @monster"),
+    ("start_cell", "--start-cell", "the setup's @warp goes there; a player starts where she is"),
+)
+# the calls that TYPE a line (ro_agent / crusader): in this file only typed_line may make one
+TYPING_CALLS = frozenset({"gm_line", "gm", "chat_line", "open_chat", "type_text", "type_secret",
+                          "say", "type_line", "console_type", "console_secret"})  # fmt: skip
+
+
+def line_refused(line: str, player_mode: bool) -> str | None:
+    """PURE (dungeon@9.35): why ``line`` must not be typed, or None. Outside --player-mode every
+    line passes (crusader.gm_line's own checks follow). Under it NOTHING is typed: a line starting
+    with "@" is a GM command a normal player has not got (on a public server it fails, or shows in
+    public chat), and any other line would be public chat."""
+    if not player_mode:
+        return None
+    word = line.strip().split(" ", 1)[0]
+    if word.startswith("@"):
+        return f"--player-mode types no GM command: {word!r} was NOT typed"
+    return "--player-mode types no chat line (it would be public chat): nothing was typed"
+
+
+def typed_line(agent: Any, screen: Any, line: str, job: str, char: str, *, player_mode: bool,
+               on_refuse: str = "raise") -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.35: THE one path by which this runner types a line (a GM command, through
+    crusader.gm_line and its identity check). line_refused decides FIRST: a refusal is a Stop
+    before any key is pressed, so a path that --player-mode missed stops the run instead of
+    leaking a line into public chat."""
+    import ro_agent as r
+
+    why = line_refused(line, player_mode)
+    if why is not None:
+        raise r.Stop(f"dungeon@{PLAYER_MODE_VERSION} refused: {why}")
+    import crusader as cr
+
+    return cr.gm_line(agent, screen, line, job, char, on_refuse=on_refuse)
+
+
+def player_mode_refused(a: argparse.Namespace) -> str | None:
+    """PURE (dungeon@9.35): why --player-mode cannot run with the other flags given (None: it can,
+    or it is off). PLAYER_REFUSED's flags exist to type GM lines or to start on a GM's warp;
+    --engage melee_ring strikes every monster in reach and is the lab server's alone (its own
+    refusal: MR_MAPS, no script NPC, the lab's attested rAthena)."""
+    if not getattr(a, "player_mode", False):
+        return None
+    bad = [f"{flag} ({why})" for attr, flag, why in PLAYER_REFUSED
+           if getattr(a, attr, None) not in (None, False)]  # fmt: skip
+    if getattr(a, "engage", "defend_scan") == "melee_ring":
+        bad.append("--engage melee_ring (the lab server only: it strikes every monster in reach)")
+    if not bad:
+        return None
+    why = "; ".join(bad)
+    return f"--player-mode types no GM command and starts where she stands; not with {why}"
+
+
+def player_plan(lines: Sequence[str], player: bool) -> list[str]:
+    """PURE (dungeon@9.35): the setup lines a run types -- all of them, or under --player-mode
+    none. Every lab setup line is a GM command (the level hold, @heal, the @item top-ups, the
+    @warp to the map, @killmonster2, @monster), and a player types no line at all."""
+    return [] if player else list(lines)
+
+
+def player_stock_refused(counts: Mapping[int, int | None],
+                         heal_items: Sequence[int]) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.35): why the stock the person brought cannot start a player-mode run (None:
+    it can). ``counts`` are the hotbar's drawn counts by item (None: unreadable). At least
+    PLAYER_MIN_WINGS Fly Wings, and PLAYER_MIN_HEALS heal items in all (``heal_items``: the White
+    Potion, with --heal-candy the Candy Cane and Candy too); an unreadable count refuses, never a
+    guess (4.05 a10 hunted with no Fly Wing after a guessed stock)."""
+    wings = counts.get(STOCK_ITEMS["fly"])
+    if wings is None:
+        return "the Fly Wings' count on the hotbar did not read: a person first"
+    if wings < PLAYER_MIN_WINGS:
+        return (f"{wings} Fly Wings on the hotbar: bring at least {PLAYER_MIN_WINGS} (the run's "
+                f"escapes; it ends with {PLAYER_WINGS_KEEP} left for the end's own)")  # fmt: skip
+    heals = [counts.get(i) for i in heal_items]
+    if any(n is None for n in heals):
+        read = dict(zip(heal_items, heals, strict=True))
+        return f"a heal item's count on the hotbar did not read ({read})"
+    n_heal = sum(int(n or 0) for n in heals)
+    if n_heal < PLAYER_MIN_HEALS:
+        return (f"{n_heal} heal items on the hotbar (items {list(heal_items)}): bring at least "
+                f"{PLAYER_MIN_HEALS}")  # fmt: skip
+    return None
+
+
+def player_weight_refused(share: float | None, red: bool) -> str | None:
+    """PURE (dungeon@9.35): a player's bag is never dropped (no clear stand to warp to): the run
+    starts only on a READ weight under WEIGHT_MAX (natural regen stops at 50 %)."""
+    if share is None or red:
+        return "the weight on Basic Info did not read, or reads red (>= 50 %): a person first"
+    if share >= WEIGHT_MAX:
+        return f"weight {share:.2f} >= {WEIGHT_MAX}: lighten the bag first (a person)"
+    return None
+
+
+def player_start_refused(map_: str, here: Cell | None, okr: Any, area: Any) -> str | None:
+    """PURE (dungeon@9.35): why a player-mode run cannot start from ``here``, the cell the
+    minimap readout gave (None: it can). She must stand on the run's route grid (walkable, outside
+    every zone, not in a sealed-off part) in a walk component that reaches the search area: the
+    heading walk, the patrol (its nearest waypoint ahead) and --explore (her component's regions)
+    all start from her cell."""
+    if here is None:
+        return (f"her cell did not read on the minimap readout within {PLAYER_POS_S} s: a "
+                "person first")  # fmt: skip
+    import explore_map as em_p
+
+    g = np.asarray(okr, dtype=bool)
+    h, w = g.shape[:2]
+    if not (0 <= here[0] < w and 0 <= here[1] < h):
+        return f"her cell {here} is off {map_} ({w} x {h}): is she on {map_}?"
+    if not g[here[1], here[0]]:
+        return (f"her cell {here} is off {map_}'s route grid (a wall, a zone or a sealed-off "
+                f"part): walk her onto the open ground first")  # fmt: skip
+    if not (em_p.component(g, here) & np.asarray(area, dtype=bool)).any():
+        return f"no walk from her cell {here} reaches {map_}'s search area: walk her nearer first"
+    return None
+
+
+def player_wings_low(item: int, n: int | None, keep: int = PLAYER_WINGS_KEEP) -> bool:
+    """PURE (dungeon@9.35): under --player-mode the run ends when the Fly Wings read ``keep`` or
+    fewer (an unread count never ends it), so the end's own escape still has one: no @warp takes a
+    player home."""
+    return item == STOCK_ITEMS["fly"] and n is not None and n <= keep
 
 
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
@@ -2092,11 +2247,12 @@ def walk_target(path: Sequence[Cell], ahead: int, fits: Any) -> tuple[int, Cell]
     return None
 
 
-def level_lines(level_db: int, hold: int | None) -> list[str]:
+def level_lines(level_db: int | None, hold: int | None) -> list[str]:
     """PURE (Batt 2026-10-26 ~20:5x, hold the Rogue at Base 63): the setup line that brings a DB
     base level above ``hold`` back down (@baselevelup -N: it takes back that level's status points
-    and zeroes the EXP, pinned atcommand.cpp); never raises a level."""
-    if hold is None or level_db <= hold:
+    and zeroes the EXP, pinned atcommand.cpp); never raises a level. An unknown level (None:
+    --player-mode reads no DB, dungeon@9.35) holds nothing."""
+    if hold is None or level_db is None or level_db <= hold:
         return []
     return [f"@baselevelup -{level_db - hold}"]
 
@@ -2254,6 +2410,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["bare_ready"] = [BARE_READY_VERSION]
     if getattr(a, "steal_opener", None):  # dungeon@9.27c (Batt 2026-11-11 ~19:15: the Knife)
         out["steal_opener"] = [str(a.steal_opener), bs.OPENER_VERSION]
+    if getattr(a, "player_mode", False):  # dungeon@9.35 (docs/planning/player-mode.md, Batt 11-12)
+        out["player_mode"] = [PLAYER_MIN_WINGS, PLAYER_MIN_HEALS, PLAYER_WINGS_KEEP,
+                              PLAYER_MODE_VERSION]  # fmt: skip
     return out
 
 
@@ -3232,8 +3391,9 @@ def clear_bag(a: argparse.Namespace) -> int:
         if why_be is not None:
             raise r.Stop(why_be)
         ui_gate.ensure_clear(agent, screen, why="clear-bag")
-        cr.gm_line(agent, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} {CLEAR_STAND[2]}",
-                   conf["job"], crk)  # fmt: skip
+        # clear-bag is the lab's alone (it warps and tops up): never a player's run
+        typed_line(agent, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} {CLEAR_STAND[2]}",
+                   conf["job"], crk, player_mode=False)  # fmt: skip
         t_w = time.monotonic()
         time.sleep(3.0)
         while not cr.check(screen, conf["job"], crk)["ok"]:
@@ -3265,7 +3425,7 @@ def clear_bag(a: argparse.Namespace) -> int:
             raise r.Stop(f"clear-bag: {exc} {before}") from exc
         for item, n in add.items():
             if n > 0:
-                cr.gm_line(agent, screen, f"@item {item} {n}", conf["job"], crk)
+                typed_line(agent, screen, f"@item {item} {n}", conf["job"], crk, player_mode=False)
                 time.sleep(0.8)
         bench.close_chat(agent, screen)
         after = read_stock()
@@ -4175,6 +4335,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     map_ = a.map
     keys_ = conf["keys"]
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
+    player = bool(getattr(a, "player_mode", False))  # dungeon@9.35 (docs/planning/player-mode.md)
+    why_pm = player_mode_refused(a)  # before any input: the flags that type GM lines
+    if why_pm:
+        raise SystemExit(f"dungeon@{PLAYER_MODE_VERSION} refused: {why_pm}")
     bosses: tuple[str, ...] = ()  # --engage-screen's boss guard (Amendment J)
     map_species: tuple[str, ...] = ()
     if getattr(a, "engage_screen", False):
@@ -4470,6 +4634,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")
+
+        def player_chat_closed(when: str) -> None:
+            """dungeon@9.35: the setup's chat-close step (bench.close_chat) presses Enter on an
+            open chat input; a player's run never does (text left in it would go to public chat),
+            so under --player-mode an open input stops the run before that step can run."""
+            if player and r.is_state(screen, "chat_open"):
+                raise r.Stop(f"dungeon@9.35 refused: --player-mode: the chat input is open "
+                             f"({when}): close it first (a person)")  # fmt: skip
+
+        player_chat_closed("at the start")
         # the Battle Log reader (battle_log.py live) reads the SHOWN chat tab: since 2026-11-05 the
         # window has two (Battle Log | Chat, the replies'), and a client restart shows the first
         # while a typed line's check may leave the replies' shown -- so Battle Log is selected here
@@ -4477,13 +4651,20 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         cl_.select_tab(agent_raw, screen, "battle")
         # the setup (the experimenter's restore, never a decision): full HP / SP, the stock topped
-        # up against the DB's last save (an upper bound of what is carried), the weight checked
-        name = json.loads((cr.data_dir(crk) / "char.json").read_text())["name"]
-        cid = int(r.db_query(f"SELECT char_id FROM `char` WHERE name = {r.sql_str(name)};")[0][0])
-        inv = {int(i): int(n) for i, n in r.db_query(
-            f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
-            "AND nameid IN (504, 601);")}  # fmt: skip
-        level_db = int(r.db_query(f"SELECT base_level FROM `char` WHERE char_id = {cid};")[0][0])
+        # up against the DB's last save (an upper bound of what is carried), the weight checked.
+        # dungeon@9.35 (--player-mode): a public server has no DB of ours -- nothing is read from
+        # the lab's DB; the stock comes from the hotbar's pixels alone (below)
+        inv: dict[int, int] = {}
+        level_db: int | None = None
+        if not player:
+            name = json.loads((cr.data_dir(crk) / "char.json").read_text())["name"]
+            q_cid = f"SELECT char_id FROM `char` WHERE name = {r.sql_str(name)};"
+            cid = int(r.db_query(q_cid)[0][0])
+            inv = {int(i): int(n) for i, n in r.db_query(
+                f"SELECT nameid, amount FROM inventory WHERE char_id = {cid} "
+                "AND nameid IN (504, 601);")}  # fmt: skip
+            q_lv = f"SELECT base_level FROM `char` WHERE char_id = {cid};"
+            level_db = int(r.db_query(q_lv)[0][0])
         setup = [*level_lines(level_db, conf.get("level_hold")), "@heal"]  # the hold, then heal
         p_to = potions_target(strat, conf)
         w_to = int(strat.get("wings_to") or conf["wings_to"])
@@ -4491,6 +4672,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             setup.append(f"@item 504 {p_to - inv.get(504, 0)}")
         if inv.get(601, 0) < w_to:
             setup.append(f"@item 601 {w_to - inv.get(601, 0)}")
+        setup = player_plan(setup, player)  # dungeon@9.35: a player types none of these lines
         import gm_state
 
         fr0 = gm_state._frames(screen)
@@ -4498,14 +4680,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         red0 = overweight_red(fr0[0])  # Amendment I: the reader is blind to the red (>= 50 %) line
         cleared: dict[str, Any] | None = None
         if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT or (w0 is None and red0):
-            if not conf["clear_etc"]:  # dungeon@6: the Thief's Etc tab holds Batt's target items
+            # dungeon@6: the Thief's Etc tab holds Batt's target items; dungeon@9.35: a player's
+            # bag is never dropped (no clear stand to warp to): the same refusal
+            if not conf["clear_etc"] or player:
                 hold = etc_hold_refused(gm_state.weight_share(w0), red0, conf)
                 if hold is not None:
                     raise r.Stop(f"dungeon@6: weight {w0} {hold} for the {a.char}: "
                                  "the setup never drops its Etc tab (a person first)")  # fmt: skip
             else:
-                cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                           f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
+                typed_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
+                           f"{CLEAR_STAND[2]}", conf["job"], crk, player_mode=player)  # fmt: skip
                 time.sleep(3.0)
                 bench.close_chat(agent_raw, screen)
                 cleared = clear_etc(agent_raw, screen, why="dungeon-setup")
@@ -4515,7 +4699,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             typed.append(cmd)
             # 4.04 Amendment A: @heal is idempotent -- chat_guard's skip (a refused 3rd @heal in a
             # row is not typed; the HP / SP are full after the pre-run's heal or the relog)
-            got_ = cr.gm_line(agent_raw, screen, cmd, conf["job"], crk,
+            got_ = typed_line(agent_raw, screen, cmd, conf["job"], crk, player_mode=player,
                               on_refuse="skip" if cmd == "@heal" else "raise")  # fmt: skip
             if not got_.get("typed", True):
                 counts["setup_heal_skipped"] += 1
@@ -4534,7 +4718,29 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         stock_due: dict[int, float] = {}  # 8.4: item -> when its count is re-read
         stock_tries: dict[int, int] = {}
         true_potions = inv.get(504, 0)
-        if conf.get("hotbar_stock"):
+        if player:  # dungeon@9.35: the stock is the person's -- read from the hotbar, never added
+            import hotbar_count as hb
+
+            try:
+                tpl = hb.load()
+            except OSError as exc:
+                raise r.Stop(f"dungeon@9.35: no hotbar digit templates ({exc})") from exc
+            slots = {stock_items[k]: hotbar_slot(keys_[k]) for k in stock_items}  # 9.31: + candies
+            time.sleep(0.8)  # as read_stock: the hotbar redrawn
+            g_pm = hb.gray(np.asarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())))
+            before = {item: hb.read_count(g_pm, slot, tpl) for item, slot in slots.items()}
+            stock = {"before": before, "added": {}, "after": before,
+                     "min": {"wings": PLAYER_MIN_WINGS, "heals": PLAYER_MIN_HEALS}}  # fmt: skip
+            heal_items = ([i for _, i in HEAL_ORDER] if heal_candy
+                          else [STOCK_ITEMS["potion"]])  # fmt: skip
+            why_pst = player_stock_refused(before, heal_items)
+            if why_pst is not None:
+                raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_pst} {stock}")
+            true_potions = int(before.get(STOCK_ITEMS["potion"]) or 0)
+            stock_watch = (tpl, slots)  # dungeon@8.4's guard in the run, as the Rogue's
+            if heal_candy:  # dungeon@9.31: the heal items' counts, as read
+                heal_left.update({i: before.get(i) for _, i in HEAL_ORDER})
+        elif conf.get("hotbar_stock"):
             # dungeon@8.3 (Amendment M): the DB lines above are a first guess only; the hotbar's
             # drawn count is the truth -- read it on the stand, top up from it, read it again
             import hotbar_count as hb
@@ -4580,6 +4786,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         # paced; outside the measured window): carried weight is loot room before 50 %
         drunk = 0
         excess = 0 if heal_candy else true_potions - p_to  # 9.31: the fallback potions stay
+        if player:  # dungeon@9.35: the person's potions are never drunk down at the start
+            excess = 0
         if excess > 0:
             ui_gate.ensure_clear(agent_raw, screen, why="dungeon-setup:drink")
             r.activate_client(agent_raw, screen)
@@ -4592,6 +4800,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         # TRIAL only), and with --stage-at (U0's TRIAL only) the spawn at X,Y and the @warp back
         setup.extend(map_setup_lines(map_, start, a.clear_map, getattr(a, "stage_mob", None),
                                      getattr(a, "stage_at", None)))  # fmt: skip
+        setup = player_plan(setup, player)  # dungeon@9.35: no @warp -- she starts where she stands
+        player_chat_closed("before the setup's chat-close step")
         for cmd in setup:
             setup_line(cmd)
         bench.close_chat(agent_raw, screen)
@@ -4617,11 +4827,32 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             h_i, w_i = np.asarray(img_).shape[:2]
             return selfpos.read_minimap(img_, digits, (0, 0, w_i, h_i), light=True)
 
+        if player:  # dungeon@9.35: she starts where the person left her -- her cell, read
+            here0: Cell | None = None  # from the minimap readout (PosConfirm's rule, as the loop)
+            t_p0 = time.monotonic()
+            while here0 is None and time.monotonic() - t_p0 <= PLAYER_POS_S:
+                rd0 = selfpos.read_minimap(frame(), digits, light=True)
+                here0 = pos_ok.accept(time.monotonic(), rd0)
+                if here0 is None:
+                    time.sleep(0.2)
+            why_pc = player_start_refused(map_, here0, okr, area)
+            if why_pc is not None or here0 is None:
+                raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_pc}")
+            start = here0
+            if explore_on:  # dungeon@9.14's regions: HER component (the seed's cell was a guess)
+                ex_reach = em.component(np.asarray(okr, dtype=bool), start)
+                ex_anchors = em.regions(ex_reach)
+                if not ex_anchors:
+                    raise r.Stop(f"dungeon@9.14 refused: no explore region reachable from {start}")
         fr1 = gm_state._frames(screen)
         w_ = gm_state._weight(fr1)
         share = gm_state.weight_share(w_)
         if share is None and overweight_red(fr1[0]):  # Amendment I: fail closed on the red line
             raise r.Stop("dungeon@4: the weight line reads RED (>= 50 %) after the setup")
+        if player:  # dungeon@9.35: a READ weight under WEIGHT_MAX (her bag is never dropped)
+            why_pw = player_weight_refused(share, overweight_red(fr1[0]))
+            if why_pw is not None:
+                raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_pw}")
         bare_ref: Any = None  # dungeon@9.27: the F5 slot's ARMED look (bare_ref_cut)
         bare_rec: dict[str, Any] | None = None
         bare_reg: Any = None
@@ -4679,6 +4910,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
+            **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),
             **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
@@ -6544,6 +6776,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
                 if stock_watch is not None and stock_due:  # dungeon@8.4: the stock after a press
                     out_item = None
+                    keep_n: int | None = None  # dungeon@9.35: the Fly Wings kept for the end
                     for item_ in [i for i, t_ in stock_due.items() if tick >= t_]:
                         n_ = hb.read_count(hb.gray(img), stock_watch[1][item_], stock_watch[0])
                         stock_tries[item_] = stock_tries.get(item_, 0) + 1
@@ -6559,8 +6792,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 out_item = item_
                         elif out_item is None and stock_out({item_: n_}) is not None:
                             out_item = item_
+                        if player and player_wings_low(item_, n_):  # dungeon@9.35
+                            keep_n = n_
                     if out_item is not None:  # no escape (or no potion) left: end, warp home
                         reason = f"stock_out: item {out_item} reads 0 on the hotbar"
+                        break
+                    if keep_n is not None:  # dungeon@9.35: no warp takes a player home, so her
+                        # last Fly Wing(s) stay for the end's own escape: the run ends here
+                        reason = f"stock_keep: {keep_n} Fly Wing(s) left, kept for the end"
                         break
                 if miss_tpl is not None and not sitting and mode != "after":  # dungeon@9.1:
                     # a missed swing AT us (drawn above the attacker, beside us); 9.1b: not read
@@ -7564,14 +7803,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             if item_det is not None:  # dungeon@9.33 (--loot-items): its client's paths, closed
                 ev({"kind": "loot_items_det", "info": item_det.info()})
                 item_det.cpu.close()
-            if sitting:
+            # dungeon@9.35 (--player-mode): a run that ends while she rests stays SEATED (natural
+            # regen goes on); she stands only for the end's escape (no Fly Wing while sitting). It
+            # cannot turn due later: time only ages the hits and the HP reads (end_escape_needed)
+            seated_end = player and sitting and not end_escape_needed(
+                time.monotonic(), last_taken, st.hist, reason)  # fmt: skip
+            if sitting and not seated_end:
                 agent_raw.keys(keys_["stand"])
             if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):  # dungeon@8.5
                 press("fly", "end")
                 ev({"kind": "end_escape", "how": "fly", "reason": reason,
                     "hp": None if not st.hist else round(st.hist[-1][1], 3)})  # fmt: skip
                 time.sleep(1.0)
-            if reason == "death":
+            if reason == "death" and not player:  # 9.35: a player's death dialog is the person's
                 x, y = gx0 + gv.RETURN_TO_GAME[0], gy0 + gv.RETURN_TO_GAME[1]
                 agent_raw.move(x + 4, y + 3)
                 time.sleep(0.08)
@@ -7582,7 +7826,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if r.is_state(screen, gv.DEAD_STATE):
                     raise r.Stop("dungeon@1: the death dialog stayed after its known step")
                 for cmd in ("@alive", "@heal"):
-                    cr.gm_line(agent_raw, screen, cmd, conf["job"], crk)
+                    typed_line(agent_raw, screen, cmd, conf["job"], crk, player_mode=player)
                     time.sleep(0.8)
                 bench.close_chat(agent_raw, screen)
                 if bare is not None and not bare.st.armed:  # dungeon@9.27: alive -> armed again
@@ -7594,13 +7838,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             # run_end (outside the measured window) it goes home. dungeon@8 (4.05 a1, 2026-10-25
             # 22:04): after a DEATH too -- @alive revives it on the spot, and the Orc Lord that
             # killed it killed it again there
-            try:
-                cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
-                           f"{CLEAR_STAND[2]}", conf["job"], crk)  # fmt: skip
-                time.sleep(3.0)
-                bench.close_chat(agent_raw, screen)
-            except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
-                print(f"end warp failed: {exc!r}", flush=True)
+            if not player:  # dungeon@9.35: a player is never warped home (the escape above)
+                try:
+                    typed_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
+                               f"{CLEAR_STAND[2]}", conf["job"], crk,
+                               player_mode=player)  # fmt: skip
+                    time.sleep(3.0)
+                    bench.close_chat(agent_raw, screen)
+                except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
+                    print(f"end warp failed: {exc!r}", flush=True)
+            else:  # what she was left as: seated (a rest), standing, or dead with its dialog open
+                ev({"kind": "player_end", "reason": reason, "seated": seated_end,
+                    "dead": reason == "death"})  # fmt: skip
             print(r.to_png(screen.full(), out / "end.png"), flush=True)
     t1 = r.ns()
     evf.close()
@@ -8130,6 +8379,22 @@ def main() -> int:
         help="dungeon@8 (rogue-gef10.md Amendment A4): the setup types @killmonster2 "
         "after the warp to the map, so its MVP (gef_fild10's Orc Lord, 2 h "
         "respawn) is absent until the flee rule is proven; everything respawns",
+    )
+    t.add_argument(
+        "--player-mode",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.35 (docs/planning/player-mode.md, Batt 2026-11-12; OFF by default): the "
+        "hunt as a normal player, for a public rAthena that permits bots (ADR-0023's declared "
+        "mode): the run types NO line (no GM command, no chat) in its setup, loop or end, and "
+        "reads nothing from the lab's DB. The person brings the character to the map with her "
+        "stock; the run starts where she stands (her cell read on the minimap, on the map's "
+        "route grid), refuses below 5 Fly Wings / 5 heal items on the hotbar "
+        "(PLAYER_MIN_WINGS / PLAYER_MIN_HEALS) or an unread weight / >= 48 %%, never warps, "
+        "heals, tops up, drinks down, drops the bag or stages, ends when the Fly Wings read 1 "
+        "(PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape only (a rest stays "
+        "seated; a death's dialog stays for the person). Refused with --clear-map, --stage-mob, "
+        "--stage-at, --start-cell, --engage melee_ring",
     )
     t.add_argument(
         "--walk-ahead",
