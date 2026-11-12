@@ -116,6 +116,24 @@ The person's potions are never drunk down at the start (the lab drinks the ones 
 - No sit is added after the end's Fly Wing (a key right after a teleport's load is an unverified
   step). A `player_end` event records what she was left as.
 
+## Built: the boss-map warning (dungeon@9.35b; written 2026-11-12 19:40 ICT from `date`)
+
+Batt (rogue-xmas02.md 4DF, translated): "player mode on public servers: a warning only, no
+refusal".
+
+- At the start, before any input, a `--player-mode` run reads the map's BOSS spawns from the KB
+  (`player_boss_spawns`: `data/kb/spawns.json` + `mobs.json`, the names `--boss-walk` uses,
+  `boss_spawn_names`).
+- When there is one and the boss guard is off (neither `--engage-screen`, whose Battle Log names
+  guard, nor `--garm-fly`, whose detector box guards), it prints ONE plain `WARNING:` line naming
+  them. It records `{"kind": "player_boss_warning", "bosses": [...], "guard": false}` right after
+  `run_start`.
+- A KB that does not read gives the same warning with the bosses unknown (`"bosses": null`).
+- **It never refuses:** the run goes on. With the guard on, or with no boss spawn, nothing is
+  printed.
+- Tests: `test_player_mode.py` (the line, the KB read on made-up names, the block's place before
+  the session, no raise in it).
+
 ## Not built yet
 
 - **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known
@@ -125,7 +143,8 @@ The person's potions are never drunk down at the start (the lab drinks the ones 
   active only with `--engage-screen`. Its live flee proof against Stormy Knight (rogue-xmas02.md
   4CS) FAILS as registered: F1 died in the runner's own setup before the loop ran (4CU), so the
   escape itself is unproven. A player-mode run on a map with an MVP is protected by nothing
-  proven.
+  proven. Since 9.35b the start WARNS on such a map when the guard is off (above); it does not
+  refuse (Batt).
 - **A "go home" item at the end:** a Butterfly Wing on a hotbar key would be a player's own way to
   the save point. Nothing presses one today.
 - **A learner's own character and data:** the identity check needs that character's name and job

@@ -965,7 +965,8 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
   `--engage melee_ring`.
 - **Not built yet:** Kafra warps, NPC shops and selling. Also nothing that keeps you away from an
   MVP: the only guard is the boss escape of `--engage-screen`, and it is unproven. A map with an
-  MVP is at your own risk.
+  MVP is at your own risk. On a map whose KB lists a boss, with neither `--engage-screen` nor
+  `--garm-fly`, the run prints one `WARNING:` line at its start and goes on.
 - **Not research:** a run on a declared server is never counted (ADR-0023 decision 2). Its record
   carries `fixes.player_mode`; no judge filters on it yet.
 

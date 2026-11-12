@@ -1118,6 +1118,38 @@ def player_wings_low(item: int, n: int | None, keep: int = PLAYER_WINGS_KEEP) ->
     return item == STOCK_ITEMS["fly"] and n is not None and n <= keep
 
 
+# dungeon@9.35b (Batt 2026-11-12, rogue-xmas02.md 4DF: "player mode on public servers: a warning
+# only, no refusal"): a --player-mode run on a map whose KB lists a BOSS spawn, with the boss guard
+# off (no --engage-screen, whose Battle Log names guard; no --garm-fly, whose detector box guards),
+# prints ONE plain WARNING line at its start and records player_boss_warning. It never refuses.
+def player_boss_spawns(map_: str, kb: Path | None = None) -> tuple[str, ...] | None:
+    """dungeon@9.35b: the map's boss spawns by the KB, as --boss-walk names them
+    (boss_spawn_names: the spawn's name and the mob table's); None when the KB does not read."""
+    kb_ = ROOT / "data" / "kb" if kb is None else kb
+    try:
+        spawns = json.loads((kb_ / "spawns.json").read_text())
+        mobs = json.loads((kb_ / "mobs.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return boss_spawn_names(map_, spawns, mobs)
+
+
+def player_boss_warning(map_: str, bosses: Sequence[str] | None, guard: bool) -> str | None:
+    """PURE (dungeon@9.35b): the WARNING line of a --player-mode start (None: no warning) -- the
+    map has a boss spawn in the KB (``bosses``; None: the KB did not read, so they are unknown)
+    and the boss guard is off (``guard``: --engage-screen or --garm-fly). A warning only: the run
+    goes on."""
+    if guard or (bosses is not None and not bosses):
+        return None
+    off = "the boss guard is off (no --engage-screen / --garm-fly)"
+    if bosses is None:
+        return (f"WARNING: --player-mode on {map_}: the KB did not read, so its boss spawns are "
+                f"unknown, and {off}; the run goes on")  # fmt: skip
+    return (f"WARNING: --player-mode on {map_}: the KB lists a boss spawn here "
+            f"({', '.join(bosses)}) and {off}: nothing guards her from it; "
+            "the run goes on")  # fmt: skip
+
+
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
 # dungeon@7 (Batt ~16:0x: ONE Steal on every monster first, SP permitting)
 STEAL_SP = 10  # pinned pre-re skill_db TF_STEAL SpCost (every level)
@@ -4912,6 +4944,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     evf.write(json.dumps({"t_ns": r.ns(), "kind": "ev_hook_error",
                                           "error": repr(e)[:300]}) + "\n")  # fmt: skip
 
+    pb_rec: dict[str, Any] | None = None  # dungeon@9.35b: --player-mode on a boss map, no guard
+    if player:
+        pb_guard = bool(getattr(a, "engage_screen", False) or getattr(a, "garm_fly", False))
+        pb_bosses = player_boss_spawns(map_)
+        pb_line = player_boss_warning(map_, pb_bosses, pb_guard)
+        if pb_line is not None:  # a warning only (Batt 2026-11-12): the run goes on
+            print(pb_line, flush=True)
+            pb_rec = {"kind": "player_boss_warning",
+                      "bosses": None if pb_bosses is None else list(pb_bosses),
+                      "guard": pb_guard}  # fmt: skip
     counts: Counter[str] = Counter()
     reason = "time_box"
     t0 = r.ns()
@@ -5204,6 +5246,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
             **({"steal_opener": fixes_of(a)["steal_opener"]} if opener_key is not None else {}),
             **({"house": house_rec} if house_on else {})})  # fmt: skip
+        if pb_rec is not None:  # dungeon@9.35b: the start's boss warning, in the run's record
+            ev(pb_rec)
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())

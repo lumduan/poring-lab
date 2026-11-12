@@ -385,3 +385,52 @@ def test_the_run_ends_while_one_fly_wing_is_left() -> None:
     assert loop.index("if player and player_wings_low(item_, n_):") < loop.index(
         'reason = f"stock_keep: {keep_n} Fly Wing(s) left, kept for the end"'
     )
+
+
+# --- dungeon@9.35b: the boss-map warning (Batt 2026-11-12: "a warning only") ----------------------
+
+
+def test_the_boss_warning_names_the_kb_bosses_when_the_guard_is_off() -> None:
+    line = dh.player_boss_warning("m_x", ("Made Boss", "Made Boss Table"), False)
+    assert line is not None and line.startswith("WARNING: --player-mode on m_x")
+    assert "Made Boss, Made Boss Table" in line and "--engage-screen / --garm-fly" in line
+    assert line.endswith("the run goes on") and "\n" not in line  # one plain line
+    assert dh.player_boss_warning("m_x", ("Made Boss",), True) is None  # the guard is on
+    assert dh.player_boss_warning("m_x", (), False) is None  # no boss spawn: nothing to say
+    unknown = dh.player_boss_warning("m_x", None, False)  # the KB did not read
+    assert unknown is not None and "unknown" in unknown and unknown.startswith("WARNING")
+    assert dh.player_boss_warning("m_x", None, True) is None
+
+
+def test_the_boss_spawns_come_from_the_kb_as_the_boss_walk_names_them(tmp_path: Path) -> None:
+    import json
+
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "spawns.json").write_text(json.dumps({"m_x": [
+        {"id": 9001, "name": "Made Boss", "boss": True},
+        {"id": 9002, "name": "Made Minion"},
+    ], "m_y": [{"id": 9002, "name": "Made Minion"}]}))  # fmt: skip
+    (kb / "mobs.json").write_text(json.dumps({"9001": {"name": "Made Boss Table"}}))
+    assert dh.player_boss_spawns("m_x", kb) == ("Made Boss", "Made Boss Table")
+    assert dh.player_boss_spawns("m_y", kb) == ()  # no boss spawn on that map
+    assert dh.player_boss_spawns("m_x", tmp_path / "none") is None  # no KB: unknown, no refusal
+    (kb / "mobs.json").write_text("{not json")
+    assert dh.player_boss_spawns("m_x", kb) is None
+
+
+def test_the_boss_warning_is_printed_before_any_input_and_never_refuses() -> None:
+    run_src = ast.get_source_segment(SRC, _func("run")) or ""
+    i_blk = run_src.index("pb_rec: dict[str, Any] | None = None")
+    i_end = run_src.index("counts: Counter[str] = Counter()", i_blk)
+    blk = run_src[i_blk:i_end]
+    assert i_end < run_src.index("with r.session(")  # printed before any input
+    assert "    if player:\n" in blk and "print(pb_line, flush=True)" in blk
+    assert "raise" not in blk and "SystemExit" not in blk and "Stop" not in blk  # a warning only
+    guard = 'bool(getattr(a, "engage_screen", False) or getattr(a, "garm_fly", False))'
+    assert guard in blk
+    # the event goes into the run's record right after its start record
+    i_start = run_src.index('ev({"kind": "run_start"')
+    i_ev = run_src.index("        if pb_rec is not None:  # dungeon@9.35b")
+    assert i_start < i_ev and run_src.index("ev(pb_rec)") > i_ev
+    assert '"kind": "player_boss_warning"' in blk and '"guard": pb_guard' in blk
