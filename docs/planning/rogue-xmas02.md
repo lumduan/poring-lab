@@ -6452,3 +6452,32 @@ the scorer before any trial runs.
   differ by 21 kills / h (p84 144.0, p85 165.3), so the base pair's estimate gets more runs. They
   are reported with p84 + p85; the comparison base stays p84 + p85 as pre-registered.
 
+- **Built: dungeon@9.36 `--loot-recheck`** (recorded 15:12 ICT from `date`; branch
+  `feat/loot-recheck`, not merged yet). OFF by default; refused without `--loot-items` before any
+  input. Its fixes record: `loot_recheck: [7.0, 1.0, "9.36"]` (`RECHECK_S`, `RECHECK_EVERY_S`).
+  - The loot step is unchanged (9.33). Each kill (the exp-line and the hit-gap kill sites, where the
+    loot list grows) adds a PENDING kill: her cell and the tick. Its cells are the loot step's
+    5 x 5 (`RECHECK_R` 2: walkable, outside the zones).
+  - Where: in the main loop after the fight branch, before the AFTER block, so a fight's own loot
+    step goes first. A pending kill leaves after 7.0 s, or at an escape after it (a Fly Wing, a boss
+    or unreach walk-away, a house door click): she never goes back to cells she fled.
+  - Calm (`recheck_calm`): mode `search` (where the loot step hands her back; never a fight, its
+    `after` or a rest), no lock, the runner's own `calm` (no hit for 2 s, not sitting, no HP drop),
+    no hit for `FIGHT_TAKEN_S` 2.5 s, no boss-avoid window.
+  - Due: 1.0 s after the last item detection, the recheck's own or the loot step's. Not due ->
+    nothing: no sleep in the loop.
+  - The check: the same `item_det` on a fresh `frame()`, mapped by `item_rels` over `ITEM_GRID`
+    from her current cell. An item in a pending kill's cells -> the matched kills' cells in
+    `items_plan`'s order, hovered by `recheck_visit` (the loot step's `visit()` step for step:
+    SWORD -> the `loot_sword` strike, PICKUP -> the click, its walk wait, a position read), under
+    the loot step's caps. Those kills are then done, unless a fight or a hit stopped it.
+  - Events: `recheck` (`kill_age_s` of the oldest matched kill, `kills` [cell, age, checks],
+    `seen`, `hover`, `hovered`, `looted`, `picks`, `end` looted / empty / off / fight / hit /
+    escape, `ms`); `recheck_expired` (`kill_age_s`, `why` time / escape, `checks`); loot clicks
+    with `why` "recheck". Counts `recheck_*` (incl. `recheck_left` at the run's end).
+  - **An open point for p94 + p95:** the cells come from the loot step's `ITEM_GRID` (+-4 cells
+    around her). An item maps only while she is within ~2-6 cells of the kill, and the search walk
+    resumes right after a `no_items` step. Most kills drop nothing, so an expiry alone says
+    little: a drop the packets show and no `recheck` looted is read against its kill's
+    `recheck_expired` (`checks`) and her cells at those checks (the `hp_read` events), which
+    tells "not drawn yet" from "out of range".
