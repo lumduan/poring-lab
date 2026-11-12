@@ -628,6 +628,114 @@ def loot_recheck_refused(recheck: bool, loot_items: str | None) -> str | None:
     return None
 
 
+# dungeon@9.37 (--loot-memory; rogue-xmas02.md 4DB, after p94: 9.36's recheck ran ONCE in 71
+# pending kills -- its calm rule is almost never true within 7 s of a kill on this dense map, the
+# next monster is engaged at once). The item model only LOOKS (no click, no sleep): on a fresh frame
+# at most every MEMORY_EVERY_S while any kill is younger than MEMORY_S, in ANY mode but sitting
+# (fights included), from the main loop. Item cells inside a young kill's 5 x 5 cells (the loot
+# step's plan filter) are REMEMBERED for MEMORY_KEEP_S after their last sighting. The NEXT loot
+# step hovers its own seen items PLUS the remembered cells (after its own, items_plan's order, its
+# caps) and clears those it visited; a step that saw nothing itself visits the remembered cells
+# instead of ending "no_items". Calm (9.36's recheck_calm) with cells left -> 9.36's recheck_visit.
+LOOT_MEMORY_VERSION = "9.37"
+MEMORY_S = 7.0  # the item model looks while a kill is younger than this (9.36's RECHECK_S)
+MEMORY_EVERY_S = 1.0  # at most one look this often
+MEMORY_KEEP_S = 12.0  # a remembered cell is kept this long after its last sighting
+
+
+@dataclass(frozen=True)
+class Remembered:
+    """dungeon@9.37: a floor-item cell seen inside a young kill's cells -- its last sighting and
+    the matched kills' cells (the plan items_plan takes its neighbours from)."""
+
+    t: float
+    plan: frozenset[Cell]
+
+
+def memory_look_due(now: float, last: float, kills: Sequence[PendingKill], sitting: bool,
+                    max_s: float = MEMORY_S, every_s: float = MEMORY_EVERY_S) -> bool:  # fmt: skip
+    """PURE (dungeon@9.37): the next look is due -- not sitting, a kill younger than ``max_s``,
+    and ``every_s`` since the last look (recheck_due's clock rule)."""
+    return (not sitting and any(now - k.t < max_s for k in kills)
+            and recheck_due(now, last, every_s))  # fmt: skip
+
+
+def memory_remember(mem: Mapping[Cell, Remembered], seen: Sequence[Cell],
+                    kills: Sequence[PendingKill], now: float,
+                    fits: Callable[[Cell], bool] | None = None, max_s: float = MEMORY_S,
+                    ) -> tuple[dict[Cell, Remembered], list[Cell], list[Cell]]:  # fmt: skip
+    """PURE (dungeon@9.37): (the memory after a look, the cells newly remembered, the seen cells
+    kept) -- a seen item cell (absolute) inside a kill's cells (kill_cells, filtered by ``fits``)
+    of a kill younger than ``max_s`` is remembered at ``now``; one already remembered is re-timed
+    (its last sighting) and its plan grows by the newly matched kills' cells; others: passed by."""
+    young = [kill_cells(k.cell, fits) for k in kills if now - k.t < max_s]
+    out = dict(mem)
+    new: list[Cell] = []
+    kept: list[Cell] = []
+    for c in seen:
+        if c in kept:
+            continue
+        plan = frozenset(x for cells in young if c in cells for x in cells)
+        if not plan:
+            continue
+        kept.append(c)
+        if c in out:
+            out[c] = Remembered(now, out[c].plan | plan)
+        else:
+            out[c] = Remembered(now, plan)
+            new.append(c)
+    return out, new, kept
+
+
+def memory_expire(mem: Mapping[Cell, Remembered], now: float, escape_t: float,
+                  keep_s: float = MEMORY_KEEP_S,
+                  ) -> tuple[dict[Cell, Remembered], list[Cell], list[Cell]]:  # fmt: skip
+    """PURE (dungeon@9.37): (the cells still remembered, those aged out -- ``keep_s`` since their
+    last sighting --, those dropped at an escape: last seen at or before ``escape_t``, a Fly Wing,
+    a walk-away or a door click; she left those cells on purpose, as recheck_split)."""
+    keep: dict[Cell, Remembered] = {}
+    old: list[Cell] = []
+    esc: list[Cell] = []
+    for c, m in mem.items():
+        if m.t <= escape_t:
+            esc.append(c)
+        elif now - m.t >= keep_s:
+            old.append(c)
+        else:
+            keep[c] = m
+    return keep, old, esc
+
+
+def memory_merge(order: Sequence[Cell], mem: Mapping[Cell, Remembered],
+                 here: Cell | None) -> tuple[list[Cell], list[Cell]]:  # fmt: skip
+    """PURE (dungeon@9.37): (the hover order: the loot step's own ``order`` first, then each
+    remembered cell's items_plan over its own kills' cells -- nearest her first --, one cell once;
+    the remembered cells offered, in that order)."""
+    rem = sorted(mem, key=lambda c: (cheb2(c, here), c))
+    out = list(order)
+    for c in rem:
+        for x in items_plan([c], mem[c].plan):
+            if x not in out:
+                out.append(x)
+    return out, rem
+
+
+def memory_clear(mem: Mapping[Cell, Remembered],
+                 visited: set[Cell] | Sequence[Cell]) -> dict[Cell, Remembered]:  # fmt: skip
+    """PURE (dungeon@9.37): the memory after a loot (the loot step's or the calm path's): every
+    remembered cell it visited (hovered, in view or not) is done."""
+    done = set(visited)
+    return {c: m for c, m in mem.items() if c not in done}
+
+
+def loot_memory_refused(memory: bool, loot_items: str | None) -> str | None:
+    """PURE (dungeon@9.37): why --loot-memory cannot run (None: it can, or it is off). It looks
+    with --loot-items' model: without that model there is nothing to look with."""
+    if memory and not loot_items:
+        return "--loot-memory goes with --loot-items"
+    return None
+
+
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
@@ -2524,6 +2632,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                              LOOT_ITEMS_VERSION]  # fmt: skip
     if getattr(a, "loot_recheck", False):  # dungeon@9.36 (rogue-xmas02.md 4DA)
         out["loot_recheck"] = [RECHECK_S, RECHECK_EVERY_S, LOOT_RECHECK_VERSION]
+    if getattr(a, "loot_memory", False):  # dungeon@9.37 (rogue-xmas02.md 4DB)
+        out["loot_memory"] = [MEMORY_S, MEMORY_EVERY_S, MEMORY_KEEP_S, LOOT_MEMORY_VERSION]
     if getattr(a, "loot_aim", False):  # dungeon@9.32 (Study S-IDLE)
         out["loot_aim"] = [LOOT_AIM_HOVERS, LOOT_AIM_R, LOOT_AIM_PX, LOOT_AIM_VERSION]
     if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
@@ -4558,6 +4668,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         raise SystemExit(f"dungeon@{LOOT_RECHECK_VERSION} refused: {why_rk}")
     rk_pending: list[PendingKill] = []  # 9.36: the kills whose cells wait for a late drop
     rk_st: dict[str, float] = {"last": -1e9}  # 9.36: the last item detection (recheck / loot step)
+    lm_on = bool(getattr(a, "loot_memory", False))  # dungeon@9.37 (rogue-xmas02.md 4DB)
+    why_lm = loot_memory_refused(lm_on, getattr(a, "loot_items", None))
+    if why_lm:
+        raise SystemExit(f"dungeon@{LOOT_MEMORY_VERSION} refused: {why_lm}")
+    lm_kills: list[PendingKill] = []  # 9.37: the young kills the item model looks at (MEMORY_S)
+    lm_mem: dict[Cell, Remembered] = {}  # 9.37: the remembered item cells (MEMORY_KEEP_S)
+    lm_st: dict[str, float] = {"last": -1e9}  # 9.37: the last look (or the loot step's detection)
     swap_gap = bool(getattr(a, "swap_gap", False))  # dungeon@9.27e (Batt's 22:53 clip)
     if swap_gap and not bare_on:
         raise SystemExit("dungeon@9.27e refused: --swap-gap goes with --bare-steal")
@@ -6709,6 +6826,123 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
             return bool(rs["n_hov"]) or end_ in ("fight", "escape")
 
+        # --- --loot-memory (dungeon@9.37, rogue-xmas02.md 4DB): the item model looks in fights --
+
+        def memory_kill(cell_k: Cell, t_k: float) -> None:
+            """9.37 (bookkeeping only): a kill (both kill sites, where the loot list grows) -- the
+            item model looks at its 5 x 5 cells for MEMORY_S."""
+            lm_kills.append(PendingKill(cell_k, t_k))
+            counts["memory_kills"] += 1
+
+        def memory_prune(tick_: float) -> None:
+            """9.37 (bookkeeping only, every tick): a kill leaves the looks at MEMORY_S (or at an
+            escape after it, as recheck_split); a remembered cell leaves MEMORY_KEEP_S after its
+            last sighting (why "time"), or when last seen before an escape (a Fly Wing, a boss /
+            unreach walk-away, a house door click: "escape") -- its memory_expired event."""
+            esc_t = max(fly_at, house_click_t, max(boss_walks, default=-1e9),
+                        max(ua_walks, default=-1e9))  # fmt: skip
+            lm_kills[:] = recheck_split(lm_kills, tick_, esc_t, MEMORY_S)[0]
+            keep_m, old_m, esc_m = memory_expire(lm_mem, tick_, esc_t)
+            for why_, cells_ in (("time", old_m), ("escape", esc_m)):
+                if cells_:
+                    counts[f"memory_expired_{why_}"] += len(cells_)
+                    ev({"kind": "memory_expired", "cells": len(cells_), "why": why_,
+                        "list": [list(c_) for c_ in cells_]})  # fmt: skip
+            if old_m or esc_m:
+                lm_mem.clear()
+                lm_mem.update(keep_m)
+
+        def memory_look(tick_: float) -> None:
+            """9.37 (--loot-memory), every tick from the main loop BEFORE the fight branch, so it
+            runs in any mode (search, fight, after, a walk to rest) but sitting: while a kill is
+            younger than MEMORY_S and a look is due (MEMORY_EVERY_S since the last one, the loot
+            step's detection included), the item model ONCE on a fresh frame, mapped over
+            RECHECK_GRID (+-8 cells) from her current cell; the item cells inside a young kill's
+            cells are remembered (memory_remember). It only looks: no click, no hover, no sleep;
+            not due -> nothing. A memory_look event only when a cell is NEWLY remembered."""
+            h_ = here
+            if h_ is None or item_det is None:
+                return
+            if not memory_look_due(tick_, lm_st["last"], lm_kills, sitting):
+                return
+            t_l = time.monotonic()
+            lm_st["last"] = t_l
+            counts["memory_looks"] += 1
+            try:
+                found_m = item_rels_on(item_det.detect(frame()), project(h_, RECHECK_GRID),
+                                       RECHECK_GRID)  # fmt: skip
+            except Exception:  # noqa: BLE001 -- a failed detection: no look this time
+                counts["memory_fail"] += 1
+                return
+            ms_l = round((time.monotonic() - t_l) * 1e3)  # the frame's wait + the model's call
+            seen_m = [(h_[0] + dx_, h_[1] + dy_) for dx_, dy_ in found_m]
+            mem_, new_, kept_ = memory_remember(lm_mem, seen_m, lm_kills, t_l, loot_fits)
+            lm_mem.clear()
+            lm_mem.update(mem_)
+            counts["memory_new"] += len(new_)
+            counts["memory_kept"] += len(kept_)
+            counts[f"memory_looks_{mode}"] += 1  # where it looked (p94's recheck: search only)
+            counts["memory_look_ms"] += ms_l  # the time the looks took from the loop, in all
+            path_ = getattr(item_det, "last_path", None)
+            if path_:
+                counts[f"memory_path_{path_}"] += 1
+            if new_:
+                ev({"kind": "memory_look", "seen": [list(c_) for c_ in seen_m],
+                    "new": [list(c_) for c_ in new_], "kept": len(kept_), "memory": len(lm_mem),
+                    "mode": mode, "kills": len(lm_kills), "at": list(h_), "path": path_,
+                    "ms": ms_l})  # fmt: skip
+
+        def memory_tick(tick_: float, calm_: bool) -> bool:
+            """9.37 (--loot-memory), in the main loop after the fight branch, before the AFTER
+            block (beside 9.36's hook): no kill came, she is calm (9.36's recheck_calm: hunting,
+            no lock, the runner's calm, no hit for FIGHT_TAKEN_S, no boss window) and remembered
+            cells are left -> they are looted 9.36's way (memory_merge's order, recheck_visit, the
+            loot step's caps: LOOT_MAX_PICKS, LOOT_MAX_HOVERS, LOOT_TRIM_HOVERS, LOOT_MAX_S, a hit
+            in the last 1 s stops). The cells it hovered are done; the rest stay. No detection, no
+            sleep of its own. True when it made input (the loop starts a fresh tick)."""
+            nonlocal loot_settle_t, idle_since
+            h_ = here
+            if not lm_mem or h_ is None:
+                return False
+            if not recheck_calm(mode, lock is not None, calm_, tick_ - last_taken,
+                                tick_ < boss_until):  # fmt: skip
+                return False
+            t_s = time.monotonic()
+            order_m, rem_m = memory_merge([], lm_mem, h_)
+            rs: dict[str, Any] = {"hovered": [], "n_hov": 0, "picks": 0, "looted": []}
+            end_ = "done"
+            while rs["picks"] < LOOT_MAX_PICKS and len(rs["hovered"]) < LOOT_MAX_HOVERS and not (
+                    loot_trim and rs["n_hov"] >= LOOT_TRIM_HOVERS):  # fmt: skip
+                todo_ = [c_ for c_ in order_m if c_ not in rs["hovered"]]
+                if not todo_ or time.monotonic() - t_s > LOOT_MAX_S:
+                    break
+                if time.monotonic() - last_taken < 1.0:
+                    end_ = "hit"
+                    break
+                got_m = recheck_visit(todo_[0], rs)
+                if got_m in ("fight", "escape"):
+                    end_ = got_m
+                    break
+            end_ = recheck_outcome(end_, rs["picks"], rs["n_hov"])[0]
+            kept_m = memory_clear(lm_mem, rs["hovered"])
+            n_done = len(lm_mem) - len(kept_m)
+            lm_mem.clear()
+            lm_mem.update(kept_m)
+            counts[f"memory_calm_{end_}"] += 1
+            counts["memory_picks"] += rs["picks"]
+            counts["memory_visited"] += n_done
+            if rs["picks"] and getattr(a, "kill_gap", False):
+                loot_settle_t = time.monotonic()  # 9.13d: the next walk waits for a fresh read
+            if rs["n_hov"]:
+                idle_since = time.monotonic()  # Amendment E: a loot is activity, never idle
+            ev({"kind": "memory_loot", "remembered": [list(c_) for c_ in rem_m],
+                "hover": [list(c_) for c_ in order_m],
+                "hovered": [list(c_) for c_ in rs["hovered"]],
+                "looted": [list(c_) for c_ in rs["looted"]], "picks": rs["picks"],
+                "hovers": rs["n_hov"], "end": end_, "done": n_done, "left": len(lm_mem),
+                "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+            return bool(rs["n_hov"]) or end_ in ("fight", "escape")
+
         def loot_step_v1(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
             """Batt 2026-10-22 11:5x (his 11:44 clip: an item left in a mob fight). After the
             fight: (1) the LOOT LIST -- the union of the 5 x 5 around our cell at EVERY kill of
@@ -6774,6 +7008,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     out_["items"] = {"seen": [list(c_) for c_ in seen_items],
                                      "hover": [list(c_) for c_ in order_items],
                                      "path": getattr(item_det, "last_path", None)}  # fmt: skip
+                    # dungeon@9.37 (--loot-memory, 4DB): the remembered cells after its own
+                    # items; with none of its own it visits them (never "no_items" while any)
+                    if lm_on and lm_mem:
+                        n_own = len(order_items)
+                        order_items, lm_rem = memory_merge(order_items, lm_mem, here)
+                        out_["items"]["hover"] = [list(c_) for c_ in order_items]
+                        out_["items"]["remembered"] = [list(c_) for c_ in lm_rem]
+                        counts["memory_merged"] += 1
+                        if not n_own:
+                            counts["memory_rescued"] += 1
                     if not order_items:  # nothing near the kills: no hover at all
                         counts["loot_items_skip"] += 1
                         ms_i = round((time.monotonic() - t_s) * 1e3)
@@ -6825,6 +7069,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if got in ("fight", "escape"):
                         end = got
                         break
+            # dungeon@9.37 (--loot-memory): every remembered cell it visited (hovered) is done
+            if lm_on and lm_mem:
+                kept_lm = memory_clear(lm_mem, hovered)
+                out_["memory_done"] = len(lm_mem) - len(kept_lm)
+                counts["memory_visited"] += out_["memory_done"]
+                lm_mem.clear()
+                lm_mem.update(kept_lm)
             ev({**out_, "hovered": len(hovered), "hovers": n_hov, "trim": loot_trim, "picks": picks,
                 "sweep_changed": len(changed), "sweep_hovered": sweep_n, "end": end,
                 "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
@@ -7163,6 +7414,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 kill_aim_set(tick)
                             if rk_on:  # dungeon@9.36: its cells stay pending for a late drop
                                 rk_pending.append(PendingKill(here, tick))
+                            if lm_on:  # dungeon@9.37: the item model looks at its cells
+                                memory_kill(here, tick)
                         if mr and lock is not None and lock.get("cell"):  # it died: off the queue
                             queue[:] = [q for q in queue if list(q["cell"]) != list(lock["cell"])]
                         lock = None
@@ -7397,6 +7650,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         wp_st["resume"] = True
                 if rk_on and rk_pending:  # dungeon@9.36: the pending kills age out every tick
                     recheck_prune(tick)
+                # dungeon@9.37 (--loot-memory, 4DB): the memory ages out every tick; while a kill
+                # is young the item model LOOKS -- here, BEFORE the fight branch, so in any mode
+                # (search, fight, after) but sitting; no click, no sleep; not due -> nothing
+                if lm_on:
+                    memory_prune(tick)
+                    if lm_kills and not sitting:
+                        memory_look(tick)
                 if hud_tx is not None and boxes is not None:  # dungeon@9.29: DISPLAY ONLY
                     hud_send(hud_tx, boxes, mode, lock is not None)
                 if bare is not None:  # dungeon@9.27: a pending read-back, a target's end, the cues
@@ -7431,6 +7691,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     kill_aim_set(tick)
                                 if rk_on:  # dungeon@9.36: its cells stay pending, as above
                                     rk_pending.append(PendingKill(here, tick))
+                                if lm_on:  # dungeon@9.37: looked at, as above
+                                    memory_kill(here, tick)
                             if mr and lock.get("cell"):  # it died: off the queue
                                 queue[:] = [q for q in queue
                                             if list(q["cell"]) != list(lock["cell"])]  # fmt: skip
@@ -7568,6 +7830,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # dungeon@9.36 (--loot-recheck): a late drop in a pending kill's cells, while calm
                 if rk_on and rk_pending and recheck_tick(tick, calm):
                     continue  # it hovered (or a fight began): a fresh tick reads the signs first
+                # dungeon@9.37 (--loot-memory): no kill came, she is calm, remembered cells left
+                if lm_on and lm_mem and memory_tick(tick, calm):
+                    continue  # it hovered (or a fight began): a fresh tick reads the signs first
                 # --- AFTER a fight: loot, then rest or search
                 if mode == "after":
                     queue.clear()
@@ -7576,6 +7841,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     got_ = loot_step(loot_list, fight_ref)
                     if rk_on:  # dungeon@9.36: the loot step just asked the item model (with a
                         rk_st["last"] = time.monotonic()  # position): the recheck waits its 1 s
+                    if lm_on:  # dungeon@9.37: the loot step just asked the item model: the
+                        lm_st["last"] = time.monotonic()  # next look waits its 1 s
                     if getattr(a, "kill_gap", False) and counts["loot_click"] > clicks0_:
                         loot_settle_t = time.monotonic()  # 9.13d: wait for a fresh position
                     idle_since = time.monotonic()
@@ -8047,6 +8314,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     bare_final = {"armed": bare.st.armed, "error": repr(exc)[:300]}
             if rk_on:  # dungeon@9.36: kills still pending at the end (neither looted nor expired)
                 counts["recheck_left"] = len(rk_pending)
+            if lm_on:  # dungeon@9.37: cells still remembered at the end (not visited, not expired)
+                counts["memory_left"] = len(lm_mem)
             ev({"kind": "run_end", "reason": reason, "counts": dict(counts),
                 "pos_light_unconfirmed": pos_ok.unconfirmed,
                 **({"bare": bare_final} if bare_final is not None else {})})  # fmt: skip
@@ -8588,6 +8857,20 @@ def main() -> int:
         "loop; an item boxed inside a pending kill's cells -> those cells are looted as the loot "
         "step's seen-items path does (its order, hovers and caps) and that kill is done; a fight "
         "or a hit during it yields (the kill stays pending until it expires)",
+    )
+    t.add_argument(
+        "--loot-memory",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.37 (rogue-xmas02.md 4DB, after p94: 9.36's recheck ran once in 71 pending "
+        "kills, its calm rule almost never true on a dense map; OFF by default; with "
+        "--loot-items; independent of --loot-recheck): while any kill is younger than 7 s the "
+        "item model LOOKS on a fresh frame at most once a second, in any mode but sitting "
+        "(fights included; no click, no sleep); item cells inside a young kill's 5 x 5 cells are "
+        "remembered for 12 s after their last sighting; the NEXT loot step hovers its own seen "
+        "items plus the remembered cells (its order and caps; a step that saw nothing itself "
+        "visits them) and clears those it visited; calm (9.36's rule) with cells left -> 9.36's "
+        "recheck path loots them",
     )
     t.add_argument(
         "--loot-aim",
