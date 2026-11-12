@@ -6712,3 +6712,71 @@ time a cell) and `QUICK_HIT_MAX_S = 3.5` s (= `LOCK_NO_HIT_S`).** Windows: 2.0 s
   - Q2 as measured counts the re-armed strike's own act: 4 of the 10. "An act on the dropped
     strike's own request target with no new strike between" counts 5 (+1 partial).
   - One drop was a Battle Log reader miss (our hits read as type "other"): no window fixes that.
+
+### 4DH. The stricter `--quick-drop` pair pre-registered: 9.38b on today's base (pre-registered 19:58 ICT from `date`, BEFORE its runs)
+
+Batt (4DF): "test `--quick-drop` again, but make it harder to drop a target, so it does not give up
+a target it is hitting". 4DG's no-hit window alone keeps at most 2 of 4CY's 10 given-up strikes.
+So the pair tests **both halves together**, as one change ("a stricter quick-drop"):
+
+- **dungeon@9.38b** (295e5bdb): `--quick-drop-scaled` also lengthens the NO-ARROW drop to
+  `QUICK_ARROW_SCALED_S = 3.0` s (from `QUICK_ARROW_S`, 2.0).
+  - The near no-arrow give-ups' own attack requests came 1.95-2.49 s after the click (4DG's table).
+  - `--far-single`'s window and every run without the flag are unchanged (tests pin the default).
+  - `fixes.quick_drop_scaled` = `[0.2, 3.5, 3.0, "9.38b"]`.
+- **The prediction on p88 + p89's own strikes** (`scripts/quick_drop_scaled_study.py`, committed
+  with this section; defaults = 9.38b's numbers):
+  - The scorer reproduces 4CY: 28 drops, 10 given up, **5 given up by their OWN hit**, Q1 46.0 s
+    (12 "no hits" unlocks).
+  - Request -> arrow lag, measured on 52 strikes that had both: median -0.44 s, at most 0.57 s.
+    The runner's `arrow_s` clock starts after the first click, so this bounds the ORDER of the two
+    events only.
+  - The 5 no-arrow give-ups under a 3.0-s window: **2 may lock** (the request + the largest lag fits
+    in 3.0 s), 1 borderline (1 cell: 2.49 + 0.57 = 3.06 s), 2 unchanged. The last 2 had no request of
+    their own, so they were not that strike's hit.
+  - The no-hit half (4DG): 1 kept, 1 borderline.
+  - **Own give-ups expected: 1 sure** (the Battle Log reader miss, no window fixes it) **+ up to 2
+    borderline, from 5.**
+  - **The cost:** each no-arrow drop that still drops waits 1.0 s longer. That is 18 drops on the
+    p88 + p89 pair, so **~ +18 s over 50 min**.
+  - 1 of the 17 good no-arrow drops may now lock (8 cells; the request 1.69 s after the click). A
+    lock that gets no hit then ends by the no-hit rule.
+- **The pair:** **p112 + p113**, 25 min each, KILL mode, aura off, NOT immune, the MVP alive (4DF).
+  - Flags: today's base (4DD's arm A) + `--quick-drop --quick-drop-scaled`, i.e.
+    `--value-target --hud --hud-fast 0.2 --quick-drop --quick-drop-scaled`.
+  - Recordings: `hunt-xmas02-fiT61` / `-fiT62`.
+  - It is queued right after the night series (p111), so it runs under the same conditions as
+    the series.
+  - **Its base is the night series' arm A pooled:** p100, p102, p104, p106, p108, p110, all
+    complete runs. A pair beside 6 interleaved base runs is the steadier comparison.
+  - If 4DD lets arm B join the base, that does not move this pair. The two changes were measured
+    on the same arm-A base, and the base pair after both checks how they combine.
+- **The bars (ALL must pass for the stricter quick-drop to join the base):**
+  - **Q2' (the mechanism, Batt's question):** strikes given up by their OWN hit <= 2, pooled.
+    - That is an attack act of ours on the strike's own request target, <= 2 s after the drop,
+      with no new strike between (`given_up_own`).
+    - Quick-drop alone on p88 + p89: 5.
+    - 4CR's Q2 letter (any act of ours <= 2 s after a drop) is reported beside it, not deciding:
+      4DG showed that it counts the re-armed strike's own act.
+  - **Q1 (the saving must survive):** the time held on plain "no hits" unlocks per 50 min <= 0.75
+    x arm A's per 50 min (`no_hits_held_s`).
+    - Quick-drop alone held 0.53 x its base pair. 4CR's bar, half, is not this pair's question:
+      longer windows give back some hold time by design.
+  - **Q3 (the decision bar):** pooled kills / h >= arm A's pooled kills / h.
+  - **No harm:**
+    - R1-A pooled < 7 (`lock_study.py`);
+    - W1 <= 3.5 % pooled;
+    - D1 p95 <= 35 ms on each run;
+    - hard bars pass;
+    - deaths are reported per run with their source (packets). A death of a kind arm A never had
+      stops the chain for a person to look.
+- **Reported, not deciding:**
+  - common-item and gross z/h, L1, items / h, the rare drops;
+  - drops by kind (no-hit / no-arrow) and the study's arrow outcomes on the pair's OWN sessions
+    (`--arrow-used 3.0`);
+  - the quick drops that became plain unlocks.
+- **Scored by:** `quick_drop_scaled_study.py <p112> <p113> --arrow-used 3.0` (Q2', Q1, the drop
+  table); the chain's `score_full.sh` (kills / h, W1, D1, deaths, z/h); `lock_study.py` (R1-A).
+  The arm-A numbers come from the same scorers over its 6 sessions.
+- **If the night ends early:** the pair is scored only if both runs complete, against at least 4
+  complete arm-A runs. Anything less is NO_VERDICT.

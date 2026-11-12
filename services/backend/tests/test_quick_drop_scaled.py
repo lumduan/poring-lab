@@ -225,3 +225,39 @@ def test_9_38b_the_no_arrow_window_is_longer_only_under_the_flag() -> None:
         'if quick and getattr(a, "quick_drop_scaled", False):  # 9.38b (4DH)\n'
         "                burst_s = QUICK_ARROW_SCALED_S"
     ) in src
+
+
+def test_the_study_bounds_the_arrow_and_counts_the_own_hits() -> None:
+    """4DH's prediction and Q2' (scripts/quick_drop_scaled_study.py, BEFORE its pair)."""
+    import quick_drop_scaled_study as qs
+
+    assert qs.QUICK_ARROW_S == dh.QUICK_ARROW_S
+    assert qs.QUICK_ARROW_SCALED_S == dh.QUICK_ARROW_SCALED_S
+    ns = qs.NS
+    t0 = 1000 * ns
+    events = [
+        {"t_ns": t0, "kind": "strike", "rel": [1, 0], "arrow_s": 1.3},
+        {"t_ns": t0 + 5 * ns, "kind": "unlock", "why": "no hits", "s": 3.6},
+        {"t_ns": t0 + 9 * ns, "kind": "strike", "rel": [2, 0], "arrow_s": None},
+        {"t_ns": t0 + 20 * ns, "kind": "strike", "rel": [0, 2], "arrow_s": 0.9},
+        {"t_ns": t0 + 30 * ns, "kind": "unlock", "why": "no hits", "s": 3.5},
+        {"t_ns": t0 + 31 * ns, "kind": "unlock", "why": "kill_gap", "s": 9.0},
+    ]  # fmt: skip
+    packets = [
+        {"t_mono_ns": t0 + int(1.0 * ns), "type": "attack_request"},  # lag 1.3 - 1.0 = 0.3
+        {"t_mono_ns": t0 + int(10 * ns), "type": "attack_request"},  # a strike with no arrow
+        {"t_mono_ns": t0 + int(21.2 * ns), "type": "attack_request"},  # lag 0.9 - 1.2 = -0.3
+    ]  # fmt: skip
+    assert qs.arrow_lags(events, packets) == [-0.3, 0.3]
+    assert qs.no_hit_hold_s(events) == (2, 7.1)  # the kill_gap unlock is not Q1's
+    row = {"why": "no_arrow", "request_s": 2.5}
+    assert qs.arrow_outcome(row, 0.57, 3.0) == "borderline"  # 3.07 > 3.0
+    assert qs.arrow_outcome({**row, "request_s": 1.95}, 0.57, 3.0) == "may_lock"
+    assert qs.arrow_outcome({**row, "request_s": 0.46}, 0.57, 3.0) == "drops_later"  # had its lag
+    assert qs.arrow_outcome({**row, "request_s": None}, 0.57, 3.0) == "drops_later"
+    assert qs.arrow_outcome({"why": "no_hit", "request_s": 2.5}, 0.57, 3.0) == "unchanged"
+    own = {"given_up": True, "next_on_own_target": True, "new_strike_first": False}
+    assert qs.own_given_up(own)
+    assert not qs.own_given_up({**own, "new_strike_first": True})  # the re-armed strike's act
+    assert not qs.own_given_up({**own, "next_on_own_target": None})  # no request of its own
+    assert not qs.own_given_up({**own, "given_up": False})

@@ -22,6 +22,16 @@ The scaled window W = min(--max, QUICK_HIT_S + --per-cell x cells) (never below 
 hit_s) then KEEPS a no-hit lock when the line surely lands before the drop tick (hi + TAIL_LAG_S
 <= W), is BORDERLINE when it may (lo + TAIL_LAG_S <= W + TICK_S), else the lock still drops (the
 plain "no hits" unlock instead when W >= LOCK_NO_HIT_S). A no-arrow drop is untouched by W.
+
+9.38b (rogue-xmas02.md 4DH, BEFORE its pair): ``--arrow-window`` (default 3.0,
+QUICK_ARROW_SCALED_S) judges each NO-ARROW drop against a longer no-arrow window. The lag from a
+strike's own attack request (event clock) to its arrow (the runner's ``arrow_s``, its own clock) is
+measured on every strike of the sessions that had both; a drop whose request + the LARGEST lag fits
+in the window "may_lock" (if its arrow comes at all, it now takes the lock), one past it is
+"borderline", and a drop with no request, or whose arrow had its whole lag inside the old window
+and never came, "drops_later" (it only waits longer). ``given_up_own`` is the given-up drops whose
+next act hit the strike's OWN request target with no new strike between (4DG: the re-armed strike's
+act is not the dropped strike's hit).
 """
 
 from __future__ import annotations
@@ -40,6 +50,8 @@ ATTACK_KINDS = frozenset({"normal", "multi_hit", "lucky_dodge"})
 TICK_S = 0.2  # the runner's main loop (READ_HZ 5): the drop and the line are seen on its ticks
 TAIL_LAG_S = 0.1  # hunt_flow.BattleLogTail polls the reader's file every 0.03-0.05 s
 QUICK_HIT_S, LOCK_NO_HIT_S = 2.0, 3.5  # dungeon_hunt.py's (pinned by the test)
+QUICK_ARROW_S, QUICK_ARROW_SCALED_S = 2.0, 3.0  # dungeon_hunt.py's no-arrow windows (9.6, 9.38b)
+REQ_MAX_S = 6.0  # a strike's own request further than this from its click is not its own
 
 
 def cells_of(rel: Sequence[int]) -> int:
@@ -121,6 +133,57 @@ def scaled_outcome(row: Mapping[str, Any], per_cell: float, max_s: float) -> str
     return "plain_unlock" if w >= LOCK_NO_HIT_S else "drops"
 
 
+def arrow_lags(
+    events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]]
+) -> list[float]:
+    """PURE: per strike with an arrow and its own attack request (the first one between its click
+    and the next strike, within REQ_MAX_S): the runner's ``arrow_s`` - the request's time after the
+    click, sorted. The two clocks differ (``arrow_s`` counts from after the first click), so this
+    is a lag between ORDERS of events, used only to bound when an arrow can still come."""
+    reqs = sorted(int(p["t_mono_ns"]) for p in packets if p.get("type") == "attack_request")
+    strikes = sorted((e for e in events if e.get("kind") == "strike"), key=lambda e: int(e["t_ns"]))
+    out: list[float] = []
+    for i, st in enumerate(strikes):
+        if st.get("arrow_s") is None:
+            continue
+        t_s = int(st["t_ns"])
+        t_next = int(strikes[i + 1]["t_ns"]) if i + 1 < len(strikes) else None
+        req = next((t for t in reqs if t >= t_s and (t_next is None or t < t_next)), None)
+        if req is not None and (req - t_s) / NS <= REQ_MAX_S:
+            out.append(round(float(st["arrow_s"]) - (req - t_s) / NS, 2))
+    return sorted(out)
+
+
+def arrow_outcome(
+    row: Mapping[str, Any], max_lag: float, window: float, used: float = QUICK_ARROW_S
+) -> str:
+    """PURE: what a no-arrow window of ``window`` s does to one drop (``used`` = the run's own):
+    "unchanged" (a no-hit drop), "drops_later", "may_lock" or "borderline" (module docstring)."""
+    if row.get("why") != "no_arrow":
+        return "unchanged"
+    req = row.get("request_s")
+    if req is None or float(req) + max_lag <= used:
+        return "drops_later"  # no request, or its arrow had its whole lag and never came
+    return "may_lock" if float(req) + max_lag <= window else "borderline"
+
+
+def own_given_up(row: Mapping[str, Any]) -> bool:
+    """PURE: 4DH's Q2': given up, and the act was on the strike's OWN request target with no new
+    strike of ours between the drop and it."""
+    return (
+        bool(row.get("given_up"))
+        and row.get("next_on_own_target") is True
+        and row.get("new_strike_first") is False
+    )
+
+
+def no_hit_hold_s(events: Sequence[Mapping[str, Any]]) -> tuple[int, float]:
+    """PURE: 4CR's Q1 -- the plain "no hits" unlocks of a run and the time they held (``s``)."""
+    xs = [float(e.get("s") or 0.0) for e in events
+          if e.get("kind") == "unlock" and e.get("why") == "no hits"]  # fmt: skip
+    return len(xs), round(sum(xs), 1)
+
+
 def load(d: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     ev = [json.loads(x) for x in (d / "events.jsonl").read_text().splitlines() if x.strip()]
     with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
@@ -135,17 +198,29 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("sessions", type=Path, nargs="+")
     ap.add_argument("--per-cell", type=float, default=0.2)
     ap.add_argument("--max", type=float, default=3.5)
+    ap.add_argument("--arrow-window", type=float, default=QUICK_ARROW_SCALED_S)
+    ap.add_argument(
+        "--arrow-used",
+        type=float,
+        default=QUICK_ARROW_S,
+        help="the no-arrow window the sessions ran with (3.0 for 9.38b sessions)",
+    )
     a = ap.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / "packages" / "poring_dataset" / "src"))
     from poring_dataset.timeline import infer_self_aid
 
     all_rows: list[dict[str, Any]] = []
-    for d in a.sessions:
-        ev, pk, bl = load(d)
+    loaded = [(d, *load(d)) for d in a.sessions]
+    lags = sorted(x for _d, ev, pk, _bl in loaded for x in arrow_lags(ev, pk))
+    max_lag = lags[-1] if lags else 0.0
+    held = [no_hit_hold_s(ev) for _d, ev, _pk, _bl in loaded]
+    for d, ev, pk, bl in loaded:
         for row in drop_rows(ev, pk, bl, infer_self_aid(pk)):
             row["session"] = d.name
             row["scaled"] = scaled_outcome(row, a.per_cell, a.max)
+            row["arrow"] = arrow_outcome(row, max_lag, a.arrow_window, a.arrow_used)
+            row["given_up_own"] = own_given_up(row)
             all_rows.append(row)
             print(json.dumps(row))
     gu = [r for r in all_rows if r["given_up"]]
@@ -160,6 +235,18 @@ def main(argv: list[str] | None = None) -> int:
         "given_up_scaled": {o: sum(r["scaled"] == o for r in gu)
                             for o in ("kept", "borderline", "drops", "plain_unlock", "unchanged")},
         "kept_drops_lost": sum(r["scaled"] in ("kept", "plain_unlock") for r in kept),
+        "given_up_own": sum(r["given_up_own"] for r in all_rows),  # 4DH's Q2'
+        "no_hits_unlocks": sum(n for n, _s in held),  # 4CR's Q1
+        "no_hits_held_s": round(sum(x for _n, x in held), 1),
+        "arrow_lag": {"n": len(lags), "median": lags[len(lags) // 2] if lags else None,
+                      "max": max_lag},
+        "arrow_window": a.arrow_window, "arrow_used": a.arrow_used,
+        "given_up_arrow": {o: sum(r["arrow"] == o for r in gu)
+                           for o in ("may_lock", "borderline", "drops_later")},
+        "kept_drops_arrow": {o: sum(r["arrow"] == o for r in kept)
+                             for o in ("may_lock", "borderline", "drops_later")},
+        "added_wait_s": round((a.arrow_window - a.arrow_used)
+                              * sum(r["arrow"] == "drops_later" for r in all_rows), 1),
     }))  # fmt: skip
     return 0
 
