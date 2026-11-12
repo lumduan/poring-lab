@@ -53,4 +53,7 @@ case "${sub}" in
 esac
 if ${force} && ! guarded_parent; then refuse "--force-recreate"; fi
 
-exec docker compose -f compose.yaml -f compose.dev.yaml --profile remote --profile dev "$@"
+# Batt 2026-11-12: this machine's own values (gitignored compose.override.yaml) come LAST
+LOCAL=()
+[ -f compose.override.yaml ] && LOCAL=(-f compose.override.yaml)
+exec docker compose -f compose.yaml -f compose.dev.yaml "${LOCAL[@]}" --profile remote --profile dev "$@"
