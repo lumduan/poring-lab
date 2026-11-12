@@ -6931,3 +6931,26 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
 
   Batt's 30 minutes are also the first human example of the Rogue on xmas_dun02 for a learned
   policy (frames, inputs and packets, one clock).
+
+### 4DL. Batt's answers to the 22:34 report, and the night's plan to 06:00 (recorded 22:39 ICT from `date`)
+
+- **Batt (~22:3x, translated):**
+  1. "Allow installing the VRAM helper": done 22:38 (`poring-lab-vram.service` active; /hardware
+     shows 1.33 of 6.38 GB while p102's detect server runs).
+  2. "Teach it; make it work. In the end the bot should be faster than me": the Knife swap (4DK
+     candidate b) is the next build.
+  3. On the runner's own GM setup lines: "prepare it too". A normal player types none of them
+     (`@killmonster2` via `--clear-map`, `@heal`, `@item`, `@warp`, the level hold).
+     - The counted series (4DD, then 4DH) keeps its pre-registered setup to the end, so its
+       arms stay alike.
+     - The runs AFTER it are prepared as a player's (`--player-mode`).
+     - The one piece a player has that the lab lacks is restocking between runs. A shop or
+       Kafra walk is not built (player-mode.md "Not built yet"), so the night's queue ends before
+       it is needed.
+  4. Hyper-Threading: Batt turns it on in the BIOS tomorrow.
+- **Batt: "tonight plan a long run without me, until 06:00."** The plan:
+  1. 22:29 -> ~03:10: the night series p102-p111 (4DD, arm A even / B odd).
+  2. ~03:10 -> ~04:05: the stricter quick-drop pair p112 + p113 (4DH).
+  3. Built now, pre-registered BEFORE its runs, queued after p113: the Knife swap v2, as two
+     pairs to ~06:00. The comparison is arm A pooled, like 4DH.
+  4. In the morning: every verdict, with each arm as a share of Batt's run (4DK).
