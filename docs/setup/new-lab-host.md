@@ -785,9 +785,27 @@ sudo systemctl daemon-reload && sudo systemctl enable --now poring-lab-gpu-clock
 cat /sys/class/drm/card*/gt_min_freq_mhz      # 2450 on the A380
 ```
 
-(The `.sh` line is **(unverified)**: the unit's own header lists only the `.service` install, and
-the unit runs `/usr/local/libexec/poring-lab-gpu-clock.sh`.) Undo:
+(The unit runs `/usr/local/libexec/poring-lab-gpu-clock.sh`, so the `.sh` goes in first; the unit's
+own header says so since 2026-11-12, second-install-gaps.md row L.) Undo:
 `sudo systemctl disable --now poring-lab-gpu-clock.service`.
+
+**The Arc's VRAM on the Hardware page** (optional, 2026-11-12): i915 has no unprivileged source of
+device-memory use, so the page shows "n/a" until a small ROOT helper runs. It reads
+`i915_gem_objects` from debugfs every 2 s and writes only the numbers to
+`/dev/shm/poring-lab-hwshm/vram.json`. The backend reads that file (no capabilities, no network
+in the unit; see the unit's header):
+
+```bash
+sudo install -D -m 755 scripts/host/poring-lab-vram.py /usr/local/libexec/poring-lab-vram.py
+sudo install -m 644 scripts/host/poring-lab-vram.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now poring-lab-vram.service
+cat /dev/shm/poring-lab-hwshm/vram.json       # t_mono_ns advances every 2 s
+```
+
+A running backend picks it up within one sample; one that reads the old code needs
+`python3 scripts/guarded_build.py --sustain 30 --spike 25 restart:backend@30`. An NVIDIA host
+needs neither (the page has no NVIDIA reader by design). Undo:
+`sudo systemctl disable --now poring-lab-vram.service`.
 
 ## 10. The xmas_dun02 Rogue on YOUR lab server
 
