@@ -6489,3 +6489,27 @@ the scorer before any trial runs.
     a reason that is not the idea under test.
   - The bars do not change. p94 / p95 are queued after the base repeats p92 / p93.
 
+### 4DB. The next loot candidate pre-registered: ITEM MEMORY (pre-registered 17:01 ICT from `date`, BEFORE its runs; p95 still to run)
+
+- **What p94 showed** (`--loot-items --loot-recheck`, first of its pair):
+  - 81 kills (194.3 / h, the day's best) and L1 17 / 26 = 65.4 %.
+  - The recheck ran ONCE in 71 pending kills; 70 expired unseen.
+  - Its calm rule (search mode, no lock, no hit for 2.5 s) is almost never true within 7 s of a
+    kill on this map: the next monster is engaged at once.
+  - The base repeats p92 / p93: 163.2 / 163.1 kills / h, L1 21 / 24 and 17 / 20. The four base runs
+    pooled: 158.9 kills / h, L1 75 / 82 = 91.5 %.
+- **The candidate, `--loot-memory` (to be built, OFF by default, with `--loot-items`):**
+  - The item model runs on the box watcher's fresh frames at most once a second while any kill is
+    younger than MEMORY_S = 7.0 s, in ANY mode, fights included. It only looks: no click and no
+    sleep.
+  - Item cells seen inside a recent kill's 5 x 5 cells are REMEMBERED for MEMORY_KEEP_S = 12.0 s.
+  - The NEXT loot step (after the next kill) hovers its own seen items PLUS the remembered cells,
+    in items_plan order, under its caps. The remembered cells it visits are then cleared.
+  - If no kill comes and she is calm while remembered cells are left, the 9.36 recheck path loots
+    them.
+- **The pair p96 + p97:** today's base + `--loot-items xmas02fi5 --loot-memory` (no
+  `--loot-recheck`), against the base pair p84 + p85, with 4DA's bars unchanged:
+  - R-a: L1 >= 92.4 %.
+  - R-b: kills / h >= 159.30 AND common-item z/h >= 52,686.
+  - No harm: the base's bars.
+
