@@ -249,6 +249,7 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
   - the direction (frames in, numbers out);
   - one socket, one connection at a time (`listen(1)`): while the bot's runner holds it, the
     HUD's calls fall back to its CPU detector (GpuDetector's 250-ms timeout and 5-s retry);
+    ➡️ SUPERSEDED 2026-11-12 by the amendment below: several connections at once, one GPU gate;
   - vision still initiates nothing and reaches no host, LAN or internet address;
   - every other row of this ADR.
 - **Why it is safe:** the HUD is a host process with the bot's own privileges and no input path.
@@ -257,3 +258,28 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
 ## Tracking
 
 [lumduan/poring-lab#1](https://github.com/lumduan/poring-lab/issues/1), labelled `blocks-phase-4` and `security`.
+
+## Amendment 2026-11-12 (07:30 ICT): the detect server serves several connections, decisions first
+
+- **Why:** Batt 2026-11-11 21:01 ("the boxes come late ... use the GPU") and 2026-11-12 ("build them").
+  `--hud-fast` slowed the bot's own detections (D1 p95 93.5 ms) because every call shared one
+  connection and one rate gap. The floor-item loot path (`--loot-items`) needs a second model
+  beside the species model.
+- **What changes** (`poring_vision.detect_server`, dungeon@9.29c; merged with 77b64986):
+  - The server serves up to MAX_CONN = 6 connections at once, one thread each. Each connection's
+    model comes from its hello. A connection past the cap is closed unanswered, and its client
+    falls back to its CPU detector, as before.
+  - One forward at a time on the card, through a gate. Decision calls (any model) go first, in
+    arrival order. HUD-only calls (hello `"prio": "hud"`) run only when no decision waits; a HUD
+    frame that cannot start within 150 ms is answered "skipped", never queued.
+  - The rate bound stays in the server: at most `--max-hz` decision forwards a second per model,
+    and at most `--max-hz` HUD forwards in all.
+- **What does NOT change:**
+  - the direction (frames in, numbers out);
+  - the ONE unix socket in the host RAM directory, mounted only in the worker;
+  - the host processes as its only clients;
+  - vision still initiates nothing and reaches no host, LAN or internet address;
+  - every other row of this ADR.
+- **Read with it:** a hello without `prio` is a decision client, so old clients are served as
+  before. `scripts/hud_scene.py` is now served as a decision client beside the bot; it should
+  declare `prio: "hud"` when run beside a hunt.

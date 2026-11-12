@@ -261,6 +261,9 @@ HEADER = struct.Struct("<HHI")
 # windows are 60-180 s; a paused worker accepts and never answers).
 GPU_CALL_S, GPU_HELLO_S, GPU_RETRY_S = 0.25, 0.25, 5.0
 LINE_MAX = 512
+# dungeon@9.29c (detect_server's gate): a connection that declares itself HUD-only is served only
+# between the decision calls' forwards, and its frame is skipped when it cannot start in time.
+PRIO_HUD = "hud"
 
 
 @dataclass(frozen=True)
@@ -326,6 +329,11 @@ class GpuClosed(GpuUnavailable):
     """The server closed the connection before a reply."""
 
 
+class GpuSkipped(GpuUnavailable):
+    """A HUD-only call the server skipped (the decision calls went first): no boxes this time;
+    the connection stays and the GPU is not marked down."""
+
+
 class GpuRefused(GpuUnavailable):
     """Never the GPU again in this run: an unsafe socket, or a server not serving the pinned
     weights at the pinned shape."""
@@ -370,15 +378,20 @@ class GpuDetector:
     ``last_path`` says which path gave the last boxes, ``last_ms`` its time (GPU: the call from
     the canvas to the decoded boxes, on the host's clock; ``last_server_ms`` the server's own
     forward, from its reply), ``last_reason`` why the GPU did not.
-    ``weights`` None: the model has no GPU checkpoint, so the CPU serves alone."""
+    ``weights`` None: the model has no GPU checkpoint, so the CPU serves alone.
+    ``prio`` "hud" (dungeon@9.29c; made by ``hud_twin``): a HUD-only client (module PRIO_HUD)."""
 
     def __init__(self, cpu: UnitDetector, weights: str | None = "v1", *,
                  socket_path: Path = GPU_SOCKET, conf: float = CONF, iou: float = IOU,
                  call_s: float = GPU_CALL_S, hello_s: float = GPU_HELLO_S,
                  retry_s: float = GPU_RETRY_S,
-                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
+                 clock: Callable[[], float] = time.monotonic,
+                 prio: str | None = None) -> None:  # fmt: skip
         if weights is not None and weights not in GPU_WEIGHTS:
             raise DetectorUnavailable(f"GPU weights {weights!r}: not in GPU_WEIGHTS")
+        if prio not in (None, PRIO_HUD):
+            raise DetectorUnavailable(f"prio {prio!r}: None (decisions) or {PRIO_HUD!r}")
+        self.prio = prio
         self.cpu = cpu
         self.model, self.names, self.collapse = cpu.model, cpu.names, cpu.collapse
         self.weights = weights
@@ -394,6 +407,7 @@ class GpuDetector:
         self.last_path = ""
         self.last_ms = 0.0
         self.last_server_ms: float | None = None  # the reply's "ms": the server's forward
+        self.last_wait_ms: float | None = None  # its "wait_ms": the wait at the server's gate
         self.last_reason: str | None = None
         self.counts: Counter[str] = Counter()  # gpu / cpu (asked) / fallback
         self.reasons: Counter[str] = Counter()  # why the GPU did not serve
@@ -407,7 +421,11 @@ class GpuDetector:
     def detect(self, img: Any, prefer: str = "gpu") -> list[Box]:
         a = np.ascontiguousarray(np.asarray(img)[..., :3], dtype=np.uint8)
         rows = self._gpu(a) if prefer == "gpu" else None
-        if rows is None:
+        if rows is None and self.prio is not None:  # dungeon@9.29c: a HUD call: never the CPU
+            boxes = []  # (the CPU worker is one pipe, the decisions' detector's alone)
+            self.last_path, self.last_ms, self.last_server_ms = "none", 0.0, None
+            self.counts["none"] += 1
+        elif rows is None:
             boxes = self.cpu.detect(a)
             self.last_path, self.last_ms = "cpu", self.cpu.last_ms
             self.last_server_ms = None
@@ -419,7 +437,8 @@ class GpuDetector:
         if self.log_path is not None:
             row = {"t_ns": time.monotonic_ns(), "t_wall": round(time.time(), 3),
                    "ms": self.last_ms, "path": self.last_path, "prefer": prefer,
-                   "reason": self.last_reason, "h": a.shape[0], "w": a.shape[1],
+                   "reason": self.last_reason, "wait_ms": self.last_wait_ms,
+                   "h": a.shape[0], "w": a.shape[1],
                    "boxes": [[round(b.x0, 1), round(b.y0, 1), round(b.x1, 1), round(b.y1, 1),
                               round(b.score, 3), b.cls] for b in boxes]}  # fmt: skip
             with self.log_path.open("a") as fh:
@@ -427,7 +446,7 @@ class GpuDetector:
         return boxes
 
     def _gpu(self, a: np.ndarray) -> list[list[float]] | None:
-        self.last_reason, self.last_server_ms = None, None
+        self.last_reason, self.last_server_ms, self.last_wait_ms = None, None, None
         if self.disabled is not None:
             self.last_reason = "disabled"
             return None
@@ -443,6 +462,10 @@ class GpuDetector:
             self.disabled = str(exc)[:300]
             self.reasons["refused"] += 1
             self.last_reason = f"refused: {self.disabled}"
+            return None
+        except GpuSkipped as exc:  # dungeon@9.29c: a HUD frame the decisions went before
+            self.reasons["skipped"] += 1
+            self.last_reason = f"skipped: {exc}"[:300]
             return None
         except (OSError, GpuUnavailable, ValueError) as exc:
             self._drop()
@@ -487,14 +510,18 @@ class GpuDetector:
         deadline = time.monotonic() + self.hello_s
         self.sock, self.buf = connect_private(self.socket_path, self.hello_s), bytearray()
         try:
-            self._send(json.dumps({"v": PROTOCOL, "model": self.weights}).encode() + b"\n",
-                       deadline)  # fmt: skip
+            hello: dict[str, Any] = {"v": PROTOCOL, "model": self.weights}
+            if self.prio is not None:
+                hello["prio"] = self.prio  # dungeon@9.29c; a decisions' hello is unchanged
+            self._send(json.dumps(hello).encode() + b"\n", deadline)
             doc = json.loads(self._line(deadline))
         except BaseException:
             self._drop()
             raise
         want = {"ok": True, "model": self.weights, "imgsz": list(IMGSZ),
                 "shape": list(self.shape)}  # fmt: skip
+        if self.prio is not None:  # a server before the gate ignores "prio": refused, so a HUD
+            want["prio"] = self.prio  # client never runs there as a decision client
         # the pinned torch checkpoint, or the pinned deployed ONNX (a vendor-neutral backend)
         shas = {self.spec.sha256, self.spec.onnx_sha256} - {""}
         got = {k: v for k, v in doc.items() if k != "sha256"} if isinstance(doc, dict) else doc
@@ -508,6 +535,8 @@ class GpuDetector:
         self._send(HEADER.pack(h, w, 0), deadline)
         self._send(memoryview(np.ascontiguousarray(canvas)).cast("B"), deadline)
         head = json.loads(self._line(deadline))
+        if self.prio is not None and isinstance(head, dict) and "skipped" in head:
+            raise GpuSkipped(str(head["skipped"])[:40])  # no body follows (detect_server)
         if not isinstance(head, dict) or head.get("shape") != list(self.shape):
             raise GpuUnavailable(f"reply {str(head)[:120]}: the shape must be {list(self.shape)}")
         out = np.empty(self.shape, "<f4")
@@ -517,6 +546,9 @@ class GpuDetector:
         ms = head.get("ms")
         ok_ms = isinstance(ms, (int, float)) and not isinstance(ms, bool)
         self.last_server_ms = float(ms) if ok_ms else None
+        wait = head.get("wait_ms")  # dungeon@9.29c's servers; None from an older one
+        if isinstance(wait, (int, float)) and not isinstance(wait, bool):
+            self.last_wait_ms = float(wait)
         return out
 
     def _left(self, deadline: float) -> float:
@@ -571,11 +603,23 @@ class GpuDetector:
         """For the run's events: the weights, what served, and why the GPU did not."""
         return {"weights": self.weights, "sha256": None if self.spec is None else self.spec.sha256,
                 "counts": dict(self.counts), "reasons": dict(self.reasons),
-                "disabled": self.disabled}  # fmt: skip
+                "disabled": self.disabled,
+                **({"prio": self.prio} if self.prio is not None else {})}  # fmt: skip
+
+    def hud_twin(self) -> GpuDetector:
+        """dungeon@9.29c (--hud-fast): the same model and decoding on a SECOND connection that
+        declares itself HUD-only, for a thread of its own: the server serves its frames only
+        between the decision calls' forwards and skips one that cannot start in time. Its
+        ``detect`` never runs the CPU (``last_path`` "none" and no boxes when the GPU gave none):
+        the CPU worker stays this detector's alone. Closing it leaves the CPU worker running."""
+        return GpuDetector(self.cpu, self.weights, socket_path=self.socket_path, conf=self.conf,
+                           iou=self.iou, call_s=self.call_s, hello_s=self.hello_s,
+                           retry_s=self.retry_s, clock=self.clock, prio=PRIO_HUD)  # fmt: skip
 
     def close(self) -> None:
         self._drop()
-        self.cpu.close()
+        if self.prio is None:  # a HUD twin borrows the CPU detector (hud_twin)
+            self.cpu.close()
 
     def __enter__(self) -> GpuDetector:
         return self

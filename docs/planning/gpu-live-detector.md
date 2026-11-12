@@ -52,7 +52,8 @@ owner: Batt
 1. **ADR-0005 amendment:** the socket directory (e.g. `/dev/shm/poring-lab-detect`), its one
    protocol (detector_worker's: frame bytes in, JSON boxes out), mounted read-write ONLY in the
    vision worker and read by host scripts; `test_guards.py` pins it.
-2. **`poring_vision.detect_server`:** serves one client at a time, under the VRAM cap, FP32,
+2. **`poring_vision.detect_server`:** serves one client at a time (➡️ since 2026-11-12 several,
+   decisions first: ADR-0005 Amendment 2026-11-12), under the VRAM cap, FP32,
    per-model groups as `unit_detector` (species collapsed before NMS).
 3. **`unit_detector.GpuDetector`:** the same `detect()` interface. A timeout (e.g. 150 ms) falls
    back to the CPU detector, so R3's pauses and a stopped worker never blind the bot. The box

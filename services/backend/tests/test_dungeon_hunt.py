@@ -4187,3 +4187,118 @@ def test_loot_items_is_wired_before_the_aim_and_after_the_pinned_sort() -> None:
                               rest="spot", npc_guard=False, loot_items="xmas02fi4")  # fmt: skip
     assert dh.fixes_of(a)["loot_items"] == ["xmas02fi4", 0.25, 30.0, 3, "9.33"]
     assert "loot_items" not in dh.fixes_of(dh.argparse.Namespace(**{**vars(a), "loot_items": None}))
+
+
+# --- dungeon@9.29c: --hud-fast's GPU calls on a HUD twin, in a thread of their own ---------------
+
+
+class _FakeTwin(_FakeDet):
+    """A HUD twin (unit_detector.GpuDetector.hud_twin): ``delay_s`` a call, its thread recorded,
+    ``path`` what each call gives ("gpu" with one monster box, or "none")."""
+
+    def __init__(self, delay_s: float = 0.0) -> None:
+        super().__init__()
+        self.delay_s, self.path, self.closed = delay_s, "gpu", False
+        self.threads: list[str] = []
+        self.log_path: object = None
+
+    def detect(self, img: object, prefer: str = "gpu") -> list[object]:
+        import threading
+        import time
+        from types import SimpleNamespace
+
+        self.threads.append(threading.current_thread().name)
+        time.sleep(self.delay_s)
+        self.calls.append((time.monotonic(), prefer))
+        self.last_path = self.path
+        box = SimpleNamespace(x0=1, y0=2, x1=3, y1=4, cls="monster")
+        return [box] if self.path == "gpu" else []
+
+    def info(self) -> dict[str, object]:
+        return {"prio": "hud", "calls": len(self.calls)}
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _hud_watch(gpu: bool, twin: _FakeTwin | None = None) -> dh.BoxWatch:
+    from types import SimpleNamespace
+
+    bw = _watch(gpu)
+    bw.hud_every_s, bw.hud_last, bw.n_hud = None, (0.0, []), 0
+    bw.hud_det = bw.hud_screen = bw.hud_th = None
+    bw.r = SimpleNamespace(Screen=_FakeScreen)
+    bw.det.hud_twin = lambda: twin  # type: ignore[attr-defined]
+    return bw
+
+
+def _until(cond: Any, timeout: float = 3.0) -> bool:
+    import time
+
+    t0 = time.monotonic()
+    while not cond():
+        if time.monotonic() - t0 > timeout:
+            return False
+        time.sleep(0.005)
+    return True
+
+
+def test_hud_fast_on_the_gpu_never_holds_up_a_kick() -> None:
+    """dungeon@9.29c: on the GPU path --hud-fast's calls run on the detector's HUD twin in a
+    thread of their own (its own grab helper): a kick is served while a slow HUD call is still
+    in flight (9.29b's calls sat in the watcher's own thread, so a kick waited for them); the
+    twin's boxes go to hud_last only; a call without GPU boxes leaves hud_last as it was."""
+    import time
+
+    twin = _FakeTwin(delay_s=0.3)
+    bw = _hud_watch(True, twin)
+    try:
+        assert _until(lambda: bw.n >= 1)
+        bw.start_hud(0.02, "hud.jsonl")  # type: ignore[arg-type]
+        assert bw.hud_det is twin and twin.log_path == "hud.jsonl"
+        assert bw.hud_every_s is None  # 9.29b's calls in the watcher's thread: off
+        assert bw.hud_th is not None and bw.hud_th.name == "hud-watch"
+        assert _until(lambda: len(twin.threads) >= 1)  # a 0.3-s HUD call is in flight
+        t_call = time.monotonic()
+        meta = bw.fresh_now("gpu", 1.0)
+        assert meta is not None and time.monotonic() - t_call < 0.15  # it did not wait
+        assert _until(lambda: bw.n_hud >= 1)
+        assert bw.hud_last[1] and bw.last[1] == []  # the twin's box: the HUD's, not the decisions'
+        assert set(twin.threads) == {"hud-watch"} and len(bw.det.calls) >= 2
+        twin.path, t_kept = "none", bw.hud_last[0]
+        n_calls = len(twin.calls)
+        assert _until(lambda: len(twin.calls) >= n_calls + 2)
+        assert bw.hud_last[0] == t_kept  # a skipped frame: the HUD keeps what it has
+        assert bw.hud_info() == {"n_hud": bw.n_hud, "prio": "hud", "calls": len(twin.calls)}
+    finally:
+        bw.stop()
+    assert twin.closed and not bw.hud_th.is_alive()
+
+
+def test_hud_fast_on_the_cpu_keeps_its_calls_between_the_watchers_own() -> None:
+    """The CPU detector's worker is one pipe: --hud-fast there stays 9.29b's (no twin, no
+    thread); without --hud-fast nothing starts at all."""
+    bw = _hud_watch(False)
+    try:
+        assert bw.hud_info() is None
+        bw.start_hud(0.2)
+        assert bw.hud_every_s == 0.2 and bw.hud_det is None and bw.hud_th is None
+    finally:
+        bw.stop()
+    src = Path(dh.__file__).read_text()
+    assert "            if hud_fast and boxes is not None:  # dungeon@9.29c" in src
+    assert 'boxes.start_hud(float(hud_fast), out / "detections_hud.jsonl")' in src
+    assert src.count("boxes.start_hud(") == 1 and src.count("boxes.hud_every_s =") == 0
+    loop = src[src.index("    def _hud_loop(self, every: float) -> None:") :]
+    loop = loop[: loop.index("    def hud_info(self)")]
+    assert "self.hud_last = (t_h," in loop and "self.hud_det.detect(img_h)" in loop
+    for decision in ("self.last =", "self.alarm =", "self.meta =", "self.n += 1", "kick"):
+        assert decision not in loop, decision
+    assert 'if self.hud_det.last_path != "gpu":' in loop
+    assert 'ev({"kind": "hud_watch", **hud_rec})' in src
+    base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
+                npc_guard=False, miss_cue=False)  # fmt: skip
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, hud=True, hud_fast=0.2))
+    assert rec["hud_prio"] == ["9.29c"]
+    rec_off = dh.fixes_of(dh.argparse.Namespace(**base, hud=True, hud_fast=None))
+    assert "hud_prio" not in rec_off and "hud_fast" not in rec_off

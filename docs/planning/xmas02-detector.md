@@ -3229,7 +3229,8 @@ xmas_dun02`: rc 0 (`all_and_only_the_set`) is the icon proof.**
   bars). But at 70 % recall, "skip the loot step when no box" would skip ~30 % of the real drops.
 - **I5 GPU, measured as O13 fixed, NOT judged:**
   - through the guarded serve step (OpenVINO; the listening line names xmas02fi d149b3a7) and
-    `GpuDetector`, one model a run (the server serves one client at a time), 300 frames;
+    `GpuDetector`, one model a run (the server then served one client at a time; ➡️ several since
+    2026-11-12, ADR-0005's amendment), 300 frames;
   - xmas02fi: call p50 51.1 / p95 63.6 ms, server forward p50 16.25 / p95 16.51 ms;
   - the deployed xmas02gb, the same harness: call p50 52.4 / p95 63.8 ms, server 16.6 / 16.85 ms;
   - so the harness adds ~35 ms that the live runner does not (xmas02gb's live D1 p95 22-26 ms in
