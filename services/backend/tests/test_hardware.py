@@ -4,6 +4,7 @@ optional (null + a reason, logged once, the task never dies), and GET /hardware'
 call it (never the agent's :8001)."""
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -219,7 +220,9 @@ def test_a_full_sample_and_its_rates(tmp_path: Path) -> None:
     assert gpu.busy_pct == 25.0  # 1.5 s of 2 s in RC6
     assert (gpu.temp_c, gpu.power_max_w, gpu.fan_rpm) == (50.0, 43.0, 146)
     assert (gpu.freq_act_mhz, gpu.freq_cur_mhz, gpu.freq_max_mhz) == (0, 1450, 2450)
-    assert gpu.vram_used_b is None and s.na["gpu.vram_used_b"] == hw.VRAM_NA
+    # the host /dev/shm is mounted, the root helper's vram.json is not there: say which helper
+    assert gpu.vram_used_b is None and s.na["gpu.vram_used_b"] == hw.VRAM_NO_HELPER
+    assert s.na["gpu.vram_total_b"] == hw.VRAM_NO_HELPER
     labels = [(t.chip, t.label, t.c, t.max_c, t.crit_c) for t in s.temps]
     assert labels == [
         ("coretemp", "Package id 0", 35.0, 78.0, 88.0),
@@ -542,3 +545,98 @@ def test_nics_hidden_by_the_network_namespace_keep_distinct_labels(tmp_path: Pat
     labels = [t.label for t in m.sample().temps if t.chip == "tg3"]
     assert labels == ["eno1", "NIC 02:00.0", "NIC 02:00.1"]
     assert len(set(labels)) == len(labels)
+
+
+# --- VRAM from the root helper (scripts/host/poring-lab-vram.py; Batt 2026-11-12) ----------------
+
+HELPER = Path(__file__).resolve().parents[3] / "scripts" / "host" / "poring-lab-vram.py"
+# the shape of an Arc A380's i915_gem_objects on bot-server (kernel 7.0, 2026-11-12), trimmed
+GEM_OBJECTS = """7 shrinkable [0 free] objects, 28672 bytes
+system-ttm: total:0x00000003bedb9000 bytes
+local0:   use_type: 1
+  use_tt: 0
+  size: 1558528
+  usage: 26439680
+default_page_size: 64KiB
+visible_avail: 231MiB
+visible_size: 256MiB
+visible_reserved: 0MiB
+chunk_size: 4KiB, total: 6088MiB, free: 6062MiB, clear_free: 0MiB
+order-19 free:     2048 MiB, blocks: 1
+order- 0 free:       12 KiB, blocks: 3
+reserved:
+stolen-local: total:0x0000000001800000 bytes
+"""
+
+
+def helper() -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("poring_lab_vram", HELPER)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_helper_reads_local0_and_skips_a_card_without_it() -> None:
+    h = helper()
+    mib = 1 << 20
+    got = h.parse_local0(GEM_OBJECTS)
+    assert got == {"total_b": 6088 * mib, "free_b": 6062 * mib, "used_b": 26 * mib,
+                   "usage_b": 26439680}  # fmt: skip
+    igpu = "system: total:0x1 bytes\nstolen-system: total:0x2 bytes\n"
+    assert h.parse_local0(igpu) is None  # an integrated GPU has no local0
+    # a buddy line of ANOTHER region after local0's block is not local0's
+    other = "local0:   use_type: 1\nstolen-local: x\nchunk_size: 4KiB, total: 9MiB, free: 1MiB\n"
+    assert h.parse_local0(other) is None
+
+
+def test_the_helpers_file_reaches_the_page(tmp_path: Path) -> None:
+    """End to end: the helper's sample() on a fake host, its write(), the backend's reader."""
+    h = helper()
+    root, clock = host_tree(tmp_path / "host"), Clock()
+    drm = root / "sys/class/drm"
+    debugfs = tmp_path / "debug/dri"
+    put(debugfs, "1/i915_gem_objects", GEM_OBJECTS)
+    data = h.sample(drm, debugfs)
+    assert data["cards"]["card1"]["used_b"] == 26 * (1 << 20) and data["why"] == {}
+    data["t_mono_ns"] = clock.ns  # the test's clock stands for CLOCK_MONOTONIC
+    shm = tmp_path / "shm"
+    h.write(shm, data)
+    m = monitor(root, clock, shm_path=shm)
+    s = m.sample()
+    assert s.gpu is not None
+    assert (s.gpu.vram_used_b, s.gpu.vram_total_b) == (26 * (1 << 20), 6088 * (1 << 20))
+    assert "gpu.vram_used_b" not in s.na and "gpu.vram_total_b" not in s.na
+    clock.tick(hw.VRAM_MAX_AGE_S + 1)  # the helper stopped writing
+    s = m.sample()
+    assert s.gpu is not None and s.gpu.vram_used_b is None
+    assert (
+        s.na["gpu.vram_used_b"].startswith("stale (")
+        and s.na["gpu.vram_total_b"] == (s.na["gpu.vram_used_b"])
+    )
+
+
+def test_vram_reasons_when_the_file_cannot_be_trusted(tmp_path: Path) -> None:
+    now = 1_000 * S
+    ok = {"v": 1, "t_mono_ns": now, "cards": {"card1": {"used_b": 5, "total_b": 10}}, "why": {}}
+    assert hw.parse_vram(json.dumps(ok), "card1", now) == (5, 10)
+    bad = [
+        ("{", "unparsable vram.json"),
+        (json.dumps({**ok, "v": 2}), "unknown vram.json version"),
+        (json.dumps({**ok, "cards": {}, "why": {"card1": "no local0 region"}}),
+         "the helper has no card1: no local0 region"),
+        (json.dumps({**ok, "cards": {"card1": {"used_b": 11, "total_b": 10}}}),
+         "implausible vram.json numbers"),
+    ]  # fmt: skip
+    for text, reason in bad:
+        with pytest.raises(hw.Unavailable) as exc:
+            hw.parse_vram(text, "card1", now)
+        assert exc.value.reason == reason
+    with pytest.raises(hw.Unavailable, match="stale"):
+        hw.parse_vram(json.dumps(ok), "card1", now + int(11 * S))
+    # no host /dev/shm mounted: the page says so (not "the helper is not running")
+    root = host_tree(tmp_path / "host")
+    s = monitor(root, Clock()).sample()
+    assert s.na["gpu.vram_used_b"] == hw.VRAM_NO_SHM

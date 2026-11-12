@@ -1,0 +1,37 @@
+# poring-lab on bot-server: the Intel GPU's VRAM use for the console's /hardware page.
+#
+# Why (Batt 2026-11-12: "show VRAM too; you can sudo anyway"): i915 has no unprivileged source of
+# device-memory use (debugfs is root only; the query ioctl hides the free size from non-PERFMON
+# callers). This root loop reads /sys/kernel/debug/dri/<minor>/i915_gem_objects every 2 s and
+# writes the numbers, and nothing else, to /dev/shm/poring-lab-hwshm/vram.json. The backend reads
+# that file read-only at /host-shm (hardware.py). See the helper's docstring.
+#
+# Install (root; bot-server is the bot's sandbox, Batt 2026-11-07). The helper FIRST:
+#     install -D -m 755 scripts/host/poring-lab-vram.py /usr/local/libexec/poring-lab-vram.py
+#     install -m 644 scripts/host/poring-lab-vram.service /etc/systemd/system/
+#     systemctl daemon-reload && systemctl enable --now poring-lab-vram.service
+# Undo: systemctl disable --now poring-lab-vram.service; rm -f /dev/shm/poring-lab-hwshm/vram.json
+# Check: cat /dev/shm/poring-lab-hwshm/vram.json (t_mono_ns advances every 2 s)
+[Unit]
+Description=poring-lab: the Intel GPU's VRAM use for /hardware (reads i915 debugfs as root)
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/libexec/poring-lab-vram.py
+Restart=on-failure
+RestartSec=10
+Nice=10
+# It needs uid 0 for debugfs (a root-owned 0700 directory) and nothing else: no capabilities, no
+# network, the file system read-only except /dev (where /dev/shm lives)
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

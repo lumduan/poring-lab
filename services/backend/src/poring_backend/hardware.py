@@ -13,8 +13,11 @@ cpuinfo}, /sys/devices/system/cpu, /sys/class/{hwmon,drm,powercap}.
           statvfs of a path ON them (HARDWARE_SHM_PATH, HARDWARE_DISK_PATH; config.py).
   GPU     vendor-neutral (ADR-0022): the first DRM card whose driver has a reader. Intel i915 now:
           its hwmon (temp, the energy counter -> W, the power limit, the fan), the GT frequencies,
-          and busy % from RC6 residency (1 - time in RC6 / wall time). Any other driver -> null
-          with the reason; there is deliberately no nvidia-smi call.
+          and busy % from RC6 residency (1 - time in RC6 / wall time). VRAM (2026-11-12): i915 has
+          no unprivileged source, so a ROOT helper (scripts/host/poring-lab-vram.py, its unit
+          poring-lab-vram.service) writes local0's use to the host /dev/shm, read here as a plain
+          file (vram.json, stale after 10 s). Any other driver -> null with the reason; there is
+          deliberately no nvidia-smi call.
   Temps   every hwmon temp*_input, with its label, max and crit.
   Power   the whole server from hwmon "power_meter" (ACPI; on the HP ML350 it is iLO's average over
           power1_average_interval), the GPU (above), and the CPU package from RAPL energy_uj (root
@@ -31,6 +34,7 @@ is display only. The page adds its own fetch age to ``age_s``; it never subtract
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
@@ -56,6 +60,17 @@ CPU_CHIPS = frozenset({"coretemp", "k10temp", "zenpower", "cpu_thermal"})
 # Names for the PCI ids this lab has (display only; anything else shows its id).
 KNOWN_GPUS = {"8086:56a5": "Intel Arc A380", "8086:56a6": "Intel Arc A310"}
 VRAM_NA = "no unprivileged source (i915 debugfs is root only)"
+# Since 2026-11-12 (Batt: "show VRAM too"): the root helper poring-lab-vram.service
+# (scripts/host/poring-lab-vram.py) writes the i915 cards' local0 use to the host's
+# /dev/shm/poring-lab-hwshm/vram.json, which this container sees at HARDWARE_SHM_PATH. Read as a
+# plain file like every other sensor here; older than VRAM_MAX_AGE_S (the helper writes every 2 s,
+# on the same CLOCK_MONOTONIC) is stale, never shown.
+VRAM_FILE = "vram.json"
+VRAM_MAX_AGE_S = 10.0
+VRAM_NO_HELPER = (
+    "the root helper poring-lab-vram.service is not running (i915 debugfs is root only)"
+)
+VRAM_NO_SHM = "the host's /dev/shm is not mounted here (HARDWARE_SHM_PATH)"
 # The sparkline series, in the order a history row stores them.
 SERIES = ("cpu_pct", "mem_pct", "gpu_busy_pct", "cpu_temp_c", "gpu_temp_c", "server_w", "gpu_w")
 # The ACPI power meter re-runs its ACPI method on a read once the driver's cache is old (~10 ms on
@@ -196,6 +211,41 @@ def read_text(path: Path) -> str:
 
 def read_int(path: Path) -> int:
     return int(read_text(path))
+
+
+def parse_vram(text: str, card: str, now_ns: int) -> tuple[int, int]:
+    """PURE: (used, total) bytes of ``card`` from the root helper's vram.json, or Unavailable with
+    the reason (unparsable, the helper's own why for the card, stale, implausible numbers)."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        raise Unavailable("unparsable vram.json") from None
+    if not isinstance(data, dict) or data.get("v") != 1:
+        raise Unavailable("unknown vram.json version")
+    t = data.get("t_mono_ns")
+    if not isinstance(t, int):
+        raise Unavailable("unparsable vram.json")
+    age_s = (now_ns - t) / 1e9
+    if age_s > VRAM_MAX_AGE_S or age_s < -VRAM_MAX_AGE_S:
+        raise Unavailable(f"stale ({age_s:.0f} s old): is poring-lab-vram.service running?")
+    entry = (data.get("cards") or {}).get(card)
+    if not isinstance(entry, dict):
+        why = (data.get("why") or {}).get(card)
+        raise Unavailable(f"the helper has no {card}" + (f": {why}" if why else ""))
+    used, total = entry.get("used_b"), entry.get("total_b")
+    if not (isinstance(used, int) and isinstance(total, int) and 0 <= used <= total and total > 0):
+        raise Unavailable("implausible vram.json numbers")
+    return used, total
+
+
+def read_vram(path: Path, card: str, now_ns: int) -> tuple[int, int]:
+    try:
+        text = read_text(path)
+    except Unavailable as exc:
+        if exc.reason == "absent":
+            raise Unavailable(VRAM_NO_HELPER) from None
+        raise
+    return parse_vram(text, card, now_ns)
 
 
 def reason_of(exc: BaseException) -> str:
@@ -475,6 +525,9 @@ class IntelI915:
         self.rc6 = gt0 if gt0.exists() else card_dir / "power/rc6_residency_ms"
         self._energy: tuple[int, int] | None = None
         self._rc6: tuple[int, int] | None = None
+        # the root helper's vram.json (HardwareMonitor sets it from HARDWARE_SHM_PATH); None: no
+        # host /dev/shm here
+        self.vram_path: Path | None = None
 
     def _hw(self, name: str) -> int:
         if self.hwmon is None:
@@ -514,8 +567,16 @@ class IntelI915:
             gpu.busy_pct = None if rate is None else round(clamp_pct(100 - rate / 10), 1)
             if why:
                 probe.miss("gpu.busy_pct", why)
-        probe.miss("gpu.vram_used_b", VRAM_NA)
-        probe.miss("gpu.vram_total_b", VRAM_NA)
+        if self.vram_path is None:
+            probe.miss("gpu.vram_used_b", VRAM_NO_SHM)
+            probe.miss("gpu.vram_total_b", VRAM_NO_SHM)
+            return gpu
+        path = self.vram_path
+        got = probe.get("gpu.vram_used_b", lambda: read_vram(path, self.card_dir.name, t_ns))
+        if got is None:
+            probe.miss("gpu.vram_total_b", probe.na.get("gpu.vram_used_b", VRAM_NA))
+        else:
+            gpu.vram_used_b, gpu.vram_total_b = got
         return gpu
 
 
@@ -696,6 +757,8 @@ class HardwareMonitor:
         if stale or recheck:  # found once; looked for again if it vanishes, or each minute if none
             self._gpu, self._gpu_why = find_gpu(self.root)
             self._gpu_checked_ns = t_ns
+            if isinstance(self._gpu, IntelI915):  # the root helper's file, on the host /dev/shm
+                self._gpu.vram_path = None if self.shm_path is None else self.shm_path / VRAM_FILE
         if self._gpu is None:
             probe.miss("gpu", self._gpu_why or "no GPU")
             return None
