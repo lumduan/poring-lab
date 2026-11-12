@@ -798,22 +798,28 @@ the hunting UI layout (`scripts/client_layout.py`); the map's committed zones an
 (`config/map_zones/xmas_dun02.yaml`, `config/routes/xmas_dun02.yaml`); the KB for the map, its GAT
 and sprites (section 8); the detector (section 9).
 
-**The base runner command.** The night chain's runner scripts (`chain.py`, `run_pilot_v3.sh`,
-`pilot_rec_min.sh`) are scratch files in `/dev/shm`, NOT in the repo. The command below is
-assembled from the committed records: p13's command (rogue-xmas02.md 4T) plus the base additions of
-4BL and 4CR, and `--steal` **(unverified: the exact list of the chain's fixed flags; check the
-newest pre-registration in rogue-xmas02.md before relying on it)**. `--exp-first` and
-`--box-detector gpu` are defaults.
+**The base runner command.** The night chain's runner scripts run from `/dev/shm` (scratch). A
+verbatim copy from 2026-11-12 20:15 is committed in
+[docs/records/pilot-chain/](../records/pilot-chain/README.md), and the command below is taken from
+it: `run_pilot_v3.sh`'s fixed part, `pilot_rec2.sh`'s `BASE`, and the night series' arm A flags
+(rogue-xmas02.md 4DD). (Corrected 2026-11-12 20:15: the hand-composed version had `--steal`,
+which the chain never passes.) `--exp-first` and `--box-detector gpu` are defaults.
 
 ```bash
 nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --char rogue --map xmas_dun02 \
     --strategy P2 --search patrol --walk-trust --npc-guard --miss-cue --loot trim --clear-map \
-    --box-strike --box-now --self-recheck --still-strike --engage-screen --steal \
+    --minutes 25 --seed <SEED> --label <LABEL> --box-strike --box-now \
+    --self-recheck --still-strike --engage-screen \
     --reach-check --far-single --far-approach --explore --walk-pick --kill-gap --loot-first \
     --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2 --late-confirm \
-    --still-target --lead-press --value-target --hud --hud-fast 0.2 \
-    --minutes 25 --seed <SEED> --label <LABEL>
+    --still-target --lead-press \
+    --value-target --hud --hud-fast 0.2
 ```
+
+- The chain starts the detect server first (`scripts/unit_detector.py serve-cmd --backend openvino
+  --seconds <run + 150>`) and waits for its `"listening"` line; `run_pilot_v3.sh` shows how.
+- `--clear-map` types `@killmonster2` at the start: the map's MVP and every monster on it die,
+  then respawn (rogue-xmas02.md 4DI). It is a GM line, so `--player-mode` refuses it.
 
 **Immunity and the MVP, in one paragraph.** The map's MVP (Stormy Knight) killed the Rogue in two
 hits 0.4 s apart (p18, 2026-11-08), so runs are scheduled around it, never fought: with immunity ON
