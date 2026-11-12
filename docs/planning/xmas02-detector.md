@@ -4079,3 +4079,36 @@ the knight's labels are right. It does not say whether there are enough of them 
   Rogue holding target items in the DB's last save. Their recordings (24 MB, ~10 MB) were renamed
   `-ABORTED` on the NAS. The bag was cleared at 08:01; the staging runs once the DB has saved.
 
+### Amendment S2 (2026-11-12 08:06 ICT from `date`, BEFORE any T2 labeller): the alarm learns the knight's PARTY -- the Christmas Goblin
+
+- **Why (S1's finding):** the frozen rule labels the knight, but its 8 summons crowd it. The cache
+  would write only 3 + 5 knight boxes from sk1a + sk2a, too few for a class. The Christmas Goblin
+  (1607) is a summon ONLY on this map (1b): a Goblin in view means its master is near.
+  - Its labels are plentiful: 1,421 / 1,402 kept, ~1,015 above the T_h floor in each session.
+  - Garm Babies come with the knight too, but they are also a regular spawn: they already have their
+    own alarm (`--garm-fly`, Fly Wing on sight).
+- **The class plan, instead of S's knight-only class:**
+  - `classes-xmas02-sk.json` = classes-xmas02-gb + `8 Christmas Goblin 1607` + `9 Stormy Knight
+    1251`.
+  - The knight is kept as a class with the few boxes it has: its recall is reported, never a bar.
+  - The cache = xmas02gb's TRAIN + sk1a + sk2a; init xmas02gb; the epochs committed before the GPU
+    step.
+- **T2 (the pack S1 built, before any answer; two NEW blind labellers G and H; section 6's rule):**
+  - **species_pass["1607"]** (good >= 0.90, species >= 0.95 for each labeller) DECIDES whether
+    the Goblin is trained.
+  - species_pass["1251"] decides whether the knight is kept.
+  - The other species are reported and decide nothing.
+- **The bars (sk3a's held-out, once, after the freeze):**
+  - Q1 for the Goblin: recall >= 0.80, precision >= 0.80.
+  - The knight: recall reported.
+  - The four species and the Garm Baby keep their Q1 (>= 0.80 each).
+  - D1 p95 <= 35 ms live.
+- **The runner (rogue-xmas02.md, its own pre-registration):** a Goblin OR a knight box in a fresh
+  detection joins `--garm-fly`'s alarm:
+  - within ~8 cells of her: the Fly Wing at once;
+  - farther: `--boss-walk`'s walk-away.
+  - A LIVE flee proof comes before any scored run without the kill-before-window protocol.
+- **Batt is told:** the knight alone cannot be learnt from these recordings, so the alarm keys on
+  its party. Spawning knights apart from their summons is not possible with the GM commands
+  allowed (the summons are its own skill).
+
