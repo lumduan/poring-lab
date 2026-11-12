@@ -5,7 +5,9 @@
 
 From the session's own logs, nothing else:
 - ``detections.jsonl`` (the box watcher's every call): the count by path (gpu / cpu / fallback)
-  and the GPU calls' ``ms`` (host clock, the frame to the decoded boxes) p50 / p95;
+  and the GPU calls' ``ms`` (host clock, the frame to the decoded boxes) p50 / p95. Since
+  dungeon@9.29c, --hud-fast's HUD-only GPU calls are logged apart (``detections_hud.jsonl``), so
+  this is the decisions' calls only; s73's 93.5-ms p95 (rogue-xmas02.md 4CI) still counted both;
 - ``events.jsonl``'s ``box_target`` events: ``det_ms``, ``boxes_after_ms`` (the boxes after the
   grab), ``verdict_from_grab_ms`` (the sword verdict after the grab), each p50 over the events that
   carry it, and how many were struck.

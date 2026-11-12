@@ -2113,6 +2113,7 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud"] = ["9.29"]
     if getattr(a, "hud_fast", None):  # dungeon@9.29b: the HUD-only detection rate
         out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
+        out["hud_prio"] = ["9.29c"]  # its GPU calls: a HUD twin the detect server serves last
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
     if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
@@ -2703,6 +2704,11 @@ class BoxWatch:
         self.hud_every_s: float | None = None
         self.hud_last: tuple[float, list[Any]] = (0.0, [])
         self.n_hud = 0
+        # dungeon@9.29c: on the GPU path the HUD-only detections run in their OWN thread
+        # (start_hud), on the detector's HUD twin and their own grab helper
+        self.hud_det: Any = None
+        self.hud_screen: Any = None
+        self.hud_th: threading.Thread | None = None
         self.n = 0
         self.n_self = 0
         self.n_skip = 0
@@ -2829,12 +2835,64 @@ class BoxWatch:
             return (b_v.x0, b_v.y0, b_v.x1, b_v.y1)
         return None if best is None else best[1:]
 
+    def start_hud(self, every_s: float, log_path: Path | None = None) -> None:
+        """--hud-fast: HUD-only detections every ``every_s`` into hud_last (dungeon@9.29b).
+
+        dungeon@9.29c (Batt 2026-11-11: a fast HUD that does not slow the decisions; s73's D1 p95
+        93.5 ms, rogue-xmas02.md 4CI): on the GPU path they run in a thread of their own, with
+        their own grab helper (ro_agent.Screen is one pipe), on the detector's HUD twin
+        (unit_detector.GpuDetector.hud_twin: a second connection the detect server serves only
+        between the decision calls' forwards, skipping a frame that cannot start in time). So a
+        kick never waits for a HUD call, and a decision call at most for one HUD forward in
+        flight. The twin never runs the CPU. Its calls are logged to ``log_path``, apart from the
+        decisions' detections.jsonl. The CPU detector keeps 9.29b's HUD calls between the
+        watcher's own (its worker is one pipe)."""
+        if not self.gpu:
+            self.hud_every_s = float(every_s)
+            return
+        self.hud_det = self.det.hud_twin()
+        self.hud_det.log_path = log_path
+        self.hud_screen = self.r.Screen()
+        self.hud_th = threading.Thread(target=self._hud_loop, args=(float(every_s),),
+                                       name="hud-watch", daemon=True)  # fmt: skip
+        self.hud_th.start()
+
+    def _hud_loop(self, every: float) -> None:
+        """dungeon@9.29c: the HUD twin's detections, one every ``every`` s, into hud_last only
+        (last / alarm / meta / n are the decisions'). A frame the server skipped, or any call
+        without GPU boxes, leaves hud_last as it was."""
+        while not self.halt.wait(every):
+            try:
+                t_h = time.monotonic()
+                img_h = np.ascontiguousarray(self.hud_screen.grab(*self.region)[1][..., :3])
+                raw_h = self.hud_det.detect(img_h)
+            except Exception:  # noqa: BLE001 -- display only: the HUD stream just stops
+                return
+            if self.hud_det.last_path != "gpu":
+                continue  # skipped by the server, or no GPU now: the HUD keeps what it has
+            with self.lock:
+                self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
+                self.n_hud += 1
+
+    def hud_info(self) -> dict[str, Any] | None:
+        """dungeon@9.29c: for the run's end event, the HUD twin's detections (None without)."""
+        if self.hud_det is None:
+            return None
+        return {"n_hud": self.n_hud, **self.hud_det.info()}
+
     def stop(self) -> None:
         self.halt.set()
         self.kick_ev.set()
         self.th.join(timeout=3)
         with contextlib.suppress(Exception):
             self.screen.proc.terminate()
+        hud_th = getattr(self, "hud_th", None)  # dungeon@9.29c (a test builds it without __init__)
+        if hud_th is not None:
+            hud_th.join(timeout=3)
+            with contextlib.suppress(Exception):
+                self.hud_screen.proc.terminate()
+            with contextlib.suppress(Exception):
+                self.hud_det.close()  # its socket only: the CPU worker is the watcher's
 
 
 def box_flags_refused(box_strike: bool, box_now: bool, detector: str) -> str | None:
@@ -4496,8 +4554,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                   min_interval_s=min(HUD_EVERY_S, hud_fast or HUD_EVERY_S),
                                   ttl_ms=(HUD_FAST_TTL_MS if hud_fast
                                           else oh.DEFAULT_TTL_MS))  # fmt: skip
-            if hud_fast and boxes is not None:
-                boxes.hud_every_s = float(hud_fast)
+            if hud_fast and boxes is not None:  # dungeon@9.29c: the GPU's in a thread of its own
+                boxes.start_hud(float(hud_fast), out / "detections_hud.jsonl")
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
         ours_used = -2e9
@@ -7269,6 +7327,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     "gpu": boxes.det.info() if boxes.gpu else None,
                     "spots_ignored": [list(c) for c in (box_spots.misses if box_spots else {})
                                       if box_spots and box_spots.ignored(c)]})  # fmt: skip
+                hud_rec = boxes.hud_info()  # dungeon@9.29c: the HUD twin's calls, when it ran
+                if hud_rec is not None:
+                    ev({"kind": "hud_watch", **hud_rec})
             if sitting:
                 agent_raw.keys(keys_["stand"])
             if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):  # dungeon@8.5
@@ -7713,7 +7774,10 @@ def main() -> int:
         metavar="S",
         help="dungeon@9.29b (with --hud; Batt 2026-11-11: the boxes come late, sometimes where "
         "the monster was): HUD-ONLY GPU detections every S seconds between the watcher's own, "
-        "sent as they come (a box lives 600 ms); the decisions never read them",
+        "sent as they come (a box lives 600 ms); the decisions never read them. dungeon@9.29c: on "
+        "the GPU they run in a thread of their own on a HUD-only connection, which the detect "
+        "server serves only between the decisions' calls (it skips a frame that cannot start in "
+        "time); logged to detections_hud.jsonl",
     )
     t.add_argument(
         "--value-target",
