@@ -6277,3 +6277,30 @@ the scorer before any trial runs.
   - A death or a hit DURING setup ends the trial at once: no re-warp, no `@alive`.
   - The staged knight's death is verified from its own `@mobsearch` line.
 
+### 4CV. The day chain's first starts: two refused p84s, both mine, and what changed (recorded 09:33 ICT from `date`)
+
+- **The MVP:** the chain started in KILL mode at 09:13:50 with LAST KILL 08:07:29 (4CU). It polled,
+  read the MVP ALIVE, and killed it at 09:19:10, which gives an exact window to 10:19:10.
+- **p84, attempt 1 (09:19:57): the detect server REFUSED.**
+  - The new `xmas02fi5` entry's ONNX was not in the NAS model folder (xmas02-detector.md O25).
+  - Fixed at 09:23, and a 45-s serve test listened with all 8 models.
+- **p84, attempt 2 (09:25:42): the pilot runner REFUSED a server that WAS listening.**
+  - The cause is the detect-prio server (de1cf141). Its listening line now has `"hud_wait_ms"`
+    between `"precision"` and `"gpu_clock"`, and run_pilot_v3's grep wanted the two side by side.
+  - Worse, a refusal waited out the server's whole 27-min time box. The recorder kept running and
+    she stood NOT immune for 5 min.
+  - I ended the server by its PID at 09:30. The packets show 0 hits and 0 deaths in that span. Her
+    immunity was ON again at 09:30:47.
+  - Fixed in run_pilot_v3.sh: the grep allows keys in between. A refusal now writes `run rc=REFUSED`,
+    so the chain ends the server in 30 s and the recorder stops.
+- **Both refused attempts made recordings with the HELD-OUT name.** They are renamed on the NAS:
+  `20261112T091958-` and `20261112T092543-rdp-hunt-xmas02-fiH1-ABORTED` (2 and 5 min, no run). The
+  held-out fiH1 is the THIRD attempt only.
+- **chain.py changes** (scratch, the night chain's file), all from this morning's slips:
+  - `gm()` checks `"typed": true`. A chat-guard repeat refusal types a `@where` filler and retries
+    once; anything else stops. Before this, a refused line returned "" silently.
+  - `--poll-max-min`.
+  - `--mvp-live`, for use only after a passing flee proof.
+- **p84, attempt 3:** started 09:33:11, the server listening at 09:33:23 (f32, floor 2450, 8 models).
+  It is the first run on the detect-prio server, so it gives D1's check.
+
