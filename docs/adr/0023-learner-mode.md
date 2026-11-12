@@ -1,13 +1,13 @@
 ---
 doc_type: decision
 hypothesis: null
-status: ACCEPTED (decided by Batt 2026-11-07; NOT BUILT yet)
+status: ACCEPTED (decided by Batt 2026-11-07); decision 1 BUILT 2026-11-12
 role: null
 verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [0006-sanctioned-test-environments.md, 0016-environment-interlock.md, 0019-windows-stays-clean.md, 0021-external-servers.md, 0001-single-rdp-session.md, ../planning/bot-server-cutover.md]
-next_action: "Design the build (a plan doc): the `declared` attestation in envstore / interlock / the Settings page, the Windows host as a console session setting, and the per-target remote identity (credentials, RDP certificate pin, Sunshine pairing) on a shared bot server. Until it is built, ADR-0006 / ADR-0016 and CLAUDE.md rule 9 stand as written."
+next_action: "Decision 1 (the `declared` attestation in envstore / interlock / the Settings page) is BUILT 2026-11-12 (section Implementation). Still to design and build: decision 3 (the learner's Windows gets only the remote program), decision 4 (the Windows host as a console session setting) and the per-target remote identity (credentials, RDP certificate pin, Sunshine pairing) on a shared bot server."
 ---
 
 # ADR-0023: Learner mode -- a person may declare permission; nothing on the learner's Windows
@@ -69,6 +69,7 @@ Batt's decision came from teaching, not from the lab (2026-11-07, during the bot
   (as today) or by a person's declaration (labelled "declared, not verified").
 - **ADR-0019:** reaffirmed and extended to learners: their Windows gets only the remote program.
 - **CLAUDE.md rule 9:** a pointer here. Until the build lands, rule 9 stands as written.
+  ➡️ 2026-11-12: decision 1 is built (section Implementation); decisions 3 and 4 are not.
 
 ## Open questions for the build (not decided here)
 - **Per-target identity on a shared bot server:** each learner's RDP credentials, the RDP
@@ -78,10 +79,69 @@ Batt's decision came from teaching, not from the lab (2026-11-07, during the bot
   unavailable on a declared server it is unused there, but the lab's own server still needs it per
   target.
 - **How long a declaration lasts:** per session, or until revoked; how it is shown to the next
-  learner who takes a turn.
+  learner who takes a turn. ➡️ 2026-11-12 build: until a person withdraws it (section
+  Implementation); how it is shown to the next learner is still open.
 
 ## Consequences
 - A learner with one PC, a class server someone hosts, and a shared bot server can run the bot
   after a few entries on one web page, with nothing extra on their Windows.
 - The lab keeps its verified ground truth: a declared session is visible as such and never counted.
 - The code to build it does not exist yet; the lab runs under ADR-0006 / ADR-0016 until it does.
+  ➡️ SUPERSEDED 2026-11-12 for decision 1: it is built (next section). Decisions 3 and 4 and the
+  per-target identity are still not built.
+
+## Implementation (2026-11-12): decision 1
+Why now, in Batt's words (2026-11-12, translated): "Don't lock: we cannot control other people
+anyway; just write a warning." and "The more we lock, the more it breaks later: a user configures
+their own rAthena on a public IP, but we lock it, and when they pull our git again their config
+breaks at once." Before this build a user-created Allowed environment could never be green: the
+interlock needs `signals`, a technical field neither the page nor an import can set, so it said
+`no_signals_configured`; packet attestation works only for the lab's own rAthena (our sniffer).
+
+What was built:
+- **The store** (`envstore.py`, `settings/environments.json`, gitignored: a pull never touches
+  it). An environment may carry `declared` = {`at` (ISO 8601 with offset), `peer` (the browser's
+  address from the write gate), `statement` (the person's own words, 10 to 500 characters)}.
+  Only an ALLOWED environment carries one (`validate`: `declaration_not_allowed_here`); changing
+  it away from allowed drops it. It is a technical field: export never writes it, and an import
+  that carries one is refused (`declaration_not_importable`); an import keeps the current ones.
+- **The rules** (`classify`): a new or changed declaration is its own change kind, `declare`, which
+  needs the statement; withdrawing it is `easy` (tightening). Every existing rule stands (easy /
+  normal / hard, one hard change per save). Audited as `declare` / `withdraw`: the environment, the
+  peer, the time and the statement.
+- **The write path** (`routes_settings.py`): the same `PUT /settings/environments` and the same
+  human-only gate (LAN browser + Origin + CSRF, never `:8001`, never the lab host, never
+  `WIN_HOST`, rate limit, audit). The page sends only the statement; the backend stamps `at` and
+  `peer` itself. The page sends the whole set, so a kept declaration comes back as the same
+  statement and keeps its time and peer.
+- **The interlock** (`interlock.py`): packet-attested environments are tried FIRST, exactly as
+  before. Only when none is green, a declared allowed environment is green when it has servers
+  (else `no_servers`), the capture lock is `rdp`/`console` and steady (else `lock_not_steady`),
+  and, only if the environment names a Windows host, `WIN_HOST` is that host (else
+  `host_mismatch`). No attestation and no signals are needed. Its reason is `declared` (the
+  attested one stays `ok`); the verdict's `verified` is False. A shipped `environments.yaml` that
+  sets `declared` is refused (`config_invalid`): a declaration is never a file's.
+- **The protocol**: `EnvironmentStatus.verified` (true = packet-verified, false = declared by a
+  person, not verified, null when not green), in `/health` and the console's Status.
+- **The console**: on an allowed environment's Settings card, a "Declare permission" section with
+  Batt's warning before the statement box, then "Declared by a person, not verified -- <date>" and
+  Withdraw. The form is offered only where the lab has no packet check of its own (no `signals`):
+  the lab's own environments do not show it, though the backend would accept one there too (it
+  would only ever be tried after the attested path, and labelled). A declaration that exists can
+  always be withdrawn. The banner and the mode badge say a declared green is a person's
+  declaration, not verified; a verified green reads as before. Text only (no HTML from stored
+  values).
+
+What it means for decision 2: a declared server is one our sniffer cannot see, so no packet
+metric, judge or dataset can contain its sessions; the `verified` label marks the rest. No
+research tool reads `verified` yet: a lab script that only checks `state == "green"` treats a
+declared green as green.
+
+How long a declaration lasts (an open question above): until a person withdraws it, or the
+environment stops being allowed. It survives restarts and pulls (the store is gitignored).
+
+NOT built here: decision 3 (nothing on the learner's Windows but the remote program), decision 4
+(the Windows host as a console setting; today `windows_host` is still technical, so a
+user-created environment has none and the declared path does not check the host), the per-target
+identity on a shared bot server, and a link from the game-file finder's `clientinfo.xml` check to
+the declaration (the finder works as before, separately).

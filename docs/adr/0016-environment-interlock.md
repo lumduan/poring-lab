@@ -31,7 +31,7 @@ next_action: "2026-10-06: user-managed environments (Settings page, asymmetric r
   History line "OS-level locks belong to production and teaching distributions only" would no
   longer hold for external environments: there, a confirmed OS lock is a required signal.
 
-> ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED, NOT BUILT):** the signals gain `declared` (a person's audited declaration of permission, labelled "declared, not verified"); packet attestation stays for the lab's own server and for every research count. Until the build lands, this record stands as written.
+> ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED; decision 1 BUILT 2026-11-12):** the signals gain a person's declaration: an environment is green either attested (as below, reason `ok`, `verified` true, tried first) or declared (reason `declared`, `verified` false, labelled "declared by a person, not verified"); packet attestation stays for the lab's own server and for every research count. ADR-0023's Implementation section has the rules.
 
 ## Rule
 The mux accepts a **BOT press** only while the interlock says so; everything else gets
