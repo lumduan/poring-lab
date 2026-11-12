@@ -4302,3 +4302,48 @@ def test_hud_fast_on_the_cpu_keeps_its_calls_between_the_watchers_own() -> None:
     assert rec["hud_prio"] == ["9.29c"]
     rec_off = dh.fixes_of(dh.argparse.Namespace(**base, hud=True, hud_fast=None))
     assert "hud_prio" not in rec_off and "hud_fast" not in rec_off
+
+
+# dungeon@9.34 (Batt 2026-11-12, rogue-xmas02.md 4CW): an EXP / Job EXP line is the kill, first
+
+
+def test_exp_kill_pairs_base_and_job_of_one_kill() -> None:
+    k1, pair = dh.exp_kill("base_exp", 10.0, None)
+    assert k1 and pair == ("base_exp", 10.0)
+    k2, pair = dh.exp_kill("job_exp", 10.2, pair)  # the same kill's other line
+    assert not k2 and pair is None
+    k3, pair = dh.exp_kill("base_exp", 12.0, pair)  # the next kill
+    assert k3
+
+
+def test_exp_kill_job_line_alone_is_a_kill() -> None:
+    # a max BASE level on a client that hides 0 EXP: only Job lines -- each one a kill
+    k1, pair = dh.exp_kill("job_exp", 5.0, None)
+    k2, pair = dh.exp_kill("job_exp", 7.0, pair)
+    assert k1 and k2
+
+
+def test_exp_kill_same_kind_twice_is_two_kills() -> None:
+    k1, pair = dh.exp_kill("base_exp", 5.0, None)
+    k2, _ = dh.exp_kill("base_exp", 5.3, pair)  # two kills printed close together
+    assert k1 and k2
+
+
+def test_exp_kill_other_kind_late_is_a_new_kill() -> None:
+    _, pair = dh.exp_kill("base_exp", 5.0, None)
+    k2, _ = dh.exp_kill("job_exp", 5.0 + dh.EXP_PAIR_S + 0.1, pair)
+    assert k2
+
+
+def test_exp_first_is_on_by_default_and_recorded() -> None:
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert dh.fixes_of(dh.argparse.Namespace(**base))["exp_first"] == [dh.EXP_PAIR_S, "9.34"]
+    assert "exp_first" not in dh.fixes_of(dh.argparse.Namespace(**base, exp_first=False))
+
+
+def test_kill_gap_yields_to_exp_lines_in_the_source() -> None:
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert 'if getattr(a, "kill_gap", False) and not exp_seen' in src  # n_lock: 0 hits
+    assert 'elif typ == "base_exp" or (exp_first and typ == "job_exp"):' in src

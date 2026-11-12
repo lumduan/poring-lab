@@ -6304,3 +6304,34 @@ the scorer before any trial runs.
 - **p84, attempt 3:** started 09:33:11, the server listening at 09:33:23 (f32, floor 2450, 8 models).
   It is the first run on the detect-prio server, so it gives D1's check.
 
+### 4CW. Batt's rule: an EXP / Job EXP line = the monster is dead, FIRST (dungeon@9.34, built 10:47 ICT from `date`)
+
+- **Batt (2026-11-12 ~10:3x, after playing the Thai dev server by hand at lv99, translated):**
+  - The screenshot: every kill prints `[Myst Case] ... '186'`, then `EXP '0' ...` and
+    `Job EXP '0' ...`, in a "Battle Message" tab. Its settings have two options ON: battle
+    messages and EXP gained.
+  - His decision: "Prepare for it, the same way as before: if EXP / Job EXP appear in the chat,
+    take the monster as dead -- as the FIRST thing."
+- **Why the lab never shows it:**
+  - rAthena e985006 sends the notice at max level too: `pc_gainexp` calls
+    `clif_displayexp(sd, 0, ...)` under `flag&4`, packet 0x0ACC at PACKETVER 20211103.
+  - The lab's 2021 client prints no 0-EXP line. Its EXP lines at lower levels are what
+    battle_log.py was built on.
+  - Our sniffer frames 0x0ACC without decoding it, so the packets never showed it.
+- **dungeon@9.34 `--exp-first` (ON by default; `--no-exp-first` rolls back):**
+  - A `base_exp` OR `job_exp` line is the kill: the event `kill by exp_line` with its `line`.
+  - One kill prints both lines. The other kind within `EXP_PAIR_S` = 1.0 s of the counted line is
+    the same kill (`exp_pair` count). The same kind twice is two kills; a Job line alone (a max
+    base level on a client that hides 0) is a kill.
+  - Once the client has printed any exp line in a run (the event `exp_seen`), `--kill-gap` infers no
+    kill: the lock's hit count reads 0, so the gap rule (5 hits) cannot fire. Locks then end by the
+    usual no-hit timers.
+- **Effect on today's pilots: none.** The lab's Base 99 / Job 50 Rogue gets no exp line, so
+  `exp_seen` stays false and `--kill-gap` works as before. A pair started before or after this
+  change is comparable.
+  - It changes behaviour only where the client prints exp lines: lower-level lab characters, and
+    the Thai server.
+- **Still open for the Thai server:** the reader's Thai glyphs need unscaled full-client PNGs.
+  Batt's crop is ~2x scaled, so `data/ui_anchors/battle_log/th/` holds his screenshots and the
+  README only. He will send them when he can.
+
