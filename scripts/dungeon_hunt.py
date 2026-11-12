@@ -640,7 +640,9 @@ def loot_recheck_refused(recheck: bool, loot_items: str | None) -> str | None:
 LOOT_MEMORY_VERSION = "9.37"
 MEMORY_S = 7.0  # the item model looks while a kill is younger than this (9.36's RECHECK_S)
 MEMORY_EVERY_S = 1.0  # at most one look this often
-MEMORY_KEEP_S = 12.0  # a remembered cell is kept this long after its last sighting
+# 4DB amendment (before p96): 12 -> 30 s. Kills come ~18.5 s apart at 194 / h, so a 12-s keep
+# expired cells just before the next loot step could take them.
+MEMORY_KEEP_S = 30.0  # a remembered cell is kept this long after its last sighting
 
 
 @dataclass(frozen=True)

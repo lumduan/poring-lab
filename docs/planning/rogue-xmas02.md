@@ -6549,3 +6549,10 @@ the scorer before any trial runs.
     `rescued` (steps that would have ended `no_items`), `visited`, `calm_<end>`, `picks`,
     `expired_time` / `_escape`, `left` (at the run's end).
   - Tests: `services/backend/tests/test_loot_memory.py` (19).
+- **4DB amendment (17:23 ICT from `date`, BEFORE p96 / p97; no memory run has happened):**
+  `MEMORY_KEEP_S` goes from 12 s to 30 s.
+  - The builder's risk (a): kills come ~18.5 s apart at p94's 194 / h. A cell is last seen at most
+    7 s after its kill, so a 12-s keep let it expire ~19 s after the kill, just before the next loot
+    step that would take it.
+  - The bars do not change. p96 / p97 are queued after p95.
+

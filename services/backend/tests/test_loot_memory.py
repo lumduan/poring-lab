@@ -81,7 +81,7 @@ def _k(cell: tuple[int, int], t: float) -> Any:
 
 
 def test_the_constants_are_the_pre_registered_ones() -> None:
-    assert (dh.MEMORY_S, dh.MEMORY_EVERY_S, dh.MEMORY_KEEP_S) == (7.0, 1.0, 12.0)
+    assert (dh.MEMORY_S, dh.MEMORY_EVERY_S, dh.MEMORY_KEEP_S) == (7.0, 1.0, 30.0)  # 4DB amendment
     assert dh.LOOT_MEMORY_VERSION == "9.37"
     assert dh.MEMORY_S == dh.RECHECK_S  # the same 7 s window as 9.36's pending kills
 
@@ -139,8 +139,10 @@ def test_a_remembered_cell_expires_keep_s_after_its_last_sighting_or_at_an_escap
     assert dh.memory_expire(mem, 100.0 + dh.MEMORY_KEEP_S, -1e9) == ({}, [(10, 10)], [])
     assert dh.memory_expire(mem, 101.0, 100.5) == ({}, [], [(10, 10)])  # seen before a Fly Wing
     assert dh.memory_expire(mem, 101.0, 99.0) == (mem, [], [])  # an escape BEFORE it: kept
-    two = {(1, 1): dh.Remembered(90.0, frozenset()), (2, 2): dh.Remembered(99.0, frozenset())}
-    keep, old, esc = dh.memory_expire(two, 103.0, -1e9)
+    now_ = 103.0  # (1, 1) seen one second past the keep, (2, 2) four seconds ago
+    two = {(1, 1): dh.Remembered(now_ - dh.MEMORY_KEEP_S - 1.0, frozenset()),
+           (2, 2): dh.Remembered(now_ - 4.0, frozenset())}  # fmt: skip
+    keep, old, esc = dh.memory_expire(two, now_, -1e9)
     assert list(keep) == [(2, 2)] and old == [(1, 1)] and esc == []  # each on its own clock
 
 
@@ -191,7 +193,7 @@ def test_a_whole_cycle_look_remember_merge_clear() -> None:
 
 def test_the_fixes_record_is_written_only_when_on() -> None:
     on = dh.fixes_of(dh.argparse.Namespace(**BASE, loot_items="xmas02fi5", loot_memory=True))
-    assert on["loot_memory"] == [7.0, 1.0, 12.0, "9.37"]
+    assert on["loot_memory"] == [7.0, 1.0, 30.0, "9.37"]
     assert "loot_recheck" not in on  # independent of --loot-recheck
     off = dh.fixes_of(dh.argparse.Namespace(**BASE, loot_items="xmas02fi5", loot_memory=False))
     assert "loot_memory" not in off
