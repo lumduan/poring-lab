@@ -6134,4 +6134,13 @@ with **W1 <= 3.5 %** (4CQ item 3).
     detection runs on the CPU fallback: reported (D1 and the loot detection's ms).
 - **Decisions:** each pair whose bars all pass JOINS THE BASE before the next pair. Two that join
   are then run together as the night's base. All go to Batt with the numbers.
+- **4CR amendment (07:31 ICT, BEFORE p84): `--hud-fast 0.2` returns to the base, display only.**
+  - The detect server now serves decision calls first: dungeon@9.29c, merged de1cf141, ADR-0005's
+    2026-11-12 amendment. The HUD runs on its own connection and thread, and a HUD frame that
+    cannot start within 150 ms is skipped.
+  - `detections.jsonl` now holds decision calls only, so D1 measures the decisions alone. **D1 p95
+    <= 35 ms on each run is its check**; a failure takes it off again for the next pair.
+  - The first run with it (p84) also checks the server's own `decision_wait_p95` and the
+    `hud_watch` skip counts.
+  - Batt's ask (2026-11-11 21:01: "the boxes come late ... use the GPU").
 
