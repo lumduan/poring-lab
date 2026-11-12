@@ -132,4 +132,3 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   worker's 6 GB (bot-server's trainer was OOM-killed at 6 GB; its Intel overlay gives 11 GB). Raise it in
   the machine's own `compose.override.yaml` (`mem_limit` == `memswap_limit`), never in a tracked file:
   docs/setup/new-lab-host.md section 5.
-\n
