@@ -67,3 +67,15 @@ def test_the_decision_is_4dds_bars() -> None:
     assert ss.decide(b_unread, a)["bars"]["harm_d1_p95"] is False  # an unread run never passes
     three = ss.arm_score([run(42, 0.25, [])] * 3, TABLE)
     assert ss.decide(three, a)["verdict"] == "NO_VERDICT"
+
+
+def test_mvp_sightings_count_distinct_knights_in_view() -> None:
+    import sk_flee_score as sk
+
+    assert ss.KNIGHT == sk.KNIGHT
+    pk = [{"type": "entity_appear", "gid": 5, "job": ss.KNIGHT},
+          {"type": "entity_appear", "gid": 5, "job": ss.KNIGHT},  # the same one again
+          {"type": "entity_appear", "gid": 6, "job": 1002},
+          {"type": "entity_vanish", "gid": 7, "job": ss.KNIGHT}]  # fmt: skip
+    assert ss.mvp_sightings(pk) == 1
+    assert ss.mvp_sightings([]) == 0

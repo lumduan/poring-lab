@@ -6642,6 +6642,9 @@ the scorer before any trial runs.
   - the chain restarts with `--mvp-live --no-immunity`: no `@monsterignore`, no `@killmonster2`
     before windows, no `@mobsearch`. The MVP lives, and the bot escapes it as a player would
     (`--garm-fly`, the boss guard).
+    ➡️ **CORRECTED 20:13 by 4DI: the MVP does NOT simply live.** The runner's own `--clear-map`,
+    a fixed flag of every pilot, still types `@killmonster2` at each run's setup (p100: 19:43:22).
+    The chain no longer kills it; the runner does.
   - The runner's own setup lines (the stock top-up, `@heal`, the map warp) are unchanged until Batt
     says whether "a normal player" covers them too: that is `--player-mode`, and its stock cannot be
     restocked yet.
@@ -6792,3 +6795,35 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   The arm-A numbers come from the same scorers over its 6 sessions.
 - **If the night ends early:** the pair is scored only if both runs complete, against at least 4
   complete arm-A runs. Anything less is NO_VERDICT.
+
+### 4DI. Correction: the runner's own `--clear-map` still kills the MVP at every run start (recorded 20:13 ICT from `date`; p101 running)
+
+- **Found while writing the base command down for a second install (gap Q).**
+  - `run_pilot_v3.sh` (the chain's pilot runner, scratch) passes `--clear-map` on EVERY pilot, as
+    it has since p3. That flag's setup types `@killmonster2` right after the warp.
+  - It ran in p99 and p100 too: p100's log has `thief gm: @killmonster2` at 19:43:22.
+  - **4DF's "the MVP lives" is therefore wrong.** The chain stopped killing it before windows; the
+    runner kept doing so at each start.
+- **What the MVP is in fact doing in the counted series** (from rAthena's spawn rule: a boss
+  respawns 60-70 min after its LAST death):
+  - Each start kills it when it is alive and every other monster on the map, which then respawn.
+  - When it is already dead, its timer runs on from the last real kill. With starts ~28 min apart,
+    it can come back in the middle of a later run. The bot then meets it as a player would
+    (`--garm-fly`, the boss guard).
+  - p98, p99, p100: no Stormy Knight came into view (no `entity_appear` of job 1251 in their
+    packets).
+- **The series stays as it is.** Both arms have the same setup, alternating, so 4DD's comparison
+  is still like with like. Removing `--clear-map` now would split the counted series in the
+  middle. Each run's MVP sightings (packets, job 1251) are now REPORTED beside its deaths.
+- **For Batt (the open question of 4DF, now with this line in it):** "a normal player" types no GM
+  line. The runner's setup still types these GM lines:
+  - `@killmonster2` (`--clear-map`; the MVP and the map's monsters);
+  - `@heal`;
+  - `@item` (the stock top-ups);
+  - `@warp` (to the map);
+  - the level hold.
+
+  Dropping them all is `--player-mode` (no line typed; the stock from the hotbar, the run ends
+  when the Fly Wings run low). Dropping only `--clear-map` leaves the MVP alive, which kills her in
+  ~0.4 s (11-08; 4CU's F1 death), and its escape is unproven. **Not changed without Batt's word.**
+

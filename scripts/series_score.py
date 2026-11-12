@@ -20,11 +20,14 @@ listed. On p84 + p85, p92 + p93, p94 + p95 and p96 + p97 this reproduces the fig
 ``--decide B:A`` applies 4DD's bars: D1 pooled kills / h of B >= A x (1 + --min-gain); D2 pooled
 common z/h of B >= A; no harm: deaths of B <= deaths of A, W1 of B <= 3.5 % pooled, D1 p95 <= 35 ms
 on every run of both arms. Fewer than --min-runs complete runs in an arm is NO_VERDICT (4DD).
+Each run's MVP sightings (distinct Stormy Knight gids in view, its packets) and deaths are
+REPORTED per run (4DI), never deciding.
 """
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 from collections.abc import Mapping, Sequence
@@ -32,8 +35,15 @@ from pathlib import Path
 from typing import Any
 
 COMMON_MAX = 3000  # z at Overcharge: items below it are "common" (4CR)
+KNIGHT = 1251  # Stormy Knight (sk_flee_score.KNIGHT): the map's MVP, sightings REPORTED (4DI)
 INCOME = ("picked", "stolen", "snatched")  # dungeon_judge.INCOME: the bot's own gains
 W1_MAX, D1_MAX_MS = 0.035, 35.0  # the base's no-harm bars (4CR / 4DD)
+
+
+def mvp_sightings(packets: Sequence[Mapping[str, Any]], job: int = KNIGHT) -> int:
+    """PURE (4DI): how many distinct MVP gids came into view in a run (``entity_appear``)."""
+    return len({int(p["gid"]) for p in packets
+                if p.get("type") == "entity_appear" and p.get("job") == job})  # fmt: skip
 
 
 def arm_score(
@@ -67,13 +77,15 @@ def arm_score(
     req = sum(int((r.get("refusals") or {}).get("requests") or 0) for r in runs)
     ign = sum(int((r.get("refusals") or {}).get("ignored") or 0) for r in runs)
     d1 = [(r.get("speed") or {}).get("gpu_ms_p95") for r in runs]
+    mvp = [r.get("mvp") for r in runs]
     per = (lambda x: round(x / hours, 1)) if hours > 0 else (lambda x: None)  # noqa: E731
     return {
         "runs": len(runs), "hours": round(hours, 4), "kills": kills, "deaths": deaths,
         "kills_h": per(kills), "gross_oc_h": per(gross), "common_h": per(common),
         "items_h": per(units), "rare": dict(sorted(rare.items())), "unpriced": sorted(unpriced),
         "w1": None if not req else round(ign / req, 4), "w1_counts": [ign, req],
-        "d1_p95": d1,
+        "d1_p95": d1, "mvp_seen": mvp, "deaths_by_run": [int(r["judge"].get("deaths") or 0)
+                                                          for r in runs],
     }  # fmt: skip
 
 
@@ -103,13 +115,22 @@ def decide(
     }
 
 
-def load_run(d: Path) -> dict[str, Any]:
+def load_run(d: Path, demo_roots: Sequence[Path] = ()) -> dict[str, Any]:
     def opt(name: str) -> Any:
         f = d / name
         return json.loads(f.read_text()) if f.exists() else None
 
-    return {"dir": str(d), "judge": json.loads((d / "judge.json").read_text()),
-            "speed": opt("speed.json"), "refusals": opt("refusals.json")}  # fmt: skip
+    judge = json.loads((d / "judge.json").read_text())
+    mvp = None  # 4DI: from the session's own packets, when its directory is found
+    sid = judge.get("session")
+    for root in demo_roots:
+        pk = root / str(sid) / "packets.jsonl.gz"
+        if sid and pk.exists():
+            with gzip.open(pk, "rt") as fh:
+                mvp = mvp_sightings([json.loads(x) for x in fh if '"entity_appear"' in x])
+            break
+    return {"dir": str(d), "judge": judge, "speed": opt("speed.json"),
+            "refusals": opt("refusals.json"), "mvp": mvp}  # fmt: skip
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--decide", default=None, metavar="B:A")
     ap.add_argument("--min-gain", type=float, default=0.03)
     ap.add_argument("--min-runs", type=int, default=4)
+    ap.add_argument("--demo-root", action="append", type=Path, default=None,
+                    help="where the sessions are (for the MVP sightings); default "
+                    "/dev/shm/poring-lab-demo")  # fmt: skip
     a = ap.parse_args(argv)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import econ_items
@@ -129,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         name, _, dirs = spec.partition("=")
         if not name or not dirs:
             ap.error(f"--arm {spec!r}: want NAME=DIR,DIR,...")
-        runs = [load_run(Path(x)) for x in dirs.split(",") if x]
+        roots = a.demo_root or [Path("/dev/shm/poring-lab-demo")]
+        runs = [load_run(Path(x), roots) for x in dirs.split(",") if x]
         arms[name] = arm_score(runs, table)
         print(json.dumps({"arm": name, **arms[name]}))
     if a.decide:
