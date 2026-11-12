@@ -351,11 +351,22 @@ def check(run: Mapping[str, Any]) -> list[str]:
     t, jv, e = run["totals"], run.get("judge_value") or {}, run.get("econ_row") or {}
     if "value" in jv and (t["gross"], t["gross_oc"]) != (jv["value"], jv["value_oc"]):
         bad.append(f"gross {t['gross']}/{t['gross_oc']} != judge {jv['value']}/{jv['value_oc']}")
-    if e.get("cost") is not None and (float(t["cost"]), float(t["cost_dc"])) != (
+    # 2026-11-12 (Batt's own run ate 3 Candies and 2 Candy Canes): econ_row prices only what an NPC
+    # sells; the candies' FORGONE SALE (FORGONE_SALE_IDS) is this export's own addition, so like is
+    # compared with like -- the shop-priced part only
+    fg = sum(
+        int(r["used"]) * int(r["npc_buy"])
+        for r in run.get("consumables") or []
+        if r.get("price_basis") == "forgone_sale" and r.get("npc_buy") is not None
+    )  # a sale gets no Discount: the same amount in both columns
+    if e.get("cost") is not None and (float(t["cost"]) - fg, float(t["cost_dc"]) - fg) != (
         float(e["cost"]),
         float(e["cost_dc"]),
     ):
-        bad.append(f"cost {t['cost']}/{t['cost_dc']} != econ_row {e['cost']}/{e['cost_dc']}")
+        bad.append(
+            f"cost {t['cost']}/{t['cost_dc']} (of which forgone sales {fg}) != econ_row "
+            f"{e['cost']}/{e['cost_dc']}"
+        )
     pv = sum(r["picked_of_dropped"] * r["sell"] for r in run["items"] if r["sell"] is not None)
     if e.get("picked_value") is not None and float(pv) != float(e["picked_value"]):
         bad.append(f"picked drops value {pv} != econ_row {e['picked_value']}")
@@ -493,7 +504,11 @@ def judge_session(
         or man.get("map")
         or dj.MAP
     )
-    judged = dj.judge(ev, pk, table, man, map_name=mp, drop_order=dj.drop_order_of(mp, maps_path))
+    t0, t1 = human_window(man)
+    judged = dj.judge(ev, pk, table, man, map_name=mp, drop_order=dj.drop_order_of(mp, maps_path),
+                      t0=t0, t1=t1)  # fmt: skip
+    if t0 is not None:
+        judged["window"]["source"] = HUMAN_WINDOW
     judged["session"] = dj.session_dir(session).name
     w = judged["window"]
     krows, fates = dj.kills_loot(pk, int(w["t0"]), int(w["t1"]))
@@ -505,6 +520,22 @@ def judge_session(
         "where": str(dj.session_dir(session)),
         "clock": run_clock(str(judged["session"]), ev, w, man),
     }
+
+
+HUMAN_WINDOW = (
+    "manifest t0_live_ns..t_end_ns (a human demo: his first input to the recording's end)"
+)
+
+
+def human_window(man: Mapping[str, Any]) -> tuple[int | None, int | None]:
+    """PURE (Batt 2026-11-12: "record my stats on the economy page too"): a PLAYED human demo
+    (human_demo.py) is judged from his first input (t0_live_ns) to the recording's end (t_end_ns),
+    dungeon_judge's ``--live`` rule, never from arming (minutes of waiting before he started) nor
+    through the aftercare's warp and @heal. (None, None) for every other session: unchanged."""
+    t0, t1 = man.get("t0_live_ns"), man.get("t_end_ns")
+    if not (isinstance(t0, int) and isinstance(t1, int)) or t1 <= t0:
+        return None, None
+    return t0, t1
 
 
 def entry_of(

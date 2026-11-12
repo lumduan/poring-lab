@@ -406,3 +406,36 @@ def test_candies_eaten_cost_the_npc_sale_they_forgo() -> None:
     assert sorted(ed.FORGONE_SALE_IDS) == [529, 530]
     potion = ed.consumable_rows([POTION_X], TABLE, NAMES)[0][0]
     assert potion["price_basis"] == "npc_buy"
+
+
+def test_a_played_human_demo_is_judged_from_the_first_input() -> None:
+    """Batt 2026-11-12 ("record my stats on the economy page too"): dungeon_judge's --live rule."""
+    import econ_dash as ed
+
+    man = {"t0_mono_ns": 100, "t0_live_ns": 700, "t_end_ns": 2_500, "t1_mono_ns": 3_000}
+    assert ed.human_window(man) == (700, 2_500)  # not from arming, not through the aftercare
+    assert ed.human_window({"t0_mono_ns": 100, "t1_mono_ns": 3_000}) == (None, None)  # a run
+    assert ed.human_window({"t0_live_ns": None, "t_end_ns": 2_500}) == (None, None)  # unplayed
+    assert ed.human_window({"t0_live_ns": 900, "t_end_ns": 900}) == (None, None)
+
+
+def test_the_cost_check_leaves_the_candies_forgone_sale_out() -> None:
+    """Batt's 2026-11-12 run ate 3 Candies + 2 Candy Canes: econ_row prices only NPC-sold items,
+    the export adds the candies' forgone sale (9.31), so the check compares the shop part only."""
+    import econ_dash as ed
+
+    run = {
+        "totals": {"gross": 0, "gross_oc": 0, "cost": 1235.0, "cost_dc": 947.0},
+        "judge_value": {},
+        "econ_row": {"cost": 1200.0, "cost_dc": 912.0},
+        "items": [],
+        "consumables": [
+            {"item_id": 504, "used": 1, "npc_buy": 1200, "price_basis": "npc_buy"},
+            {"item_id": 529, "used": 3, "npc_buy": 5, "price_basis": "forgone_sale"},
+            {"item_id": 530, "used": 2, "npc_buy": 10, "price_basis": "forgone_sale"},
+        ],
+    }
+    assert ed.check(run) == []
+    # a real disagreement in the shop part is still caught
+    bad = {**run, "econ_row": {"cost": 1100.0, "cost_dc": 836.0}}
+    assert ed.check(bad) and "forgone sales 35" in ed.check(bad)[0]

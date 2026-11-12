@@ -722,7 +722,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "autoguard": len(falls(sp, AG_SP, skip)),
         "autoguard_h": per_h(len(falls(sp, AG_SP, skip))),
         "endure": len(falls(sp, ENDURE_SP, skip)),
-        "char": rs.get("char") or "crusader",
+        "char": char,  # 2026-11-12: a human demo's manifest names it (Batt's Rogue read "crusader")
         "items": items_rows(gains, h, item_names()),
         "value": items_value(items_rows(gains, h, item_names()), table, h),
         "steal": {"tries_packets": len(st_falls), "stolen": n_stolen,
