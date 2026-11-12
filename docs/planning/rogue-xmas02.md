@@ -6954,3 +6954,57 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   3. Built now, pre-registered BEFORE its runs, queued after p113: the Knife swap v2, as two
      pairs to ~06:00. The comparison is arm A pooled, like 4DH.
   4. In the morning: every verdict, with each arm as a share of Batt's run (4DK).
+
+### 4DM. Two pairs to 06:00, pre-registered BEFORE either runs: the Knife on the fast-loot arm, and `--defend-box` (written 22:45 ICT from `date`)
+
+**Why these two (4DK, Batt's run as the bar):**
+- The bot already plays Batt's Knife fight. On the same ruler (`weapon_swap_study.py`), p73 / p74
+  had:
+  - 7 / 8 Knife hits before the steal (Batt 7);
+  - 18 hits a kill (18);
+  - an 8.9 / 8.7-s stolen fight (8.9);
+  - the swap back 0.34 s after the steal (Batt 1.36 s);
+  - a steal on 88 % / 82 % of kills (91 %).
+- What it lacked was Batt's ~2 s of idle a kill (the bot: 8.6). The Knife's longer fights
+  without his short gaps cost 27 % of the kills (4CK). So the Knife is tried ON the arm whose
+  loot path cut the post-kill pause (arm B: 3.76 -> 1.05 s to the next move).
+- And the second-largest idle loss, the reaction to a monster that hit first (2.31 vs 0.38 s a
+  kill), gets its own one-change pair: `--defend-box` (dungeon@9.39, 8a85bb9d).
+
+**Pair K, p114 + p115 (recorded `hunt-xmas02-fiT64` / `-fiT65`):**
+- Flags: arm B's (`--value-target --hud --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory`) +
+  the Knife as 4CE ran it (`--bare-steal --bare-ready --steal-opener F4 --steal-cue popup
+  --swap-gap`). F4 holds the Knife, and Damascus +8 is worn at the start (F5 reads empty, the
+  runner's own start check). The run always puts Damascus back before it ends (BareCtl
+  `run_end`).
+- **Its base: the night series' arm B pooled** (p101, p103, p105, p107, p109, p111).
+- **K1 (the mechanism):** steals a kill >= arm B's + 0.15 (`weapon_swap_study.py`'s
+  with_steal / kills).
+- **K2 (the decision bar, Batt's goal):** common-item z/h >= arm B's (`series_score.py`). Gross
+  is reported, not deciding: a rare drop must not decide it (4CK).
+- **K3 (the cue):** popup equips with a packet steal before them >= 90 % (4CE's B4). 0 swap-fail
+  stops.
+- **Reported:** kills / h (expected to fall: the Knife's longer fights), items / h, the swap back
+  after the steal (s), and each figure as a share of Batt's run.
+- **No harm:** deaths <= arm B's; W1 <= 3.5 % pooled; D1 p95 <= 35 ms on each run; hard bars.
+
+**Pair D, p116 + p117 (recorded `-fiT66` / `-fiT67`):**
+- Flags: arm A's (`--value-target --hud --hud-fast 0.2`) + `--defend-box`.
+- **Its base: the night series' arm A pooled** (p100, p102, p104, p106, p108, p110; p102 is the
+  re-run).
+- **D-a (the mechanism):** the reaction to a monster that hit first (`time_budget.py`,
+  approach_react s a kill) <= arm A's - 0.8 s.
+- **D-b (the decision bar):** pooled kills / h >= arm A's x 1.03.
+- **Reported:** the defend-box tries and strikes (the runner's counts), the ring scans after
+  them, common z/h, and each figure as a share of Batt's run.
+- **No harm:** R1-A pooled < 7 (`lock_study.py`); deaths <= arm A's; W1 <= 3.5 %; D1 p95
+  <= 35 ms; hard bars.
+
+**Rules (both):**
+- A pair is scored only if both runs complete. Fewer than 4 complete base runs in its arm is
+  NO_VERDICT.
+- All bars pass -> it JOINS THE BASE (K on arm B's base, D on arm A's). Otherwise a FLAG,
+  reported with its numbers.
+- The chain's own stop rules apply. A death of a kind its base arm never had stops the chain for
+  a person.
+- Order: K first (Batt's priority), then D. Expected end ~05:55.
