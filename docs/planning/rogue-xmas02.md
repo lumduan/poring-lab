@@ -6423,3 +6423,32 @@ the scorer before any trial runs.
   recordings (`settle_study.py`: per fall, the first frame after it in which the model boxes a
   new floor item).
 
+### 4DA. The settle study, and the next loot pair pre-registered: a DEFERRED item re-check (pre-registered 14:53 ICT from `date`, BEFORE its runs)
+
+- **The settle study** (`settle_study.py`, scratch; p90 / p91's own 1-fps recordings fiT39 / fiT40;
+  the xmas02fi5 ONNX on the CPU).
+  - For each of the 53 falls (packets): the first frame after the fall in which the model boxes
+    more floor items than in the last frame before it.
+  - Seen by 1 s: 11 / 53; 2 s: 25; 3 s: 30; 4 s: 32; 5 s: 38; 6 s: 42. Never within 9 s: 8.
+  - Median 1.7 s, q75 4.2 s, q90 5.5 s.
+  - It agrees with the live miss: the loot step asked at about +2-3 s, when ~57 % were visible.
+  - A FIXED wait in the loot step would cost ~3 s on most steps, more than the old sweep (2.9 s):
+    rejected.
+- **The candidate, `--loot-recheck` (to be built, OFF by default, with `--loot-items`):**
+  - The loot step stays as 9.33: no items seen means it goes back to hunting.
+  - Each kill's 5 x 5 cells then stay "pending" for `RECHECK_S` = 7.0 s.
+  - While a kill is pending, the item model runs on the box watcher's frames at most once a second
+    (GPU, ~16 ms).
+  - When it boxes an item inside a pending kill's cells, and no fight holds her, the bot goes back
+    and loots those cells: hovers, as the loot step does. That kill is then done.
+  - Recorded: `recheck` events (the kill, the delay to the first sighting, the cells looted).
+- **The pair p94 + p95** (after it is built and tested), on today's base + `--loot-items xmas02fi5
+  --loot-recheck`, against the base pair p84 + p85:
+  - R-a (the mechanism): L1 >= base - 5 pts = 92.4 %.
+  - R-b (the decision bar): kills / h >= base + 3 % = 159.30 AND common-item z/h >= the base
+    pair's 52,686.
+  - No harm: the base's bars (deaths 0, W1 <= 3.5 %, D1 p95 <= 35 ms, R1-A pooled < 7).
+- **Meanwhile: two BASE repeats, p92 + p93** (today's base flags, no bar). The base's own two runs
+  differ by 21 kills / h (p84 144.0, p85 165.3), so the base pair's estimate gets more runs. They
+  are reported with p84 + p85; the comparison base stays p84 + p85 as pre-registered.
+
