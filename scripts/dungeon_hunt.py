@@ -256,6 +256,12 @@ QUICK_ARROW_S, QUICK_HIT_S, QUICK_RETRY = 2.0, 2.0, 2
 # contacts (2-4 of our hits, then the target walked off alive); 5 keeps 27 of its 28 real ones and 3
 # of the 17 false ones (a real kill took 3-22 hits, median 15).
 KILL_GAP_S, KILL_GAP_HITS = 1.5, 5
+# dungeon@9.34 (Batt 2026-11-12, rogue-xmas02.md 4CW): an EXP or a Job EXP line in the Battle Log =
+# the monster is DEAD, FIRST. One kill prints both lines: the other kind within EXP_PAIR_S of the
+# counted one is the same kill. Once the client has printed any exp line in a run, --kill-gap infers
+# no kill (the client says it). The Thai dev server prints EXP '0' at Base 99; the lab's 2021 client
+# prints no 0-EXP line, so the lab's Base-99 Rogue still relies on --kill-gap (unchanged there).
+EXP_PAIR_S = 1.0
 # 9.13d (after p37, rogue-xmas02.md 4AR): after a loot step that clicked an item, the next walk
 # click waits for a position read taken LOOT_SETTLE_S after the step (the pickup walk moved us; a
 # target computed from the stale cell was dropped by the client: 8 of p37's 11 unsent walk
@@ -2186,6 +2192,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
             "9.13d",
             LOOT_SETTLE_S,
         ]  # b no_miss, c 5 hits, d the loot settle (after p37)
+    if getattr(a, "exp_first", True):  # dungeon@9.34 (Batt 11-12, rogue-xmas02.md 4CW): ON
+        out["exp_first"] = [EXP_PAIR_S, "9.34"]
     if getattr(a, "garm_fly", False):  # dungeon@9.19 (rogue-xmas02.md 4BA)
         out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19"]
         if getattr(a, "garm_confirm", GARM_CONFIRM) != GARM_CONFIRM:
@@ -2636,6 +2644,18 @@ def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GA
     """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
     landed on this lock and none for ``gap_s`` since the last."""
     return hits_on_lock >= min_hits and since_last_hit > gap_s
+
+
+def exp_kill(
+    kind: str, tick: float, pair: tuple[str, float] | None, pair_s: float = EXP_PAIR_S
+) -> tuple[bool, tuple[str, float] | None]:
+    """PURE (dungeon@9.34, exp-first): is this exp line (``kind`` "base_exp" / "job_exp") a NEW
+    kill? ``pair`` is the last counted kill's line (kind, tick) while it waits for its other
+    half: the other kind within ``pair_s`` is the same kill (the pair closes, no kill); anything
+    else (the same kind again, or later) is a new kill whose line opens a pair."""
+    if pair is not None and pair[0] != kind and tick - pair[1] <= pair_s:
+        return False, None
+    return True, (kind, tick)
 
 
 def scan_needed(now: float, last_taken: float, last_ours: float, last_swing: float,
@@ -4823,6 +4843,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 1 for t_o in ours_ticks if t0_ <= t_o <= t1_))  # fmt: skip
             ev_hooks.append(ex_rec.on_event)
         kills_seen: list[float] = []
+        exp_first = bool(getattr(a, "exp_first", True))  # dungeon@9.34 (Batt 11-12)
+        exp_seen = False  # 9.34: the client printed an exp line in this run
+        exp_pair: tuple[str, float] | None = None  # 9.34: the last exp kill's line, unpaired
         mode = "search"
         lock: dict[str, Any] | None = None
         sitting = False
@@ -6626,10 +6649,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     elif typ == "damage":
                         last_ours = tick
                         ours_ticks.append(tick)
-                    elif typ == "base_exp":
+                    elif typ == "base_exp" or (exp_first and typ == "job_exp"):
+                        if exp_first:  # dungeon@9.34: EXP / Job EXP = dead, one kill per pair
+                            if not exp_seen:
+                                ev({"kind": "exp_seen", "line": typ})
+                            exp_seen = True
+                            new_kill, exp_pair = exp_kill(typ, tick, exp_pair)
+                            if not new_kill:
+                                counts["exp_pair"] += 1
+                                continue
                         kills_seen.append(tick)
-                        ev({"kind": "kill", "by": "exp_line", "gm": None if here is None
-                            else list(here)})  # fmt: skip
+                        ev({"kind": "kill", "by": "exp_line", "line": typ, "gm": None
+                            if here is None else list(here)})  # fmt: skip
                         if here is not None:  # the loot list: the 5 x 5 around us at this death
                             loot_list.append((here, tick))
                             if loot_aim:  # dungeon@9.32: the nearest box's cell at this death
@@ -6882,8 +6913,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             last_ours = bare.swap_t  # a swap restarts the no-hit clocks
                         since = tick - lock["t"]
                         idle = tick - max(last_ours, lock["t"])
+                        # dungeon@9.34: once the client printed an exp line, it says the kill:
+                        # no hit count, so --kill-gap infers none (exp lines first, Batt 11-12)
                         n_lock = (sum(1 for t_o in ours_ticks if t_o >= lock["t"])
-                                  if getattr(a, "kill_gap", False) else 0)  # fmt: skip
+                                  if getattr(a, "kill_gap", False) and not exp_seen
+                                  else 0)  # fmt: skip
                         if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):
                             # dungeon@9.13: our hits stopped -> taken as the kill (no exp line)
                             ev({"kind": "unlock", "why": "kill_gap", "s": round(since, 1),
@@ -7702,6 +7736,14 @@ def main() -> int:
         help="dungeon@9.13c (rogue-xmas02.md 4AF; OFF by default): after 5 of our hits on the "
         "lock, none for 1.5 s is taken as the kill (no exp line at Base 99): the lock goes and a "
         "quiet fight ends without the scan",
+    )
+    t.add_argument(
+        "--exp-first",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="dungeon@9.34 (Batt 2026-11-12, rogue-xmas02.md 4CW; ON by default): an EXP or Job "
+        "EXP line in the Battle Log is the kill, first (Base + Job of one kill count once, paired "
+        "within 1 s); once the client printed any exp line in the run, --kill-gap infers no kill",
     )
     t.add_argument(
         "--walk-pick-step",
