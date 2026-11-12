@@ -769,8 +769,8 @@ later. Here is what the lab allows TODAY, what is being built, and the warnings.
 - [ADR-0006](../adr/0006-sanctioned-test-environments.md) sanctions exactly two environments:
   the self-hosted rAthena on the LAN, and one community bot-testing server whose permission
   evidence is still pending. Official servers and every other public server are forbidden, for
-  every component, in every mode. This second installation is Batt's lab too, so ADR-0006 binds
-  it exactly as it binds bot-server.
+  every component, in every mode. This binds the lab bot-server and what its agent does. On a
+  copy YOU run, you are the person who decides; the warnings below apply.
 - The interlock ([ADR-0016](../adr/0016-environment-interlock.md)) lets the bot press keys only
   while an Allowed environment is ATTESTED: our own sniffer, on our own rAthena, sees a live
   session of a lab account from the game PC. In ASSIST only (a mode only a person sets), a
@@ -793,7 +793,7 @@ for other users ("the more we lock, the more it breaks later"), plain warnings i
 build lands, ADR-0006 / ADR-0016 stand as written.
 
 **The warnings, for every user of the code** (ADR-0023 decision 5 makes the official-server list a
-DEFAULT for other users; for Batt's own lab installs, ADR-0006's ban on official servers stays
+DEFAULT for other users; on the lab bot-server, ADR-0006's ban on official servers stays
 absolute):
 - Run the bot only on a server whose owner permits bots. Their rules can change; check them again
   before each new series.
