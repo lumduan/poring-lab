@@ -1,0 +1,12 @@
+# ADR-0022 Amendment 2026-11-12: the dedicated NVIDIA overlay for the long-lived vision worker,
+# the worker's twin of compose.nvidia.yaml. Never used on VM 103. guarded_build adds it LAST,
+# after compose.vision-worker.yaml, when the host profile is dedicated-nvidia. The same ONE change,
+# nothing else (tests/test_guards.py): no VRAM cap by default, the host is dedicated. The CUDA
+# image, the NVIDIA reservation, the agent network only, the mounts (the detect socket's included)
+# and the memory cap (6g, mem == memswap; the Intel worker's 11g was bot-server's own 15 GiB, Batt
+# 2026-11-08) stay compose.vision-worker.yaml's. A value in .env still wins over the default below:
+# set VISION_MAX_VRAM_FRACTION=1.0 there.
+services:
+  vision-worker:
+    environment:
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}

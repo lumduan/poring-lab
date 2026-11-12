@@ -1139,6 +1139,43 @@ def test_the_intel_image_never_gets_the_packet_or_dataset_package() -> None:
     assert "PORING_ACCEL=xpu" in text
 
 
+# --- ADR-0022 Amendment 2026-11-12: the dedicated NVIDIA overlays (a new host's own NVIDIA card) --
+NVIDIA_OVERLAYS = {
+    "compose.nvidia.yaml": ("vision", "compose.yaml"),
+    "compose.vision-worker.nvidia.yaml": ("vision-worker", "compose.vision-worker.yaml"),
+}
+NO_VRAM_CAP = {"VISION_MAX_VRAM_FRACTION": "${VISION_MAX_VRAM_FRACTION:-1.0}"}
+
+
+@pytest.mark.parametrize(
+    ("name", "svc", "base"), [(n, s, b) for n, (s, b) in NVIDIA_OVERLAYS.items()]
+)
+def test_the_nvidia_overlays_change_only_the_vram_cap(name: str, svc: str, base: str) -> None:
+    """dedicated-nvidia (Batt 2026-11-12: "NVIDIA on a new machine still needs a profile") is
+    shared-nvidia's CUDA path with the dedicated rules. Its overlays lift the 25 % VRAM cap (R1 on
+    the shared host) and set NOTHING else: the CUDA image, the NVIDIA reservation, the agent
+    network only, no X, mem == memswap, oom_score_adj and the mounts stay the base file's."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import host_profile
+
+    prof = host_profile.PROFILES["dedicated-nvidia"]
+    assert (*prof.vision_overlay, *prof.worker_overlay) == tuple(NVIDIA_OVERLAYS)
+    assert compose(name)["services"] == {svc: {"environment": NO_VRAM_CAP}}
+    assert set(compose(name)) == {"services"}  # no networks, volumes or anything else
+    text = (ROOT / name).read_text()
+    assert "!reset" not in text and "!override" not in text
+    spec = compose(base)["services"][svc]  # what the overlay leaves in place
+    assert spec["environment"]["VISION_MAX_VRAM_FRACTION"] == "${VISION_MAX_VRAM_FRACTION:-0.25}"
+    assert "PORING_ACCEL" not in spec["environment"]  # auto: cuda first (poring_vision.accel)
+    assert spec["image"] == "poring-lab/vision:local"
+    assert spec["deploy"]["resources"]["reservations"]["devices"] == [
+        {"driver": "nvidia", "count": 1, "capabilities": ["gpu"]}
+    ]
+    assert spec["networks"] == ["agent"] and "devices" not in spec
+
+
 def _pins(text: str) -> dict[str, str]:
     pin = re.compile(r"^([A-Za-z0-9_.-]+)==([^ ;\\\n]+)", re.M)
     return {m[1].lower(): m[2] for m in pin.finditer(text)}
@@ -1213,7 +1250,8 @@ def test_the_media_probe_is_contained_and_never_started_by_default() -> None:
     assert "environment" not in probe and "env_file" not in probe
     assert "depends_on" not in probe
     for name in ("compose.dev.yaml", "compose.intel.yaml", "compose.vision-worker.yaml",
-                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml"):  # fmt: skip
+                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml",
+                 *NVIDIA_OVERLAYS):  # fmt: skip
         assert "media-probe" not in (compose(name).get("services") or {}), name
     for svc, spec in services.items():
         if svc != "media-probe":
@@ -1257,7 +1295,8 @@ def test_the_recording_bench_is_the_probe_contained_plus_three_binds() -> None:
     assert bench["restart"] == "no"
     assert "environment" not in bench and "env_file" not in bench and "depends_on" not in bench
     for name in ("compose.dev.yaml", "compose.intel.yaml", "compose.vision-worker.yaml",
-                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml"):  # fmt: skip
+                 "compose.vision-worker.intel.yaml", "compose.vision-dev.yaml",
+                 *NVIDIA_OVERLAYS):  # fmt: skip
         assert "media-recbench" not in (compose(name).get("services") or {}), name
     for name in ("compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"):
         for svc, spec in (compose(name).get("services") or {}).items():
@@ -1291,7 +1330,7 @@ MEDIAREC_CTL = "/dev/shm/poring-lab-mediarec"
 MEDIAREC_REC = "${HOME}/poring-lab-rec/.media-rec"
 COMPOSE_FILES = ("compose.yaml", "compose.dev.yaml", "compose.intel.yaml",
                  "compose.vision-worker.yaml", "compose.vision-worker.intel.yaml",
-                 "compose.vision-dev.yaml")  # fmt: skip
+                 "compose.vision-dev.yaml", *NVIDIA_OVERLAYS)  # fmt: skip
 
 
 def test_the_stage_2_sidecar_is_the_probe_contained_plus_three_binds() -> None:

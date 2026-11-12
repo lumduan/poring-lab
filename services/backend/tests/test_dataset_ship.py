@@ -70,10 +70,13 @@ def test_the_free_space_floor_is_batts_100_gb(
     ds: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on VM 103's shared root
-    disk (120 GB since 11-05, 140 GB before); Batt 2026-11-08: 30 GB on bot-server (dedicated)."""
-    assert ds.MIN_FREE_BY_PROFILE == {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9}
+    disk (120 GB since 11-05, 140 GB before); Batt 2026-11-08: 30 GB on bot-server (dedicated).
+    2026-11-12: every DEDICATED profile takes the dedicated floor (dedicated-nvidia too)."""
+    assert ds.MIN_FREE_BY_PROFILE == {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9,
+                                      "dedicated-nvidia": 30 * 10**9}  # fmt: skip
     assert ds.min_free_bytes("shared-nvidia") == 100 * 10**9
     assert ds.min_free_bytes("dedicated-intel") == 30 * 10**9
+    assert ds.min_free_bytes("dedicated-nvidia") == 30 * 10**9
     assert ds.min_free_bytes() == ds.MIN_FREE_BYTES  # this host's, read from its .env
     floor = 100 * 10**9
     monkeypatch.setattr(ds, "free_bytes", lambda path: 99 * 10**9)
@@ -218,14 +221,16 @@ def test_ship_refuses_during_set_hours_unless_forced(
     assert not (dirs.root / SID).exists()
 
 
+@pytest.mark.parametrize("profile", ["dedicated-intel", "dedicated-nvidia"])
 def test_a_dedicated_host_ships_during_set_hours(
-    ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+    ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, profile: str
 ) -> None:
     """Batt 2026-11-10: bot-server (dedicated-intel) waits for nothing of the quant work; the gate
-    stays on a shared host (the test above)."""
-    monkeypatch.setenv("LAB_HOST_PROFILE", "dedicated-intel")
+    stays on a shared host (the test above). 2026-11-12: a dedicated NVIDIA host neither."""
+    monkeypatch.setenv("LAB_HOST_PROFILE", profile)
     monkeypatch.setattr(ds, "now", lambda: WEDNESDAY_10)
     assert ds.market_gate_applies() is False
+    assert ds.market_gate_applies(profile) is False
     assert ds.market_gate_applies("shared-nvidia") is True
     make_session(dirs.root, SID)
     assert ds.main(ship_argv(dirs)) == 0  # no --force-market needed
