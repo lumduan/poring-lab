@@ -7,7 +7,7 @@ verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [0005-vision-x-access.md, 0018-component-licensing.md, ../planning/gpu-live-detector.md, ../planning/bot-server-migration.md]
-next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backend + the torch device layer, each proven on bot-server against the CPU boxes / a real training cache. NVIDIA keeps working on ubuntu-docker; AMD is designed in and untested until a host has one."
+next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backend + the torch device layer, each proven on bot-server against the CPU boxes / a real training cache. NVIDIA keeps working on ubuntu-docker; a dedicated NVIDIA host uses dedicated-nvidia (Amendment 2026-11-12) and proves it there first (check_gpu, a serve test, the parity check); AMD is designed in and untested until a host has one."
 ---
 
 # ADR-0022: Vendor-neutral accelerators (Intel, NVIDIA, AMD; chosen per host)
@@ -78,3 +78,51 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   render node and render group, `PORING_ACCEL=xpu`; nothing else, `test_guards.py`). Built on
   bot-server 2026-11-07 (11.8 GB); a guarded `run:vision` there saw the A380 (torch 2.15.0+xpu),
   ran a matmul, OpenVINO listed `GPU`, and an ultralytics forward ran on xpu.
+
+## Amendment 2026-11-12: dedicated-nvidia
+- **Batt (Thai, translated):** "NVIDIA on a new machine still needs a profile -- please add NVIDIA
+  too; we already tried it on the old server, remember?"
+- **Why:** until now a NEW host with its own NVIDIA card could choose only between two wrong
+  profiles:
+  - `shared-nvidia`: its R3 needs Frigate's stats and fails closed without them, so every GPU step
+    is refused;
+  - `dedicated-intel`: the Intel image and the DRM render node, wrong for an NVIDIA card.
+- **What it is:** a third profile, `dedicated-nvidia` (`scripts/host_profile.py`): shared-nvidia's
+  NVIDIA path with dedicated-intel's dedicated rules.
+
+  | | shared-nvidia (VM 103) | dedicated-nvidia | dedicated-intel (bot-server) |
+  |---|---|---|---|
+  | accelerator, detect backend, GPU lister | cuda, torch, nvidia-smi | cuda, torch, nvidia-smi | xpu, openvino, drm-fdinfo |
+  | vision image | the CUDA image (torch 2.14.0+cu130) | the same CUDA image | the Intel image |
+  | GPU in compose | the NVIDIA reservation | the same reservation | the render node + render group |
+  | VRAM cap default | 0.25 (R1) | 1.0 | 1.0 |
+  | R1-R3, co-tenant watch, duty cycle | yes | no | no |
+  | IO guard on capture cgroups | yes | idle | idle |
+  | SET-hour shipping gate | yes | no | no |
+  | recorder disk floor | 100 GB | 30 GB | 30 GB |
+  | refused if a capture service runs there (`dedicated_refusal`) | - | yes | yes |
+
+  - Its overlays, `compose.nvidia.yaml` and `compose.vision-worker.nvidia.yaml`, change exactly
+    ONE thing: `VISION_MAX_VRAM_FRACTION` defaults to 1.0 (`test_guards.py` pins it; a diff of
+    the merged compose config with and without them shows that one key only). A value in `.env`
+    still wins, so a dedicated-nvidia host sets `VISION_MAX_VRAM_FRACTION=1.0` there.
+  - The worker keeps compose.vision-worker.yaml's 6 GB memory cap. The Intel worker's 11 GB was
+    bot-server's own (15 GiB, Batt 2026-11-08).
+  - The recorder floor follows the profile's `shared` flag, not its name
+    (`dataset_ship.MIN_FREE_BY_PROFILE` is derived from it). The SET-hour gate already did.
+- **What it is NOT:**
+  - **Not for VM 103 (ubuntu-docker).** Its GPU is shared with Frigate, Ollama and fit-first's
+    VTON worker, and its disk with live quant capture. It stays unset = `shared-nvidia`, with
+    every rule of CLAUDE.md rule 5 and exactly its old commands. A dedicated profile on a host
+    with a capture service is refused at every step.
+  - Not a CPU-only profile: that gap stays open (docs/planning/second-install-gaps.md D).
+  - Not a new image, and not proven on a dedicated host. The NVIDIA path ran only on VM 103 (the
+    RTX 5060 Ti, shared: the detect server's torch backend 49-52 ms a call, paused half the time
+    while R3 measured). The first dedicated-nvidia host proves it with `scripts/check_gpu.py`, a
+    serve test and the parity check (gpu-live-detector.md 6).
+- **Its needs on the host (from the CUDA image):** an NVIDIA driver of release 580 or newer
+  (the image is CUDA 13.0; a CUDA 13.2 image refuses to start on R580) and the NVIDIA Container
+  Toolkit for compose's `driver: nvidia` reservation.
+- Built 2026-11-12 on the branch `feat/dedicated-nvidia` (commit da115f3f): the profile, the two
+  overlays, the floor, and their tests (`test_host_profile.py`, `test_dataset_ship.py`,
+  `test_guards.py`).

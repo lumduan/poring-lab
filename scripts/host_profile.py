@@ -11,6 +11,11 @@ capture services the shared rules protect (`dedicated_refusal`).
                       (Batt 2026-11-07: "use it fully, no limits like this machine"). No R1-R3
                       (no Frigate), no IO guard (no capture to protect). The Intel vision image
                       (compose.intel.yaml, compose.vision-worker.intel.yaml).
+    dedicated-nvidia  a NEW host whose NVIDIA card is the lab's alone (Batt 2026-11-12: "NVIDIA on
+                      a new machine still needs a profile"). shared-nvidia's CUDA path (the same
+                      image, the NVIDIA reservation, nvidia-smi, the torch detect server) with
+                      dedicated-intel's dedicated rules; its overlays (compose.nvidia.yaml,
+                      compose.vision-worker.nvidia.yaml) only lift the 25 % VRAM cap. Never VM 103.
 
 Stdlib only: guarded_build runs under the system python3.
 """
@@ -45,6 +50,10 @@ PROFILES = {
     "dedicated-intel": HostProfile(
         "dedicated-intel", "xpu", False, ("compose.intel.yaml",),
         ("compose.vision-worker.intel.yaml",), "openvino", "drm-fdinfo",
+    ),
+    "dedicated-nvidia": HostProfile(
+        "dedicated-nvidia", "cuda", False, ("compose.nvidia.yaml",),
+        ("compose.vision-worker.nvidia.yaml",), "torch", "nvidia-smi",
     ),
 }  # fmt: skip
 

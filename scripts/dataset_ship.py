@@ -79,16 +79,30 @@ NAS_ROOT = Path("/mnt/poring-lab-datasets")
 # recording takes 7.0-8.4 GB/h and is shipped after. That is VM 103's (shared-nvidia) floor.
 # Batt 2026-11-08: bot-server (dedicated-intel: a 122-GB root disk with no other tenant, 83 GB free
 # after the move) keeps 30 GB free -- 100 GB refused every recording there.
-MIN_FREE_BY_PROFILE = {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9}
+# The floor follows the profile's `shared` flag, never its name (2026-11-12, dedicated-nvidia): a
+# SHARED host keeps the other tenants' 100 GB, a DEDICATED one (no other tenant on its disk) 30 GB.
+MIN_FREE_SHARED = 100 * 10**9
+MIN_FREE_DEDICATED = 30 * 10**9
+
+
+def _host_profile() -> Any:
+    """scripts/host_profile.py (stdlib only), imported from this script's own directory."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import host_profile
+
+    return host_profile
+
+
+MIN_FREE_BY_PROFILE = {
+    name: MIN_FREE_SHARED if prof.shared else MIN_FREE_DEDICATED
+    for name, prof in _host_profile().PROFILES.items()
+}
 
 
 def min_free_bytes(profile: str | None = None) -> int:
     """This host's free-space floor: the named profile's, or host_profile.current()'s."""
     if profile is None:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import host_profile
-
-        profile = host_profile.current().name
+        profile = _host_profile().current().name
     return MIN_FREE_BY_PROFILE[profile]
 
 
@@ -122,12 +136,11 @@ def in_set_hours(when: dt.datetime | None = None) -> bool:
 def market_gate_applies(profile: str | None = None) -> bool:
     """True when SET hours gate shipping on this host: only a SHARED host (VM 103, beside the quant
     stack). Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
-    machine is our own, the GPU is ours alone, use it fully" -> dedicated-intel ships any time."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import host_profile
-
-    prof = host_profile.PROFILES[profile] if profile else host_profile.current()
-    return prof.shared
+    machine is our own, the GPU is ours alone, use it fully" -> every DEDICATED profile
+    (dedicated-intel, dedicated-nvidia) ships any time."""
+    hp = _host_profile()
+    prof = hp.PROFILES[profile] if profile else hp.current()
+    return bool(prof.shared)
 
 
 # --- local caps (record_session.py uses these too) ------------------------------------------------

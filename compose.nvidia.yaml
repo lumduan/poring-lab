@@ -1,0 +1,14 @@
+# ADR-0022 Amendment 2026-11-12: the dedicated NVIDIA overlay for the vision service (a NEW host
+# whose NVIDIA card is the lab's alone). Never used on VM 103 (shared-nvidia: no overlay there).
+# guarded_build adds it LAST, after compose.yaml (and compose.vision-dev.yaml for rundev:), when
+# the host profile is dedicated-nvidia (LAB_HOST_PROFILE in .env; scripts/host_profile.py).
+# Exactly ONE thing changes, and tests/test_guards.py pins it (everything else -- the CUDA image
+# poring-lab/vision:local with torch cu130, the NVIDIA reservation, the agent network only, no X,
+# mem == memswap, oom_score_adj, the mounts -- is compose.yaml's):
+#   - no VRAM cap by default: the host is dedicated (no Frigate, no Ollama on its GPU; Batt
+#     2026-11-12, "NVIDIA on a new machine still needs a profile"). A value in .env still wins:
+#     set VISION_MAX_VRAM_FRACTION=1.0 there (.env.example carries VM 103's 0.25).
+services:
+  vision:
+    environment:
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}
