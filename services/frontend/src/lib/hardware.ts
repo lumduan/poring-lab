@@ -128,6 +128,19 @@ export function fmtGiB(bytes: number | null | undefined): string | null {
   return finite(bytes) ? `${(bytes / 2 ** 30).toFixed(1)} GiB` : null;
 }
 
+/** VRAM "used of total" (binary units, as the driver counts it): MiB while under 1 GiB, so a few
+ * tens of MiB do not read "0.0 GiB" (2026-11-12, the root helper's vram.json). */
+export function fmtVram(used: number | null | undefined, total: number | null | undefined): string | null {
+  if (!finite(used)) return null;
+  const one = (b: number) => (b < 2 ** 30 ? `${Math.round(b / 2 ** 20)} MiB` : `${(b / 2 ** 30).toFixed(1)} GiB`);
+  return finite(total) && total > 0 ? `${one(used)} of ${one(total)}` : one(used);
+}
+
+/** VRAM used as a percent of total, or null when either is unknown. */
+export function vramPct(used: number | null | undefined, total: number | null | undefined): number | null {
+  return finite(used) && finite(total) && total > 0 ? (100 * used) / total : null;
+}
+
 /** Decimal units, as the lab's disk floors and rule 7's /dev/shm limit are stated. */
 export function fmtGB(bytes: number | null | undefined, digits = 1): string | null {
   return finite(bytes) ? `${(bytes / 1e9).toFixed(digits)} GB` : null;

@@ -5,6 +5,8 @@ import {
   fmtC,
   fmtGB,
   fmtGiB,
+  fmtVram,
+  vramPct,
   fmtMHz,
   fmtPct,
   fmtW,
@@ -113,4 +115,15 @@ test("sparkline bounds: fixed, else from the data, padded when flat", () => {
   assert.deepEqual(sparkRange([0, 0], { min: 0 }), [0, 1]);
   assert.equal(sparkSummary([3.21, null, 41], " %"), "last 10 min: min 3.2 %, max 41.0 %");
   assert.equal(sparkSummary([null], " W"), "no history yet");
+});
+
+test("VRAM reads in MiB under 1 GiB, with its share of the total (2026-11-12)", () => {
+  const mib = 2 ** 20;
+  assert.equal(fmtVram(26 * mib, 6088 * mib), "26 MiB of 5.9 GiB");
+  assert.equal(fmtVram(3 * 2 ** 30, 6088 * mib), "3.0 GiB of 5.9 GiB");
+  assert.equal(fmtVram(26 * mib, null), "26 MiB");
+  assert.equal(fmtVram(null, 6088 * mib), null);
+  assert.equal(vramPct(26 * mib, 6088 * mib)?.toFixed(2), "0.43");
+  assert.equal(vramPct(26 * mib, 0), null);
+  assert.equal(vramPct(null, 6088 * mib), null);
 });

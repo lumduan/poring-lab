@@ -25,6 +25,8 @@ import {
   tempTone,
   type Tone,
   TONE_WORD,
+  fmtVram,
+  vramPct,
 } from "@/lib/hardware";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -278,8 +280,9 @@ export default function HardwareMonitor({ backendUrl }: { backendUrl: string | n
             <Val text={gpu?.fan_rpm != null ? `${gpu.fan_rpm} RPM` : null} sample={s} na={["gpu.fan_rpm", "gpu"]} />
           </Row>
           <Row label="VRAM used">
-            <Val text={fmtGiB(gpu?.vram_used_b)} sample={s} na={["gpu.vram_used_b", "gpu"]} />
+            <Val text={fmtVram(gpu?.vram_used_b, gpu?.vram_total_b)} sample={s} na={["gpu.vram_used_b", "gpu"]} />
           </Row>
+          <Meter pct={vramPct(gpu?.vram_used_b, gpu?.vram_total_b)} label="VRAM used" />
           <Spark view={view} name="gpu_busy_pct" caption="busy % (RC6)" unit=" %" min={0} max={100} />
           <Spark view={view} name="gpu_temp_c" caption="temperature °C" unit=" °C" />
         </Tile>
