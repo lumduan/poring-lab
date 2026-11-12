@@ -602,6 +602,23 @@ def test_o17_round3_pack_reads_fsTn3_as_no_aura() -> None:
     assert all(g["aura"] for g in fl.r2_picks(ev, True, 67, "xmas02-fi"))  # round 2's names
 
 
+def test_o26_round5_pack_natural_first_slot_staging_second() -> None:
+    """O26 (round 5): seed 69; the natural drops (fiH1 + fiH2) fill the first size slot (<= 70),
+    the staging fsH1 the second (<= 50); the held-out names agree with fi_eval's."""
+    import fi_eval as fe
+
+    assert fl.R5_EVAL_SEED == 69
+    assert set(fl.R5_STAGING) | set(fe.R5_PILOTS) == set(fe.R5_AURA_OFF)
+    c = {"frame_id": 1, "floor_id": 1, "stratum": "N", "rel": [1.0, 0.0], "under": None}
+    nat = [{**c, "session": "20261112T093311-rdp-hunt-xmas02-fiH1", "frame_id": i, "floor_id": i}
+           for i in range(30)]  # fmt: skip
+    stg = [{**c, "session": "20261112T085856-rdp-xmas02-fsH1", "frame_id": i,
+            "floor_id": 1000 + i} for i in range(80)]  # fmt: skip
+    got = fl.r2_picks(nat + stg, True, 69, "xmas02-fi", fl.R5_STAGING)
+    assert sum(g["aura"] for g in got) == 30  # every natural crop (the first slot: <= 70)
+    assert sum(not g["aura"] for g in got) == 50  # the staging capped at 50
+
+
 def test_s_the_floor_items_keep_o3s_species(tmp_path: Path) -> None:
     """xmas02-detector.md Amendment S (2026-11-12) put Stormy Knight (1251) in the monster
     MapSpec's species; the floor items' drop tables stay O.3 (g)'s six species, so 1251's drops

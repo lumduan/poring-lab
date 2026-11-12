@@ -134,6 +134,11 @@ R3_EVAL_SEED = 67
 R3_NOAURA = ("-rdp-xmas02-fsTn3",)  # fi_eval.R3_NOAURA
 R4_EVAL_SEED = 68  # O20 (round 4, `pack --round 4 --eval-test`)
 R4_NOAURA = ("-rdp-xmas02-fsTn4",)  # fi_eval.R4_NOAURA
+# O26 (round 5, `pack --round 5 --eval-test`): seed 69; round 2's two size slots carry the NATURAL
+# drops (fiH1 + fiH2, the first slot, <= 70) and the STAGING (fsH1, the second slot, <= 50) --
+# round 5 is aura-off throughout (O22), so the slot names mean natural / staging here
+R5_EVAL_SEED = 69
+R5_STAGING = ("-rdp-xmas02-fsH1",)  # the second slot (fi_eval.R5_AURA_OFF's staging)
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -1303,11 +1308,11 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
 
     spec = FI_MAPS[a.map]
     rnd = getattr(a, "round", 1)
-    r2 = rnd in (2, 3, 4)  # rounds 3 / 4 (O17 / O20) pack as round 2, their own seed + no-aura
-    if rnd in (3, 4):
+    r2 = rnd in (2, 3, 4, 5)  # rounds 3-5 (O17 / O20 / O26) pack as round 2, own seed + slots
+    if rnd in (3, 4, 5):
         if not a.eval_test:
             raise SystemExit(f"--round {rnd}: the evaluation's pack only (--eval-test)")
-        want = R3_EVAL_SEED if rnd == 3 else R4_EVAL_SEED
+        want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED}[rnd]
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
@@ -1325,8 +1330,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     sheets = frozen_sheets(prm)
     cands = pool_labels(docs)
     if r2:
-        picks = r2_picks(cands, a.eval_test, a.seed, spec.salt,
-                         {3: R3_NOAURA, 4: R4_NOAURA}.get(rnd, R2_NOAURA))  # fmt: skip
+        second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING}.get(rnd, R2_NOAURA)
+        picks = r2_picks(cands, a.eval_test, a.seed, spec.salt, second)
     elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
                             spec.salt)  # fmt: skip
@@ -1474,7 +1479,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
-    p.add_argument("--round", type=int, choices=(1, 2, 3, 4), default=1,
+    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5), default=1,
                    help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
