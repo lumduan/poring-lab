@@ -352,6 +352,9 @@ the game client's title bar on a fresh frame; clicks are never blocked.
 
 ## Quickstart
 
+A second, independent lab host from scratch (Docker, the services, the Windows PC, choosing the
+detector): [docs/setup/new-lab-host.md](docs/setup/new-lab-host.md).
+
 ```bash
 scripts/init_env.sh                          # .env from .env.example: detects HOST_LAN_IP, random secrets
 python3 scripts/guarded_build.py build:desktop build:backend build:rathena build:frontend pull:db up:180
