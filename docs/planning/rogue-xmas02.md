@@ -6101,3 +6101,37 @@ Also: **"The GPU may be used at any time -- full rights."** **The goal stays > 1
 will play 20-30 min himself as an example when he is free (he will say when). And **"make the
 flows of this map, so I can see how the bot works"** (/flows, the xmas_dun02 Rogue).
 
+### 4CR. The day's pilots after round 5's freeze (pre-registered 2026-11-12 07:09 ICT from `date`, BEFORE any of them)
+
+**THE BASE from here (4CQ):** 4BL's flags + `--late-confirm --still-target --lead-press
+--value-target --hud`, the aura OFF, 25 min, her NOT immune (read back), after an MVP kill (the
+chain's protocol, until the Stormy Knight escape passes its own proof). No-harm bars as before,
+with **W1 <= 3.5 %** (4CQ item 3).
+
+- **p84 + p85 -- the new base, measured; recorded `hunt-xmas02-fiH1` / `-fiH2`.** These are O22's
+  fresh natural-drop held-out, recorded AFTER round 5's freeze and refused by name for TRAIN. They
+  are the comparison base for every pair below. Reported: kills / h, gross z/h at Overcharge,
+  common items only, items / h, stolen a kill, the time budget with `--map xmas_dun02`.
+- **p86 + p87 -- `--loot-aim` (dungeon@9.32, a0f9d5f3).**
+  - A1 (the mechanism): the median loot-step time <= the base pair's - 1.0 s.
+  - A2: L1 (pickups of floor items) >= the base pair's - 5 points.
+  - A3 (the decision bar): kills / h >= the base pair's, AND common-item z/h >= the base pair's
+    - 3 %.
+  - No harm: the base's bars.
+- **p88 + p89 -- `--quick-drop` (dungeon@9.6) on today's base.** It was not adopted on 11-08
+  (p15 / p17: Q1, R1) on a much older base.
+  - Q1: time held on no-hit strikes ("unlock: no hits") pooled <= half the base pair's.
+  - Q2: good strikes given up (an attack act of ours within 2 s after the drop) <= 5.
+  - Q3 (the decision bar): kills / h >= the base pair's.
+  - No harm: the base's bars, incl. R1-A pooled < 7.
+- **p90 + p91 -- `--loot-items xmas02fi5`, ONLY if round 5's model passes O22's bars.**
+  - I-a: loot steps with no item seen skip the sweep (`no_items`) on >= 50 % of loot steps.
+  - I-b: L1 >= the base pair's - 10 points.
+  - I-c (the decision bar): kills / h >= the base pair's + 3 % AND common-item z/h >= the base
+    pair's.
+  - No harm: the base's bars.
+  - Until the detect server serves a second connection (the subagent's priority work), its
+    detection runs on the CPU fallback: reported (D1 and the loot detection's ms).
+- **Decisions:** each pair whose bars all pass JOINS THE BASE before the next pair. Two that join
+  are then run together as the night's base. All go to Batt with the numbers.
+
