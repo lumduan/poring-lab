@@ -7075,3 +7075,30 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
     same way.
 - **As a share of Batt's run (4DK):** kills 71 %, common z/h 62 %. The best common share of the
   night so far.
+
+### 4DP. 4DM pair D's verdict: `--defend-box` (p114 + p115) -- a FLAG: it almost never found a box (recorded 05:14 ICT from `date`)
+
+- **The runs:** p114 04:14-04:39 (fiT64), p115 04:41-05:07 (fiT65). Both rc 0, 0 deaths. The
+  record `defend_box = [110.0, "9.39"]`.
+- **VERDICT: D-a and D-b FAIL -> a FLAG.** No harm passes.
+
+| | arm A (6 runs) | `--defend-box` | bar (4DM) | |
+|---|---|---|---|---|
+| D-a: reaction to a monster that hit first (s a kill, `time_budget.py`) | 2.23 | **2.82** | <= A - 0.8 = 1.43 | **FAIL** |
+| D-b: kills / h | 155.9 | **145.1** (-6.9 %) | >= A x 1.03 = 160.6 | **FAIL** |
+| common-item z/h | 62,584 | 52,197 | reported | |
+| idle after a fight (s a kill) | 3.65 | 3.99 | reported | |
+| R1-A pooled / deaths / W1 / D1 p95 | | 1 / 0 / 1.43 % / 21.9-22.1 ms | < 7 / <= A / <= 3.5 % / <= 35 | PASS |
+
+- **Why:**
+  - Its case is rare: in p114, 76 of 95 fights started from a box. Only 19 had none (8 loot
+    cursor, 4 walk cursor, 4 Battle Log hits, 3 Miss cues).
+  - When it ran, no monster box was within 110 px of her feet: 21 tries, 1 strike.
+  - Each empty try cost ~0.5 s, mostly `box_target`'s walk-settle wait, before the ring scan
+    began anyway.
+  - The 2.3-s reaction loss of 4DK therefore lives mostly INSIDE box-started fights, where a
+    monster hits her while she walks to or settles on another target. A box-less fight is the
+    smaller part.
+- **Next (a study first, not a build):** split `approach_react` by what the bot was doing when
+  the first hit came (walking to a box, the loot step, the settle wait, the scan). That says
+  which branch to make faster.
