@@ -2304,7 +2304,11 @@ def test_still_target_is_wired_at_the_box_targets_sword_only() -> None:
     On: press_check's D2 by the box target's arm, the hold through hold_track with guard_tick, the
     re-aim only after box_target's selection gate and a SWORD read; no input path of its own."""
     src = Path(dh.__file__).read_text()
-    body = src[src.index("        def box_target() -> tuple[Cell, tuple[float, float]] | None:") :]
+    body = src[
+        src.index(
+            "        def box_target(radius_px: float | None = None)"  # 9.39 (--defend-box)
+        ) :
+    ]
     body = body[: body.index("\n        def ", 10)]
     i_sword = body.index('if res_["verdict"] == "sword":')
     i_on = body.index("if still_target_on:  # dungeon@9.23 (LS-2)", i_sword)
@@ -2457,7 +2461,11 @@ def test_lead_press_is_wired_in_press_checks_hold_only() -> None:
     same path as every strike; lead_aim reads no cursor, clicks nothing, applies its gates in
     order."""
     src = Path(dh.__file__).read_text()
-    body = src[src.index("        def box_target() -> tuple[Cell, tuple[float, float]] | None:") :]
+    body = src[
+        src.index(
+            "        def box_target(radius_px: float | None = None)"  # 9.39 (--defend-box)
+        ) :
+    ]
     body = body[: body.index("\n        def ", 10)]
     assert "lead_press" not in body and "lead_aim" not in body  # box_target untouched
     assert "if got_p is not None:  # it stood still and read SWORD again: its box" in body

@@ -277,6 +277,15 @@ QUICK_PER_CELL, QUICK_HIT_MAX_S = 0.2, 3.5
 # the no-arrow window is 3.0 s, not QUICK_ARROW_S (2.0); --far-single's own window stays as before
 QUICK_ARROW_SCALED_S = 3.0
 QUICK_SCALED_VERSION = "9.38b"  # b: the no-arrow window 3.0 s (4DH)
+# --defend-box (dungeon@9.39, rogue-xmas02.md 4DM; Batt 2026-11-12 "use my technique"): a fight that
+# a hit ON US started has no box, so it went straight to the hover ring scan (ring 1, then ring 2:
+# up to 24 hovers). 4DK: the bot took 2.31 s a kill to answer a monster that hit first, Batt 0.38 s
+# -- he clicks the attacker he sees. With the flag, such a fight first tries the live detector's
+# NEAREST box within DEFEND_BOX_PX of our feet (~3 cells: ring 2's diagonals), one hover for the
+# sword, then the strike; the ring scan stays the fallback. Once per fight. No value re-pick (the
+# attacker is the one beside us) and no walk-up (it is near).
+DEFEND_BOX_PX = 110.0
+DEFEND_BOX_VERSION = "9.39"
 # --kill-gap (dungeon@9.13, rogue-xmas02.md 4AF): at Base 99 the Battle Log shows NO exp line, so
 # the runner never sees a kill: after the killing blow the lock waited LOCK_NO_HIT_S (3.5 s, ~4.0 s
 # with the reader) for "no hits", then the defend scan (~2.3 s) found nobody -- p21: a median 6.46 s
@@ -2728,6 +2737,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
                                     QUICK_SCALED_VERSION]  # fmt: skip  # 9.38b: + the arrow window
     if getattr(a, "engage_screen", False):  # dungeon@9.7 (rogue-xmas02.md 4X)
         out["engage_screen"] = [BOX_SCREEN_PX]
+    if getattr(a, "defend_box", False):  # dungeon@9.39 (rogue-xmas02.md 4DM)
+        out["defend_box"] = [DEFEND_BOX_PX, DEFEND_BOX_VERSION]
     if getattr(a, "far_single", False):  # dungeon@9.8 (rogue-xmas02.md 4Z)
         out["far_single"] = [FAR_CELLS, FAR_BASE_S, FAR_PER_CELL_S, FAR_MAX_S]
     if getattr(a, "near_single", False):  # dungeon@9.25 (S-LF5 R2)
@@ -3200,6 +3211,14 @@ def quick_no_hit(arrow_t: float | None, last_ours: float, t_click: float, now: f
     """PURE (--quick-drop): the lock drops -- the strike's arrow showed at ``arrow_t`` and none of
     our hits was seen since its click for ``hit_s`` after the arrow."""
     return arrow_t is not None and last_ours < t_click and now - arrow_t > hit_s
+
+
+def defend_box_refused(a: argparse.Namespace) -> str | None:
+    """PURE (dungeon@9.39): --defend-box strikes a live detector box, so it needs --box-strike
+    (None: it can run, or it is off)."""
+    if getattr(a, "defend_box", False) and not getattr(a, "box_strike", False):
+        return "--defend-box goes with --box-strike (it strikes the live detector's box)"
+    return None
 
 
 def quick_hit_window(rel: Sequence[int], far_w: float | None = None) -> float:
@@ -4776,6 +4795,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_qs = quick_scaled_refused(a)  # dungeon@9.38: before any input
     if why_qs:
         raise SystemExit(f"dungeon@{QUICK_SCALED_VERSION} refused: {why_qs}")
+    why_db = defend_box_refused(a)  # dungeon@9.39: before any input
+    if why_db:
+        raise SystemExit(f"dungeon@{DEFEND_BOX_VERSION} refused: {why_db}")
     bosses: tuple[str, ...] = ()  # --engage-screen's boss guard (Amendment J)
     map_species: tuple[str, ...] = ()
     if getattr(a, "engage_screen", False):
@@ -5440,6 +5462,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         loot_settle_t = -1e9  # 9.13d: the end of the last loot step that clicked an item
         loot_first_on = getattr(a, "loot_first", False)  # dungeon@9.16
         quiet_scan_on = getattr(a, "quiet_scan", False)  # dungeon@9.17
+        defend_box_on = bool(getattr(a, "defend_box", False))  # dungeon@9.39
         late_confirm_on = getattr(a, "late_confirm", False)  # dungeon@9.21 (LF-2)
         unread_step_on = getattr(a, "unread_step", False)  # dungeon@9.22 (LF-4)
         still_target_on = getattr(a, "still_target", False)  # dungeon@9.23 (LS-2)
@@ -6137,11 +6160,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 bare.struck()  # dungeon@9.27: the caller holds this target's lock now
             return True
 
-        def box_target() -> tuple[Cell, tuple[float, float]] | None:
+        def box_target(radius_px: float | None = None) -> tuple[Cell, tuple[float, float]] | None:
             """dungeon@8.8 (rogue-xmas02.md 4M): our walk ends (BOX_SETTLE_S after the last walk
             click), then a box grabbed after that, the nearest to our cell's point within
             BOX_TARGET_PX, is hovered at its box_hover_points; the first SWORD is returned as
-            (its cell relative to us, the hover point) for the strike. None: the ring scan."""
+            (its cell relative to us, the hover point) for the strike. None: the ring scan.
+            ``radius_px`` (--defend-box, dungeon@9.39): the nearest box within it, no value
+            re-pick, no walk-up (the record says ``defend``)."""
             nonlocal last_walk_click
             assert boxes is not None
             t_0 = time.monotonic()
@@ -6171,7 +6196,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 rec.update(path=meta["path"], det_ms=meta["ms"], gpu_reason=meta["reason"],
                            grab_after_ms=round((meta["t"] - t_set) * 1e3),
                            boxes_after_ms=round((meta["t_done"] - t_set) * 1e3))  # fmt: skip
-            if getattr(a, "engage_screen", False):  # dungeon@9.7: the nearest box on screen
+            if radius_px is not None:  # dungeon@9.39 (--defend-box): the box beside us
+                rec["defend"] = True
+                near_b = boxes.near(FOOT_PX, radius_px, BOX_TARGET_WAIT_S + 1.0) if fresh else None
+            elif getattr(a, "engage_screen", False):  # dungeon@9.7: the nearest box on screen
                 near_b = (boxes.near(FOOT_PX, BOX_SCREEN_PX, BOX_TARGET_WAIT_S + 1.0,
                                      lambda f: (not in_view(f[0], f[1] - BODY_UP)
                                                 or unreachable(here, f)))
@@ -6179,7 +6207,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             else:
                 near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
                           else None)  # fmt: skip
-            if vt_values and fresh and near_b is not None:  # dungeon@9.28 (--value-target, 4CB)
+            if vt_values and fresh and near_b is not None and radius_px is None:  # 9.28 (4CB)
                 es_ = getattr(a, "engage_screen", False)
                 near_v = boxes.near(  # the SAME candidates and skips, chosen by value
                     FOOT_PX, BOX_SCREEN_PX if es_ else BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0,
@@ -6197,7 +6225,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 d_px=round(math.hypot(foot[0] - FOOT_PX[0], foot[1] - FOOT_PX[1])),
             )
             verdicts: list[str] = []
-            if (getattr(a, "far_approach", False) and here is not None
+            if (getattr(a, "far_approach", False) and here is not None and radius_px is None
                     and int(box_fight.get("approach_n", 0)) < APPROACH_MAX):  # fmt: skip
                 sp_a = box_spot(here, foot)  # dungeon@9.10: too far -> walk toward it first
                 rel_a = None if sp_a is None else (sp_a[0] - here[0], sp_a[1] - here[1])
@@ -8029,6 +8057,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 lock = {"t": time.monotonic(), "rel": rel_b,
                                         "cell": None if here is None else
                                         [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
+                    if (lock is None and defend_box_on and boxes is not None
+                            and box_fight.get("box") is None
+                            and not box_fight.get("defend_tried")):  # fmt: skip
+                        box_fight["defend_tried"] = True  # dungeon@9.39: once per fight
+                        counts["defend_box_try"] += 1
+                        got_d = box_target(DEFEND_BOX_PX)
+                        if got_d is not None:
+                            rel_d, (u_d, v_d) = got_d
+                            if strike(u_d, v_d, rel_d, "box"):  # a box strike, as the box path's
+                                counts["defend_box_strike"] += 1
+                                lock = {"t": time.monotonic(), "rel": rel_d,
+                                        "cell": None if here is None else
+                                        [here[0] + rel_d[0], here[1] + rel_d[1]]}  # fmt: skip
                     approaching = (getattr(a, "far_approach", False)
                                    and tick - float(box_fight.get("approach_t", -1e9))
                                    < APPROACH_HOLD_S)  # fmt: skip
@@ -8966,6 +9007,14 @@ def main() -> int:
         help="dungeon@9.6 (rogue-xmas02.md 4W, pilot p15; OFF by default): a strike with no arrow "
         "and no damage 2.0 s after its click takes no lock, and a lock whose arrow brought no hit "
         "of ours in 2.0 s drops; then the box path runs again (nearest box), twice a fight at most",
+    )
+    t.add_argument(
+        "--defend-box",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.39 (rogue-xmas02.md 4DM; OFF by default; needs --box-strike): a fight a "
+        "hit on us started first strikes the live detector's nearest box within 110 px of our "
+        "feet (one sword hover), before the hover ring scan; once per fight",
     )
     t.add_argument(
         "--quick-drop-scaled",
