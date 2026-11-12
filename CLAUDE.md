@@ -60,7 +60,8 @@ ports, quickstart) and `docs/adr/`.
      bot-server declares `LAB_HOST_PROFILE=dedicated-intel` (ADR-0022, Batt 2026-11-07: "no limits
      like this machine"): there guarded_build skips R1-R3 and idles the IO guard, and refuses if a
      capture service ever appears (`scripts/host_profile.py`). Rule 6's pinned subnets and every
-     other rule bind on both hosts.
+     other rule bind on both hosts. `dedicated-nvidia` (ADR-0022 amendment 2026-11-12, Batt) is the
+     same dedicated rules on a new host's own NVIDIA card (no VRAM cap); never VM 103.
    - ➡️ **Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
      machine is our own, the GPU is ours alone; use it fully."** No market-hour waits there: no SET
      hours, no market-open windows. `dataset_ship.py` gates SET hours on a SHARED host only

@@ -32,3 +32,10 @@ def test_dev_sh_and_verify_mount_add_it_last() -> None:
     assert '-f compose.yaml -f compose.dev.yaml "${LOCAL[@]}"' in dev
     vm = (ROOT / "scripts" / "verify_mount.py").read_text()
     assert '"-f", "compose.dev.yaml", *local,' in vm
+
+
+def test_the_worker_command_adds_it_too() -> None:
+    """The dedicated-nvidia review (2026-11-12): worker:vision / worker-stop take the override
+    too, so a machine's own worker values (its memory cap, its volumes) live there as well."""
+    src = (ROOT / "scripts" / "guarded_build.py").read_text()
+    assert "overlay=PROFILE.worker_overlay), *local_override()," in src

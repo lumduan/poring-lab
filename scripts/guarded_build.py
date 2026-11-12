@@ -437,8 +437,8 @@ def run_cmd(step: Step) -> list[str]:
 WORKER_SERVICE = "vision-worker"
 WORKER = "poring-lab-vision-worker-1"  # compose's name for the ONE worker container
 VISION_WORKER = [*host_profile.files("compose.yaml", "compose.vision-worker.yaml",
-                                     overlay=PROFILE.worker_overlay),
-                 "--profile", WORKER_SERVICE]  # fmt: skip
+                                     overlay=PROFILE.worker_overlay), *local_override(),
+                 "--profile", WORKER_SERVICE]  # fmt: skip  # this machine's own values LAST
 EXEC_GRACE_S = 60  # the docker exec client outlives the inner timeout by this much
 EXEC_KILL_AFTER_S = 30  # the inner timeout's SIGKILL, this long after its SIGTERM
 EXEC_SETTLE_S = 10  # after the client ends: orphaned children get this long to exit by themselves

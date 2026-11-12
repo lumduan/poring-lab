@@ -676,6 +676,26 @@ behind it automatically. An NVIDIA card with `dedicated-nvidia` is the other GPU
 old VM 103 ran, not yet proven on a dedicated host. Without a GPU, the CPU detector works; it is
 slower and the runner's grab-to-click time grows with it.
 
+**Intel graphics built into the CPU** (asked by Batt 2026-11-12, e.g. a Core Ultra 7 265, LGA 1851):
+use `dedicated-intel` too. Nothing in the Intel path is tied to the A380:
+- the overlay passes the render node;
+- OpenVINO runs on Intel's integrated GPUs;
+- the clock unit holds the GPU at ITS OWN highest clock (RP0, read from sysfs, not a fixed number).
+
+What to know:
+- **The model:** the F models (265F, 265KF) have NO built-in graphics.
+- **Speed (unverified):** the 265's built-in graphics has 4 Xe cores and shares system RAM. The A380
+  has 8 Xe cores and its own GDDR6. Expect it slower than the A380 but far faster than a CPU, and
+  measure it with the 45-s serve test (section 9's run block).
+- **RAM:** the GPU borrows system memory. 32 GB is comfortable, 16 GB the minimum.
+- **The OS:** Arrow Lake needs a recent kernel and Intel compute runtime. Ubuntu 26.04 (as
+  bot-server) is the safe choice (unverified on that chip).
+- **Training:** training on it (torch-xpu) is unverified. Detection through OpenVINO is the solid
+  part.
+- **Not used yet:** its NPU (AI Boost). OpenVINO can target it, but the code does not yet.
+- **The fallback:** its CPU is much stronger than bot-server's Xeon E5-2609 v4, so even the CPU
+  detector runs faster than the 110-126 ms measured here.
+
 **Which model a map uses (`scripts/unit_detector.py`):**
 - `MAP_MODELS`: the map's own deployed model. Today only xmas_dun02:
   `xmas02gb-last-736x1280.onnx`, sha256 `b22d972b...` (since 2026-11-10; Myst Case, Cruiser and
