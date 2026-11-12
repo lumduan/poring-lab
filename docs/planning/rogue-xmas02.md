@@ -6174,3 +6174,47 @@ with **W1 <= 3.5 %** (4CQ item 3).
 - A death respawns her at her save point. At Base 99 (held) there is no level to lose, only time; it
   ends that trial (FAIL).
 
+### 4CT. The flee proof's scorer and its counting rule (pre-registered 2026-11-12 08:42 ICT from `date`, BEFORE F1)
+
+4CS left one case open: a trial in which she never meets the knight. This entry closes it and fixes
+the scorer before any trial runs.
+
+- **The scorer:** `scripts/sk_flee_score.py`, committed with this entry; its tests are in
+  `test_sk_flee_score.py`.
+  - The WINDOW runs from the trial's verified immunity OFF to its end.
+  - APPEAR: the knight (1251) entering her SERVER view (`entity_appear`, ~14 cells, wider than the
+    screen), or the window's start if it was in view already.
+  - FLEE: her first map change at or after APPEAR that is not a GM command's. This is the Fly Wing;
+    the press time is its `use_item_request` in the 1.5 s before.
+  - HIT: the knight's first `act` on her with damage > 0, OR an UNEXPLAINED hp drop of >= 1,000.
+    Skill hits are not decoded as acts; the knight's normal hit was 1,170 and a Garm Baby's 900.
+  - DEATH: her own `entity_vanish` with reason 1 (died), or an hp of 0.
+  - The summons' damage before the FLEE is reported, not failed. That covers Christmas Goblin 1607
+    and Garm Baby 1515; Garm Baby is also a regular spawn here.
+- **The positive case, from a REAL session** (p18, 2026-11-08 23:13-23:17:30 ICT, re-read from
+  the sniffer's archive):
+  - the knight's gid 110015908 was found, and its first hit (1,170) at its real time;
+  - its skill was found as an unexplained drop of 1,308;
+  - her death came 938 ms after the first hit;
+  - the trial was counted, and it FAILED, as it must.
+- **COUNTED:** the knight appears in the window AND there is a contest (a FLEE or a HIT).
+  - A trial without one is NOT counted: "the knight never appeared" or "no contest".
+  - It is re-run ONCE on the same pair (F1b ...), with at most 2 re-runs in the whole proof.
+  - Fewer than 5 counted trials after the re-runs -> NO_VERDICT. The kill-before-window protocol
+    then stays.
+- **PASSED:** counted, a FLEE whose press comes before the HIT (or there is no HIT), and no death
+  before the FLEE. The proof (4CS) PASSES on 5 counted passes; any counted failure -> FAIL.
+- **How the trials run** (the driver: `/dev/shm/poring-lab-tmp/flee/flee_trials.py`, scratch):
+  - ONE detect server and ONE 1-fps recording for the whole proof. The frames are there to study a
+    failure.
+  - The driver types the staging lines while she is immune.
+  - The runner's own setup goes only to its open-field stand (prt_fild08) and back to her start cell.
+  - Each run lasts 3 minutes. Flags: the 4CR base (`pilot_rec_min.sh` BASE + `--value-target --hud
+    --hud-fast 0.2`) and run_pilot_v3's fixed flags, WITHOUT `--clear-map`, plus `--start-cell`.
+  - The runner's own `garm_seen` time is reported beside the server-view APPEAR. Frame truth is
+    built only to study a failure.
+  - After each run: immunity ON (judged), `@warp` to her cell, `@killmonster2`. A death stops the
+    driver (a person first).
+  - Each trial's `@killmonster2` also kills the natural MVP if it is alive. After the proof, the
+    chain's last kill is the proof's last `@killmonster2`.
+
