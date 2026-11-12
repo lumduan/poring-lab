@@ -6723,6 +6723,8 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   `QUICK_ARROW_SCALED_S = 3.0` s (from `QUICK_ARROW_S`, 2.0).
   - The near no-arrow give-ups' own attack requests came 1.95-2.49 s after the click (4DG's table).
   - `--far-single`'s window and every run without the flag are unchanged (tests pin the default).
+    The base runs `--far-single`, whose window (1.8-3.5 s) replaces the no-arrow one from 4 cells
+    (`FAR_CELLS`). So **the 3.0 s applies only to strikes nearer than 4 cells.**
   - `fixes.quick_drop_scaled` = `[0.2, 3.5, 3.0, "9.38b"]`.
 - **The prediction on p88 + p89's own strikes** (`scripts/quick_drop_scaled_study.py`, committed
   with this section; defaults = 9.38b's numbers):
@@ -6731,16 +6733,21 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   - Request -> arrow lag, measured on 52 strikes that had both: median -0.44 s, at most 0.57 s.
     The runner's `arrow_s` clock starts after the first click, so this bounds the ORDER of the two
     events only.
-  - The 5 no-arrow give-ups under a 3.0-s window: **2 may lock** (the request + the largest lag fits
-    in 3.0 s), 1 borderline (1 cell: 2.49 + 0.57 = 3.06 s), 2 unchanged. The last 2 had no request of
-    their own, so they were not that strike's hit.
+  - The 5 no-arrow give-ups under a 3.0-s window: **1 may lock** (2 cells: the request at 1.95 s
+    + the largest lag fits in 3.0 s), 1 borderline (1 cell: 2.49 + 0.57 = 3.06 s). The other 3 are at
+    4, 6 and 7 cells, so `--far-single`'s window, which 9.38b leaves alone, decides them. 2 of
+    those 3 had no request of their own, so they were not that strike's hit.
   - The no-hit half (4DG): 1 kept, 1 borderline.
   - **Own give-ups expected: 1 sure** (the Battle Log reader miss, no window fixes it) **+ up to 2
     borderline, from 5.**
-  - **The cost:** each no-arrow drop that still drops waits 1.0 s longer. That is 18 drops on the
-    p88 + p89 pair, so **~ +18 s over 50 min**.
-  - 1 of the 17 good no-arrow drops may now lock (8 cells; the request 1.69 s after the click). A
-    lock that gets no hit then ends by the no-hit rule.
+  - **The cost:** each NEAR no-arrow drop that still drops waits 1.0 s longer. That is 10 drops on
+    the p88 + p89 pair, so **~ +10 s over 50 min**. None of the 18 good drops may now lock (the
+    8 that are 4+ cells away keep `--far-single`'s window).
+  - **Amended 20:07 ICT from `date`, BEFORE any of its runs** (p100 was running; p112 had not
+    started). As committed at 19:58, this read "2 may lock, 1 borderline, 2 unchanged" and "18 drops,
+    ~ +18 s; 1 of the 17 good drops may now lock (8 cells)". That version applied the 3.0 s to every
+    strike and missed `--far-single`'s override. The study now reads each run's own `run_start`
+    record (`far_from_cells`). The bars below are unchanged.
 - **The pair:** **p112 + p113**, 25 min each, KILL mode, aura off, NOT immune, the MVP alive (4DF).
   - Flags: today's base (4DD's arm A) + `--quick-drop --quick-drop-scaled`, i.e.
     `--value-target --hud --hud-fast 0.2 --quick-drop --quick-drop-scaled`.

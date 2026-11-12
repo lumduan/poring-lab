@@ -261,3 +261,18 @@ def test_the_study_bounds_the_arrow_and_counts_the_own_hits() -> None:
     assert not qs.own_given_up({**own, "new_strike_first": True})  # the re-armed strike's act
     assert not qs.own_given_up({**own, "next_on_own_target": None})  # no request of its own
     assert not qs.own_given_up({**own, "given_up": False})
+
+
+def test_the_study_leaves_far_single_strikes_to_their_own_window() -> None:
+    """dungeon_hunt's far_w replaces burst_s from --far-single's distance: 9.38b is below it."""
+    import quick_drop_scaled_study as qs
+
+    start = {"kind": "run_start", "fixes": {"far_single": [dh.FAR_CELLS, 1.0, 0.2, 3.5]}}
+    assert qs.far_from_cells([start]) == dh.FAR_CELLS == 4
+    near = {"kind": "run_start", "fixes": {**start["fixes"], "near_single": [2, "9.25"]}}
+    assert qs.far_from_cells([near]) == dh.NEAR_SINGLE_CELLS == 2
+    assert qs.far_from_cells([{"kind": "run_start", "fixes": {}}]) is None
+    row = {"why": "no_arrow", "request_s": 1.52, "cells": 7}
+    assert qs.arrow_outcome(row, 0.57, 3.0, far_from=4) == "unchanged"  # far-single's window
+    assert qs.arrow_outcome(row, 0.57, 3.0, far_from=None) == "may_lock"
+    assert qs.arrow_outcome({**row, "cells": 3}, 0.57, 3.0, far_from=4) == "may_lock"

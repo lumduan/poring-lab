@@ -31,7 +31,8 @@ in the window "may_lock" (if its arrow comes at all, it now takes the lock), one
 "borderline", and a drop with no request, or whose arrow had its whole lag inside the old window
 and never came, "drops_later" (it only waits longer). ``given_up_own`` is the given-up drops whose
 next act hit the strike's OWN request target with no new strike between (4DG: the re-armed strike's
-act is not the dropped strike's hit).
+act is not the dropped strike's hit). A strike at --far-single's distance (the run's own run_start
+record) keeps that flag's window: 9.38b leaves it "unchanged".
 """
 
 from __future__ import annotations
@@ -154,12 +155,29 @@ def arrow_lags(
     return sorted(out)
 
 
+def far_from_cells(events: Sequence[Mapping[str, Any]]) -> int | None:
+    """PURE: from the run's own ``run_start`` record, the distance (cells) from which
+    --far-single's window replaces the no-arrow window (--near-single lowers it), or None (off).
+    9.38b changes the no-arrow window only BELOW it: dungeon_hunt's ``far_w`` overrides burst_s."""
+    fx = next((e.get("fixes") or {} for e in events if e.get("kind") == "run_start"), {})
+    if "far_single" not in fx:
+        return None
+    return int(fx["near_single"][0]) if "near_single" in fx else int(fx["far_single"][0])
+
+
 def arrow_outcome(
-    row: Mapping[str, Any], max_lag: float, window: float, used: float = QUICK_ARROW_S
+    row: Mapping[str, Any],
+    max_lag: float,
+    window: float,
+    used: float = QUICK_ARROW_S,
+    far_from: int | None = None,
 ) -> str:
     """PURE: what a no-arrow window of ``window`` s does to one drop (``used`` = the run's own):
-    "unchanged" (a no-hit drop), "drops_later", "may_lock" or "borderline" (module docstring)."""
+    "unchanged" (a no-hit drop, or a strike at ``far_from`` cells or more: --far-single's own
+    window), "drops_later", "may_lock" or "borderline" (module docstring)."""
     if row.get("why") != "no_arrow":
+        return "unchanged"
+    if far_from is not None and int(row["cells"]) >= far_from:
         return "unchanged"
     req = row.get("request_s")
     if req is None or float(req) + max_lag <= used:
@@ -219,7 +237,9 @@ def main(argv: list[str] | None = None) -> int:
         for row in drop_rows(ev, pk, bl, infer_self_aid(pk)):
             row["session"] = d.name
             row["scaled"] = scaled_outcome(row, a.per_cell, a.max)
-            row["arrow"] = arrow_outcome(row, max_lag, a.arrow_window, a.arrow_used)
+            row["arrow"] = arrow_outcome(
+                row, max_lag, a.arrow_window, a.arrow_used, far_from_cells(ev)
+            )
             row["given_up_own"] = own_given_up(row)
             all_rows.append(row)
             print(json.dumps(row))
@@ -242,9 +262,9 @@ def main(argv: list[str] | None = None) -> int:
                       "max": max_lag},
         "arrow_window": a.arrow_window, "arrow_used": a.arrow_used,
         "given_up_arrow": {o: sum(r["arrow"] == o for r in gu)
-                           for o in ("may_lock", "borderline", "drops_later")},
+                           for o in ("may_lock", "borderline", "drops_later", "unchanged")},
         "kept_drops_arrow": {o: sum(r["arrow"] == o for r in kept)
-                             for o in ("may_lock", "borderline", "drops_later")},
+                             for o in ("may_lock", "borderline", "drops_later", "unchanged")},
         "added_wait_s": round((a.arrow_window - a.arrow_used)
                               * sum(r["arrow"] == "drops_later" for r in all_rows), 1),
     }))  # fmt: skip
