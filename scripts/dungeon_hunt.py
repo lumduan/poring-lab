@@ -117,7 +117,10 @@ the account is no GM. The run types NO line (every line this runner types goes t
 which refuses first), reads nothing from the lab's DB, starts where the person left the character
 (her cell read on the minimap readout) with the stock she brought (read on the hotbar: at least
 PLAYER_MIN_WINGS Fly Wings and PLAYER_MIN_HEALS heal items), and ends by the run's own Fly Wing
-escape only: no warp home, no @alive / @heal, no level hold, no top-up, no staging.
+escape: no warp home, no @alive / @heal, no level hold, no top-up, no staging. dungeon@9.35b (Batt
+2026-11-12): then ONE Butterfly Wing home (its hotbar key, --player-home-key) when its count reads
+>= 1; and on a map whose KB lists a boss spawn, with the boss guard off, one WARNING line at the
+start (never a refusal).
 
     dungeon_hunt.py run --strategy A|B|C|H --minutes 45 --seed S [--label L] [--search patrol]
                         [--char crusader|thief|rogue] [--map M] [--steal] [--bank-tags]
@@ -197,6 +200,12 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 }  # fmt: skip
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "heal": "F5", "sit": "Insert",
         "stand": "Insert"}  # fmt: skip
+# dungeon@9.35b (--player-mode's Butterfly Wing home, Batt 2026-11-12): each character's hotbar key
+# for the Butterfly Wing (CHARS_CONF "home_key"), F8 -- the first row-1 key no character uses (F1
+# potion, F2 Fly Wing, F3 Steal / Auto Guard, F4 the Knife opener, F5 the dagger / Heal, F6 + F7
+# --heal-candy's). It joins the run's keys (keys_["home"]) under --player-mode only, so the lab's
+# own key checks (clear-bag's Eqp guard, --steal-opener's) are unchanged
+HOME_KEY = "F8"
 MAX_HP = 5260  # the Crusader's (CHARS_CONF holds each character's)
 READ_HZ = 5.0
 HEAL_GAP_S = 1.1  # Heal's after-cast delay is 1 s (pinned skill_db AL_HEAL AfterCastActDelay)
@@ -786,13 +795,14 @@ CLEAR_STAND = ("prt_fild08", 268, 107)  # ... on the Crusader's open-field stand
 # HP-rate trigger), keys, Auto Guard or not, stock, and whether the setup may drop the Etc tab
 CHARS_CONF: dict[str, dict[str, Any]] = {
     "crusader": {"job": "crusader", "max_hp": 5260, "keys": KEYS, "autoguard": True,
-                 "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True},
+                 "potions_to": None, "wings_to": WINGS_TO, "clear_etc": True,
+                 "home_key": HOME_KEY},
     "thief": {"job": "thief", "max_hp": 952, "max_sp": 112,  # its status window (thief-payon 4)
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert"},
               "autoguard": False, "potions_to": 10, "wings_to": 10,
               # Rough Oridecon 756 / Rough Elunium 757 are Etc: never dropped by the setup
-              "clear_etc": False},
+              "clear_etc": False, "home_key": HOME_KEY},
     # dungeon@8 (Batt 2026-10-25, rogue-gef10.md): the SAME character (data/thief, Thief8fce) after
     # its job change; its status window 2026-10-25 19:3x: HP 2146, SP 336 (Base 62 / Rogue 50).
     # Loot is value now (his Overcharge merchant): never dropped; at 40 % the setup stops ("train
@@ -808,6 +818,7 @@ CHARS_CONF: dict[str, dict[str, Any]] = {
               "keys": {"potion": "F1", "fly": "F2", "steal": "F3", "sit": "Insert",
                        "stand": "Insert", "equip": "F5"},
               "autoguard": False, "potions_to": 10, "wings_to": 10, "clear_etc": False,
+              "home_key": HOME_KEY,  # dungeon@9.35b: the Butterfly Wing (--player-mode only)
               "hotbar_stock": True,  # dungeon@8.3: the stock is read from the hotbar
               "level_hold": 99,
               # Batt 2026-11-08 (p11 refused at 40.7 %): the Rogue runs on up to WEIGHT_MAX
@@ -1148,6 +1159,120 @@ def player_boss_warning(map_: str, bosses: Sequence[str] | None, guard: bool) ->
     return (f"WARNING: --player-mode on {map_}: the KB lists a boss spawn here "
             f"({', '.join(bosses)}) and {off}: nothing guards her from it; "
             "the run goes on")  # fmt: skip
+
+
+# dungeon@9.35b (Batt 2026-11-12, rogue-xmas02.md 4DF: "add a Butterfly Wing home at the end"):
+# at the END of a --player-mode run, after the run's own end escape, ONE press of the Butterfly
+# Wing (to her save point) when its hotbar count reads >= 1 -- a key through press(), the mux,
+# never a line. Its key is the character's home_key (HOME_KEY) or --player-home-key. It is
+# optional: the start checks nothing for it, and an unread / 0 count, no key, a death or a hard bar
+# (an unknown state gets no key, as dungeon@8.5's end escape) mean no press, recorded.
+PLAYER_HOME_VERSION = "9.35b"
+PLAYER_HOME_ITEM = 602  # the Butterfly Wing (a Use item): to the save point
+PLAYER_HOME_LOAD_S = 3.0  # after the press, the load screen (Basic Info unread) starts by then ...
+PLAYER_HOME_WAIT_S = WARP_READY_S  # ... and Basic Info reads again (the new map drawn) by then
+PLAYER_HOME_POLL_S = 0.2
+PLAYER_STAND_S = 0.6  # a seated end stands first: no wing can be used sitting
+
+
+def player_home_refused(a: argparse.Namespace, conf: Mapping[str, Any], keys: Mapping[str, str],
+                        opener: str | None) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.35b): why the Butterfly Wing's key cannot be used (None: it can, or there is
+    none). --player-home-key goes with --player-mode; the key (it, else the character's
+    ``home_key``) is a row-1 hotbar key (F1-F9) that is no other key of the run (``keys``: the
+    character's, with --heal-candy's) and not --steal-opener's ``opener``."""
+    override = getattr(a, "player_home_key", None)
+    if not getattr(a, "player_mode", False):
+        return None if override is None else "--player-home-key goes with --player-mode"
+    key = override or conf.get("home_key")
+    if key is None:
+        return None
+    try:
+        hotbar_slot(key)
+    except ValueError:
+        return f"the Butterfly Wing key {key!r} is not a row-1 hotbar key (F1-F9)"
+    used = sorted(w for w, k in keys.items() if k == key)
+    if opener == key:
+        used.append("--steal-opener")
+    if used:
+        return f"the Butterfly Wing key {key} is already the run's ({', '.join(used)})"
+    return None
+
+
+def player_home_skip(reason: str, key: str | None) -> str | None:
+    """PURE (dungeon@9.35b): why the end presses no Butterfly Wing before its count is read (None:
+    read it). No key configured; a death (the dialog is the person's; no item works dead); a hard
+    bar (an unknown UI state gets no key, as dungeon@8.5's end escape)."""
+    if key is None:
+        return "no Butterfly Wing key configured"
+    if reason == "death":
+        return "dead: the death dialog is the person's"
+    if reason.startswith("hard_bar"):
+        return "a hard bar: an unknown state gets no key"
+    return None
+
+
+def player_home_count_why(count: int | None) -> str | None:
+    """PURE (dungeon@9.35b): why a read count presses no Butterfly Wing (None: press it once)."""
+    if count is None:
+        return "the Butterfly Wing's hotbar count did not read"
+    if count < 1:
+        return f"no Butterfly Wing on the hotbar (count {count})"
+    return None
+
+
+def player_home_end(key: str | None, reason: str, seated: bool, *,
+                    read_count: Callable[[], int | None], press: Callable[[], None],
+                    stand: Callable[[], None], basic_info: Callable[[], bool],
+                    sleep: Callable[[float], None] = time.sleep,
+                    now: Callable[[], float] = time.monotonic,
+                    rec: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.35b: the end of a --player-mode run -- the Butterfly Wing home, once, and the
+    record of what happened ({"pressed", "why", "key", "count", "stood", "load_s", "back_s",
+    "waited_s"}; filled IN PLACE in ``rec`` when given, so a failure midway keeps what was done).
+    The count is read up to STOCK_TRIES times STOCK_READ_S apart (an end Fly Wing's dark frames);
+    a seated end stands first. After the press it waits for the map change as the runner sees one
+    (gef10-house-rest's load gap): Basic Info (``basic_info``: the HP percent reads) gone within
+    PLAYER_HOME_LOAD_S, then back, at most PLAYER_HOME_WAIT_S; it never presses again."""
+    rec = {} if rec is None else rec
+    rec.update(pressed=False, key=key, count=None, stood=False)
+    why = player_home_skip(reason, key)
+    if why is not None:
+        rec["why"] = why
+        return rec
+    n: int | None = None
+    for i in range(STOCK_TRIES):
+        n = read_count()
+        if n is not None:
+            break
+        if i + 1 < STOCK_TRIES:
+            sleep(STOCK_READ_S)
+    rec["count"] = n
+    why = player_home_count_why(n)
+    if why is not None:
+        rec["why"] = why
+        return rec
+    if seated:
+        stand()
+        rec["stood"] = True
+        sleep(PLAYER_STAND_S)
+    press()
+    rec.update(pressed=True, why=f"{n} on the hotbar")
+    t0 = now()
+    load_s: float | None = None
+    back_s: float | None = None
+    while now() - t0 < PLAYER_HOME_WAIT_S:
+        sleep(PLAYER_HOME_POLL_S)
+        seen, t_ = basic_info(), now() - t0
+        if load_s is None and not seen:
+            load_s = round(t_, 2)
+        elif load_s is None and t_ > PLAYER_HOME_LOAD_S:
+            break  # no load screen: the map did not change (recorded, never a second press)
+        elif load_s is not None and seen:
+            back_s = round(t_, 2)
+            break
+    rec.update(load_s=load_s, back_s=back_s, waited_s=round(now() - t0, 2))
+    return rec
 
 
 STEAL_FORGET_S = 40.0  # a target stolen at: no new try within 2 cells for this long
@@ -4752,6 +4877,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise SystemExit(f"dungeon@9.31 refused: {why_hc}")
         keys_ = {**keys_, **HEAL_CANDY_KEYS}
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
+    why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
+    if why_hk:
+        raise SystemExit(f"dungeon@{PLAYER_HOME_VERSION} refused: {why_hk}")
+    home_key: str | None = None  # dungeon@9.35b: the Butterfly Wing's key (--player-mode only)
+    if player:
+        home_key = getattr(a, "player_home_key", None) or conf.get("home_key")
+        if home_key is not None:  # press("home") at the end; the lab's keys stay as they were
+            keys_ = {**keys_, "home": home_key}
     heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
@@ -5241,6 +5374,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
             **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
+            **({"player_home_key": home_key} if player else {}),
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),
             **({"bare_ready": fixes_of(a)["bare_ready"]} if bare_ready_on else {}),
@@ -8429,7 +8563,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 item_det.cpu.close()
             # dungeon@9.35 (--player-mode): a run that ends while she rests stays SEATED (natural
             # regen goes on); she stands only for the end's escape (no Fly Wing while sitting). It
-            # cannot turn due later: time only ages the hits and the HP reads (end_escape_needed)
+            # cannot turn due later: time only ages the hits and the HP reads (end_escape_needed).
+            # 9.35b: she stands for the Butterfly Wing home too, when one is pressed (below)
             seated_end = player and sitting and not end_escape_needed(
                 time.monotonic(), last_taken, st.hist, reason)  # fmt: skip
             if sitting and not seated_end:
@@ -8471,9 +8606,30 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     bench.close_chat(agent_raw, screen)
                 except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
                     print(f"end warp failed: {exc!r}", flush=True)
-            else:  # what she was left as: seated (a rest), standing, or dead with its dialog open
-                ev({"kind": "player_end", "reason": reason, "seated": seated_end,
-                    "dead": reason == "death"})  # fmt: skip
+            else:  # dungeon@9.35b: the Butterfly Wing home (a count >= 1), once, then what she
+                # was left as: seated (a rest, no wing), standing, home, or dead with its dialog
+                home_rec: dict[str, Any] = {"pressed": False, "stood": False}  # filled in place
+                try:
+                    import hotbar_count as hb_h
+
+                    def home_count() -> int | None:
+                        if stock_watch is None or home_key is None:
+                            return None
+                        g_h = hb_h.gray(np.asarray(frame()))
+                        return hb_h.read_count(g_h, hotbar_slot(home_key), stock_watch[0])
+
+                    player_home_end(
+                        home_key, reason, seated_end, read_count=home_count,
+                        press=lambda: press("home", "end"),
+                        stand=lambda: agent_raw.keys(keys_["stand"]),
+                        basic_info=lambda: hpp.read(frame(), glyphs) is not None,
+                        rec=home_rec)  # fmt: skip
+                except Exception as exc:  # noqa: BLE001 -- recorded; the end goes on
+                    home_rec["error"] = repr(exc)[:300]
+                ev({"kind": "player_home", **home_rec})
+                ev({"kind": "player_end", "reason": reason,
+                    "seated": seated_end and not home_rec.get("stood"),
+                    "home": bool(home_rec.get("pressed")), "dead": reason == "death"})  # fmt: skip
             print(r.to_png(screen.full(), out / "end.png"), flush=True)
     t1 = r.ns()
     evf.close()
@@ -9052,9 +9208,22 @@ def main() -> int:
         "route grid), refuses below 5 Fly Wings / 5 heal items on the hotbar "
         "(PLAYER_MIN_WINGS / PLAYER_MIN_HEALS) or an unread weight / >= 48 %%, never warps, "
         "heals, tops up, drinks down, drops the bag or stages, ends when the Fly Wings read 1 "
-        "(PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape only (a rest stays "
-        "seated; a death's dialog stays for the person). Refused with --clear-map, --stage-mob, "
-        "--stage-at, --start-cell, --engage melee_ring",
+        "(PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape, then (9.35b) ONE "
+        "Butterfly Wing home when its hotbar count reads >= 1 (--player-home-key; without one a "
+        "rest stays seated; a death's dialog stays for the person). On a map whose KB lists a "
+        "boss spawn, with neither --engage-screen nor --garm-fly, it prints one WARNING line at "
+        "the start and goes on (9.35b). Refused with --clear-map, --stage-mob, --stage-at, "
+        "--start-cell, --engage melee_ring",
+    )
+    t.add_argument(
+        "--player-home-key",
+        default=None,
+        metavar="KEY",
+        help="dungeon@9.35b (Batt 2026-11-12; with --player-mode): the Butterfly Wing's row-1 "
+        "hotbar key (default: the character's home_key, F8). At the end of a --player-mode run, "
+        "after its own end escape, it is pressed ONCE when its hotbar count reads >= 1 (a seated "
+        "end stands first); no key, an unread or 0 count, a death or a hard bar: no press, "
+        "recorded (player_home). The start checks nothing for it",
     )
     t.add_argument(
         "--walk-ahead",

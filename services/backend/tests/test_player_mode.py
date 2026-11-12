@@ -434,3 +434,166 @@ def test_the_boss_warning_is_printed_before_any_input_and_never_refuses() -> Non
     i_ev = run_src.index("        if pb_rec is not None:  # dungeon@9.35b")
     assert i_start < i_ev and run_src.index("ev(pb_rec)") > i_ev
     assert '"kind": "player_boss_warning"' in blk and '"guard": pb_guard' in blk
+
+
+# --- dungeon@9.35b: the Butterfly Wing home at the end (Batt 2026-11-12) -------------------------
+
+
+def test_each_character_has_a_home_key_that_no_other_key_takes() -> None:
+    import bare_steal as bs
+
+    assert dh.HOME_KEY == "F8" and dh.PLAYER_HOME_ITEM == 602
+    for char, conf in dh.CHARS_CONF.items():
+        assert conf["home_key"] == dh.HOME_KEY, char
+        assert "home" not in conf["keys"], char  # the lab's own keys are unchanged
+        assert dh.HOME_KEY not in conf["keys"].values(), char
+    assert dh.HOME_KEY not in dh.HEAL_CANDY_KEYS.values() and dh.HOME_KEY != bs.EQUIP_KEY
+    assert dh.hotbar_slot(dh.HOME_KEY) == 7
+
+
+def test_the_home_key_is_checked_before_any_input() -> None:
+    rogue = dh.CHARS_CONF["rogue"]
+    keys = rogue["keys"]
+    ns = dh.argparse.Namespace
+
+    assert dh.player_home_refused(ns(player_mode=False), rogue, keys, None) is None
+    assert "goes with --player-mode" in str(
+        dh.player_home_refused(ns(player_mode=False, player_home_key="F9"), rogue, keys, None)
+    )
+    assert dh.player_home_refused(ns(player_mode=True), rogue, keys, None) is None
+    assert dh.player_home_refused(ns(player_mode=True, player_home_key="F9"), rogue, keys,
+                                  None) is None  # fmt: skip
+    why = dh.player_home_refused(ns(player_mode=True, player_home_key="F2"), rogue, keys, None)
+    assert why is not None and "fly" in why  # the Fly Wing's key
+    candy = {**keys, **dh.HEAL_CANDY_KEYS}
+    assert "cane" in str(dh.player_home_refused(ns(player_mode=True, player_home_key="F6"),
+                                                rogue, candy, None))  # fmt: skip
+    assert "--steal-opener" in str(dh.player_home_refused(ns(player_mode=True), rogue, keys, "F8"))
+    for bad in ("Insert", "F10", "8"):
+        assert "row-1" in str(dh.player_home_refused(ns(player_mode=True, player_home_key=bad),
+                                                     rogue, keys, None))  # fmt: skip
+    assert dh.player_home_refused(ns(player_mode=True), {"keys": keys}, keys, None) is None  # none
+    run_src = ast.get_source_segment(SRC, _func("run")) or ""
+    i_hk = run_src.index("why_hk = player_home_refused(a, conf, keys_, opener_key)")
+    assert run_src.index("keys_ = {**keys_, **HEAL_CANDY_KEYS}") < i_hk  # the candies' keys too
+    assert i_hk < run_src.index("with r.session(")
+    i_join = run_src.index('keys_ = {**keys_, "home": home_key}')
+    blk = run_src[run_src.rindex("    if player:\n", 0, i_join) : i_join]
+    assert "home_key = " in blk  # the home key joins the run's keys under --player-mode only
+
+
+def test_run_refuses_a_home_key_without_player_mode_before_any_input(monkeypatch: Any) -> None:
+    import ro_agent as r
+
+    a = _ns(monkeypatch, "--player-home-key", "F9")
+    assert a.player_home_key == "F9" and _ns(monkeypatch).player_home_key is None
+    monkeypatch.undo()
+
+    def no_session(*_: Any, **__: Any) -> Any:
+        raise AssertionError("a session was opened")
+
+    monkeypatch.setattr(r, "session", no_session)
+    with pytest.raises(SystemExit) as exc:
+        dh.run(a)
+    assert "dungeon@9.35b refused" in str(exc.value) and "--player-mode" in str(exc.value)
+
+
+def test_the_end_skips_without_a_key_dead_or_on_a_hard_bar() -> None:
+    assert dh.player_home_skip("time_box", "F8") is None
+    assert dh.player_home_skip("stock_keep: 1 Fly Wing(s) left, kept for the end", "F8") is None
+    assert "no Butterfly Wing key" in str(dh.player_home_skip("time_box", None))
+    assert "dead" in str(dh.player_home_skip("death", "F8"))
+    assert "hard bar" in str(dh.player_home_skip("hard_bar: position jump (map change?)", "F8"))
+    assert dh.player_home_count_why(1) is None and dh.player_home_count_why(7) is None
+    assert "did not read" in str(dh.player_home_count_why(None))
+    assert "count 0" in str(dh.player_home_count_why(0))
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+        self.log: list[str] = []
+
+    def now(self) -> float:
+        return self.t
+
+    def sleep(self, dt: float) -> None:
+        self.t += dt
+
+
+def _home(clock: _Clock, counts: list[int | None], seen: Any, *, key: str | None = "F8",
+          reason: str = "time_box", seated: bool = False) -> dict[str, Any]:  # fmt: skip
+    reads = list(counts)
+
+    def read_count() -> int | None:
+        clock.log.append("read")
+        return reads.pop(0) if reads else None
+
+    return dh.player_home_end(
+        key, reason, seated, read_count=read_count,
+        press=lambda: clock.log.append("press"), stand=lambda: clock.log.append("stand"),
+        basic_info=lambda: seen(clock.t), sleep=clock.sleep, now=clock.now)  # fmt: skip
+
+
+def test_the_end_presses_the_butterfly_wing_once_with_a_count_of_one_or_more() -> None:
+    c = _Clock()
+    rec = _home(c, [2], lambda t: not 0.5 <= t < 3.9)  # a load screen 0.5-3.9 s after the press
+    assert c.log == ["read", "press"] and rec["pressed"] is True and rec["count"] == 2
+    assert rec["why"] == "2 on the hotbar" and rec["stood"] is False
+    assert rec["load_s"] == pytest.approx(0.6) and rec["back_s"] == pytest.approx(4.0)
+    # a count that reads on the third try (the end Fly Wing's dark frames)
+    c = _Clock()
+    rec = _home(c, [None, None, 1], lambda t: t > 2.0)
+    assert c.log == ["read", "read", "read", "press"] and rec["count"] == 1
+    # seated: she stands first, then the wing
+    c = _Clock()
+    rec = _home(c, [3], lambda t: True, seated=True)
+    assert c.log == ["read", "stand", "press"] and rec["stood"] is True
+    assert rec["load_s"] is None and rec["back_s"] is None  # no load seen: recorded ...
+    assert rec["waited_s"] <= dh.PLAYER_HOME_LOAD_S + 2 * dh.PLAYER_HOME_POLL_S  # ... not waited
+
+
+def test_the_end_presses_nothing_on_zero_unread_no_key_death_or_a_hard_bar() -> None:
+    for counts, why in (([0], "count 0"), ([], "did not read")):
+        c = _Clock()
+        rec = _home(c, counts, lambda t: True)
+        assert "press" not in c.log and rec["pressed"] is False and why in rec["why"]
+    c = _Clock()
+    _home(c, [], lambda t: True)
+    assert c.log == ["read"] * dh.STOCK_TRIES  # an unread count is retried, then given up
+    for kw in ({"key": None}, {"reason": "death"}, {"reason": "hard_bar: unknown UI state x"}):
+        c = _Clock()
+        rec = _home(c, [5], lambda t: True, **kw)
+        assert c.log == [] and rec["pressed"] is False and rec["count"] is None, kw
+    c = _Clock()
+    rec = _home(c, [5], lambda t: False)  # the load never ends: the wait is capped, one press
+    assert c.log.count("press") == 1 and rec["back_s"] is None
+    assert rec["waited_s"] == pytest.approx(dh.PLAYER_HOME_WAIT_S, abs=dh.PLAYER_HOME_POLL_S)
+
+
+def test_the_home_press_is_on_the_player_path_only_and_types_nothing() -> None:
+    run_ = _func("run")
+    presses = [n for n in ast.walk(run_) if isinstance(n, ast.Call) and _call_name(n) == "press"
+               and n.args and isinstance(n.args[0], ast.Constant)
+               and n.args[0].value == "home"]  # fmt: skip
+    assert len(presses) == 1
+    node: ast.AST = presses[0]
+    in_player_else = False
+    while node in PARENT:
+        up = PARENT[node]
+        if isinstance(up, ast.If) and _is_not_player(up.test) and any(node is s for s in up.orelse):
+            in_player_else = True
+        node = up
+    assert in_player_else  # the else of `if not player:` (the lab's end warp is its body)
+    assert not _player_never_runs(presses[0])
+    calls = [n for n in ast.walk(run_) if isinstance(n, ast.Call)
+             and _call_name(n) == "player_home_end"]  # fmt: skip
+    assert len(calls) == 1
+    end_src = ast.get_source_segment(SRC, _func("player_home_end")) or ""
+    for word in ("typed_line", "gm_line", "close_chat", "type_text", '"@'):
+        assert word not in end_src, word
+    run_src = ast.get_source_segment(SRC, run_) or ""
+    assert (
+        '"kind": "player_home"' in run_src
+        and '**({"player_home_key": home_key} if player else {}),' in run_src
+    )
