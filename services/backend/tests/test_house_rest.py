@@ -363,7 +363,9 @@ def test_the_default_run_records_no_rest_field_and_house_mode_does() -> None:
     a = Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=True, rest="spot",
                   npc_guard=True, miss_cue=False)  # fmt: skip
     assert dh.fixes_of(a) == {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0,
-                              "walk_trust": True, "npc_guard": True, "miss_cue": False}  # fmt: skip
+                              "walk_trust": True, "npc_guard": True, "miss_cue": False,
+                              # dungeon@9.34 (Batt 11-12): exp-first is ON by default, recorded
+                              "exp_first": [dh.EXP_PAIR_S, "9.34"]}  # fmt: skip
     a.rest = "house"
     assert dh.fixes_of(a)["rest"] == "house"
 
