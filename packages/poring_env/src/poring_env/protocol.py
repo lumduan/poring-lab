@@ -254,15 +254,24 @@ class EnvironmentStatus(BaseModel):
     model_config = _MODEL_CONFIG
 
     state: Literal["green", "window", "red"] = Field(
-        description="green: an allowed environment is attested; window: an operator window lets "
-        "ASSIST's bot side through; red: every bot press is refused."
+        description="green: an allowed environment is attested, or declared by a person "
+        "(ADR-0023; see verified); window: an operator window lets ASSIST's bot side through; "
+        "red: every bot press is refused."
     )
-    reason: str = Field(description='"ok", "window:<kind>", or why bot presses are refused.')
-    env_id: str | None = Field(default=None, description="The attested environment's id.")
+    reason: str = Field(
+        description='"ok" (attested), "declared" (a person\'s declaration), "window:<kind>", or '
+        "why bot presses are refused."
+    )
+    env_id: str | None = Field(default=None, description="The green environment's id.")
     window: Literal["login", "desktop"] | None = None
     window_left_s: float | None = Field(default=None, ge=0)
     attest_age_s: float | None = Field(
         default=None, description="Seconds since the sniffer's last attestation; null = none yet."
+    )
+    verified: bool | None = Field(
+        default=None,
+        description="Only while green: true = packet-verified (the sniffer attested the session); "
+        "false = DECLARED by a person, not verified (ADR-0023). null when not green.",
     )
 
 

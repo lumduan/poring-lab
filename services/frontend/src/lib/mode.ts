@@ -18,6 +18,8 @@ export interface InterlockLike {
   state?: string | null;
   reason?: string | null;
   window?: string | null;
+  /** While green: true = packet-verified, false = declared by a person, not verified (ADR-0023). */
+  verified?: boolean | null;
 }
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -36,6 +38,9 @@ export const MODE_ACTIVE_CLASS: Record<Mode, string> = {
 
 function interlockText(env: InterlockLike | null | undefined): string {
   if (!env?.state) return "";
+  if (env.state === "green" && env.verified === false) {
+    return " Allowed by a person's declaration, not verified.";
+  }
   if (env.state === "green") return " Lab session verified.";
   if (env.state === "window") return ` Operator window open (${env.window ?? "?"}).`;
   return ` Bot input is blocked (${env.reason ?? "no reason given"}).`;

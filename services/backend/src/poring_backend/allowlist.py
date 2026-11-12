@@ -42,9 +42,9 @@ class AuditRecord(BaseModel):
     t_wall: str
     action: Literal[
         "refused", "seed", "env_create", "env_delete", "env_rename", "env_type", "env_text",
-        "server_add", "server_remove",
+        "server_add", "server_remove", "declare", "withdraw",
     ]  # fmt: skip
-    kind: Literal["easy", "normal", "hard"] | None = None  # the asymmetric rule that applied
+    kind: Literal["easy", "normal", "hard", "declare"] | None = None  # the rule that applied
     env_id: str | None
     entry: str | None  # the subject: "host:port", "host", ".domain", or an environment's name
     revision_before: int | None
@@ -56,7 +56,9 @@ class AuditRecord(BaseModel):
     client: str | None  # the browser's peer address
     origin: str | None
     listener: int | None  # the port the request arrived on
-    note: str | None = None  # a hard change: the typed reason; else the change in plain words
+    # a hard change: the typed reason; declare / withdraw: the person's statement (ADR-0023);
+    # else the change in plain words
+    note: str | None = None
 
 
 # Cloudflare's published IPv4 ranges (https://www.cloudflare.com/ips-v4, unchanged since 2021). A

@@ -404,3 +404,147 @@ def test_human_input_passes_while_red(app_client: Any) -> None:
     keys = [e.code for e in client.fake.events if isinstance(e, Key)]  # type: ignore[attr-defined]
     assert keys[:2] == ["KeyH", "KeyH"]
     assert client.get("/health").json()["environment"]["state"] == "red"
+
+
+# --- ADR-0023 decision 1: a person's DECLARATION (built 2026-11-12) -------------------------------
+
+CLASS = {"id": "class-server", "status": "allowed", "adr": "ADR-0023", "declared": True,
+         "servers": ["203.0.113.7:6900"]}  # fmt: skip  # a server the sniffer cannot see
+
+
+def with_envs(*extra: dict[str, Any], lab: bool = True) -> EnvironmentsConfig:
+    envs = [CFG.environments[0].model_dump()] if lab else []
+    return EnvironmentsConfig.model_validate(CFG.model_dump() | {"environments": [*envs, *extra]})
+
+
+def test_a_declared_environment_is_green_labelled_not_verified() -> None:
+    cfg = with_envs(CLASS, lab=False)
+    for mode in (Mode.BOT, Mode.ASSIST):
+        v = verdict(cfg, mode=mode, age=None)  # no attestation at all: none is needed
+        assert (v.green, v.bot_allowed, v.reason, v.env_id, v.verified) == (
+            True, True, "declared", "class-server", False)  # fmt: skip
+        status = v.status()
+        assert (status.state, status.reason, status.verified) == ("green", "declared", False)
+
+
+def test_an_attested_environment_wins_over_a_declared_one() -> None:
+    cfg = with_envs(CLASS)
+    v = verdict(cfg)  # the lab session is attested
+    assert (v.reason, v.env_id, v.verified, v.status().verified) == (
+        "ok", "lab-rathena", True, True)  # fmt: skip
+    v = verdict(cfg, age=None)  # no attestation: the declaration, labelled
+    assert (v.reason, v.env_id, v.verified) == ("declared", "class-server", False)
+    first = with_envs(CLASS, lab=False).environments + with_envs().environments
+    cfg = EnvironmentsConfig.model_validate(  # declared listed FIRST: still tried second
+        CFG.model_dump() | {"environments": [e.model_dump() for e in first]}
+    )
+    assert (verdict(cfg).reason, verdict(cfg).env_id) == ("ok", "lab-rathena")
+
+
+def test_the_lab_environment_without_a_declaration_behaves_as_before() -> None:
+    v = verdict()
+    assert (v.green, v.reason, v.verified, v.status().verified) == (True, "ok", True, True)
+    assert all(not e.declared for e in CFG.environments)
+    red = verdict(age=None)
+    assert (red.green, red.reason, red.verified, red.status().verified) == (
+        False, "no_attestation", False, None)  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("change", "kwargs", "reason"),
+    [
+        ({"servers": []}, {}, "no_servers"),
+        ({}, {"lock": CaptureBackend(backend="hold", reason="x")}, "lock_not_steady"),
+        ({}, {"lock": CaptureBackend(backend="console", seq=7, phase="switching")},
+         "lock_not_steady"),
+        ({"windows_host": HOST}, {"win_host": "192.168.1.170"}, "host_mismatch"),
+    ],
+)  # fmt: skip
+def test_a_declared_environment_still_needs_servers_and_a_steady_lock(
+    change: dict[str, Any], kwargs: dict[str, Any], reason: str
+) -> None:
+    cfg = with_envs(CLASS | change, lab=False)
+    for mode in (Mode.BOT, Mode.ASSIST):
+        v = verdict(cfg, mode=mode, age=None, **kwargs)
+        assert (v.green, v.bot_allowed, v.reason, v.status().state) == (False, False, reason, "red")
+        assert v.status().verified is None
+
+
+def test_a_declared_environment_naming_its_windows_host_needs_that_host() -> None:
+    cfg = with_envs(CLASS | {"windows_host": HOST}, lab=False)
+    assert verdict(cfg, age=None).reason == "declared"  # this backend drives that PC
+    no_host = with_envs(CLASS, lab=False)  # no Windows host named: any target
+    assert verdict(no_host, age=None, win_host="192.168.1.170").reason == "declared"
+
+
+@pytest.mark.parametrize("status", ["forbidden", "pending"])
+def test_a_forbidden_or_pending_environment_is_never_green_even_declared(status: str) -> None:
+    cfg = with_envs(CLASS | {"status": status}, lab=False)
+    for mode in (Mode.BOT, Mode.ASSIST):
+        v = verdict(cfg, mode=mode, age=None)
+        assert (v.green, v.bot_allowed, v.reason) == (False, False, f"env_{status}")
+
+
+def test_an_undeclared_environment_without_signals_stays_red() -> None:
+    cfg = with_envs(CLASS | {"declared": False}, lab=False)
+    assert verdict(cfg, age=None).reason == "no_signals_configured"  # as before ADR-0023
+
+
+def test_a_window_still_works_in_assist_beside_a_declared_environment() -> None:
+    cfg = with_envs(CLASS | {"servers": []}, lab=False)  # declared, but red (no servers)
+    v = verdict(cfg, mode=Mode.ASSIST, window=WIN, age=None)
+    assert (v.green, v.bot_allowed, v.reason, v.status().state) == (
+        False, True, "window:login", "window")  # fmt: skip
+    v = verdict(cfg, mode=Mode.BOT, window=WIN, age=None)
+    assert (v.bot_allowed, v.reason) == (False, "no_servers")  # never in BOT mode
+    green = verdict(with_envs(CLASS, lab=False), mode=Mode.ASSIST, window=WIN, age=None)
+    assert (green.reason, green.window) == ("declared", WIN)  # green carries the window, as before
+
+
+def test_a_shipped_file_can_never_declare(tmp_path: Path) -> None:
+    import yaml
+
+    raw = CFG.model_dump(mode="json")
+    raw["environments"][0]["declared"] = True
+    path = tmp_path / "environments.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    assert load_config(path) == (None, "config_invalid")  # a declaration is a person's act
+
+
+def declare_in_store(tmp_path: Path) -> None:
+    """A declaration as the Settings page would have stored it (a person's act; tests only)."""
+    from poring_backend import envstore
+
+    settings = tmp_path / "settings"
+    es = envstore.load(settings)
+    declared = envstore.Declaration(at="2026-11-12T07:00:00+00:00", peer="192.168.1.50",
+                                    statement="The teacher who owns it permits bots.")  # fmt: skip
+    es.environments.append(envstore.EnvEntry(
+        id="class-server", name="Class server", type="allowed", declared=declared,
+        servers=[envstore.ServerEntry(host="203.0.113.7", port=6900)]))  # fmt: skip
+    envstore.save(settings, es)
+
+
+def test_a_declared_environment_lets_the_bot_press_labelled_in_health(
+    app_client: Any, tmp_path: Path
+) -> None:
+    write_config(tmp_path / "environments.yaml")
+    declare_in_store(tmp_path)
+    client = app_client(assist_lease_s=0.01)
+    set_mode(client, Mode.BOT)
+    env = client.get("/health").json()["environment"]
+    assert (env["state"], env["reason"], env["env_id"], env["verified"]) == (
+        "green", "declared", "class-server", False)  # fmt: skip
+    ack = bot(client, Key(t_mono_ns=1, code="KeyA", action="down"),
+              Key(t_mono_ns=1, code="KeyA", action="up"))  # fmt: skip
+    assert (ack["accepted"], ack["dropped"]) == (2, 0), ack["reasons"]
+    with client.websocket_connect("/ingest/packets") as ingest:  # the lab session attests
+        ingest.send_text(attest().model_dump_json())
+    wait(lambda: client.get("/health").json()["environment"]["reason"] == "ok")
+    env = client.get("/health").json()["environment"]
+    assert (env["state"], env["env_id"], env["verified"]) == ("green", "lab-rathena", True)
+    with client.websocket_connect("/internal/agent") as ws:  # the agent still sees nothing
+        ws.send_text(AgentHello(t_mono_ns=1, agent_id="t", version="0").model_dump_json())
+        while (msg := json.loads(ws.receive_text()))["type"] != "status":
+            pass
+        assert msg["environment"] is None

@@ -58,10 +58,17 @@ export function bannerAlarms(status: Status | null, statusAgeS: number | null = 
 }
 
 /** ADR-0016 (rewritten 2026-10-04): the environment interlock, while the bot could act (BOT or
- * ASSIST). Green says nothing; an operator window and a refusal are shown with their reason. */
+ * ASSIST). A packet-verified green says nothing; a green by a person's DECLARATION (ADR-0023) says
+ * so, never as verified; an operator window and a refusal are shown with their reason. */
 export function describeEnvironment(status: Status | null): string | null {
   const env = status?.environment;
   if (!env || !status || status.mode === "HUMAN") return null;
+  if (env.state === "green" && env.verified === false) {
+    return (
+      `Interlock: bot input allowed on "${env.env_id ?? "?"}" by a person's DECLARATION, not ` +
+      "verified (the lab cannot check this server)."
+    );
+  }
   if (env.state === "window") {
     const left = env.window_left_s === null || env.window_left_s === undefined ? "" : `, ${Math.round(env.window_left_s)} s left`;
     return `Interlock: operator window open (${env.window}${left}) -- bot input allowed in ASSIST only.`;

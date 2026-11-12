@@ -26,6 +26,14 @@ export interface Suggestion {
   port: number;
 }
 
+/** ADR-0023: a person declared that the server's owner permits bots. The backend stamps `at` (ISO
+ * 8601, UTC) and `peer` (the browser's address) itself; the page sends only the statement. */
+export interface Declaration {
+  at: string;
+  peer: string;
+  statement: string;
+}
+
 export interface EnvView {
   id: string;
   name: string;
@@ -36,6 +44,7 @@ export interface EnvView {
   suggestions: Suggestion[];
   ready: boolean;
   signals: string[];
+  declared?: Declaration | null; // allowed environments only (ADR-0023)
 }
 
 export interface SettingsView {
@@ -47,10 +56,14 @@ export interface SettingsView {
   forbidden: string[];
   saved?: boolean;
   read_back?: boolean;
-  changes?: { kind: "easy" | "normal" | "hard"; text: string }[];
+  changes?: { kind: ChangeKind; text: string }[];
 }
 
-/** One environment as the PUT body carries it (user fields only). */
+/** The rule a change fell under: the asymmetric rules plus a person's declaration (ADR-0023). */
+export type ChangeKind = "easy" | "normal" | "hard" | "declare";
+
+/** One environment as the PUT body carries it (user fields only). `declared` is the person's
+ * statement (null or absent: none); the page sends a kept one back unchanged. */
 export interface EnvInput {
   id: string | null;
   name: string;
@@ -58,12 +71,13 @@ export interface EnvInput {
   summary: string;
   why: string;
   servers: { host: string; port: number | null; note: string; source?: string }[];
+  declared?: string | null;
 }
 
 export interface AuditRecord {
   t_wall: string;
   action: string;
-  kind?: "easy" | "normal" | "hard" | null;
+  kind?: ChangeKind | null;
   env_id: string | null;
   entry: string | null;
   revision_before: number | null;
@@ -124,6 +138,10 @@ export const REASON_TEXT: Record<string, string> = {
   bad_forbidden_entry: "Write a server (name or IP), optionally with :port, or .domain for a whole domain.",
   not_blocked: "That server is not on the blocked list.",
   not_a_forbidden_environment: "Blocked servers belong to the forbidden (official) environments.",
+  statement_required: "Write the declaration in your own words (at least 10 characters).",
+  declaration_not_importable: "A declaration cannot come from a file: declare it on this page yourself.",
+  declaration_not_allowed_here: "Only an allowed environment can carry a declaration.",
+  declaration_not_for_attested: "This environment is verified by the lab's own packet check; it takes no declaration.",
 };
 
 export function reasonText(reason: string): string {
@@ -204,6 +222,14 @@ const ACTION_TEXT: Record<string, string> = {
   env_text: "Edited description",
   server_add: "Added",
   server_remove: "Removed",
+  declare: "Declared the owner's permission (not verified)",
+  withdraw: "Withdrew the declaration",
+};
+
+/** Changes whose note is the person's own words, quoted (ADR-0023). */
+const NOTE_LABEL: Record<string, string> = {
+  declare: "statement",
+  withdraw: "withdrawn statement",
 };
 
 export function auditText(r: AuditRecord): string {
@@ -213,7 +239,8 @@ export function auditText(r: AuditRecord): string {
   }
   if (r.action === "seed") return `${ACTION_TEXT.seed} (${r.note ?? ""})`;
   const tag = r.kind === "hard" ? "LOOSENED a forbidden list — " : "";
-  const what = r.kind === "hard" ? (r.note ? `reason: "${r.note}"` : "") : (r.note ?? "");
+  const label = r.kind === "hard" ? "reason" : NOTE_LABEL[r.action];
+  const what = label ? (r.note ? `${label}: "${r.note}"` : "") : (r.note ?? "");
   const rev = `(revision ${r.revision_before} → ${r.revision_after})`;
   return `${tag}${ACTION_TEXT[r.action] ?? r.action}: ${r.entry ?? ""}${what ? ` — ${what}` : ""} ${rev}${who}`;
 }
@@ -227,15 +254,50 @@ export function badgeText(env: Pick<EnvView, "type" | "servers">): string {
 }
 
 /** Why the bot cannot act in an allowed environment yet, in one sentence (null: it can). */
-export function notReadyText(env: Pick<EnvView, "type" | "servers" | "signals">): string | null {
+export function notReadyText(
+  env: Pick<EnvView, "type" | "servers" | "signals"> & Partial<Pick<EnvView, "declared">>,
+): string | null {
   if (env.type !== "allowed") return null;
   const usable = env.servers.filter((s) => !s.forbidden);
   if (env.servers.length === 0) return "The bot cannot act here yet: confirm at least one server below.";
   if (usable.length === 0) return "Every server here is on a forbidden list, so the bot ignores them.";
-  if (env.signals.length === 0) {
-    return "The bot cannot act here yet: the lab has no way to check a game session on these servers.";
+  if (env.signals.length === 0 && !env.declared) {
+    return (
+      "The bot cannot act here yet: the lab has no way to check a game session on these servers. " +
+      "If the server's owner permits bots, you can declare it below."
+    );
   }
   return null;
+}
+
+// --- a person's declaration (ADR-0023 decision 1, Batt 2026-11-12: "don't lock, write a warning") --
+
+/** The backend's MIN_REASON: a declaration is the person's own words. */
+export const MIN_DECLARE_STATEMENT = 10;
+/** The backend's MAX_STATEMENT. */
+export const MAX_DECLARE_STATEMENT = 500;
+
+/** Shown BEFORE the statement box, every time (Batt's wording, 2026-11-12). */
+export const DECLARE_WARNING =
+  "Declare only for a server whose owner permits bots. The lab cannot check this: once you " +
+  "declare, the bot will act there on your word. Official servers stay blocked by default; " +
+  "lifting that block can get your account banned and is your own responsibility. Never collect " +
+  "other players' data.";
+
+/** Declare is ready only with the person's own words (the backend checks the same). */
+export function declareReady(statement: string): boolean {
+  const n = statement.trim().length;
+  return n >= MIN_DECLARE_STATEMENT && n <= MAX_DECLARE_STATEMENT;
+}
+
+/** "Declared by a person, not verified — 2026-11-12 07:03 UTC, from 192.168.1.50". */
+export function declaredText(d: Declaration): string {
+  return `Declared by a person, not verified — ${d.at.slice(0, 16).replace("T", " ")} UTC, from ${d.peer}`;
+}
+
+/** The whole set with one environment's declaration set (a statement) or withdrawn (null). */
+export function withDeclaration(envs: EnvInput[], envId: string, statement: string | null): EnvInput[] {
+  return envs.map((e) => (e.id === envId ? { ...e, declared: statement === null ? null : statement.trim() } : e));
 }
 
 /** Suggestions grouped by server address, for "Confirm all". */
@@ -254,6 +316,7 @@ export function toInputs(view: Pick<SettingsView, "environments">): EnvInput[] {
     summary: e.summary,
     why: e.why,
     servers: e.servers.map((s) => ({ host: s.host, port: s.port, note: s.note })),
+    declared: e.declared ? e.declared.statement : null, // sent back unchanged: the backend keeps it
   }));
 }
 

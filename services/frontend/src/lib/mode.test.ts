@@ -23,6 +23,15 @@ test("ASSIST is amber and HUMAN is blue; neither pulses", () => {
   assert.doesNotMatch(h.detail, /blocked/); // the interlock does not matter while a human drives
 });
 
+test("a declared green is never shown as verified (ADR-0023)", () => {
+  for (const mode of ["BOT", "ASSIST"] as const) {
+    const b = modeBadge(mode, { state: "green", reason: "declared", verified: false });
+    assert.match(b.detail, /Allowed by a person's declaration, not verified\./);
+    assert.doesNotMatch(b.detail, /session verified/);
+  }
+  assert.match(modeBadge("BOT", { state: "green", verified: true }).detail, /Lab session verified/);
+});
+
 test("no status is never shown as a safe mode", () => {
   const u = modeBadge(null);
   assert.equal(u.tone, "unknown");
