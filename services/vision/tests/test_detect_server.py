@@ -488,7 +488,7 @@ def test_main_takes_ov_precision_and_records_it(monkeypatch: pytest.MonkeyPatch)
     assert len(rec.nets) == 2
     step = ud.serve_step_openvino(600, ov_precision="f16")
     assert ds.main(step.split("=", 1)[1].split()[3:]) == 0  # serve-cmd's step, parsed here
-    assert [n[4] for n in rec.nets[2:]] == ["f16", "f16"]  # v1 + xmas02
+    assert [n[4] for n in rec.nets[2:]] == ["f16"] * len(ud.GPU_WEIGHTS)  # every served model
 
 
 def test_gpu_clock_reads_the_cards_floor(tmp_path: Path) -> None:
@@ -513,8 +513,9 @@ def test_the_openvino_serve_step_passes_ov_preproc_to_the_server(
         cmd = step.split("=", 1)[1].split()
         assert cmd[:3] == ["python", "-m", "poring_vision.detect_server"]
         assert ds.main(cmd[3:]) == 0
-    assert [n[5] for n in rec.nets] == ["gpu", "gpu", "cpu", "cpu"]  # v1 + xmas02 each time
-    assert [n[0] for n in rec.nets[:2]] == [f"{ud.NAS_MODELS}/{w.onnx}"
+    n_w = len(ud.GPU_WEIGHTS)  # every served model, each time
+    assert [n[5] for n in rec.nets] == ["gpu"] * n_w + ["cpu"] * n_w
+    assert [n[0] for n in rec.nets[:n_w]] == [f"{ud.NAS_MODELS}/{w.onnx}"
                                             for w in ud.GPU_WEIGHTS.values()]  # fmt: skip
     assert [s["mode"]["ov_preproc"] for s in rec.servers] == ["gpu", "cpu"]  # type: ignore[index]
     assert "--ov-preproc gpu" in ud.serve_step_openvino(600)  # the default since the parity run
