@@ -205,10 +205,17 @@ ports, quickstart) and `docs/adr/`.
      DEFAULT network's name (`scripts/backend_addr.py`).
 
 9. **Environment allowlist** (ADR-0006). Automation (BOT/ASSIST) may act only on the sanctioned
-   ➡️ **ADR-0023 (Batt 2026-11-07, DECIDED, NOT BUILT): learner mode.** A person may DECLARE a
-   server owner's permission on the Settings page (shown "declared by a person, not verified";
-   research counts only packet-verified sessions); a learner's Windows gets only the remote program;
-   the Windows host becomes a console setting. Until it is built, the rules below stand as written.
+   ➡️ **ADR-0023 decision 1 BUILT 2026-11-12** (Batt: "don't lock; we cannot control other people;
+   write a warning"). It applies only to an allowed environment the lab CANNOT verify; one with
+   packet `signals` is refused (`declaration_not_for_attested`).
+   - A person may DECLARE the server owner's permission on the Settings page, as a typed statement.
+     It is stored in their own gitignored `settings/`; an import or a shipped file never carries it.
+   - The interlock is then green there, labelled "declared by a person, not verified" (`verified`
+     false). Packet-attested environments are tried first.
+   - Research counts only packet-verified sessions. The agent never declares.
+   - The lab agent still runs pilots only on the environments Batt names.
+   - NOT built: decisions 3-4 (a learner's Windows gets only the remote program; the Windows host
+     as a console setting).
    environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
    data stays local and pseudonymized.
    - **The interlock is built** (ADR-0016 ACCEPTED 2026-10-04): a LOGIC interlock driven by

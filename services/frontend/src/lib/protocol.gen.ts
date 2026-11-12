@@ -969,17 +969,21 @@ export interface EnvironmentStatus {
    */
   attest_age_s: number | null;
   /**
-   * The attested environment's id.
+   * The green environment's id.
    */
   env_id: string | null;
   /**
-   * "ok", "window:<kind>", or why bot presses are refused.
+   * "ok" (attested), "declared" (a person's declaration), "window:<kind>", or why bot presses are refused.
    */
   reason: string;
   /**
-   * green: an allowed environment is attested; window: an operator window lets ASSIST's bot side through; red: every bot press is refused.
+   * green: an allowed environment is attested, or declared by a person (ADR-0023; see verified); window: an operator window lets ASSIST's bot side through; red: every bot press is refused.
    */
   state: "green" | "window" | "red";
+  /**
+   * Only while green: true = packet-verified (the sniffer attested the session); false = DECLARED by a person, not verified (ADR-0023). null when not green.
+   */
+  verified: boolean | null;
   window: ("login" | "desktop") | null;
   window_left_s: number | null;
 }
