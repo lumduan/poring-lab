@@ -18,8 +18,10 @@
 // DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Changed here: the colours come synchronously from our own tokenizer (no lazy @lezer import), no
-// "AI helper" mark, and a `colour` switch (JSON is shown plain).
-import { forwardRef, useMemo } from "react";
+// "AI helper" mark, and a `colour` switch (JSON is shown plain). Ours: `mark`, a line range shown
+// as a band behind the text (an empty span: the text and a copy of it are unchanged) and scrolled
+// into view (a runner flow's selected block, 2026-11-12).
+import { forwardRef, useEffect, useMemo, useRef } from "react";
 
 import { colouredPieces } from "@/lib/flow/pycolor";
 
@@ -29,25 +31,43 @@ export type CodeViewProps = {
   label?: string;
   colour?: boolean;
   testId?: string;
+  /** Lines [from, to] (1-based, inclusive) to mark: a band behind them, their numbers bold. */
+  mark?: [number, number] | null;
 };
 
 const CodeView = forwardRef<HTMLPreElement, CodeViewProps>(function CodeView(
-  { code, errorLine = null, label = "Python made from the blocks", colour = true, testId = "python-code" },
+  { code, errorLine = null, label = "Python made from the blocks", colour = true, testId = "python-code", mark = null },
   ref,
 ) {
   const pieces = useMemo(() => (colour ? colouredPieces(code) : null), [code, colour]);
   const lines = code === "" ? [""] : code.replace(/\n$/, "").split("\n");
+  const from = mark ? Math.max(1, Math.min(lines.length, mark[0])) : null;
+  const to = mark && from !== null ? Math.max(from, Math.min(lines.length, mark[1])) : null;
+  const gutter = useRef<HTMLPreElement | null>(null);
+  useEffect(() => {
+    // the marked lines scrolled into the code view only (never the page): the gutter is the
+    // offsetParent of its numbers, and the view's top edge
+    const g = gutter.current;
+    const box = g?.parentElement;
+    const el = from === null ? undefined : (g?.children[from - 1] as HTMLElement | undefined);
+    if (!g || !box || !el) return;
+    const top = el.offsetTop;
+    const seen = top >= box.scrollTop && top + el.offsetHeight * 2 <= box.scrollTop + box.clientHeight;
+    if (!seen) box.scrollTop = Math.max(0, top - box.clientHeight / 3);
+  }, [from, to]);
+  const cls = (n: number) => (n === errorLine ? "code-gutter-error" : from !== null && to !== null && n >= from && n <= to ? "code-gutter-mark" : undefined);
   return (
     <div className="code-view" data-testid={testId}>
-      <pre className="code-gutter" aria-hidden="true">
+      <pre className="code-gutter" aria-hidden="true" ref={gutter}>
         {lines.map((_, i) => (
-          <span key={i} className={i + 1 === errorLine ? "code-gutter-error" : undefined}>
+          <span key={i} className={cls(i + 1)}>
             {i + 1}
             {"\n"}
           </span>
         ))}
       </pre>
-      <pre className="code-text" tabIndex={0} aria-label={label} ref={ref}>
+      <pre className="code-text" tabIndex={0} aria-label={label} ref={ref} data-marked={from !== null ? `${from}-${to}` : undefined}>
+        {from !== null && to !== null && <span className="code-mark-band" aria-hidden="true" style={{ top: `calc(0.6rem + ${from - 1} * 1.5em)`, height: `calc(${to - from + 1} * 1.5em)` }} />}
         {pieces
           ? pieces.map((piece, i) =>
               piece.kind ? (

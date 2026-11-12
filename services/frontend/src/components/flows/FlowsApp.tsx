@@ -30,6 +30,7 @@ import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, r
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { type AuthoredExit, canonical, emptyFlow, type Flow, MAX_JSON_BYTES } from "@/lib/flow/ir";
 import { browserStorage, KEYS, pythonDefault, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
+import { findRunner, RUNNERS, runnerForMap } from "@/lib/flow/runners";
 import { oneMapStarter, STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
 import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText, tabOf } from "@/lib/flow/words";
@@ -100,7 +101,16 @@ function initialFlow(): { flow: Flow; restored: boolean; broken: boolean } {
   return r.ok ? { flow: r.flow, restored: true, broken: false } : { flow: starterFlow(), restored: false, broken: true };
 }
 
-export default function FlowsApp({ backendUrl, initialBlock = null }: { backendUrl: string | null; initialBlock?: string | null }) {
+export default function FlowsApp({
+  backendUrl,
+  initialBlock = null,
+  onRunner,
+}: {
+  backendUrl: string | null;
+  initialBlock?: string | null;
+  /** Open a runner flow (FlowsClient): the generated description of a live runner. */
+  onRunner?: (id: string) => void;
+}) {
   // Client-only (FlowsClient loads this with ssr: false): backendHttpBase reads window.location.
   const [api] = useState<FlowsApi>(() => new FlowsApi(backendHttpBase(backendUrl)));
   const [start] = useState(initialFlow);
@@ -127,6 +137,13 @@ export default function FlowsApp({ backendUrl, initialBlock = null }: { backendU
     const want = initialBlock ? `block:${initialBlock}` : null;
     return want && all.some((t) => t.key === want) ? want : all[0].key;
   });
+  // `?block=<map>` when this browser's flow has no such block, but a runner flow describes that
+  // map (e.g. xmas_dun02, the Rogue's dungeon_hunt.py): open the description instead (2026-11-12)
+  useEffect(() => {
+    if (!initialBlock || tabsOf(start.flow).some((t) => t.key === `block:${initialBlock}`)) return;
+    const r = findRunner(initialBlock);
+    if (r) onRunner?.(r.id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [editor, setEditor] = useState<EditorState>(NO_EDITOR);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const pendingShow = useRef<{ tab: string; path: string } | null>(null);
@@ -561,6 +578,13 @@ export default function FlowsApp({ backendUrl, initialBlock = null }: { backendU
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(oneMapStarter(), { undo: true, notice: "Opened the starter: one map." }))}>
                   Starter: one map<small>one tab, main: wait, wait until the detector sees a monster, stop</small>
                 </button>
+                {onRunner &&
+                  RUNNERS.map((r) => (
+                    <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
+                      How the bot works on {r.map}
+                      <small>the {r.char}&apos;s runner ({r.script}) as blocks with its Python, made from its code; your flow stays as it is</small>
+                    </button>
+                  ))}
               </div>
             )}
           </div>
@@ -687,7 +711,7 @@ export default function FlowsApp({ backendUrl, initialBlock = null }: { backendU
                 </button>
               )}
             </div>
-            <MapPicker flow={flow} tab={active.key} onTab={goTab} onLeave={flush} />
+            <MapPicker flow={flow} tab={active.key} onTab={goTab} onLeave={flush} onRunner={onRunner ? (id) => (flush(), onRunner(id)) : undefined} />
           </div>
           <div className="blocks-area">
             {active.scope ? (
@@ -920,9 +944,10 @@ export default function FlowsApp({ backendUrl, initialBlock = null }: { backendU
  * matpilot"): at the end of the tab row, as matpilot's Robot choice is. Each map block's tab IS its
  * map's flow; the choice opens another map's tab, and "Maps" goes back to the maps graph (the
  * Maps page) with this map selected. */
-function MapPicker({ flow, tab, onTab, onLeave }: { flow: Flow; tab: string; onTab: (key: string) => boolean; onLeave: () => void }) {
+function MapPicker({ flow, tab, onTab, onLeave, onRunner }: { flow: Flow; tab: string; onTab: (key: string) => boolean; onLeave: () => void; onRunner?: (id: string) => void }) {
   const wf = flow.workflow;
   const block = tab.startsWith("block:") ? wf?.blocks.find((b) => `block:${b.name}` === tab) : undefined;
+  const runner = runnerForMap(block?.map.map); // a live runner's description of this map (2026-11-12)
   const title = !wf
     ? "None: a plain flow, one program with no map blocks. The Maps page shows the login before it."
     : block
@@ -941,6 +966,11 @@ function MapPicker({ flow, tab, onTab, onLeave }: { flow: Flow; tab: string; onT
           ))}
         </select>
       </label>
+      {runner && onRunner && (
+        <button type="button" className="runner-chip-button" onClick={() => onRunner(runner.id)} title={`${runner.title}: a description of ${runner.script}, made from its code`} data-testid="map-picker-runner">
+          How the bot hunts here ↗
+        </button>
+      )}
       <Link href={block ? `/maps?node=${encodeURIComponent(`block:${block.name}`)}` : "/maps"} className="robot-picker-link" onClick={onLeave} title="The maps graph: login, characters, the maps and their exits, and the simulator">
         ◂ Maps
       </Link>

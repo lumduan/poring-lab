@@ -33,6 +33,7 @@ import { type BlockProps, connectExit, type EditResult, removeBlock, removeExit,
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { type AuthoredExit, canonical, type Flow, MAP_ID, MAX_JSON_BYTES } from "@/lib/flow/ir";
 import { browserStorage, KEYS, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
+import { RUNNERS, runnerForMap, runnerHref } from "@/lib/flow/runners";
 import { STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
 import { END_TEXT, lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts, oneMapFlow } from "@/lib/maps/build";
@@ -574,6 +575,12 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setAdding({ map: "xmas_dun02", mode: "flow" }))} data-testid="maps-load-one-map">
                   One map from the lab data…<small>e.g. xmas_dun02, the Rogue&apos;s map: its walk grid and spawns</small>
                 </button>
+                {RUNNERS.map((r) => (
+                  <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), flush(), router.push(runnerHref(r)))} data-testid={`maps-load-runner-${r.id}`}>
+                    How the bot works on {r.map}
+                    <small>on /flows: the {r.char}&apos;s runner ({r.script}) as blocks with its Python, made from its code</small>
+                  </button>
+                ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), fileRef.current?.click())}>
                   Open a flow file (.json)…<small>checked before it opens</small>
                 </button>
@@ -909,6 +916,22 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                         <button type="button" className="button button-small" onClick={() => (setMatChoice(selectedBlock.map.map), setPlaying(false), matOpen || (setMatOpen(true), writeChoice(store, MK.mat, "open")))}>
                           Show its map
                         </button>
+                        {runnerForMap(selectedBlock.map.map) && (
+                          <button
+                            type="button"
+                            className="button button-small"
+                            onClick={() => {
+                              const r = runnerForMap(selectedBlock.map.map);
+                              if (!r) return;
+                              flush();
+                              router.push(runnerHref(r));
+                            }}
+                            title="On /flows: a description of the live runner on this map, made from its code"
+                            data-testid="maps-runner-flow"
+                          >
+                            How the bot hunts here ↗
+                          </button>
+                        )}
                       </div>
                       <InspectPanel
                         flow={flow}

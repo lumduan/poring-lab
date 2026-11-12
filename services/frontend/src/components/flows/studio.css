@@ -1301,3 +1301,87 @@
     max-width: 8rem;
   }
 }
+
+/* --- a runner flow (RunnerView.tsx, 2026-11-12: the description of a live runner) -------------- */
+.code-text[data-marked] {
+  isolation: isolate; /* the band paints behind the text, inside the code */
+}
+.code-mark-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  background: var(--code-mark);
+  pointer-events: none;
+}
+.code-gutter .code-gutter-mark {
+  color: var(--text);
+  font-weight: 700;
+  background: var(--code-mark);
+}
+.runner-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.runner-table caption {
+  text-align: left;
+  padding-bottom: 0.25rem;
+}
+.runner-table th,
+.runner-table td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.runner-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+.runner-list li + li {
+  margin-top: 0.25rem;
+}
+.runner-steps {
+  margin: 0;
+  padding-left: 1.8rem;
+  list-style: decimal;
+  font-size: 0.82rem;
+}
+.runner-steps li {
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+}
+.runner-steps li[data-active="true"] {
+  background: var(--code-mark);
+}
+.runner-steps .problem-link {
+  text-decoration: none;
+}
+.runner-steps li[data-tone="safety"] .problem-link {
+  color: var(--error-text);
+}
+.runner-steps li[data-tone="note"] .problem-link {
+  color: var(--muted);
+  font-style: italic;
+}
+.runner-steps li[data-tone="end"] .problem-link {
+  font-weight: 700;
+}
+.runner-command {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.studio .runner-chip-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
