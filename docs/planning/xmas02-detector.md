@@ -4141,3 +4141,25 @@ the knight's labels are right. It does not say whether there are enough of them 
 - sk3a stays unread (refused by name); it is kept for a later class round if the label rule ever
   changes.
 
+### O25 (2026-11-12 08:50 ICT from `date`): round 5 FROZEN, exported, archived -- BEFORE any held-out file exists
+
+- **The training (O22, O23b's TRAIN list):** `xmas02-fi-r5-20261112`.
+  - Run: 3 epochs from round 4 (32e8afae) on 3,664 TRAIN frames and 272 val frames.
+  - Time: 07:13:14 -> 08:48:20 ICT (5,700.8 s), rc 0. Arc A380 (xpu), peak VRAM 2,180 MiB.
+  - Its own val split (TRAIN-side frames, not a held-out): precision 0.9586, recall 0.9485,
+    mAP50 0.9865, mAP50-95 0.7526. These numbers decide nothing; O22's bars on fsH1 + fiH1/fiH2 do.
+- **FROZEN** 08:48:29 ICT: `last.pt` sha256 `331b1927cfbe86c2df03a74207c81e9393c7d528eb3ffda2bc9d5bd369491875`
+  (5,529,242 bytes).
+- **ONNX** (M9's recipe, a temporary RAM env, removed after): `xmas02fi5-last-736x1280.onnx`, sha256
+  `9c43f6cdae28bf874d24299e70d915bf6cc0b1a09e676b537d343a56c29bb25c`, classes `["floor_item"]`.
+- **Archived** to `archive/train/xmas02-fi-r5-20261112` at 08:49:37. The NAS copy's sha256
+  matches; the local copy was deleted by the guarded archive's own check.
+  - The freeze script's archive line first failed (rc 2): it passed a relative source, and
+    guarded_build needs `<abs src>=<abs dst>`.
+  - The step was re-run with absolute paths, unchanged otherwise.
+- **Registered** as `xmas02fi5` in `unit_detector.GPU_WEIGHTS` and `fi_gpu_latency.ONNX`.
+  - It is served only for its I5 and the held-out evaluation.
+  - It is NOT in MAP_MODELS (it is not deployed) until O22's bars decide.
+- **The held-out is still unrecorded:** fsH1 (O24) and the pilots fiH1 / fiH2 (p84 / p85) come
+  after this freeze, as O22 requires.
+

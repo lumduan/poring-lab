@@ -25,6 +25,7 @@ M = Path("/dev/shm/poring-lab-detector/model")
 ONNX = {"xmas02fi": "xmas02fi-last-736x1280.onnx", "xmas02fi2": "xmas02fi2-last-736x1280.onnx",
         "xmas02fi3": "xmas02fi3-last-736x1280.onnx",
         "xmas02fi4": "xmas02fi4-last-736x1280.onnx",
+        "xmas02fi5": "xmas02fi5-last-736x1280.onnx",
         "xmas02gb": "xmas02gb-last-736x1280.onnx"}  # fmt: skip
 
 
