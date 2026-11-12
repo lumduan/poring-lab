@@ -4162,4 +4162,14 @@ the knight's labels are right. It does not say whether there are enough of them 
   - It is NOT in MAP_MODELS (it is not deployed) until O22's bars decide.
 - **The held-out is still unrecorded:** fsH1 (O24) and the pilots fiH1 / fiH2 (p84 / p85) come
   after this freeze, as O22 requires.
+- **➡️ The registration's slip (09:23 ICT):** p84's detect server REFUSED at 09:22
+  (`FileNotFoundError: /datasets/archive/models/xmas02fi5-last-736x1280.onnx`).
+  - The server opens EVERY `GPU_WEIGHTS` entry's ONNX in the NAS model folder at start. The ONNX was
+    only in `/dev/shm/poring-lab-detector/model`, and the unit tests do not touch the files.
+  - Fixed at 09:23: the ONNX and its names file were copied to `archive/models` (sha256 `9c43f6cd`
+    read back). A 45-s serve test then listened with all 8 models.
+  - The 2-min recording the refused pilot made carries the held-out name. It is renamed
+    `20261112T091958-rdp-hunt-xmas02-fiH1-ABORTED` on the NAS, so fiH1 is still unrecorded.
+  - **The rule from now on:** a round's ONNX goes to `archive/models` BEFORE its `GPU_WEIGHTS`
+    entry is committed, and a serve test listens before any pilot.
 
