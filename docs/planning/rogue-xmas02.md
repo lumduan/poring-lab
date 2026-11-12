@@ -6620,3 +6620,29 @@ the scorer before any trial runs.
 - **The night series (4DD) decides `--loot-items --loot-memory` against the base on income over
   6 + 6 interleaved runs**, from p98 (started 18:42).
 
+### 4DF. Batt: no immunity from now on, play as a normal player -- the night series switches at a pair boundary (recorded 19:14 ICT from `date`, BEFORE p99)
+
+- **Batt (2026-11-12 ~19:1x, translated), answering the flee-protocol question:**
+  "No more immunity. From now on, play like a normal player." Also:
+  - player mode on public servers: a warning only, no refusal;
+  - add a Butterfly Wing home at the end;
+  - no lab live test of player mode;
+  - he does the real-GitHub Save/Load check;
+  - write the NVIDIA worker-memory note in the docs;
+  - test a stricter `--quick-drop`.
+- **What changed at 19:14** (no pilot was running; the chain was polling for p99's MVP window):
+  - her immunity was switched OFF once, judged on the Chat tab (19:14:28);
+  - the chain restarts with `--mvp-live --no-immunity`: no `@monsterignore`, no `@killmonster2`
+    before windows, no `@mobsearch`. The MVP lives, and the bot escapes it as a player would
+    (`--garm-fly`, the boss guard).
+  - The runner's own setup lines (the stock top-up, `@heal`, the map warp) are unchanged until Batt
+    says whether "a normal player" covers them too: that is `--player-mode`, and its stock cannot be
+    restocked yet.
+- **The night series (4DD) stays balanced:**
+  - p98 (A, MVP killed) and p99 (B, MVP alive) form a mixed pair. Both are reported, neither
+    decides.
+  - The COUNTED series is p100-p111, A = even labels and B = odd, all with the MVP alive and no
+    immunity. p110 (A) and p111 (B) are added so it keeps 6 + 6.
+  - The decision and no-harm bars are 4DD's. Deaths may now come from the MVP in either arm; they
+    are reported per arm with their source (packets).
+
