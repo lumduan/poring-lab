@@ -887,6 +887,9 @@ later. Here is what the lab allows TODAY, what is being built, and the warnings.
   (`capture_backend.py window`). Releases are never gated.
 - A server we do not run cannot be packet-attested, so **the bot cannot act on an external server
   as built today**, Allowed or not. Its presses are refused with `environment_unattested`.
+  ➡️ SUPERSEDED 2026-11-12 for a DECLARED server: ADR-0023 decision 1 is built (next paragraph's
+  pointer). A person's declaration on the Settings page can turn such a server green, labelled
+  "declared by a person, not verified".
 - Adding a server for the lab is a person's act on the Settings page PLUS an ADR-0006 entry with a
   permission record that names the exact host the client connects to
   ([ADR-0021](../adr/0021-external-servers.md) D14).
@@ -894,12 +897,13 @@ later. Here is what the lab allows TODAY, what is being built, and the warnings.
   server we do not run unless its own rules allow it.
 
 **Being built next: ADR-0023, learner mode** ([ADR-0023](../adr/0023-learner-mode.md), decided
-2026-11-07, not built). A person will be able to DECLARE a server owner's permission on the Settings
-page. The bot may then act there, shown as "declared by a person, not verified"; research counts
-only packet-verified sessions. A user's own servers, including their own rAthena on a public
-address, will then work after one Settings-page entry. Batt's direction (2026-11-12): no hard locks
-for other users ("the more we lock, the more it breaks later"), plain warnings instead. Until that
-build lands, ADR-0006 / ADR-0016 stand as written.
+2026-11-07, not built). ➡️ 2026-11-12: decision 1 (the declaration) is BUILT (ADR-0023, section
+Implementation); decisions 3 and 4 are not. A person will be able to DECLARE a server owner's
+permission on the Settings page. The bot may then act there, shown as "declared by a person, not
+verified"; research counts only packet-verified sessions. A user's own servers, including their own
+rAthena on a public address, will then work after one Settings-page entry. Batt's direction
+(2026-11-12): no hard locks for other users ("the more we lock, the more it breaks later"), plain
+warnings instead. Until that build lands, ADR-0006 / ADR-0016 stand as written.
 
 **The warnings, for every user of the code** (ADR-0023 decision 5 makes the official-server list a
 DEFAULT for other users; on the lab bot-server, ADR-0006's ban on official servers stays
@@ -914,6 +918,36 @@ absolute):
 
 This manual gives no way to weaken, bypass or fake the interlock, the attestation or the server
 list, and none exists in the supported setup.
+
+### 11.1 Hunting on a server where you are not a GM: `--player-mode`
+
+On a server you do not run (a declared one, ADR-0023), your account is a normal player. The
+hunting runner's usual setup types GM commands (`@warp`, `@heal`, `@item`, `@killmonster2`): there
+they would fail, or appear in public chat. Run it with `--player-mode` there
+([docs/planning/player-mode.md](../planning/player-mode.md)):
+
+```bash
+nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --char <CHAR> \
+    --map <MAP> --strategy P2 --search patrol <your other flags> --minutes 25 --seed <SEED> \
+    --label <LABEL>
+```
+
+- **The runner types no line at all**, and reads nothing from the lab's database.
+- **You bring the character to the map yourself**, standing on open ground, with the chat input
+  closed. The run starts where your character stands.
+- **On the hotbar:** at least 5 Fly Wings on the Fly Wing key (F2) and 5 heal items (White
+  Potions on F1; with `--heal-candy`, Candy Canes and Candies count too). The bag must weigh less
+  than 48 % on Basic Info. Below any of these the run refuses, and says why.
+- **It never warps, heals or restocks you.** It ends when only 1 Fly Wing is left. At the end it
+  uses only its own Fly Wing escape. It stays seated if it was resting. After a death it leaves
+  the death dialog for you.
+- **Refused with it:** `--clear-map`, `--stage-mob`, `--stage-at`, `--start-cell`,
+  `--engage melee_ring`.
+- **Not built yet:** Kafra warps, NPC shops and selling. Also nothing that keeps you away from an
+  MVP: the only guard is the boss escape of `--engage-screen`, and it is unproven. A map with an
+  MVP is at your own risk.
+- **Not research:** a run on a declared server is never counted (ADR-0023 decision 2). Its record
+  carries `fixes.player_mode`; no judge filters on it yet.
 
 ## 12. Known differences of the Thai client
 

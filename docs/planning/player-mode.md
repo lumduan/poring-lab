@@ -1,13 +1,13 @@
 ---
 doc_type: plan
 hypothesis: null
-status: PROPOSED (decided by Batt 2026-11-12: build after ADR-0025's SQLite)
+status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); NOT live-verified
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../setup/new-lab-host.md, rogue-xmas02.md]
-next_action: "After the SQLite build: a design pass over dungeon_hunt.py's setup (every GM line it types) and a --player-mode that types none."
+next_action: "A first live --player-mode run on the LAB server, judged from packets (no GM line typed), then Batt's later steps: Kafra warps, NPC shops, selling."
 ---
 
 # Player mode: the hunting bot without GM commands
@@ -42,6 +42,99 @@ Written 2026-11-12 11:40 ICT from `date`.
    a `@warp`.
 4. **Later (Batt):** walking to a Kafra and warping through its menu (the UI gate's known steps),
    buying from an NPC shop, selling loot.
+
+## Built: the first cut (2026-11-12 12:41 ICT from `date`; dungeon@9.35, `--player-mode`)
+
+`scripts/dungeon_hunt.py run --player-mode` (OFF by default; `fixes.player_mode` =
+`[5, 5, 1, "9.35"]` in `run_start` and the manifest only when ON, so a default run's record is
+unchanged). Tests: `services/backend/tests/test_player_mode.py`.
+
+**1. No line is ever typed, by construction.**
+- Every line the runner types goes through ONE guard, `typed_line`. Under `--player-mode`
+  `line_refused` refuses every line before any key: a line starting with "@" is a GM command, and
+  any other line would be public chat. The refusal is a Stop, so a path the flag missed stops the
+  run instead of leaking a line.
+- A source scan fails the tests on any other typing call in the file (crusader's `gm_line`,
+  ro_agent's `chat_line` / `gm` / `open_chat` / `say` / `type_line` / `console_*`, the agent's
+  `type_text` / `type_secret`). Every `typed_line` call must name its mode.
+- A second scan checks that every place `run` could type (`typed_line`, `setup_line`, the chat
+  close step) is in a branch the flag never takes, or runs a plan `player_plan` just emptied.
+- Mutating the code proved the scans: a raw GM call, the end warp or the death's `@alive` made
+  reachable, the plan or the chat check removed, the DB read made unconditional each fail a test.
+
+**2. The "@" call sites found, and what each does under the flag:**
+
+| Where | Lines | Under `--player-mode` |
+|---|---|---|
+| setup, the stand | the level hold (`@baselevelup -N`), `@heal`, `@item 504` / `@item 601` top-ups | none: `player_plan` empties the list |
+| setup, the clear stand | `@warp prt_fild08 268 107` + dropping the Etc tab | never: the bag is not dropped; `etc_hold_refused` stops the run instead |
+| setup, the Rogue's hotbar top-up | `@item` from the hotbar count | never: the player's own stock read replaces it |
+| setup, the map | `@warp MAP X Y`, `--clear-map`'s `@killmonster2`, `--stage-mob`'s `@monster`, `--stage-at`'s second `@warp` | none: `player_plan` empties the list; the four flags are refused anyway |
+| the end, a death | the dialog's button, then `@alive` + `@heal` | none: the death dialog stays open for the person |
+| the end, every run | `@warp` to the clear stand | none |
+| `clear-bag` (a separate subcommand) | `@warp` + `@item` | the lab's alone: it has no `--player-mode` and passes `player_mode=False` |
+
+- The hunt loop itself types nothing (the scan proves it).
+- The runner has no immunity flag: immunity (`@monsterignore`) is toggled OUTSIDE it, by the lab's
+  chain through crusader.py, so there was nothing to refuse there.
+
+**3. Nothing is read from the lab's DB.** The setup's three queries (char_id, the inventory's
+White Potions and Fly Wings, the base level) run only without the flag. Under it the stock comes
+from the hotbar's drawn counts (`hotbar_count`, the same reader the Rogue's top-up uses) and the
+weight from Basic Info (`gm_state`).
+
+**4. The start refuses, with a plain message, when:**
+- the chat input is open (the setup's chat-close step presses Enter, which would send text left
+  there): checked at the start and again right before that step;
+- fewer than `PLAYER_MIN_WINGS` = **5 Fly Wings** are on the hotbar (3 for an unread position,
+  `POS_FLY_MAX`, one escape, and one kept for the end), or fewer than `PLAYER_MIN_HEALS` = **5
+  heal items** (White Potions; with `--heal-candy` the Candy Canes, Candies and potions together),
+  or a count does not read;
+- the weight does not read, reads red, or is at or over 48 % (`WEIGHT_MAX`; the bag is never
+  dropped). At 40 % (`CLEAR_AT`) a character whose bag the lab would clear stops too;
+- her cell does not read on the minimap within 5 s (`PLAYER_POS_S`), is off the map, off the
+  run's route grid, or in a part from which no walk reaches the search area.
+
+The run starts where she stands: the heading walk walks into the search area, the patrol joins its
+loop at the nearest waypoint ahead, and `--explore` takes its regions from HER walk component.
+The person's potions are never drunk down at the start (the lab drinks the ones over the stock).
+
+**5. Refused flags:** `--clear-map` (`@killmonster2`), `--stage-mob` (`@monster`), `--stage-at`
+(`@warp` + `@monster`), `--start-cell` (the setup's `@warp` goes there), and `--engage melee_ring`
+(it strikes every monster in reach; its own rule is the lab server's). Refused before any input.
+
+**6. The loop and the end.**
+- The escapes are unchanged: the Fly Wing key and the potions, the HP escape, the unread-position
+  and stuck Fly Wings, and the boss guard with `--engage-screen`.
+- The run ENDS when the Fly Wings read 1 (`PLAYER_WINGS_KEEP`; reason `stock_keep`), so the end
+  always has one. A count of 0 ends it as before (`stock_out`).
+- The end types nothing and warps nowhere. The run's own end escape (dungeon@8.5's rule,
+  unchanged) presses the Fly Wing when a hit came within 3.5 s, the HP fell, or the HP is under
+  50 %.
+- A run that ends during a rest stays SEATED (natural regen goes on); it stands only when that
+  escape is due, because a Fly Wing cannot be used sitting.
+- No sit is added after the end's Fly Wing (a key right after a teleport's load is an unverified
+  step). A `player_end` event records what she was left as.
+
+## Not built yet
+
+- **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known
+  steps), buying from an NPC shop, selling loot.
+- **The MVP.** The lab kills it before every run with `@killmonster2`. A player cannot, so the
+  only protection is the runner's boss guard: a Fly Wing on a boss or minion Battle Log line,
+  active only with `--engage-screen`. Its live flee proof against Stormy Knight (rogue-xmas02.md
+  4CS) FAILS as registered: F1 died in the runner's own setup before the loop ran (4CU), so the
+  escape itself is unproven. A player-mode run on a map with an MVP is protected by nothing
+  proven.
+- **A "go home" item at the end:** a Butterfly Wing on a hotbar key would be a player's own way to
+  the save point. Nothing presses one today.
+- **A learner's own character and data:** the identity check needs that character's name and job
+  references (crusader.py's cut steps), and the hotbar digits, the KB, the GATs and the map's zones
+  and route are local files built on the lab. None of that comes from the server.
+- **ADR-0023 decision 2 in the judges:** a player-mode run carries `fixes.player_mode`, but no
+  judge or the economy page filters on it yet.
+- **No live run has been made** (the build had no live access): the first one should be on the
+  LAB server, where the packets can confirm that no GM line was typed.
 
 ## Not in scope
 
