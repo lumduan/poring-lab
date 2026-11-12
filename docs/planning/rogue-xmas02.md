@@ -6602,3 +6602,21 @@ the scorer before any trial runs.
   - If the night ends early, the series is decided only on COMPLETE A / B pairs, with at least 4
     of each; fewer is NO_VERDICT.
 
+### 4DE. `--loot-memory` (p96 + p97): a FLAG; it lifted L1 by ~15 points (recorded 18:44 ICT from `date`)
+
+| | base p84 + p85 | loot-items p90 + p91 | memory p96 + p97 | bar (4DB) | |
+|---|---|---|---|---|---|
+| R-a: L1 | 97.4 % | 52.8 % | **69.4 %** (34 / 49) | >= 92.4 % | **FAIL** |
+| R-b: kills / h | 154.66 | 178.57 | **181.14** | >= 159.30 | PASS |
+| R-b: common-item z/h | 52,686 | 42,912 | 50,190 | >= 52,686 | **FAIL** (-4.7 %) |
+| gross z/h | 66,066 | 47,370 | 72,503 | reported | 5 Pearls |
+| D1 p95 / W1 / deaths | | | 22.7 / 22.8 ms, 0.79 % (6 / 764), 0 | no harm | PASS |
+
+- **The verdict: a FLAG** (R-a; R-b's income just misses).
+- **The mechanism worked:** 38 looks remembered new cells, 27 loot steps took remembered cells, and
+  there were 10 calm memory loots. L1 rose from ~55 % (loot-items alone) to 69.4 %.
+- **It is still short of the sweep's 86-97 %.** The drops it misses are not yet visible while the
+  kill is young (the settle study: ~21 % unseen even at 6 s).
+- **The night series (4DD) decides `--loot-items --loot-memory` against the base on income over
+  6 + 6 interleaved runs**, from p98 (started 18:42).
+
