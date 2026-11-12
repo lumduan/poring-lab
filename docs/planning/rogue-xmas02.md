@@ -6579,3 +6579,26 @@ the scorer before any trial runs.
 - **Batt's > 100,000 z/h:** p94 + p95's gross passed it again, 106,653, on rare drops.
 - **Next:** p96 + p97 (`--loot-memory`, 4DB) are running.
 
+### 4DD. The night series: base vs the speed candidate, INTERLEAVED, 6 + 6 (pre-registered 18:14 ICT from `date`, BEFORE any of its runs)
+
+- **Why a series:** one pair's income is too noisy to decide with.
+  - The same mechanism (`--loot-items`) gave common income 42,912 and 63,533 z/h in two pairs.
+  - The base's own runs: 144.0-165.3 kills / h.
+  - Batt's goal is z/h (> 100,000), and L1 is a means to it, not the end.
+- **The arms, alternating in ONE queue** (A, B, A, B, ...), each 25 min, KILL mode, aura off, NOT
+  immune:
+  - A = today's base: `--value-target --hud --hud-fast 0.2`;
+  - B = the base + `--loot-items xmas02fi5 --loot-memory` (the day's fastest loot path, 9.33 +
+    9.37 with the 30-s keep).
+  - 6 runs each: p98-p109 (A = even labels, B = odd).
+- **The decision (B joins the base) needs BOTH:**
+  - D1: pooled kills / h of B >= pooled kills / h of A + 3 %;
+  - D2: pooled common-item z/h (sell_oc < 3000) of B >= that of A.
+- **No harm:** deaths of B <= deaths of A; W1 <= 3.5 % pooled; D1 p95 <= 35 ms on every run.
+- **Reported, not deciding:** L1, gross z/h, items / h, the rare drops per arm, memory counts.
+- **Stops:**
+  - The chain's own stop rules apply (a run rc != 0, anything unreadable).
+  - A death in B that A never had stops the series for a person to look.
+  - If the night ends early, the series is decided only on COMPLETE A / B pairs, with at least 4
+    of each; fewer is NO_VERDICT.
+
