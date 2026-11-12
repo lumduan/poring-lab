@@ -4138,3 +4138,52 @@ def test_boxwatch_keeps_its_recent_detections_newest_first() -> None:
     own = (dh.FOOT_PX[0] - 20, dh.FOOT_PX[1] - 70, dh.FOOT_PX[0] + 20, dh.FOOT_PX[1])
     w.hist.append((now, [NS_(x0=own[0], y0=own[1], x1=own[2], y1=own[3])]))
     assert w.recent(1.0)[0] == [own]
+
+
+def test_loot_items_maps_item_boxes_to_cells_and_plans_their_hovers() -> None:
+    """dungeon@9.33 (--loot-items, Batt 2026-11-12): floor-item boxes (class floor_item, score
+    >= LOOT_ITEMS_CONF = fi_eval.CONF, centre within LOOT_ITEMS_PX of a cell's point) -> cells;
+    the plan hovers each item's cell, then its nearest plan neighbours (<= LOOT_ITEMS_HOVERS)."""
+    from types import SimpleNamespace as NS_
+
+    import fi_eval
+
+    assert fi_eval.CONF == dh.LOOT_ITEMS_CONF == 0.25
+    uv = [(600.0 + 34 * dx, 360.0 + 24 * dy) for dx, dy in dh.ITEM_GRID]
+    at = lambda rel, cls="floor_item", score=0.6: NS_(  # noqa: E731
+        x0=uv[dh.ITEM_GRID.index(rel)][0] - 12, x1=uv[dh.ITEM_GRID.index(rel)][0] + 12,
+        y0=uv[dh.ITEM_GRID.index(rel)][1] - 10, y1=uv[dh.ITEM_GRID.index(rel)][1] + 10,
+        cls=cls, species=None, score=score)  # fmt: skip
+    assert dh.item_rels([at((1, 0))], uv) == [(1, 0)]
+    assert dh.item_rels([at((1, 0)), at((1, 0))], uv) == [(1, 0)]  # one cell once
+    assert dh.item_rels([at((1, 0), cls="monster")], uv) == []
+    assert dh.item_rels([at((1, 0), score=0.2)], uv) == []
+    far = NS_(x0=2000.0, x1=2020.0, y0=10.0, y1=20.0, cls="floor_item", species=None, score=0.9)
+    assert dh.item_rels([far], uv) == []
+    plan = {(10 + dx, 10 + dy) for dx in range(-2, 3) for dy in range(-2, 3)}
+    got = dh.items_plan([(11, 10)], plan)
+    assert got[0] == (11, 10) and len(got) == dh.LOOT_ITEMS_HOVERS
+    assert all(max(abs(c[0] - 11), abs(c[1] - 10)) <= 1 for c in got)
+    assert dh.items_plan([(30, 30)], plan) == []  # outside the plan: passed over
+    two = dh.items_plan([(11, 10), (11, 11)], plan)
+    assert len(two) == len(set(two)) and (11, 11) in two
+
+
+def test_loot_items_is_wired_before_the_aim_and_after_the_pinned_sort() -> None:
+    """dungeon@9.33: OFF by default; refused without --loot trim; the item detector asked once per
+    loot step (a failure -> today's sweep), no item near the kills -> no hover ("no_items"), the
+    aim used only when the model gave no answer; recorded in the run's fixes."""
+    src = Path(dh.__file__).read_text()
+    body = src[src.index("        def loot_step_v1(") : src.index("        def tadv(")]
+    assert body.count("item_det.detect(frame())") == 1
+    assert '"end": "no_items"' in body and 'counts["loot_items_fail"] += 1' in body
+    assert "if loot_aim and seen_items is None:" in body
+    i_sort = body.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))")
+    assert i_sort < body.index("todo = [c for c in order_items if c not in hovered]")
+    assert "--loot-items goes with --loot trim" in src
+    i_def = src.index("item_det: Any = None")
+    assert i_def < src.index("if item_det is not None:  # dungeon@9.33 (--loot-items): its client")
+    a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
+                              rest="spot", npc_guard=False, loot_items="xmas02fi4")  # fmt: skip
+    assert dh.fixes_of(a)["loot_items"] == ["xmas02fi4", 0.25, 30.0, 3, "9.33"]
+    assert "loot_items" not in dh.fixes_of(dh.argparse.Namespace(**{**vars(a), "loot_items": None}))

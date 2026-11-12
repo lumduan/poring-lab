@@ -435,6 +435,57 @@ def aim_cap(n_kills: int, n_aims: int) -> int | None:
     return min(LOOT_TRIM_HOVERS, LOOT_AIM_HOVERS * n_aims)
 
 
+# dungeon@9.33 (--loot-items MODEL; Batt 2026-11-12: "I see the bot spend time looking for items
+# every time"; xmas02-detector.md O22): the loot step asks the floor-item model (a GPU_WEIGHTS name)
+# once, on a fresh frame. Item boxes near the step's kills -> hover those cells (each with its
+# neighbours, at most LOOT_ITEMS_HOVERS a seen item) and nothing else; none -> the sweep is SKIPPED
+# (~70 % of the loot steps found nothing, ~3.7 s each). A failed detection -> today's trim sweep.
+LOOT_ITEMS_VERSION = "9.33"
+LOOT_ITEMS_CONF = 0.25  # fi_eval.CONF: the operating point the item model's bars were scored at
+LOOT_ITEMS_PX = 30.0  # an item box's centre within this many px of a cell's projected point
+LOOT_ITEMS_HOVERS = 3  # hovers for one seen item: its cell, then its nearest neighbours
+LOOT_ITEMS_CLASS = "floor_item"
+ONNX_TAIL = "-last-736x1280.onnx"  # the deployed ONNX name: <GPU_WEIGHTS name> + this
+ITEM_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-4, 5) for dy in range(-4, 5)]
+
+
+def item_rels(boxes: Sequence[Any], uv: Any, conf: float = LOOT_ITEMS_CONF,
+              max_px: float = LOOT_ITEMS_PX) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE (dungeon@9.33): the cells (relative to her) of the floor-item boxes -- class
+    LOOT_ITEMS_CLASS (or that species), score >= ``conf``, the box centre within ``max_px`` of an
+    ITEM_GRID cell's projected point ``uv`` (one row per ITEM_GRID entry); one cell once."""
+    pts = np.asarray(uv, dtype=float)
+    out: list[tuple[int, int]] = []
+    for b in boxes:
+        if LOOT_ITEMS_CLASS not in (getattr(b, "cls", None), getattr(b, "species", None)):
+            continue
+        if float(getattr(b, "score", 0.0)) < conf:
+            continue
+        d = np.hypot(pts[:, 0] - (b.x0 + b.x1) / 2, pts[:, 1] - (b.y0 + b.y1) / 2)
+        i = int(np.argmin(d))
+        if float(d[i]) <= max_px and ITEM_GRID[i] not in out:
+            out.append(ITEM_GRID[i])
+    return out
+
+
+def items_plan(items: Sequence[Cell], plan: Sequence[Cell] | set[Cell],
+               per_item: int = LOOT_ITEMS_HOVERS) -> list[Cell]:  # fmt: skip
+    """PURE (dungeon@9.33): the cells to hover for the seen items (absolute), in order -- each
+    item's own cell, then its plan neighbours nearest it (Chebyshev, then the cell), at most
+    ``per_item`` cells an item, one cell once; an item outside the plan is passed over."""
+    pl = set(plan)
+    out: list[Cell] = []
+    for it in items:
+        if it not in pl:
+            continue
+        near_ = sorted((c for c in pl if max(abs(c[0] - it[0]), abs(c[1] - it[1])) <= 1),
+                       key=lambda c: (max(abs(c[0] - it[0]), abs(c[1] - it[1])), c))  # fmt: skip
+        for c in near_[:per_item]:
+            if c not in out:
+                out.append(c)
+    return out
+
+
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
@@ -2175,6 +2226,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["hud_fast"] = [float(a.hud_fast), HUD_FAST_TTL_MS, "9.29b"]
     if getattr(a, "value_target", False):  # dungeon@9.28 (rogue-xmas02.md 4CB; Batt's 100,000 z/h)
         out["value_target"] = ["9.28", 150.0]
+    if getattr(a, "loot_items", None):  # dungeon@9.33 (Batt 2026-11-12)
+        out["loot_items"] = [str(a.loot_items), LOOT_ITEMS_CONF, LOOT_ITEMS_PX, LOOT_ITEMS_HOVERS,
+                             LOOT_ITEMS_VERSION]  # fmt: skip
     if getattr(a, "loot_aim", False):  # dungeon@9.32 (Study S-IDLE)
         out["loot_aim"] = [LOOT_AIM_HOVERS, LOOT_AIM_R, LOOT_AIM_PX, LOOT_AIM_VERSION]
     if getattr(a, "bare_steal", False) and getattr(a, "swap_gap", False):  # dungeon@9.27e
@@ -4120,6 +4174,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_so = steal_opener_refused(opener_key, bare_on, keys_)
     if why_so:
         raise SystemExit(f"dungeon@9.27c refused: {why_so}")
+    if getattr(a, "loot_items", None) and a.loot != "trim":  # dungeon@9.33
+        raise SystemExit("dungeon@9.33 refused: --loot-items goes with --loot trim")
     loot_aim = bool(getattr(a, "loot_aim", False))  # dungeon@9.32 (Study S-IDLE)
     if loot_aim and (a.loot != "trim" or not a.box_strike):
         raise SystemExit("dungeon@9.32 refused: --loot-aim goes with --loot trim and --box-strike")
@@ -4555,6 +4611,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
         mr = a.engage == "melee_ring"  # Batt 13:4x: the CURSOR engages, the detector does not
         boxes = None
+        item_det: Any = None  # dungeon@9.33 (--loot-items MODEL): the floor-item model's client
         if a.boxes and not mr:
             boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
                              None if a.box_model == "v1" else a.map,
@@ -4564,6 +4621,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 "every_s": boxes.every_s})  # fmt: skip
             if boxes.gpu:  # dungeon@8.9: each detection's path + wall time (R3's windows, 4N G1)
                 boxes.det.log_path = out / "detections.jsonl"
+        if getattr(a, "loot_items", None):
+            import unit_detector as ud_i
+
+            onnx_i = Path("/dev/shm/poring-lab-detector/model") / f"{a.loot_items}{ONNX_TAIL}"
+            if not onnx_i.exists():
+                raise r.Stop(f"dungeon@9.33: no CPU fallback for --loot-items ({onnx_i})")
+            item_det = ud_i.GpuDetector(ud_i.UnitDetector(model=onnx_i), weights=a.loot_items)
         hud_tx: Any = None  # dungeon@9.29 (--hud; Batt 11-11: "HUD on: lines, no boxes")
         if getattr(a, "hud", False):
             import operator_hud as oh
@@ -6127,9 +6191,29 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     here = read_here() or c
                 return "ok"
 
+            seen_items: list[Cell] | None = None  # dungeon@9.33 (--loot-items): None = not asked
+            order_items: list[Cell] = []
+            if item_det is not None:
+                try:
+                    found_i = item_rels(item_det.detect(frame()), project(here, ITEM_GRID))
+                    seen_items = [(here[0] + dx_, here[1] + dy_) for dx_, dy_ in found_i]
+                except Exception:  # noqa: BLE001 -- a failed detection: today's trim sweep
+                    counts["loot_items_fail"] += 1
+                if seen_items is not None:
+                    order_items = items_plan(seen_items, plan)
+                    out_["items"] = {"seen": [list(c_) for c_ in seen_items],
+                                     "hover": [list(c_) for c_ in order_items],
+                                     "path": getattr(item_det, "last_path", None)}  # fmt: skip
+                    if not order_items:  # nothing near the kills: no hover at all
+                        counts["loot_items_skip"] += 1
+                        ms_i = round((time.monotonic() - t_s) * 1e3)
+                        ev({**out_, "hovered": 0, "hovers": 0, "trim": loot_trim, "picks": 0,
+                            "end": "no_items", "ms": ms_i})  # fmt: skip
+                        return "done"
+                    counts["loot_items_seen"] += 1
             aims: list[Cell] = []  # dungeon@9.32 (--loot-aim)
             cap_aim: int | None = None
-            if loot_aim:
+            if loot_aim and seen_items is None:
                 fresh_k = [t_ for _g, t_ in lst if t_s - t_ <= 55.0]
                 aims = [kill_aim[t_] for t_ in fresh_k if t_ in kill_aim]
                 cap_aim = aim_cap(len(fresh_k), len(aims))
@@ -6141,6 +6225,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))
                 if aims:  # 9.32: the aimed cells first, then their neighbours
                     todo = aim_order(todo, aims)
+                if seen_items is not None:  # 9.33: only the seen items' cells, in their order
+                    todo = [c for c in order_items if c not in hovered]
                 if cap_aim is not None and n_hov >= cap_aim:
                     counts["loot_aim_capped"] += 1
                     break
@@ -7380,6 +7466,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     "gpu": boxes.det.info() if boxes.gpu else None,
                     "spots_ignored": [list(c) for c in (box_spots.misses if box_spots else {})
                                       if box_spots and box_spots.ignored(c)]})  # fmt: skip
+            if item_det is not None:  # dungeon@9.33 (--loot-items): its client's paths, closed
+                ev({"kind": "loot_items_det", "info": item_det.info()})
+                item_det.cpu.close()
             if sitting:
                 agent_raw.keys(keys_["stand"])
             if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):  # dungeon@8.5
@@ -7850,6 +7939,17 @@ def main() -> int:
         "detection within 60 px of its last foot, passing the box path's skips, hovered for its "
         "SWORD and struck through strike(); an empty queue, a failed re-find or no SWORD -> "
         "today's search path. Never during a loot step, a rest, an escape or a bare-steal swap",
+    )
+    t.add_argument(
+        "--loot-items",
+        default=None,
+        metavar="MODEL",
+        help="dungeon@9.33 (Batt 2026-11-12: the bot spends time looking for items every time; OFF "
+        "by default; with --loot trim): the loot step asks the floor-item MODEL (a GPU_WEIGHTS "
+        "name, e.g. xmas02fi4; its ONNX in /dev/shm/poring-lab-detector/model as the CPU "
+        "fallback) once on a fresh frame; it hovers only the seen items' cells (+ neighbours, at "
+        "most 3 an item) near the kills, and SKIPS the sweep when none is seen; a failed "
+        "detection -> today's sweep",
     )
     t.add_argument(
         "--loot-aim",
