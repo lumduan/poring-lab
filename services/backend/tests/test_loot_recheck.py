@@ -303,3 +303,25 @@ def test_the_flag_off_changes_nothing() -> None:
         in_loop += 1
     assert in_loop >= 6  # the prune, the hook, the loot step's clock, two kills, the end count
     assert 'rk_on = bool(getattr(a, "loot_recheck", False))' in _nested("run")
+
+
+def test_the_recheck_maps_items_on_its_wider_grid() -> None:
+    """4DA amendment (before p94 / p95): +-8 cells; item_rels_on == item_rels on ITEM_GRID."""
+    assert len(dh.RECHECK_GRID) == 17 * 17 and (8, -8) in dh.RECHECK_GRID
+    assert set(dh.ITEM_GRID) <= set(dh.RECHECK_GRID)
+
+    class B:
+        cls, species, score = dh.LOOT_ITEMS_CLASS, None, 0.9
+
+        def __init__(self, x: float, y: float) -> None:
+            self.x0, self.y0, self.x1, self.y1 = x - 5, y - 5, x + 5, y + 5
+
+    uv = [(100.0 * dx, 100.0 * dy) for dx, dy in dh.RECHECK_GRID]
+    far = B(700.0, 0.0)  # (7, 0): outside ITEM_GRID, inside RECHECK_GRID
+    assert dh.item_rels_on([far], uv, dh.RECHECK_GRID) == [(7, 0)]
+    near_uv = [(100.0 * dx, 100.0 * dy) for dx, dy in dh.ITEM_GRID]
+    assert dh.item_rels_on([B(200.0, 100.0)], near_uv, dh.ITEM_GRID) == dh.item_rels(
+        [B(200.0, 100.0)], near_uv
+    )
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert "project(h_, RECHECK_GRID)" in src

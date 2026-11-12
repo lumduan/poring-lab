@@ -6481,3 +6481,11 @@ the scorer before any trial runs.
     little: a drop the packets show and no `recheck` looted is read against its kill's
     `recheck_expired` (`checks`) and her cells at those checks (the `hp_read` events), which
     tells "not drawn yet" from "out of range".
+- **4DA amendment (15:16 ICT from `date`, BEFORE p94 / p95; no recheck run has happened).**
+  - The recheck maps items on its own `RECHECK_GRID` of +-8 cells (about the visible floor),
+    through `item_rels_on`. The loot step keeps ITEM_GRID's +-4 cells.
+  - Why: the builder's risk note. After a "no_items" step the search walk takes her ~7 cells on, so
+    a late-visible item at a kill could fall outside +-4 cells around her, and R-a would fail for
+    a reason that is not the idea under test.
+  - The bars do not change. p94 / p95 are queued after the base repeats p92 / p93.
+

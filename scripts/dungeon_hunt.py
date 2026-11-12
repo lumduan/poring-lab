@@ -463,6 +463,25 @@ ONNX_TAIL = "-last-736x1280.onnx"  # the deployed ONNX name: <GPU_WEIGHTS name> 
 ITEM_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-4, 5) for dy in range(-4, 5)]
 
 
+def item_rels_on(boxes: Sequence[Any], uv: Any, grid: Sequence[tuple[int, int]],
+                 conf: float = LOOT_ITEMS_CONF,
+                 max_px: float = LOOT_ITEMS_PX) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE (dungeon@9.36, 4DA amendment): ``item_rels`` on any cell grid (``uv`` = one projected
+    point per ``grid`` entry): the recheck's wider RECHECK_GRID."""
+    pts = np.asarray(uv, dtype=float)
+    out: list[tuple[int, int]] = []
+    for b in boxes:
+        if LOOT_ITEMS_CLASS not in (getattr(b, "cls", None), getattr(b, "species", None)):
+            continue
+        if float(getattr(b, "score", 0.0)) < conf:
+            continue
+        d = np.hypot(pts[:, 0] - (b.x0 + b.x1) / 2, pts[:, 1] - (b.y0 + b.y1) / 2)
+        i = int(np.argmin(d))
+        if float(d[i]) <= max_px and grid[i] not in out:
+            out.append(grid[i])
+    return out
+
+
 def item_rels(boxes: Sequence[Any], uv: Any, conf: float = LOOT_ITEMS_CONF,
               max_px: float = LOOT_ITEMS_PX) -> list[tuple[int, int]]:  # fmt: skip
     """PURE (dungeon@9.33): the cells (relative to her) of the floor-item boxes -- class
@@ -512,6 +531,10 @@ def items_plan(items: Sequence[Cell], plan: Sequence[Cell] | set[Cell],
 LOOT_RECHECK_VERSION = "9.36"
 RECHECK_S = 7.0  # a kill's cells stay pending this long after the kill (the study: 42 / 53 by 6 s)
 RECHECK_EVERY_S = 1.0  # at most one item detection this often while a kill is pending
+# 4DA amendment (BEFORE p94 / p95): the recheck maps items on a WIDER grid than the loot step's
+# ITEM_GRID (+-4): she has often walked ~7 cells on by the time a late item shows (the builder's
+# risk note), so +-8 cells (about the visible floor) keeps a pending kill's cells mappable
+RECHECK_GRID: list[tuple[int, int]] = [(dx, dy) for dx in range(-8, 9) for dy in range(-8, 9)]
 RECHECK_R = 2  # a kill's cells: the (2R + 1)^2 around her cell at the kill (the loot step's plan)
 
 
@@ -6644,7 +6667,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             for k_ in rk_pending:
                 k_.checks += 1
             try:
-                found_r = item_rels(item_det.detect(frame()), project(h_, ITEM_GRID))
+                found_r = item_rels_on(item_det.detect(frame()), project(h_, RECHECK_GRID),
+                                       RECHECK_GRID)  # fmt: skip  # 4DA amendment: +-8 cells
             except Exception:  # noqa: BLE001 -- a failed detection: no recheck this time
                 counts["recheck_fail"] += 1
                 return False
