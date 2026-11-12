@@ -248,6 +248,9 @@ The vision worker mounts the NAS separately, as a Docker volume (section 4.1).
    uv run python scripts/rotate_secrets.py set LAB_HOST_PROFILE=dedicated-intel RENDER_GID=<gid> VISION_MAX_VRAM_FRACTION=1.0
    ```
 
+   With an NVIDIA card of the lab's own instead (no render group):
+   `uv run python scripts/rotate_secrets.py set LAB_HOST_PROFILE=dedicated-nvidia VISION_MAX_VRAM_FRACTION=1.0`.
+
 4. rAthena's web-server (the client's account settings, section 7.1):
    `uv run python scripts/rotate_secrets.py set RATHENA_WEB_SERVER=true`.
 5. The Windows side comes later (section 7.3): `WIN_HOST` stays EMPTY until the game PC is ready.
@@ -367,16 +370,18 @@ A host profile tells the guards what this machine has (`scripts/host_profile.py`
 |---|---|---|
 | `shared-nvidia` | the old VM 103: an RTX GPU beside Frigate and Ollama, a disk beside live quant capture | GPU sharing rules R1-R3 (they need Frigate's stats), the IO guard on capture cgroups, SET-hour gates for shipping, a 100 GB recorder floor; the CUDA vision image |
 | `dedicated-intel` | bot-server: the Arc A380, nothing else on the machine | no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor; the Intel vision image (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`: the render node, `PORING_ACCEL=xpu`, the worker capped at 11 GB) |
+| `dedicated-nvidia` | a new machine whose NVIDIA card is the lab's alone (ADR-0022 Amendment 2026-11-12). Never VM 103 | the same dedicated rules as `dedicated-intel` (no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor); the CUDA vision image and the NVIDIA reservation of `shared-nvidia`, GPU processes listed with `nvidia-smi`. Its overlays (`compose.nvidia.yaml`, `compose.vision-worker.nvidia.yaml`) change only the VRAM cap's default, 0.25 -> 1.0; the worker stays capped at 6 GB |
 
 **Which to choose:**
 - **An Intel Arc machine used only by the lab:** `dedicated-intel`.
 - **A machine with no GPU, used only by the lab:** `dedicated-intel` too, and never start vision
-  or the worker there (they need the render node). It is the only DEDICATED profile today; the
-  default `shared-nvidia` would apply the old VM's market gates and its 100 GB floor.
-- **An NVIDIA machine:** no profile fits yet. `shared-nvidia` refuses every GPU step without a
-  Frigate baseline (R3 fails closed), and there is no `dedicated-nvidia`. Adding one is a small,
-  reviewed code change in `scripts/host_profile.py` and its tests (ADR-0022: "moving a host means
-  writing its profile").
+  or the worker there (they need the render node). There is no CPU-only profile yet
+  (docs/planning/second-install-gaps.md D); the default `shared-nvidia` would apply the old VM's
+  market gates and its 100 GB floor.
+- **An NVIDIA machine used only by the lab:** `dedicated-nvidia` (since 2026-11-12). Set
+  `VISION_MAX_VRAM_FRACTION=1.0` in `.env` too (section 3): a value there wins over the overlay's
+  default, and `.env.example` carries the old VM's 0.25. Never `shared-nvidia` on a new machine:
+  it refuses every GPU step without a Frigate baseline (R3 fails closed).
 - guarded_build refuses EVERY step on a host declared dedicated where a capture service (quant,
   Frigate) runs. That is intended: the declaration would be wrong.
 
@@ -392,6 +397,26 @@ clinfo -l                            # lists the Arc
 
 The host packages are for host-side checks only; the vision image carries its own runtime. Log out
 and in after the group change.
+
+**For an NVIDIA GPU (once; every step here is (unverified) on a dedicated host: the NVIDIA path ran
+only on the old VM 103):**
+- The NVIDIA driver, release **580 or newer**. The vision image is CUDA 13.0 (torch
+  `2.14.0+cu130`, the build with RTX 50-series sm_120 kernels); a CUDA 13.2 image refuses to start
+  on an R580 driver. `nvidia-smi` on the host must list the card and a `Driver Version: 580.` or
+  newer.
+- The **NVIDIA Container Toolkit**, so that compose's `driver: nvidia` reservation works:
+  install it from NVIDIA's own instructions, then `sudo nvidia-ctk runtime configure
+  --runtime=docker` and restart Docker. That command edits `/etc/docker/daemon.json`: afterwards
+  check that the address pool of section 1.1 is still there
+  (`docker info --format '{{json .DefaultAddressPools}}'` must not print `null`).
+- Then build the CUDA image (`build:vision`, section 6) and check the card from inside it:
+
+  ```bash
+  python3 scripts/guarded_build.py 'run:vision@600=python scripts/check_gpu.py'
+  ```
+
+  It checks that torch sees the card, the VRAM cap, that the build has the card's sm_ kernels, and
+  that matmul + conv2d run.
 
 ## 6. Starting the services
 
@@ -430,8 +455,9 @@ Exit 0 only when every step completed.
    python3 scripts/guarded_build.py build:sniffer
    ```
 
-4. **Optional images:** `build:gamestream` (the console path, section 7.5) and, with an Arc,
-   `build:vision` (the Intel image, because the profile adds its overlay).
+4. **Optional images:** `build:gamestream` (the console path, section 7.5) and, with a GPU,
+   `build:vision`: the Intel image with `dedicated-intel` (the profile adds its overlay), the CUDA
+   image with `dedicated-nvidia`.
 5. **The game server first:**
 
    ```bash
@@ -636,7 +662,7 @@ What changes is where the forward pass runs.
 |---|---|---|---|---|---|
 | no GPU | `dedicated-intel` (section 5) | the CPU detector: onnxruntime, 16 threads, in `/dev/shm/poring-lab-detector` | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
 | Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the A380 (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
-| NVIDIA | none fits yet (section 5) | the torch CUDA (cu130) detect server, `.pt` weights | `gpu` | 49-52 ms a call on the RTX 5060 Ti (a shared host) | not usable on a new host until a `dedicated-nvidia` profile exists |
+| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the RTX 5060 Ti, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified) |
 | AMD | - | designed (ADR-0022), never built | - | - | not built |
 
 OpenVINO on the CPU measured ~10 % faster than onnxruntime on bot-server's CPU
@@ -646,8 +672,9 @@ a GPU-less host uses the onnxruntime CPU detector.
 **Recommendation for a new machine: an Intel Arc with `dedicated-intel`.** It is the only GPU path
 proven end to end on a dedicated host (the cutover smoke: 302 / 302 detections served by the Arc),
 about 5x faster per call than the CPU, the image and overlays exist, and the CPU detector stays
-behind it automatically. Without a GPU, the CPU detector works; it is slower and the runner's
-grab-to-click time grows with it.
+behind it automatically. An NVIDIA card with `dedicated-nvidia` is the other GPU path: the one the
+old VM 103 ran, not yet proven on a dedicated host. Without a GPU, the CPU detector works; it is
+slower and the runner's grab-to-click time grows with it.
 
 **Which model a map uses (`scripts/unit_detector.py`):**
 - `MAP_MODELS`: the map's own deployed model. Today only xmas_dun02:
@@ -693,6 +720,20 @@ eval "$(.venv/bin/python scripts/unit_detector.py serve-cmd --backend openvino -
   dedicated host start the worker directly, as above.
 - A device check without the server **(unverified)**:
   `python3 scripts/guarded_build.py 'run:vision@300=python -c "import openvino as ov; print(ov.Core().available_devices)"'`.
+
+**Run the GPU path beside a run (dedicated-nvidia; (unverified) on a dedicated host):** the same two
+steps, with the torch backend (serve-cmd's default):
+
+```bash
+python3 scripts/guarded_build.py worker:vision@60
+eval "$(.venv/bin/python scripts/unit_detector.py serve-cmd --seconds 1800)"
+```
+
+- The torch server loads each `GPU_WEIGHTS` model's `.pt` checkpoint from the NAS's
+  `/datasets/archive/train/...` (inside the worker) by its sha256, not the ONNX: every registered
+  `.pt` must be there.
+- The same check (the `"listening"` line), the same `rc=124` at the time box, the same
+  `worker-stop:vision`. The device check is `scripts/check_gpu.py` (section 5).
 
 **The Arc's clock floor** (recommended): between calls the card clocks down and a forward runs at
 ~29 ms instead of ~16 (FP32). bot-server holds the floor at RP0 with a oneshot unit:
