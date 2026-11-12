@@ -6827,3 +6827,21 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   when the Fly Wings run low). Dropping only `--clear-map` leaves the MVP alive, which kills her in
   ~0.4 s (11-08; 4CU's F1 death), and its escape is unproven. **Not changed without Batt's word.**
 
+
+### 4DJ. Paused for Batt's CPU change: p102 cut short (recorded 20:51 ICT from `date`)
+
+- **Batt (~20:41, translated):** "pause the work for about 20 minutes; I will change the CPU and
+  tell you when to resume."
+- **What was stopped, in order:**
+  1. the chain (20:42);
+  2. p102's runner, by SIGINT (rc 130 at 20:42:52, 2 min 42 s into the run);
+  3. its detect server, by host PID;
+  4. the recorder (by its own waiter);
+  5. the vision worker (`worker-stop:vision`, 20:43:20: nothing of ours on the GPU).
+- **p102 does not count.** Its recording is renamed `...-fiT51-ABORTED`. The counted series is
+  p100, p101 so far (one complete A / B pair). On resume p102 runs again as a fresh label in the
+  same place in the alternation, so the series keeps A, B, A, B.
+- **`/dev/shm` before the power-off:** everything of ours (1.2 GB, 17,516 files) was copied to
+  `scratch-archive/2026-11-12/shm-before-cpu-swap/` on the NAS. The sessions and scores (5,406
+  files: `poring-lab-demo`, `poring-lab-tmp` without the old pytest fixtures) were verified there
+  by sha256 (`KEY-SHA256SUMS`).
