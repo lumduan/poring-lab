@@ -6513,3 +6513,39 @@ the scorer before any trial runs.
   - R-b: kills / h >= 159.30 AND common-item z/h >= 52,686.
   - No harm: the base's bars.
 
+
+- **Built: dungeon@9.37 `--loot-memory`** (recorded 17:17 ICT from `date`; branch
+  `feat/loot-memory`, not merged yet). OFF by default; refused without `--loot-items` before any
+  input; independent of `--loot-recheck`. Its fixes record: `loot_memory: [7.0, 1.0, 12.0, "9.37"]`
+  (`MEMORY_S`, `MEMORY_EVERY_S`, `MEMORY_KEEP_S`).
+  - The kills: both kill sites (where the loot list grows) register the kill (her cell, the tick)
+    in the memory's own list (9.36's `PendingKill`), pruned at 7.0 s or at an escape after it
+    (9.36's `recheck_split`).
+  - The look (`memory_look`): in the main loop right after 9.36's prune, BEFORE the fight branch,
+    so it runs in any mode (search, fight, after, a walk to rest) but sitting. Due 1.0 s after the
+    last look or the loot step's own detection; not due -> nothing. One `item_det` call on a fresh
+    `frame()`, mapped by `item_rels_on` over `RECHECK_GRID` (+-8 cells) from her current cell. An
+    item cell inside a young kill's 5 x 5 cells (the loot step's filter: on the map, walkable,
+    outside the zones) is remembered with the time of its LAST sighting and its kills' cells. No
+    click, no hover, no sleep.
+  - A remembered cell leaves 12.0 s after its last sighting (`memory_expired`, why `time`), or when
+    it was last seen before an escape (why `escape`: a Fly Wing, a boss / unreach walk-away, a
+    door click).
+  - The take: the next loot step (`loot_step_v1`, the seen-items path) appends the remembered
+    cells after its own hover order (`memory_merge`: each cell's `items_plan` over its own kills'
+    cells, nearest her first, one cell once), before its `no_items` return, so a step that saw
+    nothing itself visits them. The caps are the step's own (`LOOT_TRIM_HOVERS` 9 first). Every
+    remembered cell it hovered (in view or not) is cleared. 9.36's loot step is otherwise byte for
+    byte unchanged (a test pins its hash with the two `if lm_on` blocks taken out). A failed
+    detection (today's trim sweep) merges nothing; cells the sweep hovers are still cleared.
+  - Calm with cells left (9.36's `recheck_calm`), after the fight branch, before the AFTER block:
+    the cells are hovered by 9.36's `recheck_visit` under the loot step's caps; the hovered ones
+    are cleared. No detection there: the hover itself checks the cell. Its loot clicks carry 9.36's
+    `"why": "recheck"`; its `memory_loot` event follows them.
+  - Events: `memory_look` (only when a cell is NEWLY remembered: `seen`, `new`, `kept`, `memory`,
+    `mode`, `ms`); the loot step's `items.remembered` (+ `memory_done`); `memory_loot`;
+    `memory_expired` (`cells`, `why`, `list`). Counts `memory_*`: `looks`, `looks_<mode>`,
+    `look_ms` (the looks' total time), `path_gpu` / `path_cpu`, `new`, `kept`, `merged`,
+    `rescued` (steps that would have ended `no_items`), `visited`, `calm_<end>`, `picks`,
+    `expired_time` / `_escape`, `left` (at the run's end).
+  - Tests: `services/backend/tests/test_loot_memory.py` (19).
