@@ -43,6 +43,11 @@ removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails clos
 - **xmas_dun02:** `model/xmas02-last-736x1280.onnx` (sha256 `293dca92...`, from last.pt `5c5bb67a...`;
   docs/benchmarks/xmas02-eval.md PASSED 2026-11-07 00:39) with its `.names.json` (player, npc, warp,
   mystcase, cruiser, cookie, cookie_xmas).
+  ➡️ **SUPERSEDED 2026-11-10 06:53 (3d8427a3, xmas02-detector.md M12):** `MAP_MODELS` now names
+  `xmas02gb-last-736x1280.onnx` (sha256 `b22d972b...`, GPU name `xmas02gb`). It keeps `garm_baby`
+  as its own class (never collapsed: the runner never strikes it, and `--garm-fly` reads it); the
+  four species are still renamed `monster`. `xmas02` stays in `GPU_WEIGHTS` as the rollback.
+  (second-install-gaps.md row G.)
 - Its four species are renamed `monster` and suppressed TOGETHER (one NMS group): per-class NMS
   drew a Cookie AND a Christmas Cookie box on one sprite (13 of 964 boxes on X2). The positive case
   on 113 real X2 frames (13 with a double, 100 random): 197 monster boxes -> 184; all 13 dropped

@@ -7,7 +7,7 @@ verdict_date: 2026-09-30
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt records the community server's bot/AI-testing permission (docs/environments/community-server.md); build the environment interlock (GitHub issue, blocks-phase-4) before Phase 4.
+next_action: "Batt records the community server's bot/AI-testing permission (docs/environments/community-server.md). The interlock is BUILT (ADR-0016, 2026-10-04); ADR-0023 decision 1 (declared mode) is BUILT 2026-11-12."
 ---
 
 # ADR-0006: Sanctioned test environments — self-hosted rAthena and a community bot-testing server
@@ -26,6 +26,8 @@ next_action: Batt records the community server's bot/AI-testing permission (docs
   accepts it.
 
 > ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED, NOT BUILT):** a person may DECLARE a server owner's permission on the Settings page; the bot may then act there, shown as "declared by a person, not verified", and research counts only packet-verified sessions. For the community server, "no agent automation" becomes "none until a person declares permission". Until the build lands, this record stands as written.
+>
+> ➡️ **ADR-0023 decision 1 BUILT 2026-11-12** (declared mode in envstore / the interlock / the Settings page). It applies only to an allowed environment the lab cannot verify. An environment with packet signals refuses a declaration (`declaration_not_for_attested`).
 
 ## Context
 poring-lab needs two kinds of environment that no single server provides:
@@ -123,7 +125,7 @@ that the two cannot be confused.
 | Rule | Status |
 |---|---|
 | 1 Evidence | The file exists; the evidence is pending (Batt to supply the rules/announcement link). |
-| 2 Interlock | **Not built.** It is tracked as [issue #2](https://github.com/lumduan/poring-lab/issues/2) (`blocks-phase-4`, `security`). Until it exists, **no agent automation runs against the community server** (CLAUDE.md rule 9). Batt may play there manually through the console, as the human. |
+| 2 Interlock | **Not built.** It is tracked as [issue #2](https://github.com/lumduan/poring-lab/issues/2) (`blocks-phase-4`, `security`). Until it exists, **no agent automation runs against the community server** (CLAUDE.md rule 9). Batt may play there manually through the console, as the human. ➡️ **BUILT 2026-10-04: [ADR-0016](0016-environment-interlock.md) (ACCEPTED), a logic interlock over the user-managed environment set.** The community server's entry stays `pending` with no signals, so it is never green (CLAUDE.md rule 9). ADR-0023's declared mode was added 2026-11-12. |
 | 3 Etiquette | Applies once automation exists (the Phase 4+ humanizer/rate limits). |
 | 4 Other players' data | Nothing is stored in the repo. The one debug frame with other players' names and chat (latency work, 2026-09-30) was deleted from scratch memory. |
 | 5 Typhoon | Phase 6, [ROADMAP](../ROADMAP.md). |

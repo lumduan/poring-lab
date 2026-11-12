@@ -10,9 +10,13 @@ related: [r3-paired.md, ../../scripts/guarded_build.py, ../../scripts/runbooks/t
 next_action: "chain15 runs v1's evals + re-proof 2 in one worker; the next training uses train-day WORKER=1. Batt: whether to pre-warm the CUDA libraries before a worker's first run (the remaining burst, 5b)."
 ---
 
-# Option A: one long-lived vision container per day (BUILT; NOT proven live; NOT switched)
+# Option A: one long-lived vision container per day (BUILT; NOT proven live; NOT switched) ➡️ PROVEN + SWITCHED 2026-10-10 (5b)
 
 > **Status, 2026-10-09 ~20:30:** the plan (sections 3-6) was APPROVED by Batt (~19:30). It is
+> ➡️ **SUPERSEDED 2026-10-10: PROVEN (5b: PASS on all four items of 5a) and SWITCHED** (the status
+> above). Since 2026-11-07 on bot-server the worker also hosts the live detect server
+> (`serve-cmd`, ADR-0005 Amendment 2026-11-07). The rest of this banner is the 2026-10-09 history.
+>
 > **BUILT on `feat/vision-worker` (90a7b74), unit-tested, NOT proven live, NOT switched.** Nothing
 > uses it until the parent runs THE PROOF (section 5, "How to run it") and Batt OKs the result:
 > `train-day.sh` still runs `rundev:` unless `WORKER=1`, and `eval.sh` is unchanged. What was

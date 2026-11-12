@@ -434,7 +434,7 @@ does the same thing unguarded.
   python3 scripts/guarded_build.py --sustain 30 --spike 25 \
     'rundev:vision@900=python -m poring_vision.train --cache /datasets/.framecache/<id> --eval /data/train/<run>/weights/best.pt --split test'
   ```
-  - **Option A, the long-lived vision worker** (BUILT, NOT switched; `docs/operations/vision-long-lived.md`):
+  - **Option A, the long-lived vision worker** (PROVEN + SWITCHED 2026-10-10; `docs/operations/vision-long-lived.md`):
     one idle vision container per day (`compose.vision-worker.yaml`), started once in a measured quiet
     window; each attempt is an `execdev:` inside it, with the same R2/R3, IO-guard and verified-stop
     rules. `train-day.sh` uses it only with `WORKER=1`. Its live proof is

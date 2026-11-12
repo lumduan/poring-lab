@@ -87,7 +87,7 @@ On a breach:
                   re-measurement; `ABORT <label>: R3-HARD drops ... (no resume)` when a camera
                   drops frames for 30 s. --frigate-baseline PATH overrides the baseline file.
   OPTION A, the long-lived vision worker (docs/operations/vision-long-lived.md; Batt 2026-10-09:
-  BUILT and unit-tested, NOT proven live, NOT switched -- train-day.sh uses it only with WORKER=1):
+  BUILT, unit-tested; PROVEN + SWITCHED 2026-10-10, 5b -- train-day.sh uses it with WORKER=1):
   worker:vision[@<seconds>]
                 start THE worker once: `docker compose -f compose.yaml -f
                 compose.vision-worker.yaml --profile vision-worker up -d --no-deps --no-build

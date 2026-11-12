@@ -1,6 +1,6 @@
 # OPTION A (docs/operations/vision-long-lived.md; Batt 2026-10-09): ONE long-lived vision container
 # per day, every training / eval attempt run INSIDE it, so the ~5 GB torch image is cold-started once
-# (in a measured quiet window), not once per attempt. BUILT, NOT switched.
+# (in a measured quiet window), not once per attempt. BUILT; PROVEN + SWITCHED 2026-10-10 (5b).
 #
 #   python3 scripts/runbooks/quiet_start.py -- \
 #       python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
