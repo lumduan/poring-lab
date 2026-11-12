@@ -3948,6 +3948,119 @@ same I1 recall / I2 / I4 (precision 0.9922 / 0.9934).
     Orc Lord's lesson (orclord-recognizer.md 12-13): a boss can hit ~1 s after it comes into view.
   - Until that proof passes, the chain keeps killing the MVP before each window.
 
+
+#### S1 (2026-11-12 08:0x ICT from `date`, before any labeller): sk1a / sk2a labels and the T2 pack
+
+**How (a subagent, branch `feat/sk-class`, offline, CPU, a 4 GB scope without swap, nice 15):** the
+worktree's sources with the main venv; the FROZEN params `d4cc0a5d...` (Amendment G) and the 11-06
+inputs in /dev/shm (`xmas-det/`: RSW + RSMs, sprites with `knight_of_windstorm`, kb-sprites, the
+GAT); `map_labels.py labels` with `classes-none.json` and `check --c1-rule round2` per session, as
+M1. The tool commit is **`19a9e3f8`**, and both label files record it:
+- sk3a's NAME is refused like TEST by labels, T2's pool and the cache (`-rdp-xmas02-sk3a`). It is
+  not in eval_suffixes: its scoring belongs to a later amendment, as gw3's did until M7.
+- Stormy Knight (1251) is a species of the map, in T2's tier whatever its pool. It is appended LAST,
+  and the reference keeps Poring and Santa Poring, so species + reference is the 11-06 list and
+  order. The sheet is byte-identical (below).
+- `MapSpec.screen_overlays` drops a measured Windows overlay's frames from the candidates
+  (`screen_overlay`; below).
+- fi_labels pins the floor items' drop species to O.3 (g)'s six.
+
+Nothing in the label rule changed. The labeller already fitted every monster with a sprite, the
+knight included, at fit_px 6. The old MapSpec only made its frames `unchecked_species`.
+
+**Positive case first:**
+- xw3's second session (`20261106T160700-rdp-xmas02-xw3`), re-labelled on this host at
+  de1cf141, gives **678 / 678 frames identical** to its 11-06 file (`3cc560fc...`). Only `commit`
+  and `labelled_at` differ.
+- On `19a9e3f8` the same 678 frames are identical too; `counts` gains a `1251: kept 0` entry.
+- xw3's first session on `19a9e3f8`: 902 / 932 frames identical. The other 30 differ ONLY by
+  `unchecked_species:1251` leaving `excluded_frame`, and none of them becomes whole (each holds an
+  excluded label). `kept_total` goes 1,130 -> 1,147: its 17 knight labels now count.
+
+**sk1a's OneDrive toast (ADR-0019 2026-11-12):** a pixel test compared every frame's game-region
+x 984-1276, y 478-716 with frame 30's toast panel. Frames **22-46** match it (mean abs difference
+0.00-0.08; t_mono_ns 406689558430974-406713548667487, ~07:03:55-07:04:19 ICT). Every other frame
+of sk1a scores >= 26.16, and the first stand's frames without the toast score 86.95. That span is
+`screen_overlays[sk1a]`: **23** of its 25 frames were dropped as `screen_overlay`; the other 2 had
+already been dropped by an earlier rule. sk2a has no toast: its closest frame scores 22.84, a
+dimmed warp frame (looked at), against 0.00-0.08 for the real toast.
+
+**The sessions:**
+- Both manifests pass 3c's path: rdp, png, recorder v7, [80, 77, 1280, 720], lab-rathena.
+- Each has 16 stands of `lattice-train.json` (`73053842...`), none of them in lattice-test.json.
+- Each stand: `@monster 1251 1` and a 40-s dwell, then `@killmonster2`.
+- The packets show what came with every knight: **2 Garm Babies** (their appear packets carry
+  `gm_command`, with the knight's) and **6 Christmas Goblins** summoned during the dwell (no GM
+  flag). All 16 knights of each session have kept labels.
+- sk2a's packet anchor (489 s before its t0) also carries sk1a's last knight and its 8 slaves:
+  packets only, no frame.
+
+| | sk1a | sk2a |
+|---|---|---|
+| recording / watch | `20261112T070331-rdp-xmas02-sk1a` (892 frames, 1.87 GB, 4,755 packet events) / `20261112T070339-watch-xmas_dun02-sk1a`, seed 2611121 | `20261112T072541-rdp-xmas02-sk2a` (897, 1.96 GB, 5,115) / `20261112T072548-watch-xmas_dun02-sk2a`, seed 2611122 |
+| candidates (drops) | 700 (gm_window 116, map_change 41, other_map 12, **screen_overlay 23**) | 741 (gm_window 120, map_change 36) |
+| whole frames (frame exclusions) | 156 (dying_in_view 1) | 163 |
+| whole, no `weak_fit` (classes ignored) | 112 | 119 |
+| frames the cache writes: gb list / gb + `8 Stormy Knight 1251` (the planned sk list, NOT a file) | 106 / **109** | 112 / **117** |
+| kept (in whole frames): Myst Case / Cruiser / Cookie / Christmas Cookie | 319 (41) / 157 (24) / 96 (24) / 84 (24) | 306 (64) / 278 (41) / 195 (56) / 94 (17) |
+| kept Garm Baby (in whole frames); pass T_h | 524 (84); 166 | 589 (82); 203 |
+| kept Christmas Goblin (in whole frames); pass T_h | 1,421 (152); 1,015 | 1,402 (113); 1,015 |
+| **kept Stormy Knight (in whole frames); pass T_h (of them in whole frames)** | **306 (43); 137 (20)** | **370 (42); 159 (14)** |
+| **Stormy Knight boxes in the frames the cache writes** (sk list) | **3** (3 frames); Garm Baby 2 | **5** (5 frames); Garm Baby 8 |
+| Stormy Knight excluded | occluded_model 85, occluded_terrain 53, ambiguous_view 48, crowd 26, facing_unknown 4, next_move 2 | occluded_model 95, occluded_terrain 52, ambiguous_view 24, crowd 15, next_move 13 |
+| Stormy Knight: clear fit NCC p10 / p50 / p90; box w / h p50 (p90) px | 0.364 / **0.495** / 0.635; 97 (140) / 124 (135) | 0.359 / **0.490** / 0.640; 98 (141) / 123 (135) |
+| **own C1 (3c: <= 5 % on >= 50)** | **2 / 209 = 0.96 %: ADDED** | **2 / 278 = 0.72 %: ADDED** |
+| C1 / C2 rows: Stormy Knight, Garm Baby, Goblin | **0 / 0 / 0** (C2: PASS x 4 common species) | **0 / 0 / 0** (C2: PASS x 4) |
+| label file / own-C1 sha256 | `301c06af...` / `ce4f1515...` | `340c5643...` / `6d61976b...` |
+
+**What looked wrong (packets, label files and C1 rows only; no frame opened except the toast check):**
+1. **The cache would write almost no Stormy Knight:** 3 + 5 boxes across both sessions. For
+   comparison, gw2 alone gave 391 Garm Baby boxes.
+   - Of the 524 / 569 frames holding a knight label, 43 / 42 are whole. Their blockers are mostly
+     the summons' own exclusions (sk1a: Goblin crowd 326, next_move 259, occluded 275; Garm Baby
+     crowd 134, next_move 122, occluded 244) and the knight's (occluded 138, ambiguous_view 48).
+   - In the whole frames, `weak_fit` takes most of the rest: the knight's clear fit NCC median
+     is 0.49-0.50, below T_h 0.536, so 380 of its 676 kept labels are below the floor.
+   - Making the Goblin a class would not change it: the what-if gives the same 3 / 5 knight frames.
+   - This is Amendment H's crowded-pack failure in another form. Each knight brings 8 slaves.
+2. **C1 and C2 cannot see the knight in these sessions.** The standing rule needs a unit isolated
+   by 120 px, and the knight is never clear of its summons: 0 rows for it, Garm Baby and the
+   Goblin. The ADDED verdicts rest on the four common species only. T2 is the only check of the
+   knight's labels.
+3. **Size and its own character:**
+   - No `ui` exclusion of the knight. Its `crowd` exclusions (26 / 15) are its summons.
+   - Kept knight labels by Chebyshev cells from us: sk1a 1: 11, 2-3: 44, 4-7: 131, 8+: 120;
+     sk2a 16 / 100 / 138 / 116.
+   - No kept knight box lies >= 0.25 under our own `player` box (sk1a 267 at 0 and 39 under
+     0.25; sk2a 284 and 86).
+   - The ~141 px width is the p90. The median box is ~97 x 123.
+
+**The T2 pack (built 07:58:26, BEFORE any answer exists):** `map_labels.py pack --map xmas_dun02`
+sk1a + sk2a `--seed 51 --min-fit 0.536` (M2's rule: the floor, as the cache writes).
+- Both sessions are admitted by 3c.
+- 30 per species, tier [1249, 1248, 1265, 1246, 1515, 1607, 1251]: the Goblin joins by D3's >= 30.
+  **210 crops**, 11 grids.
+- Pools after the floor: 583 / 373 / 277 / 174 / 369 / 2,030 / **296** (knight: 380 cut as
+  weak_fit).
+- The knight's 30 crops: 16 sk1a + 14 sk2a, NCC >= 0.538, 21 idle + 9 walk, 5 under a model.
+- **answer_key.json sha256 `d9c5a2b4d687ba01c8ead24c5857473715450d53f0576368d6dbbf451b85160d`**;
+  pack.json `3e6ee155...`; the instructions `dc48fb15...` (T2's, unchanged); the reference
+  **`d389551c...`, byte-identical to the 11-06 and M packs** (the same 9 species, order and seed:
+  letters A-I as then).
+- The file list (`pack.SHA256SUMS`, 224 files) has sha256 `c8e5516a...`.
+
+**Where (client pixels, /dev/shm, never committed):**
+- The labellers' pack: `/dev/shm/poring-lab-tmp/blind-sk51-sk12-floor/pack` (21 MB). Answers go
+  to `.../blind-sk51-sk12-floor/answers/<X>.json`.
+- The key: `/dev/shm/poring-lab-tmp/xmas-sk/t2/sk12-floor/key/answer_key.json`, outside the
+  labellers' tree.
+- Labels, own-C1 and tables: `/dev/shm/poring-lab-tmp/xmas-sk/`.
+
+**The verdict (Amendment S):** `species_pass["1251"]` of blind_score.py over two NEW labellers:
+good >= 0.90 and species >= 95 % each, on the 30 knight crops. The other six species are reported
+and decide nothing. Point 1 is the parent's to weigh before any cache. The T2 verdict says whether
+the knight's labels are right. It does not say whether there are enough of them to train on.
+
 ### Amendment O24 (2026-11-12 08:04 ICT from `date`, BEFORE round 5's freeze): the fresh held-out fixed
 
 - **fsH1** (the aura-off Rogue, recorded AFTER the freeze, refused by name for TRAIN): `stage_items.py
