@@ -7102,3 +7102,34 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
 - **Next (a study first, not a build):** split `approach_react` by what the bot was doing when
   the first hit came (walking to a box, the loot step, the settle wait, the scan). That says
   which branch to make faster.
+
+### 4DQ. 4DM pair K's verdict: Batt's Knife on arm B's fast loot (p116 + p117) -- every bar passes, it JOINS THE BASE (recorded 06:09 ICT from `date`)
+
+- **The runs:** p116 05:11-05:36 (fiT66), p117 05:39-06:04 (fiT67). Both rc 0, 0 deaths, 0 swap
+  failures. p116 met the MVP: 1 in view by packets, 5 Fly Wings.
+- **VERDICT: K1, K2, K3 and no harm pass -> JOINS THE BASE** (4DM). The base from here is
+  `--value-target --hud --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory --bare-steal
+  --bare-ready --steal-opener F4 --steal-cue popup --swap-gap`.
+
+| | arm B (6 runs) | the Knife on arm B | bar (4DM) | |
+|---|---|---|---|---|
+| K1: steals a kill (`weapon_swap_study.py`) | 0.555 (226 / 407) | **0.781** (89 / 114) | >= B + 0.15 = 0.705 | PASS |
+| K2: common-item z/h | 62,129 | **67,269** (+8.3 %) | >= B | PASS |
+| K3: popup equips with a packet steal before them | | **66 / 66 = 100 %** | >= 90 %, 0 swap-fail stops | PASS |
+| deaths / W1 / D1 p95 | 0 / 1.32 % / 22.2-23.9 | 0 / 1.86 % / 22.1-22.5 ms | B / <= 3.5 % / <= 35 | PASS |
+| kills / h | 162.7 | 136.8 (-15.9 %) | reported (expected to fall) | |
+| items / h | 128.3 | **147.6** (+15 %) | reported | |
+| gross z/h | 82,944 | 89,581 (5 Pearls) | reported | |
+| the swap back after the steal | | 0.32-0.33 s median (Batt 1.36) | reported | |
+| Knife hits before the steal | | 4 / 9 (Batt 7) | reported | |
+
+- **Against arm A (the old base):** common z/h +7.5 % (67,269 vs 62,584); kills / h -12 %.
+- **As a share of Batt's run (4DK):**
+  - kills / h 60 %;
+  - common z/h 50 %;
+  - steals a kill 78 % (his 91 %);
+  - items / h 49 %.
+- **What is left (4DK's ranking, now ON the Knife):**
+  - the idle between fights;
+  - the reaction to an attacker. 4DP: it lives inside box-started fights, not box-less ones.
+  - The Knife's longer fights make every idle second cost more kills.
