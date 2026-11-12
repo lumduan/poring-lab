@@ -6,7 +6,8 @@
 // the workflow map) with the PYTHON BESIDE IT, a drawer of output panes, the problems under the
 // blocks, and a status footer with the panel toggles. Everything of MW2's page is kept: the map-block
 // workflow canvas (the "Map" tab), inspect, lint, SIMULATE, JSON import / export, the path map and
-// the zones layer.
+// the zones layer. Save and Load (2026-11-12, docs/planning/flows-save-load.md): on this computer and
+// on GitHub, the dialogs shared with /maps (components/flowfile/).
 //
 // NOTHING here runs live: the green button is SIMULATE (no game, no input). The backend calls are
 // computation only (lib/flow/api.ts); the page never reaches the executor, the mux, an agent channel
@@ -22,13 +23,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
+import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
 import { DEFAULT_SIM, HuntRulesPanel, InspectPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type SimDoc, type WorldSource } from "@/lib/flow/api";
 import type { Scope } from "@/lib/flow/blocks";
 import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
+import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { exportText, importFlow } from "@/lib/flow/importer";
-import { type AuthoredExit, canonical, emptyFlow, type Flow, MAX_JSON_BYTES } from "@/lib/flow/ir";
+import { type AuthoredExit, canonical, emptyFlow, type Flow } from "@/lib/flow/ir";
 import { browserStorage, KEYS, pythonDefault, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
 import { findRunner, RUNNERS, runnerForMap } from "@/lib/flow/runners";
 import { oneMapStarter, STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
@@ -63,7 +66,7 @@ const PANES: [Pane, string][] = [
   ["hunt", "Hunt rules"],
 ];
 type Tab = { key: string; label: string; scope: Scope | null };
-type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource } | null };
+type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource; file: FileMeta } | null };
 const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose: [], canUndo: false, canRedo: false };
 
 function tabsOf(flow: Flow): Tab[] {
@@ -117,6 +120,10 @@ export default function FlowsApp({
   const [flow, setFlowState] = useState<Flow>(start.flow);
   const flowRef = useRef<Flow>(start.flow);
   const [epoch, setEpoch] = useState(0); // the flow was replaced from outside the blocks: reload them
+  // the name it was saved as and the GitHub file it came from (shared with /maps through storage)
+  const [file, setFileState] = useState<FileMeta>(() => (start.restored ? readFileMeta(browserStorage(), start.flow) : newFileMeta(start.flow)));
+  const fileRef = useRef<FileMeta>(file);
+  const [dialog, setDialog] = useState<FileDialog>(null);
   const [positions, setPositions] = useState<Record<string, XY>>({});
   // the static data the flow is linted and simulated on: the starter's are the sample sheets; a
   // restored flow keeps this browser's choice (2026-11-09 pm)
@@ -166,7 +173,6 @@ export default function FlowsApp({
   const [panes, setPanes] = useState<Record<Pane, boolean>>(() =>
     Object.fromEntries(PANES.map(([p]) => [p, readChoice(store, KEYS[p], OPEN_CLOSED, "closed") === "open"])) as Record<Pane, boolean>,
   );
-  const fileRef = useRef<HTMLInputElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const key = useMemo(() => canonical(flow), [flow]);
@@ -195,12 +201,18 @@ export default function FlowsApp({
     flowRef.current = f;
     setFlowState(f);
   }, []);
+  const setFile = useCallback((m: FileMeta) => {
+    fileRef.current = m;
+    setFileState(m);
+  }, []);
   const replace = useCallback(
-    (f: Flow, opts: { notice?: string; undo?: boolean; world?: WorldSource; keepView?: boolean } = {}) => {
-      const prev = { flow: flowRef.current, world };
+    (f: Flow, opts: { notice?: string; undo?: boolean; world?: WorldSource; keepView?: boolean; file?: FileMeta } = {}) => {
+      const prev = { flow: flowRef.current, world, file: fileRef.current };
       flowRef.current = f;
       setFlowState(f);
       setEpoch((e) => e + 1);
+      // an edit keeps the file it came from; any other new flow starts unsaved (Undo puts it back)
+      setFile(opts.file ?? (opts.keepView ? fileRef.current : newFileMeta(f)));
       if (!opts.keepView) {
         setPositions({});
         setSim(null);
@@ -210,7 +222,7 @@ export default function FlowsApp({
       if (opts.world) setWorld(opts.world);
       if (opts.notice) setNotice({ text: opts.notice, tone: "ok", undo: opts.undo ? prev : null });
     },
-    [world],
+    [world, setFile],
   );
   const edit = (r: EditResult) => {
     if (r.ok) replace(r.flow, { keepView: true });
@@ -228,13 +240,16 @@ export default function FlowsApp({
     writeChoice(store, KEYS.world, world);
   }, [world, store]);
 
-  // remember this browser's flow (a convenience: a reload does not lose the work); the Maps page
-  // reads the same flow, so it is also written at once on the way there and when the page goes
-  const flush = useCallback(() => writeChoice(store, KEYS.flow, exportText(flowRef.current)), [store]);
+  // remember this browser's flow (a convenience: a reload does not lose the work) and its file meta;
+  // the Maps page reads the same, so it is also written at once on the way there and when the page goes
+  const flush = useCallback(() => {
+    writeChoice(store, KEYS.flow, exportText(flowRef.current));
+    writeFileMeta(store, fileRef.current, flowRef.current);
+  }, [store]);
   useEffect(() => {
-    const t = setTimeout(() => writeChoice(store, KEYS.flow, exportText(flow)), SAVE_DEBOUNCE_MS);
+    const t = setTimeout(flush, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [flow, store]);
+  }, [flow, file, flush]);
   useEffect(() => () => void flush(), [flush]);
 
   // close the Load menu on a click outside it
@@ -335,20 +350,19 @@ export default function FlowsApp({
       setNotice({ text: `No sample: ${e instanceof ApiError ? e.reason : String(e)}`, tone: "error", undo: null });
     }
   };
-  const importFile = async (file: File) => {
-    if (file.size > MAX_JSON_BYTES) return setNotice({ text: `${file.name}: larger than ${MAX_JSON_BYTES} bytes`, tone: "error", undo: null });
-    const r = importFlow(await file.text());
-    if (!r.ok) return setNotice({ text: `${file.name}: ${r.errors.join(" · ")}`, tone: "error", undo: null });
-    replace(r.flow, { undo: true, notice: `Opened ${file.name}; the backend checks it with MW1's schema at the next lint.` });
+  // Save and Load (components/flowfile/): a loaded file is already checked into a scratch flow
+  const onOpened = (o: Opened) => {
+    setDialog(null);
+    replace(o.flow, { undo: true, file: o.meta, notice: `${o.notice} The backend checks it with MW1's schema at the next lint.` });
   };
-  const exportFile = () => {
-    const url = URL.createObjectURL(new Blob([exportText(flowRef.current)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${flowRef.current.name}.flow.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const pythonCached = useCallback((f: Flow) => (python && python.for === canonical(f) ? python.text : null), [python]);
+  const pythonFor = useCallback(
+    (f: Flow): Promise<string> => {
+      const have = pythonCached(f);
+      return have !== null ? Promise.resolve(have) : api.python(f).then((r) => r.python, () => "");
+    },
+    [api, pythonCached],
+  );
   const startOver = () => {
     if (!window.confirm("Start a new program from the starter blocks? The flow here is replaced. (Undo, right after, brings it back.)")) return;
     replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Started a new program from the starter: two maps, on the sample sheets." });
@@ -467,6 +481,14 @@ export default function FlowsApp({
   const pyStale = python !== null && python.for !== key;
   const codeText = codeFile === "py" ? pyText : exportText(flow);
   const zonesBlock = zonesFor ? flow.workflow?.blocks.find((x) => x.name === zonesFor) : undefined;
+  useFileShortcuts(
+    (d) => {
+      setMenu(false);
+      setDialog(d);
+    },
+    dialog,
+    !zonesBlock,
+  );
 
   const paneToggles = (cls: string, after?: () => void) =>
     PANES.filter(([p]) => p !== "hunt" || huntRules).map(([p, label]) => (
@@ -527,7 +549,7 @@ export default function FlowsApp({
               : "Updating…"}
         </p>
       )}
-      {codeFile === "json" && <p className="studio-panel-note">The flow IR, MW1&apos;s canonical JSON: the one source of truth (Save downloads it, Load opens one).</p>}
+      {codeFile === "json" && <p className="studio-panel-note">The flow IR, MW1&apos;s canonical JSON: the one source of truth (Save keeps it with this Python, on this computer or on GitHub; Load opens one).</p>}
       {codeFile === "py" && !pyText && !pythonErr ? (
         <p className="studio-panel-note">The Python view is made by the flow engine…</p>
       ) : (
@@ -563,8 +585,8 @@ export default function FlowsApp({
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), fileRef.current?.click())}>
-                  Open a flow file (.json)…<small>a flow saved here, or any IR JSON (checked before it opens)</small>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="load-saved">
+                  Open a saved flow…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => void loadSample()} data-testid="load-sample">
                   Batt&apos;s sample<small>town → NPC warp → farm loop, on synthetic map sheets</small>
@@ -588,19 +610,7 @@ export default function FlowsApp({
               </div>
             )}
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,application/json"
-            className="visually-hidden"
-            tabIndex={-1}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void importFile(f);
-            }}
-          />
-          <button type="button" className="button button-small button-file" onClick={exportFile} title="Save the flow as a .json file" data-testid="save">
+          <button type="button" className="button button-small button-file" onClick={() => (setMenu(false), setDialog("save"))} title="Save the flow: on this computer or on GitHub (Ctrl+S)" data-testid="save">
             <SaveIcon />
             <span className="button-text">Save</span>
           </button>
@@ -633,7 +643,7 @@ export default function FlowsApp({
                 onClick={() => {
                   const u = notice.undo;
                   setNotice(null);
-                  if (u) replace(u.flow, { world: u.world });
+                  if (u) replace(u.flow, { world: u.world, file: u.file });
                 }}
                 data-testid="notice-undo"
               >
@@ -920,6 +930,17 @@ export default function FlowsApp({
           </div>
         </div>
       </footer>
+
+      <FlowFileDialogs
+        open={dialog}
+        onClose={() => setDialog(null)}
+        meta={file}
+        onMeta={setFile}
+        getFlow={getFlow}
+        pythonCached={pythonCached}
+        pythonFor={pythonFor}
+        onOpened={onOpened}
+      />
 
       {zonesBlock && (
         // the Zones layer is its own full-window tool (dark, as before): its text colours restored

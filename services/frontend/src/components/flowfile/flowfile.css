@@ -1,0 +1,192 @@
+/* The Save, Load and GitHub dialogs of /flows and /maps (2026-11-12,
+   docs/planning/flows-save-load.md). They render inside the .studio root, so the studio's tokens
+   (light and dark) apply; UNLAYERED, as studio.css.
+
+   Ported from MatPilot (MIT), src/app/globals.css at 4022c87 (https://github.com/lumduan/matpilot;
+   THIRD_PARTY.md): the "Dialogs (Save, Load, GitHub)" rules (.dialog*, .field*, .link-button,
+   .program-list*, .dialog-help*), renamed .dialog-field / .dialog-label / .dialog-input /
+   .dialog-hint / .dialog-check and .flow-list* here (studio.css already has a .field), and scoped
+   to .studio. This licence covers the ported files of components/flowfile/, lib/flow/file.ts and
+   lib/github/:
+
+   MIT License, Copyright (c) 2026 Sarat Sonsuk. Permission is hereby granted, free of charge, to
+   any person obtaining a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
+   Software, and to permit persons to whom the Software is furnished to do so, subject to the
+   following conditions: The above copyright notice and this permission notice shall be included
+   in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+   WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+   OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+
+.studio .dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.studio .dialog::backdrop {
+  background: rgba(15, 20, 25, 0.45);
+}
+.studio .dialog-inner {
+  padding: 0.9rem 1.1rem 1.1rem;
+}
+.studio .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.studio .dialog-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.studio .dialog-section {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+.studio .dialog-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.studio .dialog-section p {
+  margin: 0 0 0.6rem;
+}
+.studio .dialog-section .notice {
+  margin-top: 0.6rem;
+}
+.studio .dialog-form {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.8rem;
+}
+.studio .dialog-form .notice {
+  margin: 0;
+}
+.studio .dialog-field {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+}
+.studio .dialog-form .dialog-field {
+  margin-top: 0;
+}
+.studio .dialog-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.studio .dialog-input {
+  font: inherit;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+}
+.studio .dialog-input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 0;
+}
+.studio .dialog-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.studio .dialog-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.studio .dialog-check input {
+  margin-top: 0.2rem;
+}
+.studio .link-button {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.studio .dialog a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.studio .flow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.studio .flow-list-item {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.studio .flow-list-item:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.studio .flow-list-item:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+.studio .flow-list-item:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.studio .flow-list-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.studio .flow-list-meta {
+  flex: none;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.studio .dialog-help {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.studio .dialog-help summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+.studio .dialog-help ol,
+.studio .dialog-help ul {
+  padding-left: 1.25rem;
+  list-style: revert;
+}
+.studio .dialog-help li + li {
+  margin-top: 0.3rem;
+}
+.studio .dialog-help p {
+  margin: 0.5rem 0 0;
+}

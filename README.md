@@ -328,7 +328,33 @@ Amendment B); a not-adopted model is never offered.
   RDP / S2, unverified), its lint findings and its last simulated run.
 - **Lint, Simulate, JSON, Python:** MW1's linter; a simulated run against static data (the
   synthetic sample sheets, or the lab's own data/kb) with a scenario you choose; JSON import /
-  export; the Python view, read-only.
+  export (➡️ Save and Load, below); the Python view, read-only.
+- **Save and Load (2026-11-12, the same on /flows and /maps;
+  [docs/planning/flows-save-load.md](docs/planning/flows-save-load.md)):**
+  - **Save** (the disk icon, Ctrl/⌘+S) downloads `<name>.flow.json`: the flow, and its Python as
+    lines so a diff reads well. Never the sample sheets or the lab data. **Load** ▸ "Open a saved
+    flow…" (Ctrl/⌘+O) opens one from this computer or from GitHub. It is checked before anything
+    changes, and Undo on the notice goes back. A `.flow.json` downloaded before 2026-11-12 (the bare
+    IR) still opens.
+  - **GitHub:** "Set up GitHub…" in either dialog takes a repository (`owner/name` or its link), a
+    folder (default `poring-lab`) and your name (it goes into the commit message). A **public**
+    repository LOADS without a token. Saving needs a fine-grained token for that one repository
+    ("Contents: Read and write"; the dialog links GitHub's prefilled page). The token stays in this
+    browser tab unless you tick "Remember on this computer"; "Forget the token" removes it.
+  - A save never silently replaces someone else's newer version. You choose: Save mine as a new
+    flow (`<name> 2`), Replace it, See who changed it, or Cancel.
+  - **A teacher sharing a folder:** make a public repository in a free GitHub organisation, with
+    one folder per class (well under 1,000 files). The students set that repository and folder and
+    press Load, then carry on from the flow. Students who save are members of the organisation,
+    each with their own token (fine-grained tokens do not work for outside collaborators). GitHub
+    accounts are for ages 13 and over. Without a token GitHub allows 60 requests an hour for each
+    internet address; a Load and one open cost 3-4, so a class behind one school address shares
+    that budget.
+  - Saving a flow you opened from GitHub, under the same name, UPDATES that file when nobody changed
+    it since (GitHub keeps every version). So a teacher keeps the starting flows where the students
+    can only read, and each student saves into their own folder.
+  - The page talks to `https://api.github.com` only (the CSP's one outside origin), and only after
+    you open GitHub settings, Save or Load.
 - **The hunt block (B2, 2026-10-21):** one dropdown per parameter (engage; dead + loot; search),
   each a list of rule versions: ★ the adopted base's, ◆ hunting evidence (Batt's D8). The "Hunt
   rules" pane lists each version's numbers, read-only.

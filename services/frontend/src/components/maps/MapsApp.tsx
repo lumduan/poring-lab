@@ -16,7 +16,8 @@
 // /flows' map picker comes back here. The layout follows MatPilot's Mats page
 // (src/components/mats/MatsApp.tsx at commit d639909; MIT License, Copyright (c) 2026 Sarat Sonsuk;
 // the licence text is in studio.css and THIRD_PARTY.md): the stage with the playback bar over it,
-// the panel beside it.
+// the panel beside it. Save and Load (2026-11-12, docs/planning/flows-save-load.md): on this computer
+// and on GitHub, the dialogs shared with /flows (components/flowfile/).
 import "@/components/flows/studio.css";
 import "./maps.css";
 
@@ -24,14 +25,16 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
 import { InspectPanel } from "@/components/flows/Panels";
 import { CaretIcon, CloseIcon, FolderIcon, PlayIcon, SaveIcon } from "@/components/maps/icons";
 import { CharacterPanel, DEFAULT_RUN, LoginPanel, PlaybackBar, RunPanel, type RunForm, SPEEDS, StartPanel } from "@/components/maps/SidePanels";
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
 import { type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
+import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { exportText, importFlow } from "@/lib/flow/importer";
-import { type AuthoredExit, canonical, type Flow, MAP_ID, MAX_JSON_BYTES } from "@/lib/flow/ir";
+import { type AuthoredExit, canonical, type Flow, MAP_ID } from "@/lib/flow/ir";
 import { browserStorage, KEYS, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
 import { RUNNERS, runnerForMap, runnerHref } from "@/lib/flow/runners";
 import { STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
@@ -66,7 +69,7 @@ const MK = {
   run: "poring-lab.maps.run.v1",
 } as const;
 const EXAMPLE_MAPS = ["xmas_dun02", "town_1", "field_1"];
-type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource } | null };
+type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource; file: FileMeta } | null };
 type Sim = { doc: SimDoc; for: string; tl: Timeline; seed: number | null; old: boolean };
 
 function initialFlow(store: ReturnType<typeof browserStorage>): { flow: Flow; restored: boolean; broken: boolean } {
@@ -114,6 +117,10 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const [start] = useState(() => initialFlow(store));
   const [flow, setFlowState] = useState<Flow>(start.flow);
   const flowRef = useRef<Flow>(start.flow);
+  // the name it was saved as and the GitHub file it came from (shared with /flows through storage)
+  const [file, setFileState] = useState<FileMeta>(() => (start.restored ? readFileMeta(store, start.flow) : newFileMeta(start.flow)));
+  const fileRef = useRef<FileMeta>(file);
+  const [dialog, setDialog] = useState<FileDialog>(null);
   const [world, setWorld] = useState<WorldSource>(() => (start.restored ? readChoice(store, KEYS.world, WORLDS, "local") : STARTER_WORLD));
   const worldRef = useRef(world);
   useEffect(() => {
@@ -155,7 +162,6 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   // round 5 (Batt: "make it an option"): the map's other monsters as decoration; off by default
   const [decorOn, setDecorOn] = useState(() => readChoice(store, WANDER_KEY, ["on", "off"] as const, "off") === "on");
   const [graphFolded, setGraphFolded] = useState(false); // round 3: the map gets the height in a run
-  const fileRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
   const matRef = useRef<HTMLElement | null>(null);
@@ -188,12 +194,19 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const flush = useCallback(() => {
     writeChoice(store, KEYS.flow, exportText(flowRef.current));
     writeChoice(store, KEYS.world, worldRef.current);
+    writeFileMeta(store, fileRef.current, flowRef.current);
   }, [store]);
+  const setFile = useCallback((m: FileMeta) => {
+    fileRef.current = m;
+    setFileState(m);
+  }, []);
   const replace = useCallback(
-    (f: Flow, opts: { notice?: string; undo?: boolean; world?: WorldSource; keepView?: boolean } = {}) => {
-      const prev = { flow: flowRef.current, world: worldRef.current };
+    (f: Flow, opts: { notice?: string; undo?: boolean; world?: WorldSource; keepView?: boolean; file?: FileMeta } = {}) => {
+      const prev = { flow: flowRef.current, world: worldRef.current, file: fileRef.current };
       flowRef.current = f;
       setFlowState(f);
+      // an edit keeps the file it came from; any other new flow starts unsaved (Undo puts it back)
+      setFile(opts.file ?? (opts.keepView ? fileRef.current : newFileMeta(f)));
       if (!opts.keepView) {
         setPositions(readLayout(store, f.name));
         setSim(null);
@@ -205,7 +218,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       if (opts.world) setWorld(opts.world);
       if (opts.notice) setNotice({ text: opts.notice, tone: "ok", undo: opts.undo ? prev : null });
     },
-    [store, setTime],
+    [store, setTime, setFile],
   );
   const edit = useCallback(
     (r: EditResult) => {
@@ -217,7 +230,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   useEffect(() => {
     const t = setTimeout(flush, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [flow, world, flush]);
+  }, [flow, world, file, flush]);
   useEffect(() => flush, [flush]); // leaving the page: the latest flow is kept for /flows
   useEffect(() => {
     try {
@@ -423,20 +436,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       setNotice({ text: `No sample: ${e instanceof ApiError ? e.reason : String(e)}`, tone: "error", undo: null });
     }
   };
-  const importFile = async (file: File) => {
-    if (file.size > MAX_JSON_BYTES) return setNotice({ text: `${file.name}: larger than ${MAX_JSON_BYTES} bytes`, tone: "error", undo: null });
-    const r = importFlow(await file.text());
-    if (!r.ok) return setNotice({ text: `${file.name}: ${r.errors.join(" · ")}`, tone: "error", undo: null });
-    replace(r.flow, { undo: true, notice: `Opened ${file.name}.` });
+  // Save and Load (components/flowfile/): a loaded file is already checked into a scratch flow
+  const onOpened = (o: Opened) => {
+    setDialog(null);
+    replace(o.flow, { undo: true, file: o.meta, notice: o.notice });
   };
-  const exportFile = () => {
-    const url = URL.createObjectURL(new Blob([exportText(flowRef.current)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${flowRef.current.name}.flow.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const pythonCached = useCallback((f: Flow) => (python && python.for === canonical(f) ? python.text : null), [python]);
+  const pythonFor = useCallback(
+    (f: Flow): Promise<string> => {
+      const have = pythonCached(f);
+      return have !== null ? Promise.resolve(have) : api.python(f).then((r) => r.python, () => "");
+    },
+    [api, pythonCached],
+  );
+  const getFlow = useCallback(() => flowRef.current, []);
   const facts = async (map: string, source: WorldSource): Promise<{ facts: MapFacts | null; why: string }> => {
     try {
       const w = await api.world(source, flowRef.current.target.server, [map], true);
@@ -544,6 +557,14 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         : "Ready. Press Simulate to watch the bot log in (a mock) and walk its maps.";
   const codeText = codeFile === "session" ? sessionPython(session) : codeFile === "py" ? (python?.text ?? "") : exportText(flow);
   const zonesBlock = zonesFor ? flow.workflow?.blocks.find((x) => x.name === zonesFor) : undefined;
+  useFileShortcuts(
+    (d) => {
+      setMenu(false);
+      setDialog(d);
+    },
+    dialog,
+    !zonesBlock,
+  );
 
   return (
     <main className="studio maps-page" data-run={tl ? "true" : "false"} data-testid="maps-app">
@@ -581,25 +602,13 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                     <small>on /flows: the {r.char}&apos;s runner ({r.script}) as blocks with its Python, made from its code</small>
                   </button>
                 ))}
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), fileRef.current?.click())}>
-                  Open a flow file (.json)…<small>checked before it opens</small>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="maps-load-saved">
+                  Open a saved flow…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
               </div>
             )}
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,application/json"
-            className="visually-hidden"
-            tabIndex={-1}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void importFile(f);
-            }}
-          />
-          <button type="button" className="button button-small button-file" onClick={exportFile} aria-label="Save the flow" title="Save the flow as a .json file" data-testid="maps-save">
+          <button type="button" className="button button-small button-file" onClick={() => (setMenu(false), setDialog("save"))} aria-label="Save the flow" title="Save the flow: on this computer or on GitHub (Ctrl+S)" data-testid="maps-save">
             <SaveIcon />
             <span className="button-text">Save</span>
           </button>
@@ -622,7 +631,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                   onClick={() => {
                     const u = notice.undo;
                     setNotice(null);
-                    if (u) replace(u.flow, { world: u.world });
+                    if (u) replace(u.flow, { world: u.world, file: u.file });
                   }}
                 >
                   Undo
@@ -993,7 +1002,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                           : selectedBlock
                             ? `Every map's flow is a def under @map_block: ${selectedBlock.name}'s is def ${selectedBlock.name}().`
                             : "Every map's flow is a def under @map_block, made by the flow engine from the blocks."
-                        : "The flow IR (the one source of truth), as /flows saves it."}
+                        : "The flow IR (the one source of truth): Save keeps it with the Python, on this computer or on GitHub."}
                   </p>
                   {codeFile === "py" && !python ? (
                     <p className="studio-panel-note">The Python view is made by the flow engine…</p>
@@ -1020,6 +1029,17 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
           </button>
         </div>
       </footer>
+
+      <FlowFileDialogs
+        open={dialog}
+        onClose={() => setDialog(null)}
+        meta={file}
+        onMeta={setFile}
+        getFlow={getFlow}
+        pythonCached={pythonCached}
+        pythonFor={pythonFor}
+        onOpened={onOpened}
+      />
 
       {zonesBlock && (
         <div className="text-neutral-100">

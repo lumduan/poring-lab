@@ -135,6 +135,30 @@ MicroPython simulator and its mat geometry were not copied.
 | same | `d639909` | same | `src/app/globals.css` (`.mat-playback*`, `.robot-checks*`, `.run-result`, `.run-output`, `.run-time`, `.mats-side`, `.robot-picker*`) | `services/frontend/src/components/maps/maps.css`; `.robot-picker*` in `services/frontend/src/components/flows/studio.css` |
 | same | `d639909` | same | `src/components/blocks/BlocksApp.tsx` (the folder, save and play icons; round 2) | `services/frontend/src/components/maps/icons.tsx` (with our own pause, step and back-to-start icons) |
 
+### Save, Download and Load, on this computer and on GitHub (2026-11-12)
+
+Batt (2026-11-12): "make a save and download system too. Ask matpilot how they do it and do it that
+way: save/load on the machine, and through GitHub too"
+([docs/planning/flows-save-load.md](docs/planning/flows-save-load.md)). MatPilot at commit
+`4022c870083c38c7ed4c62ff8361ef65a57d41f8`; its LICENSE was read at that commit (MIT, Copyright (c)
+2026 Sarat Sonsuk, sha256 `519e79d4387e85cd8fb36588804fdadfa5e65bb1183f732ed2947a00b9f1e606`, the
+same as at `d639909`). The full copyright and permission notice is in
+`services/frontend/src/components/flowfile/flowfile.css`; every ported file starts with "Ported from
+MatPilot (MIT), <file> at 4022c87". No dependency was added; MatPilot's vitest tests were re-written
+for `node:test`. Ours, not MatPilot's: the folder listed with the Git Trees API (and `truncated` said
+plainly), the size checked before a GitHub read, names capped by UTF-8 bytes and NFC, `safePath`
+(no `.` / `..` segment in a URL), the token in this tab by default, the commit link built from its
+checked id, and the flow IR inside the file.
+
+| Source | Commit | License | File read | Ported into |
+|---|---|---|---|---|
+| [lumduan/matpilot](https://github.com/lumduan/matpilot) | `4022c87` | MIT, © 2026 Sarat Sonsuk (`LICENSE`) | `src/lib/blocks/program-file.ts` (+ `.test.ts`) | `services/frontend/src/lib/flow/file.ts` (+ `file.test.ts`): the file's shape, the name cleaning, the file names; `src/hooks/downloadFile.ts` as `downloadText` |
+| same | `4022c87` | same | `src/lib/github/client.ts`, `base64.ts`, `repository.ts`, `programs.ts` (+ their tests) | `services/frontend/src/lib/github/client.ts`, `base64.ts`, `repository.ts`, `flows.ts` (+ tests, with `testkit.ts`) |
+| same | `4022c87` | same | `src/hooks/useGitHub.ts`; `src/hooks/useAiHelper.ts` (only its key-storage pattern: this tab unless "Remember") | `services/frontend/src/lib/github/settings.ts` (+ test), `services/frontend/src/components/flowfile/useGitHub.ts` |
+| same | `4022c87` | same | `src/components/blocks/SaveDialog.tsx`, `LoadDialog.tsx`, `GitHubSettingsDialog.tsx`, `describe.ts`; `src/components/Dialog.tsx` | `services/frontend/src/components/flowfile/` (`SaveDialog.tsx`, `LoadDialog.tsx`, `GitHubSettingsDialog.tsx`, `Dialog.tsx`), `services/frontend/src/lib/github/describe.ts` |
+| same | `4022c87` | same | `src/app/globals.css` (the "Dialogs (Save, Load, GitHub)" rules) | `services/frontend/src/components/flowfile/flowfile.css` (renamed `.dialog-*`, `.flow-list*`) |
+| same | `4022c87` | same | `docs/adr/0011-save-load-github.md` (the decision and the GitHub facts it checked); `src/lib/github/files.ts` (read only: robots and mats, not ported) | `docs/planning/flows-save-load.md` |
+
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:

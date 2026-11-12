@@ -1,18 +1,19 @@
 ---
 doc_type: plan
 hypothesis: null
-status: PROPOSED
+status: BUILT (2026-11-12, branch feat/flows-save-load, not merged; the real-GitHub checks in "Built" 4 are open)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, world-map-flows.md, ../adr/0023-learner-mode.md]
-next_action: "Build it (after the setup manual and ADR-0023 decision 1): one Save / Load for /flows and /maps, on this computer and on GitHub, ported from MatPilot (MIT, 4022c870) with attribution in THIRD_PARTY.md."
+next_action: "Batt reviews and merges feat/flows-save-load; then the real-GitHub checks of 'Built' 4 (a Thai-named round trip, tree sha == contents sha, Windows / macOS clones, an iPhone download) on a throwaway public repository, and tell the matpilot session the result."
 ---
 
 # /flows and /maps: Save, Download and Load -- on this computer and on GitHub
 
-Written 2026-11-12 11:12 ICT from `date`.
+Written 2026-11-12 11:12 ICT from `date`. ➡️ **BUILT the same day** (section "Built", at the end):
+both pages, on this computer and on GitHub; not merged, and the real-GitHub checks are open.
 
 ## Why (Batt, 2026-11-12, translated)
 
@@ -22,6 +23,9 @@ Written 2026-11-12 11:12 ICT from `date`.
 > helps build a community that shares knowledge as code on GitHub."
 
 ## What exists today
+
+➡️ This section is the state BEFORE 2026-11-12. Since then Save and Load are dialogs (section
+"Built"); the bare IR download below still opens.
 
 - Both pages edit ONE flow (the IR: name, handlers, procedures, variables, workflow ...; no world
   data). It is autosaved in this browser (`prefs.ts` KEYS.flow) and can be downloaded as
@@ -144,3 +148,142 @@ Written 2026-11-12 11:12 ICT from `date`.
 - History, diffs and merging inside poring-lab (github.com shows them).
 - Branches, deleting or renaming files on GitHub, signing in with GitHub (needs a server).
 - Saving the sample world or anything client- / rAthena-derived.
+
+## Built (2026-11-12, from 11:45 ICT by `date`; branch `feat/flows-save-load`)
+
+### 1. What was built
+
+- **The file** (`services/frontend/src/lib/flow/file.ts`): `serializeFlowFile` writes EXACTLY the
+  seven fields above, the flow in canonical key order and the Python as lines; never the world.
+  `parseFlowFile` checks the size (2,000,000 bytes) and the bracket depth before `JSON.parse`, then
+  each field's type, then the IR through `importFlow` (which keeps the IR's own 1 MiB cap), into a
+  scratch flow. `python` is never read. A bare IR file opens; a newer `version` gets "this flow was
+  saved by a newer poring-lab: pull the update, then open it again".
+- **Names** (`cleanFlowName`): NFC; control characters (C0, DEL, C1), `/ \ : * ? " < > |`, bidi
+  overrides and isolates, and lone surrogates removed; spaces collapsed; leading dots removed; at
+  most 60 characters AND 180 UTF-8 bytes, cut between graphemes (`Intl.Segmenter`), so a Thai letter
+  keeps its marks. Thai and spaces stay.
+- **On this computer:** Save downloads it (a Blob, `<a download>`, the object URL revoked after
+  10 s). Load ▸ "Open a saved flow…" opens the Load dialog's file picker (`.json`). `File.size` is
+  checked before the file is read. Autosave is unchanged.
+- **Undo and the file meta:** loading is ONE undo step through the page's notice. The notice's undo
+  also restores the FILE META: the name the flow was saved as, and the GitHub file (repository,
+  path, sha) it came from. So Undo never leaves a classmate's GitHub file attached to your own flow
+  (MatPilot ADR 0011 decision 2). The meta is kept in this browser beside the autosaved flow
+  (`prefs.ts` KEYS.file, tagged with the IR name), shared by both pages.
+- **Shortcuts:** Ctrl/⌘+S opens Save and Ctrl/⌘+O opens Load. They do nothing while typing in an
+  input, textarea, select or contenteditable, while a dialog shows, or while the Zones layer is
+  open. On a Thai layout the letter is taken from the key's place (`code`).
+- **GitHub** (`services/frontend/src/lib/github/`):
+  - `repository.ts` reads the repository by regex (`owner/name`, a link, `git@github.com:`) and
+    checks the folder (default `poring-lab`). `safePath` refuses empty, `.` and `..` segments
+    before any path reaches a URL, and every segment is `encodeURIComponent`'d.
+  - `client.ts` sends every request to `https://api.github.com` only, with `cache: "no-store"`,
+    `credentials: "omit"`, `referrerPolicy: "no-referrer"`, `X-GitHub-Api-Version: 2022-11-28` and
+    the token only as `Authorization: Bearer`.
+  - The folder is LISTED WITH THE GIT TREES API: `git/trees/{default branch}`, then each folder
+    level's sub-tree. Any `truncated: true` answer shows a plain message and NO list. Symlinks,
+    submodules and names with `/` or dot segments are dropped.
+  - Files are read through the contents API. GitHub's `size` is checked before the content is read,
+    then the Base64's length before it is decoded (TextDecoder fatal). An `encoding: "none"` file
+    (1 to 2 MB) is re-read with `Accept: application/vnd.github.raw+json`.
+  - Writes are one PUT a save. UTF-8-safe Base64: TextEncoder, then btoa in 32 KB chunks.
+  - `flows.ts` holds the sha compare-and-swap: read first, write only when the sha is the one we
+    opened or last saved, else a conflict. A 409, or a 422 about the sha, is a conflict too. It also
+    makes the commit messages (the note, or "Add/Update <name>", then "(saved by <name>)", then
+    "Saved from poring-lab.") and `<name> 2` within both name caps.
+  - `settings.ts` is the TOKEN STORE. By default the token is kept in this tab (sessionStorage).
+    It goes to localStorage only when "Remember on this computer" is ticked, and to memory when
+    storage refuses it. "Forget the token" clears all three. Its shape is checked (visible ASCII,
+    at most 255 characters).
+  - Errors: 401 / 403 / 404 / 409 / 422 / 429. A 403 with `x-ratelimit-remaining: 0` is the rate
+    limit, shown with the time from `x-ratelimit-reset`.
+- **The dialogs** (`services/frontend/src/components/flowfile/`): `SaveDialog`, `LoadDialog` and
+  `GitHubSettingsDialog`, MatPilot's, are shared by both pages through `FlowFileDialogs`. The
+  GitHub settings dialog is opened from either and goes back to it when closed.
+  - Save: "On this computer" (Download), and "On GitHub" (a note, Save, the conflict choices: Save
+    mine as a new flow, Replace it, See who changed it, Cancel). Without settings it offers "Set up
+    GitHub…".
+  - Load: "From this computer" (Choose a file…), and "From GitHub" (the folder link, Refresh,
+    Change, the list with sizes).
+  - Settings: the repository, the folder, your name, the token (with the prefilled token-page link),
+    "Remember on this computer" (OFF by default), "Check and save", and "Forget the token".
+  - Every github.com link opens only on a click, with `rel="noreferrer"`. Everything renders as
+    text: no `innerHTML`, which `gamefile.test.ts` still scans for.
+- **The pages:** on /flows and /maps the header's Save opens the Save dialog, and Load's menu
+  starts with "Open a saved flow…". On phones only the icons show; the words stay for screen
+  readers (studio.css `.button-file .button-text`, unchanged).
+- **The CSP** (`csp.ts`): `connect-src` gains EXACTLY `https://api.github.com`. `csp.test.ts` pins
+  that it is the one outside origin in the whole policy, that it equals the client's `GITHUB_API`,
+  and that no other module of `src/` names `api.github.com`. Nothing is sent to GitHub until a
+  person opens GitHub settings ("Check and save"), Save ("Save to GitHub") or Load (the listing).
+- **Attribution:** THIRD_PARTY.md, "Save, Download and Load". The licence text is in
+  `flowfile.css`, and each ported file starts with "Ported from MatPilot (MIT), <file> at 4022c87".
+
+### 2. Deviations from the design above, and why
+
+1. **Load keeps its menu.** The menu still holds the sample, the starters and the runner links, so
+   they stay one click away. Its first item, "Open a saved flow…", opens the Load dialog;
+   Ctrl/⌘+O opens the dialog directly. (MatPilot's Load opens the dialog at once.)
+2. **Names drop a little more** than section 1 lists:
+   - C1 controls, the bidi overrides and isolates (a name that displays differently from its
+     bytes), and lone surrogates (not UTF-8) are removed;
+   - a Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`) gets a trailing `_`,
+     because Windows refuses `CON.flow.json` and a class's clone would fail;
+   - the cut is between graphemes.
+3. **Folders** also refuse `: * ? " < > |` (a clone on Windows) and are capped at 200 characters.
+   They are refused, never quietly changed.
+4. **The default branch** that "Check and save" finds is kept in the settings. A listing then
+   costs the root tree plus one sub-tree a folder level (2 requests for `poring-lab`), with the
+   repository read again only when the branch has changed. Without a token GitHub allows 60
+   requests an hour for each internet address, and a class shares one address.
+5. **A 403 with `Retry-After`** (GitHub's secondary limit) is treated as the rate limit too.
+6. **The commit link is built** from the commit's checked sha. `commit.html_url` from the answer
+   is never used as a link.
+7. **"See who changed it"** shows in both conflicts ("a file with this name exists" and "changed
+   since you opened it"); MatPilot shows it for the second only.
+8. **A save whose file would exceed 2,000,000 bytes is refused** with a message, because Load would
+   refuse that file.
+9. **A version-1 file's unknown top-level fields are ignored** (never read); the known ones are
+   type-checked.
+10. **The tree sha is not used for the compare-and-swap.** A flow opened from GitHub keeps the sha
+    of the contents API's answer (the file is read before it opens), and a save reads the file
+    again first. So the swap does not depend on the tree sha equalling the contents sha. The tree
+    sha only shows in the list.
+
+### 3. Not built
+
+- The share link of section 4 (later, by design).
+- Branches, deleting, renaming, history or diffs inside poring-lab (out of scope).
+- Saving the sample world or anything client- or rAthena-derived. The file has exactly the seven
+  fields, and a test hands the serializer a `world` and checks that it is not written.
+
+### 4. Open: checks on real GitHub (none was made; every GitHub test is MOCKED)
+
+Run these on a throwaway public repository, then tell the matpilot session the results; it
+records them in its ADR 0011.
+1. **A Thai-named round trip:** save `ฟาร์ม โพริง.flow.json`, list it, reload it, and compare the
+   name the trees API returns with the NFC name we wrote.
+2. **The tree's blob sha equals the contents API's sha** for one real file. Our swap does not need
+   it (deviation 10), but the list shows the tree sha.
+3. **The listing's answers on real GitHub:**
+   - an EMPTY repository's `git/trees/{branch}` answer: 409 is assumed (it lists as empty either
+     way);
+   - a default branch with a `/` in it (sent as `%2F`): untested.
+4. **Clones:** clone on Windows and on macOS, and open the files.
+5. **A real iPhone:** a download (MatPilot has not verified iOS Safari either), and the
+   `<dialog>`.
+
+### 5. Checks run (2026-11-12, in the worktree; node v24.17.0 from /dev/shm)
+
+- `node --test` over the package's test globs: **345 tests, 343 pass, 2 fail**.
+  - The 2 failures are the existing `blockly_headless.test.ts` and `runner.test.ts`. They need
+    `node_modules/blockly`, which the worktree does not have, and they fail the same way on `main`
+    (290 pass + those 2 before this change).
+  - New: `lib/flow/file.test.ts` (13 tests), `lib/github/{base64,repository,client,flows,settings}`
+    `.test.ts` (38 tests), `lib/csp.test.ts` (+2: 5 tests).
+- NOT run here (no `node_modules` in a tmpfs worktree):
+  - `pnpm typecheck` and `pnpm lint`. The TypeScript was written strict, and the `.ts` modules run
+    under Node's type stripping, but the `.tsx` dialogs and the two pages have had no compiler.
+  - Any browser check of the dialogs.
+  - These run in `frontend-dev` after the merge.

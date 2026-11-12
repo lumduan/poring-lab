@@ -15,6 +15,8 @@ export const KEYS = {
   hunt: "poring-lab.flows.hunt-pane.v1",
   flow: "poring-lab.flows.flow.v1",
   world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on
+  // the last flow's saved name and the GitHub file it came from (file.ts FileMeta); never the world
+  file: "poring-lab.flows.file.v1",
 } as const;
 
 /** The browser's localStorage, or null where reading it throws (blocked site data). */

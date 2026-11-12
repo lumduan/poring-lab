@@ -50,6 +50,10 @@ no input), and the page reaches no executor, mux, agent channel or input path.
   the code over the whole canvas, z-index 80 above Blockly's toolbox at 70); Load (a menu: a
   `.json` file, Batt's sample, a new workflow, the starter), Save (downloads the IR JSON), Start
   over (confirm, then the starter, with Undo), and the big green **Simulate** (`--run-bg`).
+  ➡️ **Since 2026-11-12 Save and Load open DIALOGS** (on this computer, and on GitHub; the same on
+  /maps; Ctrl/⌘+S, Ctrl/⌘+O): Save writes a `<name>.flow.json` that carries the IR and its Python,
+  and the menu's first item opens the Load dialog
+  ([flows-save-load.md](flows-save-load.md), "Built").
 - **Notices:** only when there is something to say; a replaced flow gets **Undo** and folds away
   after 12 s; errors stay until hidden.
 - **Context bar** (matpilot's device bar): the flow's shape, the static-data source (moved here
