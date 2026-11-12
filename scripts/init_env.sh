@@ -9,13 +9,14 @@ if [[ -e .env ]]; then
   exit 1
 fi
 
-lan_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')"
+# `|| true`: under pipefail a failing `ip` (no route) would end the script silently, before .env
+lan_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)"
 secret() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
 
 umask 077
 cp .env.example .env
 sed -i \
-  -e "s|^HOST_LAN_IP=.*|HOST_LAN_IP=${lan_ip:-192.168.1.13}|" \
+  -e "s|^HOST_LAN_IP=.*|HOST_LAN_IP=${lan_ip}|" \
   -e "s|^DB_PASSWORD=$|DB_PASSWORD=$(secret)|" \
   -e "s|^DB_ROOT_PASSWORD=$|DB_ROOT_PASSWORD=$(secret)|" \
   -e "s|^RATHENA_SERVER_USER=$|RATHENA_SERVER_USER=srv_$(secret | cut -c1-8)|" \
@@ -30,5 +31,10 @@ sed -i \
   -e "s|^RATHENA_GM_CHAR=$|RATHENA_GM_CHAR=Val$(secret | cut -c1-6)|" \
   .env
 
-echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-192.168.1.13}, random DB, server, test and agent account secrets."
+echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-<not detected>}, random DB, server, test and agent account secrets."
+if [[ -z "$lan_ip" ]]; then
+  # second-install-gaps.md row K: never a guessed address (it was VM 103's 192.168.1.13): compose
+  # stops with "set HOST_LAN_IP in .env" until it is set, instead of binding the wrong one
+  echo "WARNING: this host's LAN address was not detected: set HOST_LAN_IP in .env yourself." >&2
+fi
 echo "RDP is disabled until you set WIN_HOST, RDP_USER and RDP_PASSWORD in .env."

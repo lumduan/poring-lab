@@ -29,7 +29,7 @@ file, and a pull never breaks them.
 | H | ADR-0006's implementation table: "2 Interlock: Not built", no pointer to ADR-0016 (built 2026-10-04) | Misleads a reader | OPEN (doc) |
 | I | CLAUDE.md rule 2 / ADR-0014: "S2 is the bot's primary path"; the S2 UI-gate set is unproven, today's pilots run on RDP | Misleads a reader | OPEN (doc) |
 | J | Hard-coded /home/batt paths: guarded_build MEASURE_ROOTS, compose.dev.yaml S2_REC_DIR default, an .env.example comment | measure:/archive: refuse other users' paths | OPEN |
-| K | Stale VM 103 address 192.168.1.13: init_env.sh HOST_LAN_IP fallback, .env.example, compose.yaml comment, windows-setup.md | A new .env starts with a wrong address | OPEN |
+| K | Stale VM 103 address 192.168.1.13: init_env.sh HOST_LAN_IP fallback, .env.example, compose.yaml comment, windows-setup.md | A new .env starts with a wrong address | FIXED 2026-11-12 20:16: init_env.sh leaves it EMPTY with a WARNING when it cannot detect it (and no longer ends silently when `ip` fails: under pipefail the old fallback never ran) (compose then stops with "set HOST_LAN_IP in .env"); .env.example empty; the comment and windows-setup.md name it as VM 103's, from 2026-11-05 |
 | L | The gpu-clock unit's install text omits copying its .sh to /usr/local/libexec | The unit fails to start | OPEN (doc) |
 | M | scripts/check_gpu.py is NVIDIA-only; README's GPU check points only at it | No committed Intel device check besides a serve test | OPEN |
 | N | The detect server opens EVERY GPU_WEIGHTS ONNX at start (8 files, incl. evaluation-only rounds) | A new host needs all 8 files to serve one map | OPEN (a serve-cmd model subset) |
