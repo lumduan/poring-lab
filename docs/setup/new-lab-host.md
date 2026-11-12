@@ -659,7 +659,7 @@ are byte-identical to kRO there (docs/thai-data-experiment.md). Use your own cli
 | battle-log glyphs, per language | `scripts/battle_log.py formats-init en`, `clusters`, `cut`, `cut-names` | `data/ui_anchors/battle_log/<lang>/` |
 | minimap position digits | `scripts/selfpos_calibrate.py` (labelled by packet truth from recorded sessions) | `data/ui_anchors/minimap_digits.npz` |
 | hotbar stock digits | `scripts/hotbar_count.py cut --cal DIR` | `data/hotbar/digits.npz` |
-| HP percent glyphs, job identity references | `scripts/hp_percent.py fit FRAMES_DIR` then `prove FRAMES_DIR` (labelled by hp packets); `scripts/crusader.py --char <char> cut-job <JOB>` / `cut-name` | `data/crusader/`, `data/thief/` |
+| HP percent glyphs, job identity references | `scripts/hp_percent.py fit FRAMES_DIR` then `prove FRAMES_DIR` (labelled by hp packets); `scripts/crusader.py --char <char> init --name <NAME>` (once), `cut-name`, `cut-job <JOB>`; add `--no-db` on a server with no DB of ours (section 11.1) | `data/crusader/`, `data/thief/` |
 
 Notes:
 - `--decode-mixcrypt` needs the study-only decoder in `~/poring-lab-private/` (Batt, 2026-10-05:
@@ -952,7 +952,26 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
     --label <LABEL>
 ```
 
-- **The runner types no line at all**, and reads nothing from the lab's database.
+- **The runner types no line at all**, and reads nothing from the lab's database (since
+  dungeon@9.35c the start's identity check skips it too: the name plate and the job, from the
+  pixels alone).
+- **Your own character, once, before the first run.** The runner knows two character slots:
+  `crusader` and `rogue` (the Rogue's files live in `data/thief/`, so the tools below take
+  `--char thief`). For a Rogue:
+  1. Write its name file (never over an existing one):
+     `uv run python scripts/crusader.py --char thief init --name '<NAME>'`
+  2. Log the character in alone, with Basic Info open (Alt+V), and cut its references from the
+     screen: `uv run python scripts/crusader.py --char thief cut-name --no-db`, then
+     `... cut-job rogue --no-db`.
+  3. Check it: `uv run python scripts/crusader.py --char thief check --job rogue --no-db` must print
+     `"ok": true`.
+  - ⚠️ **`--no-db` is a warning, not a lock.** On a server of someone else's there is no DB of
+    ours to say who is online, so the identity rests on the pixels and on your word that the
+    character on screen is the one you named. Each command prints a `WARNING:` line saying so.
+  - Not configurable yet: the runner's table of each character's numbers and keys (max HP and SP,
+    F1 potion, F2 Fly Wing, F3 Steal, F5 the dagger, Insert to sit) is the lab Rogue's. A character
+    with other keys or stats needs that table changed in `scripts/dungeon_hunt.py` (`CHARS_CONF`;
+    docs/planning/second-install-gaps.md row R).
 - **You bring the character to the map yourself**, standing on open ground, with the chat input
   closed. The run starts where your character stands.
 - **On the hotbar:** at least 5 Fly Wings on the Fly Wing key (F2) and 5 heal items (White

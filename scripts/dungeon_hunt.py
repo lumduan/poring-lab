@@ -995,7 +995,7 @@ def hotbar_slot(key: str) -> int:
 # file. The run reads nothing from the lab's DB; the person brings the character to the map with
 # her stock, the run starts where she stands, reads the stock from the hotbar's pixels and refuses
 # below these minimums.
-PLAYER_MODE_VERSION = "9.35"
+PLAYER_MODE_VERSION = "9.35"  # 9.35c (the DB-free start check) changes no record: the version stays
 # Fly Wings on the hotbar at the start: POS_FLY_MAX (3) wings for an unread position, one escape,
 # and PLAYER_WINGS_KEEP for the end's own escape (no @warp takes her home)
 PLAYER_MIN_WINGS = 5
@@ -5098,7 +5098,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     with r.session(f"rule:dungeon-{a.strategy}") as (agent_raw, screen):
         agent_raw.wait_for_human()
         agent = hf.FrameGuard(agent_raw, (gx0, gy0, gw, gh), counts)
-        got = cr.check(screen, conf["job"], crk)
+        # dungeon@9.35c: under --player-mode the start reads NO lab DB either (a public server has
+        # none): the identity is the name plate and the job from the pixels alone
+        got = cr.check(screen, conf["job"], crk, db=not player)
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent_raw, screen, why="dungeon-start")

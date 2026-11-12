@@ -185,6 +185,12 @@ Batt (rogue-xmas02.md 4DF): "add a Butterfly Wing home at the end".
 - **A learner's own character and data:** the identity check needs that character's name and job
   references (crusader.py's cut steps), and the hotbar digits, the KB, the GATs and the map's zones
   and route are local files built on the lab. None of that comes from the server.
+  ➡️ PARTLY BUILT 2026-11-12 (found 20:1x, second-install-gaps.md row R): the start's identity
+  check read the lab DB (`r.online_chars`) even under the flag, so a run on a server of someone
+  else's refused at its start. dungeon@9.35c passes `db=False` under `--player-mode`.
+  `crusader.py --char <c> init --name` writes the learner's `char.json`, and `--no-db` on check /
+  cut-name / cut-job cuts the references without the lab DB (a printed warning, no lock;
+  new-lab-host.md 11.1). Still open: the runner's per-character numbers and keys (`CHARS_CONF`).
 - **ADR-0023 decision 2 in the judges:** a player-mode run carries `fixes.player_mode`, but no
   judge or the economy page filters on it yet.
 - **No live run has been made** (the build had no live access): the first one should be on the

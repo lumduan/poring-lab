@@ -105,3 +105,21 @@ def test_gm_line_skip_types_nothing_when_the_guard_refuses(monkeypatch, tmp_path
     refuse["on"] = False
     got = cr.gm_line(fake_agent, None, "@heal", "thief", "thief", on_refuse="skip")
     assert got["typed"] is True and typed == ["<open>", "@heal\n"]
+
+
+def test_init_writes_a_learners_char_file_and_never_over_one(tmp_path) -> None:
+    """new-lab-host.md 11.1: a learner's own character on a server of someone else's."""
+    import json
+
+    d = tmp_path / "thief"
+    got = cr.init_char(d, "Someone", 2)
+    assert "name" not in got and got["slot"] == 2  # the name is not printed back
+    rec = json.loads((d / "char.json").read_text())
+    assert rec["name"] == "Someone" and rec["slot"] == 2 and len(rec["made"]) == 10
+    with pytest.raises(SystemExit, match="exists already"):
+        cr.init_char(d, "Other")
+    assert json.loads((d / "char.json").read_text())["name"] == "Someone"  # untouched
+    with pytest.raises(SystemExit, match="empty"):
+        cr.init_char(tmp_path / "crusader", "  ")
+    cr.init_char(tmp_path / "c2", "X")  # no slot given: none written
+    assert "slot" not in json.loads((tmp_path / "c2" / "char.json").read_text())

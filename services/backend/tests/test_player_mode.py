@@ -597,3 +597,31 @@ def test_the_home_press_is_on_the_player_path_only_and_types_nothing() -> None:
         '"kind": "player_home"' in run_src
         and '**({"player_home_key": home_key} if player else {}),' in run_src
     )
+
+
+# --- dungeon@9.35c: the start check reads no lab DB under --player-mode ------------------------
+
+
+def test_the_check_without_the_db_never_asks_who_is_online(monkeypatch: pytest.MonkeyPatch) -> None:
+    import crusader as cr
+
+    asked: list[str] = []
+    fake = types.SimpleNamespace(online_chars=lambda which: asked.append(which) or ["Someone"],
+                                 black=lambda screen: False)  # fmt: skip
+    monkeypatch.setitem(sys.modules, "ro_agent", fake)
+    monkeypatch.setattr(cr, "load_refs", lambda char: ("Me", None, {}))
+    monkeypatch.setattr(cr, "client_frame", lambda screen: None)
+    monkeypatch.setattr(cr, "identity", lambda frame, ref, jobs, job: {"ok": True, "job": job})
+    assert cr.check(object(), "rogue", "thief", db=False) == {"ok": True, "job": "rogue"}
+    assert asked == []  # a public server has no DB of ours: never asked
+    # the lab's default still asks, and refuses another character online
+    got = cr.check(object(), "rogue", "thief")
+    assert asked == ["gm"] and got["ok"] is False and "online on the GM account" in got["why"]
+
+
+def test_the_run_start_passes_db_off_under_player_mode() -> None:
+    run_src = ast.get_source_segment(SRC, _func("run")) or ""
+    assert 'got = cr.check(screen, conf["job"], crk, db=not player)' in run_src
+    # the only other check in run() is the setup's @warp wait, which a player run never reaches
+    # (player_plan gives it no line)
+    assert run_src.count("cr.check(") == 2

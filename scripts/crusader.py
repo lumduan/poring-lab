@@ -108,14 +108,17 @@ def client_frame(screen: Any) -> Img:
     return np.asarray(screen.grab(x0, y0, w, h)[1])[..., :3]
 
 
-def check(screen: Any, job: str, char: str = "crusader") -> dict[str, Any]:
-    """The three checks on a fresh frame (no input)."""
+def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> dict[str, Any]:
+    """The three checks on a fresh frame (no input). ``db=False`` (dungeon@9.35c, --player-mode):
+    a public server has no DB of ours, so the lab DB's "who is online" check is skipped and the
+    identity rests on the pixels alone (the name plate and the job, against this char's refs)."""
     import ro_agent as r
 
     name, name_ref, jobs = load_refs(char)
-    online = r.online_chars("gm")
-    if online != [name]:
-        return {"ok": False, "why": f"online on the GM account: {online} (want [{name!r}])"}
+    if db:
+        online = r.online_chars("gm")
+        if online != [name]:
+            return {"ok": False, "why": f"online on the GM account: {online} (want [{name!r}])"}
     if r.black(screen):
         return {"ok": False, "why": "the game region is black"}
     return identity(client_frame(screen), name_ref, jobs, job)
@@ -157,6 +160,29 @@ def gm_line(agent: Any, screen: Any, command: str, job: str,
     return {**got, "typed": True}
 
 
+NO_DB_WARNING = (
+    "WARNING: --no-db: the lab DB is not asked who is online. Make sure the character "
+    "on screen is the one in char.json, logged in alone, before you trust this."
+)
+
+
+def init_char(d: Path, name: str, slot: int | None = None) -> dict[str, Any]:
+    """A learner's own character (new-lab-host.md 11.1): write ``d/char.json`` with its name.
+    Never over an existing file (a lab character's name and slot are kept); the references are
+    cut after it (cut-name, cut-job), with --no-db on a server of someone else's."""
+    f = d / "char.json"
+    if not name.strip():
+        raise SystemExit("init: --name is empty")
+    if f.exists():
+        raise SystemExit(f"init: {f} exists already: remove it yourself first if it is wrong")
+    rec: dict[str, Any] = {"name": name, "made": time.strftime("%F")}
+    if slot is not None:
+        rec["slot"] = int(slot)
+    d.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(rec) + "\n")
+    return {"wrote": str(f), **{k: v for k, v in rec.items() if k != "name"}}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
@@ -171,16 +197,34 @@ def main() -> int:
     k = sub.add_parser("cut-job")
     k.add_argument("job", choices=all_jobs)
     sub.add_parser("cut-name")
+    # 2026-11-12 (new-lab-host.md 11.1, a learner's own character): the name file a server of
+    # someone else's needs, and --no-db for its check and cuts (that server has no DB of ours)
+    i = sub.add_parser("init", help="write data/<char>/char.json (never over an existing one)")
+    i.add_argument(
+        "--name", required=True, help="the character's name exactly as the client shows it"
+    )
+    i.add_argument("--slot", type=int, default=None, help="its slot at character select (optional)")
+    for sp in (c, k, sub.choices["cut-name"]):
+        sp.add_argument("--no-db", action="store_true",
+                        help="a server with no DB of ours (ADR-0023's declared mode): skip the lab "
+                        "DB's 'who is online' check; the identity rests on the pixels and on "
+                        "YOUR word that this character is the one on screen")  # fmt: skip
     a = ap.parse_args()
     if getattr(a, "job", None) is not None and a.job not in CHARS[a.char]:
         ap.error(f"job {a.job!r} is not one of the {a.char}'s jobs {CHARS[a.char]}")
+    d = data_dir(a.char)
+    if a.cmd == "init":
+        print(json.dumps(init_char(d, a.name, a.slot)))
+        return 0
     import ro_agent as r
 
-    d = data_dir(a.char)
+    no_db = bool(getattr(a, "no_db", False))
+    if no_db:
+        print(NO_DB_WARNING, flush=True)
     if a.cmd == "check":
         screen = r.Screen()
         try:
-            print(json.dumps(check(screen, a.job, a.char)))
+            print(json.dumps(check(screen, a.job, a.char, db=not no_db)))
         finally:
             screen.close()
         return 0
@@ -188,7 +232,7 @@ def main() -> int:
         screen = r.Screen()
         try:
             name = json.loads((d / "char.json").read_text())["name"]
-            if r.online_chars("gm") != [name]:
+            if not no_db and r.online_chars("gm") != [name]:
                 raise r.Stop(f"{a.cmd}: the DB does not say {a.char} {name!r} is the one online")
             frame = client_frame(screen)
             if a.cmd == "cut-name":
