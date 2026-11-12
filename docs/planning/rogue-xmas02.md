@@ -6845,3 +6845,89 @@ So the pair tests **both halves together**, as one change ("a stricter quick-dro
   `scratch-archive/2026-11-12/shm-before-cpu-swap/` on the NAS. The sessions and scores (5,406
   files: `poring-lab-demo`, `poring-lab-tmp` without the old pytest fixtures) were verified there
   by sha256 (`KEY-SHA256SUMS`).
+
+### 4DK. Batt's own run is the bot's bar: his technique, measured (recorded 22:33 ICT from `date`)
+
+- **Batt (2026-11-12 ~21:3x-22:2x, translated):**
+  - "before you start, I want to play for 20-30 minutes; record it as an example";
+  - "record my stats on the economy page too";
+  - "use my playing technique, and use me as the benchmark for training the bot".
+- **The session:** `20261112T214008-demo-human-demo-xmas02`.
+  - Recorded by `human_demo.py` (5 Hz frames on the NAS, packets, his inputs, the live Battle
+    Log), plus a 1-fps PNG recording (`hunt-xmas02-batt1112b`, 1,928 frames). The aftercare was
+    judged clean (prt_fild08 268,107, HP/SP full, no dialog).
+  - Judged from his first input (21:50:34) to the stop (22:21:02): 30.46 min. That is the judge's
+    `--live` rule, now also econ_dash's for a played demo (d13b825a).
+  - The Rogue, the MVP alive (the server restarted 21:22), not immune. On `/economy` as
+    `batt-xmas02-20261112`, in `data/econ/lab.sqlite`.
+- **His numbers** (the bot's rulers: `series_score.py`, `time_budget.py`, `dungeon_style.py`):
+
+| | Batt | bot, tonight's arm B (p99 + p101) | bot, the day's 8 runs (p84-p85, p92-p97) |
+|---|---|---|---|
+| kills / h | **228.5** | 169.2 | 170.6 |
+| common-item z/h (sell_oc < 3000) | **135,737** | 80,564 | 53,016 |
+| gross z/h (Overcharge) | **173,601** (a 2carat Diamond, a Pearl) | 109,574 | 76,068 |
+| items / h | 299 | 162 | 133 |
+| deaths | 0 | 0 | 0 |
+
+- **Where the time goes** (`time_budget.py compare`, s per kill; the bot = 12 runs p84-p85,
+  p92-p101, 838 kills):
+
+| per kill (s) | fight | approach | search walk | idle | loot | cycle median |
+|---|---|---|---|---|---|---|
+| Batt | 8.93 | 1.65 | 2.91 | **2.13** | 0.13 | 14.6 |
+| bot | 5.21 | 3.70 | 3.84 | **8.64** | 0.10 | 19.4 |
+
+  The losses, ranked (kills / h if the bot matched him on that alone):
+  1. idle after a fight, 3.49 vs 0.82 s (+23.8);
+  2. reacting to a monster that attacked first, 2.31 vs 0.38 s (+16.5);
+  3. idle inside the search, 2.21 vs 0.30 s (+16.4);
+  4. idle before engaging, 1.41 vs 0.19 s (+10.1);
+  5. walking the search, 3.84 vs 2.91 s (+7.6);
+  6. the loot pause, 1.50 vs 0.66 s (+6.8).
+
+  He fights LONGER per kill on purpose (below).
+- **His style** (`dungeon_style.py table`):
+  - he moves on 2.5 s after a kill (the bot: 6.9-7.2 s);
+  - he stands still 3.2 s a kill outside fights (the bot: 11.7);
+  - he sees 49 monsters / 10 min (the bot: 37.5);
+  - 30.5 fights / 10 min (21-24);
+  - 47 pickups in 30 min, 42 of them within 10 s of the fight (the bot: 20 in 25 min);
+  - 97.5 % of his targets were the nearest one (as the bot's).
+  The bot's own events show where its post-kill seconds go. From the inferred kill to the next walk
+  or strike takes a median 3.76 s in p100 (the base's loot sweep) and 1.05 s in p101 (arm B:
+  `--loot-items --loot-memory` skip the sweep). Before that, the kill itself is known only
+  `KILL_GAP_S` (1.5 s) after the last hit: at Base 99 our client prints no EXP line.
+- **HIS TECHNIQUE: the Knife opener, swapped back once the steal lands**
+  (`scripts/weapon_swap_study.py`, committed with this section):
+  - 208 weapon changes in 30.5 min between the Knife (inventory index 10) and his Damascus +8
+    (index 2; the lab DB's rows);
+  - **106 of 116 kills gave a Snatcher steal (91 %)**; the bot's base got 39 of 65 (60 %, p100);
+  - 71 kills opened on the Knife and ended on Damascus; 38 were Damascus throughout;
+  - a median 7 Knife hits before the steal;
+  - **the swap back to Damascus a median 1.36 s after the steal** (p75 1.72 s);
+  - 18 hits a kill (the bot ~11), each doing ~37 % of the bot's damage while on the Knife (a
+    normal hit 68 vs 184);
+  - the steal rate per hit is the same as the bot's (~5 %). The Knife only buys more hits on
+    each monster before it dies, and a monster can be stolen from only once, so after the steal he
+    kills it fast.
+  - The bot's own version, `--steal-opener` (4CA / 4CE), stayed a FLAG: its steal cue was false
+    44.5 % (4CA B4), then P2 failed on p74 (4CE). Batt's run shows the technique worth ~1.6 x the
+    items a kill when it is played well.
+- **THE BENCHMARK (Batt: "use me as the bar"):** from here every report states the bot as a share
+  of this run, on the same rulers. Tonight: kills / h 74 % of Batt (arm B 169.2 / 228.5), common
+  z/h 59 % (80,564 / 135,737).
+  - The targets, each on its own ruler: kills / h 228.5; common z/h 135,737; idle 2.1 s a kill;
+    moving on 2.5 s after a kill; a steal on 91 % of kills; 0 deaths.
+  - Pairs still join the base only by their own pre-registered bars. Batt's run is the
+    north star, not a bar a pair must pass.
+- **Next candidates, in the order of the time each loses** (each pre-registered before its pair):
+  1. the post-kill pause: arm B is under test now (4DD); then a faster death cue than
+     `KILL_GAP_S`, e.g. the target's box vanishing on the live detector;
+  2. the Knife opener again, swapped back on the steal. Batt's 1.36-s reflex is the target, and
+     the cue is the stolen item's gain;
+  3. reacting to an attacker within ~0.4 s;
+  4. not stopping inside the search.
+
+  Batt's 30 minutes are also the first human example of the Rogue on xmas_dun02 for a learned
+  policy (frames, inputs and packets, one clock).
