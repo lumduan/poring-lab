@@ -6218,3 +6218,62 @@ the scorer before any trial runs.
   - Each trial's `@killmonster2` also kills the natural MVP if it is alive. After the proof, the
     chain's last kill is the proof's last `@killmonster2`.
 
+### 4CU. F1 (2026-11-12 08:50 ICT): FAILED by the rules, from a death in the runner's OWN SETUP before the bot's loop ran; the proof as registered FAILS (recorded 08:58 ICT from `date`)
+
+- **The timeline** (sniffer packets, ICT):
+  - 08:50:25: `@monster 1251 1` at (173, 16), her immune.
+  - Then the `@warp` to (159, 16), and immunity OFF judged at 08:50:46.
+  - 08:50:49: the runner starts. Its setup (session, stock reads, `@heal`, `@item 601 10`, ...)
+    took ~30 s; nothing watched the screen during it.
+  - 08:50:51: the knight appears in her server view at (170, 25), then (168, 23). The party moved
+    on her as soon as she could be attacked.
+  - 08:50:53: the knight's first act (a miss).
+  - 08:50:54-57: Christmas Goblins, Garm Babies and the knight hit her (the knight 1,267 and 1,188).
+  - 08:50:57: she DIED, 6 s after the knight first appeared.
+  - The setup carried on.
+    - It `@warp`ed her back to (159, 16) at 08:51:16, and she was killed again at 08:51:23 (a
+      Goblin's 7,992, a Garm Baby's 2,315 + 824, the knight's 1,030).
+    - It revived her (`@alive`) at 08:51:31, and she was killed again at 08:51:36.
+    - Then it took her to its stand (prt_fild08).
+  - Its loop's first frame read HP 0: `run_end` "death" at 0.24 s. The bot never judged a frame.
+- **The score** (`sk_flee_score.py`, from the archive): counted and FAILED.
+  - No flee came before the first hit. The summons' damage before it: Goblins 8,607, Garm Babies
+    7,128. 3 deaths in 39 s.
+  - By 4CS / 4CT the PROOF FAILS, so the kill-before-window protocol STAYS. The day's pilots run
+    in KILL mode.
+- **What F1 shows:**
+  - (1) The PROTOCOL was wrong.
+    - Immunity OFF has to come as the bot's loop starts, not before the runner's ~30-s setup.
+    - 12-14 cells is inside the party's reach: the first hit came 3 s after the knight appeared.
+  - (2) It says NOTHING yet about the bot's flee: no frame reached the loop.
+  - (3) The runner's setup is not built for a hostile spot. It typed on, warped her back into the
+    party and revived her into it: two more deaths.
+- **Two driver bugs, found in the aftercare** (her immune throughout):
+  - **The kill was not sent.** crusader.py's identity check refused `@killmonster2` right after a
+    `@warp` (the map still loading). The refusal went to stderr, and the chain's `gm()` kept only
+    the last stdout line, an empty one. So the STAGED knight stayed alive until 08:55:24, when a
+    re-typed kill read "All monsters killed!".
+    - Fixed in `chain.gm`: a line counts only when crusader reports `"typed": true`. One retry,
+      then Stop.
+  - **The MVP read missed the staged knight.** `@mobsearch Stormy Knight` lists a STAGED knight as
+    "Knight of Windstorm" with its cell, and the natural one as "Stormy Knight" (alive cell or
+    `[dead]`).
+    - The chain's `mvp_dead` reads only the LAST green line. At 08:54:18 it said "dead" while the
+      staged one stood at (157, 35).
+    - A staged knight's death must be read from its own line, or from the packets.
+- **The natural MVP** (the sniffer's GM-chat history from 05:20):
+  - It read dead at 05:28:39. It respawned ~06:00-06:40.
+  - It died at the first sk staging kill (07:04:38), and respawned 08:05-08:15.
+  - It died at the first fsTa5 kill after that: between 08:07:29 and 08:16:17.
+  - The next respawn is due between ~09:08 and ~09:26.
+  - So the day chain starts in KILL mode with LAST KILL 08:07:29, the EARLIEST possible death: it
+    polls until the MVP respawns and kills it, which gives an exact window. Poll limit 80 min.
+  - The 08:49:55 value armed earlier for this case (the proof's first kill) would have been UNSAFE:
+    the MVP could have died before the proof. It was never used.
+- **Next (Batt's decision, since it goes beyond the 5 approved trials):** a fixed protocol. Not run.
+  - A TRIAL-only runner flag: the setup's LAST line toggles immunity OFF, judged on the Chat tab;
+    unread means the trial is refused, immune.
+  - The loop starts at once, so the bot watches from its first frame.
+  - A death or a hit DURING setup ends the trial at once: no re-warp, no `@alive`.
+  - The staged knight's death is verified from its own `@mobsearch` line.
+
