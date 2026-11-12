@@ -6367,3 +6367,31 @@ the scorer before any trial runs.
   complete: next come its predictions, the pack, two new blind labellers, and `fi_eval --strata r5`
   (O22).
 
+### 4CY. `--quick-drop` on today's base (p88 + p89): a FLAG by its own bars, though it hunted better (recorded 13:13 ICT from `date`)
+
+| | base p84 + p85 | quick-drop p88 + p89 | bar (4CR) | |
+|---|---|---|---|---|
+| Q1: time held on "unlock: no hits", pooled | 87.0 s (23 unlocks) | 46.0 s (12) | <= half = 43.5 s | **FAIL** (by 2.5 s) |
+| Q2: good strikes given up (our attack act <= 2 s after a drop, packets) | - | **10** of 28 drops (5 + 5) | <= 5 | **FAIL** |
+| Q3 (the decision bar): kills / h | 154.66 | **158.33** (+2.4 %) | >= base | PASS |
+| R1-A pooled (own-body class D that lost an attack) | 0 | 5 (3 + 2) | < 7 | PASS |
+| W1 | 0.39 % | 1.99 % (14 / 704) | <= 3.5 % | PASS |
+| D1 p95 | 22.2 / 22.1 ms | 22.7 / 22.1 ms | <= 35 ms | PASS |
+| deaths / hard bars | 0 / pass | 0 / pass | | PASS |
+| common-item z/h | 52,686 | **57,781** (+9.7 %) | reported | |
+| gross z/h (Overcharge) | 66,066 | **101,655** | reported | rare: 2carat Diamond, 2 Old Blue Box, a Chef King Orleans book, a Pearl |
+
+- **The verdict: `--quick-drop` stays a FLAG.** Every pair joins the base only when ALL its bars pass
+  (4CR), and Q1 and Q2 fail.
+  - It drops a lock on its first missing hit. That halved the "no hits" hold time only nearly
+    (46.0 s against a 43.5-s bar).
+  - In 10 of its 28 drops our own attack landed within 2 s after it: a strike that was working
+    was given up.
+- **What it did to the hunt:** more kills (+2.4 %) and more common-item income (+9.7 %) than the
+  base pair. One pair cannot separate that from luck: the base's own two runs differ by 21.3 kills
+  / h.
+- **Batt's > 100,000 z/h:** this pair's GROSS passed it, 101,655. That came from rare drops; on
+  common items it is 57,781.
+- **A next study (Batt's call):** the drop's trigger made stricter, so a hit landing at once does
+  not lose the strike (Q2). It would be its own pre-registered pair.
+
