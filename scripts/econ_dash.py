@@ -243,21 +243,52 @@ def run_entry(
 ) -> dict[str, Any]:
     """PURE: one run's dashboard entry from dungeon_judge.judge's row (``judged``), the same kill
     rows and fates (dungeon_judge.kills_loot) and the packets (amounts, item uses)."""
+    drops, used = counts_of(judged, kill_rows, fates, packets)
+    return entry_from_counts(judged, drops, used, table, names, mobs, where)
+
+
+def counts_of(
+    judged: Mapping[str, Any],
+    kill_rows: Sequence[Mapping[str, Any]],
+    fates: Mapping[int, Mapping[str, Any]],
+    packets: Sequence[Mapping[str, Any]],
+) -> tuple[dict[int, dict[str, int]], list[int]]:
+    """PURE: the two counts an entry takes from the packets: our kills' drops per item id
+    (drops_by_item) and the item id of each of OUR successful uses in the judged window
+    (econ_row.uses)."""
     import dungeon_judge as dj
     import econ_row as er
+
+    w = judged["window"]
+    drops = drops_by_item(kill_rows, fates, er.floor_amounts(packets))
+    used = [iid for _t, iid in er.uses(packets, int(w["t0"]), int(w["t1"]), dj.AID)]
+    return drops, used
+
+
+def entry_from_counts(
+    judged: Mapping[str, Any],
+    drops: Mapping[int, Mapping[str, int]],
+    used: Sequence[int],
+    table: Mapping[str, Mapping[str, Any]],
+    names: Mapping[str, str],
+    mobs: Mapping[str, str],
+    where: str | None = None,
+) -> dict[str, Any]:
+    """PURE: one run's dashboard entry from the judged row and its counts (counts_of) -- names and
+    prices from ``table`` / ``names`` / ``mobs``. scripts/econ_db.py rebuilds an entry from its
+    stored counts through this very function (ADR-0025)."""
+    import dungeon_judge as dj
 
     why: dict[str, Any] = dict(judged.get("why") or {})
     econ = judged.get("economics") or {}
     why.update({f"econ_row.{k}": v for k, v in (econ.get("why") or {}).items()})
     w = judged["window"]
-    drops = drops_by_item(kill_rows, fates, er.floor_amounts(packets))
     items, unpriced = item_rows(judged.get("items") or [], drops, table, names)
     if unpriced:
         why["unpriced_items"] = (
             f"not in the item table (econ_items.py build): {unpriced}; "
             "their price is null and they are left out of the zeny"
         )
-    used = [iid for _t, iid in er.uses(packets, int(w["t0"]), int(w["t1"]), dj.AID)]
     cons, no_price = consumable_rows(used, table, names)
     if no_price:
         why["consumables_no_price"] = (
@@ -444,15 +475,15 @@ def run_clock(
     return out
 
 
-def export_run(
+def judge_session(
     session: str,
     table: Mapping[str, Mapping[str, Any]],
-    names: Mapping[str, str],
-    mobs: Mapping[str, str],
     map_name: str | None = None,
     maps_path: Path | None = None,
 ) -> dict[str, Any]:
-    """One session (a directory or an id) through dungeon_judge.judge and its kill rows."""
+    """One session (a directory or an id) through dungeon_judge.judge and its kill rows: what an
+    entry is made of BEFORE names and prices -- {"judged": judge's row, "drops" / "used":
+    counts_of, "where": the directory read, "clock": run_clock}."""
     import dungeon_judge as dj
 
     ev, pk, man = dj.load(session)
@@ -466,26 +497,78 @@ def export_run(
     judged["session"] = dj.session_dir(session).name
     w = judged["window"]
     krows, fates = dj.kills_loot(pk, int(w["t0"]), int(w["t1"]))
-    entry = run_entry(
-        judged, krows, fates, pk, table, names, mobs, where=str(dj.session_dir(session))
-    )
-    entry.update(run_clock(str(judged["session"]), ev, w, man))
+    drops, used = counts_of(judged, krows, fates, pk)
+    return {
+        "judged": judged,
+        "drops": drops,
+        "used": used,
+        "where": str(dj.session_dir(session)),
+        "clock": run_clock(str(judged["session"]), ev, w, man),
+    }
+
+
+def entry_of(
+    j: Mapping[str, Any],
+    table: Mapping[str, Mapping[str, Any]],
+    names: Mapping[str, str],
+    mobs: Mapping[str, str],
+) -> dict[str, Any]:
+    """PURE: a judged session (judge_session's shape) as its dashboard entry."""
+    entry = entry_from_counts(j["judged"], j["drops"], j["used"], table, names, mobs, j["where"])
+    entry.update(j["clock"])
     return entry
+
+
+def export_run(
+    session: str,
+    table: Mapping[str, Mapping[str, Any]],
+    names: Mapping[str, str],
+    mobs: Mapping[str, str],
+    map_name: str | None = None,
+    maps_path: Path | None = None,
+) -> dict[str, Any]:
+    """One session (a directory or an id) through dungeon_judge.judge and its kill rows."""
+    return entry_of(judge_session(session, table, map_name, maps_path), table, names, mobs)
+
+
+def table_sha(path: Path) -> str:
+    """The item table's identity as the export records it (sha256, 16 hex)."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def sources(data: Path = DATA) -> tuple[Path, dict[str, Any], dict[str, str], dict[str, str]]:
+    """(the item table's path, its document, the KB's item names, the KB's monster names) under
+    ``data``; the table is required (econ_items.load raises with the command to run)."""
+    import econ_items
+
+    tpath = data / "econ" / "items.json"
+    tdoc = econ_items.load(tpath)
+    return tpath, tdoc, _names(data / "kb" / "items.json"), _names(data / "kb" / "mobs.json")
 
 
 def build(
     sessions: Sequence[str], name: str, data: Path = DATA, map_name: str | None = None
 ) -> dict[str, Any]:
-    import econ_items
-
-    tpath = data / "econ" / "items.json"
-    tdoc = econ_items.load(tpath)
+    tpath, tdoc, names, mobs = sources(data)
     table = tdoc["items"]
-    names = _names(data / "kb" / "items.json")
-    mobs = _names(data / "kb" / "mobs.json")
     runs = [
         export_run(s, table, names, mobs, map_name, data / "econ" / "maps.json") for s in sessions
     ]
+    return document(runs, name, tpath, tdoc, names, mobs)
+
+
+def document(
+    runs: Sequence[Mapping[str, Any]],
+    name: str,
+    tpath: Path,
+    tdoc: Mapping[str, Any],
+    names: Mapping[str, str],
+    mobs: Mapping[str, str],
+) -> dict[str, Any]:
+    """The export document around its run entries: the sources, the price rules, the runs and
+    the pool (pool_runs)."""
+    import econ_items
+
     meta = tdoc.get("meta") or {}
     return {
         "schema": SCHEMA,
@@ -497,7 +580,7 @@ def build(
                 "rathena_ref": meta.get("rathena_ref"),
                 "mode": meta.get("mode"),
                 "built_at": meta.get("built_at"),
-                "sha256": hashlib.sha256(tpath.read_bytes()).hexdigest()[:16],
+                "sha256": table_sha(tpath),
             },
             "item_names": "data/kb/items.json" if names else "the item table (no KB names)",
             "mob_names": "data/kb/mobs.json" if mobs else None,
@@ -517,7 +600,7 @@ def build(
                 "source": "pc_modifybuyvalue, pc.cpp:5689-5703",
             },
         },
-        "runs": runs,
+        "runs": list(runs),
         "pooled": pool_runs(runs),
     }
 
