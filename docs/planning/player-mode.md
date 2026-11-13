@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../setup/new-lab-host.md, rogue-xmas02.md]
-next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.)"
+next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.) The map's name is not read from the screen (9.45's gap): a person checks it before Run."
 ---
 
 # Player mode: the hunting bot without GM commands
@@ -306,7 +306,76 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   ➡️ The Run helper says "playing" only after the runner's run_start event (matpilot's finding:
   it said "playing" while the runner was still refusing at its start checks).
 
+## Built: the live ticks and the flow's keys (dungeon@9.45; written 2026-11-13 18:29 ICT from `date`)
+
+**Batt (2026-11-13): "do it"** -- before Run, the page ticks each start-checklist line from the
+GAME SCREEN. And every hotbar key comes from a FUNCTION of the flow (e.g. `def fly_wing():
+press_key("F8")`): /flows compiles the functions into five keys and sends them with Run.
+
+- **`dungeon_hunt.py check`** (`LIVE_CHECK_VERSION = "9.45"`; the runner's `VERSION` stays
+  dungeon@8.7) takes run's OWN flags (its parser is `check`'s parent: no flag of its own), runs
+  run()'s whole preamble (every refusal before any input, the same keys, the same route grid) and
+  returns before the session: `start_check(screen, ctx)` gets a screen and no agent, and the check's
+  process replaces ro_agent's `Agent` and `session` with ones that refuse at construction
+  (`no_input_guard`). So it sends NO input: no key, click, move, chat line, window or tab. It
+  prints one `CHECK {json}` line and makes no session folder. `--player-mode` only.
+- **Its lines** (ids = `CHECK_IDS` = the page's `CHECKLIST_IDS`, test-pinned), each decided by the
+  same function the runner's start uses (the start now calls the shared pieces too:
+  `player_chat_refused`, `read_start_cell`, `explore_from`, `etc_hold_due`, `stock_slots`,
+  `hotbar_counts`, `player_heal_items`, and `player_stock_refused` = `player_wings_refused` or
+  `player_heals_refused`):
+  - `identity`: `crusader.check(..., db=False)` (the name plate and the job, no DB);
+  - `cell`: the minimap readout (`read_start_cell`, PosConfirm) + `player_start_refused` (+ the
+    explore regions from her cell);
+  - `chat`: the `chat_open` signature;
+  - `weight`: the Etc-hold rule then `player_weight_refused` (under WEIGHT_MAX, read, not red);
+  - `wings`, `heals`: the hotbar counts on fly_key / heal_key (heal candies with --heal-candy);
+  - `home`: the Butterfly Wings' count on home_key with `player_home_count_why`. The start
+    never refuses on it (it is a warning line, `refuses: false`); the way home reads it again;
+  - `knife`, `dagger` (Knife swap on): READ FROM THE HOTBAR, no window opened, by the start's own
+    `opener_ref_cut` (one item, no stack, on knife_key: the Knife in the bag; its icon is not
+    matched) and `bare_ref_cut` (dagger_key's slot empty: worn; an empty slot cannot tell
+    "worn" from "nothing there", the first swap tells).
+  Each line: `{id, ok: true | false | null, words, value, refuses}`; a read that raises (a frozen
+  stream, a missing template) is that line's `null`.
+- **🔴 The map's NAME is not read from the screen (a gap).** No pixel read tells which map she is
+  on: the minimap readout gives a cell, and `hunt_flow.map_same` only compares the minimap picture
+  with the run's OWN start crop. The live read below proves it matters: in GEFFEN at (119, 40) the
+  cell falls on xmas_dun02's open ground, so the cell line passes, and the runner's own start
+  would accept that cell too. The line's words say so ("IF she is on xmas_dun02: the map's name is
+  not read from the screen"), and the checklist line asks the person to check the map. A map
+  recogniser was NOT built (out of this task's scope).
+- **The Run helper** (`flow_run.py`): action `check` -- refused while a run starts, runs or stops,
+  or another runner / the night chain plays (the start's busy rule); one at a time; it builds the
+  start's argv with "check" for "run" (`check_command`), runs it in its own process group, time-
+  boxed at `CHECK_TIMEOUT_S` (20 s), and puts the result into status.json's `check` = {state
+  (checking | done | refused | failed | timeout | cancelled), at (ISO), flow, items, ok, refuses,
+  detail, keys, keys_src, used (the values it applied: the page greys a result its settings
+  outdated)}. A Run pressed meanwhile ends the check first. Its log: `/dev/shm/poring-lab-tmp/
+  flowcheck/check.log` (overwritten by the next check).
+- **The flow's keys:** POST /flows/run `{action: "start" | "check", flow, keys?: {heal_key,
+  fly_key, home_key, knife_key, dagger_key}}`: when given, ALL FIVE, each F1-F9, nothing else
+  (`flow_config.keys_problem`; the backend refuses with 400 `keys_refused` and the words, the
+  helper refuses the same). They go over the config file's for THAT run or check only (the file
+  is not written), then the clash rule runs as before. The status says `keys_src` ("the flow's
+  functions" / "the settings"); the run's record (runs.jsonl `start`, `config_src` = "flow" for
+  the five) and the backend's requests.jsonl name them. A check needs no ASSIST (it reads only).
+- **The page** (LiveRun): each line ✓ / ✗ / ? with the value read, a red ✗ with its words, a
+  "Check the game" button (also once by itself when the panel opens and the helper can check), the
+  time of the last check, greyed lines once the settings it used changed. Run stays pressable with
+  a ✗ (Batt: warnings, not locks); its title then says the runner will refuse. `keys` (from the
+  flow's functions) go with every start and check, and the checklist states them.
+- **Live read (read only, the lab's screen, 2026-11-13 18:23:20-18:23:24 ICT, 4.0 s):** the Rogue
+  in Geffen (119, 40), HP 100 %. Every line ✓: identity (her name plate, rogue), cell (119, 40)
+  "IF she is on xmas_dun02 ...", chat closed, weight 825 / 2430 (34 %), 10 Fly Wings on F8, 10
+  heal items on F1, 3 Butterfly Wings on F9, one item on F4 (the Knife), F5 empty (the dagger
+  worn). An earlier attempt (18:22:51) stopped in the preamble before any read (the worktree lacked
+  the generated map cache).
+
 ## Not built yet
+
+- **The map's name from the screen** (the 9.45 live read's gap, above): the cell rule passes on
+  another map whose cell falls on this map's open ground; a person checks the map.
 
 - **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known
   steps), buying from an NPC shop, selling loot.

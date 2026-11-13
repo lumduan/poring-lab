@@ -1023,7 +1023,10 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
     unit `scripts/host/poring-lab-flowrun.service` (the install lines are in its header).
   - Its request rules are the Settings page's: your browser on the LAN, the console's address,
     never the lab host itself.
-  - The command it runs is fixed in `scripts/flow_run.py` (`FLOWS`); a request only names a flow.
+  - The command it runs is fixed in `scripts/flow_run.py` (`FLOWS`); a request only names a flow
+    (and, since dungeon@9.45, the flow's five hotbar keys when its functions give them).
+  - "Check the game" ticks the checklist from the screen (dungeon@9.45: `dungeon_hunt.py check`,
+    read only); the map's name is not read, so check that she is on the map yourself.
 
 ## 12. Known differences of the Thai client
 

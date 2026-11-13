@@ -302,6 +302,14 @@ Amendment B); a not-adopted model is never offered.
   checklist made from the run's own settings. The groups' radios read "change for:" and follow
   the file. The version chip says "dungeon@9.44 (base 8.7)": 8.7 is the default behaviour's
   version, each newer technique has its own; the same runner plays.
+  ➡️ **~18:2x, the live ticks (dungeon@9.45, Batt "do it"):** the checklist is ticked from the
+  game screen: ✓ / ✗ (red, with the reason) / ? (not read), with the value read ("10 Fly Wings on
+  F8"). "Check the game" (also once by itself when the panel opens) runs the runner's read-only
+  check through the Run helper: it presses nothing, needs no ASSIST, and is refused while a run
+  goes. The time of the last check is shown; lines whose settings changed since are greyed. A ✗
+  does not lock Run: its title says the runner will refuse. The map's NAME is not read from the
+  screen: the cell line ticks her cell on the map's open ground, and you check the map. The
+  version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
