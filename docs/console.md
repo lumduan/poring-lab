@@ -344,7 +344,10 @@ Amendment B); a not-adopted model is never offered.
   version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
   ➡️ **SUPERSEDED by dungeon@9.46 (the same evening):** the map's name IS read, from the minimap's
   picture (`scripts/minimap_id.py`). The cell line ticks only when the minimap is the run's map,
-  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (read from the minimap ...)"), and
+  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (the minimap shows geffen's map
+  picture with a match score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or
+  more, 0.15 ahead of the next; xmas_dun02's picture scores at most 0.21)": every score with its
+  scale, since matpilot's round 16 #10), and
   a ? asking you when it cannot tell; the runner's player start refuses both before any input.
   It needs the references built once per host (`OMP_NUM_THREADS=2 python3 scripts/minimap_id.py
   build --decode-mixcrypt`); without them the line is a ? and a player start refuses. The version chip

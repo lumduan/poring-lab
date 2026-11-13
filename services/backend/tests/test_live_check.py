@@ -418,7 +418,9 @@ def test_the_map_line_crosses_another_map_before_its_cell(monkeypatch: pytest.Mo
     got = dh.start_check(_paint(FakeScreen(), 2), _ctx(map_refs=_refs()))
     by = {i["id"]: i for i in got["items"]}
     assert by["cell"]["ok"] is False and by["cell"]["refuses"] is True
-    assert by["cell"]["words"].startswith("she is on geffen, not xmas_dun02 (read from the minimap")
+    w = by["cell"]["words"]
+    assert w.startswith("she is on geffen, not xmas_dun02 (the minimap shows geffen's map picture")
+    assert "where 1.00 is the same picture" in by["cell"]["words"]  # round 16 #10: no bare number
     assert by["cell"]["words"].endswith("walk or warp her to xmas_dun02 first")
     assert by["cell"]["value"] == "(119, 40)"  # the line keeps the cell
     assert got["ok"] is False and got["refuses"] is True

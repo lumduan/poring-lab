@@ -116,7 +116,8 @@ def test_the_run_map_is_read_through_the_translucency_the_scene_and_the_marks() 
             assert rd.map == "xmas_dun02" and rd.names == ("xmas_dun02",), (alpha, seed, rd)
             assert rd.score >= mi.MATCH_MIN and rd.margin >= mi.MARGIN_MIN
             ok, words = mi.map_verdict(rd, "xmas_dun02", REFS)
-            assert ok is True and words.startswith("the minimap is xmas_dun02's")
+            assert ok is True and words.startswith("the minimap is xmas_dun02's (it matches")
+            assert f"the run's map needs {mi.MATCH_MIN:.2f} or more" in words
 
 
 def test_another_map_is_named_with_its_copies_and_crosses_the_run_map() -> None:
@@ -124,7 +125,22 @@ def test_another_map_is_named_with_its_copies_and_crosses_the_run_map() -> None:
     assert rd.map == "geffen" and rd.names == ("geffen", "pgeffen")  # the shortest name first
     ok, words = mi.map_verdict(rd, "xmas_dun02", REFS)
     assert ok is False
-    assert words.startswith("she is on geffen, not xmas_dun02 (read from the minimap")
+    assert words.startswith("she is on geffen, not xmas_dun02 (the minimap shows geffen's map")
+    # matpilot round 16 #10: no bare number -- each score is said with what it is and its scale
+    assert f"with a match score of {rd.score:.2f}, where 1.00 is the same picture" in words
+    assert f"a map is named at {mi.NAME_MIN:.2f} or more, {mi.MARGIN_MIN:.2f} ahead" in words
+    assert rd.next_names == ("xmas_dun02",)
+    assert words.endswith(f"xmas_dun02's picture scores {rd.next_score:.2f})")
+    assert "read from the minimap:" not in words and "is not that picture" not in words
+    # the reviewer's case (Geffen read at 0.47): the run's map is not the next picture either, so
+    # its own score is at most the next one's
+    seen = mi.MapRead("geffen", ("geffen",), 0.47, 0.21, ("prontera",), "geffen", "")
+    ok, words = mi.map_verdict(seen, "xmas_dun02", REFS)
+    assert ok is False and words == (
+        "she is on geffen, not xmas_dun02 (the minimap shows geffen's map picture with a match "
+        "score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or more, 0.15 "
+        "ahead of the next; xmas_dun02's picture scores at most 0.21)"
+    )
     ok2, words2 = mi.map_verdict(rd, "pgeffen", REFS)  # a copy draws the same picture: a tick
     assert ok2 is True and "the same picture as geffen" in words2
 
@@ -159,6 +175,7 @@ def test_two_alike_pictures_cannot_tell_and_a_weak_match_never_ticks(
     rd2 = mi.read_map(frame_with(bitmap(1)), REFS)
     ok, words = mi.map_verdict(rd2, "xmas_dun02", REFS)
     assert rd2.map == "xmas_dun02" and ok is None and "weakly" in words
+    assert "where 1.00 is the same picture and the run's map needs 1.01 or more" in words
 
 
 def test_no_references_cannot_tell_with_the_build_command() -> None:

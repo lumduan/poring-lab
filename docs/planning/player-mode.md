@@ -528,6 +528,17 @@ She stands in Geffen at (119, 40) (19:02's position; the lab database said last_
     she on xmas_dun02? (her cell ... if she is) (the runner refuses a start that cannot tell)".
   The value stays the cell. Without references: "? -- no minimap reference for xmas_dun02 (build
   them: python3 scripts/minimap_id.py build)".
+  ➡️ **The words since matpilot's round 16 #10 (2026-11-14, `minimap_id.map_verdict`):** a bare
+  score ("0.47") said nothing to a reader, so every score is said with what it is and what it is
+  measured against: "she is on geffen, not xmas_dun02 (the minimap shows geffen's map picture with
+  a match score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or more, 0.15
+  ahead of the next; xmas_dun02's picture scores at most 0.21): walk or warp her to xmas_dun02
+  first"; the tick: "the minimap is xmas_dun02's (it matches xmas_dun02's map picture with a match
+  score of 0.85, where 1.00 is the same picture and the run's map needs 0.60 or more; the next
+  map's picture scores 0.33); her cell ...". The quotes above and in "The live case" are the
+  words printed at the time. Still bare: the runner's own start refusal
+  (`dungeon_hunt.player_map_refused`, "[read from the minimap: 0.47, the next map 0.15]"), left
+  for the branch that owns dungeon_hunt.py.
 - **The runner's player start** (`run()`, `player_start_map`): after the check's branch and BEFORE
   the session folder and the session -- a screen of its own, no Agent -- it reads the map and
   refuses with "dungeon@9.46 refused: --player-mode: the screen shows <map>, not <run map>: walk
