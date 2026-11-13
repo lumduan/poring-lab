@@ -1,25 +1,26 @@
-// The Maps page's pure parts (2026-11-10, docs/planning/world-map-flows.md): the session mock and
-// its truthful Python, the graph (START -> Login -> Choose character -> the map blocks), placing a
-// map node from the static data, and the playback over the simulator's trace (the committed
-// fixture is the simulator's own output on the SYNTHETIC sample sheets; poring_flow's
-// test_trace.py checks it is current).
+// The Maps page's pure parts on the PROJECT (2026-11-13, docs/planning/project-model.md): the
+// session nodes (login, choose character) and their mock timeline, the graph (the project's nodes,
+// its session connections, the map nodes' exits), placing a map node from the static data, and the
+// playback over the simulator's trace (the committed fixture is the simulator's own output on the
+// SYNTHETIC sample sheets, whose blocks are the sample project's map node ids; poring_flow's
+// test_maps_page.py checks it is current).
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import type { Trace } from "../flow/api.ts";
-import type { Flow } from "../flow/ir.ts";
-import { oneMapStarter, starterFlow } from "../flow/starter.ts";
-import { addMapNode, blockName, centreCell, oneMapFlow, targetGuess } from "./build.ts";
+import type { PlayStep, Trace } from "../flow/api.ts";
+import { mapNodes, nodeById, sampleProject, xmasProject } from "../flow/project.ts";
+import { addMapNode, centreCell, mapNodeFor, newNodePos, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
-import { fitViewport, followCentre, mapsGraph } from "./graph.ts";
+import { activeEdgeAt, entryHandle, exitRuns, fitViewport, followCentre, mapsGraph, POS_SCALE, toScreen, toUnits } from "./graph.ts";
 import { makeWanderers, shares, WANDER_CAP, wanderersAt } from "./wander.ts";
-import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, trailAt, walkSeconds } from "./play.ts";
-import { ACCOUNTS, DEFAULT_SESSION, parseSession, SERVERS, sessionLength, sessionProblems, sessionPython, sessionSteps } from "./session.ts";
+import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, traceHasSession, trailAt, walkSeconds } from "./play.ts";
+import { CREDENTIALS, characterOf, loginOf, SERVERS, sessionLength, sessionOf, sessionProblems, sessionSteps, setCharacter, setLogin } from "./session.ts";
 
 const trace = JSON.parse(readFileSync(new URL("./fixtures/starter_trace.json", import.meta.url), "utf8")) as Trace;
+const SAMPLE_SESSION = sessionOf(sampleProject());
 
-// --- the session ---------------------------------------------------------------------------------
+// --- the session nodes ---------------------------------------------------------------------------
 // (that the list is config/environments.yaml's, ids and statuses in order, is checked on the host
 // by packages/poring_flow/tests/test_maps_page.py: the container serves services/frontend only)
 test("only the lab's rAthena can be chosen; every other server says why not", () => {
@@ -28,74 +29,86 @@ test("only the lab's rAthena can be chosen; every other server says why not", ()
   assert.deepEqual(SERVERS.filter((s) => s.status === "forbidden").map((s) => s.automatable), [false, false]);
 });
 
-test("a stored session is checked field by field; a credential has nowhere to go", () => {
-  assert.deepEqual(parseSession(null), DEFAULT_SESSION);
-  assert.deepEqual(parseSession("{not json"), DEFAULT_SESSION);
-  assert.deepEqual(parseSession(JSON.stringify({ server: "community-bot-testing", account: "root", slot: 99, char: "<b>" })), DEFAULT_SESSION);
-  assert.deepEqual(parseSession(JSON.stringify({ server: "lab-rathena", account: "player", slot: 3, char: "Rogue One", password: "x" })), {
-    server: "lab-rathena",
-    account: "player",
-    slot: 3,
-    char: "Rogue One",
-  });
-  assert.deepEqual(Object.keys(DEFAULT_SESSION).sort(), ["account", "char", "server", "slot"]);
-  assert.deepEqual(ACCOUNTS.map((a) => a.id), ["gm", "player"]);
+test("the session is read from the login and character nodes: a server and a credential by NAME", () => {
+  assert.deepEqual(SAMPLE_SESSION, { server: "lab-rathena", credential: "lab_gm", slot: null, char: "", login: "login", character: "character" });
+  assert.deepEqual(CREDENTIALS.map((c) => [c.name, c.account]), [["lab_gm", "gm"], ["lab_player", "player"]]);
+  const p = sampleProject();
+  const a = setLogin(p, "login", { server: "lab-rathena", credential: "lab_player" });
+  assert.ok(a.ok);
+  assert.deepEqual(loginOf(nodeById(a.project, "login")), { server: "lab-rathena", credential: "lab_player", plain: true, found: true });
+  assert.deepEqual(loginOf(nodeById(p, "login"))?.credential, "lab_gm", "the edit is pure");
+  // a forbidden server, or anything that is not a NAME, is refused (a secret has nowhere to go)
+  assert.equal(setLogin(p, "login", { server: "official-ro-thai", credential: "lab_gm" }).ok, false);
+  assert.equal(setLogin(p, "login", { server: "lab-rathena", credential: "hunter2 pass!" }).ok, false);
+  assert.equal(setLogin(p, "character", { server: "lab-rathena", credential: "lab_gm" }).ok, false);
+  const c = setCharacter(p, "character", { slot: 3, name: "Rogue One" });
+  assert.ok(c.ok);
+  assert.deepEqual(characterOf(nodeById(c.project, "character")), { slot: 3, name: "Rogue One", plain: true, found: true });
+  const back = setCharacter(c.project, "character", { slot: null, name: "" });
+  assert.ok(back.ok);
+  assert.deepEqual(back.project, p, "the remembered slot and the account's own: no params");
+  assert.equal(setCharacter(p, "character", { slot: 99, name: "" }).ok, false);
+  assert.equal(setCharacter(p, "character", { slot: null, name: "<b>" }).ok, false);
 });
 
-test("session problems: another server, or a flow for another server", () => {
-  assert.deepEqual(sessionProblems(DEFAULT_SESSION, "lab-rathena"), []);
-  assert.equal(sessionProblems({ ...DEFAULT_SESSION, server: "official-ro-thai" }, "lab-rathena").length, 2);
-  assert.match(sessionProblems(DEFAULT_SESSION, "elsewhere")[0], /the flow targets elsewhere/);
+test("session problems: another server, a project for another server, an unknown credential", () => {
+  assert.deepEqual(sessionProblems(SAMPLE_SESSION, "lab-rathena"), []);
+  assert.equal(sessionProblems({ ...SAMPLE_SESSION, server: "official-ro-thai" }, "lab-rathena").length, 2);
+  assert.match(sessionProblems(SAMPLE_SESSION, "elsewhere")[0], /the project targets elsewhere/);
+  assert.match(sessionProblems({ ...SAMPLE_SESSION, credential: "someone" }, "lab-rathena")[0], /not one the lab knows/);
 });
 
-test("the session's Python names the bot's real calls, marked as a mock, in short comment lines", () => {
-  const py = sessionPython(DEFAULT_SESSION);
-  assert.match(py, /^# A MOCK/);
-  assert.match(py, /ro_agent\.py login gm/);
-  assert.match(py, /from ro_agent import enter_game, session/);
-  assert.match(py, /to_char_select\(agent, screen, ACCOUNT\)/);
-  assert.match(py, /enter_game\(agent, screen, ACCOUNT\)\n/);
-  assert.ok(!/password\s*=|PASSWORD|_USER\b/.test(py), "no credential name or value in the code");
-  const slot = sessionPython({ ...DEFAULT_SESSION, account: "player", slot: 3, char: "Rogue One" });
-  assert.match(slot, /# slot 3: selected first/);
-  assert.match(slot, /enter_game\(agent, screen, ACCOUNT, char="Rogue One"\)/);
-  for (const line of [...py.split("\n"), ...slot.split("\n")]) if (line.trim().startsWith("#")) assert.ok(line.length <= 46, line);
-  // the steps it simulates, with mock times
-  const steps = sessionSteps(DEFAULT_SESSION);
-  assert.deepEqual(steps.map((s) => s.node), ["start", "login", "character"]);
+test("the mock session steps name the bot's real calls and belong to the project's nodes", () => {
+  const steps = sessionSteps(SAMPLE_SESSION);
+  assert.deepEqual(steps.map((s) => [s.step, s.node]), [["start", "login"], ["login", "login"], ["character", "character"]]);
   assert.equal(steps[2].t1, sessionLength());
-  assert.match(steps[1].call, /^to_char_select/);
+  assert.match(steps[1].call, /^to_char_select\(agent, screen, "gm"\)$/);
+  assert.match(steps[2].call, /^enter_game\(agent, screen, "gm"\)$/);
+  const other = sessionSteps({ ...SAMPLE_SESSION, credential: "lab_player", slot: 3, char: "Rogue One" });
+  assert.match(other[2].call, /enter_game\(agent, screen, "player", char="Rogue One"\)/);
+  assert.match(other[2].text, /^Choose slot 3 \(Rogue One\)/);
+  for (const s of steps) assert.ok(!/password\s*=|PASSWORD|_USER\b/.test(s.text + s.call), "no credential value or env name in the steps");
 });
 
 // --- the graph ---------------------------------------------------------------------------------------
-test("the graph: START -> Login -> Choose character -> the start block, then the exits", () => {
-  const g = mapsGraph(starterFlow(), DEFAULT_SESSION);
-  assert.deepEqual(g.nodes.map((n) => n.id), ["start", "login", "character", "block:town", "block:field", "unknown"]);
+test("the graph: the project's nodes, its session connections onto the start entry, the exits", () => {
+  const g = mapsGraph(sampleProject());
+  assert.deepEqual(g.nodes.map((n) => [n.id, n.type]), [["login", "login"], ["character", "character"], ["town", "map"], ["field", "map"], ["global", "global"]]);
   const e = (id: string) => g.edges.find((x) => x.id === id);
-  assert.equal(e("session:enter")?.target, "block:town");
-  assert.equal(e("exit:town.2")?.data.kind, "npc_warp");
-  assert.equal(e("exit:field.1")?.data.kind, "item_warp");
-  assert.equal(e("respawn:field")?.data.kind, "death_respawn"); // the save point is set in town
-  // round 6: an edge runs from ITS exit's port onto the ENTRY it lands on (n8n-style ports)
-  assert.deepEqual([e("exit:town.2")?.sourceHandle, e("exit:town.2")?.targetHandle], ["x:town.2", "e:arrival"]);
-  assert.deepEqual([e("exit:field.1")?.sourceHandle, e("exit:field.1")?.targetHandle], ["x:field.1", "e:spawn"]);
-  assert.equal(e("session:enter")?.targetHandle, "e:spawn");
-  assert.equal(e("respawn:field")?.targetHandle, "e:spawn");
-  assert.equal(e("rule:unknown"), undefined, "the unknown-map rule is off: no edge from Any other map");
-  assert.ok(!g.edges.some((x) => x.data.kind === "attach"), "event nodes stay on /flows");
-  // the map nodes sit right of the session; a dragged position wins
-  const town = g.nodes.find((n) => n.id === "block:town")!;
-  assert.ok(town.position.x > g.nodes.find((n) => n.id === "character")!.position.x);
-  assert.deepEqual(mapsGraph(starterFlow(), DEFAULT_SESSION, { "block:town": { x: 5, y: 6 } }).nodes[3].position, { x: 5, y: 6 });
-  const plain = mapsGraph(oneMapStarter(), DEFAULT_SESSION);
-  assert.deepEqual(plain.nodes.map((n) => n.id), ["start", "login", "character", "main"]);
+  assert.deepEqual([e("edge:login>character")?.sourceHandle, e("edge:login>character")?.targetHandle], ["out", "in"]);
+  assert.deepEqual([e("edge:character>town")?.target, e("edge:character>town")?.targetHandle], ["town", entryHandle("spawn")]);
+  // an edge runs from ITS exit's port onto the ENTRY it lands on (n8n-style ports)
+  assert.deepEqual([e("exit:town/main/main.2")?.data.kind, e("exit:town/main/main.2")?.sourceHandle, e("exit:town/main/main.2")?.targetHandle], ["npc_warp", "x:town/main/main.2", "e:arrival"]);
+  assert.deepEqual([e("exit:field/main/main.1")?.data.kind, e("exit:field/main/main.1")?.targetHandle], ["item_warp", "e:spawn"]);
+  assert.deepEqual([e("respawn:field")?.data.kind, e("respawn:field")?.targetHandle], ["death_respawn", "e:spawn"]); // the save point is set in town
+  assert.ok(!g.edges.some((x) => x.source === "global" || x.target === "global"), "Global has no edges");
+  assert.deepEqual(g.notes, []);
+  // the first map is marked; the saved positions are scaled to the screen (and back when dragged)
+  assert.equal(g.nodes.find((n) => n.id === "town")?.data.kind === "map" && (g.nodes.find((n) => n.id === "town")?.data as { first: boolean }).first, true);
+  assert.deepEqual(g.nodes.find((n) => n.id === "town")?.position, { x: 560 * POS_SCALE.x, y: 0 });
+  assert.deepEqual(toUnits(toScreen({ x: 860, y: 220 })), { x: 860, y: 220 });
+  // a broken session path says how to mend it
+  const broken = sampleProject();
+  broken.edges = broken.edges.filter((x) => x.from !== "character");
+  assert.match(mapsGraph(broken).notes[0], /^The session path: the character node is not connected to a map/);
+  // the Rogue's: login, character, two maps, Global; the wing home by its function
+  const x = mapsGraph(xmasProject());
+  assert.deepEqual(x.edges.map((y) => y.id), ["edge:login>character", "edge:character>xmas_dun02", "exit:xmas_dun02/main/main.2", "respawn:xmas_dun02"]);
+});
+
+test("the playback lights the connection or exit it last went along; exits are counted", () => {
+  const g = mapsGraph(sampleProject());
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
+  const at = (kind: string, from = 0) => tl.beats.findIndex((b, i) => i >= from && b.kind === kind);
+  assert.equal(activeEdgeAt(tl, 1, g.edges), null, "logging in: no connection yet");
+  assert.equal(activeEdgeAt(tl, 2, g.edges), "edge:login>character");
+  assert.equal(activeEdgeAt(tl, 3, g.edges), "edge:character>town", "on the first map: the way in");
+  assert.equal(activeEdgeAt(tl, at("exit"), g.edges), "exit:town/main/main.2", "an IR 2 path (town.2) is matched by from / kind / to");
+  assert.deepEqual([...exitRuns(trace, g.edges)].sort(), [["exit:field/main/main.1", 1], ["exit:town/main/main.2", 2]]);
 });
 
 // --- placing a map node ------------------------------------------------------------------------------
-test("a map node from the static data: its name, the centre-most entry, a target guess", () => {
-  assert.equal(blockName("xmas_dun02", new Set()), "xmas_dun02");
-  assert.equal(blockName("xmas_dun02", new Set(["xmas_dun02"])), "xmas_dun02_2");
-  assert.equal(blockName("1@tower", new Set()), "tower");
+test("a map node from the static data: its id, the centre-most entry, a target guess", () => {
   const rows = ["#####", "#...#", "#.#.#", "#...#", "#####"];
   assert.deepEqual(centreCell(rows), [2, 1]); // (2, 2) is blocked; nearest, lower y first
   assert.equal(centreCell(null), null);
@@ -106,41 +119,43 @@ test("a map node from the static data: its name, the centre-most entry, a target
     { mob: 9105, count: 3, boss: false },
   ];
   assert.deepEqual(targetGuess(spawns), { targets: [9101, 9105], ignore: [9102, 9109] });
-  const r = addMapNode(starterFlow(), "syn_cave", { rows, spawns });
+  const r = addMapNode(sampleProject(), "syn_cave", { rows, spawns });
   assert.ok(r.ok);
-  const b = r.flow.workflow!.blocks.at(-1)!;
-  assert.equal(b.name, "syn_cave");
-  assert.deepEqual(b.entries[0].at, { kind: "cell", map: "syn_cave", x: 2, y: 1 });
-  assert.equal(b.main[0].kind, "repeat");
-  assert.equal(b.main.at(-1)?.kind, "stop");
-  const bare = addMapNode(starterFlow(), "syn_town", null);
-  assert.ok(bare.ok && bare.flow.workflow!.blocks.at(-1)!.entries[0].at === null);
-  assert.ok(!addMapNode(oneMapStarter(), "syn_cave", null).ok);
-  assert.ok(!addMapNode(starterFlow(), "no spaces", null).ok);
-  const one = oneMapFlow("syn_cave", { rows, spawns });
-  assert.ok(one.ok);
-  assert.equal(one.flow.name, "syn_cave_flow");
-  assert.equal(one.flow.workflow!.start_block, "syn_cave");
+  const n = nodeById(r.project, r.id);
+  assert.ok(n && n.kind === "map");
+  assert.equal(n.id, "syn_cave");
+  assert.deepEqual(n.entries[0].at, { kind: "cell", map: "syn_cave", x: 2, y: 1 });
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main"], "IRON RULE: every node has a main");
+  assert.equal(n.tabs[0].main![0].kind, "repeat");
+  assert.equal(n.tabs[0].main!.at(-1)?.kind, "stop");
+  assert.deepEqual(n.pos, { x: 1160, y: 0 }, "right of the rightmost map");
+  assert.deepEqual(newNodePos(r.project), { x: 1460, y: 0 });
+  const bare = mapNodeFor(sampleProject(), "syn_town", null);
+  assert.equal(bare.entries[0].at, null);
+  assert.deepEqual(bare.tabs[0].main, [{ kind: "stop", reason: "done" }]);
+  assert.ok(!addMapNode(sampleProject(), "no spaces", null).ok);
+  const twice = addMapNode(r.project, "syn_cave", null);
+  assert.ok(twice.ok && twice.id === "syn_cave_2");
 });
 
 // --- the playback ------------------------------------------------------------------------------------
 test("the timeline: the session's mock steps, then the simulator's steps in order", () => {
-  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
   assert.equal(tl.offset, sessionLength());
   assert.equal(tl.approximate, false);
-  assert.deepEqual(tl.beats.slice(0, 3).map((b) => b.node), ["start", "login", "character"]);
+  assert.deepEqual(tl.beats.slice(0, 3).map((b) => b.node), ["login", "login", "character"]);
   assert.ok(tl.beats.every((b, i) => i === 0 || b.t0 >= tl.beats[i - 1].t0));
   assert.deepEqual(tl.maps, ["town_1", "field_1"]);
   assert.equal(tl.end, sessionLength() + trace.t_end_s);
-  // before the flow starts, the character stands at the start entry
+  // before the map steps start, the character stands at the start entry
   const p0 = poseAt(tl, 0.5)!;
-  assert.equal(p0.node, "start");
+  assert.equal(p0.node, "login");
   const p1 = poseAt(tl, tl.offset + 0.01)!;
   assert.deepEqual([p1.map, Math.round(p1.x), Math.round(p1.y)], ["town_1", 40, 40]);
   // mid-walk, between two cells of the route; at its end, on its last cell
   const walk = tl.beats.find((b) => b.kind === "walk")!;
   const mid = poseAt(tl, (walk.t0 + walk.t1) / 2)!;
-  assert.equal(mid.node, "block:town");
+  assert.equal(mid.node, "town", "a beat belongs to the map NODE (the trace's block)");
   assert.ok(mid.x > 40 && mid.x < 55);
   const end = poseAt(tl, walk.t1)!;
   assert.deepEqual([end.x, end.y], walk.step!.cells!.at(-1));
@@ -149,6 +164,24 @@ test("the timeline: the session's mock steps, then the simulator's steps in orde
   const after = poseAt(tl, exit.t1)!;
   assert.deepEqual([after.map, after.x, after.y], ["field_1", 30, 30]);
   assert.equal(beatAt(tl, -1), -1);
+});
+
+test("a trace with its OWN login and character steps is played as it is (no mock)", () => {
+  const own = structuredClone(trace);
+  const steps = [
+    { kind: "login", t0: 0, t1: 5, block: "login", map: null, outcome: "ok" },
+    { kind: "character", t0: 5, t1: 8, block: "character", map: null, outcome: "ok" },
+  ] as unknown as PlayStep[];
+  own.play = [...steps, ...(own.play ?? []).map((st) => ({ ...st, t0: st.t0 + 8, t1: st.t1 + 8 }))];
+  assert.ok(traceHasSession(own) && !traceHasSession(trace));
+  const tl = buildTimeline(own, sessionSteps(SAMPLE_SESSION));
+  assert.equal(tl.offset, 0);
+  assert.deepEqual(tl.beats.slice(0, 2).map((b) => [b.kind, b.node]), [["session", "login"], ["session", "character"]]);
+  assert.equal(tl.beats[2].node, "town");
+  assert.equal(beatText(tl.beats[0], null), "Log in (simulated)");
+  assert.deepEqual([poseAt(tl, 8)?.map, Math.round(poseAt(tl, 8)?.x ?? 0)], ["town_1", 40]);
+  const checks = runChecks(tl, own, mapNodes(sampleProject()).map((n) => ({ id: n.id, map: n.map.map })), "x", null);
+  assert.equal(checks[0].text, "Logged in and entered the game (simulated, nothing ran)");
 });
 
 test("a walk is interpolated by RO's step costs", () => {
@@ -161,7 +194,7 @@ test("a walk is interpolated by RO's step costs", () => {
 });
 
 test("the map shows the monster met, its fight, its loot, and the NPC talked to", () => {
-  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
   const fight = tl.beats.find((b) => b.kind === "fight" && b.step?.at)!;
   const engage = tl.beats[fight.i - 1];
   assert.equal(engage.kind, "walk");
@@ -187,16 +220,17 @@ test("the map shows the monster met, its fight, its loot, and the NPC talked to"
 });
 
 test("words and checks", () => {
-  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
   const labels = { mobs: { "9101": "slime A (synthetic)" }, npcs: {}, items: { "9002": "return wing (synthetic)" }, options: {} };
   const texts = tl.beats.map((b) => beatText(b, labels));
-  assert.match(texts[1], /^Log in to lab-rathena with the lab GM account/);
+  assert.match(texts[1], /^Log in to lab-rathena with the credential lab_gm \(the lab GM account/);
   assert.ok(texts.some((t) => /^NPC warp → field \(field_1 30, 30\)$/.test(t)), texts.join("\n"));
-  // 2026-11-13: the starter's wing is the function butterfly_wing (press F9)
+  // the sample's wing is the function butterfly_wing (press F9)
   assert.ok(texts.some((t) => /^call butterfly_wing\(\): press F9 \(the Butterfly Wing: back to the save point\)$/.test(t)), texts.join("\n"));
   assert.ok(texts.some((t) => /^meet (slime A \(synthetic\) \(9101\)|monster 91\d\d) at \(\d+, \d+\): fight, defeat, loot$/.test(t)));
-  const checks = runChecks(tl, trace, starterFlow().workflow!.blocks.map((b) => ({ name: b.name, map: b.map.map })), "the simulated time ran out", 3);
+  const checks = runChecks(tl, trace, mapNodes(sampleProject()).map((n) => ({ id: n.id, map: n.map.map })), "the simulated time ran out", 3);
   assert.deepEqual(checks.map((c) => c.ok), [true, true, true, true, true, true]);
+  assert.match(checks[1].text, /^Reached town \(town_1\): 2 visits$/);
   assert.match(checks.at(-1)!.text, /^Met \d+ monsters \(placed from seed 3\)$/);
 });
 
@@ -211,11 +245,6 @@ test("an older backend (no play list): an approximate timeline from the walked s
   assert.ok(tl.beats.every((b, i) => i === 0 || b.t0 >= tl.beats[i - 1].t1 - 1e-9));
   assert.ok(runChecks(tl, old, [], "x", null).some((c) => /^Approximate/.test(c.text)));
   assert.deepEqual(approximatePlay([], []), []);
-});
-
-test("every map block of the starter is a Flow the graph can show", () => {
-  const f: Flow = starterFlow();
-  assert.equal(mapsGraph(f, DEFAULT_SESSION).nodes.filter((n) => n.type === "map").length, f.workflow!.blocks.length);
 });
 
 // --- the map view's drawing (lib/maps/draw.ts) on a recording context -----------------------------
@@ -254,7 +283,7 @@ test("the grid: one dark area, then each row's walkable runs in grey (y grows no
 });
 
 test("the scene at a time: the character where the timeline puts it, the monster, the bubble", () => {
-  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
   const sheet = { town: false, size: [100, 100] as [number, number], npcs: [], warps: [], spawns: [] };
   const fight = tl.beats.find((b) => b.kind === "fight" && b.step?.at)!;
   const t = (fight.t0 + fight.t1) / 2;
@@ -302,7 +331,7 @@ test("the Maps components draw no glyph Chromium on Linux lacks, and label their
 // --- round 3 (2026-11-10, matpilot's re-run) -------------------------------------------------------
 test("the graph's smallest text stays >= 11 px at the fit's 0.85 zoom; the playback bar is opaque", () => {
   const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const graph = /^(\.mp-node|\.mp-title|\.mp-mock|\.mp-line|\.mp-muted|\.mp-key|\.mp-call|\.mp-button|\.mp-start|\.maps-graph)\b/;
+  const graph = /^(\.mp-node|\.mp-title|\.mp-mock|\.mp-line|\.mp-muted|\.mp-key|\.mp-call|\.mp-button|\.mp-status|\.mp-run|\.mp-pill|\.mp-edge-label|\.mp-name|\.mp-names-tab|\.mp-override|\.maps-graph)\b/;
   let checked = 0;
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selectors = m[1].split(",").map((x) => x.trim());
@@ -416,7 +445,7 @@ test("other monsters are never where the run's monster stands, at its meeting ti
   assert.ok(k < all);
   for (let i = 0; i < k; i++) assert.ok(Math.max(Math.abs(Math.round(st.out[i].x) - c[0]), Math.abs(Math.round(st.out[i].y) - c[1])) > 1);
   // through the drawing, on the fixture's run: during every meeting, no decoration at the met cell
-  const tl = buildTimeline(trace, sessionSteps(DEFAULT_SESSION));
+  const tl = buildTimeline(trace, sessionSteps(SAMPLE_SESSION));
   const rows = Array.from({ length: 100 }, () => ".".repeat(100)); // field_1's size; open
   const decor = makeWanderers(rows, [{ mob: 9101, count: 40 }], 3, "field_1");
   for (const f of tl.beats.filter((b) => b.kind === "fight" && b.step?.at)) {

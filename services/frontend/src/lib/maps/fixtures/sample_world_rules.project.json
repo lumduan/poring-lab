@@ -1,0 +1,418 @@
+{
+  "format": "poring-lab.project",
+  "version": 3,
+  "name": "my_first_project",
+  "description": "Town: set the save point, warp to the field. Field: attack 5 times, a Butterfly Wing back (the function butterfly_wing: press F9). The sample's SYNTHETIC maps and keys.",
+  "target": {
+    "client": "kro-20211103-prere",
+    "server": "lab-rathena",
+    "locale": "en",
+    "path": "s2"
+  },
+  "max_runtime_s": 14400,
+  "where_budget": 12,
+  "stop_when": null,
+  "assumes": [],
+  "start": "login",
+  "nodes": [
+    {
+      "id": "login",
+      "kind": "login",
+      "pos": {
+        "x": 0,
+        "y": 0
+      },
+      "tabs": [
+        {
+          "name": "main",
+          "main": [
+            {
+              "kind": "action",
+              "block": "login",
+              "concept": "session.login",
+              "timeout_s": 60,
+              "on_fail": "stop",
+              "outcome_to": null,
+              "note": null,
+              "params": {
+                "server": {
+                  "kind": "lit",
+                  "value": "lab-rathena"
+                },
+                "credential": {
+                  "kind": "lit",
+                  "value": "lab_gm"
+                }
+              }
+            }
+          ],
+          "defs": [],
+          "vars": {}
+        }
+      ]
+    },
+    {
+      "id": "character",
+      "kind": "character",
+      "pos": {
+        "x": 260,
+        "y": 0
+      },
+      "tabs": [
+        {
+          "name": "main",
+          "main": [
+            {
+              "kind": "action",
+              "block": "choose_character",
+              "concept": "session.select_char",
+              "timeout_s": 30,
+              "on_fail": "stop",
+              "outcome_to": null,
+              "note": null,
+              "params": {}
+            }
+          ],
+          "defs": [],
+          "vars": {}
+        }
+      ]
+    },
+    {
+      "id": "town",
+      "kind": "map",
+      "pos": {
+        "x": 560,
+        "y": 0
+      },
+      "map": {
+        "kind": "map",
+        "map": "town_1"
+      },
+      "entries": [
+        {
+          "name": "spawn",
+          "at": {
+            "kind": "cell",
+            "map": "town_1",
+            "x": 40,
+            "y": 40
+          },
+          "radius": 2
+        }
+      ],
+      "targets": [],
+      "ignore": [],
+      "resume_here": true,
+      "tabs": [
+        {
+          "name": "main",
+          "main": [
+            {
+              "kind": "action",
+              "block": "assert_save_point",
+              "concept": "core.assert_save_point",
+              "timeout_s": 1,
+              "on_fail": "stop",
+              "outcome_to": null,
+              "note": "the world rule: the save point (where a Butterfly Wing and a death land)",
+              "params": {
+                "cell": {
+                  "kind": "lit",
+                  "value": {
+                    "kind": "cell",
+                    "map": "town_1",
+                    "x": 42,
+                    "y": 40
+                  }
+                }
+              }
+            },
+            {
+              "kind": "action",
+              "block": "set_save_point",
+              "concept": "nav.set_save_point",
+              "timeout_s": 60,
+              "on_fail": "stop",
+              "outcome_to": null,
+              "note": null,
+              "params": {
+                "npc": {
+                  "kind": "lit",
+                  "value": {
+                    "kind": "npc",
+                    "key": "n_kafra"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "action",
+              "block": "walk_to",
+              "concept": "nav.walk_to",
+              "timeout_s": 120,
+              "on_fail": "stop",
+              "outcome_to": null,
+              "note": null,
+              "params": {
+                "cell": {
+                  "kind": "lit",
+                  "value": {
+                    "kind": "cell",
+                    "map": "town_1",
+                    "x": 97,
+                    "y": 71
+                  }
+                }
+              }
+            },
+            {
+              "kind": "take_exit",
+              "exit": {
+                "kind": "npc_warp",
+                "warp": null,
+                "npc": {
+                  "kind": "npc",
+                  "key": "n_warper"
+                },
+                "options": [
+                  {
+                    "kind": "option",
+                    "key": "o_to_field"
+                  }
+                ],
+                "item": null,
+                "to_block": "field",
+                "to_entry": "arrival",
+                "timeout_s": 120
+              }
+            }
+          ],
+          "defs": [],
+          "vars": {}
+        }
+      ]
+    },
+    {
+      "id": "field",
+      "kind": "map",
+      "pos": {
+        "x": 860,
+        "y": 0
+      },
+      "map": {
+        "kind": "map",
+        "map": "field_1"
+      },
+      "entries": [
+        {
+          "name": "arrival",
+          "at": {
+            "kind": "cell",
+            "map": "field_1",
+            "x": 30,
+            "y": 30
+          },
+          "radius": 2
+        }
+      ],
+      "targets": [
+        {
+          "kind": "mob",
+          "id": 9101
+        },
+        {
+          "kind": "mob",
+          "id": 9102
+        },
+        {
+          "kind": "mob",
+          "id": 9105
+        },
+        {
+          "kind": "mob",
+          "id": 9109
+        }
+      ],
+      "ignore": [],
+      "resume_here": true,
+      "tabs": [
+        {
+          "name": "main",
+          "main": [
+            {
+              "kind": "repeat",
+              "times": {
+                "kind": "lit",
+                "value": 5
+              },
+              "body": [
+                {
+                  "kind": "action",
+                  "block": "attack_nearest",
+                  "concept": "combat.attack_target",
+                  "timeout_s": 120,
+                  "on_fail": "stop",
+                  "outcome_to": null,
+                  "note": null,
+                  "params": {
+                    "within": {
+                      "kind": "lit",
+                      "value": 12
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "take_exit",
+              "exit": {
+                "kind": "item_warp",
+                "warp": null,
+                "npc": null,
+                "options": [],
+                "item": null,
+                "proc": "butterfly_wing",
+                "to_block": "town",
+                "to_entry": "spawn",
+                "timeout_s": 120
+              }
+            }
+          ],
+          "defs": [],
+          "vars": {}
+        }
+      ]
+    },
+    {
+      "id": "global",
+      "kind": "global",
+      "pos": {
+        "x": 560,
+        "y": 220
+      },
+      "tabs": [
+        {
+          "name": "keys",
+          "main": null,
+          "defs": [
+            {
+              "name": "butterfly_wing",
+              "params": [],
+              "varargs": null,
+              "kwargs": null,
+              "body": [
+                {
+                  "kind": "action",
+                  "block": "press_key",
+                  "concept": "ui.press_hotkey",
+                  "params": {
+                    "key": {
+                      "kind": "lit",
+                      "value": "F9"
+                    }
+                  },
+                  "timeout_s": 2,
+                  "on_fail": "stop",
+                  "outcome_to": null,
+                  "note": null
+                }
+              ],
+              "on": null
+            }
+          ],
+          "vars": {}
+        },
+        {
+          "name": "safety",
+          "main": null,
+          "defs": [
+            {
+              "name": "unexpected_map",
+              "params": [],
+              "varargs": null,
+              "kwargs": null,
+              "on": {
+                "when": {
+                  "kind": "sense",
+                  "sensor": "map_load_seen",
+                  "args": {}
+                },
+                "until": null,
+                "rearm": null,
+                "priority": "critical",
+                "rank": null,
+                "mode": "preempt",
+                "escalate": null,
+                "max_insert_fails": 3,
+                "cooldown_s": 0,
+                "max_per_min": null,
+                "max_fires_per_10min": 10,
+                "max_per_run": 3,
+                "then": "relocate"
+              },
+              "body": [
+                {
+                  "kind": "action",
+                  "block": "read_position",
+                  "concept": "nav.read_position",
+                  "timeout_s": 10,
+                  "on_fail": "stop",
+                  "outcome_to": null,
+                  "note": null,
+                  "params": {}
+                },
+                {
+                  "kind": "if",
+                  "cond": {
+                    "kind": "cmp",
+                    "op": "not in",
+                    "left": {
+                      "kind": "sense",
+                      "sensor": "current_map",
+                      "args": {}
+                    },
+                    "right": {
+                      "kind": "lit",
+                      "value": [
+                        {
+                          "kind": "map",
+                          "map": "field_1"
+                        },
+                        {
+                          "kind": "map",
+                          "map": "town_1"
+                        }
+                      ]
+                    }
+                  },
+                  "then": [
+                    {
+                      "kind": "call",
+                      "proc": "butterfly_wing",
+                      "args": [],
+                      "kwargs": {}
+                    }
+                  ],
+                  "orelse": []
+                }
+              ]
+            }
+          ],
+          "vars": {}
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "login",
+      "to": "character"
+    },
+    {
+      "from": "character",
+      "to": "town",
+      "entry": "spawn"
+    }
+  ]
+}

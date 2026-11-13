@@ -2,7 +2,12 @@
 // section 4): the simulator's run in order as a TIMELINE of beats, where the character is at any
 // time, what the map shows then (the monster met, the loot, the NPC talked to), and the run's words
 // and checks. Pure functions over the backend's trace (poring_flow.trace `play`), tested in
-// play.test.ts.
+// maps.test.ts. Since the PROJECT model (2026-11-13) a step's `block` is the map NODE's id, and a
+// beat belongs to a project node (its id, as the graph draws it).
+//
+// THE SESSION (login, choose character): the engine under construction names its steps with the
+// play kinds "login" and "character"; a trace that has them is played as it is. Until it lands,
+// the page passes session.ts's MOCK timeline, played BEFORE the trace's own steps (`offset`).
 //
 // It invents nothing about the run: positions are the trace's cells (a walk is interpolated between
 // its cells at RO's 150 ms a cell, 212 ms a diagonal, scaled to the step's own duration), monsters
@@ -19,7 +24,7 @@ export type Beat = {
   t0: number; // absolute: the session's mock steps come first
   t1: number;
   kind: PlayStep["kind"] | "session";
-  node: string; // the graph node it belongs to: start | login | character | block:<name> | main
+  node: string; // the project node it belongs to (its id; "" when the trace names none)
   map: string | null;
   step: PlayStep | null;
   session: SessionStep | null;
@@ -29,7 +34,7 @@ export type Beat = {
 export type Timeline = {
   beats: Beat[];
   end: number;
-  offset: number; // where the map flow starts (after the session)
+  offset: number; // where the trace's own steps start (after a MOCK session; 0 when it has its own)
   approximate: boolean; // no `play` from the backend: built from the walked segments
   capped: boolean;
   maps: string[]; // every map the run is on, in order of first visit
@@ -51,10 +56,20 @@ export function walkSeconds(cells: readonly Cell[]): number {
 }
 
 function nodeOf(block: string | null | undefined): string {
-  return block ? `block:${block}` : "main";
+  return block ?? "";
 }
 
-/** The block a trace path names: "town.1" / "town.0.body.0" / "town: exit npc_warp" -> town. */
+/** The trace's own session steps (the engine names them "login" / "character"; PlayStep's kinds do
+ * not list them yet, so they are compared as text). */
+export const SESSION_KINDS = ["login", "character"] as const;
+export function isSessionStep(st: PlayStep): boolean {
+  return (SESSION_KINDS as readonly string[]).includes(st.kind as string);
+}
+export function traceHasSession(trace: Trace): boolean {
+  return Array.isArray(trace.play) && trace.play.some(isSessionStep);
+}
+
+/** The node a trace path names: "town.1" / "town/main/main.2" / "town: exit npc_warp" -> town. */
 export function blockOfPath(path: string): string | null {
   const m = /^([A-Za-z][A-Za-z0-9_]*)/.exec(path);
   return m && m[1] !== "main" ? m[1] : null;
@@ -91,10 +106,11 @@ export function approximatePlay(paths: readonly PathSegment[], transitions: Trac
 
 export function buildTimeline(trace: Trace, session: readonly SessionStep[] | null): Timeline {
   const beats: Beat[] = [];
-  const offset = session && session.length ? session[session.length - 1].t1 : 0;
+  const own = traceHasSession(trace);
+  const offset = !own && session && session.length ? session[session.length - 1].t1 : 0;
   const start: Where = { map: trace.start.map, cell: trace.start.cell };
-  for (const s of session ?? []) {
-    beats.push({ i: beats.length, t0: s.t0, t1: s.t1, kind: "session", node: s.node, map: null, step: null, session: s, before: { map: null, cell: null }, after: s.node === "character" ? start : { map: null, cell: null } });
+  for (const s of own ? [] : (session ?? [])) {
+    beats.push({ i: beats.length, t0: s.t0, t1: s.t1, kind: "session", node: s.node, map: null, step: null, session: s, before: { map: null, cell: null }, after: s.step === "character" ? start : { map: null, cell: null } });
   }
   const approximate = !Array.isArray(trace.play);
   const steps = approximate ? approximatePlay(trace.paths, trace.transitions) : (trace.play ?? []);
@@ -105,6 +121,16 @@ export function buildTimeline(trace: Trace, session: readonly SessionStep[] | nu
   };
   seen(start.map);
   for (const st of steps) {
+    if (isSessionStep(st)) {
+      // the trace's own session step (the engine's "login" / "character"), in the trace's time
+      const step = (st.kind as string) === "login" ? "login" : "character";
+      const node = st.node ?? st.block ?? "";
+      const bad = st.outcome && st.outcome !== "ok" ? ` (${st.outcome})` : "";
+      const s: SessionStep = { step, node, t0: st.t0, t1: st.t1, text: step === "login" ? `Log in${bad} (simulated)` : `Choose the character and enter the game${bad} (simulated)`, call: "" };
+      beats.push({ i: beats.length, t0: st.t0, t1: st.t1, kind: "session", node, map: null, step: st, session: s, before: { map: null, cell: null }, after: step === "character" ? start : { map: null, cell: null } });
+      if (step === "character") cur = start;
+      continue;
+    }
     const map = st.map ?? cur.map;
     let before: Where = cur;
     let after: Where = cur;
@@ -174,7 +200,7 @@ export function poseAt(tl: Timeline, t: number): Pose | null {
     const p = along(b.step.cells, (t - b.t0) / Math.max(1e-6, b.t1 - b.t0));
     return { map: b.map, x: p.x, y: p.y, known: true, beat: i, node: b.node };
   }
-  if (b.kind === "session" && t >= b.t1 && b.session?.node === "character") where = b.after;
+  if (b.kind === "session" && t >= b.t1 && b.session?.step === "character") where = b.after;
   const c = where.cell;
   return { map: where.map, x: c ? c[0] : 0, y: c ? c[1] : 0, known: c !== null, beat: i, node: b.node };
 }
@@ -293,13 +319,14 @@ export function beatText(b: Beat, labels: Labels | null): string {
 
 export type Check = { ok: boolean | null; text: string }; // null: not known
 
-/** matpilot's run checks, for maps: the session, every map block reached, the exits, the end. */
-export function runChecks(tl: Timeline, trace: Trace, blocks: readonly { name: string; map: string }[], endText: string, seed: number | null): Check[] {
+/** matpilot's run checks, for maps: the session, every map node reached, the exits, the end. */
+export function runChecks(tl: Timeline, trace: Trace, maps: readonly { id: string; map: string }[], endText: string, seed: number | null): Check[] {
   const out: Check[] = [];
   if (tl.offset > 0) out.push({ ok: true, text: "Logged in and entered the game (a mock: simulated, nothing ran)" });
-  for (const b of blocks) {
-    const v = trace.blocks[b.name]?.visits ?? 0;
-    out.push(v > 0 ? { ok: true, text: `Reached ${b.name} (${b.map}): ${v} visit${v === 1 ? "" : "s"}` } : { ok: false, text: `Never reached ${b.name} (${b.map})` });
+  else if (tl.beats.some((b) => b.kind === "session")) out.push({ ok: true, text: "Logged in and entered the game (simulated, nothing ran)" });
+  for (const b of maps) {
+    const v = trace.blocks[b.id]?.visits ?? 0;
+    out.push(v > 0 ? { ok: true, text: `Reached ${b.id} (${b.map}): ${v} visit${v === 1 ? "" : "s"}` } : { ok: false, text: `Never reached ${b.id} (${b.map})` });
   }
   const missed = trace.transitions.filter((x) => !x.arrived);
   if (trace.transitions.length) out.push(missed.length ? { ok: false, text: `${missed.length} exit${missed.length === 1 ? "" : "s"} did not arrive (${missed[0].from} → ${missed[0].to})` } : { ok: true, text: `Every exit arrived (${trace.transitions.length})` });

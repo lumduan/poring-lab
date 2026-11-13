@@ -1,17 +1,18 @@
-// Placing a MAP NODE from the static data (the Maps page's "+ Map"; docs/planning/world-map-flows.md
-// section 2): a map block for a map id, with what the backend's static data says about that map
-// (its walk grid and its spawns), worked out in the browser at run time. Nothing derived from the
-// client or rAthena is stored in the repo: the cells and ids come from GET /flows/world each time.
-// Pure functions, tested in build.test.ts on synthetic data.
+// Placing a MAP NODE from the static data (the Maps page's "+ map"; docs/planning/project-model.md
+// section 2): a project map node (project.ts newMapNode) for a map id, with what the backend's
+// static data says about that map (its walk grid and its spawns), worked out in the browser at run
+// time. Nothing derived from the client or rAthena is stored in the repo: the cells and ids come
+// from GET /flows/world each time. Pure functions, tested in maps.test.ts on synthetic data.
 //
-// The defaults are a GUESS a learner then changes (in Inspect, or in the map's flow on /flows):
+// The defaults are a GUESS a learner then changes (in the node inspector, or the node's tabs on
+// /flows):
 // - the entry: the walkable cell nearest the map's centre (no walk grid: "anywhere");
 // - targets: the species the map spawns 2 or more of; ignored: boss spawn lines and single spawns
 //   (on xmas_dun02 that ignores the Stormy Knight and the Garm Baby, the Rogue's own rule);
-// - the flow: with targets, attack the nearest target 5 times (within 9 cells), then stop; without,
-//   stop("todo") as /flows' "+ map block" does.
-import type { EditResult } from "../flow/canvas.ts";
-import { clone, emptyFlow, type Flow, MAP_ID, type MapBlock, NAME, newBlock, type Stmt } from "../flow/ir.ts";
+// - its main: with targets, attack the nearest target 5 times (within 9 cells), then stop; without,
+//   newMapNode's own (stop at once until it is written).
+import { MAP_ID, type Stmt } from "../flow/ir.ts";
+import { type MapNode, mapNodes, newMapNode, type Project } from "../flow/project.ts";
 
 export type MapFacts = {
   rows: string[] | null; // rows[y][x], '.' walkable (the backend's walk grid)
@@ -20,16 +21,8 @@ export type MapFacts = {
 
 export const ATTACKS = 5;
 export const WITHIN = 9;
-
-/** A block name for a map id: [A-Za-z][A-Za-z0-9_]*, unused in the flow. */
-export function blockName(map: string, taken: ReadonlySet<string>): string {
-  let base = map.replace(/[^A-Za-z0-9_]/g, "_").replace(/^[^A-Za-z]+/, "");
-  if (!base) base = "map";
-  base = base.slice(0, 40);
-  let name = base;
-  for (let i = 2; taken.has(name) || !NAME.test(name); i++) name = `${base}_${i}`;
-  return name;
-}
+/** Where "+ map" places a new node: right of the rightmost map node, in the project's units. */
+export const NEW_NODE_DX = 300;
 
 /** The walkable cell nearest the grid's centre (ties: the lower y, then the lower x), or null. */
 export function centreCell(rows: readonly string[] | null): [number, number] | null {
@@ -88,34 +81,33 @@ function attackLoop(): Stmt[] {
   ];
 }
 
-export function mapBlockFor(name: string, map: string, facts: MapFacts | null): MapBlock {
-  const b = newBlock(name, map);
+/** Where a new map node goes: right of the rightmost map node, on its row (else right of all). */
+export function newNodePos(p: Project): { x: number; y: number } {
+  const maps = mapNodes(p);
+  const pool = maps.length ? maps : p.nodes;
+  if (!pool.length) return { x: 0, y: 0 };
+  const right = pool.reduce((a, b) => (b.pos.x > a.pos.x ? b : a));
+  return { x: Math.round(right.pos.x + NEW_NODE_DX), y: Math.round(right.pos.y) };
+}
+
+/** A map node for `map`, from the static data's facts (null: none known). */
+export function mapNodeFor(p: Project, map: string, facts: MapFacts | null, pos = newNodePos(p)): MapNode {
+  const n = newMapNode(p, map, pos);
   const c = centreCell(facts?.rows ?? null);
-  b.entries = [{ name: "arrival", at: c ? { kind: "cell", map, x: c[0], y: c[1] } : null, radius: 2 }];
+  n.entries = [{ name: "arrival", at: c ? { kind: "cell", map, x: c[0], y: c[1] } : null, radius: 2 }];
   const g = targetGuess(facts?.spawns ?? []);
-  b.targets = g.targets.map((id) => ({ kind: "mob", id }));
-  b.ignore = g.ignore.map((id) => ({ kind: "mob", id }));
-  if (g.targets.length) b.main = attackLoop();
-  return b;
+  n.targets = g.targets.map((id) => ({ kind: "mob", id }));
+  n.ignore = g.ignore.map((id) => ({ kind: "mob", id }));
+  const main = n.tabs[0];
+  if (g.targets.length && main.main) main.main = attackLoop();
+  return n;
 }
 
-/** Add a map node for `map` to a workflow flow (a plain flow has no map blocks). */
-export function addMapNode(flow: Flow, map: string, facts: MapFacts | null): EditResult & { name?: string } {
-  if (!MAP_ID.test(map)) return { ok: false, error: `${JSON.stringify(map)} is not a map id` };
-  const out = clone(flow);
-  if (!out.workflow) return { ok: false, error: "a plain flow has no map blocks: Load a workflow first" };
-  const name = blockName(map, new Set(out.workflow.blocks.map((b) => b.name)));
-  out.workflow.blocks.push(mapBlockFor(name, map, facts));
-  return { ok: true, flow: out, name };
-}
+export type AddResult = { ok: true; project: Project; id: string } | { ok: false; error: string };
 
-/** A new workflow of ONE map node on `map` (Load ▸ "One map from the lab data"). */
-export function oneMapFlow(map: string, facts: MapFacts | null, maxRuntimeS?: number): EditResult {
+/** Add a map node for `map` to the project (+ map). */
+export function addMapNode(p: Project, map: string, facts: MapFacts | null, pos?: { x: number; y: number }): AddResult {
   if (!MAP_ID.test(map)) return { ok: false, error: `${JSON.stringify(map)} is not a map id` };
-  const f = emptyFlow(`${blockName(map, new Set()).toLowerCase().replace(/^[^a-z]+/, "") || "map"}_flow`.slice(0, 48), maxRuntimeS);
-  const name = blockName(map, new Set());
-  const b = mapBlockFor(name, map, facts);
-  f.description = `One map, ${map}: its entry, targets and ignored species are a first guess from the lab's static data (change them in Inspect).`;
-  f.workflow = { start_block: name, start_entry: b.entries[0].name, blocks: [b], run_until_stopped: false };
-  return { ok: true, flow: f };
+  const n = mapNodeFor(p, map, facts, pos ?? newNodePos(p));
+  return { ok: true, project: { ...p, nodes: [...p.nodes, n] }, id: n.id };
 }

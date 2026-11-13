@@ -1,111 +1,138 @@
-// The Maps page's GRAPH (Batt 2026-11-10: "the n8n / Node-RED way of placing blocks, like at the
-// very start: easy to read, and one map links to many other maps"; docs/planning/world-map-flows.md
-// section 2): START -> Login -> Choose character -> the flow's map blocks, joined by their typed
-// exits. Pure data, tested in graph.test.ts.
+// The Maps page's GRAPH over the PROJECT (Batt 2026-11-13, docs/planning/project-model.md: "a login
+// node, a choose-character node, a node for each map, all linked into a work flow, and a GLOBAL
+// node that shares variables and functions"): n8n / Node-RED's way of placing blocks. Pure data,
+// tested in maps.test.ts.
 //
-// The map nodes and exit edges are /flows' own (lib/flow/canvas.ts toGraph: one node per map
-// block, one edge per take_exit, the derived death_respawn edges), so the IR stays the one source
-// of truth; the three session nodes and their edges are the page's MOCK (lib/maps/session.ts), never
-// IR. Event nodes are on /flows (every map tab, and each map tab).
-import { autoLayout, blockId, type GEdge, type MapNodeData, savePointBlock, toGraph, type XY } from "../flow/canvas.ts";
-import type { Flow } from "../flow/ir.ts";
-import { readRules, type Rules } from "./rules.ts";
-import type { Session } from "./session.ts";
+// - NODES are the project's own nodes (`project.nodes`), drawn at their saved `pos`.
+// - The SESSION connections are `project.edges` (login -> character -> the start map's ENTRY port).
+// - MAP -> MAP links are the EXITS (take_exit statements in a map node's tabs): one port per exit
+//   on the card's right (`x:<engine path>`), onto the ENTRY it lands on (`e:<entry name>`, the
+//   card's left); `in` (the card's head) takes what names no entry (a death's respawn lands on the
+//   save point's cell). A death's respawn edge is DERIVED (the save point's map node).
+// - GLOBAL has no ports and no edges: its card says it is shared by every node.
+import type { AuthoredExit } from "../flow/ir.ts";
+import type { Trace } from "../flow/api.ts";
+import { type CharacterNode, type GlobalNode, type LoginNode, type MapNode, mapNodes, nodeById, type Project, sessionPath } from "../flow/project.ts";
+import { exitRows, savePointNode } from "./links.ts";
+import type { Timeline } from "./play.ts";
 
-// Round 6 (Batt 2026-11-13, "like n8n"): a map node has ONE PORT PER ENTRY (left, how the character
-// arrives) and ONE PORT PER EXIT (right, where it goes), so an edge runs from the exit it is onto
-// the entry it lands on. Handle ids: `x:<exit path>` and `e:<entry name>`; `in` (the node's head)
-// takes what names no entry (a death's respawn lands on the save point's cell). The node "Any other
-// map" (`unknown`) is the world rule for a map none of the blocks is on (rules.ts).
 export const exitHandle = (path: string) => `x:${path}`;
 export const entryHandle = (name: string) => `e:${name}`;
-export const UNKNOWN_ID = "unknown";
+export const OUT = "out"; // a session node's one port out
+export const IN = "in"; // a node's head: a connection that names no entry
+export const RESPAWN = "death_respawn";
+
+/** The project's `pos` is in the graph's UNITS; a card is drawn at pos x POS_SCALE pixels. The
+ * ready-made projects place cards 260-300 units apart and 220 rows down, and a map card is 330-400
+ * px wide and up to ~400 px tall (a port per entry and exit), so the map columns come out ~570 px
+ * apart (the IR 2 graph's 560) and Global under the maps. Dragging saves pixels / scale, rounded. */
+export const POS_SCALE = { x: 1.9, y: 2 } as const;
+export type XY = { x: number; y: number };
+export const toScreen = (p: XY): XY => ({ x: p.x * POS_SCALE.x, y: p.y * POS_SCALE.y });
+export const toUnits = (p: XY): XY => ({ x: Math.round(p.x / POS_SCALE.x), y: Math.round(p.y / POS_SCALE.y) });
 
 export type MapsNodeData =
-  | { kind: "start" }
-  | { kind: "login"; session: Session }
-  | { kind: "character"; session: Session; enters: string | null }
-  | MapNodeData
-  | { kind: "main"; statements: number }
-  | { kind: "unknown"; rules: Rules; saveBlock: string | null; maps: number };
+  | { kind: "login"; node: LoginNode; start: boolean }
+  | { kind: "character"; node: CharacterNode }
+  | { kind: "map"; node: MapNode; first: boolean }
+  | { kind: "global"; node: GlobalNode };
 export type MapsNode = { id: string; type: MapsNodeData["kind"]; position: XY; data: MapsNodeData };
-export type MapsEdge = Omit<GEdge, "data"> & { data: (GEdge["data"] & { label?: string }) | { kind: "session"; derived: true; label: string } };
+export type EdgeData =
+  | { kind: "session"; from: string; to: string; entry: string | null; label: string; derived: false }
+  | { kind: AuthoredExit; path: string; entry: string; derived: false; label?: string }
+  | { kind: "death_respawn"; derived: true; label?: string };
+export type MapsEdge = { id: string; source: string; target: string; sourceHandle: string; targetHandle: string; data: EdgeData };
 export type MapsGraph = { nodes: MapsNode[]; edges: MapsEdge[]; notes: string[] };
 
-export const SESSION_IDS = ["start", "login", "character"] as const;
-const SESSION_AT: Record<(typeof SESSION_IDS)[number], XY> = {
-  start: { x: 0, y: 110 },
-  login: { x: 150, y: 70 },
-  character: { x: 470, y: 70 },
-};
-const MAPS_X = 800; // the first column of map nodes
-const MAPS_Y = 70;
-const ROW_SCALE = 1.35; // round 6: the cards (a port per entry and exit) are taller than /flows' blocks
+export const sessionEdgeId = (from: string, to: string) => `edge:${from}>${to}`;
+export const exitEdgeId = (path: string) => `exit:${path}`;
 
-export function mapsGraph(flow: Flow, session: Session, positions: Record<string, XY> = {}): MapsGraph {
-  const g = toGraph(flow, {});
-  const auto = autoLayout(flow);
-  const at = (id: string, fallback: XY): XY => positions[id] ?? fallback;
-  const wf = flow.workflow;
-  const nodes: MapsNode[] = [
-    { id: "start", type: "start", position: at("start", SESSION_AT.start), data: { kind: "start" } },
-    { id: "login", type: "login", position: at("login", SESSION_AT.login), data: { kind: "login", session } },
-    {
-      id: "character",
-      type: "character",
-      position: at("character", SESSION_AT.character),
-      data: { kind: "character", session, enters: wf ? wf.start_block : null },
-    },
-  ];
-  const edges: MapsEdge[] = [
-    { id: "session:start", source: "start", target: "login", sourceHandle: "out", targetHandle: "in", data: { kind: "session", derived: true, label: "open the client" } },
-    { id: "session:login", source: "login", target: "character", sourceHandle: "out", targetHandle: "in", data: { kind: "session", derived: true, label: "character select" } },
-  ];
-  if (!wf) {
-    nodes.push({ id: "main", type: "main", position: at("main", { x: MAPS_X, y: MAPS_Y }), data: { kind: "main", statements: flow.main?.length ?? 0 } });
-    edges.push({ id: "session:enter", source: "character", target: "main", sourceHandle: "out", targetHandle: "in", data: { kind: "session", derived: true, label: "enter the game" } });
-    return { nodes, edges, notes: ["a plain flow has no map blocks: its one program runs wherever the character is"] };
+const finiteXY = (p: XY | undefined): p is XY => !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
+
+/** Where a node with no usable `pos` goes (a hand-made file): by its kind, in rows. */
+function fallbackPos(kind: MapsNodeData["kind"], i: number): XY {
+  if (kind === "login") return { x: 0, y: 0 };
+  if (kind === "character") return { x: 260, y: 0 };
+  if (kind === "global") return { x: 560, y: 260 };
+  return { x: 560 + 300 * (i % 4), y: 300 * Math.floor(i / 4) };
+}
+
+export function mapsGraph(p: Project): MapsGraph {
+  const sp = sessionPath(p);
+  const nodes: MapsNode[] = [];
+  let mi = 0;
+  for (const n of p.nodes) {
+    const units = finiteXY(n.pos) ? n.pos : fallbackPos(n.kind, n.kind === "map" ? mi : 0);
+    if (n.kind === "map") mi++;
+    const position = toScreen(units);
+    if (n.kind === "login") nodes.push({ id: n.id, type: "login", position, data: { kind: "login", node: n, start: p.start === n.id } });
+    else if (n.kind === "character") nodes.push({ id: n.id, type: "character", position, data: { kind: "character", node: n } });
+    else if (n.kind === "map") nodes.push({ id: n.id, type: "map", position, data: { kind: "map", node: n, first: sp.map?.id === n.id } });
+    else nodes.push({ id: n.id, type: "global", position, data: { kind: "global", node: n } });
   }
-  const entriesOf = new Map(wf.blocks.map((b) => [blockId(b.name), b.entries.map((e) => e.name)]));
-  const onto = (block: string, entry: string | undefined) => (entry !== undefined && entriesOf.get(block)?.includes(entry) ? entryHandle(entry) : "in");
-  for (const n of g.nodes) {
-    if (n.data.kind !== "map") continue;
-    const a = auto[n.id] ?? { x: 40, y: 240 };
-    const p = at(n.id, { x: MAPS_X + (a.x - 40), y: MAPS_Y + (a.y - 240) * ROW_SCALE });
-    nodes.push({ id: n.id, type: "map", position: p, data: n.data });
+  const isMap = (id: string): MapNode | null => {
+    const n = nodeById(p, id);
+    return n?.kind === "map" ? n : null;
+  };
+  const onto = (to: string, entry: string | null | undefined) => (entry && isMap(to)?.entries.some((e) => e.name === entry) ? entryHandle(entry) : IN);
+  const edges: MapsEdge[] = [];
+  for (const e of p.edges) {
+    if (!nodeById(p, e.from) || !nodeById(p, e.to)) continue;
+    const to = nodeById(p, e.to);
+    const label = to?.kind === "character" ? "log in, then choose" : to?.kind === "map" ? `enter the game${e.entry ? ` → ${e.entry}` : ""}` : "";
+    edges.push({ id: sessionEdgeId(e.from, e.to), source: e.from, target: e.to, sourceHandle: OUT, targetHandle: onto(e.to, e.entry), data: { kind: "session", from: e.from, to: e.to, entry: e.entry ?? null, label, derived: false } });
   }
-  edges.push({
-    id: "session:enter",
-    source: "character",
-    target: blockId(wf.start_block),
-    sourceHandle: "out",
-    targetHandle: onto(blockId(wf.start_block), wf.start_entry),
-    data: { kind: "session", derived: true, label: `enter the game → ${wf.start_entry}` },
-  });
-  for (const e of g.edges) {
-    if (e.data.kind === "attach") continue;
-    if (e.data.kind === "death_respawn") edges.push({ ...e, targetHandle: onto(e.target, entriesOf.get(e.target)?.[0]) });
-    else edges.push({ ...e, sourceHandle: e.data.path ? exitHandle(e.data.path) : e.sourceHandle, targetHandle: onto(e.target, e.data.entry) });
+  for (const n of mapNodes(p)) {
+    for (const x of exitRows(p, n)) {
+      if (!isMap(x.toNode)) continue; // drawn on the card ("not a map of this project"), no edge
+      edges.push({ id: exitEdgeId(x.path), source: n.id, target: x.toNode, sourceHandle: exitHandle(x.path), targetHandle: onto(x.toNode, x.toEntry), data: { kind: x.kind, path: x.path, entry: x.toEntry, derived: false } });
+    }
   }
-  // the world rule's node: "Any other map", under the maps
-  const rules = readRules(flow);
-  const sp = savePointBlock(flow);
-  const saveBlock = rules.savePoint.cell ? (wf.blocks.find((b) => b.map.map === rules.savePoint.cell?.map)?.name ?? null) : sp.block;
-  // under the session row, left of the maps: its edge to the save town runs through open space
-  // (round 6: under the maps its label sat under its own card)
-  nodes.push({ id: UNKNOWN_ID, type: "unknown", position: at(UNKNOWN_ID, { x: 150, y: MAPS_Y + 260 }), data: { kind: "unknown", rules, saveBlock, maps: wf.blocks.length } });
-  if (rules.unknownMap === "wing" && saveBlock) {
-    const target = blockId(saveBlock);
-    edges.push({
-      id: "rule:unknown",
-      source: UNKNOWN_ID,
-      target,
-      sourceHandle: "out",
-      targetHandle: onto(target, entriesOf.get(target)?.[0]),
-      data: { kind: "item_warp", derived: true, label: "world rule: a Butterfly Wing home" },
-    });
+  const save = savePointNode(p).node;
+  const saveNode = save ? isMap(save) : null;
+  if (saveNode) {
+    for (const n of mapNodes(p)) {
+      if (n.id === saveNode.id) continue;
+      edges.push({ id: `respawn:${n.id}`, source: n.id, target: saveNode.id, sourceHandle: RESPAWN, targetHandle: onto(saveNode.id, saveNode.entries[0]?.name), data: { kind: "death_respawn", derived: true } });
+    }
   }
-  return { nodes, edges, notes: g.notes.filter((n) => !n.startsWith("death_respawn")) };
+  const notes = sp.problems.map((x) => `The session path: ${x}. Simulate starts at the login node and follows login → character → a map's entry: drag from a node's right port to connect it.`);
+  return { nodes, edges, notes };
+}
+
+/** How often the run took each exit edge (matched by source, kind and target). */
+export function exitRuns(trace: Trace | null, edges: readonly MapsEdge[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!trace) return out;
+  const count = new Map<string, number>();
+  for (const t of trace.transitions) count.set(`${t.from}|${t.kind}|${t.to}`, (count.get(`${t.from}|${t.kind}|${t.to}`) ?? 0) + 1);
+  for (const e of edges) {
+    if (e.data.kind === "session") continue;
+    const k = `${e.source}|${e.data.kind}|${e.target}`;
+    if (count.has(k)) out.set(e.id, count.get(k) as number);
+  }
+  return out;
+}
+
+/** The edge the playback last went along at beat `current`: a session step's connection, the last
+ * exit (by its engine path, else by its from / kind / to), or a death's respawn. */
+export function activeEdgeAt(tl: Timeline, current: number, edges: readonly MapsEdge[]): string | null {
+  if (current < 0 || current >= tl.beats.length) return null;
+  const sessionInto = (to: string) => edges.find((e) => e.data.kind === "session" && e.target === to)?.id ?? null;
+  const b = tl.beats[current];
+  if (b.kind === "session") return b.session?.step === "character" ? sessionInto(b.node) : null;
+  for (let i = current; i >= 0; i--) {
+    const x = tl.beats[i];
+    if (x.kind === "exit" && x.step) {
+      const st = x.step;
+      if (st.node && edges.some((e) => e.id === exitEdgeId(st.node as string))) return exitEdgeId(st.node);
+      const from = st.from_block ?? st.block;
+      return edges.find((e) => e.data.kind === st.exit && e.source === from && e.target === st.to_block)?.id ?? null;
+    }
+    if (x.kind === "arrive" && x.step?.via === "respawn") return x.step.block ? `respawn:${x.step.block}` : null;
+    if (x.kind === "session") return x.session?.step === "character" ? (edges.find((e) => e.data.kind === "session" && e.source === x.node)?.id ?? null) : null;
+  }
+  return null;
 }
 
 // --- the graph's view (round 4, 2026-11-10) ------------------------------------------------------
@@ -121,7 +148,7 @@ export type Viewport = { x: number; y: number; zoom: number };
 const finite = (...v: number[]) => v.every((n) => Number.isFinite(n));
 
 /** The viewport that fits `bounds` into `box` between minZoom and maxZoom; a graph too big for
- * minZoom starts at its LEFT (START) and is centred vertically when it fits, else top-aligned.
+ * minZoom starts at its LEFT and is centred vertically when it fits, else top-aligned.
  * `overflow`: it did not fit at minZoom. Null: no box (folded, not laid out) or a bad number. */
 export function fitViewport(box: Box, bounds: Rect, minZoom: number, maxZoom: number, pad: number): { viewport: Viewport; overflow: boolean } | null {
   if (!finite(box.width, box.height, bounds.x, bounds.y, bounds.width, bounds.height, minZoom, maxZoom, pad)) return null;
