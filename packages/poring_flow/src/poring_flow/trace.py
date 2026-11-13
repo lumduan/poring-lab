@@ -74,7 +74,13 @@ FIGHT_BLOCKS = ("attack_nearest", "finish_target", "hunt", "dungeon_hunt")
 HUNT_BLOCKS = ("hunt", "dungeon_hunt")
 DetectKey = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}/[a-z][a-z0-9_]{0,47}$")]
 ScenarioKey = Literal[
-    "hp_percent", "sp_percent", "weight_percent", "is_dead", "engagement_seen", "engaged_species"
+    "hp_percent",
+    "sp_percent",
+    "weight_percent",
+    "is_dead",
+    "engagement_seen",
+    "engaged_species",
+    "sees_boss",  # live-blocks.md stage 2: the hunt core's boss read, scripted like the others
 ]
 
 

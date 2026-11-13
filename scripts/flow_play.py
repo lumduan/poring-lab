@@ -28,11 +28,25 @@ timeout, else the run stops), and the HUNT CORE: a dungeon_hunt block plays the 
 (scripts/dungeon_hunt.py run) IN THIS PROCESS with the SAME Agent and Screen (one process, one
 input writer; dungeon@9.48: run(a, hook=..., session=...)), its argv exactly the Run helper's for
 that map (flow_run.FIXED, the flow's flags, flow_config.argv of the config with the node's keys),
-its time box the player's remaining time. While it runs, the runner's own survival plays and the
-box's events wait; its TICK HOOK is called once per runner tick (stage 2 moves survival through
-it). When it ends on its own map exit (the Butterfly Wing home, the respawn), the player relocates
-by the map's name, or ends when no node of the project is there. Anything else is refused BEFORE
-ANY INPUT, each one named ("walk_to cannot play live yet (stage 4)").
+its time box the player's remaining time. Its TICK HOOK is called once per runner tick. When it
+ends on its own map exit (the Butterfly Wing home, the respawn), the player relocates by the map's
+name, or ends when no node of the project is there. Anything else is refused BEFORE ANY INPUT, each
+one named ("walk_to cannot play live yet (stage 4)").
+
+THE BOX'S SURVIVAL INSIDE THE HUNT CORE (stage 2, live-blocks.md section 3.2; dungeon@9.49): the
+node's own events (and Global's) play WHILE the runner hunts. On every runner tick -- its survival
+point, and guard_tick's quick read inside a long action -- the runner calls the hook's
+``survive(HuntTick, press)``: the player sets the box's sensors from the tick (hp_percent,
+sp_percent, sees_boss: the runner's boss read; is_dead), evaluates the box's events by the
+engine's own rules (edges, until / rearm, cooldown_s, limits: runtime.Sim._perceive / _fire), then
+plays every due body at once at that safe point -- the pre-empts first, a ReleaseAll before each
+(the engine's rule), then the inserts (runtime.Sim._run_inserts) -- through ``press``: the
+runner's own press of that role (one Agent, one writer; the runner waits while the box plays). The
+runner's own handlers the box plays are off for that run (poring_flow.live.hunt_plan's PLAYS,
+passed as run(box_plays=...)); after a box Fly Wing the runner runs its own after-the-fly steps.
+A tick with no HP read and no boss line decides nothing (the runner's own sustain reads nothing
+without an HP read either). An event's limit (handler_runaway, max_per_run) or a refused key ends
+the run through the runner's normal end, then the player ends with that reason.
 
 THE START, before any input: the project validates; the node is a map node; every block plays live;
 the time box fits the Settings maximum (--max-s); each hunt core's keys resolve from the node's
@@ -50,7 +64,8 @@ released (ReleaseAll) and the run ends. The time box: min(the project's max_runt
 ITS RECORD: a session folder /dev/shm/poring-lab-demo/<time>-play-<label>/events.jsonl, as the
 runner's (the helper's Live tracker and the page's live line read it): run_start, each block entered
 (`block`, its node path "<node>/<tab>/<site>"), each key pressed (`key`: the key only), each event
-fired (`event`), the HP / SP / weight / map once a second (`hp_read`), the hunt core's own events
+fired (`event`: its name, its node path, the READING that fired it, `in` "hunt" inside the hunt
+core), the HP / SP / weight / map once a second (`hp_read`), the hunt core's own events
 mirrored (`hunt_start`, the runner's kills, loot, presses, `hunt_end`), and `run_end` with its
 reason and its words.
 """
@@ -91,7 +106,7 @@ from poring_flow.runtime import (  # noqa: E402
     _Tick,
 )
 
-VERSION = live.VERSION  # dungeon_hunt.LIVE_BLOCKS_VERSION (test_live_player.py pins all three)
+VERSION = live.VERSION  # dungeon_hunt.SURVIVAL_EVENTS_VERSION (test_live_player.py pins them)
 DEMO = fr.DEMO
 HP_EVERY_S = 1.0  # the hp_read record (the live line's HP), not the sensor read (every tick)
 WEIGHT_EVERY_S = 0.5  # the weight readout needs two equal reads (gm_state._weight): not each tick
@@ -103,7 +118,7 @@ ROLE_PRESS = {"heal_key": "potion", "fly_key": "fly", "home_key": "home", "knife
               "dagger_key": "equip"}  # flow_run.PRESS_BLOCK's words (the live line)  # fmt: skip
 MIRROR = frozenset({*fr.EVENT_BLOCK, "press", "death", "player_home", "player_end",
                     "player_respawn", "stock", "stop_file", "hook_stop", "run_start",
-                    "run_end"})  # fmt: skip
+                    "run_end", "escape", "box_refused"})  # fmt: skip
 CHECK_LABEL = "flowplay-check"
 
 
@@ -121,6 +136,10 @@ class RunnerPlan:
     flow_id: str
     keys: dict[str, str]
     vals: dict[str, Any]
+    # stage 2: the box's events that play inside this hunt core and the runner's own handlers
+    # they replace (poring_flow.live.hunt_plan; dungeon_hunt run(box_plays=...))
+    events: tuple[str, ...] = ()
+    plays: frozenset[str] = frozenset()
 
     def argv(self, label: str, stop_file: Path | None, minutes: float | None) -> list[str]:
         """Exactly the Run helper's runner argv for this map (flow_run.command without its head),
@@ -158,7 +177,8 @@ class Prepared:
     def doc(self) -> dict[str, Any]:
         return {"version": VERSION, "project": self.project.name, "node": self.node,
                 "map": self.map, "project_hash": self.project_hash, "cap_s": self.cap_s,
-                "runners": {b: {"flow": p.flow_id, "keys": p.keys} for b, p in
+                "runners": {b: {"flow": p.flow_id, "keys": p.keys, "events": list(p.events),
+                                "box_plays": sorted(p.plays)} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -219,7 +239,8 @@ def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CO
             vals, _src, _ks, why = fr.run_values(fr.FLOWS[fid], rk.keys, config_dir)
         if why:
             return refuse(f"{block}'s runner settings: {why}")
-        runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals)
+        hp = live.hunt_plan(c.flow, block)  # its problems refused above (live.problems)
+        runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals, hp.events, hp.plays)
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
 
@@ -356,6 +377,7 @@ class HuntResult:
     dead: bool = False
     rc: int | None = None
     ticks: int = 0
+    survive_calls: int = 0  # stage 2: the hook's survive calls (main ticks and quick reads)
 
     @property
     def left(self) -> bool:
@@ -382,7 +404,12 @@ class HuntHook:
     def tick(self, view: Any) -> str | None:
         self.res.ticks += 1
         self.last = view
-        return self.player.stop_due()
+        return self.player.hunt_halt_words() or self.player.stop_due()
+
+    def survive(self, view: Any, press: Callable[[str, str], str | None]) -> str | None:
+        """dungeon@9.49: the box's survival events on this runner tick (LivePlayer.hunt_tick)."""
+        self.res.survive_calls += 1
+        return self.player.hunt_tick(view, press)
 
     def event(self, rec: Mapping[str, Any], t_mono: float) -> None:
         k = rec.get("kind")
@@ -427,16 +454,19 @@ class HuntCore:
             return res
         argv = plan.argv(f"{self.label}-hunt{self.n}", self.stop_file, left_min)
         player.rec.ev({"kind": "hunt_start", "node": player.node_path, "n": self.n,
-                       "flow": plan.flow_id, "keys": plan.keys, "argv": argv})  # fmt: skip
+                       "flow": plan.flow_id, "keys": plan.keys, "argv": argv,
+                       "events": list(plan.events), "box_plays": sorted(plan.plays)})  # fmt: skip
         hook = HuntHook(player, res)
+        box = {"box_plays": sorted(plan.plays)} if plan.plays else {}  # stage 2 (none: as 9.48)
         try:
             a = args_fn(argv)
-            res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen))
+            res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
-                       "ticks": res.ticks, "rc": res.rc})  # fmt: skip
+                       "ticks": res.ticks, "survive_calls": res.survive_calls,
+                       "rc": res.rc})  # fmt: skip
         return res
 
 
@@ -468,6 +498,12 @@ class LivePlayer(Sim):
         self._map_before: str | None = None
         self._last_block: tuple[str, float] = ("", -1e9)
         self._hp_t = -1e9
+        # stage 2: the box's events inside a running hunt core (hunt_tick)
+        self._port: Callable[[str, str], str | None] | None = None  # the runner's own press
+        self._hunt_keys: frozenset[str] = frozenset()  # the events that play in the hunt core
+        self._hunt_halt: _Halt | None = None  # one of them ended the run (its words: words)
+        self._playing: str | None = None  # the event whose body plays now (its key)
+        self._readings: dict[str, dict[str, Any]] = {}  # event key -> the reading that fired it
 
     # -- the clock and the sensors --
     def stop_due(self) -> str | None:
@@ -518,7 +554,8 @@ class LivePlayer(Sim):
         else:
             self._next = now  # an overrun tick is not caught up in a burst
         self.t = self.io.clock() - self._t0
-        self.read()
+        if self._port is None:  # inside the hunt core the runner's tick is the reading (stage 2)
+            self.read()
 
     def _waited(self, waited: float, t_start: float) -> float:
         return self.t - t_start
@@ -545,12 +582,20 @@ class LivePlayer(Sim):
                     self.rec.ev({"kind": "release", "why": why})
                 elif (isinstance(e, Key) and e.action == "down" and isinstance(nxt, Key)
                       and nxt.action == "up" and nxt.code == e.code):  # fmt: skip
-                    self.io.tap(e.code)
-                    self.keys_sent.append(e.code)
                     rec: dict[str, Any] = {"kind": "key", "key": e.code, "node": self.node_path}
-                    if e.code in self.prep.roles:  # the live line's words (flow_run.PRESS_DOING)
-                        self.rec.ev({"kind": "press", "what": self.prep.roles[e.code],
-                                     "key": e.code})  # fmt: skip
+                    if self._port is not None:  # stage 2, inside the hunt core: the runner's OWN
+                        # press of that role (its record, count and stock read; mirrored to ours)
+                        if self._port(e.code, self._box_why()) is None:
+                            self.words = (f"the box pressed {e.code} inside the hunt core: a key "
+                                          "the hunt core does not hand the box")  # fmt: skip
+                            raise _Halt("not_live_input")
+                        rec["in"] = "hunt"
+                    else:
+                        self.io.tap(e.code)
+                        if e.code in self.prep.roles:  # the live line's words (PRESS_DOING)
+                            self.rec.ev({"kind": "press", "what": self.prep.roles[e.code],
+                                         "key": e.code})  # fmt: skip
+                    self.keys_sent.append(e.code)
                     self.rec.ev(rec)
                     i += 1
                 else:
@@ -560,6 +605,8 @@ class LivePlayer(Sim):
             if only_release:
                 self.rec.ev({"kind": "release_failed", "why": str(e)[:300]})
                 return
+            if self._port is not None:
+                raise  # inside the hunt core: the runner's own Stop handling (its session ends)
             self.words = f"the input was refused: {str(e)[:300]}"
             raise _Halt("input_refused") from None
 
@@ -625,12 +672,20 @@ class LivePlayer(Sim):
         if self.hunt is None or plan is None:
             self.words = f"no runner for {self.block}"
             return "failed"
-        res = self.hunt.play(self, plan)
+        self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
+        try:
+            res = self.hunt.play(self, plan)
+        finally:
+            self._hunt_keys = frozenset()
+            self.world["sees_boss"] = None  # the runner's boss read: unknown outside it
         self._next = self.io.clock()
         self.t = self.io.clock() - self._t0
         if res.left:  # its own map exit: the map change it made is expected
             self._map_before, self._expect_until = self.world.get("map"), self.t + EXPECT_S
         self.read()
+        if self._hunt_halt is not None:  # a box event ended it (the runner's normal end ran)
+            halt, self._hunt_halt = self._hunt_halt, None
+            raise halt
         if res.error is not None:
             self.words = f"the hunt core ended: {res.error}"
             return "failed"
@@ -715,8 +770,95 @@ class LivePlayer(Sim):
     # -- events --
     def _fire(self, e: Any) -> None:
         super()._fire(e)
+        reading = self._reading_of(e)
+        self._readings[e.key] = reading
         self.rec.ev({"kind": "event", "event": e.key, "mode": e.handler.mode,
-                     "node": self.c.where(e.label).path or e.label})  # fmt: skip
+                     "node": self.c.where(e.label).path or e.label, "reading": reading,
+                     **({"in": "hunt"} if self._port is not None else {})})  # fmt: skip
+
+    def _reading_of(self, e: Any) -> dict[str, Any]:
+        """The values its conditions read when it fired (the record; the press's why)."""
+        h = e.handler
+        names = sorted({x.sensor for c in (h.when, h.until, h.rearm) if c is not None
+                        for x in ir.sub_exprs(c) if isinstance(x, ir.Sense) and not x.args
+                        and x.sensor not in live.HELPER_SENSORS})  # fmt: skip
+        world_key = {"current_map": "map", "position": "cell"}
+        return {n: self.world.get(world_key.get(n, n)) for n in names}
+
+    def _box_why(self) -> str:
+        """A box press's why in the runner's record: "box fly_away (hp_percent 80, sees_boss
+        True)" -- the event and the reading that fired it."""
+        key = self._playing or "?"
+        shown = ", ".join(f"{k} {v}" for k, v in (self._readings.get(key) or {}).items())
+        return f"box {key}" + (f" ({shown})" if shown else "")
+
+    def _play_sync(self, e: Any, gen: Generator[_Tick, str | None, str]) -> str:
+        saved, self._playing = self._playing, e.key
+        try:
+            return super()._play_sync(e, gen)
+        finally:
+            self._playing = saved
+
+    # -- stage 2: the box's events INSIDE the hunt core (its tick hook) --
+    def hunt_tick(self, view: Any, press: Callable[[str, str], str | None]) -> str | None:
+        """One runner tick (dungeon_hunt.HuntTick; the module docstring): the box's sensors from
+        it, its events by the engine's rules, every due body played NOW through ``press``. None:
+        the runner goes on; words: the run ends (the runner's normal end)."""
+        if self._hunt_halt is not None:
+            return self.hunt_halt_words()
+        keys = self._hunt_keys
+        if not keys:
+            return None
+        boss = None if view.quick else view.boss is not None  # quick: no Battle Log read
+        if view.hp_pct is None and not boss:
+            return None  # nothing to decide on: no HP read and no boss line
+        self.t = self.io.clock() - self._t0
+        changes: dict[str, Any] = {"hp_percent": view.hp_pct, "sp_percent": view.sp_pct,
+                                   "sees_boss": boss}  # fmt: skip
+        if not view.quick:
+            changes["is_dead"] = bool(view.dead)
+        self._set(changes, "world")
+        node_path, self._port = self.node_path, press
+        try:
+            for e in self._perceive(lambda x: x.key in keys):
+                self._fire(e)
+            self._preempt_now(keys)
+            self._run_inserts()
+        except _Halt as h:
+            self._hunt_halt = h
+            return self.hunt_halt_words()
+        finally:
+            self._port, self.node_path = None, node_path
+        return None
+
+    def _preempt_now(self, keys: frozenset[str]) -> None:
+        """The box's due PRE-EMPTS, each played to its end now (the runner it suspends is between
+        two of its own steps), in the queue's order: a ReleaseAll before its first batch (2.5 rule
+        4); `then` resume (live.hunt_plan refuses any other)."""
+        while True:
+            self.queue.sort()
+            i = next((j for j, q in enumerate(self.queue) if q[-1] in keys), None)
+            if i is None:
+                return
+            e = self._event(self.queue.pop(i)[-1])
+            if e is None:
+                continue
+            self._release(f"pre-empt by {e.key}")
+            self.preempts.append((len(self.out) - 1, e.label))
+            self._st(e.key).runs.append(self.t)
+            self.log.append((self.t, "preempt", e.key))
+            out = self._play_sync(e, self._handler_gen(e))
+            if out != "ok":
+                raise _Halt(out)
+
+    def hunt_halt_words(self) -> str | None:
+        """Why a box event ends the run inside the hunt core (None: none did)."""
+        h = self._hunt_halt
+        if h is None:
+            return None
+        if not self.words:
+            self.words = HUNT_HALT_WORDS.get(h.reason, f"a box event stopped the run ({h.reason})")
+        return f"the box: {self.words}"
 
     def _handler_gen(self, e: Any) -> Generator[_Tick, str | None, str]:
         if e.built_in:  # stage 1: the always-on safety events play as the SAFE END
@@ -725,6 +867,11 @@ class LivePlayer(Sim):
         return (yield from super()._handler_gen(e))
 
 
+HUNT_HALT_WORDS = {
+    "handler_runaway": "an event fired more often than its max_fires_per_10min without its stop "
+                       "holding, inside the hunt core: the run ends",
+    "insert_failed": "an inserted event failed inside the hunt core: the run ends",
+}  # fmt: skip
 BUILT_IN_WORDS = {
     "dead": "she died: the run ends and the death dialog is a person's (respawn plays live in "
             "stage 2)",

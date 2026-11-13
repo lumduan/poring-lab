@@ -137,6 +137,11 @@ def _literal(e: Any, env: dict[str, Any]) -> tuple[bool, Any]:
     return False, None
 
 
+def literal_value(e: Any, env: dict[str, Any]) -> tuple[bool, Any]:
+    """(is it known, its value): a literal, or a parameter bound to one (live.hunt_plan)."""
+    return _literal(e, env)
+
+
 def bind_literals(
     flow: ir.Flow, name: str, args: list[Any], kwargs: dict[str, Any]
 ) -> dict[str, Any] | None:

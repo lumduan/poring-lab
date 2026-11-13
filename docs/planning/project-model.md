@@ -264,6 +264,12 @@ knife_back F5. No login, character, geffen or Global node. It lints without an e
 data; with the zones provider). The login-start project above is kept as the TESTS' fixture
 `project_session.json` (the session path, Global and its overrides build on it); the sample is
 unchanged.
+➡️ **2026-11-14 (live-blocks.md stage 2, section 3.2):** the one box has a third tab, `survival`:
+the events `drink` (`hp_percent() < 30`, repeating until 31 %, an insert paced 0.7 s; calls heal)
+and `fly_away` (`sees_boss() or hp_percent() < 25`, a one-shot pre-empt re-armed 3 s after its Fly
+Wing; calls fly_wing). They play INSIDE the hunt core, where the runner's own potion, Fly Wing on
+HP and boss fly are then off. Its description now names the tabs (the Python view holds a string
+of at most 200 characters). Still 0 lint errors.
 
 ## 8. Not converted (Batt's answer 6)
 
