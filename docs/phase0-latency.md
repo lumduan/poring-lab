@@ -303,3 +303,14 @@ kicks Windows App back.
    the 10 trials, console vs Windows App.
 6. **Keep the recordings.** They are the ground truth the measured segments should add up to (the
    display scan-out, ~8–16 ms, is visible only here).
+
+## History: the README's "Next step: Phase 0" note (2026-09-29; moved here 2026-11-13)
+
+`scripts/ws_probe.py` already reports stream FPS and backend-side capture→encode→send latency
+(30.0 fps; capture→encode p50 ~11 ms; encode→send p50 ~0.6 ms on 2026-09-29). Phase 0 extends it:
+
+- **mss XShm grab rate at 1280×720,** measured in the backend and in vision.
+- **Motion-to-photon latency:** inject a key through the mux that toggles a large, fixed UI element.
+  Time it from the mux's `t_mono_ns` to the first changed pixel. Everything runs on one host clock.
+- **Codec comparison:** run the above for each `RDP_GFX` codec (autodetect/AVC444, `progressive`,
+  `off` = lossless legacy), and score fidelity against a lossless on-Windows screenshot.

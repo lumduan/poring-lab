@@ -38,14 +38,14 @@ How to read it:
 - `vision-worker` + the detect server (only with a GPU, section 9);
 - optional: `gamestream` (the Sunshine console path), `media-rec` (GPU video recordings).
 
-**Hardware** (bot-server is the reference; it runs everything below at once):
+**Hardware** (the lab's own host is the reference; it runs everything below at once):
 
-| Part | Reference (bot-server) | Recommended for a new host |
+| Part | Reference (the lab's host) | Recommended for a new host |
 |---|---|---|
-| CPU | Xeon E5-2609 v4, 8 cores, 1.7 GHz | 8 cores or more. RDP decode alone takes ~4.5 cores at 30 fps (progressive) |
+| CPU | a server CPU, 14 cores at 2.6 GHz (since 2026-11-13; before that, 8 cores at 1.7 GHz ran everything too) | 8 cores or more. RDP decode alone takes ~4.5 cores at 30 fps (progressive) |
 | RAM | 15 GiB | 16 GB minimum, 32 GB if you train. The vision worker is capped at 11 GB |
-| Disk | 128 GB SATA SSD + the NAS for long-term data | 256 GB SSD or more without a NAS. Images ~15 GB; recordings 0.84 GB/h (video) or 7-8 GB/h (PNG) |
-| GPU | Intel Arc A380 | Intel Arc (proven), or none (CPU detector). See section 9 for NVIDIA |
+| Disk | a 128 GB SATA SSD + a NAS for long-term data | 256 GB SSD or more without a NAS. Images ~15 GB; recordings 0.84 GB/h (video) or 7-8 GB/h (PNG) |
+| GPU | an entry-level Intel Arc card (8 Xe cores, 6 GB of its own memory) | Intel Arc (proven), or none (CPU detector). See section 9 for NVIDIA |
 | OS | Ubuntu 26.04.1 LTS, kernel 7.0 | Ubuntu 26.04 LTS. The Intel vision image is built FROM ubuntu:26.04, and its GPU runtime must match the host's kernel driver release |
 
 **Also needed:**
@@ -368,8 +368,8 @@ A host profile tells the guards what this machine has (`scripts/host_profile.py`
 
 | Profile | For | What it switches |
 |---|---|---|
-| `shared-nvidia` | the old VM 103: an RTX GPU beside Frigate and Ollama, a disk beside live quant capture | GPU sharing rules R1-R3 (they need Frigate's stats), the IO guard on capture cgroups, SET-hour gates for shipping, a 100 GB recorder floor; the CUDA vision image |
-| `dedicated-intel` | bot-server: the Arc A380, nothing else on the machine | no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor; the Intel vision image (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`: the render node, `PORING_ACCEL=xpu`, the worker capped at 11 GB) |
+| `shared-nvidia` | the old VM 103: an NVIDIA GPU beside Frigate and Ollama, a disk beside live quant capture | GPU sharing rules R1-R3 (they need Frigate's stats), the IO guard on capture cgroups, SET-hour gates for shipping, a 100 GB recorder floor; the CUDA vision image |
+| `dedicated-intel` | bot-server: an Intel Arc card, nothing else on the machine | no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor; the Intel vision image (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`: the render node, `PORING_ACCEL=xpu`, the worker capped at 11 GB) |
 | `dedicated-nvidia` | a new machine whose NVIDIA card is the lab's alone (ADR-0022 Amendment 2026-11-12). Never VM 103 | the same dedicated rules as `dedicated-intel` (no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor); the CUDA vision image and the NVIDIA reservation of `shared-nvidia`, GPU processes listed with `nvidia-smi`. Its overlays (`compose.nvidia.yaml`, `compose.vision-worker.nvidia.yaml`) change only the VRAM cap's default, 0.25 -> 1.0; the worker stays capped at 6 GB |
 
 **Which to choose:**
@@ -401,7 +401,7 @@ and in after the group change.
 **For an NVIDIA GPU (once; every step here is (unverified) on a dedicated host: the NVIDIA path ran
 only on the old VM 103):**
 - The NVIDIA driver, release **580 or newer**. The vision image is CUDA 13.0 (torch
-  `2.14.0+cu130`, the build with RTX 50-series sm_120 kernels); a CUDA 13.2 image refuses to start
+  `2.14.0+cu130`, the build with sm_120 kernels for the newest NVIDIA cards); a CUDA 13.2 image refuses to start
   on an R580 driver. `nvidia-smi` on the host must list the card and a `Driver Version: 580.` or
   newer.
 - The **NVIDIA Container Toolkit**, so that compose's `driver: nvidia` reservation works:
@@ -681,8 +681,8 @@ What changes is where the forward pass runs.
 | Hardware | Profile | Path | `--box-detector` | Measured | Status |
 |---|---|---|---|---|---|
 | no GPU | `dedicated-intel` (section 5) | the CPU detector: onnxruntime, 16 threads, in `/dev/shm/poring-lab-detector` | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
-| Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the A380 (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
-| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the RTX 5060 Ti, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified) |
+| Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the lab's entry-level Arc card (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
+| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the old host's NVIDIA card, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified) |
 | AMD | - | designed (ADR-0022), never built | - | - | not built |
 
 OpenVINO on the CPU measured ~10 % faster than onnxruntime on bot-server's CPU
@@ -696,25 +696,26 @@ behind it automatically. An NVIDIA card with `dedicated-nvidia` is the other GPU
 old VM 103 ran, not yet proven on a dedicated host. Without a GPU, the CPU detector works; it is
 slower and the runner's grab-to-click time grows with it.
 
-**Intel graphics built into the CPU** (asked by Batt 2026-11-12, e.g. a Core Ultra 7 265, LGA 1851):
-use `dedicated-intel` too. Nothing in the Intel path is tied to the A380:
+**Intel graphics built into the CPU** (asked by Batt 2026-11-12, a recent desktop Core Ultra):
+use `dedicated-intel` too. Nothing in the Intel path is tied to the lab's Arc card:
 - the overlay passes the render node;
 - OpenVINO runs on Intel's integrated GPUs;
 - the clock unit holds the GPU at ITS OWN highest clock (RP0, read from sysfs, not a fixed number).
 
 What to know:
-- **The model:** the F models (265F, 265KF) have NO built-in graphics.
-- **Speed (unverified):** the 265's built-in graphics has 4 Xe cores and shares system RAM. The A380
-  has 8 Xe cores and its own GDDR6. Expect it slower than the A380 but far faster than a CPU, and
+- **The model:** CPU models with an F in the suffix (F, KF) have NO built-in graphics.
+- **Speed (unverified):** a desktop Core Ultra's built-in graphics has about 4 Xe cores and shares
+  system RAM. The lab's Arc card has 8 Xe cores and its own GDDR6. Expect it slower than the card
+  but far faster than a CPU, and
   measure it with the 45-s serve test (section 9's run block).
 - **RAM:** the GPU borrows system memory. 32 GB is comfortable, 16 GB the minimum.
-- **The OS:** Arrow Lake needs a recent kernel and Intel compute runtime. Ubuntu 26.04 (as
+- **The OS:** a recent Intel chip needs a recent kernel and Intel compute runtime. Ubuntu 26.04 (as
   bot-server) is the safe choice (unverified on that chip).
 - **Training:** training on it (torch-xpu) is unverified. Detection through OpenVINO is the solid
   part.
 - **Not used yet:** its NPU (AI Boost). OpenVINO can target it, but the code does not yet.
-- **The fallback:** its CPU is much stronger than bot-server's Xeon E5-2609 v4, so even the CPU
-  detector runs faster than the 110-126 ms measured here.
+- **The fallback:** a recent desktop CPU is much stronger per core than the lab's server CPU, so
+  even the CPU detector should run faster than the 110-126 ms measured here (unverified).
 
 **Which model a map uses (`scripts/unit_detector.py`):**
 - `MAP_MODELS`: the map's own deployed model. Today only xmas_dun02:
@@ -732,7 +733,7 @@ What to know:
 **Where the files come from:** never git. Batt's NAS keeps the deployed ONNX files in
 `archive/models/` (with `SHA256SUMS`) and the training runs in `archive/train/`; the CPU detector's
 copies go in `/dev/shm/poring-lab-detector/model/` with their `.names.json`. Without the NAS:
-Batt's private copy, or retraining (the README's training section,
+Batt's private copy, or retraining (the training steps in docs/development.md;
 docs/planning/xmas02-detector.md).
 
 **THE RULE for a new model** (xmas02-detector.md O25, after p84's refused start, 2026-11-12):
@@ -782,7 +783,7 @@ eval "$(.venv/bin/python scripts/unit_detector.py serve-cmd --seconds 1800)"
 sudo install -m 755 scripts/host/poring-lab-gpu-clock.sh /usr/local/libexec/poring-lab-gpu-clock.sh
 sudo install -m 644 scripts/host/poring-lab-gpu-clock.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now poring-lab-gpu-clock.service
-cat /sys/class/drm/card*/gt_min_freq_mhz      # 2450 on the A380
+cat /sys/class/drm/card*/gt_min_freq_mhz      # 2450 on the lab's Arc card
 ```
 
 (The unit runs `/usr/local/libexec/poring-lab-gpu-clock.sh`, so the `.sh` goes in first; the unit's

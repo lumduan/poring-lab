@@ -2,7 +2,7 @@
 
 Next.js 16 (App Router, TypeScript, Tailwind 4), pnpm via corepack. One page: the live RDP view on a
 canvas, a separate overlay canvas for detection boxes, the HUMAN / ASSIST / BOT mode switch, and an
-FPS / latency panel. See the repository `README.md` for the whole system.
+FPS / latency panel. See the repository `README.md` (the quick start) and `docs/README.md` (the docs index) for the whole system.
 
 ```bash
 corepack pnpm install

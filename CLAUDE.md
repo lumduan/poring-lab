@@ -5,8 +5,9 @@ environments** ([ADR-0006](docs/adr/0006-sanctioned-test-environments.md)):
 - the self-hosted rAthena in this repo, on the LAN, for controlled ground truth;
 - a community bot-testing server, for multi-party social research.
 
-Official servers and every other public server are forbidden. Start with `README.md` (topology,
-ports, quickstart) and `docs/adr/`.
+Official servers and every other public server are forbidden. Start with `README.md` (the quick start),
+`docs/README.md` (the docs index: the topology in `docs/architecture.md`, every port in
+`docs/services-and-ports.md`) and `docs/adr/`.
 
 ## Hard rules (never break these)
 
@@ -340,8 +341,9 @@ ports, quickstart) and `docs/adr/`.
 - **In dev mode, bring core services up with `guarded_build.py start:<svc>@<s>`**, never `up:`
   (refused: it would recreate backend/desktop without their mounts).
 - **FreeRDP is major 3**: **3.32.1** from trixie-backports since 2026-10-01 (Arm C). `xfreerdp3` is a link
-  to `xfreerdp`, and the rollback image is `poring-lab/desktop:freerdp-3.15`. Use 3.x flag syntax only (see the README
-  table). Credentials go through `/args-from:stdin`, never argv.
+  to `xfreerdp`, and the rollback image was `poring-lab/desktop:freerdp-3.15` (➡️ removed 2026-10-23; a rollback
+  now rebuilds 3.15 from git, docs/operations/freerdp-315-rollback.md). Use 3.x flag syntax only (see
+  the table in `docs/troubleshooting.md`). Credentials go through `/args-from:stdin`, never argv.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
@@ -672,7 +674,11 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
 
 ## Docs to keep in sync
 
-- `README.md`: ports, services, troubleshooting, when any of them change.
+- `README.md`: SETUP ONLY (Batt 2026-11-13): what you need, the quick start (it mirrors
+  `docs/setup/new-lab-host.md` section 6), configuration, the ports summary. Everything else lives in
+  `docs/` (index `docs/README.md`). No hardware model names in the README or the setup docs.
+- `docs/services-and-ports.md` (services, profiles, ports), `docs/console.md` (the console's pages),
+  `docs/troubleshooting.md`: when any of them change.
 - `.env.example`: every variable `compose.yaml` reads.
 - `docs/adr/*`: when a decision changes, supersede it explicitly (a new ADR plus a pointer in the old
   one); don't silently edit history.

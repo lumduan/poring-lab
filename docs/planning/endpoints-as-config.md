@@ -158,6 +158,8 @@ becomes config-driven** (a-e), **code or doc**.
 | D14 | runbooks: `docs/operations/sunshine-msi-replace.md:10, 73, 85, 95, 110, 132, 138` (Sunshine's peer); `docs/operations/nas-sink.md:36, 62, 94-96` (NFS exports to the VM) | R2 procedures | R2 | out of the store's scope; change only if the bot host moves | none |
 | D15 | `config/environments.yaml` header lines 4-7 ("lab host + loopback only") and 14-20 (ADR-0021 D16) | config comments | R1 | **(c)**: point to the generated group and to Settings | on acceptance (a config file: not touched now) |
 
+➡️ **2026-11-13: the root README was split** (Batt: the README for setup only, the rest in `docs/`). The README lines cited in D3-D7 (numbers as of 2026-10-09) now live in: D3, `docs/services-and-ports.md` (the `:8001` row); D4, `docs/architecture.md` (the topology) and `docs/services-and-ports.md` (the ports; the README keeps a short ports table with `HOST_LAN_IP`); D5, `docs/setup/windows-lab-host.md` step 2 ("point at `HOST_LAN_IP:6900`"); D6, `docs/troubleshooting.md`; D7, `docs/console.md`. The inventory's decisions are unchanged.
+
 ### 3.4 Outside the repo (from the records; not inspected here)
 
 | # | Where | What | Role | How | Who |

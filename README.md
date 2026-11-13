@@ -1,658 +1,100 @@
 # poring-lab
 
-Private research lab for a **vision-based Ragnarok Online agent**. There are exactly two sanctioned
-environments ([ADR-0006](docs/adr/0006-sanctioned-test-environments.md)):
-- a self-hosted rAthena server on the LAN, for ground truth;
-- a community bot-testing server, for multi-party social research. It stays manual-only until its
-  permission evidence is recorded and the environment interlock exists.
+A lab for a **vision-based Ragnarok Online bot** that you run on your own rAthena server, on your
+own LAN. The bot sees the game **only through pixels** and plays **only through mouse and keyboard**:
+no memory reading, no packet injection. Packet capture is used offline, as ground truth.
 
-Official and other public servers are forbidden.
+**Documentation: [docs/README.md](docs/README.md)** (the console, the architecture, troubleshooting,
+the research). The full setup manual is [docs/setup/new-lab-host.md](docs/setup/new-lab-host.md).
 
-**Licence** ([ADR-0018](docs/adr/0018-component-licensing.md)):
-- Apache-2.0 (`LICENSE`) for everything except `services/vision`;
-- AGPL-3.0-only (`services/vision/LICENSE`) for `services/vision`, which imports ultralytics.
-- The repository is private for now. Third-party work and its terms are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+> **Where the bot may play.** Only on game servers you allow on the console's Settings page, and
+> only with the server owner's permission. Official servers are forbidden. See
+> [ADR-0006](docs/adr/0006-sanctioned-test-environments.md) and
+> [ADR-0023](docs/adr/0023-learner-mode.md).
 
-> **Core principle.** The agent perceives the game **only through pixels** and acts **only through
-> mouse and keyboard**. There is no memory reading and no packet injection. Packet sniffing is allowed
-> later, and only as **offline** ground truth for evaluating perception.
+## What you need
 
-This repository is the **scaffold**: containers, wiring, health checks, the environment contract,
-a minimal stream/input round trip, and the input mux. Detection, policy, training, packet decoding,
-humanization and LLM integration are clearly marked TODOs.
+- **A Linux server** for the bot and the game server: Ubuntu 26.04 LTS, 8 or more CPU cores, 16 GB
+  RAM (32 GB to train), an SSD with 256 GB or more. A GPU is optional (an Intel Arc or NVIDIA card)
+  and makes the detector faster; without one, the CPU detector runs.
+- **A Windows PC** on the same LAN, for the game client only, with a fixed address.
+- **A third computer with a browser** for the console. The Settings page refuses writes from the
+  server and from the game PC.
+- **A Ragnarok Online client** that matches the server's `PACKETVER` (`20211103` by default, in
+  `.env`). It is not included, and client files are never committed.
 
-## Topology
+## Quick start
 
-```
- Windows host (OptiPlex 3090)                     Ubuntu Docker host (HOST_LAN_IP)
-┌────────────────────────────────┐               ┌────────────────────────────────────────────────────────────────┐
-│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /size (no WM) ─► Xvfb :99 canvas 1920x1200 │
-│   └─ RO client                 │ ◄──────────── │           x11vnc (view-only) ──► noVNC :6080                   │
-│        │                       │  exactly one  │                                     │ /tmp/.X11-unix (volume)  │
-│        │ game traffic          │               │              ┌──────────────────────┴────┐                     │
-│        │ 6900 / 6121 / 5121    │               │              ▼ grab (ro)                 ▼ grab (ro)           │
-│        └────────────────────── │ ──────────►   │ rathena      backend :8000               vision (GPU)          │
-│                                │               │  login       JPEG stream                 grab → infer →        │
-│                                │               │  char        INPUT MUX ◄─────────────    decide → act          │
-│                                │               │  map          └─► XTest                  (:8001, internal)     │
-│                                │               │   │          (the only input writer)                           │
-│                                │               │   ▼          ▲ /ws/input   │ /ws/stream                        │
-│                                │               │  db          │             ▼                                   │
-│                                │               │              frontend :3000 ◄──► your browser                  │
-│                                │               │  sniffer (ADR-0007, rathena's netns) ─► captures + /ingest     │
-└────────────────────────────────┘               └────────────────────────────────────────────────────────────────┘
-```
+The full steps, with a check and a fix for each, are in the
+[setup manual](docs/setup/new-lab-host.md). In short:
 
-- Pixels flow Windows → RDP → `xfreerdp3` → Xvfb framebuffer, and `backend` grabs them for the
-  browser stream. Input flows browser/agent → **backend mux** → XTest → Xvfb → `xfreerdp3` → RDP →
-  Windows. The mux is the only writer (ADR-0002).
-- **The bot's path is S2** (ADR-0014; the diagram above predates it): Sunshine on the Windows
-  console → the `gamestream` S2 client decodes once → the shared-memory **frame bus** → backend
-  (human view) and **vision** (the bot). The mux's input goes to the S2 client over a unix socket.
-- **vision has no X at all** (ADR-0005 closed, option c2, 2026-10-04):
-  - no `x11-unix` mount; it reads the bus only;
-  - it lives ONLY on the internal `agent` network (`10.210.97.0/24`, `internal: true`, gateway
-    isolated), shared with the backend alone;
-  - the backend refuses that subnet on every listener but `:8001`. So the bot's one way in is
-    `/internal/agent` → the mux, and it can reach neither the LAN, the host nor the internet.
-- **Datasets** (ADR-0010, ADR-0024): `scripts/record_session.py` records H.264 by default on
-  console (the S2 client's own bitstream, an IDR every 1 s, ~2.5 GB/h; Batt 2026-10-04) and, on
-  rdp, GPU-encoded HEVC video (`vpp-hevc444-10-q20`: 10-bit 4:4:4, CQP 20, all-intra, lossy;
-  ~0.84 GB/h at 1 fps; Batt 2026-11-09) through the `media-rec` sidecar, which must be up
-  (`guarded_build.py start:media-rec@60`; without it the recording is refused). Lossless PNG
-  stays selectable (`--format png --fps 1`, either backend) and is required by the studies that
-  fit pixel cues. `scripts/dataset_ship.py ship` moves sessions to the NAS;
-  `scripts/dataset_check.py` then verifies every H.264 frame against the live checksums, or decodes
-  every video frame alone; `poring_dataset.h264` reads H.264 and `poring_dataset.frames` reads PNG
-  and video sessions for every other reader (`scripts/qa_export.py` reads all three).
-- **The environment interlock** (ADR-0016) gates the mux's BOT presses:
-  - the environments are user-managed on the Settings page (seeded once from
-    `config/environments.yaml`);
-  - the sniffer's attestation must say a lab account's session is live;
-  - or, in ASSIST only, a bounded operator window is open (`scripts/capture_backend.py window`).
+1. **Set Docker's address pool BEFORE installing Docker**, so Docker never takes a 192.168.x range
+   from your LAN, then install Docker (manual, section 1).
+2. **Get the code** (manual, section 2):
 
-  `/health.environment` shows its state.
+   ```bash
+   git clone https://github.com/lumduan/poring-lab.git
+   cd poring-lab
+   uv sync
+   git config core.hooksPath .githooks
+   ```
 
-## Services and profiles
+3. **Create `.env`** (manual, sections 3 and 5): random secrets, and `HOST_LAN_IP` from the
+   default route. Then set your host profile: `dedicated-intel` for an Intel Arc card or no GPU,
+   `dedicated-nvidia` for an NVIDIA card.
 
-| Service | Profile(s) | What it is |
-|---|---|---|
-| `db` | core, sniffer | MariaDB 11.8 LTS, named volume, never published |
-| `rathena` | core, sniffer | login/char/map built from a pinned commit with `PACKETVER` (20211103, pre-renewal). The image ships the runtime tree as ONE tar, extracted into a 192m tmpfs on every start (~78 MiB). It renders `conf/import/*.txt` from `.env`, imports the schema on first start, and upserts the optional test account. Thai: tis620 end to end. |
-| `desktop` | remote | Xvfb + the ONE `xfreerdp3` session + view-only x11vnc/noVNC, under supervisord. CPU: low weight (`cpu_shares: 64`) and an 8-core ceiling, because xfreerdp's software decode takes 7-15 cores in full-scene motion. |
-| `backend` | remote | FastAPI: screen stream, input mux, JSONL input log, internal agent API |
-| `frontend` | remote | Next.js console: video canvas, overlay canvas, mode switch, FPS/latency |
-| `vision` | vision | GPU agent loop skeleton (torch 2.14 cu130 + ultralytics), `scripts/check_gpu.py` |
-| `sniffer` | sniffer | ADR-0007 packet ground truth, offline/human-console only, plus the ADR-0016 session ATTESTATION (yes/no + account id + age, never world data). Its own slim image (`poring-lab/sniffer:local`): a `poring_packets` change needs a guarded `build:sniffer` + `recreate:sniffer`. Root with only `NET_RAW`, read-only rootfs. Writes pcapng (password bytes zeroed) + `events-*.jsonl.gz` to the `captures` volume (hourly / 256 MB; 7 days / 20 GB) and feeds `/ingest/packets`. Needs `scripts/gen_packet_tables.py` run once (the length table is build-time generated, never committed). |
+   ```bash
+   scripts/init_env.sh
+   getent group render                 # the third field is the gid
+   uv run python scripts/rotate_secrets.py set LAB_HOST_PROFILE=dedicated-intel RENDER_GID=<gid> VISION_MAX_VRAM_FRACTION=1.0
+   ```
 
-| `gamestream` | gamestream | ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows **console** session in the same Xvfb :99 (input from the mux's XTest, absolute mouse). Streams only while the capture-backend lock says `console`; idles under `rdp`. Read-only rootfs, AppImage unpacked into tmpfs, pairing key in the `gamestream-state` volume (mounted here only). |
+4. **Build and start** (manual, section 6). Every build and start goes through
+   `scripts/guarded_build.py`:
 
-| `db-th`, `rathena-th`, `sniffer-th` | th | **The Thai-data experiment (Batt, 2026-10-05; ADR-0006 environment 1b):** a SEPARATE rAthena with the same image, SHA and pre-renewal mode; its own database (`db-th-data`) and captures (`captures-th`); a map cache generated from the Thai client's GRF by rAthena's own tool (`scripts/gen_mapcache_th.py` → `data/mapcache-th/`, never committed), installed as `db/import/map_cache.dat`. **One at a time with `rathena`:** the same pinned IP and LAN ports, so Docker refuses to start both. Its sniffer attests `server=lab-rathena-th` (ADR-0016 amendment). Its client is the separate copy `C:\RO-rAthena-th\` (`ro_agent.py --profile th`). |
+   ```bash
+   python3 scripts/guarded_build.py build:rathena pull:db build:backend build:desktop
+   python3 scripts/guarded_build.py target:rathena:build:poring-lab/rathena-build:local
+   python3 scripts/guarded_build.py tables && uv run python scripts/gen_mapcache.py
+   python3 scripts/guarded_build.py build:sniffer
+   python3 scripts/guarded_build.py start:db@120 start:rathena@240
+   scripts/smoke_test.sh --core        # must print: SMOKE TEST (--core) PASSED
+   uv run python scripts/capture_backend.py init
+   python3 scripts/guarded_build.py start:backend,desktop@90
+   python3 scripts/guarded_build.py start:sniffer@120
+   python3 scripts/guarded_build.py start:frontend-dev@120
+   ```
 
-| `media-probe`, `media-recbench`, `media-rec` | probe, recbench, mediarec | The GPU recording plan ([docs/planning/gpu-recording.md](docs/planning/gpu-recording.md); bot-server's Arc only): the media-probe image (iHD + ffmpeg 8; no network, a read-only root, the DRM render node only). `media-probe` and `media-recbench` are one-shot evidence runs; `media-rec` is the RDP recordings' encoder sidecar (ADR-0024: the video IS the recording by default; stage 2's `--also-png` adds the PNG twin), idle until `record_session.py --backend rdp` feeds it raw frames through one named pipe in `/dev/shm/poring-lab-mediarec` (sections 9.1, 9.4). Started and removed only by `guarded_build.py` (`start:media-rec@60`, `rm:media-rec`). |
+5. **Open the console** at `http://HOST_LAN_IP:3000` from your third computer. It always starts in
+   HUMAN mode; only a person switches it to ASSIST or BOT.
+6. **Set up the Windows PC and its game client** (manual, section 7), then choose the detector
+   (section 9).
 
-`sniffer` shares rathena's network namespace, so `--profile sniffer` brings `db` and `rathena` up with it.
-To switch to the Thai-data server and back (stop needs no guard; start does):
+## Configuration
 
-    scripts/dev.sh --profile sniffer stop sniffer rathena
-    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db-th,rathena-th,sniffer-th@240
-    # ... and back:
-    scripts/dev.sh --profile th stop sniffer-th rathena-th
-    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:rathena,sniffer@240
-`vision` works on its own, but it has nothing to look at until `remote` runs.
+- Every setting comes from **`.env`**; [`.env.example`](.env.example) lists them all.
+- Host-specific changes go in **`compose.override.yaml`** (gitignored). A `git pull` never
+  overwrites `.env`, `compose.override.yaml`, `settings/` or `data/` (manual, section 4).
+- `LAB_HOST_PROFILE` describes your machine: a dedicated host with an Intel or NVIDIA GPU, or a
+  host shared with other services (manual, section 5).
 
 ## Ports
 
-| Host bind | Service | Purpose | Exposure |
-|---|---|---|---|
-| `HOST_LAN_IP:6900` | rathena | login server | LAN |
-| `HOST_LAN_IP:6121` | rathena | char server (advertises `HOST_LAN_IP`) | LAN |
-| `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
-| `HOST_LAN_IP:8888` | rathena | web-server (`RATHENA_WEB_SERVER=true`): the client's account / character UI settings and emblems over HTTP, at its `AssistAddr` (2026-11-05). Its load routes are **unauthenticated** upstream | LAN |
-| `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
-| `HOST_LAN_IP:8000` | backend | `/health`, `/hardware` (the host's CPU/RAM/GPU/temps/power; this listener only), `/economy/*` (the economy dashboard's exports, read-only; this listener only), `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
-| `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
-| — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose networks only (`default` + the internal `agent` network) |
-| — (`:3306`) | db | MariaDB | compose network only |
-| — (`:5900`) | desktop | x11vnc | inside the container only |
-| outbound → `WIN_HOST:3389` | desktop | the single RDP session | LAN |
-
-**Security:**
-- Everything published binds to `HOST_LAN_IP`, never `0.0.0.0`.
-- **noVNC has no authentication.** It is view-only by default (`NOVNC_VIEW_ONLY=true`).
-- The backend's browser WebSockets require an `Origin` listed in `FRONTEND_ORIGINS`. The `/transfer`
-  routes and clipboard paste additionally require one to be *present*, so scripts and the agent can't
-  use them.
-- The agent API is not published at all. The agent's own network (`agent`, internal) reaches only
-  the backend, and the backend refuses it on `:8000` (`/health.agent_network_refused`).
-- Host scripts address the backend by its DEFAULT-network IP (`scripts/backend_addr.py`): with two
-  networks, a `{{range .Networks}}` template concatenates both addresses.
-- Keep all of this on a trusted LAN.
-
-## Web console now (no image builds): `frontend-dev`
-
-The console runs as a dev server with **no image
-builds and no disk-heavy writes** (`compose.dev.yaml`, driven by `scripts/dev.sh`):
-
-- `backend` runs its source straight from the host, mounted read-only and put first on `PYTHONPATH`.
-  Picking up code changes is a restart, not a rebuild.
-- `frontend-dev` runs `next dev` on the local `node:24.17.0-slim` image (no pull):
-  - the source is mounted read-only at `/src`, then copied into tmpfs and kept in sync;
-  - tmpfs caps: `/app` 2 GiB (`node_modules` + pnpm store), `/app/.next` 1 GiB, `/tmp` 256 MiB;
-  - `mem_limit` 3.5 GiB, read-only rootfs, core dumps off.
-
-```bash
-python3 scripts/guarded_build.py --sustain 30 --spike 25 start:backend,frontend-dev@60   # start (desktop keeps RDP)
-python3 scripts/guarded_build.py --sustain 30 --spike 25 restart:backend@30   # pick up backend / poring_env code changes
-scripts/dev.sh logs -f frontend-dev           # dev server output
-scripts/dev.sh stop frontend-dev              # console off
-```
-
-Open **http://192.168.1.228:3000** (`HOST_LAN_IP`; bot-server since the 2026-11-07 cutover, docs/planning/bot-server-cutover.md). What it gives you:
-- **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
-- **Input:** click the screen to give it keyboard focus. That focus lives in a hidden textarea, so
-  ⌘V pastes your clipboard into Windows (ADR-0004). Leaving it, or hiding the tab, releases
-  everything held. It sends that release only while something IS held, and a closed tab holding
-  nothing submits nothing: in ASSIST any human event takes the lease and makes the bot let go
-  (Batt, 2026-10-07).
-- **Toolbar:** Ctrl+Alt+Del (sent as Ctrl+Alt+End, RDP's secure-attention mapping), Win, Alt+Tab, Esc,
-  Release keyboard, Secret typing, and **Watch only**.
-  - Watch only forwards no input at all from this tab: no mouse, keys, wheel or paste.
-  - So the bot keeps control in ASSIST while you watch; the mux mode is unchanged and switching to
-    HUMAN still works.
-  - Turning it on first releases what the tab holds. Off restores instant takeover, and every
-    page load starts with it off.
-  - An amber WATCH ONLY chip shows on the screen and in the header.
-- **Top bar (every page):** Console / Flows / Maps / Settings / Hardware / Economy (Label QA left the
-  bar 2026-11-10; `/qa` remains), and the **mode badge**, always
-  visible: **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no
-  status.
-- **Hardware** (`/hardware`, Batt 2026-11-08): the lab host's CPU (total and per core, MHz, load),
-  memory, `/dev/shm` against rule 7's 4 GB, root-disk free space, the GPU (busy from RC6 residency,
-  temperature, power against its limit, clocks, fan), every hwmon temperature, and power (the whole
-  server from the iLO power meter, the GPU, the CPU package), with 10-minute sparklines.
-  - The backend samples plain `/proc` + `/sys` files every 2 s in a worker thread
-    (`poring_backend/hardware.py`) and serves `GET /hardware` on `:8000` only; `:8001`, the agent's
-    listener, answers 404 (counted in `/health` `dropped_messages.hardware_http`).
-  - A sensor it cannot read shows `n/a:` and the reason (e.g. the CPU package's RAPL counter is
-    root only on the host and masked in containers; i915 has no unprivileged VRAM figure). The
-    host's `/dev/shm` is not mounted in the backend, so it shows `n/a` there unless
-    `HARDWARE_SHM_PATH` names a path on it. A sample older than 6 s is marked STALE.
-- **Economy** (`/economy`, Batt 2026-11-11): banked runs' business results at fixed NPC prices (course
-  material too): Income (picked / stolen / total per item, an editable NPC sell price, Overcharge),
-  Kills per species, Drops of our kills, Consumables (an editable NPC buy price, Discount) and the
-  P&L per hour (gross, cost and net, plain and "best").
-  - A run shows only after it is exported: `scripts/econ_dash.py export SESSION_DIR ... --name NAME`
-    writes `data/econ/dashboard/NAME.json`; the backend serves it read-only (`GET /economy/list`,
-    `GET /economy/data/NAME`, `:8000` only). Formulas and checks: `docs/econ/economics.md` section 10.
-  - The runs' counts can also live in one local SQLite file, `data/econ/lab.sqlite`
-    (`scripts/econ_db.py build / update / export / dashboard`, ADR-0025). The page still reads
-    the JSON exports.
-  - Edited prices stay in the browser (localStorage) and are never sent to the server.
-- **Route preview** (2026-10-08): the LIVE, world-anchored route of every walk run: a green line
-  from the character's feet with square corner nodes, a box on the next click and arrows
-  converging on the goal (the RA2 look), re-projected about 20 times a second and matched to the
-  frame on screen.
-  - The rule publishes its plan in map cells (`scripts/route_plan.py`). The previewer daemon
-    (`scripts/route_previewd.py`, started by the first route, one at a time) draws it, and exits
-    after 30 idle minutes. Its log: `/dev/shm/poring-lab-route/previewd.log`.
-  - The one-shot plan picture (walk@8-12, screen pixels) is gone: it floated off the character
-    as the camera scrolled (Batt, 2026-10-08). The protocol refuses a `RoutePreview` without
-    `live: true`.
-  - Display only (a `RoutePreview` the backend relays like detections, never to the mux).
-- **Operator HUD** (2026-10-08; the **HUD** toolbar toggle, per tab, off on every load): the rule's
-  detector boxes (class, confidence, distance in cells), its locked target and countdown, the work
-  zone, the walk vector, counters, and a short plain-words log in a panel under the stream. Display
-  only (an `OperatorHud` the backend relays to viewers, never to the mux); see docs/phase4-ui.md.
-- **Header:** mode switch (the same colours) and ASSIST lease. **Panel:** stats. A banner shows if
-  the stream or RDP is down, and when bot typing was just refused because the game window was not
-  in front.
-
-**Workstation alternative:** run the console on your own machine against this backend.
-1. Add your browser's origin to the backend allowlist in `.env`:
-   `FRONTEND_ORIGINS=http://192.168.1.228:3000,http://localhost:3000`
-2. Apply it: `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:backend@30`.
-3. Run the console:
-
-```bash
-cd services/frontend && corepack pnpm install
-BACKEND_PUBLIC_URL=http://192.168.1.228:8000 corepack pnpm dev    # open http://localhost:3000
-```
-
-`FRONTEND_ORIGINS` is the backend's WebSocket Origin allowlist: comma-separated, and unknown origins are
-refused. It defaults to `http://${HOST_LAN_IP}:3000`. Stream rate and quality are `STREAM_FPS` (30) and
-`JPEG_QUALITY` (80). The stream is sent without WebSocket compression: JPEG doesn't compress, and
-deflate cost 8 fps on the event loop.
-
-**Latency (Phase 0, [docs/phase0-latency.md](docs/phase0-latency.md)).** The stream grabs when the
-screen changes (`STREAM_CAPTURE=damage`, at most `STREAM_MAX_FPS=60`); `fixed` restores the old
-`STREAM_FPS` grid. `/health` has a `latency` block:
-- capture/encode/send;
-- the open tab's network, decode and paint times, with the clock-offset uncertainty.
-
-`scripts/latency_probe.py` (inside the backend container) measures the segments and switches the
-knobs live through the loopback-only `/debug/stream-tuning`: `capture`, `max_fps`, `jpeg_quality`,
-and the console's `paint` and `move_interval_ms`.
-
-## Typing a password through the console: "Secret typing" (ADR-0004 amendment c)
-
-The input log records every human key with its code, so **turn on "Secret typing" in the toolbar
-before typing or pasting a password**.
-- Keys still reach Windows; the log keeps type and timing only, and a paste no length or digest.
-- The button turns red for every viewer (`Status.human_secret`).
-- It turns off on click, or when that console tab disconnects.
-- Older human typing was purged on 2026-10-02 (`scripts/purge_input_log.py`; counts only).
-
-## Clipboard and file transfer (human-only, ADR-0004)
-
-Both are **off by default**. For this lab `.env` sets:
-
-```bash
-RDP_CLIPBOARD=text-to-remote   # off | text-to-remote  (text Mac -> Windows only; never Windows -> X)
-RDP_DRIVES=transfer            # "" | transfer        (\\tsclient\transfer in Windows)
-```
-
-Applying a change reconnects the RDP session once, because desktop and backend are recreated together:
-`python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop,backend@90`.
-
-- **Paste to Windows:** click the target field in the remote screen, then press **⌘V** there, as
-  in Windows App.
-  - Off macOS the paste chord is Ctrl+V; Shift+Insert works everywhere.
-  - On a Mac, physical Ctrl+V still reaches Windows as Ctrl+V (Windows-internal paste).
-  - A toast on the screen shows the result.
-  - The "Paste to Windows" panel stays as a fallback: paste into its box, check it, then Send (⌘Enter).
-  - Up to **64 KiB** of UTF-8; Thai is fine. It works over plain HTTP: the page uses the `paste`
-    event, not `navigator.clipboard`.
-  - The backend owns the X clipboard for about a second, the mux sends Ctrl+V as the human, and then
-    it lets go. Windows keeps no copy.
-  - Refused in BOT mode, and only accepted from the console page.
-  - Logged as length + sha256, never the text.
-- **Files ⇄ Windows** (console panel):
-  - Uploads land in `\\tsclient\transfer` (Win+R in Windows).
-  - Whatever Windows saves there can be downloaded from the panel.
-  - A **512 MiB tmpfs** (RAM, never the disk), emptied when desktop and backend stop.
-  - **Large files such as a multi-GB game client: use SMB or a direct download on Windows**, not
-    this.
-  - Audited in `data/transfer_log/` (name, size, sha256).
-- The bot can use neither. The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert, the agent protocol
-  has no such messages, and a watchdog clears any foreign X clipboard owner. The remaining gap (vision
-  can still reach X directly) is [ADR-0005](docs/adr/0005-vision-x-access.md), which blocks Phase 4.
-
-## Settings: the game servers the bot may use
-
-Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
-- **Environments** are game services you manage yourself: **Allowed** (the bot may act while the
-  game is connected to one of its servers), **Forbidden** (never; its servers can never be allowed
-  anywhere) or **Pending** (not approved). Create, rename and delete them, and edit their server
-  lists, on the page. The shipped ones (official Thai, official Korean, the community server, the
-  lab's rAthena) are only a starting set.
-- **Found by the lab:** servers your game client is set up for. They are suggestions until you
-  press **Confirm** (or **Confirm all** for one server's ports). Every save is checked by reading
-  the file back ("Saved and checked ✓").
-- **Blocking is easy; unblocking is hard.** Removing a forbidden server, deleting a Forbidden
-  environment, or making it Allowed needs a written reason and the name typed again, one change at
-  a time.
-- **Find servers from a game file:** drop a `data.grf`, `clientinfo.xml` / `sclientinfo.xml`, an
-  `externalsettings` .lub or the game's .exe on the page.
-  - It is read in your browser only, and never uploaded. Encrypted parts are skipped, not
-    decrypted. A protected exe says so: drop its `data.grf` instead.
-  - You pick what to do with each server found. The default is to **block** it; allowing is a
-    separate, deliberate choice with a warning for anything outside your network.
-- **Share a setup:** export the whole set as one file, and import it elsewhere (same rules).
-- **Change history:** every save and every refused attempt, with the browser's address.
-- **Who can change it:** only a person in a browser on your network, on another computer. The bot
-  can read the list but never change it. The lab computer itself and the game PC the bot drives
-  are refused too; every save carries a CSRF token and is rate limited.
-- The set lives in `./settings/` (gitignored, mounted into the backend only); see ADR-0016.
-
-## Flows: block programs, SIMULATE only (MW2, 2026-10-08)
-
-Open `http://<host>:3000/flows` (Flows in the top bar). The page edits ADR-0020's flow IR.
-
-**Maps** (`http://<host>:3000/maps`, Maps in the top bar, 2026-11-10): the same flow as a graph of maps:
-START -> Login -> Choose character (MOCKS: only the lab rAthena is selectable, no credential field)
--> the map nodes, each bound to its own flow ("Open flow" opens its /flows tab; /flows' `Map` picker
-names the bound map). Simulate plays the bot on each map's walk grid: walks, seeded monsters, NPC
-talks, warps ([docs/planning/world-map-flows.md](docs/planning/world-map-flows.md)). A map's walk
-grid needs its GAT in `data/gat` (`scripts/flows_gat.py`, client-derived, gitignored).
-➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
-matpilot are at home), in matpilot's colours, light or dark as the system is
-([docs/planning/flows-studio.md](docs/planning/flows-studio.md)): a header (Blocks | Python, Load,
-Save, Start over, the green **Simulate**), tabs over the blocks (`main` and `events`; a workflow
-adds a **Map** tab with the canvas below and one tab per map block), the **Python beside the
-blocks** (open by default on a wide screen), output panes in a drawer (Inspect, Lint, Results,
-Path map, Hunt rules), the problems under the blocks and a status line. The **trained models** are
-Sensors blocks ("detector v1 sees monster", "detector xmas02 count of cookie xmas"; ADR-0020
-Amendment B); a not-adopted model is never offered.
-- **Canvas:** map blocks joined by typed exits (walk exit, NPC warp, item warp; the death respawn
-  is derived from the save point), the global and per-map events, a lint / run line under each.
-  Draw an exit from a port onto another block; double-click a block for its blocks.
-- **Blocks:** Blockly (MakeCode look). Each skill block shows its L1 verification badge (verified
-  RDP / S2, unverified), its lint findings and its last simulated run.
-- **Lint, Simulate, JSON, Python:** MW1's linter; a simulated run against static data (the
-  synthetic sample sheets, or the lab's own data/kb) with a scenario you choose; JSON import /
-  export (➡️ Save and Load, below); the Python view, read-only.
-- **Save and Load (2026-11-12, the same on /flows and /maps;
-  [docs/planning/flows-save-load.md](docs/planning/flows-save-load.md)):**
-  - **Save** (the disk icon, Ctrl/⌘+S) downloads `<name>.flow.json`: the flow, and its Python as
-    lines so a diff reads well. Never the sample sheets or the lab data. **Load** ▸ "Open a saved
-    flow…" (Ctrl/⌘+O) opens one from this computer or from GitHub. It is checked before anything
-    changes, and Undo on the notice goes back. A `.flow.json` downloaded before 2026-11-12 (the bare
-    IR) still opens.
-  - **GitHub:** "Set up GitHub…" in either dialog takes a repository (`owner/name` or its link), a
-    folder (default `poring-lab`) and your name (it goes into the commit message). A **public**
-    repository LOADS without a token. Saving needs a fine-grained token for that one repository
-    ("Contents: Read and write"; the dialog links GitHub's prefilled page). The token stays in this
-    browser tab unless you tick "Remember on this computer"; "Forget the token" removes it.
-  - A save never silently replaces someone else's newer version. You choose: Save mine as a new
-    flow (`<name> 2`), Replace it, See who changed it, or Cancel.
-  - **A teacher sharing a folder:** make a public repository in a free GitHub organisation, with
-    one folder per class (well under 1,000 files). The students set that repository and folder and
-    press Load, then carry on from the flow. Students who save are members of the organisation,
-    each with their own token (fine-grained tokens do not work for outside collaborators). GitHub
-    accounts are for ages 13 and over. Without a token GitHub allows 60 requests an hour for each
-    internet address; a Load and one open cost 3-4, so a class behind one school address shares
-    that budget.
-  - Saving a flow you opened from GitHub, under the same name, UPDATES that file when nobody changed
-    it since (GitHub keeps every version). So a teacher keeps the starting flows where the students
-    can only read, and each student saves into their own folder.
-  - The page talks to `https://api.github.com` only (the CSP's one outside origin), and only after
-    you open GitHub settings, Save or Load.
-- **The hunt block (B2, 2026-10-21):** one dropdown per parameter (engage; dead + loot; search),
-  each a list of rule versions: ★ the adopted base's, ◆ hunting evidence (Batt's D8). The "Hunt
-  rules" pane lists each version's numbers, read-only.
-- **Zones (B2):** a map block's "Open the Zones layer" draws `config/map_zones/<map>.yaml`'s lines
-  and areas, checks them with the runner's own loader and EXPORTS the YAML (a person commits it;
-  `config/map_zones/README.md`). `zones_engine_unavailable` = the backend cannot import
-  `scripts/map_zones.py`: the dev backend needs its read-only `./scripts` mount (compose.dev.yaml,
-  a guarded `recreate:backend`).
-- **No live run:** nothing on the page reaches the executor, the mux or an input path. The backend's
-  `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
-  20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md) and
-  [docs/planning/blocks-from-hunt-flow.md](docs/planning/blocks-from-hunt-flow.md) (7b).
-
-**Bot typing needs the game window in front.** Before the bot types anything, the backend checks
-the game client's title bar on a fresh frame; clicks are never blocked.
-- The reference picture is installed with
-  `uv run python scripts/foreground_template.py install rdp|stream`.
-- The console (S2) view has its own picture, cut on the stream (2026-10-07). Re-cut it with
-  `ro_agent.py calibrate client_title_active@stream` + `foreground_template.py install stream`
-  if the client window moves.
-
-## Quickstart
-
-A second, independent lab host from scratch (Docker, the services, the Windows PC, choosing the
-detector): [docs/setup/new-lab-host.md](docs/setup/new-lab-host.md).
-
-```bash
-scripts/init_env.sh                          # .env from .env.example: detects HOST_LAN_IP, random secrets
-python3 scripts/guarded_build.py build:desktop build:backend build:rathena build:frontend pull:db up:180
-scripts/smoke_test.sh                        # health, LAN ports, >=30 frames, input round trip, input log
-```
-
-**Mechanical guard (2026-10-01).** `scripts/dev.sh` refuses `up create build pull run restart start
-down rm`, any `--force-recreate`, and an interpolated `config` unless `scripts/guarded_build.py` is its
-parent process. For agent sessions, the repo's `.claude/settings.json` PreToolUse hook
-(`scripts/hooks/guard_docker.py`) also refuses the same verbs typed as raw `docker` / `docker compose`.
-Read-only commands (`ps logs exec inspect config --no-interpolate`) and `stop` stay allowed.
-The raw `docker compose ...` lines elsewhere in this README are for a person on a plain (non-dev)
-install; in dev mode use the matching guarded step (`start:`, `restart:`, `recreate:`) instead
-(second-install-gaps.md row O).
-A second hook (`scripts/hooks/guard_bigread.py`, 2026-10-03) refuses whole-file reads (grep, rg,
-cat, awk, sed, sort, …) of session transcripts (`~/.claude/**/*.jsonl`) and of files over 50 MB on
-the shared disk; a byte-bounded `head -c`/`tail -c`/`dd count=` (≤ 64 MB) passes.
-`scripts/verify_mount.py` checks that containers see the current single-file bind mounts.
-
-**On this host (dev mode, `scripts/dev.sh`):** `up:` is refused because it would recreate the dev
-containers. Bring the game server up with `start:` instead, using the tolerant IO guard (Batt,
-2026-09-30):
-
-```bash
-python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena pull:db start:db@120 start:rathena@240
-scripts/smoke_test.sh --core                 # db + rathena health, LAN ports, advertised IP, tis620
-```
-
-`guarded_build.py` builds one image at a time and backs off if the host's live capture services start
-stalling on disk IO. On a dedicated machine, `docker compose --profile core --profile remote up -d --build`
-does the same thing unguarded.
-
-- **Web console:** `http://HOST_LAN_IP:3000`. Click the screen to control it; switch between HUMAN,
-  ASSIST and BOT at the top.
-- **Debug view:** `http://HOST_LAN_IP:6080` (noVNC, view-only).
-- **GPU check:**
-  ```bash
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 build:vision   # ~5 GB of writes
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 'run:vision@600=python scripts/check_gpu.py'
-  ```
-- **Training (Phase 3, AGPL vision component, ADR-0018):**
-  - vision reads the NAS datasets **read-only** (`datasets-nas` → `/datasets`, soft NFS, vision only);
-  - frames come as tar shards built on the host by `scripts/build_frame_cache.py` (one sequential pass
-    per session, split by session) under `/mnt/poring-lab-datasets/.framecache/<id>/`;
-  - `rundev:` mounts the host's vision source read-only, so no image rebuild is needed.
-  - GPU runs follow the sharing rules R1–R3 (`scripts/frigate_r3.py`, enforced by the guard); the old
-    20:00–05:00 window is retired (Batt, 2026-10-07):
-  ```bash
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
-    'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/<id> --smoke'
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
-    'rundev:vision@900=python -m poring_vision.train --cache /datasets/.framecache/<id> --eval /data/train/<run>/weights/best.pt --split test'
-  ```
-  - **Option A, the long-lived vision worker** (PROVEN + SWITCHED 2026-10-10; `docs/operations/vision-long-lived.md`):
-    one idle vision container per day (`compose.vision-worker.yaml`), started once in a measured quiet
-    window; each attempt is an `execdev:` inside it, with the same R2/R3, IO-guard and verified-stop
-    rules. `train-day.sh` uses it only with `WORKER=1`. Its live proof is
-    `scripts/runbooks/worker_proof.py`.
-  ```bash
-  python3 scripts/runbooks/quiet_start.py -- \
-    python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
-    'execdev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/<id> --smoke'
-  python3 scripts/guarded_build.py worker-stop:vision
-  ```
-- **Agent loop:**
-  ```bash
-  docker compose --profile remote --profile vision up -d
-  ```
-  Set `VISION_DEBUG_BOX=true` to see a box on the overlay without a model.
-- **RDP:** without `WIN_HOST`/`RDP_USER`/`RDP_PASSWORD` in `.env`, the desktop runs Xvfb-only (a black
-  screen). Everything else still works. Fill them in, then recreate the desktop: `docker compose up -d desktop` on a plain install, or `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop@90` in dev mode (a `restart` keeps the container's old environment, so a new `.env` value would not take effect).
-
-**Game accounts:** `RATHENA_NEW_ACCOUNT=yes` lets you create an account from the client login screen by
-suffixing a new username with `_M` or `_F` (e.g. `bot01_M`). `RATHENA_TEST_USER` / `RATHENA_TEST_PASSWORD`
-(generated by `init_env.sh`, only in `.env`) are upserted as a player account on every rathena start.
-The agent's own accounts are upserted the same way: `RATHENA_AGENT_USER` / `_PASSWORD` (player, group 0)
-and `RATHENA_GM_USER` / `_PASSWORD` (group 20 "Validation": `where`, `who`, `whomap`, `mapmove`,
-`mobsearch`, `monster`, `killmonster2`, `hide`, and since 2026-10-04 `alive`, `heal` (lab only, so dataset
-collection survives provoked monsters); every command logged; ground-truth checks and GM-driven collection),
-with `RATHENA_AGENT_CHAR` / `RATHENA_GM_CHAR` as their character names. `scripts/ro_agent.py` logs in with
-them as **sensitive** input (the input log keeps counts only); see `docs/client/rathena-client.md`
-"Agent automation". `GAME_REGION` (`x,y,w,h`, the client area) feeds the backend's black-screen detector
-(`/health` `game_display`, console banner) and ro_agent.
-
-### Windows host checklist (the RO client side)
-
-**Windows stays clean** ([ADR-0019](docs/adr/0019-windows-stays-clean.md), Batt 2026-10-06):
-- The Windows PC runs the game and streams it. Nothing of poring-lab runs there, and no key of
-  ours is stored there.
-- The user-facing setup is the **game client with its one-time config, plus Sunshine**. It is in
-  [docs/windows-setup.md](docs/windows-setup.md), the course notes.
-- The checklist below is THIS LAB's setup, which adds RDP as the human's admin path.
-- The lab-only pieces (the `poring-lab watch` task, the agent's shell, the tscon task) and a live
-  audit of everything on the Dell are in ADR-0019.
-
-1. Enable Remote Desktop. Use a dedicated **standard** account in "Remote Desktop Users" and put it in `RDP_*`.
-   This lab uses `poring-lab` (`WIN_LAB_USER`/`WIN_LAB_PASSWORD`, 2026-10-01): not an administrator,
-   Modify on `C:\RO-rAthena` only (the stopped `C:\RO-rAthena-th` copy is writable through C:\'s inherited
-   Authenticated Users: Modify; ADR-0019), plus Performance Monitor Users and Event Log Readers for the RDP
-   counters/events. Elevation is the operator's (UAC); see `docs/client/rathena-client.md` "Windows
-   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`). On FreeRDP 3.32.1 it delivers 30 fps outdoors;
-   `AVCthin` is the measured alternative: the same frames at ~1/5 of the desktop CPU, but lossy.
-2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
-3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
-4. Run the RO client **inside the RDP session** at `SESSION_SIZE` (default 1440x900). The game window is 1296×759,
-   which is a 1:1 **1280×720 client area** at (80,77), above the taskbar; frozen for Phase 2. Launch it from the
-   "Ragnarok Offline" desktop shortcut.
-   - The session is drawn 1:1 at the top-left of a larger Xvfb canvas (`XVFB_RESOLUTION`, default 1920x1200).
-   - The stream, the agent's frames and the input mapping all cover only the session.
-   - The canvas exists for the console mode: Moonlight opens its window at native size only below 80 % of the
-     screen (ADR-0009, 2026-10-02).
-5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
-   client untouched:** never patch, repoint or reuse it in place.
-   - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.
-   - Client patching and `clientinfo.xml` live on Windows. **Never copy client files into this
-     repo** (see `.gitignore`).
-   - The recipe (exe, data, WARP patches, HKCU settings, the dgVoodoo2 wrapper that RDP needs, Thai
-     locale): [docs/client/rathena-client.md](docs/client/rathena-client.md). It lives in
-     `C:\RO-rAthena\` and is launched non-elevated.
-6. Pin the RDP certificate: `python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>` prints the
-   `RDP_CERT_SHA256=` line for `.env` (pre-auth handshake only; it never logs in). Unpinned means
-   `/cert:ignore`.
-
-## Capture backends, benchmark and Phase 2 tools
-
-- **Who owns the Windows session:** `python3 scripts/capture_backend.py status` (host file, every
-  container, `/health`). `init`, `drill` (a live lock test), `pair PIN`, `to-console [--yes-tscon]`,
-  `to-rdp [--recover]`. The lock file is `state/capture-backend` (gitignored, mounted read-only).
-- **Benchmark:** `scripts/bench.py run --backend rdp|console --label NAME`, `reference`,
-  `validate-reference PNG`, `table` -- procedure in [docs/benchmarks/SPEC.md](docs/benchmarks/SPEC.md),
-  results in [docs/benchmarks/](docs/benchmarks/README.md).
-- **Phase 2 (offline):** `scripts/gen_mapcache.py` (pinned rAthena map caches),
-  `scripts/record_session.py`, `scripts/calibrate_projection.py`, `scripts/qa_export.py` + the console
-  page `/qa` (dev server only). See [docs/phase2-plan.md](docs/phase2-plan.md).
-- **UI anchors (ADR-0011):** `scripts/ui_anchors_tool.py capture [--mask-png]` cuts the window
-  templates into `data/ui_anchors/` (gitignored); `check` locates the windows on a live or saved frame.
-
-## Development
-
-```bash
-uv sync                               # host venv: poring_env + backend + dev tools (not torch)
-uv run pytest                         # mux, protocol round trips + schema drift, keymap, app e2e, loop
-uv run ruff check . && uv run ruff format --check .
-uv run mypy                           # --strict on packages/poring_env (and the backend)
-scripts/gen_protocol.sh               # after editing poring_env/protocol.py: schema + TS types
-(cd services/frontend && corepack pnpm install && corepack pnpm lint && corepack pnpm typecheck)
-```
-
-- **Python:** 3.12, a uv workspace (`packages/poring_env`, `packages/poring_packets`,
-  `packages/poring_dataset`, `services/backend`, `services/vision`),
-  ruff, and `mypy --strict`.
-- **Wire protocol:** the Pydantic models in `poring_env.protocol` are the source of truth. The JSON
-  Schema and the TypeScript are generated from them and committed, and CI-style tests fail on drift.
-- **vision's GPU dependencies install only inside its container:**
-  - torch `2.14.0+cu130`, from the explicit cu130 index declared in the root `pyproject.toml`;
-  - ultralytics, with headless OpenCV.
-- **Architecture decisions:** [`docs/adr/`](docs/adr/).
-
-## Troubleshooting
-
-**The client says "Failed to Connect to Server" right after logging in (and quits on OK).** This
-client gives up when no server is picked within ~1–2 s of the list appearing; it never even dials
-the char server. Pick it at once (a human click at 1.3 s works; ro_agent clicks at 0.8 s).
-
-**Login works, then the client hangs or disconnects at server/character select.**
-- The char/map servers are advertising the wrong IP. `HOST_LAN_IP` must be this host's LAN address.
-- Check `docker compose logs rathena | grep "clients will be sent"`.
-- Never set rAthena's `bind_ip` to the LAN IP: it doesn't exist inside the container.
-
-**Keys and clicks show in the input log, but typing never reaches Windows (after console mode).**
-The X keyboard focus was left at None: SDL (Moonlight) focuses its window with RevertToNone, and
-there is no window manager to take the focus back.
-- `rdp-loop` resets the focus to PointerRoot before every connect, and gamestream does the same
-  after every stream.
-- By hand:
-
-      docker exec poring-lab-desktop-1 bash -c 'source /usr/local/bin/rdp-loop.sh; focus_pointer_root'
-
-- Check: the backend's `Xlib get_input_focus()` must report focus 1 (PointerRoot), not 0.
-
-**The RDP session keeps dropping or never connects.** Windows client editions allow **one**
-interactive session. `rdp-loop` reacts to xfreerdp3's exit code:
-
-| Exit | Meaning | What happens |
-|---|---|---|
-| **5** | someone else took the session | backs off for 10 minutes. Don't use `mstsc` against the Windows host while the stack runs. |
-| **132 / 134 / 135 / 148–159** | authentication or account failure | **stops retrying** (account-lockout risk). Fix `.env`, then recreate the desktop (see RDP above: a restart keeps the old environment). |
-| 16–26 | licensing, or a bad command-line flag | stops |
-| anything else | network trouble, host booting | backs off, 2 s → 60 s |
-
-Watch it with `docker compose logs -f desktop`.
-
-**FreeRDP 2 vs 3 flags.** This image pins FreeRDP **3.32.1** from trixie-backports (`xfreerdp3`, a link to
-`xfreerdp`; rollback image `poring-lab/desktop:freerdp-3.15` ➡️ removed 2026-10-23 ~03:15 ICT in the host's approved image cleanup (home-assistant-ops OS-039 phase 3 A): a rollback now means
-rebuilding 3.15 from git history, not byte-identical: docs/operations/freerdp-315-rollback.md). 2.x spellings aren't even compiled in:
-
-| Purpose | 2.x | 3.x (used here) |
-|---|---|---|
-| ignore certificate | `/cert-ignore` | `/cert:ignore` (or `/cert:deny,fingerprint:sha256:<hex>`) |
-| H.264 | `/gfx-h264`, `/gfx:avc444` | `/gfx:AVC444` (Debian builds only; Ubuntu's FreeRDP 3 has no H.264) |
-| keyboard layout | `/kbd:0x409` | `/kbd:layout:0x409` |
-| credentials off argv | `/from-stdin` | `/args-from:stdin` (must be the only argument) |
-| binary | `xfreerdp` | `xfreerdp3` |
-
-**RDP worked for months, then stopped connecting.** Windows renews its self-signed RDP certificate
-about every six months, so the pinned fingerprint no longer matches. `rdp-loop` treats that as a
-TLS failure and backs off; no credentials are sent. Re-pin:
-`python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>`, update `.env`, then
-recreate the desktop: `docker compose up -d desktop` on a plain install, or `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop@90` in dev mode (a `restart` keeps the container's old environment, so a new `.env` value would not take effect).
-
-**noVNC is black.** That's normal without RDP credentials: Xvfb is empty. Check the `RDP window` field
-in the console's stats panel.
-
-**`cudaGetDeviceCount == 0` in vision, while `nvidia-smi` works on the host.**
-- If the Proxmox host had hardware work, verify the GPU's PCI address (BDF) in VM 103's passthrough
-  config (see `~/docker/frigate/CLAUDE.md`).
-- `no kernel image is available` means the wrong torch wheel. This project needs **cu130** (sm_120).
-- A `nvidia/cuda:13.2*` base image refuses to start on this host's R580 driver.
-
-**The rAthena build fails in `rapidyaml`.** That's a parallel-make race. Set `RATHENA_MAKE_JOBS=1` in
-`.env` and rebuild.
-
-**The client disconnects right after character select, or shows garbled packets.** `PACKETVER` doesn't
-match the client executable. Set it in `.env`, then run
-`python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena start:rathena@240`.
-
-**map-server loops "Connection to Char Server lost" / login logs "Invalid password" for the server
-account.** The inter-server `RATHENA_SERVER_USER`/`PASSWORD` must be at most 23 characters. char and
-map keep them in 24-byte buffers and silently truncate longer ones.
-
-**Thai shows as `?` or chat lines are missing from `chatlog`.** The database must be tis620
-(`scripts/smoke_test.sh --core` checks this). The db volume takes `--character-set-server=tis620`
-only when it is first initialised; the rathena entrypoint refuses anything else.
-
-**The client hangs at 100 % CPU with no window, or says "Cannot init d3d".** See
-[docs/client/rathena-client.md](docs/client/rathena-client.md). Causes: missing HKCU `RenewSetup`/`Ragnarok`
-keys (it loops trying to run Setup.exe), and DirectDraw/Direct3D 7 under RDP (needs the dgVoodoo2 wrapper).
-
-**Paste does nothing, or says "did not paste".** The toast on the screen, or the panel's message,
-names the cause. If ⌘V shows no toast at all, the screen didn't have keyboard focus: click it first.
-- `rdp_clipboard_not_listening`: `RDP_CLIPBOARD` is not `text-to-remote`, or RDP is reconnecting.
-  Check the connect line in `scripts/dev.sh logs desktop`, which reads `clipboard=… drives=…`.
-- `no_data_request`: the focused Windows window ignored Ctrl+V. Click a text field in the remote screen
-  first. The game's chat box needs to be open.
-- `mode_bot`: switch the mux to HUMAN or ASSIST.
-- Every refusal is also counted in `/health` (`input_refused`, `clipboard.foreign_owner_clears`).
-
-**`\\tsclient\transfer` is missing in Windows.**
-- `RDP_DRIVES=transfer` must be set in `.env`, and the desktop recreated.
-- Drives appear only for sessions started after that.
-- Explorer may need `\\tsclient` typed in full.
-
-**A message was dropped.** The backend never drops silently. The console banner shows it, and
-`/health` has `dropped_messages{channel: {reason: n}}`. A WARNING names the channel, message type and
-reason (e.g. `missing:key.t_mono_ns`), never the contents. Script clients must send `t_mono_ns` on
-every message.
-
-## Roadmap
-
-Research phases 0–6, current status and the ordered plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
-
-## Next step: Phase 0 (capture FPS and end-to-end latency)
-
-`scripts/ws_probe.py` already reports stream FPS and backend-side capture→encode→send latency
-(30.0 fps; capture→encode p50 ~11 ms; encode→send p50 ~0.6 ms on 2026-09-29). Phase 0 extends it:
-
-- **mss XShm grab rate at 1280×720,** measured in the backend and in vision.
-- **Motion-to-photon latency:** inject a key through the mux that toggles a large, fixed UI element.
-  Time it from the mux's `t_mono_ns` to the first changed pixel. Everything runs on one host clock.
-- **Codec comparison:** run the above for each `RDP_GFX` codec (autodetect/AVC444, `progressive`,
-  `off` = lossless legacy), and score fidelity against a lossless on-Windows screenshot.
+Everything binds to `HOST_LAN_IP`. Keep it on a trusted LAN.
+
+| Port | What |
+|---|---|
+| 3000 | the web console |
+| 8000 | the backend (stream, input, health) |
+| 6900, 6121, 5121 | the rAthena login, char and map servers |
+| 8888 | the rAthena web server (the client's account settings) |
+| 6080 | noVNC, view-only, **no authentication** |
+
+Every service and port: [docs/services-and-ports.md](docs/services-and-ports.md).
+
+## License
+
+Apache-2.0 ([LICENSE](LICENSE)), except `services/vision`, which is AGPL-3.0-only
+([services/vision/LICENSE](services/vision/LICENSE)) because it imports ultralytics
+([ADR-0018](docs/adr/0018-component-licensing.md)). Third-party work and its terms:
+[THIRD_PARTY.md](THIRD_PARTY.md).

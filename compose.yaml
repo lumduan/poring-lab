@@ -1,4 +1,4 @@
-# poring-lab -- see README.md for the topology, ports and quickstart.
+# poring-lab -- the quick start: README.md; the topology and every port: docs/architecture.md, docs/services-and-ports.md.
 #
 # Profiles:  core    db + rathena (the game server)
 #            remote  desktop (Xvfb + the ONE RDP session) + backend + frontend

@@ -791,7 +791,9 @@ reaches the agent (ADR-0007 decision 4 unchanged).
 - `docs/windows-setup.md`: the firewall rule becomes REQUIRED for an external environment, with
   the script, its hash check and the paste-back.
 - `README.md`: the Settings page's firewall confirmation, the Packet timeline's states, and its
-  "Windows stays clean" section.
+  "Windows stays clean" section. (➡️ Since 2026-11-13 the README is setup only: these items belong in `docs/console.md` (the
+  Settings page, the Packet timeline) and `docs/setup/windows-lab-host.md` ("Windows stays
+  clean"). The README of 2026-11-12 had no Packet-timeline or firewall-confirmation text.)
 - `docs/ROADMAP.md`: the "Environment interlock" row (its last cell says the community server
   can never be green) and the "Windows stays clean" row.
 - `docs/environments/community-server.md`: its status box (pointer added now).
