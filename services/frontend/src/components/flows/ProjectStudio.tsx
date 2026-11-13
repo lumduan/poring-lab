@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
+import NodeInspector from "@/components/maps/NodeInspector";
 import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
 import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
@@ -880,7 +881,16 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
               <div className="pane-body">
                 {p === "inspect" && (
                   <div className="stack" data-testid="inspect-pane">
-                    <NodeSummary project={project} node={node} />
+                    <NodeInspector
+                      project={project}
+                      nodeId={node.id}
+                      lint={lintStale ? null : lintDoc}
+                      credentials={catalogue?.credentials}
+                      canOpen={false}
+                      onChange={(p) => replace(p, { keepView: true })}
+                      onOpen={(id) => goTab(MAIN_TAB, id)}
+                      onRenamed={(_from, to) => setNodeId(to)}
+                    />
                     <FlowSettings flow={project} limits={catalogue?.runtime_limits ?? null} onFlow={(f) => replace(f, { keepView: true })} />
                   </div>
                 )}
@@ -1033,34 +1043,6 @@ function nodeStrip(p: Project, n: PNode, overrides: string[]): { head: string; t
   out.push({ head: "IMPORTS", text: `${n.tabs.length > 1 ? `its tabs (${n.tabs.filter((t) => t.name !== MAIN_TAB).map((t) => t.name).join(", ")}) and ` : ""}Global${g ? ` (${g.tabs.map((t) => t.name).join(", ") || "no tab yet"})` : ""}` });
   if (overrides.length) out.push({ head: "REPLACES GLOBAL'S", text: overrides.join(", ") });
   return out;
-}
-
-/** The Inspect pane's node summary (the full node inspector is the Maps page's, NodeInspector). */
-function NodeSummary({ project, node }: { project: Project; node: PNode }) {
-  const names = [...namesOf(node).entries()];
-  return (
-    <div className="box stack" data-testid="node-summary">
-      <div className="strong">
-        {node.id} <span className="muted">({KIND_WORDS[node.kind]}{node.kind === "map" ? ` ${node.map.map}` : ""})</span>
-      </div>
-      {node.kind === "map" && (
-        <div className="muted">
-          entries: {node.entries.map((e) => `${e.name}${e.at ? ` (${e.at.map} ${e.at.x}, ${e.at.y})` : " (where she stands)"}`).join(", ")}
-          {node.targets.length ? ` · targets ${node.targets.map((t) => t.id).join(", ")}` : ""}
-          {node.zones ? ` · zones ${node.zones.map}` : ""}
-        </div>
-      )}
-      <ul>
-        {names.map(([k, v]) => (
-          <li key={k}>
-            <code>{k}</code> <span className="muted">({v.kind}, tab {v.tab}{node.kind === "global" && overriddenBy(project, k).length ? `; replaced on ${overriddenBy(project, k).join(", ")}` : ""}{node.kind !== "global" && globalOf(project) && namesOf(globalOf(project)!).has(k) ? "; replaces Global's" : ""})</span>
-          </li>
-        ))}
-        {!names.length && <li className="muted">no functions, events or variables yet</li>}
-      </ul>
-      <div className="muted">Edit the node itself (its id, map, entries, targets, zones) on the Maps page: <Link href={`/maps?node=${encodeURIComponent(node.id)}`}>open it there ↗</Link></div>
-    </div>
-  );
 }
 
 // --- icons (MatPilot's, BlocksApp.tsx) ---------------------------------------------------------
