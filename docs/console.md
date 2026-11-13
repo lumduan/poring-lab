@@ -432,6 +432,39 @@ Amendment B); a not-adopted model is never offered.
     pane; the drawer is as tall as its panes, so the page is the one scroller (Before Run's
     checklist no longer scrolls inside a 333 px box), and the status row with More ▾ stays at the
     screen's bottom.
+  ➡️ **2026-11-14, matpilot's round 17 N1-N8** ([planning/project-model.md](planning/project-model.md)
+  section 10c; built offline, the reviewer re-measures in a browser):
+  - **Which threshold a Run uses:** in a Run of a project the box's events and functions decide
+    what they play inside the hunt core and the runner's own handler is off (the potion, the Fly
+    Wing on HP, the boss fly, the weight exit on a read weight, the death dialog's clicks); the
+    setting then applies to the runner alone (the old Run path, a box without that event). Before
+    Run's settings rows say so ("in this project: replaced by the box's drink event (HP < 30 %,
+    until HP >= 31 %); this value is the runner's alone ..."); a tab the box plays has a strip
+    line **IN A RUN** naming each event or function, what it replaces with Before Run's setting
+    and value, and what stays the runner's (the HP-rate fly); /maps' inspector marks those names
+    in its tabs list. The words come from the flow engine (POST /flows/lint `box`).
+  - **/maps' lint lines:** every list is most serious first (error, not ready, warning, info),
+    each line starts with its severity, and the inspector's capped list says what it hides
+    ("…and 18 more (18 info): …").
+  - **A runner node's monsters:** the lint says per spawn whether the runner strikes it (every
+    class its model strikes: use_model's, else the map's own detector; a monster's function only
+    chooses HOW) or never does (garm_baby, the boss); the inspector says so under the target /
+    ignore lists, which are the simulator's on such a node.
+  - **Event blocks:** every trigger field the Python writes is on the block, one row each (pause
+    after each run = cooldown_s, at most N a run / a minute, N in 10 minutes, an insert's failures
+    and its escalation; empty = none); a tab's first block starts below Undo / Redo.
+  - **Run waits for another input writer:** while a night chain, a runner, the live block player
+    or an A/B series of ours plays, the Run helper's state is **busy** with those words, Run and
+    "Check the game" are greyed with them, and the backend refuses a start or a check
+    (`input_writer_busy`).
+  - **/maps' Fit:** at a readable size (0.85) it shows every card, else the run's path (all but
+    Global), else START and the map cards; on a canvas of 768 px or less START and every map card
+    are scaled down until they fit (after a load, after "+ map", on Fit). The button's tooltip
+    says what the last fit showed and what it left out (its accessible name stays "Fit the maps").
+  - **/maps' connection labels:** every label (the session's "log in, then choose", "enter the
+    game → <entry>", and the exits) sits in the gap between its two cards -- beside: at the
+    line's height, wrapped or one short word or none; one under the other: in the vertical gap,
+    as many lines as fit -- never under a card; a shortened label's full words are its tooltip.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
