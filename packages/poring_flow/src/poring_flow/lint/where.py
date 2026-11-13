@@ -50,10 +50,10 @@ def _count(
     n = 0
     for site in ir.walk(stmts, "x", root="x", scope="main", block=None):
         n += len(_reads(site.stmt, sensors, blocks))
-        st = site.stmt
-        if isinstance(st, ir.CallProc) and st.proc not in seen:
-            body = ctx.flow.procedures.get(st.proc, [])
-            n += _count(ctx, body, sensors, blocks, seen | {st.proc})
+        for proc in ir.calls_in(site.stmt):  # a call statement, and a function's value (callv)
+            if proc not in seen:
+                body = ctx.flow.procedures.get(proc, [])
+                n += _count(ctx, body, sensors, blocks, seen | {proc})
     return n
 
 

@@ -173,6 +173,11 @@ class _Ctx:
     in_block: bool = False
     loops: int = 0
     wrapped: set[int] = field(default_factory=set)  # the statements of Main's try / finally
+    # the PROJECT view (format 3, poring_flow.pyproject): calls take arguments, a function's
+    # value is an expression, `return` stands inside a def, a def's inputs are its variables
+    project: bool = False
+    inputs: set[str] = field(default_factory=set)
+    in_def: bool = False
 
     def err(self, node: ast.AST, msg: str) -> None:
         self.errors.append(f"{_at(node)}: {msg}")
@@ -784,7 +789,7 @@ def _expr(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
     if isinstance(node, ast.Name):
         if node.id in OUTCOME_CONSTANTS:
             return {"kind": "outcome", "value": CONSTANTS[node.id]}
-        if node.id in ctx.variables:
+        if node.id in ctx.variables or node.id in ctx.inputs:
             return {"kind": "var", "name": node.id}
         ctx.err(node, f"{node.id} is not a flow variable")
         raise _Bad
@@ -848,7 +853,12 @@ def _expr(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
         if name in ctx.cat.blocks:
             action = _action(node, ctx)
             return {"kind": "do", "action": action}
-        ctx.err(node, f"{name}(...) is not a sensor, a block or a reference")
+        if ctx.project and name in ctx.procedures:  # a function's value (format 3)
+            args, kwargs = _proc_args(node, ctx)
+            return {"kind": "callv", "proc": name, "args": args, "kwargs": kwargs}
+        what = "a sensor, a block, a function or a reference" if ctx.project else (
+            "a sensor, a block or a reference")  # fmt: skip
+        ctx.err(node, f"{name}(...) is not {what}")
         raise _Bad
     ctx.refuse(node, type(node).__name__, "not an expression a flow can hold")
     raise _Bad
@@ -904,6 +914,12 @@ def _function_name(node: ast.expr, ctx: _Ctx, what: str) -> str:
     raise _Bad
 
 
+def _proc_args(call: ast.Call, ctx: _Ctx) -> tuple[list[Any], dict[str, Any]]:
+    """A function call's arguments (the project view): positional, then keyword."""
+    args = [_expr(a, ctx) for a in call.args]
+    return args, {k: _expr(v, ctx) for k, v in _kw(call).items()}
+
+
 def _action(call: ast.Call, ctx: _Ctx, outcome_to: str | None = None) -> dict[str, Any]:
     name = call.func.id  # type: ignore[attr-defined]
     spec = ctx.cat.blocks[name].spec
@@ -953,7 +969,7 @@ def _stmt(st: ast.stmt, ctx: _Ctx) -> list[Any]:
             ctx.refuse(st, "this assignment", "exactly one plain name on the left")
             raise _Bad
         name = st.targets[0].id
-        if name not in ctx.variables:
+        if name not in ctx.variables and name not in ctx.inputs:
             ctx.err(st, f"{name} is not a flow variable: declare it at the top with its value")
             raise _Bad
         cname = _call_name(st.value)
@@ -970,7 +986,7 @@ def _stmt(st: ast.stmt, ctx: _Ctx) -> list[Any]:
             ctx.refuse(st, "this augmented assignment", "only name += value or name -= value")
             raise _Bad
         name = st.target.id
-        if name not in ctx.variables:
+        if name not in ctx.variables and name not in ctx.inputs:
             ctx.err(st, f"{name} is not a flow variable")
             raise _Bad
         op = ARITH[type(st.op)]
@@ -1018,6 +1034,11 @@ def _stmt(st: ast.stmt, ctx: _Ctx) -> list[Any]:
         return [out]
     if isinstance(st, ast.For):
         return [_for(st, ctx)]
+    if isinstance(st, ast.Return) and ctx.project:
+        if not ctx.in_def:
+            ctx.err(st, "return belongs inside a function (a def), not in main")
+            raise _Bad
+        return [{"kind": "return", "value": _expr(st.value, ctx) if st.value else None}]
     if isinstance(st, ast.FunctionDef):
         ctx.refuse(st, f"def {st.name} here", "procedures and events are top level only")
         raise _Bad
@@ -1041,7 +1062,7 @@ def _for(st: ast.For, ctx: _Ctx) -> dict[str, Any]:
             raise _Bad
         return {"kind": "repeat", "times": _expr(it.args[0], ctx), "body": body}  # type: ignore[attr-defined]
     var = st.target.id
-    if var not in ctx.variables:
+    if var not in ctx.variables and var not in ctx.inputs:
         ctx.err(st.target, f"{var} is not a flow variable: declare it at the top with its value")
         raise _Bad
     if _call_name(it) == "range":
@@ -1091,6 +1112,9 @@ def _call_stmt(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
             raise _Bad
         return {"kind": "take_exit", "exit": _exit(call.args[0], ctx)}
     if name in ctx.procedures:
+        if ctx.project:  # a call with arguments (format 3)
+            args, kwargs = _proc_args(call, ctx)
+            return {"kind": "call", "proc": name, "args": args, "kwargs": kwargs}
         if call.args or call.keywords:
             ctx.err(call, f"{name}() takes no arguments")
             raise _Bad
@@ -1450,7 +1474,15 @@ def expr_src(e: Any, cat: Catalogue | None = None) -> str:
         return f"{e.sensor}({_call_args(e.args, spec.params if spec else [], cat)})"
     if isinstance(e, ir.Do):
         return _action_call(e.action, cat)
+    if isinstance(e, ir.CallV):  # a function's value (format 3)
+        return f"{e.proc}({_proc_call_args(e.args, e.kwargs, cat)})"
     raise TypeError(type(e))
+
+
+def _proc_call_args(args: list[Any], kwargs: dict[str, Any], cat: Catalogue) -> str:
+    return ", ".join(
+        [expr_src(a, cat) for a in args] + [f"{k}={expr_src(v, cat)}" for k, v in kwargs.items()]
+    )
 
 
 def _call_args(args: dict[str, Any], params: Any, cat: Catalogue) -> str:
@@ -1614,7 +1646,11 @@ def _stmt_src(st: Any, ind: str, cat: Catalogue) -> list[str]:
             return [f"{ind}{st.var} {v.op}= {expr_src(v.right, cat)}"]
         return [f"{ind}{st.var} = {expr_src(v, cat)}"]
     if isinstance(st, ir.CallProc):
-        return [f"{ind}{st.proc}()"]
+        return [f"{ind}{st.proc}({_proc_call_args(st.args, st.kwargs, cat)})"]
+    if isinstance(st, ir.Return):  # format 3: inside a def
+        return [
+            f"{ind}return {expr_src(st.value, cat)}" if st.value is not None else f"{ind}return"
+        ]
     if isinstance(st, ir.Stop):
         return [f"{ind}stop({_s(st.reason)})"]
     if isinstance(st, ir.Break_):

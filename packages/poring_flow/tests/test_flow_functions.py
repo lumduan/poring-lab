@@ -270,7 +270,21 @@ def test_each_role_names_a_function_of_exactly_one_press() -> None:
         f"{at}: dungeon_hunt's heal (the heal item's key) names heal, whose body is not exactly "
         "one press_key: the runner presses one key for each role"
     ]
+    # ➡️ the project model (section 6: "through calls with literal arguments"): a role function
+    # that calls another resolves to ITS one press_key -- here heal's F1, so the clash shows
     assert role_errors(call) == [
+        f"{at}: dungeon_hunt's heal and knife_on both press F1: each role needs its own key"
+    ]
+
+    def call_a_variable(d: dict[str, Any]) -> None:
+        d["variables"]["K"] = {"kind": "lit", "value": "F4"}
+        d["procedures"]["press_it"] = [press("F4")]
+        d["procedures"]["press_it"][0]["params"]["key"] = {"kind": "var", "name": "k"}
+        d["signatures"] = {"press_it": {"params": [{"name": "k", "default": None}]}}
+        d["procedures"]["knife_on"] = [{"kind": "call", "proc": "press_it",
+                                        "args": [{"kind": "var", "name": "K"}]}]  # fmt: skip
+
+    assert role_errors(call_a_variable) == [
         f"{at}: dungeon_hunt's knife_on (the Knife's key) names knife_on, whose body is not "
         "exactly one press_key: the runner presses one key for each role"
     ]

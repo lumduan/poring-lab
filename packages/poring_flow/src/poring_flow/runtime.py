@@ -30,6 +30,14 @@ The rules it implements (each table-tested in tests/test_runtime.py):
 - `max_fires_per_10min` without `until` holding stops the run (`handler_runaway`); `max_per_run`
   stops it (`death_limit` for `dead`); `max_runtime_s` and `stop_when` are guards;
 - ONE input token: batches of two flows never interleave.
+- FUNCTIONS (the project model, format 3: docs/planning/project-model.md): a call binds its
+  arguments as Python does (positional, keyword, defaults, `*varargs` as a list, `**kwargs` as the
+  extra keyword values) into a LOCAL environment of the running flow (one stack per scheduler
+  frame, so an event that pre-empts a function never sees or changes its locals); `return value`
+  ends it, and a call used as a value (`callv`) is that value (unknown without one). A function's
+  value runs before the expression that reads it, innermost first, as a `do` action does.
+  Assigning a parameter changes the local; any other name is a flow variable. Recursion is the
+  linter's error; here a call deeper than MAX_CALL_DEPTH stops the run (`call_depth`).
 """
 
 from __future__ import annotations
@@ -48,6 +56,8 @@ from poring_flow.effective import Effective, global_set, merge
 TICK_S = 0.1
 RANK = {"critical": 0, "survival": 1, "upkeep": 2}  # the CLASS level (lower runs first)
 MAIN_RANK = 3
+MAX_CALL_DEPTH = 32  # nested calls (recursion is the linter's error: this only bounds a run)
+RETURN = "\0return"  # a local environment's return value (never a NAME)
 
 
 def queue_key(e: Effective) -> tuple[int, int, int]:
@@ -101,7 +111,7 @@ def default_plan(a: ir.ActionStmt, sim: Sim) -> Plan:
     if a.block == "use_item":
         return Plan(ticks=1)
     if a.block == fn.PRESS:  # one hotbar press; a key off the hotbar sends nothing and fails
-        return Plan(ticks=1) if fn.key_of(a) in sim.hotbar else Plan(ticks=0, outcome="failed")
+        return Plan(ticks=1) if sim.key(a) in sim.hotbar else Plan(ticks=0, outcome="failed")
     if spec is not None and spec.profile == "atomic":
         return Plan(ticks=3, atomic=(0, 3))
     return Plan(ticks=3)
@@ -136,6 +146,10 @@ class _Frame:
     pending: str | None = None  # what to send at its next step: restart | fail
     atomic: bool = False
     started: bool = False
+    # the project model's functions: this frame's call stack of LOCAL environments (parameter ->
+    # value), and the last value of each function / do expression it computed (by node id)
+    envs: list[dict[str, Any]] = field(default_factory=list)
+    values: dict[int, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -168,6 +182,7 @@ class Sim:
         save_point: tuple[str, tuple[int, int]] | None = None,
         cat: Catalogue | None = None,
         max_ticks: int = 5000,
+        start_t: float = 0.0,
     ) -> None:
         self.flow = flow
         self.tree = compile_tree(flow)
@@ -177,7 +192,10 @@ class Sim:
         self.planner = planner or default_plan
         self.save_point = save_point
         self.max_ticks = max_ticks
-        self.t = 0.0
+        self.t = start_t  # the project model's session runs before the first map (project.py)
+        self.frame: _Frame | None = None  # the frame being stepped (its locals; None: none)
+        self._loose: dict[int, Any] = {}  # values computed outside any frame (a test's body)
+        self._loose_envs: list[dict[str, Any]] = []
         self.frame_id = 0
         self.out: list[Emitted] = []
         self.log: list[tuple[float, str, str]] = []
@@ -251,6 +269,9 @@ class Sim:
         if isinstance(e, ir.Lit):
             return e.value
         if isinstance(e, ir.Var):
+            env = self._env()
+            if env is not None and e.name in env:
+                return env[e.name]
             return self.vars.get(e.name)
         if isinstance(e, ir.OutcomeLit):
             return e.value
@@ -258,8 +279,10 @@ class Sim:
             return [self._eval(i, done) for i in e.items]
         if isinstance(e, ir.Sense):
             return self._sense(e)
-        if isinstance(e, ir.Do):
-            return (done or {}).get(id(e))
+        if isinstance(e, ir.Do | ir.CallV):
+            if done is not None and id(e) in done:
+                return done[id(e)]
+            return self._values().get(id(e))
         if isinstance(e, ir.Not_):
             v = self._eval(e.term, done)
             return None if v is None else not v
@@ -300,7 +323,7 @@ class Sim:
                 Key(t_mono_ns=ns, code="F1", action="up"),
             ]
         if a.block == fn.PRESS:  # the press's own hotbar key (default_plan refuses another)
-            code = fn.key_of(a) or "F1"
+            code = self.key(a) or "F1"
             return [
                 Key(t_mono_ns=ns, code=code, action="down"),
                 Key(t_mono_ns=ns, code=code, action="up"),
@@ -322,6 +345,9 @@ class Sim:
     def _action(self, a: ir.ActionStmt, owner: str) -> Generator[_Tick, str | None, Outcome]:
         if a.block in self._where_blocks:  # read_position types /where (#10)
             self.where.append((self.t, self._reason))
+        for e in a.params.values():  # a parameter that is a function's value runs first
+            if any(isinstance(x, ir.CallV) for x in ir.sub_exprs(e)):
+                yield from self._pre(e, owner, {})
         while True:
             plan = self.planner(a, self)
             restarted = False
@@ -355,18 +381,113 @@ class Sim:
                 self._set(effects, cause=cause)
             return plan.outcome
 
+    def key(self, a: ir.ActionStmt) -> str | None:
+        """A press_key's key: its literal, or (the project model) the parameter it presses, as
+        the running call bound it."""
+        v = self._eval(a.params.get("key")) if a.block == fn.PRESS else None
+        return v if isinstance(v, str) else None
+
     def _is_wing(self, a: ir.ActionStmt) -> bool:
         if a.block == fn.PRESS:  # a key the flow's Butterfly Wing function presses
-            return fn.key_of(a) in self.wing_keys
+            return self.key(a) in self.wing_keys
         v = self._eval(a.params["item"]) if "item" in a.params else None
         return isinstance(v, ir.ItemRef) and self.world.get(f"wing:{v.id}") == "butterfly"
 
     def _cond(self, e: Any, owner: str) -> Generator[_Tick, str | None, Any]:
-        done: dict[int, str] = {}
-        for x in ir.sub_exprs(e):
-            if isinstance(x, ir.Do):
-                done[id(x)] = yield from self._action(x.action, owner)
+        done: dict[int, Any] = {}
+        yield from self._pre(e, owner, done)
         return self._eval(e, done)
+
+    def _pre(self, e: Any, owner: str, done: dict[int, Any]) -> Generator[_Tick, str | None, None]:
+        """Run every `do` action and function value inside `e`, innermost first; their values go
+        to `done` and to the frame's values (the planner reads an action's parameters later)."""
+        if isinstance(e, ir.Do):
+            done[id(e)] = yield from self._action(e.action, owner)
+        elif isinstance(e, ir.CallV):
+            for a in [*e.args, *e.kwargs.values()]:
+                yield from self._pre(a, owner, done)
+            _, done[id(e)] = yield from self._call(e.proc, e.args, e.kwargs, owner, done)
+        else:
+            for c in _children(e):
+                yield from self._pre(c, owner, done)
+            return
+        self._values()[id(e)] = done[id(e)]
+
+    # --- functions (the project model; the module docstring) -------------------------------------
+    def _envs(self) -> list[dict[str, Any]]:
+        return self.frame.envs if self.frame is not None else self._loose_envs
+
+    def _env(self) -> dict[str, Any] | None:
+        envs = self._envs()
+        return envs[-1] if envs else None
+
+    def _values(self) -> dict[int, Any]:
+        return self.frame.values if self.frame is not None else self._loose
+
+    def _assign(self, name: str, value: Any) -> None:
+        env = self._env()
+        if env is not None and name in env:
+            env[name] = value
+        else:
+            self.vars[name] = value
+
+    def _bind(self, proc: str, vals: list[Any], kw: dict[str, Any]) -> dict[str, Any]:
+        """The callee's local environment, bound as Python binds a call (a mismatch the linter
+        names, `call_args`, stops the run here)."""
+        sig = self.flow.signatures.get(proc) or ir.Signature()
+        names = [p.name for p in sig.params]
+        env: dict[str, Any] = dict(zip(names, vals, strict=False))
+        extra = vals[len(names) :]
+        if extra and sig.varargs is None:
+            raise _Halt(f"call_args_{proc}")
+        if sig.varargs is not None:
+            env[sig.varargs] = list(extra)
+        more: dict[str, Any] = {}
+        for k, v in kw.items():
+            if k in names:
+                if k in env:
+                    raise _Halt(f"call_args_{proc}")
+                env[k] = v
+            elif sig.kwargs is not None:
+                more[k] = v
+            else:
+                raise _Halt(f"call_args_{proc}")
+        if sig.kwargs is not None:
+            env[sig.kwargs] = more
+        for p in sig.params:
+            if p.name not in env:
+                if p.default is None:
+                    raise _Halt(f"call_args_{proc}")
+                env[p.name] = p.default.value
+        return env
+
+    def _call(
+        self,
+        proc: str,
+        args: list[Any],
+        kwargs: dict[str, Any],
+        owner: str,
+        done: dict[int, Any] | None = None,
+    ) -> Generator[_Tick, str | None, tuple[str, Any]]:
+        """Run a procedure with its arguments: (how its body ended, its return value). `done`:
+        the arguments' inner values were computed already (a function's value, `_pre`)."""
+        vals: list[Any] = []
+        kw: dict[str, Any] = {}
+        for a in args:
+            v = self._eval(a, done) if done is not None else (yield from self._cond(a, owner))
+            vals.append(v)
+        for k, a in kwargs.items():
+            kw[k] = self._eval(a, done) if done is not None else (yield from self._cond(a, owner))
+        env = self._bind(proc, vals, kw)
+        envs = self._envs()  # this frame's stack, kept: the generator may close in another tick
+        if len(envs) >= MAX_CALL_DEPTH:
+            raise _Halt("call_depth")
+        envs.append(env)
+        try:
+            r = yield from self._stmts(list(self.flow.procedures.get(proc, [])), owner)
+        finally:
+            envs.pop()
+        return r, env.get(RETURN)
 
     def _stmts(self, stmts: list[Any], owner: str) -> Generator[_Tick, str | None, str]:
         for st in stmts:
@@ -384,7 +505,7 @@ class Sim:
         if isinstance(st, ir.ActionStmt):
             out = yield from self._action(st, owner)
             if st.outcome_to:
-                self.vars[st.outcome_to] = out
+                self._assign(st.outcome_to, out)
             if out != "ok" and st.on_fail == "stop":
                 raise _Halt(f"{st.block}_{out}")
             return "next"
@@ -400,19 +521,25 @@ class Sim:
                 self._reason = reason  # the next poll is this statement's again
                 if waited >= st.timeout_s:
                     if st.outcome_to:
-                        self.vars[st.outcome_to] = "failed"
+                        self._assign(st.outcome_to, "failed")
                     return "next"
                 yield _Tick(None, False, "wait_until")
                 waited += TICK_S
             if st.outcome_to:
-                self.vars[st.outcome_to] = "ok"
+                self._assign(st.outcome_to, "ok")
             return "next"
         if isinstance(st, ir.SetVar):
-            self.vars[st.var] = self._eval(st.value)
+            self._assign(st.var, (yield from self._cond(st.value, owner)))
             return "next"
         if isinstance(st, ir.CallProc):
-            r = yield from self._stmts(self.flow.procedures.get(st.proc, []), owner)
+            r, _ = yield from self._call(st.proc, st.args, st.kwargs, owner)
             return r if r in ("exit",) else "next"
+        if isinstance(st, ir.Return):
+            value = (yield from self._cond(st.value, owner)) if st.value is not None else None
+            env = self._env()
+            if env is not None:
+                env[RETURN] = value
+            return "return"
         if isinstance(st, ir.Stop):
             raise _Halt(st.reason)
         if isinstance(st, ir.Break_ | ir.Continue_):
@@ -426,16 +553,13 @@ class Sim:
         n = 0
         start = self.t
         if isinstance(st, ir.Repeat):
-            items: list[Any] = list(range(int(self._eval(st.times) or 0)))
+            items: list[Any] = list(range(int((yield from self._cond(st.times, owner)) or 0)))
         elif isinstance(st, ir.ForEach):
             if isinstance(st.items, ir.Range):
-                items = list(
-                    range(
-                        int(self._eval(st.items.start)),
-                        int(self._eval(st.items.stop)),
-                        int(self._eval(st.items.step)),
-                    )
-                )
+                start_ = yield from self._cond(st.items.start, owner)
+                stop_ = yield from self._cond(st.items.stop, owner)
+                step_ = yield from self._cond(st.items.step, owner)
+                items = list(range(int(start_), int(stop_), int(step_)))
             else:
                 items = list(self._eval(st.items) or [])
         else:
@@ -455,14 +579,14 @@ class Sim:
                 if i >= len(items):
                     return "next"
                 if isinstance(st, ir.ForEach):
-                    self.vars[st.var] = items[i]
+                    self._assign(st.var, items[i])
                 i += 1
             n += 1
             r = yield from self._stmts(st.body, owner)
             if r == "break":
                 return "next"
-            if r == "exit":
-                return "exit"
+            if r in ("exit", "return"):
+                return r
 
     def _exit(self, x: ir.Exit, owner: str) -> Generator[_Tick, str | None, None]:
         """An exit's actions, then its arrival check (13.1): the map from the world."""
@@ -483,7 +607,7 @@ class Sim:
                 # and the arrival below is the one map change (never a second one by the press)
                 self.in_exit_function = True
                 try:
-                    yield from self._stmts(list(self.flow.procedures.get(x.proc, [])), owner)
+                    yield from self._call(x.proc, [], {}, owner)
                 finally:
                     self.in_exit_function = False
             else:
@@ -648,6 +772,7 @@ class Sim:
             s.runs.append(self.t)
             gen = self._stmts(list(e.handler.body), e.label)
             outcome = "ok"
+            saved, self.frame = self.frame, _Frame(e.label, RANK[e.handler.priority], gen)
             try:
                 tick = next(gen)
                 while True:
@@ -659,6 +784,8 @@ class Sim:
                 pass
             except _Halt as h:
                 outcome = h.reason
+            finally:
+                self.frame = saved
             s.last_end = self.t
             if outcome != "ok":
                 s.insert_fails += 1
@@ -737,10 +864,13 @@ class Sim:
         send, frame.pending = frame.pending, None
         if not frame.started:  # nothing was interrupted before its first tick
             send, frame.started = None, True
+        self.frame = frame
         try:
             tick = frame.gen.send(send) if send is not None else next(frame.gen)
         except StopIteration:
             return False
+        finally:
+            self.frame = None
         frame.atomic = tick.atomic
         if tick.batch is not None:
             self._emit(
@@ -789,6 +919,23 @@ class Sim:
             self._release(f"end: {self.end}")
         self.log.append((self.t, "end", self.end or ""))
         return self.end or ""
+
+
+def _children(e: Any) -> list[Any]:
+    """An expression's direct sub-expressions (a `do` action's parameters are its own)."""
+    if isinstance(e, ir.ListE):
+        return list(e.items)
+    if isinstance(e, ir.Logic):
+        return list(e.terms)
+    if isinstance(e, ir.Not_):
+        return [e.term]
+    if isinstance(e, ir.Sense):
+        return list(e.args.values())
+    if isinstance(e, ir.Cmp | ir.Arith):
+        return [e.left, e.right]
+    if isinstance(e, ir.CallV):
+        return [*e.args, *e.kwargs.values()]
+    return []
 
 
 _OPS: dict[str, Callable[[Any, Any], Any]] = {

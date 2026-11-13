@@ -270,6 +270,29 @@ CASES = [
         ),
         ["handlers.hp_low: escalate names no procedure leave"],
     ),
+    Case(  # the project model (format 3): a call's arguments fit the function's inputs
+        "call_args",
+        "call_args",
+        irflow(
+            {"kind": "call", "proc": "go", "kwargs": {"m": {"kind": "lit", "value": 1}}},
+            {"kind": "call", "proc": "go", "args": [{"kind": "lit", "value": 1}] * 2},
+            procedures={"go": [SIT]},
+            signatures={"go": {"params": [{"name": "n", "default": None}]}},
+        ),
+        [
+            "main.0: go() has no parameter m",
+            "main.0: go() needs n",
+            "main.1: go() takes 1 positional argument, not 2",
+        ],
+        farm=False,
+    ),
+    Case(  # the project model: return ends a function, never a main
+        "return_placement",
+        "return_placement",
+        irflow({"kind": "return", "value": None}, SIT),
+        ["main.0: return belongs in a function"],
+        farm=False,
+    ),
     Case(
         "names",
         "names",

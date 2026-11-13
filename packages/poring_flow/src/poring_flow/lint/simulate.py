@@ -327,6 +327,8 @@ class SavePoint:
                 state = self._set(a, b, state)
             if isinstance(st, ir.TakeExit) and b is not None:
                 self._exit(path, st.exit, state, b)
+            for proc in ir.calls_in(st):  # a call statement, and a function's value (callv)
+                state = self._stmts(ctx.flow.procedures.get(proc, []), proc, state, b)
             if isinstance(st, ir.If):
                 state = self._stmts(st.then, f"{path}.then", state, b) | self._stmts(
                     st.orelse, f"{path}.orelse", state, b
@@ -334,8 +336,6 @@ class SavePoint:
             elif isinstance(st, ir.While | ir.Repeat | ir.ForEach):
                 once = self._stmts(st.body, f"{path}.body", state, b)
                 state = state | once | self._stmts(st.body, f"{path}.body", state | once, b)
-            elif isinstance(st, ir.CallProc):
-                state = self._stmts(ctx.flow.procedures.get(st.proc, []), st.proc, state, b)
         return state
 
     def _wing(
@@ -817,8 +817,8 @@ def _map_change(ctx: Ctx, consts: Consts) -> None:
             if isinstance(site.stmt, ir.TakeExit):
                 continue
             acts = list(ir.actions_in(site.stmt))
-            if isinstance(site.stmt, ir.CallProc):
-                acts += body_actions(ctx.flow.procedures.get(site.stmt.proc, []), ctx.flow)
+            for proc in ir.calls_in(site.stmt):  # a call statement, and a function's value
+                acts += body_actions(ctx.flow.procedures.get(proc, []), ctx.flow)
             for a in acts:
                 what = _changes_map(ctx, consts, a, ctx.sheet(b.map.map))
                 if what:

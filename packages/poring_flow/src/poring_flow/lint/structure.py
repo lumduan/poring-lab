@@ -45,6 +45,8 @@ def expr_type(e: Any, ctx: Ctx, types: dict[str, str]) -> str:
         return types.get(e.name, "?")
     if isinstance(e, ir.OutcomeLit | ir.Do):
         return "outcome"
+    if isinstance(e, ir.CallV):
+        return "?"  # a function's value: whatever it returns (the project model)
     if isinstance(e, ir.ListE):
         kinds = {expr_type(i, ctx, types) for i in e.items}
         return f"list:{kinds.pop()}" if len(kinds) == 1 else "list:mixed"
@@ -57,6 +59,8 @@ def expr_type(e: Any, ctx: Ctx, types: dict[str, str]) -> str:
         return "bool"
     if isinstance(e, ir.Arith):
         a, b = expr_type(e.left, ctx, types), expr_type(e.right, ctx, types)
+        if "?" in (a, b):
+            return "?"  # a parameter or a function's value (the project model): any number
         return "int" if a == b == "int" else "float"
     return "?"
 
@@ -84,18 +88,33 @@ def _article(t: str) -> str:
     return f"an {shown}" if shown[0] in "aeiou" else f"a {shown}"
 
 
+def site_types(flow: ir.Flow, site: ir.Site, types: dict[str, str]) -> dict[str, str]:
+    """The variables a statement sees: the flow's, and inside a function its parameters (the
+    project model: a parameter holds any value, so its type is unknown)."""
+    sig = flow.signatures.get(site.root) if site.scope == "procedure" else None
+    if sig is None:
+        return types
+    return {**types, **{n: "?" for n in sig.names()}}
+
+
+# where `return` may stand: a function's body, or an event's (the project model: an event is a
+# def); never a main or a map block's main
+RETURN_SCOPES = ("procedure", "handler", "map_event")
+
+
 def check(ctx: Ctx) -> None:
     flow = ctx.flow
-    types = var_types(flow)
+    module_types = var_types(flow)
     _names(ctx)
     n = ir.count_nodes(flow)
     if n > MAX_NODES:
         ctx.add("node_count", "error", 1, "", f"the flow has {n} nodes; at most {MAX_NODES}")
-    for name, t in types.items():
+    for name, t in module_types.items():
         if t == "list:mixed":
             ctx.add("variables", "error", 1, name, "a list holds one kind of reference")
     for site in ir.sites(flow):
         st, path = site.stmt, site.path
+        types = site_types(flow, site, module_types)
         if site.depth > MAX_DEPTH:
             ctx.add("depth", "error", 1, path, f"statements nested deeper than {MAX_DEPTH}")
         if isinstance(st, ir.Repeat):
@@ -118,8 +137,10 @@ def check(ctx: Ctx) -> None:
                     f"exit.item: {st.exit.item.name} holds {_article(held)}: an item_warp takes an "
                     "item",
                 )
-        if isinstance(st, ir.CallProc) and st.proc not in flow.procedures:
-            ctx.add("procedures", "error", 1, path, f"there is no procedure {st.proc}")
+        if isinstance(st, ir.CallProc):
+            _call(ctx, path, st.proc, st.args, st.kwargs, "procedure")
+        if isinstance(st, ir.Return) and site.scope not in RETURN_SCOPES:
+            ctx.add("return_placement", "error", 1, path, "return belongs in a function")
         if isinstance(st, ir.SetVar):
             _set_var(ctx, path, st.var, expr_type(st.value, ctx, types), types)
         if isinstance(st, ir.ForEach):
@@ -132,19 +153,66 @@ def check(ctx: Ctx) -> None:
             _expr(ctx, path, e, types)
     for label, h, _, _ in ir.handler_bodies(flow):
         for _, e in handler_exprs(h):
-            _expr(ctx, label, e, types)
+            _expr(ctx, label, e, module_types)
             if any(isinstance(x, ir.Do) for x in ir.sub_exprs(e)):
                 ctx.add("do_placement", "error", 1, label, "an event condition cannot run a block")
+            if any(isinstance(x, ir.CallV) for x in ir.sub_exprs(e)):
+                ctx.add(
+                    "do_placement",
+                    "error",
+                    1,
+                    label,
+                    "an event condition cannot call a function: it reads sensors and variables",
+                )
         if h.escalate and h.escalate not in flow.procedures:
             ctx.add("procedures", "error", 1, label, f"escalate names no procedure {h.escalate}")
     for where, e in [
         *((f"assumes.{i}", a) for i, a in enumerate(flow.assumes)),
         *((("stop_when", flow.stop_when),) if flow.stop_when else ()),
     ]:
-        _expr(ctx, where, e, types)
-        if any(isinstance(x, ir.Do) for x in ir.sub_exprs(e)):
+        _expr(ctx, where, e, module_types)
+        if any(isinstance(x, ir.Do | ir.CallV) for x in ir.sub_exprs(e)):
             ctx.add("do_placement", "error", 1, where, "this condition cannot run a block")
+    for name, sig in flow.signatures.items():
+        if name not in flow.procedures:
+            ctx.add("procedures", "error", 1, "", f"inputs given for {name}, which is no procedure")
+        for p in sig.params:
+            if p.default is not None:
+                _expr(ctx, name, p.default, module_types)
     _recursion(ctx)
+
+
+def _call(
+    ctx: Ctx, path: str, proc: str, args: list[Any], kwargs: dict[str, Any], what: str
+) -> None:
+    """A call's procedure exists and its arguments fit its inputs, as Python binds them
+    (`call_args`; the project model, format 3)."""
+    flow = ctx.flow
+    if proc not in flow.procedures:
+        ctx.add("procedures", "error", 1, path, f"there is no {what} {proc}")
+        return
+    sig = flow.signatures.get(proc) or ir.Signature()
+    names = [p.name for p in sig.params]
+    if len(args) > len(names) and sig.varargs is None:
+        n = len(names)
+        ctx.add(
+            "call_args",
+            "error",
+            1,
+            path,
+            f"{proc}() takes {n} positional argument{'' if n == 1 else 's'}, not {len(args)}",
+        )
+    by_position = set(names[: len(args)])
+    for k in kwargs:
+        if k in by_position:
+            ctx.add("call_args", "error", 1, path, f"{proc}() got {k} twice")
+        elif k not in names and sig.kwargs is None:
+            ctx.add("call_args", "error", 1, path, f"{proc}() has no parameter {k}")
+    missing = [
+        p.name for p in sig.params[len(args) :] if p.default is None and p.name not in kwargs
+    ]
+    if missing:
+        ctx.add("call_args", "error", 1, path, f"{proc}() needs {', '.join(missing)}")
 
 
 def _set_var(ctx: Ctx, path: str, var: str, t: str, types: dict[str, str]) -> None:
@@ -219,8 +287,9 @@ def _membership_ok(right: Any, types: dict[str, str]) -> bool:
         return isinstance(right.value, list)
     if isinstance(right, ir.ListE):
         return all(isinstance(i, ir.Var | ir.Lit) for i in right.items)
-    if isinstance(right, ir.Var):
-        return types.get(right.name, "?").startswith("list") or right.name not in types
+    if isinstance(right, ir.Var):  # a list variable, or a parameter (any value: the project)
+        t = types.get(right.name)
+        return t is None or t == "?" or t.startswith("list")
     return False
 
 
@@ -267,6 +336,8 @@ def _expr(ctx: Ctx, path: str, e: Any, types: dict[str, str]) -> None:
             for p in s.spec.params:
                 if p.required and p.name not in x.args:
                     ctx.add("unknown_sensor", "error", 1, path, f"{x.sensor}() needs {p.name}")
+        elif isinstance(x, ir.CallV):
+            _call(ctx, path, x.proc, x.args, x.kwargs, "function")
         elif isinstance(x, ir.Do):
             _action(ctx, path, x.action, types)
             if x.action.outcome_to:
@@ -314,8 +385,8 @@ def _names(ctx: Ctx) -> None:
 def _recursion(ctx: Ctx) -> None:
     calls: dict[str, set[str]] = {}
     for site in ir.sites(ctx.flow):
-        if site.scope == "procedure" and isinstance(site.stmt, ir.CallProc):
-            calls.setdefault(site.root, set()).add(site.stmt.proc)
+        if site.scope == "procedure":  # a call statement, and a function's value (callv)
+            calls.setdefault(site.root, set()).update(ir.calls_in(site.stmt))
     reported: set[frozenset[str]] = set()
 
     def dfs(node: str, stack: list[str]) -> None:

@@ -57,6 +57,11 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
   (Batt: "every key a function"): a `press_key` block (hotbar row 1 only), an `item_warp` that
   runs a function (`Exit.proc`, left out of the JSON when None: no IR bump), and the Rogue's runner
   as a `dungeon_hunt` block whose parameters name those functions.
+- ➡️ 2026-11-13 evening: [Amendment D](#amendment-d-2026-11-13-batt-decided-the-project-model-format-3-is-what-people-author)
+  (Batt decided [the project model](../planning/project-model.md)): the PROJECT (format 3: nodes,
+  tabs, functions like Python, Global with overrides) is what /maps and /flows author and save;
+  IR 2 becomes the engine's internal execution form, and the session blocks `login` /
+  `choose_character` join the catalogue, simulated only.
 - **Related:**
   - [ADR-0002](0002-input-mux.md): one input writer, the lease, releases on handoff;
   - [ADR-0003](0003-env-abstraction.md): the `Env` contract the blocks act through;
@@ -433,6 +438,10 @@ from its L1 entry.
   interlock is red, and only an operator window (ASSIST, a HOST tool, ≤ 120 s) lets input through.
   The agent channel can never open one (ADR-0016). Flows therefore start in game. How a flow could
   ask for a window is an open question.
+  ➡️ **2026-11-13 ([Amendment D](#amendment-d-2026-11-13-batt-decided-the-project-model-format-3-is-what-people-author)):**
+  `session.login` and `session.select_char` are the blocks `login(server, credential)` and
+  `choose_character(slot, name)` of the project model's login and character nodes, SIMULATED
+  only (flows still start in game: Run starts on a map node). `session.logout` stays excluded.
 - `vitals.read`, `nav.read_position`: they become SENSORS (2.3).
 
 **Never a block, in any version:** clipboard or file transfer (ADR-0004); chat or whispers (the
@@ -2406,3 +2415,57 @@ same studio as my_first_workflow, not a separate view." This amendment ADDS to s
 - **The fixture** `services/frontend/src/lib/flow/fixtures/xmas_dun02_flow.json`: the xmas_dun02
   flow as two map blocks (xmas_dun02 -> geffen), every key a function
   (`packages/poring_flow/tests/test_flow_functions.py`).
+
+## Amendment D (2026-11-13, Batt decided): the project model (format 3) is what people author
+
+**Batt (2026-11-13 evening, translated; the full words and answers are in
+[project-model.md](../planning/project-model.md) section 0):** "/maps: a login node, a
+choose-character node, a node for each map, and a GLOBAL node that can share variables and
+functions... Each node has as many tabs as it likes, but only ONE main tab... A map's function with
+a Global function's name OVERRIDES it... Functions with and without inputs, like real Python...
+Refactor fresh: old IR 2 files are not converted." This amendment ADDS to sections 1 and 7 and to
+13.1 / 13.6; nothing above is rewritten. The contract is project-model.md (its JSON in section 2,
+the name semantics in section 3); what was decided while building it is recorded there.
+
+- **The authoring format is the PROJECT** (`poring_flow/project.py`, `format:
+  "poring-lab.project"`, `version: 3`): nodes (login, character, map, at most one Global), each with
+  tabs (one main first, the user's others), defs (functions with positional inputs, defaults,
+  `*args`, `**kwargs`, `return`; EVENTS = defs with a trigger) and variables; edges are the session
+  path login -> character -> the start map's entry. Canonical JSON and `project_hash` as section
+  1's. Its JSON Schema is `packages/poring_flow/schema/project.schema.json` (drift-tested), its
+  TypeScript `services/frontend/src/lib/flow/project.gen.ts` (scripts/gen_protocol.sh).
+- **IR 2 is the engine's internal execution form.** `compile_project` turns a project into ONE IR
+  flow (map nodes = map blocks, Global = the flow's procedures, variables and global events), so
+  every rule of the linter (sections 5, 13.5, 13.6.9, Amendments A-C), the simulators and their
+  safety semantics apply unchanged. Batt's override rule (a name is the node's definition first,
+  then Global's, also inside Global's functions and events) compiles by SPECIALISATION: a Global
+  definition that reaches a name a node overrides gets a copy for that node whose names resolve on
+  it (a Global event an override on that node, marked dispatched); exact, because code runs on the
+  node where it was entered. Nothing user-facing reads or writes IR 2 any more; the routes refuse
+  an IR 2 body (`format_changed`, section 8 of the plan: not converted).
+- **IR 2's internal additions** (each left out of its canonical JSON when unused, so every IR 2
+  flow keeps its JSON and hash): `CallProc.args` / `kwargs`, `CallV` (a function's value),
+  `Return`, `Flow.signatures` (a procedure's inputs) and `Override.strict` (a map node's def of a
+  safety-critical event's name REPLACES it there, under the written-global "not weakened" rule:
+  its body starts with the built-in's step; 13.6.1's safety-critical three stay always on). New
+  lint rules: `call_args` (arguments as Python binds them), `return_placement`, recursion through
+  function values too, `do_placement` for a function called in an event condition, and
+  `key_argument` (a press_key may press its function's PARAMETER when every call gives it a literal
+  hotbar key; dungeon_hunt's roles and Run's keys resolve "through calls with literal arguments").
+  The runtime binds arguments into a local environment per scheduler frame (a pre-empting event
+  never sees a cut function's locals) and bounds call depth.
+- **The session blocks** `login(server, credential)` / `choose_character(slot, name)` (L1
+  `session.login` / `session.select_char`, moved from 2.1's excluded list to blocks): SIMULATED
+  ONLY. The compiler never puts a login or character node into the IR that runs; Run starts on a
+  map node with the character in the game; the bot's real login stays ro_agent's. The server is an
+  environment id (a warning unless it is lab-rathena), the credential a NAME (`lab_gm`,
+  `lab_player`); a value that is not a plain name is an error, never echoed, and such a project's
+  hash is never returned either (ADR-0004 c). The simulator plays them as the Maps page's mock
+  (1 s + 6 s + 4 s), then the start map's entry through the edges.
+- **The Python view** is one file per tab plus `project.py` (`poring_flow/pyproject.py`), under
+  7.2's rules with a def's inputs and `return` added; 7.5's round trips hold per file and for the
+  whole project.
+- **The fixtures** both sides test: `services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json`
+  and `project_sample.json`, the Maps page's `lib/maps/fixtures/project_sample_trace.json`
+  (`packages/poring_flow/tests/test_project.py`, `test_project_pyview.py`).
+

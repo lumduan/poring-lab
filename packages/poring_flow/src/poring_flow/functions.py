@@ -15,7 +15,8 @@ the `press_key` block. Three things use them:
 
 Everything here reads the IR only (no catalogue, no linter), so the linter, the simulator and the
 editor share one definition. A key is a press's LITERAL key (the linter's `param_option` refuses
-any other value: a variable, a key off the hotbar).
+any other value: a variable, a key off the hotbar), or (the project model, format 3) a function's
+PARAMETER that every call gives a literal key (`resolve_key`; the linter's `key_argument`).
 """
 
 from __future__ import annotations
@@ -65,9 +66,10 @@ def actions(
     seen = set() if seen is None else seen
     for site in ir.walk(stmts, "x", root="x", scope="main", block=None):
         yield from ir.actions_in(site.stmt)
-        if isinstance(site.stmt, ir.CallProc) and site.stmt.proc not in seen:
-            seen.add(site.stmt.proc)
-            yield from actions(flow.procedures.get(site.stmt.proc, []), flow, seen)
+        for proc in ir.calls_in(site.stmt):  # a call statement, and a function's value (callv)
+            if proc not in seen:
+                seen.add(proc)
+                yield from actions(flow.procedures.get(proc, []), flow, seen)
 
 
 def presses(stmts: list[Any], flow: ir.Flow) -> list[ir.ActionStmt]:
@@ -99,11 +101,90 @@ def wing_keys(flow: ir.Flow) -> dict[str, list[str]]:
     for name in wing_functions(flow):
         if name not in flow.procedures:
             continue  # the linter names an undefined function
-        for a in presses(flow.procedures[name], flow):
-            k = key_of(a)
+        keys = [key_of(a) for a in presses(flow.procedures[name], flow)]
+        keys.append(resolve_key(flow, name)[0])  # through calls with literal arguments
+        for k in keys:
             if k is not None and name not in out.setdefault(k, []):
                 out[k].append(name)
     return out
+
+
+MAX_KEY_DEPTH = 8
+
+
+def _literal(e: Any, env: dict[str, Any]) -> tuple[bool, Any]:
+    """(is it known, its value): a literal, or a parameter bound to one."""
+    if isinstance(e, ir.Lit):
+        return True, e.value
+    if isinstance(e, ir.Var) and e.name in env:
+        return True, env[e.name]
+    return False, None
+
+
+def bind_literals(
+    flow: ir.Flow, name: str, args: list[Any], kwargs: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A call's arguments bound to the function's inputs (literal values; defaults filled), or
+    None when they do not fit (the linter's call_args names how)."""
+    sig = flow.signatures.get(name) or ir.Signature()
+    names = [p.name for p in sig.params]
+    env: dict[str, Any] = dict(zip(names, args, strict=False))
+    if len(args) > len(names) and sig.varargs is None:
+        return None
+    for k, v in kwargs.items():
+        if k not in names or k in env:
+            return None
+        env[k] = v
+    for p in sig.params:
+        if p.name not in env:
+            if p.default is None:
+                return None
+            env[p.name] = p.default.value
+    return env
+
+
+def resolve_key(
+    flow: ir.Flow,
+    name: str,
+    args: list[Any] | None = None,
+    kwargs: dict[str, Any] | None = None,
+    depth: int = 0,
+) -> tuple[str | None, str]:
+    """The ONE hotbar key a function presses (the project model, section 6: "through calls with
+    literal arguments, to exactly one press_key"): its body is exactly one statement, a press_key
+    whose key is a literal or the function's parameter bound to a literal, or a call -- with
+    literal arguments -- of another such function. (key, "") or (None, why)."""
+    body = flow.procedures.get(name)
+    if body is None:
+        return None, f"there is no function {name}"
+    if depth > MAX_KEY_DEPTH:
+        return None, "its calls go deeper than the engine follows"
+    env = bind_literals(flow, name, list(args or []), dict(kwargs or {}))
+    if env is None:
+        return None, f"{name}() is called with arguments that do not fit its inputs"
+    if len(body) != 1:
+        return None, f"{name}'s body is not exactly one press_key"
+    st = body[0]
+    if isinstance(st, ir.ActionStmt) and st.block == PRESS:
+        known, v = _literal(st.params.get("key"), env)
+        if known and isinstance(v, str):
+            return v, ""
+        return None, f"{name}'s press_key has no literal key"
+    if isinstance(st, ir.CallProc):
+        vals: list[Any] = []
+        for a in st.args:
+            known, v = _literal(a, env)
+            if not known:
+                return None, f"{name} calls {st.proc} with an argument that is not a literal"
+            vals.append(v)
+        kw: dict[str, Any] = {}
+        for k, a in st.kwargs.items():
+            known, v = _literal(a, env)
+            if not known:
+                return None, f"{name} calls {st.proc} with an argument that is not a literal"
+            kw[k] = v
+        return resolve_key(flow, st.proc, vals, kw, depth + 1)
+    return None, f"{name}'s body is not exactly one press_key"
 
 
 def single_press(flow: ir.Flow, name: str) -> ir.ActionStmt | None:

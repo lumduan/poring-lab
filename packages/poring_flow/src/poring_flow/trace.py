@@ -168,7 +168,10 @@ class TraceSim(Sim):
         world: World | None,
         scenario: Scenario | None = None,
         cat: Catalogue | None = None,
+        start_t: float = 0.0,
     ) -> None:
+        """`start_t`: the run's clock when the map flow starts (the project model's session plays
+        before it: project.py); the scenario's horizon and timeline stay on the run's clock."""
         self.scenario = scenario or Scenario()
         self.static = world
         self.notes: list[str] = []
@@ -222,7 +225,8 @@ class TraceSim(Sim):
             timeline=timeline,
             planner=self._plan,
             cat=cat or catalogue(),
-            max_ticks=_ticks(sc.horizon_s * 1000),
+            max_ticks=_ticks(max(TICK_S, sc.horizon_s - start_t) * 1000),
+            start_t=start_t,
         )
         self.block = block_name
         self.start = {
@@ -595,7 +599,7 @@ class TraceSim(Sim):
         if a.block == fn.PRESS and self.in_exit_function:
             # the press IS the exit (an item warp by function): no step of its own, no arrive;
             # _play_exit plays it as the exit's item step
-            self._exit_presses.append((t0, self.t, fn.key_of(a)))
+            self._exit_presses.append((t0, self.t, self.key(a)))
         else:
             self._play_action(a, t0, before, out, planned, walk_ms, fight)
         if out == "ok" and a.block == "set_save_point":
@@ -689,7 +693,7 @@ class TraceSim(Sim):
         elif a.block in ("loot", "respawn"):
             self._play_step({**base, "kind": a.block, "t0": t0, "t1": self.t}, before)
         elif a.block == fn.PRESS:  # an act that names its hotbar key (Amendment C)
-            self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t, "key": fn.key_of(a)},
+            self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t, "key": self.key(a)},
                             before)  # fmt: skip
         else:
             self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t}, before)

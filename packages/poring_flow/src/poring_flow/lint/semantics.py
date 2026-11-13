@@ -42,6 +42,10 @@ def _all_refs(ctx: Ctx) -> list[tuple[str, Any]]:
 
     for name, lit in ctx.flow.variables.items():
         scan(name, lit)
+    for name, sig in ctx.flow.signatures.items():  # a parameter's default (the project model)
+        for p in sig.params:
+            if p.default is not None:
+                scan(name, p.default)
     for site in ir.sites(ctx.flow):
         for _, e in ir.stmt_exprs(site.stmt):
             scan(site.path, e)

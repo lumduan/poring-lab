@@ -12,7 +12,11 @@ from poring_skills.schema import load_l1
 def test_every_l1_concept_is_a_block_a_sensor_or_excluded_with_a_reason() -> None:
     assert coverage() == []
     cat = catalogue()
-    assert set(cat.excluded) == {"session.login", "session.select_char", "session.logout"}
+    # the project model (Batt 2026-11-13): session.login / session.select_char are the SIMULATED
+    # session blocks login / choose_character (ADR-0020 Amendment D); logout stays out
+    assert set(cat.excluded) == {"session.logout"}
+    assert {cat.blocks["login"].spec.concept, cat.blocks["choose_character"].spec.concept} == {
+        "session.login", "session.select_char"}  # fmt: skip
     assert all(len(reason) > 20 for reason in cat.excluded.values())
 
 
@@ -83,9 +87,16 @@ def test_no_block_is_a_raw_input_a_clipboard_a_chat_or_a_packet_read() -> None:
         "whisper",
         "send_file",
         "read_packets",
-        "login",
+        "logout",
+        "type_password",
     ):
         assert banned not in names
+    # ➡️ the project model (ADR-0020 Amendment D): `login` IS a block now, and SIMULATED only: it
+    # names a server and a credential (never a secret, never typed by a flow), and the compiler
+    # never puts a login node into the IR that runs (test_project.py pins both)
+    login = catalogue().blocks["login"].spec
+    assert [(p.name, p.type) for p in login.params] == [("server", "str"), ("credential", "str")]
+    assert "simulated only" in (login.note or "")
 
 
 def test_the_catalogue_is_one_json_document() -> None:

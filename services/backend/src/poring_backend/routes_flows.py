@@ -3,9 +3,22 @@
     GET  /flows/catalogue[?client=<L2 build>]   blocks, sensors, verification badges, windows
     GET  /flows/world?source=&server=&maps=      the pickers' static data (map sheets, labels)
     GET  /flows/sample                           the committed SYNTHETIC sample flow (IR JSON)
-    POST /flows/lint      {flow, world}          MW1's linter (layers 1-3), findings by node
-    POST /flows/simulate  {flow, world, scenario}  the trace (poring_flow.trace): no game
-    POST /flows/python    {flow}                 MW1's canonical Python view (read-only)
+    POST /flows/lint      {project, world}       the linter (layers 1-3) on a PROJECT (format 3)
+    POST /flows/simulate  {project, world, scenario}  the trace (poring_flow.project): no game
+    POST /flows/python    {project}              the project's Python view, one file per tab
+
+THE PROJECT MODEL (format 3, Batt 2026-11-13; docs/planning/project-model.md): the three POST
+routes take {"project": ..., "world": "local" | "sample", "scenario"?: ...}. The old body
+{"flow": <IR 2>} is refused with 400 `format_changed` ("the flow format changed: a project
+(format 3)"): IR 2 flows are not converted (section 8). Responses (the browser reads them):
+  lint      {project_hash, counts, findings: [{rule, severity, layer, path, message, text, ack,
+             node, tab}], by_node, run: {allowed, summary, reasons}, effective, world, world_notes}
+  python    {project_hash, files: [{node, tab, path: "<node>/<tab>.py", text}]} (project.py last,
+             node "" and tab "")
+  simulate  {project_hash, trace, lint}: the trace's `block` is a map node's id, a play step's
+             `node` "<node>/<tab>/<site>", the session's steps (kinds login, character) first
+`project_hash` is null for a project whose login credential is not a plain name (it may be a
+secret: neither it nor a digest of it is ever returned, ADR-0004 c).
     GET  /flows/zones/file?map=&source=&server=  config/map_zones/<map>.yaml for the editor to start
                                                  from (its items, comment, the loader's verdict)
     POST /flows/zones/check {map, yaml, world, server}  the RUNNER'S loader on the editor's YAML
@@ -99,7 +112,7 @@ def python_gate(request: Request) -> AppState:
 
 def _engine(request: Request) -> Any:
     try:
-        from poring_flow import editor, ir, trace  # noqa: F401  (lazy: see the module docstring)
+        from poring_flow import editor, ir, project, pyproject, trace  # noqa: F401  (lazy)
     except ImportError:
         raise _fail(request, 503, "flow_engine_unavailable") from None
     import poring_flow
@@ -108,9 +121,12 @@ def _engine(request: Request) -> Any:
 
 
 # --- bodies -----------------------------------------------------------------------------------
+FORMAT_CHANGED = "the flow format changed: a project (format 3)"
+
+
 class Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    flow: dict[str, Any]
+    project: dict[str, Any]
     world: World = "local"
     scenario: dict[str, Any] | None = None
 
@@ -132,6 +148,12 @@ async def _body(request: Request) -> Envelope:
     if ir._depth(raw.decode("utf-8", errors="replace")) > ir.MAX_JSON_DEPTH + 2:
         raise _fail(request, 422, "too_deep")
     try:
+        loose = json.loads(raw)
+    except (ValueError, RecursionError):
+        loose = None
+    if isinstance(loose, dict) and "flow" in loose and "project" not in loose:
+        raise _fail(request, 400, "format_changed", message=FORMAT_CHANGED)
+    try:
         return Envelope.model_validate_json(raw)
     except ValidationError as e:
         raise _fail(request, 422, "invalid_body", errors=_errors(e)) from None
@@ -146,28 +168,47 @@ def _errors(e: ValidationError) -> list[str]:
     return out
 
 
-def _flow(request: Request, env: Envelope) -> Any:
-    """The IR through MW1's hostile-input path: size, depth, NFC, the schema."""
-    from poring_flow import ir
+def _project(request: Request, env: Envelope) -> Any:
+    """The project through the engine's hostile-input path (project.from_json: size, depth, NFC,
+    the schema, the shape rules); the problems name their node, tab and path."""
+    from poring_flow import project
 
-    text = json.dumps(env.flow, ensure_ascii=False, separators=(",", ":"))
+    text = json.dumps(env.project, ensure_ascii=False, separators=(",", ":"))
     try:
-        return ir.from_json(text)
-    except ir.FlowError as e:
-        raise _fail(request, 422, "invalid_flow", errors=e.messages[:50]) from None
+        return project.from_json(text)
+    except project.ProjectError as e:
+        raise _fail(request, 422, "invalid_project", errors=e.messages[:50],
+                    problems=[p.doc() for p in e.problems[:50]]) from None  # fmt: skip
 
 
-def _world(state: AppState, flow: Any, source: World) -> tuple[Any, list[str]]:
+def _compiled(request: Request, p: Any) -> Any:
+    from poring_flow import project
+
+    try:
+        return project.compile_project(p)
+    except project.ProjectError as e:
+        raise _fail(request, 422, "invalid_project", errors=e.messages[:50],
+                    problems=[q.doc() for q in e.problems[:50]]) from None  # fmt: skip
+
+
+def _world(state: AppState, p: Any, c: Any, source: World) -> tuple[Any, list[str]]:
     """The static data: the committed synthetic sample's sheets, or the LOCAL KB (data/kb: a
     generated sheet file, else a sheet built in memory from the extracted L3 data; kbsheet.py)."""
-    from poring_flow import editor
+    from poring_flow import editor, project
     from poring_flow.kbsheet import load_local_world
 
-    maps = editor.maps_of(flow)
+    maps = project.maps_of(c)
     if source == "sample":
         return editor.sample_world(maps), []
-    world, labels = load_local_world(flow.target.server, maps, _kb_root(state), _gat_dir())
+    world, labels = load_local_world(p.target.server, maps, _kb_root(state), _gat_dir())
     return world, labels.notes
+
+
+def _envs(state: AppState) -> dict[str, str] | None:
+    """config/environments.yaml's ids and statuses (the login block's server); None: not here."""
+    from poring_flow import project
+
+    return project.environments(state.settings.environments_file)
 
 
 def _kb_root(state: AppState) -> Path:
@@ -285,7 +326,7 @@ async def get_catalogue(
     default_s, max_s = runtime_limits(state)
 
     def build() -> dict[str, Any]:
-        doc = dict(editor.catalogue_doc(client=client))
+        doc = dict(editor.catalogue_doc(client=client, envs=_envs(state)))
         # B2: the hunt block's groups, rule versions and badges (config/flows/hunt, committed)
         doc["hunt_rules"], doc["hunt_rules_error"] = _hunt_rules(state)
         return doc
@@ -353,24 +394,31 @@ async def get_world(
 
 
 # --- POST: compute ------------------------------------------------------------------------------
+def _lint(state: AppState, p: Any, c: Any, source: World, max_s: int) -> tuple[Any, Any]:
+    """(the lint document, the world) of a project."""
+    from poring_flow import project
+
+    world, notes = _world(state, p, c, source)
+    zp, znotes = _zones_provider(state, world)
+    rp, rnotes = _routes_provider(state, world)
+    doc = project.lint_doc(
+        p, world=world, resolver=_resolver(state, p), runtime_max_s=max_s, zones_provider=zp,
+        routes_provider=rp, envs=_envs(state),
+    )  # fmt: skip
+    return {**doc, "world_notes": notes + znotes + rnotes}, world
+
+
 @router.post("/lint")
 async def post_lint(request: Request, state: AppState = Depends(compute_gate)) -> dict[str, Any]:
     _engine(request)
     env = await _body(request)
-    flow = _flow(request, env)
-    from poring_flow import editor
-
+    p = _project(request, env)
+    c = _compiled(request, p)
     _, max_s = runtime_limits(state)
 
     def run() -> dict[str, Any]:
-        world, notes = _world(state, flow, env.world)
-        zp, znotes = _zones_provider(state, world)
-        rp, rnotes = _routes_provider(state, world)
-        doc = editor.lint_doc(
-            flow, world=world, resolver=_resolver(state, flow), runtime_max_s=max_s,
-            zones_provider=zp, routes_provider=rp,
-        )  # fmt: skip
-        return {**doc, "world_notes": notes + znotes + rnotes}
+        doc, _ = _lint(state, p, c, env.world, max_s)
+        return dict(doc)
 
     return dict(await _compute(request, state, run))
 
@@ -381,8 +429,9 @@ async def post_simulate(
 ) -> dict[str, Any]:
     _engine(request)
     env = await _body(request)
-    flow = _flow(request, env)
-    from poring_flow import editor, ir, trace
+    p = _project(request, env)
+    c = _compiled(request, p)
+    from poring_flow import project, trace
 
     try:
         scenario = trace.Scenario.model_validate(env.scenario or {})
@@ -392,14 +441,9 @@ async def post_simulate(
     _, max_s = runtime_limits(state)
 
     def run() -> dict[str, Any]:
-        world, notes = _world(state, flow, env.world)
-        zp, znotes = _zones_provider(state, world)
-        rp, rnotes = _routes_provider(state, world)
-        lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow),
-                                  runtime_max_s=max_s, zones_provider=zp, routes_provider=rp),
-                "world_notes": notes + znotes + rnotes}  # fmt: skip
-        result = trace.simulate(flow, world, scenario)
-        return {"flow_hash": ir.flow_hash(flow), "trace": result, "lint": lint}
+        lint, world = _lint(state, p, c, env.world, max_s)
+        result = project.simulate(p, world, scenario, compiled=c)
+        return {"project_hash": project.shown_hash(p), "trace": result, "lint": lint}
 
     try:
         return dict(await _compute(request, state, run))
@@ -411,10 +455,10 @@ async def post_simulate(
 async def post_python(request: Request, state: AppState = Depends(python_gate)) -> dict[str, Any]:
     _engine(request)
     env = await _body(request)
-    flow = _flow(request, env)
-    from poring_flow import editor
+    p = _project(request, env)
+    from poring_flow import pyproject
 
-    return dict(await _compute(request, state, lambda: editor.python_doc(flow)))
+    return dict(await _compute(request, state, lambda: pyproject.python_doc(p)))
 
 
 # --- the zones layer (B2; Batt D6: export only) -------------------------------------------------

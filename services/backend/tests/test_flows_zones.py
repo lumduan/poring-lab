@@ -26,6 +26,7 @@ import map_zones as mz  # noqa: E402
 
 TS_ZONES = REPO / "services/frontend/src/lib/flow/fixtures/zones"
 CONFIG_ZONES = REPO / "config/map_zones"
+PROJECT = REPO / "services/frontend/src/lib/flow/fixtures/project_sample.json"
 
 
 def _load_tmz() -> Any:
@@ -371,24 +372,24 @@ def test_the_file_route_gives_the_editor_its_starting_point(zclient: Any) -> Non
 
 def test_lint_reads_the_zones_files_through_the_provider(zclient: Any) -> None:
     """B1's open point 2: the /flows routes pass the zones provider (fail closed without it)."""
-    flow = json.loads((REPO / "packages/poring_flow/src/poring_flow/examples/town_warp_farm.json")
-                      .read_text())  # fmt: skip
+    project = json.loads(PROJECT.read_text())  # the project model (format 3): the sample
     (zclient.zones_dir / "field_1.yaml").write_text(FIELD_TEXT, encoding="utf-8")
 
-    def lint(f: dict[str, Any]) -> dict[str, Any]:
-        r = zclient.post("/flows/lint", json={"flow": f, "world": "sample"}, headers=_hdr(zclient))
+    def lint(p: dict[str, Any]) -> dict[str, Any]:
+        r = zclient.post("/flows/lint", json={"project": p, "world": "sample"},
+                         headers=_hdr(zclient))  # fmt: skip
         assert r.status_code == 200, r.text
         return dict(r.json())
 
-    doc = lint(flow)
+    doc = lint(project)
     rules = {f["rule"] for f in doc["findings"]}
     assert "zones_unreferenced" in rules
     assert not any("zones" in n and "unchecked" in n for n in doc["world_notes"])
     sha = hashlib.sha256(FIELD_TEXT.encode()).hexdigest()
-    for b in flow["workflow"]["blocks"]:
-        if b["map"]["map"] == "field_1":
-            b["zones"] = {"map": "field_1", "sha256": sha}
-    doc = lint(flow)
+    for n in project["nodes"]:
+        if n["kind"] == "map" and n["map"]["map"] == "field_1":
+            n["zones"] = {"map": "field_1", "sha256": sha}
+    doc = lint(project)
     assert not {f["rule"] for f in doc["findings"]} & {
         "zones_unreferenced",
         "zones_changed",
@@ -402,23 +403,22 @@ def test_lint_reads_the_patrol_routes_through_the_provider(zclient: Any) -> None
     """The hunt block's search_route patrol_route (Batt 2026-10-22, plan section 7d): /flows/lint
     passes the routes provider (scripts/flow_routes.py over the runner's loader), so a map without
     a routes file is refused, a file the loader refuses is refused, and a good one passes."""
-    flow = json.loads((REPO / "packages/poring_flow/src/poring_flow/examples/town_warp_farm.json")
-                      .read_text())  # fmt: skip
+    project = json.loads(PROJECT.read_text())  # the project model (format 3): the sample
     rules = {"strike": "arm_c@32", "engage_on_the_way": "on_the_way@19", "dead": "exp_line@48",
              "loot": "gm_fast_scan@54", "search": "heading_coverage@22",
              "search_route": "patrol_route"}  # fmt: skip
     hunt = {"block": "hunt", "concept": "combat.hunt", "kind": "action", "note": None,
             "on_fail": "stop", "outcome_to": None, "timeout_s": 600.0,
             "params": {k: {"kind": "lit", "value": v} for k, v in rules.items()}}  # fmt: skip
-    farm = next(b for b in flow["workflow"]["blocks"] if b["map"]["map"] == "field_1")
-    farm["main"].insert(0, hunt)
+    farm = next(n for n in project["nodes"] if n["kind"] == "map" and n["map"]["map"] == "field_1")
+    farm["tabs"][0]["main"].insert(0, hunt)
 
     def patrol(text: str | None) -> tuple[set[str], dict[str, Any]]:
         path = zclient.routes_dir / "field_1.yaml"
         path.unlink(missing_ok=True)
         if text is not None:
             path.write_text(text, encoding="utf-8")
-        r = zclient.post("/flows/lint", json={"flow": flow, "world": "sample"},
+        r = zclient.post("/flows/lint", json={"project": project, "world": "sample"},
                          headers=_hdr(zclient))  # fmt: skip
         assert r.status_code == 200, r.text
         doc = dict(r.json())
