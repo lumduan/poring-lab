@@ -29,3 +29,12 @@ test("the labels and every refusal the backend gives have words", () => {
     assert.ok(REFUSALS[r], r);
   }
 });
+
+// matpilot's player test 2026-11-13: "while she really plays, the page tells me nothing"
+test("the live line says what she does, the counts and the time of the time box", async () => {
+  const { liveLine } = await import("./liverun.ts");
+  const l = { hp: 95, hp_low: 94, pos: [8, 22], doing: "looting", block: "loot", elapsed_s: 581, kills: 23, loot_steps: 27, pickups: 5, knife: 26, steals: 14, potions: 0, flies: 0, end: {} };
+  assert.equal(liveLine(l, 120), "HP 95 % · looting · 23 kills · 27 loot steps · 26 Knife swaps (14 steals) · 9:41 of 120 min");
+  assert.equal(liveLine({ ...l, kills: 1, knife: 0, hp: null, elapsed_s: 5 }, null), "looting · 1 kill · 27 loot steps · 0:05");
+  assert.equal(liveLine(null, 120), null);
+});

@@ -1720,6 +1720,9 @@ def build() -> dict[str, Any]:
         "char": cmd["char"],
         "script": "scripts/dungeon_hunt.py run",
         "version": dh.VERSION,
+        # matpilot 2026-11-13: "the chip says dungeon@8.7 but the runner that refused is 9.35":
+        # VERSION is the DEFAULT behaviour's; each newer technique has its own number
+        "feature_version": feature_version(dh),
         "file": f"{cmd['map']}.py",
         "command": {
             "base": list(BASE_COMMAND),
@@ -1757,6 +1760,18 @@ def build() -> dict[str, Any]:
         # default and the params its blocks show; /flows reads the values from GET /flows/config
         "config": config_doc(values),
     }
+
+
+def feature_version(dh: Any) -> str:
+    """The runner's newest feature version (its ``*_VERSION`` constants, e.g. "9.44")."""
+    best: tuple[int, int, str] = (0, 0, "")
+    for k, v in vars(dh).items():
+        if not (k.endswith("_VERSION") and isinstance(v, str)):
+            continue
+        m = re.fullmatch(r"(\d+)\.(\d+)([a-z]?)", v)
+        if m and (int(m[1]), int(m[2]), m[3]) > best:
+            best = (int(m[1]), int(m[2]), m[3])
+    return f"dungeon@{best[0]}.{best[1]}{best[2]}"
 
 
 def config_doc(values: dict[str, Any]) -> dict[str, Any]:

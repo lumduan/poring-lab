@@ -17,7 +17,45 @@ export type LiveStatus = {
   log_tail?: string[];
   flows?: Record<string, { title: string; minutes: number }>;
   mode?: string;
+  // matpilot's player test 2026-11-13: what she does while she plays, and the end in plain words
+  live?: LiveSummary | null;
+  end_png?: string | null; // set (the end time) when the last run left an end picture
+  config?: Record<string, unknown> | null; // the values this run took
 };
+export type LiveSummary = {
+  hp: number | null;
+  hp_low: number | null;
+  pos: number[] | null;
+  doing: string;
+  block: string | null; // the block to highlight (the export's id)
+  elapsed_s: number | null;
+  kills: number;
+  loot_steps: number;
+  pickups: number;
+  knife: number;
+  steals: number;
+  potions: number;
+  flies: number;
+  end: { reason?: string; home?: boolean; dead?: boolean; respawned?: boolean };
+};
+
+/** PURE: the live line while she plays: HP, what she does, the counts, the time (of the time box). */
+export function liveLine(l: LiveSummary | null | undefined, minutes: number | null): string | null {
+  if (!l) return null;
+  const t = l.elapsed_s ?? 0;
+  const mm = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+  const parts = [
+    l.hp !== null ? `HP ${l.hp} %` : null,
+    l.doing,
+    `${l.kills} kill${l.kills === 1 ? "" : "s"}`,
+    `${l.loot_steps} loot step${l.loot_steps === 1 ? "" : "s"}`,
+    l.knife ? `${l.knife} Knife swaps (${l.steals} steals)` : null,
+    l.potions ? `${l.potions} potions` : null,
+    l.flies ? `${l.flies} Fly Wings` : null,
+    minutes ? `${mm} of ${minutes} min` : mm,
+  ];
+  return parts.filter(Boolean).join(" · ");
+}
 
 export const ACTIVE: readonly string[] = ["starting", "running", "stopping"];
 

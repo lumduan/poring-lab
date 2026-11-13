@@ -46,6 +46,7 @@ export type RunnerDoc = {
   char: string;
   script: string;
   version: string;
+  feature_version?: string; // the newest technique's version (2026-11-13)
   file: string;
   command: { base: string[]; optional: RunnerOptional[] };
   params: Record<string, RunnerParam>;

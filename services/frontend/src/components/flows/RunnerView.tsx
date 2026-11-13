@@ -37,9 +37,9 @@ import {
   titleOf,
   valueText,
 } from "@/lib/flow/runner";
-import { ACTIVE, liveLabel } from "@/lib/flow/liverun";
+import { ACTIVE, liveLabel, liveLine } from "@/lib/flow/liverun";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
-import { configArgv, configClash, effectiveConfig, withConfig } from "@/lib/flow/config";
+import { configArgv, configClash, effectiveConfig, startChecklist, withConfig } from "@/lib/flow/config";
 import { INJECT } from "@/lib/flow/theme";
 
 const VIEWS = ["blocks", "python"] as const;
@@ -110,7 +110,6 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
   const areaRef = useRef<HTMLDivElement | null>(null); // the canvas: Simulate brings it into view
 
   const node = findNode(doc, selected) ?? doc.stacks[0];
-  const mark = node ? markOf(node) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const nBlocks = useMemo(() => allNodes(doc).length, [doc]);
 
@@ -125,6 +124,17 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
   };
   const setPane = (p: Pane, open: boolean) => setPanes((old) => ({ ...old, [p]: open }));
 
+  // matpilot's player test 2026-11-13: "no live block is highlighted, though Simulate does": the
+  // block the live run is on (the helper's live summary), unless a simulation is being looked at
+  // (derived at render: a click on a tab or a block stops following until "follow the run")
+  const liveBlock = ACTIVE.includes(live.st?.state ?? "") ? (live.st?.live?.block ?? null) : null;
+  const [liveFollow, setLiveFollow] = useState(true);
+  const liveOn = liveBlock !== null && sim === null && liveFollow;
+  const liveTab = liveOn ? tabOf(doc, liveBlock) : null;
+  const shownTab = (liveTab ? tabs.find((t) => t.name === liveTab) : null) ?? tab;
+  const shownFollow = liveOn ? liveBlock : follow;
+  const shownNode = liveOn ? (findNode(doc, liveBlock) ?? node) : node;
+  const mark = shownNode ? markOf(shownNode) : null; // the Python follows the live block too
   // --- SIMULATE: the example, in the browser (no game, no input, no backend)
   const show = useCallback((r: SimResult | null, i: number) => {
     if (!r || !r.steps.length) return;
@@ -158,6 +168,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
     setSelected(id);
     setPlaying(false);
     setFollow(null);
+    setLiveFollow(false); // a person's own click: the live highlight waits for "follow the run"
   }, []);
 
   const copy = () => {
@@ -257,6 +268,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
               <span className="runner-about-live">
                 {" "}
                 · Run in the game: <strong data-testid="runner-about-state">{liveLabel(live.st)}</strong>
+                {ACTIVE.includes(live.st?.state ?? "") && live.st?.live ? ` · ${liveLine(live.st.live, eff ? Number(eff.values.minutes) : null)}` : ""}
               </span>
             )}
             <span className="runner-about-more"> · {aboutOpen ? "less" : "more"}</span>
@@ -268,14 +280,16 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
           </p>
           <div className="device-bar" aria-label="The runner">
             <Chip label="runner" value={doc.script} />
-            <Chip label="version" value={doc.version} />
+            <span title={`${doc.version} is the default behaviour's version; each newer technique has its own number (player mode 9.35, the settings 9.44): the same runner plays`}>
+              <Chip label="version" value={doc.feature_version ? `${doc.feature_version} (base ${doc.version.replace("dungeon@", "")})` : doc.version} />
+            </span>
             <Chip label="map" value={doc.map} />
             <Chip label="character" value={String(doc.params["cmd.char"]?.value ?? doc.char)} />
             <Chip label="strategy" value={String(doc.params["cmd.strategy"]?.value ?? "")} />
             <Chip label="time box" value={`${valueText(doc.params["cmd.minutes"]?.value)} min`} />
             <Chip label="blocks" value={String(nBlocks)} />
           </div>
-          {isLive && <LiveRun live={live} />}
+          {isLive && <LiveRun live={live} checklist={cdoc && eff ? startChecklist(cdoc, eff.values, rawDoc.map) : []} minutes={eff ? Number(eff.values.minutes) : null} />}
         </details>
         {copied === "failed" && (
           <p className="notice notice-warn" role="status">
@@ -292,11 +306,11 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
           <div className="block-tabs-bar">
             <div className="block-tabs" role="tablist" aria-label="Tabs">
               {tabs.map((t) => (
-                <div key={t.name} className="block-tab" data-active={t.name === tab?.name}>
+                <div key={t.name} className="block-tab" data-active={t.name === shownTab?.name}>
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={t.name === tab?.name}
+                    aria-selected={t.name === shownTab?.name}
                     className="block-tab-name"
                     title={t.stacks.map((id) => titleOf(findNode(doc, id) as RunnerNode)).join(" · ")}
                     onClick={() => {
@@ -304,6 +318,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
                       setSelected(t.stacks[0]);
                       setPlaying(false);
                       setFollow(null);
+                      if (liveBlock) setLiveFollow(false); // looking around: stop following the run
                     }}
                     data-testid={`runner-tab-${t.name.replaceAll(" ", "-")}`}
                   >
@@ -319,7 +334,12 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
             </div>
           </div>
           <div className="blocks-area" ref={areaRef}>
-            <RunnerBlocks doc={doc} only={tab?.stacks ?? null} follow={follow} hidden={view === "python"} onSelect={onBlock} />
+            <RunnerBlocks doc={doc} only={shownTab?.stacks ?? null} follow={shownFollow} hidden={view === "python"} onSelect={onBlock} />
+            {liveBlock && !liveFollow && sim === null && (
+              <button type="button" className="button button-small live-follow" onClick={() => setLiveFollow(true)} data-testid="runner-live-follow">
+                follow the run
+              </button>
+            )}
           </div>
           {view === "python" && (
             <section className="studio-python-full" aria-labelledby="runner-python-full">
@@ -346,7 +366,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
                 </button>
               </div>
               <div className="pane-body">
-                {p === "inspect" && node && <InspectRunner doc={doc} node={node} />}
+                {p === "inspect" && shownNode && <InspectRunner doc={doc} node={shownNode} />}
                 {p === "results" && (
                   <ResultsPane
                     sim={sim}

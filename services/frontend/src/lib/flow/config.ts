@@ -210,3 +210,20 @@ export function configShownMatchesExport(doc: RunnerDoc, d: ConfigDoc): boolean 
   const ok = (n: RunnerNode): boolean => walk(n.parts) && (n.branches ?? []).every((b) => walk(b.parts) && b.body.every(ok)) && (n.body ?? []).every(ok);
   return doc.stacks.every(ok);
 }
+
+/** PURE: what must be true before Run, in a person's words, from the values the run will take
+ * (matpilot 2026-11-13: "the start conditions are buried in a long paragraph"). */
+export function startChecklist(d: ConfigDoc, values: Record<string, ConfigValue>, map: string): string[] {
+  const v = (n: string) => values[n];
+  const pct = (n: string) => Math.round(Number(v(n)) * 100);
+  const out = [
+    `she stands on ${map}, on its open ground`,
+    "the chat input closed (no white input bar under the chat)",
+    `the bag under ${pct("WEIGHT_MAX")} %`,
+    `at least ${String(v("PLAYER_MIN_WINGS"))} Fly Wings on ${String(v("fly_key"))}`,
+    `at least ${String(v("PLAYER_MIN_HEALS"))} heal items on ${String(v("heal_key"))}`,
+    `Butterfly Wings on ${String(v("home_key"))} (the way home at the end)`,
+  ];
+  if (inUse(d, values, "knife_key") && v("knife_swap") === true) out.push(`the Knife on ${String(v("knife_key"))} (in the bag) and the dagger worn (${String(v("dagger_key"))})`);
+  return out;
+}

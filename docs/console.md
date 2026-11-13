@@ -292,6 +292,16 @@ Amendment B); a not-adopted model is never offered.
   group's item model, the aiming group's value target. A setting that needs another one off is
   dimmed "(not in use: needs …)" and is not passed; a safety switch turned off says what it
   risks; the blocks of a technique switched off turn grey and begin "off:".
+  ➡️ **~15:4x, matpilot's player test (a real 10-min run, Batt's yes):** while she plays, the Run
+  panel shows ONE live line (HP, what she does, kills, loot steps, Knife swaps and steals,
+  potions, Fly Wings, the time of the time box; the Run helper reads the run's own session events)
+  and the block she is on is highlighted as Simulate does (a click on a tab or a block stops
+  following until "follow the run"). The end is in plain words ("Stopped by you after 10 min. She
+  flew home on a Butterfly Wing. 23 kills …") with the end picture (GET /flows/run/end.png, the
+  helper's copy), never a server path or a raw JSON line. Before Run the start conditions are a
+  checklist made from the run's own settings. The groups' radios read "change for:" and follow
+  the file. The version chip says "dungeon@9.44 (base 8.7)": 8.7 is the default behaviour's
+  version, each newer technique has its own; the same runner plays.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

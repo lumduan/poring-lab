@@ -170,3 +170,50 @@ def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(
             assert "refused before any input" in h.detail
     finally:
         fr.CONFIG_DIR = orig
+
+
+# --- matpilot's player test 2026-11-13: "while she plays, the page tells me nothing"; "the end is
+# written for a developer" ------------------------------------------------------------------------
+def test_the_live_line_follows_the_runs_own_events(tmp_path: Path) -> None:
+    ev = [{"t_ns": 1_000_000_000, "kind": "run_start"},
+          {"t_ns": 2_000_000_000, "kind": "hp_read", "pct": 97, "pos": [7, 21]},
+          {"t_ns": 3_000_000_000, "kind": "press", "what": "opener", "why": "ready"},
+          {"t_ns": 4_000_000_000, "kind": "strike"},
+          {"t_ns": 5_000_000_000, "kind": "press", "what": "equip", "why": "popup"},
+          {"t_ns": 6_000_000_000, "kind": "kill"},
+          {"t_ns": 7_000_000_000, "kind": "hp_read", "pct": 88, "pos": [8, 22]},
+          {"t_ns": 8_000_000_000, "kind": "loot_step"},
+          {"t_ns": 9_000_000_000, "kind": "loot_click"}]  # fmt: skip
+    f = tmp_path / "events.jsonl"
+    f.write_text("".join(json.dumps(e) + "\n" for e in ev[:5]) + '{"t_ns": 5')  # a half line
+    lv = fr.Live()
+    off = fr.feed_new(lv, f, 0)
+    assert lv.knife == 1 and lv.steals == 1 and lv.kills == 0 and lv.doing == "the dagger back on"
+    with open(f, "a") as fh:
+        fh.write('500000000, "kind": "hp_read"}\n' + "".join(json.dumps(e) + "\n" for e in ev[5:]))
+    fr.feed_new(lv, f, off)
+    s = lv.summary()
+    assert (s["kills"], s["loot_steps"], s["pickups"], s["hp"], s["hp_low"]) == (1, 1, 1, 88, 88)
+    assert s["block"] == "loot" and s["doing"] == "picking up" and s["elapsed_s"] == 8
+    assert s["pos"] == [8, 22]
+    # every block it may highlight is a block of the flow
+    src = (ROOT / "services/frontend/src/lib/flow/runners/xmas_dun02_rogue.gen.ts").read_text()
+    for b in {*fr.EVENT_BLOCK.values(), *fr.PRESS_BLOCK.values()}:
+        assert f'"id": "{b}"' in src, b
+
+
+def test_the_end_in_a_players_words() -> None:
+    lv = fr.Live()
+    for e in ({"t_ns": 0, "kind": "run_start"}, {"t_ns": 600_000_000_000, "kind": "kill"},
+              {"t_ns": 600_000_000_001, "kind": "run_end", "reason": "stopped"},
+              {"t_ns": 600_000_000_002, "kind": "player_end", "home": True, "dead": False,
+               "respawned": False}):  # fmt: skip
+        lv.feed(e)
+    w = fr.end_words(lv, True, 0)
+    assert w.startswith("Stopped by you after 10 min. She flew home on a Butterfly Wing.")
+    assert "1 kills" in w or "1 kill" in w
+    lv.feed({"kind": "player_end", "home": False, "dead": True, "respawned": True})
+    assert "She respawned at the save point." in fr.end_words(lv, False, 0)
+    # the log a person reads: no server path, no raw JSON
+    assert fr.player_lines(["/dev/shm/x/end.png", '{"sid": "x"}', "refused: the chat"]) == [
+        "refused: the chat"]  # fmt: skip

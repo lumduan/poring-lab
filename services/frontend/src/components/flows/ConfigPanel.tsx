@@ -179,7 +179,8 @@ function GroupRow({
       <span className="mb-part" title={g.note}>
         <span className="mb-key">{g.title}</span>
       </span>
-      <span className="mb-part config-scope" role="radiogroup" aria-label={`${g.title}: whose values`}>
+      <span className="mb-part config-scope" role="radiogroup" aria-label={`${g.title}: a change goes to`}>
+        <span className="muted">change for:</span>{" "}
         <label title="Edit the values every map's flow uses">
           <input type="radio" name={`scope-${g.id}`} checked={scope === "global"} onChange={() => setScope("global")} data-testid={`config-scope-${g.id}-global`} /> every map
         </label>{" "}
@@ -191,12 +192,30 @@ function GroupRow({
         <FieldInput key={f.name} f={f} d={d} v={eff.values[f.name]} level={eff.source[f.name]} off={off} why={notInUseWhy(d, eff.values, f.name)} onChange={(v) => onChange(scope, f, v)} />
       ))}
       {scope === "map" && ownMap && (
-        <button type="button" className="mb-link" disabled={off} onClick={() => onClear("map")} data-testid={`config-clear-${g.id}-map`}>
+        <button
+          type="button"
+          className="mb-link"
+          disabled={off}
+          onClick={() => {
+            onClear("map");
+            setScope(null); // matpilot: the radio stayed on "map only" until a reload
+          }}
+          data-testid={`config-clear-${g.id}-map`}
+        >
           {map}: use every map&apos;s values again
         </button>
       )}
       {scope === "global" && ownGlobal && (
-        <button type="button" className="mb-link" disabled={off} onClick={() => onClear("global")} data-testid={`config-clear-${g.id}-global`}>
+        <button
+          type="button"
+          className="mb-link"
+          disabled={off}
+          onClick={() => {
+            onClear("global");
+            setScope(null);
+          }}
+          data-testid={`config-clear-${g.id}-global`}
+        >
           every map back to the defaults
         </button>
       )}

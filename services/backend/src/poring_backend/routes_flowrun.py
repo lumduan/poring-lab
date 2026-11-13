@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from poring_backend.routes_settings import _who, browser_gate, write_gate
@@ -136,6 +137,16 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
 @router.get("/run")
 def get_run(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
     return {**read_status(run_dir(state)), "mode": state.mux.mode}
+
+
+@router.get("/run/end.png")
+def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
+    """The last run's end picture (matpilot 2026-11-13: "show end.png as an image, not a server
+    path"): the helper copies it into its own folder at the run's end. A console browser only."""
+    f = run_dir(state) / "end.png"
+    if not f.is_file():
+        raise HTTPException(404, {"reason": "no_end_picture"})
+    return FileResponse(f, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/run")

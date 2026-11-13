@@ -395,6 +395,34 @@
   margin-top: 0.5rem;
 }
 
+.live-follow {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  z-index: 6;
+}
+/* the live run (LiveRun.tsx, matpilot's player test): the live line, the checklist, the end */
+.live-line {
+  font-weight: 600;
+}
+.live-checklist {
+  margin: 0.2rem 0 0.4rem 1.1rem;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.live-end {
+  font-weight: 600;
+}
+.live-end-picture {
+  margin: 0.5rem 0 0;
+}
+.live-end-picture img {
+  max-width: min(100%, 32rem);
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+}
+
 /* the settings panel (ConfigPanel.tsx): a setting not in use is dimmed; a safety switch's warning */
 .config-panel [data-unused="true"] {
   opacity: 0.55;

@@ -37,6 +37,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import time
@@ -249,6 +250,137 @@ def run_started(label: str | None, demo: Path = DEMO) -> bool:
     return False
 
 
+# --- LIVE (matpilot's player test 2026-11-13: "while she really plays, the page tells me nothing";
+# "the end is written for a developer"): the run's own session events, read as they grow, give
+# the page one live line (HP, what she does, kills, loot, Knife swaps, time) and the block to
+# highlight, then the end in plain words. Display only: nothing here decides anything.
+EVENT_BLOCK = {"walk": "walk_click", "strike": "strike", "kill": "kill", "loot_step": "loot",
+               "loot_click": "loot", "engage": "fight_on", "fight_end": "fight_over",
+               "box_target": "choose", "explore": "explore", "goal": "explore", "unlock": "unlock",
+               "scan": "ring_scan", "player_home": "home"}  # fmt: skip
+PRESS_BLOCK = {"opener": "press_knife", "equip": "press_dagger", "potion": "drink",
+               "fly": "wing_hp_fly", "home": "home"}  # fmt: skip
+DOING = {"walk": "walking", "strike": "striking", "kill": "a kill", "loot_step": "looting",
+         "loot_click": "picking up", "engage": "a fight starts", "fight_end": "the fight is over",
+         "box_target": "aiming", "explore": "exploring", "goal": "exploring",
+         "unlock": "letting go",
+         "scan": "scanning around her", "player_home": "flying home"}  # fmt: skip
+PRESS_DOING = {"opener": "the Knife on", "equip": "the dagger back on", "potion": "a potion",
+               "fly": "a Fly Wing", "home": "the Butterfly Wing home"}  # fmt: skip
+
+
+@dataclass
+class Live:
+    """PURE: the live summary of one run's session events (fed line by line)."""
+
+    t0_ns: int | None = None
+    t_ns: int | None = None
+    hp: int | None = None
+    pos: list[int] | None = None
+    doing: str = "starting"
+    block: str | None = None
+    kills: int = 0
+    loot_steps: int = 0
+    pickups: int = 0
+    knife: int = 0
+    steals: int = 0
+    potions: int = 0
+    flies: int = 0
+    hp_low: int | None = None
+    end: dict[str, Any] = field(default_factory=dict)
+
+    def feed(self, e: Mapping[str, Any]) -> None:
+        k, t = e.get("kind"), e.get("t_ns")
+        if isinstance(t, int):
+            self.t_ns = t
+        if k == "run_start" and isinstance(t, int):
+            self.t0_ns = t
+        elif k == "hp_read":
+            if isinstance(e.get("pct"), int):
+                self.hp = e["pct"]
+                self.hp_low = self.hp if self.hp_low is None else min(self.hp_low, self.hp)
+            if isinstance(e.get("pos"), list):
+                self.pos = [int(x) for x in e["pos"][:2]]
+            return  # a look every tick: what she does stays the last action
+        elif k == "press":
+            w = str(e.get("what"))
+            self.knife += w == "opener"
+            self.steals += w == "equip" and e.get("why") == "popup"
+            self.potions += w == "potion"
+            self.flies += w == "fly"
+            if w in PRESS_BLOCK:
+                self.doing, self.block = PRESS_DOING[w], PRESS_BLOCK[w]
+            return
+        elif k == "run_end":
+            self.end["reason"] = str(e.get("reason") or "")
+        elif k == "player_end":
+            for x in ("home", "dead", "respawned"):
+                self.end[x] = bool(e.get(x))
+        self.kills += k == "kill"
+        self.loot_steps += k == "loot_step"
+        self.pickups += k == "loot_click"
+        if k in EVENT_BLOCK:
+            self.doing, self.block = DOING[k], EVENT_BLOCK[k]
+
+    def summary(self) -> dict[str, Any]:
+        t0, t1 = self.t0_ns, self.t_ns
+        el = None if t0 is None or t1 is None else round((t1 - t0) / 1e9)
+        return {"hp": self.hp, "hp_low": self.hp_low, "pos": self.pos, "doing": self.doing,
+                "block": self.block, "elapsed_s": el, "kills": self.kills,
+                "loot_steps": self.loot_steps, "pickups": self.pickups, "knife": self.knife,
+                "steals": self.steals, "potions": self.potions, "flies": self.flies,
+                "end": dict(self.end)}  # fmt: skip
+
+
+def session_of(label: str | None, demo: Path) -> Path | None:
+    """The run's session folder (named after its label), or None."""
+    hits = sorted(demo.glob(f"*-{label}")) if label else []
+    return hits[-1] if hits else None
+
+
+def feed_new(live: Live, path: Path, offset: int) -> int:
+    """Feed the complete lines written since ``offset``; returns the new offset."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            data = fh.read(4_000_000)
+    except OSError:
+        return offset
+    end = data.rfind(b"\n")
+    if end < 0:
+        return offset
+    for ln in data[: end + 1].splitlines():
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            live.feed(e)
+    return offset + end + 1
+
+
+def player_lines(lines: Sequence[str]) -> list[str]:
+    """PURE: the log lines a person reads (matpilot: a server path and a raw JSON line cut off
+    mid-word are a developer's): none starting with "{" or "/"."""
+    return [ln for ln in lines if not ln.lstrip().startswith(("{", "/"))]
+
+
+def end_words(live: Live, stopped: bool, rc: int | None) -> str:
+    """The end in a player's words (matpilot: "did she get home? any deaths? what did she do?")."""
+    s = live.summary()
+    mins = (s["elapsed_s"] or 0) // 60
+    how = "Stopped by you" if stopped else ("Ended by itself" if rc == 0 else "Ended")
+    e = s["end"]
+    where = ("She respawned at the save point." if e.get("respawned") else
+             "She died there." if e.get("dead") else
+             "She flew home on a Butterfly Wing." if e.get("home") else
+             "She stayed on the map.")  # fmt: skip
+    did = (f"{s['kills']} kills, {s['loot_steps']} loot steps ({s['pickups']} pickups), "
+           f"{s['knife']} Knife swaps ({s['steals']} steals), {s['potions']} potions, "
+           f"{s['flies']} Fly Wings; lowest HP {s['hp_low']} %.")  # fmt: skip
+    return f"{how} after {mins} min. {where} {did}"
+
+
 def busy_reason(ps_lines: Sequence[str]) -> str | None:
     """PURE: why a new run must not start (another input writer of ours), from `ps -eo args`."""
     for ln in ps_lines:
@@ -287,6 +419,9 @@ class Helper:
         self.state = "idle"
         self.detail = "waiting for the Run button"
         self.flow: str | None = None
+        self.live: Live | None = None  # the run's live summary (its session events)
+        self.live_off = 0
+        self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
         self.config: dict[str, Any] | None = None  # the run's values (config_of)
         self.config_src: dict[str, str] | None = None  # each one's level
         self.label: str | None = None
@@ -308,8 +443,10 @@ class Helper:
         return {"v": VERSION, "state": self.state, "detail": self.detail, "flow": self.flow,
                 "label": self.label, "request_id": self.request_id, "started": self.started,
                 "ended": self.ended, "rc": self.rc, "t_wall": time.time(),
-                "log_tail": [] if log is None else tail(log),
+                "log_tail": [] if log is None else player_lines(tail(log)),
                 "config": self.config, "config_src": self.config_src,
+                "live": None if self.live is None else self.live.summary(),
+                "end_png": self.end_png,
                 "flows": {k: {"title": f.title, "minutes": f.minutes, "map": f.map,
                               "defaults": dict(f.defaults)}
                           for k, f in FLOWS.items()}}  # fmt: skip
@@ -371,6 +508,7 @@ class Helper:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.cap_s = float(vals.get("minutes", flow.minutes)) * 60 + CAP_GRACE_S
         self.config, self.config_src = vals, src
+        self.live, self.live_off, self.end_png = Live(), 0, None
         self.note(event="start", flow=flow.id, label=self.label, request=rid, config=vals,
                   config_src=src)  # fmt: skip
         self.detail = "starting the vision worker"
@@ -470,6 +608,9 @@ class Helper:
             os.killpg(self.runner.pid, signal.SIGINT)
             self.stop_t = None
             return
+        sess = session_of(self.label, DEMO) if self.live is not None else None
+        if sess is not None and self.live is not None:
+            self.live_off = feed_new(self.live, sess / "events.jsonl", self.live_off)
         if rc is None:
             if self.state == "starting" and run_started(self.label):
                 self.state, self.detail = "running", "playing"
@@ -483,6 +624,16 @@ class Helper:
         self.detail = (refused or ("stopped (Stop)" if stopped else
                                    "ended by itself (time box or stock)" if rc == 0
                                    else f"the runner ended rc {rc}"))  # fmt: skip
+        if self.live is not None and self.live.t0_ns is not None and not refused:
+            self.detail = end_words(self.live, stopped, rc)  # matpilot: the end in plain words
+        png = (sess / "end.png") if sess is not None else None
+        self.end_png = None
+        if png is not None and png.is_file():  # the backend serves it (GET /flows/run/end.png)
+            try:
+                shutil.copyfile(png, self.dir / "end.png")
+                self.end_png = self.ended
+            except OSError:
+                pass
         self.stop_t = None
         self.note(event="end", label=self.label, rc=rc, detail=self.detail)
         self.end_server()

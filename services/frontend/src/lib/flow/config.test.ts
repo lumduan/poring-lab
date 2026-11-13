@@ -139,3 +139,16 @@ test("switches, choices and a chain of needs", () => {
   assert.match(String(configClash(C, { ...d, hud_fast: 0.5, BOX_EVERY_S: 0.5 })), /faster than the detector/);
   assert.equal(shownValue(F("hud"), false), "off");
 });
+
+test("the start checklist says what must be true, from the values the run takes", async () => {
+  const { startChecklist } = await import("./config.ts");
+  const d = effectiveConfig(C, null, "xmas_dun02").values;
+  const c = startChecklist(C, d, "xmas_dun02");
+  assert.ok(c.some((x) => /stands on xmas_dun02/.test(x)));
+  assert.ok(c.some((x) => /bag under 48 %/.test(x)));
+  assert.ok(c.some((x) => /at least 5 Fly Wings on F8/.test(x)));
+  assert.ok(c.some((x) => /heal items on F1/.test(x)));
+  assert.ok(c.some((x) => /Knife on F4/.test(x)));
+  assert.ok(!startChecklist(C, { ...d, knife_swap: false }, "xmas_dun02").some((x) => /Knife/.test(x)));
+  assert.ok(startChecklist(C, { ...d, fly_key: "F6", PLAYER_MIN_WINGS: 3 }, "xmas_dun02").some((x) => /at least 3 Fly Wings on F6/.test(x)));
+});

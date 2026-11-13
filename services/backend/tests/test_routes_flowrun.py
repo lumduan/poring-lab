@@ -218,3 +218,13 @@ def test_the_config_refuses_what_could_not_run(client: TestClient, tmp_path: Pat
     r = put_config(client, ok)
     assert r.status_code == 409 and r.json()["detail"]["reason"] == "config_file_broken"
     assert (d / "config.json").read_text() == "{not json"
+
+
+def test_the_end_picture_is_served_to_the_console(client: TestClient, tmp_path: Path) -> None:
+    """matpilot 2026-11-13: "show end.png as an image, not a server path"."""
+    helper(tmp_path)
+    assert client.get("/flows/run/end.png", headers=H).status_code == 404
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    (tmp_path / "settings" / "flowrun" / "end.png").write_bytes(png)
+    r = client.get("/flows/run/end.png", headers=H)
+    assert r.status_code == 200 and r.content == png and r.headers["content-type"] == "image/png"

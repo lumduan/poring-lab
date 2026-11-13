@@ -12,13 +12,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { liveButtons, liveLabel, type LiveStatus, REFUSALS } from "@/lib/flow/liverun";
+import { ACTIVE, liveButtons, liveLabel, liveLine, type LiveStatus, REFUSALS } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
 export const ARM_MS = 4000;
 
 export type Live = {
+  base: string;
   flow: string;
   st: LiveStatus | null;
   err: string | null;
@@ -98,7 +99,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
     [base, flow],
   );
 
-  return { flow, st, err, busy, send, buttons: liveButtons(st, flow) };
+  return { base, flow, st, err, busy, send, buttons: liveButtons(st, flow) };
 }
 
 /** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
@@ -145,24 +146,39 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
   );
 }
 
-export default function LiveRun({ live }: { live: Live }) {
+export default function LiveRun({ live, checklist = [], minutes = null }: { live: Live; checklist?: string[]; minutes?: number | null }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
+  const active = ACTIVE.includes(st?.state ?? "");
+  const line = active ? liveLine(st?.live, minutes ?? st?.flows?.[flow]?.minutes ?? null) : null;
+  const ended = st?.state === "ended" || st?.state === "failed";
+  const logLines = (st?.log_tail ?? []).filter((ln) => ln.trim() !== (st?.detail ?? "").trim()); // matpilot: not twice
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
         <strong>Run in the game</strong> · <span data-testid="live-run-state">{liveLabel(st)}</span>
         {st?.label ? ` · ${st.label}` : ""}
       </p>
-      <p>
-        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under the start&apos;s limit, the Fly Wings and heal items the start asks for on the hotbar; the heal item, the Fly Wing, the Butterfly Wing, the Knife and the dagger on the keys of your settings),
-        set the console to ASSIST, then press <strong>Run</strong> at the top (twice: the second press confirms). She plays until you press Stop, until her Fly Wings run low, until the bag is over
-        50 % (the Butterfly Wing takes her home), until she dies (the respawn function block takes her to the save point), or for at most
-        {` ${st?.flows?.[flow]?.minutes ?? 120} `}
-        minutes. It types no GM command.
-      </p>
+      {line && (
+        <p className="live-line" data-testid="live-run-line">
+          {line}
+        </p>
+      )}
+      {!active && (
+        <>
+          <p>{title ?? "the bot plays this flow"}. Before Run (press it twice: the second press confirms), check:</p>
+          {/* matpilot: the start conditions were buried in a paragraph */}
+          <ul className="live-checklist" data-testid="live-run-checklist">
+            {checklist.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+            <li>the console in ASSIST</li>
+          </ul>
+          <p className="notice-sub">The runner checks each of these itself before its first step, and refuses with the reason. It types no GM command.</p>
+        </>
+      )}
       {b.why && <p className="notice-sub">{b.why}</p>}
-      {st?.detail && <p className="notice-sub">{st.detail}</p>}
+      {st?.detail && <p className={ended ? "live-end" : "notice-sub"}>{st.detail}</p>}
       {st?.started && (
         <p className="notice-sub">
           started {st.started}
@@ -170,10 +186,10 @@ export default function LiveRun({ live }: { live: Live }) {
           {st.rc !== null && st.rc !== undefined ? ` · rc ${st.rc}` : ""}
         </p>
       )}
-      {/* matpilot 2026-11-13: the refusal was printed twice (the detail and the log's last line) */}
-      {st?.log_tail && st.log_tail.filter((ln) => ln.trim() !== (st.detail ?? "").trim()).length > 0 && (
+      {ended && st?.end_png && <EndPicture base={live.base} stamp={st.end_png} />}
+      {logLines.length > 0 && (
         <pre className="notice-sub" data-testid="live-run-log">
-          {st.log_tail.filter((ln) => ln.trim() !== (st.detail ?? "").trim()).join("\n")}
+          {logLines.join("\n")}
         </pre>
       )}
       {err && (
@@ -182,6 +198,36 @@ export default function LiveRun({ live }: { live: Live }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** The last run's end picture (matpilot: "show it as an image, not a server path"), fetched over
+ * the backend connection the page already has (the CSP's img-src stays 'self' blob: data:). */
+function EndPicture({ base, stamp }: { base: string; stamp: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let made: string | null = null;
+    void fetch(`${base}/flows/run/end.png`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (!alive || !blob) return;
+        made = URL.createObjectURL(blob);
+        setUrl(made);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [base, stamp]);
+  if (!url) return null;
+  return (
+    <figure className="live-end-picture">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a blob: URL of the backend's picture */}
+      <img src={url} alt="The game screen when the run ended" data-testid="live-run-end-picture" />
+      <figcaption className="notice-sub">the screen when the run ended ({stamp})</figcaption>
+    </figure>
   );
 }
 
