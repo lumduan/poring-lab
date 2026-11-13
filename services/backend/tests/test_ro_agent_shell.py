@@ -368,7 +368,7 @@ def test_recover_launches_without_closing_when_no_client_is_open(
     monkeypatch.setattr(ro, "session", lambda name: Session())
     monkeypatch.setattr(ro, "close_client", lambda a, s: calls.append("close"))
     monkeypatch.setattr(ro, "launch_client", lambda a, s: calls.append("launch"))
-    monkeypatch.setattr(ro, "login", lambda a, s, w: calls.append(f"login {w}"))
+    monkeypatch.setattr(ro, "login", lambda a, s, w, **kw: calls.append(f"login {w}"))
     monkeypatch.setattr(ro, "client_absent", lambda s: True)
     ro.recover("gm", retries=0)
     assert calls == ["launch", "login gm"]
