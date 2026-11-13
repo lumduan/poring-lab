@@ -21,6 +21,26 @@ export type LiveStatus = {
   live?: LiveSummary | null;
   end_png?: string | null; // set (the end time) when the last run left an end picture
   config?: Record<string, unknown> | null; // the values this run took
+  keys_src?: string | null; // the run's keys: "the flow's functions" or "the settings"
+  check?: LiveCheck | null; // dungeon@9.45: the last check of the game screen
+};
+
+/** One line of the live check (scripts/dungeon_hunt.py check_item): ok true / false / null (not
+ * read), its words, the value read, and whether the runner's own start refuses on it. */
+export type CheckItem = { id: string; ok: boolean | null; words: string; value: string | null; refuses?: boolean };
+/** The last check (the Run helper's status "check"; Batt 2026-11-13 "do it": the start checklist
+ * ticked from the game screen, read only). */
+export type LiveCheck = {
+  state: "checking" | "done" | "refused" | "failed" | "timeout" | "cancelled" | string;
+  at: string; // ISO time
+  flow: string;
+  items: CheckItem[];
+  ok: boolean | null;
+  refuses?: boolean;
+  detail?: string;
+  keys_src?: string;
+  keys?: Record<string, string | null>;
+  used?: Record<string, unknown>; // the values the check applied, by the settings' names
 };
 export type LiveSummary = {
   hp: number | null;
@@ -58,6 +78,62 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
 }
 
 export const ACTIVE: readonly string[] = ["starting", "running", "stopping"];
+
+/** The body of POST /flows/run: a start or a check names the flow (and the flow's keys, when its
+ * functions gave them); a stop names nothing. */
+export function runBody(action: "start" | "stop" | "check", flow: string, keys?: Record<string, string> | null): Record<string, unknown> {
+  if (action === "stop") return { action };
+  return keys ? { action, flow, keys } : { action, flow };
+}
+
+/** Whether the game can be checked now, and why not (the backend refuses the same). */
+export function canCheck(st: LiveStatus | null, flow: string): { can: boolean; why: string | null } {
+  if (st === null) return { can: false, why: "reading the Run helper…" };
+  if (!st.helper_alive) return { can: false, why: st.detail || "the Run helper is not running on the bot server" };
+  if (ACTIVE.includes(st.state)) return { can: false, why: "a run is going: the game is checked before a run" };
+  if (!st.flows || !(flow in st.flows)) return { can: false, why: "the Run helper does not list this flow" };
+  if (st.check?.state === "checking") return { can: false, why: "checking the game…" };
+  return { can: true, why: null };
+}
+
+/** PURE: the check was made with other values than these (``basis``: a checklist line's), or for
+ * another flow: its result is outdated (shown greyed). */
+export function checkStale(check: LiveCheck | null | undefined, flow: string, basis: Record<string, unknown>): boolean {
+  if (!check) return false;
+  if (check.flow !== flow) return true;
+  const used = check.used ?? {};
+  return Object.entries(basis).some(([k, v]) => (used[k] ?? null) !== (v ?? null));
+}
+
+export type Tick = { mark: "ok" | "fail" | "unread" | "none"; sign: string; words: string | null; value: string | null; stale: boolean; refuses: boolean };
+
+/** PURE: a checklist line's tick from the last check: ✓ (ok), ✗ (fails: its words), ? (not read),
+ * or none (no result for it); ``stale`` when the settings changed since. */
+export function tickFor(check: LiveCheck | null | undefined, flow: string, id: string, basis: Record<string, unknown>): Tick {
+  const it = check && check.state === "done" ? check.items.find((x) => x.id === id) : undefined;
+  if (!it) return { mark: "none", sign: "", words: null, value: null, stale: false, refuses: false };
+  const mark = it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
+  return { mark, sign: mark === "ok" ? "✓" : mark === "fail" ? "✗" : "?", words: it.words, value: it.value, stale: checkStale(check, flow, basis), refuses: it.ok === false && it.refuses !== false };
+}
+
+/** PURE: the Run button's warning from the last check of this flow: the lines the runner refuses
+ * on that failed (Batt: warnings, not locks -- Run stays pressable; the runner refuses itself). */
+export function refuseWarning(check: LiveCheck | null | undefined, flow: string): string | null {
+  if (!check || check.flow !== flow) return null;
+  if (check.state === "refused") return `The last check: ${check.detail ?? "refused"}. The runner will refuse at its start.`;
+  if (check.state !== "done") return null;
+  const bad = check.items.filter((i) => i.ok === false && i.refuses !== false);
+  if (bad.length === 0) return null;
+  return `The last check of the game: ${bad.map((i) => i.words).join("; ")}. The runner will refuse at its start (Run still starts it: its own checks decide).`;
+}
+
+/** The check's time as the browser's local time of day (its "at" is ISO with an offset). */
+export function checkTime(at: string | null | undefined): string {
+  const t = at ? new Date(at) : null;
+  if (!t || Number.isNaN(t.getTime())) return at ?? "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
+}
 
 export type LiveButtons = { canStart: boolean; canStop: boolean; why: string | null };
 
@@ -104,4 +180,6 @@ export const REFUSALS: Record<string, string> = {
   config_file_broken: "The settings file on the bot server cannot be read: a person looks at settings/flowrun/config.json first.",
   config_refused: "Not saved: that value cannot run.",
   config_engine_unavailable: "The bot server cannot read its settings list (scripts/flow_config.py) here.",
+  keys_refused: "The flow's hotbar keys cannot be used",
+  check_running: "The game is being checked already: a moment.",
 };

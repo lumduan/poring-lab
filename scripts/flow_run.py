@@ -4,11 +4,13 @@ run on flows, and the bot plays by itself, with the flow that earns the most a r
 
     flow_run.py serve        the helper loop (scripts/host/poring-lab-flowrun.service)
     flow_run.py status       print the status file
-    flow_run.py command FLOW print the exact runner command a FLOW runs
+    flow_run.py command FLOW [--check]   print the exact runner command a FLOW runs (or checks)
 
 WHAT IT RUNS: the proven runner (scripts/dungeon_hunt.py run), never a new executor. A flow is a
 FIXED entry of FLOWS below: its whole command line lives here, in the repo. A request names a flow
-by its id and says start or stop; nothing in a request becomes an argument.
+by its id and says start, check or stop; nothing in a request becomes an argument, except the
+flow's five hotbar keys (2026-11-13, Batt: every key from a FUNCTION of the flow): ``keys``, all
+five of flow_config.KEY_FIELDS, each F1-F9, over the config file's for THAT run or check only.
 
 THE CHANNEL: the backend writes ``settings/flowrun/request.json`` (POST /flows/run, behind
 routes_settings.write_gate: a console browser on the LAN, never the lab host or the Windows host,
@@ -29,11 +31,17 @@ A START runs, in order (as the night chain's run_pilot_v3.sh does):
    (ASSIST, the interlock, her identity, her cell).
 A STOP sends SIGINT to the runner's process group (a clean end, rc 130). Either way the detect
 server is ended by PID when the runner exits, and the run's session goes into data/econ/lab.sqlite.
+A CHECK (dungeon@9.45, Batt 2026-11-13 "do it": /flows' start checklist ticked from the game screen)
+runs ``dungeon_hunt.py check`` with the SAME argv a start would build (the config, the keys): the
+runner's preamble, then the player start's checks READ from the screen -- it sends no input. It is
+refused while a run starts or runs (the start's busy rule), time-boxed (CHECK_TIMEOUT_S), and its
+result goes into status.json's "check"; a Run pressed meanwhile ends it (its process group).
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -43,6 +51,7 @@ import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +68,9 @@ POLL_S = 1.0
 LISTEN_WAIT_S = 120.0
 CAP_GRACE_S = 300.0  # the helper's own cap beyond the runner's --minutes
 VERSION = 1
+CHECK_TIMEOUT_S = 20.0  # dungeon@9.45's check: uv + the runner's preamble + <= PLAYER_POS_S reads
+CHECK_LABEL = "flowcheck"  # its --label (a check makes no session) and its scratch folder
+CHECK_MARK = "CHECK "  # dungeon_hunt.CHECK_MARK: the check's result line (test_flow_run pins it)
 
 # The runner's fixed part, as the night chain ran it (docs/records/pilot-chain/run_pilot_v3.sh +
 # pilot_rec2.sh's BASE) WITHOUT --clear-map (a GM line: --player-mode refuses it), --seed fixed.
@@ -199,12 +211,15 @@ STOP_GRACE_S = 90.0  # Stop: the runner ends at its next tick; SIGINT only if it
 
 
 def command(flow: Flow, label: str, stop_file: Path | None = None,
-            vals: Mapping[str, Any] | None = None) -> list[str]:  # fmt: skip
+            vals: Mapping[str, Any] | None = None, sub: str = "run") -> list[str]:  # fmt: skip
     """PURE: the runner's argv for ``flow`` (the label names its session; ``stop_file`` is the
     runner's --stop-file: its Stop ends the run through the normal end, with the packets;
-    ``vals``: config_of's values, else the flow's defaults)."""
+    ``vals``: config_of's values, else the flow's defaults; ``sub``: "run", or dungeon@9.45's
+    read-only "check", which takes run's own flags)."""
+    if sub not in ("run", "check"):
+        raise ValueError(f"not a runner command: {sub!r}")
     stop = [] if stop_file is None else ["--stop-file", str(stop_file)]
-    head = ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/dungeon_hunt.py", "run"]
+    head = ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/dungeon_hunt.py", sub]
     v = dict(flow.defaults) if vals is None else dict(vals)
     why = fc.clash(v)
     if why:
@@ -212,9 +227,16 @@ def command(flow: Flow, label: str, stop_file: Path | None = None,
     return [*head, *FIXED, "--label", label, *stop, *flow.flags, *fc.argv(v)]
 
 
+def check_command(flow: Flow, vals: Mapping[str, Any] | None = None) -> list[str]:
+    """PURE (dungeon@9.45): the read-only check's argv -- the start's, with "check" for "run" (no
+    --stop-file: a check is time-boxed by the helper)."""
+    return command(flow, CHECK_LABEL, None, vals, sub="check")
+
+
 def parse_request(text: str) -> dict[str, Any] | str:
-    """PURE: a valid request ({"id", "action", "flow"}) or why it is not one. It names a flow and
-    nothing else: every setting comes from the config file (Batt 2026-11-13 ~14:4x)."""
+    """PURE: a valid request ({"id", "action", "flow"}, and "keys" when the flow's functions gave
+    them) or why it is not one. It names a flow and nothing else: every setting comes from the
+    config file (Batt 2026-11-13 ~14:4x), but the five hotbar keys a flow's functions may give."""
     try:
         req = json.loads(text)
     except ValueError:
@@ -224,11 +246,48 @@ def parse_request(text: str) -> dict[str, Any] | str:
     rid, action, flow = req.get("id"), req.get("action"), req.get("flow")
     if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", rid):
         return "bad request id"
-    if action not in ("start", "stop"):
+    if action not in ("start", "stop", "check"):
         return f"unknown action {action!r}"
-    if action == "start" and flow not in FLOWS:
+    if action in ("start", "check") and flow not in FLOWS:
         return f"unknown flow {flow!r}"
-    return {"id": rid, "action": action, "flow": flow}
+    out: dict[str, Any] = {"id": rid, "action": action, "flow": flow}
+    keys = req.get("keys")
+    if keys is not None:
+        if action == "stop":
+            return "keys go with start or check, not stop"
+        why = fc.keys_problem(keys)
+        if why is not None:
+            return why
+        out["keys"] = {k: keys[k] for k in fc.KEY_FIELDS}
+    return out
+
+
+def parse_check_output(text: str) -> dict[str, Any]:
+    """PURE (dungeon@9.45): the check's log as its result -- its CHECK line (the items, ok,
+    refuses, the values it used), else the runner's refusal (a preamble refusal: no line read)."""
+    for ln in reversed(text.splitlines()):
+        if ln.startswith(CHECK_MARK):
+            try:
+                got = json.loads(ln[len(CHECK_MARK) :])
+            except ValueError:
+                break
+            if not isinstance(got, dict) or not isinstance(got.get("items"), list):
+                break
+            fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False]
+            unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None]
+            n = len(got["items"])
+            detail = (f"{len(fails)} of {n} lines fail" if fails else
+                      f"{len(unread)} of {n} lines not read" if unread else
+                      "every line passes")  # fmt: skip
+            return {"state": "done", "items": got["items"], "ok": got.get("ok"),
+                    "refuses": bool(got.get("refuses")), "used": got.get("used") or {},
+                    "detail": detail}  # fmt: skip
+    lines = [ln.strip() for ln in player_lines(text.splitlines()) if ln.strip()]
+    why = next((ln for ln in reversed(lines) if "refused" in ln), lines[-1] if lines else "")
+    refused = "refused" in why  # the runner's preamble refused: its start would refuse the same
+    return {"state": "refused" if refused else "failed", "items": [],
+            "ok": False if refused else None, "refuses": refused, "used": {},
+            "detail": why[:300] or "the check ended without a result"}  # fmt: skip
 
 
 DEMO = Path("/dev/shm/poring-lab-demo")  # dungeon_hunt.DEMO: each run's session folder
@@ -413,6 +472,11 @@ def ict(t: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() if t is None else t))
 
 
+def iso_now() -> str:
+    """The time as ISO 8601 with its offset (the check's "at": the browser shows it locally)."""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
 class Helper:
     def __init__(self, d: Path = DIR) -> None:
         self.dir = d
@@ -424,6 +488,10 @@ class Helper:
         self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
         self.config: dict[str, Any] | None = None  # the run's values (config_of)
         self.config_src: dict[str, str] | None = None  # each one's level
+        self.keys_src: str | None = None  # the run's keys: the flow's functions, or the settings
+        self.check: dict[str, Any] | None = None  # dungeon@9.45: the last check (status "check")
+        self.check_proc: subprocess.Popen[bytes] | None = None
+        self.check_t = 0.0
         self.label: str | None = None
         self.request_id: str | None = None
         self.started: str | None = None
@@ -445,6 +513,7 @@ class Helper:
                 "ended": self.ended, "rc": self.rc, "t_wall": time.time(),
                 "log_tail": [] if log is None else player_lines(tail(log)),
                 "config": self.config, "config_src": self.config_src,
+                "keys_src": self.keys_src, "check": self.check,
                 "live": None if self.live is None else self.live.summary(),
                 "end_png": self.end_png,
                 "flows": {k: {"title": f.title, "minutes": f.minutes, "map": f.map,
@@ -478,29 +547,48 @@ class Helper:
         if req["action"] == "stop":
             self.stop(req["id"])
         elif self.runner is not None or self.state in ("starting", "running", "stopping"):
-            self.detail = "a run is already going: press Stop first"
-            self.note(event="start_refused", why="busy", request=req["id"])
+            act = req["action"]
+            self.detail = (
+                "a run is going: the game is checked before a run, not during it"
+                if act == "check"
+                else "a run is already going: press Stop first"
+            )
+            self.note(event=f"{act}_refused", why="busy", request=req["id"])
+        elif req["action"] == "check":
+            self.check_start(FLOWS[req["flow"]], req["id"], req.get("keys"))
         else:
-            self.start(FLOWS[req["flow"]], req["id"])
+            self.start(FLOWS[req["flow"]], req["id"], req.get("keys"))
+
+    def values_for(self, flow: Flow, keys: Mapping[str, str] | None
+                   ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
+        """A start's (and a check's) values: the config file (default < every map < this map),
+        the flow's keys over it when given, then the clash rule -- (vals, src, keys_src, why)."""
+        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
+        cfg = fc.read_config(CONFIG_DIR)  # 2026-11-13: default < every map < this map
+        if isinstance(cfg, str):
+            return {}, {}, keys_src, f"refused before any input: {cfg}"
+        vals, src = config_of(flow, cfg)
+        if keys:
+            vals = fc.with_keys(vals, keys)
+            src = {**src, **{k: "flow" for k in fc.KEY_FIELDS}}
+        clash = fc.clash(vals)
+        return vals, src, keys_src, (f"refused before any input: {clash}" if clash else None)
 
     # -- a run --
-    def start(self, flow: Flow, rid: str) -> None:
+    def start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
+        self.check_cancel("Run was pressed: the runner's own start checks decide")
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
         why = busy_reason(ps.splitlines())
-        cfg = fc.read_config(CONFIG_DIR)  # 2026-11-13: default < every map < this map
         vals: dict[str, Any] = {}
         src: dict[str, str] = {}
-        if why is None and isinstance(cfg, str):
-            why = f"refused before any input: {cfg}"
-        if why is None and not isinstance(cfg, str):
-            vals, src = config_of(flow, cfg)
-            clash = fc.clash(vals)
-            if clash:
-                why = f"refused before any input: {clash}"
+        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
+        if why is None:
+            vals, src, keys_src, why = self.values_for(flow, keys)
         if why is not None:
             self.state, self.detail, self.request_id = "refused", why, rid
-            self.note(event="start_refused", why=why, request=rid)
+            self.note(event="start_refused", why=why, request=rid, keys_src=keys_src)
             return
+        self.keys_src = keys_src
         self.state, self.flow, self.request_id = "starting", flow.id, rid
         self.started, self.ended, self.rc = ict(), None, None
         self.label = "flowrun-" + time.strftime("%m%d%H%M")
@@ -510,7 +598,8 @@ class Helper:
         self.config, self.config_src = vals, src
         self.live, self.live_off, self.end_png = Live(), 0, None
         self.note(event="start", flow=flow.id, label=self.label, request=rid, config=vals,
-                  config_src=src)  # fmt: skip
+                  config_src=src, keys={k: vals.get(k) for k in fc.KEY_FIELDS},
+                  keys_src=keys_src)  # fmt: skip
         self.detail = "starting the vision worker"
         self.write_status()
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", WORKER],
@@ -563,6 +652,75 @@ class Helper:
         self.state, self.detail = "starting", "the runner's own start checks"
         self.write_status()
 
+    # -- a check (dungeon@9.45): the runner's read-only `check`, the start's own argv --
+    def check_start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
+        if self.check_proc is not None:
+            self.detail = "a check is already reading the game screen"
+            return
+        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+        why = busy_reason(ps.splitlines())
+        vals: dict[str, Any] = {}
+        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
+        if why is None:
+            vals, _src, keys_src, why = self.values_for(flow, keys)
+        self.check = {"state": "checking", "at": iso_now(), "flow": flow.id, "items": [],
+                      "ok": None, "refuses": False, "keys_src": keys_src,
+                      "keys": {k: vals.get(k) for k in fc.KEY_FIELDS}, "used": {},
+                      "request_id": rid, "detail": "reading the game screen"}  # fmt: skip
+        if why is not None:
+            self.check.update(state="refused", ok=False, detail=why)
+            self.note(event="check_refused", why=why, request=rid, keys_src=keys_src)
+            return
+        d = SCRATCH / CHECK_LABEL
+        d.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
+        argv = check_command(flow, vals)
+        self.note(event="check", flow=flow.id, request=rid, keys=self.check["keys"],
+                  keys_src=keys_src)  # fmt: skip
+        with open(d / "check.log", "wb") as fh:
+            self.check_proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
+                                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                               start_new_session=True)  # fmt: skip
+        self.check_t = time.monotonic()
+        self.write_status()
+
+    def check_tick(self) -> None:
+        p = self.check_proc
+        if p is None or self.check is None:
+            return
+        rc = p.poll()
+        if rc is None:
+            if time.monotonic() - self.check_t > CHECK_TIMEOUT_S:
+                self.check_cancel(f"the check did not finish within {CHECK_TIMEOUT_S:.0f} s",
+                                  "timeout")  # fmt: skip
+                self.write_status()
+            return
+        self.check_proc = None
+        log = SCRATCH / CHECK_LABEL / "check.log"
+        text = log.read_text(errors="replace") if log.exists() else ""
+        self.check.update(parse_check_output(text), rc=rc)
+        self.note(event="check_end", request=self.check.get("request_id"), rc=rc,
+                  ok=self.check.get("ok"), detail=self.check.get("detail"))  # fmt: skip
+        self.write_status()
+
+    def check_cancel(self, why: str, state: str = "cancelled") -> None:
+        """End a running check (its own process group: uv, the runner, its screen reader)."""
+        p = self.check_proc
+        if p is None:
+            return
+        if p.poll() is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGTERM)
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(p.pid, signal.SIGKILL)
+        self.check_proc = None
+        if self.check is not None:
+            self.check.update(state=state, ok=None, detail=why)
+        self.note(event=f"check_{state}", why=why)
+
     def stop(self, rid: str) -> None:
         if self.runner is None or self.runner.poll() is not None:
             self.detail = "nothing is running"
@@ -596,6 +754,7 @@ class Helper:
         self.server = None
 
     def tick(self) -> None:
+        self.check_tick()
         if self.runner is None:
             return
         rc = self.runner.poll()
@@ -669,6 +828,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status")
     c = sub.add_parser("command")
     c.add_argument("flow", choices=sorted(FLOWS))
+    c.add_argument("--check", action="store_true", help="the read-only check's (dungeon@9.45)")
     a = ap.parse_args(argv)
     if a.cmd == "serve":
         return Helper().serve()
@@ -676,7 +836,8 @@ def main(argv: list[str] | None = None) -> int:
         f = DIR / "status.json"
         print(f.read_text() if f.exists() else '{"state": "no helper"}')
         return 0
-    print(" ".join(command(FLOWS[a.flow], "flowrun-LABEL")))
+    f = FLOWS[a.flow]
+    print(" ".join(check_command(f) if a.check else command(f, "flowrun-LABEL")))
     return 0
 
 

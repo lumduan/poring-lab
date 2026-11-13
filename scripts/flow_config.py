@@ -901,6 +901,34 @@ NOT_SETTINGS: dict[str, str] = {
 
 BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 KEY_FIELDS = tuple(f.name for f in FIELDS if f.kind == "key")
+# 2026-11-13 (Batt: every hotbar key from a FUNCTION of the flow, e.g. `def fly_wing():
+# press_key("F8")`): /flows compiles the flow's functions into KEY_FIELDS' five keys and sends them
+# with Run / check; they go over the config file's keys for THAT run or check only
+KEYS_SRC = {"flow": "the flow's functions", "config": "the settings"}
+
+
+def keys_problem(keys: Any) -> str | None:
+    """PURE: why a Run / check request's ``keys`` cannot be used (None: they can): exactly
+    KEY_FIELDS' five names, each a row-1 hotbar key (KEYS). Two on one key is clash's, once they
+    are over the run's values (a key not in use may share one)."""
+    if not isinstance(keys, dict):
+        return "the flow's keys must be an object of {name: key}"
+    extra = sorted(str(k) for k in set(keys) - set(KEY_FIELDS))
+    if extra:
+        return f"the flow's keys name {extra[0]!r}: only {', '.join(KEY_FIELDS)}"
+    missing = [k for k in KEY_FIELDS if k not in keys]
+    if missing:
+        return f"the flow's keys lack {missing[0]}: all five are needed ({', '.join(KEY_FIELDS)})"
+    for k in KEY_FIELDS:
+        why = problem_of(BY_NAME[k], keys[k])
+        if why:
+            return f"the flow's keys: {why}"
+    return None
+
+
+def with_keys(vals: Mapping[str, Any], keys: Mapping[str, Any] | None) -> dict[str, Any]:
+    """PURE: the run's values with the flow's keys over the config's (None: the config's)."""
+    return {**vals, **({k: keys[k] for k in KEY_FIELDS} if keys else {})}
 
 
 def _on_grid(v: float, f: Field) -> bool:

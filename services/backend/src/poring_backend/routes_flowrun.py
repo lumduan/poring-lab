@@ -1,8 +1,13 @@
 """The /flows page's RUN button, the backend side (Batt 2026-11-13: "I put the bot on the map,
 press run on flows, and the bot plays by itself").
 
-    GET  /flows/run   the host helper's status (scripts/flow_run.py) and whether it is alive
-    POST /flows/run   {"action": "start" | "stop", "flow": "<id>"}: one request for the helper
+    GET  /flows/run   the host helper's status (scripts/flow_run.py) and whether it is alive; its
+         "check" is the last check of the game screen (dungeon@9.45), passed through as written
+    POST /flows/run   {"action": "start" | "check" | "stop", "flow": "<id>", "keys"?: {...}}: one
+         request for the helper. "check" (Batt 2026-11-13 "do it"): the start checklist ticked from
+         the game screen -- the runner's read-only check, which sends no input (no ASSIST needed).
+         "keys" (Batt 2026-11-13: every hotbar key from a FUNCTION of the flow): all five of
+         flow_config.KEY_FIELDS, each F1-F9, over the config file's for that run or check only
     GET  /flows/config  every setting a person set: every map's ("global") and each map's own
     PUT  /flows/config  {"scope": "global" | "map", "map": "<map>", "group": "<group>",
          "values": {...} | null}: one group at one level (Batt 2026-11-13: "nothing is fixed, we
@@ -47,11 +52,13 @@ ACTIVE = ("starting", "running", "stopping")
 
 class RunBody(BaseModel):
     """A Run request names a flow and nothing else (Batt 2026-11-13 ~14:4x: every setting lives in
-    the config file, every map's and each map's own; the helper reads it at the start)."""
+    the config file, every map's and each map's own; the helper reads it at the start) -- but the
+    five hotbar keys the flow's functions give (``keys``, checked by flow_config.keys_problem)."""
 
     model_config = ConfigDict(extra="forbid")
-    action: Literal["start", "stop"]
+    action: Literal["start", "stop", "check"]
     flow: str | None = Field(default=None, max_length=64)
+    keys: dict[str, Any] | None = None
 
 
 class ConfigBody(BaseModel):
@@ -129,9 +136,25 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
         return 400, "unknown_flow"
     if st.get("state") in ACTIVE:
         return 409, "already_running"
+    if body.action == "check":  # dungeon@9.45: it reads the screen only (no ASSIST needed)
+        checking = (st.get("check") or {}).get("state") == "checking"
+        return (409, "check_running") if checking else None
     if mode != Mode.ASSIST:
         return 409, "mode_not_assist"
     return None
+
+
+def keys_refusal(body: RunBody, fc: Any) -> tuple[int, str, str] | None:
+    """Why the request's ``keys`` cannot go to the helper (None: none given, or they can): the
+    helper's own rule (flow_config.keys_problem), refused here first with its words."""
+    if body.keys is None:
+        return None
+    if fc is None:
+        return 503, "config_engine_unavailable", "the settings list cannot be read here"
+    if body.action == "stop":
+        return 400, "keys_refused", "keys go with start or check, not stop"
+    why = fc.keys_problem(body.keys)
+    return None if why is None else (400, "keys_refused", str(why))
 
 
 @router.get("/run")
@@ -153,6 +176,10 @@ def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
 def post_run(body: RunBody, request: Request,
              state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
     d = run_dir(state)
+    bad = keys_refusal(body, flow_config(state) if body.keys is not None else None)
+    if bad is not None:
+        state.drops.record("flowrun_http", bad[1], "post")
+        raise HTTPException(bad[0], {"reason": bad[1], "detail": bad[2]})
     st = read_status(d)
     why = refusal(body, st, state.mux.mode)
     if why is not None:
@@ -160,13 +187,16 @@ def post_run(body: RunBody, request: Request,
         raise HTTPException(why[0], {"reason": why[1]})
     rid = uuid.uuid4().hex
     req: dict[str, Any] = {"id": rid, "action": body.action, "flow": body.flow, "at": time.time()}
+    if body.keys is not None:  # the flow's functions' keys (all five, checked): that run's only
+        req["keys"] = dict(body.keys)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".request.{rid}"
     tmp.write_text(json.dumps(req) + "\n")
     os.replace(tmp, d / "request.json")
     with open(d / "requests.jsonl", "a") as fh:
         fh.write(json.dumps({**req, **_who(request).model_dump()}) + "\n")
-    return {"ok": True, "id": rid, "action": body.action, "flow": body.flow}
+    return {"ok": True, "id": rid, "action": body.action, "flow": body.flow,
+            **({"keys": req["keys"]} if "keys" in req else {})}  # fmt: skip
 
 
 @router.get("/config")

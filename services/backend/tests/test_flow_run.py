@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -217,3 +218,175 @@ def test_the_end_in_a_players_words() -> None:
     # the log a person reads: no server path, no raw JSON
     assert fr.player_lines(["/dev/shm/x/end.png", '{"sid": "x"}', "refused: the chat"]) == [
         "refused: the chat"]  # fmt: skip
+
+
+# --- dungeon@9.45 (Batt 2026-11-13 "do it"): the start checklist ticked from the game screen; and
+# the flow's keys (Batt: every hotbar key from a FUNCTION of the flow) over the config file's ----
+KEYS = {"heal_key": "F2", "fly_key": "F3", "home_key": "F6", "knife_key": "F7", "dagger_key": "F9"}
+
+
+def test_the_check_runs_the_starts_own_argv_read_only() -> None:
+    f = fr.FLOWS["xmas_dun02_rogue"]
+    vals = fc.with_keys(dict(f.defaults), KEYS)
+    run, check = fr.command(f, "flowrun-x", None, vals), fr.check_command(f, vals)
+    assert run[8] == "run" and check[8] == "check" and run[:8] == check[:8]
+
+    def settings(a: list[str]) -> list[str]:  # the argv but the label's value
+        i = a.index("--label")
+        return a[9:i] + a[i + 2 :]
+
+    assert settings(run) == settings(check) and "flowrun-x" not in check
+    assert check[check.index("--fly-key") + 1] == "F3" and "--stop-file" not in check
+    assert fr.CHECK_MARK == dh.CHECK_MARK and fr.CHECK_TIMEOUT_S <= 30
+    with pytest.raises(ValueError, match="not a runner command"):
+        fr.command(f, "x", sub="clear-bag")
+
+
+def test_a_request_may_carry_the_flows_five_keys_and_nothing_else() -> None:
+    base = {"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"}
+    assert fr.parse_request(json.dumps(base)) == base  # no keys: the settings' keys
+    got = fr.parse_request(json.dumps({**base, "keys": KEYS}))
+    assert isinstance(got, dict) and got["keys"] == KEYS and got["action"] == "check"
+    assert isinstance(fr.parse_request(json.dumps({**base, "action": "start", "keys": KEYS})), dict)
+    for keys, word in (({**KEYS, "steal_key": "F1"}, "only heal_key"),
+                       ({k: v for k, v in KEYS.items() if k != "home_key"}, "lack home_key"),
+                       ({**KEYS, "fly_key": "F10"}, "not a row-1 hotbar key"),
+                       ({**KEYS, "fly_key": 8}, "not a row-1 hotbar key"),
+                       (["F1"], "must be an object")):  # fmt: skip
+        assert word in str(fr.parse_request(json.dumps({**base, "keys": keys}))), keys
+    stop = {"id": "a1b2c3d4e5", "action": "stop", "keys": KEYS}
+    assert "not stop" in str(fr.parse_request(json.dumps(stop)))
+    assert "unknown flow" in str(fr.parse_request(json.dumps({**base, "flow": "x"})))
+
+
+def test_the_flows_keys_go_over_the_config_for_that_run_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = fr.FLOWS["xmas_dun02_rogue"]
+    monkeypatch.setattr(fr, "CONFIG_DIR", tmp_path)
+    cfg = {"v": 2, "global": {"fly_key": "F7"}, "maps": {}}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    h = fr.Helper(tmp_path)
+    vals, src, keys_src, why = h.values_for(f, KEYS)
+    assert why is None and keys_src == "the flow's functions"
+    assert {k: vals[k] for k in KEYS} == KEYS and src["fly_key"] == "flow"
+    vals, src, keys_src, why = h.values_for(f, None)
+    assert vals["fly_key"] == "F7" and src["fly_key"] == "global" and keys_src == "the settings"
+    assert json.loads((tmp_path / "config.json").read_text()) == cfg  # the file is not written
+    # two on one key: refused before any input, in the clash rule's own words
+    _, _, _, why = h.values_for(f, {**KEYS, "dagger_key": "F7"})
+    clash = fc.clash({**f.defaults, **KEYS, "dagger_key": "F7"})
+    assert why == f"refused before any input: {clash}"
+    assert "both on F7" in str(why)
+
+
+class FakeProc:
+    def __init__(self, argv: list[str], log: Any, rc: int | None, text: str) -> None:
+        self.argv, self.pid, self.rc = argv, 424242, rc
+        log.write(text.encode())
+
+    def poll(self) -> int | None:
+        return self.rc
+
+    def wait(self, timeout: float | None = None) -> int:
+        return self.rc or 0
+
+
+def _helper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rc: int | None,
+            text: str) -> tuple[Any, list[Any]]:  # fmt: skip
+    made: list[Any] = []
+
+    def popen(argv: list[str], **kw: Any) -> FakeProc:
+        made.append(FakeProc(argv, kw["stdout"], rc, text))
+        return made[-1]
+
+    monkeypatch.setattr(fr, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(fr, "SCRATCH", tmp_path / "scratch")
+    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)
+    import types
+
+    ps = types.SimpleNamespace(stdout="", returncode=0)  # `ps -eo args`: busy_reason is faked
+    monkeypatch.setattr(fr.subprocess, "run", lambda *a, **k: ps)
+    monkeypatch.setattr(fr.subprocess, "Popen", popen)
+    return fr.Helper(tmp_path), made
+
+
+def test_a_check_runs_and_its_result_goes_into_the_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    items = [
+        {"id": "wings", "ok": True, "words": "12", "value": "12 Fly Wings on F3"},
+        {"id": "chat", "ok": False, "words": "the chat input is open", "value": "open"},
+    ]
+    line = fr.CHECK_MARK + json.dumps({"items": items, "ok": False, "refuses": True,
+                                       "used": {"fly_key": "F3"}})  # fmt: skip
+    h, made = _helper(tmp_path, monkeypatch, 0, f"some uv line\n{line}\n")
+    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue", "keys": KEYS})
+    assert len(made) == 1 and made[0].argv[8] == "check"
+    assert made[0].argv[made[0].argv.index("--heal-key") + 1] == "F2"  # the flow's keys
+    assert h.check is not None and h.check["state"] == "checking" and h.state == "idle"
+    h.tick()
+    st = json.loads((tmp_path / "status.json").read_text())
+    ck = st["check"]
+    assert ck["state"] == "done" and ck["ok"] is False and ck["refuses"] is True
+    assert ck["items"] == items and ck["flow"] == "xmas_dun02_rogue" and "T" in ck["at"]
+    assert ck["keys_src"] == "the flow's functions" and ck["keys"] == KEYS
+    assert ck["used"] == {"fly_key": "F3"} and ck["detail"] == "1 of 2 lines fail"
+    assert st["state"] == "idle" and h.runner is None  # a check is no run
+    runs = [json.loads(x) for x in (tmp_path / "runs.jsonl").read_text().splitlines()]
+    assert runs[0]["event"] == "check" and runs[0]["keys"] == KEYS
+    assert runs[-1]["event"] == "check_end"
+
+
+def test_a_check_is_refused_while_a_run_goes_and_is_time_boxed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    h, made = _helper(tmp_path, monkeypatch, None, "")
+    for state in ("starting", "running", "stopping"):
+        h.state = state
+        h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+        assert made == [] and h.check is None and "checked before a run" in h.detail
+    h.state = "idle"
+    monkeypatch.setattr(fr, "busy_reason", lambda _lines: "the night chain is running")
+    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    assert made == [] and h.check is not None and h.check["state"] == "refused"
+    assert "night chain" in h.check["detail"]
+    # a check that does not end in CHECK_TIMEOUT_S: its process group ends
+    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
+    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    assert len(made) == 1 and h.check["state"] == "checking"
+    h.handle({"id": "b1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    assert len(made) == 1  # one at a time
+    h.check_t -= fr.CHECK_TIMEOUT_S + 1
+    h.tick()
+    assert h.check["state"] == "timeout" and h.check_proc is None and killed[0][0] == 424242
+    assert "did not finish" in h.check["detail"]
+
+
+def test_run_ends_a_running_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    h, made = _helper(tmp_path, monkeypatch, None, "")
+    killed: list[int] = []
+    monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: killed.append(pid))
+    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    (tmp_path / "config.json").write_text("{")  # the start then refuses before any input
+    h.handle({"id": "b1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue", "keys": KEYS})
+    assert killed == [424242] and h.check is not None and h.check["state"] == "cancelled"
+    assert h.state == "refused" and "not valid JSON" in h.detail and len(made) == 1
+
+
+def test_the_checks_output_is_its_result_or_the_runners_refusal() -> None:
+    items = [{"id": "cell", "ok": None, "words": "w", "value": None}]
+    got = fr.parse_check_output("x\n" + fr.CHECK_MARK + json.dumps({"items": items, "ok": None}))
+    assert got["state"] == "done" and got["detail"] == "1 of 1 lines not read"
+    ok = fr.parse_check_output(fr.CHECK_MARK + json.dumps({"items": [{"id": "a", "ok": True}],
+                                                           "ok": True}))  # fmt: skip
+    assert ok["detail"] == "every line passes" and ok["ok"] is True
+    why = "dungeon@9.42 refused: F4 is set for --steal-opener and equip: each needs its own key"
+    got = fr.parse_check_output(f"/home/bot/x.py:1: a path\n{why}\n")
+    assert got == {"state": "refused", "items": [], "ok": False, "refuses": True, "used": {},
+                   "detail": why}  # fmt: skip
+    crash = fr.parse_check_output("Traceback (most recent call last):\nKeyError: 'x'\n")
+    assert crash["state"] == "failed" and crash["ok"] is None and crash["detail"] == "KeyError: 'x'"
+    assert fr.parse_check_output("")["detail"] == "the check ended without a result"
