@@ -92,7 +92,7 @@ def test_the_check_returns_before_the_session_and_its_folder() -> None:
 
 
 def test_check_takes_runs_own_flags_and_no_flag_of_its_own() -> None:
-    main = _func("main")
+    main = _func("build_parser")  # dungeon@9.48: the CLI's parser (main() parses with it)
     own = [n for n in main.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
            and _call_name(n.value) == "add_parser" and n.value.args
            and ast.literal_eval(n.value.args[0]) == "check"]  # fmt: skip

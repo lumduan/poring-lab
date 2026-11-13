@@ -141,6 +141,7 @@ from collections import Counter, deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
@@ -5504,7 +5505,62 @@ class BareCtl:
                 **({"state": self.opener.state(f)} if self.opener is not None else {})}  # fmt: skip
 
 
-def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
+# --- dungeon@9.48 (Batt 2026-11-13: "build the player of blocks in the real game first"; docs/
+# planning/live-blocks.md stage 1): THE HUNT CORE AS A LIBRARY. The live block player
+# (scripts/flow_play.py) plays a project's dungeon_hunt block IN ITS OWN PROCESS -- one process,
+# ONE input writer -- with ITS Agent and Screen: run(a, hook=..., session=(agent, screen)). The CLI
+# (`dungeon_hunt.py run ...`, the Run helper's path) passes neither and runs exactly as before:
+# ro_agent.session() opens the session, no hook is called. VERSION stays dungeon@8.7.
+LIVE_BLOCKS_VERSION = "9.48"
+
+
+@dataclass(frozen=True)
+class HuntTick:
+    """What the TICK HOOK reads once per tick of the loop (read access only: values, and the
+    counters as a read-only view). Stage 2 moves survival into the box's events through it."""
+
+    t: float  # the tick's time.monotonic()
+    hp_pct: int | None  # the HP percent line (hp_percent.read)
+    sp_pct: int | None
+    dead: bool  # the death dialog
+    pos: Cell | None  # her cell as the loop holds it
+    mode: str  # search, fight, loot, after, ...
+    counts: Mapping[str, int]  # the run's counters (a read-only view)
+    frame: Any  # the tick's game-region frame (BGR), shared: never written
+
+
+def hook_stop(hook: Any, view: HuntTick) -> str | None:
+    """dungeon@9.48: the tick hook's answer -- None (go on), or why the run ends at this tick (its
+    NORMAL end: the safe-end escape, the packets, a player's way home). ``hook`` None: no hook,
+    never a stop (the CLI)."""
+    if hook is None:
+        return None
+    why = hook.tick(view)
+    return None if why is None else str(why)
+
+
+def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
+    """dungeon@9.48: the runner's arguments from its CLI flags (the subcommand ``cmd``, "run" or
+    the read-only "check", left out), parsed by the CLI's own parser with main()'s defaults: the
+    live player builds exactly the argv the Run helper builds (scripts/flow_run.py FIXED + the
+    flow's flags + flow_config.argv)."""
+    if cmd not in ("run", "check"):
+        raise ValueError(f"not a runner command: {cmd!r}")
+    a = build_parser().parse_args([cmd, *argv])
+    if a.ag_match is None:
+        import survive as sv
+
+        a.ag_match = sv.AG_MATCH_DUNGEON
+    return a
+
+
+def run(a: argparse.Namespace, *, hook: Any = None,
+        session: tuple[Any, Any] | None = None) -> int:  # noqa: PLR0915, C901  # fmt: skip
+    """The runner. ``hook`` / ``session`` (dungeon@9.48, the live block player only): an object
+    whose ``tick(HuntTick)`` is called once per tick of the loop (a str back ends the run there)
+    and, when it has one, ``event(rec, t_mono)`` with every event (a passive observer); and the
+    (Agent, Screen) to play with instead of a session of its own (the caller keeps and closes
+    them). Both None: the CLI's run, unchanged."""
     import bench
     import crusader as cr
     import cursor_sword as csw
@@ -5883,6 +5939,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     evf = (out / "events.jsonl").open("a")
 
     ev_hooks: list[Any] = []  # dungeon@9.14: passive observers of the event stream (--explore)
+    if hook is not None and hasattr(hook, "event"):  # dungeon@9.48: the live player's mirror
+        ev_hooks.append(hook.event)
 
     def ev(rec: dict[str, Any]) -> None:
         evf.write(json.dumps({"t_ns": r.ns(), **rec}) + "\n")
@@ -5909,7 +5967,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     counts: Counter[str] = Counter()
     reason = "time_box"
     t0 = r.ns()
-    with r.session(f"rule:dungeon-{a.strategy}") as (agent_raw, screen):
+    given = None if session is None else contextlib.nullcontext(session)  # dungeon@9.48: the
+    # live player's own (Agent, Screen), kept open for it after; None: the CLI's own session
+    with r.session(f"rule:dungeon-{a.strategy}") if given is None else given as (agent_raw, screen):
         agent_raw.wait_for_human()
         agent = hf.FrameGuard(agent_raw, (gx0, gy0, gw, gh), counts)
         # dungeon@9.35c: under --player-mode the start reads NO lab DB either (a public server has
@@ -8406,6 +8466,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     "dark": dark, "pos": None if here is None else list(here),
                     "here_age_s": round(tick - last_pos_t, 2), **lf_rec,
                     "rd": rd_why})  # fmt: skip
+                if hook is not None:  # dungeon@9.48: the live player's tick hook (the CLI: none)
+                    why_hk = hook_stop(hook, HuntTick(tick, pct, spp, bool(dead), here, mode,
+                                                      MappingProxyType(counts), img))  # fmt: skip
+                    if why_hk is not None:  # its stop: the NORMAL end, as the Stop file's
+                        reason = f"stopped: {why_hk}"
+                        ev({"kind": "hook_stop", "why": why_hk})
+                        break
                 if dead:
                     reason = "death"
                     ev(
@@ -9548,7 +9615,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     return 0
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI's parser (dungeon@9.48: shared by main() and args_for, so the live player's
+    hunt core parses its flags exactly as the CLI does)."""
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -10328,7 +10397,11 @@ def main() -> int:
     cb.add_argument("--char", required=True, choices=sorted(CHARS_CONF))
     cb.add_argument("--tabs", default=",".join(BAG_TABS))
     cb.add_argument("--out", required=True, help="the evidence directory (/dev/shm)")
-    a = ap.parse_args()
+    return ap
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    a = build_parser().parse_args(argv)
     if a.cmd == "clear-bag":
         return clear_bag(a)
     if a.cmd == "check":  # dungeon@9.45: the player start's checks, read only
