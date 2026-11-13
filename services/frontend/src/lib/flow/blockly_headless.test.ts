@@ -18,7 +18,7 @@ import { fromWorkspace, type Scope, tabFromWorkspace, tabToWorkspace, toWorkspac
 import { canonical, clone, type Flow } from "./ir.ts";
 import type { Models } from "./models.ts";
 import { sampleProject, xmasProject } from "./project.ts";
-import { FIXTURES, fixture } from "./testkit.ts";
+import { FIXTURES, fixture, sessionProject } from "./testkit.ts";
 
 const require = createRequire(import.meta.url);
 const lib = (p: string) => fileURLToPath(new URL(`../../../node_modules/blockly/${p}`, import.meta.url));
@@ -89,7 +89,9 @@ test("IR -> the real Blockly -> IR is exact: the fixtures, the starter and the m
 });
 
 test("PROJECT tabs -> the real Blockly -> the project is exact: every node's every tab of the ready-made projects", () => {
-  for (const p of [xmasProject(), sampleProject()]) {
+  // the one box (its runner block with the fifth role), the sample, and the login-start project
+  // (a runner block with four roles: the empty home field stays no home role)
+  for (const p of [xmasProject(), sampleProject(), sessionProject()]) {
     for (const n of p.nodes) {
       for (const t of n.tabs) {
         const scope = { node: n.id, tab: t.name };

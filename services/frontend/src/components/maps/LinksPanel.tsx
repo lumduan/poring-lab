@@ -139,7 +139,11 @@ export default function LinksPanel({ project, node, onSelect, onOpen, onRules }:
         <strong>Every link</strong>
         <span className="muted">
           {count} map{count === 1 ? "" : "s"}, {all.length} exit{all.length === 1 ? "" : "s"} ·{" "}
-          {sp.map ? (
+          {sp.map && !sp.login ? (
+            <>
+              START: the run starts on <MapButton project={project} node={sp.map.id} onSelect={onSelect} /> ({sp.entry ?? "no entry"}), where she stands
+            </>
+          ) : sp.map ? (
             <>
               the session enters on <MapButton project={project} node={sp.map.id} onSelect={onSelect} /> ({sp.entry ?? "no entry"})
             </>

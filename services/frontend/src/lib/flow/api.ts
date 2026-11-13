@@ -201,6 +201,9 @@ export interface CatalogueBlockDoc {
       note?: string | null;
     }[];
     note?: string | null;
+    /** the LIVE BLOCK PLAYER plays it in the game (docs/planning/live-blocks.md stage 1; the
+     * feat/live-player branch adds it): absent = not live (Run is greyed with the reason) */
+    live?: boolean;
   };
   status: string;
   badge: Badge;

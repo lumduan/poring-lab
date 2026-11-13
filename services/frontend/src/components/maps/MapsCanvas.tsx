@@ -9,6 +9,10 @@
 // edits the project (lib/maps/edit.ts). During a playback the node the character is in glows and
 // the connection or exit it last took is drawn thicker. Ideas from Node-RED and n8n (typed ports,
 // status lines); no code from either.
+//
+// THE START MARKER (Batt 2026-11-13 ~21:4x: "START > map xmas_dun02, one box is enough"): on a
+// project that starts on a map node, a small START pill (not a project node) joined to the start
+// map's entry; drag that connection's end onto another map node and the run starts there.
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -44,7 +48,7 @@ import type { AuthoredExit } from "@/lib/flow/ir";
 import { type Project } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
 import { sessionLinkProblem } from "@/lib/maps/edit";
-import { type EdgeData, entryHandle, exitHandle, exitRuns, fitViewport, followCentre, IN, mapsGraph, type MapsNodeData, OUT, RESPAWN, toUnits, type XY } from "@/lib/maps/graph";
+import { type EdgeData, entryHandle, exitHandle, exitRuns, fitViewport, followCentre, IN, mapsGraph, type MapsNodeData, OUT, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
 import { entryCaption, EXIT_WORDS, nodeLinks } from "@/lib/maps/links";
 import { nodeLint, tabList, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
@@ -103,6 +107,18 @@ function RunLine({ trace, id }: { trace: Trace | null; id: string }) {
 function useHandles(id: string, sig: string) {
   const update = useUpdateNodeInternals();
   useLayoutEffect(() => update(id), [id, sig, update]);
+}
+
+/** THE START MARKER: where the run starts (a map node: she stands on it). Not a project node. */
+function StartMarker({ id, data }: NodeProps<MNode>) {
+  useHandles(id, "out");
+  if (data.kind !== "start") return null;
+  return (
+    <div className="mp-start-marker" title={`The run starts here: on ${data.to}${data.entry ? ` (entry ${data.entry})` : ""}, where a person put her. Drag the connection's end onto another map to start there.`} data-testid="map-start-marker">
+      <span className="mp-pill mp-pill-start">START</span>
+      <Handle type="source" position={Position.Right} id={OUT} className="mp-handle" />
+    </div>
+  );
 }
 
 function LoginNode({ id, data }: NodeProps<MNode>) {
@@ -319,7 +335,7 @@ function SessionEdge(props: EdgeProps<SessionEdgeT>) {
   // round 6: the label sits ABOVE the session row (the cards are wider than the gaps between
   // them; matpilot: the labels read "en the cli", "cter s")
   const [path, lx] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-  const label = data && data.kind === "session" ? data.label : "";
+  const label = data && (data.kind === "session" || data.kind === "start") ? data.label : "";
   return (
     <>
       <BaseEdge id={id} path={path} style={{ stroke: selected ? "var(--accent)" : "var(--neutral-border)", strokeWidth: selected || data?.active ? 3.5 : 2 }} />
@@ -338,9 +354,9 @@ const MIN_ZOOM = 0.85; // node text (0.86rem and up) stays >= 11 px
 const MAX_ZOOM = 1.2;
 const PAD = 24;
 
-const nodeTypes = { login: LoginNode, character: CharacterNode, map: MapNodeCard, global: GlobalNodeCard };
+const nodeTypes = { start: StartMarker, login: LoginNode, character: CharacterNode, map: MapNodeCard, global: GlobalNodeCard };
 const edgeTypes = { exit: ExitEdge, session: SessionEdge };
-const MINIMAP: Record<string, string> = { map: "#a21caf", login: "#1d7a43", character: "#8a96a3", global: "#0f766e" };
+const MINIMAP: Record<string, string> = { map: "#a21caf", login: "#1d7a43", character: "#8a96a3", global: "#0f766e", start: "#1d7a43" };
 
 export type MapsCanvasProps = {
   project: Project;
@@ -352,6 +368,7 @@ export type MapsCanvasProps = {
   onSelect: (id: string | null) => void;
   onMove: (positions: Record<string, XY>) => void; // in the project's units
   onConnectSession: (from: string, to: string, entry?: string) => void;
+  onSetStart: (id: string) => void; // the START marker's connection dropped on a map node
   onDeleteSession: (from: string, to: string) => void;
   onConnectExit: (from: string, kind: AuthoredExit, to: string) => void;
   onRetargetExit: (path: string, to: string, entry?: string) => void;
@@ -362,7 +379,7 @@ export type MapsCanvasProps = {
 };
 
 function MapsCanvas(p: MapsCanvasProps) {
-  const { project, lint, trace, selected, activeNode, activeEdge, onSelect, onMove, onConnectSession, onDeleteSession, onConnectExit, onRetargetExit, onDeleteExit, onOpen, onSimulateFrom, onRules } = p;
+  const { project, lint, trace, selected, activeNode, activeEdge, onSelect, onMove, onConnectSession, onSetStart, onDeleteSession, onConnectExit, onRetargetExit, onDeleteExit, onOpen, onSimulateFrom, onRules } = p;
   const graph = useMemo(() => mapsGraph(project), [project]);
   const rf = useRef<ReactFlowInstance | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -426,6 +443,7 @@ function MapsCanvas(p: MapsCanvasProps) {
         position: n.position,
         data: { ...n.data, selected: n.id === selected, active: n.id === activeNode, project, lint, trace, onOpen, onSimulateFrom, onRules },
         deletable: false,
+        ...(n.id === START_ID ? { draggable: false, selectable: false } : {}),
       })) as Node[],
     [graph, selected, activeNode, project, lint, trace, onOpen, onSimulateFrom, onRules],
   );
@@ -443,10 +461,10 @@ function MapsCanvas(p: MapsCanvasProps) {
         target: e.target,
         sourceHandle: e.sourceHandle,
         targetHandle: e.targetHandle,
-        type: e.data.kind === "session" ? "session" : "exit",
+        type: e.data.kind === "session" || e.data.kind === "start" ? "session" : "exit",
         animated: e.id === activeEdge,
         data: { ...e.data, runs: runs.get(e.id), active: e.id === activeEdge },
-        deletable: !e.data.derived,
+        deletable: !e.data.derived && e.data.kind !== "start", // the start is moved, never deleted
         selectable: !e.data.derived,
         reconnectable: e.data.derived ? false : "target",
       })) as Edge[],
@@ -466,6 +484,7 @@ function MapsCanvas(p: MapsCanvasProps) {
   const isValidConnection = useCallback(
     (c: Connection | Edge) => {
       if (!c.source || !c.target) return false;
+      if (c.source === START_ID) return project.nodes.some((n) => n.id === c.target && n.kind === "map"); // the START marker: onto a map node
       if (c.sourceHandle === OUT) return sessionLinkProblem(project, c.source, c.target, entryOf(c.targetHandle)) === null;
       if (isPort(c.sourceHandle)) return c.source !== c.target && project.nodes.some((n) => n.id === c.target && n.kind === "map");
       // an exit's end dragged onto another map (its own port `x:<path>`: onReconnect retargets it)
@@ -476,28 +495,31 @@ function MapsCanvas(p: MapsCanvasProps) {
   );
   const onConnect = useCallback(
     (c: Connection) => {
-      if (c.sourceHandle === OUT) onConnectSession(c.source, c.target, entryOf(c.targetHandle));
+      if (c.source === START_ID) onSetStart(c.target);
+      else if (c.sourceHandle === OUT) onConnectSession(c.source, c.target, entryOf(c.targetHandle));
       else if (isPort(c.sourceHandle)) onConnectExit(c.source, c.sourceHandle, c.target);
     },
-    [onConnectSession, onConnectExit],
+    [onConnectSession, onConnectExit, onSetStart],
   );
   // dragging a connection's END onto another node moves it (a session connection, or an exit's target)
   const onReconnect = useCallback(
     (old: Edge, c: Connection) => {
       const d = old.data as EdgeData | undefined;
       if (!d || d.derived) return;
-      if (d.kind === "session") {
+      if (d.kind === "start") {
+        if (project.nodes.some((n) => n.id === c.target && n.kind === "map")) onSetStart(c.target);
+      } else if (d.kind === "session") {
         if (c.source !== old.source || sessionLinkProblem(project, c.source, c.target, entryOf(c.targetHandle)) !== null) return;
         onConnectSession(c.source, c.target, entryOf(c.targetHandle));
       } else if (project.nodes.some((n) => n.id === c.target && n.kind === "map")) onRetargetExit(d.path, c.target, entryOf(c.targetHandle));
     },
-    [project, onConnectSession, onRetargetExit],
+    [project, onConnectSession, onRetargetExit, onSetStart],
   );
   const onEdgesDelete = useCallback(
     (es: Edge[]) => {
       for (const e of es) {
         const d = e.data as EdgeData | undefined;
-        if (!d || d.derived) continue;
+        if (!d || d.derived || d.kind === "start") continue;
         if (d.kind === "session") onDeleteSession(d.from, d.to);
         else onDeleteExit(d.path);
       }
@@ -514,14 +536,14 @@ function MapsCanvas(p: MapsCanvasProps) {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeDragStop={(_, __, dragged) => onMove(Object.fromEntries(dragged.map((n) => [n.id, toUnits(n.position)])))}
+        onNodeDragStop={(_, __, dragged) => onMove(Object.fromEntries(dragged.filter((n) => n.id !== START_ID).map((n) => [n.id, toUnits(n.position)])))}
         isValidConnection={isValidConnection}
         onConnect={onConnect}
         onReconnect={onReconnect}
         onEdgesDelete={onEdgesDelete}
-        onNodeClick={(_, n) => onSelect(n.id)}
+        onNodeClick={(_, n) => n.id !== START_ID && onSelect(n.id)}
         onPaneClick={() => onSelect(null)}
-        onNodeDoubleClick={(_, n) => onOpen(n.id)}
+        onNodeDoubleClick={(_, n) => n.id !== START_ID && onOpen(n.id)}
         zoomOnDoubleClick={false}
         deleteKeyCode={["Delete", "Backspace"]}
         colorMode="system"

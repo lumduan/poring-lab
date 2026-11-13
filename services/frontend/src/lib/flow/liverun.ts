@@ -2,6 +2,14 @@
 // itself"): the page's side of GET / POST /flows/run (routes_flowrun.py). The backend only passes a
 // request to the host helper (scripts/flow_run.py), which runs the proven runner in player mode;
 // these helpers decide which buttons a status allows and how it reads. Pure, tested.
+//
+// THE PROJECT RUN (Batt 2026-11-13 ~21:4x, docs/planning/live-blocks.md stage 1: "on the Maps page
+// add a Run button too: it runs from START, box by box"): POST /flows/run/project {project, node}
+// asks the Run helper's LIVE BLOCK PLAYER (scripts/flow_play.py, the feat/live-player branch) to
+// play the project's blocks in the game from that map node. Its status is GET /flows/run with the
+// flow id "project" (PROJECT_FLOW); Stop is POST /flows/run {action: "stop"}, as a runner's.
+
+import type { Project } from "./project.ts";
 
 export type LiveState = "no_helper" | "idle" | "starting" | "running" | "stopping" | "ended" | "failed" | "refused";
 
@@ -90,6 +98,17 @@ export function runBody(action: "start" | "stop" | "check", flow: string, keys?:
 /** Where a request goes: the read-only check has its OWN route (matpilot 2026-11-13 #16). */
 export const runPath = (action: "start" | "stop" | "check"): string => (action === "check" ? "/flows/run/check" : "/flows/run");
 
+/** The flow id a PROJECT run has in GET /flows/run's status (the live block player). */
+export const PROJECT_FLOW = "project";
+/** The project run to start: the project (format 3) and the MAP node it starts on. */
+export type ProjectRun = { project: Project; node: string };
+/** The body of POST /flows/run/project: the whole project, and the map node it plays from. */
+export function projectRunBody(project: Project, node: string): { project: Project; node: string } {
+  return { project, node };
+}
+/** Where a project run's start goes (a stop stays POST /flows/run {action: "stop"}). */
+export const projectRunPath = (): string => "/flows/run/project";
+
 /** Whether the game can be checked now, and why not (the backend refuses the same). */
 export function canCheck(st: LiveStatus | null, flow: string): { can: boolean; why: string | null } {
   if (st === null) return { can: false, why: "reading the Run helper…" };
@@ -141,13 +160,15 @@ export function checkTime(at: string | null | undefined): string {
 
 export type LiveButtons = { canStart: boolean; canStop: boolean; why: string | null };
 
-/** Which buttons the status allows for `flow`, and why Start is off (the backend refuses the same). */
+/** Which buttons the status allows for `flow`, and why Start is off (the backend refuses the same).
+ * A PROJECT run (PROJECT_FLOW) needs no entry in the helper's flow list: the player plays any
+ * project the backend's checks pass (its refusals come back in words, REFUSALS). */
 export function liveButtons(st: LiveStatus | null, flow: string): LiveButtons {
   if (st === null) return { canStart: false, canStop: false, why: "reading the Run helper…" };
   if (!st.helper_alive) return { canStart: false, canStop: false, why: st.detail || "the Run helper is not running on the bot server" };
   const active = ACTIVE.includes(st.state);
   if (active) return { canStart: false, canStop: st.state !== "stopping", why: null };
-  if (!st.flows || !(flow in st.flows)) return { canStart: false, canStop: false, why: "the Run helper does not list this flow" };
+  if (flow !== PROJECT_FLOW && (!st.flows || !(flow in st.flows))) return { canStart: false, canStop: false, why: "the Run helper does not list this flow" };
   if (st.mode !== "ASSIST") return { canStart: false, canStop: false, why: "set the console to ASSIST first (the bot never takes over in HUMAN)" };
   return { canStart: true, canStop: false, why: null };
 }
@@ -187,4 +208,9 @@ export const REFUSALS: Record<string, string> = {
   config_engine_unavailable: "The bot server cannot read its settings list (scripts/flow_config.py) here.",
   keys_refused: "The flow's hotbar keys cannot be used",
   check_running: "The game is being checked already: a moment.",
+  // the PROJECT run (POST /flows/run/project; the live block player)
+  lint_errors: "The flow engine finds errors in the project: fix them first (Lint lists them).",
+  not_live: "A block on the way cannot be played in the game yet (Simulate plays it).",
+  run_start_refused: "The run-start check refused it.",
+  invalid_project: "The flow engine refuses this project.",
 };

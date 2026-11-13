@@ -84,15 +84,18 @@ export const THEN_OPTIONS = ["resume", "skip_block", "restart_flow", "relocate",
 /** The hotbar keys a press_key block offers (row 1: the keys the runner reads; scripts/flow_config.py
  * KEYS, the catalogue's `options` for press_key). */
 export const HOTKEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"] as const;
-/** The Rogue's runner block (blocks.yaml `dungeon_hunt`): each ROLE names the function the runner
- * calls for it (Batt 2026-11-13: "every key a function"), in the block's order. */
 /** The lab's credentials by name (catalogue `credentials`; .env's account prefixes, never secrets). */
 export const CREDENTIALS = ["lab_gm", "lab_player"] as const;
+/** The Rogue's runner block (blocks.yaml `dungeon_hunt`): each ROLE names the function the runner
+ * calls for it (Batt 2026-11-13: "every key a function"), in the block's order. The fifth, `home`
+ * (the one box, Batt 2026-11-13 ~21:4x: the runner flies home itself on the Butterfly Wing), is
+ * OPTIONAL: an empty field is no home role (the map's item warp by function gives the key). */
 export const RUNNER_ROLES = [
-  { param: "heal", field: "HEAL", words: "heal", fn: "heal" },
-  { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing" },
-  { param: "knife_on", field: "KNIFE_ON", words: "Knife on", fn: "knife_on" },
-  { param: "knife_back", field: "KNIFE_BACK", words: "Knife back", fn: "knife_back" },
+  { param: "heal", field: "HEAL", words: "heal", fn: "heal", optional: false },
+  { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing", optional: false },
+  { param: "knife_on", field: "KNIFE_ON", words: "Knife on", fn: "knife_on", optional: false },
+  { param: "knife_back", field: "KNIFE_BACK", words: "Knife back", fn: "knife_back", optional: false },
+  { param: "home", field: "HOME", words: "home (Butterfly Wing)", fn: "butterfly_wing", optional: true },
 ] as const;
 
 export const BLOCK_DEFS: BlockDef[] = [
@@ -272,7 +275,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     args1: [text("HEAL", "heal"), text("FLY", "fly_wing")],
     message2: "Knife on: call %1 Knife back: call %2",
     args2: [text("KNIFE_ON", "knife_on"), text("KNIFE_BACK", "knife_back")],
-    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: the function's one key press is the key the runner presses. Its other settings: the Run pane",
+    message3: "home (Butterfly Wing): call %1",
+    args3: [text("HOME", "butterfly_wing")],
+    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: the function's one key press is the key the runner presses. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). Its other settings: the Run pane",
   }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),

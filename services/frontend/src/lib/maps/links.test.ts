@@ -8,7 +8,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { def, globalOf, mapNodes, nodeById, type Project, sampleProject, sessionPath, tab, xmasProject } from "../flow/project.ts";
-import { exitHow, exitRows, knownMaps, nodeLinks, savePointNode, worldLinks } from "./links.ts";
+import { sessionProject } from "../flow/testkit.ts";
+import { arrivalText, entryRows, exitHow, exitRows, knownMaps, nodeLinks, savePointNode, worldLinks } from "./links.ts";
 import { isOurRule, MAX_PER_RUN, readRules, refreshRule, RULE_NAME, ruleMaps, setSavePoint, setUnknownMap, WING_ID, wingItem } from "./rules.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/sample_world_rules.project.json", import.meta.url), "utf8")) as Project;
@@ -40,7 +41,7 @@ test("an exit says where it goes and how, by its engine path; a def's exit count
   assert.deepEqual(worldLinks(p).map((x) => `${x.fromMap}->${x.toMap}:${x.kind}:${x.how}`), ["town_1->field_1:npc_warp:talk to n_warper · o_to_field", "field_1->town_1:item_warp:call butterfly_wing()"]);
   assert.deepEqual(knownMaps(p), ["field_1", "town_1"]);
   // an exit inside a function of another tab is one of the map's exits as well
-  const x = xmasProject();
+  const x = sessionProject();
   const xm = nodeById(x, "xmas_dun02");
   assert.ok(xm && xm.kind === "map");
   const main = xm.tabs[0].main!;
@@ -92,9 +93,12 @@ test("the save point is the START map's first statement: set, moved, cleared", (
   assert.deepEqual(cleared.project, sampleProject());
   assert.equal(setSavePoint(sampleProject(), { ...town, x: -1 }).ok, false);
   assert.equal(setSavePoint(sampleProject(), { ...town, map: "bad map" }).ok, false);
-  // xmas_dun02 states Geffen already: its start map is xmas_dun02
-  const x = readRules(xmasProject());
-  assert.deepEqual([x.startMap, x.savePoint.cell?.map, x.unknownMap], ["xmas_dun02", "geffen", "stop"]);
+  // xmas_dun02 states Geffen already: its start map is xmas_dun02 (the one box: the START itself;
+  // the login-start project: the session path's map)
+  for (const p of [xmasProject(), sessionProject()]) {
+    const x = readRules(p);
+    assert.deepEqual([x.startMap, x.savePoint.cell?.map, x.unknownMap], ["xmas_dun02", "geffen", "stop"]);
+  }
   // no path to a map: no start map, refused with words
   const broken = sampleProject();
   broken.edges = [];
@@ -161,4 +165,17 @@ test("a project lint (by_node, no by_owner) never breaks the node words (matpilo
   assert.equal(nodeLint(lint as never, "login").counts.warning, 1);
   assert.equal(nodeLint(lint as never, "nobody").counts.warning, 0);
   assert.equal(lintOf(lint as never, "login").warning, 1);
+});
+
+test("a map START: its first entry says the run starts there (no session)", () => {
+  const x = xmasProject();
+  const n = mapNodes(x)[0];
+  const rows = entryRows(x, n);
+  assert.deepEqual(rows.map((r) => [r.name, r.arrivals.map((a) => [a.kind, a.from])]), [["here", [["start", null]]]]);
+  assert.equal(arrivalText(rows[0].arrivals[0]), "START: the run starts here, where she stands");
+  // the login start's entry: the session enters there
+  const s = sessionProject();
+  const sx = nodeById(s, "xmas_dun02");
+  assert.ok(sx && sx.kind === "map");
+  assert.equal(arrivalText(entryRows(s, sx)[0].arrivals[0]), "the session enters here");
 });

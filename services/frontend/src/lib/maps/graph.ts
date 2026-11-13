@@ -10,9 +10,13 @@
 //   card's left); `in` (the card's head) takes what names no entry (a death's respawn lands on the
 //   save point's cell). A death's respawn edge is DERIVED (the save point's map node).
 // - GLOBAL has no ports and no edges: its card says it is shared by every node.
+// - THE START MARKER (Batt 2026-11-13 ~21:4x, the one box "START > map xmas_dun02"): when `start` is
+//   a MAP node, a small "START" pill sits left of it, NOT a project node (its id `START_ID` is no
+//   name), with one connection onto the start map's first entry; dragging that connection's end
+//   onto another map node sets `start` (edit.ts setStart). A login start keeps its Login card's pill.
 import type { AuthoredExit } from "../flow/ir.ts";
 import type { Trace } from "../flow/api.ts";
-import { type CharacterNode, type GlobalNode, type LoginNode, type MapNode, mapNodes, nodeById, type Project, sessionPath } from "../flow/project.ts";
+import { type CharacterNode, type GlobalNode, type LoginNode, type MapNode, mapNodes, nodeById, type Project, sessionPath, startMap } from "../flow/project.ts";
 import { exitRows, savePointNode } from "./links.ts";
 import type { Timeline } from "./play.ts";
 
@@ -21,6 +25,12 @@ export const entryHandle = (name: string) => `e:${name}`;
 export const OUT = "out"; // a session node's one port out
 export const IN = "in"; // a node's head: a connection that names no entry
 export const RESPAWN = "death_respawn";
+/** The START marker's id and its one connection's (never a node id: ids are names, no "@"). */
+export const START_ID = "@start";
+export const START_EDGE = "start>";
+/** Where the marker sits: this many pixels left of the start map's card, a little lower. */
+export const START_DX = 150;
+export const START_DY = 40;
 
 /** The project's `pos` is in the graph's UNITS; a card is drawn at pos x POS_SCALE pixels. The
  * ready-made projects place cards 260-300 units apart and 220 rows down, and a map card is 330-400
@@ -32,12 +42,14 @@ export const toScreen = (p: XY): XY => ({ x: p.x * POS_SCALE.x, y: p.y * POS_SCA
 export const toUnits = (p: XY): XY => ({ x: Math.round(p.x / POS_SCALE.x), y: Math.round(p.y / POS_SCALE.y) });
 
 export type MapsNodeData =
+  | { kind: "start"; to: string; entry: string | null }
   | { kind: "login"; node: LoginNode; start: boolean }
   | { kind: "character"; node: CharacterNode }
   | { kind: "map"; node: MapNode; first: boolean }
   | { kind: "global"; node: GlobalNode };
 export type MapsNode = { id: string; type: MapsNodeData["kind"]; position: XY; data: MapsNodeData };
 export type EdgeData =
+  | { kind: "start"; to: string; entry: string | null; label: string; derived: false }
   | { kind: "session"; from: string; to: string; entry: string | null; label: string; derived: false }
   | { kind: AuthoredExit; path: string; entry: string; derived: false; label?: string }
   | { kind: "death_respawn"; derived: true; label?: string };
@@ -60,11 +72,13 @@ function fallbackPos(kind: MapsNodeData["kind"], i: number): XY {
 export function mapsGraph(p: Project): MapsGraph {
   const sp = sessionPath(p);
   const nodes: MapsNode[] = [];
+  const at = new Map<string, XY>();
   let mi = 0;
   for (const n of p.nodes) {
     const units = finiteXY(n.pos) ? n.pos : fallbackPos(n.kind, n.kind === "map" ? mi : 0);
     if (n.kind === "map") mi++;
     const position = toScreen(units);
+    at.set(n.id, position);
     if (n.kind === "login") nodes.push({ id: n.id, type: "login", position, data: { kind: "login", node: n, start: p.start === n.id } });
     else if (n.kind === "character") nodes.push({ id: n.id, type: "character", position, data: { kind: "character", node: n } });
     else if (n.kind === "map") nodes.push({ id: n.id, type: "map", position, data: { kind: "map", node: n, first: sp.map?.id === n.id } });
@@ -76,6 +90,13 @@ export function mapsGraph(p: Project): MapsGraph {
   };
   const onto = (to: string, entry: string | null | undefined) => (entry && isMap(to)?.entries.some((e) => e.name === entry) ? entryHandle(entry) : IN);
   const edges: MapsEdge[] = [];
+  const sm = startMap(p);
+  const smAt = sm ? at.get(sm.id) : undefined;
+  if (sm && smAt) {
+    const entry = sm.entries[0]?.name ?? null;
+    nodes.unshift({ id: START_ID, type: "start", position: { x: smAt.x - START_DX, y: smAt.y + START_DY }, data: { kind: "start", to: sm.id, entry } });
+    edges.push({ id: START_EDGE, source: START_ID, target: sm.id, sourceHandle: OUT, targetHandle: onto(sm.id, entry), data: { kind: "start", to: sm.id, entry, label: "", derived: false } });
+  }
   for (const e of p.edges) {
     if (!nodeById(p, e.from) || !nodeById(p, e.to)) continue;
     const to = nodeById(p, e.to);
@@ -96,7 +117,7 @@ export function mapsGraph(p: Project): MapsGraph {
       edges.push({ id: `respawn:${n.id}`, source: n.id, target: saveNode.id, sourceHandle: RESPAWN, targetHandle: onto(saveNode.id, saveNode.entries[0]?.name), data: { kind: "death_respawn", derived: true } });
     }
   }
-  const notes = sp.problems.map((x) => `The session path: ${x}. Simulate starts at the login node and follows login → character → a map's entry: drag from a node's right port to connect it.`);
+  const notes = sp.problems.map((x) => `The session path: ${x}. Simulate starts at the login node and follows login → character → a map's entry: drag from a node's right port to connect it (or start on a map: "Start here" in a map node's inspector).`);
   return { nodes, edges, notes };
 }
 
@@ -107,7 +128,7 @@ export function exitRuns(trace: Trace | null, edges: readonly MapsEdge[]): Map<s
   const count = new Map<string, number>();
   for (const t of trace.transitions) count.set(`${t.from}|${t.kind}|${t.to}`, (count.get(`${t.from}|${t.kind}|${t.to}`) ?? 0) + 1);
   for (const e of edges) {
-    if (e.data.kind === "session") continue;
+    if (e.data.kind === "session" || e.data.kind === "start") continue;
     const k = `${e.source}|${e.data.kind}|${e.target}`;
     if (count.has(k)) out.set(e.id, count.get(k) as number);
   }

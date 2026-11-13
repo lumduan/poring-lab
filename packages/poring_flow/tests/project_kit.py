@@ -1,4 +1,11 @@
-"""Builders for the project model's tests (format 3): JSON pieces, the two fixtures as dicts."""
+"""Builders for the project model's tests (format 3): JSON pieces, the fixtures as dicts.
+
+- XMAS: the ready-made ONE-BOX project (Batt 2026-11-13 ~21:4x: "START > map xmas_dun02, one box
+  is enough"): start the map node xmas_dun02, no edges, tabs main and keys;
+- SESSION: the login-start project the model's tests build on (login -> character -> xmas_dun02 ->
+  geffen, a Global with keys and safety): the ready-made project before the one box, kept as the
+  test fixture of the session path, Global and its overrides;
+- SAMPLE: the two-map sample on the synthetic sheets."""
 
 from __future__ import annotations
 
@@ -13,6 +20,7 @@ from poring_flow.catalogue import catalogue
 REPO = Path(__file__).resolve().parents[3]
 FIXTURES = REPO / "services/frontend/src/lib/flow/fixtures"
 XMAS = FIXTURES / "project_xmas_dun02.json"
+SESSION = FIXTURES / "project_session.json"
 SAMPLE = FIXTURES / "project_sample.json"
 SAMPLE_TRACE = REPO / "services/frontend/src/lib/maps/fixtures/project_sample_trace.json"
 ZONES = REPO / "config/map_zones/xmas_dun02.yaml"
@@ -62,6 +70,10 @@ def hp(op: str, v: int) -> dict[str, Any]:
 
 def xmas() -> dict[str, Any]:
     return dict(json.loads(XMAS.read_text(encoding="utf-8")))
+
+
+def session() -> dict[str, Any]:
+    return dict(json.loads(SESSION.read_text(encoding="utf-8")))
 
 
 def sample() -> dict[str, Any]:

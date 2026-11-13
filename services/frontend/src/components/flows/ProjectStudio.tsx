@@ -12,9 +12,13 @@
 // BlocksApp.tsx (https://github.com/lumduan/matpilot, MIT, Copyright (c) 2026 Sarat Sonsuk; the
 // licence text is in studio.css and THIRD_PARTY.md).
 //
-// What runs in the game: only Run, on a map node whose blocks hold "hunt with the runner" (the
-// runner scripts/dungeon_hunt.py through the host's Run helper; its keys are the node's functions).
-// Everything else is SIMULATE (the flow engine; no game, no input).
+// What runs in the game: only Run, on a map node: it plays the PROJECT from that node through the
+// host's Run helper and its LIVE BLOCK PLAYER (POST /flows/run/project; docs/planning/live-blocks.md
+// stage 1, Batt 2026-11-13 ~21:4x), and only when every block a run from there can reach is live
+// (the catalogue's `live` flag, lib/flow/liveready.ts); else it is greyed with the blocks that are
+// not live yet. "hunt with the runner" is the runner's hunt (scripts/dungeon_hunt.py) played by the
+// player in-process; its keys are the node's functions. Everything else is SIMULATE (the flow
+// engine; no game, no input).
 import "./studio.css";
 
 import dynamic from "next/dynamic";
@@ -34,6 +38,7 @@ import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config"
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
 import { ACTIVE } from "@/lib/flow/liverun";
+import { liveReady } from "@/lib/flow/liveready";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
   GLOBAL_ID,
@@ -52,6 +57,7 @@ import {
   runnerBlockOn,
   runnerKeysOn,
   sampleProject,
+  startMap,
   type Tab,
   tabNameProblem,
   xmasProject,
@@ -96,18 +102,19 @@ const READY: Record<string, () => { project: Project; world: WorldSource }> = {
 
 const KIND_WORDS: Record<PNode["kind"], string> = { login: "login", character: "character", map: "map", global: "Global" };
 
-/** The node a page opens first: `?node=`, else the start map's (the first map), else the first. */
+/** The node a page opens first: `?node=`, else the start map (a map START, else the session's
+ * first map), else the first map, else the first node. */
 function firstNode(p: Project, want: string | null): string {
   if (want && nodeById(p, want)) return want;
-  const start = p.edges.find((e) => nodeById(p, e.to)?.kind === "map")?.to;
+  const start = startMap(p)?.id ?? p.edges.find((e) => nodeById(p, e.to)?.kind === "map")?.to;
   return start ?? mapNodes(p)[0]?.id ?? p.nodes[0].id;
 }
 
 /** The main tab's start words. */
-function startWords(n: PNode): string {
+function startWords(n: PNode, p: Project): string {
   if (n.kind === "login") return "when the run starts: log in";
   if (n.kind === "character") return "after the login: choose the character";
-  if (n.kind === "map") return `when she arrives on ${n.map.map}`;
+  if (n.kind === "map") return p.start === n.id ? `when the run starts: she stands on ${n.map.map}` : `when she arrives on ${n.map.map}`;
   return "";
 }
 
@@ -170,17 +177,21 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const scopeKey = tab ? `${node.id}/${tab.name}` : `${node.id}/`;
   const toolboxScope: ToolboxScope = { node: node.kind, main: tab?.name === MAIN_TAB && node.kind !== "global" };
 
-  // --- RUN: a map node whose blocks hold the runner's block, on a map the Run helper plays -----------
+  // --- RUN: the PROJECT from this map node (the live block player), when every block it reaches is
+  // live; the runner's checklist, settings and read-only check where the node holds its block ------
   const runDoc = node.kind === "map" && runnerBlockOn(node) ? runnerForMap(node.map.map) : null;
-  const runnable = !!runDoc && LIVE_FLOWS.includes(runDoc.id);
-  const keysR = runnable ? runnerKeysOn(project, node.id) : null;
+  const runnerLive = !!runDoc && LIVE_FLOWS.includes(runDoc.id); // the Run helper plays this runner
+  const ready = node.kind === "map" ? liveReady(project, node.id, catalogue?.blocks ?? null) : null;
+  const runnable = node.kind === "map" && ready?.ready === true && (!runnerBlockOn(node) || runnerLive);
+  const keysR = runnerLive ? runnerKeysOn(project, node.id) : null;
   const runKeys = keysR?.ok ? keysR.keys : null;
-  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable, runKeys);
+  const projectRun = runnable ? { project, node: node.id } : null; // the hook keeps the latest in a ref
+  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable || runnerLive, runKeys, projectRun);
   const cs = useConfig(backendUrl, runDoc?.map ?? "");
   const cdoc = runDoc?.config ?? null;
   const runEff = cdoc && runDoc ? effectiveConfig(cdoc, cs.file, runDoc.map) : null;
   const runValues = runEff ? (runKeys ? { ...runEff.values, ...runKeys } : runEff.values) : null;
-  const runWhy = !runnable
+  const runWhy = !runnable && !runnerLive
     ? null
     : keysR && !keysR.ok
       ? `the keys: ${keysR.problems.join("; ")}`
@@ -192,17 +203,19 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const keysLine = keysR?.ok
     ? (["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"] as const).map((k) => `${keysR.keys[k]} ${keysR.from[k]}()`).join(" · ")
     : (keysR?.problems.join("; ") ?? "");
-  const runActive = runnable && ACTIVE.includes(live.st?.state ?? "");
-  // Batt 2026-11-13: "every flow has Simulate and Run" -- Run plays in the game only what the bot can
-  // play live; today that is the block "hunt with the runner" on a map with a runner (xmas_dun02)
+  const runActive = (runnable || runnerLive) && ACTIVE.includes(live.st?.state ?? "");
+  // Batt 2026-11-13: "every flow has Simulate and Run" -- Run plays in the game only what the live
+  // block player can play: every block a run from this node reaches (lib/flow/liveready.ts)
   const notRunWhy =
     node.kind === "global"
       ? "Global is code every map shares: open a map node to Run"
       : node.kind !== "map"
-        ? "Run starts on a map node, with the character already in the game (the bot logs in with its own Python)"
+        ? "login and choosing the character are not live yet: Run starts on a map node, where a person put her"
         : runnerBlockOn(node) && !runDoc
           ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${node.map.map}`
-          : `the bot cannot play this map's blocks live yet: in the game it plays the block "hunt with the runner" (on xmas_dun02). Every other block is Simulate only until the live player for blocks is built`;
+          : ready && !ready.ready
+            ? ready.why
+            : "Run is not available on this node";
   const shown: Record<Pane, boolean> = { ...panes, run: panes.run || runActive };
 
   const setView = (v: (typeof VIEWS)[number]) => {
@@ -641,7 +654,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                 {/* Batt 2026-11-13: a PROJECT is the save of /maps; /flows loads and saves the same one */}
                 <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => openReady("xmas_dun02")} data-testid="load-xmas">
                   xmas_dun02
-                  <small>the ready-made project: login → character → xmas_dun02 (hunt with the runner, a Butterfly Wing home); every key a function in Global (Undo brings yours back)</small>
+                  <small>the ready-made ONE BOX: START → xmas_dun02, where you put her (hunt with the runner; it flies home on the Butterfly Wing itself); every key a function in its keys tab (Undo brings yours back)</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => openReady("my_first_project")} data-testid="load-sample-project">
                   my_first_project
@@ -820,7 +833,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
               <BlockEditor
                 scope={{ node: node.id, tab: tab.name }}
                 toolboxScope={toolboxScope}
-                title={startWords(node)}
+                title={startWords(node, project)}
                 scopeKey={scopeKey}
                 epoch={epoch}
                 getProject={getProject}
@@ -910,6 +923,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                   <div className="run-pane" data-testid="run-pane-not-ready">
                     <p>
                       <strong>Run in the game · not ready here.</strong> {notRunWhy}
+                      {ready && !ready.ready && ready.notLive.length > 0 ? " (the live block player plays a block only once it is built and proven; until then Simulate plays it)." : ""}
                     </p>
                     {notReady.length > 0 && (
                       <>
@@ -928,13 +942,19 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                     <p className="muted">Simulate (green) plays this map alone; /maps plays the whole chain.</p>
                   </div>
                 )}
+                {p === "run" && runnable && !runDoc && (
+                  <div className="run-pane" data-testid="run-pane-blocks">
+                    <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
+                    <LiveRun live={live} check={false} blocked={runWhy} />
+                  </div>
+                )}
                 {p === "run" && runDoc && (
                   <div className="run-pane" data-testid="run-pane">
                     <p className="muted">
-                      Run (the amber button at the top) plays <code>{runDoc.script}</code> on {runDoc.map} as a player (no GM line), from where she stands. Its keys are this node&apos;s functions
+                      Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is <code>{runDoc.script}</code>&apos;s hunt on {runDoc.map}, in the same process. Its keys are this node&apos;s functions
                       (its own first, then Global&apos;s): {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy} />
+                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy ?? (runnable ? null : notRunWhy)} />
                     {/* matpilot #7: say where these are kept */}
                     <p className="muted">The settings below are saved on the bot server the moment one changes (every browser sees them). The blocks and their functions are this browser&apos;s, until you Save.</p>
                     {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} />}

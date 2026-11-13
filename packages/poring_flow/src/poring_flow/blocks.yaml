@@ -149,12 +149,17 @@ blocks:
       - {name: fly, type: proc, required: true, group: keys, note: "the function the runner presses for a Fly Wing (a jump on this map): one press_key (its default F8)"}
       - {name: knife_on, type: proc, required: true, group: keys, note: "the function the runner presses to wield the Knife: one press_key (its default F4)"}
       - {name: knife_back, type: proc, required: true, group: keys, note: "the function the runner presses to wield the dagger again: one press_key (its default F5)"}
+      # ➡️ Batt 2026-11-13 ~21:4x (the one box, START > xmas_dun02): the runner flies HOME itself, on
+      # a Butterfly Wing (the bag half full, or Stop: its settings), so a fifth role names that
+      # function. Optional: without it the map's item warp by function gives the home key, as before
+      # (poring_flow.project.runner_keys). Its function is a Butterfly Wing function (its key a wing key).
+      - {name: home, type: proc, group: keys, note: "the function the runner presses to fly home on a Butterfly Wing (the bag half full, or Stop): one press_key (its default F9); absent: the map's item warp by function"}
     timeout_s: 600
     long: true
     moves: near
     adds_weight: true
     affects: {position: "~", hp_percent: "-", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
-    note: the stop group is the enclosing loop (13.5) -- its condition and max_s; one call hunts at most timeout_s. Each parameter names a FUNCTION of exactly one press_key (the runner presses one key a role); only on a map with a runner (xmas_dun02)
+    note: the stop group is the enclosing loop (13.5) -- its condition and max_s; one call hunts at most timeout_s. Each parameter names a FUNCTION of exactly one press_key (the runner presses one key a role; home, optional, is the Butterfly Wing it flies home on); only on a map with a runner (xmas_dun02)
   hunt:
     # Amendment A 3 (DRAFT; Batt D2 2026-10-21: one `hunt` block with groups): hunt-flow's ADOPTED
     # rules as ONE task-level block inside a map node. Its parameters are a person's choices, each

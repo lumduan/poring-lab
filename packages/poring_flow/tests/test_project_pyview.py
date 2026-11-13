@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from project_kit import (  # noqa: E402
     REPO,
     SAMPLE,
+    SESSION,
     XMAS,
     act,
     add_tab,
@@ -28,9 +29,9 @@ from project_kit import (  # noqa: E402
     lit,
     node,
     press,
+    session,
     tab,
     var,
-    xmas,
 )
 
 
@@ -59,7 +60,7 @@ def rich() -> P.Project:
     add = fdef("add", *body, params=["a", {"name": "b", "default": lit(10)}], varargs="rest",
                kwargs="opts")  # fmt: skip
     quit_ = fdef("give_up", {"kind": "return", "value": None})
-    d = add_tab(xmas(), "global", tab("lib", add, quit_, vars={"TOTAL": lit(0), "x": lit(0)}))
+    d = add_tab(session(), "global", tab("lib", add, quit_, vars={"TOTAL": lit(0), "x": lit(0)}))
     d = add_tab(d, "xmas_dun02", tab("keys", fdef("fly_wing", press("F6")),
                                      vars={"TOTAL": lit(5)}))  # fmt: skip
     node(d, "geffen")["tabs"][0]["main"] = [
@@ -73,13 +74,13 @@ def rich() -> P.Project:
 
 
 def test_both_fixtures_round_trip_per_file_and_whole() -> None:
-    for path in (XMAS, SAMPLE):
+    for path in (XMAS, SESSION, SAMPLE):
         files = round_trip(P.from_json(path.read_text()))
         assert files[-1].path == "project.py" and (files[-1].node, files[-1].tab) == ("", "")
 
 
 def test_the_files_and_their_paths() -> None:
-    files = V.print_files(P.from_json(XMAS.read_text()))
+    files = V.print_files(P.from_json(SESSION.read_text()))
     assert [(f.node, f.tab, f.path) for f in files] == [
         ("login", "main", "login/main.py"),
         ("character", "main", "character/main.py"),
@@ -134,7 +135,7 @@ def test_inputs_values_returns_and_overrides_are_python() -> None:
 
 
 def test_the_parser_ignores_the_override_comment_and_edits_one_tab() -> None:
-    p = P.from_json(XMAS.read_text())
+    p = P.from_json(SESSION.read_text())
     src = V.print_tab(p, p.node("global"), p.node("global").tab("keys"))  # type: ignore[arg-type, union-attr]
     edited = src.replace('press_key("F8")', 'press_key("F7")').replace(
         "def fly_wing", "# a person's comment\ndef fly_wing"
@@ -144,7 +145,7 @@ def test_the_parser_ignores_the_override_comment_and_edits_one_tab() -> None:
 
 
 def test_a_secret_is_never_printed() -> None:
-    d = xmas()
+    d = session()
     node(d, "login")["tabs"][0]["main"] = [act("login", server=lit("lab-rathena"),
                                               credential=lit("Hunter2-pass!"))]  # fmt: skip
     doc = V.python_doc(build(d))
@@ -165,7 +166,7 @@ def test_a_secret_is_never_printed() -> None:
     ],
 )  # fmt: skip
 def test_the_parser_refuses_what_a_tab_cannot_hold(change: Any, message: str) -> None:
-    p = P.from_json(XMAS.read_text())
+    p = P.from_json(SESSION.read_text())
     src = V.print_tab(p, p.node("global"), p.node("global").tab("keys"))  # type: ignore[arg-type, union-attr]
     with pytest.raises(pyview.ParseError) as e:
         V.parse_tab(p, "global", "keys", change(src))
@@ -174,7 +175,7 @@ def test_the_parser_refuses_what_a_tab_cannot_hold(change: Any, message: str) ->
 
 
 def test_return_outside_a_def_is_refused() -> None:
-    p = P.from_json(XMAS.read_text())
+    p = P.from_json(SESSION.read_text())
     src = V.print_tab(p, p.node("geffen"), p.node("geffen").tab("main"))  # type: ignore[arg-type, union-attr]
     with pytest.raises(pyview.ParseError, match="return belongs inside a function"):
         V.parse_tab(p, "geffen", "main", src.replace('stop("home")', "return"))

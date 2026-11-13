@@ -27,6 +27,7 @@ SAMPLE_JSON = REPO / "packages/poring_flow/src/poring_flow/examples/town_warp_fa
 FIXTURES = REPO / "services/frontend/src/lib/flow/fixtures"
 PROJECT_JSON = FIXTURES / "project_sample.json"
 XMAS_JSON = FIXTURES / "project_xmas_dun02.json"
+SESSION_JSON = FIXTURES / "project_session.json"
 ENVS = REPO / "config/environments.yaml"
 
 
@@ -191,15 +192,28 @@ def test_lint_simulate_python(make: Make) -> None:
     assert any(f["rule"] == "map_sheet" for f in local["findings"])
 
 
-def test_the_xmas_dun02_project_simulates_from_login(make: Make) -> None:
-    """Its 0-error lint is the engine's test (test_project.py: no static data, the zones
-    provider, the local KB); here the sample sheets lack its maps and this backend has no zones
-    files: only those refuse (fail closed)."""
+def test_the_xmas_dun02_project_simulates_from_its_map_start(make: Make) -> None:
+    """The ready-made ONE BOX (Batt 2026-11-13 ~21:4x: "START > map xmas_dun02"): its 0-error
+    lint is the engine's test (test_project.py: no static data, the zones provider, the local KB);
+    here the sample sheets lack its map and this backend has no zones files: only those refuse
+    (fail closed). It simulates from the map itself: no session."""
     client = make()
     proj = json.loads(XMAS_JSON.read_text())
     lint = post(client, "lint", {"project": proj, "world": "sample"}).json()
     errs = {f["rule"] for f in lint["findings"] if f["severity"] == "error"}
     assert errs <= {"map_sheet", "zones_missing"} and "map_sheet" in errs
+    sim = post(client, "simulate", {"project": proj, "world": "sample",
+                                    "scenario": {"horizon_s": 40}}).json()  # fmt: skip
+    assert sim["trace"]["session"] is None
+    play = sim["trace"]["play"]
+    assert play and all(s["kind"] not in ("login", "character") for s in play)
+    assert all(s["block"] == "xmas_dun02" for s in play)
+
+
+def test_the_session_project_simulates_from_login(make: Make) -> None:
+    """A login start (the test fixture project_session.json): the session's two steps first."""
+    client = make()
+    proj = json.loads(SESSION_JSON.read_text())
     sim = post(client, "simulate", {"project": proj, "world": "sample",
                                     "scenario": {"horizon_s": 40}}).json()  # fmt: skip
     play = sim["trace"]["play"]

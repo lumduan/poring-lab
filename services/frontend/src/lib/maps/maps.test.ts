@@ -10,9 +10,10 @@ import { test } from "node:test";
 
 import type { PlayStep, Trace } from "../flow/api.ts";
 import { mapNodes, nodeById, sampleProject, xmasProject } from "../flow/project.ts";
+import { sessionProject } from "../flow/testkit.ts";
 import { addMapNode, centreCell, mapNodeFor, newNodePos, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
-import { activeEdgeAt, entryHandle, exitRuns, fitViewport, followCentre, mapsGraph, POS_SCALE, toScreen, toUnits } from "./graph.ts";
+import { activeEdgeAt, entryHandle, exitRuns, fitViewport, followCentre, mapsGraph, POS_SCALE, START_DX, START_DY, START_EDGE, START_ID, toScreen, toUnits } from "./graph.ts";
 import { makeWanderers, shares, WANDER_CAP, wanderersAt } from "./wander.ts";
 import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, traceHasSession, trailAt, walkSeconds } from "./play.ts";
 import { CREDENTIALS, characterOf, loginOf, SERVERS, sessionLength, sessionOf, sessionProblems, sessionSteps, setCharacter, setLogin } from "./session.ts";
@@ -91,9 +92,33 @@ test("the graph: the project's nodes, its session connections onto the start ent
   const broken = sampleProject();
   broken.edges = broken.edges.filter((x) => x.from !== "character");
   assert.match(mapsGraph(broken).notes[0], /^The session path: the character node is not connected to a map/);
-  // the Rogue's: login, character, two maps, Global; the wing home by its function
-  const x = mapsGraph(xmasProject());
+  // the Rogue's login-start project: login, character, two maps, Global; the wing home by its function
+  const x = mapsGraph(sessionProject());
   assert.deepEqual(x.edges.map((y) => y.id), ["edge:login>character", "edge:character>xmas_dun02", "exit:xmas_dun02/main/main.2", "respawn:xmas_dun02"]);
+  assert.ok(!x.nodes.some((n) => n.id === START_ID), "a login start: no START marker (its Login card says START)");
+});
+
+test("the START marker (the one box): a pill left of the start map, one connection onto its entry, not a project node", () => {
+  const p = xmasProject();
+  const g = mapsGraph(p);
+  assert.deepEqual(g.nodes.map((n) => `${n.id}:${n.type}`), [`${START_ID}:start`, "xmas_dun02:map"]);
+  const m = g.nodes.find((n) => n.id === "xmas_dun02")!;
+  const s = g.nodes.find((n) => n.id === START_ID)!;
+  assert.deepEqual(s.position, { x: m.position.x - START_DX, y: m.position.y + START_DY });
+  assert.deepEqual(s.data, { kind: "start", to: "xmas_dun02", entry: "here" });
+  assert.deepEqual(
+    g.edges.map((e) => [e.id, e.source, e.target, e.sourceHandle, e.targetHandle, e.data.kind]),
+    [[START_EDGE, START_ID, "xmas_dun02", "out", entryHandle("here"), "start"]],
+  );
+  assert.deepEqual(g.notes, []);
+  assert.ok(!p.nodes.some((n) => n.id === START_ID), "never a project node");
+  // the session project started on its map: the marker moves there; its session edges stay drawn
+  const q = sessionProject();
+  q.start = "geffen";
+  const h = mapsGraph(q);
+  assert.equal(h.edges.find((e) => e.id === START_EDGE)?.target, "geffen");
+  assert.equal(h.edges.find((e) => e.id === START_EDGE)?.targetHandle, entryHandle("save"));
+  assert.equal(exitRuns(null, h.edges).size, 0);
 });
 
 test("the playback lights the connection or exit it last went along; exits are counted", () => {

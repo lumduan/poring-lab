@@ -115,3 +115,25 @@ test("a start or a check carries the flow and the flow's keys; a stop nothing", 
   assert.equal(checkTime("not a time"), "not a time");
   assert.ok(REFUSALS.keys_refused && REFUSALS.check_running);
 });
+
+// THE PROJECT RUN (Batt 2026-11-13 ~21:4x, live-blocks.md stage 1): the request the other half
+// (feat/live-player: the backend and the live block player) is built against
+test("the project run: POST /flows/run/project {project, node}; its status is the flow id project", async () => {
+  const { PROJECT_FLOW, projectRunBody, projectRunPath, runBody, runPath } = await import("./liverun.ts");
+  const { xmasProject } = await import("./project.ts");
+  const p = xmasProject();
+  assert.equal(projectRunPath(), "/flows/run/project");
+  assert.deepEqual(projectRunBody(p, "xmas_dun02"), { project: p, node: "xmas_dun02" });
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(projectRunBody(p, "xmas_dun02")))).sort(), ["node", "project"]);
+  // Stop and the check are as before
+  assert.deepEqual(runBody("stop", PROJECT_FLOW), { action: "stop" });
+  assert.equal(runPath("stop"), "/flows/run");
+  // the buttons: a project run needs no entry in the helper's flow list; ASSIST and an idle helper still do
+  assert.equal(PROJECT_FLOW, "project");
+  assert.deepEqual(liveButtons(ok, PROJECT_FLOW), { canStart: true, canStop: false, why: null });
+  assert.equal(liveButtons({ ...ok, mode: "HUMAN" }, PROJECT_FLOW).canStart, false);
+  assert.equal(liveButtons({ ...ok, helper_alive: false }, PROJECT_FLOW).canStart, false);
+  assert.deepEqual(liveButtons({ ...ok, state: "running", flow: PROJECT_FLOW }, PROJECT_FLOW), { canStart: false, canStop: true, why: null });
+  // every refusal of the project run has words
+  for (const r of ["lint_errors", "not_live", "run_start_refused", "already_running", "mode_not_assist", "helper_not_running"]) assert.ok(REFUSALS[r], r);
+});

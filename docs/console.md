@@ -210,7 +210,8 @@ Global's event `unexpected_map` (the node "Any other map" is gone). The side pan
 is the node inspector (id and rename, the map's entries / targets / zones, the login and character
 in words, tabs and names with the override marks, delete a map node); **Simulation** is the run.
 Load offers the two ready-made projects and "Open a project file…"; Save downloads
-`<name>.project.json`. An old flow in this browser is not converted (a notice says so). Login and
+`<name>.project.json`. (➡️ Since 2026-11-13 ~21:4x the xmas_dun02 ready-made is ONE box,
+START > xmas_dun02, and /maps has a **Run** from START: the Flows part below.) An old flow in this browser is not converted (a notice says so). Login and
 Choose character are played as a mock timeline until the engine's trace names them.
 ➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
 matpilot are at home), in matpilot's colours, light or dark as the system is
@@ -378,7 +379,27 @@ Amendment B); a not-adopted model is never offered.
   lists what the flow engine says is not ready for a live run on that node). The toolbox no longer
   closes by itself; a function's input can be used in its body ("press key <value>", the input by
   name); both pages open the lab's xmas_dun02 project first.
-- **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
+  ➡️ **~21:4x, THE ONE BOX and Run from START** (Batt: "take every box out: START > map
+  xmas_dun02, one box is enough; build this box's flow with everything the bot has trained; login
+  and choosing the character come later; the user puts the character on xmas_dun02 themself. On
+  the Maps page add a Run button too: it runs from START, box by box";
+  [planning/live-blocks.md](planning/live-blocks.md) section 3). The ready-made **xmas_dun02** is
+  ONE map node: its START is the map itself (the run starts where a person put her; no login, no
+  character), its `main` the save point (Geffen), "hunt with the runner" with five roles (heal, Fly
+  Wing, Knife on, Knife back and **home**: the Butterfly Wing the runner flies home on when the bag
+  is half full or on Stop) and a stop; its `keys` tab every key a function (heal F1, fly_wing F8,
+  butterfly_wing F9, knife_on F4, knife_back F5). A project may start on any map node.
+  - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
+    connection onto another map and the run starts there (or "Start here" in a node's inspector).
+    **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the
+    game from START, box by box, through the Run helper's live block player (`POST
+    /flows/run/project`), and the live line shows while she plays; Stop ends it. It is greyed with
+    the reason while a block on the way is not live yet ("walk_to, talk_npc: not live yet") or
+    START is a login node ("login is not live yet").
+  - **/flows:** Run on a map node plays the same project run from THAT node, enabled when every
+    block it can reach is live in the player (the catalogue says so), else greyed with the reason.
+    "Before Run" keeps the checklist, the live line, the settings and the read-only check.
+- **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
   [planning/blocks-from-hunt-flow.md](planning/blocks-from-hunt-flow.md) (7b).
