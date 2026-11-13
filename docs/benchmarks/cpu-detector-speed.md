@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../teaching/simple-bot/simple_bot.py, ../../scripts/unit_detector.py, ../../scripts/detector_worker.py, gef10-eval.md, xmas02-eval.md]
-next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); Batt 2026-11-07 ~09:2x: MOVE the live detector to the GPU after this report (section 8: how heavy). ➡️ DONE 2026-11-07: Batt chose option A; built, proven and live (docs/planning/gpu-live-detector.md sections 5-7)."
+next_action: "DECIDED 2026-11-07 ~05:5x (Batt): the live bot goes to 16 threads (unit_detector.THREADS, done 8d2ab43); the Windows --bench ran ONCE on the lab PC (section 6, ADR-0019 one-off, removed); Batt 2026-11-07 ~09:2x: MOVE the live detector to the GPU after this report (section 8: how heavy). ➡️ DONE 2026-11-07: Batt chose option A; built, proven and live (docs/planning/gpu-live-detector.md sections 5-7). ➡️ 2026-11-13 (section 9): on bot-server's new CPU with HT, 14 and 16 threads are equal on the live path (p50 91.5 vs 92.5 ms); 28 is slower; THREADS stays 16 unless Batt decides otherwise."
 title: "How fast is the v1 detector on a CPU? Threads, the live worker path, INT8"
 date: 2026-11-06
 owner: Batt
@@ -261,3 +261,45 @@ Batt (~09:2x), answering section 7's decisions:
 - Files: `data/train/eval/gpu-bench/bench.json` (moved to the NAS), the samplers, the parity and
   the logs: `scratch-archive/2026-11-07/gpu-bench2/`.
 
+
+## 9. bot-server's new CPU with Hyper-Threading: 14 vs 16 threads (2026-11-13 09:2x-09:4x ICT)
+
+**The host:** bot-server, a 14-core / 28-thread server CPU (the CPU changed 2026-11-12, Batt turned
+HT on 2026-11-13 09:08). Load average 0.4-0.7 before each run; the GPU worker stopped; nothing else
+of ours running. Model: the deployed xmas_dun02 model (`xmas02gb-last-736x1280.onnx`, sha256
+`b22d972b...`), onnxruntime CPU from `/dev/shm/poring-lab-detector/.venv`.
+
+**A. The bare model** (an `InferenceSession` in one process, nice 0, `inter_op` 1, a random
+1 x 3 x 736 x 1280 input, 3 warm-up + 20 calls per setting, two rounds in different orders):
+
+| threads | p50 ms (round 1 / round 2) | p95 ms |
+|---|---|---|
+| 8 | 68.3 / 65.7 | 81.1 / 69.6 |
+| 12 | - / 58.6 | - / 78.9 |
+| 14 | 58.1 / 57.4, 62.0 | 70.7 / 62.8, 70.4 |
+| 16 | 80.0 / 79.4, 66.0 | 81.4 / 81.7, 67.4 |
+| 28 | 74.7 / 75.2 | 89.9 / 101.5 |
+
+**B. The live path** (`unit_detector.UnitDetector`: its worker process, nice 10, the worker's own
+`ms`; 21 real 1440 x 900 session pictures from the 2026-11-13 night, `end.png` of each demo session
+on the NAS; 3 warm-up calls per detector):
+
+| threads | run style | n | p50 ms | p95 ms |
+|---|---|---|---|---|
+| 16 | both detectors alive, interleaved frame by frame | 63 | 116.9 | 132.7 |
+| 14 | the same | 63 | 111.8 | 127.2 |
+| 16 | ONE detector at a time, blocks 16, 14, 28, 14, 16, 28, 16, 14 | 63 | 92.5 | 117.9 |
+| 14 | the same | 63 | 91.5 | 119.8 |
+| 28 | the same | 42 | 114.9 | 128.9 |
+
+Boxes: 18 with either count in the interleaved run (the same frames).
+
+**Reading:**
+- On the live path, **14 and 16 threads are equal** (p50 91.5 vs 92.5 ms, p95 119.8 vs 117.9).
+  Table A's 10-25 % gain for 14 does not carry over. Its 16-thread rows also vary most between
+  rounds (66-80 ms), which fits threads landing on sibling HT threads in some runs.
+- **28 threads (every HT thread) is slower** on both paths: +24 % at p50 on the live path.
+- So HT gives the CPU detector nothing. `THREADS` stays 16 unless Batt decides otherwise. The
+  first report to Batt (09:24) said "14 is 10-25 % faster" from table A alone; that is corrected
+  here and in the 09:4x report.
+- The GPU detect server stays the live path; this detector is the fallback behind it.

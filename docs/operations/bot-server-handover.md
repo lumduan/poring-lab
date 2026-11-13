@@ -90,7 +90,7 @@ train and run at full speed without touching this machine's GPU again."
     .13 only.~~ ➡️ SUPERSEDED ~17:4x the same day: 8 and 9 admit .228 too (Batt extended the
     rule), mounted at `/mnt/poring-locale-packs` and `/mnt/poring-thai-src`.
 - **The tools:** `scripts/bot_server_sudo.sh` (a root script on bot-server, the password on
-  stdin), `scripts/guarded_copy.py` (a copy under the IO guard), `scripts/agent_sync.py` (the
+  stdin; since 2026-11-13 it runs sudo locally when started ON bot-server, over ssh from elsewhere), `scripts/guarded_copy.py` (a copy under the IO guard), `scripts/agent_sync.py` (the
   agent's push: memory, history, skills, CLAUDE.md under the preface in
   `bot-server-claude-preface.md`), `scripts/migration_check.py` (manifest here, check there) and
   `scripts/host_profile.py` (`LAB_HOST_PROFILE=dedicated-intel` there, ADR-0022).
