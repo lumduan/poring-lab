@@ -35,7 +35,8 @@ INPUT_CALLS = dh.TYPING_CALLS | {
     "wait_for_human", "clear_etc", "typed_line",
 }  # fmt: skip
 CHECK_FUNCS = ("start_check", "_wings_line", "_heals_line", "_home_line", "_knife_line",
-               "_dagger_line", "check_used", "check_item", "check_verdict")  # fmt: skip
+               "_dagger_line", "check_used", "check_item", "check_verdict", "read_start_map",
+               "player_map_verdict")  # fmt: skip
 
 
 def _func(name: str) -> ast.FunctionDef:
@@ -227,7 +228,8 @@ def test_a_check_run_sends_nothing_and_ticks_every_line(monkeypatch: pytest.Monk
     ids = [i["id"] for i in got["items"]]
     assert ids == [x for x in dh.CHECK_IDS if x in ids] and set(ids) == set(dh.CHECK_IDS)
     by = {i["id"]: i for i in got["items"]}
-    # the map line is never a tick (matpilot 2026-11-13: a cell is no proof of the map): "?"
+    # without minimap references the map line is never a tick (matpilot 2026-11-13: a cell is
+    # no proof of the map): "?"
     assert by["cell"]["ok"] is None and "is she on" in by["cell"]["words"]
     assert all(i["ok"] is True for i in got["items"] if i["id"] != "cell"), got["items"]
     assert got["ok"] is None and got["refuses"] is False and got["version"] == "9.45"
@@ -235,8 +237,9 @@ def test_a_check_run_sends_nothing_and_ticks_every_line(monkeypatch: pytest.Monk
     assert by["heals"]["value"] == "10 heal items on F1"
     assert by["home"]["value"] == "3 Butterfly Wings on F9" and by["home"]["refuses"] is False
     assert by["weight"]["value"] == "30 %" and by["cell"]["value"] == "(7, 21)"
-    # the map line says what it knows: a cell, not the map's name
-    assert "the map's name is not" in by["cell"]["words"]
+    # the map line says what it knows: a cell, and no references to read the map's name by
+    assert "no minimap reference for xmas_dun02" in by["cell"]["words"]
+    assert "minimap_id.py build" in by["cell"]["words"]
     assert got["used"]["fly_key"] == "F8" and got["used"]["PLAYER_MIN_WINGS"] == 5
 
 
@@ -319,4 +322,74 @@ def test_the_feature_version_is_the_checks() -> None:
     import runner_flow_export as rfe
 
     assert dh.LIVE_CHECK_VERSION == "9.45" and dh.VERSION == "dungeon@8.7"
-    assert rfe.feature_version(dh) == "dungeon@9.45"
+    assert dh.MAP_IDENTITY_VERSION == "9.46"  # the map line's reader (minimap_id)
+    assert rfe.feature_version(dh) == "dungeon@9.46"
+
+
+# --- (c) dungeon@9.46: the map line, from the minimap's picture -----------------------------------
+
+
+def _bitmap(seed: int) -> np.ndarray:
+    """A SYNTHETIC minimap bitmap (no client picture in git): random 8 px blocks, a key strip."""
+    rng = np.random.default_rng(seed)
+    img = np.kron(rng.integers(0, 230, (8, 8, 3), dtype=np.uint8), np.ones((8, 8, 1), np.uint8))
+    img[:, :19] = (255, 0, 255)
+    return img
+
+
+def _paint(screen: FakeScreen, seed: int) -> FakeScreen:
+    """``seed``'s picture drawn where the client draws the minimap, translucent over the scene."""
+    import minimap_id as mi
+
+    g, d = mi.render_picture(_bitmap(seed))
+    x, y = 1136 + mi.PIC_OFFSET[0], 18 + mi.PIC_OFFSET[1]
+    sq = screen.img[y : y + mi.PIC_SIZE, x : x + mi.PIC_SIZE, :3].astype(np.float32)
+    a = 0.7 * d[..., None]
+    screen.img[y : y + mi.PIC_SIZE, x : x + mi.PIC_SIZE, :3] = a * g[..., None] + (1 - a) * sq
+    return screen
+
+
+def _refs() -> Any:
+    import minimap_id as mi
+
+    return mi.MapRefs.from_pictures({"xmas_dun02": mi.render_picture(_bitmap(1)),
+                                     "geffen": mi.render_picture(_bitmap(2))})  # fmt: skip
+
+
+def test_the_map_line_ticks_only_on_the_runs_minimap(monkeypatch: pytest.MonkeyPatch) -> None:
+    made = _readers(monkeypatch, GOOD, weight=[300, 1000])
+    monkeypatch.setattr(dh, "PLAYER_MAP_S", 0.3)
+    screen = _paint(FakeScreen(), 1)
+    got = dh.start_check(screen, _ctx(map_refs=_refs()))
+    by = {i["id"]: i for i in got["items"]}
+    assert made == [] and set(screen.calls) <= {"grab", "grab_meta"}
+    assert by["cell"]["ok"] is True and by["cell"]["value"] == "(7, 21)"
+    assert by["cell"]["words"].startswith("the minimap is xmas_dun02's")
+    assert "her cell (7, 21) is on xmas_dun02's open ground" in by["cell"]["words"]
+    assert got["ok"] is True and got["refuses"] is False  # every line ticked
+
+
+def test_the_map_line_crosses_another_map_before_its_cell(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 19:02 ICT 2026-11-13: she stood in Geffen at (119, 40), a cell on xmas_dun02's open ground
+    _readers(monkeypatch, GOOD, cell=(119, 40), weight=[300, 1000])
+    monkeypatch.setattr(dh, "PLAYER_MAP_S", 0.3)
+    got = dh.start_check(_paint(FakeScreen(), 2), _ctx(map_refs=_refs()))
+    by = {i["id"]: i for i in got["items"]}
+    assert by["cell"]["ok"] is False and by["cell"]["refuses"] is True
+    assert by["cell"]["words"].startswith("she is on geffen, not xmas_dun02 (read from the minimap")
+    assert by["cell"]["words"].endswith("walk or warp her to xmas_dun02 first")
+    assert by["cell"]["value"] == "(119, 40)"  # the line keeps the cell
+    assert got["ok"] is False and got["refuses"] is True
+
+
+def test_the_map_line_asks_a_person_when_it_cannot_tell(monkeypatch: pytest.MonkeyPatch) -> None:
+    _readers(monkeypatch, GOOD, weight=[300, 1000])
+    monkeypatch.setattr(dh, "PLAYER_MAP_S", 0.3)
+    screen = FakeScreen()  # no minimap drawn: a flat square
+    by = {i["id"]: i for i in dh.start_check(screen, _ctx(map_refs=_refs()))["items"]}
+    assert by["cell"]["ok"] is None and by["cell"]["value"] == "(7, 21)"
+    w = by["cell"]["words"]
+    assert w.startswith("the map is not read from the minimap: no minimap picture")
+    assert "look at the game -- is she on xmas_dun02?" in w
+    assert "the runner refuses a start that cannot tell" in w
+    assert screen.calls.count("grab_meta") >= 2  # it read frames for PLAYER_MAP_S, no more

@@ -341,6 +341,13 @@ Amendment B); a not-adopted model is never offered.
   does not lock Run: its title says the runner will refuse. The map's NAME is not read from the
   screen: the cell line ticks her cell on the map's open ground, and you check the map. The
   version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
+  ➡️ **SUPERSEDED by dungeon@9.46 (the same evening):** the map's name IS read, from the minimap's
+  picture (`scripts/minimap_id.py`). The cell line ticks only when the minimap is the run's map,
+  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (read from the minimap ...)"), and
+  a ? asking you when it cannot tell; the runner's player start refuses both before any input.
+  It needs the references built once per host (`OMP_NUM_THREADS=2 python3 scripts/minimap_id.py
+  build --decode-mixcrypt`); without them the line is a ? and a player start refuses. The version chip
+  reads dungeon@9.46.
 - ➡️ **SUPERSEDED 2026-11-13 ~20:xx by THE PROJECT MODEL** (Batt: "/maps first: login, character, each
   map and a Global node, linked like modular code; double-click a node for its flows; one main
   tab, the rest the person's; every tab and Global imported into main"; design:

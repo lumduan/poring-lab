@@ -326,9 +326,15 @@ def test_the_record_carries_player_mode_only_when_on() -> None:
     assert on["player_mode"] == [5, 5, 1, "9.35"]
     assert on["player_mode"] == [dh.PLAYER_MIN_WINGS, dh.PLAYER_MIN_HEALS, dh.PLAYER_WINGS_KEEP,
                                  dh.PLAYER_MODE_VERSION]  # fmt: skip
-    assert {k: v for k, v in on.items() if k != "player_mode"} == off
+    assert {k: v for k, v in on.items() if k not in ("player_mode", "player_map")} == off
     i_start = SRC.index('ev({"kind": "run_start", "strategy": a.strategy')
     assert '**({"player_mode": fixes_of(a)["player_mode"]} if player else {}),' in SRC[i_start:]
+    # dungeon@9.46: the map read's rule, and the read itself in run_start
+    import minimap_id as mi
+
+    assert on["player_map"] == [mi.MATCH_MIN, mi.NAME_MIN, mi.MARGIN_MIN, dh.PLAYER_MAP_S,
+                                dh.PLAYER_MAP_UNREAD, "9.46"]  # fmt: skip
+    assert '"player_map": None if map_read is None else map_read.record()' in SRC[i_start:]
 
 
 def test_the_help_states_the_minimums() -> None:
@@ -732,7 +738,8 @@ def test_the_record_carries_the_exits_only_when_on(monkeypatch: Any) -> None:
     assert "weight_home" not in base and "respawn" not in base
     on = dh.fixes_of(_ns(monkeypatch, "--player-mode", "--weight-home", "0.5", "--respawn"))
     assert on["weight_home"] == 0.5 and on["respawn"] is True
-    assert {k: v for k, v in on.items() if k not in ("weight_home", "respawn", "player_mode")} == {
+    pm = ("weight_home", "respawn", "player_mode", "player_map")  # player_map: dungeon@9.46
+    assert {k: v for k, v in on.items() if k not in pm} == {
         k: v for k, v in base.items() if k != "player_mode"
     }
 
@@ -897,3 +904,131 @@ def test_the_confirm_point_is_a_point_or_none(monkeypatch: Any) -> None:
     ns = types.SimpleNamespace
     off = ns(player_mode=True, weight_home=None, respawn=False, respawn_confirm_at=(1, 1))
     assert "goes with --respawn" in str(dh.exits_refused(off))
+
+
+# --- (g) dungeon@9.46: the map she stands on, from the minimap's picture, before ANY input --------
+
+KEY = (255, 0, 255)
+
+
+def _bitmap(seed: int) -> np.ndarray:
+    """A SYNTHETIC minimap bitmap (no client picture in git): random 8 px blocks, a key strip."""
+    rng = np.random.default_rng(seed)
+    img = np.kron(rng.integers(0, 230, (8, 8, 3), dtype=np.uint8), np.ones((8, 8, 1), np.uint8))
+    img[:, :19] = KEY
+    return img
+
+
+def _map_refs() -> Any:
+    import minimap_id as mi
+
+    return mi.MapRefs.from_pictures({"xmas_dun02": mi.render_picture(_bitmap(1)),
+                                     "geffen": mi.render_picture(_bitmap(2))})  # fmt: skip
+
+
+class MapScreen:
+    """A screen that can only be grabbed (and closed), showing ``seed``'s minimap (None: none)."""
+
+    def __init__(self, seed: int | None) -> None:
+        import minimap_id as mi
+
+        self.calls: list[str] = []
+        self.img = np.full((720, 1280, 4), 120, np.uint8)
+        if seed is not None:
+            g, d = mi.render_picture(_bitmap(seed))
+            x, y = 1136 + mi.PIC_OFFSET[0], 18 + mi.PIC_OFFSET[1]
+            sq = self.img[y : y + mi.PIC_SIZE, x : x + mi.PIC_SIZE, :3].astype(np.float32)
+            a = 0.7 * d[..., None]
+            self.img[y : y + mi.PIC_SIZE, x : x + mi.PIC_SIZE, :3] = (a * g[..., None]
+                                                                       + (1 - a) * sq)  # fmt: skip
+
+    def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, Any, int, str]:
+        self.calls.append("grab_meta")
+        return 1, self.img[y : y + h, x : x + w], -1, "x11"
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"the map read asked the screen for {name!r}")
+
+
+def _no_input(monkeypatch: Any, seed: int | None) -> MapScreen:
+    import ro_agent as r
+
+    screen = MapScreen(seed)
+
+    def no_session(*_: Any, **__: Any) -> Any:
+        raise AssertionError("a session was opened")
+
+    class NoAgent:
+        def __init__(self, *_: Any, **__: Any) -> None:
+            raise AssertionError("an Agent was made")
+
+    monkeypatch.setattr(r, "session", no_session)
+    monkeypatch.setattr(r, "Agent", NoAgent)
+    monkeypatch.setattr(r, "Screen", lambda: screen)
+    monkeypatch.setattr(dh, "PLAYER_MAP_S", 0.3)
+    return screen
+
+
+REGION = (0, 0, 1280, 720)
+
+
+def test_the_start_refuses_another_map_before_any_input(monkeypatch: Any) -> None:
+    screen = _no_input(monkeypatch, 2)  # she stands in "geffen"
+    with pytest.raises(SystemExit) as exc:
+        dh.player_start_map("xmas_dun02", _map_refs(), REGION)
+    assert str(exc.value).startswith(
+        "dungeon@9.46 refused: --player-mode: the screen shows geffen, not xmas_dun02: walk or "
+        "warp her there first (a person)"
+    )
+    assert "read from the minimap" in str(exc.value)
+    assert set(screen.calls) == {"grab_meta", "close"} and screen.calls[-1] == "close"
+
+
+def test_the_start_goes_on_when_the_minimap_is_the_runs_map(monkeypatch: Any) -> None:
+    screen = _no_input(monkeypatch, 1)
+    rd = dh.player_start_map("xmas_dun02", _map_refs(), REGION)
+    assert rd.map == "xmas_dun02" and screen.calls == ["grab_meta", "close"]  # its first frame
+    assert rd.record()["map"] == "xmas_dun02"
+
+
+def test_a_start_that_cannot_tell_refuses_or_warns_by_the_rule(monkeypatch: Any,
+                                                              capsys: Any) -> None:  # fmt: skip
+    _no_input(monkeypatch, None)  # no minimap drawn (a load screen, an indoor map)
+    assert dh.PLAYER_MAP_UNREAD == "refuse"  # the held-out set's decision (player-mode.md)
+    with pytest.raises(SystemExit, match="does not show that she is on xmas_dun02"):
+        dh.player_start_map("xmas_dun02", _map_refs(), REGION)
+    monkeypatch.setattr(dh, "PLAYER_MAP_UNREAD", "warn")
+    rd = dh.player_start_map("xmas_dun02", _map_refs(), REGION)
+    out = capsys.readouterr().out
+    assert rd.map is None and "WARNING: --player-mode: is she on xmas_dun02?" in out
+    # another map still refuses under "warn"
+    _no_input(monkeypatch, 2)
+    with pytest.raises(SystemExit, match="the screen shows geffen"):
+        dh.player_start_map("xmas_dun02", _map_refs(), REGION)
+
+
+def test_no_references_refuse_with_the_build_command(monkeypatch: Any) -> None:
+    screen = _no_input(monkeypatch, 1)
+    with pytest.raises(SystemExit, match="minimap_id.py build"):
+        dh.player_start_map("xmas_dun02", None, REGION)
+    assert "grab_meta" not in screen.calls  # no references: no frame is even read
+    assert dh.load_map_refs(Path("/nonexistent/refs.npz")) is None
+
+
+def test_the_map_is_read_after_the_check_and_before_the_session() -> None:
+    run_src = ast.get_source_segment(SRC, _func("run")) or ""
+    i_ck = run_src.index('if getattr(a, "cmd", "run") == "check":')
+    i_ret = run_src.index("return 0", i_ck)
+    i_map = run_src.index("map_read = player_start_map(map_, map_refs, (gx0, gy0, gw, gh)) if "
+                          "player else None")  # fmt: skip
+    assert i_ret < i_map < run_src.index("out.mkdir(") < run_src.index("with r.session(")
+    assert run_src.index("map_refs = load_map_refs() if player else None") < i_ck
+    # the check gets the same references
+    assert "map_refs=map_refs" in run_src[i_ck:i_ret]
+    f = _func("player_start_map")
+    calls = {_call_name(n) for n in ast.walk(f) if isinstance(n, ast.Call)}
+    no_input = {"session", "Agent", "keys", "click", "move", "ensure_clear", "select_tab"}
+    assert "Screen" in calls and not calls & (no_input | {"typed_line"})
