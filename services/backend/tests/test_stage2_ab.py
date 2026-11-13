@@ -219,3 +219,41 @@ def test_the_verdict_applies_the_pre_registered_bar(tmp_path: Path) -> None:
     short[0].minutes = 10.0
     assert ab.verdict(short, 20)["pairs_valid"] == 3 and short[0].label in ab.verdict(
         short, 20)["invalid"]  # fmt: skip
+
+
+def test_the_warp_takes_the_other_cell_when_the_guards_own_history_would_refuse_it() -> None:
+    # 2026-11-14 00:38: stage 1's two setups had typed the first cell twice (the guard's state
+    # is per host), so the series' first warp would have been the 3rd identical line in a row
+    a, b = ab.warp_lines(2, dh.PATROL_START["xmas_dun02"])
+    hist = ab.guard_history({"chat": {"text": a, "count": 2}, "last_t": 1.0})
+    assert hist == [a, a]
+    assert ab.pick_warp(a, b, hist) == b
+    assert ab.pick_warp(b, a, hist) == b  # the planned cell when it is not the repeated one
+    assert ab.pick_warp(a, b, ab.guard_history({"chat": {"text": a, "count": 1}})) == a
+    assert ab.guard_history({}) == [] and ab.guard_history({"chat": "x"}) == []
+
+
+def test_the_setup_heals_her_when_her_hp_is_not_full_or_unread() -> None:
+    # 2026-11-14 01:00: run 1 (A) died to the MVP; she respawned with almost no HP and run 2 (B)
+    # met the player's built-in hp_critical at once
+    assert ab.needs_heal(None) and ab.needs_heal(3) and ab.needs_heal(ab.HEAL_BELOW - 1)
+    assert not ab.needs_heal(ab.HEAL_BELOW) and not ab.needs_heal(100)
+    assert ab.guard_ok(["@warp xmas_dun02 7 21", "@heal", "@warp xmas_dun02 114 23", "@heal"])
+
+
+def test_a_clear_bag_rc_is_judged_by_the_series_own_read() -> None:
+    ok = {"weight": 0.284, "counts": {"F9": 0, "F8": 10, "F1": 10}}  # 2026-11-14 01:02's read
+    assert ab.clear_bag_refused(ok) is None
+    assert "0.45" in str(ab.clear_bag_refused({**ok, "weight": 0.45}))
+    assert ab.clear_bag_refused({**ok, "weight": None}) is not None
+    assert "F8" in str(ab.clear_bag_refused({**ok, "counts": {"F9": 0, "F8": None, "F1": 10}}))
+
+
+def test_the_setup_reads_a_worn_knife_and_puts_the_dagger_back_on() -> None:
+    # 2026-11-14 01:06: she died with the Knife worn; the next start check refused (rightly)
+    assert ab.knife_worn({"knife_empty": True, "dagger_empty": False}) is True
+    assert ab.knife_worn({"knife_empty": False, "dagger_empty": True}) is False
+    assert ab.knife_worn({"knife_empty": True, "dagger_empty": True}) is None
+    assert ab.knife_worn({"knife_empty": False, "dagger_empty": False}) is None
+    assert ab.knife_worn(None) is None
+    assert (ab.KNIFE_KEY, ab.DAGGER_KEY) == ("F4", "F5")  # the Run config's knife / dagger keys

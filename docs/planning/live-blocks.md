@@ -89,6 +89,59 @@ So the box is written like this (a sketch; the spellings are the engine's):
 - Every key in a function; every threshold in an event's condition; every technique per monster
   in that monster's function: nothing of it a setting hidden in one block.
 
+## 2b. Stage 4's design (written 2026-11-14 ~00:5x, offline, before any stage-4 code)
+
+The hunt core today is ONE state machine (scripts/dungeon_hunt.py run: ~4,000 lines of loop,
+modes search / fight / after / loot, ~60 closures sharing its state). Breaking it into blocks
+the player schedules one by one (Batt's "never one block") is the largest change of the four
+stages, so it comes in two steps, each A/B'd against the step before; the hunt never plays worse.
+
+**4a: the box decides WHICH technique per monster; the runner still plays every step.** The same
+shape as stages 2 and 3 (the runner says WHEN, the box says WHAT):
+- `use_model("xmas02")`: the trained data. It names an entry of
+  packages/poring_flow/src/poring_flow/models.yaml (status `live`; its file and sha256 prefix are
+  what the detect server prints). Its `classes` become the MONSTERS the other blocks may name
+  (the editor's `mob` values: mystcase, cruiser, cookie, cookie_xmas, garm_baby); a name the
+  model does not have is a lint error. Live: the runner's box detector takes that model instead
+  of its map default (`box_model choice: map` today), refused before any input when the entry is
+  not live, not on this map, or its sha256 differs from the server's.
+- A `monsters` tab: one function per monster, its body a RECIPE of primitive calls, e.g.
+
+      def attack_mystcase(t):   knife_on(); strike(t); wait_steal(t); knife_back(); wait_kill(t); loot(t)
+      def attack_cookie(t):     strike(t); wait_kill(t); loot(t)        # no knife swap
+      def attack_cruiser(t):    use_skill("F6"); strike(t); wait_kill(t); loot(t)
+
+- When the runner LOCKS a target, it asks the box which function attacks that monster (by the
+  detector's species of the box it struck, before the collapse) and plays the recipe's steps WITH
+  ITS OWN CODE: strike = its strike (the two-motion click, the lead, the reach check), wait_steal
+  = the bare-steal popup cue, wait_kill = its kill read (the exp line, else the kill gap),
+  knife_on / knife_back = stage 3's functions at those points, loot = its loot step, use_skill =
+  a press of a declared role. A recipe without knife_on: that monster is fought without the swap
+  (Batt: "on some we may not swap the knife at all"). No function for a monster: the runner's
+  default recipe, named in the lint as info ("cookie: no attack function; the runner's own").
+- Which monster to choose stays the runner's (`--value-target`); 4a adds a per-monster
+  `priority` (a function argument default, e.g. `def attack_mystcase(t, priority=3)`), so the
+  person can change the order in blocks.
+- Refused before any input: a recipe step outside that set, a recipe whose order cannot be
+  played (wait_kill before strike, loot before wait_kill), knife_back without knife_on, a key
+  that is not a role the start check reads.
+- 4a's A/B: the stage-3 box (B3) vs the same box plus a monsters tab that writes TODAY's
+  technique for every monster (B4 = an equivalence check: kills/h, steals/h, loot/h within the
+  noise, deaths not more). Only after it holds, the first real experiment in blocks: no knife
+  swap on cookie / cookie_xmas (which carry no steal worth the swap time), B4 vs B4'.
+
+**4b: the recipe's steps run as blocks.** The player runs each primitive as a live block with the
+runner's code behind it (choose_target() returns a monster value; walk_to_target(t), strike(t),
+wait_kill(t), loot(t), explore() each one bounded call into the hunt core's state, through the
+same hook and the same Agent). That needs the loop's state (lock, goal path, loot list, odometry,
+the bare-steal controller, the memory) moved out of run()'s closures into one HuntState object
+the primitives share: a refactor of the runner, done behind the CLI's unchanged behaviour
+(`dungeon_hunt.py run` plays byte-for-byte as before; every existing runner test stays green).
+4b is planned only after 4a's A/B.
+
+What 4a does NOT change: search / patrol / explore, the loot model, the stock, the safety events
+(stage 2), the way home (stage 3).
+
 ## 3. Stage 1 in detail
 
 - The project: `start` may be a MAP node (the run starts where she stands on it); login /

@@ -88,6 +88,15 @@ CLEAR_AT = 0.40  # the night chain's WEIGHT_CLEAR: at or over it, clear-bag befo
 # (item, its key, floor, to): a GM @item only when the read count is under the floor
 TOPUP = ((602, "F9", 2, 3), (601, "F8", 7, 10), (504, "F1", 7, 10))
 WARP_SETTLE_S, ARRIVE_S = 4.0, 20.0
+# 2026-11-14 01:00: a death respawns her with almost no HP (the lab server's restart HP), and the
+# next run (B) met the player's built-in hp_critical at once (0.1 min): the setup heals her first,
+# the lab GM's @heal (group 20; demo_aftercare's), when her HP reads under HEAL_BELOW or unread
+HEAL_BELOW = 95
+SHORT_RUN_S = 60.0  # a run that ends sooner never played: the series stops (a person first)
+# 2026-11-14 01:06: she died with the Knife worn (the opener on for a steal): F4 read EMPTY and F5
+# showed the Damascus in the bag, and the next run's start check refused (rightly). The setup
+# puts the dagger back on with the run's own dagger key, once, in town, then reads the slots again
+KNIFE_KEY, DAGGER_KEY = "F4", "F5"
 START_GRACE_S, STOP_GRACE_S = 180.0, 90.0
 SERVE_EXTRA_S = 600
 CHAT_GUARD_RUN = 3  # chat_guard refuses the 3rd identical line in a row
@@ -125,6 +134,13 @@ def arms(pairs: int, order: str = "alternate") -> list[str]:
 def warp_lines(n: int, cells: Sequence[tuple[int, int]]) -> list[str]:
     """PURE: the setup's warp line per run, alternating the two cells (the chat guard)."""
     return [f"@warp {MAP} {cells[i % 2][0]} {cells[i % 2][1]}" for i in range(n)]
+
+
+def dh_cells() -> Sequence[tuple[int, int]]:
+    """The map's two patrol starts (dungeon_hunt.PATROL_START): the setup's warp cells."""
+    import dungeon_hunt as dh
+
+    return dh.PATROL_START[MAP]
 
 
 def series(label: str, pairs: int, order: str = "alternate",
@@ -165,6 +181,67 @@ def guard_ok(lines: Iterable[str], run: int = CHAT_GUARD_RUN) -> bool:
         if n >= run:
             return False
     return True
+
+
+def clear_bag_refused(got: Mapping[str, Any]) -> str | None:
+    """PURE: why the series cannot go on after a clear-bag that did not end rc 0, from its own
+    read (None: the bag reads cleared and every top-up count reads)."""
+    w = got.get("weight")
+    if not isinstance(w, (int, float)) or w >= CLEAR_AT:
+        return f"the bag reads {w} after it (at or over {CLEAR_AT}, or unread)"
+    counts = got.get("counts") or {}
+    missing = [k for _i, k, _f, _t in TOPUP if counts.get(k) is None]
+    if missing:
+        return f"the counts on {', '.join(missing)} did not read after it"
+    return None
+
+
+def knife_worn(knife: Mapping[str, Any] | None) -> bool | None:
+    """PURE: True when the slots read "the Knife worn" (its key EMPTY, the dagger's key showing
+    an icon: the dagger in the bag), False when they read as a run's start wants them (the Knife
+    in the bag, the dagger's key empty: worn), None when they read neither (a person first)."""
+    if not isinstance(knife, Mapping):
+        return None
+    k, d = knife.get("knife_empty"), knife.get("dagger_empty")
+    if k is True and d is False:
+        return True
+    if k is False and d is True:
+        return False
+    return None
+
+
+def needs_heal(hp: Any) -> bool:
+    """PURE: the setup heals her when her HP percent reads under HEAL_BELOW, or does not read."""
+    return not isinstance(hp, int) or hp < HEAL_BELOW
+
+
+def guard_history(state: Mapping[str, Any]) -> list[str]:
+    """PURE: the chat guard's own repeat history (its per-host state, chat_guard.STATE: the last
+    chat line and how many times in a row), as the lines a guard_ok check starts from. Lines
+    typed by OTHER processes (stage 1's setups, clear-bag) count: the guard counts them too."""
+    last = state.get("chat") if isinstance(state, Mapping) else None
+    if not isinstance(last, Mapping) or not isinstance(last.get("text"), str):
+        return []
+    return [str(last["text"])] * max(0, int(last.get("count") or 0))
+
+
+def pick_warp(planned: str, other: str, history: Sequence[str]) -> str:
+    """PURE: the setup's warp line -- the planned cell, or the other one when the planned line
+    would be the chat guard's 3rd identical line in a row (2026-11-14 00:38: stage 1's two setups
+    had typed the first cell twice, and the series stopped before any run)."""
+    if guard_ok([*history, planned]):
+        return planned
+    return other
+
+
+def read_guard_state() -> dict[str, Any]:
+    """The chat guard's state file (a read; {} when it is missing or unreadable)."""
+    import chat_guard
+
+    try:
+        return dict(json.loads(chat_guard.STATE.read_text()))
+    except (OSError, ValueError):
+        return {}
 
 
 def project_text(minutes: float, path: Path | None = None) -> str:
@@ -467,7 +544,7 @@ class Series:
         return dict(got)
 
     def gm(self, line: str) -> None:
-        if not guard_ok([*self.typed, line]):
+        if not guard_ok([*guard_history(read_guard_state()), line]):
             raise Stop(f"{line!r} would be the chat guard's 3rd identical line in a row")
         out = self.sh([PY, "scripts/crusader.py", "--char", "thief", "gm", "--job", "rogue", line],
                       180)  # fmt: skip
@@ -485,16 +562,48 @@ class Series:
             out_dir = self.dir / f"clear-bag-{r.label}"
             cb = self.sh([PY, "scripts/dungeon_hunt.py", "clear-bag", "--char", "rogue", "--tabs",
                           "etc,use", "--out", str(out_dir)], 900)  # fmt: skip
-            if cb.returncode != 0:
-                raise Stop(f"clear-bag rc {cb.returncode}: {cb.stdout.strip()[-200:]}")
             self.typed.append("(clear-bag's own lines)")  # its lines are not ours to count
             got = self.read()
-        self.gm(r.warp)
+            if cb.returncode != 0:  # 2026-11-14 01:02: rc 1 on its own stock read-back (Fly
+                # Wings "0" after the add, while the hotbar read 10): the series judges by ITS
+                # read -- the weight cleared and the counts read -- and the run's start check
+                # refuses anything still wrong before any input
+                why_cb = clear_bag_refused(got)
+                self.log(f"{r.label}: clear-bag rc {cb.returncode} ({cb.stdout.strip()[-160:]}); "
+                         f"the series' read: {why_cb or 'cleared, counts read'}")  # fmt: skip
+                if why_cb:
+                    raise Stop(f"clear-bag rc {cb.returncode}: {why_cb}")
+        worn = knife_worn(got.get("knife"))
+        if worn:  # the dagger back on (the run's own dagger key), once, then read again
+            self.log(
+                f"{r.label}: the Knife reads worn (F4 empty, F5 shows the dagger): {DAGGER_KEY}"
+            )
+            kb_ = self.sh([PY, str(Path(__file__)), "dagger-on"], 120)
+            got = self.read()
+            if knife_worn(got.get("knife")) is not False:
+                raise Stop(f"after {DAGGER_KEY} the slots read {got.get('knife')} "
+                           f"({(kb_.stdout or kb_.stderr).strip()[-160:]})")  # fmt: skip
+        elif worn is None:
+            raise Stop(f"the Knife / dagger slots read neither way: {got.get('knife')}")
+        # healed BEFORE the warp: she never arrives on the map with a respawn's HP
+        if needs_heal(got.get("hp")):
+            self.gm("@heal")
+            time.sleep(1.5)
+            got = self.read()
+            if needs_heal(got.get("hp")):
+                raise Stop(f"after @heal her HP reads {got.get('hp')}, not {HEAL_BELOW} % or more")
+        lines_ = warp_lines(2, dh_cells())
+        other = lines_[1] if r.warp == lines_[0] else lines_[0]
+        warp = pick_warp(r.warp, other, guard_history(read_guard_state()))
+        if warp != r.warp:
+            self.log(f"{r.label}: {r.warp!r} would be the chat guard's 3rd in a row: {warp!r}")
+        self.gm(warp)
         time.sleep(WARP_SETTLE_S)
         t0 = time.monotonic()
+        got = self.read()  # after the warp (the read before it may already say the map)
         while got.get("map") != MAP or got.get("counts") is None:
             if time.monotonic() - t0 > ARRIVE_S:
-                raise Stop(f"after {r.warp!r} the minimap reads {got.get('map')}, not {MAP}")
+                raise Stop(f"after {warp!r} the minimap reads {got.get('map')}, not {MAP}")
             time.sleep(1.0)
             got = self.read()
         lines = topup_lines(got["counts"])
@@ -507,7 +616,7 @@ class Series:
         last = (cc.stdout.strip().splitlines() or ["{}"])[-1]
         if '"closed": true' not in last:
             raise Stop(f"the chat input did not read closed: {(cc.stderr or last)[-200:]}")
-        self.log(f"{r.label}: setup done ({r.warp}; {len(lines)} top-up line(s); chat closed)")
+        self.log(f"{r.label}: setup done ({warp}; {len(lines)} top-up line(s); chat closed)")
 
     def serve(self) -> None:
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", fr.WORKER],
@@ -581,8 +690,12 @@ class Series:
                 self.log(f"{rr['label']}: no end after Stop: SIGINT")
                 stop_t = now + 10**9
         rc = proc.returncode
-        self.log(f"{rr['label']} ended rc {rc} after {(time.monotonic() - t0) / 60:.1f} min")
-        return {"label": rr["label"], "rc": rc, "s": round(time.monotonic() - t0, 1)}
+        s_ = time.monotonic() - t0
+        self.log(f"{rr['label']} ended rc {rc} after {s_ / 60:.1f} min")
+        out = {"label": rr["label"], "rc": rc, "s": round(s_, 1)}
+        if s_ < SHORT_RUN_S:  # it never played (a start refusal, a safe end at once)
+            out["short"] = True
+        return out
 
     def run(self) -> int:
         done: list[dict[str, Any]] = []
@@ -596,6 +709,8 @@ class Series:
                 (self.dir / "done.json").write_text(json.dumps(done, indent=1) + "\n")
                 if done[-1]["rc"] not in (0, 130):  # a refused start (rc 2 / 1): a person first
                     raise Stop(f"{rr['label']} rc {done[-1]['rc']} (its log first)")
+                if done[-1].get("short"):
+                    raise Stop(f"{rr['label']} ended within {SHORT_RUN_S:.0f} s (its log first)")
         except Stop as e:
             self.log(f"STOPPED: {e} (a person first)")
             return 2
@@ -608,10 +723,12 @@ class Series:
 # --- the two setup steps that touch the game (child processes) -----------------------------------
 def read_now() -> dict[str, Any]:
     """Pixels only (no Agent): the map's name (the minimap), the weight share, the chat input,
-    the hotbar counts on the box's keys (dungeon_hunt's own readers)."""
+    the hotbar counts on the box's keys, her HP percent (dungeon_hunt's own readers)."""
+    import bare_steal as bs
     import dungeon_hunt as dh
     import gm_state
     import hotbar_count as hb
+    import hp_percent as hpp
     import minimap_id as mi
     import numpy as np
     import ro_agent as r
@@ -625,11 +742,30 @@ def read_now() -> dict[str, Any]:
         tpl = hb.load()
         g = hb.gray(img)
         counts = {k: hb.read_count(g, dh.hotbar_slot(k), tpl) for _i, k, _f, _t in TOPUP}
+        knife = {
+            "knife_empty": bool(bs.slot_empty(g, dh.hotbar_slot(KNIFE_KEY))),
+            "dagger_empty": bool(bs.slot_empty(g, dh.hotbar_slot(DAGGER_KEY))),
+        }
+        z = np.load(hpp.GLYPHS)
+        glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
         return {"map": None if refs is None else mi.read_map(img, refs).map,
+                "hp": hpp.read(img, glyphs), "knife": knife,
                 "weight": None if share is None else round(share, 4),
                 "chat_open": bool(r.is_state(screen, "chat_open")), "counts": counts}  # fmt: skip
     finally:
         screen.close()
+
+
+def dagger_on() -> dict[str, Any]:
+    """The dagger back on: ONE paced tap of the run's own dagger key (the runner's swap back),
+    after the human-activity wait, through the mux like every input (no chat, no typing)."""
+    import ro_agent as r
+
+    with r.session("rule:stage2-ab-dagger") as (agent, screen):
+        agent.wait_for_human()
+        agent.keys(DAGGER_KEY)
+        time.sleep(1.0)
+        return {"pressed": DAGGER_KEY}
 
 
 def close_chat() -> dict[str, Any]:
@@ -663,12 +799,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--json", action="store_true")
     sub.add_parser("read")
     sub.add_parser("close-chat")
+    sub.add_parser("dagger-on")
     a = ap.parse_args(argv)
     if a.cmd == "read":
         print(json.dumps(read_now()))
         return 0
     if a.cmd == "close-chat":
         print(json.dumps(close_chat()))
+        return 0
+    if a.cmd == "dagger-on":
+        print(json.dumps(dagger_on()))
         return 0
     folder = SCRATCH / a.label
     if a.cmd == "score":
