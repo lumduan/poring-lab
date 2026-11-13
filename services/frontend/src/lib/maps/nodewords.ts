@@ -93,15 +93,39 @@ export function tabList(n: PNode): string {
 
 export type NodeLint = { counts: Record<Severity, number>; findings: Finding[] };
 const ZERO = (): Record<Severity, number> => ({ error: 0, readiness: 0, warning: 0, info: 0 });
+/** A finding is ON a node: the project model's `node` field, else a path that starts with its id. */
+const onNode = (f: Finding, id: string) => (f.node !== undefined ? f.node === id : f.path === id || f.path.startsWith(`${id}/`));
 
 /** The findings ON a node (the project model's `node` field, else a path that starts with the
  * node's id), by severity; the engine's by_owner[node] when no finding names a node. */
 export function nodeLint(lint: LintDoc | null, id: string): NodeLint {
   const counts = ZERO();
   if (!lint) return { counts, findings: [] };
-  const findings = lint.findings.filter((f) => (f.node !== undefined ? f.node === id : f.path === id || f.path.startsWith(`${id}/`)));
+  const findings = lint.findings.filter((f) => onNode(f, id));
   for (const f of findings) counts[f.severity] += 1;
   const own = countsFor(lint, id); // the project lint's by_node (IR 2's by_owner as before)
   if (!findings.length && own) return { counts: { ...counts, ...own }, findings };
   return { counts, findings };
+}
+
+/** One group of the Maps page's lint list: a node's findings (as its card counts them), or the
+ * PROJECT's own (`node` null: on no node, or on a node id this project does not have). */
+export type LintGroup = { node: string | null; findings: Finding[]; counts: Record<Severity, number> };
+
+/** Every finding of the lint, where the page shows it (matpilot round 16 #7: the chip said "3
+ * warnings", the cards 2; the third, "a death returns to the save point on geffen, where no block
+ * is", was on the project itself and no card showed it). The project's own first, then each
+ * node's in the project's order, by the same rule as the cards (nodeLint). Every finding is in
+ * exactly one group, so the groups add up to the lint's counts: the chip's words. */
+export function lintGroups(lint: LintDoc | null, p: Project): LintGroup[] {
+  if (!lint) return [];
+  const groups = new Map<string | null, Finding[]>([[null, []], ...p.nodes.map((n): [string, Finding[]] => [n.id, []])]);
+  for (const f of lint.findings) groups.get(p.nodes.find((n) => onNode(f, n.id))?.id ?? null)!.push(f);
+  return [...groups]
+    .filter(([, fs]) => fs.length > 0)
+    .map(([node, findings]) => {
+      const counts = ZERO();
+      for (const f of findings) counts[f.severity] += 1;
+      return { node, findings, counts };
+    });
 }
