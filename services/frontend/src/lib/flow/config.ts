@@ -211,19 +211,88 @@ export function configShownMatchesExport(doc: RunnerDoc, d: ConfigDoc): boolean 
   return doc.stacks.every(ok);
 }
 
-/** PURE: what must be true before Run, in a person's words, from the values the run will take
- * (matpilot 2026-11-13: "the start conditions are buried in a long paragraph"). */
-export function startChecklist(d: ConfigDoc, values: Record<string, ConfigValue>, map: string): string[] {
-  const v = (n: string) => values[n];
-  const pct = (n: string) => Math.round(Number(v(n)) * 100);
-  const out = [
-    `she stands on ${map}, on its open ground`,
-    "the chat input closed (no white input bar under the chat)",
-    `the bag under ${pct("WEIGHT_MAX")} %`,
-    `at least ${String(v("PLAYER_MIN_WINGS"))} Fly Wings on ${String(v("fly_key"))}`,
-    `at least ${String(v("PLAYER_MIN_HEALS"))} heal items on ${String(v("heal_key"))}`,
-    `Butterfly Wings on ${String(v("home_key"))} (the way home at the end)`,
-  ];
-  if (inUse(d, values, "knife_key") && v("knife_swap") === true) out.push(`the Knife on ${String(v("knife_key"))} (in the bag) and the dagger worn (${String(v("dagger_key"))})`);
+/** The start checklist's lines, in the page's order. Each id is a line the live check ticks from
+ * the game screen (scripts/dungeon_hunt.py CHECK_IDS; test_live_check.py pins the two lists equal):
+ * who plays, her cell, the chat input, the bag, the Fly Wings, the heal items, the Butterfly Wings,
+ * the Knife in the bag and the dagger worn (the last two with the Knife swap only). */
+export const CHECKLIST_IDS = ["identity", "cell", "chat", "weight", "wings", "heals", "home", "knife", "dagger"];
+
+/** The five hotbar keys a flow's functions may give with Run / check (scripts/flow_config.py
+ * KEY_FIELDS; Batt 2026-11-13: every key from a FUNCTION of the flow). */
+export const RUN_KEY_NAMES = ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"];
+export type RunKeys = Record<string, string>;
+
+/** One checklist line: its id (the check's), the text a person reads, and the values it states
+ * (``basis``: a check made with other values is shown greyed, as outdated). */
+export type ChecklistItem = { id: string; text: string; basis: Record<string, ConfigValue>; map: string };
+
+/** PURE: the run's values with the flow's keys over them (flow_config.with_keys: the five keys
+ * only; null: the values as they are). */
+export function withRunKeys(values: Record<string, ConfigValue>, keys: RunKeys | null | undefined): Record<string, ConfigValue> {
+  const out = { ...values };
+  for (const k of RUN_KEY_NAMES) if (keys && typeof keys[k] === "string") out[k] = keys[k];
   return out;
+}
+
+function checklistText(id: string, b: Record<string, ConfigValue>, map: string): string {
+  const s = (n: string) => String(b[n]);
+  switch (id) {
+    case "identity":
+      return "her character on screen (the runner knows her name plate and job)";
+    case "cell":
+      // the map's NAME is not read from the screen (no pixel read tells which map she is on): the
+      // tick is her cell's, on this map's open ground -- a person checks that the map is this one
+      return `she stands on ${map}, on its open ground (her cell is read; the map's name is not: you check it is ${map})`;
+    case "chat":
+      return "the chat input closed (no white input bar under the chat)";
+    case "weight":
+      return `the bag under ${Math.round(Number(b.WEIGHT_MAX) * 100)} %`;
+    case "wings":
+      return `at least ${s("PLAYER_MIN_WINGS")} Fly Wings on ${s("fly_key")}`;
+    case "heals":
+      return `at least ${s("PLAYER_MIN_HEALS")} heal items on ${s("heal_key")}`;
+    case "home":
+      return `Butterfly Wings on ${s("home_key")} (the way home at the end)`;
+    case "knife":
+      return `the Knife on ${s("knife_key")} (in the bag)`;
+    case "dagger":
+      return `the dagger worn (${s("dagger_key")} empty on the hotbar)`;
+    default:
+      return id;
+  }
+}
+
+/** PURE: what must be true before Run, in a person's words, from the values the run will take
+ * (matpilot 2026-11-13: "the start conditions are buried in a long paragraph"), with the flow's
+ * keys over the settings' (``keys``: what Run sends). Each line's id is the live check's. */
+export function startChecklist(d: ConfigDoc, values: Record<string, ConfigValue>, map: string, keys?: RunKeys | null): ChecklistItem[] {
+  const v = withRunKeys(values, keys);
+  const knife = inUse(d, v, "knife_key") && v.knife_swap === true;
+  const basis: Record<string, string[]> = {
+    identity: [],
+    cell: [],
+    chat: [],
+    weight: ["WEIGHT_MAX"],
+    wings: ["PLAYER_MIN_WINGS", "fly_key"],
+    heals: ["PLAYER_MIN_HEALS", "heal_key"],
+    home: ["home_key"],
+    knife: ["knife_key", "knife_swap"],
+    dagger: ["dagger_key", "knife_swap"],
+  };
+  return CHECKLIST_IDS.filter((id) => knife || (id !== "knife" && id !== "dagger")).map((id) => {
+    const b: Record<string, ConfigValue> = {};
+    for (const n of basis[id]) b[n] = v[n];
+    return { id, text: checklistText(id, b, map), basis: b, map };
+  });
+}
+
+/** PURE: the lines with the flow's keys over their values, their text written again (LiveRun's
+ * ``keys``: the checklist states the keys Run sends). */
+export function checklistWithKeys(items: ChecklistItem[], keys: RunKeys | null | undefined): ChecklistItem[] {
+  if (!keys) return items;
+  return items.map((it) => {
+    const b = { ...it.basis };
+    for (const k of Object.keys(b)) if (RUN_KEY_NAMES.includes(k) && typeof keys[k] === "string") b[k] = keys[k];
+    return { ...it, basis: b, text: checklistText(it.id, b, it.map) };
+  });
 }

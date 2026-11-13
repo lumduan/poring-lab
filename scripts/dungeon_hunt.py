@@ -1091,13 +1091,27 @@ def player_stock_refused(counts: Mapping[int, int | None],
     it can). ``counts`` are the hotbar's drawn counts by item (None: unreadable). At least
     PLAYER_MIN_WINGS Fly Wings, and PLAYER_MIN_HEALS heal items in all (``heal_items``: the White
     Potion, with --heal-candy the Candy Cane and Candy too); an unreadable count refuses, never a
-    guess (4.05 a10 hunted with no Fly Wing after a guessed stock)."""
+    guess (4.05 a10 hunted with no Fly Wing after a guessed stock). dungeon@9.45: its two rules
+    are two functions (the live check ticks each on its own)."""
+    return player_wings_refused(counts) or player_heals_refused(counts, heal_items)
+
+
+def player_wings_refused(counts: Mapping[int, int | None]) -> str | None:
+    """PURE (dungeon@9.35, player_stock_refused's first rule): the Fly Wings' count read, and at
+    least PLAYER_MIN_WINGS (read when called: --tune)."""
     wings = counts.get(STOCK_ITEMS["fly"])
     if wings is None:
         return "the Fly Wings' count on the hotbar did not read: a person first"
     if wings < PLAYER_MIN_WINGS:
         return (f"{wings} Fly Wings on the hotbar: bring at least {PLAYER_MIN_WINGS} (the run's "
                 f"escapes; it ends with {PLAYER_WINGS_KEEP} left for the end's own)")  # fmt: skip
+    return None
+
+
+def player_heals_refused(counts: Mapping[int, int | None],
+                         heal_items: Sequence[int]) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.35, player_stock_refused's second rule): every heal item's count read, and
+    PLAYER_MIN_HEALS of them in all (read when called: --tune)."""
     heals = [counts.get(i) for i in heal_items]
     if any(n is None for n in heals):
         read = dict(zip(heal_items, heals, strict=True))
@@ -1107,6 +1121,65 @@ def player_stock_refused(counts: Mapping[int, int | None],
         return (f"{n_heal} heal items on the hotbar (items {list(heal_items)}): bring at least "
                 f"{PLAYER_MIN_HEALS}")  # fmt: skip
     return None
+
+
+def player_heal_items(heal_candy: bool) -> list[int]:
+    """PURE (dungeon@9.35 / 9.31): the heal items a player's start counts -- the White Potion, or
+    with --heal-candy the Candy Cane, the Candy and the White Potion (HEAL_ORDER)."""
+    return [i for _, i in HEAL_ORDER] if heal_candy else [STOCK_ITEMS["potion"]]
+
+
+def stock_slots(stock_items: Mapping[str, int], keys: Mapping[str, str]) -> dict[int, int]:
+    """PURE (dungeon@8.3 / 9.31): each stock item -> its row-1 hotbar slot, by the run's keys."""
+    return {stock_items[k]: hotbar_slot(keys[k]) for k in stock_items}
+
+
+def hotbar_counts(gray: Any, slots: Mapping[int, int], tpl: Any) -> dict[int, int | None]:
+    """dungeon@8.3: each item's drawn count on its slot (hotbar_count.read_count; None: unread)."""
+    import hotbar_count as hb
+
+    return {item: hb.read_count(gray, slot, tpl) for item, slot in slots.items()}
+
+
+def player_chat_refused(is_open: bool, when: str) -> str | None:
+    """PURE (dungeon@9.35): why a player's run must stop for its chat input (None: it is closed).
+    The setup's chat-close step (bench.close_chat) presses Enter on an open input; a player's run
+    never does (text left in it would go to public chat)."""
+    return f"the chat input is open ({when}): close it first (a person)" if is_open else None
+
+
+def read_start_cell(frame_fn: Callable[[], Any], digits: Any, pos_ok: Any,
+                    wait_s: float) -> Cell | None:  # fmt: skip
+    """dungeon@9.35: her cell at a player's start -- the minimap readout, read until PosConfirm
+    accepts one or ``wait_s`` (the caller's PLAYER_POS_S) passes; None: it did not read."""
+    from poring_env import selfpos
+
+    here: Cell | None = None
+    t0 = time.monotonic()
+    while here is None and time.monotonic() - t0 <= wait_s:
+        rd = selfpos.read_minimap(frame_fn(), digits, light=True)
+        here = pos_ok.accept(time.monotonic(), rd)
+        if here is None:
+            time.sleep(0.2)
+    return here
+
+
+def explore_from(okr: Any, cell: Cell) -> tuple[Any, dict[tuple[int, int], Cell], str | None]:
+    """dungeon@9.14 (--explore): ``cell``'s component of the route grid, its regions, and why the
+    explore cannot start from there (None: a region is reachable)."""
+    import explore_map as em_x
+
+    reach = em_x.component(np.asarray(okr, dtype=bool), cell)
+    anchors = em_x.regions(reach)
+    return reach, anchors, (None if anchors else f"no explore region reachable from {cell}")
+
+
+def etc_hold_due(w: Sequence[int] | None, red: bool) -> bool:
+    """PURE (dungeon@6): the start's bag is heavy enough for the Etc-tab rule (etc_hold_refused,
+    or the lab's clear): at or over CLEAR_AT, or no readout but the red (>= 50 %) line."""
+    import gm_state
+
+    return (gm_state.weight_share(w) or 0.0) >= CLEAR_AT or (w is None and red)
 
 
 def player_weight_refused(share: float | None, red: bool) -> str | None:
@@ -1393,6 +1466,250 @@ def tune_apply(vals: Mapping[str, Any], mods: Mapping[str, Any]) -> dict[str, An
         is_int = isinstance(old, int) and not isinstance(old, bool)
         setattr(mod, attr, int(v) if is_int else float(v))
     return prev
+
+
+# --- dungeon@9.45 (Batt 2026-11-13: "do it"): THE LIVE CHECK -- /flows' start checklist ticked from
+# the GAME SCREEN before Run. `dungeon_hunt.py check` takes run's own flags (the same parser: the
+# Run helper builds the same argv as its start), runs run()'s whole preamble (every refusal before
+# any input, the same keys, the same route grid) and then, in place of the session, READS PIXELS
+# ONLY: no key, click, mouse move, chat line, window or tab. That is structural: start_check gets a
+# screen and no agent, and the check's process replaces ro_agent's Agent and session with ones
+# that refuse at construction (no_input_guard), so no input path can even open.
+LIVE_CHECK_VERSION = "9.45"
+CHECK_MARK = "CHECK "  # the one stdout line the Run helper parses (scripts/flow_run.py)
+# the start's lines the runner itself refuses on (a red line = the runner will refuse); the
+# Butterfly Wings' count is read at the start but never refused on (player_home_count_why)
+CHECK_IDS = ("identity", "cell", "chat", "weight", "wings", "heals", "home", "knife", "dagger")
+
+
+@dataclass(frozen=True)
+class CheckCtx:
+    """What run()'s preamble resolved, for start_check (the same values its own start uses)."""
+
+    map_: str
+    conf: Mapping[str, Any]
+    crk: str
+    keys: Mapping[str, str]  # the run's whole key map (the person's keys, "home" included)
+    stock_items: Mapping[str, int]
+    heal_candy: bool
+    opener: str | None  # --steal-opener's key (the Knife)
+    bare: bool  # --bare-steal (the Knife swap)
+    explore: bool
+    okr: Any
+    area: Any
+    digits: Any
+    region: tuple[int, int, int, int]
+
+
+def check_item(id_: str, ok: bool | None, words: str, value: str | None = None,
+               refuses: bool = True) -> dict[str, Any]:  # fmt: skip
+    """PURE: one line of the check: ok True / False / None (not read), the words, the value read,
+    and whether the runner's own start refuses on it (a False there = the runner will refuse)."""
+    return {"id": id_, "ok": ok, "words": words, "value": value, "refuses": refuses}
+
+
+def check_verdict(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE: the check as a whole -- ok False when any line fails, True when every line passes,
+    else None (a line not read); ``refuses``: a line the runner refuses on failed."""
+    oks = [i.get("ok") for i in items]
+    ok = False if False in oks else (True if oks and all(o is True for o in oks) else None)
+    refuses = any(i.get("ok") is False and i.get("refuses", True) for i in items)
+    return {"ok": ok, "refuses": refuses}
+
+
+class NoInputAgent:
+    """dungeon@9.45: what ro_agent.Agent is inside a check's process: it refuses at construction,
+    so no /internal/agent connection (the one input path) is ever opened."""
+
+    def __init__(self, *_a: Any, **_k: Any) -> None:
+        import ro_agent as r
+
+        raise r.Stop(f"dungeon@{LIVE_CHECK_VERSION}: the check sends no input (no Agent opened)")
+
+
+def no_input_guard() -> None:
+    """dungeon@9.45: a check's process can open no input path: ro_agent's Agent and session refuse
+    at construction (start_check never asks for one; this makes a slip fail instead of press)."""
+    import ro_agent as r
+
+    def no_session(*_a: Any, **_k: Any) -> Any:
+        raise r.Stop(f"dungeon@{LIVE_CHECK_VERSION}: the check sends no input (no session opened)")
+
+    r.Agent = NoInputAgent  # type: ignore[misc,assignment]
+    r.session = no_session  # type: ignore[assignment]
+
+
+def check_used(ctx: CheckCtx) -> dict[str, Any]:
+    """PURE but for the constants (read when called: --tune): the values the check applied, by the
+    settings' names (scripts/flow_config.py), so /flows can grey a result its settings outdated."""
+    return {"heal_key": ctx.keys.get("potion"), "fly_key": ctx.keys.get("fly"),
+            "home_key": ctx.keys.get("home"), "knife_key": ctx.opener,
+            "dagger_key": ctx.keys.get("equip") if ctx.bare else None, "knife_swap": ctx.bare,
+            "PLAYER_MIN_WINGS": PLAYER_MIN_WINGS, "PLAYER_MIN_HEALS": PLAYER_MIN_HEALS,
+            "WEIGHT_MAX": WEIGHT_MAX, "PLAYER_POS_S": PLAYER_POS_S}  # fmt: skip
+
+
+def start_check(screen: Any, ctx: CheckCtx) -> dict[str, Any]:
+    """dungeon@9.45: a player start's checks, READ ONLY from ``screen`` (its grabs, nothing else):
+    each line decided by the SAME function run()'s player start uses (cr.check without the DB,
+    player_chat_refused, player_start_refused + explore_from, etc_hold_refused +
+    player_weight_refused, player_wings_refused, player_heals_refused, player_home_count_why,
+    opener_ref_cut, bare_ref_cut). No agent is passed, none is made: nothing here can send input.
+    A read that raises (a frozen stream, a missing template) is that line's "not read"."""
+    import crusader as cr
+    import gm_state
+    import hotbar_count as hb
+    import ro_agent as r
+
+    items: list[dict[str, Any]] = []
+
+    def grab() -> Any:
+        return np.ascontiguousarray(np.asarray(r.grab_after(screen, ctx.region, r.ns()))[..., :3])
+
+    def line(id_: str, fn: Callable[[], dict[str, Any]], refuses: bool = True) -> None:
+        try:
+            items.append(fn())
+        except (SystemExit, OSError, ValueError, LookupError) as e:  # r.Stop is a SystemExit
+            items.append(check_item(id_, None, f"not read from the screen ({e})", None, refuses))
+
+    job = str(ctx.conf["job"])
+
+    def identity() -> dict[str, Any]:
+        got = cr.check(screen, job, ctx.crk, db=False)  # run()'s: db=not player
+        name = cr.load_refs(ctx.crk)[0]
+        if got.get("ok"):
+            return check_item("identity", True, f"the name plate reads {name} and the job "
+                              f"{job} (her references; no DB, as the player start)",
+                              f"{name}, {job}")  # fmt: skip
+        why = got.get("why")
+        words = {"name": f"the name plate is not {name}'s ({got.get('name_diff')} pixels differ): "
+                         "another character, or a window over it",
+                 "job": f"the job does not read {job} ({got.get('job_diff')} pixels "
+                        "differ)"}.get(str(why), str(why))  # fmt: skip
+        return check_item("identity", False, words)
+
+    def chat() -> dict[str, Any]:
+        is_open = bool(r.is_state(screen, "chat_open"))
+        why = player_chat_refused(is_open, "now")
+        return check_item("chat", why is None, why or "the chat input is closed",
+                          "open" if is_open else "closed")  # fmt: skip
+
+    def cell() -> dict[str, Any]:
+        pos_ok = PosConfirm()
+        here = read_start_cell(grab, ctx.digits, pos_ok, PLAYER_POS_S)
+        why = player_start_refused(ctx.map_, here, ctx.okr, ctx.area)
+        if why is None and ctx.explore and here is not None:
+            why = explore_from(ctx.okr, here)[2]
+        value = None if here is None else f"({here[0]}, {here[1]})"
+        if why is not None or here is None:
+            return check_item("cell", False, str(why), value)
+        return check_item("cell", True, f"her cell reads ({here[0]}, {here[1]}): {ctx.map_}'s "
+                          f"open ground, in reach of its search area -- IF she is on {ctx.map_}: "
+                          "the map's name is not read from the screen (a cell of another map can "
+                          f"fall on {ctx.map_}'s open ground)", value)  # fmt: skip
+
+    def weight() -> dict[str, Any]:
+        frs = gm_state._frames(screen)
+        w = gm_state._weight(frs)
+        share = gm_state.weight_share(w)
+        red = overweight_red(frs[0])
+        why = None
+        if etc_hold_due(w, red):  # run()'s first rule (a player's bag is never dropped) ...
+            hold = etc_hold_refused(share, red, ctx.conf)
+            why = None if hold is None else f"weight {w} {hold}: her Etc tab is never dropped"
+        why = why or player_weight_refused(share, red)  # ... then the player start's own
+        value = None if share is None else f"{share * 100:.0f} %"
+        if why is not None or w is None or share is None:
+            return check_item("weight", False, str(why), value)
+        return check_item("weight", True, f"the bag reads {w[0]} / {w[1]} ({share * 100:.0f} %): "
+                          f"under {WEIGHT_MAX * 100:.0f} %", value)  # fmt: skip
+
+    line("identity", identity)  # in CHECK_IDS' order (the page's checklist)
+    line("cell", cell)
+    line("chat", chat)
+    line("weight", weight)
+    try:
+        frame = grab()
+        gray = hb.gray(frame)
+        tpl = hb.load()
+        counts = hotbar_counts(gray, stock_slots(ctx.stock_items, ctx.keys), tpl)
+    except (SystemExit, OSError, ValueError, LookupError) as e:
+        for id_ in ("wings", "heals", "home"):
+            items.append(check_item(id_, None, f"the hotbar was not read ({e})", None,
+                                    id_ != "home"))  # fmt: skip
+    else:
+        line("wings", lambda: _wings_line(ctx, counts))
+        line("heals", lambda: _heals_line(ctx, counts))
+        line("home", lambda: _home_line(ctx, gray, tpl), refuses=False)
+        if ctx.bare and ctx.opener is not None:
+            line("knife", lambda: _knife_line(ctx.opener or "", gray))
+        if ctx.bare:
+            line("dagger", lambda: _dagger_line(gray))
+    return {"version": LIVE_CHECK_VERSION, "map": ctx.map_, "items": items,
+            "used": check_used(ctx), **check_verdict(items)}  # fmt: skip
+
+
+def _wings_line(ctx: CheckCtx, counts: Mapping[int, int | None]) -> dict[str, Any]:
+    key, n = ctx.keys.get("fly"), counts.get(STOCK_ITEMS["fly"])
+    why = player_wings_refused(counts)
+    value = None if n is None else f"{n} Fly Wings on {key}"
+    return check_item("wings", why is None, why or f"{n} Fly Wings on {key}: at least "
+                      f"{PLAYER_MIN_WINGS}", value)  # fmt: skip
+
+
+def _heals_line(ctx: CheckCtx, counts: Mapping[int, int | None]) -> dict[str, Any]:
+    heal_items = player_heal_items(ctx.heal_candy)
+    role = {i: k for k, i in ctx.stock_items.items()}
+    keys = " + ".join(str(ctx.keys.get(role[i])) for i in heal_items)
+    why = player_heals_refused(counts, heal_items)
+    got = [counts.get(i) for i in heal_items]
+    n = None if any(c is None for c in got) else sum(int(c or 0) for c in got)
+    value = None if n is None else f"{n} heal items on {keys}"
+    return check_item("heals", why is None, why or f"{n} heal items on {keys}: at least "
+                      f"{PLAYER_MIN_HEALS}", value)  # fmt: skip
+
+
+def _home_line(ctx: CheckCtx, gray: Any, tpl: Any) -> dict[str, Any]:
+    """The Butterfly Wings: the runner's start never refuses on them (player_home_refused checks
+    only the key); its way home reads the same count with player_home_count_why."""
+    import hotbar_count as hb
+
+    key = ctx.keys.get("home")
+    note = " (the runner does not refuse on it: its way home reads this count again)"
+    if key is None:
+        return check_item("home", None, "no Butterfly Wing key: no way home" + note, None, False)
+    n = hb.read_count(gray, hotbar_slot(key), tpl)
+    why = player_home_count_why(n)
+    value = None if n is None else f"{n} Butterfly Wings on {key}"
+    if why is None:
+        return check_item("home", True, f"{n} Butterfly Wings on {key}: her way home (the bag "
+                          "full, the end)" + note, value, False)  # fmt: skip
+    return check_item("home", None if n is None else False,
+                      f"{why} ({key}): no way home when the bag fills or at the end" + note,
+                      value, False)  # fmt: skip
+
+
+def _knife_line(key: str, gray: Any) -> dict[str, Any]:
+    ref, rec, why = opener_ref_cut(gray, key)  # run()'s --steal-opener start read
+    if why is not None:
+        return check_item("knife", False, why, "an empty slot" if rec.get("empty") else None)
+    if ref is None:
+        return check_item("knife", None, f"the {key} slot is dark (a load screen?): not read")
+    return check_item("knife", True, f"{key} shows one item with no stack count: the Knife in the "
+                      "bag, as the runner reads it (the icon itself is not matched)",
+                      f"one item on {key}")  # fmt: skip
+
+
+def _dagger_line(gray: Any) -> dict[str, Any]:
+    key = bs.EQUIP_KEY  # --dagger-key, configured by run()'s preamble (bs.configure)
+    ref, _rec, why = bare_ref_cut(gray)  # run()'s --bare-steal start read
+    if why is not None:
+        return check_item("dagger", False, why, f"an icon on {key}")
+    if ref is None:
+        return check_item("dagger", None, f"the {key} slot is dark (a load screen?): not read")
+    return check_item("dagger", True, f"{key} is empty: the dagger is worn (an empty {key} cannot "
+                      f"tell 'worn' from 'nothing on {key}': the runner's first swap tells)",
+                      f"{key} empty")  # fmt: skip
 
 
 def knife_numbers_refused(a: argparse.Namespace) -> str | None:
@@ -5428,6 +5745,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                else np.zeros(len(rel_)))  # fmt: skip
         return camera.project(rel_, alt)
 
+    if getattr(a, "cmd", "run") == "check":  # dungeon@9.45: every refusal above passed; now the
+        # player start's checks, READ ONLY (a screen, no session, no agent; no session folder)
+        ctx = CheckCtx(map_=map_, conf=conf, crk=crk, keys=dict(keys_), stock_items=stock_items,
+                       heal_candy=heal_candy, opener=opener_key, bare=bare_on, explore=explore_on,
+                       okr=okr, area=area, digits=digits, region=(gx0, gy0, gw, gh))  # fmt: skip
+        screen_ck = r.Screen()
+        try:
+            got_ck = start_check(screen_ck, ctx)
+        finally:
+            screen_ck.close()
+        print(CHECK_MARK + json.dumps(got_ck), flush=True)
+        return 0
     mr_tag = "-mr" if a.engage == "melee_ring" else ""
     if (a.char, map_) != ("crusader", "orcsdun01"):  # dungeon@6: the session name says who / where
         mr_tag = f"-{a.char}-{map_}{mr_tag}"
@@ -5478,9 +5807,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             """dungeon@9.35: the setup's chat-close step (bench.close_chat) presses Enter on an
             open chat input; a player's run never does (text left in it would go to public chat),
             so under --player-mode an open input stops the run before that step can run."""
-            if player and r.is_state(screen, "chat_open"):
-                raise r.Stop(f"dungeon@9.35 refused: --player-mode: the chat input is open "
-                             f"({when}): close it first (a person)")  # fmt: skip
+            why_ch = player_chat_refused(player and r.is_state(screen, "chat_open"), when)
+            if why_ch is not None:
+                raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_ch}")
 
         player_chat_closed("at the start")
         # the Battle Log reader (battle_log.py live) reads the SHOWN chat tab: since 2026-11-05 the
@@ -5518,7 +5847,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         w0 = gm_state._weight(fr0)
         red0 = overweight_red(fr0[0])  # Amendment I: the reader is blind to the red (>= 50 %) line
         cleared: dict[str, Any] | None = None
-        if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT or (w0 is None and red0):
+        if etc_hold_due(w0, red0):
             # dungeon@6: the Thief's Etc tab holds Batt's target items; dungeon@9.35: a player's
             # bag is never dropped (no clear stand to warp to): the same refusal
             if not conf["clear_etc"] or player:
@@ -5564,14 +5893,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 tpl = hb.load()
             except OSError as exc:
                 raise r.Stop(f"dungeon@9.35: no hotbar digit templates ({exc})") from exc
-            slots = {stock_items[k]: hotbar_slot(keys_[k]) for k in stock_items}  # 9.31: + candies
+            slots = stock_slots(stock_items, keys_)  # 9.31: + candies
             time.sleep(0.8)  # as read_stock: the hotbar redrawn
             g_pm = hb.gray(np.asarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())))
-            before = {item: hb.read_count(g_pm, slot, tpl) for item, slot in slots.items()}
+            before = hotbar_counts(g_pm, slots, tpl)
             stock = {"before": before, "added": {}, "after": before,
                      "min": {"wings": PLAYER_MIN_WINGS, "heals": PLAYER_MIN_HEALS}}  # fmt: skip
-            heal_items = ([i for _, i in HEAL_ORDER] if heal_candy
-                          else [STOCK_ITEMS["potion"]])  # fmt: skip
+            heal_items = player_heal_items(heal_candy)
             why_pst = player_stock_refused(before, heal_items)
             if why_pst is not None:
                 raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_pst} {stock}")
@@ -5667,22 +5995,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             return selfpos.read_minimap(img_, digits, (0, 0, w_i, h_i), light=True)
 
         if player:  # dungeon@9.35: she starts where the person left her -- her cell, read
-            here0: Cell | None = None  # from the minimap readout (PosConfirm's rule, as the loop)
-            t_p0 = time.monotonic()
-            while here0 is None and time.monotonic() - t_p0 <= PLAYER_POS_S:
-                rd0 = selfpos.read_minimap(frame(), digits, light=True)
-                here0 = pos_ok.accept(time.monotonic(), rd0)
-                if here0 is None:
-                    time.sleep(0.2)
+            # from the minimap readout (PosConfirm's rule, as the loop)
+            here0 = read_start_cell(frame, digits, pos_ok, PLAYER_POS_S)
             why_pc = player_start_refused(map_, here0, okr, area)
             if why_pc is not None or here0 is None:
                 raise r.Stop(f"dungeon@9.35 refused: --player-mode: {why_pc}")
             start = here0
             if explore_on:  # dungeon@9.14's regions: HER component (the seed's cell was a guess)
-                ex_reach = em.component(np.asarray(okr, dtype=bool), start)
-                ex_anchors = em.regions(ex_reach)
-                if not ex_anchors:
-                    raise r.Stop(f"dungeon@9.14 refused: no explore region reachable from {start}")
+                ex_reach, ex_anchors, why_xp = explore_from(okr, start)
+                if why_xp is not None:
+                    raise r.Stop(f"dungeon@9.14 refused: {why_xp}")
         fr1 = gm_state._frames(screen)
         w_ = gm_state._weight(fr1)
         share = gm_state.weight_share(w_)
@@ -9877,6 +10199,12 @@ def main() -> int:
     t.add_argument("--bank-tags", action=argparse.BooleanOptionalAction, default=None,
                    help="dungeon@6: bank the raw name-tag band at every strike (default: on off "
                    "orcsdun01)")  # fmt: skip
+    # dungeon@9.45: `check` takes run's OWN flags (its parser as the parent: no flag of its own),
+    # so the Run helper's check and start build the same argv
+    sub.add_parser("check", parents=[t], add_help=False,
+                   help="READ ONLY (dungeon@9.45): run's preamble (every refusal before any "
+                   "input), then the --player-mode start's checks read from the game screen -- no "
+                   "key, click, move or line; prints one CHECK {json} line")  # fmt: skip
     cb = sub.add_parser("clear-bag", help="LIVE: empty the inventory tabs on the clear stand, "
                         "then restock the run stock (Batt 2026-11-08)")  # fmt: skip
     cb.add_argument("--char", required=True, choices=sorted(CHARS_CONF))
@@ -9885,7 +10213,12 @@ def main() -> int:
     a = ap.parse_args()
     if a.cmd == "clear-bag":
         return clear_bag(a)
-    if a.cmd == "run" and a.ag_match is None:
+    if a.cmd == "check":  # dungeon@9.45: the player start's checks, read only
+        if not a.player_mode:
+            raise SystemExit(f"dungeon@{LIVE_CHECK_VERSION} refused: check goes with --player-mode "
+                             "(it is the player start's own checks)")  # fmt: skip
+        no_input_guard()
+    if a.cmd in ("run", "check") and a.ag_match is None:
         import survive as sv
 
         a.ag_match = sv.AG_MATCH_DUNGEON

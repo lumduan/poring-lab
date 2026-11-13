@@ -410,6 +410,34 @@
   padding: 0;
   font-size: 0.85rem;
 }
+/* dungeon@9.45: each line ticked from the game screen -- a fail is red, a stale result greyed */
+.live-checklist li {
+  list-style: none;
+}
+.live-tick {
+  display: inline-block;
+  width: 1.1em;
+  font-weight: 700;
+}
+.live-checklist li[data-tick="fail"] {
+  color: var(--error-text, #8a1f1f);
+}
+.live-checklist li[data-tick="unread"] .live-tick {
+  color: var(--warn-text, #744d10);
+}
+.live-checklist li[data-stale="true"] {
+  opacity: 0.5;
+}
+.live-tick-value,
+.live-tick-words {
+  color: var(--muted, #59636e);
+}
+.live-checklist li[data-tick="fail"] .live-tick-words {
+  color: inherit;
+}
+.live-check-bar {
+  margin: 0.2rem 0 0.4rem;
+}
 .live-end {
   font-weight: 600;
 }

@@ -141,14 +141,51 @@ test("switches, choices and a chain of needs", () => {
 });
 
 test("the start checklist says what must be true, from the values the run takes", async () => {
-  const { startChecklist } = await import("./config.ts");
+  const { startChecklist, CHECKLIST_IDS } = await import("./config.ts");
   const d = effectiveConfig(C, null, "xmas_dun02").values;
-  const c = startChecklist(C, d, "xmas_dun02");
+  const items = startChecklist(C, d, "xmas_dun02");
+  const c = items.map((x) => x.text);
   assert.ok(c.some((x) => /stands on xmas_dun02/.test(x)));
   assert.ok(c.some((x) => /bag under 48 %/.test(x)));
   assert.ok(c.some((x) => /at least 5 Fly Wings on F8/.test(x)));
   assert.ok(c.some((x) => /heal items on F1/.test(x)));
   assert.ok(c.some((x) => /Knife on F4/.test(x)));
-  assert.ok(!startChecklist(C, { ...d, knife_swap: false }, "xmas_dun02").some((x) => /Knife/.test(x)));
-  assert.ok(startChecklist(C, { ...d, fly_key: "F6", PLAYER_MIN_WINGS: 3 }, "xmas_dun02").some((x) => /at least 3 Fly Wings on F6/.test(x)));
+  assert.ok(c.some((x) => /dagger worn \(F5/.test(x)));
+  // each line's id is the live check's (scripts/dungeon_hunt.py CHECK_IDS), in that order
+  assert.deepEqual(
+    items.map((x) => x.id),
+    CHECKLIST_IDS,
+  );
+  const noKnife = startChecklist(C, { ...d, knife_swap: false }, "xmas_dun02");
+  assert.ok(!noKnife.some((x) => /Knife|dagger/.test(x.text)));
+  assert.deepEqual(
+    noKnife.map((x) => x.id),
+    CHECKLIST_IDS.filter((x) => x !== "knife" && x !== "dagger"),
+  );
+  assert.ok(startChecklist(C, { ...d, fly_key: "F6", PLAYER_MIN_WINGS: 3 }, "xmas_dun02").some((x) => /at least 3 Fly Wings on F6/.test(x.text)));
+  // a line states the values it needs (a check made with others is outdated)
+  const wings = items.find((x) => x.id === "wings");
+  assert.deepEqual(wings?.basis, { PLAYER_MIN_WINGS: 5, fly_key: "F8" });
+});
+
+// Batt 2026-11-13: every hotbar key from a FUNCTION of the flow -- the checklist states those keys
+test("the flow's keys go over the settings' in the checklist", async () => {
+  const { startChecklist, checklistWithKeys, withRunKeys, RUN_KEY_NAMES } = await import("./config.ts");
+  const d = effectiveConfig(C, null, "xmas_dun02").values;
+  const keys = { heal_key: "F2", fly_key: "F3", home_key: "F6", knife_key: "F7", dagger_key: "F9" };
+  const k = startChecklist(C, d, "xmas_dun02", keys);
+  const t = (id: string) => k.find((x) => x.id === id)?.text ?? "";
+  assert.match(t("wings"), /on F3$/);
+  assert.match(t("heals"), /on F2$/);
+  assert.match(t("home"), /on F6 /);
+  assert.match(t("knife"), /on F7 /);
+  assert.match(t("dagger"), /\(F9 empty/);
+  // the same from the settings' list with the keys put over it (LiveRun's keys prop)
+  assert.deepEqual(checklistWithKeys(startChecklist(C, d, "xmas_dun02"), keys), k);
+  assert.deepEqual(checklistWithKeys(k, null), k);
+  // only the five keys go over: nothing else a request could carry
+  const w = withRunKeys(d, { ...keys, PLAYER_MIN_WINGS: "1" } as Record<string, string>);
+  assert.equal(w.PLAYER_MIN_WINGS, 5);
+  assert.deepEqual(RUN_KEY_NAMES, ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"]);
+  assert.deepEqual(withRunKeys(d, null), d);
 });

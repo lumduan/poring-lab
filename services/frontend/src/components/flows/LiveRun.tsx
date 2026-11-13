@@ -9,10 +9,18 @@
 // Run button next to Simulate, to run it for real on this map") and the status panel share it.
 // The header's Run takes TWO presses (a second within ARM_MS): it sits beside Simulate, which
 // runs nothing, and a live run must never start from a slip.
+//
+// THE LIVE TICKS (dungeon@9.45, Batt 2026-11-13 "do it"): "Check the game" (and once by itself
+// when the panel opens and the helper is idle) asks the helper for the runner's read-only check;
+// each checklist line then shows ✓ / ✗ / ? with what was read, greyed when the settings changed
+// since. A ✗ never locks Run (Batt: warnings, not locks): the runner refuses on its own, and the
+// Run button's title says so. THE FLOW'S KEYS (Batt 2026-11-13: every hotbar key from a function
+// of the flow): ``keys`` goes with every start and check, and the checklist states those keys.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ACTIVE, liveButtons, liveLabel, liveLine, type LiveStatus, REFUSALS } from "@/lib/flow/liverun";
+import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/config";
+import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, refuseWarning, REFUSALS, runBody, tickFor } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -24,17 +32,26 @@ export type Live = {
   st: LiveStatus | null;
   err: string | null;
   busy: boolean;
-  send: (action: "start" | "stop") => Promise<void>;
+  /** One request; ``keys`` (the flow's functions' five keys) go with a start or a check, else the
+   * hook's own ``keys``. */
+  send: (action: "start" | "stop" | "check", keys?: RunKeys | null) => Promise<void>;
   buttons: ReturnType<typeof liveButtons>;
+  keys: RunKeys | null;
 };
 
-export function useLiveRun(backendUrl: string | null, flow: string, enabled = true): Live {
+/** ``keys``: the flow's functions' hotbar keys (all five), sent with every start and check of
+ * this poller; null: the bot server's settings decide. */
+export function useLiveRun(backendUrl: string | null, flow: string, enabled = true, keys: RunKeys | null = null): Live {
   const base = backendHttpBase(backendUrl);
   const [st, setSt] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const csrf = useRef<string | null>(null);
   const refresh = useRef<() => void>(() => {});
+  const keysRef = useRef<RunKeys | null>(keys);
+  useEffect(() => {
+    keysRef.current = keys;
+  }, [keys]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -63,7 +80,8 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   }, [base, enabled]);
 
   const send = useCallback(
-    async (action: "start" | "stop"): Promise<void> => {
+    async (action: "start" | "stop" | "check", given?: RunKeys | null): Promise<void> => {
+      const k = given ?? keysRef.current;
       setBusy(true);
       setErr(null);
       try {
@@ -77,16 +95,17 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            body: JSON.stringify(action === "start" ? { action, flow } : { action }), // every setting is the bot server's config
+            body: JSON.stringify(runBody(action, flow, k)), // every other setting is the bot server's config
           });
           if (r.ok) break;
-          const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string } };
+          const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string; detail?: string } };
           const reason = body.detail?.reason ?? `HTTP ${r.status}`;
           if (reason === "csrf_invalid" && attempt === 0) {
             csrf.current = null; // a backend restart invalidates every token: fetch a new one once
             continue;
           }
-          setErr(REFUSALS[reason] ?? `Refused: ${reason}`);
+          const more = body.detail?.detail ? `: ${body.detail.detail}` : "";
+          setErr(`${REFUSALS[reason] ?? `Refused: ${reason}`}${more}`);
           break;
         }
         refresh.current();
@@ -99,12 +118,13 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
     [base, flow],
   );
 
-  return { base, flow, st, err, busy, send, buttons: liveButtons(st, flow) };
+  return { base, flow, st, err, busy, send, buttons: liveButtons(st, flow), keys };
 }
 
 /** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
- * within ARM_MS; the armed button says what it will do. */
-export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?: string | null }) {
+ * within ARM_MS; the armed button says what it will do. ``keys``: the flow's keys for this start
+ * (else the poller's). A failed check's lines are in its title: the runner will refuse. */
+export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Live; blocked?: string | null; keys?: RunKeys | null }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -113,6 +133,7 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
   }, [armed]);
   const b = live.buttons;
   const running = b.canStop;
+  const warn = refuseWarning(live.st?.check, live.flow);
   return (
     <>
       {running ? (
@@ -132,9 +153,10 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
               return;
             }
             setArmed(false);
-            void live.send("start");
+            void live.send("start", keys);
           }}
-          title={blocked ?? (b.canStart ? "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm." : (b.why ?? "Run is not available now"))}
+          title={blocked ?? (b.canStart ? (warn ?? "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm.") : (b.why ?? "Run is not available now"))}
+          data-refuses={warn ? "true" : "false"}
           aria-label={armed ? "Confirm: run in the game" : "Run in the game"}
           data-testid="runner-live-run"
         >
@@ -146,13 +168,26 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
   );
 }
 
-export default function LiveRun({ live, checklist = [], minutes = null }: { live: Live; checklist?: string[]; minutes?: number | null }) {
+export default function LiveRun({ live, checklist = [], minutes = null, keys = null }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   const active = ACTIVE.includes(st?.state ?? "");
   const line = active ? liveLine(st?.live, minutes ?? st?.flows?.[flow]?.minutes ?? null) : null;
   const ended = st?.state === "ended" || st?.state === "failed";
   const logLines = (st?.log_tail ?? []).filter((ln) => ln.trim() !== (st?.detail ?? "").trim()); // matpilot: not twice
+  const runKeys = keys ?? live.keys;
+  const items = checklistWithKeys(checklist, runKeys); // the keys Run sends, in the text too
+  const check = st?.check?.flow === flow ? st.check : null;
+  const cc = canCheck(st, flow);
+  const anyStale = items.some((it) => checkStale(check, flow, it.basis));
+  // once by itself when the panel opens and the helper can check (Batt: "do it")
+  const auto = useRef(false);
+  const { send } = live;
+  useEffect(() => {
+    if (auto.current || !cc.can || st?.check?.state === "checking") return;
+    auto.current = true;
+    void send("check", runKeys);
+  }, [cc.can, st?.check?.state, send, runKeys]);
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
@@ -167,14 +202,40 @@ export default function LiveRun({ live, checklist = [], minutes = null }: { live
       {!active && (
         <>
           <p>{title ?? "the bot plays this flow"}. Before Run (press it twice: the second press confirms), check:</p>
-          {/* matpilot: the start conditions were buried in a paragraph */}
+          {/* matpilot: the start conditions were buried in a paragraph; dungeon@9.45: each ticked from the game screen */}
           <ul className="live-checklist" data-testid="live-run-checklist">
-            {checklist.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-            <li>the console in ASSIST</li>
+            {items.map((it) => {
+              const t = tickFor(check, flow, it.id, it.basis);
+              return (
+                <li key={it.id} data-tick={t.mark} data-stale={t.stale ? "true" : "false"} data-testid={`live-check-${it.id}`}>
+                  <span className="live-tick" aria-label={t.mark === "none" ? "not checked" : t.mark === "ok" ? "passes" : t.mark === "fail" ? "fails" : "not read"}>
+                    {t.sign || "·"}
+                  </span>{" "}
+                  {it.text}
+                  {t.value && <span className="live-tick-value"> · read: {t.value}</span>}
+                  {t.mark !== "ok" && t.mark !== "none" && t.words && <span className="live-tick-words"> · {t.words}</span>}
+                  {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
+                </li>
+              );
+            })}
+            <li data-tick={st?.mode === "ASSIST" ? "ok" : st ? "fail" : "none"} data-stale="false" data-testid="live-check-assist">
+              <span className="live-tick">{st?.mode === "ASSIST" ? "✓" : st ? "✗" : "·"}</span> the console in ASSIST
+            </li>
           </ul>
-          <p className="notice-sub">The runner checks each of these itself before its first step, and refuses with the reason. It types no GM command.</p>
+          <p className="notice-sub live-check-bar">
+            <button type="button" className="button" disabled={!cc.can || live.busy} onClick={() => void send("check", runKeys)} title={cc.why ?? "Read the game screen now: the runner's own start checks, read only (it presses nothing)"} data-testid="live-run-check">
+              {st?.check?.state === "checking" ? "Checking the game…" : "Check the game"}
+            </button>{" "}
+            {check && check.state !== "checking" && (
+              <span data-testid="live-run-check-time">
+                last checked {checkTime(check.at)}
+                {check.state !== "done" ? ` · ${check.detail ?? check.state}` : ""}
+                {anyStale ? " · greyed lines: the settings changed since, check again" : ""}
+                {check.keys_src ? ` · keys from ${check.keys_src}` : ""}
+              </span>
+            )}
+          </p>
+          <p className="notice-sub">The check only reads the screen: it presses nothing. The runner checks each of these itself before its first step, and refuses with the reason; a ✗ does not lock Run. It types no GM command.</p>
         </>
       )}
       {b.why && <p className="notice-sub">{b.why}</p>}

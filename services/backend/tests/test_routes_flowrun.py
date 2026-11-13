@@ -228,3 +228,75 @@ def test_the_end_picture_is_served_to_the_console(client: TestClient, tmp_path: 
     (tmp_path / "settings" / "flowrun" / "end.png").write_bytes(png)
     r = client.get("/flows/run/end.png", headers=H)
     assert r.status_code == 200 and r.content == png and r.headers["content-type"] == "image/png"
+
+
+# --- dungeon@9.45 (Batt 2026-11-13 "do it"): the start checklist ticked from the game screen; the
+# flow's keys (Batt: every hotbar key from a FUNCTION of the flow) ---------------------------------
+KEYS = {"heal_key": "F2", "fly_key": "F3", "home_key": "F6", "knife_key": "F7", "dagger_key": "F9"}
+
+
+def test_a_check_is_one_request_behind_the_write_gate(client: TestClient, tmp_path: Path) -> None:
+    helper(tmp_path)  # HUMAN: a check reads the screen only, so it needs no ASSIST
+    d = tmp_path / "settings" / "flowrun"
+    assert post(client, {"action": "check", "flow": FLOW}, csrf=False).status_code == 403
+    r = client.post("/flows/run", json={"action": "check", "flow": FLOW})  # no Origin
+    assert r.status_code == 403 and not (d / "request.json").exists()
+    r = post(client, {"action": "check", "flow": FLOW})
+    assert r.status_code == 200, r.text
+    req = json.loads((d / "request.json").read_text())
+    assert (
+        req["action"] == "check"
+        and req["flow"] == FLOW
+        and set(req) == {"id", "action", "flow", "at"}
+    )
+    assert json.loads((d / "requests.jsonl").read_text().splitlines()[-1])["action"] == "check"
+    assert post(client, {"action": "check", "flow": "rm -rf"}).status_code == 400
+    helper(tmp_path, state="running")
+    r = post(client, {"action": "check", "flow": FLOW})
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "already_running"
+
+
+def test_a_check_waits_for_the_one_reading_and_its_result_reads_back(
+    client: TestClient, tmp_path: Path
+) -> None:
+    helper(tmp_path)
+    st_file = tmp_path / "settings" / "flowrun" / "status.json"
+    st = json.loads(st_file.read_text())
+    st["check"] = {"state": "checking", "at": "2026-11-13T18:30:05+07:00", "flow": FLOW,
+                   "items": [], "ok": None}  # fmt: skip
+    st_file.write_text(json.dumps(st))
+    r = post(client, {"action": "check", "flow": FLOW})
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "check_running"
+    item = {"id": "chat", "ok": False, "words": "the chat input is open", "value": "open"}
+    st["check"] = {**st["check"], "state": "done", "items": [item], "ok": False}
+    st_file.write_text(json.dumps(st))
+    got = client.get("/flows/run", headers=H).json()
+    assert got["check"]["items"] == [item] and got["check"]["at"] == "2026-11-13T18:30:05+07:00"
+
+
+def test_the_flows_keys_go_with_start_and_check_all_five(
+    client: TestClient, tmp_path: Path
+) -> None:
+    helper(tmp_path)
+    assist(client)
+    d = tmp_path / "settings" / "flowrun"
+    for action in ("check", "start"):
+        r = post(client, {"action": action, "flow": FLOW, "keys": KEYS})
+        assert r.status_code == 200, r.text
+        assert r.json()["keys"] == KEYS
+        req = json.loads((d / "request.json").read_text())
+        assert req["keys"] == KEYS and req["action"] == action
+        assert json.loads((d / "requests.jsonl").read_text().splitlines()[-1])["keys"] == KEYS
+    (d / "request.json").unlink()
+    for keys, word in (({**KEYS, "steal_key": "F1"}, "only heal_key"),
+                       ({k: v for k, v in KEYS.items() if k != "dagger_key"}, "lack dagger_key"),
+                       ({**KEYS, "fly_key": "F10"}, "not a row-1 hotbar key")):  # fmt: skip
+        r = post(client, {"action": "start", "flow": FLOW, "keys": keys})
+        assert r.status_code == 400 and r.json()["detail"]["reason"] == "keys_refused", r.text
+        assert word in r.json()["detail"]["detail"], (keys, r.text)
+    helper(tmp_path, state="running")
+    r = post(client, {"action": "stop", "keys": KEYS})
+    assert r.status_code == 400 and "not stop" in r.json()["detail"]["detail"]
+    assert not (d / "request.json").exists()  # nothing refused was passed on
+    # any other field is still refused (a request names a flow and the flow's keys, nothing else)
+    assert post(client, {"action": "check", "flow": FLOW, "settings": {}}).status_code == 422
