@@ -327,6 +327,23 @@ Amendment B); a not-adopted model is never offered.
   does not lock Run: its title says the runner will refuse. The map's NAME is not read from the
   screen: the cell line ticks her cell on the map's open ground, and you check the map. The
   version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
+- ➡️ **SUPERSEDED 2026-11-13 ~20:xx by THE PROJECT MODEL** (Batt: "/maps first: login, character, each
+  map and a Global node, linked like modular code; double-click a node for its flows; one main
+  tab, the rest the person's; every tab and Global imported into main"; design:
+  [planning/project-model.md](planning/project-model.md)). /flows shows ONE NODE of the project
+  (`/flows?node=<id>`; the node chip switches, "◂ Maps" goes back): its tabs are `main` (the node's
+  program; Global has none) and the person's own (`+ tab`, double-click to rename, × to close).
+  Functions take inputs as Python writes them (`key, times=1, *args, **kwargs`), return values,
+  and an EVENT is a function with a "when …" trigger. A node's function, event or variable of a
+  Global name replaces Global's on that node (the strip under the tabs says which). The Python
+  panel shows one file per tab (this node's and Global's). Login and Choose character are real
+  nodes with their own main (a server and a credential by NAME, never a password; simulated: Run
+  starts on a map node). Run is on a map node holding "hunt with the runner": its five keys are
+  that node's functions (its own first, then Global's). The drawer's "Before Run" (renamed from
+  "Run", matpilot) holds the checklist, the live run and the settings, and says the settings are
+  saved on the bot server at once. Save / Load carry PROJECTS (file version 2); flows of the old
+  format are refused in words, not converted. The read-only check has its own route
+  (`POST /flows/run/check`).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

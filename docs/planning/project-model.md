@@ -168,12 +168,21 @@ The engine may keep IR 2 internally as its execution form; nothing user-facing r
 
 ## 10. matpilot's review of 2026-11-13 (round 14) to fold in
 
-1 (DONE 3b0657f1) the map line never a tick; 2 (DONE 3b0657f1) phone: Run last and small;
-3 the badges (this page RUNS when it has Run); 4 two buttons named Run (the pane: "Before Run");
-5 a key that reads 0 while another slot holds the item: say where it is; 6 the state "ready" with
-a ✗ or a clash; 7 say that the settings save on the server at once; 8 the known warnings in one
-plain line; 9 the functions: what a function is, which keys are taken, a clash marked where it
-is; 10 who flies home (one weight number, the runner's, shown in the loop); 11 the inside view
-follows the function keys; 12 block words (no raw Python, no "xmas_dun02 · xmas_dun02"); 13 the
-tab row and the phone canvas; 14 the FLOWS row order stable; 15 Load: no "Map tab", Escape closes
-it; 16 the read-only check on its own endpoint (POST /flows/run/check).
+| # | Finding | State |
+|---|---|---|
+| 1 | the map line never a tick | DONE 3b0657f1 ("?"); the map-name reader replaces it (section 9) |
+| 2 | phone: Run first and biggest | DONE 3b0657f1 (last and small; the bar wraps) |
+| 3 | "SIMULATE only" on a page with Run | DONE: "SIMULATE · RUN" on a node with Run |
+| 4 | two buttons named Run | DONE: the drawer pane is "Before Run" |
+| 5 | 0 items read on a key: say where they may be | PART: a hint to set the function's key (the check reads only the keys it is given) |
+| 6 | "ready" with a ✗ or a clash | DONE: "not ready: …" |
+| 7 | settings saved on the server, unsaid | DONE: a line above them |
+| 8 | the known warnings in plain words | OPEN |
+| 9 | the functions: what a function is, taken keys, a clash where it is | PART: the toolbox's words; the engine's hotbar_keys error names both roles |
+| 10 | who flies home (three weight numbers) | OPEN: the loop's 50 % is the flow's, the runner's weight setting decides the real run |
+| 11 | the inside view does not follow the function keys | OPEN |
+| 12 | raw Python words on blocks, "xmas_dun02 · xmas_dun02" | DONE: the save point sentence, "arrive on … at …", the node chip |
+| 13 | the tab row and the phone canvas | PART: the runner link left the tab row; the phone canvas not re-measured |
+| 14 | the FLOWS row reorders on a press | DONE: by name |
+| 15 | Load names the Map tab; Escape | DONE |
+| 16 | the check shares the start's endpoint | DONE: POST /flows/run/check; a check body on /flows/run is refused |
