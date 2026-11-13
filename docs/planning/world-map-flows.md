@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 d95b24b5 (a NaN console bug: section 12); round 5 (the other monsters as an option: section 13) not committed yet. Round 6 (2026-11-13, Batt: 'like n8n'; section 14): entry / exit ports, the Links panel, the world rules, the /flows binding strip, the NavBar order."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 d95b24b5 (a NaN console bug: section 12); round 5 (the other monsters as an option: section 13) not committed yet. Round 6 (2026-11-13, Batt: 'like n8n'; section 14): entry / exit ports, the Links panel, the world rules, the /flows binding strip, the NavBar order. Section 15 (2026-11-13 evening): ONE studio -- no Map tab on /flows, a functions tab, every key a function, xmas_dun02 an ordinary flow whose Run reads its keys from the functions."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Batt: try round 6 (section 14.7); matpilot: re-run steps a and c after the 14.8 fixes. Round 5 is committed (its section)."
+next_action: "Batt: try section 15.6 (one studio: the functions tab, xmas_dun02 as a map tab, Run reading its keys from the functions)."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -119,6 +119,8 @@ Tap by tap:
   cell), npc_warp (an NPC's menu path: a warper, or a Kafra teleport with its options), item_warp
   (a Butterfly Wing to the save point; a Fly Wing stays on the map, so it is no exit), and the
   derived death_respawn (to the save point's map).
+- ➡️ SUPERSEDED 2026-11-13 (Batt: "take the Map tab off /flows"; section 15): /flows has no Map
+  tab; the Maps page is the one map graph.
 - **/flows' Map tab: KEPT**, with a link to the Maps page (round 5: Batt wanted the map canvas
   first on /flows). It shows the event nodes the Maps page leaves out. Proposal for Batt: keep both
   for now; later either (a) the Map tab becomes a link only, or (b) /flows opens on the first map's
@@ -418,6 +420,8 @@ example. The live bot on xmas_dun02 is not an IR flow: "How the bot hunts here" 
 first entry of Load, `/flows?runner=xmas_dun02`, four tabs (the run, the knife swap, the respawn, the
 safety rules); docs/console.md has the details. It stays a description of the runner, not an IR
 flow: the IR's hunt block cannot hold the Knife swap's two halves (one at idle, one on every tick).
+➡️ SUPERSEDED the same evening (section 15): xmas_dun02 is an ordinary IR flow; its map tab holds ONE
+block, "hunt with the runner" (dungeon_hunt), and the runner's own blocks are its read-only inside.
 
 ### 14.6 Checks (2026-11-13)
 
@@ -468,4 +472,82 @@ the graph's height and first view at both sizes).
   of them, had stretched the box to the session row: field_1 was never in view); the handle refresh
   is a layout effect (1 error#008 was left after State it); the attribution top-right (top-left
   printed over "open the client").
+
+## 15. One studio: every key a function, xmas_dun02 a map tab (2026-11-13 evening)
+
+**Batt (2026-11-13, Thai, translated):** "Why does the xmas_dun02 flow have to be separate, not made
+in /flows like my_first_flow? We just add a map named xmas_dun02, and add whatever block is missing.
+Fly Wing and Butterfly Wing: don't write them fixed like that; write them as functions, and in the
+function say which shortcut key F1-F9 to press: more flexible. The Knife swap too, as functions,
+choosing which key to press; casting skills, anything: the same principle, make functions. Don't
+forget we have Save and Load, so these can be shared, and we can keep global functions in a tab of
+their own. In matpilot I made modules, and main joins all the flows together. And on /flows take the
+Map tab off, so it does not duplicate /maps: /maps is the main one; each map, when opened, has its
+own flow, and maybe a global flow every map shares, like a public class."
+
+### 15.1 What plays in the game (unchanged, said plainly)
+
+The flow engine (packages/poring_flow) SIMULATES only; ADR-0020's executor is not built. The game
+is played by the runner `scripts/dungeon_hunt.py`. So the xmas_dun02 map tab does not turn the
+runner's loop into editable blocks: it holds ONE block, **hunt with the runner (dungeon_hunt.py)**,
+a task-level block like `hunt` (its parameters are a person's choices, its internals stay in the
+engine). The runner's own blocks (the export, four tabs) are that block's **inside**, read only.
+Everything AROUND it is ordinary blocks: the save point, the loop "while the bag is under 50 %",
+the way home, the functions, the events.
+
+### 15.2 The flow (lib/flow/starter.ts `xmasFlow`, fixtures/xmas_dun02_flow.json)
+
+    def heal():           press_key("F1")
+    def fly_wing():       press_key("F8")
+    def butterfly_wing(): press_key("F9")
+    def knife_on():       press_key("F4")
+    def knife_back():     press_key("F5")
+
+    @map_block(xmas_dun02, entry here: where she stands)
+        assert_save_point(geffen 119 40)
+        while weight_percent() < 50:
+            dungeon_hunt(heal=heal, fly=fly_wing, knife_on=knife_on, knife_back=knife_back)
+        take_exit(item_warp(by butterfly_wing -> geffen.save))
+
+    @map_block(geffen, entry save: 119 40)
+        stop("home")
+
+(The Python view's exact spelling is the engine's: section 15.5.)
+
+### 15.3 What changed
+
+| Part | Change |
+|---|---|
+| /flows tabs | one per map block (the START map first), **every map** (the global events: "like a public class"), **functions**; the Map tab is gone (the Maps page is the map graph; "+ map block" stays) |
+| Functions | a hat "function NAME ( )" on the functions tab = `Flow.procedures[NAME]` (the IR had procedures; the editor had only "call"); "call NAME ( )" on any tab |
+| press key | a new catalogue block `press_key(key)`, F1-F9 (hotbar row 1), L1 concept `ui.press_hotkey`; insertable like use_item (Batt's Q17: a hotbar press) |
+| Item warp by a function | `Exit.proc`: an item_warp takes an item OR a function (left out of the canonical JSON when absent: every older flow keeps its hash); "item warp: call butterfly_wing → geffen . save" |
+| The runner's block | `dungeon_hunt(heal, fly, knife_on, knife_back)`: each role names a function that is exactly ONE press_key; only on a map that has a runner (today xmas_dun02) |
+| Run | on a flow whose map holds that block: beside Simulate; it reads the five keys from the functions (lib/flow/functions.ts `runnerKeys`: the four roles + the item warp's function) and sends them with Run; the Run helper checks them as any setting (F1-F9, no clash) and applies them to that run only. The Run pane (drawer): the live run, the start checklist, the settings (the keys group says "your functions") |
+| The FLOWS row | every flow by name: the one open, the ones KEPT in this browser (the shelf), the ready-made ones (my_first_workflow, xmas_dun02); switching keeps the one left |
+| my_first_workflow | its wing is the function butterfly_wing (press F9); the world rule's wing calls it (`call butterfly_wing`) |
+| /maps | Load ▸ xmas_dun02 opens the flow (the one before is kept); a map card's runner button reads "Inside the runner" |
+
+### 15.4 Not done (each a next step, none decided silently)
+
+- **Modules:** ONE functions tab. matpilot's several modules (tabs of functions) would need a module
+  name per function: the IR has none (an IR change).
+- **A map's own function** (same name, overriding the global one): the IR's procedures are global;
+  a map uses another function by name instead (e.g. `heal_strong`).
+- **Heal and escape as events:** the heal / Fly Wing thresholds stay settings (the Run pane, every
+  map / this map); compiling an event "when hp_percent() < 40: call heal()" into the runner's numbers
+  is not built.
+- **The loop's 50 %** is the flow's own; the runner's weight exit is its setting (default 50 %).
+  The two are not tied yet.
+- The live block highlight runs on the runner's inside view, not on the studio's blocks.
+
+### 15.5 The engine's side
+
+(Filled in at the merge: the Python-view spellings, the lint rules and codes.)
+
+### 15.6 For Batt to try
+
+1. /flows ▸ FLOWS row ▸ **xmas_dun02**: the tabs xmas_dun02 · geffen · every map · functions.
+2. functions: change fly_wing's key to F6. xmas_dun02 ▸ Run pane: the keys line says "F6 fly_wing()".
+3. Back on the FLOWS row ▸ my_first_workflow: your flow comes back as you left it.
 

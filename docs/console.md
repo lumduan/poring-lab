@@ -302,6 +302,23 @@ Amendment B); a not-adopted model is never offered.
   checklist made from the run's own settings. The groups' radios read "change for:" and follow
   the file. The version chip says "dungeon@9.44 (base 8.7)": 8.7 is the default behaviour's
   version, each newer technique has its own; the same runner plays.
+  ➡️ **~18:xx, ONE STUDIO (Batt: "why is the xmas_dun02 flow separate? make it like my_first_flow;
+  every key a function; global functions in a tab of their own; take the Map tab off /flows, the
+  Maps page is the map graph"):** xmas_dun02 is now an ORDINARY flow of the studio (Load ▸
+  xmas_dun02, or the FLOWS row). Its tabs: `xmas_dun02` (hunt with the runner while the bag is under
+  50 %, then "item warp: call butterfly_wing → geffen.save"), `geffen` (the save point; the run
+  ends there), **every map** (the events every map shares) and **functions** (heal = press F1,
+  fly_wing = F8, butterfly_wing = F9, knife_on = F4, knife_back = F5). A function is a block hat
+  ("function NAME ( )") with any blocks in it; "press key F1-F9" presses one hotbar key; "call NAME"
+  runs a function from any tab; Save and Load carry the functions with the flow. **Run** (beside
+  Simulate, on a flow whose map holds the block "hunt with the runner") reads its five keys FROM THE
+  FUNCTIONS: each role function must be exactly one "press key"; the Run pane (in the drawer) holds
+  the live run, the start checklist and the settings (the keys group says "your functions"). The
+  runner's own blocks (the four tabs above) are now **inside the hunt block**, read only ("See inside
+  the runner ↗"; `/flows?runner=xmas_dun02` still opens them). The FLOWS row switches flows by name
+  and KEEPS the one left in this browser. The Map tab is gone: the maps graph is the Maps page; each
+  map's tab is its flow. my_first_workflow's wing is a function too (butterfly_wing = F9), and the
+  world rule calls it. Design: [planning/world-map-flows.md](planning/world-map-flows.md) section 15.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
