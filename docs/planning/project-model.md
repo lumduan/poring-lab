@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: [world-map-flows.md section 15 (the one-studio round), flows-save-load.md (the file format)]
 related: [world-map-flows.md, flows-studio.md, ADR-0020, ../../packages/poring_flow/src/poring_flow/ir.py, "matpilot ADR 0013 (tabs and functions)"]
-next_action: "Build: the engine (packages/poring_flow/project), /maps (nodes + Global), /flows (per-node tabs, functions with inputs), the map-name reader; then matpilot's re-review."
+next_action: "Engine BUILT 2026-11-13 (branch feat/project-engine: poring_flow/project.py + pyproject.py, the routes, the fixtures; ADR-0020 Amendment D). Still to build: /maps (nodes + Global), /flows (per-node tabs, functions with inputs), the map-name reader; then matpilot's re-review."
 title: "The project model: nodes on /maps, tabs per node on /flows, functions like Python"
 date: 2026-11-13
 owner: Batt
@@ -87,6 +87,25 @@ stays ro_agent's Python). Their nodes' flows are simulated and shown.
 Canonical JSON and the project's hash: as IR 2 (sorted keys, no whitespace, NFC; the engine's
 floats as it prints them). A field that is absent by default (zones) stays out of the JSON.
 
+➡️ **The engine's decisions on section 2 (built 2026-11-13, `poring_flow/project.py`; the JSON
+is unchanged):**
+- `stop_when: {"kind": "lit", "value": false}` is the explicit "run until stopped" (IR 2's
+  `run_until_stopped`, 13.5: a workflow cycle needs a stop condition or that choice). The sample
+  project uses it; no new field.
+- Absent by default and out of the JSON: a map node's `zones` and an edge's `entry`. A call's
+  `args` / `kwargs` are always IN a project's JSON. `pos` x / y are floats (the canonical JSON
+  prints `260.0`); `where_budget` defaults to 12, `description` to "", `assumes` / `edges` to [].
+- The shape rules are `ProjectError` problems `{node, tab, path, message}` (the routes' 422
+  `invalid_project`, `problems`): main tabs, tab names, one namespace per node (a function and a
+  variable count alike), parameters (required first, each once), an event takes no inputs, return
+  only inside a def, take_exit only on a map node, edges (login -> character without an entry;
+  character -> map WITH an existing entry; one edge out of a node), at most one Global with id
+  "global", start a login node. An empty main is accepted while drafting (the lint's `empty_main`
+  error on a map node).
+- Tab names also refuse a VARIABLE's name of the same node (a module name clash), and
+  `built_in`: findings at the engine's always-on safety events (when Global writes none) show
+  under `global/built_in/<event>`. The list is GET /flows/catalogue's `tab_name_rule`.
+
 ## 3. Names: imports and overrides (the semantics)
 
 - A node's tabs are ONE namespace: a name defined twice in one node (two tabs) is an error.
@@ -108,6 +127,27 @@ floats as it prints them). A field that is absent by default (zones) stays out o
 - Recursion: refused (a function calling itself, directly or through others): the engine
   inlines or frames calls with a depth bound; a loop is the way to repeat.
 
+➡️ **How the engine runs it (built 2026-11-13, ADR-0020 Amendment D):** a project COMPILES to one
+internal IR 2 flow, so every IR 2 rule holds unchanged. Map nodes are map blocks (the node id is
+the block's name); Global's functions, variables and events are the flow's procedures, variables
+and global events; a node's own functions and variables are procedures / variables of their own
+(an internal name when another node or Global has the same one; texts always show the user's).
+VIRTUAL DISPATCH is compiled by specialisation: a Global function or event that reaches (through
+Global's calls and variables) a name a node overrides gets a copy for that node whose names
+resolve there; a Global event's copy is an override on that node (the effective set shows it
+"inherited", `dispatched: true`, and an info finding names the override it uses). It is exact:
+code runs on the node where it was entered (an exit ends a main, a relocation ends everything).
+Calls frame: arguments bind into a local environment per scheduler frame (an event that cuts a
+function never sees its locals); a call deeper than 32 stops the run (`call_depth`). Further rules:
+- an override keeps its kind (a function for a function, a variable for a variable, an event for
+  an event: else an error); a node's PLAIN function named like a Global event turns that event
+  off there (IR 2's Disable, a warning; refused for dead, hp_critical, unexpected_map);
+- a node's def of a safety-critical event's name replaces it there (a strict override) only
+  where the built-in's rule holds (its body starts with the built-in's step, no looser limits);
+- an event is not called; an event condition cannot call a function (it reads sensors and
+  variables); a parameter cannot reuse a visible function's, variable's or catalogue name;
+- Global's code uses only Global's names (a name only a node defines is "there is no procedure").
+
 ## 4. The Python view (one file per tab)
 
     global/keys.py        def fly_wing():  press_key("F8")
@@ -125,6 +165,19 @@ The engine owns the exact spelling (functions with defaults, *args, **kwargs, re
 positional and keyword arguments) and its round trip (Python -> project and back, per file). A
 file that overrides Global's names says so in a comment line the parser ignores.
 
+➡️ **The spelling (built 2026-11-13, `poring_flow/pyproject.py`, its docstring is the
+reference):** files `<node>/<tab>.py` plus `project.py` (the Config constants, `node("<id>",
+kind=..., pos=(x, y), tabs=[...])`, `edge("<from>", "<to>", entry="<entry>")`). Every file starts
+with the two generated lines and `from poring_flow.learner import *`; a node's file adds
+`from global_ import *` (`global` is a Python keyword: the module takes PEP 8's trailing
+underscore; the folder stays `global/`) and `from .<tab> import *` for its other tabs but main.
+`def go(cell, times=3, *rest, **opts):`, `go(cell("m", 1, 2), times=4)`, `x = pick(3)`,
+`return` / `return x`, an event `@on(hp_percent() < 30, ..., priority=SURVIVAL)` above a def
+without inputs, a map node's main `@map_node("xmas_dun02", entries=[...], zones=zones(...))
+def main():`, a login's `def main():\n    login(server="lab-rathena", credential="lab_gm")`,
+and the override comment `# overrides Global's fly_wing (tab keys)`. A credential that is not a
+plain name prints as `"<redacted>"`.
+
 ## 5. Login like n8n (credentials by name)
 
 - The login block names a SERVER (an environment id of the Settings page) and a CREDENTIAL by
@@ -134,12 +187,33 @@ file that overrides Global's names says so in a comment line the parser ignores.
   (secrets typed human-only, ADR-0004 c) is a later step.
 - The simulator plays login and choose_character as the Maps page's mocks (lib/maps/session.ts).
 
+➡️ **Built 2026-11-13:** the blocks `login(server, credential)` and `choose_character(slot=None,
+name=None)` (blocks.yaml; L1 `session.login` / `session.select_char`, out of `excluded`). Lint:
+`session_place` (only on a login / character node's main), `session_main` (that main is the one
+block), `session_server` (an environment id of config/environments.yaml: an error otherwise; a
+warning unless it is lab-rathena; a warning when the project targets another server),
+`session_credential` (one of lab_gm, lab_player; anything not matching `^[a-z][a-z0-9_]{0,31}$`
+"looks like a secret": an error that never echoes the value, and the project's hash is then never
+returned: null in every route), `session_character` (slot 1-15, a name of session.ts's
+CHAR_NAME), `session_path` (start -> character -> a map node's entry by edges), `session_defs` (a
+warning: a session node's functions never run). The simulator's play list starts with a `login`
+step (0-7 s: `phases` start 0-1, login 1-7) and a `character` step (7-11 s, `enters` the start
+map's entry); the map flow's times follow on the same clock. A scenario whose `start_block` is a
+map node starts there without the session (Run's case).
+
 ## 6. Run (unchanged in effect)
 
 Run belongs to a map node whose main holds "hunt with the runner" (dungeon_hunt) on a map with a
 runner. Its five keys are read from the functions the block names (and the item warp's function),
 resolved on THAT node (its override first, then Global), through calls with literal arguments, to
 exactly one press_key each; the request carries them (POST /flows/run keys), as today.
+
+➡️ **Built 2026-11-13:** `poring_flow.project.runner_keys(project, node_id)` -> the five keys
+(`heal_key`, `fly_key`, `home_key`, `knife_key`, `dagger_key`) and the functions they came from,
+or the problems (no dungeon_hunt, no item warp by function, a function that is not one press, a key
+off the hotbar, two roles on one key). "Through calls with literal arguments": a function's body is
+one press_key, or one call with literal arguments of such a function; a press_key may press its
+function's parameter when every call gives it a literal hotbar key (the lint's `key_argument`).
 
 ## 7. The ready-made project (the fixture both sides test)
 
@@ -149,6 +223,15 @@ character (the remembered slot) -> xmas_dun02 (entry here) with geffen; Global t
 event calling heal, as an example a map can override); xmas_dun02 main: the save point, the hunt
 loop, the wing home. A second ready-made: the two-map sample (town_1 / field_1) on the sample
 sheets.
+
+➡️ **Built 2026-11-13:** `project_xmas_dun02.json` exactly as above (positions login (0,0),
+character (260,0), xmas_dun02 (560,0), geffen (860,0), global (560,220); the zones sha256 is
+config/map_zones/xmas_dun02.yaml's; Global's hp_low: when hp_percent() < 30, rearm above 50,
+survival, insert, resume, body heal(): IR 2's rearm rule needs the re-arm); `project_sample.json`
+(town / field on the synthetic sample sheets, Global keys: butterfly_wing = F9, `stop_when: false`
+= run until stopped); the Maps page's trace `lib/maps/fixtures/project_sample_trace.json` (from the
+login, horizon 71 s, encounters, seed 3). Both lint without an error (xmas_dun02: no static data,
+with the zones provider, with the local KB when present; the sample on its sheets).
 
 ## 8. Not converted (Batt's answer 6)
 
@@ -160,7 +243,7 @@ The engine may keep IR 2 internally as its execution form; nothing user-facing r
 
 | Part | Who | Notes |
 |---|---|---|
-| Engine: packages/poring_flow (project models, Python view, lint, simulate, routes) | subagent | the contract above; keeps the safety semantics of IR 2 |
+| Engine: packages/poring_flow (project models, Python view, lint, simulate, routes) | subagent | the contract above; keeps the safety semantics of IR 2. ➡️ BUILT 2026-11-13 (feat/project-engine; the ➡️ notes in sections 2-7) |
 | The map-name reader (pixels: which map she is on) | subagent | the start check's map line ✓ only when read; the runner's start refuses another map |
 | /maps: login / character / map / Global nodes, edges, double-click -> /flows?node= | the parent or a subagent | lib/flow/project.ts is the shared TS model |
 | /flows: one node's tabs (main + the user's), functions with inputs, events as functions, Python per tab, Run | the parent | matpilot's ADR 0013 as the model (MIT) |

@@ -256,6 +256,10 @@ New routes on the PUBLIC port, for LAN viewers only:
 | `POST /flows/simulate` | IR + start → trace |
 | `POST /flows/python` | IR → the Python view (MW1's printer) |
 
+➡️ SUPERSEDED 2026-11-13 ([project-model.md](project-model.md), ADR-0020 Amendment D): the three
+POST routes take a PROJECT (format 3), `{"project": ..., "world": ..., "scenario"?: ...}`; an IR
+body (`{"flow": ...}`) is a 400 `format_changed`. The shapes are in routes_flows.py's docstring.
+
 Rules for these routes:
 - **Hostile input:** every body is user-authored, so MW1's caps apply (1 MiB, depth 256, its
   validation). Plus the console's Origin, the CSRF token (as `/settings`), and 20 requests/min per
