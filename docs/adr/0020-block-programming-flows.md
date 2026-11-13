@@ -2497,8 +2497,43 @@ is rewritten. The contract and the stages are live-blocks.md; what stage 1 built
   1 plays them as the SAFE END (everything held released, the run ends, named); their bodies
   (respawn, the escape, the /where read) play live in stage 2. While the hunt core runs the
   runner's own survival plays; its tick hook is where stage 2 moves survival into the box's events.
+  ➡️ **Stage 2 BUILT 2026-11-14 (Amendment F):** the box's own events play inside the hunt core on
+  every runner tick; the runner's potion, Fly Wing on HP and boss fly are off where they do. The
+  three built-ins keep the safe end (their bodies are a later stage).
 - **Relocation reads the map's NAME** (minimap_id.py: no /where typed); the player types no line,
   ever (player mode).
 - **The run-start check** (section 5, runstart.py) gates it at POST /flows/run/project: 0 lint
   errors, the live set, the verdict with one difference written down -- a `bindings` readiness
   item on a hunt core is answered by the runner, which is that block's binding (`live.OWN_BINDING`).
+
+## Amendment F (2026-11-14, Batt decided stage 2): the box's survival events INSIDE the hunt core
+
+**Batt (2026-11-13 ~22:0x, translated; [live-blocks.md](../planning/live-blocks.md) section 2a):**
+"Heal, Fly Wing, Knife swap: write every one of them as a FUNCTION, don't make one block. Heal:
+press F1 (the White Potion) when HP < 30 %. Fly Wing: press F8 when a boss is seen or HP < 25 %."
+This amendment ADDS to Amendment E; nothing above is rewritten. What was built is live-blocks.md
+section 3.2.
+
+- **Events play inside the hunt core.** On a map node with a hunt core, every user event active
+  there (the node's own, Global's) is evaluated on EVERY tick of the runner -- its survival point
+  and its quick read inside a long action -- with that tick's values, by the engine's own rules
+  (`runtime.Sim._perceive` / `_fire`), and every due body plays at once at that safe point (the
+  pre-empts first, a ReleaseAll before each, then the inserts) through the runner's OWN press of
+  that role (`dungeon_hunt.run(..., box_plays=...)`, dungeon@9.49: one Agent, one writer; the
+  runner waits while the box plays). `runtime.py` gained `_perceive(which)` and `_play_sync`.
+- **What may play there** is `live.hunt_plan` (the ONE place): the sensors hp_percent, sp_percent
+  and the new `sees_boss` (the runner's boss read: its boss guard's Battle Log line); presses of
+  dungeon_hunt's heal and fly keys only; calls, if, set, return; `then` resume. Anything else is
+  refused before any input, named.
+- **The runner's own handler for each thing the box plays is switched off** for that run (the
+  potion, the Fly Wing on HP, the boss fly); everything else stays the runner's (the HP-rate fly,
+  the Garm Baby box, the stock, the dead jump, an unread position, the NPC guard, the knife, the
+  way home). After a box Fly Wing the runner runs its own after-the-fly steps.
+- **A correction to 2.5's insert rule (the simulator too):** an insert's pacing counts
+  `cooldown_s` from the end of its last BODY RUN (`_paced`). Until 2026-11-13 the fire's own
+  provisional end held every insert with a cooldown back by `cooldown_s` after its fire, and a
+  repeating insert ran every 2 x `cooldown_s` -- against "an INSERT event runs at the running
+  flow's next SAFE POINT". A one-shot's fires are unchanged; an insert's run (and with it a
+  repeating insert's next fire) moved earlier.
+- **Proven by** a live A/B against the runner alone (`scripts/stage2_ab.py`), its bar
+  pre-registered in live-blocks.md 3.2 before any live run.

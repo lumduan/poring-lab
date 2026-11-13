@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: the PLAYER BUILT 2026-11-13 ~22:3x (feat/live-player, offline tests only; NOT run live yet), the one-box project and the pages' Run on feat/one-box."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Stage 1: merge feat/live-player (the player, section 3's BUILT notes) and feat/one-box (the one-box project, Run on /flows and /maps); the first LIVE run of the player needs Batt's OK, with her placed on xmas_dun02 by a person. Then stage 2."
+next_action: "Stage 2: merge feat/stage2, deploy (backend, Run helper), then the A/B of section 3.2 (scripts/stage2_ab.py run; its bar pre-registered there) -- the parent runs it. Then stage 3 (the Knife swap as two functions, the respawn, the weight home)."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -47,7 +47,7 @@ owner: Batt
 | Stage | What becomes blocks | Proven by |
 |---|---|---|
 | 1 | The ONE-BOX project (START > xmas_dun02). The LIVE BLOCK PLAYER: press key, wait, wait until (HP, weight, dead, the map's name: pixels), if / while / repeat, functions with inputs, variables, events, stop, the item warp by a function (its arrival read on the minimap). The hunt core as ONE block played IN-PROCESS (the runner's loop as a library with a tick hook: one process, one input writer). Run on /flows and on /maps (from START, box by box). | offline: fakes prove the input it sends; live: Batt's OK, she placed on xmas_dun02 by a person |
-| 2 | SURVIVAL out of the runner into the box's EVENTS (functions with a trigger, section 2a): heal (F1 at HP < 30 %), the Fly Wing (F8 on a boss or HP < 25 %), stock out, the dead jump, the Garm Baby, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`); the event plays through the tick hook. | live A/B against the monolithic runner: deaths, potions, flies, kills/h |
+| 2 | SURVIVAL out of the runner into the box's EVENTS (functions with a trigger, section 2a): heal (F1 at HP < 30 %), the Fly Wing (F8 on a boss or HP < 25 %), stock out, the dead jump, the Garm Baby, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`); the event plays through the tick hook. ➡️ BUILT 2026-11-14 for heal and the Fly Wing (section 3.2; the switch is a new run() argument, not a flag); stock out, the dead jump, the Garm Baby and an unread position stay the runner's (a later stage) | live A/B against the monolithic runner: deaths, potions, flies, kills/h (➡️ pre-registered in 3.2) |
 | 3 | The Knife swap as two FUNCTIONS of presses and a wait (section 2a), the respawn, the weight home, the end | live A/B: steals, swaps, respawn, home |
 | 4+ | The CORE as PRIMITIVE blocks + ONE FUNCTION PER MONSTER (attack_myst_case, attack_cookie, ...; section 2a), and use_model (the trained data) | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) |
 
@@ -172,14 +172,169 @@ The run, in order (each step refuses before any input until the Agent opens):
   map (its own time box, a weight exit with no wing) -> the box's main goes on.
 - **The safety-critical three** a project does not write play as the SAFE END in stage 1 (dead,
   HP under 20 %, an unexpected map: release, end, named); while the hunt core runs, the runner's
-  own survival plays and the box's events wait.
+  own survival plays and the box's events wait. ➡️ Stage 2 (3.2): the box's own events play inside
+  the hunt core now; the three built-ins still wait there (the runner's own rules cover them).
 - **The record**: `/dev/shm/poring-lab-demo/<time>-play-<label>/events.jsonl` (`run_start`,
   `block` with its node path, `key`, `event`, `hp_read` each second, the hunt core's mirrored
   events and `hunt_start` / `hunt_end`, `run_end` with its words); the helper's Live tracker reads
   it (status.json `live`: `node`, `keys`, `fired`, `last_event`, `end.words` besides the runner's).
 - **Not yet (stage 2)**: survival through the tick hook into the box's events; the respawn, the
   escape and the /where read as live blocks; the check of a project (POST /flows/run/check with
-  the flow "project" is the runner's check for now).
+  the flow "project" is the runner's check for now). ➡️ The first BUILT 2026-11-14 (3.2); the rest
+  is still not built.
+
+### 3.2 ➡️ Stage 2 BUILT 2026-11-14 (feat/stage2; offline only, NOT run live)
+
+Batt's words (section 2a): "Heal: press F1 (the White Potion) when HP < 30 %. Fly Wing: press F8
+when a boss is seen or HP < 25 %", each a FUNCTION. The one box (`project_xmas_dun02.json` =
+`xmasProject()`, byte-identical canonical; 0 lint errors) has a third tab, `survival`:
+
+    @on(hp_percent() < 30, until=hp_percent() >= 31, priority=SURVIVAL, mode=INSERT, cooldown_s=0.7)
+    def drink():
+        heal()            # tab keys: press_key("F1"), the White Potion
+
+    @on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)
+    def fly_away():
+        fly_wing()        # tab keys: press_key("F8"), the Fly Wing
+
+**Why these trigger fields** (the runner's own pacing, `dungeon_hunt.sustain`):
+- `drink` is a REPEATING event (`until`): the runner presses a potion on every tick under its line,
+  at most every 0.7 s (at most 3 in 2 s). The box: while HP reads under 30 %, a potion at most
+  0.7 s after the last one ended (`cooldown_s`), until HP reads 31 % or more (the engine's
+  hysteresis rule wants the stop one readout step past the start: the exact complement `>= 30`
+  is a lint warning). INSERT, class survival: it never cuts what it lands in.
+- `fly_away` is a ONE-SHOT (no `until`, no `rearm`): a Fly Wing on the edge -- a boss line, or HP
+  falling under 25 % -- re-armed once its condition reads false and 3 s have passed since its Fly
+  Wing (the runner's Fly Wing pace: 3 s; its boss fly waits 2 s). A boss line is a momentary cue:
+  one Fly Wing per sighting, as the runner's. After the jump she is elsewhere: the next Fly Wing
+  needs a new boss line or a new fall under 25 % (between them it is the potion's job); a fast
+  fall right after a jump is the runner's HP-RATE fly, which stays the runner's. A repeating
+  version would need `until` to hold, and `sees_boss()` is unknown outside the hunt core and on a
+  quick read: it would repeat there. PRE-EMPT, class critical: a ReleaseAll before its press (the
+  engine's rule), and it goes before `drink` when both are due (drink then plays at the same safe
+  point, as the engine's inserts do after a pre-empt).
+- Names: `escape` is a catalogue block (hp_critical's body) and `heal` the keys function; the
+  sensor is `sees_boss()`, because `boss_seen` is a map event of the IR 2 samples
+  (town_warp_farm, farm_loop) and a sensor of that name would make them invalid.
+- The thresholds are Batt's: 30 % / 25 %. The runner's own (P2) are 40 % (potion) and 20 % (Fly
+  Wing). The A/B measures that difference with the rest.
+
+**The sensor `sees_boss()`** (blocks.yaml `live: true`, cue; the simulator's scenario key;
+`dungeon_hunt.HuntTick.boss`): the runner's OWN boss read of that tick -- its boss guard's
+(--engage-screen) Battle Log line, damage or taken, whose bracketed name fits the map's boss or
+one of its summons (`boss_of` over `boss_names`: the Stormy Knight, the Garm Baby, ...). It is not
+the detector's boxes: the detector's Garm Baby box (--garm-fly) is the runner's Garm Baby rule
+and stays the runner's. Read only inside a hunt core (elsewhere unknown: it never fires there);
+guard_tick's quick reads carry no boss.
+
+**How the hook plays them** (dungeon@9.49, `run(a, hook=..., session=..., box_plays=...)`):
+
+    the runner's tick (run loop)                         the player (flow_play LivePlayer.hunt_tick)
+      HP read; the stop hook (stage 1)
+      the Battle Log's new lines -> boss_hit
+      box_on: hook_survive(HuntTick(..., boss_hit), box_press)
+                                                  -->  the box's sensors from the tick
+                                                       _perceive(its events) -> _fire (limits)
+                                                       the pre-empts now (ReleaseAll, body), then
+                                                       the inserts (_run_inserts), each press ->
+                       box_press(code, why)       <--  the runner's OWN press of that role: a
+                                                       stand-up, the unread escape's end, the dagger
+                                                       before a bare fly, its count, its record,
+                                                       the stock read after it
+      a box Fly Wing: the runner's own after-the-fly steps (fly_at, the target / loot / mode /
+        position reset, the 3-s Fly Wing pace, 1 s) and on a boss line its boss fly's end (continue)
+      sustain(off=the box's): the HP-rate fly, Heal; the Garm Baby box; the boss guard (no fly of
+        its own for a Battle Log line), the box engagement it blocks for 30 s
+    guard_tick, inside a long action: the same call (quick, no boss); a box Fly Wing ends the action
+
+- A tick with no HP read and no boss line decides nothing (the runner's own sustain reads nothing
+  without an HP read either).
+- An event's limit (handler_runaway, max_per_run) or a key the hunt core does not hand the box ends
+  the run through the runner's NORMAL end (its safe-end escape, its way home), and the player ends
+  with that reason, in words.
+- `live.hunt_plan` (the ONE place) refuses before any input an event on a hunt-core node that reads
+  anything but hp_percent / sp_percent / sees_boss, presses another key than dungeon_hunt's heal and
+  fly ones, holds a wait / loop / exit / stop, presses nothing, presses the Fly Wing on a condition
+  that reads neither HP nor the boss, escalates, or does not resume (the backend's `not_live` names
+  the same).
+
+**What the box plays and what stays the runner's** (per run; `box_plays` from `live.hunt_plan`):
+
+| The runner's handler | With the one box | Why |
+|---|---|---|
+| the potion (`potion_below`, 40 %) | OFF: `drink` | an event presses the heal key |
+| the Fly Wing on HP (`fly_below`, 20 %) | OFF: `fly_away` | an event presses the fly key on hp_percent |
+| the boss fly (a Battle Log boss line) | OFF: `fly_away` | an event presses the fly key on sees_boss |
+| the HP-RATE fly (150 HP/s under 50 %) | the runner's | not in the box (it waits 3 s after any box Fly Wing, as after its own) |
+| the Garm Baby box (--garm-fly), the boss guard's 30-s box avoidance | the runner's | not in the box |
+| stock out / stock keep, the dead jump, an unread position, the NPC guard, the safe end's escape, the knife, the way home | the runner's | stage 3 and later |
+
+A box without such events (no survival tab) passes no `box_plays`: the runner plays exactly as in
+stage 1, and the CLI (`dungeon_hunt.py run`, the old Run path) passes neither hook nor box.
+
+**The record**: the player's events.jsonl has each event fired (`event`: its name, its node path,
+`reading` -- the values its condition read --, `in: "hunt"`), the runner's press records mirrored
+(`press` what potion / fly, why "box drink (hp_percent 28)" or "box fly_away (hp_percent 100,
+sees_boss True)": the live line counts potions and flies from them), `hunt_start` with the events
+and box_plays, `hunt_end` with its survive calls. The runner's own session: run_start `box_plays` /
+`box_version`, `escape {by: "box", boss}`, `boss_guard {box: ...}`, the counters box_potion /
+box_fly.
+
+**The engine, corrected (ADR-0020 Amendment F)**: an insert's pacing counts `cooldown_s` from the
+end of its last body run; before, the fire's own mark held it back `cooldown_s` (the potion would
+have waited 0.7 s). The simulator plays the box's events too (a scripted `sees_boss`).
+
+**Versions**: `dungeon_hunt.VERSION` stays dungeon@8.7; `SURVIVAL_EVENTS_VERSION` = `live.VERSION`
+= `flow_play.VERSION` = 9.49 (stage 1's `LIVE_BLOCKS_VERSION` stays 9.48); the runner export
+counts neither (no feature of the runner's own play: its description is unchanged).
+
+**THE A/B** (`scripts/stage2_ab.py`; run by the parent; NOT run yet):
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage2_ab.py plan  --label s2ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage2_ab.py run   --label s2ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage2_ab.py score --label s2ab-1114
+
+- Before it: merged and deployed; ASSIST; the Rogue in the game (on xmas_dun02 or at her save
+  point); the Run helper idle; no chain. `plan` prints everything it will do and refuses before any
+  input if the box cannot play.
+- The arms, the same runner settings for both (the Run config, the box's five keys, --minutes M):
+  A = `dungeon_hunt.py run` with the old Run path's argv (`flow_run.command`, player mode); B =
+  `flow_play.py play` of the box (its time box M minutes) with those settings as its runner
+  config. Order AB, BA, AB, BA (each pair's first arm alternates).
+- The setup before every run, the same for both: the read (weight, the F1 / F8 / F9 counts);
+  clear-bag (etc, use) at 40 % or an unread weight; the lab GM's `@warp xmas_dun02 7 21` or
+  `114 23`, alternating (the chat guard never meets a line 3 times in a row), until the minimap
+  reads xmas_dun02; `@item 602` only under 2 Butterfly Wings (to 3), `@item 601` under 7 Fly Wings
+  (to 10), `@item 504` under 7 White Potions (to 10); the chat input closed and read closed. The
+  detect server once for the series. A STOP file in its folder ends it before the next run.
+- The score per run, from the RUNNER's own session (the same reader for both arms) and B's player
+  session: minutes, deaths, potions, Fly Wings by cause (hp, rate, boss, garm, pos_unread, stuck,
+  unreach, end, other), kills / h, loot steps / h, the lowest HP, the box's events fired.
+
+**THE PRE-REGISTERED BAR** (written 2026-11-14, before any live run; `stage2_ab.BAR`): B must hold,
+against A, over the valid pairs:
+
+| Line | B must hold |
+|---|---|
+| deaths | B's total <= A's total |
+| potions | B's potions per hour <= A's + 6 |
+| Fly Wings (all but the end's own escape) | B's per hour <= A's + 4 |
+| kills per hour | the mean paired difference (B - A) >= -2 x its standard error, over at least 3 valid pairs |
+| a valid run | at least 80 % of M minutes on the runner's own clock; a pair counts when both runs are valid |
+
+Reported, not judged: loot steps per hour (the mean paired difference), the lowest HP, the boss
+flies, the Garm Baby flies, the box's events fired. The verdict: PASS when every judged line
+passes, FAIL when one fails, INCONCLUSIVE when fewer than 3 pairs are valid (kills per hour
+unjudged) and nothing failed. Why these margins: tonight's two 10-min runs pressed 0 potions and
+0 Fly Wings, so the counts are small; "6 potions / 4 Fly Wings an hour more" is about one more
+potion every 10 min and one more Fly Wing every 15 min -- within reason for a lower potion line
+(30 % vs 40 %) and a higher Fly Wing line (25 % vs 20 %); kills per hour is held to the pairs' own
+noise.
+
+**Not yet (stage 3)**: the Knife swap as two functions (F4, wait 100 ms, F5 and back), the respawn,
+the weight home, the end; stock out, the dead jump, the Garm Baby, an unread position as the box's
+events; the built-ins' bodies (respawn, escape, /where) live; `sees_boss()` outside a hunt core.
 
 ## 4. Not in stage 1
 
@@ -198,7 +353,8 @@ In order; each step only after the one before is proven; nothing of the hunt pla
    deaths, potions). The Stormy Knight's schedule is checked first (memory: the MVP).
 3. Stage 2: heal and the Fly Wing as the box's EVENTS (section 2a) through the tick hook; the
    runner's own potion and fly switched off where the box plays them; offline tests; live A/B
-   (the runner vs the box), alternating runs, as many pairs as the night allows.
+   (the runner vs the box), alternating runs, as many pairs as the night allows. ➡️ BUILT
+   2026-11-14 (section 3.2, feat/stage2); its A/B pre-registered there, not run yet.
 4. Stage 3: the Knife swap as functions, the respawn, the weight home (the Knife question in the
    report for Batt: the strike between F4 and F5, or not).
 5. Stage 4 begins: use_model (the trained data block) and the first primitives (choose_target,
