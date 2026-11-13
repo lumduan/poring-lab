@@ -23,7 +23,7 @@ test("the example run tells its story: a choice by worth, two kills, a loot step
   for (const s of r.steps) assert.ok(ids.has(s.block), `${s.block} is a block of the description`);
   for (let i = 1; i < r.steps.length; i++) assert.ok(r.steps[i].t >= r.steps[i - 1].t, "steps in time order");
   const b = blocks(r);
-  for (const id of ["identity", "stock", "warp", "look", "choose", "strike", "lock_on", "kill", "fight_over", "loot", "explore", "walk_click", "garm", "garm_fly", "drink", "lead", "wing_hp_fly", "end", "home"]) assert.ok(b.includes(id), id);
+  for (const id of ["identity", "stock", "start_here", "look", "choose", "strike", "lock_on", "kill", "fight_over", "loot", "explore", "walk_click", "garm", "garm_fly", "drink", "lead", "wing_hp_fly", "end", "home"]) assert.ok(b.includes(id), id);
   // the first choice is by worth, not by distance: the farther mystcase beats the near cookie
   const first = r.steps.find((s) => s.block === "choose");
   assert.match(first?.text ?? "", /^the mystcase scores/);

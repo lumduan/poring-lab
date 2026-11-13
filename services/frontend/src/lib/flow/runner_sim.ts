@@ -103,9 +103,9 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
   // --- the setup (the run hat's first blocks)
   say(0, "run", `the run starts: ${doc.script} on ${doc.map}`, "note");
   say(0, "identity", `the status window names the ${doc.char}: go on`);
-  say(0, "stock", `the bag gets ${potions} potions and ${wings} Fly Wings`);
-  say(0, "weight", `the bag is under ${pct(N("char.etc_hold_max"))}: go on`, "decide");
-  say(0, "warp", `warped to (${N("PATROL_START.x")}, ${N("PATROL_START.y")}); the map is cleared`);
+  say(0, "stock", `the hotbar shows ${potions} potions and ${wings} Fly Wings (at least ${N("PLAYER_MIN_HEALS")} and ${N("PLAYER_MIN_WINGS")}): go on`);
+  say(0, "weight", `the bag is under ${pct(N("WEIGHT_MAX"))}: go on`, "decide");
+  say(0, "start_here", "she starts where you left her, on the map's open ground (no warp, no GM command)");
   say(0, "timebox", `the time box: ${minutes} minutes`);
 
   let mode: "search" | "fight" | "after" = "search";
@@ -356,7 +356,7 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
       wings -= 1;
       say(tEnd, "end_fly", "still in a fight (or HP under half): a Fly Wing first", "safety");
     } else say(tEnd, "end", `no hit in the last ${N("END_HOT_S")} s and HP over ${pct(N("END_FLY_BELOW"))}: no Fly Wing needed`, "decide");
-    say(tEnd, "home", "warp home: the run is over", "end");
+    say(tEnd, "home", `a Butterfly Wing (${String(doc.params["HOME_KEY"]?.value ?? "F8")}) home, if the hotbar shows one: the run is over`, "end");
   }
   return { steps, end, kills: kills.length, picks, potions: p0 - potions, wings: w0 - wings, strikes };
 }

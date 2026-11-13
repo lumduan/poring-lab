@@ -40,29 +40,32 @@ SCRIPTS = ROOT / "scripts"
 OUT_DIR = ROOT / "services" / "frontend" / "src" / "lib" / "flow" / "runners"
 FORMAT = 1
 
-# The base command, as the night pilots ran it (rogue-xmas02.md 4CM's p81-p83; --value-target
-# joined the base by Batt's decision, 4CQ Amendment AC 1, 2026-11-12). --seed / --label vary per
-# run and are left out.
-BASE_COMMAND = [
-    "--char", "rogue", "--map", "xmas_dun02", "--strategy", "P2", "--search", "patrol",
-    "--walk-trust", "--npc-guard", "--miss-cue", "--loot", "trim", "--clear-map",
-    "--minutes", "25", "--box-strike", "--box-now", "--self-recheck", "--still-strike",
-    "--engage-screen", "--reach-check", "--far-single", "--far-approach", "--explore",
-    "--walk-pick", "--kill-gap", "--loot-first", "--walk-pick-step", "--quiet-scan",
-    "--garm-fly", "--garm-confirm", "2", "--late-confirm", "--still-target", "--lead-press",
-    "--value-target", "--hud",
-]  # fmt: skip
-# The optional flag set (not in the base): the Knife opener (rogue-xmas02.md 4CK; Amendment AC 1:
-# bare hands retired, the Knife opener stays a flag).
-OPTIONAL = [
-    {
-        "name": "knife_opener",
-        "title": "the Knife opener",
-        "flags": ["--bare-steal", "--bare-ready", "--steal-opener", "F4", "--swap-gap"],
-        "note": "Optional, OFF in the base: open each new target with the weak Knife (F4) so "
-        "Snatcher steals before it dies, then the dagger goes back on (F5).",
-    }
-]
+# The base command: the /flows Run button's own (scripts/flow_run.py FLOWS["xmas_dun02_rogue"]; Batt
+# 2026-11-13: the Knife base of rogue-xmas02.md 4DQ, played as a player). Read from flow_run.py, so
+# the page can never describe another command than the one Run starts. --seed / --label vary per run
+# and are left out.
+sys.path.insert(0, str(SCRIPTS))
+import flow_run as _fr  # noqa: E402
+
+_RUN_FLOW = _fr.FLOWS["xmas_dun02_rogue"]
+
+
+def _without_seed(argv: list[str]) -> list[str]:
+    out, skip = [], False
+    for tok in argv:
+        if skip:
+            skip = False
+        elif tok == "--seed":
+            skip = True
+        else:
+            out.append(tok)
+    return out
+
+
+BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minutes),
+                *_RUN_FLOW.flags]  # fmt: skip
+# The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
+OPTIONAL: list[dict[str, Any]] = []
 
 # Block styles: MatPilot's categories (lib/flow/theme.ts) + the runner view's own (runner.ts)
 S_HAT, S_SETUP, S_SENSE = "mp_start_blocks", "mp_setup_blocks", "mp_sensor_blocks"
@@ -139,24 +142,26 @@ def spec() -> list[Node]:
             step(
                 "stock",
                 S_SETUP,
-                "stock up: {derived.potions} potions and {derived.wings} Fly Wings",
+                "read her stock on the hotbar: at least {PLAYER_MIN_WINGS} Fly Wings and "
+                "{PLAYER_MIN_HEALS} heal items",
                 [
-                    "stock_up(potions=$(derived.potions), wings=$(derived.wings))  # @item only "
-                    "what is missing"
+                    "stock = hotbar_stock()  # the digits the hotbar draws: a player has no @item",
+                    'if too_little(stock): stop("bring more Fly Wings / heal items first")',
                 ],
-                "The lab's GM commands top the bag up to the run's stock: her own potion count "
-                "(potions_target: the Rogue's own number outranks the strategy's) and the "
-                "strategy's Fly Wings. Only the missing ones are added.",
-                code=["potions_target"],
+                "A normal player cannot conjure items, so the run never adds any (--player-mode): "
+                "it reads the counts on the hotbar and will not start with less. You bring the "
+                "stock; the run uses it.",
+                flags=["--player-mode"],
+                code=["player_stock_refused"],
             ),
             cond(
                 "weight",
                 S_IF,
                 [
                     Branch(
-                        "the bag is {char.etc_hold_max:pct} % full or more: stop (a person "
-                        "empties it)",
-                        'if weight_share() >= CHAR["etc_hold_max"]:  # she never drops her loot',
+                        "the bag reads {WEIGHT_MAX:pct} % full or more (or does not read): stop "
+                        "(a person lightens it)",
+                        "if weight_unread() or weight_share() >= WEIGHT_MAX:  # never dropped",
                         [
                             step(
                                 "weight_stop",
@@ -171,24 +176,22 @@ def spec() -> list[Node]:
                     )
                 ],
                 "At 50 % weight the server gives no natural HP / SP regeneration, so the run "
-                "refuses to start this close to it.",
-                code=["etc_hold_refused"],
+                "refuses to start this close to it. A player's run never throws loot away.",
+                code=["player_weight_refused"],
             ),
             step(
-                "warp",
+                "start_here",
                 S_MOVE,
-                "warp to the patrol start ({PATROL_START.x}, {PATROL_START.y}) and clear the map",
+                "start where she stands (on the map's open ground, within {PLAYER_POS_S} s)",
                 [
-                    "warp_to($(cmd.map), *PATROL_START[$(cmd.map)][0])  # @warp to the loop's "
-                    "first cell",
-                    'type_line("@killmonster2")  # --clear-map: the monsters start dead and '
-                    "respawn",
+                    "here = minimap_cell()  # the minimap's readout, no warp",
+                    'if not on_route_grid(here): stop("walk her onto the open ground first")',
                 ],
-                "She is warped onto the map's patrol loop (never into the maze in the middle), and "
-                "--clear-map kills every monster on the map once, so the big boss is not waiting "
-                "for her. Every monster respawns as usual.",
-                flags=["--clear-map"],
-                code=["map_setup_lines", "patrol_start"],
+                "You put her on the map yourself, the way a player walks in. There is no warp and "
+                "no GM command clears the map: the big boss may be alive, and the boss guard "
+                "below escapes it with a Fly Wing.",
+                flags=["--player-mode"],
+                code=["player_start_refused"],
             ),
             step(
                 "timebox",
@@ -241,9 +244,13 @@ def spec() -> list[Node]:
             step(
                 "home",
                 S_MOVE,
-                "warp home",
-                ["warp_home()  # outside the measured window"],
-                "The run is over; she goes back to her save point.",
+                "go home on a Butterfly Wing ({HOME_KEY}) if the hotbar shows one",
+                ["press_home_if_stocked()  # one press; none on the hotbar: she stays put"],
+                "A player's way home: the Butterfly Wing takes her to her save point. The run "
+                "also ends by itself when her Fly Wings fall to {PLAYER_WINGS_KEEP}: the last "
+                "one stays for the escape.",
+                flags=["--player-mode"],
+                code=["player_home_refused"],
             ),
         ],
     )
@@ -949,13 +956,15 @@ def knife() -> Node:
         "knife_opener",
         "hat",
         S_OPT_HAT,
-        "optional (not in the base): the Knife opener",
+        "Batt's technique, ON in this flow: the Knife opener",
         [
             "def knife_opener(eyes):",
-            '    """--bare-steal --bare-ready --steal-opener F4 --swap-gap: OFF in the base"""',
+            '    """--bare-steal --bare-ready --steal-opener F4 --steal-cue popup --swap-gap"""',
         ],
-        "An optional flag set, not in the base. The Rogue's Snatcher steals when she HITS, so a "
-        "weak first weapon keeps the monster alive for more hits, and more steals. The swaps "
+        "Batt's own technique (his 2026-11-12 run: a steal on 91 % of kills), in the base since "
+        "rogue-xmas02.md 4DQ (a steal on 78 % of kills, common items +8 % an hour). The Rogue's "
+        "Snatcher steals when she HITS, so a weak first weapon keeps the monster alive for more "
+        "hits, and more steals; once it stole, the dagger goes back on to kill fast. The swaps "
         "are hotbar keys, each read back from the hotbar's pixels.",
         flags=["--bare-steal", "--bare-ready", "--steal-opener", "--swap-gap"],
         body=[
@@ -1127,6 +1136,12 @@ def params(cmd: dict[str, Any]) -> list[Param]:
             "the patrol start's y",
         ),
         const("READ_HZ", "ticks a second (the loop's rhythm)"),
+        const("PLAYER_MIN_WINGS", "--player-mode: Fly Wings on the hotbar to start at least"),
+        const("PLAYER_MIN_HEALS", "--player-mode: heal items on the hotbar to start at least"),
+        const("PLAYER_WINGS_KEEP", "--player-mode: the run ends at this many Fly Wings"),
+        const("PLAYER_POS_S", "--player-mode: her cell must read within this long (s)"),
+        const("WEIGHT_MAX", "the weight share a run refuses to start at"),
+        const("HOME_KEY", "the Butterfly Wing's hotbar key"),
         const("FIGHT_TAKEN_S", "a hit on her within this long = still in a fight (s)"),
         const("HP_DROP_PTS", "HP percent points falling ..."),
         const("HP_DROP_S", "... within this long (s) = a hit the log did not show"),
