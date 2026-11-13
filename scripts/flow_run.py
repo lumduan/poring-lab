@@ -62,13 +62,11 @@ VERSION = 1
 # The runner's fixed part, as the night chain ran it (docs/records/pilot-chain/run_pilot_v3.sh +
 # pilot_rec2.sh's BASE) WITHOUT --clear-map (a GM line: --player-mode refuses it), --seed fixed.
 FIXED = [
-    "--char", "rogue", "--map", "xmas_dun02", "--strategy", "P2", "--search", "patrol",
-    "--walk-trust", "--npc-guard", "--miss-cue", "--loot", "trim", "--seed", "20261105",
-    "--box-strike", "--box-now", "--self-recheck", "--still-strike", "--engage-screen",
-    "--reach-check", "--far-single", "--far-approach", "--explore", "--walk-pick", "--kill-gap",
-    "--loot-first", "--walk-pick-step", "--quiet-scan", "--garm-fly", "--garm-confirm", "2",
-    "--late-confirm", "--still-target", "--lead-press",
+    "--char", "rogue", "--map", "xmas_dun02", "--strategy", "P2", "--seed", "20261105",
 ]  # fmt: skip
+# ➡️ 2026-11-13 ~15:2x (Batt: "do all of them"): every technique of the night chain's base is a
+# SWITCH now (scripts/flow_config.py), its default the base's own (the flow's ``defaults``); FIXED
+# keeps only what flow_config.NOT_SETTINGS names: the character, the map, the strategy, the seed.
 
 
 @dataclass(frozen=True)
@@ -108,22 +106,7 @@ FLOWS: dict[str, Flow] = {
         "xmas_dun02_rogue",
         "xmas_dun02: the Rogue with Batt's Knife swap (the base of 4DQ), as a player",
         120,
-        (
-            "--value-target",
-            "--hud",
-            "--hud-fast",
-            "0.2",
-            "--loot-items",
-            "xmas02fi5",
-            "--loot-memory",
-            "--bare-steal",
-            "--bare-ready",
-            "--steal-cue",
-            "popup",
-            "--swap-gap",
-            "--player-mode",
-            "--respawn",
-        ),  # fmt: skip
+        ("--player-mode",),  # Batt: the Run button plays as a player (flow_config.NOT_SETTINGS)
         "rogue-xmas02.md 4DQ (the base) + --player-mode (Batt 2026-11-13: no GM lines) + the "
         "map's two exits (dungeon@9.41, Batt 2026-11-13): weight over 50 % -> the Butterfly Wing "
         "home; a death -> the death dialog's move to saved location",
@@ -146,6 +129,65 @@ FLOWS: dict[str, Flow] = {
             "weight_home": 0.50,
             "respawn_at": "645,481",
             "respawn_confirm_at": "714,405",
+            # the runner numbers it reads from flags of their own (flow_config: a --tune would miss)
+            "WALK_AHEAD": 7,
+            "WALK_EVERY_S": 1.2,
+            "BOX_EVERY_S": 1.0,
+            # every TECHNIQUE (2026-11-13 ~15:2x): the night chain's base, as it ran (4DQ)
+            "minutes": 120,
+            "knife_swap": True,
+            "bare_ready": True,
+            "steal_cue": "popup",
+            "swap_gap": True,
+            "weight_exit": True,
+            "respawn": True,
+            "engage_screen": True,
+            "reach_check": True,
+            "unreach_escape": False,
+            "miss_cue": True,
+            "late_confirm": True,
+            "exp_first": True,
+            "kill_gap": True,
+            "quiet_scan": True,
+            "defend_box": False,
+            "quick_drop": False,
+            "quick_drop_scaled": False,
+            "value_target": True,
+            "box_strike": True,
+            "box_now": True,
+            "queue": False,
+            "self_recheck": True,
+            "still_strike": True,
+            "still_target": True,
+            "lead_press": True,
+            "far_single": True,
+            "near_single": False,
+            "near_single_still": False,
+            "far_approach": True,
+            "skip_own_cells": False,
+            "walk_stop": False,
+            "box_ignore": 2,
+            "loot": "trim",
+            "loot_items": "xmas02fi5",
+            "loot_memory": True,
+            "loot_recheck": False,
+            "loot_aim": False,
+            "loot_first": True,
+            "search": "patrol",
+            "explore": True,
+            "explore_cover": False,
+            "walk_through": False,
+            "walk_pick": True,
+            "walk_pick_step": True,
+            "walk_trust": True,
+            "npc_guard": True,
+            "garm_fly": True,
+            "garm_confirm": 2,
+            "boss_walk": False,
+            "unread_step": False,
+            "box_detector": "gpu",
+            "hud": True,
+            "hud_fast": 0.2,
         },
     ),
 }
@@ -166,8 +208,7 @@ def command(flow: Flow, label: str, stop_file: Path | None = None,
     why = fc.clash(v)
     if why:
         raise ValueError(why)
-    return [*head, *FIXED, "--minutes", str(flow.minutes), "--label", label, *stop, *flow.flags,
-            *fc.argv(v)]  # fmt: skip
+    return [*head, *FIXED, "--label", label, *stop, *flow.flags, *fc.argv(v)]
 
 
 def parse_request(text: str) -> dict[str, Any] | str:
@@ -187,6 +228,25 @@ def parse_request(text: str) -> dict[str, Any] | str:
     if action == "start" and flow not in FLOWS:
         return f"unknown flow {flow!r}"
     return {"id": rid, "action": action, "flow": flow}
+
+
+DEMO = Path("/dev/shm/poring-lab-demo")  # dungeon_hunt.DEMO: each run's session folder
+
+
+def run_started(label: str | None, demo: Path = DEMO) -> bool:
+    """The runner passed its start checks: its session (named after the run's label) has the
+    run_start event. A session folder or a line it cannot read: not yet."""
+    if not label:
+        return False
+    for d in demo.glob(f"*-{label}"):
+        try:
+            with open(d / "events.jsonl", "rb") as fh:
+                head = fh.read(200_000)
+        except OSError:
+            continue
+        if b'"kind": "run_start"' in head:
+            return True
+    return False
 
 
 def busy_reason(ps_lines: Sequence[str]) -> str | None:
@@ -309,7 +369,7 @@ class Helper:
         self.label = "flowrun-" + time.strftime("%m%d%H%M")
         self.run_dir = SCRATCH / self.label
         self.run_dir.mkdir(parents=True, exist_ok=True)
-        self.cap_s = flow.minutes * 60 + CAP_GRACE_S
+        self.cap_s = float(vals.get("minutes", flow.minutes)) * 60 + CAP_GRACE_S
         self.config, self.config_src = vals, src
         self.note(event="start", flow=flow.id, label=self.label, request=rid, config=vals,
                   config_src=src)  # fmt: skip
@@ -360,7 +420,9 @@ class Helper:
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            start_new_session=True)  # fmt: skip
         self.t_start = time.monotonic()
-        self.state, self.detail = "running", "playing"
+        # matpilot 2026-11-13: "playing" only once the runner's own start checks passed (its
+        # session's run_start event); until then it may still refuse (the chat open, the stock)
+        self.state, self.detail = "starting", "the runner's own start checks"
         self.write_status()
 
     def stop(self, rid: str) -> None:
@@ -409,6 +471,9 @@ class Helper:
             self.stop_t = None
             return
         if rc is None:
+            if self.state == "starting" and run_started(self.label):
+                self.state, self.detail = "running", "playing"
+                self.write_status()
             return
         self.rc, self.ended, self.runner = rc, ict(), None
         last = tail(self.run_dir / "run.log", 3) if self.run_dir else []

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { belowValue, configArgv, configClash, type ConfigDoc, configShownMatchesExport, effectiveConfig, fieldProblem, FIRST_GROUPS, levelAfter, shownValue, withConfig } from "./config.ts";
+import { belowValue, configArgv, configClash, type ConfigDoc, configShownMatchesExport, effectiveConfig, fieldProblem, FIRST_GROUPS, inUse, levelAfter, notInUseWhy, shownValue, withConfig } from "./config.ts";
 import { allNodes, textOf } from "./runner.ts";
 import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
 
@@ -104,4 +104,38 @@ test("the blocks show what the next Run uses", () => {
   assert.equal(mine.params["LOOT_TRIM_HOVERS"].value, 12);
   assert.equal(mine.python, DOC.python); // its lines are the blocks' marks
   assert.equal(shownValue(F("WEIGHT_MAX"), 0.48), "48");
+});
+
+// --- 2026-11-13 ~15:2x (Batt: "do all of them": the techniques' switches) ---------------------
+test("a technique switched off: its settings are not in use, not passed, its blocks greyed", () => {
+  const d = effectiveConfig(C, null, "xmas_dun02").values;
+  assert.equal(d.knife_swap, true);
+  const off = { ...d, knife_swap: false };
+  for (const n of ["bare_ready", "steal_cue", "swap_gap", "knife_key", "dagger_key", "knife_max_s", "knife_hp_min"]) assert.equal(inUse(C, off, n), false, n);
+  assert.match(String(notInUseWhy(C, off, "knife_max_s")), /needs Batt's Knife swap on/);
+  const a = configArgv(C, off, effectiveConfig(C, null, "xmas_dun02").source);
+  for (const flag of ["--bare-steal", "--bare-ready", "--steal-opener", "--dagger-key", "--knife-max-s"]) assert.ok(!a.includes(flag), flag);
+  assert.equal(configClash(C, { ...off, dagger_key: "F9" }), null); // an unused key clashes with nothing
+  const mine = withConfig(DOC, C, off);
+  for (const id of ["knife_opener", "knife_back_fn", "knife_on_call", "knife_back_call"]) {
+    const n = allNodes(mine).find((x) => x.id === id);
+    assert.ok(n && n.style.startsWith("rd_off"), id);
+    assert.match(words(mine, id), /^off: /, id);
+  }
+  assert.ok(!allNodes(withConfig(DOC, C, d)).some((n) => n.style.startsWith("rd_off")), "with the defaults nothing is off");
+});
+
+test("switches, choices and a chain of needs", () => {
+  const d = effectiveConfig(C, null, "xmas_dun02").values;
+  const src = effectiveConfig(C, null, "xmas_dun02").source;
+  assert.ok(configArgv(C, { ...d, exp_first: false }, src).includes("--no-exp-first"));
+  assert.ok(configArgv(C, { ...d, respawn: false }, src).includes("--no-respawn"));
+  assert.ok(!configArgv(C, { ...d, respawn: false }, src).includes("--respawn-at"));
+  assert.ok(!configArgv(C, { ...d, loot: "v1" }, src).includes("--loot-items"));
+  assert.ok(!configArgv(C, { ...d, loot_items: "off" }, src).includes("--loot-memory"));
+  assert.equal(inUse(C, { ...d, box_strike: false }, "lead_press"), false); // lead -> still_target -> box_now -> box_strike
+  assert.equal(fieldProblem(F("loot"), "nope", C) !== null, true);
+  assert.equal(fieldProblem(F("hud"), true, C), null);
+  assert.match(String(configClash(C, { ...d, hud_fast: 0.5, BOX_EVERY_S: 0.5 })), /faster than the detector/);
+  assert.equal(shownValue(F("hud"), false), "off");
 });

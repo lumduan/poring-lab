@@ -10,7 +10,7 @@
 // Run uses. Every value renders as text.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type ConfigDoc, type ConfigField, type ConfigFile, type ConfigValue, effectiveConfig, FIRST_GROUPS, fieldProblem, type Level, levelAfter, shownValue } from "@/lib/flow/config";
+import { type ConfigDoc, type ConfigField, type ConfigFile, type ConfigValue, effectiveConfig, FIRST_GROUPS, fieldProblem, type Level, levelAfter, notInUseWhy, shownValue } from "@/lib/flow/config";
 import { REFUSALS } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -167,7 +167,12 @@ function GroupRow({
 }) {
   const ownMap = fields.some((f) => eff.source[f.name] === "map");
   const ownGlobal = fields.some((f) => cs.file?.global?.[f.name] !== undefined);
-  const [scope, setScope] = useState<"global" | "map">(ownMap ? "map" : "global");
+  // the person's pick; until they pick, the group follows the file: this map's own values = "map"
+  // (matpilot 2026-11-13: set before the file had loaded, it showed "every map" after a reload)
+  const [picked, setScope] = useState<"global" | "map" | null>(null);
+  const scope = picked ?? (ownMap ? "map" : "global");
+  // switches and choices first (what runs), then its numbers
+  const ordered = [...fields].sort((a, b) => Number(!["switch", "choice"].includes(a.kind)) - Number(!["switch", "choice"].includes(b.kind)));
   const off = cs.busy || cs.file === null || Boolean(cs.file?.broken);
   return (
     <div className="map-binding run-settings config-group" data-kind="block" data-testid={`config-group-${g.id}`}>
@@ -182,8 +187,8 @@ function GroupRow({
           <input type="radio" name={`scope-${g.id}`} checked={scope === "map"} onChange={() => setScope("map")} data-testid={`config-scope-${g.id}-map`} /> {map} only
         </label>
       </span>
-      {fields.map((f) => (
-        <FieldInput key={f.name} f={f} d={d} v={eff.values[f.name]} level={eff.source[f.name]} off={off} onChange={(v) => onChange(scope, f, v)} />
+      {ordered.map((f) => (
+        <FieldInput key={f.name} f={f} d={d} v={eff.values[f.name]} level={eff.source[f.name]} off={off} why={notInUseWhy(d, eff.values, f.name)} onChange={(v) => onChange(scope, f, v)} />
       ))}
       {scope === "map" && ownMap && (
         <button type="button" className="mb-link" disabled={off} onClick={() => onClear("map")} data-testid={`config-clear-${g.id}-map`}>
@@ -199,16 +204,39 @@ function GroupRow({
   );
 }
 
-function FieldInput({ f, d, v, level, off, onChange }: { f: ConfigField; d: ConfigDoc; v: ConfigValue; level: Level; off: boolean; onChange: (v: ConfigValue) => void }) {
+function FieldInput({ f, d, v, level, off, why, onChange }: { f: ConfigField; d: ConfigDoc; v: ConfigValue; level: Level; off: boolean; why: string | null; onChange: (v: ConfigValue) => void }) {
   const [draft, setDraft] = useState<string | null>(null); // a number or a point while it is typed
   const tag = LEVEL_TAG[level];
   const label = (
     <>
       {f.words}
-      {tag && <span className="config-tag"> ({tag})</span>}{" "}
+      {tag && <span className="config-tag"> ({tag})</span>}
+      {why && <span className="config-tag"> (not in use: {why})</span>}{" "}
     </>
   );
   const id = `config-${f.name}`;
+  if (f.kind === "switch") {
+    return (
+      <label className="mb-part" data-unused={why ? "true" : "false"}>
+        <input type="checkbox" checked={v === true} disabled={off} onChange={(e) => onChange(e.target.checked)} data-testid={id} /> {label}
+        {v === false && f.warn && <span className="config-warn"> {f.warn}</span>}
+      </label>
+    );
+  }
+  if (f.kind === "choice") {
+    return (
+      <label className="mb-part" data-unused={why ? "true" : "false"}>
+        {label}
+        <select value={String(v)} disabled={off} onChange={(e) => onChange(e.target.value)} data-testid={id}>
+          {(f.options ?? []).map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
   if (f.kind === "key") {
     return (
       <label className="mb-part">

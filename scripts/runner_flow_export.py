@@ -111,6 +111,7 @@ class Node:
     flags: list[str] = field(default_factory=list)
     code: list[str] = field(default_factory=list)  # symbols: name (dungeon_hunt), vt. / bs. / em.
     tab: str = ""  # a stack's tab on /flows (Batt 2026-11-13: each part in view, none off-screen)
+    gate: str = ""  # the technique switch (flow_config) this block belongs to: greyed while off
 
 
 def step(id_: str, style: str, text: str, py: list[str], why: str, flags: list[str] | None = None,
@@ -284,7 +285,31 @@ def spec() -> list[Node]:
             ),
         ],
     )
-    return [main, *knife(), respawn_fn(), safety()]
+    out = [main, *knife(), respawn_fn(), safety()]
+    gates = {"knife_opener": "knife_swap", "knife_back_fn": "knife_swap",
+             "knife_on_call": "knife_swap", "knife_back_call": "knife_swap",
+             "respawn": "respawn", "respawn_fn": "respawn", "garm": "garm_fly",
+             "approach": "far_approach", "still": "still_strike", "lead": "lead_press",
+             "explore": "explore", "walk_pick": "walk_pick", "kill": "kill_gap",
+             "npc_guard": "npc_guard", "choose": "value_target"}  # fmt: skip
+    seen: set[str] = set()
+
+    def gate(n: Node) -> None:
+        if n.id in gates:
+            n.gate = gates[n.id]
+            seen.add(n.id)
+        for c in n.body:
+            gate(c)
+        for b in n.branches:
+            for c in b.body:
+                gate(c)
+
+    for n in out:
+        gate(n)
+    missing = sorted(set(gates) - seen)
+    if missing:
+        raise SystemExit(f"runner_flow_export: no block {missing} to gate")
+    return out
 
 
 def respawn_fn() -> Node:
@@ -1564,6 +1589,8 @@ class Builder:
         doc: dict[str, Any] = {"id": n.id, "kind": n.kind, "style": n.style}
         if n.tab:
             doc["tab"] = n.tab
+        if n.gate:
+            doc["gate"] = n.gate
         if n.kind == "if":
             branches = []
             head_end = start
@@ -1740,7 +1767,8 @@ def config_doc(values: dict[str, Any]) -> dict[str, Any]:
         n = f["name"]
         if n in _RUN_FLOW.defaults:
             f["default"] = json_val(_RUN_FLOW.defaults[n])
-            f["params"] = SETTING_PARAMS.get(n, [])
+            dest = "cmd." + f["flag"][2:].replace("-", "_") if f["flag"] else ""
+            f["params"] = SETTING_PARAMS.get(n) or [x for x in (n, dest) if x and x in values]
         else:
             if n not in values:
                 raise SystemExit(f"runner_flow_export: the setting {n} has no param of the doc")

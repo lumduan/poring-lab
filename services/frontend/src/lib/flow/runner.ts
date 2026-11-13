@@ -29,6 +29,7 @@ export type RunnerNode = {
   code: string[];
   params: string[];
   tab?: string; // a stack's tab on /flows (2026-11-13); absent: the stack's id
+  gate?: string; // the technique switch (lib/flow/config.ts) it belongs to: greyed while off
 };
 export type RunnerParam = { value: unknown; source: string; note: string };
 export type RunnerFlag = { help: string | null; default: unknown; value: unknown; kind: "bool" | "value"; base: boolean };
@@ -59,6 +60,9 @@ export type RunnerDoc = {
 };
 export type RunnerExit = { id: string; kind: "item_warp" | "death_respawn"; when: string; how: string; to: string; flag: string };
 
+/** A block of a technique switched off: a grey that still carries white text (contrast >= 4.5). */
+export const OFF_GREY = "#5f6670";
+
 /** The runner view's own block styles, beside MatPilot's (theme.ts): the safety rules in its
  * red (sound), Batt's technique (the Knife swap, in the base since 4DQ) in its purple (light);
  * their hats get the round cap. */
@@ -70,6 +74,9 @@ export const RUNNER_STYLES: Record<string, BlockStyle> = {
   // 2026-11-13 (Batt: "the respawn as a function block"): a function's definition, the Functions
   // colour with the round cap
   rd_function_hat_blocks: { colourPrimary: CATEGORY_COLOURS.functions, hat: "cap" },
+  // 2026-11-13 ~15:2x (Batt: the techniques' switches): a block of a technique switched off
+  rd_off_blocks: { colourPrimary: OFF_GREY },
+  rd_off_hat_blocks: { colourPrimary: OFF_GREY, hat: "cap" },
 };
 
 /** A block's row width (characters) before its words wrap onto the next row. */

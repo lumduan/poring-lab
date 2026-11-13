@@ -76,6 +76,7 @@ def helper(tmp_path: Path, state: str = "idle", age: float = 0.0) -> None:
                     "home_key": "F9",
                     "knife_key": "F4",
                     "dagger_key": "F5",
+                    "knife_swap": True,
                 },
             }
         },  # fmt: skip

@@ -6,8 +6,8 @@
 // (components/flows/ConfigPanel.tsx) and the tests use them. Every value renders as text.
 import type { RunnerDoc, RunnerNode, RunnerPart } from "./runner.ts";
 
-export type ConfigKind = "key" | "share" | "number" | "int" | "point" | "point_or_none";
-export type ConfigValue = string | number;
+export type ConfigKind = "key" | "share" | "number" | "int" | "point" | "point_or_none" | "switch" | "choice";
+export type ConfigValue = string | number | boolean;
 export type ConfigField = {
   name: string;
   group: string;
@@ -17,7 +17,11 @@ export type ConfigField = {
   hi: number;
   step: number;
   unit: string;
-  flag: string; // its own runner flag, or "--tune"
+  flag: string; // its own runner flag, "--tune", or "" (a switch that gates others only)
+  off?: string; // a switch the runner has on by default: the flag that turns it off
+  options?: string[]; // a choice's values ("off": no flag at all)
+  warn?: string; // said beside it while it is off (a safety technique)
+  needs?: [string, ConfigValue][]; // in use only while these hold (else not passed, greyed)
   default: ConfigValue;
   params: string[]; // the doc params whose numbers show it in the blocks
 };
@@ -63,8 +67,35 @@ export function belowValue(d: ConfigDoc, file: ConfigFile | null, scope: "global
 
 const onGrid = (v: number, step: number) => step <= 0 || Math.abs(v / step - Math.round(v / step)) < 1e-6;
 
+/** PURE: a setting is IN USE when each of its needs holds and each needed setting is in use
+ * (scripts/flow_config.py in_use): one not in use is not passed, and the page greys it. */
+export function inUse(d: ConfigDoc, values: Record<string, ConfigValue>, name: string, seen: ReadonlySet<string> = new Set()): boolean {
+  const f = d.fields.find((x) => x.name === name);
+  if (!f || seen.has(name)) return false;
+  for (const [other, want] of f.needs ?? []) {
+    if (!inUse(d, values, other, new Set([...seen, name]))) return false;
+    const v = values[other];
+    if (want === "!off" ? v === undefined || v === "off" || v === false : v !== want) return false;
+  }
+  return true;
+}
+
+/** PURE: why a setting is not in use (its first unmet need, in a person's words); null: it is. */
+export function notInUseWhy(d: ConfigDoc, values: Record<string, ConfigValue>, name: string): string | null {
+  const f = d.fields.find((x) => x.name === name);
+  if (!f || inUse(d, values, name)) return null;
+  for (const [other, want] of f.needs ?? []) {
+    const o = d.fields.find((x) => x.name === other);
+    const v = values[other];
+    const met = inUse(d, values, other) && (want === "!off" ? v !== undefined && v !== "off" && v !== false : v === want);
+    if (!met) return `needs ${o?.words ?? other}${want === true ? " on" : want === "!off" ? "" : ` = ${String(want)}`}`;
+  }
+  return "not in use";
+}
+
 /** The text of a value as a person reads it (a share as a whole percent, as the export shows). */
 export function shownValue(f: ConfigField, v: ConfigValue): string {
+  if (typeof v === "boolean") return v ? "on" : "off";
   if (typeof v !== "number") return String(v);
   if (f.kind === "share") return `${Math.round(v * 10000) / 100}`;
   return String(Math.round(v * 10000) / 10000);
@@ -72,6 +103,8 @@ export function shownValue(f: ConfigField, v: ConfigValue): string {
 
 /** PURE: why ``v`` cannot be the field's value (null: it can) -- flow_config.problem_of's rules. */
 export function fieldProblem(f: ConfigField, v: unknown, d: ConfigDoc): string | null {
+  if (f.kind === "switch") return typeof v === "boolean" ? null : `${f.words}: not on or off`;
+  if (f.kind === "choice") return (f.options ?? []).includes(String(v)) ? null : `${f.words}: ${String(v)} is not one of ${(f.options ?? []).join(", ")}`;
   if (f.kind === "key") return d.keys.includes(String(v)) ? null : `the ${f.words}'s key ${String(v)} is not a row-1 hotbar key (F1-F9)`;
   if (f.kind === "point" || f.kind === "point_or_none") {
     if (f.kind === "point_or_none" && v === "none") return null;
@@ -91,12 +124,15 @@ export function fieldProblem(f: ConfigField, v: unknown, d: ConfigDoc): string |
 export function configClash(d: ConfigDoc, values: Record<string, ConfigValue>): string | null {
   const seen = new Map<string, ConfigField>();
   for (const f of d.fields) {
-    if (f.kind !== "key") continue;
+    if (f.kind !== "key" || !inUse(d, values, f.name)) continue;
     const v = String(values[f.name]);
     const other = seen.get(v);
     if (other) return `the ${other.words} and the ${f.words} are both on ${v}: each needs its own key`;
     seen.set(v, f);
   }
+  const hf = values.hud_fast;
+  const be = values.BOX_EVERY_S;
+  if (typeof hf === "number" && typeof be === "number" && inUse(d, values, "hud_fast") && !(hf < be)) return `the HUD's fresh box every ${hf} s must be faster than the detector (${be} s)`;
   return null;
 }
 
@@ -116,6 +152,7 @@ export function levelAfter(d: ConfigDoc, file: ConfigFile | null, scope: "global
 
 /** A value as the runner's flag takes it (scripts/flow_config.py flag_value). */
 export function flagValue(f: ConfigField, v: ConfigValue): string {
+  if (typeof v === "boolean") return v ? "on" : "off";
   if (typeof v !== "number") return String(v);
   if (f.kind === "share") return v.toFixed(2);
   if (f.kind === "int") return String(Math.round(v));
@@ -127,8 +164,15 @@ export function flagValue(f: ConfigField, v: ConfigValue): string {
 export function configArgv(d: ConfigDoc, values: Record<string, ConfigValue>, source: Record<string, Level>): string[] {
   const out: string[] = [];
   for (const f of d.fields) {
-    if (f.flag !== "--tune") out.push(f.flag, flagValue(f, values[f.name]));
-    else if (source[f.name] !== "default") out.push("--tune", `${f.name}=${flagValue(f, values[f.name])}`);
+    if (!inUse(d, values, f.name)) continue;
+    const v = values[f.name];
+    if (f.kind === "switch") {
+      if (v === true && f.flag) out.push(f.flag);
+      else if (v === false && f.off) out.push(f.off);
+    } else if (f.kind === "choice" && v === "off") {
+      // "off": no flag at all
+    } else if (f.flag && f.flag !== "--tune") out.push(f.flag, flagValue(f, v));
+    else if (f.flag === "--tune" && source[f.name] !== "default") out.push("--tune", `${f.name}=${flagValue(f, v)}`);
   }
   return out;
 }
@@ -139,12 +183,19 @@ export function withConfig(doc: RunnerDoc, d: ConfigDoc, values: Record<string, 
   const byParam = new Map<string, [string, ConfigValue]>();
   for (const f of d.fields) for (const id of f.params) byParam.set(id, [shownValue(f, values[f.name]), values[f.name]]);
   const parts = (ps: RunnerPart[] | undefined) => ps?.map((p) => ("param" in p && byParam.has(p.param) ? { param: p.param, shown: (byParam.get(p.param) as [string, ConfigValue])[0] } : p));
-  const node = (n: RunnerNode): RunnerNode => ({
-    ...n,
-    parts: parts(n.parts),
-    branches: n.branches?.map((b) => ({ ...b, parts: parts(b.parts) ?? b.parts, body: b.body.map(node) })),
-    body: n.body?.map(node),
-  });
+  // a block of a technique switched off (its gate not on): greyed, its words begin "off:"
+  const off = (n: RunnerNode) => n.gate !== undefined && !(inUse(d, values, n.gate) && values[n.gate] === true);
+  const node = (n: RunnerNode): RunnerNode => {
+    const dim = off(n);
+    const ps = parts(n.parts);
+    return {
+      ...n,
+      style: dim ? (n.kind === "hat" ? "rd_off_hat_blocks" : "rd_off_blocks") : n.style,
+      parts: dim && ps ? [{ text: "off: " }, ...ps] : ps,
+      branches: n.branches?.map((b, k) => ({ ...b, parts: dim && k === 0 ? [{ text: "off: " }, ...(parts(b.parts) ?? b.parts)] : (parts(b.parts) ?? b.parts), body: b.body.map(node) })),
+      body: n.body?.map(node),
+    };
+  };
   const params = { ...doc.params };
   for (const [id, [, value]] of byParam) if (params[id]) params[id] = { ...params[id], value };
   return { ...doc, params, stacks: doc.stacks.map(node) };

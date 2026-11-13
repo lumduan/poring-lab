@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,7 @@ LEGACY_FILE = "survival.json"  # 8e3ca2df's file (v1: the heal and escape number
 GAME_PX = (1280, 720)  # the game picture: a point lies inside it
 KEYS = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
 MAP_NAME = re.compile(r"[a-z0-9_@-]{1,40}")
-KINDS = ("key", "share", "number", "int", "point", "point_or_none")
+KINDS = ("key", "share", "number", "int", "point", "point_or_none", "switch", "choice")
 
 
 @dataclass(frozen=True)
@@ -50,10 +50,16 @@ class Field:
     step: float = 0.0  # share / number: the grid (int: 1)
     flag: str = ""  # its own runner flag; "" = a runner constant: --tune NAME=VALUE
     unit: str = ""  # shown after the value: "s", "px", "cells", "HP/s", "%" for a share
+    # 2026-11-13 ~15:2x (Batt: the techniques' on/off switches too): a switch's / a choice's
+    options: tuple[str, ...] = ()  # a choice's values ("off": no flag at all)
+    needs: tuple[tuple[str, Any], ...] = ()  # in use only while these hold (else not passed)
+    off: str = ""  # a switch the runner has ON by default: the flag that turns it off
+    warn: str = ""  # said beside it while it is off (a safety technique)
 
     @property
     def tune(self) -> bool:
-        return not self.flag
+        """A runner constant set with --tune (no flag of its own, and no switch)."""
+        return not self.flag and self.kind not in ("switch", "choice")
 
 
 # The groups, in the page's order: (id, title, a line under the title)
@@ -325,9 +331,19 @@ FIELDS: tuple[Field, ...] = (
         unit="s",
     ),  # fmt: skip
     Field(
-        "WALK_AHEAD", "walk", "int", "walk this many path cells ahead", 2, 15, 1, unit="cells"
+        "WALK_AHEAD",
+        "walk",
+        "int",
+        "walk this many path cells ahead",
+        2,
+        15,
+        1,
+        "--walk-ahead",
+        "cells",
     ),  # fmt: skip
-    Field("WALK_EVERY_S", "walk", "number", "a walk decision every", 0.3, 10, _S, unit="s"),
+    Field(
+        "WALK_EVERY_S", "walk", "number", "a walk decision every", 0.3, 10, _S, "--walk-every", "s"
+    ),  # fmt: skip
     Field("WALK_PICK_TOL", "walk", "int", "the client's pick within", 0, 4, 1, unit="cells"),
     Field(
         "NOENTRY_CARVE_R",
@@ -427,7 +443,17 @@ FIELDS: tuple[Field, ...] = (
         unit="cells",
     ),  # fmt: skip
     Field("READ_HZ", "loop", "number", "looks a second", 1, 15, _S),
-    Field("BOX_EVERY_S", "loop", "number", "the monster detector every", 0.2, 10, _S, unit="s"),
+    Field(
+        "BOX_EVERY_S",
+        "loop",
+        "number",
+        "the monster detector every",
+        0.2,
+        10,
+        _S,
+        "--box-every",
+        "s",
+    ),  # fmt: skip
     Field(
         "BOX_FRESH_S",
         "loop",
@@ -439,6 +465,440 @@ FIELDS: tuple[Field, ...] = (
         unit="s",
     ),  # fmt: skip
 )
+# --- THE TECHNIQUES' SWITCHES (dungeon@9.45; Batt 2026-11-13 ~15:1x: "do all of them": which
+# technique runs is the person's too). Each is the runner's own flag; the default is what the flow
+# runs today (a FLAG tested off-by-default stays off). A field whose ``needs`` do not hold is NOT
+# IN USE: it is not passed, and /flows greys it with the reason -- the value shown is the value
+# used.
+_ON, _OFF = True, False
+SWITCHES: tuple[Field, ...] = (
+    # the Knife swap
+    Field("knife_swap", "knife", "switch", "Batt's Knife swap", flag="--bare-steal"),
+    Field(
+        "bare_ready",
+        "knife",
+        "switch",
+        "swap at idle, never at the strike",
+        flag="--bare-ready",
+        needs=(("knife_swap", _ON),),
+    ),  # fmt: skip
+    Field(
+        "steal_cue",
+        "knife",
+        "choice",
+        "the steal cue",
+        flag="--steal-cue",
+        options=("popup", "both"),
+        needs=(("knife_swap", _ON),),
+    ),  # fmt: skip
+    Field(
+        "swap_gap",
+        "knife",
+        "switch",
+        "a swap restarts the no-hit clocks",
+        flag="--swap-gap",
+        needs=(("knife_swap", _ON),),
+    ),  # fmt: skip
+    # leaving the map, the respawn
+    Field("weight_exit", "exits", "switch", "go home when the bag is full"),
+    Field(
+        "respawn",
+        "respawn",
+        "switch",
+        "after a death, respawn at the save point",
+        flag="--respawn",
+        off="--no-respawn",
+        warn="off: after a death she stays where she fell, and the run ends there",
+    ),  # fmt: skip
+    # the start
+    Field("minutes", "start", "int", "the time box", 5, 600, 1, "--minutes", "min"),
+    # the fight
+    Field(
+        "engage_screen",
+        "fight",
+        "switch",
+        "fight any monster box on the screen",
+        flag="--engage-screen",
+    ),  # fmt: skip
+    Field(
+        "reach_check",
+        "fight",
+        "switch",
+        "only boxes the server walks her to in one click",
+        flag="--reach-check",
+        needs=(("engage_screen", _ON),),
+    ),  # fmt: skip
+    Field(
+        "unreach_escape",
+        "fight",
+        "switch",
+        "3 unreachable attackers in a row: a Fly Wing",
+        flag="--unreach-escape",
+        needs=(("reach_check", _ON), ("engage_screen", _ON)),
+    ),  # fmt: skip
+    Field("miss_cue", "fight", "switch", "a Miss drawn at her starts a fight", flag="--miss-cue"),
+    Field(
+        "late_confirm",
+        "fight",
+        "switch",
+        "a doubtful position read: confirm it at once",
+        flag="--late-confirm",
+    ),  # fmt: skip
+    Field(
+        "exp_first",
+        "fight",
+        "switch",
+        "an EXP line in the Battle Log = a kill",
+        flag="--exp-first",
+        off="--no-exp-first",
+    ),  # fmt: skip
+    Field(
+        "kill_gap",
+        "fight",
+        "switch",
+        "no EXP line: a quiet gap after our hits = a kill",
+        flag="--kill-gap",
+    ),  # fmt: skip
+    Field(
+        "quiet_scan",
+        "fight",
+        "switch",
+        "scan the cells around her only after damage",
+        flag="--quiet-scan",
+    ),  # fmt: skip
+    Field(
+        "defend_box",
+        "fight",
+        "switch",
+        "a fight started by a hit strikes the live box first",
+        flag="--defend-box",
+        needs=(("box_strike", _ON),),
+    ),  # fmt: skip
+    Field(
+        "quick_drop",
+        "fight",
+        "switch",
+        "no arrow, no damage after a strike: try the next",
+        flag="--quick-drop",
+    ),  # fmt: skip
+    Field(
+        "quick_drop_scaled",
+        "fight",
+        "switch",
+        "... its wait scaled by the distance",
+        flag="--quick-drop-scaled",
+        needs=(("quick_drop", _ON),),
+    ),  # fmt: skip
+    # choosing and striking
+    Field(
+        "value_target", "aim", "switch", "choose the monster worth the most", flag="--value-target"
+    ),  # fmt: skip
+    Field("box_strike", "aim", "switch", "strike from the detector's box", flag="--box-strike"),
+    Field(
+        "box_now",
+        "aim",
+        "switch",
+        "a fresh detection right before the strike",
+        flag="--box-now",
+        needs=(("box_strike", _ON),),
+    ),  # fmt: skip
+    Field(
+        "queue",
+        "aim",
+        "switch",
+        "queue the monsters of the scene, the next one ready",
+        flag="--queue",
+        needs=(("box_strike", _ON),),
+    ),  # fmt: skip
+    Field(
+        "self_recheck",
+        "aim",
+        "switch",
+        "a sword on her own body: look again first",
+        flag="--self-recheck",
+    ),  # fmt: skip
+    Field(
+        "still_strike",
+        "aim",
+        "switch",
+        "a far strike waits for a still screen",
+        flag="--still-strike",
+    ),  # fmt: skip
+    Field(
+        "still_target",
+        "aim",
+        "switch",
+        "a walking target: wait until it stands",
+        flag="--still-target",
+        needs=(("box_strike", _ON), ("box_now", _ON), ("still_strike", _ON)),
+    ),  # fmt: skip
+    Field(
+        "lead_press",
+        "aim",
+        "switch",
+        "a fast walker: aim where it will be",
+        flag="--lead-press",
+        needs=(("still_target", _ON),),
+    ),  # fmt: skip
+    Field("far_single", "aim", "switch", "a far strike: one click, then wait", flag="--far-single"),
+    Field(
+        "near_single",
+        "aim",
+        "switch",
+        "... from 2 cells already",
+        flag="--near-single",
+        needs=(("far_single", _ON),),
+    ),  # fmt: skip
+    Field(
+        "near_single_still",
+        "aim",
+        "switch",
+        "a near strike re-clicks only on a still screen",
+        flag="--near-single-still",
+        needs=(("near_single", _ON),),
+    ),  # fmt: skip
+    Field(
+        "far_approach", "aim", "switch", "walk toward a far target first", flag="--far-approach"
+    ),  # fmt: skip
+    Field(
+        "skip_own_cells",
+        "aim",
+        "switch",
+        "the scan skips the cells over her own sprite",
+        flag="--skip-own-cells",
+    ),  # fmt: skip
+    Field(
+        "walk_stop",
+        "aim",
+        "switch",
+        "a strike that scrolls the screen: stop first",
+        flag="--walk-stop",
+    ),  # fmt: skip
+    Field(
+        "box_ignore",
+        "aim",
+        "int",
+        "ignore a box spot after this many empty fights",
+        0,
+        10,
+        1,
+        "--box-ignore",
+    ),  # fmt: skip
+    # loot
+    Field(
+        "loot",
+        "loot",
+        "choice",
+        "the loot step",
+        flag="--loot",
+        options=("trim", "v1", "v2", "rhythm"),
+    ),  # fmt: skip
+    Field(
+        "loot_items",
+        "loot",
+        "choice",
+        "look for items with the item model",
+        flag="--loot-items",
+        options=("xmas02fi5", "xmas02fi4", "xmas02fi3", "off"),
+        needs=(("loot", "trim"),),
+    ),  # fmt: skip
+    Field(
+        "loot_memory",
+        "loot",
+        "switch",
+        "remember the items seen after a kill",
+        flag="--loot-memory",
+        needs=(("loot_items", "!off"),),
+    ),  # fmt: skip
+    Field(
+        "loot_recheck",
+        "loot",
+        "switch",
+        "ask the item model again a moment later",
+        flag="--loot-recheck",
+        needs=(("loot_items", "!off"),),
+    ),  # fmt: skip
+    Field(
+        "loot_aim",
+        "loot",
+        "switch",
+        "loot only near the kills' boxes",
+        flag="--loot-aim",
+        needs=(("loot", "trim"), ("box_strike", _ON)),
+    ),  # fmt: skip
+    Field(
+        "loot_first",
+        "loot",
+        "switch",
+        "loot before a box alone starts the next fight",
+        flag="--loot-first",
+    ),  # fmt: skip
+    # walking and exploring
+    Field(
+        "search",
+        "walk",
+        "choice",
+        "the search between fights",
+        flag="--search",
+        options=("patrol", "heading"),
+    ),  # fmt: skip
+    Field(
+        "explore",
+        "walk",
+        "switch",
+        "walk to the map's regions worth a visit",
+        flag="--explore",
+        needs=(("search", "patrol"),),
+    ),  # fmt: skip
+    Field(
+        "explore_cover",
+        "walk",
+        "switch",
+        "... favour the regions seen least",
+        flag="--explore-cover",
+        needs=(("explore", _ON),),
+    ),  # fmt: skip
+    Field(
+        "walk_through",
+        "walk",
+        "switch",
+        "walk on to the next waypoint without stopping",
+        flag="--walk-through",
+        needs=(("search", "patrol"),),
+    ),  # fmt: skip
+    Field(
+        "walk_pick",
+        "walk",
+        "switch",
+        "walk only to cells the client picks right",
+        flag="--walk-pick",
+    ),  # fmt: skip
+    Field(
+        "walk_pick_step",
+        "walk",
+        "switch",
+        "no cell fits: try a shorter step",
+        flag="--walk-pick-step",
+        needs=(("walk_pick", _ON),),
+    ),  # fmt: skip
+    Field("walk_trust", "walk", "switch", "trust cells she walked before", flag="--walk-trust"),
+    # safety and the end
+    Field(
+        "npc_guard",
+        "safety",
+        "switch",
+        "no fight click near an NPC",
+        flag="--npc-guard",
+        warn="off: a strike near an NPC may open its dialog and stop the run",
+    ),  # fmt: skip
+    Field(
+        "garm_fly",
+        "safety",
+        "switch",
+        "a Garm Baby seen: a Fly Wing",
+        flag="--garm-fly",
+        warn="off: she stays when a Garm Baby comes (two killed her, 11-09)",
+    ),  # fmt: skip
+    Field(
+        "garm_confirm",
+        "safety",
+        "int",
+        "... seen in this many detections in a row",
+        1,
+        5,
+        1,
+        "--garm-confirm",
+        needs=(("garm_fly", _ON),),
+    ),  # fmt: skip
+    Field(
+        "boss_walk",
+        "safety",
+        "switch",
+        "a boss seen: walk away (before the Fly Wing)",
+        flag="--boss-walk",
+        needs=(("engage_screen", _ON),),
+    ),  # fmt: skip
+    Field(
+        "unread_step",
+        "safety",
+        "switch",
+        "no position read: a step first, then a Fly Wing",
+        flag="--unread-step",
+    ),  # fmt: skip
+    # the loop
+    Field(
+        "box_detector",
+        "loop",
+        "choice",
+        "the monster detector runs on",
+        flag="--box-detector",
+        options=("gpu", "cpu"),
+    ),  # fmt: skip
+    Field(
+        "hud", "loop", "switch", "show the boxes on the console's HUD (display only)", flag="--hud"
+    ),  # fmt: skip
+    Field(
+        "hud_fast",
+        "loop",
+        "number",
+        "... a fresh HUD box every",
+        0.1,
+        0.9,
+        _S,
+        "--hud-fast",
+        "s",
+        needs=(("hud", _ON),),
+    ),  # fmt: skip
+)
+# the value settings that are in use only with a technique on
+_NEEDS: dict[str, tuple[tuple[str, Any], ...]] = {
+    "knife_key": (("knife_swap", _ON),),
+    "dagger_key": (("knife_swap", _ON),),
+    "knife_max_s": (("knife_swap", _ON),),
+    "knife_hp_min": (("knife_swap", _ON),),
+    "weight_home": (("weight_exit", _ON),),
+    "respawn_at": (("respawn", _ON),),
+    "respawn_confirm_at": (("respawn", _ON),),
+    "RESPAWN_SETTLE_S": (("respawn", _ON),),
+    "RESPAWN_CONFIRM_WAIT_S": (("respawn", _ON),),
+    "RESPAWN_LOAD_S": (("respawn", _ON),),
+    "RESPAWN_WAIT_S": (("respawn", _ON),),
+    "vt.D0_PX": (("value_target", _ON),),
+    "LOOT_TRIM_HOVERS": (("loot", "trim"),),
+    "EXPLORE_LEG_MAX_S": (("explore", _ON),),
+    "NPC_NO_FIGHT": (("npc_guard", _ON),),
+    "GARM_FRESH_S": (("garm_fly", _ON),),
+}
+FIELDS = tuple(replace(f, needs=_NEEDS.get(f.name, f.needs)) for f in FIELDS) + SWITCHES
+
+# The runner's flags that are NOT settings, each with the reason (test_flow_config: every flag of
+# `dungeon_hunt.py run` is a field's or listed here)
+NOT_SETTINGS: dict[str, str] = {
+    "--char": "the flow's character: a map's flow is made for one",
+    "--map": "the flow's map: the flow is that map's",
+    "--player-mode": "the Run button plays as a player, never as a GM (Batt 2026-11-12)",
+    "--strategy": "the heal and escape numbers are settings; P2's rest and heal parts never run",
+    "--seed": "the run's random seed (the explore picks repeat with it)",
+    "--label": "the Run helper names each run's session",
+    "--stop-file": "the Run helper's Stop",
+    "--tune": "the way the runner's numbers are set",
+    "--engage": "the melee ring is the lab server's only (refused elsewhere): the scan is used",
+    "--boxes": "the box watcher is the bot's eyes for monsters: the base needs it",
+    "--box-model": "the map's own monster model",
+    "--stage-mob": "a GM trial line (refused in player mode)",
+    "--start-cell": "a GM trial line (refused in player mode)",
+    "--stage-at": "a GM trial line (refused in player mode)",
+    "--clear-map": "a GM line (refused in player mode)",
+    "--steal": "the Steal skill opening: refused with the Knife swap",
+    "--heal-candy": "needs its own hotbar layout (candies on F6 / F7): not a switch yet",
+    "--rest": "P2 never rests",
+    "--plant-sweep": "an old White Plant sweep, off since dungeon@5",
+    "--ag-match": "the Crusader's Auto Guard icon",
+    "--bank-tags": "data collection, not play",
+    "--lead-strike": "replaced by the lead press (they cannot run together)",
+}
+
+
 BY_NAME: dict[str, Field] = {f.name: f for f in FIELDS}
 KEY_FIELDS = tuple(f.name for f in FIELDS if f.kind == "key")
 
@@ -449,6 +909,10 @@ def _on_grid(v: float, f: Field) -> bool:
 
 def problem_of(f: Field, v: Any) -> str | None:
     """PURE: why ``v`` cannot be ``f``'s value (None: it can)."""
+    if f.kind == "switch":
+        return None if isinstance(v, bool) else f"{f.words}: {v!r} is not on or off"
+    if f.kind == "choice":
+        return None if v in f.options else f"{f.words}: {v!r} is not one of {list(f.options)}"
     if f.kind == "key":
         return None if v in KEYS else f"{f.words}'s key {v!r} is not a row-1 hotbar key (F1-F9)"
     if f.kind in ("point", "point_or_none"):
@@ -470,6 +934,8 @@ def problem_of(f: Field, v: Any) -> str | None:
 
 
 def _norm(f: Field, v: Any) -> Any:
+    if f.kind in ("switch", "choice"):
+        return v
     if f.kind in ("key", "point", "point_or_none"):
         if f.kind != "key" and v != "none":
             x, y = (int(t) for t in str(v).split(","))
@@ -551,17 +1017,39 @@ def effective(defaults: Mapping[str, Any], cfg: Mapping[str, Any],
     return vals, src
 
 
+def in_use(name: str, vals: Mapping[str, Any], _seen: frozenset[str] = frozenset()) -> bool:
+    """PURE: a setting is IN USE when every one of its needs holds (and each needed setting is in
+    use itself); one not in use is not passed to the runner (/flows greys it with the reason)."""
+    f = BY_NAME.get(name)
+    if f is None or name in _seen:
+        return False
+    for other, want in f.needs:
+        v = vals.get(other)
+        if not in_use(other, vals, _seen | {name}):
+            return False
+        if want == "!off":
+            if v in (None, "off", False):
+                return False
+        elif v != want:
+            return False
+    return True
+
+
 def clash(vals: Mapping[str, Any]) -> str | None:
-    """PURE: why these values cannot run together (None: they can): each hotbar key its own."""
+    """PURE: why these values cannot run together (None: they can): each hotbar key in use its
+    own; the HUD's fast box faster than the detector (the runner refuses it otherwise)."""
     seen: dict[str, str] = {}
     for k in KEY_FIELDS:
         v = vals.get(k)
-        if v is None:
+        if v is None or not in_use(k, vals):
             continue
         if v in seen:
             return f"the {BY_NAME[seen[v]].words} and the {BY_NAME[k].words} are both on {v}: " \
                    "each needs its own key"  # fmt: skip
         seen[v] = k
+    hf, be = vals.get("hud_fast"), vals.get("BOX_EVERY_S")
+    if hf is not None and be is not None and in_use("hud_fast", vals) and not hf < be:
+        return f"the HUD's fresh box every {hf:g} s must be faster than the detector ({be:g} s)"
     return None
 
 
@@ -577,13 +1065,24 @@ def flag_value(f: Field, v: Any) -> str:
 
 
 def argv(vals: Mapping[str, Any]) -> list[str]:
-    """PURE: the runner flags of these values, in FIELDS' order: a flag's own, or --tune."""
+    """PURE: the runner flags of these values, in FIELDS' order: a flag's own, or --tune; a switch
+    on = its flag (off = its off flag, if the runner has one); a choice "off" = nothing; a setting
+    not in use = nothing."""
     out: list[str] = []
     for f in FIELDS:
-        if f.name not in vals:
+        if f.name not in vals or not in_use(f.name, vals):
             continue
-        v = flag_value(f, vals[f.name])
-        out += [f.flag, v] if f.flag else ["--tune", f"{f.name}={v}"]
+        v = vals[f.name]
+        if f.kind == "switch":
+            if v and f.flag:
+                out.append(f.flag)
+            elif not v and f.off:
+                out.append(f.off)
+            continue
+        if f.kind == "choice" and v == "off":
+            continue
+        fv = flag_value(f, v)
+        out += [f.flag, fv] if f.flag else ["--tune", f"{f.name}={fv}"]
     return out
 
 
@@ -630,7 +1129,11 @@ def registry() -> dict[str, Any]:
                 "hi": f.hi,
                 "step": f.step,
                 "unit": f.unit,
-                "flag": f.flag or "--tune",
+                "flag": f.flag or ("--tune" if f.tune else ""),
+                "off": f.off,
+                "options": list(f.options),
+                "warn": f.warn,
+                "needs": [[n, w] for n, w in f.needs],
             }
             for f in FIELDS
         ],  # fmt: skip

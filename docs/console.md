@@ -287,6 +287,11 @@ Amendment B); a not-adopted model is never offered.
   equal to the level below is not stored (it keeps following it); a tag says where a value comes
   from (this map / every map / nothing = the default). Run sends no settings: the Run helper reads
   the same file. The run settings strip and the heal-and-escape strip above are history.
+  ➡️ **~15:2x, the techniques' switches too:** each group also holds its techniques' on/off
+  switches and choices (shown first): e.g. the Knife swap group's "Batt's Knife swap", the loot
+  group's item model, the aiming group's value target. A setting that needs another one off is
+  dimmed "(not in use: needs …)" and is not passed; a safety switch turned off says what it
+  risks; the blocks of a technique switched off turn grey and begin "off:".
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

@@ -135,11 +135,12 @@ def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
 
 def test_keys_clash_and_the_flags() -> None:
     ok = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
-          "dagger_key": "F5"}  # fmt: skip
+          "dagger_key": "F5", "knife_swap": True}  # fmt: skip
     assert fc.clash(ok) is None
     assert "the Knife and the dagger are both on F4" in str(fc.clash({**ok, "dagger_key": "F4"}))
-    vals = {**ok, "weight_home": 0.5, "knife_max_s": 8.0, "fly_rate": 150, "LOOT_TRIM_HOVERS": 12,
-            "vt.D0_PX": 200, "respawn_confirm_at": "none"}  # fmt: skip
+    vals = {**ok, "weight_home": 0.5, "weight_exit": True, "knife_max_s": 8.0, "fly_rate": 150,
+            "LOOT_TRIM_HOVERS": 12, "loot": "trim", "vt.D0_PX": 200, "value_target": True,
+            "respawn_confirm_at": "none", "respawn": True}  # fmt: skip
     a = fc.argv(vals)
     assert a[:2] == ["--heal-key", "F1"] and a[a.index("--weight-home") + 1] == "0.50"
     assert a[a.index("--knife-max-s") + 1] == "8" and a[a.index("--fly-rate") + 1] == "150"
@@ -176,3 +177,66 @@ def test_a_level_is_put_by_group_and_checked(tmp_path: Path) -> None:
                       (json.dumps({"v": 2, "maps": {"../a": {}}}), "not a map name")):  # fmt: skip
         (tmp_path / "config.json").write_text(bad)
         assert word in str(fc.read_config(tmp_path)), bad
+
+
+# --- 2026-11-13 ~15:2x (Batt: "do all of them": the techniques' on/off switches too) ------------
+def test_every_runner_flag_is_a_setting_or_says_why_not() -> None:
+    import runner_flow_export as rfe
+
+    flags = rfe.run_flags(dh, SOURCES["dh"])
+    owned = {f.flag for f in fc.FIELDS if f.flag} | {f.off for f in fc.FIELDS if f.off}
+    for flag in flags:
+        assert flag in owned or flag in fc.NOT_SETTINGS, f"{flag} is fixed: make it a setting"
+    assert not set(fc.NOT_SETTINGS) & owned  # nothing both a setting and excused
+    for flag in fc.NOT_SETTINGS:
+        assert flag in flags, f"{flag}: no such runner flag (a stale excuse)"
+
+
+def test_no_runner_number_is_a_flag_default_bound_before_the_run() -> None:
+    """A constant used as a flag's argparse default is copied when the parser is built, before
+    run() applies --tune: the runner then uses the flag, never the constant (BOX_EVERY_S,
+    WALK_AHEAD and WALK_EVERY_S were: they are settings with their flags now)."""
+    tuned = {_mod_attr(f.name)[1] for f in TUNED if _mod_attr(f.name)[0] == "dh"}
+    tree = ast.parse(SOURCES["dh"].read_text())
+    bad = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "add_argument":
+            for kw in n.keywords:
+                if kw.arg == "default":
+                    bad += [x.id for x in ast.walk(kw.value) if isinstance(x, ast.Name)
+                            and x.id in tuned]  # fmt: skip
+    assert bad == []
+
+
+def test_a_technique_switched_off_takes_its_settings_with_it() -> None:
+    import flow_run as fr
+
+    d = fr.FLOWS["xmas_dun02_rogue"].defaults
+    on = fc.argv(d)
+    for flag in ("--bare-steal", "--bare-ready", "--steal-cue", "--swap-gap", "--steal-opener",
+                 "--knife-max-s", "--value-target", "--loot-items", "--loot-memory"):  # fmt: skip
+        assert flag in on, flag
+    off = fc.argv({**d, "knife_swap": False})
+    for flag in ("--bare-steal", "--bare-ready", "--steal-cue", "--swap-gap", "--steal-opener",
+                 "--dagger-key", "--knife-max-s", "--knife-hp-min"):  # fmt: skip
+        assert flag not in off, flag  # not in use: not passed (the runner would refuse them)
+    assert fc.clash({**d, "knife_swap": False, "dagger_key": "F9"}) is None  # an unused key
+    # a choice: the loot items' model only with the trim loot; "off" = no flag
+    assert "--loot-items" not in fc.argv({**d, "loot": "v1"})
+    assert "--loot-memory" not in fc.argv({**d, "loot_items": "off"})
+    # a switch the runner has ON by default is turned off with its own flag
+    assert "--no-exp-first" in fc.argv({**d, "exp_first": False})
+    assert "--no-respawn" in fc.argv({**d, "respawn": False})
+    assert "--respawn-at" not in fc.argv({**d, "respawn": False})
+    # a chain of needs: still_target needs box_now, which needs box_strike
+    assert "--lead-press" not in fc.argv({**d, "box_strike": False})
+    assert "--weight-home" not in fc.argv({**d, "weight_exit": False})
+    assert fc.problem_of(fc.BY_NAME["loot"], "nope") is not None
+    assert fc.problem_of(fc.BY_NAME["hud"], "yes") is not None
+    assert "faster than the detector" in str(fc.clash({**d, "hud_fast": 0.5, "BOX_EVERY_S": 0.5}))
+
+
+def test_the_item_models_a_choice_names_exist() -> None:
+    text = (ROOT / "scripts" / "unit_detector.py").read_text()
+    for m in fc.BY_NAME["loot_items"].options:
+        assert m == "off" or f'"{m}": GpuWeights(' in text, m

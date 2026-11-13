@@ -170,9 +170,10 @@ export default function LiveRun({ live }: { live: Live }) {
           {st.rc !== null && st.rc !== undefined ? ` · rc ${st.rc}` : ""}
         </p>
       )}
-      {st?.log_tail && st.log_tail.length > 0 && (
+      {/* matpilot 2026-11-13: the refusal was printed twice (the detail and the log's last line) */}
+      {st?.log_tail && st.log_tail.filter((ln) => ln.trim() !== (st.detail ?? "").trim()).length > 0 && (
         <pre className="notice-sub" data-testid="live-run-log">
-          {st.log_tail.join("\n")}
+          {st.log_tail.filter((ln) => ln.trim() !== (st.detail ?? "").trim()).join("\n")}
         </pre>
       )}
       {err && (

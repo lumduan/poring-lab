@@ -285,6 +285,26 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   default < every map's < the map's own, refuses a broken file or a key clash before any input,
   and passes the flags. ➡️ This SUPERSEDES the per-browser run settings (9.41-9.42) and the
   survival-only file (9.43) above: they are history.
+- ➡️ **dungeon@9.45 (registry), the TECHNIQUES' SWITCHES (2026-11-13 ~15:2x; Batt: "do all of
+  them"):** 50 switches and choices join flow_config (124 settings in all): every technique of the
+  night chain's base (the Knife swap and its parts, the value target, the loot items and its
+  model, the box strike chain, still / lead / far / near, the search and exploring, the walk
+  pick, the kill gap, the EXP line, the Miss cue, the NPC guard, the Garm Baby escape, the HUD, the
+  detector's CPU / GPU, the time box ...) plus the FLAGs tested off-by-default (queue, defend box,
+  quick drop, loot recheck / aim, explore cover, boss walk, unread step ...), each defaulting to
+  what the flow runs today (the default command equals the old one, six flags now stated
+  explicitly at the runner's own defaults). A setting whose NEEDS do not hold (e.g. box_now
+  without box_strike, the Knife's keys and numbers with the Knife swap off, the respawn points
+  with the respawn off) is NOT IN USE: not passed, greyed on /flows with the reason, and its
+  key clashes with nothing. FIXED stays only what `flow_config.NOT_SETTINGS` names (the
+  character, the map, player mode, the strategy, the seed, the GM trial lines ...), and
+  test_flow_config fails if any runner flag is neither a setting nor listed there.
+  ➡️ Found on the way: `BOX_EVERY_S`, `WALK_AHEAD` and `WALK_EVERY_S` are the runner's flag
+  DEFAULTS (bound when the parser is built), so 9.44's --tune of them would have been ignored:
+  they are settings with their own flags now (--box-every, --walk-ahead, --walk-every), and the
+  guard test also refuses a tunable used as an argparse default.
+  ➡️ The Run helper says "playing" only after the runner's run_start event (matpilot's finding:
+  it said "playing" while the runner was still refusing at its start checks).
 
 ## Not built yet
 

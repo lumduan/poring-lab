@@ -395,6 +395,15 @@
   margin-top: 0.5rem;
 }
 
+/* the settings panel (ConfigPanel.tsx): a setting not in use is dimmed; a safety switch's warning */
+.config-panel [data-unused="true"] {
+  opacity: 0.55;
+}
+.config-warn {
+  color: var(--warn-text, #8a4b00);
+  font-weight: 600;
+}
+
 /* THE FLOWS ROW (Batt 2026-11-13: "on /flows I don't see this flow's name"): every flow by name, always
    in view under the header; the one shown is pressed */
 .flow-switcher {

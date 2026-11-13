@@ -71,9 +71,10 @@ def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
     assert f.map == "xmas_dun02"
     for k, v in f.defaults.items():
-        assert k in fc.BY_NAME and not fc.BY_NAME[k].tune, k  # a flag of its own
+        assert k in fc.BY_NAME and not fc.BY_NAME[k].tune, k  # a flag or a switch of its own
         assert fc.problem_of(fc.BY_NAME[k], v) is None, (k, v)
-    assert {x.name for x in fc.FIELDS if x.flag} == set(f.defaults)  # every flag field defaulted
+    own = {x.name for x in fc.FIELDS if x.flag or x.kind in ("switch", "choice")}
+    assert own == set(f.defaults)  # every flag and switch has the flow's default
     assert fc.clash(f.defaults) is None
     p2 = dh.STRATEGIES[fr.FIXED[fr.FIXED.index("--strategy") + 1]]
     for k in ("potion_below", "fly_below", "fly_rate", "fly_rate_below"):
@@ -151,8 +152,11 @@ def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
     assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
 
 
-def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(tmp_path: Path) -> None:
+def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
+    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)  # a live run on this host: not ours
     orig = fr.CONFIG_DIR
     try:
         fr.CONFIG_DIR = tmp_path
