@@ -48,6 +48,7 @@ sys.path.insert(0, str(SCRIPTS))
 import flow_run as _fr  # noqa: E402
 
 _RUN_FLOW = _fr.FLOWS["xmas_dun02_rogue"]
+_fc = _fr.fc  # scripts/flow_config.py: the settings' registry
 
 
 def _without_seed(argv: list[str]) -> list[str]:
@@ -63,17 +64,19 @@ def _without_seed(argv: list[str]) -> list[str]:
 
 
 BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minutes),
-                *_RUN_FLOW.flags, *_fr.settings_argv(_RUN_FLOW.settings),
-                *_fr.survival_argv(_RUN_FLOW.survival)]  # fmt: skip
+                *_RUN_FLOW.flags, *_fc.argv(_RUN_FLOW.defaults)]  # fmt: skip
 # The person's Run settings (2026-11-13, Batt: "don't hard-code the keys"): each one's param in the
 # doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
-SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
-                  "weight_home": "cmd.weight_home", "respawn_at": "cmd.respawn_at",
-                  "respawn_confirm_at": "cmd.respawn_confirm_at",
+SETTING_PARAMS = {"fly_key": ["cmd.fly_key"], "home_key": ["cmd.player_home_key"],
+                  "weight_home": ["cmd.weight_home"], "respawn_at": ["cmd.respawn_at"],
+                  "respawn_confirm_at": ["cmd.respawn_confirm_at"],
                   # Batt 2026-11-13 ~13:3x: "everything a user can set again; only defaults"
-                  "heal_key": "cmd.heal_key", "knife_key": "cmd.steal_opener",
-                  "dagger_key": "cmd.dagger_key", "knife_max_s": "cmd.knife_max_s",
-                  "knife_hp_min": "cmd.knife_hp_min"}  # fmt: skip
+                  "heal_key": ["cmd.heal_key"], "knife_key": ["cmd.steal_opener"],
+                  "dagger_key": ["cmd.dagger_key"], "knife_max_s": ["cmd.knife_max_s"],
+                  "knife_hp_min": ["cmd.knife_hp_min"],
+                  # ~14:2x: the heal and escape numbers show as their strategy's params too
+                  **{k: [f"strategy.{k}", f"cmd.{k}"] for k in
+                     ("potion_below", "fly_below", "fly_rate", "fly_rate_below")}}  # fmt: skip
 # The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
 OPTIONAL: list[dict[str, Any]] = []
 
@@ -1722,26 +1725,29 @@ def build() -> dict[str, Any]:
         # dungeon@9.41 (Batt 2026-11-13): where the map's flow begins and how it leaves the map
         "entry": "where you place her: Run starts on the cell she stands on",
         "exits": exits_of(ctx.cmd, str(ctx.cmd.get("player_home_key") or dh.HOME_KEY)),
-        "settings": {
-            "defaults": dict(_RUN_FLOW.settings),
-            "params": dict(SETTING_PARAMS),
-            "keys": list(_fr.KEY_CHOICES),
-            "reserved": list(_RUN_FLOW.reserved_keys),
-            "weights": list(_fr.WEIGHT_CHOICES),
-            "knife_s": list(_fr.KNIFE_S_RANGE),
-            "knife_hp": list(_fr.KNIFE_HP_CHOICES),
-            "flags": dict(_fr.SETTING_FLAGS),
-            # 2026-11-13 ~14:2x (Batt: every map's config, a map's own on top): the SURVIVAL
-            # group's defaults, choices and the params its blocks show
-            "survival": {
-                "defaults": dict(_RUN_FLOW.survival),
-                "params": {k: [f"strategy.{k}", f"cmd.{k}"] for k in _fr.SURVIVAL_FLAGS},
-                "choices": {k: list(v) for k, v in _fr.SURVIVAL_CHOICES.items()},
-                "fly_rate": list(_fr.FLY_RATE_RANGE),
-                "flags": dict(_fr.SURVIVAL_FLAGS),
-            },
-        },  # fmt: skip
+        # 2026-11-13 (Batt: "nothing is fixed, we only put the defaults"; "a global config for
+        # every map's flow, a map's own on top"): EVERY setting (scripts/flow_config.py), with its
+        # default and the params its blocks show; /flows reads the values from GET /flows/config
+        "config": config_doc(values),
     }
+
+
+def config_doc(values: dict[str, Any]) -> dict[str, Any]:
+    """The registry for /flows: each field with its default (the flow's, or the runner's own
+    number) and the doc params that show it."""
+    reg = _fc.registry()
+    for f in reg["fields"]:
+        n = f["name"]
+        if n in _RUN_FLOW.defaults:
+            f["default"] = json_val(_RUN_FLOW.defaults[n])
+            f["params"] = SETTING_PARAMS.get(n, [])
+        else:
+            if n not in values:
+                raise SystemExit(f"runner_flow_export: the setting {n} has no param of the doc")
+            f["default"] = json_val(values[n])
+            f["params"] = [n]
+    reg["map"] = _RUN_FLOW.map
+    return reg
 
 
 def exits_of(cmd: dict[str, Any], home_key: str) -> list[dict[str, str]]:

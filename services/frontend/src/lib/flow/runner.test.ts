@@ -23,15 +23,12 @@ import {
   type RunnerDoc,
   type RunnerPart,
   runnerDefs,
-  type RunSettings,
   runnerTabs,
   runnerWorkspace,
-  settingsProblem,
   stackOf,
   tabOf,
   textOf,
   titleOf,
-  withSettings,
   wrapParts,
 } from "./runner.ts";
 import { findRunner, RUNNERS, runnerForMap, runnerHref } from "./runners/index.ts";
@@ -255,76 +252,3 @@ test("the main loop calls Batt's Knife swap where the runner runs it", () => {
   assert.match(titleOf(findNode(DOC, "knife_back_fn") as never), /^function knife_back\(\)/);
   assert.ok(DOC.python.includes("def knife_on(eyes):") && DOC.python.includes("def knife_back(eyes):"));
 });
-
-test("no block names a hotbar key the person's settings replaced", () => {
-  const mine = withSettings(DOC, { ...(DOC.settings?.defaults as RunSettings), fly_key: "F6", home_key: "F7" });
-  const words = allNodes(mine).map((n) => titleOf(n) + (n.branches ?? []).map((b) => textOf(b.parts)).join(" "));
-  assert.ok(!words.some((w) => /Fly Wing \(F2\)/.test(w)), "the Fly Wing's key is the person's, never F2 in the words");
-  assert.ok(words.some((w) => /Fly Wing \(F6\)/.test(w)));
-});
-
-// --- 2026-11-13 (Batt: the hotbar keys and the weight limit are the person's, shown in the blocks)
-test("the run settings show in the blocks and the params; the Python keeps its lines", () => {
-  const d = DOC;
-  assert.ok(d.settings, "the export carries the settings");
-  assert.deepEqual(d.settings.defaults, {
-    fly_key: "F8",
-    home_key: "F9",
-    weight_home: 0.5,
-    respawn_at: "645,481",
-    respawn_confirm_at: "714,405",
-    heal_key: "F1",
-    knife_key: "F4",
-    dagger_key: "F5",
-    knife_max_s: 8,
-    knife_hp_min: 0.5,
-  });
-  const mine = withSettings(d, { ...d.settings.defaults, fly_key: "F6", home_key: "F7", weight_home: 0.65, respawn_at: "600,500", respawn_confirm_at: "none" });
-  const shown = (doc: RunnerDoc, param: string) =>
-    allNodes(doc).flatMap((n) => [...(n.parts ?? []), ...(n.branches ?? []).flatMap((b) => b.parts)]).filter((p): p is Extract<RunnerPart, { param: string }> => "param" in p && p.param === param).map((p) => p.shown);
-  assert.ok(shown(d, "cmd.weight_home").length >= 1 && shown(d, "cmd.weight_home").every((v) => v === "50"));
-  assert.ok(shown(mine, "cmd.weight_home").every((v) => v === "65"));
-  assert.ok(shown(mine, "cmd.player_home_key").length >= 1 && shown(mine, "cmd.player_home_key").every((v) => v === "F7"));
-  assert.ok(shown(mine, "cmd.fly_key").length >= 1 && shown(mine, "cmd.fly_key").every((v) => v === "F6"));
-  assert.equal(mine.params["cmd.weight_home"].value, 0.65);
-  // the respawn function block shows the person's button point (Batt: another server's menu)
-  assert.ok(shown(mine, "cmd.respawn_at").length >= 2 && shown(mine, "cmd.respawn_at").every((v) => v === "600,500"));
-  assert.ok(findNode(d, "respawn_fn"), "the respawn is its own function block");
-  assert.ok(shown(mine, "cmd.respawn_confirm_at").length >= 1 && shown(mine, "cmd.respawn_confirm_at").every((v) => v === "none"));
-  assert.equal(mine.python, d.python); // its lines are the blocks' marks
-  assert.equal(allNodes(mine).length, allNodes(d).length);
-  assert.deepEqual(checkDoc(mine, STYLES), []);
-  assert.equal(shown(d, "cmd.weight_home")[0], "50", "the export itself is unchanged");
-  // Batt 2026-11-13 ~13:3x: the Knife swap's keys and numbers, the heal key: the person's too
-  const knife = withSettings(d, { ...d.settings.defaults, heal_key: "F2", knife_key: "F6", dagger_key: "F7", knife_max_s: 0.2, knife_hp_min: 0.35 });
-  assert.ok(shown(knife, "cmd.steal_opener").length >= 3 && shown(knife, "cmd.steal_opener").every((v) => v === "F6"));
-  assert.ok(shown(knife, "cmd.dagger_key").length >= 2 && shown(knife, "cmd.dagger_key").every((v) => v === "F7"));
-  assert.ok(shown(knife, "cmd.knife_max_s").length >= 2 && shown(knife, "cmd.knife_max_s").every((v) => v === "0.2"));
-  assert.ok(shown(knife, "cmd.knife_hp_min").length >= 2 && shown(knife, "cmd.knife_hp_min").every((v) => v === "35"));
-  assert.ok(shown(knife, "cmd.heal_key").length >= 1 && shown(knife, "cmd.heal_key").every((v) => v === "F2"));
-  assert.deepEqual(shown(d, "cmd.knife_max_s").slice(0, 1), ["8"]); // the export's own default text
-});
-
-test("the run settings are checked against the export's own choices", () => {
-  const s = DOC.settings;
-  assert.ok(s);
-  assert.equal(settingsProblem(s.defaults, s), null);
-  assert.deepEqual(s.reserved, []); // Batt 2026-11-13: no key is the run's own
-  assert.match(String(settingsProblem({ ...s.defaults, fly_key: "F4" }, s)), /the Fly Wing and the Knife are both on F4/);
-  assert.match(String(settingsProblem({ ...s.defaults, home_key: "F8" }, s)), /both on F8/);
-  assert.match(String(settingsProblem({ ...s.defaults, dagger_key: "F1" }, s)), /the heal item and the dagger are both on F1/);
-  assert.match(String(settingsProblem({ ...s.defaults, fly_key: "F12" }, s)), /not one of/);
-  assert.match(String(settingsProblem({ ...s.defaults, weight_home: 0.33 }, s)), /not one of the choices/);
-  assert.equal(settingsProblem({ ...s.defaults, respawn_at: "1279,719" }, s), null);
-  for (const bad of ["1280,10", "10,720", "x,1", "645", "-1,5", ""]) assert.match(String(settingsProblem({ ...s.defaults, respawn_at: bad }, s)), /not a point/, bad);
-  assert.equal(settingsProblem({ ...s.defaults, respawn_confirm_at: "none" }, s), null); // a server that asks nothing
-  assert.match(String(settingsProblem({ ...s.defaults, respawn_confirm_at: "900,800" }, s)), /not a point/);
-  assert.deepEqual(DOC.exits?.map((x) => x.id), ["weight_home", "respawn"]); // the map's two exits
-  // the Knife swap's numbers (Batt: "F4, wait 200 ms, F5" = a Knife time of 0.2 s)
-  assert.equal(settingsProblem({ ...s.defaults, knife_max_s: 0.2 }, s), null);
-  assert.equal(settingsProblem({ ...s.defaults, knife_max_s: 20 }, s), null);
-  for (const bad of [0.1, 20.5, Number.NaN]) assert.match(String(settingsProblem({ ...s.defaults, knife_max_s: bad }, s)), /Knife's time/, String(bad));
-  assert.equal(settingsProblem({ ...s.defaults, knife_hp_min: 0.3 }, s), null);
-  assert.match(String(settingsProblem({ ...s.defaults, knife_hp_min: 0.33 }, s)), /HP under 33 %/);
-});
-

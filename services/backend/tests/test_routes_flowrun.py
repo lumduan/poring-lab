@@ -65,7 +65,9 @@ def helper(tmp_path: Path, state: str = "idle", age: float = 0.0) -> None:
         "v": 1,
         "state": state,
         "t_wall": time.time() - age,
-        "flows": {FLOW: {"title": "t", "minutes": 120}},
+        "flows": {FLOW: {"title": "t", "minutes": 120, "map": "xmas_dun02",
+                         "defaults": {"heal_key": "F1", "fly_key": "F8", "home_key": "F9",
+                                      "knife_key": "F4", "dagger_key": "F5"}}},  # fmt: skip
     }
     (d / "status.json").write_text(json.dumps(st))
 
@@ -104,44 +106,16 @@ def test_a_start_writes_one_request_for_a_listed_flow(client: TestClient, tmp_pa
     assert post(client, {"action": "start", "flow": FLOW, "args": ["--x"]}).status_code == 422
 
 
-def test_a_start_may_carry_settings_from_fixed_ranges(client: TestClient, tmp_path: Path) -> None:
+def test_a_start_carries_no_settings(client: TestClient, tmp_path: Path) -> None:
+    """Batt 2026-11-13 ~14:4x: every setting lives in the config file (every map's, a map's own);
+    a Run request names a flow and nothing else."""
     helper(tmp_path)
     assist(client)
-    body = {
-        "action": "start",
-        "flow": FLOW,
-        "settings": {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5},
-    }
-    r = post(client, body)
-    assert r.status_code == 200, r.text
+    r = post(client, {"action": "start", "flow": FLOW, "settings": {"fly_key": "F8"}})
+    assert r.status_code == 422  # extra fields are refused
+    assert post(client, {"action": "start", "flow": FLOW}).status_code == 200
     req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
-    assert req["settings"] == {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5}
-    for bad in ({"fly_key": "F10"}, {"home_key": "Shift"}, {"weight_home": 0.95},
-                {"weight_home": 0.1}, {"fly_key": "F8", "extra": 1}):  # fmt: skip
-        assert (
-            post(client, {"action": "start", "flow": FLOW, "settings": bad}).status_code == 422
-        ), bad
-    r = post(
-        client, {"action": "start", "flow": FLOW, "settings": {"fly_key": "F8", "home_key": "F8"}}
-    )
-    assert r.status_code == 400 and r.json()["detail"]["reason"] == "settings_same_key"
-    # Batt 2026-11-13 ~13:3x: the heal key, the Knife swap's keys and numbers are the person's too
-    for bad in ({"knife_key": "F10"}, {"dagger_key": "Tab"}, {"heal_key": "F0"},
-                {"knife_max_s": 0.1}, {"knife_max_s": 25}, {"knife_hp_min": 0.1},
-                {"knife_hp_min": 0.95}):  # fmt: skip
-        assert (
-            post(client, {"action": "start", "flow": FLOW, "settings": bad}).status_code == 422
-        ), bad
-    for same in ({"knife_key": "F4", "dagger_key": "F4"}, {"heal_key": "F8", "fly_key": "F8"},
-                 {"home_key": "F5", "dagger_key": "F5"}):  # fmt: skip
-        r = post(client, {"action": "start", "flow": FLOW, "settings": same})
-        assert r.status_code == 400 and r.json()["detail"]["reason"] == "settings_same_key", same
-    mine = {"heal_key": "F2", "knife_key": "F6", "dagger_key": "F7", "knife_max_s": 0.2,
-            "knife_hp_min": 0.35}  # fmt: skip
-    r = post(client, {"action": "start", "flow": FLOW, "settings": mine})
-    assert r.status_code == 200, r.text
-    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
-    assert req["settings"] == mine  # the helper checks the whole set again (flow_run.settings_of)
+    assert set(req) == {"id", "action", "flow", "at"}
 
 
 def test_the_write_gate_holds(client: TestClient, tmp_path: Path) -> None:
@@ -167,68 +141,67 @@ def test_stop_and_busy(client: TestClient, tmp_path: Path) -> None:
     assert r.status_code == 503
 
 
-# --- 2026-11-13 ~14:2x (Batt: "the heal and escape numbers: a global config for every map's flow;
-# a map's flow that sets them again overrides it") ---------------------------------------------
-def put_survival(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
+# --- 2026-11-13 (Batt: "nothing is fixed, we only put the defaults"; "a global config for every
+# map's flow, a map's own on top"; scripts/flow_config.py is the registry) ----------------------
+def put_config(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
     h = dict(H)
     if csrf:
         h["X-CSRF-Token"] = c.get("/settings/csrf", headers=H).json()["token"]
-    return c.put("/flows/survival", json=body, headers=h)
+    return c.put("/flows/config", json=body, headers=h)
 
 
-def test_the_survival_numbers_every_map_then_a_maps_own(client: TestClient, tmp_path: Path) -> None:
-    f = tmp_path / "settings" / "flowrun" / "survival.json"
-    assert client.get("/flows/survival", headers=H).json() == {"global": {}, "maps": {}}
+def test_the_config_every_map_then_a_maps_own(client: TestClient, tmp_path: Path) -> None:
+    helper(tmp_path)  # its status lists the flow's map and defaults (the clash check reads them)
+    d = tmp_path / "settings" / "flowrun"
+    assert client.get("/flows/config", headers=H).json() == {"global": {}, "maps": {}}
     g = {"potion_below": 0.3, "fly_below": 0.15, "fly_rate": 200, "fly_rate_below": 0.6}
-    r = put_survival(client, {"scope": "global", "values": g})
+    r = put_config(client, {"scope": "global", "group": "survival", "values": g})
     assert r.status_code == 200, r.text
-    m = {"potion_below": 0.5, "fly_below": 0.25, "fly_rate": 120.4, "fly_rate_below": 0.55}
-    assert (
-        put_survival(client, {"scope": "map", "map": "xmas_dun02", "values": m}).status_code == 200
-    )
-    doc = json.loads(f.read_text())
-    assert doc["v"] == 1 and doc["global"]["potion_below"] == 0.3
-    assert doc["maps"]["xmas_dun02"]["fly_rate"] == 120.0  # whole HP per second
-    got = client.get("/flows/survival", headers=H).json()
-    assert got["maps"]["xmas_dun02"]["potion_below"] == 0.5 and got["global"]["fly_below"] == 0.15
-    # the helper reads the same file the same way (scripts/flow_run.py, checked again there)
+    r = put_config(client, {"scope": "map", "map": "xmas_dun02", "group": "loot",
+                            "values": {"LOOT_TRIM_HOVERS": 12, "LOOT_MAX_S": 30}})  # fmt: skip
+    assert r.status_code == 200, r.text
+    doc = json.loads((d / "config.json").read_text())
+    assert doc["v"] == 2 and doc["global"]["potion_below"] == 0.3
+    assert doc["maps"]["xmas_dun02"] == {"LOOT_TRIM_HOVERS": 12, "LOOT_MAX_S": 30.0}
+    # the helper reads the same file the same way
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+    import flow_config as fc
     import flow_run as fr
 
-    vals, src = fr.survival_of(fr.FLOWS[FLOW], fr.read_survival(f))  # type: ignore[arg-type]
-    assert vals["potion_below"] == 0.5 and set(src.values()) == {"map"}
-    # clearing the map's own: every map's apply again; clearing every map's: the defaults
-    assert (
-        put_survival(client, {"scope": "map", "map": "xmas_dun02", "values": None}).status_code
-        == 200
-    )
-    assert json.loads(f.read_text())["maps"] == {}
-    assert put_survival(client, {"scope": "global", "values": None}).status_code == 200
-    assert json.loads(f.read_text())["global"] == {}
-    audit = (tmp_path / "settings" / "flowrun" / "survival.jsonl").read_text().splitlines()
-    assert len(audit) == 4 and json.loads(audit[1])["map"] == "xmas_dun02"
+    vals, src = fr.config_of(fr.FLOWS[FLOW], fc.read_config(d))  # type: ignore[arg-type]
+    assert vals["potion_below"] == 0.3 and src["potion_below"] == "global"
+    assert vals["LOOT_TRIM_HOVERS"] == 12 and src["LOOT_TRIM_HOVERS"] == "map"
+    # a group's values replace only that group's at that level; None removes them
+    r = put_config(client, {"scope": "map", "map": "xmas_dun02", "group": "loot", "values": None})
+    assert r.status_code == 200 and json.loads((d / "config.json").read_text())["maps"] == {}
+    assert put_config(client, {"scope": "global", "group": "survival", "values": None}).status_code == 200
+    assert json.loads((d / "config.json").read_text())["global"] == {}
+    audit = (d / "config.jsonl").read_text().splitlines()
+    assert len(audit) == 4 and json.loads(audit[1])["group"] == "loot"
 
 
-def test_the_survival_numbers_are_refused_off_their_grid(
-    client: TestClient, tmp_path: Path
-) -> None:
-    ok = {"potion_below": 0.4, "fly_below": 0.2, "fly_rate": 150, "fly_rate_below": 0.5}
-    for bad in ({**ok, "potion_below": 0.33}, {**ok, "potion_below": 0.95},
-                {**ok, "fly_below": 0.0},
-                {**ok, "fly_rate": 20}, {**ok, "fly_rate": 5000}, {**ok, "fly_rate_below": 0.1},
-                {**ok, "extra": 1}, {"potion_below": 0.4}):  # fmt: skip
-        r = put_survival(client, {"scope": "global", "values": bad})
-        assert r.status_code == 422, bad
-    assert put_survival(client, {"scope": "map", "values": ok}).status_code == 400  # which map?
-    assert put_survival(client, {"scope": "map", "map": "../etc", "values": ok}).status_code == 422
-    assert put_survival(client, {"scope": "global", "values": ok}, csrf=False).status_code == 403
+def test_the_config_refuses_what_could_not_run(client: TestClient, tmp_path: Path) -> None:
+    helper(tmp_path)
+    d = tmp_path / "settings" / "flowrun"
+    for body, word in (
+        ({"scope": "global", "group": "survival", "values": {"potion_below": 0.33}}, "step"),
+        ({"scope": "global", "group": "loot", "values": {"LOOT_TRIM_HOVERS": 99}}, "is not from"),
+        ({"scope": "global", "group": "loot", "values": {"potion_below": 0.3}}, "not in the group"),
+        ({"scope": "global", "group": "nope", "values": {}}, "unknown group"),
+        ({"scope": "map", "group": "loot", "values": {}}, "map's name"),
+        ({"scope": "global", "group": "keys", "values": {"dagger_key": "F4"}}, "both on F4"),
+    ):  # fmt: skip
+        r = put_config(client, body)
+        assert r.status_code == 400 and word in r.json()["detail"]["detail"], (body, r.text)
+    assert put_config(client, {"scope": "map", "map": "../etc", "group": "loot"}).status_code == 422
+    ok = {"scope": "global", "group": "loot", "values": {"LOOT_TRIM_HOVERS": 12}}
+    assert put_config(client, ok, csrf=False).status_code == 403
+    assert not (d / "config.json").exists()  # nothing refused was written
     # a file a person must look at is never written over
-    f = tmp_path / "settings" / "flowrun" / "survival.json"
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("{not json")
-    assert client.get("/flows/survival", headers=H).json().get("broken") is True
-    r = put_survival(client, {"scope": "global", "values": ok})
-    assert r.status_code == 409 and r.json()["detail"]["reason"] == "survival_file_broken"
-    assert f.read_text() == "{not json"
+    (d / "config.json").write_text("{not json")
+    assert "not valid JSON" in client.get("/flows/config", headers=H).json()["broken"]
+    r = put_config(client, ok)
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "config_file_broken"
+    assert (d / "config.json").read_text() == "{not json"

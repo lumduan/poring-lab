@@ -6,10 +6,13 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import flow_config as fc  # noqa: E402
 import flow_run as fr  # noqa: E402
 
 
@@ -47,11 +50,10 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
         "action": "start",
         "flow": "xmas_dun02_rogue",
         "args": ["--clear-map"],
-    }  # an argument in a request is ignored
-    ok = fr.parse_request(json.dumps(req))
-    # a start carries its SETTINGS, checked (the flow's defaults when the request names none)
-    assert ok == {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
-                  "settings": DEFAULTS}  # fmt: skip
+        "settings": {"fly_key": "F1"},
+    }  # an argument or a setting in a request is ignored: every setting is the config file's
+    assert fr.parse_request(json.dumps(req)) == {"id": "a1b2c3d4e5", "action": "start",
+                                                 "flow": "xmas_dun02_rogue"}  # fmt: skip
     assert fr.parse_request("{") == "unparsable request"
     assert fr.parse_request(json.dumps({"id": "x", "action": "start"})) == "bad request id"
     assert "unknown flow" in str(fr.parse_request(json.dumps(
@@ -63,74 +65,51 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
 
 
 # --- 2026-11-13 (Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't hard-code them";
-# ~13:3x "everything a user can set again; nothing fixed, we only put the defaults") -------------
-DEFAULTS = {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5, "respawn_at": "645,481",
-            "respawn_confirm_at": "714,405", "heal_key": "F1", "knife_key": "F4",
-            "dagger_key": "F5", "knife_max_s": 8.0, "knife_hp_min": 0.5}  # fmt: skip
-
-
-def test_the_settings_are_the_defaults_or_a_persons_from_fixed_lists() -> None:
+# "nothing is fixed, we only put the defaults"; "a global config for every map's flow, a map's own
+# on top") -- every setting is scripts/flow_config.py's, its value from settings/flowrun/config.json
+def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    assert fr.settings_of(f, None) == DEFAULTS
-    assert f.reserved_keys == ()  # no key is the run's own: every one is the person's
-    assert fr.settings_of(f, {"respawn_confirm_at": "none"})["respawn_confirm_at"] == "none"  # type: ignore[index]
-    assert fr.settings_of(f, {"fly_key": "F6", "weight_home": 0.6, "respawn_at": "600,500"}) == {
-        **DEFAULTS, "fly_key": "F6", "weight_home": 0.6, "respawn_at": "600,500"}  # fmt: skip
-    # the Knife swap, the heal key (Batt's "F4, wait 200 ms, F5" = a Knife time of 0.2 s)
-    mine = fr.settings_of(f, {"heal_key": "F2", "knife_key": "F6", "dagger_key": "F7",
-                              "knife_max_s": 0.2, "knife_hp_min": 0.35})  # fmt: skip
-    assert isinstance(mine, dict) and mine["knife_max_s"] == 0.2 and mine["knife_hp_min"] == 0.35
-    assert fr.settings_of(f, {"knife_max_s": 20})["knife_max_s"] == 20.0  # type: ignore[index]
-    bad = (({"fly_key": "F10"}, "not a row-1"), ({"home_key": "Enter"}, "not a row-1"),
-           ({"fly_key": "F4"}, "the Fly Wing and the Knife are both on F4"),
-           ({"home_key": "F1"}, "the heal item and the Butterfly Wing are both on F1"),
-           ({"dagger_key": "F4"}, "the Knife and the dagger are both on F4"),
-           ({"heal_key": "F8"}, "the heal item and the Fly Wing are both on F8"),
-           ({"knife_key": "F12"}, "not a row-1"),
-           ({"knife_max_s": 0.1}, "is not a time"), ({"knife_max_s": 21}, "is not a time"),
-           ({"knife_max_s": "8"}, "is not a time"), ({"knife_max_s": True}, "is not a time"),
-           ({"knife_hp_min": 0.33}, "is not one of"), ({"knife_hp_min": 0.95}, "is not one of"),
-           ({"fly_key": "F9"}, "two different keys"), ({"weight_home": 0.33}, "is not one of"),
-           ({"weight_home": True}, "is not one of"), ({"weight_home": "0.5"}, "is not one of"),
-           ({"steal_opener": "F2"}, "unknown setting"),
-           ({"respawn_at": "1280,10"}, "not a point"), ({"respawn_at": "10,720"}, "not a point"),
-           ({"respawn_at": "645;481"}, "not a point"),
-           ({"respawn_at": 645}, "not a point"),
-           ({"respawn_confirm_at": "1300,1"}, "not a point"),
-           ({"respawn_confirm_at": "NONE!"}, "not a point"))  # fmt: skip
-    for raw, why in bad:
-        got = fr.settings_of(f, raw)
-        assert isinstance(got, str) and why in got, (raw, got)
+    assert f.map == "xmas_dun02"
+    for k, v in f.defaults.items():
+        assert k in fc.BY_NAME and not fc.BY_NAME[k].tune, k  # a flag of its own
+        assert fc.problem_of(fc.BY_NAME[k], v) is None, (k, v)
+    assert {x.name for x in fc.FIELDS if x.flag} == set(f.defaults)  # every flag field defaulted
+    assert fc.clash(f.defaults) is None
+    p2 = dh.STRATEGIES[fr.FIXED[fr.FIXED.index("--strategy") + 1]]
+    for k in ("potion_below", "fly_below", "fly_rate", "fly_rate_below"):
+        assert f.defaults[k] == p2[k], k
+    assert set(dh.SURVIVAL_RANGES) <= set(f.defaults)
 
 
-def test_the_settings_become_flags_and_nothing_else_does() -> None:
+def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    st = fr.settings_of(f, {"fly_key": "F7", "home_key": "F6", "weight_home": 0.4})
-    assert isinstance(st, dict)
-    argv = fr.command(f, "flowrun-x", None, st)
-    assert argv[argv.index("--fly-key") + 1] == "F7"
-    assert argv[argv.index("--player-home-key") + 1] == "F6"
-    assert argv[argv.index("--weight-home") + 1] == "0.40"
-    assert argv.count("--fly-key") == 1 and argv.count("--weight-home") == 1
-    assert argv[argv.index("--respawn-at") + 1] == "645,481"  # the default point
-    assert argv[argv.index("--respawn-confirm-at") + 1] == "714,405"
-    for flag, v in (("--heal-key", "F1"), ("--steal-opener", "F4"), ("--dagger-key", "F5"),
-                    ("--knife-max-s", "8.00"), ("--knife-hp-min", "0.50")):  # fmt: skip
-        assert argv[argv.index(flag) + 1] == v and argv.count(flag) == 1, flag
-    req = {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
-           "settings": {"fly_key": "F4"}}  # fmt: skip
-    assert "both on F4" in str(fr.parse_request(json.dumps(req)))
-    req["settings"] = ["F8"]
-    assert fr.parse_request(json.dumps(req)) == "settings must be an object"
+    cfg = {"global": {"potion_below": 0.3, "LOOT_TRIM_HOVERS": 12, "fly_key": "F7"},
+           "maps": {"xmas_dun02": {"potion_below": 0.5}, "prt_fild08": {"fly_key": "F6"}}}  # fmt: skip
+    vals, src = fr.config_of(f, cfg)
+    assert vals["potion_below"] == 0.5 and src["potion_below"] == "map"
+    assert vals["fly_key"] == "F7" and src["fly_key"] == "global"  # another map's own is not hers
+    assert vals["LOOT_TRIM_HOVERS"] == 12 and src["LOOT_TRIM_HOVERS"] == "global"
+    assert vals["home_key"] == "F9" and src["home_key"] == "default"
+    argv = fr.command(f, "x", None, vals)
+    assert argv[argv.index("--potion-below") + 1] == "0.50"
+    assert argv[argv.index("--fly-key") + 1] == "F7" and argv.count("--fly-key") == 1
+    assert argv[argv.index("LOOT_TRIM_HOVERS=12") - 1] == "--tune"
+    assert "--tune" not in fr.command(f, "x")  # nobody set a runner number: the runner's own
 
 
-def test_the_runner_accepts_the_default_keys_with_the_runs_own() -> None:
-    """The defaults pass the runner's own key checks (no key of the run's is taken twice), and
-    a person's other set of keys does too, as the runner composes them (dungeon@9.42)."""
+def test_two_settings_on_one_key_never_run() -> None:
+    f = fr.FLOWS["xmas_dun02_rogue"]
+    with pytest.raises(ValueError, match="both on F4"):
+        fr.command(f, "x", None, {**f.defaults, "dagger_key": "F4"})
+
+
+def test_the_runner_accepts_the_default_keys_and_another_set() -> None:
+    """The defaults pass the runner's own key checks, and so does a person's other set of keys,
+    as the runner composes them (dungeon@9.42)."""
     conf = dh.CHARS_CONF["rogue"]
-    f = fr.FLOWS["xmas_dun02_rogue"]
-    for st in (dict(f.settings), {**f.settings, "heal_key": "F3", "fly_key": "F1", "home_key": "F2",
-                                  "knife_key": "F6", "dagger_key": "F7"}):  # fmt: skip
+    d = fr.FLOWS["xmas_dun02_rogue"].defaults
+    for st in (dict(d), {**d, "heal_key": "F3", "fly_key": "F1", "home_key": "F2",
+                         "knife_key": "F6", "dagger_key": "F7"}):  # fmt: skip
         no_steal = {w: k for w, k in conf["keys"].items() if w != "steal"}  # --steal is off
         keys, why = dh.person_keys(no_steal, st["heal_key"], st["dagger_key"])
         assert why is None
@@ -171,60 +150,18 @@ def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
     assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
 
 
-# --- 2026-11-13 ~14:2x (Batt: "the heal and escape numbers: a global config for every map's flow;
-# a map's flow that sets them again overrides it, that map's config first") ---------------------
-def test_the_survival_defaults_are_the_strategys_own() -> None:
+def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(tmp_path: Path) -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    strat = dh.STRATEGIES["P2"]
-    assert f.map == "xmas_dun02" and "--strategy" in fr.FIXED
-    assert fr.FIXED[fr.FIXED.index("--strategy") + 1] == "P2"
-    assert f.survival == {k: strat[k] for k in fr.SURVIVAL_FLAGS}
-    assert set(fr.SURVIVAL_FLAGS) == set(dh.SURVIVAL_RANGES)
-
-
-def test_the_maps_own_numbers_first_then_every_maps_then_the_defaults() -> None:
-    f = fr.FLOWS["xmas_dun02_rogue"]
-    g = {"potion_below": 0.3, "fly_below": 0.15, "fly_rate": 200.0, "fly_rate_below": 0.6}
-    m = {"potion_below": 0.5, "fly_below": 0.25, "fly_rate": 120.0, "fly_rate_below": 0.55}
-    assert fr.survival_of(f, {}) == (f.survival, dict.fromkeys(f.survival, "default"))
-    assert fr.survival_of(f, {"global": g, "maps": {}}) == (g, dict.fromkeys(g, "global"))
-    assert fr.survival_of(f, {"global": g, "maps": {"xmas_dun02": m}}) == (
-        m,
-        dict.fromkeys(m, "map"),
-    )
-    assert fr.survival_of(f, {"global": g, "maps": {"prt_fild08": m}})[0] == g  # another map's
-    vals, src = fr.survival_of(f, {"global": {"fly_below": 0.1}, "maps": {}})
-    assert vals == {**f.survival, "fly_below": 0.1} and src["fly_below"] == "global"
-    argv = fr.command(f, "x", None, None, m)
-    for flag, v in (("--potion-below", "0.50"), ("--fly-below", "0.25"), ("--fly-rate", "120"),
-                    ("--fly-rate-below", "0.55")):  # fmt: skip
-        assert argv[argv.index(flag) + 1] == v and argv.count(flag) == 1, flag
-    assert "--fly-rate" in fr.command(f, "x")  # the defaults when no config is given
-
-
-def test_the_survival_file_is_checked_and_a_broken_one_refuses(tmp_path: Path) -> None:
-    p = tmp_path / "survival.json"
-    assert fr.read_survival(p) == {}
-    p.write_text(json.dumps({"v": 1, "global": {"potion_below": 0.35}, "maps": {"xmas_dun02": {
-        "fly_rate": 199.6}}}))  # fmt: skip
-    assert fr.read_survival(p) == {"global": {"potion_below": 0.35},
-                                   "maps": {"xmas_dun02": {"fly_rate": 200.0}}}  # fmt: skip
-    for bad, why in (("{", "not valid JSON"), (json.dumps({"v": 2}), "version 1"),
-                     (json.dumps({"v": 1, "global": {"potion_below": 0.33}}), "is not one of"),
-                     (json.dumps({"v": 1, "global": {"fly_rate": 20}}), "HP/s"),
-                     (json.dumps({"v": 1, "global": {"heal": 1}}), "unknown survival"),
-                     (json.dumps({"v": 1, "maps": {"../x": {}}}), "not a map name"),
-                     (json.dumps({"v": 1, "maps": {"m": {"fly_below": True}}}),
-                      "not a number")):  # fmt: skip
-        p.write_text(bad)
-        got = fr.read_survival(p)
-        assert isinstance(got, str) and why in got, (bad, got)
-    # the helper refuses to start on a broken file, before anything starts
-    h = fr.Helper(tmp_path)
-    orig = fr.SURVIVAL_FILE
+    orig = fr.CONFIG_DIR
     try:
-        fr.SURVIVAL_FILE = p
-        h.start(fr.FLOWS["xmas_dun02_rogue"], "a1b2c3d4e5")
+        fr.CONFIG_DIR = tmp_path
+        for text, word in (("{", "not valid JSON"),
+                           (json.dumps({"v": 2, "maps": {"xmas_dun02": {"dagger_key": "F4"}}}),
+                            "both on F4")):  # fmt: skip
+            (tmp_path / "config.json").write_text(text)
+            h = fr.Helper(tmp_path)
+            h.start(f, "a1b2c3d4e5")
+            assert h.state == "refused" and word in h.detail and h.runner is None, h.detail
+            assert "refused before any input" in h.detail
     finally:
-        fr.SURVIVAL_FILE = orig
-    assert h.state == "refused" and "refused before any input" in h.detail and h.runner is None
+        fr.CONFIG_DIR = orig

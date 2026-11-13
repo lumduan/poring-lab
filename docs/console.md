@@ -279,6 +279,14 @@ Amendment B); a not-adopted model is never offered.
   on the bot server (`settings/flowrun/survival.json`, the Settings write gate) and says which
   values the next Run uses: this map's own, every map's, or the defaults. Unlike the run settings
   (this browser), these follow the person to any browser.
+  ➡️ **SUPERSEDED ~15:0x by ONE settings panel (dungeon@9.44):** every setting, 70 in 12 groups
+  (scripts/flow_config.py): hotbar keys, the Knife swap, heal and escape, leaving the map and the
+  respawn open; the start, the fight, choosing and striking, loot, walking, safety and the loop
+  under "all the other numbers". Each group edits **every map** or **this map only**; each change
+  is saved at once on the bot server (settings/flowrun/config.json) with an undo line; a value
+  equal to the level below is not stored (it keeps following it); a tag says where a value comes
+  from (this map / every map / nothing = the default). Run sends no settings: the Run helper reads
+  the same file. The run settings strip and the heal-and-escape strip above are history.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

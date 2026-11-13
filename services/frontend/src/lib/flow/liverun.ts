@@ -63,8 +63,7 @@ export const REFUSALS: Record<string, string> = {
   origin_required: "Open the console from its own address to use Run.",
   lab_host_peer: "Run is refused from the bot server itself: use your own browser on the LAN.",
   rate_limited: "Too many requests: wait a moment.",
-  settings_same_key: "Two of your run settings use the same hotbar key: each one needs its own key.",
-  settings_off_picture: "The respawn button's point must lie inside the 1280 x 720 game picture.",
-  survival_file_broken: "The survival file on the bot server cannot be read: a person looks at settings/flowrun/survival.json first.",
-  survival_map_missing: "Which map's numbers? (no map was named)",
+  config_file_broken: "The settings file on the bot server cannot be read: a person looks at settings/flowrun/config.json first.",
+  config_refused: "Not saved: that value cannot run.",
+  config_engine_unavailable: "The bot server cannot read its settings list (scripts/flow_config.py) here.",
 };

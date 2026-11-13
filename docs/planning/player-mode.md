@@ -266,6 +266,25 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   them as flags; a request never carries them, and a broken file refuses the run before any input.
   /flows shows a "heal and escape" strip: every map / <map> only, each change saved at once; the
   blocks show the numbers the next Run uses.
+- ➡️ **dungeon@9.44, EVERY setting on the bot server (2026-11-13 ~15:0x; Batt: "move them too"
+  -- the hotbar keys, the Knife swap, the respawn points -- and "all of them" -- loot, walking, the
+  start minimums, the rest):** ONE registry, `scripts/flow_config.py` (70 settings in 12 groups:
+  hotbar keys, the Knife swap, heal and escape, leaving the map, the respawn, the start, the fight,
+  choosing and striking, loot, walking and exploring, safety and the end, the loop), each with its
+  kind, range, words and how the runner takes it: its own flag (the 14 Run settings) or
+  `--tune NAME=VALUE` (56 runner constants; `tune_values` checks each against flow_config, then
+  `tune_apply` sets it before anything reads one). 21 constants used to be copied into default
+  arguments at import (a `--tune` would have been ignored SILENTLY): they are read at call time
+  now, and `test_flow_config` fails if any setting is ever bound at import again, or if /flows
+  shows a runner number that is neither a setting nor excluded with its reason.
+  ➡️ The values: `settings/flowrun/config.json` (v2, the same shape as 8e3ca2df's survival.json,
+  which it reads while config.json does not exist), `PUT /flows/config` per GROUP and level
+  (every map / one map's own; audited in config.jsonl; refused when a value is off its range or
+  two settings would share a hotbar key for a listed flow). A Run request names a flow and NOTHING
+  else: the browser's run settings (localStorage) are gone; the helper takes, per setting, the
+  default < every map's < the map's own, refuses a broken file or a key clash before any input,
+  and passes the flags. ➡️ This SUPERSEDES the per-browser run settings (9.41-9.42) and the
+  survival-only file (9.43) above: they are history.
 
 ## Not built yet
 

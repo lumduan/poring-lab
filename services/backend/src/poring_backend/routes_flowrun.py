@@ -3,10 +3,11 @@ press run on flows, and the bot plays by itself").
 
     GET  /flows/run   the host helper's status (scripts/flow_run.py) and whether it is alive
     POST /flows/run   {"action": "start" | "stop", "flow": "<id>"}: one request for the helper
-    GET  /flows/survival  the heal and escape numbers: every map's ("global") and each map's own
-    PUT  /flows/survival  {"scope": "global" | "map", "map": "<map>", "values": {...} | null}
-         (Batt 2026-11-13 ~14:2x: "a global config for every map's flow; a map's flow that sets
-         them again overrides it"); the helper reads the file at each start
+    GET  /flows/config  every setting a person set: every map's ("global") and each map's own
+    PUT  /flows/config  {"scope": "global" | "map", "map": "<map>", "group": "<group>",
+         "values": {...} | null}: one group at one level (Batt 2026-11-13: "nothing is fixed, we
+         only put the defaults"; "a global config for every map's flow, a map's own on top";
+         scripts/flow_config.py is the registry); the helper reads the file at each start
 
 The backend starts nothing itself (it cannot reach the host's processes, by design). It writes ONE
 request file into the human-only settings store (``settings/flowrun/request.json``, mounted only
@@ -21,15 +22,17 @@ is logged (requests.jsonl, who and what). Reads pass the console-browser gate.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from poring_backend.routes_settings import _who, browser_gate, write_gate
 from poring_backend.state import AppState
@@ -41,84 +44,54 @@ HELPER_FRESH_S = 10.0  # the helper rewrites its status every 2 s: older = not r
 ACTIVE = ("starting", "running", "stopping")
 
 
-HotbarKey = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"]
-
-
-class RunSettings(BaseModel):
-    """A person's run settings (2026-11-13, Batt: "don't hard-code the keys"): hotbar keys and the
-    weight limit only, each from a fixed range. The Run helper checks them again against the flow
-    (its defaults and the keys the run uses already: scripts/flow_run.py settings_of)."""
-
-    model_config = ConfigDict(extra="forbid")
-    fly_key: HotbarKey | None = None
-    home_key: HotbarKey | None = None
-    weight_home: float | None = Field(default=None, ge=0.3, le=0.8)
-    # the death menu's button, game-picture px "X,Y" (another server's menu may differ)
-    respawn_at: str | None = Field(default=None, pattern=r"^\d{1,4},\d{1,4}$")
-    # its confirmation's OK, or "none" (a server that asks no confirmation)
-    respawn_confirm_at: str | None = Field(default=None, pattern=r"^(\d{1,4},\d{1,4}|none)$")
-    # Batt 2026-11-13 ~13:3x: "everything a user can set again; we only put the defaults"
-    heal_key: HotbarKey | None = None
-    knife_key: HotbarKey | None = None  # Batt's Knife swap: the Knife
-    dagger_key: HotbarKey | None = None  # ... and the dagger back on
-    knife_max_s: float | None = Field(default=None, ge=0.2, le=20.0)
-    knife_hp_min: float | None = Field(default=None, ge=0.2, le=0.9)
-
-
-def _on_step(v: float, step: float = 0.05) -> float:
-    """A share on the helper's 0.05 grid (scripts/flow_run.py SURVIVAL_CHOICES), else refused."""
-    if abs(v / step - round(v / step)) > 1e-6:
-        raise ValueError(f"{v} is not a multiple of {step}")
-    return round(v, 2)
-
-
-class Survival(BaseModel):
-    """The SURVIVAL group, all four numbers (a level's group is set whole): the ranges of
-    dungeon_hunt.SURVIVAL_RANGES; the helper checks them again (flow_run.survival_check)."""
-
-    model_config = ConfigDict(extra="forbid")
-    potion_below: float = Field(ge=0.10, le=0.90)  # a heal item under this HP share
-    fly_below: float = Field(ge=0.05, le=0.60)  # a Fly Wing under this HP share
-    fly_rate: float = Field(ge=50.0, le=1000.0)  # a Fly Wing when the HP falls faster (HP/s) ...
-    fly_rate_below: float = Field(ge=0.20, le=0.90)  # ... while under this share
-
-    @field_validator("potion_below", "fly_below", "fly_rate_below")
-    @classmethod
-    def _grid(cls, v: float) -> float:
-        return _on_step(v)
-
-    @field_validator("fly_rate")
-    @classmethod
-    def _whole(cls, v: float) -> float:
-        return float(round(v))
-
-
-class SurvivalBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    scope: Literal["global", "map"]
-    map: str | None = Field(default=None, pattern=r"^[a-z0-9_@-]{1,40}$")
-    values: Survival | None = None  # None: clear this level (the next one down applies)
-
-
-def read_survival(d: Path) -> dict[str, Any]:
-    """PURE but for the file read: {"global": {...}, "maps": {...}} (empty when there is none;
-    ``broken`` when it cannot be read: the helper then refuses to start a run)."""
-    try:
-        doc = json.loads((d / "survival.json").read_text())
-    except FileNotFoundError:
-        return {"global": {}, "maps": {}}
-    except (OSError, ValueError):
-        return {"global": {}, "maps": {}, "broken": True}
-    if not isinstance(doc, dict) or doc.get("v") != 1:
-        return {"global": {}, "maps": {}, "broken": True}
-    return {"global": doc.get("global") or {}, "maps": doc.get("maps") or {}}
-
-
 class RunBody(BaseModel):
+    """A Run request names a flow and nothing else (Batt 2026-11-13 ~14:4x: every setting lives in
+    the config file, every map's and each map's own; the helper reads it at the start)."""
+
     model_config = ConfigDict(extra="forbid")
     action: Literal["start", "stop"]
     flow: str | None = Field(default=None, max_length=64)
-    settings: RunSettings | None = None
+
+
+class ConfigBody(BaseModel):
+    """PUT /flows/config: one GROUP of settings at one level (every map, or one map's own);
+    ``values`` None or {}: that group's own values there are removed (the next level applies)."""
+
+    model_config = ConfigDict(extra="forbid")
+    scope: Literal["global", "map"]
+    map: str | None = Field(default=None, pattern=r"^[a-z0-9_@-]{1,40}$")
+    group: str = Field(max_length=40)
+    values: dict[str, Any] | None = None
+
+
+def flow_config(state: AppState) -> Any:
+    """scripts/flow_config.py (the settings' registry: pure, stdlib only), from the read-only
+    scripts mount (ZONES_CODE_DIR, as flows_zones imports the zones loader) or, on the host's
+    tests, the repo's scripts/; None when it is not there (the routes then answer 503)."""
+    if "fc" in _FC:
+        return _FC["fc"]
+    out: Any = None
+    for d in (state.settings.zones_code_dir, Path(__file__).resolve().parents[4] / "scripts"):
+        if d is None or not (Path(d) / "flow_config.py").is_file():
+            continue
+        path = Path(d) / "flow_config.py"
+        spec = importlib.util.spec_from_file_location("flow_config_backend", path)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod  # its dataclasses look their module up while it loads
+        try:
+            spec.loader.exec_module(mod)
+        except Exception:  # noqa: BLE001 -- a broken module is "not there", never a 500
+            sys.modules.pop(spec.name, None)
+            continue
+        out = mod
+        break
+    _FC["fc"] = out
+    return out
+
+
+_FC: dict[str, Any] = {}
 
 
 def run_dir(state: AppState) -> Path:
@@ -155,16 +128,6 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
         return 409, "already_running"
     if mode != Mode.ASSIST:
         return 409, "mode_not_assist"
-    s = body.settings
-    if s is not None:
-        keys = [k for k in (s.heal_key, s.fly_key, s.home_key, s.knife_key, s.dagger_key) if k]
-        if len(keys) != len(set(keys)):  # every key its own (the helper checks the whole set)
-            return 400, "settings_same_key"
-    for pt in (s.respawn_at, s.respawn_confirm_at) if s is not None else ():
-        if pt is not None and pt != "none":
-            x, y = (int(v) for v in pt.split(","))
-            if x >= 1280 or y >= 720:
-                return 400, "settings_off_picture"
     return None
 
 
@@ -184,8 +147,6 @@ def post_run(body: RunBody, request: Request,
         raise HTTPException(why[0], {"reason": why[1]})
     rid = uuid.uuid4().hex
     req: dict[str, Any] = {"id": rid, "action": body.action, "flow": body.flow, "at": time.time()}
-    if body.action == "start" and body.settings is not None:
-        req["settings"] = body.settings.model_dump(exclude_none=True)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".request.{rid}"
     tmp.write_text(json.dumps(req) + "\n")
@@ -195,33 +156,45 @@ def post_run(body: RunBody, request: Request,
     return {"ok": True, "id": rid, "action": body.action, "flow": body.flow}
 
 
-@router.get("/survival")
-def get_survival(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
-    return read_survival(run_dir(state))
+@router.get("/config")
+def get_config(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
+    """Every map's values and each map's own (settings/flowrun/config.json, else 8e3ca2df's
+    survival.json); ``broken``: the file a person must look at (Run refuses until then)."""
+    fc = flow_config(state)
+    if fc is None:
+        raise HTTPException(503, {"reason": "config_engine_unavailable"})
+    got = fc.read_config(run_dir(state))
+    if isinstance(got, str):
+        return {"global": {}, "maps": {}, "broken": got}
+    return {"global": dict(got["global"]), "maps": dict(got["maps"])}
 
 
-@router.put("/survival")
-def put_survival(body: SurvivalBody, request: Request,
-                 state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
-    if body.scope == "map" and not body.map:
-        raise HTTPException(400, {"reason": "survival_map_missing"})
+@router.put("/config")
+def put_config(body: ConfigBody, request: Request,
+               state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    fc = flow_config(state)
+    if fc is None:
+        raise HTTPException(503, {"reason": "config_engine_unavailable"})
     d = run_dir(state)
-    cur = read_survival(d)
-    if cur.get("broken"):  # never write over a file a person must look at first
-        raise HTTPException(409, {"reason": "survival_file_broken"})
-    doc: dict[str, Any] = {"v": 1, "global": dict(cur["global"]), "maps": dict(cur["maps"])}
-    vals = body.values.model_dump() if body.values is not None else None
-    if body.scope == "global":
-        doc["global"] = vals or {}
-    elif vals is None:
-        doc["maps"].pop(body.map, None)
-    else:
-        doc["maps"][body.map] = vals
+    cur = fc.read_config(d)
+    if isinstance(cur, str):  # never write over a file a person must look at first
+        raise HTTPException(409, {"reason": "config_file_broken", "detail": cur})
+    doc = fc.put_level(cur, body.scope, body.map, body.group, body.values)
+    if isinstance(doc, str):
+        raise HTTPException(400, {"reason": "config_refused", "detail": doc})
+    # every flow the helper lists must still run: no two of its settings on one hotbar key
+    flows = (read_status(d).get("flows") or {}) if (d / "status.json").exists() else {}
+    for f in flows.values():
+        vals, _ = fc.effective(f.get("defaults") or {}, doc, f.get("map") or "")
+        why = fc.clash(vals)
+        if why:
+            raise HTTPException(400, {"reason": "config_refused", "detail": why})
     d.mkdir(parents=True, exist_ok=True)
-    tmp = d / f".survival.{uuid.uuid4().hex}"
+    tmp = d / f".config.{uuid.uuid4().hex}"
     tmp.write_text(json.dumps(doc, indent=2) + "\n")
-    os.replace(tmp, d / "survival.json")
-    with open(d / "survival.jsonl", "a") as fh:
+    os.replace(tmp, d / fc.FILE)
+    with open(d / "config.jsonl", "a") as fh:
         fh.write(json.dumps({"at": time.time(), "scope": body.scope, "map": body.map,
-                             "values": vals, **_who(request).model_dump()}) + "\n")  # fmt: skip
+                             "group": body.group, "values": body.values,
+                             **_who(request).model_dump()}) + "\n")  # fmt: skip
     return {"ok": True, "global": doc["global"], "maps": doc["maps"]}

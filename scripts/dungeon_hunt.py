@@ -613,11 +613,12 @@ def recheck_due(now: float, last: float, every_s: float = RECHECK_EVERY_S) -> bo
 
 
 def recheck_calm(mode: str, locked: bool, calm: bool, since_taken: float, avoiding: bool,
-                 taken_s: float = FIGHT_TAKEN_S) -> bool:  # fmt: skip
+                 taken_s: float | None = None) -> bool:  # fmt: skip
     """PURE (dungeon@9.36): she may recheck now -- hunting (mode "search": where the loot step hands
     her back; never a fight, its "after", a rest), no lock held, the runner's own ``calm`` (no hit
     for CALM_S, not fighting, not sitting, no HP drop), no hit on her within ``taken_s``
     (FIGHT_TAKEN_S), and no boss-avoid window."""
+    taken_s = FIGHT_TAKEN_S if taken_s is None else taken_s  # 9.44: at call time (--tune)
     return mode == "search" and not locked and calm and since_taken > taken_s and not avoiding
 
 
@@ -892,13 +893,14 @@ NPC_GUARDED = frozenset({"strike", "strike_burst", "steal", "loot"})
 
 
 def npc_guard_blocks(here: Cell | None, npcs: Sequence[Sequence[int]], why: str,
-                     radius: int = NPC_NO_FIGHT) -> bool:  # fmt: skip
+                     radius: int | None = None) -> bool:  # fmt: skip
     """PURE (dungeon@9.0b, rogue-gef10.md Amendment P): a strike / Steal / loot click is refused
     while OUR cell is within ``radius`` (Chebyshev) of an NPC. In c2 (2026-10-26 12:53) a strike on
     a monster standing in front of gef_fild10's bulletin board landed on the board's sprite and
     opened its dialog (a hard bar). NPC sprites stand at most ~5 cells tall, so a click from 8+
     cells away cannot land on one. Walk clicks are not refused here (walk_trust has its own NPC
     distance; the cursor gate reads an NPC as not-walkable)."""
+    radius = NPC_NO_FIGHT if radius is None else radius  # 9.44: at call time (--tune)
     if why not in NPC_GUARDED or here is None or not npcs:
         return False
     return min(max(abs(here[0] - int(n[0])), abs(here[1] - int(n[1]))) for n in npcs) <= radius
@@ -1140,10 +1142,11 @@ def player_start_refused(map_: str, here: Cell | None, okr: Any, area: Any) -> s
     return None
 
 
-def player_wings_low(item: int, n: int | None, keep: int = PLAYER_WINGS_KEEP) -> bool:
+def player_wings_low(item: int, n: int | None, keep: int | None = None) -> bool:
     """PURE (dungeon@9.35): under --player-mode the run ends when the Fly Wings read ``keep`` or
     fewer (an unread count never ends it), so the end's own escape still has one: no @warp takes a
     player home."""
+    keep = PLAYER_WINGS_KEEP if keep is None else keep  # 9.44: at call time (--tune)
     return item == STOCK_ITEMS["fly"] and n is not None and n <= keep
 
 
@@ -1344,6 +1347,52 @@ def with_survival(strat: Mapping[str, Any], a: argparse.Namespace) -> dict[str, 
         if v is not None:
             out[k] = float(v)
     return out
+
+
+# dungeon@9.44 (Batt 2026-11-13 ~14:4x: "all of them": every number a person may set): the runner's
+# constants named in scripts/flow_config.py FIELDS (a field without a flag) are set at the run's
+# start by --tune NAME=VALUE, each checked against its range there. Every one of them is read when
+# the code runs (test_flow_config: no default argument, no import-time copy), so the value set is
+# the value used.
+TUNE_VERSION = "9.44"
+
+
+def tune_values(items: Sequence[str]) -> tuple[dict[str, Any], str | None]:
+    """PURE: --tune NAME=VALUE items as {name: value}, each a runner constant of flow_config's
+    inside its range, or why one cannot be (the first)."""
+    import flow_config as fc
+
+    out: dict[str, Any] = {}
+    for it in items:
+        name, sep, raw = it.partition("=")
+        f = fc.BY_NAME.get(name)
+        if not sep or f is None or not f.tune:
+            return {}, f"--tune {it!r}: not a runner number of scripts/flow_config.py"
+        try:
+            v: Any = float(raw)
+        except ValueError:
+            return {}, f"--tune {it!r}: not a number"
+        if f.kind == "int" and v.is_integer():
+            v = int(v)
+        why = fc.problem_of(f, v)
+        if why:
+            return {}, f"--tune {it!r}: {why}"
+        out[name] = v
+    return out, None
+
+
+def tune_apply(vals: Mapping[str, Any], mods: Mapping[str, Any]) -> dict[str, Any]:
+    """Set the run's constants (once, before its first read); return the previous values (a
+    test puts them back with ``tune_apply(prev, mods)``). ``mods``: "dh" (this module), "vt"."""
+    prev: dict[str, Any] = {}
+    for name, v in vals.items():
+        key, _, attr = name.rpartition(".")
+        mod = mods[key or "dh"]
+        old = getattr(mod, attr)
+        prev[name] = old
+        is_int = isinstance(old, int) and not isinstance(old, bool)
+        setattr(mod, attr, int(v) if is_int else float(v))
+    return prev
 
 
 def knife_numbers_refused(a: argparse.Namespace) -> str | None:
@@ -2517,9 +2566,11 @@ def etc_hold_refused(share: float | None, red: bool, conf: Mapping[str, Any]) ->
     return f"at or over {limit}" if share >= limit else None
 
 
-def still_now(shifts: Sequence[tuple[float, float]], px: float = STILL_PX,
-              n: int = STILL_N) -> bool:  # fmt: skip
+def still_now(shifts: Sequence[tuple[float, float]], px: float | None = None,
+              n: int | None = None) -> bool:  # fmt: skip
     """PURE (--still-strike): the last ``n`` frame-to-frame scene shifts are all < ``px``."""
+    px = STILL_PX if px is None else px  # 9.44: at call time (--tune)
+    n = STILL_N if n is None else n  # 9.44: at call time (--tune)
     return len(shifts) >= n and all(math.hypot(dx, dy) < px for dx, dy in shifts[-n:])
 
 
@@ -2591,12 +2642,13 @@ def foot_shift(b1: Sequence[float], b2: Sequence[float]) -> float:
 
 
 def press_decide(
-    b1: Sequence[float], later: Sequence[Sequence[float]], px: float = WALKER_PX
+    b1: Sequence[float], later: Sequence[Sequence[float]], px: float | None = None
 ) -> tuple[str, tuple[float, ...] | None, float | None]:
     """PURE (--still-target, 9.23): D2's verdict on the SWORD-read box ``b1`` from the boxes of the
     detection after it (``later``): ("no_match", None, None) when same_box finds none (D2 cannot
     judge: the strike is today's); ("strike", b2, moved) when its foot moved < ``px``; else
     ("hold", b2, moved)."""
+    px = WALKER_PX if px is None else px  # 9.44: at call time (--tune)
     b2 = same_box(b1, later)
     if b2 is None:
         return "no_match", None, None
@@ -2613,12 +2665,14 @@ def nearest_centre_px(b1: Sequence[float], later: Sequence[Sequence[float]]) -> 
     return round(min(ds), 1) if ds else None
 
 
-def hold_end(shifts: Sequence[float], elapsed_s: float, matched: bool, px: float = WALKER_PX,
-             n: int = HOLD_STILL_N, max_s: float = HOLD_MAX_S) -> str | None:  # fmt: skip
+def hold_end(shifts: Sequence[float], elapsed_s: float, matched: bool, px: float | None = None,
+             n: int = HOLD_STILL_N, max_s: float | None = None) -> str | None:  # fmt: skip
     """PURE (--still-target, 9.23): how a hold ends after a poll, in order: "lost" (the poll's
     detection held no box matching the last one), "still" (the last ``n`` foot shifts, one per
     matched detection, all < ``px``), "timeout" (``elapsed_s`` since the hold began >= ``max_s``);
     None: poll again."""
+    px = WALKER_PX if px is None else px  # 9.44: at call time (--tune)
+    max_s = HOLD_MAX_S if max_s is None else max_s  # 9.44: at call time (--tune)
     if not matched:
         return "lost"
     if len(shifts) >= n and all(s < px for s in shifts[-n:]):
@@ -2635,8 +2689,8 @@ def hold_track(
     guard: Callable[[], bool],
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
-    gap_s: float = HOLD_GAP_S,
-    max_s: float = HOLD_MAX_S,
+    gap_s: float | None = None,
+    max_s: float | None = None,
     wait_s: float = BOX_TARGET_WAIT_S,
 ) -> dict[str, Any]:
     """--still-target (dungeon@9.23, LS-2): the hold's polls on the moved sprite ``b`` (grabbed at
@@ -2647,6 +2701,8 @@ def hold_track(
     each poll. Returns {"end", "box" (the last matched box), "t" (its grab), "shifts" (each poll's
     foot shift; None: no detection came), "polls", "hold_s", "lost_px" (nearest_centre_px of the
     poll that matched nothing, else None)}."""
+    gap_s = HOLD_GAP_S if gap_s is None else gap_s  # 9.44: at call time (--tune)
+    max_s = HOLD_MAX_S if max_s is None else max_s  # 9.44: at call time (--tune)
     t_h = clock()
     last, last_t = tuple(float(x) for x in b[:4]), t_b
     shifts: list[float] = []
@@ -2737,7 +2793,7 @@ def lead_cap(
     lead: Sequence[float],
     cell_x: Sequence[float] | None = None,
     cell_y: Sequence[float] | None = None,
-    cap_cells: float = LEAD_CAP_CELLS,
+    cap_cells: float | None = None,
     cap_px: float = LEAD_CAP_PX,
 ) -> tuple[tuple[float, float], bool, str]:
     """PURE (--lead-press, 9.24): the screen ``lead`` (px) shortened to at most ``cap_cells``
@@ -2745,6 +2801,7 @@ def lead_cap(
     ``cell_x`` / ``cell_y`` at the sprite (its direction kept); a lead within it is kept as is.
     Without usable vectors (None, a zero one, or < ~6 degrees apart) at most ``cap_px`` px,
     Euclidean. Returns (the lead, whether it was shortened, the rule used: "cell" / "px")."""
+    cap_cells = LEAD_CAP_CELLS if cap_cells is None else cap_cells  # 9.44: at call time (--tune)
     lx, ly = float(lead[0]), float(lead[1])
     if cell_x is not None and cell_y is not None:
         ax, ay, bx, by = float(cell_x[0]), float(cell_x[1]), float(cell_y[0]), float(cell_y[1])
@@ -2768,9 +2825,9 @@ def press_lead(
     t_now: float,
     cell_x: Sequence[float] | None = None,
     cell_y: Sequence[float] | None = None,
-    walker_px: float = WALKER_PX,
-    lead_px: float = LEAD_PX,
-    age_s: float = LEAD_AGE_S,
+    walker_px: float | None = None,
+    lead_px: float | None = None,
+    age_s: float | None = None,
 ) -> dict[str, Any]:
     """PURE (--lead-press, 9.24, LS-1): D2's verdict by the foot shift from D1's box ``b1``
     (grabbed at ``t1``) to D2's ``b2`` (``t2``): < ``walker_px`` -> "strike" (today's); <
@@ -2780,6 +2837,9 @@ def press_lead(
     hover point + the lead, and the led foot (its cell) = D2's foot + the lead. Grabs not in order
     give no velocity: "hold" (``why`` "dt"). Returns {"decision", "moved", and for "lead": "v",
     "age_s", "raw" (the lead before the cap), "lead", "capped", "cap", "point", "foot"}."""
+    walker_px = WALKER_PX if walker_px is None else walker_px  # 9.44: at call time (--tune)
+    lead_px = LEAD_PX if lead_px is None else lead_px  # 9.44: at call time (--tune)
+    age_s = LEAD_AGE_S if age_s is None else age_s  # 9.44: at call time (--tune)
     moved = foot_shift(b1, b2)
     if moved < walker_px:
         return {"decision": "strike", "moved": moved}
@@ -2944,6 +3004,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["respawn"] = True
     if getattr(a, "fly_key", None) is not None:  # 2026-11-13: the person's Fly Wing key
         out["fly_key"] = a.fly_key
+    if getattr(a, "tune", None):  # dungeon@9.44: the person's runner numbers
+        out["tune"] = list(a.tune)
     for k_ in (
         "heal_key",
         "dagger_key",
@@ -3099,9 +3161,10 @@ def picked_cell(camera: Any, gat: Any, here: Cell, px: Sequence[float]) -> Cell 
     return None if dx_p == pick_.NONE else (here[0] + dx_p, here[1] + dy_p)
 
 
-def walk_pick_ok(picked: Cell | None, target: Cell, okr: Any, tol: int = WALK_PICK_TOL) -> bool:
+def walk_pick_ok(picked: Cell | None, target: Cell, okr: Any, tol: int | None = None) -> bool:
     """PURE (dungeon@9.15): the client's picked cell under a walk target's pixel is on the route
     grid ``okr`` and within ``tol`` (Chebyshev) of the target."""
+    tol = WALK_PICK_TOL if tol is None else tol  # 9.44: at call time (--tune)
     if picked is None:
         return False
     h, w = np.asarray(okr).shape
@@ -3219,11 +3282,12 @@ def boss_spawn_names(map_name: str, spawns: Mapping[str, Any],
 
 
 def alarm_seen(alarm: tuple[float, Sequence[Any]], now: float,
-               fresh_s: float = GARM_FRESH_S, streak: int = 1,
+               fresh_s: float | None = None, streak: int = 1,
                need: int = GARM_CONFIRM) -> Any | None:  # fmt: skip
     """PURE (--garm-fly, 9.19): the first box of an alarm class in a detection at most ``fresh_s``
     old (``alarm``: the box watcher's (grab time, alarm boxes)), else None. 9.19b: also None while
     fewer than ``need`` consecutive detections (``streak``, the latest included) held one."""
+    fresh_s = GARM_FRESH_S if fresh_s is None else fresh_s  # 9.44: at call time (--tune)
     t, boxes = alarm
     if not boxes or now - t > fresh_s or streak < need:
         return None
@@ -3420,8 +3484,9 @@ def boss_of(name_read: str | None, bosses: Sequence[str], species: Sequence[str]
     return fit if fit in bosses else None
 
 
-def approach_cell(rel: Sequence[int], keep: int = APPROACH_KEEP) -> tuple[int, int]:
+def approach_cell(rel: Sequence[int], keep: int | None = None) -> tuple[int, int]:
     """PURE (--far-approach): the cell ``keep`` cells short of ``rel`` on the line from us."""
+    keep = APPROACH_KEEP if keep is None else keep  # 9.44: at call time (--tune)
     x, y = int(rel[0]), int(rel[1])
     d = max(abs(x), abs(y))
     if d <= keep:
@@ -3430,10 +3495,11 @@ def approach_cell(rel: Sequence[int], keep: int = APPROACH_KEEP) -> tuple[int, i
     return (round(x * f), round(y * f))
 
 
-def far_window(rel: Sequence[int], from_cells: int = FAR_CELLS) -> float | None:
+def far_window(rel: Sequence[int], from_cells: int | None = None) -> float | None:
     """PURE (--far-single): how long a strike at ``rel`` waits for its arrow / damage line with
     ONE click, or None when it is nearer than ``from_cells`` (FAR_CELLS; --near-single, 9.25:
     NEAR_SINGLE_CELLS) -- the burst as before."""
+    from_cells = FAR_CELLS if from_cells is None else from_cells  # 9.44: at call time (--tune)
     cells = max(abs(int(rel[0])), abs(int(rel[1])))
     if cells < from_cells:
         return None
@@ -3496,29 +3562,33 @@ def loot_settling(
     return now - settle_t < max_s and last_pos_t < settle_t + settle_s
 
 
-def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float = KILL_GAP_S,
-                min_hits: int = KILL_GAP_HITS) -> bool:  # fmt: skip
+def kill_gapped(hits_on_lock: int, since_last_hit: float, gap_s: float | None = None,
+                min_hits: int | None = None) -> bool:  # fmt: skip
     """PURE (--kill-gap): the locked target is taken as dead -- at least ``min_hits`` of our hits
     landed on this lock and none for ``gap_s`` since the last."""
+    gap_s = KILL_GAP_S if gap_s is None else gap_s  # 9.44: at call time (--tune)
+    min_hits = KILL_GAP_HITS if min_hits is None else min_hits  # 9.44: at call time (--tune)
     return hits_on_lock >= min_hits and since_last_hit > gap_s
 
 
 def exp_kill(
-    kind: str, tick: float, pair: tuple[str, float] | None, pair_s: float = EXP_PAIR_S
+    kind: str, tick: float, pair: tuple[str, float] | None, pair_s: float | None = None
 ) -> tuple[bool, tuple[str, float] | None]:
     """PURE (dungeon@9.34, exp-first): is this exp line (``kind`` "base_exp" / "job_exp") a NEW
     kill? ``pair`` is the last counted kill's line (kind, tick) while it waits for its other
     half: the other kind within ``pair_s`` is the same kill (the pair closes, no kill); anything
     else (the same kind again, or later) is a new kill whose line opens a pair."""
+    pair_s = EXP_PAIR_S if pair_s is None else pair_s  # 9.44: at call time (--tune)
     if pair is not None and pair[0] != kind and tick - pair[1] <= pair_s:
         return False, None
     return True, (kind, tick)
 
 
 def scan_needed(now: float, last_taken: float, last_ours: float, last_swing: float,
-                hp_drop: bool, window_s: float = QUIET_SCAN_S) -> bool:  # fmt: skip
+                hp_drop: bool, window_s: float | None = None) -> bool:  # fmt: skip
     """PURE (--quiet-scan, 9.17): the screen showed damage within ``window_s`` -- a hit line on us,
     a damage line of ours, a Miss read at us -- or the HP just dropped; else the scan is skipped."""
+    window_s = QUIET_SCAN_S if window_s is None else window_s  # 9.44: at call time (--tune)
     recent = min(now - last_taken, now - last_ours, now - last_swing)
     return hp_drop or recent < window_s
 
@@ -3656,7 +3726,8 @@ class BoxWatch:
 
     def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any,
                  map_name: str | None = None, detector: str = "cpu",
-                 every_s: float = BOX_EVERY_S) -> None:  # fmt: skip
+                 every_s: float | None = None) -> None:  # fmt: skip
+        every_s = BOX_EVERY_S if every_s is None else every_s  # 9.44: at call time (--tune)
         import threading
 
         import unit_detector
@@ -5031,6 +5102,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     conf = CHARS_CONF[a.char]  # dungeon@6
     crk = conf.get("data", a.char)  # dungeon@8: the crusader.py data dir (the Rogue is data/thief)
     map_ = a.map
+    # dungeon@9.44: the person's runner numbers, set FIRST (before anything reads one)
+    tuned, why_tu = tune_values(getattr(a, "tune", None) or [])
+    if why_tu:
+        raise SystemExit(f"dungeon@{TUNE_VERSION} refused: {why_tu}")
+    import value_target as vt_tune
+
+    tune_apply(tuned, {"dh": sys.modules[__name__], "vt": vt_tune})
     keys_ = conf["keys"]
     # dungeon@9.42: the person's heal / dagger keys and the Knife swap's numbers, before all
     keys_, why_pk = person_keys(keys_, getattr(a, "heal_key", None), getattr(a, "dagger_key", None))
@@ -9386,6 +9464,15 @@ def main() -> int:
         help="dungeon@9.43 (Batt 2026-11-13: the survival numbers are the person's, for every "
         "map or one map's own): ... the HP share under this (the fast-fall rule) "
         "(default: --strategy's)",
+    )
+    t.add_argument(
+        "--tune",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="dungeon@9.44 (Batt 2026-11-13: every number is the person's): set one of the "
+        "runner's numbers for this run, e.g. LOOT_TRIM_HOVERS=12 or vt.D0_PX=200; the names and "
+        "ranges are scripts/flow_config.py's (repeatable)",
     )
     t.add_argument(
         "--heal-key",

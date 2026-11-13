@@ -64,8 +64,9 @@ def value_of(species: str | None, values: Mapping[str, float]) -> float:
     return float(values.get("*", 0.0))
 
 
-def score(value: float, dist_px: float, d0: float = D0_PX) -> float:
+def score(value: float, dist_px: float, d0: float | None = None) -> float:
     """PURE: value discounted by distance."""
+    d0 = D0_PX if d0 is None else d0  # 9.44: at call time (--tune)
     return value / (1.0 + max(0.0, dist_px) / d0)
 
 
@@ -73,9 +74,11 @@ Cand = tuple[float, Any]
 
 
 def pick(cands: Iterable[Cand], values: Mapping[str, float],
-         species_of: Callable[[Any], str | None], d0: float = D0_PX) -> Cand | None:  # fmt: skip
+         species_of: Callable[[Any], str | None],
+         d0: float | None = None) -> Cand | None:  # fmt: skip
     """PURE: from (distance_px, box) candidates, the best by ``score`` (ties: the nearer); None when
     there are none."""
+    d0 = D0_PX if d0 is None else d0  # 9.44: at call time (--tune)
     best: tuple[float, float, Any] | None = None
     for d, b in cands:
         s = score(value_of(species_of(b), values), d, d0)

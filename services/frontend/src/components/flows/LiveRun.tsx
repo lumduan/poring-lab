@@ -13,7 +13,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { liveButtons, liveLabel, type LiveStatus, REFUSALS } from "@/lib/flow/liverun";
-import type { RunSettings } from "@/lib/flow/runner";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -24,7 +23,7 @@ export type Live = {
   st: LiveStatus | null;
   err: string | null;
   busy: boolean;
-  send: (action: "start" | "stop", settings?: RunSettings | null) => Promise<void>;
+  send: (action: "start" | "stop") => Promise<void>;
   buttons: ReturnType<typeof liveButtons>;
 };
 
@@ -63,7 +62,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   }, [base, enabled]);
 
   const send = useCallback(
-    async (action: "start" | "stop", settings: RunSettings | null = null): Promise<void> => {
+    async (action: "start" | "stop"): Promise<void> => {
       setBusy(true);
       setErr(null);
       try {
@@ -77,7 +76,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            body: JSON.stringify(action === "start" ? { action, flow, ...(settings ? { settings } : {}) } : { action }),
+            body: JSON.stringify(action === "start" ? { action, flow } : { action }), // every setting is the bot server's config
           });
           if (r.ok) break;
           const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string } };
@@ -104,7 +103,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
 
 /** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
  * within ARM_MS; the armed button says what it will do. */
-export function LiveRunButtons({ live, settings = null, blocked = null }: { live: Live; settings?: RunSettings | null; blocked?: string | null }) {
+export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?: string | null }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -132,7 +131,7 @@ export function LiveRunButtons({ live, settings = null, blocked = null }: { live
               return;
             }
             setArmed(false);
-            void live.send("start", settings);
+            void live.send("start");
           }}
           title={blocked ?? (b.canStart ? "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm." : (b.why ?? "Run is not available now"))}
           aria-label={armed ? "Confirm: run in the game" : "Run in the game"}
@@ -156,7 +155,7 @@ export default function LiveRun({ live }: { live: Live }) {
         {st?.label ? ` · ${st.label}` : ""}
       </p>
       <p>
-        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under 48 %, at least 5 Fly Wings and 5 heal items on the hotbar; the heal item, the Fly Wing, the Butterfly Wing, the Knife and the dagger on the keys of your run settings),
+        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under the start&apos;s limit, the Fly Wings and heal items the start asks for on the hotbar; the heal item, the Fly Wing, the Butterfly Wing, the Knife and the dagger on the keys of your settings),
         set the console to ASSIST, then press <strong>Run</strong> at the top (twice: the second press confirms). She plays until you press Stop, until her Fly Wings run low, until the bag is over
         50 % (the Butterfly Wing takes her home), until she dies (the respawn function block takes her to the save point), or for at most
         {` ${st?.flows?.[flow]?.minutes ?? 120} `}

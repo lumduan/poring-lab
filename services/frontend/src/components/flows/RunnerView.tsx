@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
 import FlowSwitcher from "@/components/flows/FlowSwitcher";
-import SurvivalStrip, { useSurvival } from "@/components/flows/SurvivalStrip";
+import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
 import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, savedFlowName, writeChoice } from "@/lib/flow/prefs";
@@ -25,27 +25,21 @@ import {
   allNodes,
   commandPieces,
   findNode,
-  flagValue,
-  KEY_SETTINGS,
   markOf,
   type RunnerDoc,
   type RunnerNode,
-  type RunnerSettingsDoc,
-  type RunSettings,
   runnerTabs,
   runnerWorkspace,
-  settingsProblem,
   STACK_X,
   STACK_Y0,
   tabOf,
   textOf,
   titleOf,
   valueText,
-  withSettings,
 } from "@/lib/flow/runner";
 import { ACTIVE, liveLabel } from "@/lib/flow/liverun";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
-import { effectiveSurvival, SURVIVAL_KEYS, survivalShown, withSurvival } from "@/lib/flow/survival";
+import { configArgv, configClash, effectiveConfig, withConfig } from "@/lib/flow/config";
 import { INJECT } from "@/lib/flow/theme";
 
 const VIEWS = ["blocks", "python"] as const;
@@ -64,44 +58,17 @@ const darkQuery = () => (typeof window !== "undefined" && window.matchMedia ? wi
 // The runner flows the Run panel can start (scripts/flow_run.py's FLOWS; 2026-11-13)
 const LIVE_FLOWS: readonly string[] = ["xmas_dun02_rogue"];
 
-/** The person's Run settings, remembered per flow in this browser (a convenience; the Run helper
- * checks them again). Unknown or broken: the export's defaults. */
-function readSettings(store: ReturnType<typeof browserStorage>, id: string, d: RunnerSettingsDoc): RunSettings {
-  try {
-    const v = JSON.parse(store?.getItem(`poring-lab.flows.runsettings.${id}.v1`) ?? "null") as Partial<RunSettings> | null;
-    const s = { ...d.defaults, ...(v ?? {}) };
-    return settingsProblem(s, d) === null ? s : { ...d.defaults };
-  } catch {
-    return { ...d.defaults };
-  }
-}
-
 export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; onRunner?: (id: string) => void; backendUrl?: string | null }) {
   const store = useMemo(() => browserStorage(), []);
   const myName = useMemo(() => savedFlowName(store), [store]);
-  // 2026-11-13 (Batt): the hotbar keys and the weight limit are the person's, shown in the blocks
-  const sdoc = rawDoc.settings ?? null;
-  const [runSettings, setRunSettingsState] = useState<RunSettings | null>(() => (sdoc ? readSettings(store, rawDoc.id, sdoc) : null));
-  const setRunSettings = useCallback(
-    (s: RunSettings) => {
-      setRunSettingsState(s);
-      try {
-        store?.setItem(`poring-lab.flows.runsettings.${rawDoc.id}.v1`, JSON.stringify(s));
-      } catch {
-        // unremembered: this tab keeps them
-      }
-    },
-    [store, rawDoc.id],
-  );
-  // 2026-11-13 ~14:2x (Batt): the heal and escape numbers: every map's, or this map's own
-  const svDoc = sdoc?.survival ?? null;
-  const sv = useSurvival(backendUrl, rawDoc.map);
-  const svNow = useMemo(() => (svDoc ? effectiveSurvival(svDoc, sv.cfg, rawDoc.map).values : null), [svDoc, sv.cfg, rawDoc.map]);
-  const doc = useMemo(() => {
-    const d = runSettings ? withSettings(rawDoc, runSettings) : rawDoc;
-    return svDoc && svNow ? withSurvival(d, svDoc, svNow) : d;
-  }, [rawDoc, runSettings, svDoc, svNow]);
-  const settingsWhy = runSettings && sdoc ? settingsProblem(runSettings, sdoc) : null;
+  // 2026-11-13 (Batt: "nothing is fixed, we only put the defaults"; "a global config for every
+  // map's flow, a map's own on top"; "move them too"; "all of them"): every setting from the bot
+  // server's config (GET /flows/config), shown in the blocks; the Run helper reads the same file
+  const cdoc = rawDoc.config ?? null;
+  const cs = useConfig(backendUrl, rawDoc.map);
+  const eff = useMemo(() => (cdoc ? effectiveConfig(cdoc, cs.file, rawDoc.map) : null), [cdoc, cs.file, rawDoc.map]);
+  const doc = useMemo(() => (cdoc && eff ? withConfig(rawDoc, cdoc, eff.values) : rawDoc), [rawDoc, cdoc, eff]);
+  const configWhy = cdoc && eff ? (cs.file?.broken ? `the settings file cannot be used: ${cs.file.broken}` : configClash(cdoc, eff.values)) : null;
   const isLive = LIVE_FLOWS.includes(doc.id);
   const live = useLiveRun(backendUrl, doc.id, isLive); // one poller: the header's Run and the panel
   const [about, setAbout] = useState(false);
@@ -238,15 +205,10 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
         </button>
       </div>
       <p className="studio-panel-note">An outline of {doc.script} with the code&apos;s own numbers (generated); it is not the runner and never runs.</p>
-      {runSettings && (
+      {cdoc && eff && (
         <details className="studio-panel-note" data-testid="runner-python-settings">
-          <summary>Your Run settings, as the flags Run adds</summary>
-          <code>
-            {[
-              ...Object.entries(sdoc?.flags ?? {}).map(([k, flag]) => `${flag} ${flagValue(runSettings[k as keyof RunSettings])}`),
-              ...(svDoc && svNow ? SURVIVAL_KEYS.map((k) => `${svDoc.flags[k]} ${k === "fly_rate" ? survivalShown(k, svNow[k]) : svNow[k].toFixed(2)}`) : []),
-            ].join(" ")}
-          </code>
+          <summary>Your settings, as the flags Run adds</summary>
+          <code>{configArgv(cdoc, eff.values, eff.source).join(" ")}</code>
         </details>
       )}
       <CodeView ref={codeRef} code={doc.python} colour mark={mark} label={`Python: ${doc.file}`} testId="runner-python" />
@@ -277,7 +239,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
             <PlayIcon />
             <span className="button-text">Simulate</span>
           </button>
-          {isLive && <LiveRunButtons live={live} settings={runSettings} blocked={settingsWhy} />}
+          {isLive && <LiveRunButtons live={live} blocked={configWhy} />}
         </div>
       </header>
 
@@ -323,8 +285,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
       </div>
 
       <RunnerBinding doc={doc} />
-      {sdoc && runSettings && <RunSettingsStrip d={sdoc} s={runSettings} why={settingsWhy} onChange={setRunSettings} />}
-      {svDoc && <SurvivalStrip d={svDoc} map={rawDoc.map} sv={sv} />}
+      {cdoc && <ConfigPanel d={cdoc} map={rawDoc.map} cs={cs} problem={configWhy} />}
 
       <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
         <div className="studio-canvas">
@@ -792,111 +753,3 @@ function RunnerBinding({ doc }: { doc: RunnerDoc }) {
 /** The Run settings strip (2026-11-13, Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't
  * hard-code them, a user changes them"): the hotbar keys and the weight limit, each from the
  * export's fixed choices; the blocks show the choice at once, and Run sends it. */
-function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: RunSettings; why: string | null; onChange: (s: RunSettings) => void }) {
-  // Batt 2026-11-13: "everything a user can set again; nothing fixed, we only put the defaults"
-  const keys = d.keys.filter((k) => !d.reserved.includes(k));
-  const [lo, hi] = d.knife_s ?? [0.2, 20];
-  const keyPick = (k: keyof RunSettings, label: string) => (
-    <label className="mb-part" key={k}>
-      {label}{" "}
-      <select value={String(s[k])} onChange={(e) => onChange({ ...s, [k]: e.target.value })} data-testid={`run-settings-${k}`}>
-        {keys.map((x) => (
-          <option key={x} value={x}>
-            {x}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-  return (
-    <div className="map-binding run-settings" data-kind={why ? "plain" : "block"} data-testid="run-settings">
-      <span className="mb-part">
-        <span className="mb-key">your run settings</span>
-      </span>
-      <span className="mb-part muted">hotbar keys:</span>
-      {KEY_SETTINGS.map(([k, label]) => keyPick(k, label.replace(/^the /, "")))}
-      <span className="mb-part muted">the Knife swap:</span>
-      <label className="mb-part" title="The dagger goes back on this long after the first hit with the Knife, when no steal came first (Batt's 'F4, wait 200 ms, F5' is 0.2 s)">
-        dagger back after{" "}
-        <input
-          className="run-settings-num"
-          type="number"
-          min={lo}
-          max={hi}
-          step={0.1}
-          value={Number.isFinite(s.knife_max_s) ? s.knife_max_s : ""}
-          onChange={(e) => onChange({ ...s, knife_max_s: e.target.value === "" ? Number.NaN : Number(e.target.value) })}
-          aria-label="the Knife's time in seconds"
-          data-testid="run-settings-knife-s"
-        />{" "}
-        s (or at the steal)
-      </label>
-      <label className="mb-part">
-        or at once under HP{" "}
-        <select value={String(s.knife_hp_min)} onChange={(e) => onChange({ ...s, knife_hp_min: Number(e.target.value) })} data-testid="run-settings-knife-hp">
-          {(d.knife_hp ?? [s.knife_hp_min]).map((w) => (
-            <option key={w} value={String(w)}>
-              {Math.round(w * 100)} %
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className="mb-part muted">the exits:</span>
-      <label className="mb-part">
-        go home when the bag is over{" "}
-        <select value={String(s.weight_home)} onChange={(e) => onChange({ ...s, weight_home: Number(e.target.value) })} data-testid="run-settings-weight">
-          {d.weights.map((w) => (
-            <option key={w} value={String(w)}>
-              {Math.round(w * 100)} %
-            </option>
-          ))}
-        </select>
-      </label>
-      <RespawnAt s={s} onChange={onChange} />
-      <ConfirmAt s={s} d={d} onChange={onChange} />
-      <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} title={Object.entries(d.defaults).map(([k, v]) => `${k} ${String(v)}`).join(" · ")} data-testid="run-settings-reset">
-        back to the defaults
-      </button>
-      {d.reserved.length > 0 && <span className="mb-part muted">taken by the run: {d.reserved.join(", ")}</span>}
-      {why && (
-        <span className="mb-part mb-warn" role="status">
-          {why}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** The respawn button's point, X and Y in the game picture (Batt 2026-11-13: another server's death
- * menu may differ; the respawn function block shows it). Typed numbers; checked by settingsProblem. */
-function RespawnAt({ s, onChange }: { s: RunSettings; onChange: (s: RunSettings) => void }) {
-  const [x, y] = (s.respawn_at ?? "").split(",");
-  const set = (nx: string, ny: string) => onChange({ ...s, respawn_at: `${nx.replace(/\D/g, "").slice(0, 4)},${ny.replace(/\D/g, "").slice(0, 4)}` });
-  return (
-    <span className="mb-part" title="Where the respawn function block presses: the death menu's 'move to saved location' button, in game-picture pixels">
-      respawn button at x{" "}
-      <input className="run-settings-num" value={x ?? ""} onChange={(e) => set(e.target.value, y ?? "")} inputMode="numeric" size={4} aria-label="respawn button x" data-testid="run-settings-respawn-x" />{" "}
-      y{" "}
-      <input className="run-settings-num" value={y ?? ""} onChange={(e) => set(x ?? "", e.target.value)} inputMode="numeric" size={4} aria-label="respawn button y" data-testid="run-settings-respawn-y" />
-    </span>
-  );
-}
-
-/** The confirmation's OK point (this client asks "go back to your savepoint?"), or none: another
- * server may ask nothing. Pressed only while its picture (the respawn_confirm signature) reads. */
-function ConfirmAt({ s, d, onChange }: { s: RunSettings; d: RunnerSettingsDoc; onChange: (s: RunSettings) => void }) {
-  const asks = s.respawn_confirm_at !== "none";
-  const [x, y] = asks ? s.respawn_confirm_at.split(",") : ["", ""];
-  const set = (nx: string, ny: string) => onChange({ ...s, respawn_confirm_at: `${nx.replace(/\D/g, "").slice(0, 4)},${ny.replace(/\D/g, "").slice(0, 4)}` });
-  return (
-    <span className="mb-part" title="After the respawn button this client asks to confirm: its OK, in game-picture pixels. Untick for a server that asks nothing">
-      <label>
-        <input type="checkbox" checked={asks} onChange={(e) => onChange({ ...s, respawn_confirm_at: e.target.checked ? (d.defaults.respawn_confirm_at !== "none" ? d.defaults.respawn_confirm_at : "714,405") : "none" })} data-testid="run-settings-confirm" />{" "}
-        then confirm (OK) at
-      </label>{" "}
-      x <input className="run-settings-num" value={x ?? ""} disabled={!asks} onChange={(e) => set(e.target.value, y ?? "")} inputMode="numeric" size={4} aria-label="confirm OK x" data-testid="run-settings-confirm-x" /> y{" "}
-      <input className="run-settings-num" value={y ?? ""} disabled={!asks} onChange={(e) => set(x ?? "", e.target.value)} inputMode="numeric" size={4} aria-label="confirm OK y" data-testid="run-settings-confirm-y" />
-    </span>
-  );
-}
-
