@@ -210,12 +210,13 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
               const t = tickFor(check, flow, it.id, it.basis);
               return (
                 <li key={it.id} data-tick={t.mark} data-stale={t.stale ? "true" : "false"} data-testid={`live-check-${it.id}`}>
-                  <span className="live-tick" aria-label={t.mark === "none" ? "not checked" : t.mark === "ok" ? "passes" : t.mark === "fail" ? "fails" : "not read"}>
-                    {t.sign || "·"}
+                  {/* matpilot round 15 #8: a greyed (stale) line shows no verdict: its tick was for other keys */}
+                  <span className="live-tick" aria-label={t.stale ? "changed since the last check" : t.mark === "none" ? "not checked" : t.mark === "ok" ? "passes" : t.mark === "fail" ? "fails" : "not read"}>
+                    {t.stale ? "·" : t.sign || "·"}
                   </span>{" "}
                   {it.text}
-                  {t.value && <span className="live-tick-value"> · read: {t.value}</span>}
-                  {t.mark !== "ok" && t.mark !== "none" && t.words && <span className="live-tick-words"> · {t.words}</span>}
+                  {t.value && !t.stale && <span className="live-tick-value"> · read: {t.value}</span>}
+                  {t.mark !== "ok" && t.mark !== "none" && !t.stale && t.words && <span className="live-tick-words"> · {t.words}</span>}
                   {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
                   {/* matpilot #5: a key that reads none may simply be the wrong key */}
                   {t.mark === "fail" && /^0 /.test(t.value ?? "") && ["wings", "heals", "home"].includes(it.id) && (
@@ -236,7 +237,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
               <span data-testid="live-run-check-time">
                 last checked {checkTime(check.at)}
                 {check.state !== "done" ? ` · ${check.detail ?? check.state}` : ""}
-                {anyStale ? " · greyed lines: the settings changed since, check again" : ""}
+                {anyStale ? " · greyed lines: the keys or the settings changed since, check again" : ""}
                 {check.keys_src ? ` · keys from ${check.keys_src}` : ""}
               </span>
             )}
@@ -321,5 +322,16 @@ export function stateWords(label: string, state: string | null, blocked: string 
   if (blocked) return "not ready: Run is blocked (see why under it)";
   if (failing) return "not ready: a line below fails (✗)";
   return label;
+}
+
+/** Run where the bot cannot play this node's blocks live yet (Batt 2026-11-13: "every flow has
+ * Simulate and Run"): the same button, greyed, saying why. */
+export function RunNotReady({ why }: { why: string }) {
+  return (
+    <button type="button" className="button button-live" disabled title={why} aria-label={`Run in the game: not available (${why})`} data-testid="runner-live-run-not-ready">
+      <RunIcon />
+      <span className="button-text">Run</span>
+    </button>
+  );
 }
 

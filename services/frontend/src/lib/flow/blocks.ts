@@ -339,6 +339,8 @@ function ownBlock(s: ActionStmt): WsBlock | null {
   if (s.block === "press_key" && keys.length === 1 && keys[0] === "key") {
     const k = litText(s.params.key);
     if (k !== null && (HOTKEYS as readonly string[]).includes(k)) return { type: "pl_press_key", fields: { KEY: k }, extraState: actionRest(s) };
+    // the key as a value: a function's input (matpilot round 15 #2)
+    return { type: "pl_press_key_v", inputs: { KEY: { block: exprBlock(s.params.key, "key", new Ids()) } }, extraState: actionRest(s) };
   }
   if (s.block === "assert_save_point" && keys.length === 1 && keys[0] === "cell") {
     const v = s.params.cell;
@@ -857,6 +859,8 @@ class Reader {
         if (!(HOTKEYS as readonly string[]).includes(k)) this.err(where, `press key ${JSON.stringify(k)}: one of ${HOTKEYS.join(", ")}`);
         return { kind: "action", block: "press_key", params: { key: { kind: "lit", value: k } }, ...this.rest(b, "press_key", where) };
       }
+      case "pl_press_key_v":
+        return { kind: "action", block: "press_key", params: { key: this.expr(b.inputs?.KEY?.block, where, "the key") }, ...this.rest(b, "press_key", where) };
       case "pl_dungeon_hunt": {
         const params: Record<string, Expr> = {};
         for (const r of RUNNER_ROLES) params[r.param] = { kind: "lit", value: this.name(b, r.field, where) };

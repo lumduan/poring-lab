@@ -217,10 +217,16 @@ export default function BlockEditor(p: BlockEditorProps) {
     if (!ready || !ws.current) return;
     // the lists may arrive after the workspace: the type is defined before the toolbox names it
     if (blockly.current) registerHunt(blockly.current, catalogue?.hunt_rules ?? null);
-    tbRef.current = toolboxOf(catalogue, p.toolboxScope);
-    ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
+    // matpilot round 15 #3: a re-render (the Run panel's 2 s poll) must not re-send an equal toolbox:
+    // updateToolbox closes an open flyout. Only a CHANGED toolbox is sent.
+    const next = toolboxOf(catalogue, p.toolboxScope);
+    if (JSON.stringify(next) !== JSON.stringify(tbRef.current)) {
+      tbRef.current = next;
+      ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
+    }
     if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope);
-  }, [ready, catalogue, lint, trace, scope, p.toolboxScope]);
+    // the scopes as plain values: their objects are new on every render of the page
+  }, [ready, catalogue, lint, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>

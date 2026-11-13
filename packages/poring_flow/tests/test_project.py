@@ -79,9 +79,10 @@ def test_the_xmas_dun02_fixture_is_canonical_and_says_what_batt_asked() -> None:
         "login",
     )
     assert [(n.id, n.kind, (n.pos.x, n.pos.y)) for n in p.nodes] == [
-        ("login", "login", (0, 0)), ("character", "character", (260, 0)),
-        ("xmas_dun02", "map", (560, 0)), ("geffen", "map", (860, 0)),
-        ("global", "global", (560, 220)),
+        # the compact first view (matpilot round 15 #5): the session column left, Global under
+        ("login", "login", (0, 0)), ("character", "character", (0, 120)),
+        ("xmas_dun02", "map", (230, 0)), ("geffen", "map", (460, 0)),
+        ("global", "global", (230, 170)),
     ]  # fmt: skip
     assert [(e.from_, e.to, e.entry) for e in p.edges] == [
         ("login", "character", None), ("character", "xmas_dun02", "here")]  # fmt: skip

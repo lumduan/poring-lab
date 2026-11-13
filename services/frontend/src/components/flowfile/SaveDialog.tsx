@@ -119,7 +119,7 @@ export default function SaveDialog({ github, meta, getFlow, pythonCached, python
   };
 
   return (
-    <Dialog title="Save your flow" onClose={onClose} testId="save-dialog">
+    <Dialog title="Save your project" onClose={onClose} testId="save-dialog">
       <label className="dialog-field">
         <span className="dialog-label">Name</span>
         <input

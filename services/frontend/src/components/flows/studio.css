@@ -1721,3 +1721,18 @@
   font: inherit;
   font-size: 0.92rem;
 }
+
+/* matpilot round 15 #6 (phone): the node row wraps (◂ Maps and the runner link stay in view), and
+   Simulate keeps its word now that the header wraps */
+@media (max-width: 48rem) {
+  .studio .device-bar {
+    flex-wrap: wrap;
+  }
+  .studio .studio-bar .button-run .button-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+}

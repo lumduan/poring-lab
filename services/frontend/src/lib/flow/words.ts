@@ -102,6 +102,8 @@ export type StatusIn = {
   lintErrors: number;
   simulating: boolean;
   mapTab: boolean;
+  /** the node's Run plays in the game (a map node with the runner's block) */
+  run?: boolean;
 };
 
 /** The footer's sentence: what to do next, never a live run. */
@@ -112,5 +114,7 @@ export function statusText(s: StatusIn): string {
   if (s.simulating) return "Simulating… (nothing runs in the game)";
   if (s.lintErrors) return `Lint found ${s.lintErrors} error${s.lintErrors > 1 ? "s" : ""}: press Simulate to see what would happen; a run is never approved with them.`;
   if (s.mapTab) return "Ready. Press Simulate (nothing here runs in the game).";
+  // matpilot round 15 #7: a page with Run must not say that nothing runs in the game
+  if (s.run) return "Ready. Simulate plays this map without the game; Run (amber) plays it in the game.";
   return "Ready. Press Simulate to run the flow in the simulator (nothing here runs in the game).";
 }

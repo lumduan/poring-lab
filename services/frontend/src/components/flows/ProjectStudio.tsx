@@ -26,7 +26,7 @@ import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from 
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
 import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
-import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
+import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
@@ -34,7 +34,7 @@ import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config"
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
 import { ACTIVE } from "@/lib/flow/liverun";
-import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, readShelf, shelve, writeChoice, writeProjectText, writeShelf } from "@/lib/flow/prefs";
+import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
   GLOBAL_ID,
   globalOf,
@@ -62,7 +62,6 @@ import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText } from "@/lib/flow/words";
 import { backendHttpBase } from "@/lib/ws";
 
-import FlowSwitcher, { type FlowItem } from "./FlowSwitcher";
 
 const BlockEditor = dynamic(() => import("@/components/flows/BlockEditor"), {
   ssr: false,
@@ -194,6 +193,16 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
     ? (["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"] as const).map((k) => `${keysR.keys[k]} ${keysR.from[k]}()`).join(" · ")
     : (keysR?.problems.join("; ") ?? "");
   const runActive = runnable && ACTIVE.includes(live.st?.state ?? "");
+  // Batt 2026-11-13: "every flow has Simulate and Run" -- Run plays in the game only what the bot can
+  // play live; today that is the block "hunt with the runner" on a map with a runner (xmas_dun02)
+  const notRunWhy =
+    node.kind === "global"
+      ? "Global is code every map shares: open a map node to Run"
+      : node.kind !== "map"
+        ? "Run starts on a map node, with the character already in the game (the bot logs in with its own Python)"
+        : runnerBlockOn(node) && !runDoc
+          ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${node.map.map}`
+          : `the bot cannot play this map's blocks live yet: in the game it plays the block "hunt with the runner" (on xmas_dun02). Every other block is Simulate only until the live player for blocks is built`;
   const shown: Record<Pane, boolean> = { ...panes, run: panes.run || runActive };
 
   const setView = (v: (typeof VIEWS)[number]) => {
@@ -362,33 +371,6 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
     return () => clearTimeout(t);
   }, [key]);
 
-  // --- the FLOWS row: projects by name; the one left is KEPT on this browser's shelf ----------------
-  const [shelfNames, setShelfNames] = useState<string[]>(() => Object.keys(readShelf(store)).filter((n) => importProject(readShelf(store)[n].text).ok));
-  const switchTo = (name: string) => {
-    flush();
-    const here = projectRef.current;
-    shelve(store, here.name, exportProject(here), world);
-    const shelf = readShelf(store);
-    let next: { project: Project; world: WorldSource } | null = null;
-    const kept = shelf[name];
-    if (kept && name !== here.name) {
-      const r = importProject(kept.text);
-      if (r.ok) next = { project: r.project, world: WORLDS.includes(kept.world as WorldSource) ? (kept.world as WorldSource) : "local" };
-    }
-    if (!next && READY[name]) next = READY[name]();
-    if (!next) return setNotice({ text: `The project ${name} could not be opened.`, tone: "error", undo: null });
-    delete shelf[name];
-    writeShelf(store, shelf);
-    setShelfNames(Object.keys(readShelf(store)).filter((n) => importProject(readShelf(store)[n].text).ok));
-    replace(next.project, { world: next.world, notice: `Opened ${next.project.name}. ${here.name} is kept in this browser: the FLOWS row opens it again.` });
-  };
-  // matpilot #14: the row's order never changes on a press (by name, not "the open one first")
-  const flowItems: FlowItem[] = [...new Set([project.name, ...shelfNames, ...Object.keys(READY)])].sort().map((n) => ({
-    name: n,
-    state: n === project.name ? "open" : shelfNames.includes(n) ? "kept" : "starter",
-    run: n === project.name ? mapNodes(project).some((m) => runnerBlockOn(m) !== null) : n === "xmas_dun02",
-  }));
-
   // --- load, save, start over, simulate -------------------------------------------------------------
   const loadGlobals = useRef(false);
   const onOpened = (o: Opened) => {
@@ -433,6 +415,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
     dialog,
     true,
   );
+  const openReady = (name: string) => {
+    setMenu(false);
+    // matpilot round 15 #4: a Load replaces the project open now; say so before (Undo brings it back)
+    if (!window.confirm(`Open the ready-made project ${name}? It replaces the project open now (${projectRef.current.name}): Save that first if you want to keep a copy; Undo, right after, brings it back.`)) return;
+    const r = READY[name]();
+    replace(r.project, { world: r.world, undo: true, notice: `Opened the ready-made project ${name}: the one before comes back with Undo (or Save it first).` });
+  };
   const startOver = () => {
     if (!window.confirm("Open the ready-made xmas_dun02 project again? The project here is replaced (Undo, right after, brings it back).")) return;
     replace(READY.xmas_dun02().project, { world: "local", undo: true, notice: "Opened the ready-made project xmas_dun02." });
@@ -527,12 +516,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const getProject = useCallback(() => projectRef.current, []);
   const issues = editor.issues;
   const loose = editor.loose;
-  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false });
+  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false, run: runnable });
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
-  const visiblePanes = PANES.filter(([p]) => (p !== "hunt" || huntRules) && (p !== "run" || runnable));
+  const visiblePanes = PANES.filter(([p]) => (p !== "hunt" || huntRules) && (p !== "run" || node.kind === "map"));
   const openPanes = visiblePanes.filter(([p]) => shown[p]);
+  const notReady = (lintStale ? [] : (lintDoc?.findings ?? [])).filter((f) => f.severity === "readiness" && (f.node ?? "") === node.id);
   const tabErrors = (t: string) => errors.some((f) => (f.node || node.id) === node.id && (f.tab || MAIN_TAB) === t);
   const nodeErrors = (id: string) => errors.some((f) => f.node === id);
 
@@ -626,8 +616,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
         <div className="studio-brand">
           <span className="studio-home">Flows</span>
           {/* matpilot 2026-11-13 #3: the badge says what THIS page can do */}
-          <span className="status-pill" title={runnable ? "Simulate plays the blocks without the game; Run (amber) plays the runner in the game" : "Nothing on this node runs in the game: Simulate only"}>
-            {runnable ? "SIMULATE · RUN" : "SIMULATE only"}
+          <span className="status-pill" title={runnable ? "Simulate plays the blocks without the game; Run (amber) plays them in the game" : `Simulate plays the blocks without the game; Run: ${notRunWhy}`}>
+            {runnable ? "SIMULATE · RUN" : "SIMULATE · RUN not ready"}
           </span>
           <h1 className="studio-title" title={`${project.name}: ${node.id}`}>
             {project.name} <span className="muted">· {node.id}</span>
@@ -648,13 +638,14 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
-                <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), switchTo("xmas_dun02"))} data-testid="load-xmas">
+                {/* Batt 2026-11-13: a PROJECT is the save of /maps; /flows loads and saves the same one */}
+                <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => openReady("xmas_dun02")} data-testid="load-xmas">
                   xmas_dun02
-                  <small>the Rogue: login → character → xmas_dun02 (hunt with the runner, a Butterfly Wing home); every key a function in Global; Run in the game (the project open now is kept)</small>
+                  <small>the ready-made project: login → character → xmas_dun02 (hunt with the runner, a Butterfly Wing home); every key a function in Global (Undo brings yours back)</small>
                 </button>
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), switchTo("my_first_project"))} data-testid="load-sample-project">
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => openReady("my_first_project")} data-testid="load-sample-project">
                   my_first_project
-                  <small>the two-map sample: town → NPC warp → field, a Butterfly Wing back (synthetic maps; Simulate only)</small>
+                  <small>the ready-made two-map sample: town → NPC warp → field, a Butterfly Wing back (synthetic maps)</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => ((loadGlobals.current = false), setMenu(false), setDialog("load"))} data-testid="load-saved">
                   Open a saved project…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
@@ -680,15 +671,20 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
             <NewIcon />
             <span className="button-text">Start over</span>
           </button>
-          <button type="button" className="button button-primary button-run" onClick={() => void simulate(simForm)} disabled={simBusy || issues.length > 0} title="Play the project in the simulator: no game, no input" data-testid="simulate">
+          <button
+            type="button"
+            className="button button-primary button-run"
+            onClick={() => void simulate(node.kind === "map" ? { ...simForm, startBlock: node.id, single: true } : simForm)}
+            disabled={simBusy || issues.length > 0}
+            title={node.kind === "map" ? `Play this map (${node.id}) alone in the simulator: no game, no input. /maps plays the whole chain` : "Play the project in the simulator from the login: no game, no input"}
+            data-testid="simulate"
+          >
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable && <LiveRunButtons live={live} blocked={runWhy} keys={runKeys} />}
+          {runnable ? <LiveRunButtons live={live} blocked={runWhy} keys={runKeys} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
-
-      <FlowSwitcher items={flowItems} onPick={(n) => switchTo(n)} />
 
       {notice && (
         <div className="studio-notices">
@@ -910,6 +906,28 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                 )}
                 {p === "paths" && <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
+                {p === "run" && !runnable && (
+                  <div className="run-pane" data-testid="run-pane-not-ready">
+                    <p>
+                      <strong>Run in the game · not ready here.</strong> {notRunWhy}
+                    </p>
+                    {notReady.length > 0 && (
+                      <>
+                        <p className="muted">What the flow engine says is not ready for a live run on this node:</p>
+                        <ul>
+                          {notReady.map((f, i) => (
+                            <li key={`${f.path}-${i}`}>
+                              <button type="button" className="problem-link" onClick={() => showFinding(f)} title="Show the block">
+                                {f.message}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    <p className="muted">Simulate (green) plays this map alone; /maps plays the whole chain.</p>
+                  </div>
+                )}
                 {p === "run" && runDoc && (
                   <div className="run-pane" data-testid="run-pane">
                     <p className="muted">

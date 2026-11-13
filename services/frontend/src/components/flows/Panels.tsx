@@ -400,7 +400,7 @@ export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; sta
         static data: {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"})
         {stale ? " · STALE: the flow changed since" : ""}
       </div>
-      <div className={lint.run.allowed ? "ok-text" : "muted"}>Run-start check (a live run, MW3; this page runs nothing): {lint.run.summary}</div>
+      <div className={lint.run.allowed ? "ok-text" : "muted"}>Run-start check (what a live run needs, MW3): {lint.run.summary}</div>
       {(lint.world_notes ?? []).map((n) => (
         <div key={n} className="warn-text">
           {n}

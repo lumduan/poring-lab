@@ -85,7 +85,7 @@ test("the graph: the project's nodes, its session connections onto the start ent
   assert.deepEqual(g.notes, []);
   // the first map is marked; the saved positions are scaled to the screen (and back when dragged)
   assert.equal(g.nodes.find((n) => n.id === "town")?.data.kind === "map" && (g.nodes.find((n) => n.id === "town")?.data as { first: boolean }).first, true);
-  assert.deepEqual(g.nodes.find((n) => n.id === "town")?.position, { x: 560 * POS_SCALE.x, y: 0 });
+  assert.deepEqual(g.nodes.find((n) => n.id === "town")?.position, { x: 230 * POS_SCALE.x, y: 0 });
   assert.deepEqual(toUnits(toScreen({ x: 860, y: 220 })), { x: 860, y: 220 });
   // a broken session path says how to mend it
   const broken = sampleProject();
@@ -128,8 +128,8 @@ test("a map node from the static data: its id, the centre-most entry, a target g
   assert.deepEqual(n.tabs.map((t) => t.name), ["main"], "IRON RULE: every node has a main");
   assert.equal(n.tabs[0].main![0].kind, "repeat");
   assert.equal(n.tabs[0].main!.at(-1)?.kind, "stop");
-  assert.deepEqual(n.pos, { x: 1160, y: 0 }, "right of the rightmost map");
-  assert.deepEqual(newNodePos(r.project), { x: 1460, y: 0 });
+  assert.deepEqual(n.pos, { x: 690, y: 0 }, "right of the rightmost map");
+  assert.deepEqual(newNodePos(r.project), { x: 920, y: 0 });
   const bare = mapNodeFor(sampleProject(), "syn_town", null);
   assert.equal(bare.entries[0].at, null);
   assert.deepEqual(bare.tabs[0].main, [{ kind: "stop", reason: "done" }]);

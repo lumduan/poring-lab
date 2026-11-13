@@ -258,6 +258,13 @@ export const BLOCK_DEFS: BlockDef[] = [
     tooltip: "press_key(key): press one hotbar key (row 1, F1-F9). Whatever the player put on that slot is used: an item, a skill, a piece of equipment, a wing",
   }),
   stmt({
+    type: "pl_press_key_v",
+    message0: "press key %1 %2",
+    args0: [{ type: "input_value", name: "KEY" }, run],
+    inputsInline: true,
+    tooltip: "press_key(key) with the key as a value: a function's input (e.g. key) or a text like \"F8\" (F1-F9)",
+  }),
+  stmt({
     type: "pl_dungeon_hunt",
     message0: "hunt with the runner (dungeon_hunt.py) %1 %2",
     args0: [badge, run],
@@ -615,6 +622,8 @@ export function toolbox(
     { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } },
   ];
   const variables: ToolboxItem[] = [
+    lbl("A function's input, or a variable, by its name (inside a function: its inputs):"),
+    { kind: "block", type: "pl_expr", fields: { TEXT: "key" } },
     lbl(scope.node === "global" ? "A variable every node shares:" : "A variable of this tab:"),
     { kind: "block", type: "pl_vardecl", fields: { NAME: "x" }, inputs: { VALUE: exprBlock("0") } },
     { kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } },
@@ -626,6 +635,7 @@ export function toolbox(
     { kind: "block", type: "pl_return" },
     { kind: "block", type: "pl_callv", fields: { PROC: "my_function", ARGS: "" } },
     ...pressKey,
+    ...(blocks.press_key ? [{ kind: "block" as const, type: "pl_press_key_v", inputs: { KEY: exprBlock("key") }, extraState: rest(blocks.press_key) }] : []),
   ];
   const others: ToolboxItem[] = Object.keys(blocks)
     .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK))

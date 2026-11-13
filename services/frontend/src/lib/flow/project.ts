@@ -309,11 +309,11 @@ export function xmasProject(): Project {
     start: "login",
     nodes: [
       { id: "login", kind: "login", pos: { x: 0, y: 0 }, tabs: [mainTab(loginMain())] },
-      { id: "character", kind: "character", pos: { x: 260, y: 0 }, tabs: [mainTab(characterMain())] },
+      { id: "character", kind: "character", pos: { x: 0, y: 120 }, tabs: [mainTab(characterMain())] },
       {
         id: "xmas_dun02",
         kind: "map",
-        pos: { x: 560, y: 0 },
+        pos: { x: 230, y: 0 },
         map: { kind: "map", map: "xmas_dun02" },
         entries: [{ name: "here", at: null, radius: 2 }],
         targets: [],
@@ -339,7 +339,7 @@ export function xmasProject(): Project {
       {
         id: "geffen",
         kind: "map",
-        pos: { x: 860, y: 0 },
+        pos: { x: 460, y: 0 },
         map: { kind: "map", map: "geffen" },
         entries: [{ name: "save", at: { ...GEFFEN_SAVE }, radius: 2 }],
         targets: [],
@@ -350,7 +350,7 @@ export function xmasProject(): Project {
       {
         id: GLOBAL_ID,
         kind: "global",
-        pos: { x: 560, y: 220 },
+        pos: { x: 230, y: 170 },
         tabs: [
           tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("knife_on", [pressKey("F4")]), def("knife_back", [pressKey("F5")])]),
           tab("safety", [hpLow()]),
@@ -380,11 +380,11 @@ export function sampleProject(): Project {
     start: "login",
     nodes: [
       { id: "login", kind: "login", pos: { x: 0, y: 0 }, tabs: [mainTab(loginMain())] },
-      { id: "character", kind: "character", pos: { x: 260, y: 0 }, tabs: [mainTab(characterMain())] },
+      { id: "character", kind: "character", pos: { x: 0, y: 120 }, tabs: [mainTab(characterMain())] },
       {
         id: "town",
         kind: "map",
-        pos: { x: 560, y: 0 },
+        pos: { x: 230, y: 0 },
         map: { kind: "map", map: "town_1" },
         entries: [{ name: "spawn", at: { kind: "cell", map: "town_1", x: 40, y: 40 }, radius: 2 }],
         targets: [],
@@ -401,7 +401,7 @@ export function sampleProject(): Project {
       {
         id: "field",
         kind: "map",
-        pos: { x: 860, y: 0 },
+        pos: { x: 460, y: 0 },
         map: { kind: "map", map: "field_1" },
         entries: [{ name: "arrival", at: { kind: "cell", map: "field_1", x: 30, y: 30 }, radius: 2 }],
         targets: [9101, 9102, 9105, 9109].map((id) => ({ kind: "mob" as const, id })),
@@ -414,7 +414,7 @@ export function sampleProject(): Project {
           ]),
         ],
       },
-      { id: GLOBAL_ID, kind: "global", pos: { x: 560, y: 220 }, tabs: [tab("keys", [def("butterfly_wing", [pressKey("F9")])])] },
+      { id: GLOBAL_ID, kind: "global", pos: { x: 230, y: 170 }, tabs: [tab("keys", [def("butterfly_wing", [pressKey("F9")])])] },
     ],
     edges: [
       { from: "login", to: "character" },

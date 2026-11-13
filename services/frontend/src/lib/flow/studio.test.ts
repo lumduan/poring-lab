@@ -127,6 +127,8 @@ test("the status sentence says what to do next, and never offers a live run", ()
   assert.match(statusText({ ...base, lintErrors: 1 }), /^Lint found 1 error:/);
   assert.match(statusText({ ...base, engine: "http_503" }), /not reachable \(http_503\)/);
   for (const s of [base, { ...base, mapTab: true }]) assert.doesNotMatch(statusText(s), /\brun the bot\b|live/i);
+  // a node whose Run plays in the game never says that nothing runs in the game (matpilot round 15 #7)
+  assert.doesNotMatch(statusText({ ...base, run: true }), /nothing here runs/);
   assert.deepEqual(lintErrors(null), []);
 });
 

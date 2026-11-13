@@ -34,11 +34,12 @@ import NodeInspector from "@/components/maps/NodeInspector";
 import RulesPanel from "@/components/maps/RulesPanel";
 import { DEFAULT_RUN, PlaybackBar, RunPanel, type RunForm, SPEEDS } from "@/components/maps/SidePanels";
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type PythonFiles, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
-import { type AuthoredExit, canonical, MAP_ID, MAX_JSON_BYTES } from "@/lib/flow/ir";
+import { type AuthoredExit, canonical, MAP_ID } from "@/lib/flow/ir";
 import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import { mapNodes, nodeById, type Project, sampleProject, sessionPath, xmasProject } from "@/lib/flow/project";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
-import { parseFlowFile } from "@/lib/flow/file";
+import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
+import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import { lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts } from "@/lib/maps/build";
 import { connectExit, connectSession, type Edit, moveNodes, removeExit, removeSession, retargetExit, setZones } from "@/lib/maps/edit";
@@ -89,9 +90,9 @@ const READY: { id: string; make: () => Project; world: WorldSource; title: strin
 
 function initialProject(store: ReturnType<typeof browserStorage>): { project: Project; restored: boolean; broken: boolean } {
   const text = readProjectText(store);
-  if (!text) return { project: sampleProject(), restored: false, broken: false };
+  if (!text) return { project: xmasProject(), restored: false, broken: false };
   const r = importProject(text);
-  return r.ok ? { project: r.project, restored: true, broken: false } : { project: sampleProject(), restored: false, broken: true };
+  return r.ok ? { project: r.project, restored: true, broken: false } : { project: xmasProject(), restored: false, broken: true };
 }
 
 function readRun(store: ReturnType<typeof browserStorage>): RunForm {
@@ -116,26 +117,6 @@ function contentKey(p: Project): string {
   return canonical({ ...p, nodes: p.nodes.map((n) => ({ ...n, pos: null })) });
 }
 
-/** The project file's download (a page's own: no server, nothing kept). */
-function download(name: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-/** Ctrl/⌘+S and Ctrl/⌘+O, not while typing in a field. */
-function fileKey(e: KeyboardEvent): "save" | "load" | null {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return null;
-  const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return null;
-  const k = e.key.toLowerCase();
-  return k === "s" ? "save" : k === "o" ? "load" : null;
-}
 
 export default function MapsApp({ backendUrl, initialNode }: { backendUrl: string | null; initialNode: string | null }) {
   const router = useRouter();
@@ -144,7 +125,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const [start] = useState(() => initialProject(store));
   const [project, setProjectState] = useState<Project>(start.project);
   const projectRef = useRef<Project>(start.project);
-  const [world, setWorld] = useState<WorldSource>(() => (start.restored ? readChoice(store, KEYS.world, WORLDS, "local") : "sample"));
+  const [world, setWorld] = useState<WorldSource>(() => (start.restored ? readChoice(store, KEYS.world, WORLDS, "local") : "local"));
   const worldRef = useRef(world);
   useEffect(() => {
     worldRef.current = world;
@@ -197,7 +178,13 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
   const matRef = useRef<HTMLElement | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [dialog, setDialog] = useState<FileDialog>(null);
+  const [fileMeta, setFileState] = useState<FileMeta>(() => (start.restored ? readFileMeta(store, start.project) : newFileMeta(start.project)));
+  const fileRef = useRef<FileMeta>(fileMeta);
+  const setFile = useCallback((m: FileMeta) => {
+    fileRef.current = m;
+    setFileState(m);
+  }, []);
   const scrollToMat = useRef(false); // a phone: after Simulate, the map (not the panel) comes into view
   const key = useMemo(() => contentKey(project), [project]);
   const maps = useMemo(() => mapNodes(project).map((n) => ({ id: n.id, map: n.map.map })), [project]);
@@ -225,6 +212,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const flush = useCallback(() => {
     writeProjectText(store, JSON.stringify(projectRef.current));
     writeChoice(store, KEYS.world, worldRef.current);
+    writeFileMeta(store, fileRef.current, projectRef.current);
   }, [store]);
   const replace = useCallback(
     (p: Project, opts: { notice?: string; undo?: boolean; world?: WorldSource; keepView?: boolean } = {}) => {
@@ -442,40 +430,35 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   // --- load, save, add a map ---------------------------------------------------------------------
   const openReady = (r: (typeof READY)[number]) => {
     setMenu(false);
+    // matpilot round 15 #4: a Load replaces the project open now; say so before (Undo brings it back)
+    if (!window.confirm(`Open the ready-made project ${r.title}? It replaces the project open now (${projectRef.current.name}): Save that first if you want to keep a copy; Undo, right after, brings it back.`)) return;
     replace(r.make(), { world: r.world, undo: true, notice: `Opened the ready-made project ${r.title}; the one before is back with Undo.` });
   };
-  const save = useCallback(() => {
-    const p = projectRef.current;
-    // TODO(parent): the converted Save dialog (components/flowfile/, on this computer and on GitHub)
-    // replaces this download once it takes a Project; until then the project file is downloaded.
-    download(`${p.name}${PROJECT_FILE}`, exportProject(p));
-    setNotice({ text: `Downloaded ${p.name}${PROJECT_FILE}: Load ▸ Open a project file… opens it again.`, tone: "ok", undo: null });
-  }, []);
-  const openFile = async (f: File) => {
-    if (f.size > MAX_JSON_BYTES) return setNotice({ text: `${f.name} is ${f.size} bytes; a project file is at most ${MAX_JSON_BYTES}.`, tone: "error", undo: null });
-    let text: string;
-    try {
-      text = await f.text();
-    } catch {
-      return setNotice({ text: `${f.name} could not be read.`, tone: "error", undo: null });
-    }
-    // a saved flow file (/flows' Save: the envelope with its project) or a bare project file
-    const r = parseFlowFile(text, f.name);
-    if (!r.ok) return setNotice({ text: `${f.name} was not opened: ${r.errors.slice(0, 3).join("; ")}`, tone: "error", undo: null });
-    replace(r.project, { undo: true, notice: `Opened ${r.project.name} from ${f.name}; the one before is back with Undo.` });
+  // Save and Load: the SAME dialogs as /flows (Batt 2026-11-13: "/maps is the project's save; save
+  // and load on /flows call the same"): on this computer or on GitHub, one file format
+  const onOpened = (o: Opened) => {
+    setDialog(null);
+    replace(o.project, { undo: true, notice: `${o.notice} The one before comes back with Undo.` });
+    setFile(o.meta);
   };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const which = fileKey(e);
-      if (!which || zonesFor) return;
-      e.preventDefault();
+  const pythonText = useCallback((d: PythonFiles) => d.files.map((f) => `# --- ${f.path}\n${f.text}`).join("\n"), []);
+  const pythonCached = useCallback((p: Project) => (python && python.for === contentKey(p) ? pythonText(python.doc) : null), [python, pythonText]);
+  const pythonFor = useCallback(
+    (p: Project): Promise<string> => {
+      const have = pythonCached(p);
+      return have !== null ? Promise.resolve(have) : api.python(p).then((r) => pythonText(r), () => "");
+    },
+    [api, pythonCached, pythonText],
+  );
+  const getProject = useCallback(() => projectRef.current, []);
+  useFileShortcuts(
+    (d) => {
       setMenu(false);
-      if (which === "save") save();
-      else fileRef.current?.click();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [save, zonesFor]);
+      setDialog(d);
+    },
+    dialog,
+    !zonesFor,
+  );
   const facts = async (map: string): Promise<{ facts: MapFacts | null; why: string }> => {
     try {
       const w = await api.world(worldRef.current, projectRef.current.target.server, [map], true);
@@ -491,6 +474,10 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
     if (adding === null) return;
     const map = adding.trim();
     if (!MAP_ID.test(map)) return setNotice({ text: `${JSON.stringify(map)} is not a map id`, tone: "error", undo: null });
+    // matpilot round 15 #11: a second node of the same map makes "which node does a wing land on?"
+    // a question; say so before
+    const same = projectRef.current.nodes.filter((n) => n.kind === "map" && n.map.map === map).map((n) => n.id);
+    if (same.length && !window.confirm(`The project has a node of ${map} already (${same.join(", ")}). Add a second one? A warp or a wing to ${map} lands on the one its exit names; a death respawns on the first.`)) return;
     setAddBusy(true);
     const got = await facts(map);
     setAddBusy(false);
@@ -609,27 +596,14 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                     <small>{r.words}</small>
                   </button>
                 ))}
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), fileRef.current?.click())} data-testid="maps-load-saved">
-                  Open a project file…<small>from this computer (checked before it opens; Ctrl+O)</small>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="maps-load-saved">
+                  Open a saved project…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
-                {/* TODO(parent): "from GitHub" comes back with the converted Load dialog (components/flowfile/) */}
                 <p className="studio-menu-note muted">Old flows (the format before projects) are not converted.</p>
               </div>
             )}
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,application/json"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void openFile(f);
-            }}
-            data-testid="maps-file"
-          />
-          <button type="button" className="button button-small button-file" onClick={() => (setMenu(false), save())} aria-label="Save the project" title="Save the project: download its file (Ctrl+S)" data-testid="maps-save">
+          <button type="button" className="button button-small button-file" onClick={() => (setMenu(false), setDialog("save"))} aria-label="Save the project" title="Save the project: on this computer or on GitHub (Ctrl+S)" data-testid="maps-save">
             <SaveIcon />
             <span className="button-text">Save</span>
           </button>
@@ -1032,6 +1006,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       )}
       {/* a phone in a run: room for the fixed playback bar (bar + 16 px + the safe area) */}
       <div className="maps-bar-spacer" aria-hidden="true" />
+      <FlowFileDialogs open={dialog} onClose={() => setDialog(null)} meta={fileMeta} onMeta={setFile} getFlow={getProject} pythonCached={pythonCached} pythonFor={pythonFor} onOpened={onOpened} />
     </main>
   );
 }

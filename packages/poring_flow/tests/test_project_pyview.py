@@ -112,7 +112,7 @@ def test_the_files_and_their_paths() -> None:
         "@on(hp_percent() < 30, rearm=hp_percent() > 50, priority=SURVIVAL, mode=INSERT)\n"
         "def hp_low():\n    heal()\n"
     ) in by["global/safety.py"]
-    assert 'node("xmas_dun02", kind="map", pos=(560, 0), tabs=["main"])' in by["project.py"]
+    assert 'node("xmas_dun02", kind="map", pos=(230, 0), tabs=["main"])' in by["project.py"]
     assert 'edge("character", "xmas_dun02", entry="here")' in by["project.py"]
     for text in by.values():  # the generated comment lines fit the 384 px pane (pyview's rule)
         assert all(len(line) <= pyview.RULE_WIDTH for line in text.splitlines()

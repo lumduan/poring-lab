@@ -58,8 +58,8 @@
       "id": "character",
       "kind": "character",
       "pos": {
-        "x": 260,
-        "y": 0
+        "x": 0,
+        "y": 120
       },
       "tabs": [
         {
@@ -85,7 +85,7 @@
       "id": "town",
       "kind": "map",
       "pos": {
-        "x": 560,
+        "x": 230,
         "y": 0
       },
       "map": {
@@ -200,7 +200,7 @@
       "id": "field",
       "kind": "map",
       "pos": {
-        "x": 860,
+        "x": 460,
         "y": 0
       },
       "map": {
@@ -291,8 +291,8 @@
       "id": "global",
       "kind": "global",
       "pos": {
-        "x": 560,
-        "y": 220
+        "x": 230,
+        "y": 170
       },
       "tabs": [
         {

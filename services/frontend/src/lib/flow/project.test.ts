@@ -95,6 +95,9 @@ test("the Run keys: resolved on THAT node (its override first), through calls wi
   g.tabs.push(tab("helpers", [def("use_hotkey", [{ kind: "action", block: "press_key", concept: "ui.press_hotkey", timeout_s: 2, on_fail: "stop", outcome_to: null, note: null, params: { key: { kind: "var", name: "key" } } }], { params: [{ name: "key", default: null }] })]));
   g.tabs[0].defs[0] = def("heal", [call("use_hotkey", [{ kind: "lit", value: "F7" }])]);
   assert.deepEqual(keyOfCall(p, "xmas_dun02", "heal"), { key: "F7" });
+  roundTrip(p); // the key as a value (press key <input>) round-trips through its block (matpilot round 15 #2)
+  const helper = tabToWorkspace(p, { node: "global", tab: "helpers" }).blocks.blocks[0].inputs?.DO?.block;
+  assert.equal(helper?.type, "pl_press_key_v");
   // a role function of two presses: refused in words
   g.tabs[0].defs[3] = def("knife_on", [pressKey("F4"), pressKey("F3")]);
   const r3 = runnerKeysOn(p, "xmas_dun02");

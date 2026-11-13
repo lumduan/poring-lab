@@ -22,7 +22,7 @@ export type MapFacts = {
 export const ATTACKS = 5;
 export const WITHIN = 9;
 /** Where "+ map" places a new node: right of the rightmost map node, in the project's units. */
-export const NEW_NODE_DX = 300;
+export const NEW_NODE_DX = 230; // the ready-made projects' map spacing (matpilot round 15 #5: a compact first view)
 
 /** The walkable cell nearest the grid's centre (ties: the lower y, then the lower x), or null. */
 export function centreCell(rows: readonly string[] | null): [number, number] | null {

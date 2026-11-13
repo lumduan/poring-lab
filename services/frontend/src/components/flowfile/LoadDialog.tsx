@@ -114,7 +114,7 @@ export default function LoadDialog({ github, onClose, onOpened, onSetUpGitHub }:
   };
 
   return (
-    <Dialog title="Load a flow" onClose={onClose} testId="load-dialog">
+    <Dialog title="Load a project" onClose={onClose} testId="load-dialog">
       <p className="muted">
         Loading replaces the flow on the page. Changed your mind? Press <strong>Undo</strong> on the notice.
       </p>
