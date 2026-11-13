@@ -47,7 +47,8 @@ stays ro_agent's Python). Their nodes' flows are simulated and shown.
       "name": FLOW_NAME, "description": str (<= 500),
       "target": {client, server, locale, path},          # as IR 2
       "max_runtime_s": int, "where_budget": int, "stop_when": Expr | null, "assumes": [Expr],
-      "start": NodeId,                                    # where Simulate starts (a login node)
+      "start": NodeId,                                    # where Simulate and Run start: a login
+                                                          # node, or a MAP node (2026-11-13, below)
       "nodes": [Node],                                    # ids unique
       "edges": [Edge]                                     # the session path (see 2.4)
     }
@@ -105,6 +106,17 @@ is unchanged):**
 - Tab names also refuse a VARIABLE's name of the same node (a module name clash), and
   `built_in`: findings at the engine's always-on safety events (when Global writes none) show
   under `global/built_in/<event>`. The list is GET /flows/catalogue's `tab_name_rule`.
+
+➡️ **A MAP START (Batt 2026-11-13 ~21:4x: "START > map xmas_dun02, ONE box is enough; login
+and choosing the character come later; the user puts the character on xmas_dun02 themself";
+[live-blocks.md](live-blocks.md) stage 1; built on feat/one-box):** `start` may name a MAP node.
+The run starts where she stands on it (a person put her there), at its FIRST entry, with no
+session: login and character nodes are optional and `edges` may be empty. The engine:
+`start_map(p)`, `session_path(p)` returns the map with `map_start` true; the compile starts the
+workflow there; the simulator's trace has `session: null`; the Python view prints
+`START = "<map>"`; the lint accepts it and WARNS when login / character nodes or edges are there
+too ("not played"). Any other node kind as `start` stays an error. The ready-made xmas_dun02 is
+now ONE map node (section 7).
 
 ## 3. Names: imports and overrides (the semantics)
 
@@ -215,6 +227,15 @@ off the hotbar, two roles on one key). "Through calls with literal arguments": a
 one press_key, or one call with literal arguments of such a function; a press_key may press its
 function's parameter when every call gives it a literal hotbar key (the lint's `key_argument`).
 
+➡️ **The home role (2026-11-13 ~21:4x, the one box):** dungeon_hunt has an optional FIFTH role,
+`home`: the function the runner presses to fly home on a Butterfly Wing (the bag half full, or
+Stop: its settings). Its lint is the four's (exactly one press_key, its own key), and its function
+is a Butterfly Wing function (`functions.wing_functions`: its key is a wing key, as an item warp's).
+`runner_keys` reads `home_key` from it FIRST, else from the node's item warp by function (as
+before); neither is the problem "no Butterfly Wing home". Run on a map node now plays the PROJECT
+through the live block player ([live-blocks.md](live-blocks.md) section 3: `POST
+/flows/run/project`).
+
 ## 7. The ready-made project (the fixture both sides test)
 
 `services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json`: login (lab-rathena, lab_gm) ->
@@ -232,6 +253,17 @@ survival, insert, resume, body heal(): IR 2's rearm rule needs the re-arm); `pro
 = run until stopped); the Maps page's trace `lib/maps/fixtures/project_sample_trace.json` (from the
 login, horizon 71 s, encounters, seed 3). Both lint without an error (xmas_dun02: no static data,
 with the zones provider, with the local KB when present; the sample on its sheets).
+
+➡️ **SUPERSEDED 2026-11-13 ~21:4x by THE ONE BOX** (Batt: "take every box out: START > map
+xmas_dun02, one box is enough"): `project_xmas_dun02.json` is ONE map node -- start xmas_dun02,
+no edges, at (0, 0), entry `here` (anywhere, radius 2), the zones reference as before; tab `main`:
+the save point (Geffen 119,40, the world rule's note), `dungeon_hunt(heal="heal", fly="fly_wing",
+knife_on="knife_on", knife_back="knife_back", home="butterfly_wing")`, `stop("home")` (the runner
+itself flies home); tab `keys`: heal F1, fly_wing F8, butterfly_wing F9, knife_on F4,
+knife_back F5. No login, character, geffen or Global node. It lints without an error (no static
+data; with the zones provider). The login-start project above is kept as the TESTS' fixture
+`project_session.json` (the session path, Global and its overrides build on it); the sample is
+unchanged.
 
 ## 8. Not converted (Batt's answer 6)
 

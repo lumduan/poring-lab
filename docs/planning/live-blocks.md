@@ -68,6 +68,39 @@ owner: Batt
 - The start: the start check (chat closed, the map's name read as the run's map, the stock on the
   right keys) refuses before any input: the person places her on the map.
 
+➡️ **The project and the browser side, BUILT 2026-11-13 (branch feat/one-box; the backend and the
+player are feat/live-player's):**
+- The engine: `start` may be a map node (`project.start_map`, `SessionPath.map_start`): the run
+  starts at its first entry with no session (the simulator's `session` is null); login and
+  character nodes are optional, `edges` may be empty (a map start with session nodes or edges
+  warns they are not played). dungeon_hunt has an optional fifth role `home` (the Butterfly Wing
+  the runner flies home on: one press_key, its own key, a wing key); `runner_keys` takes the home
+  key from it first, else from the node's item warp by function.
+- The ready-made project is ONE box (`project_xmas_dun02.json` = `xmasProject()`): start
+  xmas_dun02 (entry `here`, anywhere), no edges; tab `main` = the save point (Geffen 119,40),
+  `dungeon_hunt(heal, fly=fly_wing, knife_on, knife_back, home=butterfly_wing)`, `stop("home")`;
+  tab `keys` = heal F1, fly_wing F8, butterfly_wing F9, knife_on F4, knife_back F5. 0 lint errors.
+  The login-start project before it is the tests' fixture `project_session.json`.
+- THE REQUEST (lib/flow/liverun.ts `projectRunBody` / `projectRunPath`): `POST /flows/run/project
+  {"project": <format 3>, "node": "<map node id>"}` with the CSRF header; refusals 400 / 409
+  `{detail: {reason, detail}}`: `lint_errors`, `not_live`, `run_start_refused`,
+  `already_running`, `mode_not_assist`, `helper_not_running` (worded in `REFUSALS`). The status
+  stays `GET /flows/run` (flow id `project`), Stop stays `POST /flows/run {action: "stop"}`.
+  `useLiveRun(..., run)` posts it on a start; the check is the runner's, as before.
+- Live readiness (lib/flow/liveready.ts): every block a run from the node reaches -- its main,
+  the functions it calls (resolved on that node), the runner's role functions, an item warp's
+  function, the events that run there, and the map nodes its exits go on to -- must have
+  `GET /flows/catalogue blocks[name].spec.live === true` (missing = not live); an exit other than
+  the item warp by a function is not live yet. Else Run is greyed: "walk_to, talk_npc: not live
+  yet".
+- /flows: Run on a map node plays the project from that node (the same request), gated as above;
+  "Before Run" keeps the checklist, the live line, the settings and the read-only check.
+- /maps: a START marker (a pill, not a project node) joined to the start map's entry; dragging
+  that connection onto another map sets `start` ("Start here" in the node inspector too). Run
+  beside Simulate plays the project from START, box by box (the same amber press-twice button),
+  with the live line while it plays. A login start keeps today's behaviour: Run says login is not
+  live yet.
+
 ## 4. Not in stage 1
 
 Login, choose character, walk_to on the live player, talk to NPC, the shop / Kafra blocks.
