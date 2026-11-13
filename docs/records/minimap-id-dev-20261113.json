@@ -1,0 +1,20 @@
+[
+{"kind": "shards", "path": "20261106T115507-rdp-xmas02-xw1", "per_shard": 3, "shards": [0, 2, 4]},
+{"kind": "shards", "path": "20261109T082234-rdp-hunt-xmas02-p31", "per_shard": 3, "shards": [0, 3, 6]},
+{"kind": "shards", "path": "20261111T121558-rdp-hunt-xmas02-fiT10", "per_shard": 3, "shards": [0, 5, 12]},
+{"kind": "shards", "path": "20261112T163109-rdp-hunt-xmas02-fiT43", "per_shard": 3, "shards": [0, 6, 12]},
+{"kind": "shards", "path": "20261026T104146-rdp-rogue-b1", "per_shard": 4, "shards": [0, 2, 4]},
+{"kind": "shards", "path": "20261025T213953-rdp-rogue-a1", "per_shard": 4, "shards": [0, 2]},
+{"kind": "shards", "path": "20261024T173322-rdp-thief-s1", "per_shard": 3, "shards": [0, 5, 10]},
+{"kind": "shards", "path": "20261003T215314-console-s2-outdoor", "per_shard": 3, "shards": [0, 2]},
+{"kind": "frames", "path": "20261013T213555-demo-npc-click-probe-morocc"},
+{"kind": "frames", "path": "20261010T161258-demo-npc-click-probe-alberta"},
+{"kind": "frames", "path": "20261009T215405-demo-npc-click-probe-prontera"},
+{"kind": "files", "path": "20261022T205948-demo-dungeon-H-c1", "names": ["strike-001.jpg", "strike-003.jpg", "strike-005.jpg"], "label": "orcsdun01"},
+{"kind": "files", "path": "/dev/shm/poring-lab-demo/20261113T100230-demo-dungeon-rogue-xmas_dun02-patrol-P2-postupdate-1113", "names": ["end.png", "strike-001.jpg", "strike-002.jpg"], "label": "xmas_dun02"},
+{"kind": "files", "path": "/dev/shm/poring-lab-demo/20261113T113415-demo-dungeon-rogue-xmas_dun02-patrol-P2-weightexit-1113", "names": ["end.png"], "label": "xmas_dun02"},
+{"kind": "files", "path": "/dev/shm/poring-lab-demo/20261113T114435-demo-dungeon-rogue-xmas_dun02-patrol-P2-wingexit-1113", "names": ["end.png"], "label": "xmas_dun02"},
+{"kind": "files", "path": "/dev/shm/poring-lab-demo/20261113T114644-demo-dungeon-rogue-xmas_dun02-patrol-P2-wingexit2-1113", "names": ["end.png"], "label": "new_1-1"},
+{"kind": "files", "path": "/dev/shm/poring-lab-demo/20261113T151807-demo-dungeon-rogue-xmas_dun02-patrol-P2-flowrun-11131517", "names": ["end.png"], "label": "geffen"},
+{"kind": "files", "path": "/dev/shm/poring-lab-tmp/mapname/live", "names": ["live1.png"], "label": "geffen"}
+]

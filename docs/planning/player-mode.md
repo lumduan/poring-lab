@@ -372,10 +372,88 @@ press_key("F8")`): /flows compiles the functions into five keys and sends them w
   worn). An earlier attempt (18:22:51) stopped in the preamble before any read (the worktree lacked
   the generated map cache).
 
+## The map's name from the minimap (dungeon@9.46; Batt 2026-11-13 "do it")
+
+### The cue (studied 2026-11-13 19:39-20:04 ICT from `date`)
+
+- **What the screen offers.** The client writes no map name in play: the readout under the
+  minimap is the cell only, and `/where` would type a line (rule 1: no input). But the minimap
+  draws THE MAP'S OWN PICTURE: the archive's per-map minimap bitmap (`<texture folder>/map/
+  <map>.bmp`, the name through `data/resnametable.txt` like every resource; the training grounds'
+  `new_N-M` are aliases of `new_zone0M` there). At the lab's zoom it is the WHOLE map, scaled into
+  a 127 px square at the minimap window's origin (1136, 18) + (1, -1). Its magenta key colour
+  (255, 0, 255) is transparent (the scene shows), every other pixel is drawn translucent over the
+  scene (xmas_dun02's orange floor bleeds through), and the NPC marks and her arrow are on top.
+- **Why this cue.** It is drawn on every map that has a minimap, whatever the floor, the light or
+  the monsters; it does not depend on her cell; and a reference exists for every map in the
+  client's archive without a frame recorded there (references cut from recorded frames would
+  cover only the maps the lab has played). The other candidates: the scene's floor palette is
+  local to her stand and changes with effects and light; the GAT's walk grid is not what the
+  bitmap paints.
+- **How** (`scripts/minimap_id.py`, numpy only): grey; the normalised cross-correlation of the
+  square with every reference over the reference's own DRAWN pixels (its key pixels show the
+  scene); a correlation is blind to the translucency (a gain) and to a flat scene (an offset).
+  - The best picture is NAMED when it scores >= NAME_MIN (0.40) and beats the next DIFFERENT
+    picture by >= MARGIN_MIN (0.15). Two pictures >= 0.95 alike are one (a copy group: prontera
+    and pprontera draw the same picture; every server map that draws it is in the read).
+  - The run's map is TICKED only when it draws the named picture AND the score is >= MATCH_MIN
+    (0.60). Another map named: a cross ("she is on geffen, not xmas_dun02"). Else "cannot tell".
+- **The references** (`minimap_id.py build`; client-derived, `data/minimap_refs/refs.npz`,
+  gitignored, never committed): every server map of the lab's pre-re map cache (1,296) -> its
+  bitmap through resnametable -> rendered as the client draws it (the key out, box-scaled).
+  2026-11-13 20:00: 668 pictures read, 599 maps with a picture drawn on >= 10 % of the square,
+  422 distinct pictures, 1 min 14 s. 629 of the archive's 731 minimap bitmaps (xmas_dun02's,
+  orcsdun01's and gef_fild10's among them) are MIXCRYPT: they need `--decode-mixcrypt`, the lab's
+  host-local study decoder (grf_read, never in the repo). Without it those maps have no reference
+  and read "cannot tell".
+- **The geometry** was fitted on 4 frames each of 6 maps (xmas_dun02, gef_fild10, pay_fild07,
+  prt_fild08, orcsdun01, alberta): every size 122-132 x 122-132 at every offset +-4 px; the best
+  mean correlation is 127 x 127 at (1137, 17) (0.832; the next, 129 x 127 at (1136, 17), 0.826).
+
+### The development set (seen while designing; `docs/records/minimap-id-dev-20261113.json`)
+
+12 NAS sessions + today's 6 session pictures + the live frame: 88 frames. The true map is the
+session's packets' last map change (offline ground truth only; a frame 2 s before to 5 s after a
+change is not labelled: 3 here). Of the 85 labelled, 84 named right, 0 named wrong, 1 "cannot
+tell" (new_1-1: the lab client's picture of the training grounds is closer to the Thai archive's
+`new_event` (0.86) than to its `new_zone01` (0.74)). With `--expect xmas_dun02`: 34 / 34
+xmas_dun02 frames ticked; the 51 others 50 crossed, 1 "?". Scores (the true picture; the best
+OTHER picture's at most): xmas_dun02 0.80-0.89 (0.35), gef_fild10 0.87-0.89 (0.42), pay_fild07
+0.82-0.83 (0.49), prt_fild08 0.87-0.89 (0.52), orcsdun01 0.82 (0.26), alberta 0.79-0.80 (0.45),
+morocc 0.57-0.62 (0.25), prontera 0.55-0.58 (0.29), geffen 0.47 (0.15: her stand, in the live
+frame and the 15:18 flowrun's end picture alike). Towns score lower: their NPC marks cover the
+picture. MATCH_MIN 0.60 sits over every wrong-picture score seen (<= 0.52) and under every
+dungeon / field score (>= 0.79); a town can be NAMED (a cross) but never TICKED.
+
+### PRE-REGISTERED (2026-11-13 20:05 ICT from `date`, before the held-out set is read)
+
+- **The held-out set:** `docs/records/minimap-id-heldout-20261113.json` (78 items, none in the
+  development set): 24 xmas_dun02 recordings (11-05 .. 11-13; their prt_fild08 stand at the
+  start / end too), 10 gef_fild10, 6 pay_fild07, 10 prt_fild08 / prontera / prt_church
+  recordings (2 frames from each of 3 shards), 22 demo sessions' stand frames (prontera,
+  prt_church, alberta, alberta_in, morocc, new_1-2) and 24 orcsdun01 strike frames of 6 hunts.
+  Scored ONCE by `minimap_id.py eval` (`scripts/minimap_id_eval.py`) with the constants above
+  frozen, `--expect xmas_dun02`, the references of 20:00.
+- **The bar** (labelled frames only):
+  - **B1 (the danger):** 0 frames of another map, or of no minimap, TICKED as xmas_dun02.
+  - **B2:** of the xmas_dun02 frames, >= 97 % ticked and 0 crossed.
+  - **B3:** named WRONG (a map read that is neither the true map nor its copy) <= 1 % of all
+    frames, and never as xmas_dun02.
+  - **B4:** of the frames of maps with a minimap (every true map but prt_church and alberta_in,
+    indoor maps the client draws no minimap on), >= 90 % named right.
+  - **B5:** prt_church / alberta_in frames: none named.
+  - Plus the live case (read only): the live Geffen frames read "she is on geffen, not
+    xmas_dun02".
+- **The runner's "cannot tell" rule, decided by B2:** when B2 passes with at most 3 % of the
+  xmas_dun02 frames "cannot tell" (frames taken IN PLAY: fights, effects, windows; a standing
+  start is the easy case, and the start reads frames for up to PLAYER_MAP_S), the runner REFUSES
+  a start that cannot tell. Otherwise it warns in the run's log and goes on.
+
 ## Not built yet
 
 - **The map's name from the screen** (the 9.45 live read's gap, above): the cell rule passes on
   another map whose cell falls on this map's open ground; a person checks the map.
+  ➡️ dungeon@9.46 (above): read from the minimap's picture.
 
 - **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known
   steps), buying from an NPC shop, selling loot.
