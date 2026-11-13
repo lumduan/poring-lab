@@ -81,6 +81,17 @@ export const CMP_OPTIONS = ["<", "<=", ">", ">=", "==", "!=", "in", "not in"];
 export const PRIORITY_OPTIONS = ["critical", "survival", "upkeep"];
 export const MODE_OPTIONS = ["preempt", "insert"];
 export const THEN_OPTIONS = ["resume", "skip_block", "restart_flow", "relocate", "stop"];
+/** The hotbar keys a press_key block offers (row 1: the keys the runner reads; scripts/flow_config.py
+ * KEYS, the catalogue's `options` for press_key). */
+export const HOTKEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"] as const;
+/** The Rogue's runner block (blocks.yaml `dungeon_hunt`): each ROLE names the function the runner
+ * calls for it (Batt 2026-11-13: "every key a function"), in the block's order. */
+export const RUNNER_ROLES = [
+  { param: "heal", field: "HEAL", words: "heal", fn: "heal" },
+  { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing" },
+  { param: "knife_on", field: "KNIFE_ON", words: "Knife on", fn: "knife_on" },
+  { param: "knife_back", field: "KNIFE_BACK", words: "Knife back", fn: "knife_back" },
+] as const;
 
 export const BLOCK_DEFS: BlockDef[] = [
   // --- MW2's palette: one block per skill (section 3) ---
@@ -208,7 +219,26 @@ export const BLOCK_DEFS: BlockDef[] = [
     message0: "set %1 to %2",
     args0: [text("VAR", "x"), { type: "input_value", name: "VALUE" }],
   }),
-  stmt({ type: "pl_call", message0: "call %1", args0: [text("PROC")] }),
+  stmt({ type: "pl_call", message0: "call %1 ( )", args0: [text("PROC", "my_function")],
+    tooltip: "call a function of the functions tab (every map can call it)" }),
+  // --- every key a FUNCTION (Batt 2026-11-13: "Fly Wing, Butterfly Wing, the Knife swap, a skill:
+  // make each a function whose body says which key F1-F9 to press; share them with Save / Load")
+  stmt({
+    type: "pl_press_key",
+    message0: "press key %1 %2 %3",
+    args0: [{ type: "field_dropdown", name: "KEY", options: opts(HOTKEYS) }, badge, run],
+    tooltip: "press_key(key): press one hotbar key (row 1, F1-F9). Whatever the player put on that slot is used: an item, a skill, a piece of equipment, a wing",
+  }),
+  stmt({
+    type: "pl_dungeon_hunt",
+    message0: "hunt with the runner (dungeon_hunt.py) %1 %2",
+    args0: [badge, run],
+    message1: "heal: call %1 Fly Wing: call %2",
+    args1: [text("HEAL", "heal"), text("FLY", "fly_wing")],
+    message2: "Knife on: call %1 Knife back: call %2",
+    args2: [text("KNIFE_ON", "knife_on"), text("KNIFE_BACK", "knife_back")],
+    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: the function's one key press is the key the runner presses. Its other settings: the Run pane",
+  }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),
   stmt({ type: "pl_continue", message0: "continue" }),
@@ -230,6 +260,12 @@ export const BLOCK_DEFS: BlockDef[] = [
     message0: "item warp: use %1 → %2 . %3 %4",
     args0: [text("ITEM"), text("TO_BLOCK"), text("TO_ENTRY"), run],
     tooltip: "item_warp: e.g. a Butterfly Wing, to the SAVE POINT (never 'the previous map')",
+  }),
+  stmt({
+    type: "pl_exit_item_fn",
+    message0: "item warp: call %1 → %2 . %3 %4",
+    args0: [text("FN", "butterfly_wing"), text("TO_BLOCK"), text("TO_ENTRY"), run],
+    tooltip: "item_warp by a function: call the function that presses the Butterfly Wing's key; she lands on the SAVE POINT",
   }),
   stmt({
     type: "pl_raw",
@@ -298,6 +334,16 @@ export const BLOCK_DEFS: BlockDef[] = [
     style: st("pl_main"),
     mutator: STATE,
     tooltip: "The program's start (a map block's: when the flow arrives on its map). Every path ends in an exit or a stop",
+  },
+  {
+    type: "pl_def",
+    message0: "function %1 ( )",
+    args0: [text("NAME", "my_function")],
+    message1: "%1",
+    args1: [{ type: "input_statement", name: "DO" }],
+    style: st("pl_def"),
+    mutator: STATE,
+    tooltip: "A FUNCTION (the functions tab): every map's blocks can call it by its name. Save and Load carry it, so it can be shared",
   },
   {
     type: "pl_event",
@@ -405,6 +451,8 @@ const PALETTE_TYPES: Record<string, string> = {
   use_item: "pl_use_item",
 };
 const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
+/** Catalogue blocks with a block of their own (not repeated under "More skills"). */
+const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt" };
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
@@ -453,7 +501,7 @@ export function toolboxBlocks(tb: Toolbox | ToolboxCategory): { category: string
  * value. `sensors`: the model blocks' first model and class, and the not-adopted models' notes. */
 export function toolbox(
   blocks: Record<string, CatBlock>,
-  scope: "block" | "global" | "main",
+  scope: "block" | "global" | "main" | "functions",
   huntFields: Record<string, string> | null = null,
   huntOmit: Record<string, string> = {},
   sensors: SensorDefaults = { model: "v1", label: "monster", notes: [] },
@@ -465,15 +513,20 @@ export function toolbox(
       ? [{ kind: "block", type: "pl_hunt", fields: huntFields, extraState: Object.keys(huntOmit).length ? { ...rest(blocks.hunt), omit: huntOmit } : rest(blocks.hunt) }]
       : [];
   const movement: ToolboxItem[] = [...palette("walk_to"), ...hunt];
+  if (scope === "block" && blocks.dungeon_hunt) {
+    movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
+  }
   if (scope === "block") {
     movement.push(
       lbl("Leave this map (a map block ends with one):"),
       { kind: "block", type: "pl_exit_walk" },
       { kind: "block", type: "pl_exit_npc" },
+      { kind: "block", type: "pl_exit_item_fn", fields: { FN: "butterfly_wing" } },
       { kind: "block", type: "pl_exit_item", fields: { ITEM: "WING" } },
     );
   }
-  const actions: ToolboxItem[] = ACTIONS.flatMap(palette);
+  const pressKey: ToolboxItem[] = blocks.press_key ? [{ kind: "block", type: "pl_press_key", fields: { KEY: "F1" }, extraState: rest(blocks.press_key) }] : [];
+  const actions: ToolboxItem[] = [...pressKey, ...ACTIONS.flatMap(palette)];
   const sentences = Object.entries(SENTENCE).filter(([name]) => blocks[name]);
   if (sentences.length) actions.push(lbl("At a shop or a Kafra:"));
   for (const [name, sb] of sentences) actions.push({ kind: "block", type: sb.type, extraState: rest(blocks[name]) });
@@ -485,9 +538,13 @@ export function toolbox(
     { kind: "block", type: "pl_stop" },
     { kind: "block", type: "pl_break" },
     { kind: "block", type: "pl_continue" },
-    lbl(scope === "global" ? "When something happens (every map):" : "When something happens:"),
-    { kind: "block", type: "pl_event", fields: { SCOPE: scope === "global" ? "global" : "map", NAME: "my_event" },
-      inputs: { WHEN: exprBlock("hp_percent() < 30") } },
+    ...(scope === "functions"
+      ? []
+      : [
+          lbl(scope === "global" ? "When something happens (every map):" : "When something happens:"),
+          { kind: "block" as const, type: "pl_event", fields: { SCOPE: scope === "global" ? "global" : "map", NAME: "my_event" },
+            inputs: { WHEN: exprBlock("hp_percent() < 30") } },
+        ]),
   ];
   const conditions: ToolboxItem[] = [
     { kind: "block", type: "pl_if", inputs: { COND: exprBlock("hp_percent() < 50") } },
@@ -517,9 +574,13 @@ export function toolbox(
     { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } },
   ];
   const variables: ToolboxItem[] = [{ kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } }];
-  const functions: ToolboxItem[] = [{ kind: "block", type: "pl_call" }];
+  const functions: ToolboxItem[] = [
+    ...(scope === "functions" ? [{ kind: "block" as const, type: "pl_def", fields: { NAME: "my_function" } }] : [lbl("Functions are written on the functions tab:")]),
+    { kind: "block", type: "pl_call", fields: { PROC: "my_function" } },
+    ...pressKey,
+  ];
   const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields))
+    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];

@@ -16,11 +16,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
-import FlowSwitcher from "@/components/flows/FlowSwitcher";
 import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
-import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
+import LiveRun, { useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, savedFlowName, writeChoice } from "@/lib/flow/prefs";
+import { LIVE_FLOWS } from "@/lib/flow/runners";
 import {
   allNodes,
   commandPieces,
@@ -55,10 +55,8 @@ const KIND_WORD: Record<RunnerNode["kind"], string> = { hat: "a start block", st
 
 const darkQuery = () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null);
 
-// The runner flows the Run panel can start (scripts/flow_run.py's FLOWS; 2026-11-13)
-const LIVE_FLOWS: readonly string[] = ["xmas_dun02_rogue"];
 
-export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; onRunner?: (id: string) => void; backendUrl?: string | null }) {
+export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; onRunner?: (id: string) => void; backendUrl?: string | null }) {
   const store = useMemo(() => browserStorage(), []);
   const myName = useMemo(() => savedFlowName(store), [store]);
   // 2026-11-13 (Batt: "nothing is fixed, we only put the defaults"; "a global config for every
@@ -250,11 +248,18 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
             <PlayIcon />
             <span className="button-text">Simulate</span>
           </button>
-          {isLive && <LiveRunButtons live={live} blocked={configWhy} />}
         </div>
       </header>
 
-      <FlowSwitcher current={{ kind: "map", id: doc.id }} myName={myName} onMine={onBack} onMap={(id) => onRunner?.(id)} />
+      {/* 2026-11-13 (Batt: "why is the xmas_dun02 flow separate? a map tab like my_first_flow"): this
+          view is now INSIDE the flow's "hunt with the runner" block, read only; Run is on the flow */}
+      <nav className="flow-switcher" aria-label="Back to the flow" data-testid="runner-inside-bar">
+        <button type="button" className="flow-switcher-item" onClick={onBack} data-testid="runner-back">
+          <span className="flow-switcher-name">◂ {myName.slice(0, 60) || "the flow"}</span>
+          <span className="flow-switcher-kind">back to the flow: its {rawDoc.map} tab has Run</span>
+        </button>
+        <span className="flow-switcher-label">Inside the block &ldquo;hunt with the runner&rdquo;: {doc.script}, read only</span>
+      </nav>
 
       <div className="studio-notices">
         {/* matpilot 2026-11-13 (1440 x 900: no canvas left): the description, the Run panel and the
@@ -276,7 +281,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
           <p className="notice-sub" data-testid="runner-notice">
             A DESCRIPTION of <code>{doc.script}</code>, made from its code by <code>scripts/runner_flow_export.py</code>: the blocks are the runner&apos;s loop in plain words, and every
             number and flag is the code&apos;s own. Click a block to see them. The blocks and Simulate run nothing in the game
-            {isLive ? "; Run (at the top, beside Simulate) starts the real runner on this map (player mode)." : "."}
+            {isLive ? `; Run is on the flow's ${rawDoc.map} tab (back, at the top): it starts this runner with the flow's functions as its keys (player mode).` : "."}
           </p>
           <div className="device-bar" aria-label="The runner">
             <Chip label="runner" value={doc.script} />
@@ -299,7 +304,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
       </div>
 
       <RunnerBinding doc={doc} />
-      {cdoc && <ConfigPanel d={cdoc} map={rawDoc.map} cs={cs} problem={configWhy} />}
+      {cdoc && <ConfigPanel d={cdoc} map={rawDoc.map} cs={cs} problem={configWhy} replaced={{ keys: <>the flow&apos;s functions set them (on the flow, the functions tab: heal, fly_wing, butterfly_wing, knife_on, knife_back)</> }} />}
 
       <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
         <div className="studio-canvas">

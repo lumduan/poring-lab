@@ -73,6 +73,10 @@ export type Exit = {
   npc: NpcRef | null;
   options: OptionRef[];
   item: ItemRef | Var | null;
+  /** An item_warp by a FUNCTION (Batt 2026-11-13): the function that presses the wing's key, in
+   * place of `item`. ABSENT when there is none (ir.py leaves it out of the canonical JSON, so every
+   * older flow keeps its hash), never null. */
+  proc?: string;
   to_block: string;
   to_entry: string;
   timeout_s: number;

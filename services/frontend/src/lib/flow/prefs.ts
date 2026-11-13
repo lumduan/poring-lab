@@ -13,6 +13,9 @@ export const KEYS = {
   simulate: "poring-lab.flows.simulate-pane.v1",
   paths: "poring-lab.flows.path-pane.v1",
   hunt: "poring-lab.flows.hunt-pane.v1",
+  run: "poring-lab.flows.run-pane.v1", // the Run pane (a flow whose map holds the runner's block)
+  // the flows the FLOWS row switches between, by name (each kept here while another is open)
+  shelf: "poring-lab.flows.shelf.v1",
   flow: "poring-lab.flows.flow.v1",
   world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on
   // the last flow's saved name and the GitHub file it came from (file.ts FileMeta); never the world
@@ -82,4 +85,31 @@ export function forget(store: StorageLike | null, key: string): void {
  * key), and stays closed on a phone, where it would cover the blocks. */
 export function pythonDefault(wide: boolean): "open" | "closed" {
   return wide ? "open" : "closed";
+}
+
+/** THE SHELF (2026-11-13, the FLOWS row): the flows kept in this browser while another is open, by
+ * name -> its JSON text and its static data. A convenience like the flow itself: a bad or missing
+ * entry reads as empty, and at most SHELF_MAX flows are kept (the oldest goes). */
+export type Shelf = Record<string, { text: string; world: string }>;
+export const SHELF_MAX = 8;
+
+export function readShelf(store: StorageLike | null): Shelf {
+  try {
+    const v: unknown = JSON.parse(readText(store, KEYS.shelf) ?? "{}");
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Shelf = {};
+    for (const [k, e] of Object.entries(v as Record<string, unknown>)) {
+      const x = e as { text?: unknown; world?: unknown } | null;
+      if (x && typeof x.text === "string" && typeof x.world === "string") out[k] = { text: x.text, world: x.world };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function writeShelf(store: StorageLike | null, shelf: Shelf): boolean {
+  const names = Object.keys(shelf);
+  const kept = Object.fromEntries(names.slice(Math.max(0, names.length - SHELF_MAX)).map((n) => [n, shelf[n]]));
+  return writeChoice(store, KEYS.shelf, JSON.stringify(kept));
 }

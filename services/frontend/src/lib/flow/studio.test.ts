@@ -56,7 +56,7 @@ test("the toolbox is in MatPilot's order, each category styled as MatPilot's", (
   assert.ok(categoryOf(tb, "More skills")!.contents.some((i) => i.kind === "block" && i.fields?.BLOCK === "sit"));
   // exits only in a map block's toolbox
   const exits = (s: "block" | "main") => toolboxBlocks(toolbox({}, s)).filter((e) => e.item.type.startsWith("pl_exit_")).length;
-  assert.equal(exits("block"), 3);
+  assert.equal(exits("block"), 4); // walk, NPC, the wing by a function (2026-11-13), the wing by an item
   assert.equal(exits("main"), 0);
 });
 
@@ -132,7 +132,11 @@ test("the status sentence says what to do next, and never offers a live run", ()
   assert.equal(tabOf({ owner: "block:farm" }, false), "block:farm");
   assert.equal(tabOf({ owner: "global" }, true), "events");
   assert.equal(tabOf({ owner: "flow" }, true), "main");
-  assert.equal(tabOf({ owner: "flow" }, false), "map");
+  // 2026-11-13: no Map tab; a flow-level finding goes to the START map's tab, a function's to the
+  // functions tab (its node path starts with the function's name)
+  assert.equal(tabOf({ owner: "flow" }, false, [], "town"), "block:town");
+  assert.equal(tabOf({ owner: "flow", path: "heal.0" }, false, ["heal"], "town"), "functions");
+  assert.equal(tabOf({ owner: "flow", path: "heal.0" }, true, ["heal"]), "functions");
   assert.deepEqual(lintErrors(null), []);
 });
 
@@ -197,8 +201,8 @@ test("the starters are their committed canonical fixtures, and every tab round-t
   assert.equal(canonical(one), canonical(load("starter_one_map")));
   assert.equal(one.workflow, null);
   for (const [flow, scopes] of [
-    [two, [{ kind: "block", name: "town" }, { kind: "block", name: "field" }, { kind: "global" }]],
-    [one, [{ kind: "main" }, { kind: "global" }]],
+    [two, [{ kind: "block", name: "town" }, { kind: "block", name: "field" }, { kind: "global" }, { kind: "functions" }]],
+    [one, [{ kind: "main" }, { kind: "global" }, { kind: "functions" }]],
   ] as const) {
     for (const scope of scopes) {
       const ws = JSON.parse(JSON.stringify(toWorkspace(flow, scope))) as Workspace;

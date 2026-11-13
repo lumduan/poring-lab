@@ -75,7 +75,8 @@ test("the world rules on the starter make exactly the fixture the engine lints c
   assert.equal(h.max_per_run, MAX_PER_RUN);
   assert.equal(h.then, "relocate");
   assert.deepEqual(ruleMaps(b.flow), ["field_1", "town_1"]);
-  assert.deepEqual(wingItem(b.flow), { kind: "var", name: "WING" }); // the flow's own wing exit's item
+  assert.deepEqual(wingItem(b.flow), { kind: "proc", name: "butterfly_wing" }); // the flow's own wing exit's FUNCTION (2026-11-13)
+  assert.deepEqual(h.body[1].kind === "if" ? h.body[1].then : null, [{ kind: "call", proc: "butterfly_wing" }]);
 });
 
 test("the save point is the start block's first step: set, moved, cleared", () => {

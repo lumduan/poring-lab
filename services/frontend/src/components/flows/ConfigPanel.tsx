@@ -8,7 +8,7 @@
 // with an undo line (matpilot 2026-11-13: a child scrolls over these on a phone). A value equal to
 // the level below is not stored: it keeps following that level. The blocks show what the next
 // Run uses. Every value renders as text.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { type ConfigDoc, type ConfigField, type ConfigFile, type ConfigValue, effectiveConfig, FIRST_GROUPS, fieldProblem, type Level, levelAfter, notInUseWhy, shownValue } from "@/lib/flow/config";
 import { REFUSALS } from "@/lib/flow/liverun";
@@ -89,7 +89,9 @@ export function useConfig(backendUrl: string | null, map: string): ConfigState {
 const LEVEL_TAG: Record<Level, string> = { default: "", global: "every map", map: "this map" };
 type Last = { scope: "global" | "map"; group: string; prev: Record<string, ConfigValue> | null; text: string };
 
-export default function ConfigPanel({ d, map, cs, problem }: { d: ConfigDoc; map: string; cs: ConfigState; problem: string | null }) {
+/** `replaced`: a group shown as this line instead of its inputs (2026-11-13: on /flows the hotbar
+ * keys are the flow's FUNCTIONS, Batt "every key a function", so the keys group says where they are). */
+export default function ConfigPanel({ d, map, cs, problem, replaced = {} }: { d: ConfigDoc; map: string; cs: ConfigState; problem: string | null; replaced?: Record<string, ReactNode> }) {
   const eff = effectiveConfig(d, cs.file, map);
   const [last, setLast] = useState<Last | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -115,6 +117,15 @@ export default function ConfigPanel({ d, map, cs, problem }: { d: ConfigDoc; map
   };
 
   const group = (g: ConfigDoc["groups"][number]) => {
+    if (g.id in replaced) {
+      return (
+        <div key={g.id} className="map-binding run-settings config-group" data-kind="block" data-testid={`config-group-${g.id}`}>
+          <p className="config-line">
+            <strong>{g.title}</strong>: {replaced[g.id]}
+          </p>
+        </div>
+      );
+    }
     const fields = d.fields.filter((f) => f.group === g.id);
     return <GroupRow key={g.id} g={g} fields={fields} d={d} map={map} eff={eff} cs={cs} onChange={change} onClear={(scope) => saveUndoable(scope, g.id, null, `${g.title}: ${scope === "map" ? `${map} uses every map's values again` : "every map is back to the defaults"}`)} />;
   };

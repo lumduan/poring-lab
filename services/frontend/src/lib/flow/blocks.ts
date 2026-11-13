@@ -11,7 +11,7 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { DEF_BY_TYPE, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { DEF_BY_TYPE, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
@@ -37,7 +37,7 @@ import {
   NAME,
 } from "./ir.ts";
 
-export type Scope = { kind: "block"; name: string } | { kind: "global" } | { kind: "main" };
+export type Scope = { kind: "block"; name: string } | { kind: "global" } | { kind: "main" } | { kind: "functions" };
 export type WsBlock = {
   type: string;
   id?: string;
@@ -250,6 +250,8 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
           const f = huntFields(s, ids.hunt);
           if (f) return { type: HUNT_TYPE, fields: f, extraState: huntState(actionRest(s), ids.hunt) };
         }
+        const own = ownBlock(s);
+        if (own) return own;
         const p = PALETTE[s.block];
         const keys = Object.keys(s.params);
         if (p && keys.length === 1 && keys[0] === p.param) {
@@ -320,6 +322,31 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
   return { ...b, id };
 }
 
+/** A string literal's text, else null. */
+function litText(e: Expr | undefined): string | null {
+  return e && e.kind === "lit" && typeof e.value === "string" ? e.value : null;
+}
+
+/** press_key and the runner's block, when their parameters are exactly what their block holds
+ * (else the generic block keeps them, lossless). */
+function ownBlock(s: ActionStmt): WsBlock | null {
+  const keys = Object.keys(s.params).sort();
+  if (s.block === "press_key" && keys.length === 1 && keys[0] === "key") {
+    const k = litText(s.params.key);
+    if (k !== null && (HOTKEYS as readonly string[]).includes(k)) return { type: "pl_press_key", fields: { KEY: k }, extraState: actionRest(s) };
+  }
+  if (s.block === "dungeon_hunt" && keys.join(",") === RUNNER_ROLES.map((r) => r.param).sort().join(",")) {
+    const fields: Record<string, string> = {};
+    for (const r of RUNNER_ROLES) {
+      const v = litText(s.params[r.param]);
+      if (v === null || !NAME.test(v)) return null;
+      fields[r.field] = v;
+    }
+    return { type: "pl_dungeon_hunt", fields, extraState: actionRest(s) };
+  }
+  return null;
+}
+
 function exitBlock(x: Exit): WsBlock | null {
   const st = { timeout_s: x.timeout_s };
   const to = { TO_BLOCK: x.to_block, TO_ENTRY: x.to_entry };
@@ -333,7 +360,10 @@ function exitBlock(x: Exit): WsBlock | null {
       extraState: st,
     };
   }
-  if (x.kind === "item_warp" && x.item && !x.warp && !x.npc && !x.options.length) {
+  if (x.kind === "item_warp" && x.proc && !x.item && !x.warp && !x.npc && !x.options.length) {
+    return { type: "pl_exit_item_fn", fields: { FN: x.proc, ...to }, extraState: st };
+  }
+  if (x.kind === "item_warp" && x.item && x.proc === undefined && !x.warp && !x.npc && !x.options.length) {
     const item = x.item.kind === "var" ? x.item.name : String(x.item.id);
     return { type: "pl_exit_item", fields: { ITEM: item, ...to }, extraState: st };
   }
@@ -436,6 +466,11 @@ export function toWorkspace(flow: Flow, scope: Scope, opts: ConvertOptions = {})
     block.events.forEach((ev, i) => place(mapEventHat(ev, block, i, ids), 20));
   } else if (scope.kind === "global") {
     flow.handlers.forEach((h, i) => place(eventHat(h, "global", null, i, ids), 20));
+  } else if (scope.kind === "functions") {
+    // each function a hat; its statements' node paths are <name>.<i> (MW1's ir.sites)
+    for (const [name, body] of Object.entries(flow.procedures)) {
+      place({ type: "pl_def", id: ids.take(`h:def:${name}`), fields: { NAME: name }, inputs: chainInput("DO", body, name, ids), extraState: {} }, 20);
+    }
   } else {
     place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", flow.main ?? [], "main", ids), extraState: {} }, 20);
   }
@@ -707,6 +742,16 @@ class Reader {
         return { kind: "set", var: this.name(b, "VAR", where), value: this.expr(b.inputs?.VALUE?.block, where, "the value") };
       case "pl_call":
         return { kind: "call", proc: this.name(b, "PROC", where) };
+      case "pl_press_key": {
+        const k = this.field(b, "KEY");
+        if (!(HOTKEYS as readonly string[]).includes(k)) this.err(where, `press key ${JSON.stringify(k)}: one of ${HOTKEYS.join(", ")}`);
+        return { kind: "action", block: "press_key", params: { key: { kind: "lit", value: k } }, ...this.rest(b, "press_key", where) };
+      }
+      case "pl_dungeon_hunt": {
+        const params: Record<string, Expr> = {};
+        for (const r of RUNNER_ROLES) params[r.param] = { kind: "lit", value: this.name(b, r.field, where) };
+        return { kind: "action", block: "dungeon_hunt", params, ...this.rest(b, "dungeon_hunt", where) };
+      }
       case "pl_stop":
         return { kind: "stop", reason: this.name(b, "REASON", where, /^[a-z_]{1,40}$/) };
       case "pl_break":
@@ -716,6 +761,7 @@ class Reader {
       case "pl_exit_walk":
       case "pl_exit_npc":
       case "pl_exit_item":
+      case "pl_exit_item_fn":
         return { kind: "take_exit", exit: this.exit(b, where) };
       case "pl_raw": {
         const st = (b.extraState ?? {}) as { stmt?: Stmt };
@@ -759,6 +805,7 @@ class Reader {
         options: keys.map((key) => ({ kind: "option", key })),
       };
     }
+    if (b.type === "pl_exit_item_fn") return { ...base, kind: "item_warp", proc: this.name(b, "FN", where) };
     return { ...base, kind: "item_warp", item: this.item(b, "ITEM", where) };
   }
 
@@ -802,12 +849,14 @@ type Hat = { b: WsBlock; order: number; y: number };
 
 const HATS = new Set(["pl_main", "pl_event", "pl_extend", "pl_disable"]);
 
-function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; loose: Loose[] } {
+function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs: WsBlock[]; loose: Loose[] } {
   const main: WsBlock[] = [];
   const events: Hat[] = [];
+  const defs: WsBlock[] = [];
   const loose: Loose[] = [];
   for (const b of ws.blocks?.blocks ?? []) {
     if (b.type === "pl_main") main.push(b);
+    else if (b.type === "pl_def") defs.push(b);
     else if (HATS.has(b.type)) {
       const order = Number((b.extraState as { order?: number } | undefined)?.order);
       events.push({ b, order: Number.isFinite(order) ? order : Infinity, y: b.y ?? 0 });
@@ -818,15 +867,29 @@ function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; loose
   }
   if (loose.length) r.warnings.push(`${loose.length} loose block(s) outside any hat were not applied`);
   events.sort((a, c) => a.order - c.order || a.y - c.y);
-  return { main, events, loose };
+  defs.sort((a, c) => (a.y ?? 0) - (c.y ?? 0));
+  return { main, events, defs, loose };
 }
 
 /** The flow with one scope replaced by the workspace's content (or the errors, nothing applied). */
 export function fromWorkspace(flow: Flow, scope: Scope, ws: Workspace, defaults: Defaults = {}): FromResult {
   const r = new Reader(defaults);
   const out = clone(flow);
-  const { main, events, loose } = hats(ws, r);
-  if (scope.kind === "global") {
+  const { main, events, defs, loose } = hats(ws, r);
+  if (scope.kind !== "functions" && defs.length) r.warnings.push("a function belongs on the functions tab: not applied here");
+  if (scope.kind === "functions") {
+    if (main.length || events.length) r.warnings.push("only functions belong on the functions tab: the other hats were not applied");
+    const procs: Record<string, Stmt[]> = {};
+    for (const b of defs) {
+      const name = String(b.fields?.NAME ?? "").trim();
+      r.under(b, name || null, () => {
+        const n = r.name(b, "NAME", `function ${name || "?"}`);
+        if (n in procs) r.err(`function ${n}`, "two functions have this name");
+        procs[n] = r.stmts(b.inputs?.DO?.block, n);
+      });
+    }
+    out.procedures = procs;
+  } else if (scope.kind === "global") {
     if (main.length) r.warnings.push("a main hat has no place among the global events: not applied");
     out.handlers = events.map(({ b }, i) => {
       if (b.type !== "pl_event") {

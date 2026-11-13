@@ -24,7 +24,10 @@ export const RULE_NOTE = "the world rule: on an unknown map, a Butterfly Wing to
 
 export type UnknownMap = "stop" | "wing";
 export type SavePoint = { cell: CellRef | null; asserted: boolean };
-export type Rules = { savePoint: SavePoint; unknownMap: UnknownMap; custom: boolean; wingItem: ItemRef | Var };
+/** What the rule uses for the wing: an item (a variable or a literal), or the FUNCTION a Butterfly
+ * Wing exit of the flow calls (Batt 2026-11-13: "every key a function"). */
+export type Wing = ItemRef | Var | { kind: "proc"; name: string };
+export type Rules = { savePoint: SavePoint; unknownMap: UnknownMap; custom: boolean; wingItem: Wing };
 
 const act = (block: string, concept: string, params: ActionStmt["params"], note: string | null = null, timeout_s = 10): ActionStmt => ({
   kind: "action",
@@ -37,12 +40,14 @@ const act = (block: string, concept: string, params: ActionStmt["params"], note:
   params,
 });
 
-/** The item a Butterfly Wing exit of the flow uses (a variable or a literal), else the lab's 602. */
-export function wingItem(flow: Flow): ItemRef | Var {
+/** What a Butterfly Wing exit of the flow uses: its function, or its item (a variable or a
+ * literal); else the lab's 602. */
+export function wingItem(flow: Flow): Wing {
   for (const b of flow.workflow?.blocks ?? []) {
     const stack: Stmt[] = [...b.main];
     while (stack.length) {
       const s = stack.shift() as Stmt;
+      if (s.kind === "take_exit" && s.exit.kind === "item_warp" && s.exit.proc) return { kind: "proc", name: s.exit.proc };
       if (s.kind === "take_exit" && s.exit.kind === "item_warp" && s.exit.item) return s.exit.item;
       if (s.kind === "if") stack.push(...s.then, ...s.orelse);
       if (s.kind === "while" || s.kind === "repeat" || s.kind === "for") stack.push(...s.body);
@@ -62,7 +67,7 @@ function cellOf(e: Expr | undefined): CellRef | null {
 }
 
 /** The unknown-map rule as this module writes it, for `maps` and the save map. */
-export function unknownMapRule(maps: string[], saveMap: string | null, item: ItemRef | Var): Handler {
+export function unknownMapRule(maps: string[], saveMap: string | null, item: Wing): Handler {
   const avoid = [...new Set([...maps, ...(saveMap ? [saveMap] : [])])].sort();
   return {
     name: "unexpected_map",
@@ -89,7 +94,11 @@ export function unknownMapRule(maps: string[], saveMap: string | null, item: Ite
           left: { kind: "sense", sensor: "current_map", args: {} },
           right: { kind: "lit", value: avoid.map((m) => ({ kind: "map" as const, map: m })) },
         },
-        then: [act("use_item", "item.use", { item: item.kind === "var" ? item : { kind: "lit", value: item } }, RULE_NOTE)],
+        then: [
+          item.kind === "proc"
+            ? { kind: "call", proc: item.name }
+            : act("use_item", "item.use", { item: item.kind === "var" ? item : { kind: "lit", value: item } }, RULE_NOTE),
+        ],
         orelse: [],
       },
     ],
@@ -105,8 +114,7 @@ function isOurRule(h: Handler): boolean {
     h.body[0].block === "read_position" &&
     s?.kind === "if" &&
     s.then.length === 1 &&
-    s.then[0].kind === "action" &&
-    s.then[0].block === "use_item" &&
+    ((s.then[0].kind === "action" && s.then[0].block === "use_item") || s.then[0].kind === "call") &&
     s.orelse.length === 0
   );
 }

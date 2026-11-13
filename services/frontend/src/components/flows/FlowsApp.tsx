@@ -25,28 +25,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
+import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
+import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import MapBinding from "@/components/flows/MapBinding";
 import { DEFAULT_SIM, HuntRulesPanel, InspectPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type SimDoc, type WorldSource } from "@/lib/flow/api";
 import type { Scope } from "@/lib/flow/blocks";
-import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
+import { addBlock, type BlockProps, type EditResult, removeBlock, setStart, setZonesRef, updateBlock } from "@/lib/flow/canvas";
+import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
+import { runnerKeys, runnerMapBlock } from "@/lib/flow/functions";
 import { exportText, importFlow } from "@/lib/flow/importer";
-import { type AuthoredExit, canonical, emptyFlow, type Flow } from "@/lib/flow/ir";
-import { browserStorage, KEYS, pythonDefault, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
-import { findRunner, RUNNERS, runnerForMap } from "@/lib/flow/runners";
-import { oneMapStarter, STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
+import { canonical, emptyFlow, type Flow } from "@/lib/flow/ir";
+import { browserStorage, KEYS, pythonDefault, readChoice, readShelf, readText, writeChoice, writeShelf } from "@/lib/flow/prefs";
+import { ACTIVE } from "@/lib/flow/liverun";
+import { LIVE_FLOWS, RUNNERS, runnerForMap } from "@/lib/flow/runners";
+import { oneMapStarter, STARTER_NAME, STARTER_WORLD, starterFlow, XMAS_NAME, XMAS_WORLD, xmasFlow } from "@/lib/flow/starter";
 import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText, tabOf } from "@/lib/flow/words";
 import { refreshRule } from "@/lib/maps/rules";
 import { backendHttpBase } from "@/lib/ws";
 
-import FlowSwitcher from "./FlowSwitcher";
+import FlowSwitcher, { type FlowItem } from "./FlowSwitcher";
 
-const FlowCanvas = dynamic(() => import("@/components/flows/FlowCanvas"), {
-  ssr: false,
-  loading: () => <p className="muted studio-loading">Loading the map…</p>,
-});
 const BlockEditor = dynamic(() => import("@/components/flows/BlockEditor"), {
   ssr: false,
   loading: () => <div className="blocks-workspace" data-status="loading" />,
@@ -61,42 +62,43 @@ const NOTICE_MS = 12_000;
 const VIEWS = ["blocks", "python"] as const;
 const OPEN_CLOSED = ["open", "closed"] as const;
 const WORLDS = ["local", "sample"] as const;
-type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt";
+type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt" | "run";
 const PANES: [Pane, string][] = [
+  ["run", "Run"], // a flow whose map holds the runner's block (2026-11-13)
   ["inspect", "Inspect"],
   ["lint", "Lint"],
   ["simulate", "Results"], // what it shows: "Simulate" always means RUN it (the green button)
   ["paths", "Path map"],
   ["hunt", "Hunt rules"],
 ];
-type Tab = { key: string; label: string; scope: Scope | null };
+type Tab = { key: string; label: string; scope: Scope };
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource; file: FileMeta } | null };
 const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose: [], canUndo: false, canRedo: false };
 
+/** The tabs (Batt 2026-11-13: "take the Map tab off /flows, the Maps page is the map graph; each map
+ * has its own flow, and a global flow every map shares, like a public class; functions in a tab of
+ * their own"): one tab per map block (the START map first), then "every map" (the global events) and
+ * "functions" (every function of the flow: any map's blocks call them). A plain flow: main first. */
 function tabsOf(flow: Flow): Tab[] {
-  const events: Tab = { key: "events", label: "events", scope: { kind: "global" } };
-  if (!flow.workflow) return [{ key: "main", label: "main", scope: { kind: "main" } }, events];
-  return [
-    { key: "map", label: "Map", scope: null },
-    ...flow.workflow.blocks.map((b) => ({ key: `block:${b.name}`, label: b.name, scope: { kind: "block" as const, name: b.name } })),
-    events,
-  ];
+  const events: Tab = { key: "events", label: "every map", scope: { kind: "global" } };
+  const functions: Tab = { key: "functions", label: "functions", scope: { kind: "functions" } };
+  if (!flow.workflow) return [{ key: "main", label: "main", scope: { kind: "main" } }, events, functions];
+  const wf = flow.workflow;
+  const blocks = [...wf.blocks.filter((b) => b.name === wf.start_block), ...wf.blocks.filter((b) => b.name !== wf.start_block)];
+  return [...blocks.map((b) => ({ key: `block:${b.name}`, label: b.name, scope: { kind: "block" as const, name: b.name } })), events, functions];
 }
 
-/** The canvas node a tab is about (the Inspect pane shows it). */
-function inspectOf(tab: string, selected: string | null): string | null {
-  if (tab === "map") return selected;
+/** The READY-MADE flows the FLOWS row offers by name (2026-11-13), with the static data each is
+ * linted and simulated on. */
+const READY: Record<string, () => { flow: Flow; world: WorldSource }> = {
+  [STARTER_NAME]: () => ({ flow: starterFlow(), world: STARTER_WORLD }),
+  [XMAS_NAME]: () => ({ flow: xmasFlow(), world: XMAS_WORLD }),
+};
+
+/** The node a tab is about (the Inspect pane shows it). */
+function inspectOf(tab: string): string | null {
   if (tab === "events") return "events:global";
   if (tab.startsWith("block:")) return tab;
-  return null;
-}
-
-/** The tab a canvas node opens. */
-function tabFor(id: string): string | null {
-  if (id === "events:global") return "events";
-  if (id === "main") return "main";
-  if (id.startsWith("block:")) return id;
-  if (id.startsWith("events:")) return `block:${id.slice(7)}`;
   return null;
 }
 
@@ -128,7 +130,6 @@ export default function FlowsApp({
   const [file, setFileState] = useState<FileMeta>(() => (start.restored ? readFileMeta(browserStorage(), start.flow) : newFileMeta(start.flow)));
   const fileRef = useRef<FileMeta>(file);
   const [dialog, setDialog] = useState<FileDialog>(null);
-  const [positions, setPositions] = useState<Record<string, XY>>({});
   // the static data the flow is linted and simulated on: the starter's are the sample sheets; a
   // restored flow keeps this browser's choice (2026-11-09 pm)
   const [world, setWorld] = useState<WorldSource>(() =>
@@ -140,7 +141,6 @@ export default function FlowsApp({
   const [sim, setSim] = useState<{ doc: SimDoc; for: string } | null>(null);
   const [simForm, setSimForm] = useState<SimForm>(DEFAULT_SIM);
   const [simBusy, setSimBusy] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
   const [zonesFor, setZonesFor] = useState<string | null>(null);
   // `?block=<name>` (the Maps page's "Open flow", 2026-11-10): that map block's tab, if it is one
   const [tab, setTab] = useState<string>(() => {
@@ -148,20 +148,12 @@ export default function FlowsApp({
     const want = initialBlock ? `block:${initialBlock}` : null;
     return want && all.some((t) => t.key === want) ? want : all[0].key;
   });
-  // `?block=<map>` when this browser's flow has no such block, but a runner flow describes that
-  // map (e.g. xmas_dun02, the Rogue's dungeon_hunt.py): open the description instead (2026-11-12)
-  useEffect(() => {
-    if (!initialBlock || tabsOf(start.flow).some((t) => t.key === `block:${initialBlock}`)) return;
-    const r = findRunner(initialBlock);
-    if (r) onRunner?.(r.id);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [editor, setEditor] = useState<EditorState>(NO_EDITOR);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const pendingShow = useRef<{ tab: string; path: string } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(
     start.broken ? { text: "Your saved flow could not be opened, so the starter program is shown instead.", tone: "warn", undo: null } : null,
   );
-  const [canvasNotes, setCanvasNotes] = useState<string[]>([]);
   const [python, setPython] = useState<{ text: string; for: string } | null>(null);
   const [pythonErr, setPythonErr] = useState<string | null>(null);
   const [codeFile, setCodeFile] = useState<"py" | "json">("py");
@@ -182,6 +174,31 @@ export default function FlowsApp({
   const key = useMemo(() => canonical(flow), [flow]);
   const tabs = useMemo(() => tabsOf(flow), [flow]);
   const active = tabs.find((t) => t.key === tab) ?? tabs[0];
+  // RUN (Batt 2026-11-13: "the xmas_dun02 flow is a map tab like my_first_flow; every key a
+  // function"): the flow's map block that holds the runner's block, on a map the Run helper plays.
+  // Its keys come from the flow's functions (lib/flow/functions.ts), its other settings from the
+  // bot server's file (every map's, and the map's own), as before.
+  const runBlock = runnerMapBlock(flow);
+  const runDoc = runBlock ? runnerForMap(runBlock.map.map) : null;
+  const runnable = !!runDoc && LIVE_FLOWS.includes(runDoc.id);
+  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable);
+  const cs = useConfig(backendUrl, runDoc?.map ?? "");
+  const cdoc = runDoc?.config ?? null;
+  const keysR = runBlock ? runnerKeys(flow, runBlock) : null;
+  const runEff = cdoc && runDoc ? effectiveConfig(cdoc, cs.file, runDoc.map) : null;
+  const runValues = runEff ? (keysR?.ok ? { ...runEff.values, ...keysR.keys } : runEff.values) : null;
+  const runWhy = !runnable
+    ? null
+    : keysR && !keysR.ok
+      ? `the keys: ${keysR.problems.join("; ")}`
+      : cs.file?.broken
+        ? `the settings file cannot be used: ${cs.file.broken}`
+        : cdoc && runValues
+          ? configClash(cdoc, runValues)
+          : null;
+  const keysLine = keysR?.ok
+    ? (["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"] as const).map((k) => `${keysR.keys[k]} ${keysR.from[k]}()`).join(" · ") + " (the functions tab)"
+    : (keysR?.problems.join("; ") ?? "");
 
   const setView = (v: (typeof VIEWS)[number]) => {
     setViewState(v);
@@ -199,6 +216,9 @@ export default function FlowsApp({
     },
     [store],
   );
+  // a run that is starting or playing shows the Run pane (its live line and the end): derived
+  const runActive = runnable && ACTIVE.includes(live.st?.state ?? "");
+  const shown: Record<Pane, boolean> = { ...panes, run: panes.run || runActive };
 
   // --- the flow: from the blocks (no reload), or replaced from outside (the blocks reload) --------
   const fromBlocks = useCallback((f: Flow) => {
@@ -218,9 +238,7 @@ export default function FlowsApp({
       // an edit keeps the file it came from; any other new flow starts unsaved (Undo puts it back)
       setFile(opts.file ?? (opts.keepView ? fileRef.current : newFileMeta(f)));
       if (!opts.keepView) {
-        setPositions({});
         setSim(null);
-        setSelected(null);
         setTab(tabsOf(f)[0].key);
       }
       if (opts.world) setWorld(opts.world);
@@ -256,6 +274,44 @@ export default function FlowsApp({
     return () => clearTimeout(t);
   }, [flow, file, flush]);
   useEffect(() => () => void flush(), [flush]);
+
+  // THE FLOWS ROW (2026-11-13): switch to another flow by name; the one open now is KEPT on this
+  // browser's shelf (a ready-made one opens fresh the first time)
+  const [shelfNames, setShelfNames] = useState<string[]>(() => Object.keys(readShelf(store)));
+  const switchTo = (name: string, wantTab?: string) => {
+    flush();
+    const shelf = readShelf(store);
+    const here = flowRef.current;
+    shelf[here.name] = { text: exportText(here), world };
+    let next: { flow: Flow; world: WorldSource } | null = null;
+    const kept = shelf[name];
+    if (kept && name !== here.name) {
+      const r = importFlow(kept.text);
+      if (r.ok) next = { flow: r.flow, world: WORLDS.includes(kept.world as WorldSource) ? (kept.world as WorldSource) : "local" };
+    }
+    if (!next && READY[name]) next = READY[name]();
+    if (!next) return setNotice({ text: `The flow ${name} could not be opened.`, tone: "error", undo: null });
+    delete shelf[name];
+    writeShelf(store, shelf);
+    setShelfNames(Object.keys(readShelf(store)));
+    replace(next.flow, { world: next.world, notice: `Opened ${next.flow.name}. ${here.name} is kept in this browser: the FLOWS row opens it again.` });
+    if (wantTab && tabsOf(next.flow).some((t) => t.key === wantTab)) setTab(wantTab);
+  };
+  // `?block=<map>` when this browser's flow has no such block, but a ready-made flow has it (e.g.
+  // xmas_dun02, the Rogue's map since 2026-11-13): open that flow on that tab (this one is kept)
+  useEffect(() => {
+    if (!initialBlock || tabsOf(start.flow).some((t) => t.key === `block:${initialBlock}`)) return;
+    const ready = Object.entries(READY).find(([, make]) => make().flow.workflow?.blocks.some((b) => b.name === initialBlock));
+    if (ready) switchTo(ready[0], `block:${initialBlock}`);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const flowItems: FlowItem[] = (() => {
+    const names = [...new Set([flow.name, ...shelfNames, ...Object.keys(READY)])];
+    return names.map((n) => ({
+      name: n,
+      state: n === flow.name ? ("open" as const) : shelfNames.includes(n) ? ("kept" as const) : ("starter" as const),
+      run: n === flow.name ? runnerMapBlock(flow) !== undefined : n === XMAS_NAME,
+    }));
+  })();
 
   // close the Load menu on a click outside it
   useEffect(() => {
@@ -374,7 +430,7 @@ export default function FlowsApp({
   };
   const newWorkflow = () => {
     setMenu(false);
-    replace(emptyFlow("new_flow", catalogue?.runtime_limits?.default_s), { undo: true, notice: "Started a new workflow: one map block, “start”. Add map blocks on the Map tab." });
+    replace(emptyFlow("new_flow", catalogue?.runtime_limits?.default_s), { undo: true, notice: "Started a new workflow: one map block, “start”. Add maps with “+ map block”, or on the Maps page." });
   };
   const simulate = async (form: SimForm) => {
     setSimBusy(true);
@@ -429,14 +485,10 @@ export default function FlowsApp({
     setTab(k);
     return true;
   };
+  const procs = Object.keys(flow.procedures);
+  const startBlock = flow.workflow?.start_block ?? null;
   const showFinding = (f: Finding) => {
-    const t = tabOf(f, plain);
-    if (t === "map") {
-      if (!goTab("map")) return;
-      setSelected(f.owner === "flow" ? null : f.owner);
-      setPane("inspect", true);
-      return;
-    }
+    const t = tabOf(f, plain, procs, startBlock);
     if (t === active.key && editorApi) {
       editorApi.showPath(f.path);
       return;
@@ -451,8 +503,8 @@ export default function FlowsApp({
     pendingShow.current = null;
   }, [editorApi, active.key]);
   const openNode = (id: string) => {
-    const t = tabFor(id);
-    if (t && tabs.some((x) => x.key === t)) goTab(t);
+    const t = id === "events:global" ? "events" : id.startsWith("events:") ? `block:${id.slice(7)}` : id;
+    if (tabs.some((x) => x.key === t)) goTab(t);
   };
   const addMapBlock = () => {
     const before = new Set(flowRef.current.workflow?.blocks.map((b) => b.name) ?? []);
@@ -466,22 +518,21 @@ export default function FlowsApp({
   const onEditorState = useCallback((s: EditorState) => setEditor(s), []);
   const onEditorApi = useCallback((a: EditorApi | null) => setEditorApi(() => a), []);
   const getFlow = useCallback(() => flowRef.current, []);
-  const blockTab = active.scope !== null;
-  const editorReady = editor.ready || !blockTab;
-  const issues = blockTab ? editor.issues : [];
-  const loose = blockTab ? editor.loose : [];
+  const editorReady = editor.ready;
+  const issues = editor.issues;
+  const loose = editor.loose;
   const status = statusText({
-    loading: blockTab && !editor.ready && !editor.failed,
+    loading: !editor.ready && !editor.failed,
     engine: engineErr,
     issues: issues.length,
     lintErrors: errors.length,
     simulating: simBusy,
-    mapTab: !blockTab,
+    mapTab: false,
   });
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
-  const openPanes = PANES.filter(([p]) => panes[p] && (p !== "hunt" || huntRules));
+  const openPanes = PANES.filter(([p]) => shown[p] && (p !== "hunt" || huntRules) && (p !== "run" || runnable));
   const pyText = python?.text ?? "";
   const pyStale = python !== null && python.for !== key;
   const codeText = codeFile === "py" ? pyText : exportText(flow);
@@ -496,14 +547,14 @@ export default function FlowsApp({
   );
 
   const paneToggles = (cls: string, after?: () => void) =>
-    PANES.filter(([p]) => p !== "hunt" || huntRules).map(([p, label]) => (
+    PANES.filter(([p]) => (p !== "hunt" || huntRules) && (p !== "run" || runnable)).map(([p, label]) => (
       <button
         key={p}
         type="button"
         className={`toggle-button ${cls}`}
-        aria-pressed={panes[p]}
+        aria-pressed={shown[p]}
         onClick={() => {
-          setPane(p, !panes[p]);
+          setPane(p, !shown[p]);
           after?.();
         }}
         data-testid={cls ? `toggle-${p}` : `more-${p}`}
@@ -592,13 +643,15 @@ export default function FlowsApp({
               <div className="studio-menu-list" role="menu">
                 {/* the MAP FLOWS first, under their map's name (Batt 2026-11-13: "I don't see the
                     xmas_dun02 flow; name it after the map") */}
+                <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), switchTo(XMAS_NAME))} data-testid="load-xmas">
+                  {XMAS_NAME}
+                  <small>the Rogue&apos;s map: hunt with the runner, a Butterfly Wing home to Geffen; every key a function; Simulate, or Run in the game (this flow is kept)</small>
+                </button>
                 {onRunner &&
                   RUNNERS.map((r) => (
-                    <button key={r.id} type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
-                      {r.title}
-                      <small>
-                        the {r.char}&apos;s real flow on this map, on its tabs; Simulate, or Run in the game
-                      </small>
+                    <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), flush(), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
+                      Inside {r.script}
+                      <small>the runner {r.title} plays, as blocks made from its code (read only): what &ldquo;hunt with the runner&rdquo; does</small>
                     </button>
                   ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="load-saved">
@@ -638,10 +691,11 @@ export default function FlowsApp({
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
+          {runnable && <LiveRunButtons live={live} blocked={runWhy} />}
         </div>
       </header>
 
-      {onRunner && <FlowSwitcher current={{ kind: "mine" }} myName={flow.name} onMine={() => {}} onMap={(id) => (flush(), onRunner(id))} />}
+      <FlowSwitcher items={flowItems} onPick={(n) => switchTo(n)} />
 
       {notice && (
         <div className="studio-notices">
@@ -668,19 +722,13 @@ export default function FlowsApp({
           </p>
         </div>
       )}
-      {(copied === "failed" || canvasNotes.length > 0) && (
+      {copied === "failed" && (
         <div className="studio-notices">
           {copied === "failed" && (
             <p className="notice notice-warn" role="status">
               This browser would not copy automatically (the page is not a secure origin). The code is selected: press Ctrl+C (⌘C) to copy it.
             </p>
           )}
-          {!blockTab &&
-            canvasNotes.map((n) => (
-              <p key={n} className="notice notice-warn" role="status">
-                {n}
-              </p>
-            ))}
         </div>
       )}
 
@@ -718,11 +766,11 @@ export default function FlowsApp({
                     aria-selected={t.key === active.key}
                     className="block-tab-name"
                     onClick={() => goTab(t.key)}
-                    title={t.scope === null ? "The workflow: map blocks joined by exits" : t.scope.kind === "global" ? "The global events (every map)" : undefined}
+                    title={t.scope.kind === "global" ? "Every map: the events every map shares (a map's tab may override, extend or disable one)" : t.scope.kind === "functions" ? "The functions: every map's blocks can call them; Save and Load carry them" : t.scope.kind === "block" ? `The flow of the map block ${t.scope.name}` : undefined}
                     data-testid={`tab-${t.key}`}
                   >
                     {t.label}
-                    {((t.key === active.key && issues.length > 0) || errors.some((f) => tabOf(f, plain) === t.key)) && <span className="block-tab-problem" aria-label="has problems" />}
+                    {((t.key === active.key && issues.length > 0) || errors.some((f) => tabOf(f, plain, procs, startBlock) === t.key)) && <span className="block-tab-problem" aria-label="has problems" />}
                   </button>
                 </div>
               ))}
@@ -736,7 +784,6 @@ export default function FlowsApp({
           </div>
           <MapBinding flow={flow} tab={active.key} onTab={goTab} onLeave={flush} onLoadStarter={() => replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." })} />
           <div className="blocks-area">
-            {active.scope ? (
               <BlockEditor
                 scope={active.scope}
                 scopeKey={active.key}
@@ -750,32 +797,7 @@ export default function FlowsApp({
                 onState={onEditorState}
                 onApi={onEditorApi}
               />
-            ) : (
-              <div className="blocks-workspace" inert={view === "python"}>
-                <Link href="/maps" className="maps-link-chip" onClick={flush} data-testid="flows-maps-link">
-                  The Maps page: login, characters and the bot walking the maps ↗
-                </Link>
-                <FlowCanvas
-                  flow={flow}
-                  positions={positions}
-                  lint={lintDoc}
-                  lintStale={lintStale}
-                  trace={simDoc && !simStale ? simDoc.trace : null}
-                  catalogue={catalogue}
-                  selected={selected}
-                  onSelect={(id) => {
-                    setSelected(id);
-                    if (id) setPane("inspect", true);
-                  }}
-                  onOpen={openNode}
-                  onMove={(p) => setPositions((old) => ({ ...old, ...p }))}
-                  onConnectExit={(from: string, kind: AuthoredExit, to: string) => edit(connectExit(flowRef.current, from, kind, to))}
-                  onDeleteExit={(path: string) => edit(removeExit(flowRef.current, path))}
-                  onNotes={setCanvasNotes}
-                />
-              </div>
-            )}
-            {view === "blocks" && blockTab && editor.ready && (
+            {view === "blocks" && editor.ready && (
               <div className="history-buttons" role="group" aria-label="Undo and redo">
                 <button type="button" className="history-button" onClick={() => editorApi?.undo(false)} disabled={!editor.canUndo} title="Undo (Ctrl+Z)" data-testid="undo">
                   <UndoIcon />
@@ -816,7 +838,7 @@ export default function FlowsApp({
                 {p === "inspect" && (
                   <InspectPanel
                     flow={flow}
-                    selected={inspectOf(active.key, selected)}
+                    selected={inspectOf(active.key)}
                     lint={lintDoc}
                     sim={simDoc && !simStale ? simDoc : null}
                     api={api}
@@ -825,12 +847,10 @@ export default function FlowsApp({
                       edit(updateBlock(flowRef.current, name, props));
                       if (props.name !== name) {
                         if (active.key === `block:${name}`) setTab(`block:${props.name}`);
-                        if (selected === `block:${name}`) setSelected(`block:${props.name}`);
                       }
                     }}
                     onDelete={(name) => {
                       edit(removeBlock(flowRef.current, name));
-                      setSelected(null);
                     }}
                     onStart={(name, entry) => edit(setStart(flowRef.current, name, entry))}
                     onOpen={openNode}
@@ -860,6 +880,20 @@ export default function FlowsApp({
                 )}
                 {p === "paths" && <PathPanel flow={flow} sim={simDoc} stale={simStale} world={world} api={api} />}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
+                {p === "run" && runDoc && (
+                  <div className="run-pane" data-testid="run-pane">
+                    <p className="muted">
+                      Run plays <code>{runDoc.script}</code> on {runDoc.map} as a player (no GM line), from where she stands. Its keys are your functions: {keysLine}.{" "}
+                      {onRunner && (
+                        <button type="button" className="mb-link" onClick={() => (flush(), onRunner(runDoc.id))} data-testid="run-inside">
+                          See inside the runner (read only) ↗
+                        </button>
+                      )}
+                    </p>
+                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map) : []} minutes={runValues ? Number(runValues.minutes) : null} />
+                    {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: keysLine }} />}
+                  </div>
+                )}
               </div>
             </section>
           ))}
@@ -919,7 +953,7 @@ export default function FlowsApp({
 
       <footer className="studio-status">
         <p className="studio-status-text" data-testid="program-status" aria-live="polite">
-          {editorReady || !blockTab ? status : "Loading the block editor…"}
+          {editorReady ? status : "Loading the block editor…"}
         </p>
         <div className="studio-toggles" role="group" aria-label="Panels">
           {view === "blocks" && (
@@ -985,12 +1019,12 @@ function MapPicker({ flow, tab, onTab, onLeave, onRunner }: { flow: Flow; tab: s
     ? "None: a plain flow, one program with no map blocks. The Maps page shows the login before it."
     : block
       ? `This tab's flow is bound to the map ${block.map.map} (its map block ${block.name}): what the bot does on that map.`
-      : "Every map: the Map tab (or the events of every map). Choose a map to open its flow (its map block's tab).";
+      : "Every map's events, or the functions. Choose a map to open its flow (its map block's tab).";
   return (
     <div className="block-tabs-trailing robot-picker" data-testid="map-picker">
       <label className="robot-picker-label" title={title}>
         <span className="robot-picker-name">Map</span>
-        <select className="robot-picker-select" value={block ? tab : ""} onChange={(e) => onTab(e.target.value || "map")} disabled={!wf} data-testid="map-picker-select">
+        <select className="robot-picker-select" value={block ? tab : ""} onChange={(e) => onTab(e.target.value || "events")} disabled={!wf} data-testid="map-picker-select">
           <option value="">{wf ? "every map" : "none"}</option>
           {wf?.blocks.map((b) => (
             <option key={b.name} value={`block:${b.name}`}>
@@ -1000,8 +1034,8 @@ function MapPicker({ flow, tab, onTab, onLeave, onRunner }: { flow: Flow; tab: s
         </select>
       </label>
       {runner && onRunner && (
-        <button type="button" className="runner-chip-button" onClick={() => onRunner(runner.id)} title={`${runner.title}: a description of ${runner.script}, made from its code`} data-testid="map-picker-runner">
-          The {runner.title} flow ↗
+        <button type="button" className="runner-chip-button" onClick={() => onRunner(runner.id)} title={`What "hunt with the runner" does: ${runner.script} as blocks made from its code (read only)`} data-testid="map-picker-runner">
+          Inside the runner ↗
         </button>
       )}
       <Link href={block ? `/maps?node=${encodeURIComponent(`block:${block.name}`)}` : "/maps"} className="robot-picker-link" onClick={onLeave} title="The maps graph: login, characters, the maps and their exits, and the simulator">

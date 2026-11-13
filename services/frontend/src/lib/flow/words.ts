@@ -83,11 +83,17 @@ export function stackSize(b: WsBlock | undefined): number {
   return n;
 }
 
-/** The tab a lint finding belongs to: its map block's, the events', or the flow's own. */
-export function tabOf(f: Pick<Finding, "owner">, plain: boolean): string {
+/** The tab a lint finding belongs to: its map block's, every map's (the global events), the
+ * functions tab (a finding under a function: its node path starts with the function's name), or
+ * the flow's own: main in a plain flow, else the START map's tab (2026-11-13, Batt: no Map tab on
+ * /flows any more; the maps graph is the Maps page). */
+export function tabOf(f: Pick<Finding, "owner"> & { path?: string }, plain: boolean, procs: readonly string[] = [], start: string | null = null): string {
   if (f.owner.startsWith("block:")) return f.owner;
   if (f.owner === "global") return "events";
-  return plain ? "main" : "map";
+  const root = (f.path ?? "").split(".", 1)[0].split(":", 1)[0];
+  if (root && procs.includes(root)) return "functions";
+  if (plain) return "main";
+  return start ? `block:${start}` : "functions";
 }
 
 /** The lint ERRORS, for the problems list (warnings and readiness stay in the Lint pane). */
@@ -117,6 +123,6 @@ export function statusText(s: StatusIn): string {
   if (s.issues) return "Fix the problems below to simulate the flow.";
   if (s.simulating) return "Simulating… (nothing runs in the game)";
   if (s.lintErrors) return `Lint found ${s.lintErrors} error${s.lintErrors > 1 ? "s" : ""}: press Simulate to see what would happen; a run is never approved with them.`;
-  if (s.mapTab) return "Ready. Double-click a map block to open its blocks, or press Simulate (nothing here runs in the game).";
+  if (s.mapTab) return "Ready. Press Simulate (nothing here runs in the game).";
   return "Ready. Press Simulate to run the flow in the simulator (nothing here runs in the game).";
 }

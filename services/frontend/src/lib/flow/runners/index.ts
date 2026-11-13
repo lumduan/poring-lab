@@ -4,6 +4,8 @@ import type { RunnerDoc } from "../runner.ts";
 import { XMAS_DUN02_ROGUE } from "./xmas_dun02_rogue.gen.ts";
 
 export const RUNNERS: readonly RunnerDoc[] = [XMAS_DUN02_ROGUE];
+/** The runner flows the Run helper can start (scripts/flow_run.py's FLOWS; 2026-11-13). */
+export const LIVE_FLOWS: readonly string[] = ["xmas_dun02_rogue"];
 
 /** A runner flow by its id, else the first one on that map; null when there is none. */
 export function findRunner(key: string | null | undefined): RunnerDoc | null {
