@@ -228,11 +228,21 @@ test("on a node that runs the runner the inspector says the runner strikes by it
   const lint = { findings: [{ rule: "species_lists", severity: "info", layer: 2, node: "xmas_dun02", tab: "", path: "xmas_dun02", text: line, message: `xmas_dun02: ${line}`, ack: false }, { rule: "escape", severity: "warning", layer: 2, node: "xmas_dun02", tab: "", path: "xmas_dun02", text: "x", message: "xmas_dun02: x", ack: false }], counts: { error: 0, readiness: 0, warning: 1, info: 1 }, by_node: {} } as unknown as LintDoc;
   const rs = runnerSpecies(n, lint);
   assert.ok(rs);
-  assert.match(rs.words, /strikes every monster the model its main names \(use_model\("xmas02"\)\) boxes/);
+  // matpilot round 18 #2: plain words: "every monster that the model named in main (...) boxes as a target"
+  assert.match(rs.words, /strikes every monster that the model named in main \(use_model\("xmas02"\)\) boxes as a target, whatever these two lists say/);
+  assert.match(rs.words, /never WHETHER; the model's other classes/);
+  assert.doesNotMatch(rs.words, /boxes as one it strikes/);
   assert.match(rs.words, /chooses HOW that monster is attacked, never WHETHER/);
   assert.match(rs.words, /The lists are the simulator's/);
   assert.deepEqual(rs.lines, [line]);
   assert.deepEqual(runnerSpecies(n, null)?.lines, []);
+  // no use_model in main: the map's own detector picks, and the words stay true
+  const noModel = JSON.parse(JSON.stringify(n).replaceAll('"block":"use_model"', '"block":"no_such_block"')) as typeof n;
+  const rs0 = runnerSpecies(noModel, null);
+  assert.ok(rs0);
+  assert.match(rs0.words, /strikes every monster that the map's own detector \(main names no use_model\) boxes as a target/);
+  assert.match(rs0.words, /never WHETHER; the detector's other classes/);
+  assert.doesNotMatch(rs0.words, /model's other classes/);
   // a node without the runner: the lists decide (no such words)
   const town = nodeById(sampleProject(), "town");
   assert.ok(town && town.kind === "map");
