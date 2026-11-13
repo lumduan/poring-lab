@@ -182,7 +182,7 @@ def test_return_outside_a_def_is_refused() -> None:
 
 def test_the_session_mock_s_numbers_are_session_ts_s() -> None:
     ts = (REPO / "services/frontend/src/lib/maps/session.ts").read_text(encoding="utf-8")
-    m = re.search(r"SESSION_S: Record<SessionNode, number> = \{ start: (\d+), login: (\d+), "
+    m = re.search(r"SESSION_S: Record<\w+, number> = \{ start: (\d+), login: (\d+), "
                   r"character: (\d+) \}", ts)  # fmt: skip
     assert m is not None
     assert [float(x) for x in m.groups()] == [

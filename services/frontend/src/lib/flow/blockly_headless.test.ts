@@ -14,10 +14,10 @@ import { followModel, registerDetectorMenus } from "../../components/flows/block
 import { register, themesOf } from "../../components/flows/blockly-register.ts";
 import { registerSearch, SEARCH_KIND } from "../../components/flows/blockly-search.ts";
 import { BLOCK_DEFS, toolbox, toolboxBlocks } from "./blockdefs.ts";
-import { fromWorkspace, type Scope, toWorkspace, type Workspace } from "./blocks.ts";
+import { fromWorkspace, type Scope, tabFromWorkspace, tabToWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone, type Flow } from "./ir.ts";
 import type { Models } from "./models.ts";
-import { starterFlow } from "./starter.ts";
+import { sampleProject, xmasProject } from "./project.ts";
 import { FIXTURES, fixture } from "./testkit.ts";
 
 const require = createRequire(import.meta.url);
@@ -74,7 +74,7 @@ test("every block the toolbox offers loads, and its words are what the search fi
 });
 
 test("IR -> the real Blockly -> IR is exact: the fixtures, the starter and the model blocks", () => {
-  const flows: Flow[] = [...FIXTURES.map((n) => fixture(n)), starterFlow(), detectFlow()];
+  const flows: Flow[] = [...FIXTURES.map((n) => fixture(n)), detectFlow()];
   for (const flow of flows) {
     for (const scope of scopes(flow)) {
       const ws = new B.Workspace();
@@ -84,6 +84,23 @@ test("IR -> the real Blockly -> IR is exact: the fixtures, the starter and the m
       assert.ok(back.ok, `${flow.name} ${JSON.stringify(scope)}: ${!back.ok && back.errors.join("; ")}`);
       if (back.ok) assert.equal(canonical(back.flow), canonical(flow), `${flow.name} ${JSON.stringify(scope)}`);
       ws.dispose();
+    }
+  }
+});
+
+test("PROJECT tabs -> the real Blockly -> the project is exact: every node's every tab of the ready-made projects", () => {
+  for (const p of [xmasProject(), sampleProject()]) {
+    for (const n of p.nodes) {
+      for (const t of n.tabs) {
+        const scope = { node: n.id, tab: t.name };
+        const ws = new B.Workspace();
+        B.serialization.workspaces.load(tabToWorkspace(p, scope) as unknown as object, ws);
+        const saved = B.serialization.workspaces.save(ws) as unknown as Workspace;
+        const back = tabFromWorkspace(p, scope, saved);
+        assert.ok(back.ok, `${n.id}/${t.name}: ${!back.ok && back.errors.join("; ")}`);
+        if (back.ok) assert.equal(canonical(back.project), canonical(p), `${n.id}/${t.name}`);
+        ws.dispose();
+      }
     }
   }
 });
