@@ -230,14 +230,14 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
       </div>
       <p className="studio-panel-note">An outline of {doc.script} with the code&apos;s own numbers (generated); it is not the runner and never runs.</p>
       {runSettings && (
-        <p className="studio-panel-note" data-testid="runner-python-settings">
-          Your Run settings (added to the command when you press Run):{" "}
+        <details className="studio-panel-note" data-testid="runner-python-settings">
+          <summary>Your Run settings, as the flags Run adds</summary>
           <code>
             {Object.entries(sdoc?.flags ?? {})
               .map(([k, flag]) => `${flag} ${flagValue(runSettings[k as keyof RunSettings])}`)
               .join(" ")}
           </code>
-        </p>
+        </details>
       )}
       <CodeView ref={codeRef} code={doc.python} colour mark={mark} label={`Python: ${doc.file}`} testId="runner-python" />
     </>
@@ -471,7 +471,7 @@ function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc;
         const f = followNow.current;
         if (f && w.getBlockById(f)) {
           w.highlightBlock(f, true);
-          w.centerOnBlock(f, true); // the block itself, not the stack under it
+          showBlock(B, w, f);
         }
         w.clearUndo();
         // a person's click on a block (Blockly's CLICK event: gestures only, never a selection
@@ -507,7 +507,7 @@ function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc;
     w.highlightBlock(null);
     if (follow && w.getBlockById(follow)) {
       w.highlightBlock(follow, true);
-      w.centerOnBlock(follow, true); // the block itself, not the stack under it (matpilot 2026-11-13)
+      void import("blockly/core").then((B) => showBlock(B, w, follow));
     }
   }, [follow, state]);
 
@@ -517,6 +517,22 @@ function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc;
       {state === "failed" && <p className="notice notice-error blocks-failed">The blocks could not be loaded. Reload the page to try again.</p>}
     </>
   );
+}
+
+/** Bring the simulation's block into view (matpilot 2026-11-13): centred on the block itself, not
+ * the stack under it; a block taller than the canvas (the loop's C-block) shows its HEADER near
+ * the top instead of its middle. */
+function showBlock(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, id: string): void {
+  const b = w.getBlockById(id) as BlocklyT.BlockSvg | null;
+  if (!b) return;
+  const r = b.getBoundingRectangleWithoutChildren();
+  const view = w.getMetricsManager().getViewMetrics(true); // workspace units
+  if (r.getHeight() > view.height * 0.8) {
+    const head = new B.utils.Rect(r.top, r.top + Math.min(view.height * 0.4, r.getHeight()), r.left, Math.min(r.right, r.left + view.width * 0.9));
+    w.scrollBoundsIntoView(head, 24);
+  } else {
+    w.centerOnBlock(id, true);
+  }
 }
 
 /** A tab's stacks one under the other by their drawn size, from the top left: a tab shows only
