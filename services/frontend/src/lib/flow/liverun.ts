@@ -83,8 +83,12 @@ export const ACTIVE: readonly string[] = ["starting", "running", "stopping"];
  * functions gave them); a stop names nothing. */
 export function runBody(action: "start" | "stop" | "check", flow: string, keys?: Record<string, string> | null): Record<string, unknown> {
   if (action === "stop") return { action };
+  if (action === "check") return keys ? { flow, keys } : { flow }; // POST /flows/run/check: no action
   return keys ? { action, flow, keys } : { action, flow };
 }
+
+/** Where a request goes: the read-only check has its OWN route (matpilot 2026-11-13 #16). */
+export const runPath = (action: "start" | "stop" | "check"): string => (action === "check" ? "/flows/run/check" : "/flows/run");
 
 /** Whether the game can be checked now, and why not (the backend refuses the same). */
 export function canCheck(st: LiveStatus | null, flow: string): { can: boolean; why: string | null } {
@@ -169,6 +173,7 @@ export function liveLabel(st: LiveStatus | null): string {
 /** The page's words for a refusal reason of POST /flows/run. */
 export const REFUSALS: Record<string, string> = {
   helper_not_running: "The Run helper on the bot server is not running.",
+  check_has_its_own_route: "This page is older than the backend: reload it.",
   nothing_running: "Nothing is running.",
   unknown_flow: "The Run helper does not list this flow.",
   already_running: "A run is already going: press Stop first.",

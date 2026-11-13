@@ -106,7 +106,10 @@ test("a start or a check carries the flow and the flow's keys; a stop nothing", 
   const { runBody, checkTime } = await import("./liverun.ts");
   const keys = { heal_key: "F1", fly_key: "F8", home_key: "F9", knife_key: "F4", dagger_key: "F5" };
   assert.deepEqual(runBody("start", FLOW, keys), { action: "start", flow: FLOW, keys });
-  assert.deepEqual(runBody("check", FLOW, null), { action: "check", flow: FLOW });
+  assert.deepEqual(runBody("check", FLOW, null), { flow: FLOW }); // its own route (matpilot #16)
+  const { runPath } = await import("./liverun.ts");
+  assert.equal(runPath("check"), "/flows/run/check");
+  assert.equal(runPath("start"), "/flows/run");
   assert.deepEqual(runBody("stop", FLOW, keys), { action: "stop" });
   assert.match(checkTime(CHECK.at), /^\d\d:\d\d:05$/);
   assert.equal(checkTime("not a time"), "not a time");

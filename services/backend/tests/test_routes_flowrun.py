@@ -85,8 +85,14 @@ def helper(tmp_path: Path, state: str = "idle", age: float = 0.0) -> None:
 
 
 def post(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
+    """POST /flows/run, or /flows/run/check for an action "check" (its own route since matpilot's
+    2026-11-13 #16: the body there names no action)."""
     tok = routes_settings.csrf_token(c.app.state.poring)  # type: ignore[attr-defined]
-    return c.post("/flows/run", headers={**H, **({"x-csrf-token": tok} if csrf else {})},
+    path = "/flows/run"
+    if body.get("action") == "check":
+        path = "/flows/run/check"
+        body = {k: v for k, v in body.items() if k != "action"}
+    return c.post(path, headers={**H, **({"x-csrf-token": tok} if csrf else {})},
                   json=body)  # fmt: skip
 
 
@@ -239,7 +245,7 @@ def test_a_check_is_one_request_behind_the_write_gate(client: TestClient, tmp_pa
     helper(tmp_path)  # HUMAN: a check reads the screen only, so it needs no ASSIST
     d = tmp_path / "settings" / "flowrun"
     assert post(client, {"action": "check", "flow": FLOW}, csrf=False).status_code == 403
-    r = client.post("/flows/run", json={"action": "check", "flow": FLOW})  # no Origin
+    r = client.post("/flows/run/check", json={"flow": FLOW})  # no Origin
     assert r.status_code == 403 and not (d / "request.json").exists()
     r = post(client, {"action": "check", "flow": FLOW})
     assert r.status_code == 200, r.text
@@ -300,3 +306,24 @@ def test_the_flows_keys_go_with_start_and_check_all_five(
     assert not (d / "request.json").exists()  # nothing refused was passed on
     # any other field is still refused (a request names a flow and the flow's keys, nothing else)
     assert post(client, {"action": "check", "flow": FLOW, "settings": {}}).status_code == 422
+
+
+def test_the_check_has_its_own_route_and_a_start_body_can_never_be_a_check(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """matpilot 2026-11-13 #16: a guard tells a start from a check by the route; POST /flows/run
+    with action "check" is refused, a check body that names an action is refused (422), and a body
+    without an action never reaches the helper."""
+    helper(tmp_path)
+    d = tmp_path / "settings" / "flowrun"
+    tok = routes_settings.csrf_token(client.app.state.poring)  # type: ignore[attr-defined]
+    hd = {**H, "x-csrf-token": tok}
+    bad = client.post("/flows/run", headers=hd, json={"action": "check", "flow": FLOW})
+    assert bad.status_code == 400 and bad.json()["detail"]["reason"] == "check_has_its_own_route"
+    named = client.post("/flows/run/check", headers=hd, json={"action": "start", "flow": FLOW})
+    assert named.status_code == 422
+    assert client.post("/flows/run", headers=hd, json={"flow": FLOW}).status_code == 422
+    assert not (d / "request.json").exists()
+    ok = client.post("/flows/run/check", headers=hd, json={"flow": FLOW})
+    assert ok.status_code == 200
+    assert json.loads((d / "request.json").read_text())["action"] == "check"

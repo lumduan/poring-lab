@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/config";
-import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, refuseWarning, REFUSALS, runBody, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -91,7 +91,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
             if (!t.ok) throw new Error(`the security token was refused (HTTP ${t.status})`);
             csrf.current = ((await t.json()) as { token: string }).token;
           }
-          const r = await fetch(`${base}/flows/run`, {
+          const r = await fetch(`${base}${runPath(action)}`, {
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
@@ -168,7 +168,9 @@ export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Li
   );
 }
 
-export default function LiveRun({ live, checklist = [], minutes = null, keys = null }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null }) {
+/** `blocked`: why Run cannot be pressed now (a key clash, a broken settings file): the state then
+ * never says "ready" (matpilot 2026-11-13 #6). */
+export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   const active = ACTIVE.includes(st?.state ?? "");
@@ -191,7 +193,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
-        <strong>Run in the game</strong> · <span data-testid="live-run-state">{liveLabel(st)}</span>
+        <strong>Run in the game</strong> · <span data-testid="live-run-state">{stateWords(liveLabel(st), st?.state ?? null, blocked, items.some((it) => tickFor(check, flow, it.id, it.basis).mark === "fail"))}</span>
         {st?.label ? ` · ${st.label}` : ""}
       </p>
       {line && (
@@ -215,6 +217,10 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
                   {t.value && <span className="live-tick-value"> · read: {t.value}</span>}
                   {t.mark !== "ok" && t.mark !== "none" && t.words && <span className="live-tick-words"> · {t.words}</span>}
                   {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
+                  {/* matpilot #5: a key that reads none may simply be the wrong key */}
+                  {t.mark === "fail" && /^0 /.test(t.value ?? "") && ["wings", "heals", "home"].includes(it.id) && (
+                    <span className="live-tick-words"> · if the items are on another hotbar key, set that key in the function (this node&apos;s, or Global&apos;s keys tab)</span>
+                  )}
                 </li>
               );
             })}
@@ -308,3 +314,12 @@ function StopIcon() {
     </svg>
   );
 }
+
+/** The state's words: never "ready" while Run is blocked or a check line fails (matpilot #6). */
+export function stateWords(label: string, state: string | null, blocked: string | null, failing: boolean): string {
+  if (state !== "idle" && state !== "ended" && state !== "failed" && state !== null) return label;
+  if (blocked) return "not ready: Run is blocked (see why under it)";
+  if (failing) return "not ready: a line below fails (✗)";
+  return label;
+}
+

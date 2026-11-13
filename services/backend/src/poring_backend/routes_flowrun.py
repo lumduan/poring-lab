@@ -56,8 +56,18 @@ class RunBody(BaseModel):
     five hotbar keys the flow's functions give (``keys``, checked by flow_config.keys_problem)."""
 
     model_config = ConfigDict(extra="forbid")
+    # matpilot 2026-11-13 #16: the read-only check has its OWN route (POST /flows/run/check), so a
+    # guard can tell a start from a check and a mistyped body can never start the bot
     action: Literal["start", "stop", "check"]
     flow: str | None = Field(default=None, max_length=64)
+    keys: dict[str, Any] | None = None
+
+
+class CheckBody(BaseModel):
+    """POST /flows/run/check: the read-only start check (dungeon@9.45; pixels only, no input)."""
+
+    model_config = ConfigDict(extra="forbid")
+    flow: str = Field(max_length=64)
     keys: dict[str, Any] | None = None
 
 
@@ -175,6 +185,20 @@ def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
 @router.post("/run")
 def post_run(body: RunBody, request: Request,
              state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    if body.action == "check":  # its own route since matpilot's #16
+        state.drops.record("flowrun_http", "check_has_its_own_route", "post")
+        raise HTTPException(400, {"reason": "check_has_its_own_route",
+                                  "detail": "POST /flows/run/check {flow, keys?}"})  # fmt: skip
+    return _submit(body, request, state)
+
+
+@router.post("/run/check")
+def post_check(body: CheckBody, request: Request,
+               state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    return _submit(RunBody(action="check", flow=body.flow, keys=body.keys), request, state)
+
+
+def _submit(body: RunBody, request: Request, state: AppState) -> dict[str, Any]:
     d = run_dir(state)
     bad = keys_refusal(body, flow_config(state) if body.keys is not None else None)
     if bad is not None:

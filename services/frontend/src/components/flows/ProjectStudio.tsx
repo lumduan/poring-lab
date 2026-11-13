@@ -906,7 +906,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                       Run (the amber button at the top) plays <code>{runDoc.script}</code> on {runDoc.map} as a player (no GM line), from where she stands. Its keys are this node&apos;s functions
                       (its own first, then Global&apos;s): {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} />
+                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy} />
                     {/* matpilot #7: say where these are kept */}
                     <p className="muted">The settings below are saved on the bot server the moment one changes (every browser sees them). The blocks and their functions are this browser&apos;s, until you Save.</p>
                     {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} />}
