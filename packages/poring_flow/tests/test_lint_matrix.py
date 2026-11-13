@@ -1278,8 +1278,8 @@ CASES = [
             )
         ),
         [
-            "maps.farm.events.boss_seen: a Butterfly Wing changes the map: then must be relocate "
-            "or stop"
+            "maps.farm.events.boss_seen: a Butterfly Wing changes the map: then the event must "
+            "relocate or stop"
         ],
     ),
     Case(

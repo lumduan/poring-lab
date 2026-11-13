@@ -243,7 +243,7 @@ def _handler(ctx: Ctx, consts: Consts, label: str, h: ir.Handler, b: ir.MapBlock
                     "error",
                     3,
                     label,
-                    f"{what} changes the map: then must be relocate or stop",
+                    f"{what} changes the map: then the event must relocate or stop",
                 )
                 break
     _event_species(ctx, consts, label, h, b)
