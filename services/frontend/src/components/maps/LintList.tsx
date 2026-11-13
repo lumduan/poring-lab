@@ -5,23 +5,14 @@
 // a finding on the project itself ("a death returns to the save point on geffen, where no block
 // is") was counted and shown nowhere on the page. Here: the project's own first, then each node's,
 // grouped by lib/maps/nodewords.ts lintGroups (the cards' own rule), so what this list shows adds
-// up to the chip. Text only: every finding is rendered as React text.
+// up to the chip. Each group's findings most serious first (round 17 N2: nodewords bySeverity).
+// Text only: every finding is rendered as React text.
 import "./inspector.css";
 
-import type { Finding, LintDoc } from "@/lib/flow/api";
-import { sitePath } from "@/lib/flow/api";
+import type { LintDoc } from "@/lib/flow/api";
 import { nodeById, type Project } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
-import { lintGroups, nodeTitle } from "@/lib/maps/nodewords";
-
-const SEVERITY_WORDS: Record<Finding["severity"], string> = { error: "error", warning: "warning", info: "info", readiness: "not ready" };
-
-/** Where a finding is inside its node ("main main.0: "), or "" for the node or the project itself. */
-function whereText(f: Finding): string {
-  if (!f.tab) return "";
-  const site = sitePath(f);
-  return `${f.tab}${site && site !== f.path ? ` ${site}` : ""}: `;
-}
+import { findingWhere, lintGroups, nodeTitle, SEVERITY_WORDS } from "@/lib/maps/nodewords";
 
 export default function LintList({ lint, project, stale, onSelect }: { lint: LintDoc | null; project: Project; stale: boolean; onSelect: (id: string) => void }) {
   if (!lint) return <p className="ni-muted">The lint has not answered yet.</p>;
@@ -52,7 +43,7 @@ export default function LintList({ lint, project, stale, onSelect }: { lint: Lin
             <ul className="ni-findings">
               {g.findings.map((f, i) => (
                 <li key={`${f.path}-${f.rule}-${i}`} data-level={f.severity}>
-                  <strong>{SEVERITY_WORDS[f.severity]}</strong> · {whereText(f)}
+                  <strong>{SEVERITY_WORDS[f.severity]}</strong> · {findingWhere(f)}
                   {f.text || f.message}
                 </li>
               ))}

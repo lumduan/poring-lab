@@ -19,7 +19,11 @@ STATUS_EVERY_S (its heartbeat). ``settings/`` is the human-only store, mounted o
 (CLAUDE.md, "The human-only settings store"); vision cannot write it.
 
 A START runs, in order (as the night chain's run_pilot_v3.sh does):
-1. refuse while another runner or the night chain runs (one input writer at a time, ADR-0002);
+1. refuse while another input writer of ours plays: another runner, the live block player, the
+   night chain or an A/B series (one input writer at a time, ADR-0002; ``writer_busy``). Between
+   runs the status says so too (matpilot round 17 N5): while the helper has no run of its own, it
+   reads ``ps`` every STATUS_EVERY_S and is "busy" with those words (status.json ``busy``), so the
+   page disables Run and the backend refuses a start or a check (input_writer_busy);
 2. the vision worker up (``guarded_build.py worker:vision``) if it is not;
 3. the detect server (``unit_detector.py serve-cmd``, its time box = the run's cap + 150 s), and
    its "listening" line;
@@ -588,7 +592,9 @@ def end_words(live: Live, stopped: bool, rc: int | None) -> str:
 
 
 def busy_reason(ps_lines: Sequence[str]) -> str | None:
-    """PURE: why a new run must not start (another input writer of ours), from `ps -eo args`."""
+    """PURE: why a new run must not start (another input writer of ours), from `ps -eo args`.
+    The A/B series (scripts/stage*_ab.py) call it before each of their runs, so it never counts
+    a series itself (that is `writer_busy`, the helper's)."""
     for ln in ps_lines:
         if "chain.py" in ln and "poring-lab-tmp/chain" in ln:
             return "the night chain is running (one input writer at a time)"
@@ -597,6 +603,34 @@ def busy_reason(ps_lines: Sequence[str]) -> str | None:
         if "flow_play.py play" in ln and "uv run" not in ln:  # live-blocks.md stage 1
             return "the live block player is playing (one input writer at a time)"
     return None
+
+
+# an A/B series' `run` (live-blocks.md 3.2-3.4: scripts/stage2_ab.py, stage3_ab.py, stage4_ab.py):
+# between its runs it types the setup's GM lines and reads the screen, so it is an input writer
+# for its whole length, not only while one of its arms plays (matpilot round 17 N5)
+AB_SERIES = re.compile(r"\bstage\d+_ab\.py\s+run\b")
+IDLE_DETAIL = "waiting for the Run button"
+
+
+def writer_busy(ps_lines: Sequence[str]) -> str | None:
+    """PURE: the HELPER's busy rule (its starts, its checks and its status): an A/B series, or
+    busy_reason's input writers (matpilot round 17 N5: GET /flows/run said "idle" while the live
+    block player played an A/B run, and Run stayed enabled)."""
+    for ln in ps_lines:
+        if AB_SERIES.search(ln) and "uv run" not in ln:
+            return "an A/B series is running (one input writer at a time)"
+    return busy_reason(ps_lines)
+
+
+def busy_state(state: str, detail: str, why: str | None) -> tuple[str, str]:
+    """PURE: the helper's state with another input writer of ours playing (`why`) or not: an idle
+    helper is "busy" with its words while one plays, and idle again once it is gone; a run of the
+    helper's own, or a last run's end words, stay as they are (the status's `busy` says it)."""
+    if why is not None and state in ("idle", "busy"):
+        return "busy", why
+    if why is None and state == "busy":
+        return "idle", IDLE_DETAIL
+    return state, detail
 
 
 def tail(path: Path, n: int = 6) -> list[str]:
@@ -630,7 +664,8 @@ class Helper:
     def __init__(self, d: Path = DIR) -> None:
         self.dir = d
         self.state = "idle"
-        self.detail = "waiting for the Run button"
+        self.detail = IDLE_DETAIL
+        self.busy: str | None = None  # another input writer of ours plays (writer_busy), or None
         self.flow: str | None = None
         self.live: Live | None = None  # the run's live summary (its session events)
         self.live_off = 0
@@ -661,7 +696,7 @@ class Helper:
         log = None if self.run_dir is None else self.run_dir / "run.log"
         return {"v": VERSION, "state": self.state, "detail": self.detail, "flow": self.flow,
                 "label": self.label, "request_id": self.request_id, "started": self.started,
-                "ended": self.ended, "rc": self.rc, "t_wall": time.time(),
+                "ended": self.ended, "rc": self.rc, "t_wall": time.time(), "busy": self.busy,
                 "log_tail": [] if log is None else player_lines(tail(log)),
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
@@ -682,6 +717,24 @@ class Helper:
 
     def write_status(self) -> None:
         write_json(self.dir / "status.json", self.status())
+
+    def own_run(self) -> bool:
+        """A run or a check of the helper's own is going (its processes are in `ps` too)."""
+        return (self.runner is not None or self.check_proc is not None
+                or self.state in ("starting", "running", "stopping"))  # fmt: skip
+
+    def busy_tick(self, ps_lines: Sequence[str] | None = None) -> None:
+        """Round 17 N5: while the helper has no run of its own, another input writer of ours (a
+        night chain, a runner, the live block player, an A/B series) makes it "busy", in words, so
+        the page disables Run (its starts refuse the same, writer_busy)."""
+        if self.own_run():
+            self.busy = None
+            return
+        if ps_lines is None:
+            ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+            ps_lines = ps.splitlines()
+        self.busy = writer_busy(ps_lines)
+        self.state, self.detail = busy_state(self.state, self.detail, self.busy)
 
     def note(self, **kw: Any) -> None:
         with open(self.dir / "runs.jsonl", "a") as fh:
@@ -730,7 +783,7 @@ class Helper:
     def start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
         self.check_cancel("Run was pressed: the runner's own start checks decide")
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = busy_reason(ps.splitlines())
+        why = writer_busy(ps.splitlines())
         vals: dict[str, Any] = {}
         src: dict[str, str] = {}
         keys_src = fc.KEYS_SRC["flow" if keys else "config"]
@@ -822,7 +875,7 @@ class Helper:
         rid = str(req["id"])
         self.check_cancel("Run was pressed: the player's own start checks decide")
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = busy_reason(ps.splitlines())
+        why = writer_busy(ps.splitlines())
         doc: dict[str, Any] | None = None
         if why is None:
             doc, why = read_project(self.dir / PROJECT_FILE, str(req["project_hash"]))
@@ -879,7 +932,7 @@ class Helper:
             self.detail = "a check is already reading the game screen"
             return
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = busy_reason(ps.splitlines())
+        why = writer_busy(ps.splitlines())
         vals: dict[str, Any] = {}
         keys_src = fc.KEYS_SRC["flow" if keys else "config"]
         if why is None:
@@ -1045,6 +1098,7 @@ class Helper:
                 self.handle(req)
             self.tick()
             if time.monotonic() - last >= STATUS_EVERY_S:
+                self.busy_tick()
                 self.write_status()
                 last = time.monotonic()
             time.sleep(POLL_S)

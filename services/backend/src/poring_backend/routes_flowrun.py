@@ -19,8 +19,10 @@ press run on flows, and the bot plays by itself").
          secret) with ONE request {"action": "start", "flow": "project", "node", "project_hash",
          "max_s", "keys"?, "at"}. Refusals: 400 / 409 / 503 {"reason", "detail"} with reasons
          invalid_project (422, problems), not_a_map_node, lint_errors, not_live, run_start_refused,
-         keys_refused, helper_not_running, already_running, mode_not_assist. Status stays GET
-         /flows/run (flow id "project"); Stop is POST /flows/run {"action": "stop"}
+         keys_refused, helper_not_running, already_running, input_writer_busy (round 17 N5: the
+         helper's status names another input writer of ours playing, its `busy`), mode_not_assist.
+         Status stays GET /flows/run (flow id "project"); Stop is POST /flows/run {"action":
+         "stop"}
     GET  /flows/config  every setting a person set: every map's ("global") and each map's own
     PUT  /flows/config  {"scope": "global" | "map", "map": "<map>", "group": "<group>",
          "values": {...} | null}: one group at one level (Batt 2026-11-13: "nothing is fixed, we
@@ -168,6 +170,8 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
         return 400, "unknown_flow"
     if st.get("state") in ACTIVE:
         return 409, "already_running"
+    if st.get("busy"):  # round 17 N5: another input writer of ours plays (the helper refuses too)
+        return 409, "input_writer_busy"
     if body.action == "check":  # dungeon@9.45: it reads the screen only (no ASSIST needed)
         checking = (st.get("check") or {}).get("state") == "checking"
         return (409, "check_running") if checking else None
@@ -367,6 +371,8 @@ async def post_run_project(request: Request,
         raise _refuse_run(state, 503, "helper_not_running", str(st.get("detail") or ""))
     if st.get("state") in ACTIVE:
         raise _refuse_run(state, 409, "already_running", "a run is going: press Stop first")
+    if st.get("busy"):  # round 17 N5: another input writer of ours plays (the helper refuses too)
+        raise _refuse_run(state, 409, "input_writer_busy", str(st["busy"]))
     if state.mux.mode != Mode.ASSIST:
         raise _refuse_run(state, 409, "mode_not_assist", f"the mux is {state.mux.mode.value}")
     rid = uuid.uuid4().hex

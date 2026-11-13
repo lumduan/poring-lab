@@ -59,13 +59,14 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
         yield c
 
 
-def helper(tmp_path: Path, state: str = "idle", age: float = 0.0) -> None:
+def helper(tmp_path: Path, state: str = "idle", age: float = 0.0, busy: str | None = None) -> None:
     d = tmp_path / "settings" / "flowrun"
     d.mkdir(parents=True, exist_ok=True)
     st = {
         "v": 1,
         "state": state,
         "t_wall": time.time() - age,
+        "busy": busy,
         "flows": {
             FLOW: {
                 "title": "t",
@@ -123,6 +124,25 @@ def test_a_start_writes_one_request_for_a_listed_flow(client: TestClient, tmp_pa
     assert json.loads(log[-1])["client"] == LAN[0]
     # extra fields are refused, never passed on (a request names a flow, nothing else)
     assert post(client, {"action": "start", "flow": FLOW, "args": ["--x"]}).status_code == 422
+
+
+def test_a_start_or_a_check_is_refused_while_another_input_writer_plays(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """matpilot round 17 N5: the helper's status names another input writer of ours playing (its
+    `busy`: a night chain, a runner, the live block player, an A/B series); a start and a check
+    are refused with that reason before anything is written (the helper refuses them too)."""
+    why = "an A/B series is running (one input writer at a time)"
+    helper(tmp_path, state="busy", busy=why)
+    assist(client)
+    st = client.get("/flows/run", headers=H).json()
+    assert st["state"] == "busy" and st["busy"] == why and st["helper_alive"] is True
+    for body in ({"action": "start", "flow": FLOW}, {"action": "check", "flow": FLOW}):
+        r = post(client, body)
+        assert r.status_code == 409 and r.json()["detail"]["reason"] == "input_writer_busy", body
+    assert not (tmp_path / "settings" / "flowrun" / "request.json").exists()
+    helper(tmp_path, state="idle", busy=None)  # gone: Run is allowed again
+    assert post(client, {"action": "start", "flow": FLOW}).status_code == 200
 
 
 def test_a_start_carries_no_settings(client: TestClient, tmp_path: Path) -> None:
@@ -459,6 +479,10 @@ def test_a_project_run_is_refused_with_words_the_page_can_say(
     assert reason(post_project(client, {"project": _project(), "node": "field"})) == (
         "already_running"
     )
+    helper(tmp_path, state="busy", busy="the night chain is running (one input writer at a time)")
+    r = post_project(client, {"project": _project(), "node": "field"})
+    assert r.status_code == 409 and reason(r) == "input_writer_busy"  # round 17 N5
+    assert r.json()["detail"]["detail"] == "the night chain is running (one input writer at a time)"
     helper(tmp_path, age=60.0)
     r = post_project(client, {"project": _project(), "node": "field"})
     assert r.status_code == 503 and reason(r) == "helper_not_running"

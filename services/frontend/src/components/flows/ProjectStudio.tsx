@@ -34,6 +34,7 @@ import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/f
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
+import { boxedSettings, boxTabNote } from "@/lib/flow/box";
 import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
@@ -625,6 +626,11 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
 
   const overrides = overridesOn(project, node.id);
   const strip = nodeStrip(project, node, overrides);
+  // matpilot round 17 N1: what this node's box plays in a Run of the project, and what of the
+  // runner's (and of Before Run's settings) it replaces: the engine's takeovers (POST /flows/lint)
+  const box = lintStale ? null : (lintDoc?.box?.[node.id] ?? null);
+  const boxNote = tab ? boxTabNote(box, node.id, tab.name, cdoc, runValues) : null;
+  if (boxNote) strip.push({ head: "IN A RUN", text: boxNote });
 
   return (
     <main className="studio" data-view={view} data-testid="flows-app">
@@ -960,7 +966,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                     <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} />
                     {/* matpilot #7: say where these are kept */}
                     <p className="muted">The settings below are saved on the bot server the moment one changes (every browser sees them). The blocks and their functions are this browser&apos;s, until you Save.</p>
-                    {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} />}
+                    {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} boxed={boxedSettings(box)} />}
                   </div>
                 )}
               </div>

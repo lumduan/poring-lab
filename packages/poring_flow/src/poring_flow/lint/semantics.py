@@ -13,6 +13,7 @@ import itertools
 from typing import Any
 
 from poring_flow import always_on, ir
+from poring_flow import recipes as rc
 from poring_flow.lint.common import Consts, Ctx, assigned_vars, handler_exprs
 
 PARAM_STR = {"window": "name", "npc": "key", "option": "key", "map": "map"}
@@ -489,6 +490,7 @@ def _exits(ctx: Ctx) -> None:
 # --- TARGET and IGNORE lists (13.3, 13.5) ---------------------------------------------------------
 def _species(ctx: Ctx) -> None:
     w = ctx.world
+    plans = rc.analyse(ctx.flow)[0]
     for b in ctx.blocks:
         sheet = ctx.sheet(b.map.map)
         if sheet is None:
@@ -510,6 +512,10 @@ def _species(ctx: Ctx) -> None:
                 b.name,
                 f"mob {mid} is on both the TARGET and the IGNORE list",
             )
+        hunt = rc.hunt_model(ctx.flow, b, plans)
+        if hunt is not None:  # matpilot round 17 N3: the runner's targets, not the lists'
+            _runner_species(ctx, b, sheet, hunt)
+            continue
         unlisted = sorted(spawned - set(targets) - set(ignore))
         for mid in unlisted:
             ctx.add(
@@ -530,17 +536,77 @@ def _species(ctx: Ctx) -> None:
                     f"mob {mid} is aggressive and ignored: it attacks, the bot never answers, "
                     "the HP events decide",
                 )
-        for t in targets:
-            for i in sorted(set(ignore) | set(unlisted)):
-                alike = (
-                    t in mobs and i in mobs[t].look_alike or i in mobs and t in mobs[i].look_alike
+        _look_alike(ctx, b, targets, sorted(set(ignore) | set(unlisted)), "TARGET", "IGNORE")
+
+
+def _look_alike(ctx: Ctx, b: ir.MapBlock, struck: list[int], left: list[int], a: str,
+                z: str) -> None:  # fmt: skip
+    mobs = ctx.world.mobs if ctx.world else {}
+    for t in struck:
+        for i in left:
+            alike = t in mobs and i in mobs[t].look_alike or i in mobs and t in mobs[i].look_alike
+            if alike:
+                ctx.add(
+                    "species_lists",
+                    "warning",
+                    2,
+                    b.name,
+                    f"mob {t} ({a}) and mob {i} ({z}) look alike: their confusion is not measured",
                 )
-                if alike:
-                    ctx.add(
-                        "species_lists",
-                        "warning",
-                        2,
-                        b.name,
-                        f"mob {t} (TARGET) and mob {i} (IGNORE) look alike: their confusion "
-                        "is not measured",
-                    )
+
+
+def _runner_species(ctx: Ctx, b: ir.MapBlock, sheet: Any,
+                    hunt: tuple[str, Any, bool]) -> None:  # fmt: skip
+    """A map node whose main runs the RUNNER (dungeon_hunt): the live run strikes every class of
+    its hunt core's model's `strikes` (use_model's, else the map's own detector), whatever the
+    node's TARGET / IGNORE lists and the recipes say -- a recipe (attack_<class>) chooses HOW a
+    monster is attacked, never WHETHER (stage 4a); a class the model has but the runner never
+    strikes (garm_baby: its Garm Baby rule) and a monster the model has no class for (the map's
+    boss) are never struck (matpilot round 17 N3: every xmas_dun02 spawn read "on neither list:
+    treated as IGNORE" while the runner struck four of them)."""
+    model, spec, named = hunt
+    m = b.map.map
+    struck = {i: c for c in spec.strikes for i in spec.mobs.get(c, [])}
+    classed = {i: c for c, ids in spec.mobs.items() for i in ids}
+    recipes = rc.recipe_functions(ctx.flow, b.name)
+    only = ", ".join(spec.strikes)
+    if b.targets or b.ignore:
+        src = "its use_model" if named else f"the runner's own detector on {m}"
+        ctx.add(
+            "species_lists",
+            "warning",
+            2,
+            b.name,
+            f"the runner does not read {b.name}'s TARGET and IGNORE lists: it strikes what "
+            f"{model} ({src}) boxes as {only}; the lists are the simulator's",
+        )
+    bosses = {s.mob for s in sheet.spawns if s.boss}
+    mobs = ctx.world.mobs if ctx.world else {}
+    hit: list[int] = []
+    never: list[int] = []
+    for i in sorted(set(sheet.spawned())):
+        boss = i in bosses or (i in mobs and mobs[i].boss)
+        who = f"mob {i}{' (a boss)' if boss else ''} spawns on {m}"
+        c = struck.get(i)
+        if c is not None:
+            hit.append(i)
+            how = (f"its recipe {recipes[c]} chooses how" if c in recipes else
+                   "no recipe: the runner's own technique")  # fmt: skip
+            words = f"{who}: the runner strikes it ({c}, a class of {model}; {how})"
+        else:
+            never.append(i)
+            why = (f"{classed[i]} is a class of {model} it never strikes" if i in classed
+                   else f"{model} has no class for it")  # fmt: skip
+            words = f"{who}: never struck (the runner's rule: {why}; it strikes only {only})"
+        ctx.add("species_lists", "info", 2, b.name, words)
+    for i in never:
+        if i in mobs and mobs[i].aggressive:
+            ctx.add(
+                "species_lists",
+                "warning",
+                2,
+                b.name,
+                f"mob {i} is aggressive and never struck: it attacks, the runner never answers it; "
+                "the HP events and the runner's own boss and Garm Baby rules decide",
+            )
+    _look_alike(ctx, b, hit, never, "struck", "never struck")

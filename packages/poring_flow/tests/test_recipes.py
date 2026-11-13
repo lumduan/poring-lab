@@ -338,3 +338,79 @@ def test_the_simulator_plays_use_model_without_input() -> None:
     use = [s for s in one["play"] if s.get("action") == rc.MODEL_BLOCK]
     assert len(use) == 1 and use[0]["outcome"] == "ok"
     assert lint.lint(compiled(json.loads(XMAS.read_text())).flow) is not None
+
+
+# --- matpilot round 17 N3: what the runner strikes, not "on neither list: treated as IGNORE" -----
+def _xmas_world(**mob: Any) -> Any:
+    """xmas_dun02's spawn lines as the local KB has them: the four monsters xmas02's runner
+    strikes, the Garm Baby, and the Stormy Knight on a boss line (mob ids, display-free)."""
+    from poring_flow.sheet import MapSheet, Mob, Spawn, World
+
+    spawns = [Spawn(mob=i, count=10) for i in (1246, 1248, 1249, 1265, 1515)]
+    sheet = MapSheet(map="xmas_dun02", spawns=[*spawns, Spawn(mob=1251, count=1, boss=True)])
+    mobs = {i: Mob(id=i, level=50, **mob.get(str(i), {})) for i in (1246, 1248, 1249, 1251, 1265,
+                                                                    1515)}  # fmt: skip
+    return World(server="lab-rathena", sheets={"xmas_dun02": sheet}, mobs=mobs)
+
+
+def species(d: dict[str, Any], world: Any) -> list[tuple[str, str]]:
+    p = P.validate(copy.deepcopy(d))
+    return [(f.severity, f.message.split(": ", 1)[1]) for f in P.project_lint(p, world=world)[1]
+            if f.rule == "species_lists"]  # fmt: skip
+
+
+def test_a_runner_node_names_what_the_runner_strikes_and_never_strikes() -> None:
+    """The runner strikes every class of its hunt core's model's `strikes` (use_model's, else the
+    map's own detector), whatever the recipes and the node's lists say: a recipe chooses HOW, never
+    WHETHER; garm_baby (a class it never strikes) and the boss (no class) are never struck."""
+    only = "it strikes only mystcase, cruiser, cookie, cookie_xmas"
+    got = species(json.loads(XMAS.read_text()), _xmas_world())
+    assert got == [
+        ("info", "mob 1246 spawns on xmas_dun02: the runner strikes it (cookie_xmas, a class of "
+                 "xmas02; its recipe attack_cookie_xmas chooses how)"),
+        ("info", "mob 1248 spawns on xmas_dun02: the runner strikes it (cruiser, a class of "
+                 "xmas02; its recipe attack_cruiser chooses how)"),
+        ("info", "mob 1249 spawns on xmas_dun02: the runner strikes it (mystcase, a class of "
+                 "xmas02; its recipe attack_mystcase chooses how)"),
+        ("info", f"mob 1251 (a boss) spawns on xmas_dun02: never struck (the runner's rule: "
+                 f"xmas02 has no class for it; {only})"),
+        ("info", "mob 1265 spawns on xmas_dun02: the runner strikes it (cookie, a class of "
+                 "xmas02; its recipe attack_cookie chooses how)"),
+        ("info", f"mob 1515 spawns on xmas_dun02: never struck (the runner's rule: garm_baby is a "
+                 f"class of xmas02 it never strikes; {only})"),
+    ]  # fmt: skip
+    assert not any("neither list" in w for _, w in got)
+    # without use_model and the recipes (the stage-3 box): the map's own detector, the same four
+    d = box(model=None)
+    d["nodes"][0]["tabs"] = [t for t in d["nodes"][0]["tabs"] if t["name"] != rc.MONSTERS_TAB]
+    plain = species(d, _xmas_world())
+    assert [w.split(": ", 1)[1].split(" (")[0] for _, w in plain] == [
+        "the runner strikes it", "the runner strikes it", "the runner strikes it", "never struck",
+        "the runner strikes it", "never struck"]  # fmt: skip
+    assert "(cookie, a class of xmas02; no recipe: the runner's own technique)" in plain[4][1]
+    # the node's own lists are not the runner's: a warning says so (the simulator reads them)
+    listed = json.loads(XMAS.read_text())
+    listed["nodes"][0]["targets"] = [{"kind": "mob", "id": 1249}]
+    assert ("warning", "the runner does not read xmas_dun02's TARGET and IGNORE lists: it strikes "
+            "what xmas02 (its use_model) boxes as mystcase, cruiser, cookie, cookie_xmas; the "
+            "lists are the simulator's") in species(listed, _xmas_world())  # fmt: skip
+    # an aggressive monster the runner never strikes: the HP events and its own rules decide
+    angry = species(json.loads(XMAS.read_text()), _xmas_world(**{"1251": {"aggressive": True}}))
+    assert ("warning", "mob 1251 is aggressive and never struck: it attacks, the runner never "
+            "answers it; the HP events and the runner's own boss and Garm Baby rules "
+            "decide") in angry  # fmt: skip
+
+
+def test_the_hunt_model_is_use_models_else_the_maps_own_detector() -> None:
+    c = compiled(json.loads(XMAS.read_text()))
+    b = c.flow.workflow.blocks[0]
+    got = rc.hunt_model(c.flow, b)
+    assert got is not None and (got[0], got[2]) == ("xmas02", True)
+    assert models.map_detector("xmas_dun02") is not None
+    assert models.map_detector("xmas_dun02")[0] == "xmas02"  # type: ignore[index]
+    assert models.map_detector("prt_fild08") is None  # v1 names no struck classes
+    d = box(model=None)
+    d["nodes"][0]["tabs"] = [t for t in d["nodes"][0]["tabs"] if t["name"] != rc.MONSTERS_TAB]
+    c2 = compiled(d)
+    got2 = rc.hunt_model(c2.flow, c2.flow.workflow.blocks[0])
+    assert got2 is not None and (got2[0], got2[2]) == ("xmas02", False)

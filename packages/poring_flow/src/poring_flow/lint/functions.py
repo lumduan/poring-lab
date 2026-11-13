@@ -218,7 +218,7 @@ def _unknown_presses(
                 3,
                 label,
                 f'press_key("{key}") uses whatever is on that hotbar slot: if it holds a '
-                "Butterfly Wing, the map changes and then must be relocate or stop",
+                "Butterfly Wing, the map changes, and then the event must relocate or stop",
             )
             return
 

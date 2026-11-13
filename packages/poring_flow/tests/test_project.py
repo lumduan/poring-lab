@@ -856,7 +856,7 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
         "xmas_dun02/main/main.2: dungeon_hunt's fly and home both press F9: each role needs its "
         "own key",
         "xmas_dun02/survival/fly_away: the Butterfly Wing on F9 (fly_home) changes the map: "
-        "then must be relocate or stop",
+        "then the event must relocate or stop",
     ]
     # an undefined function
     gone = copy.deepcopy(d)

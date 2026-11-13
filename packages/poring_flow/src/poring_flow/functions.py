@@ -7,7 +7,8 @@ the `press_key` block. Three things use them:
 
 - an item warp by function: `Exit.proc` names the function an `item_warp` runs (the Butterfly Wing
   home). Its keys are WING KEYS: a press of one, anywhere in the flow, counts as that Butterfly
-  Wing (the save-point rule, "then must be relocate or stop", a map change in a map block's main);
+  Wing (the save-point rule, "then the event must relocate or stop", a map change in a map
+  block's main);
 - the `dungeon_hunt` block: the runner (scripts/dungeon_hunt.py) as one block, whose four ROLE
   parameters each name a function of exactly one `press_key` (the runner presses one key a role),
   and its optional fifth, `home` (Batt 2026-11-13, the one box: the Butterfly Wing the runner

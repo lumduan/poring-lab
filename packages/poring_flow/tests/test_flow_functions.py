@@ -491,5 +491,5 @@ def test_a_wing_call_in_a_main_is_a_map_change_and_another_key_in_a_resuming_eve
     assert [x.message for x in found if x.severity == "error"] == []  # an insertable hotbar press
     assert [x.message for x in found if x.rule == "relocating"] == [
         'handlers.hp_low: press_key("F1") uses whatever is on that hotbar slot: if it holds a '
-        "Butterfly Wing, the map changes and then must be relocate or stop"
+        "Butterfly Wing, the map changes, and then the event must relocate or stop"
     ]

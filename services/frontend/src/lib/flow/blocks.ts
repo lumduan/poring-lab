@@ -435,22 +435,30 @@ function eventHat(
       RANK: h.rank === null ? "" : String(h.rank),
       MODE: h.mode,
       THEN: h.then,
+      ...limitFields(h),
     },
     inputs,
-    extraState: { kind, label, order, rest: restOf(h) },
+    extraState: { kind, label, order },
   };
 }
 
-function restOf(h: Handler): HandlerRest {
+/** matpilot round 17 N4: the trigger's limits as the event block's own fields (the Python view's
+ * cooldown_s / max_per_run / max_per_min / max_fires_per_10min / max_insert_fails / escalate;
+ * before, they rode in the block's hidden state and no field showed them). Empty = none. */
+function limitFields(h: Handler): Record<string, string | number> {
   return {
-    escalate: h.escalate,
-    max_insert_fails: h.max_insert_fails,
-    cooldown_s: h.cooldown_s,
-    max_per_min: h.max_per_min,
-    max_fires_per_10min: h.max_fires_per_10min,
-    max_per_run: h.max_per_run,
+    COOLDOWN: h.cooldown_s,
+    MAX_RUN: h.max_per_run === null ? "" : String(h.max_per_run),
+    MAX_MIN: h.max_per_min === null ? "" : String(h.max_per_min),
+    MAX_10: h.max_fires_per_10min,
+    FAILS: h.max_insert_fails,
+    ESCALATE: h.escalate ?? "",
   };
 }
+
+/** A trigger's limits when its block carries none of their fields (an older workspace's hidden
+ * state, else the IR's defaults). */
+const NO_LIMITS: HandlerRest = { escalate: null, max_insert_fails: 3, cooldown_s: 0, max_per_min: null, max_fires_per_10min: 10, max_per_run: null };
 
 function mapEventHat(ev: MapEvent, block: MapBlock, order: number, ids: Ids): WsBlock {
   if (ev.kind === "override" || ev.kind === "add") return eventHat(ev.event, ev.kind, ev.label, order, ids);
@@ -941,17 +949,43 @@ class Reader {
     return null;
   }
 
+  /** A whole number lo..hi in a text field, or null when it is empty ("no limit"). */
+  optInt(b: WsBlock, field: string, where: string, what: string, lo: number, hi: number): number | null {
+    const t = this.field(b, field).trim();
+    if (t === "") return null;
+    if (/^[0-9]{1,3}$/.test(t) && Number(t) >= lo && Number(t) <= hi) return Number(t);
+    this.err(where, `${what} ${JSON.stringify(t)}: a whole number ${lo}..${hi}, or empty for no limit`);
+    return null;
+  }
+
+  /** A number lo..hi in a number field (`whole`: no fraction). */
+  bounded(b: WsBlock, field: string, where: string, what: string, lo: number, hi: number, whole: boolean): number {
+    const v = Number(b.fields?.[field]);
+    if (!Number.isFinite(v) || v < lo || v > hi || (whole && !Number.isInteger(v))) this.err(where, `${what} ${JSON.stringify(String(b.fields?.[field] ?? ""))}: ${whole ? "a whole number" : "a number"} ${lo}..${hi}`);
+    return v;
+  }
+
+  /** The trigger's limits from the block's fields (round 17 N4), each field it lacks from the
+   * block's hidden state (a workspace saved before them) or the IR's default. */
+  limits(b: WsBlock, where: string): HandlerRest {
+    const st = (b.extraState ?? {}) as { rest?: HandlerRest };
+    const base = st.rest ?? NO_LIMITS;
+    const has = (f: string) => b.fields !== undefined && f in b.fields;
+    const esc = has("ESCALATE") ? this.field(b, "ESCALATE").trim() : null;
+    const r: HandlerRest = {
+      cooldown_s: has("COOLDOWN") ? this.bounded(b, "COOLDOWN", where, "the pause after each run", 0, 3600, false) : base.cooldown_s,
+      max_per_run: has("MAX_RUN") ? this.optInt(b, "MAX_RUN", where, "at most … a run", 1, 100) : base.max_per_run,
+      max_per_min: has("MAX_MIN") ? this.optInt(b, "MAX_MIN", where, "at most … a minute", 1, 60) : base.max_per_min,
+      max_fires_per_10min: has("MAX_10") ? this.bounded(b, "MAX_10", where, "… in 10 minutes", 1, 100, true) : base.max_fires_per_10min,
+      max_insert_fails: has("FAILS") ? this.bounded(b, "FAILS", where, "an insert's failures", 1, 10, true) : base.max_insert_fails,
+      escalate: esc === null ? base.escalate : esc === "" ? null : this.name(b, "ESCALATE", where),
+    };
+    return r; // escalate on a pre-empt: the engine refuses it, in its words (IR 2's Handler)
+  }
+
   /** `root`: the node path its body's statements hang from (a map event's label). */
   handler(b: WsBlock, where: string, root?: string): Handler {
-    const st = (b.extraState ?? {}) as { rest?: HandlerRest };
-    const r: HandlerRest = st.rest ?? {
-      escalate: null,
-      max_insert_fails: 3,
-      cooldown_s: 0,
-      max_per_min: null,
-      max_fires_per_10min: 10,
-      max_per_run: null,
-    };
+    const r = this.limits(b, where);
     const name = this.name(b, "NAME", where);
     return {
       name,
@@ -1087,7 +1121,7 @@ function defHat(p: Project, node: PNode, d: Def, order: number, ids: Ids): WsBlo
     const b = eventHat(h, "global", null, order, ids);
     const replaces = node.kind !== "global" && globalOf(p) !== undefined && namesOf(globalOf(p)!).has(d.name);
     b.fields = { ...b.fields, SCOPE: node.kind === "global" ? "every node" : replaces ? "replaces Global's" : "this node" };
-    b.extraState = { order, rest: restOf(h) };
+    b.extraState = { order };
     return b;
   }
   return {
@@ -1099,6 +1133,14 @@ function defHat(p: Project, node: PNode, d: Def, order: number, ids: Ids): WsBlo
   };
 }
 
+/** Where a tab's first block sits (workspace units): BELOW the Undo / Redo buttons, which float
+ * over the canvas's top right (studio.css .history-buttons: top 0.6rem, 2.75rem tall = 53.6 px;
+ * at the studio's start scale 0.75, theme.ts INJECT, 72 units), so they never sit on a block's
+ * first row however wide it is (matpilot round 17 N4: Undo / Redo over drink's "resume ▾ until"). */
+export const TAB_TOP_Y = 76;
+/** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
+const EVENT_ROWS_Y = 6 * 48;
+
 /** One tab's blocks: the main hat (the main tab only), then its functions and events, then its
  * variables. A statement's node path is the engine's site inside the tab ("main.2", "heal.0"). */
 export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions = {}): Workspace {
@@ -1107,11 +1149,11 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
   if (!node || !t) throw new Error(`no tab ${scope.node}/${scope.tab}`);
   const ids = new Ids(opts.hunt ?? null);
   const top: WsBlock[] = [];
-  let y = 20;
+  let y = TAB_TOP_Y;
   const place = (b: WsBlock) => {
     b.x = 20;
     b.y = y;
-    y += 90 + 46 * height(b.inputs?.DO?.block);
+    y += 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
     top.push(b);
   };
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });

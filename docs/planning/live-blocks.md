@@ -333,6 +333,11 @@ guard_tick's quick reads carry no boss.
 
 A box without such events (no survival tab) passes no `box_plays`: the runner plays exactly as in
 stage 1, and the CLI (`dungeon_hunt.py run`, the old Run path) passes neither hook nor box.
+➡️ **2026-11-14 (matpilot round 17 N1, project-model.md 10c):** the pages say this table per
+project: `live.takeovers` (from `hunt_plan`, its `play_by`) gives each play, the run settings it
+replaces (`PLAY_SETTINGS`: potion_below, fly_below, weight_home, respawn_at / respawn_confirm_at)
+and what stays the runner's (fly_rate, fly_rate_below), in POST /flows/lint's `box`; Before Run's
+rows, the tab strip "IN A RUN" and the /maps inspector read it.
 
 **The record**: the player's events.jsonl has each event fired (`event`: its name, its node path,
 `reading` -- the values its condition read --, `in: "hunt"`), the runner's press records mirrored

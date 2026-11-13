@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import type { PlayStep, Trace } from "../flow/api.ts";
-import { mapNodes, nodeById, sampleProject, xmasProject } from "../flow/project.ts";
+import { mapNodes, nodeById, type Project, sampleProject, xmasProject } from "../flow/project.ts";
 import { sessionProject } from "../flow/testkit.ts";
 import { addMapNode, centreCell, mapNodeFor, NEW_NODE_DX, newNodePos, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
@@ -19,14 +19,27 @@ import {
   cardGap,
   entryHandle,
   exitRuns,
+  FIT_FLOOR,
+  FIT_NAME,
+  fitChoice,
+  fitLeftOut,
+  fitTitle,
   fitViewport,
   followCentre,
   LABEL_CLEAR_PX,
   LABEL_LANE_PX,
+  LABEL_LINE_PX,
+  LABEL_PAD_PX,
+  LABEL_VPAD_PX,
+  labelHeight,
   labelLines,
+  labelPlace,
   labelWidth,
   mapsGraph,
+  NARROW_PX,
   POS_SCALE,
+  type Rect,
+  type XY,
   START_DX,
   START_DY,
   START_EDGE,
@@ -555,4 +568,230 @@ test("maps.css: port captions wrap (no cut entry line) and the phone graph has n
   assert.ok(phone > 0);
   assert.match(css.slice(phone), /\.maps-graph \.react-flow__minimap \{\s*display: none;/);
   assert.match(css, /\.mp-edge-label \{[^}]*white-space: nowrap/);
+});
+
+// --- round 17 (matpilot N6, N7, round 16 #8's leftover): what Fit shows, and the session labels ---
+// Not measured in a browser here (the reviewer re-measures): the fixtures' real positions (the
+// graph's own: units x POS_SCALE) with the cards' sizes stated, in flow pixels. START pill 80 x 32;
+// xmas_dun02's card 380 x 360; a card "+ map" adds 400 x 300 (.mp-card's widest); the sample's Login
+// 280 x 182 (the reviewer at 1.19: a 69 px gap under it = 58 flow px, a 188 px gap to town_1 = 158),
+// Choose character 280 x 150, its map cards 380 x 340 (the reviewer's 1.19 = 972 / (437 + 380)),
+// Global 380 x 250.
+type Size = { width: number; height: number };
+const SIZE: Record<string, Size> = { start: { width: 80, height: 32 }, login: { width: 280, height: 182 }, character: { width: 280, height: 150 }, map: { width: 380, height: 340 }, global: { width: 380, height: 250 } };
+type Card = { id: string; type: string; start: boolean; rect: Rect };
+function laidOut(p: Project, sizes: Record<string, Size> = {}): Card[] {
+  return mapsGraph(p).nodes.map((n) => ({ id: n.id, type: n.type, start: n.data.kind === "login" && n.data.start, rect: { ...n.position, ...(sizes[n.id] ?? SIZE[n.type]) } }));
+}
+function union(rs: Rect[]): Rect | null {
+  if (!rs.length) return null;
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  return { x, y, width: Math.max(...rs.map((r) => r.x + r.width)) - x, height: Math.max(...rs.map((r) => r.y + r.height)) - y };
+}
+// what MapsCanvas passes: getNodesBounds of every node, of all but Global, of START + the maps
+const setsOf = (cs: Card[]) => ({
+  all: union(cs.map((c) => c.rect)),
+  path: union(cs.filter((c) => c.type !== "global").map((c) => c.rect)),
+  maps: union(cs.filter((c) => c.type === "map" || c.type === "start").map((c) => c.rect)),
+});
+const fitOf = (box: Size, cs: Card[]) => fitChoice(box, setsOf(cs), 0.85, 1.2, 24);
+const titleOf = (box: Size, cs: Card[]) => {
+  const c = fitOf(box, cs);
+  return fitTitle(c, c ? fitLeftOut(cs, c.what) : [], cs.some((x) => x.type === "start"));
+};
+const EPS = 1e-9;
+function inView(box: Size, vp: { x: number; y: number; zoom: number }, r: Rect): boolean {
+  const x = r.x * vp.zoom + vp.x;
+  const y = r.y * vp.zoom + vp.y;
+  return x >= -EPS && y >= -EPS && x + r.width * vp.zoom <= box.width + EPS && y + r.height * vp.zoom <= box.height + EPS;
+}
+const mapsAndStart = (cs: Card[]) => cs.filter((c) => c.type === "map" || c.type === "start");
+const PHONES: Size[] = [
+  { width: 390, height: 700 },
+  { width: 390, height: 320 }, // the phone graph's 20rem
+];
+const XMAS_SIZE = { xmas_dun02: { width: 380, height: 360 } };
+const NEW_CARD = { width: 400, height: 300 };
+
+test("N6: on a phone, START and every map card are in view after a load, after + map and after Fit", () => {
+  const load = laidOut(xmasProject(), XMAS_SIZE);
+  assert.deepEqual(load.map((c) => [c.id, c.rect.x, c.rect.y]), [[START_ID, -START_DX, START_DY], ["xmas_dun02", 0, 0]]);
+  const added = addMapNode(xmasProject(), "geffen", null);
+  assert.ok(added.ok);
+  const plus = laidOut(added.project, { ...XMAS_SIZE, geffen: NEW_CARD });
+  assert.deepEqual(plus.find((c) => c.id === "geffen")!.rect.x, NEW_NODE_DX * POS_SCALE.x, "300 units right");
+  for (const box of PHONES) {
+    assert.ok(box.width <= NARROW_PX);
+    for (const [name, cs] of [["load", load], ["+ map", plus]] as const) {
+      const c = fitOf(box, cs)!;
+      assert.equal(c.what, "maps", `${name} ${box.height}`);
+      assert.equal(c.scaled, true, `${name}: below the readable minimum, scaled down`);
+      assert.equal(c.overflow, false);
+      assert.ok(c.viewport.zoom < 0.85 && c.viewport.zoom >= FIT_FLOOR, String(c.viewport.zoom));
+      for (const x of mapsAndStart(cs)) assert.ok(inView(box, c.viewport, x.rect), `${name} ${box.height}: ${x.id} in view at ${JSON.stringify(c.viewport)}`);
+      // Fit is the same function on the same numbers: the same view as after the load
+      assert.deepEqual(fitOf(box, cs), c);
+    }
+  }
+  // round 17's measure on main was matrix(0.85, 151.5, 57.3) before and after Fit: geffen 0 % in view
+  assert.ok(!inView(PHONES[0], { x: 151.5, y: 57.3, zoom: 0.85 }, plus.find((c) => c.id === "geffen")!.rect));
+  assert.equal(fitOf(PHONES[0], load)!.viewport.zoom, (390 - 48) / 530, "START + xmas_dun02: 530 flow px into 342");
+  assert.equal(titleOf(PHONES[0], plus), "Fit: every card, scaled down to fit this narrow view (zoom in to read).");
+});
+
+test("N6: a phone fits START + three maps at the floor; four start at START, at the readable size", () => {
+  let p = xmasProject();
+  const sizes: Record<string, Size> = { ...XMAS_SIZE };
+  for (const m of ["geffen", "payon", "alberta"]) {
+    const r = addMapNode(p, m, null);
+    assert.ok(r.ok);
+    p = r.project;
+    sizes[m] = NEW_CARD;
+  }
+  const four = laidOut(p, sizes);
+  const three = four.filter((c) => c.id !== "alberta");
+  const box = PHONES[0];
+  const c3 = fitOf(box, three)!;
+  assert.ok(c3.scaled && c3.viewport.zoom >= FIT_FLOOR, String(c3.viewport.zoom));
+  for (const x of three) assert.ok(inView(box, c3.viewport, x.rect), x.id);
+  // 2260 flow px: below the floor -> from the left at 0.85 (the minimap is hidden on a phone: a finger pans)
+  const c4 = fitOf(box, four)!;
+  assert.deepEqual([c4.what, c4.scaled, c4.overflow, c4.viewport.zoom], ["maps", false, true, 0.85]);
+  assert.equal(c4.viewport.x, 24 + START_DX * 0.85, "START at the pad");
+  assert.equal(titleOf(box, four), "Fit: from START at the left, at a readable size (the cards do not all fit here: pan right).");
+});
+
+test("N7: the sample at 1440 fits its maps and says so; wider canvases take the run's path, then every card", () => {
+  const cs = laidOut(sampleProject());
+  assert.deepEqual(cs.map((c) => [c.id, c.rect.x, c.rect.y]), [["login", 0, 0], ["character", 0, 240], ["town", 437, 0], ["field", 874, 0], ["global", 437, 340]]);
+  // the 1440 x 900 page's canvas: the path (1254 flow px) needs 0.775 (10.7 px text): the maps
+  const at1440 = { width: 1020, height: 480 };
+  const c = fitOf(at1440, cs)!;
+  assert.deepEqual([c.what, c.scaled, c.overflow], ["maps", false, false]);
+  assert.ok(Math.abs(c.viewport.zoom - 1.19) < 0.005, String(c.viewport.zoom));
+  assert.deepEqual(fitLeftOut(cs, "maps"), ["Login (START)", "Choose character", "Global"]);
+  assert.equal(titleOf(at1440, cs), "Fit the maps: the map cards. Login (START), Choose character and Global do not fit beside them at a readable size here: pan to them.");
+  // a wider canvas: the run's path (Global under the maps left out), then every card
+  const wider = { width: 1200, height: 480 };
+  assert.equal(fitOf(wider, cs)!.what, "path");
+  for (const x of cs.filter((y) => y.type !== "global")) assert.ok(inView(wider, fitOf(wider, cs)!.viewport, x.rect), x.id);
+  assert.equal(titleOf(wider, cs), "Fit: the run's path. Global, shared by every node, does not fit beside it at a readable size here: pan to it.");
+  const big = { width: 1400, height: 700 };
+  assert.equal(fitOf(big, cs)!.what, "all");
+  assert.equal(titleOf(big, cs), "Fit: every card.");
+  // a wide canvas where not even the maps fit at 0.85: from the left at 0.85 (today's), never scaled
+  const low = { width: 900, height: 300 };
+  const l = fitOf(low, cs)!;
+  assert.deepEqual([l.what, l.scaled, l.overflow, l.viewport.zoom, l.viewport.x], ["maps", false, true, 0.85, 24 - 437 * 0.85]);
+  assert.equal(titleOf(low, cs), "Fit the maps: from the left, at a readable size (the map cards do not all fit here: pan right). Login (START), Choose character and Global are left out: pan to them.");
+  // the sample on a phone: its two maps scaled down, every one in view
+  const ph = fitOf(PHONES[0], cs)!;
+  assert.deepEqual([ph.what, ph.scaled], ["maps", true]);
+  for (const x of mapsAndStart(cs)) assert.ok(inView(PHONES[0], ph.viewport, x.rect), x.id);
+  assert.equal(titleOf(PHONES[0], cs), "Fit the maps: every map card, scaled down to fit this narrow view (zoom in to read). Login (START), Choose character and Global are left out: pan to them.");
+  // a map start: the START marker is in the fit, and Login is just Login
+  const q = sampleProject();
+  q.start = "town";
+  const qs = laidOut(q);
+  assert.equal(titleOf(at1440, qs), "Fit the maps: START and the map cards. Login, Choose character and Global do not fit beside them at a readable size here: pan to them.");
+  assert.equal(fitTitle(null, [], false), FIT_NAME, "before the first fit: the button's name");
+});
+
+test("the fit chooser: null for no box or a bad number, an unusable set skipped", () => {
+  const cs = laidOut(sampleProject());
+  const sets = setsOf(cs);
+  assert.equal(fitChoice({ width: 0, height: 0 }, sets, 0.85, 1.2, 24), null, "folded");
+  assert.equal(fitChoice({ width: Number.NaN, height: 400 }, sets, 0.85, 1.2, 24), null);
+  assert.equal(fitChoice({ width: 800, height: 400 }, {}, 0.85, 1.2, 24), null, "no card");
+  assert.equal(fitChoice({ width: 800, height: 400 }, { all: { x: Number.NaN, y: 0, width: 10, height: 10 } }, 0.85, 1.2, 24), null);
+  const c = fitChoice({ width: 1400, height: 700 }, { ...sets, all: { x: 0, y: 0, width: Infinity, height: 10 } }, 0.85, 1.2, 24)!;
+  assert.equal(c.what, "path", "a bad set is skipped, the next one is tried");
+  for (const v of [c.viewport.x, c.viewport.y, c.viewport.zoom]) assert.ok(Number.isFinite(v));
+});
+
+// the sample's two session edges, where React Flow's getSmoothStepPath puts its label point: the
+// middle of the two ports pushed 20 px out (its offset); Login's port at its right middle, Choose
+// character's head at its left middle, town_1's "spawn" entry ~150 px down its left side
+const LOGIN = { x: 0, y: 0, width: 280, height: 182 };
+const CHARACTER = { x: 0, y: 240, width: 280, height: 150 };
+const TOWN = { x: 437, y: 0, width: 380, height: 340 };
+const step = (s: XY, t: XY) => ({ x: s.x + 20 + (t.x - 20 - (s.x + 20)) / 2, y: (s.y + t.y) / 2 });
+const labelBox = (p: { x: number; y: number; lines: string[] }): Rect => {
+  const w = Math.max(...p.lines.map(labelWidth));
+  const h = labelHeight(p.lines.length);
+  return { x: p.x - w / 2, y: p.y - h / 2, width: w, height: h };
+};
+const clear = (l: Rect, c: Rect) => l.x + l.width <= c.x || c.x + c.width <= l.x || l.y + l.height <= c.y || c.y + c.height <= l.y;
+
+test("the session labels: stacked cards, in the vertical gap on the line; side by side, wrapped into the gap", () => {
+  // "log in, then choose": Choose character UNDER Login, a 58 px gap (the reviewer's 69 at 1.19)
+  const lc = step({ x: 280, y: 91 }, { x: 0, y: 315 });
+  assert.deepEqual(lc, { x: 140, y: 203 });
+  const a = labelPlace(LOGIN, CHARACTER, "log in, then choose", "log in", lc)!;
+  assert.deepEqual(a, { x: 140, y: 203, lines: ["log in, then choose"], how: "stacked" });
+  const ab = labelBox(a);
+  assert.ok(ab.y >= 182 + LABEL_CLEAR_PX && ab.y + ab.height <= 240 - LABEL_CLEAR_PX, JSON.stringify(ab));
+  assert.ok(clear(ab, LOGIN) && clear(ab, CHARACTER));
+  // "enter the game → spawn" (204 px): Choose character beside town_1, a 157 px gap
+  const ct = step({ x: 280, y: 315 }, { x: 437, y: 150 });
+  const b = labelPlace(CHARACTER, TOWN, "enter the game → spawn", "enter", ct)!;
+  assert.deepEqual(b, { x: 280 + 157 / 2, y: ct.y, lines: ["enter the game", "→ spawn"], how: "beside" });
+  for (const c of [LOGIN, CHARACTER, TOWN]) assert.ok(clear(labelBox(b), c));
+  // the label's words come from the graph, with the one word it keeps where they do not fit
+  const g = mapsGraph(sampleProject());
+  const d = (id: string) => g.edges.find((e) => e.id === id)!.data;
+  assert.deepEqual([d("edge:login>character"), d("edge:character>town")].map((x) => (x.kind === "session" ? [x.label, x.short] : [])), [["log in, then choose", "log in"], ["enter the game → spawn", "enter"]]);
+});
+
+test("a label in a vertical gap: as many lines as its height holds, the short word, else none", () => {
+  const top = { x: 0, y: 0, width: 280, height: 100 };
+  const under = (gap: number, width = 280) => ({ x: 0, y: 100 + gap, width, height: 100 });
+  const at = (gap: number, width = 280) => labelPlace(top, under(gap, width), "log in, then choose", "log in", { x: 140, y: 100 + gap / 2 })!;
+  assert.deepEqual(at(30).lines, [], "30 px: not one line (17 + 2 + 2 x 10)");
+  assert.deepEqual(at(40).lines, ["log in, then choose"]);
+  assert.deepEqual(at(40, 150).lines, ["log in"], "one line, too narrow for the words: the short word");
+  assert.deepEqual(at(80, 150).lines, ["log in, then", "choose"], "two lines fit 80 px");
+  assert.deepEqual(at(80, 60).lines, [], "narrower than the short word");
+  // its line's midpoint outside the gap: the label stays in the gap
+  const off = labelPlace(top, under(60), "log in, then choose", "log in", { x: 900, y: 40 })!;
+  assert.deepEqual([off.x, off.y], [280, 100 + LABEL_CLEAR_PX + labelHeight(1) / 2]);
+  // overlapping cards: none (the port rows say it); not measured, or a bad number: unknown
+  assert.deepEqual(labelPlace(top, { ...top, x: 50, y: 50 }, "log in, then choose", "log in", { x: 0, y: 0 })!.lines, []);
+  assert.equal(labelPlace({ ...top, height: 0 }, under(60), "x", "x", { x: 0, y: 0 }), null);
+  assert.equal(labelPlace(top, under(60), "x", "x", { x: Number.NaN, y: 0 }), null);
+  // whatever the gap and the cards, a placed label never lies over either card
+  for (const gap of [0, 20, 30, 40, 58, 80, 120, 200]) {
+    for (const w of [60, 150, 210, 280, 400]) {
+      for (const [p, q] of [[top, under(gap, w)], [top, { x: 280 + gap, y: 30, width: w, height: 100 }], [{ x: 0, y: 0, width: w, height: 90 }, { x: w + gap, y: 200 + gap, width: 200, height: 90 }]] as const) {
+        const r = labelPlace(p, q, "enter the game → spawn", "enter", { x: 100, y: 120 })!;
+        if (r.lines.length) for (const c of [p, q]) assert.ok(clear(labelBox(r), c), `${gap} ${w} ${JSON.stringify(r)}`);
+      }
+    }
+  }
+});
+
+test("maps.css: the label's line box is what labelPlace counts; the session cards are at most 280 px wide", () => {
+  const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = /\.mp-edge-label \{([^}]*)\}/.exec(css)![1];
+  const size = Number(/font-size: ([\d.]+)rem/.exec(rule)![1]) * 16;
+  const lh = Number(/line-height: ([\d.]+);/.exec(rule)![1]);
+  const [pv, ph] = /padding: ([\d.]+)rem ([\d.]+)rem/.exec(rule)!.slice(1).map((x) => Number(x) * 16);
+  assert.ok(LABEL_LINE_PX + 1e-9 >= size * lh, `${LABEL_LINE_PX} < ${size * lh}`);
+  assert.ok(LABEL_VPAD_PX >= 2 * pv && LABEL_PAD_PX >= 2 * ph);
+  // the sample's side-by-side gap (437 - 280 = 157) holds "enter the game" because no session card is wider
+  assert.match(css, /\.mp-node \{[^}]*max-width: 280px/);
+  assert.doesNotMatch(/\.mp-session \{([^}]*)\}/.exec(css)![1], /width/);
+  assert.match(css, /@media \(max-width: 48rem\)/);
+  assert.equal(NARROW_PX, 48 * 16);
+});
+
+test("the canvas wires the rules: one fit chooser, the button's title, both edges by labelPlace", () => {
+  const src = readFileSync(new URL("../../components/maps/MapsCanvas.tsx", import.meta.url), "utf8");
+  assert.equal(src.match(/labelPlace\(/g)?.length, 2, "ExitEdge and SessionEdge");
+  assert.equal(src.match(/<title>\{label\}<\/title>/g)?.length, 2, "a hidden label's words stay on its line");
+  assert.doesNotMatch(src, /- 64\}px/, "no label above the row");
+  assert.match(src, /title=\{fitText\} aria-label=\{FIT_NAME\}/);
+  assert.match(src, /minZoom=\{FIT_FLOOR\}/);
+  assert.doesNotMatch(src, /fitViewport\(/, "the canvas fits only through fitChoice");
 });

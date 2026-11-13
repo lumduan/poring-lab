@@ -132,6 +132,50 @@ def test_one_input_writer_at_a_time() -> None:
     assert fr.busy_reason(["uv run --quiet python scripts/dungeon_hunt.py run --char x"]) is None
 
 
+def test_the_helper_is_busy_while_another_input_writer_of_ours_plays(tmp_path: Path) -> None:
+    """matpilot round 17 N5: GET /flows/run said "idle", "waiting for the Run button" while the
+    live block player played an A/B run, and Run stayed enabled. The status is "busy" now, in the
+    busy rule's words, while no run of the helper's own goes; idle again once the writer is gone."""
+    series = "/home/bot/docker/poring-lab/.venv/bin/python scripts/stage4_ab.py run --label s4ab"
+    player = "/home/bot/docker/poring-lab/.venv/bin/python scripts/flow_play.py play --project x"
+    # the series counts for its whole length (its setup types too), never in busy_reason: the A/B
+    # series call busy_reason before each of their runs and must not find themselves
+    assert fr.writer_busy([series]) == "an A/B series is running (one input writer at a time)"
+    assert fr.busy_reason([series]) is None
+    quiet = (
+        "python scripts/stage2_ab.py plan --label x",
+        "python scripts/stage3_ab.py score",
+        "uv run python scripts/stage2_ab.py run --label x",
+        "less stage2_ab.py",
+    )
+    for ln in quiet:
+        assert fr.writer_busy([ln]) is None, ln
+    assert fr.writer_busy([player]) == fr.busy_reason([player])
+    assert "live block player" in str(fr.writer_busy([player]))
+    # the pure state rule
+    why = "the live block player is playing (one input writer at a time)"
+    assert fr.busy_state("idle", fr.IDLE_DETAIL, why) == ("busy", why)
+    assert fr.busy_state("busy", why, None) == ("idle", fr.IDLE_DETAIL)
+    end = "Stopped by you after 3 min."
+    assert fr.busy_state("ended", end, why) == ("ended", end)  # the end words stay; `busy` says it
+    assert fr.busy_state("running", "playing", None) == ("running", "playing")
+    # the helper: busy, in the status, then idle; never while a run of its own goes
+    h = fr.Helper(tmp_path)
+    h.busy_tick([player])
+    h.write_status()
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert (st["state"], st["detail"], st["busy"]) == ("busy", why, why)
+    h.busy_tick(["/usr/bin/bash"])
+    assert (h.state, h.detail, h.busy) == ("idle", fr.IDLE_DETAIL, None)
+    h.state = "running"  # its own player is in `ps` then: not another writer
+    h.busy_tick([player])
+    assert (h.state, h.busy) == ("running", None)
+    h.state, h.detail = "ended", "Ended by itself after 20 min."
+    h.busy_tick([series])
+    assert (h.state, h.detail) == ("ended", "Ended by itself after 20 min.")
+    assert h.busy == "an A/B series is running (one input writer at a time)"
+
+
 def test_a_request_is_consumed_once(tmp_path: Path) -> None:
     h = fr.Helper(tmp_path)
     (tmp_path / "request.json").write_text("not json")
@@ -157,7 +201,7 @@ def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)  # a live run on this host: not ours
+    monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)  # a live run on this host: not ours
     orig = fr.CONFIG_DIR
     try:
         fr.CONFIG_DIR = tmp_path
@@ -302,10 +346,10 @@ def _helper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rc: int | None,
 
     monkeypatch.setattr(fr, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(fr, "SCRATCH", tmp_path / "scratch")
-    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)
+    monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     import types
 
-    ps = types.SimpleNamespace(stdout="", returncode=0)  # `ps -eo args`: busy_reason is faked
+    ps = types.SimpleNamespace(stdout="", returncode=0)  # `ps -eo args`: writer_busy is faked
     monkeypatch.setattr(fr.subprocess, "run", lambda *a, **k: ps)
     monkeypatch.setattr(fr.subprocess, "Popen", popen)
     return fr.Helper(tmp_path), made
@@ -347,12 +391,12 @@ def test_a_check_is_refused_while_a_run_goes_and_is_time_boxed(
         h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
         assert made == [] and h.check is None and "checked before a run" in h.detail
     h.state = "idle"
-    monkeypatch.setattr(fr, "busy_reason", lambda _lines: "the night chain is running")
+    monkeypatch.setattr(fr, "writer_busy", lambda _lines: "the night chain is running")
     h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
     assert made == [] and h.check is not None and h.check["state"] == "refused"
     assert "night chain" in h.check["detail"]
     # a check that does not end in CHECK_TIMEOUT_S: its process group ends
-    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)
+    monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     killed: list[tuple[int, int]] = []
     monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
     h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})

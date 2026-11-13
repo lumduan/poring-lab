@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { liveButtons, liveLabel, type LiveStatus, REFUSALS } from "./liverun.ts";
+import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, REFUSALS } from "./liverun.ts";
 
 const FLOW = "xmas_dun02_rogue";
 const ok: LiveStatus = { state: "idle", helper_alive: true, mode: "ASSIST", flows: { [FLOW]: { title: "t", minutes: 120 } } };
@@ -20,6 +20,27 @@ test("Stop while a run is going, not while it already stops", () => {
   assert.equal(liveButtons({ ...ok, state: "starting" }, FLOW).canStop, true);
   assert.equal(liveButtons({ ...ok, state: "stopping" }, FLOW).canStop, false);
   assert.equal(liveButtons({ ...ok, state: "ended" }, FLOW).canStart, true); // a new run after an end
+});
+
+// matpilot round 17 N5: at 04:24 and 04:26 GET /flows/run said "idle", "waiting for the Run
+// button" while the live block player played an A/B run, and Run stayed enabled at both sizes
+test("another input writer of ours playing disables Run and the check, in the helper's words", () => {
+  const why = "an A/B series is running (one input writer at a time)";
+  const busy: LiveStatus = { ...ok, state: "busy", detail: why, busy: why };
+  const b = liveButtons(busy, FLOW);
+  assert.equal(b.canStart, false);
+  assert.equal(b.why, `${why}: Run waits until it ends (the Run helper refuses to start meanwhile)`);
+  assert.equal(liveButtons(busy, "project").canStart, false); // a PROJECT run (the live block player) too
+  assert.deepEqual(canCheck(busy, FLOW), { can: false, why: busyWhy(busy) });
+  assert.equal(liveLabel(busy), `busy: ${why}`);
+  // a last run's end keeps its words; `busy` still disables Run
+  const ended: LiveStatus = { ...ok, state: "ended", detail: "Stopped by you after 3 min.", busy: why };
+  assert.equal(liveButtons(ended, FLOW).canStart, false);
+  assert.equal(liveLabel(ended), `busy: ${why}`);
+  // gone: Run again
+  assert.equal(liveButtons({ ...ok, busy: null }, FLOW).canStart, true);
+  assert.equal(busyWhy({ ...ok }), null);
+  assert.ok(REFUSALS.input_writer_busy);
 });
 
 test("the labels and every refusal the backend gives have words", () => {
