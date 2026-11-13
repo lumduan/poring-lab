@@ -2,7 +2,8 @@
 """Which MAP the game screen shows, read from the minimap's PICTURE (dungeon@9.46; Batt
 2026-11-13 "do it": the start check passed her Geffen cell (119, 40) as xmas_dun02's open ground).
 
-    minimap_id.py build [--grf PATH] [--decode-mixcrypt] [--mapcache-dir DIR] [--all] [--out NPZ]
+    OMP_NUM_THREADS=2 minimap_id.py build [--grf PATH] [--decode-mixcrypt] [--mapcache-dir DIR]
+                      [--all] [--out NPZ]        (~30 s; every BLAS thread: 74 s, no better)
     minimap_id.py read IMAGE... [--expect MAP] [--refs NPZ]
     minimap_id.py eval SPEC.json [--expect MAP] [--refs NPZ] [--out JSON]
 

@@ -1481,6 +1481,99 @@ CHECK_MARK = "CHECK "  # the one stdout line the Run helper parses (scripts/flow
 # Butterfly Wings' count is read at the start but never refused on (player_home_count_why)
 CHECK_IDS = ("identity", "cell", "chat", "weight", "wings", "heals", "home", "knife", "dagger")
 
+# --- dungeon@9.46 (Batt 2026-11-13: "do it"): THE MAP'S NAME FROM THE SCREEN -- the minimap's own
+# picture (scripts/minimap_id.py; docs/planning/player-mode.md "The map's name from the minimap").
+# 9.45's gap: in Geffen at (119, 40) her cell falls on xmas_dun02's open ground, so the cell rule
+# passed there. Now the check's map line ("cell") ticks only when the minimap reads the run's map,
+# and a player's start refuses BEFORE ANY INPUT (a screen of its own, before the session) when it
+# reads another map -- or cannot tell (PLAYER_MAP_UNREAD; the held-out set decided it: player-
+# mode.md "The result"). Pixels only: no /where (it types), no packet, no DB.
+MAP_IDENTITY_VERSION = "9.46"
+PLAYER_MAP_S = 3.0  # a start reads frames for up to this long until one names a map
+PLAYER_MAP_UNREAD = "refuse"  # "cannot tell" at a player's start: "refuse" | "warn"
+
+
+def load_map_refs(path: Path | None = None) -> Any:
+    """dungeon@9.46: the minimap references (minimap_id.MapRefs), or None when the file is
+    missing or stale (every map read is then "cannot tell", with the build command)."""
+    import minimap_id as mi
+
+    try:
+        return mi.MapRefs.load(mi.REFS if path is None else path)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def read_start_map(frame_fn: Callable[[], Any], refs: Any, wait_s: float) -> Any:
+    """dungeon@9.46: the map the minimap shows (minimap_id.MapRead): frames from ``frame_fn``
+    until one names a map or ``wait_s`` passes; None without references (no frame is read)."""
+    import minimap_id as mi
+
+    if refs is None:
+        return None
+    return mi.read_until(frame_fn, refs, wait_s)[0]
+
+
+def player_map_verdict(map_: str, read: Any, refs: Any) -> tuple[bool | None, str]:
+    """PURE (dungeon@9.46): the run's map from a minimap read -- (True: the minimap is
+    ``map_``'s; False: another map's; None: cannot tell, or no references) and the words."""
+    import minimap_id as mi
+
+    if read is None:
+        return mi.map_verdict(mi.unread("no minimap references"), map_, None)
+    return mi.map_verdict(read, map_, refs)
+
+
+def player_map_refused(map_: str, read: Any, refs: Any) -> str | None:
+    """PURE (dungeon@9.46): why a player-mode run cannot start on what the minimap shows (None:
+    it can). Another map read always refuses; "cannot tell" refuses while PLAYER_MAP_UNREAD is
+    "refuse" (read when called), else the start warns (player_map_warning)."""
+    ok, words = player_map_verdict(map_, read, refs)
+    if ok is True:
+        return None
+    if ok is False:
+        return (f"the screen shows {read.map}, not {map_}: walk or warp her there first (a "
+                f"person) [read from the minimap: {read.score:.2f}, the next map "
+                f"{read.next_score:.2f}]")  # fmt: skip
+    if PLAYER_MAP_UNREAD != "refuse":
+        return None
+    return (f"the screen does not show that she is on {map_} ({words}) within {PLAYER_MAP_S} s: "
+            "a person first")  # fmt: skip
+
+
+def player_start_map(map_: str, refs: Any, region: tuple[int, int, int, int]) -> Any:
+    """dungeon@9.46: a player's start reads the map she stands on from a screen of ITS OWN,
+    before the session -- no Agent exists yet, so no input path is open -- and refuses (a
+    SystemExit, like the preamble's) on another map, and on "cannot tell" while
+    PLAYER_MAP_UNREAD is "refuse". The read goes into run_start (``player_map``)."""
+    import ro_agent as r
+
+    screen = r.Screen()
+    try:
+
+        def grab() -> Any:
+            return np.ascontiguousarray(np.asarray(r.grab_after(screen, region, r.ns()))[..., :3])
+
+        read = read_start_map(grab, refs, PLAYER_MAP_S)
+    finally:
+        screen.close()
+    why = player_map_refused(map_, read, refs)
+    if why is not None:
+        raise SystemExit(f"dungeon@{MAP_IDENTITY_VERSION} refused: --player-mode: {why}")
+    warn = player_map_warning(map_, read, refs)
+    if warn is not None:
+        print(warn, flush=True)
+    return read
+
+
+def player_map_warning(map_: str, read: Any, refs: Any) -> str | None:
+    """PURE (dungeon@9.46): the WARNING line of a start that cannot tell its map while
+    PLAYER_MAP_UNREAD is "warn" (None: no warning)."""
+    ok, words = player_map_verdict(map_, read, refs)
+    if ok is not None or PLAYER_MAP_UNREAD == "refuse":
+        return None
+    return f"WARNING: --player-mode: is she on {map_}? the screen does not say ({words})"
+
 
 @dataclass(frozen=True)
 class CheckCtx:
@@ -1499,6 +1592,7 @@ class CheckCtx:
     area: Any
     digits: Any
     region: tuple[int, int, int, int]
+    map_refs: Any = None  # dungeon@9.46: minimap_id.MapRefs (None: not built -> "cannot tell")
 
 
 def check_item(id_: str, ok: bool | None, words: str, value: str | None = None,
@@ -1595,21 +1689,31 @@ def start_check(screen: Any, ctx: CheckCtx) -> dict[str, Any]:
                           "open" if is_open else "closed")  # fmt: skip
 
     def cell() -> dict[str, Any]:
+        # dungeon@9.46: the MAP first (the minimap's picture: player_map_refused's own verdict),
+        # then her cell on its route grid. matpilot's review 2026-11-13 (safety): a cell is no
+        # proof of the map -- in Geffen her cell (119, 40) falls on xmas_dun02's open ground -- so
+        # the line ticks only when the minimap reads the run's map
+        m_read = read_start_map(grab, ctx.map_refs, PLAYER_MAP_S)
+        m_ok, m_words = player_map_verdict(ctx.map_, m_read, ctx.map_refs)
         pos_ok = PosConfirm()
         here = read_start_cell(grab, ctx.digits, pos_ok, PLAYER_POS_S)
+        value = None if here is None else f"({here[0]}, {here[1]})"
+        if m_ok is False:  # another map: the runner refuses before any input
+            return check_item("cell", False, f"{m_words}: walk or warp her to {ctx.map_} first",
+                              value)  # fmt: skip
         why = player_start_refused(ctx.map_, here, ctx.okr, ctx.area)
         if why is None and ctx.explore and here is not None:
             why = explore_from(ctx.okr, here)[2]
-        value = None if here is None else f"({here[0]}, {here[1]})"
         if why is not None or here is None:
             return check_item("cell", False, str(why), value)
-        # matpilot's review 2026-11-13 (safety): a cell is no proof of the map -- in Geffen her cell
-        # (119, 40) falls on xmas_dun02's open ground -- so this line is NEVER a tick: "?" (null)
-        # until a map-name reader exists; a person looks at the game
-        return check_item("cell", None, f"her cell ({here[0]}, {here[1]}) is read, the map's name "
-                          f"is not: look at the game -- is she on {ctx.map_}? (the cell is on "
-                          f"{ctx.map_}'s open ground, in reach of its search area, if she is)",
-                          value)  # fmt: skip
+        at = (f"her cell ({here[0]}, {here[1]}) is on {ctx.map_}'s open ground, in reach of its "
+              "search area")  # fmt: skip
+        if m_ok is True:
+            return check_item("cell", True, f"{m_words}; {at}", value)
+        then = (" (the runner refuses a start that cannot tell)" if PLAYER_MAP_UNREAD == "refuse"
+                else "")  # fmt: skip
+        return check_item("cell", None, f"{m_words}: look at the game -- is she on {ctx.map_}? "
+                          f"({at}, if she is){then}", value)  # fmt: skip
 
     def weight() -> dict[str, Any]:
         frs = gm_state._frames(screen)
@@ -3467,6 +3571,10 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "player_mode", False):  # dungeon@9.35 (docs/planning/player-mode.md, Batt 11-12)
         out["player_mode"] = [PLAYER_MIN_WINGS, PLAYER_MIN_HEALS, PLAYER_WINGS_KEEP,
                               PLAYER_MODE_VERSION]  # fmt: skip
+        import minimap_id as mi_f  # dungeon@9.46: the map read from the minimap at the start
+
+        out["player_map"] = [mi_f.MATCH_MIN, mi_f.NAME_MIN, mi_f.MARGIN_MIN, PLAYER_MAP_S,
+                             PLAYER_MAP_UNREAD, MAP_IDENTITY_VERSION]  # fmt: skip
     return out
 
 
@@ -5748,11 +5856,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                else np.zeros(len(rel_)))  # fmt: skip
         return camera.project(rel_, alt)
 
+    map_refs = load_map_refs() if player else None  # dungeon@9.46: the minimap references
     if getattr(a, "cmd", "run") == "check":  # dungeon@9.45: every refusal above passed; now the
         # player start's checks, READ ONLY (a screen, no session, no agent; no session folder)
         ctx = CheckCtx(map_=map_, conf=conf, crk=crk, keys=dict(keys_), stock_items=stock_items,
                        heal_candy=heal_candy, opener=opener_key, bare=bare_on, explore=explore_on,
-                       okr=okr, area=area, digits=digits, region=(gx0, gy0, gw, gh))  # fmt: skip
+                       okr=okr, area=area, digits=digits, region=(gx0, gy0, gw, gh),
+                       map_refs=map_refs)  # fmt: skip
         screen_ck = r.Screen()
         try:
             got_ck = start_check(screen_ck, ctx)
@@ -5760,6 +5870,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             screen_ck.close()
         print(CHECK_MARK + json.dumps(got_ck), flush=True)
         return 0
+    # dungeon@9.46: a player's start reads the map she is on BEFORE ANY INPUT -- a screen of its
+    # own, before the session (no Agent exists yet) -- and refuses on another map
+    map_read = player_start_map(map_, map_refs, (gx0, gy0, gw, gh)) if player else None
     mr_tag = "-mr" if a.engage == "melee_ring" else ""
     if (a.char, map_) != ("crusader", "orcsdun01"):  # dungeon@6: the session name says who / where
         mr_tag = f"-{a.char}-{map_}{mr_tag}"
@@ -6075,6 +6188,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
             **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
+            **({"player_map": None if map_read is None else map_read.record()} if player
+               else {}),
             **({"player_home_key": home_key} if player else {}),
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),

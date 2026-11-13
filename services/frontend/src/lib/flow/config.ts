@@ -240,9 +240,9 @@ function checklistText(id: string, b: Record<string, ConfigValue>, map: string):
     case "identity":
       return "her character on screen (the runner knows her name plate and job)";
     case "cell":
-      // the map's NAME is not read from the screen (no pixel read tells which map she is on): the
-      // tick is her cell's, on this map's open ground -- a person checks that the map is this one
-      return `she stands on ${map}, on its open ground (her cell is read; the map's name is not: you check it is ${map})`;
+      // dungeon@9.46: the map is read from the minimap's PICTURE (scripts/minimap_id.py), her cell
+      // from its readout; the tick needs both. "?" when the picture cannot tell: you check the map
+      return `she stands on ${map} (the minimap's picture says the map), on its open ground (her cell)`;
     case "chat":
       return "the chat input closed (no white input bar under the chat)";
     case "weight":
