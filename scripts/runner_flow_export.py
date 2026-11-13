@@ -63,7 +63,11 @@ def _without_seed(argv: list[str]) -> list[str]:
 
 
 BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minutes),
-                *_RUN_FLOW.flags]  # fmt: skip
+                *_RUN_FLOW.flags, *_fr.settings_argv(_RUN_FLOW.settings)]  # fmt: skip
+# The person's Run settings (2026-11-13, Batt: "don't hard-code the keys"): each one's param in the
+# doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
+SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
+                  "weight_home": "cmd.weight_home"}  # fmt: skip
 # The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
 OPTIONAL: list[dict[str, Any]] = []
 
@@ -242,11 +246,27 @@ def spec() -> list[Node]:
                 code=["end_escape_needed"],
             ),
             step(
+                "respawn",
+                S_MOVE,
+                "after a death: press the death dialog's move to saved location, once",
+                [
+                    'if reason == "death":  # --respawn: the map\'s exit after a death',
+                    "    respawn_end()  # its first button, once, while the dialog reads",
+                ],
+                "Batt 2026-11-13: a death is an exit of the map too. The death dialog's first "
+                "button (move to saved location, its place measured on two real deaths) is "
+                "pressed ONCE, and only while the dialog reads; then the runner waits for the "
+                "save point's map to be drawn. Anything else is left to a person.",
+                flags=["--respawn"],
+                code=["respawn_end"],
+            ),
+            step(
                 "home",
                 S_MOVE,
-                "go home on a Butterfly Wing ({HOME_KEY}) if the hotbar shows one",
+                "go home on a Butterfly Wing ({cmd.player_home_key}) if the hotbar shows one",
                 ["press_home_if_stocked()  # one press; none on the hotbar: she stays put"],
-                "A player's way home: the Butterfly Wing takes her to her save point. The run "
+                "A player's way home: the Butterfly Wing takes her to her save point. It ends the "
+                "weight exit, a Stop and the time box; after a death she respawns instead. The run "
                 "also ends by itself when her Fly Wings fall to {PLAYER_WINGS_KEEP}: the last "
                 "one stays for the escape.",
                 flags=["--player-mode"],
@@ -280,7 +300,8 @@ def main_loop() -> list[Node]:
         S_SAFE,
         [
             Branch(
-                "check the safety rules first (the red stack): a Fly Wing ends this tick",
+                "check the safety rules first (the red stack): a Fly Wing ({cmd.fly_key}) ends "
+                "this tick",
                 "if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here",
                 [
                     step(
@@ -782,8 +803,9 @@ def safety() -> Node:
                                 S_SAFE,
                                 "stop the run",
                                 ['raise Stop("death" if eyes.dead else "hard_bar: position jump")'],
-                                "A death is a result: recorded, then the dialog closes by its "
-                                "known button. "
+                                "A death is a result: recorded, and the map's other EXIT: at "
+                                "the end the death dialog's move to saved location takes her to "
+                                "the save point (--respawn). "
                                 "A jump nobody asked for may be a map change: never act on an "
                                 "unknown map.",
                             )
@@ -901,18 +923,28 @@ def safety() -> Node:
                             step(
                                 "ui_check",
                                 S_SAFE,
-                                "an unknown window stops the run; read the weight",
+                                "an unknown window stops the run; read the weight: over "
+                                "{cmd.weight_home:pct} % is the map's EXIT (the run ends, a "
+                                "Butterfly Wing home)",
                                 [
                                     'if client_state() != "clear":  # never click into an unknown '
                                     "state",
                                     '    raise Stop("hard_bar: unknown UI state")',
                                     "w_share = weight_share()  # at REGEN_STOP no natural regen",
+                                    "if weight_home_due($(cmd.weight_home), w_share, red):  # the "
+                                    "map's exit",
+                                    '    raise Stop("weight_home")  # the end\'s Butterfly Wing '
+                                    "takes her home",
                                 ],
                                 "An open dialog or window nobody expected means the clicks could "
                                 "go "
                                 "somewhere unsafe: stop. At {REGEN_STOP:pct} % weight the server "
                                 "gives no "
-                                "natural regeneration.",
+                                "natural regeneration. Over {cmd.weight_home:pct} % (Batt "
+                                "2026-11-13) the run ends after its fight, and the end's Butterfly "
+                                "Wing takes her home: this map's exit.",
+                                flags=["--weight-home"],
+                                code=["weight_home_due"],
                             )
                         ],
                     )
@@ -1141,7 +1173,10 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("PLAYER_WINGS_KEEP", "--player-mode: the run ends at this many Fly Wings"),
         const("PLAYER_POS_S", "--player-mode: her cell must read within this long (s)"),
         const("WEIGHT_MAX", "the weight share a run refuses to start at"),
-        const("HOME_KEY", "the Butterfly Wing's hotbar key"),
+        const(
+            "HOME_KEY",
+            "the character's default Butterfly Wing key (--player-home-key wins: the Run settings)",
+        ),
         const("FIGHT_TAKEN_S", "a hit on her within this long = still in a fight (s)"),
         const("HP_DROP_PTS", "HP percent points falling ..."),
         const("HP_DROP_S", "... within this long (s) = a hit the log did not show"),
@@ -1514,7 +1549,32 @@ def build() -> dict[str, Any]:
         },  # fmt: skip
         "stacks": stacks,
         "python": python,
+        # dungeon@9.41 (Batt 2026-11-13): where the map's flow begins and how it leaves the map
+        "entry": "where you place her: Run starts on the cell she stands on",
+        "exits": exits_of(ctx.cmd, str(ctx.cmd.get("player_home_key") or dh.HOME_KEY)),
+        "settings": {
+            "defaults": dict(_RUN_FLOW.settings),
+            "params": dict(SETTING_PARAMS),
+            "keys": list(_fr.KEY_CHOICES),
+            "reserved": list(_RUN_FLOW.reserved_keys),
+            "weights": list(_fr.WEIGHT_CHOICES),
+        },  # fmt: skip
     }
+
+
+def exits_of(cmd: dict[str, Any], home_key: str) -> list[dict[str, str]]:
+    """The map's EXITS this command takes (the /flows binding strip and Maps' words)."""
+    out: list[dict[str, str]] = []
+    if cmd.get("weight_home") is not None:
+        out.append({"id": "weight_home", "kind": "item_warp",
+                    "when": f"the bag over {float(cmd['weight_home']) * 100:g} %",
+                    "how": f"a Butterfly Wing ({home_key})", "to": "the save point",
+                    "flag": "--weight-home"})  # fmt: skip
+    if cmd.get("respawn"):
+        out.append({"id": "respawn", "kind": "death_respawn", "when": "a death",
+                    "how": "the death dialog's move to saved location", "to": "the save point",
+                    "flag": "--respawn"})  # fmt: skip
+    return out
 
 
 def wrap(tokens: list[str], width: int) -> list[str]:

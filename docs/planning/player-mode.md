@@ -184,6 +184,45 @@ Batt (rogue-xmas02.md 4DF): "add a Butterfly Wing home at the end".
 - The helper is NOT a boot service yet: the auto-mode classifier refused enabling a persistent
   unit. Batt enables it, or it is started by hand after a reboot.
 
+## Built: the map's two exits and the person's Run settings (dungeon@9.41; written 2026-11-13 11:3x ICT)
+
+**Batt (2026-11-13, Thai, translated):** "Write the flow of xmas_dun02 that the bot really plays, in
+detail: if the weight is over 50 %, use a Butterfly Wing to go back to town, that is the map's exit;
+if she dies, press to respawn, that is an exit too. For testing we can start from this map: put a Run
+button next to Simulate, to run it for real on this map." Then: "the Butterfly Wing on F9, the Fly
+Wing on F8; don't hard-code them: a user changes them in the blocks too."
+
+- **The flow is the runner's own description** (`scripts/runner_flow_export.py`, made from
+  dungeon_hunt.py's code): the IR's `hunt` block describes the older hunt rules, not the Knife base,
+  so an IR copy would have shown something other than what Run starts. Its new parts:
+  - the UI watch: over `--weight-home` the run ends after its fight (never mid-fight), and the end's
+    Butterfly Wing takes her home (`weight_home_due`, reason `weight_home: ...`);
+  - a death with `--respawn`: the death dialog's FIRST button "move to saved location" (Korean
+    저장된 지역으로 이동), pressed ONCE and only while the dialog reads (`gm_vitals.DEAD_STATE`), then
+    the load screen and the save point's map (`respawn_end`; anything else: recorded, the person's).
+    Its place `MOVE_TO_SAVE = (645, 481)` (game px) was measured on TWO real deaths of the F1 trial
+    recording (`20261112T084927-rdp-flee-xmas02-sk` frames 83 and 108): face rows 473-490, columns
+    ~535-755; the second button is the setup's known (645, 503). One more direct click in the
+    census (dungeon_hunt.py 2 -> 3).
+  - `--fly-key` (new) and `--player-home-key` (9.35b): the keys are the person's; the stock read,
+    the presses and the key-conflict checks follow them.
+- **The Run settings:** a POST /flows/run start may carry `settings` = {fly_key, home_key,
+  weight_home}: F1-F9 keys and a weight in 0.30-0.80; the backend (`RunSettings`, extra fields
+  refused) and the helper (`flow_run.settings_of`: two different keys, none the run uses already:
+  F1 potion, F3 steal, F4 the Knife, F5 the dagger; weights 0.30, 0.35 ... 0.80) check them; they
+  become the three flags, nothing else in a request does. Defaults (Batt): Fly Wing F8, Butterfly
+  Wing F9, home over 50 %.
+- **/flows?runner=xmas_dun02:** Run (amber, two presses: the second within 4 s confirms) and Stop
+  beside Simulate; a "your run settings" strip (three selects, remembered in this browser; the
+  blocks show the chosen keys and percent at once); the binding strip: bound to map xmas_dun02,
+  starts where you place her, exits -> the save point (a Butterfly Wing when the bag is over the
+  limit; the death dialog's move to saved location after a death).
+- **What the person sets up on the hotbar:** the Fly Wings on the Fly Wing key, the Butterfly Wings
+  on the Butterfly Wing key (11-13 11:12 her F8 and F9 were EMPTY: the 10:02 test's end read
+  "no Butterfly Wing on the hotbar (count 0)").
+- **Live checks:** see the 11-13 report (the weight exit with a 30 % limit; the respawn waits for
+  Batt's OK to a test death: `@die` is not in group 20).
+
 ## Not built yet
 
 - **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known

@@ -66,7 +66,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "--steal-cue",
       "popup",
       "--swap-gap",
-      "--player-mode"
+      "--player-mode",
+      "--respawn",
+      "--fly-key",
+      "F8",
+      "--player-home-key",
+      "F9",
+      "--weight-home",
+      "0.50"
     ],
     "optional": []
   },
@@ -114,6 +121,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "cmd.far_single": {
       "value": true,
       "source": "the base command: --far-single",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.fly_key": {
+      "value": "F8",
+      "source": "the base command: --fly-key",
       "note": "as the night pilots ran it"
     },
     "cmd.garm_confirm": {
@@ -191,6 +203,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "source": "the base command: --npc-guard",
       "note": "as the night pilots ran it"
     },
+    "cmd.player_home_key": {
+      "value": "F9",
+      "source": "the base command: --player-home-key",
+      "note": "as the night pilots ran it"
+    },
     "cmd.player_mode": {
       "value": true,
       "source": "the base command: --player-mode",
@@ -204,6 +221,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "cmd.reach_check": {
       "value": true,
       "source": "the base command: --reach-check",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.respawn": {
+      "value": true,
+      "source": "the base command: --respawn",
       "note": "as the night pilots ran it"
     },
     "cmd.search": {
@@ -264,6 +286,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "cmd.walk_trust": {
       "value": true,
       "source": "the base command: --walk-trust",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.weight_home": {
+      "value": 0.5,
+      "source": "the base command: --weight-home",
       "note": "as the night pilots ran it"
     },
     "strategy.potion_below": {
@@ -354,7 +381,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "HOME_KEY": {
       "value": "F8",
       "source": "dungeon_hunt.py: HOME_KEY",
-      "note": "the Butterfly Wing's hotbar key"
+      "note": "the character's default Butterfly Wing key (--player-home-key wins: the Run settings)"
     },
     "FIGHT_TAKEN_S": {
       "value": 2.5,
@@ -666,6 +693,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "kind": "bool",
       "base": true
     },
+    "--fly-key": {
+      "help": "2026-11-13 (Batt: the person sets the hotbar keys): the Fly Wing's row-1 hotbar key (default: the character's, F2). Its stock is read from that slot and every escape presses it; refused when it is another key of the run's",
+      "default": null,
+      "value": "F8",
+      "kind": "value",
+      "base": true
+    },
     "--garm-confirm": {
       "help": "dungeon@9.19b (rogue-xmas02.md 4BD; with --garm-fly): the Fly Wing waits for alarm boxes in this many CONSECUTIVE detections (default 1 = 9.19 unchanged)",
       "default": 1,
@@ -771,6 +805,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "kind": "bool",
       "base": true
     },
+    "--player-home-key": {
+      "help": "dungeon@9.35b (Batt 2026-11-12; with --player-mode): the Butterfly Wing's row-1 hotbar key (default: the character's home_key, F8). At the end of a --player-mode run, after its own end escape, it is pressed ONCE when its hotbar count reads >= 1 (a seated end stands first); no key, an unread or 0 count, a death or a hard bar: no press, recorded (player_home). The start checks nothing for it",
+      "default": null,
+      "value": "F9",
+      "kind": "value",
+      "base": true
+    },
     "--player-mode": {
       "help": "dungeon@9.35 (docs/planning/player-mode.md, Batt 2026-11-12; OFF by default): the hunt as a normal player, for a public rAthena that permits bots (ADR-0023's declared mode): the run types NO line (no GM command, no chat) in its setup, loop or end, and reads nothing from the lab's DB. The person brings the character to the map with her stock; the run starts where she stands (her cell read on the minimap, on the map's route grid), refuses below 5 Fly Wings / 5 heal items on the hotbar (PLAYER_MIN_WINGS / PLAYER_MIN_HEALS) or an unread weight / >= 48 %, never warps, heals, tops up, drinks down, drops the bag or stages, ends when the Fly Wings read 1 (PLAYER_WINGS_KEEP), and ends with the run's own Fly Wing escape, then (9.35b) ONE Butterfly Wing home when its hotbar count reads >= 1 (--player-home-key; without one a rest stays seated; a death's dialog stays for the person). On a map whose KB lists a boss spawn, with neither --engage-screen nor --garm-fly, it prints one WARNING line at the start and goes on (9.35b). Refused with --clear-map, --stage-mob, --stage-at, --start-cell, --engage melee_ring",
       "default": false,
@@ -787,6 +828,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     },
     "--reach-check": {
       "help": "dungeon@9.12 (rogue-xmas02.md 4AE; OFF by default; with --engage-screen): a box whose cell the server would not walk us to on one click (the server's map cache: a walk <= 17 steps, <= 14 unless the straight line is clear) is passed over by the trigger and the box path",
+      "default": false,
+      "value": true,
+      "kind": "bool",
+      "base": true
+    },
+    "--respawn": {
+      "help": "dungeon@9.41 (Batt 2026-11-13, the map's other exit; --player-mode only): a death presses the death dialog's FIRST button (move to saved location) once, only while the dialog reads, and waits for the save point's map; OFF: the dialog is the person's",
       "default": false,
       "value": true,
       "kind": "bool",
@@ -875,6 +923,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "value": true,
       "kind": "bool",
       "base": true
+    },
+    "--weight-home": {
+      "help": "dungeon@9.41 (Batt 2026-11-13, the map's exit; --player-mode only): when the read weight share is over SHARE (e.g. 0.50), or the line reads red at a SHARE <= 0.50, the run ends after its fight and the end's Butterfly Wing takes her home",
+      "default": null,
+      "value": 0.5,
+      "kind": "value",
+      "base": true
     }
   },
   "stacks": [
@@ -888,8 +943,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
         }
       ],
       "head": [
-        80,
-        81
+        81,
+        82
       ],
       "body": [
         {
@@ -906,12 +961,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            82,
-            82
+            83,
+            83
           ],
           "lines": [
-            82,
-            82
+            83,
+            83
           ],
           "why": "Before any key is pressed, the runner reads the status window from the pixels and checks that the character on screen is the one asked for. Anything else stops the run before it starts.",
           "flags": [],
@@ -945,12 +1000,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            83,
-            84
+            84,
+            85
           ],
           "lines": [
-            83,
-            84
+            84,
+            85
           ],
           "why": "A normal player cannot conjure items, so the run never adds any (--player-mode): it reads the counts on the hotbar and will not start with less. You bring the stock; the run uses it.",
           "flags": [
@@ -993,12 +1048,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    86,
-                    86
+                    87,
+                    87
                   ],
                   "lines": [
-                    86,
-                    86
+                    87,
+                    87
                   ],
                   "why": "The Rogue never throws loot away (it is value for Batt's merchant), so a full bag stops the run instead.",
                   "flags": [],
@@ -1009,12 +1064,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            85,
-            85
+            86,
+            86
           ],
           "lines": [
-            85,
-            86
+            86,
+            87
           ],
           "why": "At 50 % weight the server gives no natural HP / SP regeneration, so the run refuses to start this close to it. A player's run never throws loot away.",
           "flags": [],
@@ -1042,12 +1097,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            87,
-            88
+            88,
+            89
           ],
           "lines": [
-            87,
-            88
+            88,
+            89
           ],
           "why": "You put her on the map yourself, the way a player walks in. There is no warp and no GM command clears the map: the big boss may be alive, and the boss guard below escapes it with a Fly Wing.",
           "flags": [
@@ -1077,12 +1132,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            89,
-            90
+            90,
+            91
           ],
           "lines": [
-            89,
-            90
+            90,
+            91
           ],
           "why": "The run lasts this long, then ends safely. `mode` is what she is doing: search, fight, or after (a fight just ended).",
           "flags": [
@@ -1103,8 +1158,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            91,
-            91
+            92,
+            92
           ],
           "body": [
             {
@@ -1117,12 +1172,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 }
               ],
               "head": [
-                92,
-                93
+                93,
+                94
               ],
               "lines": [
-                92,
-                93
+                93,
+                94
               ],
               "why": "PIXELS IN: the HP and SP percent are read from the Basic Info window's digits, her cell from the minimap's coordinates, and the Battle Log's new lines (hits on her, her own damage, a Miss) from the chat window. Nothing reads the game's memory or packets. --late-confirm: a position read held back as doubtful is confirmed at once by a newer frame. --miss-cue: a monster's 'Miss' drawn beside her counts as an attack.",
               "flags": [
@@ -1143,7 +1198,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 {
                   "parts": [
                     {
-                      "text": "check the safety rules first (the red stack): a Fly Wing ends this tick"
+                      "text": "check the safety rules first (the red stack): a Fly Wing ("
+                    },
+                    {
+                      "param": "cmd.fly_key",
+                      "shown": "F8"
+                    },
+                    {
+                      "text": ") ends this tick"
                     }
                   ],
                   "body": [
@@ -1157,12 +1219,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        95,
-                        95
+                        96,
+                        96
                       ],
                       "lines": [
-                        95,
-                        95
+                        96,
+                        96
                       ],
                       "why": "After a Fly Wing she is somewhere else on the map: the target, the loot list and the path are forgotten and the next tick starts fresh.",
                       "flags": [],
@@ -1173,19 +1235,21 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 }
               ],
               "head": [
-                94,
-                94
+                95,
+                95
               ],
               "lines": [
-                94,
-                95
+                95,
+                96
               ],
               "why": "The safety rules (on the right) run before anything else on every tick, and again inside long actions (guard_tick reads the HP between clicks).",
               "flags": [],
               "code": [
                 "guard_tick"
               ],
-              "params": []
+              "params": [
+                "cmd.fly_key"
+              ]
             },
             {
               "id": "boxes",
@@ -1204,12 +1268,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 }
               ],
               "head": [
-                96,
-                97
+                97,
+                98
               ],
               "lines": [
-                96,
-                97
+                97,
+                98
               ],
               "why": "The box watcher runs in its own thread: about once a second it gives a fresh picture to the vision worker's GPU detector (the xmas_dun02 model) and keeps the monster boxes it finds, each with its species and the time of its picture. A box older than 1.5 s is not used. --hud only SHOWS the boxes on the console; no decision reads the HUD.",
               "flags": [
@@ -1247,12 +1311,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        99,
-                        99
+                        100,
+                        100
                       ],
                       "lines": [
-                        99,
-                        99
+                        100,
+                        100
                       ],
                       "why": "--loot-first: right after a kill a box alone does not start the next fight while that kill's loot is still waiting (a hit on her still does).",
                       "flags": [
@@ -1267,12 +1331,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 }
               ],
               "head": [
-                98,
-                98
+                99,
+                99
               ],
               "lines": [
-                98,
-                99
+                99,
+                100
               ],
               "why": "Four signs start a fight: a hit on her in the Battle Log, her HP falling 2 points within 1.5 s, a Miss drawn at her, or a monster box anywhere on the screen (--engage-screen) that the server would walk her to in one click (--reach-check: at most 17 steps). The box watcher's own cell (her body) is never a target.",
               "flags": [
@@ -1335,12 +1399,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        103,
-                                        105
+                                        104,
+                                        106
                                       ],
                                       "lines": [
-                                        103,
-                                        105
+                                        104,
+                                        106
                                       ],
                                       "why": "Batt's rule (2026-11-12): when the game prints an EXP or Job EXP line, the monster is dead -- this is checked FIRST. One kill prints both lines, so the second within 1 s is the same kill.",
                                       "flags": [],
@@ -1382,12 +1446,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        107,
-                                        109
+                                        108,
+                                        110
                                       ],
                                       "lines": [
-                                        107,
-                                        109
+                                        108,
+                                        110
                                       ],
                                       "why": "Items drop where the monster died, close to her: the 5 x 5 cells around her cell at the kill are remembered for the loot step.",
                                       "flags": [],
@@ -1420,12 +1484,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        111,
-                                        111
+                                        112,
+                                        112
                                       ],
                                       "lines": [
-                                        111,
-                                        111
+                                        112,
+                                        112
                                       ],
                                       "why": "The target walked off or was never reached: look for another one.",
                                       "flags": [],
@@ -1436,12 +1500,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                102,
-                                102
+                                103,
+                                103
                               ],
                               "lines": [
-                                102,
-                                111
+                                103,
+                                112
                               ],
                               "why": "--exp-first (ON by default, Batt 2026-11-12): an EXP / Job EXP line is the kill. Where the game prints none (the lab's Base 99 Rogue: its 2021 client hides EXP 0; the Thai server's client prints EXP '0'), --kill-gap: at Base 99 the Battle Log shows no experience line, so the runner cannot SEE a kill. It infers one: her hits on a living monster come about every half second, so after 5 or more hits a silence of 1.5 s means it died. (A real kill took 3-22 hits in the pilots; 5 keeps nearly all real kills and few false ones.)",
                               "flags": [
@@ -1484,12 +1548,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                113,
-                                113
+                                114,
+                                114
                               ],
                               "lines": [
-                                113,
-                                113
+                                114,
+                                114
                               ],
                               "why": "--value-target (in the base since 2026-11-12, Batt): not simply the nearest box, but the one worth the most a kill, discounted by distance. A monster's worth is what its drops sell for at the NPC (read at run time from data/econ/maps.json, by the detector's species). Example: a box worth 3 times as much wins up to about 150 x 2 px farther away. The candidates are the same as before: on the screen, reachable, not her own body.",
                               "flags": [
@@ -1540,12 +1604,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        115,
-                                        116
+                                        116,
+                                        117
                                       ],
                                       "lines": [
-                                        115,
-                                        116
+                                        116,
+                                        117
                                       ],
                                       "why": "One click that far rarely carried: she walks closer first, then the box path looks again with a fresh detection.",
                                       "flags": [],
@@ -1558,12 +1622,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                114,
-                                114
+                                115,
+                                115
                               ],
                               "lines": [
-                                114,
-                                116
+                                115,
+                                117
                               ],
                               "why": "--far-approach: strikes 9+ cells away missed 26 of 28 times in a pilot.",
                               "flags": [
@@ -1595,12 +1659,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                117,
-                                117
+                                118,
+                                118
                               ],
                               "lines": [
-                                117,
-                                117
+                                118,
+                                118
                               ],
                               "why": "--still-strike: while she walks, the screen scrolls and a click lands where the monster WAS; so she waits for a still scene (3 frame pairs moving under 2 px, at most 1.5 s). --still-target: one more detection of the same monster; if its feet moved 10 px or more it is walking, and she waits (a detection every 0.25 s) until it stands.",
                               "flags": [
@@ -1645,12 +1709,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                118,
-                                118
+                                119,
+                                119
                               ],
                               "lines": [
-                                118,
-                                118
+                                119,
+                                119
                               ],
                               "why": "--lead-press: instead of waiting for a fast walker, aim ahead of it, by its speed times the time until the client acts on the click (0.57 s plus the time already spent), at most 1 cell ahead.",
                               "flags": [
@@ -1702,12 +1766,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        120,
-                                        120
+                                        121,
+                                        121
                                       ],
                                       "lines": [
-                                        120,
-                                        120
+                                        121,
+                                        121
                                       ],
                                       "why": "The strike connected (the client's lock arrow or her first damage line): from now on her hits are counted for the kill gap.",
                                       "flags": [],
@@ -1740,12 +1804,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        122,
-                                        124
+                                        123,
+                                        125
                                       ],
                                       "lines": [
-                                        122,
-                                        124
+                                        123,
+                                        125
                                       ],
                                       "why": "Something hits her but no box shows it: the pointer visits the cells around her and strikes where the cursor turns into a SWORD. --self-recheck: a sword read on top of her own sprite counts only if it is still there 0.4 s later.",
                                       "flags": [
@@ -1763,12 +1827,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                119,
-                                119
+                                120,
+                                120
                               ],
                               "lines": [
-                                119,
-                                124
+                                120,
+                                125
                               ],
                               "why": "The pointer hovers the target's body; the client draws a SWORD cursor over a monster, and only then does she click. --far-single: from 4 cells away she clicks ONCE and waits up to 3.5 s (the client walks her there); a re-click would land on the floor and cancel the walk. Close up the click repeats every 0.6 s until it connects. --quiet-scan: the ring scan runs only after damage in the last 5 s.",
                               "flags": [
@@ -1791,12 +1855,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        101,
-                        101
+                        102,
+                        102
                       ],
                       "lines": [
-                        101,
-                        124
+                        102,
+                        125
                       ],
                       "why": "Locked on = a strike connected and she is hitting it.",
                       "flags": [],
@@ -1832,12 +1896,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                126,
-                                126
+                                127,
+                                127
                               ],
                               "lines": [
-                                126,
-                                126
+                                127,
+                                127
                               ],
                               "why": "--loot-first: only a kill that came during THIS fight ends it, so a fight that started right after a kill is not ended by that kill.",
                               "flags": [
@@ -1850,12 +1914,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        125,
-                        125
+                        126,
+                        126
                       ],
                       "lines": [
-                        125,
-                        126
+                        126,
+                        127
                       ],
                       "why": "A quiet fight with a recent kill ends at once: no long scan for monsters that are not there.",
                       "flags": [],
@@ -1892,12 +1956,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        128,
-                        128
+                        129,
+                        129
                       ],
                       "lines": [
-                        128,
-                        128
+                        129,
+                        129
                       ],
                       "why": "The loot list's cells (the 5 x 5 around her at each kill of the fight) are hovered nearest first. Over an item the client draws a PICKUP hand: she clicks there (the client walks her over and picks it up). A SWORD there starts a fight instead. --loot trim stops after 9 hovers (in the pilots nearly every pickup came within the first 9), at most 10 picks and 25 s; a hit on her ends the loot step.",
                       "flags": [
@@ -1924,12 +1988,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        129,
-                        129
+                        130,
+                        130
                       ],
                       "lines": [
-                        129,
-                        129
+                        130,
+                        130
                       ],
                       "why": "The loot step happens once per fight.",
                       "flags": [],
@@ -1955,12 +2019,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        131,
-                        132
+                        132,
+                        133
                       ],
                       "lines": [
-                        131,
-                        132
+                        132,
+                        133
                       ],
                       "why": "--explore: the map is cut into regions; she walks to one chosen from what earlier runs saw there (time spent, fights, good fights, stalls; data/maps/xmas_dun02/explore.json) plus a chance for less-visited ones. On arrival, or after 150 s, she picks the next. The run's own knowledge is merged into the file at its end.",
                       "flags": [
@@ -2013,12 +2077,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                134,
-                                135
+                                135,
+                                136
                               ],
                               "lines": [
-                                134,
-                                135
+                                135,
+                                136
                               ],
                               "why": "--walk-pick: on raised floors the client may pick a DIFFERENT cell under the pointer than the one meant; a walk target counts only when the client's own pick (the camera ray's first tile top) is within 1 cell of it. --walk-pick-step: when no path cell passes, a nearby cell that does. Never a click straight north of her (the client sends no move for those). The pointer first HOVERS the cell and reads the cursor.",
                               "flags": [
@@ -2059,12 +2123,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        137,
-                                        137
+                                        138,
+                                        138
                                       ],
                                       "lines": [
-                                        137,
-                                        137
+                                        138,
+                                        138
                                       ],
                                       "why": "--walk-trust: an UNKNOWN cursor read on a cell the route trusts is clicked too.",
                                       "flags": [
@@ -2092,12 +2156,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        139,
-                                        139
+                                        140,
+                                        140
                                       ],
                                       "lines": [
-                                        139,
-                                        139
+                                        140,
+                                        140
                                       ],
                                       "why": "A monster stood under the walk target: it is struck where it stands.",
                                       "flags": [],
@@ -2123,12 +2187,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                         }
                                       ],
                                       "head": [
-                                        141,
-                                        141
+                                        142,
+                                        142
                                       ],
                                       "lines": [
-                                        141,
-                                        141
+                                        142,
+                                        142
                                       ],
                                       "why": "The client calls it a wall: that cell leaves her route grid for the run.",
                                       "flags": [],
@@ -2141,12 +2205,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                                 }
                               ],
                               "head": [
-                                136,
-                                136
+                                137,
+                                137
                               ],
                               "lines": [
-                                136,
-                                141
+                                137,
+                                142
                               ],
                               "why": "Reading the cursor first means she never clicks blind.",
                               "flags": [],
@@ -2159,12 +2223,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                         }
                       ],
                       "head": [
-                        133,
-                        133
+                        134,
+                        134
                       ],
                       "lines": [
-                        133,
-                        141
+                        134,
+                        142
                       ],
                       "why": "A walk decision takes about 0.9 s and a 5-6 cell walk about 0.9 s, so at this rhythm she stands for a moment before the next click.",
                       "flags": [],
@@ -2177,12 +2241,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 }
               ],
               "head": [
-                100,
-                100
+                101,
+                101
               ],
               "lines": [
-                100,
-                141
+                101,
+                142
               ],
               "why": "Each tick does ONE of three things, by `mode`.",
               "flags": [],
@@ -2191,8 +2255,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "lines": [
-            91,
-            141
+            92,
+            142
           ],
           "why": "The hunt: one pass of this loop is one TICK, about 5 a second. Every tick looks at the screen, checks the safety rules, then does ONE thing: fight, loot, or search.",
           "flags": [],
@@ -2230,12 +2294,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    143,
-                    143
+                    144,
+                    144
                   ],
                   "lines": [
-                    143,
-                    143
+                    144,
+                    144
                   ],
                   "why": "A safe end: the end warp takes seconds, so she teleports away from a fight first.",
                   "flags": [],
@@ -2246,12 +2310,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            142,
-            142
+            143,
+            143
           ],
           "lines": [
-            142,
-            143
+            143,
+            144
           ],
           "why": "The safe end (dungeon@8.5): a run once ended inside a swarm and the character died during the end warp.",
           "flags": [],
@@ -2264,6 +2328,32 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
           ]
         },
         {
+          "id": "respawn",
+          "kind": "step",
+          "style": "mp_movement_blocks",
+          "parts": [
+            {
+              "text": "after a death: press the death dialog's move to saved location, once"
+            }
+          ],
+          "head": [
+            145,
+            146
+          ],
+          "lines": [
+            145,
+            146
+          ],
+          "why": "Batt 2026-11-13: a death is an exit of the map too. The death dialog's first button (move to saved location, its place measured on two real deaths) is pressed ONCE, and only while the dialog reads; then the runner waits for the save point's map to be drawn. Anything else is left to a person.",
+          "flags": [
+            "--respawn"
+          ],
+          "code": [
+            "respawn_end"
+          ],
+          "params": []
+        },
+        {
           "id": "home",
           "kind": "step",
           "style": "mp_movement_blocks",
@@ -2272,22 +2362,22 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
               "text": "go home on a Butterfly Wing ("
             },
             {
-              "param": "HOME_KEY",
-              "shown": "F8"
+              "param": "cmd.player_home_key",
+              "shown": "F9"
             },
             {
               "text": ") if the hotbar shows one"
             }
           ],
           "head": [
-            144,
-            144
+            147,
+            147
           ],
           "lines": [
-            144,
-            144
+            147,
+            147
           ],
-          "why": "A player's way home: the Butterfly Wing takes her to her save point. The run also ends by itself when her Fly Wings fall to 1: the last one stays for the escape.",
+          "why": "A player's way home: the Butterfly Wing takes her to her save point. It ends the weight exit, a Stop and the time box; after a death she respawns instead. The run also ends by itself when her Fly Wings fall to 1: the last one stays for the escape.",
           "flags": [
             "--player-mode"
           ],
@@ -2295,14 +2385,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             "player_home_refused"
           ],
           "params": [
-            "HOME_KEY",
-            "PLAYER_WINGS_KEEP"
+            "PLAYER_WINGS_KEEP",
+            "cmd.player_home_key"
           ]
         }
       ],
       "lines": [
-        80,
-        144
+        81,
+        147
       ],
       "why": "The runner starts here: `dungeon_hunt.py run` with the base command (see the Command pane). Everything below runs once, top to bottom; the loop inside it is the hunt.",
       "flags": [
@@ -2325,8 +2415,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
         }
       ],
       "head": [
-        147,
-        148
+        150,
+        151
       ],
       "body": [
         {
@@ -2351,12 +2441,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    150,
-                    150
+                    153,
+                    153
                   ],
                   "lines": [
-                    150,
-                    150
+                    153,
+                    153
                   ],
                   "why": "With no Fly Wing left there is no escape, so the run ends.",
                   "flags": [],
@@ -2367,12 +2457,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            149,
-            149
+            152,
+            152
           ],
           "lines": [
-            149,
-            150
+            152,
+            153
           ],
           "why": "After every potion or Fly Wing the hotbar's count is read again (1 s later).",
           "flags": [],
@@ -2412,14 +2502,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    152,
-                    152
+                    155,
+                    155
                   ],
                   "lines": [
-                    152,
-                    152
+                    155,
+                    155
                   ],
-                  "why": "A death is a result: recorded, then the dialog closes by its known button. A jump nobody asked for may be a map change: never act on an unknown map.",
+                  "why": "A death is a result: recorded, and the map's other EXIT: at the end the death dialog's move to saved location takes her to the save point (--respawn). A jump nobody asked for may be a map change: never act on an unknown map.",
                   "flags": [],
                   "code": [],
                   "params": []
@@ -2428,12 +2518,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            151,
-            151
+            154,
+            154
           ],
           "lines": [
-            151,
-            152
+            154,
+            155
           ],
           "why": "Hard bars stop the run.",
           "flags": [],
@@ -2487,12 +2577,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    154,
-                    155
+                    157,
+                    158
                   ],
                   "lines": [
-                    154,
-                    155
+                    157,
+                    158
                   ],
                   "why": "A Fly Wing teleports her to a random spot on the same map.",
                   "flags": [],
@@ -2503,12 +2593,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            153,
-            153
+            156,
+            156
           ],
           "lines": [
-            153,
-            155
+            156,
+            158
           ],
           "why": "Strategy P2 (the swarm escape): low HP, or HP falling fast (measured over 2 s against her max HP 5070) while under half: she teleports away before a swarm can kill her.",
           "flags": [
@@ -2555,12 +2645,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    157,
-                    157
+                    160,
+                    160
                   ],
                   "lines": [
-                    157,
-                    157
+                    160,
+                    160
                   ],
                   "why": "One press; the next only 0.7 s later (or at once if the HP rose), at most 3 in 2 s.",
                   "flags": [],
@@ -2571,12 +2661,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            156,
-            156
+            159,
+            159
           ],
           "lines": [
-            156,
-            157
+            159,
+            160
           ],
           "why": "No sitting to rest in this strategy: potions keep her going.",
           "flags": [],
@@ -2623,12 +2713,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    159,
-                    159
+                    162,
+                    162
                   ],
                   "lines": [
-                    159,
-                    159
+                    162,
+                    162
                   ],
                   "why": "After the escape, boxes start no fight for a while.",
                   "flags": [],
@@ -2647,12 +2737,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    160,
-                    161
+                    163,
+                    164
                   ],
                   "lines": [
-                    160,
-                    161
+                    163,
+                    164
                   ],
                   "why": "A Fly Wing teleports her to a random spot on the same map.",
                   "flags": [],
@@ -2663,12 +2753,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            158,
-            158
+            161,
+            161
           ],
           "lines": [
-            158,
-            161
+            161,
+            164
           ],
           "why": "--garm-fly: the boss's summon (it hits hard and chases far) is a class of the detector; seeing it in a fresh detection (1.5 s old at most) is enough to fly away BEFORE it reaches her. --garm-confirm: 2 detections in a row, so one false box does not waste a Fly Wing.",
           "flags": [
@@ -2713,12 +2803,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    163,
-                    163
+                    166,
+                    166
                   ],
                   "lines": [
-                    163,
-                    163
+                    166,
+                    166
                   ],
                   "why": "After the escape, boxes start no fight for a while.",
                   "flags": [],
@@ -2737,12 +2827,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    164,
-                    165
+                    167,
+                    168
                   ],
                   "lines": [
-                    164,
-                    165
+                    167,
+                    168
                   ],
                   "why": "A Fly Wing teleports her to a random spot on the same map.",
                   "flags": [],
@@ -2753,12 +2843,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            162,
-            162
+            165,
+            165
           ],
           "lines": [
-            162,
-            165
+            165,
+            168
           ],
           "why": "The boss guard of --engage-screen: the detector has no class for the boss itself (yet), so its name in a Battle Log line (read from the map's knowledge base) is the backstop.",
           "flags": [
@@ -2795,34 +2885,46 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "style": "rd_safety_blocks",
                   "parts": [
                     {
-                      "text": "an unknown window stops the run; read the weight"
+                      "text": "an unknown window stops the run; read the weight: over "
+                    },
+                    {
+                      "param": "cmd.weight_home",
+                      "shown": "50"
+                    },
+                    {
+                      "text": " % is the map's EXIT (the run ends, a Butterfly Wing home)"
                     }
                   ],
                   "head": [
-                    167,
-                    169
+                    170,
+                    174
                   ],
                   "lines": [
-                    167,
-                    169
+                    170,
+                    174
                   ],
-                  "why": "An open dialog or window nobody expected means the clicks could go somewhere unsafe: stop. At 50 % weight the server gives no natural regeneration.",
-                  "flags": [],
-                  "code": [],
+                  "why": "An open dialog or window nobody expected means the clicks could go somewhere unsafe: stop. At 50 % weight the server gives no natural regeneration. Over 50 % (Batt 2026-11-13) the run ends after its fight, and the end's Butterfly Wing takes her home: this map's exit.",
+                  "flags": [
+                    "--weight-home"
+                  ],
+                  "code": [
+                    "weight_home_due"
+                  ],
                   "params": [
-                    "REGEN_STOP"
+                    "REGEN_STOP",
+                    "cmd.weight_home"
                   ]
                 }
               ]
             }
           ],
           "head": [
-            166,
-            166
+            169,
+            169
           ],
           "lines": [
-            166,
-            169
+            169,
+            174
           ],
           "why": "The UI watch.",
           "flags": [],
@@ -2869,12 +2971,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    171,
-                    172
+                    176,
+                    177
                   ],
                   "lines": [
-                    171,
-                    172
+                    176,
+                    177
                   ],
                   "why": "A Fly Wing teleports her to a random spot on the same map.",
                   "flags": [],
@@ -2885,12 +2987,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            170,
-            170
+            175,
+            175
           ],
           "lines": [
-            170,
-            172
+            175,
+            177
           ],
           "why": "When the minimap's coordinates cannot be read (a bright background behind them), a teleport gives the readout a new background.",
           "flags": [],
@@ -2917,12 +3019,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            173,
-            173
+            178,
+            178
           ],
           "lines": [
-            173,
-            173
+            178,
+            178
           ],
           "why": "--npc-guard: a click near a script NPC can open its dialog; within 8 cells of one she does not strike or loot.",
           "flags": [
@@ -2937,8 +3039,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
         }
       ],
       "lines": [
-        147,
-        174
+        150,
+        179
       ],
       "why": "The safety rules are not a separate program: run() checks them at the top of every tick (and guard_tick() reads the HP inside long actions such as a strike's clicks or the loot hovers). Shown as their own stack so they are easy to read.",
       "flags": [],
@@ -2955,8 +3057,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
         }
       ],
       "head": [
-        177,
-        178
+        182,
+        183
       ],
       "body": [
         {
@@ -2992,12 +3094,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    180,
-                    180
+                    185,
+                    185
                   ],
                   "lines": [
-                    180,
-                    180
+                    185,
+                    185
                   ],
                   "why": "The swap happens while nothing else is going on, so the next strike is not delayed.",
                   "flags": [],
@@ -3010,12 +3112,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            179,
-            179
+            184,
+            184
           ],
           "lines": [
-            179,
-            180
+            184,
+            185
           ],
           "why": "--bare-ready + --steal-opener.",
           "flags": [
@@ -3039,12 +3141,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            181,
-            181
+            186,
+            186
           ],
           "lines": [
-            181,
-            181
+            186,
+            186
           ],
           "why": "The strike itself does not change.",
           "flags": [
@@ -3093,12 +3195,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                     }
                   ],
                   "head": [
-                    183,
-                    183
+                    188,
+                    188
                   ],
                   "lines": [
-                    183,
-                    183
+                    188,
+                    188
                   ],
                   "why": "Also before any escape and at the run's end: she never flees or ends with the Knife on.",
                   "flags": [],
@@ -3111,12 +3213,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            182,
-            182
+            187,
+            187
           ],
           "lines": [
-            182,
-            183
+            187,
+            188
           ],
           "why": "The steal cue is the item popup (or a new cyan Battle Log line): no words are read. After 8 s without a steal, or under 50 % HP, the dagger goes back on anyway.",
           "flags": [
@@ -3141,12 +3243,12 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             }
           ],
           "head": [
-            184,
-            184
+            189,
+            189
           ],
           "lines": [
-            184,
-            184
+            189,
+            189
           ],
           "why": "--swap-gap: her hit lines pause during a swap; without this the kill gap would call the monster dead while she was only changing weapons.",
           "flags": [
@@ -3157,8 +3259,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
         }
       ],
       "lines": [
-        177,
-        184
+        182,
+        189
       ],
       "why": "Batt's own technique (his 2026-11-12 run: a steal on 91 % of kills), in the base since rogue-xmas02.md 4DQ (a steal on 78 % of kills, common items +8 % an hour). The Rogue's Snatcher steals when she HITS, so a weak first weapon keeps the monster alive for more hits, and more steals; once it stole, the dagger goes back on to kill fast. The swaps are hotbar keys, each read back from the hotbar's pixels.",
       "flags": [
@@ -3171,5 +3273,66 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "params": []
     }
   ],
-  "python": "# xmas_dun02: how the Rogue hunts -- a DESCRIPTION of `scripts/dungeon_hunt.py run`\n# GENERATED by scripts/runner_flow_export.py with dungeon_hunt.py's own numbers: an outline for\n# learners, not the real code (the real loop is dungeon_hunt.run(), with many more checks).\n# Nothing here runs, and nothing on /flows reaches the game.\n#\n#   dungeon_hunt.py run \\\n#       --char rogue --map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard\n#       --miss-cue --loot trim --box-strike --box-now --self-recheck --still-strike\n#       --engage-screen --reach-check --far-single --far-approach --explore --walk-pick\n#       --kill-gap --loot-first --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2\n#       --late-confirm --still-target --lead-press --minutes 120 --value-target --hud\n#       --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory --bare-steal --bare-ready\n#       --steal-opener F4 --steal-cue popup --swap-gap --player-mode\n\nimport time\n\n# --- the numbers, read from the code at export time -------------------------------\nSTRATEGY = {\"potion_below\": 0.4, \"fly_below\": 0.2, \"fly_rate\": 150.0, \"fly_rate_below\": 0.5, \"rest_below\": None, \"heal_below\": None, \"potions_to\": 30, \"wings_to\": 20}  # STRATEGIES[\"P2\"] (--strategy)\nCHAR = {\"job\": \"rogue\", \"max_hp\": 5070, \"max_sp\": 530, \"potions_to\": 10, \"wings_to\": 10, \"etc_hold_max\": 0.48}  # some of CHARS_CONF[\"rogue\"] (--char)\nPATROL_START = {\"xmas_dun02\": ((7, 21), (114, 23))}  # some of PATROL_START\nREAD_HZ = 5.0  # dungeon_hunt.py\nPLAYER_MIN_WINGS = 5  # dungeon_hunt.py\nPLAYER_MIN_HEALS = 5  # dungeon_hunt.py\nPLAYER_WINGS_KEEP = 1  # dungeon_hunt.py\nPLAYER_POS_S = 5.0  # dungeon_hunt.py\nWEIGHT_MAX = 0.48  # dungeon_hunt.py\nHOME_KEY = \"F8\"  # dungeon_hunt.py\nFIGHT_TAKEN_S = 2.5  # dungeon_hunt.py\nHP_DROP_PTS = 2  # dungeon_hunt.py\nHP_DROP_S = 1.5  # dungeon_hunt.py\nBOX_EVERY_S = 1.0  # dungeon_hunt.py\nBOX_FRESH_S = 1.5  # dungeon_hunt.py\nEXP_PAIR_S = 1.0  # dungeon_hunt.py\nKILL_GAP_S = 1.5  # dungeon_hunt.py\nKILL_GAP_HITS = 5  # dungeon_hunt.py\nLOCK_NO_HIT_S = 3.5  # dungeon_hunt.py\nD0_PX = 150.0  # value_target.py\nAPPROACH_CELLS = 9  # dungeon_hunt.py\nAPPROACH_KEEP = 4  # dungeon_hunt.py\nAPPROACH_MAX = 2  # dungeon_hunt.py\nSTILL_PX = 2.0  # dungeon_hunt.py\nSTILL_N = 3  # dungeon_hunt.py\nSTILL_MAX_S = 1.5  # dungeon_hunt.py\nWALKER_PX = 10.0  # dungeon_hunt.py\nHOLD_GAP_S = 0.25  # dungeon_hunt.py\nHOLD_MAX_S = 2.5  # dungeon_hunt.py\nLEAD_PX = 15.0  # dungeon_hunt.py\nLEAD_AGE_S = 0.57  # dungeon_hunt.py\nLEAD_CAP_CELLS = 1.0  # dungeon_hunt.py\nFAR_CELLS = 4  # dungeon_hunt.py\nFAR_MAX_S = 3.5  # dungeon_hunt.py\nBURST_GAP_S = 0.6  # dungeon_hunt.py\nQUIET_SCAN_S = 5.0  # dungeon_hunt.py\nSELF_RECHECK_S = 0.4  # dungeon_hunt.py\nLOOT_TRIM_HOVERS = 9  # dungeon_hunt.py\nLOOT_MAX_PICKS = 10  # dungeon_hunt.py\nLOOT_MAX_S = 25.0  # dungeon_hunt.py\nEXPLORE_LEG_MAX_S = 150.0  # dungeon_hunt.py\nWALK_AHEAD = 7  # dungeon_hunt.py\nWALK_EVERY_S = 1.2  # dungeon_hunt.py\nWALK_PICK_TOL = 1  # dungeon_hunt.py\nNOENTRY_CARVE_R = 0  # dungeon_hunt.py\nEND_HOT_S = 3.5  # dungeon_hunt.py\nEND_FLY_BELOW = 0.5  # dungeon_hunt.py\nSTOCK_READ_S = 1.0  # dungeon_hunt.py\nJUMP_CELLS = 20  # dungeon_hunt.py\nGARM_FRESH_S = 1.5  # dungeon_hunt.py\nBOSS_AVOID_S = 30.0  # dungeon_hunt.py\nUI_EVERY_S = 10.0  # dungeon_hunt.py\nREGEN_STOP = 0.5  # dungeon_hunt.py\nPOS_FLY_S = 20.0  # dungeon_hunt.py\nPOS_FLY_MAX = 3  # dungeon_hunt.py\nNPC_NO_FIGHT = 8  # dungeon_hunt.py\nBARE_MAX_S = 8.0  # bare_steal.py\nBARE_HP_MIN = 0.5  # bare_steal.py\nEQUIP_KEY = \"F5\"  # bare_steal.py\nSPECIES_VALUES = {}  # read at run time from data/econ/maps.json (never exported)\n\n\ndef run():\n    \"\"\"when the run starts: dungeon_hunt.run(a), a = the parsed command line\"\"\"\n    check_identity(job=\"rogue\")  # the status window must name her job, else no run\n    stock = hotbar_stock()  # the digits the hotbar draws: a player has no @item\n    if too_little(stock): stop(\"bring more Fly Wings / heal items first\")\n    if weight_unread() or weight_share() >= WEIGHT_MAX:  # never dropped\n        stop(\"the bag is too full: a person empties it first\")\n    here = minimap_cell()  # the minimap's readout, no warp\n    if not on_route_grid(here): stop(\"walk her onto the open ground first\")\n    t_end = time.monotonic() + 120.0 * 60  # --minutes: the time box\n    mode, lock, loot_list, kills = \"search\", None, [], []\n    while time.monotonic() < t_end:\n        eyes = look()  # pixels only: HP / SP %, the minimap readout, the Battle Log's new lines\n        now, here = eyes.t, eyes.cell\n        if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here\n            continue\n        boxes = box_watch.boxes(fresh_s=BOX_FRESH_S)  # the map's own model, one detection a second\n        hud_send(hud, boxes, mode, lock is not None)  # --hud: the console's HUD, DISPLAY ONLY\n        if mode != \"fight\" and (eyes.hit_on_us or eyes.hp_dropped or eyes.miss_at_us or near_box(boxes)):\n            mode, fight_t0 = \"fight\", now\n        if mode == \"fight\":\n            if lock is not None:\n                if exp_line and exp_kill(exp_line.type, now, pair)[0]:  # EXP_PAIR_S\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif not exp_seen and kill_gapped(lock.hits, now - lock.last_hit):\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif now - max(lock.last_hit, lock.t) > LOCK_NO_HIT_S:\n                    lock = None\n            else:\n                target = value_pick(candidates(boxes), SPECIES_VALUES)  # ties: the nearer one\n                if target and target.cells >= APPROACH_CELLS:  # at most APPROACH_MAX times a fight\n                    walk_click(approach_cell(target.rel, APPROACH_KEEP))\n                    continue  # the box path looks again once that walk has ended\n                aim = still_target(target)  # --still-strike + --still-target\n                aim = press_lead(target, aim)  # its speed x (LEAD_AGE_S + the time since the picture)\n                if aim and strike(*aim):  # hover, read the cursor: a SWORD -> click\n                    lock = Lock(t=now)\n                elif scan_needed(now, last_taken, last_ours, last_swing, eyes.hp_dropped):\n                    found = scan(\"defend\", ring(1), \"sword\")  # --self-recheck on her own sprite\n                    if found and strike(*found):\n                        lock = Lock(t=now)\n            if lock is None and quiet(eyes) and quiet_kill_ends(kills, now, fight_t0, True):\n                mode = \"after\"\n        elif mode == \"after\":\n            loot_step_v1(loot_list, fight_ref)  # --loot trim: LOOT_TRIM_HOVERS hovers, no sweep\n            loot_list, mode = [], \"search\"\n        else:\n            goal = explore_goal(here)  # --search patrol --explore: explore + exploit\n            path = route(okr, carved, here, goal)\n            if now - last_walk >= WALK_EVERY_S:\n                cell = walk_target(path, WALK_AHEAD, fits)  # --walk-pick: picked_cell() within WALK_PICK_TOL\n                verdict = hover(cell)  # the cursor there: walk, sword, noentry or unknown\n                if verdict == \"walk\" or walk_trusted(cell):\n                    click_at(cell)\n                elif verdict == \"sword\":\n                    strike(cell)\n                elif verdict == \"noentry\":\n                    carve(carved, cell, NOENTRY_CARVE_R)\n    if end_escape_needed(now, last_taken, hist, \"time\"):  # a hit within END_HOT_S too\n        press(\"fly\", \"end\")\n    press_home_if_stocked()  # one press; none on the hotbar: she stays put\n\n\ndef safety_rules(eyes) -> bool:\n    \"\"\"the guards run() checks first on every tick; True = this tick ends\"\"\"\n    if stock_out(hotbar_counts) is not None:  # re-read STOCK_READ_S after each press\n        raise Stop(\"stock_out\")\n    if eyes.dead or is_jump(here, eyes.cell, eyes.since_s):  # a map change?\n        raise Stop(\"death\" if eyes.dead else \"hard_bar: position jump\")\n    if eyes.hp < STRATEGY[\"fly_below\"] or (rate_hp_s(hist, now) or 0) > STRATEGY[\"fly_rate\"] and eyes.hp < STRATEGY[\"fly_rate_below\"]:\n        press(\"fly\", \"hp\")  # a same-map teleport, far from here\n        return True\n    if eyes.hp < STRATEGY[\"potion_below\"]:  # 0.7 s apart, at most 3 in 2 s\n        press(\"potion\", \"hp\")\n    if alarm_seen(boxes.alarm, now, streak=boxes.alarm_n, need=2):\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if boss_of(eyes.name_read, bosses, species):  # the map's boss and its summons\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if now - last_ui >= UI_EVERY_S and mode != \"fight\":\n        if client_state() != \"clear\":  # never click into an unknown state\n            raise Stop(\"hard_bar: unknown UI state\")\n        w_share = weight_share()  # at REGEN_STOP no natural regen\n    if now - last_pos_t > POS_FLY_S and pos_flies < POS_FLY_MAX:\n        press(\"fly\", \"pos_unread\")  # a same-map teleport, far from here\n        return True\n    # --npc-guard: npc_guard_blocks() refuses those clicks (a strike once opened a dialog)\n    return False\n\n\ndef knife_opener(eyes):\n    \"\"\"--bare-steal --bare-ready --steal-opener F4 --steal-cue popup --swap-gap\"\"\"\n    if idle(mode, lock) and not knife_worn():  # --bare-ready: never at the strike\n        press(\"F4\")  # read back: its slot empty, the dagger in the bag\n    # strike() as usual: a weak hit keeps it alive longer, so more chances to steal\n    if steal_cue() or now - knife_t > BARE_MAX_S or eyes.hp < BARE_HP_MIN:\n        press(\"F5\")  # the dagger on again, read back\n    last_ours = max(last_ours, swap_t)  # --swap-gap\n"
+  "python": "# xmas_dun02: how the Rogue hunts -- a DESCRIPTION of `scripts/dungeon_hunt.py run`\n# GENERATED by scripts/runner_flow_export.py with dungeon_hunt.py's own numbers: an outline for\n# learners, not the real code (the real loop is dungeon_hunt.run(), with many more checks).\n# Nothing here runs, and nothing on /flows reaches the game.\n#\n#   dungeon_hunt.py run \\\n#       --char rogue --map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard\n#       --miss-cue --loot trim --box-strike --box-now --self-recheck --still-strike\n#       --engage-screen --reach-check --far-single --far-approach --explore --walk-pick\n#       --kill-gap --loot-first --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2\n#       --late-confirm --still-target --lead-press --minutes 120 --value-target --hud\n#       --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory --bare-steal --bare-ready\n#       --steal-opener F4 --steal-cue popup --swap-gap --player-mode --respawn --fly-key F8\n#       --player-home-key F9 --weight-home 0.50\n\nimport time\n\n# --- the numbers, read from the code at export time -------------------------------\nSTRATEGY = {\"potion_below\": 0.4, \"fly_below\": 0.2, \"fly_rate\": 150.0, \"fly_rate_below\": 0.5, \"rest_below\": None, \"heal_below\": None, \"potions_to\": 30, \"wings_to\": 20}  # STRATEGIES[\"P2\"] (--strategy)\nCHAR = {\"job\": \"rogue\", \"max_hp\": 5070, \"max_sp\": 530, \"potions_to\": 10, \"wings_to\": 10, \"etc_hold_max\": 0.48}  # some of CHARS_CONF[\"rogue\"] (--char)\nPATROL_START = {\"xmas_dun02\": ((7, 21), (114, 23))}  # some of PATROL_START\nREAD_HZ = 5.0  # dungeon_hunt.py\nPLAYER_MIN_WINGS = 5  # dungeon_hunt.py\nPLAYER_MIN_HEALS = 5  # dungeon_hunt.py\nPLAYER_WINGS_KEEP = 1  # dungeon_hunt.py\nPLAYER_POS_S = 5.0  # dungeon_hunt.py\nWEIGHT_MAX = 0.48  # dungeon_hunt.py\nHOME_KEY = \"F8\"  # dungeon_hunt.py\nFIGHT_TAKEN_S = 2.5  # dungeon_hunt.py\nHP_DROP_PTS = 2  # dungeon_hunt.py\nHP_DROP_S = 1.5  # dungeon_hunt.py\nBOX_EVERY_S = 1.0  # dungeon_hunt.py\nBOX_FRESH_S = 1.5  # dungeon_hunt.py\nEXP_PAIR_S = 1.0  # dungeon_hunt.py\nKILL_GAP_S = 1.5  # dungeon_hunt.py\nKILL_GAP_HITS = 5  # dungeon_hunt.py\nLOCK_NO_HIT_S = 3.5  # dungeon_hunt.py\nD0_PX = 150.0  # value_target.py\nAPPROACH_CELLS = 9  # dungeon_hunt.py\nAPPROACH_KEEP = 4  # dungeon_hunt.py\nAPPROACH_MAX = 2  # dungeon_hunt.py\nSTILL_PX = 2.0  # dungeon_hunt.py\nSTILL_N = 3  # dungeon_hunt.py\nSTILL_MAX_S = 1.5  # dungeon_hunt.py\nWALKER_PX = 10.0  # dungeon_hunt.py\nHOLD_GAP_S = 0.25  # dungeon_hunt.py\nHOLD_MAX_S = 2.5  # dungeon_hunt.py\nLEAD_PX = 15.0  # dungeon_hunt.py\nLEAD_AGE_S = 0.57  # dungeon_hunt.py\nLEAD_CAP_CELLS = 1.0  # dungeon_hunt.py\nFAR_CELLS = 4  # dungeon_hunt.py\nFAR_MAX_S = 3.5  # dungeon_hunt.py\nBURST_GAP_S = 0.6  # dungeon_hunt.py\nQUIET_SCAN_S = 5.0  # dungeon_hunt.py\nSELF_RECHECK_S = 0.4  # dungeon_hunt.py\nLOOT_TRIM_HOVERS = 9  # dungeon_hunt.py\nLOOT_MAX_PICKS = 10  # dungeon_hunt.py\nLOOT_MAX_S = 25.0  # dungeon_hunt.py\nEXPLORE_LEG_MAX_S = 150.0  # dungeon_hunt.py\nWALK_AHEAD = 7  # dungeon_hunt.py\nWALK_EVERY_S = 1.2  # dungeon_hunt.py\nWALK_PICK_TOL = 1  # dungeon_hunt.py\nNOENTRY_CARVE_R = 0  # dungeon_hunt.py\nEND_HOT_S = 3.5  # dungeon_hunt.py\nEND_FLY_BELOW = 0.5  # dungeon_hunt.py\nSTOCK_READ_S = 1.0  # dungeon_hunt.py\nJUMP_CELLS = 20  # dungeon_hunt.py\nGARM_FRESH_S = 1.5  # dungeon_hunt.py\nBOSS_AVOID_S = 30.0  # dungeon_hunt.py\nUI_EVERY_S = 10.0  # dungeon_hunt.py\nREGEN_STOP = 0.5  # dungeon_hunt.py\nPOS_FLY_S = 20.0  # dungeon_hunt.py\nPOS_FLY_MAX = 3  # dungeon_hunt.py\nNPC_NO_FIGHT = 8  # dungeon_hunt.py\nBARE_MAX_S = 8.0  # bare_steal.py\nBARE_HP_MIN = 0.5  # bare_steal.py\nEQUIP_KEY = \"F5\"  # bare_steal.py\nSPECIES_VALUES = {}  # read at run time from data/econ/maps.json (never exported)\n\n\ndef run():\n    \"\"\"when the run starts: dungeon_hunt.run(a), a = the parsed command line\"\"\"\n    check_identity(job=\"rogue\")  # the status window must name her job, else no run\n    stock = hotbar_stock()  # the digits the hotbar draws: a player has no @item\n    if too_little(stock): stop(\"bring more Fly Wings / heal items first\")\n    if weight_unread() or weight_share() >= WEIGHT_MAX:  # never dropped\n        stop(\"the bag is too full: a person empties it first\")\n    here = minimap_cell()  # the minimap's readout, no warp\n    if not on_route_grid(here): stop(\"walk her onto the open ground first\")\n    t_end = time.monotonic() + 120.0 * 60  # --minutes: the time box\n    mode, lock, loot_list, kills = \"search\", None, [], []\n    while time.monotonic() < t_end:\n        eyes = look()  # pixels only: HP / SP %, the minimap readout, the Battle Log's new lines\n        now, here = eyes.t, eyes.cell\n        if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here\n            continue\n        boxes = box_watch.boxes(fresh_s=BOX_FRESH_S)  # the map's own model, one detection a second\n        hud_send(hud, boxes, mode, lock is not None)  # --hud: the console's HUD, DISPLAY ONLY\n        if mode != \"fight\" and (eyes.hit_on_us or eyes.hp_dropped or eyes.miss_at_us or near_box(boxes)):\n            mode, fight_t0 = \"fight\", now\n        if mode == \"fight\":\n            if lock is not None:\n                if exp_line and exp_kill(exp_line.type, now, pair)[0]:  # EXP_PAIR_S\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif not exp_seen and kill_gapped(lock.hits, now - lock.last_hit):\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif now - max(lock.last_hit, lock.t) > LOCK_NO_HIT_S:\n                    lock = None\n            else:\n                target = value_pick(candidates(boxes), SPECIES_VALUES)  # ties: the nearer one\n                if target and target.cells >= APPROACH_CELLS:  # at most APPROACH_MAX times a fight\n                    walk_click(approach_cell(target.rel, APPROACH_KEEP))\n                    continue  # the box path looks again once that walk has ended\n                aim = still_target(target)  # --still-strike + --still-target\n                aim = press_lead(target, aim)  # its speed x (LEAD_AGE_S + the time since the picture)\n                if aim and strike(*aim):  # hover, read the cursor: a SWORD -> click\n                    lock = Lock(t=now)\n                elif scan_needed(now, last_taken, last_ours, last_swing, eyes.hp_dropped):\n                    found = scan(\"defend\", ring(1), \"sword\")  # --self-recheck on her own sprite\n                    if found and strike(*found):\n                        lock = Lock(t=now)\n            if lock is None and quiet(eyes) and quiet_kill_ends(kills, now, fight_t0, True):\n                mode = \"after\"\n        elif mode == \"after\":\n            loot_step_v1(loot_list, fight_ref)  # --loot trim: LOOT_TRIM_HOVERS hovers, no sweep\n            loot_list, mode = [], \"search\"\n        else:\n            goal = explore_goal(here)  # --search patrol --explore: explore + exploit\n            path = route(okr, carved, here, goal)\n            if now - last_walk >= WALK_EVERY_S:\n                cell = walk_target(path, WALK_AHEAD, fits)  # --walk-pick: picked_cell() within WALK_PICK_TOL\n                verdict = hover(cell)  # the cursor there: walk, sword, noentry or unknown\n                if verdict == \"walk\" or walk_trusted(cell):\n                    click_at(cell)\n                elif verdict == \"sword\":\n                    strike(cell)\n                elif verdict == \"noentry\":\n                    carve(carved, cell, NOENTRY_CARVE_R)\n    if end_escape_needed(now, last_taken, hist, \"time\"):  # a hit within END_HOT_S too\n        press(\"fly\", \"end\")\n    if reason == \"death\":  # --respawn: the map's exit after a death\n        respawn_end()  # its first button, once, while the dialog reads\n    press_home_if_stocked()  # one press; none on the hotbar: she stays put\n\n\ndef safety_rules(eyes) -> bool:\n    \"\"\"the guards run() checks first on every tick; True = this tick ends\"\"\"\n    if stock_out(hotbar_counts) is not None:  # re-read STOCK_READ_S after each press\n        raise Stop(\"stock_out\")\n    if eyes.dead or is_jump(here, eyes.cell, eyes.since_s):  # a map change?\n        raise Stop(\"death\" if eyes.dead else \"hard_bar: position jump\")\n    if eyes.hp < STRATEGY[\"fly_below\"] or (rate_hp_s(hist, now) or 0) > STRATEGY[\"fly_rate\"] and eyes.hp < STRATEGY[\"fly_rate_below\"]:\n        press(\"fly\", \"hp\")  # a same-map teleport, far from here\n        return True\n    if eyes.hp < STRATEGY[\"potion_below\"]:  # 0.7 s apart, at most 3 in 2 s\n        press(\"potion\", \"hp\")\n    if alarm_seen(boxes.alarm, now, streak=boxes.alarm_n, need=2):\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if boss_of(eyes.name_read, bosses, species):  # the map's boss and its summons\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if now - last_ui >= UI_EVERY_S and mode != \"fight\":\n        if client_state() != \"clear\":  # never click into an unknown state\n            raise Stop(\"hard_bar: unknown UI state\")\n        w_share = weight_share()  # at REGEN_STOP no natural regen\n        if weight_home_due(0.5, w_share, red):  # the map's exit\n            raise Stop(\"weight_home\")  # the end's Butterfly Wing takes her home\n    if now - last_pos_t > POS_FLY_S and pos_flies < POS_FLY_MAX:\n        press(\"fly\", \"pos_unread\")  # a same-map teleport, far from here\n        return True\n    # --npc-guard: npc_guard_blocks() refuses those clicks (a strike once opened a dialog)\n    return False\n\n\ndef knife_opener(eyes):\n    \"\"\"--bare-steal --bare-ready --steal-opener F4 --steal-cue popup --swap-gap\"\"\"\n    if idle(mode, lock) and not knife_worn():  # --bare-ready: never at the strike\n        press(\"F4\")  # read back: its slot empty, the dagger in the bag\n    # strike() as usual: a weak hit keeps it alive longer, so more chances to steal\n    if steal_cue() or now - knife_t > BARE_MAX_S or eyes.hp < BARE_HP_MIN:\n        press(\"F5\")  # the dagger on again, read back\n    last_ours = max(last_ours, swap_t)  # --swap-gap\n",
+  "entry": "where you place her: Run starts on the cell she stands on",
+  "exits": [
+    {
+      "id": "weight_home",
+      "kind": "item_warp",
+      "when": "the bag over 50 %",
+      "how": "a Butterfly Wing (F9)",
+      "to": "the save point",
+      "flag": "--weight-home"
+    },
+    {
+      "id": "respawn",
+      "kind": "death_respawn",
+      "when": "a death",
+      "how": "the death dialog's move to saved location",
+      "to": "the save point",
+      "flag": "--respawn"
+    }
+  ],
+  "settings": {
+    "defaults": {
+      "fly_key": "F8",
+      "home_key": "F9",
+      "weight_home": 0.5
+    },
+    "params": {
+      "fly_key": "cmd.fly_key",
+      "home_key": "cmd.player_home_key",
+      "weight_home": "cmd.weight_home"
+    },
+    "keys": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9"
+    ],
+    "reserved": [
+      "F1",
+      "F3",
+      "F4",
+      "F5"
+    ],
+    "weights": [
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8
+    ]
+  }
 };

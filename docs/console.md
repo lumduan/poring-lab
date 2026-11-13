@@ -250,6 +250,11 @@ Amendment B); a not-adopted model is never offered.
   `scripts/map_zones.py`: the dev backend needs its read-only `./scripts` mount (compose.dev.yaml,
   a guarded `recreate:backend`).
 - ➡️ **Since 2026-11-13 the xmas_dun02 runner view has a Run button** (`/flows?runner=xmas_dun02`, "Run in the game"): it starts the proven runner in player mode through the host helper `scripts/flow_run.py`, NOT the flow IR (ADR-0020's executor is still unbuilt). How and why: [planning/player-mode.md](planning/player-mode.md), [setup/new-lab-host.md](setup/new-lab-host.md) 11.1.
+  ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
+  to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
+  and the weight to go home at (defaults F8, F9, 50 %; the blocks show them); the map's exits: a bag
+  over the limit -> a Butterfly Wing home, a death -> the death dialog's move to saved location
+  ([planning/player-mode.md](planning/player-mode.md), dungeon@9.41).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

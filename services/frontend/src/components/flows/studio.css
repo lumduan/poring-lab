@@ -181,6 +181,27 @@
   border-color: var(--run-bg);
   color: var(--run-text);
 }
+/* the LIVE Run beside Simulate (2026-11-13): amber, not Simulate's green -- it plays in the game;
+   armed (the first press) it turns solid and says "Confirm: run in the game" */
+.studio .button-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1.1rem;
+  border: 2px solid var(--warn-border, #c98a1b);
+  background: var(--surface);
+  color: var(--warn-text);
+  font-weight: 700;
+}
+.studio .button-live[data-armed="true"] {
+  background: #c98a1b;
+  border-color: #c98a1b;
+  color: #ffffff;
+}
+.studio .button-live-stop {
+  border-color: #c62828;
+  color: #c62828;
+}
 .studio .button-file {
   display: inline-flex;
   align-items: center;

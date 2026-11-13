@@ -16,9 +16,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
-import LiveRun from "@/components/flows/LiveRun";
+import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
+import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, writeChoice } from "@/lib/flow/prefs";
-import { allNodes, commandPieces, findNode, markOf, type RunnerDoc, type RunnerNode, runnerWorkspace, textOf, titleOf, valueText } from "@/lib/flow/runner";
+import { allNodes, commandPieces, findNode, markOf, type RunnerDoc, type RunnerNode, type RunnerSettingsDoc, type RunSettings, runnerWorkspace, settingsProblem, textOf, titleOf, valueText, withSettings } from "@/lib/flow/runner";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
 import { INJECT } from "@/lib/flow/theme";
 
@@ -38,8 +39,38 @@ const darkQuery = () => (typeof window !== "undefined" && window.matchMedia ? wi
 // The runner flows the Run panel can start (scripts/flow_run.py's FLOWS; 2026-11-13)
 const LIVE_FLOWS: readonly string[] = ["xmas_dun02_rogue"];
 
-export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; backendUrl?: string | null }) {
+/** The person's Run settings, remembered per flow in this browser (a convenience; the Run helper
+ * checks them again). Unknown or broken: the export's defaults. */
+function readSettings(store: ReturnType<typeof browserStorage>, id: string, d: RunnerSettingsDoc): RunSettings {
+  try {
+    const v = JSON.parse(store?.getItem(`poring-lab.flows.runsettings.${id}.v1`) ?? "null") as Partial<RunSettings> | null;
+    const s = { ...d.defaults, ...(v ?? {}) };
+    return settingsProblem(s, d) === null ? s : { ...d.defaults };
+  } catch {
+    return { ...d.defaults };
+  }
+}
+
+export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; backendUrl?: string | null }) {
   const store = useMemo(() => browserStorage(), []);
+  // 2026-11-13 (Batt): the hotbar keys and the weight limit are the person's, shown in the blocks
+  const sdoc = rawDoc.settings ?? null;
+  const [runSettings, setRunSettingsState] = useState<RunSettings | null>(() => (sdoc ? readSettings(store, rawDoc.id, sdoc) : null));
+  const setRunSettings = useCallback(
+    (s: RunSettings) => {
+      setRunSettingsState(s);
+      try {
+        store?.setItem(`poring-lab.flows.runsettings.${rawDoc.id}.v1`, JSON.stringify(s));
+      } catch {
+        // unremembered: this tab keeps them
+      }
+    },
+    [store, rawDoc.id],
+  );
+  const doc = useMemo(() => (runSettings ? withSettings(rawDoc, runSettings) : rawDoc), [rawDoc, runSettings]);
+  const settingsWhy = runSettings && sdoc ? settingsProblem(runSettings, sdoc) : null;
+  const isLive = LIVE_FLOWS.includes(doc.id);
+  const live = useLiveRun(backendUrl, doc.id, isLive); // one poller: the header's Run and the panel
   const [view, setViewState] = useState<(typeof VIEWS)[number]>(() => readChoice(store, KEYS.view, VIEWS, "blocks"));
   const [pythonPanel, setPythonPanel] = useState<(typeof OPEN_CLOSED)[number]>(() => {
     const wide = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 48rem)").matches : true;
@@ -147,6 +178,11 @@ export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: Ru
         </button>
       </div>
       <p className="studio-panel-note">An outline of {doc.script} with the code&apos;s own numbers (generated); it is not the runner and never runs.</p>
+      {runSettings && (
+        <p className="studio-panel-note" data-testid="runner-python-settings">
+          Your Run settings (added to the command when you press Run): <code>--fly-key {runSettings.fly_key} --player-home-key {runSettings.home_key} --weight-home {runSettings.weight_home.toFixed(2)}</code>
+        </p>
+      )}
       <CodeView ref={codeRef} code={doc.python} colour mark={mark} label={`Python: ${doc.file}`} testId="runner-python" />
     </>
   );
@@ -156,7 +192,7 @@ export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: Ru
       <header className="studio-bar">
         <div className="studio-brand">
           <span className="studio-home">Flows</span>
-          <span className="status-pill" title="A description of the runner; Simulate plays an example; the Run panel starts the real runner in the game">
+          <span className="status-pill" title="A description of the runner; Simulate plays an example; Run (beside it) starts the real runner in the game">
             {LIVE_FLOWS.includes(doc.id) ? "DESCRIPTION · SIMULATE · RUN" : "DESCRIPTION · SIMULATE only"}
           </span>
           <h1 className="studio-title" title={doc.title}>
@@ -179,6 +215,7 @@ export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: Ru
             <PlayIcon />
             <span className="button-text">Simulate</span>
           </button>
+          {isLive && <LiveRunButtons live={live} settings={runSettings} blocked={settingsWhy} />}
         </div>
       </header>
 
@@ -186,15 +223,18 @@ export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: Ru
         <p className="notice" role="note" data-testid="runner-notice">
           A DESCRIPTION of <code>{doc.script}</code>, made from its code by <code>scripts/runner_flow_export.py</code>: the blocks are the runner&apos;s loop in plain words, and every number
           and flag is the code&apos;s own. Click a block to see them. The blocks and Simulate run nothing in the game
-          {LIVE_FLOWS.includes(doc.id) ? "; the Run panel below starts the real runner (player mode)." : "."}
+          {isLive ? "; Run (at the top, beside Simulate) starts the real runner on this map (player mode)." : "."}
         </p>
-        {LIVE_FLOWS.includes(doc.id) && <LiveRun backendUrl={backendUrl} flow={doc.id} />}
+        {isLive && <LiveRun live={live} />}
         {copied === "failed" && (
           <p className="notice notice-warn" role="status">
             This browser would not copy automatically (the page is not a secure origin). The code is selected: press Ctrl+C (⌘C) to copy it.
           </p>
         )}
       </div>
+
+      <RunnerBinding doc={doc} />
+      {sdoc && runSettings && <RunSettingsStrip d={sdoc} s={runSettings} why={settingsWhy} onChange={setRunSettings} />}
 
       <div className="device-bar" aria-label="The runner">
         <Chip label="runner" value={doc.script} />
@@ -603,3 +643,86 @@ function PlayIcon() {
     </svg>
   );
 }
+
+/** The binding strip (as /flows' MapBinding): the map this runner plays, where its flow begins and
+ * the map's EXITS it takes (dungeon@9.41, Batt 2026-11-13: a bag over 50 % -> a Butterfly Wing
+ * home; a death -> respawn at the save point), from the export (an older one has none). */
+function RunnerBinding({ doc }: { doc: RunnerDoc }) {
+  const exits = doc.exits ?? [];
+  return (
+    <div className="map-binding" data-kind="block" data-testid="runner-binding">
+      <span className="mb-part">
+        <span className="mb-key">bound to map</span> <strong>{doc.map}</strong> <span className="muted">(the {doc.char}&apos;s runner)</span>
+      </span>
+      {doc.entry && (
+        <span className="mb-part">
+          <span className="mb-key">starts</span>
+          {doc.entry}
+        </span>
+      )}
+      <span className="mb-part" data-testid="runner-exits">
+        <span className="mb-key">exits</span>
+        {exits.length === 0 && <span className="muted">none in this export: the run ends on the map</span>}
+        {exits.map((x, i) => (
+          <span key={x.id} style={{ color: EXIT_COLOURS[x.kind] }}>
+            {i > 0 && " · "}→ {x.to} <span className="mb-how">({x.when}: {x.how})</span>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** The Run settings strip (2026-11-13, Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't
+ * hard-code them, a user changes them"): the hotbar keys and the weight limit, each from the
+ * export's fixed choices; the blocks show the choice at once, and Run sends it. */
+function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: RunSettings; why: string | null; onChange: (s: RunSettings) => void }) {
+  const keys = d.keys.filter((k) => !d.reserved.includes(k));
+  return (
+    <div className="map-binding run-settings" data-kind={why ? "plain" : "block"} data-testid="run-settings">
+      <span className="mb-part">
+        <span className="mb-key">your run settings</span>
+      </span>
+      <label className="mb-part">
+        Fly Wing key{" "}
+        <select value={s.fly_key} onChange={(e) => onChange({ ...s, fly_key: e.target.value })} data-testid="run-settings-fly">
+          {keys.map((k) => (
+            <option key={k} value={k}>
+              {k}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mb-part">
+        Butterfly Wing key{" "}
+        <select value={s.home_key} onChange={(e) => onChange({ ...s, home_key: e.target.value })} data-testid="run-settings-home">
+          {keys.map((k) => (
+            <option key={k} value={k}>
+              {k}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mb-part">
+        go home when the bag is over{" "}
+        <select value={String(s.weight_home)} onChange={(e) => onChange({ ...s, weight_home: Number(e.target.value) })} data-testid="run-settings-weight">
+          {d.weights.map((w) => (
+            <option key={w} value={String(w)}>
+              {Math.round(w * 100)} %
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} data-testid="run-settings-reset">
+        defaults ({d.defaults.fly_key}, {d.defaults.home_key}, {Math.round(d.defaults.weight_home * 100)} %)
+      </button>
+      <span className="mb-part muted">taken by the run: {d.reserved.join(", ")}</span>
+      {why && (
+        <span className="mb-part mb-warn" role="status">
+          {why}
+        </span>
+      )}
+    </div>
+  );
+}
+

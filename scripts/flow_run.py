@@ -23,7 +23,9 @@ A START runs, in order (as the night chain's run_pilot_v3.sh does):
    its "listening" line;
 4. the runner, in --player-mode (it types no line; it starts where the person left her, reads her
    stock from the hotbar, refuses a heavy bag or too little stock, ends when the Fly Wings fall to
-   one and goes home on a Butterfly Wing if F8 holds one). Its own checks refuse every unsafe start
+   one and goes home on a Butterfly Wing if F8 holds one). Its two map EXITS (dungeon@9.41): a bag
+   over 50 % ends the run and the Butterfly Wing takes her home; a death presses the death dialog's
+   move to saved location. Its own checks refuse every unsafe start
    (ASSIST, the interlock, her identity, her cell).
 A STOP sends SIGINT to the runner's process group (a clean end, rc 130). Either way the detect
 server is ended by PID when the runner exits, and the run's session goes into data/econ/lab.sqlite.
@@ -75,6 +77,49 @@ class Flow:
     flags: tuple[str, ...]
     why: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
+    # 2026-11-13 (Batt: "don't hard-code the keys; a user changes them"): the person's SETTINGS,
+    # each from a fixed list (settings_of): the defaults, and the row-1 keys the run uses already
+    settings: dict[str, Any] = field(default_factory=dict)
+    reserved_keys: tuple[str, ...] = ()
+
+
+# The settings a Run request may carry, and the runner flag each becomes. NOTHING else in a
+# request becomes an argument, and each value is one of a fixed list (settings_of).
+SETTING_FLAGS = {
+    "fly_key": "--fly-key",
+    "home_key": "--player-home-key",
+    "weight_home": "--weight-home",
+}
+KEY_CHOICES = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
+WEIGHT_CHOICES = tuple(round(0.30 + 0.05 * i, 2) for i in range(11))  # 0.30 .. 0.80
+
+
+def settings_of(flow: Flow, raw: Mapping[str, Any] | None) -> dict[str, Any] | str:
+    """PURE: the run's settings (the flow's defaults, then the request's), or why they cannot be.
+    Keys from KEY_CHOICES, the two different, neither one the run uses already; the weight from
+    WEIGHT_CHOICES. An unknown name is refused, never ignored."""
+    out = dict(flow.settings)
+    for k, v in (raw or {}).items():
+        if k not in flow.settings:
+            return f"unknown setting {k!r}"
+        out[k] = v
+    for k in ("fly_key", "home_key"):
+        if k in out and out[k] not in KEY_CHOICES:
+            return f"{k} {out[k]!r} is not a row-1 hotbar key (F1-F9)"
+        if k in out and out[k] in flow.reserved_keys:
+            return f"{k} {out[k]} is a key this run uses already ({', '.join(flow.reserved_keys)})"
+    if "fly_key" in out and out.get("fly_key") == out.get("home_key"):
+        return "the Fly Wing and the Butterfly Wing need two different keys"
+    if "weight_home" in out:
+        w = out["weight_home"]
+        if (
+            isinstance(w, bool)
+            or not isinstance(w, (int, float))
+            or round(float(w), 2) not in WEIGHT_CHOICES
+        ):
+            return f"weight_home {w!r} is not one of {list(WEIGHT_CHOICES)}"
+        out["weight_home"] = round(float(w), 2)
+    return out
 
 
 # rogue-xmas02.md 4DQ (2026-11-13): the Knife on arm B's fast loot JOINED THE BASE -- the highest
@@ -101,8 +146,16 @@ FLOWS: dict[str, Flow] = {
             "popup",
             "--swap-gap",
             "--player-mode",
+            "--respawn",
         ),  # fmt: skip
-        "rogue-xmas02.md 4DQ (the base) + --player-mode (Batt 2026-11-13: no GM lines)",
+        "rogue-xmas02.md 4DQ (the base) + --player-mode (Batt 2026-11-13: no GM lines) + the "
+        "map's two exits (dungeon@9.41, Batt 2026-11-13): weight over 50 % -> the Butterfly Wing "
+        "home; a death -> the death dialog's move to saved location",
+        # Batt 2026-11-13: "the Butterfly Wing on F9, the Fly Wing on F8" (a person may change
+        # them, and the weight, on /flows before Run); the Rogue's other row-1 keys are taken:
+        # F1 potion, F3 steal, F4 the Knife (--steal-opener), F5 the dagger (--bare-steal)
+        settings={"fly_key": "F8", "home_key": "F9", "weight_home": 0.50},
+        reserved_keys=("F1", "F3", "F4", "F5"),
     ),
 }
 
@@ -111,16 +164,41 @@ STOP_NAME = "STOP"  # the runner's --stop-file, in the run's own scratch folder
 STOP_GRACE_S = 90.0  # Stop: the runner ends at its next tick; SIGINT only if it has not by then
 
 
-def command(flow: Flow, label: str, stop_file: Path | None = None) -> list[str]:
+def command(flow: Flow, label: str, stop_file: Path | None = None,
+            settings: Mapping[str, Any] | None = None) -> list[str]:  # fmt: skip
     """PURE: the runner's argv for ``flow`` (the label names its session; ``stop_file`` is the
-    runner's --stop-file: its Stop ends the run through the normal end, with the packets)."""
+    runner's --stop-file: its Stop ends the run through the normal end, with the packets;
+    ``settings``: settings_of's output, else the flow's defaults)."""
     stop = [] if stop_file is None else ["--stop-file", str(stop_file)]
     head = ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/dungeon_hunt.py", "run"]
-    return [*head, *FIXED, "--minutes", str(flow.minutes), "--label", label, *stop, *flow.flags]
+    st = settings_of(flow, None) if settings is None else settings
+    if isinstance(st, str):
+        raise ValueError(st)
+    return [
+        *head,
+        *FIXED,
+        "--minutes",
+        str(flow.minutes),
+        "--label",
+        label,
+        *stop,
+        *flow.flags,
+        *settings_argv(st),
+    ]
+
+
+def settings_argv(st: Mapping[str, Any]) -> list[str]:
+    """PURE: the runner flags of a run's settings (in SETTING_FLAGS' order)."""
+    out: list[str] = []
+    for k, flag in SETTING_FLAGS.items():
+        if k in st:
+            v = st[k]
+            out += [flag, f"{v:.2f}" if isinstance(v, float) else str(v)]
+    return out
 
 
 def parse_request(text: str) -> dict[str, Any] | str:
-    """PURE: a valid request ({"id", "action", "flow"}) or why it is not one."""
+    """PURE: a valid request ({"id", "action", "flow", "settings"}) or why it is not one."""
     try:
         req = json.loads(text)
     except ValueError:
@@ -134,7 +212,16 @@ def parse_request(text: str) -> dict[str, Any] | str:
         return f"unknown action {action!r}"
     if action == "start" and flow not in FLOWS:
         return f"unknown flow {flow!r}"
-    return {"id": rid, "action": action, "flow": flow}
+    raw = req.get("settings")
+    if raw is not None and not isinstance(raw, dict):
+        return "settings must be an object"
+    st: dict[str, Any] | None = None
+    if action == "start":
+        got = settings_of(FLOWS[flow], raw)
+        if isinstance(got, str):
+            return got
+        st = got
+    return {"id": rid, "action": action, "flow": flow, "settings": st}
 
 
 def busy_reason(ps_lines: Sequence[str]) -> str | None:
@@ -175,6 +262,7 @@ class Helper:
         self.state = "idle"
         self.detail = "waiting for the Run button"
         self.flow: str | None = None
+        self.settings: dict[str, Any] | None = None  # the run's settings (settings_of)
         self.label: str | None = None
         self.request_id: str | None = None
         self.started: str | None = None
@@ -195,7 +283,11 @@ class Helper:
                 "label": self.label, "request_id": self.request_id, "started": self.started,
                 "ended": self.ended, "rc": self.rc, "t_wall": time.time(),
                 "log_tail": [] if log is None else tail(log),
-                "flows": {k: {"title": f.title, "minutes": f.minutes}
+                "settings": self.settings,
+                "flows": {k: {"title": f.title, "minutes": f.minutes, "settings": dict(f.settings),
+                              "choices": {"keys": list(KEY_CHOICES),
+                                          "reserved": list(f.reserved_keys),
+                                          "weights": list(WEIGHT_CHOICES)}}
                           for k, f in FLOWS.items()}}  # fmt: skip
 
     def write_status(self) -> None:
@@ -228,10 +320,10 @@ class Helper:
             self.detail = "a run is already going: press Stop first"
             self.note(event="start_refused", why="busy", request=req["id"])
         else:
-            self.start(FLOWS[req["flow"]], req["id"])
+            self.start(FLOWS[req["flow"]], req["id"], req.get("settings"))
 
     # -- a run --
-    def start(self, flow: Flow, rid: str) -> None:
+    def start(self, flow: Flow, rid: str, settings: Mapping[str, Any] | None = None) -> None:
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
         why = busy_reason(ps.splitlines())
         if why is not None:
@@ -244,7 +336,11 @@ class Helper:
         self.run_dir = SCRATCH / self.label
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.cap_s = flow.minutes * 60 + CAP_GRACE_S
-        self.note(event="start", flow=flow.id, label=self.label, request=rid)
+        got = settings_of(flow, settings)  # parse_request checked them; the defaults when absent
+        self.settings = flow.settings if isinstance(got, str) else got
+        self.note(
+            event="start", flow=flow.id, label=self.label, request=rid, settings=self.settings
+        )
         self.detail = "starting the vision worker"
         self.write_status()
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", WORKER],
@@ -287,7 +383,7 @@ class Helper:
         self.stop_file.unlink(missing_ok=True)
         self.stop_t = None
         with open(self.run_dir / "run.log", "wb") as fh:
-            argv = command(flow, self.label, self.stop_file)
+            argv = command(flow, self.label, self.stop_file, self.settings)
             self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            start_new_session=True)  # fmt: skip

@@ -4,24 +4,40 @@
 // backend's POST /flows/run (routes_flowrun.py: the Settings page's write rules) and the host's Run
 // helper (scripts/flow_run.py, player mode: it types no GM line and starts where she stands).
 // Shows the helper's status every 2 s. Text only: every value from the backend renders as text.
+//
+// ONE poller per page (useLiveRun): the header's Run / Stop beside Simulate (Batt 2026-11-13: "a
+// Run button next to Simulate, to run it for real on this map") and the status panel share it.
+// The header's Run takes TWO presses (a second within ARM_MS): it sits beside Simulate, which
+// runs nothing, and a live run must never start from a slip.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { liveButtons, liveLabel, type LiveStatus, REFUSALS } from "@/lib/flow/liverun";
+import type { RunSettings } from "@/lib/flow/runner";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
+export const ARM_MS = 4000;
 
-export default function LiveRun({ backendUrl, flow }: { backendUrl: string | null; flow: string }) {
+export type Live = {
+  flow: string;
+  st: LiveStatus | null;
+  err: string | null;
+  busy: boolean;
+  send: (action: "start" | "stop", settings?: RunSettings | null) => Promise<void>;
+  buttons: ReturnType<typeof liveButtons>;
+};
+
+export function useLiveRun(backendUrl: string | null, flow: string, enabled = true): Live {
   const base = backendHttpBase(backendUrl);
   const [st, setSt] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const csrf = useRef<string | null>(null);
-
   const refresh = useRef<() => void>(() => {});
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     const tick = async () => {
       try {
@@ -44,10 +60,10 @@ export default function LiveRun({ backendUrl, flow }: { backendUrl: string | nul
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [base]);
+  }, [base, enabled]);
 
   const send = useCallback(
-    async (action: "start" | "stop"): Promise<void> => {
+    async (action: "start" | "stop", settings: RunSettings | null = null): Promise<void> => {
       setBusy(true);
       setErr(null);
       try {
@@ -61,7 +77,7 @@ export default function LiveRun({ backendUrl, flow }: { backendUrl: string | nul
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            body: JSON.stringify(action === "start" ? { action, flow } : { action }),
+            body: JSON.stringify(action === "start" ? { action, flow, ...(settings ? { settings } : {}) } : { action }),
           });
           if (r.ok) break;
           const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string } };
@@ -83,7 +99,55 @@ export default function LiveRun({ backendUrl, flow }: { backendUrl: string | nul
     [base, flow],
   );
 
-  const b = liveButtons(st, flow);
+  return { flow, st, err, busy, send, buttons: liveButtons(st, flow) };
+}
+
+/** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
+ * within ARM_MS; the armed button says what it will do. */
+export function LiveRunButtons({ live, settings = null, blocked = null }: { live: Live; settings?: RunSettings | null; blocked?: string | null }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), ARM_MS);
+    return () => clearTimeout(t);
+  }, [armed]);
+  const b = live.buttons;
+  const running = b.canStop;
+  return (
+    <>
+      {running ? (
+        <button type="button" className="button button-live button-live-stop" disabled={live.busy} onClick={() => void live.send("stop")} title="Stop the real run: it ends through its normal end" data-testid="runner-live-stop">
+          <StopIcon />
+          <span className="button-text">Stop</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="button button-live"
+          data-armed={armed ? "true" : "false"}
+          disabled={!b.canStart || live.busy || blocked !== null}
+          onClick={() => {
+            if (!armed) {
+              setArmed(true);
+              return;
+            }
+            setArmed(false);
+            void live.send("start", settings);
+          }}
+          title={blocked ?? (b.canStart ? "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm." : (b.why ?? "Run is not available now"))}
+          aria-label={armed ? "Confirm: run in the game" : "Run in the game"}
+          data-testid="runner-live-run"
+        >
+          <RunIcon />
+          <span className="button-text">{armed ? "Confirm: run in the game" : "Run"}</span>
+        </button>
+      )}
+    </>
+  );
+}
+
+export default function LiveRun({ live }: { live: Live }) {
+  const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
@@ -92,19 +156,12 @@ export default function LiveRun({ backendUrl, flow }: { backendUrl: string | nul
         {st?.label ? ` · ${st.label}` : ""}
       </p>
       <p>
-        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under 48 %, at least 5 Fly Wings and 5 heal items on the hotbar), set the console to
-        ASSIST, then press Run. She plays until you press Stop, until her Fly Wings run low (one stays for the escape; a Butterfly Wing on F8 takes her home), or for at most
+        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under 48 %, at least 5 Fly Wings and 5 heal items on the hotbar, the Fly Wings and the Butterfly Wings on the keys of your run settings),
+        set the console to ASSIST, then press <strong>Run</strong> at the top (twice: the second press confirms). She plays until you press Stop, until her Fly Wings run low, until the bag is over
+        50 % (the Butterfly Wing takes her home), until she dies (she respawns at the save point), or for at most
         {` ${st?.flows?.[flow]?.minutes ?? 120} `}
         minutes. It types no GM command.
       </p>
-      <div className="button-row">
-        <button type="button" className="button button-primary button-run" disabled={!b.canStart || busy} onClick={() => void send("start")} data-testid="live-run-start">
-          Run
-        </button>
-        <button type="button" className="button button-small" disabled={!b.canStop || busy} onClick={() => void send("stop")} data-testid="live-run-stop">
-          Stop
-        </button>
-      </div>
       {b.why && <p className="notice-sub">{b.why}</p>}
       {st?.detail && <p className="notice-sub">{st.detail}</p>}
       {st?.started && (
@@ -125,5 +182,22 @@ export default function LiveRun({ backendUrl, flow }: { backendUrl: string | nul
         </p>
       )}
     </section>
+  );
+}
+
+function RunIcon() {
+  return (
+    <svg className="button-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6.5 5.25v5.5l4.25-2.75z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg className="button-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+      <rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" />
+    </svg>
   );
 }

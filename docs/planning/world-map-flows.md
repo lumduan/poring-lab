@@ -453,3 +453,15 @@ Simulate switching to Map view, the /flows strip (plain and bound), the renamed 
 
 Asked of matpilot: a re-run of steps a and c (the edge after State it, the lint chip after the wing,
 the graph's height and first view at both sizes).
+
+
+### 14.9 matpilot's re-check (2026-11-13 ~11:00) and the last fixes
+
+- VERIFIED by it: the edge stays after State it (x:town.3 -> field_1 e:arrival), the lint 0 errors
+  after the wing ("(checking…)" for ~3 s), the graph 469 px at 1440 x 900 (was 191), no card under
+  the minimap or the attribution, the wrapped lines, the hidden head dot, the radios.
+- Left by it, done: the first view and "Fit the maps" fit the MAP cards only (Any other map, left
+  of them, had stretched the box to the session row: field_1 was never in view); the handle refresh
+  is a layout effect (1 error#008 was left after State it); the attribution top-right (top-left
+  printed over "open the client").
+

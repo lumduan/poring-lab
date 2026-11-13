@@ -625,3 +625,146 @@ def test_the_run_start_passes_db_off_under_player_mode() -> None:
     # the only other check in run() is the setup's @warp wait, which a player run never reaches
     # (player_plan gives it no line)
     assert run_src.count("cr.check(") == 2
+
+
+# --- dungeon@9.41 (Batt 2026-11-13): the map's two exits ---------------------------------------
+def test_the_weight_exit_ends_the_run_only_over_its_limit() -> None:
+    due = dh.weight_home_due
+    assert due(None, 0.99, True) is None  # off
+    assert due(0.50, 0.50, False) is None  # "over 50 %": 50 % itself goes on
+    assert "0.51 > 0.50" in str(due(0.50, 0.51, False))
+    assert due(0.50, 0.30, True) is None  # a READ weight wins over a stale red read
+    assert "red" in str(due(0.50, None, True))  # unread, but the client draws it red (>= 50 %)
+    assert due(0.60, None, True) is None  # red says >= 50 %, not over 60 %
+    assert due(0.50, None, False) is None
+
+
+def test_the_exits_go_with_player_mode_and_a_sane_limit() -> None:
+    ns = types.SimpleNamespace
+    assert dh.exits_refused(ns(player_mode=True, weight_home=0.5, respawn=True)) is None
+    assert dh.exits_refused(ns(player_mode=False, weight_home=None, respawn=False)) is None
+    assert "player-mode" in str(
+        dh.exits_refused(ns(player_mode=False, weight_home=0.5, respawn=False))
+    )
+    assert "player-mode" in str(
+        dh.exits_refused(ns(player_mode=False, weight_home=None, respawn=True))
+    )
+    assert "outside" in str(dh.exits_refused(ns(player_mode=True, weight_home=0.05, respawn=False)))
+    assert "outside" in str(dh.exits_refused(ns(player_mode=True, weight_home=1.5, respawn=False)))
+
+
+def _respawn(clock: _Clock, dead: Any, seen: Any) -> dict[str, Any]:
+    return dh.respawn_end(
+        dead=lambda: dead(clock.t),
+        press=lambda: clock.log.append("press"),
+        basic_info=lambda: seen(clock.t),
+        sleep=clock.sleep,
+        now=clock.now,
+    )
+
+
+def test_the_respawn_presses_once_while_the_dialog_reads_and_waits_for_the_town() -> None:
+    c = _Clock()
+    # the press at t=1.0 (after RESPAWN_SETTLE_S); the dialog gone 0.5 s later, a load 1-6 s
+    rec = _respawn(c, lambda t: t < 1.5, lambda t: not 2.0 <= t < 7.0)
+    assert c.log == ["press"] and rec["pressed"] is True and "why" not in rec
+    assert rec["dialog_gone_s"] == pytest.approx(0.5) and rec["load_s"] == pytest.approx(1.0)
+    assert rec["back_s"] == pytest.approx(6.0)
+
+
+def test_the_respawn_presses_nothing_without_the_dialog_and_never_twice() -> None:
+    c = _Clock()
+    rec = _respawn(c, lambda t: False, lambda t: True)
+    assert c.log == [] and rec["pressed"] is False and "does not read" in rec["why"]
+    c = _Clock()
+    rec = _respawn(c, lambda t: True, lambda t: True)  # the dialog stays
+    assert c.log == ["press"] and "stayed" in rec["why"]
+    c = _Clock()
+    rec = _respawn(c, lambda t: t < 1.5, lambda t: True)  # gone, but no load: still here?
+    assert c.log == ["press"] and "no load screen" in rec["why"]
+    c = _Clock()
+    rec = _respawn(c, lambda t: t < 1.5, lambda t: t < 2.0)  # a load that never ends
+    assert c.log == ["press"] and "did not end" in rec["why"]
+
+
+def test_the_respawn_button_is_the_dialogs_first_one_inside_its_box() -> None:
+    import gm_vitals as gv
+
+    x0, y0, w, h = gv.DEAD_BOX
+    for x, y in (dh.MOVE_TO_SAVE, gv.RETURN_TO_GAME):
+        assert x0 < x < x0 + w and y0 < y < y0 + h
+    assert dh.MOVE_TO_SAVE[0] == gv.RETURN_TO_GAME[0] and dh.MOVE_TO_SAVE[1] < gv.RETURN_TO_GAME[1]
+
+
+def test_the_respawn_is_on_the_player_path_only_behind_its_flag_and_types_nothing() -> None:
+    run_ = _func("run")
+    calls = [
+        n for n in ast.walk(run_) if isinstance(n, ast.Call) and _call_name(n) == "respawn_end"
+    ]
+    assert len(calls) == 1
+    node: ast.AST = calls[0]
+    in_player_else = flagged = False
+    while node in PARENT:
+        up = PARENT[node]
+        if isinstance(up, ast.If) and _is_not_player(up.test) and any(node is s for s in up.orelse):
+            in_player_else = True
+        if isinstance(up, ast.If) and "respawn" in (ast.get_source_segment(SRC, up.test) or ""):
+            flagged = True
+        node = up
+    assert in_player_else and flagged
+    for fn in ("respawn_end", "weight_home_due"):
+        src = ast.get_source_segment(SRC, _func(fn)) or ""
+        for word in ("typed_line", "gm_line", "close_chat", "type_text", '"@'):
+            assert word not in src, (fn, word)
+
+
+def test_the_record_carries_the_exits_only_when_on(monkeypatch: Any) -> None:
+    base = dh.fixes_of(_ns(monkeypatch))
+    assert "weight_home" not in base and "respawn" not in base
+    on = dh.fixes_of(_ns(monkeypatch, "--player-mode", "--weight-home", "0.5", "--respawn"))
+    assert on["weight_home"] == 0.5 and on["respawn"] is True
+    assert {k: v for k, v in on.items() if k not in ("weight_home", "respawn", "player_mode")} == {
+        k: v for k, v in base.items() if k != "player_mode"
+    }
+
+
+def test_run_refuses_the_exits_without_player_mode_before_any_input(monkeypatch: Any) -> None:
+    import ro_agent as r
+
+    a = _ns(monkeypatch, "--respawn")
+    monkeypatch.undo()
+
+    def no_session(*_: Any, **__: Any) -> Any:
+        raise AssertionError("a session was opened")
+
+    monkeypatch.setattr(r, "session", no_session)
+    with pytest.raises(SystemExit) as exc:
+        dh.run(a)
+    assert "dungeon@9.41 refused" in str(exc.value) and "--player-mode" in str(exc.value)
+
+
+def test_the_fly_key_is_a_free_row1_key_and_the_record_names_it(monkeypatch: Any) -> None:
+    keys = dh.CHARS_CONF["rogue"]["keys"]
+    assert dh.fly_key_refused(None, keys, "F4") is None
+    assert dh.fly_key_refused("F8", keys, "F4") is None
+    assert dh.fly_key_refused("F2", keys, "F4") is None  # its own default
+    assert "row-1" in str(dh.fly_key_refused("F12", keys, "F4"))
+    assert "potion" in str(dh.fly_key_refused("F1", keys, "F4"))
+    assert "--steal-opener" in str(dh.fly_key_refused("F4", keys, "F4"))
+    assert dh.fixes_of(_ns(monkeypatch, "--fly-key", "F8"))["fly_key"] == "F8"
+    assert "fly_key" not in dh.fixes_of(_ns(monkeypatch))
+
+
+def test_run_refuses_a_taken_fly_key_before_any_input(monkeypatch: Any) -> None:
+    import ro_agent as r
+
+    a = _ns(monkeypatch, "--fly-key", "F1")
+    monkeypatch.undo()
+
+    def no_session(*_: Any, **__: Any) -> Any:
+        raise AssertionError("a session was opened")
+
+    monkeypatch.setattr(r, "session", no_session)
+    with pytest.raises(SystemExit) as exc:
+        dh.run(a)
+    assert "refused" in str(exc.value) and "potion" in str(exc.value)

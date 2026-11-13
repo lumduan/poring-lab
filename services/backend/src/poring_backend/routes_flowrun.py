@@ -37,10 +37,25 @@ HELPER_FRESH_S = 10.0  # the helper rewrites its status every 2 s: older = not r
 ACTIVE = ("starting", "running", "stopping")
 
 
+HotbarKey = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"]
+
+
+class RunSettings(BaseModel):
+    """A person's run settings (2026-11-13, Batt: "don't hard-code the keys"): hotbar keys and the
+    weight limit only, each from a fixed range. The Run helper checks them again against the flow
+    (its defaults and the keys the run uses already: scripts/flow_run.py settings_of)."""
+
+    model_config = ConfigDict(extra="forbid")
+    fly_key: HotbarKey | None = None
+    home_key: HotbarKey | None = None
+    weight_home: float | None = Field(default=None, ge=0.3, le=0.8)
+
+
 class RunBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["start", "stop"]
     flow: str | None = Field(default=None, max_length=64)
+    settings: RunSettings | None = None
 
 
 def run_dir(state: AppState) -> Path:
@@ -77,6 +92,9 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
         return 409, "already_running"
     if mode != Mode.ASSIST:
         return 409, "mode_not_assist"
+    s = body.settings
+    if s is not None and s.fly_key is not None and s.fly_key == s.home_key:
+        return 400, "settings_same_key"
     return None
 
 
@@ -95,7 +113,9 @@ def post_run(body: RunBody, request: Request,
         state.drops.record("flowrun_http", why[1], "post")
         raise HTTPException(why[0], {"reason": why[1]})
     rid = uuid.uuid4().hex
-    req = {"id": rid, "action": body.action, "flow": body.flow, "at": time.time()}
+    req: dict[str, Any] = {"id": rid, "action": body.action, "flow": body.flow, "at": time.time()}
+    if body.action == "start" and body.settings is not None:
+        req["settings"] = body.settings.model_dump(exclude_none=True)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".request.{rid}"
     tmp.write_text(json.dumps(req) + "\n")

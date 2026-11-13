@@ -1234,6 +1234,113 @@ def player_home_count_why(count: int | None) -> str | None:
     return None
 
 
+# --- dungeon@9.41 (Batt 2026-11-13): the map's two EXITS of a --player-mode run ----------------
+# "If the weight is over 50 %, use a Butterfly Wing to go back to town: an exit of the map. If she
+# dies, press to go back and respawn: an exit of the map too."
+WEIGHT_HOME_VERSION = "9.41"
+WEIGHT_HOME_RANGE = (0.20, 0.90)  # --weight-home's accepted shares
+# The death dialog ("Game option") is gm_vitals.DEAD_BOX; its FIRST button "move to saved location"
+# (the client's Korean 저장된 지역으로 이동) respawns at the save point. Measured 2026-11-13 on TWO
+# deaths of the F1 trial's recording (20261112T084927-rdp-flee-xmas02-sk frames 83 and 108,
+# game-region pixels): face rows 473-490, columns ~535-755; the second button ("return to game",
+# gm_vitals.RETURN_TO_GAME, rows 496-513) is the setup's known step.
+MOVE_TO_SAVE = (645, 481)
+RESPAWN_SETTLE_S = 1.0  # after the death read, the dialog drawn before the press
+RESPAWN_LOAD_S = 4.0  # after the press, the load screen (Basic Info unread) starts by then ...
+RESPAWN_WAIT_S = 20.0  # ... and Basic Info reads again (the save point's map drawn) by then
+RESPAWN_POLL_S = 0.25
+
+
+def weight_home_due(limit: float | None, share: float | None, red: bool) -> str | None:
+    """PURE (dungeon@9.41): why the run ends for its way home (None: it goes on). Over ``limit``
+    (--weight-home; None: off) on a READ weight; an unread weight whose line the client draws RED
+    (>= 50 %, Amendment I) ends it too when the limit is at or under REGEN_STOP. Read in the UI
+    watch, which never runs mid-fight: a fight is finished first."""
+    if limit is None:
+        return None
+    if share is not None:
+        return f"weight {share:.2f} > {limit:.2f}" if share > limit else None
+    if red and limit <= REGEN_STOP:
+        return f"the weight line reads red (>= {REGEN_STOP:.0%}), over {limit:.2f}"
+    return None
+
+
+def fly_key_refused(key: str | None, keys: Mapping[str, str], opener: str | None) -> str | None:
+    """PURE (2026-11-13, Batt: "don't hard-code the keys; a user changes them"): why --fly-key
+    cannot be the Fly Wing's key (None: it can, or it is not given). A row-1 hotbar key (F1-F9),
+    no other key of the run's (``keys`` without its own "fly") and not --steal-opener's."""
+    if key is None:
+        return None
+    try:
+        hotbar_slot(key)
+    except ValueError:
+        return f"the Fly Wing key {key!r} is not a row-1 hotbar key (F1-F9)"
+    used = sorted(w for w, k in keys.items() if k == key and w != "fly")
+    if opener == key:
+        used.append("--steal-opener")
+    if used:
+        return f"the Fly Wing key {key} is already the run's ({', '.join(used)})"
+    return None
+
+
+def exits_refused(a: argparse.Namespace) -> str | None:
+    """PURE (dungeon@9.41): why --weight-home / --respawn cannot run (None: they can)."""
+    wh = getattr(a, "weight_home", None)
+    rs_ = getattr(a, "respawn", False)
+    if (wh is not None or rs_) and not getattr(a, "player_mode", False):
+        return "--weight-home and --respawn go with --player-mode (the lab's runs warp and revive)"
+    if wh is not None and not (WEIGHT_HOME_RANGE[0] <= wh <= WEIGHT_HOME_RANGE[1]):
+        return f"--weight-home {wh} is outside {WEIGHT_HOME_RANGE[0]}-{WEIGHT_HOME_RANGE[1]}"
+    return None
+
+
+def respawn_end(*, dead: Callable[[], bool], press: Callable[[], None],
+                basic_info: Callable[[], bool], sleep: Callable[[float], None] = time.sleep,
+                now: Callable[[], float] = time.monotonic,
+                rec: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.41: a --player-mode death's way out -- the death dialog's FIRST button ("move to
+    saved location"), ONCE, and only while the dialog reads (its signature, gm_vitals.DEAD_STATE).
+    Then the map change as the runner sees one: Basic Info unread (the load screen) within
+    RESPAWN_LOAD_S, then read again within RESPAWN_WAIT_S (the save point's map drawn). It never
+    presses again: a dialog that stays, or no load, is recorded and left to the person. ``rec``
+    is filled IN PLACE ({"pressed", "why", "dialog_gone_s", "load_s", "back_s"})."""
+    rec = {} if rec is None else rec
+    rec.update(pressed=False)
+    sleep(RESPAWN_SETTLE_S)
+    if not dead():
+        rec["why"] = "the death dialog does not read: nothing pressed"
+        return rec
+    press()
+    rec["pressed"] = True
+    t0 = now()
+    gone: float | None = None
+    load: float | None = None
+    back: float | None = None
+    while now() - t0 < RESPAWN_WAIT_S:
+        sleep(RESPAWN_POLL_S)
+        t = now() - t0
+        if gone is None and not dead():
+            gone = t
+        if load is None:
+            if not basic_info():
+                load = t
+            elif t > RESPAWN_LOAD_S:
+                break
+        elif basic_info():
+            back = t
+            break
+    rec.update(dialog_gone_s=None if gone is None else round(gone, 2),
+               load_s=None if load is None else round(load, 2),
+               back_s=None if back is None else round(back, 2))  # fmt: skip
+    if gone is None:
+        rec["why"] = "the death dialog stayed after the press (the person's)"
+    elif load is None:
+        rec["why"] = "no load screen after the press (she may still be here: the person's)"
+    elif back is None:
+        rec["why"] = "the load did not end in time (the person's)"
+    return rec
+
+
 def player_home_end(key: str | None, reason: str, seated: bool, *,
                     read_count: Callable[[], int | None], press: Callable[[], None],
                     stand: Callable[[], None], basic_info: Callable[[], bool],
@@ -2716,6 +2823,12 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["miss_cue_rule"] = MISS_CUE_RULE
     if getattr(a, "rest", "spot") != "spot":
         out["rest"] = a.rest
+    if getattr(a, "weight_home", None) is not None:  # dungeon@9.41: the map's exits, when on
+        out["weight_home"] = a.weight_home
+    if getattr(a, "respawn", False):
+        out["respawn"] = True
+    if getattr(a, "fly_key", None) is not None:  # 2026-11-13: the person's Fly Wing key
+        out["fly_key"] = a.fly_key
     if getattr(a, "walk_ahead", WALK_AHEAD) != WALK_AHEAD:  # the long legs (idle study 6.1)
         out["walk_ahead"] = a.walk_ahead
     if getattr(a, "walk_through", False):
@@ -4787,6 +4900,12 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     crk = conf.get("data", a.char)  # dungeon@8: the crusader.py data dir (the Rogue is data/thief)
     map_ = a.map
     keys_ = conf["keys"]
+    fly_key = getattr(a, "fly_key", None)  # 2026-11-13: the person's Fly Wing key (before all)
+    if fly_key is not None:
+        why_fk = fly_key_refused(fly_key, keys_, getattr(a, "steal_opener", None))
+        if why_fk:
+            raise SystemExit(f"dungeon@{WEIGHT_HOME_VERSION} refused: {why_fk}")
+        keys_ = {**keys_, "fly": fly_key}  # the stock read, the presses and the checks follow it
     strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
     player = bool(getattr(a, "player_mode", False))  # dungeon@9.35 (docs/planning/player-mode.md)
     why_pm = player_mode_refused(a)  # before any input: the flags that type GM lines
@@ -4907,6 +5026,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
     if why_hk:
         raise SystemExit(f"dungeon@{PLAYER_HOME_VERSION} refused: {why_hk}")
+    why_ex = exits_refused(a)  # dungeon@9.41: the map's exits, before any input
+    if why_ex:
+        raise SystemExit(f"dungeon@{WEIGHT_HOME_VERSION} refused: {why_ex}")
     home_key: str | None = None  # dungeon@9.35b: the Butterfly Wing's key (--player-mode only)
     if player:
         home_key = getattr(a, "player_home_key", None) or conf.get("home_key")
@@ -7902,6 +8024,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             "red": red_now})  # fmt: skip
                     w_share = w_now if w_now is not None else w_share
                     red_seen = red_now
+                    # dungeon@9.41: heavier than --weight-home -> the run ends (never mid-fight:
+                    # the UI watch waits) and the end's Butterfly Wing takes her home
+                    why_wh = weight_home_due(getattr(a, "weight_home", None), w_share, red_seen)
+                    if why_wh is not None:
+                        reason = f"weight_home: {why_wh}"
+                        sh_ = None if w_share is None else round(w_share, 4)
+                        ev({"kind": "weight_home", "share": sh_, "red": red_seen,
+                            "limit": a.weight_home})  # fmt: skip
+                        break
                 overweight = red_seen or (w_share is not None and w_share >= REGEN_STOP)
                 # Amendment E: a fight, a loot step or a rest is activity, never idle (run 3: a
                 # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
@@ -8664,6 +8795,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             else:  # dungeon@9.35b: the Butterfly Wing home (a count >= 1), once, then what she
                 # was left as: seated (a rest, no wing), standing, home, or dead with its dialog
                 home_rec: dict[str, Any] = {"pressed": False, "stood": False}  # filled in place
+                respawned = False  # dungeon@9.41: the death's way out pressed and arrived
+                if reason == "death" and getattr(a, "respawn", False):  # dungeon@9.41: the exit
+                    rsp: dict[str, Any] = {"pressed": False}  # filled in place
+
+                    def respawn_press() -> None:
+                        x_, y_ = gx0 + MOVE_TO_SAVE[0], gy0 + MOVE_TO_SAVE[1]
+                        agent_raw.move(x_ + 4, y_ + 3)  # two motions: a cold click is ignored
+                        time.sleep(0.08)
+                        agent_raw.move(x_, y_)
+                        time.sleep(0.3)
+                        agent_raw.click(x_, y_)
+
+                    try:
+                        respawn_end(dead=lambda: r.is_state(screen, gv.DEAD_STATE),
+                                    press=respawn_press,
+                                    basic_info=lambda: hpp.read(frame(), glyphs) is not None,
+                                    rec=rsp)  # fmt: skip
+                    except Exception as exc:  # noqa: BLE001 -- recorded; the end goes on
+                        rsp["error"] = repr(exc)[:300]
+                    ev({"kind": "player_respawn", **rsp})
+                    respawned = bool(rsp.get("pressed")) and rsp.get("back_s") is not None
                 try:
                     import hotbar_count as hb_h
 
@@ -8684,7 +8836,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 ev({"kind": "player_home", **home_rec})
                 ev({"kind": "player_end", "reason": reason,
                     "seated": seated_end and not home_rec.get("stood"),
-                    "home": bool(home_rec.get("pressed")), "dead": reason == "death"})  # fmt: skip
+                    "home": bool(home_rec.get("pressed")), "dead": reason == "death",
+                    "respawned": respawned})  # fmt: skip
             print(r.to_png(screen.full(), out / "end.png"), flush=True)
     t1 = r.ns()
     evf.close()
@@ -9020,6 +9173,31 @@ def main() -> int:
         help="dungeon@9.40 (Batt 2026-11-13, the /flows Run button's Stop): when PATH exists, the "
         "run ends at the next tick through its NORMAL end (the safe-end escape, the session's "
         "packets, --player-mode's way home), unlike a SIGINT, which skips them",
+    )
+    t.add_argument(
+        "--fly-key",
+        default=None,
+        metavar="KEY",
+        help="2026-11-13 (Batt: the person sets the hotbar keys): the Fly Wing's row-1 hotbar key "
+        "(default: the character's, F2). Its stock is read from that slot and every escape presses "
+        "it; refused when it is another key of the run's",
+    )
+    t.add_argument(
+        "--weight-home",
+        type=float,
+        default=None,
+        metavar="SHARE",
+        help="dungeon@9.41 (Batt 2026-11-13, the map's exit; --player-mode only): when the read "
+        "weight share is over SHARE (e.g. 0.50), or the line reads red at a SHARE <= 0.50, the run "
+        "ends after its fight and the end's Butterfly Wing takes her home",
+    )
+    t.add_argument(
+        "--respawn",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.41 (Batt 2026-11-13, the map's other exit; --player-mode only): a death "
+        "presses the death dialog's FIRST button (move to saved location) once, only while the "
+        "dialog reads, and waits for the save point's map; OFF: the dialog is the person's",
     )
     t.add_argument(
         "--defend-box",

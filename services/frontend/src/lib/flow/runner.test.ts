@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import type * as BlocklyT from "blockly/core";
 
 import { registerRunner, runnerThemes } from "../../components/flows/blockly-runner.ts";
-import { allNodes, blockType, checkDoc, commandPieces, findNode, markOf, message, nodeAtLine, RUNNER_STYLES, type RunnerDoc, type RunnerPart, runnerDefs, runnerWorkspace, textOf, wrapParts } from "./runner.ts";
+import { allNodes, blockType, checkDoc, commandPieces, findNode, markOf, message, nodeAtLine, RUNNER_STYLES, type RunnerDoc, type RunnerPart, runnerDefs, runnerWorkspace, settingsProblem, textOf, withSettings, wrapParts } from "./runner.ts";
 import { findRunner, RUNNERS, runnerForMap, runnerHref } from "./runners/index.ts";
 import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
@@ -186,3 +186,34 @@ test("a runner flow is found by its id or its map; its link opens /flows", () =>
   assert.equal(runnerForMap(undefined), null);
   assert.equal(runnerHref(DOC), "/flows?runner=xmas_dun02_rogue");
 });
+
+// --- 2026-11-13 (Batt: the hotbar keys and the weight limit are the person's, shown in the blocks)
+test("the run settings show in the blocks and the params; the Python keeps its lines", () => {
+  const d = DOC;
+  assert.ok(d.settings, "the export carries the settings");
+  assert.deepEqual(d.settings.defaults, { fly_key: "F8", home_key: "F9", weight_home: 0.5 });
+  const mine = withSettings(d, { fly_key: "F6", home_key: "F7", weight_home: 0.65 });
+  const shown = (doc: RunnerDoc, param: string) =>
+    allNodes(doc).flatMap((n) => [...(n.parts ?? []), ...(n.branches ?? []).flatMap((b) => b.parts)]).filter((p): p is Extract<RunnerPart, { param: string }> => "param" in p && p.param === param).map((p) => p.shown);
+  assert.ok(shown(d, "cmd.weight_home").length >= 1 && shown(d, "cmd.weight_home").every((v) => v === "50"));
+  assert.ok(shown(mine, "cmd.weight_home").every((v) => v === "65"));
+  assert.ok(shown(mine, "cmd.player_home_key").length >= 1 && shown(mine, "cmd.player_home_key").every((v) => v === "F7"));
+  assert.ok(shown(mine, "cmd.fly_key").length >= 1 && shown(mine, "cmd.fly_key").every((v) => v === "F6"));
+  assert.equal(mine.params["cmd.weight_home"].value, 0.65);
+  assert.equal(mine.python, d.python); // its lines are the blocks' marks
+  assert.equal(allNodes(mine).length, allNodes(d).length);
+  assert.deepEqual(checkDoc(mine, STYLES), []);
+  assert.equal(shown(d, "cmd.weight_home")[0], "50", "the export itself is unchanged");
+});
+
+test("the run settings are checked against the export's own choices", () => {
+  const s = DOC.settings;
+  assert.ok(s);
+  assert.equal(settingsProblem(s.defaults, s), null);
+  assert.match(String(settingsProblem({ ...s.defaults, fly_key: "F4" }, s)), /taken by the run/);
+  assert.match(String(settingsProblem({ ...s.defaults, home_key: "F8" }, s)), /two different keys/);
+  assert.match(String(settingsProblem({ ...s.defaults, fly_key: "F12" }, s)), /not one of/);
+  assert.match(String(settingsProblem({ ...s.defaults, weight_home: 0.33 }, s)), /not one of the choices/);
+  assert.deepEqual(DOC.exits?.map((x) => x.id), ["weight_home", "respawn"]); // the map's two exits
+});
+

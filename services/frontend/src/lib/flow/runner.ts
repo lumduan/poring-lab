@@ -48,7 +48,66 @@ export type RunnerDoc = {
   flags: Record<string, RunnerFlag>;
   stacks: RunnerNode[];
   python: string;
+  // dungeon@9.41 (2026-11-13): where the map's flow begins and how it leaves the map (absent in an
+  // older export)
+  entry?: string;
+  exits?: RunnerExit[];
+  settings?: RunnerSettingsDoc;
 };
+export type RunnerExit = { id: string; kind: "item_warp" | "death_respawn"; when: string; how: string; to: string; flag: string };
+
+// --- the person's Run settings (2026-11-13, Batt: "don't hard-code the keys; a user changes them
+// in the blocks too"): the Fly Wing's key, the Butterfly Wing's key, the weight limit. The export
+// says which param shows each (`params`), the Run helper's defaults and the fixed choices. -------
+export type RunSettings = { fly_key: string; home_key: string; weight_home: number };
+export type RunnerSettingsDoc = {
+  defaults: RunSettings;
+  params: Record<keyof RunSettings, string>;
+  keys: string[];
+  reserved: string[];
+  weights: number[];
+};
+
+/** Why these settings cannot run (null: they can), against the export's own choices. */
+export function settingsProblem(s: RunSettings, d: RunnerSettingsDoc): string | null {
+  for (const [k, label] of [["fly_key", "the Fly Wing"], ["home_key", "the Butterfly Wing"]] as const) {
+    if (!d.keys.includes(s[k])) return `${label}'s key ${s[k]} is not one of ${d.keys.join(" ")}`;
+    if (d.reserved.includes(s[k])) return `${label}'s key ${s[k]} is taken by the run (${d.reserved.join(", ")})`;
+  }
+  if (s.fly_key === s.home_key) return "the Fly Wing and the Butterfly Wing need two different keys";
+  if (!d.weights.some((w) => Math.abs(w - s.weight_home) < 1e-9)) return `go home at ${Math.round(s.weight_home * 100)} %: not one of the choices`;
+  return null;
+}
+
+/** The settings as the blocks show them: each param's `shown` text (the export's own format). */
+export function settingsShown(s: RunSettings): Record<keyof RunSettings, string> {
+  return { fly_key: s.fly_key, home_key: s.home_key, weight_home: `${Math.round(s.weight_home * 100)}` };
+}
+
+/** PURE: the doc with the person's settings in its blocks (every part showing one of the settings'
+ * params) and in its params. The Python outline is left as exported: its line numbers are the
+ * blocks' marks (the view names the settings above it). */
+export function withSettings(doc: RunnerDoc, s: RunSettings): RunnerDoc {
+  const d = doc.settings;
+  if (!d) return doc;
+  const shown = settingsShown(s);
+  const byParam = new Map<string, string>();
+  const valueOf = new Map<string, unknown>();
+  for (const k of Object.keys(d.params) as (keyof RunSettings)[]) {
+    byParam.set(d.params[k], shown[k]);
+    valueOf.set(d.params[k], s[k]);
+  }
+  const parts = (ps: RunnerPart[] | undefined) => ps?.map((p) => ("param" in p && byParam.has(p.param) ? { param: p.param, shown: byParam.get(p.param) as string } : p));
+  const node = (n: RunnerNode): RunnerNode => ({
+    ...n,
+    parts: parts(n.parts),
+    branches: n.branches?.map((b) => ({ ...b, parts: parts(b.parts) ?? b.parts, body: b.body.map(node) })),
+    body: n.body?.map(node),
+  });
+  const params = { ...doc.params };
+  for (const [id, v] of valueOf) if (params[id]) params[id] = { ...params[id], value: v };
+  return { ...doc, params, stacks: doc.stacks.map(node) };
+}
 
 /** The runner view's own block styles, beside MatPilot's (theme.ts): the safety rules in its
  * red (sound), the optional flag set in its purple (light); their hats get the round cap. */

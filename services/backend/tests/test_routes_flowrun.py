@@ -104,6 +104,29 @@ def test_a_start_writes_one_request_for_a_listed_flow(client: TestClient, tmp_pa
     assert post(client, {"action": "start", "flow": FLOW, "args": ["--x"]}).status_code == 422
 
 
+def test_a_start_may_carry_settings_from_fixed_ranges(client: TestClient, tmp_path: Path) -> None:
+    helper(tmp_path)
+    assist(client)
+    body = {
+        "action": "start",
+        "flow": FLOW,
+        "settings": {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5},
+    }
+    r = post(client, body)
+    assert r.status_code == 200, r.text
+    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
+    assert req["settings"] == {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5}
+    for bad in ({"fly_key": "F10"}, {"home_key": "Shift"}, {"weight_home": 0.95},
+                {"weight_home": 0.1}, {"fly_key": "F8", "extra": 1}):  # fmt: skip
+        assert (
+            post(client, {"action": "start", "flow": FLOW, "settings": bad}).status_code == 422
+        ), bad
+    r = post(
+        client, {"action": "start", "flow": FLOW, "settings": {"fly_key": "F8", "home_key": "F8"}}
+    )
+    assert r.status_code == 400 and r.json()["detail"]["reason"] == "settings_same_key"
+
+
 def test_the_write_gate_holds(client: TestClient, tmp_path: Path) -> None:
     helper(tmp_path)
     assist(client)

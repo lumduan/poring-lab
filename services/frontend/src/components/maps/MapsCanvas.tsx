@@ -32,7 +32,7 @@ import {
   type ReactFlowInstance,
   useUpdateNodeInternals,
 } from "@xyflow/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { EXIT_COLOURS, ExitEdge } from "@/components/flows/FlowCanvas";
 import { MapIcon, PlayIcon } from "@/components/maps/icons";
@@ -137,7 +137,9 @@ function flowSize(b: MapBlock): number {
  * source handle id x:town.3", the town -> field link gone until a reload). */
 function useHandles(id: string, sig: string) {
   const update = useUpdateNodeInternals();
-  useEffect(() => update(id), [id, sig, update]);
+  // a LAYOUT effect (matpilot's re-check: with useEffect one error#008 was left after State it):
+  // the new handle list is in before the browser paints the edge on it. Client-only (ssr: false)
+  useLayoutEffect(() => update(id), [id, sig, update]);
 }
 
 function portSig(data: MNode["data"]): string {
@@ -342,7 +344,9 @@ function MapsCanvas(p: MapsCanvasProps) {
     let f = fitViewport(box, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
     // round 6 (matpilot: at 1440 x 900 one map in view, the session row took the first 650 px): a
     // graph too big for the view opens on its MAPS (and Any other map), the session row to the left
-    const maps = ns.filter((n) => n.type === "map" || n.type === "unknown" || n.type === "main");
+    // the MAP cards only: Any other map sits left of them (under the session row), and with it the
+    // box began at the session row and never reached field_1 (matpilot's re-check, 1440 x 900)
+    const maps = ns.filter((n) => n.type === "map" || n.type === "main");
     if (f?.overflow && maps.length && maps.length < ns.length) f = fitViewport(box, inst.getNodesBounds(maps), MIN_ZOOM, MAX_ZOOM, PAD) ?? f;
     if (!f) return;
     setOverflow(f.overflow);
@@ -460,7 +464,7 @@ function MapsCanvas(p: MapsCanvasProps) {
         fitView
         fitViewOptions={{ padding: 0.12, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }}
         proOptions={{ hideAttribution: false }}
-        attributionPosition="top-left"
+        attributionPosition="top-right"
         minZoom={0.2}
       >
         <Background gap={24} />
