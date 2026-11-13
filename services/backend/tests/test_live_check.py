@@ -227,14 +227,16 @@ def test_a_check_run_sends_nothing_and_ticks_every_line(monkeypatch: pytest.Monk
     ids = [i["id"] for i in got["items"]]
     assert ids == [x for x in dh.CHECK_IDS if x in ids] and set(ids) == set(dh.CHECK_IDS)
     by = {i["id"]: i for i in got["items"]}
-    assert all(i["ok"] is True for i in got["items"]), got["items"]
-    assert got["ok"] is True and got["refuses"] is False and got["version"] == "9.45"
+    # the map line is never a tick (matpilot 2026-11-13: a cell is no proof of the map): "?"
+    assert by["cell"]["ok"] is None and "is she on" in by["cell"]["words"]
+    assert all(i["ok"] is True for i in got["items"] if i["id"] != "cell"), got["items"]
+    assert got["ok"] is None and got["refuses"] is False and got["version"] == "9.45"
     assert by["wings"]["value"] == "12 Fly Wings on F8"
     assert by["heals"]["value"] == "10 heal items on F1"
     assert by["home"]["value"] == "3 Butterfly Wings on F9" and by["home"]["refuses"] is False
     assert by["weight"]["value"] == "30 %" and by["cell"]["value"] == "(7, 21)"
     # the map line says what it knows: a cell, not the map's name
-    assert "the map's name is not read from the screen" in by["cell"]["words"]
+    assert "the map's name is not" in by["cell"]["words"]
     assert got["used"]["fly_key"] == "F8" and got["used"]["PLAYER_MIN_WINGS"] == 5
 
 

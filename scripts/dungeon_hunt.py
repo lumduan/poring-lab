@@ -1603,10 +1603,13 @@ def start_check(screen: Any, ctx: CheckCtx) -> dict[str, Any]:
         value = None if here is None else f"({here[0]}, {here[1]})"
         if why is not None or here is None:
             return check_item("cell", False, str(why), value)
-        return check_item("cell", True, f"her cell reads ({here[0]}, {here[1]}): {ctx.map_}'s "
-                          f"open ground, in reach of its search area -- IF she is on {ctx.map_}: "
-                          "the map's name is not read from the screen (a cell of another map can "
-                          f"fall on {ctx.map_}'s open ground)", value)  # fmt: skip
+        # matpilot's review 2026-11-13 (safety): a cell is no proof of the map -- in Geffen her cell
+        # (119, 40) falls on xmas_dun02's open ground -- so this line is NEVER a tick: "?" (null)
+        # until a map-name reader exists; a person looks at the game
+        return check_item("cell", None, f"her cell ({here[0]}, {here[1]}) is read, the map's name "
+                          f"is not: look at the game -- is she on {ctx.map_}? (the cell is on "
+                          f"{ctx.map_}'s open ground, in reach of its search area, if she is)",
+                          value)  # fmt: skip
 
     def weight() -> dict[str, Any]:
         frs = gm_state._frames(screen)

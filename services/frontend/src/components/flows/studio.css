@@ -1677,3 +1677,18 @@
 .studio .run-pane .config-panel {
   max-height: none;
 }
+
+/* matpilot's review 2026-11-13 (safety, phone 390): the real game's Run was the first and biggest
+   button and Simulate was cut off at the right edge (the bar 421 px in 390). On a phone the bar
+   wraps (nothing past the edge) and Run goes LAST and small, after Simulate */
+@media (max-width: 48rem) {
+  .studio .studio-bar {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+  .studio .studio-bar .button-live {
+    order: 9;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+  }
+}
