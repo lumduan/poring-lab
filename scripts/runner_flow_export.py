@@ -1425,10 +1425,14 @@ def params(cmd: dict[str, Any]) -> list[Param]:
 
 # --- the command and the flags -----------------------------------------------------------------
 def run_flags(dh: Any, path: Path) -> dict[str, dict[str, Any]]:
-    """`run`'s argparse flags from main()'s source (the parser is local to main): each flag's
-    dest, help text, default (a constant name resolved on the module), kind and type."""
+    """`run`'s argparse flags from build_parser()'s source (the CLI's parser, local to it since
+    dungeon@9.48; main() before): each flag's dest, help text, default (a constant name resolved
+    on the module), kind and type."""
     tree = ast.parse(path.read_text())
-    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                and n.name in ("build_parser", "main") and any(
+                    isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "add_argument"
+                    for c in ast.walk(n)))  # fmt: skip
     out: dict[str, dict[str, Any]] = {}
     for call in ast.walk(main):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
@@ -1762,11 +1766,17 @@ def build() -> dict[str, Any]:
     }
 
 
+# dungeon@9.48 (live-blocks.md stage 1): the hunt core as a LIBRARY for the live block player --
+# no feature of the runner's own play, so the description this export documents does not change
+NOT_FEATURES = ("LIVE_BLOCKS_VERSION",)
+
+
 def feature_version(dh: Any) -> str:
-    """The runner's newest feature version (its ``*_VERSION`` constants, e.g. "9.44")."""
+    """The runner's newest feature version (its ``*_VERSION`` constants, e.g. "9.44"; not
+    NOT_FEATURES)."""
     best: tuple[int, int, str] = (0, 0, "")
     for k, v in vars(dh).items():
-        if not (k.endswith("_VERSION") and isinstance(v, str)):
+        if not (k.endswith("_VERSION") and isinstance(v, str)) or k in NOT_FEATURES:
             continue
         m = re.fullmatch(r"(\d+)\.(\d+)([a-z]?)", v)
         if m and (int(m[1]), int(m[2]), m[3]) > best:

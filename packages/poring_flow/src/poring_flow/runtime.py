@@ -38,6 +38,13 @@ The rules it implements (each table-tested in tests/test_runtime.py):
   value runs before the expression that reads it, innermost first, as a `do` action does.
   Assigning a parameter changes the local; any other name is a flow variable. Recursion is the
   linter's error; here a call deeper than MAX_CALL_DEPTH stops the run (`call_depth`).
+
+THE LIVE PLAYER (docs/planning/live-blocks.md stage 1, ADR-0020 Amendment E: scripts/flow_play.py)
+subclasses `Sim` and replaces the fake environment through four seams, each a no-op change here:
+`_advance` (the clock between two ticks: here `t += TICK_S`), `_waited` (how long a wait_until has
+waited: here its ticks), `_guard` (a check at the top of every tick: here none) and `Relocate` (a
+block that left its map by its own way raises it; the scheduler then relocates, as a `relocate`
+event's end does). The rules above are unchanged by them.
 """
 
 from __future__ import annotations
@@ -163,6 +170,12 @@ class _Halt(Exception):  # noqa: N818 -- a control signal, not an error
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class Relocate(Exception):  # noqa: N818 -- a control signal, not an error
+    """A block left its map by its OWN way (the live player's hunt core: the runner's Butterfly
+    Wing home, its respawn): everything ends and the run relocates (`Sim._relocate`), as after a
+    `relocate` event. The simulator never raises it."""
 
 
 class Sim:
@@ -516,10 +529,11 @@ class Sim:
             return (yield from self._loop(st, owner))
         if isinstance(st, ir.WaitUntil):
             waited = 0.0
+            t_wait = self.t
             reason = self._reason
             while not (yield from self._cond(st.cond, owner)):
                 self._reason = reason  # the next poll is this statement's again
-                if waited >= st.timeout_s:
+                if self._waited(waited, t_wait) >= st.timeout_s:
                     if st.outcome_to:
                         self._assign(st.outcome_to, "failed")
                     return "next"
@@ -778,7 +792,7 @@ class Sim:
                 while True:
                     if tick.batch is not None:
                         self._emit(e.label, tick.batch, tick.why)
-                    self.t += TICK_S
+                    self._advance(TICK_S)
                     tick = gen.send(None)
             except StopIteration:
                 pass
@@ -880,6 +894,18 @@ class Sim:
             )
         return True
 
+    # --- the live player's seams (the module docstring): no-ops for the simulator -------------
+    def _advance(self, dt: float) -> None:
+        """The clock between two ticks (the simulator's: exactly `dt`)."""
+        self.t += dt
+
+    def _waited(self, waited: float, t_start: float) -> float:
+        """How long a wait_until has waited (the simulator's: its ticks)."""
+        return waited
+
+    def _guard(self) -> None:
+        """A check at the top of every tick; raises `_Halt` to end the run (none here)."""
+
     def run(self) -> str:
         """Run until the flow ends, stops or a guard halts it; returns the end reason."""
         if not self.stack:
@@ -887,6 +913,7 @@ class Sim:
         try:
             for _ in range(self.max_ticks):
                 self._apply_timeline()
+                self._guard()
                 if self.world.get("interlock") == "red":
                     raise _Halt("interlock_red")
                 if self.world.get("human"):
@@ -903,14 +930,20 @@ class Sim:
                     self.end = "done"
                     break
                 top = self.stack[-1]
-                if not self._step(top):
+                try:
+                    alive = self._step(top)
+                except Relocate:  # a block left its map by its own way (the live player only)
+                    self.stack.clear()
+                    self._relocate()
+                    continue
+                if not alive:
                     self.stack.pop()
                     if top.event is None:
                         self.end = "done"
                         break
                     self._finish(top)
                     continue
-                self.t += TICK_S
+                self._advance(TICK_S)
             else:
                 self.end = "max_ticks"
         except _Halt as h:

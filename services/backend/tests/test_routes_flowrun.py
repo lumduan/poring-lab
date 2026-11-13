@@ -4,6 +4,7 @@ written for the host helper only behind write_gate, and only for a flow the help
 from __future__ import annotations
 
 import json
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -327,3 +328,162 @@ def test_the_check_has_its_own_route_and_a_start_body_can_never_be_a_check(
     ok = client.post("/flows/run/check", headers=hd, json={"flow": FLOW})
     assert ok.status_code == 200
     assert json.loads((d / "request.json").read_text())["action"] == "check"
+
+
+# --- Run of a PROJECT (live-blocks.md stage 1): POST /flows/run/project ---------------------------
+def _project(main: list[Any] | None = None) -> dict[str, Any]:
+    """test_live_player's project, its field main after the world rule (the save point)."""
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    save = tl.action("assert_save_point", "core.assert_save_point", {"cell": tl.lit(
+        {"kind": "cell", "map": "geffen", "x": 119, "y": 40})}, 1.0)  # fmt: skip
+    return tl.project([save, *(main if main is not None else [tl.press("F2"), tl.wing_exit()])])
+
+
+@pytest.fixture(autouse=True)
+def no_kb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test has no local KB: the project's static data is "not loaded" (the linter then skips
+    the map sheets, and the real run-start verdict refuses: no static data)."""
+    from poring_backend import routes_flows
+
+    monkeypatch.setattr(routes_flows, "_world", lambda *_a, **_k: (None, []))
+
+
+def post_project(c: TestClient, body: dict[str, Any]) -> Any:
+    tok = routes_settings.csrf_token(c.app.state.poring)  # type: ignore[attr-defined]
+    return c.post("/flows/run/project", headers={**H, "x-csrf-token": tok}, json=body)
+
+
+def reason(r: Any) -> str:
+    return str(r.json()["detail"]["reason"])
+
+
+@pytest.fixture
+def allowed(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """The run-start verdict as it reads with the lab's static data (the KB is not in a test):
+    allowed; every other check stays real."""
+    from poring_flow import live, runstart
+
+    seen: list[Any] = []
+
+    def verdict(c: Any, findings: list[Any], **kw: Any) -> Any:
+        seen.append((c, findings, kw))
+        return runstart.Verdict(True, "h", (), (), ())
+
+    monkeypatch.setattr(live, "verdict", verdict)
+    return seen
+
+
+def test_a_project_run_writes_the_checked_project_and_one_request(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    import hashlib
+
+    from poring_flow import project as pj
+
+    helper(tmp_path)
+    body = {"project": _project(), "node": "field"}
+    assert reason(post_project(client, body)) == "mode_not_assist"  # HUMAN: nothing written
+    d = tmp_path / "settings" / "flowrun"
+    assert not (d / "project.json").exists() and not (d / "request.json").exists()
+    assist(client)
+    r = post_project(client, body)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    p = pj.from_json(json.dumps(body["project"]))
+    assert got["project_hash"] == pj.project_hash(p) and got["flow"] == "project"
+    raw = (d / "project.json").read_bytes()
+    assert raw == pj.canonical_json(p).encode() and hashlib.sha256(raw).hexdigest() == got[
+        "project_hash"]  # fmt: skip
+    req = json.loads((d / "request.json").read_text())
+    assert set(req) == {"id", "action", "flow", "node", "project_hash", "max_s", "at"}
+    assert (req["action"], req["flow"], req["node"]) == ("start", "project", "field")
+    import flow_run as fr  # the helper takes exactly what the backend wrote
+
+    assert fr.parse_request(json.dumps(req)) == {k: req[k] for k in req if k != "at"}
+    log = [json.loads(x) for x in (d / "requests.jsonl").read_text().splitlines()]
+    assert log[-1]["project"] == "live_test" and "nodes" not in log[-1]  # who, what, its hash
+    assert allowed and allowed[0][2]["runtime_max_s"] == 86_400
+
+
+def test_a_project_with_a_hunt_core_carries_its_keys(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    helper(tmp_path)
+    assist(client)
+    r = post_project(client, {"project": _project([tl.HUNT, tl.wing_exit()]), "node": "field"})
+    assert r.status_code == 200, r.text
+    keys = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
+            "dagger_key": "F5"}  # fmt: skip
+    assert r.json()["keys"] == keys
+    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
+    assert req["keys"] == keys
+
+
+def test_a_project_run_is_refused_with_words_the_page_can_say(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    helper(tmp_path)
+    assist(client)
+    d = tmp_path / "settings" / "flowrun"
+    walk = tl.action("walk_to", "nav.walk_to", {"cell": tl.lit({"kind": "cell", "map":
+                                                               "xmas_dun02", "x": 9, "y": 9})},
+                     120.0)  # fmt: skip
+    r = post_project(client, {"project": _project([walk, tl.wing_exit()]), "node": "field"})
+    assert r.status_code == 400 and reason(r) == "not_live"
+    (row,) = r.json()["detail"]["detail"]
+    assert row == {"path": "field/main/main.1", "what": "walk_to",
+                   "words": "walk_to cannot play live yet (stage 4)"}  # fmt: skip
+    r = post_project(client, {"project": _project([tl.call("no_such_function")]), "node": "field"})
+    assert r.status_code == 400 and reason(r) == "lint_errors"
+    assert r.json()["detail"]["detail"]["count"] >= 1
+    r = post_project(client, {"project": _project(), "node": "login"})
+    assert r.status_code == 400 and reason(r) == "not_a_map_node"
+    r = post_project(client, {"project": {"format": "nope"}, "node": "field"})
+    assert r.status_code == 422 and reason(r) == "invalid_project"
+    r = post_project(client, {"project": _project(), "node": "field", "argv": ["--clear-map"]})
+    assert r.status_code == 422 and reason(r) == "invalid_body"
+    no_keys = _project([tl.HUNT])  # a hunt core whose map node has no wing home: no home key
+    r = post_project(client, {"project": no_keys, "node": "field"})
+    assert r.status_code == 400 and reason(r) in ("keys_refused", "lint_errors")
+    assert not (d / "request.json").exists() and not (d / "project.json").exists()
+    # the helper's state: running, or not answering
+    helper(tmp_path, state="running")
+    assert reason(post_project(client, {"project": _project(), "node": "field"})) == (
+        "already_running"
+    )
+    helper(tmp_path, age=60.0)
+    r = post_project(client, {"project": _project(), "node": "field"})
+    assert r.status_code == 503 and reason(r) == "helper_not_running"
+    # a project start never goes through POST /flows/run
+    helper(tmp_path)
+    r = post(client, {"action": "start", "flow": "project"})
+    assert r.status_code == 400 and reason(r) == "project_has_its_own_route"
+
+
+def test_the_run_start_verdict_is_the_engines_and_refuses_without_static_data(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """No KB in a test: the real verdict fails closed (no static data), and says so."""
+    helper(tmp_path)
+    assist(client)
+    r = post_project(client, {"project": _project(), "node": "field"})
+    assert r.status_code == 400 and reason(r) == "run_start_refused", r.text
+    assert "no static data" in json.dumps(r.json()["detail"]["detail"])
+
+
+def test_a_project_run_needs_the_write_gate(client: TestClient, tmp_path: Path) -> None:
+    helper(tmp_path)
+    assist(client)
+    r = client.post("/flows/run/project", headers=H, json={"project": _project(), "node": "field"})
+    assert r.status_code == 403  # no CSRF token
+    r = client.post("/flows/run/project", headers={"origin": "http://evil.test"},
+                    json={"project": _project(), "node": "field"})  # fmt: skip
+    assert r.status_code == 403

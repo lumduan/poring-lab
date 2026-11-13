@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILDING."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: the PLAYER BUILT 2026-11-13 ~22:3x (feat/live-player, offline tests only; NOT run live yet), the one-box project and the pages' Run on feat/one-box."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Stage 1: the one-box project, the live block player with the generic blocks and the hunt core as one block (in-process, a tick hook), Run on /flows and on /maps."
+next_action: "Stage 1: merge feat/live-player (the player, section 3's BUILT notes) and feat/one-box (the one-box project, Run on /flows and /maps); the first LIVE run of the player needs Batt's OK, with her placed on xmas_dun02 by a person. Then stage 2."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -138,6 +138,48 @@ player are feat/live-player's):**
   beside Simulate plays the project from START, box by box (the same amber press-twice button),
   with the live line while it plays. A login start keeps today's behaviour: Run says login is not
   live yet.
+
+### 3.1 ➡️ BUILT 2026-11-13 ~22:3x (feat/live-player; offline only, not run live)
+
+How to read it, file by file:
+
+| Piece | Where | What it does |
+|---|---|---|
+| The live set | `packages/poring_flow/src/poring_flow/live.py` + blocks.yaml `live: true` | the ONE place: blocks press_key, dungeon_hunt, assert_save_point; sensors hp_percent, sp_percent, weight_percent, is_dead, current_map, map_load_seen; the control statements; an item warp by a FUNCTION. `problems(flow)` names every other thing ("walk_to cannot play live yet (stage 4)"); GET /flows/catalogue serves `live` (and each block's `spec.live`) |
+| The player | `scripts/flow_play.py` (`play`, `plan`) | the engine's tree runtime (`runtime.Sim`) with a LIVE environment (`LivePlayer`): the real clock paced at 0.1 s, the sensors from pixels each tick (hp_percent.py, gm_state's weight, the death dialog's signature, minimap_id's map name), input through ONE ro_agent Agent (the mux: ASSIST, the lease, the interlock, the foreground gate); the UI gate and the client in front at the start |
+| The runtime's seams | `packages/poring_flow/src/poring_flow/runtime.py` | `_advance`, `_waited`, `_guard`, `Relocate`: no-ops for the simulator (its tests unchanged), the player's clock, Stop and the hunt core's own map exits |
+| The hunt core | `scripts/dungeon_hunt.py` dungeon@9.48 (`LIVE_BLOCKS_VERSION`; VERSION stays dungeon@8.7) | `run(a, hook=None, session=None)`: the player passes ITS (Agent, Screen) and a hook whose `tick(HuntTick)` is called once per loop tick (read access: HP / SP, dead, her cell, the mode, the counters, the frame; a str back = the run's normal end) and whose `event()` mirrors the runner's events into the player's record. `args_for(argv)` parses the Run helper's own argv with the CLI's parser (`build_parser`). The CLI passes neither: unchanged |
+| Run of a project | `services/backend/src/poring_backend/routes_flowrun.py` POST /flows/run/project; `scripts/flow_run.py` `start_project` | the backend checks (valid, a map node, 0 lint errors, the live set, the run-start verdict, the keys) and writes the checked `project.json` + one request; the helper checks the file's hash and starts `flow_play.py play` (the detect server first when a hunt core plays) |
+
+The run, in order (each step refuses before any input until the Agent opens):
+
+    prepare (pure)  -> the start check (reads)  -> the Agent (ASSIST, the lock)  -> the UI gate
+       |                 |                                                            |
+       project valid,    with a hunt core on the node: the runner's own              run_start, then
+       a map node,       read-only check in-process (identity, the map read         the tree runtime
+       the live set,     from the minimap, chat closed, weight, stock); else        tick by tick ->
+       the time box,     identity, chat closed, the map's name                       run_end (words)
+       the hunt core's
+       keys + settings
+
+- **Stop**: the Run helper's stop file; at the next tick outside an atomic section the run ends,
+  ReleaseAll, `run_end` "Stopped by you". Inside a hunt core the runner sees the same file (its
+  --stop-file, its normal end) and the hook asks it too. The time box: min(the project's
+  max_runtime_s, the Settings maximum).
+- **The hunt core's end**: its own way home or respawn (the runner's player end) -> the player
+  follows her by the map's NAME to a node on that map, or ends ("she is on geffen: no map node of
+  the project plays there"); a death -> the run ends; its time box -> the run ends; an end on the
+  map (its own time box, a weight exit with no wing) -> the box's main goes on.
+- **The safety-critical three** a project does not write play as the SAFE END in stage 1 (dead,
+  HP under 20 %, an unexpected map: release, end, named); while the hunt core runs, the runner's
+  own survival plays and the box's events wait.
+- **The record**: `/dev/shm/poring-lab-demo/<time>-play-<label>/events.jsonl` (`run_start`,
+  `block` with its node path, `key`, `event`, `hp_read` each second, the hunt core's mirrored
+  events and `hunt_start` / `hunt_end`, `run_end` with its words); the helper's Live tracker reads
+  it (status.json `live`: `node`, `keys`, `fired`, `last_event`, `end.words` besides the runner's).
+- **Not yet (stage 2)**: survival through the tick hook into the box's events; the respawn, the
+  escape and the /where read as live blocks; the check of a project (POST /flows/run/check with
+  the flow "project" is the runner's check for now).
 
 ## 4. Not in stage 1
 

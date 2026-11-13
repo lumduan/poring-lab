@@ -22,7 +22,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
-from poring_flow import always_on, functions, ir, pyview
+from poring_flow import always_on, functions, ir, live, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
@@ -109,6 +109,10 @@ def catalogue_doc(
         # the maps whose runner the dungeon_hunt block plays (Amendment C, 2026-11-13;
         # functions.RUNNER_MAPS = scripts/flow_run.py FLOWS' maps)
         "runner_maps": sorted(functions.RUNNER_MAPS),
+        # the LIVE BLOCK PLAYER's set (live-blocks.md stage 1, ADR-0020 Amendment E): the blocks,
+        # sensors, statements and exits scripts/flow_play.py plays; each block's and sensor's
+        # `spec.live` is the same flag (blocks.yaml)
+        "live": live.document(cat),
         # the project model (format 3, docs/planning/project-model.md): the login block's
         # credentials by NAME (section 5) and servers (the Settings page's environments; only
         # lab-rathena is the lab's), the tab-name rule the browser checks too, the session mock

@@ -31,6 +31,14 @@ A START runs, in order (as the night chain's run_pilot_v3.sh does):
    (ASSIST, the interlock, her identity, her cell).
 A STOP sends SIGINT to the runner's process group (a clean end, rc 130). Either way the detect
 server is ended by PID when the runner exits, and the run's session goes into data/econ/lab.sqlite.
+A PROJECT RUN (Batt 2026-11-13 ~21:4x, docs/planning/live-blocks.md stage 1): POST
+/flows/run/project writes the checked project (``project.json``, its hash in the request) and a
+request {"action": "start", "flow": "project", "node", "project_hash", "max_s"}; the helper
+checks the file's hash against the request's, copies it into the run's folder and starts the LIVE
+BLOCK PLAYER (scripts/flow_play.py play) instead of the runner -- the same busy rules, ASSIST, the
+detect server when a hunt core plays, the stop file, status.json (its flow id "project", titled
+with the project's name). A check of the flow "project" is the runner's check (PROJECT_CHECK_FLOW)
+for now.
 A CHECK (dungeon@9.45, Batt 2026-11-13 "do it": /flows' start checklist ticked from the game screen)
 runs ``dungeon_hunt.py check`` with the SAME argv a start would build (the config, the keys): the
 runner's preamble, then the player start's checks READ from the screen -- it sends no input. It is
@@ -206,6 +214,14 @@ FLOWS: dict[str, Flow] = {
 }
 
 
+# THE PROJECT RUN (live-blocks.md stage 1): its flow id in requests and status.json, the files
+PROJECT = "project"
+PROJECT_FILE = "project.json"  # settings/flowrun/: the backend's checked project (canonical JSON)
+PROJECT_CHECK_FLOW = "xmas_dun02_rogue"  # a check of "project" is this runner's check (for now)
+PROJECT_LABEL = "flowplay"
+NODE_ID = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}")  # poring_flow.ir.NAME
+HASH = re.compile(r"[0-9a-f]{64}")
+
 STOP_NAME = "STOP"  # the runner's --stop-file, in the run's own scratch folder
 STOP_GRACE_S = 90.0  # Stop: the runner ends at its next tick; SIGINT only if it has not by then
 
@@ -225,6 +241,33 @@ def command(flow: Flow, label: str, stop_file: Path | None = None,
     if why:
         raise ValueError(why)
     return [*head, *FIXED, "--label", label, *stop, *flow.flags, *fc.argv(v)]
+
+
+def play_command(project_file: Path, node: str, label: str, stop_file: Path, max_s: int,
+                 project_hash: str, runner_config: Path | None = None) -> list[str]:  # fmt: skip
+    """PURE (live-blocks.md stage 1): the live block player's argv for a project run."""
+    rc = [] if runner_config is None else ["--runner-config", str(runner_config)]
+    return ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/flow_play.py", "play",
+            "--project", str(project_file), "--node", node, "--label", label, "--stop-file",
+            str(stop_file), "--max-s", str(int(max_s)), "--project-hash", project_hash,
+            *rc]  # fmt: skip
+
+
+def run_values(flow: Flow, keys: Mapping[str, str] | None, config_dir: Path = CONFIG_DIR,
+               ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
+    """A start's (and a check's) values: the config file (default < every map < this map), the
+    flow's keys over it when given, then the clash rule -- (vals, src, keys_src, why). The live
+    player's hunt core takes the same values (scripts/flow_play.py)."""
+    keys_src = fc.KEYS_SRC["flow" if keys else "config"]
+    cfg = fc.read_config(config_dir)  # 2026-11-13: default < every map < this map
+    if isinstance(cfg, str):
+        return {}, {}, keys_src, f"refused before any input: {cfg}"
+    vals, src = config_of(flow, cfg)
+    if keys:
+        vals = fc.with_keys(vals, keys)
+        src = {**src, **{k: "flow" for k in fc.KEY_FIELDS}}
+    clash = fc.clash(vals)
+    return vals, src, keys_src, (f"refused before any input: {clash}" if clash else None)
 
 
 def check_command(flow: Flow, vals: Mapping[str, Any] | None = None) -> list[str]:
@@ -248,6 +291,27 @@ def parse_request(text: str) -> dict[str, Any] | str:
         return "bad request id"
     if action not in ("start", "stop", "check"):
         return f"unknown action {action!r}"
+    if action == "start" and flow == PROJECT:  # live-blocks.md stage 1: the live block player
+        node, h, max_s = req.get("node"), req.get("project_hash"), req.get("max_s")
+        if not isinstance(node, str) or not NODE_ID.fullmatch(node):
+            return "a project run names its map node"
+        if not isinstance(h, str) or not HASH.fullmatch(h):
+            return "a project run carries the checked project's hash"
+        if isinstance(max_s, bool) or not isinstance(max_s, int) or not 1 <= max_s <= 86_400:
+            return "a project run carries the configured maximum run time"
+        if set(req) - {"id", "action", "flow", "node", "project_hash", "max_s", "keys", "at"}:
+            return "a project run carries nothing else"
+        out_p: dict[str, Any] = {"id": rid, "action": action, "flow": flow, "node": node,
+                                 "project_hash": h, "max_s": max_s}  # fmt: skip
+        keys_p = req.get("keys")
+        if keys_p is not None:  # shown only: the player reads the keys from the project itself
+            why = fc.keys_problem(keys_p)
+            if why is not None:
+                return why
+            out_p["keys"] = {k: keys_p[k] for k in fc.KEY_FIELDS}
+        return out_p
+    if action == "check" and flow == PROJECT:  # for now: the runner's check (PROJECT_CHECK_FLOW)
+        flow = PROJECT_CHECK_FLOW
     if action in ("start", "check") and flow not in FLOWS:
         return f"unknown flow {flow!r}"
     out: dict[str, Any] = {"id": rid, "action": action, "flow": flow}
@@ -326,6 +390,11 @@ DOING = {"walk": "walking", "strike": "striking", "kill": "a kill", "loot_step":
          "scan": "scanning around her", "player_home": "flying home"}  # fmt: skip
 PRESS_DOING = {"opener": "the Knife on", "equip": "the dagger back on", "potion": "a potion",
                "fly": "a Fly Wing", "home": "the Butterfly Wing home"}  # fmt: skip
+# the live block player's blocks (its "block" events' "what") in a player's words
+PLAYER_DOING = {"press_key": "pressing a key", "wait": "waiting", "wait_until": "waiting",
+                "dungeon_hunt": "hunting", "take_exit": "taking an exit", "call": "a function",
+                "while": "a loop", "repeat": "a loop", "for": "a loop", "if": "deciding",
+                "stop": "stopping", "assert_save_point": "the save point"}  # fmt: skip
 
 
 @dataclass
@@ -347,11 +416,32 @@ class Live:
     flies: int = 0
     hp_low: int | None = None
     end: dict[str, Any] = field(default_factory=dict)
+    # the live block player's own events (scripts/flow_play.py; live-blocks.md stage 1)
+    node: str | None = None  # the project's node path "<node>/<tab>/<site>" of the block running
+    keys: int = 0  # hotbar keys it pressed
+    fired: int = 0  # events (functions with a trigger) that fired
+    last_event: str | None = None
 
     def feed(self, e: Mapping[str, Any]) -> None:
         k, t = e.get("kind"), e.get("t_ns")
         if isinstance(t, int):
             self.t_ns = t
+        if k == "block":  # the player: each block entered, with its node path
+            self.node = str(e.get("node") or "") or None
+            w = str(e.get("what") or "")
+            self.doing = PLAYER_DOING.get(w, w.replace("_", " ") or self.doing)
+            self.block = None
+            return
+        if k == "key":
+            self.keys += 1
+            return
+        if k == "event":
+            self.fired += 1
+            self.last_event = str(e.get("event") or "") or None
+            return
+        if k in ("hunt_start",):
+            self.doing, self.block = "the hunt core starts", None
+            return
         if k == "run_start" and isinstance(t, int):
             self.t0_ns = t
         elif k == "hp_read":
@@ -372,6 +462,8 @@ class Live:
             return
         elif k == "run_end":
             self.end["reason"] = str(e.get("reason") or "")
+            if e.get("words"):  # the live block player's end in a player's words
+                self.end["words"] = str(e["words"])
         elif k == "player_end":
             for x in ("home", "dead", "respawned"):
                 self.end[x] = bool(e.get(x))
@@ -388,7 +480,8 @@ class Live:
                 "block": self.block, "elapsed_s": el, "kills": self.kills,
                 "loot_steps": self.loot_steps, "pickups": self.pickups, "knife": self.knife,
                 "steals": self.steals, "potions": self.potions, "flies": self.flies,
-                "end": dict(self.end)}  # fmt: skip
+                "node": self.node, "keys": self.keys, "fired": self.fired,
+                "last_event": self.last_event, "end": dict(self.end)}  # fmt: skip
 
 
 def session_of(label: str | None, demo: Path) -> Path | None:
@@ -416,6 +509,60 @@ def feed_new(live: Live, path: Path, offset: int) -> int:
         if isinstance(e, dict):
             live.feed(e)
     return offset + end + 1
+
+
+KEYS_SRC_PROJECT = "the project's functions"
+
+
+def read_project(path: Path, want_hash: str) -> tuple[dict[str, Any] | None, str | None]:
+    """The checked project file and why it cannot run (None: it can): it must be there, parse,
+    and its canonical JSON's sha256 must be the request's (the file the backend checked)."""
+    import hashlib
+
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None, "refused before any input: the checked project file is not there"
+    if len(raw) > 2 << 20:
+        return None, "refused before any input: the project file is too large"
+    if hashlib.sha256(raw).hexdigest() != want_hash:
+        return None, "refused before any input: the project file is not the one checked"
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return None, "refused before any input: the project file does not parse"
+    if not isinstance(doc, dict):
+        return None, "refused before any input: the project file is not a project"
+    return doc, None
+
+
+def _nodes(doc: Mapping[str, Any]) -> list[dict[str, Any]]:
+    nodes = doc.get("nodes")
+    return [n for n in nodes if isinstance(n, dict)] if isinstance(nodes, list) else []
+
+
+def node_map(doc: Mapping[str, Any], node: str) -> str:
+    n = next((x for x in _nodes(doc) if x.get("id") == node), None)
+    m = n.get("map") if n is not None else None
+    return str(m.get("map") or "") if isinstance(m, dict) else ""
+
+
+def project_node_problem(doc: Mapping[str, Any], node: str) -> str | None:
+    n = next((x for x in _nodes(doc) if x.get("id") == node), None)
+    if n is None or n.get("kind") != "map":
+        return f"refused before any input: {node} is no map node of the project"
+    return None
+
+
+def has_hunt_core(doc: Any) -> bool:
+    """PURE: the project holds a dungeon_hunt action anywhere (the detect server is started)."""
+    if isinstance(doc, dict):
+        if doc.get("kind") == "action" and doc.get("block") == "dungeon_hunt":
+            return True
+        return any(has_hunt_core(v) for v in doc.values())
+    if isinstance(doc, list):
+        return any(has_hunt_core(v) for v in doc)
+    return False
 
 
 def player_lines(lines: Sequence[str]) -> list[str]:
@@ -447,6 +594,8 @@ def busy_reason(ps_lines: Sequence[str]) -> str | None:
             return "the night chain is running (one input writer at a time)"
         if "dungeon_hunt.py run" in ln and "uv run" not in ln:
             return "another runner is playing (one input writer at a time)"
+        if "flow_play.py play" in ln and "uv run" not in ln:  # live-blocks.md stage 1
+            return "the live block player is playing (one input writer at a time)"
     return None
 
 
@@ -504,6 +653,8 @@ class Helper:
         self.cap_s = 0.0
         self.stop_file = SCRATCH / STOP_NAME
         self.stop_t: float | None = None
+        # a PROJECT run (live-blocks.md stage 1): the live block player plays it
+        self.project: dict[str, Any] | None = None  # {name, node, map, hash, max_runtime_s}
 
     # -- status --
     def status(self) -> dict[str, Any]:
@@ -515,10 +666,19 @@ class Helper:
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
                 "live": None if self.live is None else self.live.summary(),
-                "end_png": self.end_png,
-                "flows": {k: {"title": f.title, "minutes": f.minutes, "map": f.map,
-                              "defaults": dict(f.defaults)}
-                          for k, f in FLOWS.items()}}  # fmt: skip
+                "end_png": self.end_png, "project": self.project,
+                "flows": {**{k: {"title": f.title, "minutes": f.minutes, "map": f.map,
+                                 "defaults": dict(f.defaults)}
+                             for k, f in FLOWS.items()},
+                          PROJECT: self.project_entry()}}  # fmt: skip
+
+    def project_entry(self) -> dict[str, Any]:
+        """status.json flows["project"]: the project run (the page's poller and live line read it
+        like a runner flow's), titled with the current or last project's name."""
+        pr = self.project or {}
+        mins = int(pr.get("max_runtime_s") or 0) // 60
+        return {"title": str(pr.get("name") or "a project"), "minutes": mins,
+                "map": str(pr.get("map") or ""), "defaults": {}, "kind": PROJECT}  # fmt: skip
 
     def write_status(self) -> None:
         write_json(self.dir / "status.json", self.status())
@@ -556,23 +716,15 @@ class Helper:
             self.note(event=f"{act}_refused", why="busy", request=req["id"])
         elif req["action"] == "check":
             self.check_start(FLOWS[req["flow"]], req["id"], req.get("keys"))
+        elif req["flow"] == PROJECT:
+            self.start_project(req)
         else:
             self.start(FLOWS[req["flow"]], req["id"], req.get("keys"))
 
     def values_for(self, flow: Flow, keys: Mapping[str, str] | None
                    ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
-        """A start's (and a check's) values: the config file (default < every map < this map),
-        the flow's keys over it when given, then the clash rule -- (vals, src, keys_src, why)."""
-        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
-        cfg = fc.read_config(CONFIG_DIR)  # 2026-11-13: default < every map < this map
-        if isinstance(cfg, str):
-            return {}, {}, keys_src, f"refused before any input: {cfg}"
-        vals, src = config_of(flow, cfg)
-        if keys:
-            vals = fc.with_keys(vals, keys)
-            src = {**src, **{k: "flow" for k in fc.KEY_FIELDS}}
-        clash = fc.clash(vals)
-        return vals, src, keys_src, (f"refused before any input: {clash}" if clash else None)
+        """A start's (and a check's) values: run_values on the helper's config file."""
+        return run_values(flow, keys, CONFIG_DIR)
 
     # -- a run --
     def start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
@@ -600,6 +752,28 @@ class Helper:
         self.note(event="start", flow=flow.id, label=self.label, request=rid, config=vals,
                   config_src=src, keys={k: vals.get(k) for k in fc.KEY_FIELDS},
                   keys_src=keys_src)  # fmt: skip
+        if not self.detect_up():
+            return
+        self.detail = "the runner starts (its own checks first: ASSIST, the interlock, her cell)"
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
+        self.stop_file = self.run_dir / STOP_NAME
+        self.stop_file.unlink(missing_ok=True)
+        self.stop_t = None
+        with open(self.run_dir / "run.log", "wb") as fh:
+            argv = command(flow, self.label, self.stop_file, self.config)
+            self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
+                                           stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                           start_new_session=True)  # fmt: skip
+        self.t_start = time.monotonic()
+        # matpilot 2026-11-13: "playing" only once the runner's own start checks passed (its
+        # session's run_start event); until then it may still refuse (the chat open, the stock)
+        self.state, self.detail = "starting", "the runner's own start checks"
+        self.write_status()
+
+    def detect_up(self) -> bool:
+        """The vision worker and the detect server (its time box: the run's cap + 150 s), as the
+        night chain starts them; False: failed (status says why)."""
+        assert self.run_dir is not None
         self.detail = "starting the vision worker"
         self.write_status()
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", WORKER],
@@ -608,14 +782,16 @@ class Helper:
             r = subprocess.run(["python3", "scripts/guarded_build.py", "worker:vision@60"],
                                cwd=ROOT, capture_output=True, text=True)  # fmt: skip
             if r.returncode != 0:
-                return self.fail("the vision worker did not start", r.stdout[-300:])
+                self.fail("the vision worker did not start", r.stdout[-300:])
+                return False
         self.detail = "starting the detect server"
         self.write_status()
         cmd = subprocess.run([PY, "scripts/unit_detector.py", "serve-cmd", "--backend", "openvino",
                               "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
                              capture_output=True, text=True)  # fmt: skip
         if cmd.returncode != 0 or not cmd.stdout.strip():
-            return self.fail("the detect server's command did not build", cmd.stderr[-300:])
+            self.fail("the detect server's command did not build", cmd.stderr[-300:])
+            return False
         SERVE_LOG.unlink(missing_ok=True)  # only the NEW step's start line may match
         with open(self.run_dir / "serve.log", "wb") as fh:
             self.server = subprocess.Popen(
@@ -631,25 +807,70 @@ class Helper:
             time.sleep(1.0)
             text = SERVE_LOG.read_text(errors="replace") if SERVE_LOG.exists() else ""
             if '"listening"' in text and '"precision": "f32"' in text:
-                break
+                return True
             if "REFUSED" in (self.run_dir / "serve.log").read_text(errors="replace"):
-                return self.fail("the detect server refused", tail(self.run_dir / "serve.log", 3))
+                self.fail("the detect server refused", tail(self.run_dir / "serve.log", 3))
+                return False
+        self.fail("the detect server did not listen in time", [])
+        return False
+
+    # -- a PROJECT run (live-blocks.md stage 1): the live block player --
+    def start_project(self, req: Mapping[str, Any]) -> None:
+        """The checked project (the backend wrote it and its hash), played by scripts/flow_play.py:
+        the busy rule, the file's hash = the request's, the detect server when a hunt core plays,
+        then the player (its own checks before any input)."""
+        rid = str(req["id"])
+        self.check_cancel("Run was pressed: the player's own start checks decide")
+        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+        why = busy_reason(ps.splitlines())
+        doc: dict[str, Any] | None = None
+        if why is None:
+            doc, why = read_project(self.dir / PROJECT_FILE, str(req["project_hash"]))
+        node = str(req["node"])
+        if why is None and doc is not None:
+            why = project_node_problem(doc, node)
+        if why is not None or doc is None:
+            self.state, self.detail, self.request_id = "refused", str(why), rid
+            self.note(event="start_refused", why=why, request=rid, flow=PROJECT)
+            return
+        max_s = int(req["max_s"])
+        runtime_s = min(int(doc.get("max_runtime_s") or 0), max_s)
+        self.project = {"name": doc.get("name"), "node": node, "map": node_map(doc, node),
+                        "hash": req["project_hash"], "max_runtime_s": runtime_s}  # fmt: skip
+        self.keys_src = KEYS_SRC_PROJECT
+        self.state, self.flow, self.request_id = "starting", PROJECT, rid
+        self.started, self.ended, self.rc = ict(), None, None
+        self.label = PROJECT_LABEL + "-" + time.strftime("%m%d%H%M")
+        self.run_dir = SCRATCH / self.label
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.cap_s = float(runtime_s) + CAP_GRACE_S
+        keys = req.get("keys")
+        flow = FLOWS.get(PROJECT_CHECK_FLOW)
+        if keys and flow is not None and flow.map == self.project["map"]:  # shown in the status
+            vals, src, _ks, _why = self.values_for(flow, keys)
+            self.config, self.config_src = vals, src
         else:
-            return self.fail("the detect server did not listen in time", [])
-        self.detail = "the runner starts (its own checks first: ASSIST, the interlock, her cell)"
+            self.config, self.config_src = None, None
+        self.live, self.live_off, self.end_png = Live(), 0, None
+        pfile = self.run_dir / PROJECT_FILE
+        shutil.copyfile(self.dir / PROJECT_FILE, pfile)
+        self.note(event="start", flow=PROJECT, label=self.label, request=rid, node=node,
+                  project=self.project, keys=keys)  # fmt: skip
+        if has_hunt_core(doc) and not self.detect_up():
+            return
+        self.detail = "the player starts (its own checks first: the live set, the keys, her map)"
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
         self.stop_file = self.run_dir / STOP_NAME
         self.stop_file.unlink(missing_ok=True)
         self.stop_t = None
+        argv = play_command(pfile, node, self.label, self.stop_file, max_s,
+                            str(req["project_hash"]))  # fmt: skip
         with open(self.run_dir / "run.log", "wb") as fh:
-            argv = command(flow, self.label, self.stop_file, self.config)
             self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            start_new_session=True)  # fmt: skip
         self.t_start = time.monotonic()
-        # matpilot 2026-11-13: "playing" only once the runner's own start checks passed (its
-        # session's run_start event); until then it may still refuse (the chat open, the stock)
-        self.state, self.detail = "starting", "the runner's own start checks"
+        self.state, self.detail = "starting", "the player's own start checks"
         self.write_status()
 
     # -- a check (dungeon@9.45): the runner's read-only `check`, the start's own argv --
@@ -785,6 +1006,8 @@ class Helper:
                                    else f"the runner ended rc {rc}"))  # fmt: skip
         if self.live is not None and self.live.t0_ns is not None and not refused:
             self.detail = end_words(self.live, stopped, rc)  # matpilot: the end in plain words
+            if self.flow == PROJECT and self.live.end.get("words"):  # the player's own words
+                self.detail = str(self.live.end["words"])
         png = (sess / "end.png") if sess is not None else None
         self.end_png = None
         if png is not None and png.is_file():  # the backend serves it (GET /flows/run/end.png)
@@ -800,8 +1023,14 @@ class Helper:
         self.write_status()
 
     def record(self) -> None:
-        """The run's session into data/econ/lab.sqlite (ADR-0025), when it made one."""
+        """The run's session into data/econ/lab.sqlite (ADR-0025), when it made one (a project
+        run: each of its hunt core's runner sessions)."""
         demo = Path("/dev/shm/poring-lab-demo")
+        if self.flow == PROJECT and self.label:
+            for d in sorted(demo.glob(f"*-{self.label}-hunt*")):
+                subprocess.run([PY, "scripts/econ_db.py", "update", str(d)], cwd=ROOT,
+                               capture_output=True)  # fmt: skip
+            return
         sess = sorted(demo.glob(f"*-{self.label}")) if self.label else []
         if sess:
             subprocess.run([PY, "scripts/econ_db.py", "update", str(sess[-1])], cwd=ROOT,
