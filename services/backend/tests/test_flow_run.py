@@ -84,7 +84,8 @@ def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
 def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
     cfg = {"global": {"potion_below": 0.3, "LOOT_TRIM_HOVERS": 12, "fly_key": "F7"},
-           "maps": {"xmas_dun02": {"potion_below": 0.5}, "prt_fild08": {"fly_key": "F6"}}}  # fmt: skip
+           "maps": {"xmas_dun02": {"potion_below": 0.5},
+                    "prt_fild08": {"fly_key": "F6"}}}  # fmt: skip
     vals, src = fr.config_of(f, cfg)
     assert vals["potion_below"] == 0.5 and src["potion_below"] == "map"
     assert vals["fly_key"] == "F7" and src["fly_key"] == "global"  # another map's own is not hers

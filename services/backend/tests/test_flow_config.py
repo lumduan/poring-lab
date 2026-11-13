@@ -129,11 +129,13 @@ def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
     assert vals == {"fly_key": "F8", "potion_below": 0.5, "LOOT_TRIM_HOVERS": 12}
     assert src == {"fly_key": "default", "potion_below": "map", "LOOT_TRIM_HOVERS": "global"}
     assert fc.effective(d, cfg, "prt_fild08")[0]["potion_below"] == 0.3
-    assert fc.effective(d, {}, "xmas_dun02") == (d, {"fly_key": "default", "potion_below": "default"})
+    none = {"fly_key": "default", "potion_below": "default"}
+    assert fc.effective(d, {}, "xmas_dun02") == (d, none)
 
 
 def test_keys_clash_and_the_flags() -> None:
-    ok = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4", "dagger_key": "F5"}
+    ok = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
+          "dagger_key": "F5"}  # fmt: skip
     assert fc.clash(ok) is None
     assert "the Knife and the dagger are both on F4" in str(fc.clash({**ok, "dagger_key": "F4"}))
     vals = {**ok, "weight_home": 0.5, "knife_max_s": 8.0, "fly_rate": 150, "LOOT_TRIM_HOVERS": 12,
@@ -141,8 +143,8 @@ def test_keys_clash_and_the_flags() -> None:
     a = fc.argv(vals)
     assert a[:2] == ["--heal-key", "F1"] and a[a.index("--weight-home") + 1] == "0.50"
     assert a[a.index("--knife-max-s") + 1] == "8" and a[a.index("--fly-rate") + 1] == "150"
-    assert ["--tune", "LOOT_TRIM_HOVERS=12"] == a[a.index("LOOT_TRIM_HOVERS=12") - 1 : a.index(
-        "LOOT_TRIM_HOVERS=12") + 1]  # fmt: skip
+    i = a.index("LOOT_TRIM_HOVERS=12")
+    assert a[i - 1 : i + 1] == ["--tune", "LOOT_TRIM_HOVERS=12"]
     assert "vt.D0_PX=200" in a and a[a.index("--respawn-confirm-at") + 1] == "none"
     # every flag a field names is a flag of the runner's
     src = SOURCES["dh"].read_text()
@@ -157,7 +159,8 @@ def test_a_level_is_put_by_group_and_checked(tmp_path: Path) -> None:
     assert got["global"] == {"potion_below": 0.3}  # another group, untouched
     cleared = fc.put_level(got, "map", "xmas_dun02", "loot", None)
     assert isinstance(cleared, dict) and cleared["maps"] == {}
-    assert "not in the group" in str(fc.put_level(cfg, "global", None, "loot", {"potion_below": 0.3}))
+    stray = fc.put_level(cfg, "global", None, "loot", {"potion_below": 0.3})
+    assert "not in the group" in str(stray)
     assert "unknown group" in str(fc.put_level(cfg, "global", None, "nope", {}))
     assert "map's name" in str(fc.put_level(cfg, "map", None, "loot", {}))
     assert "is not from" in str(fc.put_level(cfg, "global", None, "loot", {"LOOT_TRIM_HOVERS": 99}))

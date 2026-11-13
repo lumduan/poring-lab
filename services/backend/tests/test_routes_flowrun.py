@@ -65,9 +65,20 @@ def helper(tmp_path: Path, state: str = "idle", age: float = 0.0) -> None:
         "v": 1,
         "state": state,
         "t_wall": time.time() - age,
-        "flows": {FLOW: {"title": "t", "minutes": 120, "map": "xmas_dun02",
-                         "defaults": {"heal_key": "F1", "fly_key": "F8", "home_key": "F9",
-                                      "knife_key": "F4", "dagger_key": "F5"}}},  # fmt: skip
+        "flows": {
+            FLOW: {
+                "title": "t",
+                "minutes": 120,
+                "map": "xmas_dun02",
+                "defaults": {
+                    "heal_key": "F1",
+                    "fly_key": "F8",
+                    "home_key": "F9",
+                    "knife_key": "F4",
+                    "dagger_key": "F5",
+                },
+            }
+        },  # fmt: skip
     }
     (d / "status.json").write_text(json.dumps(st))
 
@@ -176,7 +187,8 @@ def test_the_config_every_map_then_a_maps_own(client: TestClient, tmp_path: Path
     # a group's values replace only that group's at that level; None removes them
     r = put_config(client, {"scope": "map", "map": "xmas_dun02", "group": "loot", "values": None})
     assert r.status_code == 200 and json.loads((d / "config.json").read_text())["maps"] == {}
-    assert put_config(client, {"scope": "global", "group": "survival", "values": None}).status_code == 200
+    r = put_config(client, {"scope": "global", "group": "survival", "values": None})
+    assert r.status_code == 200
     assert json.loads((d / "config.json").read_text())["global"] == {}
     audit = (d / "config.jsonl").read_text().splitlines()
     assert len(audit) == 4 and json.loads(audit[1])["group"] == "loot"
