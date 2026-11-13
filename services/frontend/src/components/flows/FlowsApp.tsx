@@ -181,10 +181,11 @@ export default function FlowsApp({
   const runBlock = runnerMapBlock(flow);
   const runDoc = runBlock ? runnerForMap(runBlock.map.map) : null;
   const runnable = !!runDoc && LIVE_FLOWS.includes(runDoc.id);
-  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable);
+  const keysR = runBlock ? runnerKeys(flow, runBlock) : null;
+  const runKeys = keysR?.ok ? keysR.keys : null; // with every start and check (the helper re-checks them)
+  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable, runKeys);
   const cs = useConfig(backendUrl, runDoc?.map ?? "");
   const cdoc = runDoc?.config ?? null;
-  const keysR = runBlock ? runnerKeys(flow, runBlock) : null;
   const runEff = cdoc && runDoc ? effectiveConfig(cdoc, cs.file, runDoc.map) : null;
   const runValues = runEff ? (keysR?.ok ? { ...runEff.values, ...keysR.keys } : runEff.values) : null;
   const runWhy = !runnable
@@ -710,7 +711,7 @@ export default function FlowsApp({
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable && <LiveRunButtons live={live} blocked={runWhy} />}
+          {runnable && <LiveRunButtons live={live} blocked={runWhy} keys={runKeys} />}
         </div>
       </header>
 
@@ -909,7 +910,7 @@ export default function FlowsApp({
                         </button>
                       )}
                     </p>
-                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map) : []} minutes={runValues ? Number(runValues.minutes) : null} />
+                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} />
                     {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: keysLine }} />}
                   </div>
                 )}

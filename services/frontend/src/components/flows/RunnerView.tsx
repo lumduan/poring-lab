@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
 import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
-import LiveRun, { useLiveRun } from "@/components/flows/LiveRun";
+import { useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, savedFlowName, writeChoice } from "@/lib/flow/prefs";
 import { LIVE_FLOWS } from "@/lib/flow/runners";
@@ -39,7 +39,7 @@ import {
 } from "@/lib/flow/runner";
 import { ACTIVE, liveLabel, liveLine } from "@/lib/flow/liverun";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
-import { configArgv, configClash, effectiveConfig, startChecklist, withConfig } from "@/lib/flow/config";
+import { configArgv, configClash, effectiveConfig, withConfig } from "@/lib/flow/config";
 import { INJECT } from "@/lib/flow/theme";
 
 const VIEWS = ["blocks", "python"] as const;
@@ -294,7 +294,8 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
             <Chip label="time box" value={`${valueText(doc.params["cmd.minutes"]?.value)} min`} />
             <Chip label="blocks" value={String(nBlocks)} />
           </div>
-          {isLive && <LiveRun live={live} checklist={cdoc && eff ? startChecklist(cdoc, eff.values, rawDoc.map) : []} minutes={eff ? Number(eff.values.minutes) : null} />}
+          {/* the live run's line is above; the checklist, Check the game and Run are on the flow (its
+              keys are the flow's functions; this read-only view has none) */}
         </details>
         {copied === "failed" && (
           <p className="notice notice-warn" role="status">
