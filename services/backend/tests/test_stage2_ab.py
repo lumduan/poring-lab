@@ -257,3 +257,13 @@ def test_the_setup_reads_a_worn_knife_and_puts_the_dagger_back_on() -> None:
     assert ab.knife_worn({"knife_empty": False, "dagger_empty": False}) is None
     assert ab.knife_worn(None) is None
     assert (ab.KNIFE_KEY, ab.DAGGER_KEY) == ("F4", "F5")  # the Run config's knife / dagger keys
+
+
+def test_a_short_run_that_died_played(tmp_path: Path) -> None:
+    # 2026-11-14 05:31: the Knight killed her 46 s after the warp; the respawn worked
+    a, b, c = tmp_path / "a.log", tmp_path / "b.log", tmp_path / "c.log"
+    a.write_text('CHECK {}\\n{"sid": "x", "reason": "death", "counts": {}}\\n')
+    b.write_text("flow_play: Ended: dead after 0 min. She died in the hunt\\n")
+    c.write_text("flow_play refused before any input: the start check: ...\\n")
+    assert ab.died_in(a) and ab.died_in(b)
+    assert not ab.died_in(c) and not ab.died_in(tmp_path / "missing.log")

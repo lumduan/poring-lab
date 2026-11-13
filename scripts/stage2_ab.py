@@ -210,6 +210,19 @@ def knife_worn(knife: Mapping[str, Any] | None) -> bool | None:
     return None
 
 
+def died_in(log: Path) -> bool:
+    """A run's own log says it ended by a death (the runner's manifest "reason": "death", or the
+    player's "Ended: dead"): it played, however short (a read; False when the log is missing)."""
+    try:
+        with log.open("rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 20000))
+            tail_ = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return False
+    return '"reason": "death"' in tail_ or "Ended: dead" in tail_
+
+
 def needs_heal(hp: Any) -> bool:
     """PURE: the setup heals her when her HP percent reads under HEAL_BELOW, or does not read."""
     return not isinstance(hp, int) or hp < HEAL_BELOW
@@ -695,8 +708,9 @@ class Series:
         s_ = time.monotonic() - t0
         self.log(f"{rr['label']} ended rc {rc} after {s_ / 60:.1f} min")
         out = {"label": rr["label"], "rc": rc, "s": round(s_, 1)}
-        if s_ < SHORT_RUN_S:  # it never played (a start refusal, a safe end at once)
-            out["short"] = True
+        if s_ < SHORT_RUN_S and not died_in(self.dir / f"{rr['label']}.log"):
+            out["short"] = True  # it never played (a start refusal, a safe end at once); a
+            # death that respawned PLAYED (2026-11-14 05:31: the Knight 46 s after the warp)
         return out
 
     def run(self) -> int:
