@@ -379,3 +379,13 @@ so nothing needs a backend or Run helper restart.
 | a | point 1's cause is the page's cut, not the server's words | as #1: fixed in the frontend, dungeon_hunt.py untouched |
 | b | while the helper says busy, both pages' status lines still say "Ready. ... Run (amber) plays it in the game" with Run disabled | FIXED (5eb5c205): "Ready to simulate: Simulate plays ... without the game. Run is off now: <the busy words>." (words.ts statusText's busy; mapsReadyText on /maps). Pinned: liverun.test.ts |
 | c | "Check the game"'s disabled title says "Run waits until it ends" | FIXED (5eb5c205): "<the busy words>: the check waits until it ends (the Run helper refuses a check meanwhile)" (busyWhy(st, "check")); Run's own title keeps "Run waits". Pinned: liverun.test.ts |
+
+**Round 19 (matpilot's read-only re-measure of main e872c279, 2026-11-14 ~06:3x ICT):** items 1,
+2, 3, 5, 6, b and c MEASURED FIXED in the browser at 1440 x 900 and 390 x 844. Item 4 is fixed
+with ONE LEFTOVER, still OPEN:
+- at 390 the folded strip (390 x 36) is cut to "IN A RUN: 3 events replace the runner's own · 3 m…",
+  so its "3 more ▸" control does not show;
+- Blockly's reset / zoom in / zoom out / trash buttons (about x 320-360) sit over fly_away's
+  condition and rank field, and over the right end of drink's "do" row.
+The block area itself is right now (492 px tall; the blocks at scale 0.6, below Undo/Redo; widths
+shown 94 / 83 / 94 %).
