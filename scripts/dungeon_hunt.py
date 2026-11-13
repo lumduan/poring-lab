@@ -7524,8 +7524,13 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise AssertionError("unreachable")  # house_stop raised
 
         try:
+            stop_file = Path(a.stop_file) if getattr(a, "stop_file", None) else None
             while time.monotonic() < t_end:
                 tick = time.monotonic()
+                if stop_file is not None and stop_file.exists():  # dungeon@9.40: the Run's Stop
+                    reason = "stopped: the person pressed Stop"
+                    ev({"kind": "stop_file", "path": str(stop_file)})
+                    break  # the NORMAL end: the safe-end escape, the packets, a player's way home
                 if escaped[0]:  # a Fly Wing inside a scan or a strike (guard_tick)
                     escaped[0] = False
                     fly_at = tick
@@ -9007,6 +9012,14 @@ def main() -> int:
         help="dungeon@9.6 (rogue-xmas02.md 4W, pilot p15; OFF by default): a strike with no arrow "
         "and no damage 2.0 s after its click takes no lock, and a lock whose arrow brought no hit "
         "of ours in 2.0 s drops; then the box path runs again (nearest box), twice a fight at most",
+    )
+    t.add_argument(
+        "--stop-file",
+        default=None,
+        metavar="PATH",
+        help="dungeon@9.40 (Batt 2026-11-13, the /flows Run button's Stop): when PATH exists, the "
+        "run ends at the next tick through its NORMAL end (the safe-end escape, the session's "
+        "packets, --player-mode's way home), unlike a SIGINT, which skips them",
     )
     t.add_argument(
         "--defend-box",

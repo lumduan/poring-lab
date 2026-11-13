@@ -107,10 +107,16 @@ FLOWS: dict[str, Flow] = {
 }
 
 
-def command(flow: Flow, label: str) -> list[str]:
-    """PURE: the runner's argv for ``flow`` (the label names its session)."""
-    return ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/dungeon_hunt.py", "run",
-            *FIXED, "--minutes", str(flow.minutes), "--label", label, *flow.flags]  # fmt: skip
+STOP_NAME = "STOP"  # the runner's --stop-file, in the run's own scratch folder
+STOP_GRACE_S = 90.0  # Stop: the runner ends at its next tick; SIGINT only if it has not by then
+
+
+def command(flow: Flow, label: str, stop_file: Path | None = None) -> list[str]:
+    """PURE: the runner's argv for ``flow`` (the label names its session; ``stop_file`` is the
+    runner's --stop-file: its Stop ends the run through the normal end, with the packets)."""
+    stop = [] if stop_file is None else ["--stop-file", str(stop_file)]
+    head = ["nice", "-n", "10", "uv", "run", "--quiet", "python", "scripts/dungeon_hunt.py", "run"]
+    return [*head, *FIXED, "--minutes", str(flow.minutes), "--label", label, *stop, *flow.flags]
 
 
 def parse_request(text: str) -> dict[str, Any] | str:
@@ -179,6 +185,8 @@ class Helper:
         self.run_dir: Path | None = None
         self.t_start = 0.0
         self.cap_s = 0.0
+        self.stop_file = SCRATCH / STOP_NAME
+        self.stop_t: float | None = None
 
     # -- status --
     def status(self) -> dict[str, Any]:
@@ -275,8 +283,12 @@ class Helper:
             return self.fail("the detect server did not listen in time", [])
         self.detail = "the runner starts (its own checks first: ASSIST, the interlock, her cell)"
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
+        self.stop_file = self.run_dir / STOP_NAME
+        self.stop_file.unlink(missing_ok=True)
+        self.stop_t = None
         with open(self.run_dir / "run.log", "wb") as fh:
-            self.runner = subprocess.Popen(command(flow, self.label), cwd=ROOT, env=env, stdout=fh,
+            argv = command(flow, self.label, self.stop_file)
+            self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            start_new_session=True)  # fmt: skip
         self.t_start = time.monotonic()
@@ -289,7 +301,10 @@ class Helper:
             return
         self.state, self.detail, self.request_id = "stopping", "Stop pressed: ending cleanly", rid
         self.note(event="stop", label=self.label, request=rid)
-        os.killpg(self.runner.pid, signal.SIGINT)
+        # the runner's --stop-file: it ends at its next tick through its NORMAL end (the safe-end
+        # escape, the packets, a player's way home); SIGINT only if it has not ended by then
+        self.stop_file.touch()
+        self.stop_t = time.monotonic()
 
     def fail(self, why: str, info: Any) -> None:
         self.state, self.detail, self.ended = "failed", why, ict()
@@ -320,15 +335,22 @@ class Helper:
             self.note(event="cap", label=self.label)
             os.killpg(self.runner.pid, signal.SIGINT)
             return
+        if rc is None and self.stop_t is not None and time.monotonic() - self.stop_t > STOP_GRACE_S:
+            self.note(event="stop_sigint", label=self.label)  # the runner did not see the file
+            os.killpg(self.runner.pid, signal.SIGINT)
+            self.stop_t = None
+            return
         if rc is None:
             return
         self.rc, self.ended, self.runner = rc, ict(), None
         last = tail(self.run_dir / "run.log", 3) if self.run_dir else []
         refused = next((ln for ln in last if "refused" in ln), None)
         self.state = "ended" if rc in (0, 130) else "failed"
-        self.detail = (refused or ("stopped (Stop)" if rc == 130 else
+        stopped = self.stop_t is not None or rc == 130
+        self.detail = (refused or ("stopped (Stop)" if stopped else
                                    "ended by itself (time box or stock)" if rc == 0
                                    else f"the runner ended rc {rc}"))  # fmt: skip
+        self.stop_t = None
         self.note(event="end", label=self.label, rc=rc, detail=self.detail)
         self.end_server()
         self.record()

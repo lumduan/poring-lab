@@ -76,3 +76,14 @@ def test_a_request_is_consumed_once(tmp_path: Path) -> None:
     h.write_status()
     st = json.loads((tmp_path / "status.json").read_text())
     assert st["state"] == "idle" and "xmas_dun02_rogue" in st["flows"]
+
+
+def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
+    """Stop = the runner's --stop-file (its normal end writes the packets); SIGINT backs it up."""
+    argv = fr.command(fr.FLOWS["xmas_dun02_rogue"], "flowrun-x", tmp_path / "STOP")
+    assert argv[argv.index("--stop-file") + 1] == str(tmp_path / "STOP")
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert '"--stop-file"' in src and "if stop_file is not None and stop_file.exists():" in src
+    i = src.index("if stop_file is not None and stop_file.exists():")
+    assert "break  # the NORMAL end" in src[i : i + 400]
+    assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
