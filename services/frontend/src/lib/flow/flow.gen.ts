@@ -88,6 +88,7 @@ export type Kind26 = "walk_exit" | "npc_warp" | "item_warp" | "death_respawn";
  * @maxItems 10
  */
 export type Options = OptionRef[];
+export type Proc1 = string | null;
 export type TimeoutS2 = number;
 export type ToBlock = string;
 export type ToEntry = string;
@@ -537,6 +538,7 @@ export interface Exit {
   kind: Kind26;
   npc?: NpcRef | null;
   options?: Options;
+  proc?: Proc1;
   timeout_s?: TimeoutS2;
   to_block: ToBlock;
   to_entry: ToEntry;

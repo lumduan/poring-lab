@@ -35,6 +35,9 @@ ParamType = Literal[
     "bool",
     "str",
     "value",
+    # a FUNCTION's name, as a string literal (Batt 2026-11-13, ADR-0020 Amendment C): dungeon_hunt's
+    # roles; the linter checks it names a defined procedure (lint/functions.py)
+    "proc",
 ]
 Status = Literal["verified", "unverified", "unknown", "core"]
 
@@ -87,7 +90,9 @@ RESERVED = ("main",)  # the plain flow's node path root
 
 
 RULE_VERSION = r"^[a-z][a-z0-9_]*@[0-9]{1,4}$"  # name@N: PARAMS[N]'s numbers (hunt_config.py)
-OPTION = r"^[a-z][a-z0-9_]*$"  # a plain OPTION value: no @N, no numbers travel with it
+# a plain OPTION value: no @N, no numbers travel with it. Capitals allowed since 2026-11-13: the
+# press_key block's options are the hotbar's key names (F1-F9, L2.shortcut.hotbar)
+OPTION = r"^[A-Za-z][A-Za-z0-9_]*$"
 
 
 class ParamSpec(BaseModel):

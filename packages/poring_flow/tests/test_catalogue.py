@@ -44,9 +44,10 @@ def test_statuses_are_honest_today() -> None:
     assert cat.sensors["hp_percent"].status == "unverified"
 
 
-def test_only_hotbar_use_item_is_insertable() -> None:
-    """Batt, 2026-10-08 (open question 17)."""
-    assert [n for n, b in registry().blocks.items() if b.insertable] == ["use_item"]
+def test_only_the_hotbar_blocks_are_insertable() -> None:
+    """Batt, 2026-10-08 (open question 17): the hotbar use_item only. Since 2026-11-13 (Amendment
+    C) press_key, which IS a hotbar press, too."""
+    assert [n for n, b in registry().blocks.items() if b.insertable] == ["use_item", "press_key"]
 
 
 def test_the_new_mw1_concepts_are_written_unverified() -> None:
@@ -58,12 +59,23 @@ def test_the_new_mw1_concepts_are_written_unverified() -> None:
 
 
 def test_no_block_is_a_raw_input_a_clipboard_a_chat_or_a_packet_read() -> None:
-    """Section 2.1: never a block, in any version."""
+    """Section 2.1: never a block, in any version. ➡️ Amendment C (Batt 2026-11-13): ONE key block,
+    press_key, and only for the hotbar's row 1: its key takes exactly L2.shortcut.hotbar's keys,
+    so no other key, chord or click can be written with it."""
     names = set(catalogue().blocks)
+    from poring_skills.resolve import load_l2
+
+    spec = catalogue().blocks["press_key"].spec
+    (key,) = spec.params
+    hotbar = load_l2("kro-20211103-prere")["shortcut"]["hotbar"]["keys"]
+    assert key.required and key.options == hotbar == [f"F{i}" for i in range(1, 10)]
+    assert spec.concept == "ui.press_hotkey" and spec.types is False
     for banned in (
         "click",
         "key",
-        "press_key",
+        "press",
+        "press_keys",
+        "chord",
         "type_text",
         "paste",
         "clipboard",

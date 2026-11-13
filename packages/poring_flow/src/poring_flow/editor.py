@@ -22,7 +22,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
-from poring_flow import always_on, ir, pyview
+from poring_flow import always_on, functions, ir, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
@@ -99,6 +99,9 @@ def catalogue_doc(
         "limits": {"json_bytes": ir.MAX_JSON_BYTES, "json_depth": ir.MAX_JSON_DEPTH},
         # the trained models as sensor devices (models.yaml; ADR-0020 Amendment B, 2026-11-09)
         "models": model_document(),
+        # the maps whose runner the dungeon_hunt block plays (Amendment C, 2026-11-13;
+        # functions.RUNNER_MAPS = scripts/flow_run.py FLOWS' maps)
+        "runner_maps": sorted(functions.RUNNER_MAPS),
     }
 
 
