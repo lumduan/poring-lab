@@ -58,8 +58,15 @@ def badge(concept: str | None, l1: dict[str, Concept], core: bool = False) -> Ba
 
 
 def catalogue_doc(
-    l1: dict[str, Concept] | None = None, cat: Catalogue | None = None, client: str | None = None
+    l1: dict[str, Concept] | None = None,
+    cat: Catalogue | None = None,
+    client: str | None = None,
+    envs: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    """`envs`: config/environments.yaml's id -> status (the login block's servers); None: the
+    repo's file (`project.environments`)."""
+    from poring_flow import project
+
     l1 = load_l1() if l1 is None else l1
     cat = catalogue() if cat is None else cat
     blocks: dict[str, Any] = {}
@@ -102,6 +109,18 @@ def catalogue_doc(
         # the maps whose runner the dungeon_hunt block plays (Amendment C, 2026-11-13;
         # functions.RUNNER_MAPS = scripts/flow_run.py FLOWS' maps)
         "runner_maps": sorted(functions.RUNNER_MAPS),
+        # the project model (format 3, docs/planning/project-model.md): the login block's
+        # credentials by NAME (section 5) and servers (the Settings page's environments; only
+        # lab-rathena is the lab's), the tab-name rule the browser checks too, the session mock
+        "project": {"format": project.FORMAT, "version": project.VERSION},
+        "credentials": list(project.CREDENTIALS),
+        "servers": [
+            {"id": k, "status": v, "lab": k == project.LAB_SERVER}
+            for k, v in ((envs if envs is not None else project.environments()) or {}).items()
+        ],
+        "tab_name_rule": project.tab_name_rule(),
+        "session_s": dict(project.SESSION_S),
+        "session_blocks": list(project.SESSION_BLOCKS),
     }
 
 
