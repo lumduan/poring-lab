@@ -44,7 +44,8 @@ import { DEFAULT_RUN, PlaybackBar, RunPanel, type RunForm, SPEEDS } from "@/comp
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type PythonFiles, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
 import { type AuthoredExit, canonical, MAP_ID } from "@/lib/flow/ir";
 import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
-import { ACTIVE, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
+import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
+import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
 import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasProject } from "@/lib/flow/project";
 import { LIVE_FLOWS, runnerForMap } from "@/lib/flow/runners";
@@ -604,9 +605,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       ? "Simulating…"
       : tl && beat
         ? `${playing ? "Playing" : "Paused"} at ${time.toFixed(1)} s of ${end.toFixed(1)} s · ${beat.node && beat.kind !== "session" ? `${beat.node}: ` : ""}${beatText(beat, labels)}`
-        : sm
-          ? `Ready. Simulate plays the project from START (${sm.id}) without the game; Run (amber) plays it in the game from there, box by box.`
-          : "Ready. Press Simulate to watch the bot log in, choose its character and walk its maps (simulated: nothing runs in the game).";
+        : mapsReadyText(sm?.id ?? null, busyWhy(live.st)); // round 18 (b): busy says why Run is off
   const zonesNode = zonesFor ? nodeById(project, zonesFor) : undefined;
   const zonesMap = zonesNode?.kind === "map" ? zonesNode : undefined;
   const loginNode = sp.login ?? undefined;

@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/config";
-import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -239,7 +239,8 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
                   {t.value && !t.stale && <span className="live-tick-value"> · read: {t.value}</span>}
                   {t.mark !== "ok" && t.mark !== "none" && !t.stale && t.words && <span className="live-tick-words"> · {t.words}</span>}
                   {/* matpilot round 16 #2: a ✓ line says what was read from the icon too */}
-                  {t.mark === "ok" && !t.stale && t.words?.includes(";") && <span className="live-tick-words"> · {t.words.split(";").pop()?.trim()}</span>}
+                  {/* round 18 #1: never cut inside a parenthesis (okTail) */}
+                  {t.mark === "ok" && !t.stale && okTail(t.words) && <span className="live-tick-words"> · {okTail(t.words)}</span>}
                   {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
                   {/* matpilot #5: a key that reads none may simply be the wrong key */}
                   {t.mark === "fail" && /^0 /.test(t.value ?? "") && ["wings", "heals", "home"].includes(it.id) && (

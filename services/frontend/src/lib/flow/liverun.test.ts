@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, REFUSALS } from "./liverun.ts";
+import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, okTail, REFUSALS } from "./liverun.ts";
+import { mapsReadyText, statusText } from "./words.ts";
 
 const FLOW = "xmas_dun02_rogue";
 const ok: LiveStatus = { state: "idle", helper_alive: true, mode: "ASSIST", flows: { [FLOW]: { title: "t", minutes: 120 } } };
@@ -31,7 +32,10 @@ test("another input writer of ours playing disables Run and the check, in the he
   assert.equal(b.canStart, false);
   assert.equal(b.why, `${why}: Run waits until it ends (the Run helper refuses to start meanwhile)`);
   assert.equal(liveButtons(busy, "project").canStart, false); // a PROJECT run (the live block player) too
-  assert.deepEqual(canCheck(busy, FLOW), { can: false, why: busyWhy(busy) });
+  // matpilot round 18 (c): "Check the game"'s title names the CHECK as what waits, not Run
+  assert.deepEqual(canCheck(busy, FLOW), { can: false, why: `${why}: the check waits until it ends (the Run helper refuses a check meanwhile)` });
+  assert.equal(canCheck(busy, FLOW).why, busyWhy(busy, "check"));
+  assert.doesNotMatch(String(canCheck(busy, FLOW).why), /Run waits/);
   assert.equal(liveLabel(busy), `busy: ${why}`);
   // a last run's end keeps its words; `busy` still disables Run
   const ended: LiveStatus = { ...ok, state: "ended", detail: "Stopped by you after 3 min.", busy: why };
@@ -157,4 +161,39 @@ test("the project run: POST /flows/run/project {project, node}; its status is th
   assert.deepEqual(liveButtons({ ...ok, state: "running", flow: PROJECT_FLOW }, PROJECT_FLOW), { canStart: false, canStop: true, why: null });
   // every refusal of the project run has words
   for (const r of ["lint_errors", "not_live", "run_start_refused", "already_running", "mode_not_assist", "helper_not_running"]) assert.ok(REFUSALS[r], r);
+});
+
+// matpilot round 18 (b): while the helper says busy Run is disabled, so neither page's status line
+// may say "Run (amber) plays it in the game": it says why Run is off, in the helper's words
+test("both pages' status lines say why Run is off while another input writer plays", () => {
+  const why = "an A/B series is running (one input writer at a time)";
+  const busy: LiveStatus = { ...ok, state: "busy", detail: why, busy: why };
+  const base = { loading: false, engine: null, issues: 0, lintErrors: 0, simulating: false, mapTab: false, run: true };
+  const flows = statusText({ ...base, busy: busyWhy(busy) });
+  assert.equal(flows, `Ready to simulate: Simulate plays this map without the game. Run is off now: ${why}: Run waits until it ends (the Run helper refuses to start meanwhile).`);
+  assert.doesNotMatch(flows, /Run \(amber\) plays/);
+  assert.match(statusText({ ...base, busy: busyWhy(ok) }), /Run \(amber\) plays it in the game/);
+  const maps = mapsReadyText("xmas_dun02", busyWhy(busy));
+  assert.match(maps, /^Ready to simulate: Simulate plays the project from START \(xmas_dun02\) without the game\. Run is off now: an A\/B series/);
+  assert.doesNotMatch(maps, /Run \(amber\) plays/);
+  assert.match(mapsReadyText("xmas_dun02", busyWhy(ok)), /Run \(amber\) plays it in the game from there, box by box\.$/);
+  assert.match(mapsReadyText(null, null), /^Ready\. Press Simulate to watch the bot log in/);
+});
+
+// matpilot round 18 #1: the identity line's "(her references; no DB, as the player start)" showed
+// as "no DB, as the player start)": the cut at the last ";" fell inside the parenthesis
+test("a ✓ line's tail is cut at the last ';' outside parentheses, never inside one", () => {
+  const identity = "the name plate reads Rogue and the job rogue (her references; no DB, as the player start)";
+  assert.equal(okTail(identity), null); // no ";" outside the parenthesis: the value says it all
+  assert.equal(okTail("on xmas_dun02; at 120,85 (the cell read; 2 reads)"), "at 120,85 (the cell read; 2 reads)");
+  assert.equal(okTail("4 Fly Wings on F8: at least 2; the icon reads Fly Wing"), "the icon reads Fly Wing");
+  assert.equal(okTail("a; b; c"), "c");
+  assert.equal(okTail("no semicolon"), null);
+  assert.equal(okTail("ends with;"), null);
+  assert.equal(okTail(null), null);
+  // whatever it shows, its parentheses balance
+  for (const w of [identity, "x (a; b) y; z (c; d)", "(a; b); c", "a; (b; c"]) {
+    const t = okTail(w) ?? "";
+    assert.equal((t.match(/\(/g) ?? []).length >= (t.match(/\)/g) ?? []).length, true, w);
+  }
 });

@@ -38,7 +38,7 @@ import { boxedSettings, boxTabNote, boxTabShort } from "@/lib/flow/box";
 import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
-import { ACTIVE } from "@/lib/flow/liverun";
+import { ACTIVE, busyWhy } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
@@ -536,7 +536,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const getProject = useCallback(() => projectRef.current, []);
   const issues = editor.issues;
   const loose = editor.loose;
-  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false, run: runnable });
+  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false, run: runnable, busy: busyWhy(live.st) }); // round 18 (b)
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
