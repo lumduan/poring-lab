@@ -16,11 +16,17 @@
 // since. A ✗ never locks Run (Batt: warnings, not locks): the runner refuses on its own, and the
 // Run button's title says so. THE FLOW'S KEYS (Batt 2026-11-13: every hotbar key from a function
 // of the flow): ``keys`` goes with every start and check, and the checklist states those keys.
+//
+// THE PROJECT RUN (Batt 2026-11-13 ~21:4x, docs/planning/live-blocks.md stage 1): given a project
+// and a map node (``run``), a start is POST /flows/run/project {project, node} -- the live block
+// player plays the project's blocks from that node (/flows: the node shown; /maps: START) -- while
+// the check (the runner's read-only check, ``flow``) and Stop are as before. One hook for both
+// pages: the same amber button, the same press-twice confirm, the same live line.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/config";
-import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -37,11 +43,14 @@ export type Live = {
   send: (action: "start" | "stop" | "check", keys?: RunKeys | null) => Promise<void>;
   buttons: ReturnType<typeof liveButtons>;
   keys: RunKeys | null;
+  /** the project run a start sends (null: the runner flow ``flow``) */
+  run: ProjectRun | null;
 };
 
 /** ``keys``: the flow's functions' hotbar keys (all five), sent with every start and check of
- * this poller; null: the bot server's settings decide. */
-export function useLiveRun(backendUrl: string | null, flow: string, enabled = true, keys: RunKeys | null = null): Live {
+ * this poller; null: the bot server's settings decide. ``run``: a PROJECT run (the project and the
+ * map node it plays from): a start posts POST /flows/run/project instead of the runner flow's. */
+export function useLiveRun(backendUrl: string | null, flow: string, enabled = true, keys: RunKeys | null = null, run: ProjectRun | null = null): Live {
   const base = backendHttpBase(backendUrl);
   const [st, setSt] = useState<LiveStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -52,6 +61,10 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   useEffect(() => {
     keysRef.current = keys;
   }, [keys]);
+  const runRef = useRef<ProjectRun | null>(run);
+  useEffect(() => {
+    runRef.current = run;
+  }, [run]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -82,6 +95,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   const send = useCallback(
     async (action: "start" | "stop" | "check", given?: RunKeys | null): Promise<void> => {
       const k = given ?? keysRef.current;
+      const project = action === "start" ? runRef.current : null; // the project run: its own route
       setBusy(true);
       setErr(null);
       try {
@@ -91,11 +105,12 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
             if (!t.ok) throw new Error(`the security token was refused (HTTP ${t.status})`);
             csrf.current = ((await t.json()) as { token: string }).token;
           }
-          const r = await fetch(`${base}${runPath(action)}`, {
+          const r = await fetch(`${base}${project ? projectRunPath() : runPath(action)}`, {
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            body: JSON.stringify(runBody(action, flow, k)), // every other setting is the bot server's config
+            // every other setting is the bot server's config
+            body: JSON.stringify(project ? projectRunBody(project.project, project.node) : runBody(action, flow, k)),
           });
           if (r.ok) break;
           const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string; detail?: string } };
@@ -118,7 +133,7 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
     [base, flow],
   );
 
-  return { base, flow, st, err, busy, send, buttons: liveButtons(st, flow), keys };
+  return { base, flow, st, err, busy, send, buttons: liveButtons(st, run ? PROJECT_FLOW : flow), keys, run };
 }
 
 /** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
@@ -155,7 +170,7 @@ export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Li
             setArmed(false);
             void live.send("start", keys);
           }}
-          title={blocked ?? (b.canStart ? (warn ?? "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm.") : (b.why ?? "Run is not available now"))}
+          title={blocked ?? (b.canStart ? (warn ?? (live.run ? `Run the project FOR REAL in the game, box by box from ${live.run.node}, where she stands (player mode). Press, then press again to confirm.` : "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm.")) : (b.why ?? "Run is not available now"))}
           data-refuses={warn ? "true" : "false"}
           aria-label={armed ? "Confirm: run in the game" : "Run in the game"}
           data-testid="runner-live-run"
@@ -169,8 +184,9 @@ export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Li
 }
 
 /** `blocked`: why Run cannot be pressed now (a key clash, a broken settings file): the state then
- * never says "ready" (matpilot 2026-11-13 #6). */
-export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null }) {
+ * never says "ready" (matpilot 2026-11-13 #6). `check` false: no checklist and no "Check the game"
+ * (a node without the runner: the live block player checks its own start). */
+export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null, check: withCheck = true }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null; check?: boolean }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   const active = ACTIVE.includes(st?.state ?? "");
@@ -186,10 +202,10 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   const auto = useRef(false);
   const { send } = live;
   useEffect(() => {
-    if (auto.current || !cc.can || st?.check?.state === "checking") return;
+    if (!withCheck || auto.current || !cc.can || st?.check?.state === "checking") return;
     auto.current = true;
     void send("check", runKeys);
-  }, [cc.can, st?.check?.state, send, runKeys]);
+  }, [withCheck, cc.can, st?.check?.state, send, runKeys]);
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
@@ -201,7 +217,12 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
           {line}
         </p>
       )}
-      {!active && (
+      {!active && !withCheck && (
+        <p>
+          {live.run ? `The bot plays this project's blocks from ${live.run.node}, where she stands` : (title ?? "the bot plays this flow")}. Before Run (press it twice: the second press confirms): put her on the map yourself, the console in ASSIST. The player checks its own start (the map, the chat closed) and refuses with the reason before any input.
+        </p>
+      )}
+      {!active && withCheck && (
         <>
           <p>{title ?? "the bot plays this flow"}. Before Run (press it twice: the second press confirms), check:</p>
           {/* matpilot: the start conditions were buried in a paragraph; dungeon@9.45: each ticked from the game screen */}

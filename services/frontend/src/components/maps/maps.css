@@ -1000,6 +1000,18 @@
   background: var(--run-bg);
   color: var(--run-text);
 }
+/* the START marker (the one box): a pill left of the start map, not a project node */
+.mp-start-marker {
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--neutral-border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.mp-start-marker .mp-pill-start {
+  font-size: 0.95rem;
+}
 .mp-pill-shared {
   border: 1px dashed #0f766e;
   color: #0f766e;

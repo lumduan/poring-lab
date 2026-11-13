@@ -20,7 +20,7 @@ import type { LintDoc } from "@/lib/flow/api";
 import type { Entry, MobRef } from "@/lib/flow/ir";
 import { nodeById, type MapNode, type PNode, type Project, sessionPath } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
-import { type Edit, removeNode, renameNode, renameProblem, setZones, updateMapNode } from "@/lib/maps/edit";
+import { type Edit, removeNode, renameNode, renameProblem, setStart, setZones, updateMapNode } from "@/lib/maps/edit";
 import { entryCaption, nodeLinks } from "@/lib/maps/links";
 import { KIND_TITLE, nodeLint, nodeTitle, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
@@ -76,6 +76,17 @@ export default function NodeInspector(props: NodeInspectorProps) {
             Simulate from here
           </button>
         )}
+        {(n.kind === "map" || n.kind === "login") && project.start !== n.id && (
+          <button
+            type="button"
+            className="button button-small"
+            onClick={() => apply(setStart(project, n.id))}
+            title={n.kind === "map" ? `The run starts on ${n.id}, where a person puts her (no login, no character): START moves here` : "The run starts with this login node (the session path: login → character → a map)"}
+            data-testid="inspector-start-here"
+          >
+            Start here
+          </button>
+        )}
       </div>
       {error && error.for === n.id && (
         <p className="ni-error" role="alert" data-testid="inspector-error">
@@ -118,9 +129,10 @@ export default function NodeInspector(props: NodeInspectorProps) {
 }
 
 function whereText(n: PNode, p: Project, sp: ReturnType<typeof sessionPath>): string {
-  if (n.kind === "login") return p.start === n.id ? "Simulate starts here: the session logs in, then the character node chooses, then the start map." : "Not the project's start: Simulate starts at another login node.";
+  if (n.kind === "login") return p.start === n.id ? "Simulate starts here: the session logs in, then the character node chooses, then the start map." : "Not the project's start (START is elsewhere): its session is not played.";
   if (n.kind === "character") return sp.character?.id === n.id && sp.map ? `The session enters the game on ${sp.map.id}${sp.entry ? ` (entry ${sp.entry})` : ""}.` : "Not connected to a map yet: drag from its right port onto a map's entry.";
   if (n.kind === "global") return "Global has no main and no connections: the user makes its tabs.";
+  if (p.start === n.id) return `START: the run starts here, where a person put her${sp.entry ? ` (the entry ${sp.entry})` : ""}; no login, no character. Run on /maps plays from here, box by box.`;
   return sp.map?.id === n.id ? `The session enters the game here${sp.entry ? `, at the entry ${sp.entry}` : ""}: the first map.` : "A map the run reaches by an exit (or none yet).";
 }
 

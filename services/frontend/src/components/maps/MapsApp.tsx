@@ -10,10 +10,16 @@
 // session and the maps' tabs on each map's walk grid (walking, monsters, NPCs, warps), the graph
 // following it.
 //
-// NOTHING here runs live: the green button is SIMULATE (no game, no input; no Run on this page).
-// A credential is a NAME (the login node's), never a secret. The backend calls are computation only
-// (lib/flow/api.ts: lint, simulate, the Python view, the static data); the page never reaches the
-// executor, the mux, an agent channel or any input path. Every name is rendered as text.
+// The green button is SIMULATE (no game, no input). RUN (amber, beside it; Batt 2026-11-13 ~21:4x:
+// "on the Maps page add a Run button too: it runs from START, box by box") is the ONE live path:
+// on a project whose START is a map node (the one box: START > xmas_dun02, where a person put her),
+// it asks the Run helper's live block player to play the project from there (POST
+// /flows/run/project, components/flows/LiveRun.tsx: the same button, the same press-twice confirm
+// as /flows'), greyed with the reason while a block on the way is not live yet or START is a login
+// node (login is not live yet). A credential is a NAME (the login node's), never a secret. Every
+// other backend call is computation only (lib/flow/api.ts: lint, simulate, the Python view, the
+// static data); the page never reaches the mux, an agent channel or any input path itself. Every
+// name is rendered as text.
 //
 // The project is /flows' own (the same browser storage, prefs.ts PROJECT_STORE): double-click a
 // node, or its "Open flow", and /flows opens that node's tabs (/flows?node=<id>). The layout follows
@@ -28,6 +34,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CodeView from "@/components/flows/CodeView";
+import { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
 import { CaretIcon, CloseIcon, FolderIcon, PlayIcon, SaveIcon } from "@/components/maps/icons";
 import LinksPanel from "@/components/maps/LinksPanel";
 import NodeInspector from "@/components/maps/NodeInspector";
@@ -36,13 +43,16 @@ import { DEFAULT_RUN, PlaybackBar, RunPanel, type RunForm, SPEEDS } from "@/comp
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type PythonFiles, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
 import { type AuthoredExit, canonical, MAP_ID } from "@/lib/flow/ir";
 import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
-import { mapNodes, nodeById, type Project, sampleProject, sessionPath, xmasProject } from "@/lib/flow/project";
+import { ACTIVE, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
+import { liveReady } from "@/lib/flow/liveready";
+import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasProject } from "@/lib/flow/project";
+import { LIVE_FLOWS, runnerForMap } from "@/lib/flow/runners";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import { lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts } from "@/lib/maps/build";
-import { connectExit, connectSession, type Edit, moveNodes, removeExit, removeSession, retargetExit, setZones } from "@/lib/maps/edit";
+import { connectExit, connectSession, type Edit, moveNodes, removeExit, removeSession, retargetExit, setStart, setZones } from "@/lib/maps/edit";
 import { activeEdgeAt, mapsGraph, type XY } from "@/lib/maps/graph";
 import { nodeTitle } from "@/lib/maps/nodewords";
 import { beatAt, beatText, buildTimeline, type Check, type Labels, poseAt, runChecks, type Timeline } from "@/lib/maps/play";
@@ -84,7 +94,7 @@ type Selection = { kind: "node"; id: string } | { kind: "rules" } | null;
 
 /** The ready-made projects (project.ts; docs/planning/project-model.md section 7). */
 const READY: { id: string; make: () => Project; world: WorldSource; title: string; words: string }[] = [
-  { id: "xmas", make: xmasProject, world: "local", title: "xmas_dun02", words: "the Rogue: login, character, xmas_dun02 (hunt with the runner), a Butterfly Wing home to Geffen; Global: every key a function, an hp_low event" },
+  { id: "xmas", make: xmasProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her (hunt with the runner; it flies home on the Butterfly Wing itself); every key a function in its keys tab" },
   { id: "sample", make: sampleProject, world: "sample", title: "my_first_project", words: "two SYNTHETIC maps on the sample sheets: a town (save point, NPC warp) and a field (attack 5 times, a wing back)" },
 ];
 
@@ -345,7 +355,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       // TODO(engine): the trace's own session steps (play kinds "login" / "character") replace this
       // MOCK timeline as soon as the backend names them (play.ts traceHasSession); until then the
       // login and character nodes are played as lib/maps/session.ts's fixed mock steps.
-      const mock = fromMap ? null : sessionSteps(sessionOf(p));
+      const mock = fromMap || mapStartOf(p) ? null : sessionSteps(sessionOf(p)); // a map START has no session
       const tl = buildTimeline(doc.trace, mock);
       setSim({ doc, for: contentKey(p), tl, seed: old ? null : seed, old: old || !Array.isArray(doc.trace.play), mock: tl.offset > 0 });
       setLint({ doc: doc.lint, for: contentKey(p) });
@@ -507,6 +517,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   });
   const simulateFrom = useCallback((id: string) => void simulateRef.current?.(id), []);
   const onConnectSession = useCallback((from: string, to: string, entry?: string) => edit(connectSession(projectRef.current, from, to, entry)), [edit]);
+  const onSetStart = useCallback((id: string) => edit(setStart(projectRef.current, id), `START is ${id} now: the run starts there, where a person puts her.`), [edit]);
   const onDeleteSession = useCallback((from: string, to: string) => edit(removeSession(projectRef.current, from, to), `Deleted the connection ${from} → ${to}.`), [edit]);
   const onConnectExit = useCallback((from: string, kind: AuthoredExit, to: string) => edit(connectExit(projectRef.current, from, kind, to)), [edit]);
   const onRetargetExit = useCallback((path: string, to: string, entry?: string) => edit(retargetExit(projectRef.current, path, to, entry)), [edit]);
@@ -555,6 +566,24 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const session = sessionOf(project);
   const problems = sessionProblems(session, project.target.server);
   const sp = sessionPath(project);
+  // --- RUN: the project from START, box by box (the live block player) ----------------------------
+  const sm = mapStartOf(project);
+  const startReady = sm ? liveReady(project, sm.id, catalogue?.blocks ?? null) : null;
+  const smRunner = sm && runnerBlockOn(sm) ? runnerForMap(sm.map.map) : null;
+  const runnable = !!sm && startReady?.ready === true && (!runnerBlockOn(sm) || (!!smRunner && LIVE_FLOWS.includes(smRunner.id)));
+  const keysR = runnable && sm && smRunner ? runnerKeysOn(project, sm.id) : null;
+  const runBlocked = keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : null;
+  const notRunWhy = !sm
+    ? "login is not live yet: put START on a map node (drag START's connection onto a map, or “Start here” in a map node's inspector); the run then starts where a person put her"
+    : runnerBlockOn(sm) && !smRunner
+      ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${sm.map.map}`
+      : startReady && !startReady.ready
+        ? startReady.why
+        : "Run is not available now";
+  const projectRun = runnable && sm ? { project, node: sm.id } : null; // the hook keeps the latest in a ref
+  const live = useLiveRun(backendUrl, PROJECT_FLOW, runnable, null, projectRun);
+  const liveActive = ACTIVE.includes(live.st?.state ?? "");
+  const liveText = liveActive ? liveLine(live.st?.live, live.st?.flows?.[PROJECT_FLOW]?.minutes ?? null) : null;
   const checks: Check[] = useMemo(() => (sim ? runChecks(sim.tl, sim.doc.trace, maps, END_TEXT[sim.doc.trace.end] ?? sim.doc.trace.end, sim.seed) : []), [sim, maps]);
   const status = engineErr
     ? `The flow engine is not reachable (${engineErr}): the graph works, Simulate does not.`
@@ -562,20 +591,24 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       ? "Simulating…"
       : tl && beat
         ? `${playing ? "Playing" : "Paused"} at ${time.toFixed(1)} s of ${end.toFixed(1)} s · ${beat.node && beat.kind !== "session" ? `${beat.node}: ` : ""}${beatText(beat, labels)}`
-        : "Ready. Press Simulate to watch the bot log in, choose its character and walk its maps (simulated: nothing runs in the game).";
+        : sm
+          ? `Ready. Simulate plays the project from START (${sm.id}) without the game; Run (amber) plays it in the game from there, box by box.`
+          : "Ready. Press Simulate to watch the bot log in, choose its character and walk its maps (simulated: nothing runs in the game).";
   const zonesNode = zonesFor ? nodeById(project, zonesFor) : undefined;
   const zonesMap = zonesNode?.kind === "map" ? zonesNode : undefined;
   const loginNode = sp.login ?? undefined;
   const charNode = sp.character ?? undefined;
   const lg = loginOf(loginNode);
 
+
+
   return (
     <main className="studio maps-page" data-run={tl ? "true" : "false"} data-testid="maps-app">
       <header className="studio-bar">
         <div className="studio-brand">
           <span className="studio-home">Maps</span>
-          <span className="status-pill" title="Nothing on this page runs in the game">
-            SIMULATE only
+          <span className="status-pill" title={runnable ? "Simulate plays the project without the game; Run (amber) plays it in the game from START" : `Simulate plays the project without the game; Run: ${notRunWhy}`}>
+            {runnable ? "SIMULATE · RUN" : "SIMULATE · RUN not ready"}
           </span>
           <h1 className="studio-title" title={project.name}>
             {project.name}
@@ -618,11 +651,24 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
+          {runnable ? <LiveRunButtons live={live} blocked={runBlocked} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
 
-      {(notice || graph.notes.length > 0 || copied === "failed" || oldFlow) && (
+      {(notice || graph.notes.length > 0 || copied === "failed" || oldFlow || (runnable && (liveActive || live.err || live.st?.flow === PROJECT_FLOW))) && (
         <div className="studio-notices">
+          {runnable && (liveActive || live.st?.flow === PROJECT_FLOW) && (
+            <p className="notice notice-ok" role="status" data-testid="maps-live">
+              <strong>Run in the game</strong> · {liveLabel(live.st)}
+              {liveText ? <span className="live-line"> · {liveText}</span> : null}
+              {!liveActive && live.st?.detail ? ` · ${live.st.detail}` : ""}
+            </p>
+          )}
+          {runnable && live.err && (
+            <p className="notice notice-warn" role="status" data-testid="maps-live-error">
+              {live.err}
+            </p>
+          )}
           {oldFlow && (
             <p className="notice notice-warn notice-actions" data-testid="maps-old-format">
               <span>The flow format changed: old flows are not converted. This browser&apos;s old flow stays where it was; open a ready-made project:</span>
@@ -667,14 +713,23 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       )}
 
       <div className="device-bar" aria-label="The run">
-        <button type="button" className="device-chip mp-chip" onClick={() => loginNode && onSelect(loginNode.id)} disabled={!loginNode} title="The login node: a server and a credential by name (simulated)">
-          <span className="device-label">login</span>
-          <span className="device-value">{lg.credential ? `${lg.credential}${credentialOf(lg.credential) ? "" : " (?)"}` : "not set"}</span>
-        </button>
-        <button type="button" className="device-chip mp-chip" onClick={() => charNode && onSelect(charNode.id)} disabled={!charNode} title="The choose-character node (simulated)">
-          <span className="device-label">character</span>
-          <span className="device-value">{charNode ? slotText(characterOf(charNode)) : "not connected"}</span>
-        </button>
+        {sm ? (
+          <button type="button" className="device-chip mp-chip" onClick={() => onSelect(sm.id)} title="START: the run starts on this map node, where a person put her (no login, no character)" data-testid="maps-start-chip">
+            <span className="device-label">start</span>
+            <span className="device-value">{sm.id} (she stands there)</span>
+          </button>
+        ) : (
+          <>
+            <button type="button" className="device-chip mp-chip" onClick={() => loginNode && onSelect(loginNode.id)} disabled={!loginNode} title="The login node: a server and a credential by name (simulated)">
+              <span className="device-label">login</span>
+              <span className="device-value">{lg.credential ? `${lg.credential}${credentialOf(lg.credential) ? "" : " (?)"}` : "not set"}</span>
+            </button>
+            <button type="button" className="device-chip mp-chip" onClick={() => charNode && onSelect(charNode.id)} disabled={!charNode} title="The choose-character node (simulated)">
+              <span className="device-label">character</span>
+              <span className="device-value">{charNode ? slotText(characterOf(charNode)) : "not connected"}</span>
+            </button>
+          </>
+        )}
         <label className="device-chip">
           <span className="device-label">static data</span>
           <select value={world} onChange={(e) => setWorld(e.target.value as WorldSource)} data-testid="maps-world">
@@ -690,7 +745,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
           <span className="device-label">lint</span>
           <span className="device-value">{total ? `${total.text}${lint && lint.for !== key ? " (checking…)" : ""}` : "…"}</span>
         </div>
-        {problems.length > 0 && (
+        {!sm && problems.length > 0 && (
           <div className="device-chip" data-level="warning" title={problems.join(" · ")}>
             {problems[0]}
           </div>
@@ -740,7 +795,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 </button>
               )}
               {!folded && adding === null && (
-                <span className="maps-hint">Drag from a port to connect (login → character → a map&apos;s entry; a map&apos;s + port onto another map: an exit); click a node to inspect it; double-click a node to open its tabs on /flows.</span>
+                <span className="maps-hint">Drag from a port to connect (START&apos;s connection onto a map: the run starts there; login → character → a map&apos;s entry; a map&apos;s + port onto another map: an exit); click a node to inspect it; double-click a node to open its tabs on /flows.</span>
               )}
             </div>
             <datalist id="maps-known">
@@ -759,6 +814,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 onSelect={onSelect}
                 onMove={onMove}
                 onConnectSession={onConnectSession}
+                onSetStart={onSetStart}
                 onDeleteSession={onDeleteSession}
                 onConnectExit={onConnectExit}
                 onRetargetExit={onRetargetExit}
@@ -1040,7 +1096,8 @@ function Intro() {
     <div className="stack">
       <p className="strong">The project: its nodes, how they link, and the bot walking them.</p>
       <ul className="plain-list">
-        <li>Login → Choose character → the first map are the session: drag from a node&apos;s right port to connect it (one path). A credential is a NAME; no password is ever typed or kept here. Simulate plays them; nothing logs in.</li>
+        <li>START is where the run begins. On a map node (the ready-made xmas_dun02: ONE box), the run starts where a person put her: drag START&apos;s connection onto another map to start there. Run (amber) plays the project in the game from START, box by box, once every block on the way is live.</li>
+        <li>Login → Choose character → the first map are the session (later: login is not live yet): drag from a node&apos;s right port to connect it (one path). A credential is a NAME; no password is ever typed or kept here. Simulate plays them; nothing logs in.</li>
         <li>Each map node is a map with its own tabs (a main, and any you make): double-click it, or “Open flow”, to open them on /flows.</li>
         <li>Left of a map: its ENTRIES, how the character arrives (the session, a warp in, an NPC / Kafra warp, a Butterfly Wing). Right: its EXITS, where each goes and how.</li>
         <li>Drag from a map&apos;s “+” port onto another map to add an exit; one map can link to many. “+ map” places a map from the static data.</li>
