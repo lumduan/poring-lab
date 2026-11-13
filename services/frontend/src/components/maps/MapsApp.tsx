@@ -38,6 +38,7 @@ import { type AuthoredExit, canonical, MAP_ID, MAX_JSON_BYTES } from "@/lib/flow
 import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import { mapNodes, nodeById, type Project, sampleProject, sessionPath, xmasProject } from "@/lib/flow/project";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
+import { parseFlowFile } from "@/lib/flow/file";
 import { lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts } from "@/lib/maps/build";
 import { connectExit, connectSession, type Edit, moveNodes, removeExit, removeSession, retargetExit, setZones } from "@/lib/maps/edit";
@@ -458,7 +459,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
     } catch {
       return setNotice({ text: `${f.name} could not be read.`, tone: "error", undo: null });
     }
-    const r = importProject(text);
+    // a saved flow file (/flows' Save: the envelope with its project) or a bare project file
+    const r = parseFlowFile(text, f.name);
     if (!r.ok) return setNotice({ text: `${f.name} was not opened: ${r.errors.slice(0, 3).join("; ")}`, tone: "error", undo: null });
     replace(r.project, { undo: true, notice: `Opened ${r.project.name} from ${f.name}; the one before is back with Undo.` });
   };
