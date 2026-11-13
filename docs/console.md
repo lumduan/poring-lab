@@ -36,8 +36,8 @@ Open **http://HOST_LAN_IP:3000**. What it gives you:
   - Turning it on first releases what the tab holds. Off restores instant takeover, and every
     page load starts with it off.
   - An amber WATCH ONLY chip shows on the screen and in the header.
-- **Top bar (every page):** Console / Flows / Maps / Settings / Hardware / Economy (Label QA left the
-  bar 2026-11-10; `/qa` remains), and the **mode badge**, always
+- **Top bar (every page):** Console / Maps / Flows / Economy / Hardware / Settings (Batt's order,
+  2026-11-13; Label QA left the bar 2026-11-10, `/qa` remains), and the **mode badge**, always
   visible: **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no
   status.
 - **Hardware** (`/hardware`, Batt 2026-11-08): the lab host's CPU (total and per core, MHz, load),
@@ -188,6 +188,16 @@ START -> Login -> Choose character (MOCKS: only the lab rAthena is selectable, n
 names the bound map). Simulate plays the bot on each map's walk grid: walks, seeded monsters, NPC
 talks, warps ([planning/world-map-flows.md](planning/world-map-flows.md)). A map's walk
 grid needs its GAT in `data/gat` (`scripts/flows_gat.py`, client-derived, gitignored).
+➡️ **Since 2026-11-13 (round 6, Batt: "like n8n")** each map node shows its ENTRIES on the left (how
+the character arrives: the start, a warp in, an NPC / Kafra warp, a Butterfly Wing) and its EXITS on
+the right (where each goes and how), one port each; drag from a map's "+" port onto another map to
+add an exit. Under the graph, **Links** lists the selected map's entries and exits (or every link)
+beside the **Map view**. The node **Any other map** holds the **world rules** for every map of the
+flow: the save point (stated once, at the run's first step) and what to do on a map none of the
+nodes is on (stop, the built-in; or a Butterfly Wing home). On /flows a strip under the tabs says
+which map the tab's flow is bound to, how the character arrives and where each exit goes; a plain
+flow says it is bound to no map. Design: [planning/world-map-flows.md](planning/world-map-flows.md)
+section 14.
 ➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
 matpilot are at home), in matpilot's colours, light or dark as the system is
 ([planning/flows-studio.md](planning/flows-studio.md)): a header (Blocks | Python, Load,

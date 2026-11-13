@@ -467,6 +467,55 @@
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
+/* the binding strip under the tabs (2026-11-13): which map this tab's flow is bound to, how the
+   character arrives, where each exit goes, the world rules (components/flows/MapBinding.tsx) */
+.map-binding {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+.map-binding[data-kind="plain"] {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.mb-part {
+  min-width: 0;
+}
+.mb-key {
+  margin-right: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mb-map,
+.mb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.mb-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+.mb-how {
+  color: var(--muted);
+}
+.mb-warn {
+  color: var(--warn-text);
+}
 .block-tabs {
   display: flex;
   flex: 1;

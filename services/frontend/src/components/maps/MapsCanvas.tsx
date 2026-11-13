@@ -33,21 +33,22 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EXIT_COLOURS, ExitEdge } from "@/components/flows/FlowCanvas";
-import { PlayIcon } from "@/components/maps/icons";
+import { MapIcon, PlayIcon } from "@/components/maps/icons";
 import type { LintDoc, Trace } from "@/lib/flow/api";
-import type { GEdge, XY } from "@/lib/flow/canvas";
+import { type GEdge, savePointBlock, type XY } from "@/lib/flow/canvas";
 import type { AuthoredExit, Flow, MapBlock } from "@/lib/flow/ir";
 import { blockRunLine, edgeRuns, lintLine, lintOf } from "@/lib/flow/status";
-import { fitViewport, followCentre, mapsGraph, type MapsNodeData } from "@/lib/maps/graph";
+import { entryHandle, exitHandle, fitViewport, followCentre, mapsGraph, type MapsNodeData } from "@/lib/maps/graph";
+import { blockLinks, entryCaption, EXIT_WORDS } from "@/lib/maps/links";
 import { ACCOUNTS, serverOf, type Session, slotText } from "@/lib/maps/session";
 
 const PORTS: { kind: AuthoredExit; label: string }[] = [
-  { kind: "walk_exit", label: "walk exit" },
-  { kind: "npc_warp", label: "npc warp" },
-  { kind: "item_warp", label: "item warp" },
+  { kind: "walk_exit", label: "walk to a warp" },
+  { kind: "npc_warp", label: "NPC / Kafra warp" },
+  { kind: "item_warp", label: "Butterfly Wing" },
 ];
 
-type Extra = { selected: boolean; active: boolean; lint: LintDoc | null; trace: Trace | null; onOpenFlow: (block: string) => void; onSimulateFrom: (block: string) => void };
+type Extra = { selected: boolean; active: boolean; flow: Flow; lint: LintDoc | null; trace: Trace | null; onOpenFlow: (block: string) => void; onSimulateFrom: (block: string) => void; onRules: () => void };
 type MNode = Node<MapsNodeData & Extra>;
 
 function Mock() {
@@ -134,20 +135,20 @@ function MapNode({ data }: NodeProps<MNode>) {
   const l = data.lint ? lintLine(lintOf(data.lint, `block:${b.name}`)) : null;
   const run = blockRunLine(data.trace, b.name);
   const n = flowSize(b);
+  const links = blockLinks(data.flow, b.name);
+  const sp = savePointBlock(data.flow);
+  const respawnTo = sp.block && sp.block !== b.name ? data.flow.workflow?.blocks.find((x) => x.name === sp.block)?.map.map : null;
   return (
-    <div className="mp-node mp-map" data-selected={data.selected} data-active={data.active} data-testid={`map-node-${b.name}`}>
-      <Handle type="target" position={Position.Left} id="in" className="mp-handle" />
+    <div className="mp-node mp-map mp-card" data-selected={data.selected} data-active={data.active} data-testid={`map-node-${b.name}`}>
+      <Handle type="target" position={Position.Left} id="in" className="mp-handle mp-handle-head" />
       <div className="mp-head">
-        {data.start && <span className="fc-start">FIRST</span>}
+        <MapIcon className="mp-map-icon" />
         <span className="mp-title">{b.map.map}</span>
+        {data.start && <span className="fc-start">FIRST</span>}
       </div>
       <div className="mp-line mp-muted">
-        block {b.name}
-        {data.startEntry ? ` · enters at ${data.startEntry}` : ` · ${b.entries.length} entr${b.entries.length === 1 ? "y" : "ies"}`}
-      </div>
-      <div className="mp-line">
-        <span className="mp-key">its flow</span> {n} block{n === 1 ? "" : "s"}
-        {b.targets.length ? ` · targets ${b.targets.length}` : ""}
+        its flow: <strong>{b.name}</strong> · {n} block{n === 1 ? "" : "s"}
+        {b.targets.length ? ` · ${b.targets.length} target${b.targets.length === 1 ? "" : "s"}` : ""}
       </div>
       {l && (
         <div className="fc-status" data-level={l.level}>
@@ -155,8 +156,47 @@ function MapNode({ data }: NodeProps<MNode>) {
         </div>
       )}
       {run && <div className="fc-run">sim: {run}</div>}
+      <div className="mp-ports">
+        <div className="mp-ports-col" data-side="in">
+          <div className="mp-ports-head">entries</div>
+          {(links?.entries ?? []).map((e) => (
+            <div key={e.name} className="mp-port" data-side="in" title={`${e.name} at ${e.at ? `(${e.at.x}, ${e.at.y})` : "anywhere"}: ${entryCaption(e)}`} data-testid={`map-entry-${b.name}-${e.name}`}>
+              <Handle type="target" position={Position.Left} id={entryHandle(e.name)} className="mp-dot" />
+              <span className="mp-port-name">{e.name}</span>
+              <span className="mp-port-cap">{entryCaption(e)}</span>
+            </div>
+          ))}
+          {!links?.entries.length && <div className="mp-port-none">no entry: the bot cannot arrive</div>}
+        </div>
+        <div className="mp-ports-col" data-side="out">
+          <div className="mp-ports-head">exits</div>
+          {(links?.exits ?? []).map((x) => (
+            <div key={x.path} className="mp-port" data-side="out" style={{ color: EXIT_COLOURS[x.kind] }} title={`${EXIT_WORDS[x.kind]}: ${x.how} → ${x.toBlock} (${x.toEntry})`} data-testid={`map-exit-${x.path}`}>
+              <span className="mp-port-name">→ {x.toMap ?? `${x.toBlock}?`}</span>
+              <span className="mp-port-cap">{x.toMap ? x.how : "not a map of this flow"}</span>
+              <Handle type="source" position={Position.Right} id={exitHandle(x.path)} isConnectable={false} className="mp-dot" style={{ background: EXIT_COLOURS[x.kind] }} />
+            </div>
+          ))}
+          {respawnTo && (
+            <div className="mp-port" data-side="out" style={{ color: EXIT_COLOURS.death_respawn }} title="Derived: a death respawns at the save point">
+              <span className="mp-port-name">→ {respawnTo}</span>
+              <span className="mp-port-cap">a death respawns (derived)</span>
+              <Handle type="source" position={Position.Right} id="death_respawn" isConnectable={false} className="mp-dot" style={{ background: EXIT_COLOURS.death_respawn }} />
+            </div>
+          )}
+          {!links?.exits.length && !respawnTo && <div className="mp-port-none">no exit: the run ends here</div>}
+          <div className="mp-new" title="Drag from a dot onto another map to add an exit of that kind (its details are filled in on the map's flow)">
+            {PORTS.map((p) => (
+              <div key={p.kind} className="mp-port mp-port-new" data-side="out" style={{ color: EXIT_COLOURS[p.kind] }}>
+                <span className="mp-port-name">+ {p.label}</span>
+                <Handle type="source" position={Position.Right} id={p.kind} className="mp-dot mp-dot-new" style={{ borderColor: EXIT_COLOURS[p.kind] }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       <div className="mp-actions nodrag">
-        <button type="button" className="mp-button" onClick={() => data.onOpenFlow(b.name)} title={`Open ${b.name}'s flow on /flows`}>
+        <button type="button" className="mp-button" onClick={() => data.onOpenFlow(b.name)} title={`Open ${b.map.map}'s flow (${b.name}) on /flows`}>
           Open flow
         </button>
         <button type="button" className="mp-button" onClick={() => data.onSimulateFrom(b.name)} title={`Simulate from ${b.name} (its entry), without the login`}>
@@ -164,17 +204,39 @@ function MapNode({ data }: NodeProps<MNode>) {
           here
         </button>
       </div>
-      <div className="fc-ports">
-        {PORTS.map((p) => (
-          <div key={p.kind} className="fc-port" style={{ color: EXIT_COLOURS[p.kind] }}>
-            {p.label}
-            <Handle type="source" position={Position.Right} id={p.kind} className="!h-2.5 !w-2.5" style={{ background: EXIT_COLOURS[p.kind], right: -14 }} />
-          </div>
-        ))}
-        <div className="fc-port" style={{ color: EXIT_COLOURS.death_respawn }}>
-          death respawn
-          <Handle type="source" position={Position.Right} id="death_respawn" isConnectable={false} className="!h-2.5 !w-2.5" style={{ background: EXIT_COLOURS.death_respawn, right: -14 }} />
+    </div>
+  );
+}
+
+/** "Any other map": the world rule for a map none of the map nodes is on (rules.ts). */
+function UnknownNode({ data }: NodeProps<MNode>) {
+  if (data.kind !== "unknown") return null;
+  const r = data.rules;
+  const wing = r.unknownMap === "wing";
+  const save = r.savePoint.cell?.map ?? (data.saveBlock ? data.flow.workflow?.blocks.find((x) => x.name === data.saveBlock)?.map.map : null);
+  return (
+    <div className="mp-node mp-unknown" data-selected={data.selected} data-rule={wing ? "wing" : "stop"} data-testid="map-node-unknown">
+      <div className="mp-head">
+        <span className="mp-q" aria-hidden="true">
+          ?
+        </span>
+        <span className="mp-title">Any other map</span>
+        <span className="mp-rule-pill">world rule</span>
+      </div>
+      <div className="mp-line mp-muted">a map none of the {data.maps} map node{data.maps === 1 ? " is" : "s are"} on, e.g. a teleport walked into by accident</div>
+      <div className="mp-line">
+        {r.custom ? "this flow writes its own unexpected_map event (/flows, events)" : wing ? `→ a Butterfly Wing to the save point${save ? ` (${save})` : ": not known yet, state it"}` : "→ the run stops there (the built-in)"}
+      </div>
+      {wing && (
+        <div className="mp-port" data-side="out" style={{ color: EXIT_COLOURS.item_warp }}>
+          <span className="mp-port-cap">wing home</span>
+          <Handle type="source" position={Position.Right} id="out" isConnectable={false} className="mp-dot" style={{ background: EXIT_COLOURS.item_warp }} />
         </div>
+      )}
+      <div className="mp-actions nodrag">
+        <button type="button" className="mp-button" onClick={() => data.onRules()} title="The world rules: the save point and what happens on an unknown map">
+          World rules
+        </button>
       </div>
     </div>
   );
@@ -214,7 +276,7 @@ const MIN_ZOOM = 0.85; // node text (0.86rem and up) stays >= 11 px
 const MAX_ZOOM = 1.2;
 const PAD = 24;
 
-const nodeTypes = { start: StartNode, login: LoginNode, character: CharacterNode, map: MapNode, main: MainNode };
+const nodeTypes = { start: StartNode, login: LoginNode, character: CharacterNode, map: MapNode, main: MainNode, unknown: UnknownNode };
 const edgeTypes = { exit: ExitEdge, session: SessionEdge };
 
 export type MapsCanvasProps = {
@@ -232,10 +294,11 @@ export type MapsCanvasProps = {
   onDeleteExit: (path: string) => void;
   onOpenFlow: (block: string) => void;
   onSimulateFrom: (block: string) => void;
+  onRules: () => void;
 };
 
 function MapsCanvas(p: MapsCanvasProps) {
-  const { flow, session, positions, lint, trace, selected, activeNode, activeEdge, onSelect, onMove, onConnectExit, onDeleteExit, onOpenFlow, onSimulateFrom } = p;
+  const { flow, session, positions, lint, trace, selected, activeNode, activeEdge, onSelect, onMove, onConnectExit, onDeleteExit, onOpenFlow, onSimulateFrom, onRules } = p;
   const graph = useMemo(() => mapsGraph(flow, session, positions), [flow, session, positions]);
   const rf = useRef<ReactFlowInstance | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -297,10 +360,10 @@ function MapsCanvas(p: MapsCanvasProps) {
         id: n.id,
         type: n.type,
         position: n.position,
-        data: { ...n.data, selected: n.id === selected, active: n.id === activeNode, lint, trace, onOpenFlow, onSimulateFrom },
+        data: { ...n.data, selected: n.id === selected, active: n.id === activeNode, flow, lint, trace, onOpenFlow, onSimulateFrom, onRules },
         deletable: false,
       })) as Node[],
-    [graph, selected, activeNode, lint, trace, onOpenFlow, onSimulateFrom],
+    [graph, selected, activeNode, flow, lint, trace, onOpenFlow, onSimulateFrom, onRules],
   );
   const [view, setView] = useState<{ base: Node[]; nodes: Node[] }>({ base: initial, nodes: initial });
   if (view.base !== initial) {
@@ -377,7 +440,7 @@ function MapsCanvas(p: MapsCanvasProps) {
             pannable
             zoomable
             style={{ width: 120, height: 80 }}
-            nodeColor={(n) => (n.type === "map" ? "#a21caf" : n.type === "start" ? "#1d7a43" : "#8a96a3")}
+            nodeColor={(n) => (n.type === "map" ? "#a21caf" : n.type === "start" ? "#1d7a43" : n.type === "unknown" ? "#f5a623" : "#8a96a3")}
             data-testid="maps-minimap"
           />
         )}

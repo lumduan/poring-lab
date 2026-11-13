@@ -70,12 +70,18 @@ test("the session's Python names the bot's real calls, marked as a mock, in shor
 // --- the graph ---------------------------------------------------------------------------------------
 test("the graph: START -> Login -> Choose character -> the start block, then the exits", () => {
   const g = mapsGraph(starterFlow(), DEFAULT_SESSION);
-  assert.deepEqual(g.nodes.map((n) => n.id), ["start", "login", "character", "block:town", "block:field"]);
+  assert.deepEqual(g.nodes.map((n) => n.id), ["start", "login", "character", "block:town", "block:field", "unknown"]);
   const e = (id: string) => g.edges.find((x) => x.id === id);
   assert.equal(e("session:enter")?.target, "block:town");
   assert.equal(e("exit:town.2")?.data.kind, "npc_warp");
   assert.equal(e("exit:field.1")?.data.kind, "item_warp");
   assert.equal(e("respawn:field")?.data.kind, "death_respawn"); // the save point is set in town
+  // round 6: an edge runs from ITS exit's port onto the ENTRY it lands on (n8n-style ports)
+  assert.deepEqual([e("exit:town.2")?.sourceHandle, e("exit:town.2")?.targetHandle], ["x:town.2", "e:arrival"]);
+  assert.deepEqual([e("exit:field.1")?.sourceHandle, e("exit:field.1")?.targetHandle], ["x:field.1", "e:spawn"]);
+  assert.equal(e("session:enter")?.targetHandle, "e:spawn");
+  assert.equal(e("respawn:field")?.targetHandle, "e:spawn");
+  assert.equal(e("rule:unknown"), undefined, "the unknown-map rule is off: no edge from Any other map");
   assert.ok(!g.edges.some((x) => x.data.kind === "attach"), "event nodes stay on /flows");
   // the map nodes sit right of the session; a dragged position wins
   const town = g.nodes.find((n) => n.id === "block:town")!;

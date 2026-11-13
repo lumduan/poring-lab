@@ -232,7 +232,7 @@ class SavePoint:
         wf = ctx.flow.workflow
         if wf is not None:
             if wf.start_block in self.entry:
-                self.entry[wf.start_block].add(None)
+                self.entry[wf.start_block].add(self._start_state(ctx.block(wf.start_block)))
             for _ in range(len(ctx.blocks) * 4 + 4):  # a finite lattice: this converges
                 before = {k: set(v) for k, v in self.entry.items()}
                 for b in ctx.blocks:
@@ -255,6 +255,18 @@ class SavePoint:
     def _block(self, b: ir.MapBlock) -> None:
         self.at[b.name] = []
         self._stmts(b.main, b.name, frozenset(self.entry[b.name]), b, top=self.at[b.name])
+
+    def _start_state(self, b: ir.MapBlock | None) -> SP:
+        """The save point when the run starts: unknown, unless the START block's FIRST step asserts
+        it (the Maps page's world rule, Batt 2026-11-13: "the save value we can set as a global").
+        An assertion takes no input, so it holds from the run's first step: the linter's own advice
+        ("set it first, or assert it") then covers that step too. It stays the visible warning at
+        approval that every assertion is. Anywhere else an assertion counts from where it runs."""
+        first = b.main[0] if b is not None and b.main else None
+        if isinstance(first, ir.ActionStmt) and first.block == "assert_save_point":
+            (state,) = self._set(first, b, frozenset({None}))
+            return state
+        return None
 
     def _set(self, a: ir.ActionStmt, b: ir.MapBlock | None, state: States) -> States:
         if a.block == "set_save_point":

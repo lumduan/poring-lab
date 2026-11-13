@@ -29,6 +29,8 @@ import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from 
 import CodeView from "@/components/flows/CodeView";
 import { InspectPanel } from "@/components/flows/Panels";
 import { CaretIcon, CloseIcon, FolderIcon, PlayIcon, SaveIcon } from "@/components/maps/icons";
+import LinksPanel from "@/components/maps/LinksPanel";
+import RulesPanel from "@/components/maps/RulesPanel";
 import { CharacterPanel, DEFAULT_RUN, LoginPanel, PlaybackBar, RunPanel, type RunForm, SPEEDS, StartPanel } from "@/components/maps/SidePanels";
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type Scenario, type SimDoc, type WorldDoc, type WorldMap, type WorldSource } from "@/lib/flow/api";
 import { type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
@@ -40,9 +42,10 @@ import { RUNNERS, runnerForMap, runnerHref } from "@/lib/flow/runners";
 import { STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
 import { END_TEXT, lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts, oneMapFlow } from "@/lib/maps/build";
-import { mapsGraph } from "@/lib/maps/graph";
+import { mapsGraph, UNKNOWN_ID } from "@/lib/maps/graph";
 import { beatAt, beatText, buildTimeline, type Check, type Labels, poseAt, runChecks, type Timeline } from "@/lib/maps/play";
 import { readSession, type Session, serverOf, sessionProblems, sessionPython, sessionSteps, slotText, writeSession } from "@/lib/maps/session";
+import { refreshRule } from "@/lib/maps/rules";
 import { WANDER_KEY } from "@/lib/maps/wander";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -61,12 +64,15 @@ const WORLDS = ["local", "sample"] as const;
 const SIDES = ["node", "run", "python"] as const;
 type Side = (typeof SIDES)[number];
 const OPEN_CLOSED = ["open", "closed"] as const;
+const BOTTOMS = ["links", "map"] as const; // round 6: the panel under the graph
+type Bottom = (typeof BOTTOMS)[number];
 const MK = {
   side: "poring-lab.maps.side.v1",
   mat: "poring-lab.maps.mat-view.v1",
   panel: "poring-lab.maps.panel.v1",
   layout: "poring-lab.maps.layout.v1",
   run: "poring-lab.maps.run.v1",
+  bottom: "poring-lab.maps.bottom.v1",
 } as const;
 const EXAMPLE_MAPS = ["xmas_dun02", "town_1", "field_1"];
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { flow: Flow; world: WorldSource; file: FileMeta } | null };
@@ -134,12 +140,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const [python, setPython] = useState<{ text: string; for: string } | null>(null);
   const [pythonErr, setPythonErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(() => {
-    const ids = new Set(["start", "login", "character", "main", ...(start.flow.workflow?.blocks.map((b) => `block:${b.name}`) ?? [])]);
+    const ids = new Set(["start", "login", "character", "main", UNKNOWN_ID, ...(start.flow.workflow?.blocks.map((b) => `block:${b.name}`) ?? [])]);
     return initialNode && ids.has(initialNode) ? initialNode : null;
   });
   const [side, setSideState] = useState<Side>(() => readChoice(store, MK.side, SIDES, "node"));
   const [panelOpen, setPanelOpen] = useState(() => readChoice(store, MK.panel, OPEN_CLOSED, "open") === "open");
   const [matOpen, setMatOpen] = useState(() => readChoice(store, MK.mat, OPEN_CLOSED, "open") === "open");
+  const [bottom, setBottomState] = useState<Bottom>(() => readChoice(store, MK.bottom, BOTTOMS, "links"));
+  const setBottom = useCallback(
+    (b: Bottom) => {
+      setBottomState(b);
+      writeChoice(store, MK.bottom, b);
+    },
+    [store],
+  );
   const [notice, setNotice] = useState<Notice | null>(
     start.broken ? { text: "Your saved flow could not be opened, so the two-map starter is shown instead.", tone: "warn", undo: null } : null,
   );
@@ -222,7 +236,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   );
   const edit = useCallback(
     (r: EditResult) => {
-      if (r.ok) replace(r.flow, { keepView: true });
+      // round 6: the unknown-map rule's list of known maps follows the map nodes (rules.ts)
+      if (r.ok) replace(refreshRule(r.flow), { keepView: true });
       else setNotice({ text: r.error, tone: "error", undo: null });
     },
     [replace],
@@ -336,6 +351,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       setMatChoice(null);
       setTime(0);
       setPlaying(true);
+      setBottom("map"); // the run plays on the map view
       if (!matOpen) {
         setMatOpen(true);
         writeChoice(store, MK.mat, "open");
@@ -511,6 +527,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
     },
     [store, playing],
   );
+  const onRules = useCallback(() => onSelect(UNKNOWN_ID), [onSelect]); // "Any other map": the world rules
   const copy = () => {
     const text = codeFile === "session" ? sessionPython(session) : codeFile === "py" ? (python?.text ?? "") : exportText(flowRef.current);
     void (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard"))).then(
@@ -750,6 +767,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 onDeleteExit={onDeleteExit}
                 onOpenFlow={openFlow}
                 onSimulateFrom={simulateFrom}
+                onRules={onRules}
               />
             </div>
           </section>
@@ -779,7 +797,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             </div>
           )}
           {matOpen && (
-            <section className="maps-mat" aria-label="The map view" ref={matRef}>
+            <section className="maps-mat" aria-label="Under the graph: the links or the map view" ref={matRef} data-bottom={bottom}>
+              <div className="maps-bottom-tabs segmented" role="group" aria-label="Under the graph">
+                <button type="button" aria-pressed={bottom === "links"} className="segmented-option" onClick={() => setBottom("links")} data-testid="maps-bottom-links">
+                  Links
+                </button>
+                <button type="button" aria-pressed={bottom === "map"} className="segmented-option" onClick={() => setBottom("map")} data-testid="maps-bottom-map">
+                  Map view
+                </button>
+                <span className="maps-hint">{bottom === "links" ? (selectedBlock ? `how ${selectedBlock.map.map} links: its entries and exits` : "every link of the flow; click a map for its own") : "the walk grid and the simulation"}</span>
+              </div>
+              {bottom === "links" ? (
+                <LinksPanel flow={flow} block={selectedBlock?.name ?? null} onSelect={onSelect} onOpenFlow={openFlow} onRules={onRules} />
+              ) : (
+              <>
               <div className="maps-mat-bar">
                 <label className="device-chip">
                   <span className="device-label">map</span>
@@ -876,6 +907,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 <li data-k="warp">a warp</li>
                 <li data-k="save">the save point</li>
               </ul>
+              </>
+              )}
             </section>
           )}
         </div>
@@ -901,6 +934,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                   {selected === "start" && <StartPanel session={session} />}
                   {selected === "login" && <LoginPanel session={session} onSession={setSession} />}
                   {selected === "character" && <CharacterPanel session={session} onSession={setSession} />}
+                  {selected === UNKNOWN_ID && <RulesPanel flow={flow} onEdit={edit} />}
                   {selected === "main" && (
                     <div className="stack">
                       <p>A plain flow: one program (the tab “main” on /flows), no map blocks. Load ▸ the two-map starter, or One map from the lab data, to place maps.</p>
@@ -922,7 +956,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                           <PlayIcon />
                           Simulate from here
                         </button>
-                        <button type="button" className="button button-small" onClick={() => (setMatChoice(selectedBlock.map.map), setPlaying(false), matOpen || (setMatOpen(true), writeChoice(store, MK.mat, "open")))}>
+                        <button type="button" className="button button-small" onClick={() => (setMatChoice(selectedBlock.map.map), setPlaying(false), setBottom("map"), matOpen || (setMatOpen(true), writeChoice(store, MK.mat, "open")))}>
                           Show its map
                         </button>
                         {runnerForMap(selectedBlock.map.map) && (
@@ -1022,7 +1056,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         </p>
         <div className="studio-toggles" role="group" aria-label="Panels">
           <button type="button" className="toggle-button" aria-pressed={matOpen} onClick={() => (setMatOpen(!matOpen), writeChoice(store, MK.mat, matOpen ? "closed" : "open"))} data-testid="maps-toggle-mat">
-            Map view
+            Links &amp; map view
           </button>
           <button type="button" className="toggle-button" aria-pressed={panelOpen} onClick={() => (setPanelOpen(!panelOpen), writeChoice(store, MK.panel, panelOpen ? "closed" : "open"))}>
             Panel
@@ -1090,7 +1124,10 @@ function Intro() {
       <ul className="plain-list">
         <li>START → Login → Choose character are a MOCK of the bot&apos;s login (scripts/ro_agent.py): click one to see its choices. No password is ever typed here.</li>
         <li>Each map node is a map, BOUND to its own flow: what to do on this map. “Open flow” opens its blocks on /flows.</li>
-        <li>Draw an exit from a map&apos;s port onto another map; one map can link to many. “+ map” places a map from the static data.</li>
+        <li>Left of a map: its ENTRIES, how the character arrives (the start, a warp in, an NPC / Kafra warp, a Butterfly Wing). Right: its EXITS, where each goes and how.</li>
+        <li>Drag from a map&apos;s “+” port onto another map to add an exit; one map can link to many. “+ map” places a map from the static data.</li>
+        <li>“Any other map” holds the WORLD RULES: the save point, and what to do on a map none of the nodes is on (stop, or a Butterfly Wing home).</li>
+        <li>Under the graph, “Links” lists the selected map&apos;s entries and exits (or every link); “Map view” shows the walk grid and the run.</li>
         <li>▶ Simulate plays the run on each map&apos;s walk grid: the bot walks, meets monsters (placed from the seed), talks to NPCs and warps on, and the graph follows it.</li>
       </ul>
     </div>

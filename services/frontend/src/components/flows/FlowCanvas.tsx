@@ -184,7 +184,7 @@ function MainNode({ data }: NodeProps<MainNodeT>) {
   );
 }
 
-type ExitEdgeT = Edge<GEdge["data"] & { runs?: number; active?: boolean }, "exit">;
+type ExitEdgeT = Edge<GEdge["data"] & { runs?: number; active?: boolean; label?: string }, "exit">;
 
 /** An exit edge, typed by its colour and label (also the Maps page's, components/maps). */
 export function ExitEdge(props: EdgeProps<ExitEdgeT>) {
@@ -195,7 +195,8 @@ export function ExitEdge(props: EdgeProps<ExitEdgeT>) {
   const derived = data?.derived;
   // a backward edge (a loop back to an earlier block) gets its label lower than the forward one
   const dy = (LABEL_DY[kind] ?? 0) + (sourceX > targetX ? 48 : 0);
-  const label = kind === "attach" ? "" : `${kind.replace("_", " ")}${data?.entry ? ` → ${data.entry}` : ""}${data?.runs ? ` · ${data.runs}×` : ""}`;
+  // data.label: a caption of its own (the Maps page's world-rule edge, 2026-11-13)
+  const label = data?.label ?? (kind === "attach" ? "" : `${kind.replace("_", " ")}${data?.entry ? ` → ${data.entry}` : ""}${data?.runs ? ` · ${data.runs}×` : ""}`);
   return (
     <>
       <BaseEdge
@@ -210,7 +211,7 @@ export function ExitEdge(props: EdgeProps<ExitEdgeT>) {
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + dy}px)`, color: colour }}
           >
             {label}
-            {derived && kind === "death_respawn" ? " (derived)" : ""}
+            {derived && kind === "death_respawn" && !data?.label ? " (derived)" : ""}
           </div>
         </EdgeLabelRenderer>
       )}

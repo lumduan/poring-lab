@@ -7,18 +7,29 @@
 // block, one edge per take_exit, the derived death_respawn edges), so the IR stays the one source
 // of truth; the three session nodes and their edges are the page's MOCK (lib/maps/session.ts), never
 // IR. Event nodes stay on /flows' Map tab.
-import { autoLayout, blockId, type GEdge, type MapNodeData, toGraph, type XY } from "../flow/canvas.ts";
+import { autoLayout, blockId, type GEdge, type MapNodeData, savePointBlock, toGraph, type XY } from "../flow/canvas.ts";
 import type { Flow } from "../flow/ir.ts";
+import { readRules, type Rules } from "./rules.ts";
 import type { Session } from "./session.ts";
+
+// Round 6 (Batt 2026-11-13, "like n8n"): a map node has ONE PORT PER ENTRY (left, how the character
+// arrives) and ONE PORT PER EXIT (right, where it goes), so an edge runs from the exit it is onto
+// the entry it lands on. Handle ids: `x:<exit path>` and `e:<entry name>`; `in` (the node's head)
+// takes what names no entry (a death's respawn lands on the save point's cell). The node "Any other
+// map" (`unknown`) is the world rule for a map none of the blocks is on (rules.ts).
+export const exitHandle = (path: string) => `x:${path}`;
+export const entryHandle = (name: string) => `e:${name}`;
+export const UNKNOWN_ID = "unknown";
 
 export type MapsNodeData =
   | { kind: "start" }
   | { kind: "login"; session: Session }
   | { kind: "character"; session: Session; enters: string | null }
   | MapNodeData
-  | { kind: "main"; statements: number };
+  | { kind: "main"; statements: number }
+  | { kind: "unknown"; rules: Rules; saveBlock: string | null; maps: number };
 export type MapsNode = { id: string; type: MapsNodeData["kind"]; position: XY; data: MapsNodeData };
-export type MapsEdge = Omit<GEdge, "data"> & { data: GEdge["data"] | { kind: "session"; derived: true; label: string } };
+export type MapsEdge = Omit<GEdge, "data"> & { data: (GEdge["data"] & { label?: string }) | { kind: "session"; derived: true; label: string } };
 export type MapsGraph = { nodes: MapsNode[]; edges: MapsEdge[]; notes: string[] };
 
 export const SESSION_IDS = ["start", "login", "character"] as const;
@@ -54,20 +65,45 @@ export function mapsGraph(flow: Flow, session: Session, positions: Record<string
     edges.push({ id: "session:enter", source: "character", target: "main", sourceHandle: "out", targetHandle: "in", data: { kind: "session", derived: true, label: "enter the game" } });
     return { nodes, edges, notes: ["a plain flow has no map blocks: its one program runs wherever the character is"] };
   }
+  const entriesOf = new Map(wf.blocks.map((b) => [blockId(b.name), b.entries.map((e) => e.name)]));
+  const onto = (block: string, entry: string | undefined) => (entry !== undefined && entriesOf.get(block)?.includes(entry) ? entryHandle(entry) : "in");
+  let lowest = MAPS_Y;
   for (const n of g.nodes) {
     if (n.data.kind !== "map") continue;
     const a = auto[n.id] ?? { x: 40, y: 240 };
-    nodes.push({ id: n.id, type: "map", position: at(n.id, { x: MAPS_X + (a.x - 40), y: MAPS_Y + (a.y - 240) }), data: n.data });
+    const p = at(n.id, { x: MAPS_X + (a.x - 40), y: MAPS_Y + (a.y - 240) });
+    lowest = Math.max(lowest, p.y);
+    nodes.push({ id: n.id, type: "map", position: p, data: n.data });
   }
   edges.push({
     id: "session:enter",
     source: "character",
     target: blockId(wf.start_block),
     sourceHandle: "out",
-    targetHandle: "in",
+    targetHandle: onto(blockId(wf.start_block), wf.start_entry),
     data: { kind: "session", derived: true, label: `enter the game → ${wf.start_entry}` },
   });
-  for (const e of g.edges) if (e.data.kind !== "attach") edges.push(e);
+  for (const e of g.edges) {
+    if (e.data.kind === "attach") continue;
+    if (e.data.kind === "death_respawn") edges.push({ ...e, targetHandle: onto(e.target, entriesOf.get(e.target)?.[0]) });
+    else edges.push({ ...e, sourceHandle: e.data.path ? exitHandle(e.data.path) : e.sourceHandle, targetHandle: onto(e.target, e.data.entry) });
+  }
+  // the world rule's node: "Any other map", under the maps
+  const rules = readRules(flow);
+  const sp = savePointBlock(flow);
+  const saveBlock = rules.savePoint.cell ? (wf.blocks.find((b) => b.map.map === rules.savePoint.cell?.map)?.name ?? null) : sp.block;
+  nodes.push({ id: UNKNOWN_ID, type: "unknown", position: at(UNKNOWN_ID, { x: MAPS_X, y: lowest + 300 }), data: { kind: "unknown", rules, saveBlock, maps: wf.blocks.length } });
+  if (rules.unknownMap === "wing" && saveBlock) {
+    const target = blockId(saveBlock);
+    edges.push({
+      id: "rule:unknown",
+      source: UNKNOWN_ID,
+      target,
+      sourceHandle: "out",
+      targetHandle: onto(target, entriesOf.get(target)?.[0]),
+      data: { kind: "item_warp", derived: true, label: "world rule: a Butterfly Wing home" },
+    });
+  }
   return { nodes, edges, notes: g.notes.filter((n) => !n.startsWith("death_respawn")) };
 }
 

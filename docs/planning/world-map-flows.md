@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 d95b24b5 (a NaN console bug: section 12); round 5 (the other monsters as an option: section 13) not committed yet."
+status: "BUILT 2026-11-10: round 1 bd317dd8 (the Maps page /maps; trace play + encounters, backend restarted 10:42; xmas_dun02's GAT in data/gat); round 2 510b1c89 (matpilot's review, 7 items, all verified by its re-run: section 10); round 3 26c880ca (4 small items + the graph fold, verified: section 11); round 4 d95b24b5 (a NaN console bug: section 12); round 5 (the other monsters as an option: section 13) not committed yet. Round 6 (2026-11-13, Batt: 'like n8n'; section 14): entry / exit ports, the Links panel, the world rules, the /flows binding strip, the NavBar order."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Parent: commit round 5; matpilot: a look at the decoration toggle (section 13) and a recount of the NaN messages during a folded run (expected 0)."
+next_action: "Batt: try round 6 (section 14.7); matpilot: a headless review of /maps and /flows (section 14.6). Round 5 is committed (its section)."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -36,7 +36,8 @@ character are mocks, and the page reaches no executor, mux, agent channel or inp
   where a learner watches the robot walk; Maps is where they watch the bot walk.
 - "World" already means the STATIC DATA in this code (`WorldSource`, `GET /flows/world`,
   `sheet.World`, the context bar's "static data"): a page named World beside it would be ambiguous.
-- The NavBar: Console · Flows · **Maps** · Settings · Hardware.
+- The NavBar: Console · Flows · **Maps** · Settings · Hardware. ➡️ SUPERSEDED 2026-11-13 (Batt):
+  Console · Maps · Flows · Economy · Hardware · Settings (section 14).
 
 ## 2. What Batt sees
 
@@ -331,3 +332,103 @@ Checks:
   - Its one finding: on a phone the separate legend key wrapped the legend (73 -> 94 px, the map
     -6 %). Fixed by the parent: the faint dot sits in the checkbox label, the key is gone, and the
     label has a 24 px touch height (WCAG 2.2 2.5.8).
+
+## 14. Round 6 (2026-11-13): "like n8n": entries, exits, the Links panel, the world rules
+
+**Batt (2026-11-13, Thai, translated):**
+1. "Reorder the NavBar: Console Maps Flows Economy Hardware Setting."
+2. "/maps: make it like n8n. Show how each map links to which map, with the information below.
+   Maps are bound to flows: map-A has map-A's flow; on /flows we choose the map, or click a map to
+   see its flow. A map starts from its ENTRY: walking in from a warp, a Butterfly Wing (the town),
+   a Kafra teleport's arrival all count as entries. We write blocks, but there must be an END
+   condition, a way OUT of the map: walking to the coordinates of map B's entrance, a Butterfly
+   Wing, a teleport. On /maps each map has any number of exit points: exit 1 links to map-B, exit 2
+   to the town (a Butterfly Wing). And maybe a guard against walking into a teleport by accident:
+   on a map we do not know, press a Butterfly Wing back to the save town. This value we can set as
+   a global."
+3. "/flows should say which map this flow is bound to, and where each exit goes. And why does the
+   flow page have only these few blocks? Explain."
+
+### 14.1 What the IR already had (no new IR)
+
+- A map node IS a map block (section 4). Its EXITS are its `take_exit` statements, three authored
+  kinds that are exactly Batt's: `walk_exit` (walk onto a warp cell), `npc_warp` (an NPC's menu:
+  a warper, a Kafra teleport), `item_warp` (a Butterfly Wing to the save point), plus the derived
+  `death_respawn`. Each names its target block and the ENTRY it lands on.
+- An ENTRY is `{name, at, radius}`; its kind was never stored and is not needed: it is HOW the flow
+  arrives there (lib/maps/links.ts): the start, each exit that targets it, a death's respawn.
+- The guard: the engine already has the always-on `unexpected_map` event (always_on.py): on a map
+  load it reads the position and relocates to that map's block; on a map with no block it STOPS
+  (`relocate_no_block`). Batt's guard is that event made stricter, as the linter allows (same
+  trigger, class and `then`, the body starting with the built-in's step).
+
+### 14.2 What changed
+
+| Part | Change |
+|---|---|
+| NavBar | Console · Maps · Flows · Economy · Hardware · Settings |
+| Map node (MapsCanvas.tsx) | a card: map id, its flow (block, size, targets), lint / run; LEFT one port per entry with how the character arrives ("start · wing arrival from field_1 · respawn"); RIGHT one port per exit ("→ field_1 · talk to n_warper · o_to_field"), the derived respawn, and three "+" ports (walk to a warp, NPC / Kafra warp, Butterfly Wing) to drag a new exit |
+| Edges (graph.ts) | from the exit's own port (`x:<path>`) onto the entry it lands on (`e:<entry>`); `in` (the node's head) for what names no entry |
+| Any other map (new node) | the world rules; with the wing rule on, an orange edge "world rule: a Butterfly Wing home" to the save point's map node |
+| Under the graph | Links / Map view tabs (remembered; a Simulate switches to Map view). Links: the selected map's Entries and Exits tables, or Every link, and the world rules' line |
+| World rules (RulesPanel.tsx, lib/maps/rules.ts) | the save point (map, x, y), stated as `assert_save_point` at the START block's first step; on an unknown map: stop (the built-in) or a Butterfly Wing home |
+| /flows (MapBinding.tsx) | a strip under the tabs: bound to map X (block B) · arrives: entry: how, from which map · exits: → map (how) · world rules; each map name opens its tab. A plain flow: "Not bound to a map", with a link to the two-map starter and to /maps |
+| Load menu | "Starter: one map" renamed "Starter: one program (no map)": it was never bound to a map |
+
+### 14.3 The unknown-map rule, as written into the flow
+
+    @on(map_load_seen(), priority=CRITICAL, then=RELOCATE, max_per_run=3)
+    def unexpected_map():
+        read_position()
+        if current_map() not in [map_id("field_1"), map_id("town_1")]:
+            use_item(WING, note="the world rule: on an unknown map, a Butterfly Wing to the save point")
+
+- The list is the flow's maps plus the stated save point's map (a wing there would land on the same
+  map again). It follows the map nodes by itself (`refreshRule` on every edit, on /maps and /flows).
+- At most 3 a run, then the run stops. After the wing, `relocate` picks the save town's map node;
+  a town without a node stops the run there.
+- The item is the flow's own Butterfly Wing exit's (e.g. the starter's `WING`), else item 602.
+- A flow that writes a different `unexpected_map` is never overwritten unasked (a "Replace" button).
+
+### 14.4 The save point, and ONE linter change (Batt's 2026-10-08 rule stands)
+
+- Batt's rule: every wing before the save point is known is an ERROR (lint/simulate.py). The
+  start block's first step is always "unknown", so an event's wing in ANY workflow was an error,
+  even after an `assert_save_point` at that step, although the linter's own advice says "set it
+  first, or assert it".
+- Batt: "this value we can set as a global" -> the save point stated ONCE: an `assert_save_point`
+  as the START block's FIRST step. **The linter change:** that one assertion counts from the run's
+  first step (`SavePoint._start_state`). An assertion anywhere else counts from where it runs, as
+  before, and every assertion stays the visible warning at approval.
+- The fixture `services/frontend/src/lib/flow/fixtures/starter_world_rules.json` is rules.ts's
+  output on the starter (links.test.ts checks the TypeScript makes exactly it):
+  `packages/poring_flow/tests/test_world_rules.py`: canonical, **0 errors** (left: the
+  assertion's own warning and the two lab binding gaps), the Python round-trips; WITHOUT the
+  assertion the wing rule is an error again; an assertion after the first step does not count.
+
+### 14.5 "Why does the flow page have only these few blocks?" (Batt's screenshot)
+
+The flow in that browser was **"my_first_flow"**, Load ▸ "Starter: one map": a 3-step demo (wait
+1 s, wait until a detector sees something, at most 30 s, stop). It is a PLAIN flow: one program,
+no map blocks, so the Map picker said "none" and the Maps page had no maps to link. Its old menu
+name was misleading (renamed, 14.2). The two-map starter (Load ▸ Starter: two maps) is the map
+example. The live bot on xmas_dun02 is not an IR flow: "How the bot hunts here" shows the runner
+(dungeon_hunt.py) as blocks made from its code, and the Run button plays it.
+
+### 14.6 Checks (2026-11-13)
+
+- Frontend (frontend-dev): typecheck clean, lint clean, `pnpm test` 381 pass (9 new in
+  `src/lib/maps/links.test.ts`; the graph test pins the new handles).
+- poring_flow + the flows routes: 427 pass (3 new in test_world_rules.py); ruff and mypy clean.
+- The dev server: /, /maps, /flows, /maps?node=unknown, /flows?block=field answer 200; the top bar
+  reads Console, Maps, Flows, Economy, Hardware, Settings.
+- Not run here: a browser (none on this host). The headless review is matpilot's.
+
+### 14.7 For Batt to try
+
+1. /maps (a new browser shows the two-map starter; else Load ▸ Starter: two maps): each map shows
+   its entries left and its exits right; click field_1: the Links panel lists them.
+2. Click **Any other map** ▸ state the save point (town_1, 40, 40) ▸ choose "Use a Butterfly
+   Wing ...": an orange edge goes to town_1; the lint chip stays without an error.
+3. /flows ▸ the field tab: the strip says "bound to map field_1 · arrives ... · exits → town_1".
+

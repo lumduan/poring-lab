@@ -79,3 +79,12 @@ export function CaretIcon({ className = "button-icon" }: P) {
     </svg>
   );
 }
+
+/** A folded map (the Maps page's map node, round 6). */
+export function MapIcon({ className = "button-icon" }: P) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+      <path d="M1.75 3.5 5.5 2l5 1.75 3.75-1.5v10.25l-3.75 1.5-5-1.75-3.75 1.5zM5.5 2v10.25M10.5 3.75V14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}

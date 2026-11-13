@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
+import MapBinding from "@/components/flows/MapBinding";
 import { DEFAULT_SIM, HuntRulesPanel, InspectPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type SimDoc, type WorldSource } from "@/lib/flow/api";
 import type { Scope } from "@/lib/flow/blocks";
@@ -37,6 +38,7 @@ import { findRunner, RUNNERS, runnerForMap } from "@/lib/flow/runners";
 import { oneMapStarter, STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
 import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText, tabOf } from "@/lib/flow/words";
+import { refreshRule } from "@/lib/maps/rules";
 import { backendHttpBase } from "@/lib/ws";
 
 const FlowCanvas = dynamic(() => import("@/components/flows/FlowCanvas"), {
@@ -225,7 +227,8 @@ export default function FlowsApp({
     [world, setFile],
   );
   const edit = (r: EditResult) => {
-    if (r.ok) replace(r.flow, { keepView: true });
+    // the Maps page's unknown-map rule (if on) follows the map blocks: added, renamed, removed here
+    if (r.ok) replace(refreshRule(r.flow), { keepView: true });
     else setNotice({ text: r.error, tone: "error", undo: null });
   };
 
@@ -597,8 +600,8 @@ export default function FlowsApp({
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." }))}>
                   Starter: two maps<small>town → NPC warp → field, a wing back (the first screen)</small>
                 </button>
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(oneMapStarter(), { undo: true, notice: "Opened the starter: one map." }))}>
-                  Starter: one map<small>one tab, main: wait, wait until the detector sees a monster, stop</small>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(oneMapStarter(), { undo: true, notice: "Opened the starter: one program, bound to no map." }))}>
+                  Starter: one program (no map)<small>a plain flow, one tab “main”: wait, wait until the detector sees a monster, stop. Runs wherever the character stands</small>
                 </button>
                 {onRunner &&
                   RUNNERS.map((r) => (
@@ -723,6 +726,7 @@ export default function FlowsApp({
             </div>
             <MapPicker flow={flow} tab={active.key} onTab={goTab} onLeave={flush} onRunner={onRunner ? (id) => (flush(), onRunner(id)) : undefined} />
           </div>
+          <MapBinding flow={flow} tab={active.key} onTab={goTab} onLeave={flush} onLoadStarter={() => replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." })} />
           <div className="blocks-area">
             {active.scope ? (
               <BlockEditor

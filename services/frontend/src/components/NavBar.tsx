@@ -9,14 +9,16 @@ import type { InterlockLike } from "@/lib/mode";
 import type { Mode } from "@/lib/protocol";
 import { backendHttpBase } from "@/lib/ws";
 
+// The order is Batt's (2026-11-13): Console Maps Flows Economy Hardware Settings. Maps before
+// Flows: a learner starts from the maps and opens each map's flow from there.
 const LINKS = [
   { href: "/", label: "Console" },
-  { href: "/flows", label: "Flows" },
   { href: "/maps", label: "Maps" }, // 2026-11-10: the maps graph, each map bound to its flow, the simulator
+  { href: "/flows", label: "Flows" },
+  { href: "/economy", label: "Economy" }, // 2026-11-11: the P&L of banked runs at fixed NPC prices
+  { href: "/hardware", label: "Hardware" },
   { href: "/settings", label: "Settings" },
   // "Label QA" (/qa) left the bar 2026-11-10 (Batt: no longer used); the page itself remains
-  { href: "/hardware", label: "Hardware" },
-  { href: "/economy", label: "Economy" }, // 2026-11-11: the P&L of banked runs at fixed NPC prices
 ];
 
 /** The top bar on every page: navigation and the always-visible mode badge. The badge reads the

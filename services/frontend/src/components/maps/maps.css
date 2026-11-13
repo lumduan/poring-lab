@@ -162,6 +162,134 @@
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
+/* round 6: the panel under the graph, Links | Map view */
+.maps-bottom-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0;
+  padding: 0.3rem 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.maps-bottom-tabs .segmented-option {
+  padding: 0.15rem 0.7rem;
+  font-size: 0.85rem;
+}
+.maps-bottom-tabs .maps-hint {
+  margin-left: 0.7rem;
+}
+.mp-links {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem 0.75rem 0.75rem;
+  font-size: 0.9rem;
+}
+.mp-links-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.mp-links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 0.75rem;
+}
+.mp-links-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.mp-links-table caption {
+  padding-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mp-links-table th,
+.mp-links-table td {
+  padding: 0.25rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.mp-links-table th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.mp-arrival {
+  display: block;
+}
+.mp-link-map {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.mp-links-rules {
+  margin-top: 0.6rem;
+  color: var(--muted);
+}
+.mp-rule-warn {
+  color: var(--warn-text);
+}
+.mp-panel-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.mp-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+.mp-rule h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.mp-rule-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.4rem;
+}
+.mp-rule-form label {
+  display: flex;
+  flex-direction: column;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.mp-rule-form input {
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.mp-rule-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.mp-rule-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
 .maps-mat-bar {
   display: flex;
   flex: none;
@@ -654,6 +782,138 @@
   width: 10px !important;
   height: 10px !important;
   background: var(--neutral-border) !important;
+}
+/* --- round 6 (Batt 2026-11-13, "like n8n"): a map card with a port per entry and per exit ---- */
+.mp-card {
+  min-width: 330px;
+  max-width: 400px;
+  padding: 0.55rem 0.8rem 0.6rem;
+}
+.mp-map-icon {
+  width: 1rem;
+  height: 1rem;
+  color: #a21caf;
+}
+.mp-handle-head {
+  top: 1.1rem !important;
+  opacity: 0.55;
+}
+.mp-ports {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 0.7rem;
+  margin: 0.45rem -0.8rem 0;
+  padding: 0.35rem 0.8rem 0.1rem;
+  border-top: 1px solid var(--border);
+}
+.mp-ports-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.mp-ports-col[data-side="out"] {
+  text-align: right;
+}
+.mp-ports-head {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mp-port {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.mp-port-name {
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-port-cap {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-port-none {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+/* the dots sit ON the card's edge, beside their row */
+.mp-port .mp-dot {
+  top: 0.55rem !important;
+  width: 11px !important;
+  height: 11px !important;
+  border: 2px solid var(--surface) !important;
+  background: var(--neutral-border);
+}
+.mp-port[data-side="in"] .mp-dot {
+  left: -0.8rem !important;
+  transform: translate(-50%, -50%);
+}
+.mp-port[data-side="out"] .mp-dot {
+  right: -0.8rem !important;
+  left: auto !important;
+  transform: translate(50%, -50%);
+}
+.mp-new {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.2rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed var(--border);
+}
+.mp-port-new .mp-port-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.mp-port .mp-dot-new {
+  border: 2px solid currentColor !important;
+  background: var(--surface) !important;
+}
+.mp-unknown {
+  min-width: 300px;
+  max-width: 360px;
+  border: 2px dashed var(--neutral-border);
+}
+.mp-unknown[data-rule="wing"] {
+  border-color: #f5a623;
+}
+.mp-q {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  background: var(--neutral-border);
+  color: var(--surface);
+  font-weight: 800;
+}
+.mp-unknown[data-rule="wing"] .mp-q {
+  background: #f5a623;
+}
+.mp-rule-pill {
+  padding: 0 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.mp-unknown .mp-port {
+  margin-top: 0.2rem;
+  text-align: right;
 }
 .mp-chip {
   font: inherit;
