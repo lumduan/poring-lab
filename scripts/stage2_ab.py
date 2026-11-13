@@ -551,6 +551,19 @@ class Series:
 
     def setup(self, r: Run) -> None:
         got = self.read()
+        # the dagger on FIRST: clear-bag refuses with the dagger in the bag (2026-11-14 02:09)
+        worn = knife_worn(got.get("knife"))
+        if worn:  # the dagger back on (the run's own dagger key), once, then read again
+            self.log(
+                f"{r.label}: the Knife reads worn (F4 empty, F5 shows the dagger): {DAGGER_KEY}"
+            )
+            kb_ = self.sh([PY, str(Path(__file__)), "dagger-on"], 120)
+            got = self.read()
+            if knife_worn(got.get("knife")) is not False:
+                raise Stop(f"after {DAGGER_KEY} the slots read {got.get('knife')} "
+                           f"({(kb_.stdout or kb_.stderr).strip()[-160:]})")  # fmt: skip
+        elif worn is None:
+            raise Stop(f"the Knife / dagger slots read neither way: {got.get('knife')}")
         w = got.get("weight")
         if w is None or w >= CLEAR_AT:
             self.log(f"{r.label}: the bag reads {w}: clear-bag (etc, use)")
@@ -564,22 +577,11 @@ class Series:
                 # read -- the weight cleared and the counts read -- and the run's start check
                 # refuses anything still wrong before any input
                 why_cb = clear_bag_refused(got)
-                self.log(f"{r.label}: clear-bag rc {cb.returncode} ({cb.stdout.strip()[-160:]}); "
+                self.log(f"{r.label}: clear-bag rc {cb.returncode} "
+                         f"({(cb.stderr.strip() or cb.stdout.strip())[-200:]}); "
                          f"the series' read: {why_cb or 'cleared, counts read'}")  # fmt: skip
                 if why_cb:
                     raise Stop(f"clear-bag rc {cb.returncode}: {why_cb}")
-        worn = knife_worn(got.get("knife"))
-        if worn:  # the dagger back on (the run's own dagger key), once, then read again
-            self.log(
-                f"{r.label}: the Knife reads worn (F4 empty, F5 shows the dagger): {DAGGER_KEY}"
-            )
-            kb_ = self.sh([PY, str(Path(__file__)), "dagger-on"], 120)
-            got = self.read()
-            if knife_worn(got.get("knife")) is not False:
-                raise Stop(f"after {DAGGER_KEY} the slots read {got.get('knife')} "
-                           f"({(kb_.stdout or kb_.stderr).strip()[-160:]})")  # fmt: skip
-        elif worn is None:
-            raise Stop(f"the Knife / dagger slots read neither way: {got.get('knife')}")
         # healed BEFORE the warp: she never arrives on the map with a respawn's HP
         if needs_heal(got.get("hp")):
             self.gm("@heal")
