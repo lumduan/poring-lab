@@ -1014,6 +1014,15 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
   `--garm-fly`, the run prints one `WARNING:` line at its start and goes on.
 - **Not research:** a run on a declared server is never counted (ADR-0023 decision 2). Its record
   carries `fixes.player_mode`; no judge filters on it yet.
+- **From the console: the Run button (2026-11-13).** `/flows?runner=xmas_dun02` has a "Run in the
+  game" panel. Run starts exactly this player-mode runner with the Knife base (rogue-xmas02.md
+  4DQ), at most 120 min, until Stop or until the Fly Wings run low. Stop ends it through its
+  normal end (its packets, the stats, a Butterfly Wing home).
+  - It needs the host helper running: `python3 scripts/flow_run.py serve` (detached), or its user
+    unit `scripts/host/poring-lab-flowrun.service` (the install lines are in its header).
+  - Its request rules are the Settings page's: your browser on the LAN, the console's address,
+    never the lab host itself.
+  - The command it runs is fixed in `scripts/flow_run.py` (`FLOWS`); a request only names a flow.
 
 ## 12. Known differences of the Thai client
 

@@ -12,6 +12,12 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
 
+> ➡️ **2026-11-13 (Batt: "press run on flows and the bot plays"):** the /flows runner view of
+> xmas_dun02 got a **Run** button. It does NOT execute the block IR: MW3's executor is still not
+> built. It starts the proven runner (`dungeon_hunt.py run --player-mode`, a command fixed in
+> `scripts/flow_run.py`) through a request file behind the Settings page's write rules. The blocks
+> the page shows are generated from that same command (`runner_flow_export.py`).
+
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
   linter, offline) starts now; no runtime changes until MW2 (➡️ MW2-live, 13.8; renamed 2026-10-09).

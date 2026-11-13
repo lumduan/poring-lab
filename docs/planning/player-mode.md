@@ -169,6 +169,21 @@ Batt (rogue-xmas02.md 4DF): "add a Butterfly Wing home at the end".
   at a count >= 1, none at 0 / unread / no key / death / hard bar, a seated end stands first, the
   capped wait).
 
+## The /flows Run button (2026-11-13, Batt: "press run on flows and the bot plays")
+
+- `POST /flows/run` (routes_flowrun.py, the Settings page's write_gate) writes one request into
+  `settings/flowrun/`. The host helper `scripts/flow_run.py` consumes it and starts the worker, the
+  detect server and `dungeon_hunt.py run --player-mode` with the Knife base (4DQ), `--minutes 120`
+  and `--stop-file`. One run at a time; it refuses while the night chain or another runner plays.
+- Stop touches the runner's stop file (dungeon@9.40): the run ends at its next tick through its
+  NORMAL end, with the packets, the stats in lab.sqlite and a Butterfly Wing home. SIGINT is only
+  the backstop after 90 s.
+- Smoke tests 2026-11-13 07:36 and 07:42 on the lab server:
+  - started, hunted with the Knife swaps, ended 8 s after Stop with rc 0;
+  - the run is in the SQLite records.
+- The helper is NOT a boot service yet: the auto-mode classifier refused enabling a persistent
+  unit. Batt enables it, or it is started by hand after a reboot.
+
 ## Not built yet
 
 - **Batt's later steps:** walking to a Kafra and warping through its menu (the UI gate's known
