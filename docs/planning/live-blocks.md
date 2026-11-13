@@ -47,9 +47,47 @@ owner: Batt
 | Stage | What becomes blocks | Proven by |
 |---|---|---|
 | 1 | The ONE-BOX project (START > xmas_dun02). The LIVE BLOCK PLAYER: press key, wait, wait until (HP, weight, dead, the map's name: pixels), if / while / repeat, functions with inputs, variables, events, stop, the item warp by a function (its arrival read on the minimap). The hunt core as ONE block played IN-PROCESS (the runner's loop as a library with a tick hook: one process, one input writer). Run on /flows and on /maps (from START, box by box). | offline: fakes prove the input it sends; live: Batt's OK, she placed on xmas_dun02 by a person |
-| 2 | SURVIVAL out of the runner into the box's events: the potion, the Fly Wing on HP and on the HP rate, stock out, the dead jump, the Garm Baby, the boss, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`), the event plays it through the tick hook. | live A/B against the monolithic runner: deaths, potions, flies, kills/h |
-| 3 | The FUNCTIONS the runner calls: the Knife swap (knife_on / knife_back), the respawn, the weight home, the end: blocks the hunt calls at its hook points | live A/B: steals, swaps, respawn, home |
-| 4+ | The CORE, one technique at a time: look, boxes, engage, choose (value target), approach, still / lead / strike, loot, explore / walk / carve | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) |
+| 2 | SURVIVAL out of the runner into the box's EVENTS (functions with a trigger, section 2a): heal (F1 at HP < 30 %), the Fly Wing (F8 on a boss or HP < 25 %), stock out, the dead jump, the Garm Baby, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`); the event plays through the tick hook. | live A/B against the monolithic runner: deaths, potions, flies, kills/h |
+| 3 | The Knife swap as two FUNCTIONS of presses and a wait (section 2a), the respawn, the weight home, the end | live A/B: steals, swaps, respawn, home |
+| 4+ | The CORE as PRIMITIVE blocks + ONE FUNCTION PER MONSTER (attack_myst_case, attack_cookie, ...; section 2a), and use_model (the trained data) | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) |
+
+## 2a. Batt's shape for stages 2-4 (2026-11-13 ~22:0x, Thai, translated)
+
+"Heal, Fly Wing, Knife swap: write every one of them as a FUNCTION, don't make one block.
+Heal: press F1 (the White Potion) when HP < 30 %. Fly Wing: press F8 when a boss is seen or
+HP < 25 %. The Knife swap (Damascus): a function: press F4, wait 100 ms, press F5; the other way
+back to the Knife: the same swapped. The flow page should also have a block to LOAD THE TRAINED
+DATA (I saw you made one), with the monsters the bot already knows. The core of the hunt (look,
+choose a target, walk up, strike, loot, explore): break it into functions, never one block, e.g.
+attack_myst_case, attack_cookie, because in the future each monster may get a different skill or
+killing technique, and on some we may not swap the knife at all."
+
+So the box is written like this (a sketch; the spellings are the engine's):
+
+    # tab survival: events are functions with a trigger
+    @on(hp_percent() < 30, mode=INSERT)       def heal():      press_key("F1")   # White Potion
+    @on(boss_seen() or hp_percent() < 25)     def fly_away():  press_key("F8")   # Fly Wing
+    # tab knife
+    def knife_to_damascus():  press_key("F4"); wait(0.1); press_key("F5")
+    def damascus_to_knife():  ...the same, swapped
+    # tab monsters: one function per monster, each its own technique
+    def attack_myst_case(t):  knife_to_damascus(); strike(t); wait_kill(t); damascus_to_knife(); loot(t)
+    def attack_cookie(t):     strike(t); wait_kill(t); loot(t)               # no knife swap
+    # tab main
+    use_model("xmas02")                       # the trained data: the monsters the bot knows
+    while weight_percent() < 50:
+        t = choose_target()
+        if t is mystcase: attack_myst_case(t)
+        elif t is cookie: attack_cookie(t)
+        else: explore()
+
+- The PRIMITIVE live blocks the runner is broken into (each the runner's own code behind it):
+  use_model(model) (the trained data; its classes become the monsters the other blocks name),
+  choose_target() / nearest(class) (a monster as a value), walk_to_target(t), strike(t),
+  wait_kill(t), loot(t), explore(), use_skill(key) (a press), plus the sensors (hp, weight,
+  boss_seen, sees(class), dead, the map's name).
+- Every key in a function; every threshold in an event's condition; every technique per monster
+  in that monster's function: nothing of it a setting hidden in one block.
 
 ## 3. Stage 1 in detail
 
