@@ -192,7 +192,8 @@ test("words and checks", () => {
   const texts = tl.beats.map((b) => beatText(b, labels));
   assert.match(texts[1], /^Log in to lab-rathena with the lab GM account/);
   assert.ok(texts.some((t) => /^NPC warp → field \(field_1 30, 30\)$/.test(t)), texts.join("\n"));
-  assert.ok(texts.some((t) => /^use return wing \(synthetic\) \(9002\) \(back to the save point\)$/.test(t)));
+  // 2026-11-13: the starter's wing is the function butterfly_wing (press F9)
+  assert.ok(texts.some((t) => /^call butterfly_wing\(\): press F9 \(the Butterfly Wing: back to the save point\)$/.test(t)), texts.join("\n"));
   assert.ok(texts.some((t) => /^meet (slime A \(synthetic\) \(9101\)|monster 91\d\d) at \(\d+, \d+\): fight, defeat, loot$/.test(t)));
   const checks = runChecks(tl, trace, starterFlow().workflow!.blocks.map((b) => ({ name: b.name, map: b.map.map })), "the simulated time ran out", 3);
   assert.deepEqual(checks.map((c) => c.ok), [true, true, true, true, true, true]);

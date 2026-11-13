@@ -101,6 +101,9 @@ export interface PlayStep {
   loot?: boolean;
   item?: number | null;
   item_kind?: string | null;
+  /** an item warp by a FUNCTION (2026-11-13): the function, and the key its press_key presses */
+  proc?: string | null;
+  key?: string | null;
   exit?: "walk_exit" | "npc_warp" | "item_warp";
   from_block?: string | null;
   to_block?: string;

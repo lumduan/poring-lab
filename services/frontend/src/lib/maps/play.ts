@@ -273,6 +273,8 @@ export function beatText(b: Beat, labels: Labels | null): string {
       return `meet ${named(L?.mobs, st.mob ?? null, "monster")} at ${cellText(st.at)}: fight, defeat${st.loot ? ", loot" : ""}${bad}`;
     }
     case "item":
+      // an item warp by a function: the function and its key (the wing is whatever is on that slot)
+      if (st.proc) return `call ${st.proc}()${st.key ? `: press ${st.key}` : ""} (the Butterfly Wing: back to the save point)${bad}`;
       return `use ${named(L?.items, st.item ?? null, "item")}${st.item_kind === "butterfly_wing" ? " (back to the save point)" : st.item_kind === "heal" ? " (heal)" : ""}${bad}`;
     case "loot":
       return `pick up the loot${bad}`;
