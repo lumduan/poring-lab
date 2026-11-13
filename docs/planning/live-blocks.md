@@ -207,3 +207,23 @@ In order; each step only after the one before is proven; nothing of the hunt pla
 6. matpilot re-reviews the pages (read only); its findings fixed.
 7. The report for Batt in the morning: every run's numbers, what was proven, what is not.
 
+## 6. Stage 1 live (2026-11-13 23:01-23:11 ICT): PASS
+
+- The one-box project (main 2a3c87a5+ / a8f7d486) played by scripts/flow_play.py, started on the
+  host like a night pilot (the backend's write gate refuses the lab host itself, `lab_host_peer`,
+  by design; the browser's Run takes the same path through the Run helper). Setup: the lab's GM
+  `@warp xmas_dun02 7 21` (crusader.py gm, the chat guard and UI gate on), the chat input closed
+  and read closed 12 times. No immunity.
+- First two starts refused BEFORE ANY INPUT, as designed: the project's max_runtime_s 7200 is above
+  the run's 600 s maximum (the test's copy then had 600 s); a 3rd identical warp line was refused
+  by the chat guard.
+- The run, 10 min, the hunt core in-process (one Agent, one input writer): the start check all ✓
+  (the map's name read xmas_dun02 from the minimap; the role keys' items read from their icons);
+  28 kills, 33 loot steps, 26 Knife openers, 0 deaths, lowest HP 61 %, 0 potions; the time box
+  ended it and the runner flew her home (Butterfly Wings 3 -> 2); read after it from the screen:
+  geffen (119, 40), the bag 36 % (865 / 2430).
+- For comparison, the runner alone through the old Run path this afternoon (15:18-15:28, 10 min):
+  23 kills, 27 loot steps, 26 Knife swaps. One pair is no A/B: stage 2's pairs are.
+- Found: the detect server of a refused start kept the socket, so the next start's wait timed out
+  (the runner used the running server; harmless); the helper's path starts it once per run.
+
