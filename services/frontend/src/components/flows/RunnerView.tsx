@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
+import LiveRun from "@/components/flows/LiveRun";
 import { browserStorage, KEYS, pythonDefault, readChoice, writeChoice } from "@/lib/flow/prefs";
 import { allNodes, commandPieces, findNode, markOf, type RunnerDoc, type RunnerNode, runnerWorkspace, textOf, titleOf, valueText } from "@/lib/flow/runner";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
@@ -34,7 +35,10 @@ const KIND_WORD: Record<RunnerNode["kind"], string> = { hat: "a start block", st
 
 const darkQuery = () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null);
 
-export default function RunnerView({ doc, onBack }: { doc: RunnerDoc; onBack: () => void }) {
+// The runner flows the Run panel can start (scripts/flow_run.py's FLOWS; 2026-11-13)
+const LIVE_FLOWS: readonly string[] = ["xmas_dun02_rogue"];
+
+export default function RunnerView({ doc, onBack, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; backendUrl?: string | null }) {
   const store = useMemo(() => browserStorage(), []);
   const [view, setViewState] = useState<(typeof VIEWS)[number]>(() => readChoice(store, KEYS.view, VIEWS, "blocks"));
   const [pythonPanel, setPythonPanel] = useState<(typeof OPEN_CLOSED)[number]>(() => {
@@ -152,8 +156,8 @@ export default function RunnerView({ doc, onBack }: { doc: RunnerDoc; onBack: ()
       <header className="studio-bar">
         <div className="studio-brand">
           <span className="studio-home">Flows</span>
-          <span className="status-pill" title="A description of the runner: nothing on this page runs in the game">
-            DESCRIPTION · SIMULATE only
+          <span className="status-pill" title="A description of the runner; Simulate plays an example; the Run panel starts the real runner in the game">
+            {LIVE_FLOWS.includes(doc.id) ? "DESCRIPTION · SIMULATE · RUN" : "DESCRIPTION · SIMULATE only"}
           </span>
           <h1 className="studio-title" title={doc.title}>
             {doc.title}
@@ -181,8 +185,10 @@ export default function RunnerView({ doc, onBack }: { doc: RunnerDoc; onBack: ()
       <div className="studio-notices">
         <p className="notice" role="note" data-testid="runner-notice">
           A DESCRIPTION of <code>{doc.script}</code>, made from its code by <code>scripts/runner_flow_export.py</code>: the blocks are the runner&apos;s loop in plain words, and every number
-          and flag is the code&apos;s own. Click a block to see them. Nothing here runs in the game.
+          and flag is the code&apos;s own. Click a block to see them. The blocks and Simulate run nothing in the game
+          {LIVE_FLOWS.includes(doc.id) ? "; the Run panel below starts the real runner (player mode)." : "."}
         </p>
+        {LIVE_FLOWS.includes(doc.id) && <LiveRun backendUrl={backendUrl} flow={doc.id} />}
         {copied === "failed" && (
           <p className="notice notice-warn" role="status">
             This browser would not copy automatically (the page is not a secure origin). The code is selected: press Ctrl+C (⌘C) to copy it.

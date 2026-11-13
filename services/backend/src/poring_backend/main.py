@@ -20,6 +20,7 @@ from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
 from poring_backend.routes_debug import router as debug_router
 from poring_backend.routes_economy import router as economy_router
+from poring_backend.routes_flowrun import router as flowrun_router
 from poring_backend.routes_flows import router as flows_router
 from poring_backend.routes_hardware import router as hardware_router
 from poring_backend.routes_internal import router as internal_router
@@ -108,6 +109,7 @@ def create_app(
     app.include_router(qa_router)
     app.include_router(settings_router)
     app.include_router(flows_router)
+    app.include_router(flowrun_router)  # the Run button (routes_flowrun.py; write_gate)
     app.include_router(debug_router)
     app.include_router(hardware_router)  # the public listener only (routes_hardware.py)
     app.include_router(economy_router)  # read-only, the public listener only (routes_economy.py)

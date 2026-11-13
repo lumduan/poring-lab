@@ -1,0 +1,26 @@
+# poring-lab: the /flows page's Run button, the host side (scripts/flow_run.py; Batt 2026-11-13).
+# A USER unit (no root): it runs as the lab's user, who owns the repo, and launches the same steps
+# the night chain does (guarded_build's worker, the detect server, dungeon_hunt.py --player-mode).
+#
+# Install (as the lab user; linger keeps it running without a login):
+#     mkdir -p ~/.config/systemd/user
+#     cp scripts/host/poring-lab-flowrun.service ~/.config/systemd/user/
+#     systemctl --user daemon-reload && systemctl --user enable --now poring-lab-flowrun.service
+# Undo: systemctl --user disable --now poring-lab-flowrun.service
+# Check: python3 scripts/flow_run.py status (its t_wall advances every 2 s)
+[Unit]
+Description=poring-lab: the /flows Run button's helper (starts the proven runner in player mode)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/docker/poring-lab
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Asia/Bangkok
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/docker/poring-lab/.venv/bin/python %h/docker/poring-lab/scripts/flow_run.py serve
+Restart=on-failure
+RestartSec=10
+Nice=5
+
+[Install]
+WantedBy=default.target
