@@ -922,6 +922,11 @@ def patrol_start(map_: str, okr: Any, check: Any) -> Cell:
 # --- U0's staged setup (TRIAL ONLY: rogue-xmas02.md 4BU, U0 -- the staged unreachable attacker;
 # Study S-UA: in p57 she stood on (100,207) and a Cruiser on (98,205) shot her across cliff cells
 # she cannot walk). Batt OK'd a staged monster beside her, 2026-11-11.
+def point_or_none(s: str) -> Cell | str:
+    """argparse type: "X,Y" -> (X, Y), or "none" (no such step on this server)."""
+    return "none" if s.strip().lower() == "none" else cell_arg(s)
+
+
 def cell_arg(s: str) -> Cell:
     """argparse type: "X,Y" -> (X, Y), two non-negative integers."""
     xs, sep, ys = s.partition(",")
@@ -1246,6 +1251,13 @@ WEIGHT_HOME_RANGE = (0.20, 0.90)  # --weight-home's accepted shares
 # gm_vitals.RETURN_TO_GAME, rows 496-513) is the setup's known step.
 MOVE_TO_SAVE = (645, 481)  # the DEFAULT; --respawn-at X,Y (the Run settings) sets another server's
 GAME_PX = (1280, 720)  # the game region's size: a --respawn-at point lies inside it
+# The CONFIRMATION this client asks after the menu's button (found live 2026-11-13 11:57: "Do you
+# really want to go back to your savepoint?" with OK / Cancel); its picture is the signature
+# RESPAWN_CONFIRM_STATE (cut from that live frame, box game (505, 300, 280, 119)); OK's centre was
+# measured on it (columns 694-733, rows 396-413). --respawn-confirm-at X,Y | none sets another's.
+RESPAWN_CONFIRM_STATE = "respawn_confirm"
+CONFIRM_AT = (714, 405)
+RESPAWN_CONFIRM_WAIT_S = 3.0  # after the menu's press, the confirmation drawn by then (or none)
 RESPAWN_SETTLE_S = 1.0  # after the death read, the dialog drawn before the press
 RESPAWN_LOAD_S = 4.0  # after the press, the load screen (Basic Info unread) starts by then ...
 RESPAWN_WAIT_S = 20.0  # ... and Basic Info reads again (the save point's map drawn) by then
@@ -1295,13 +1307,21 @@ def exits_refused(a: argparse.Namespace) -> str | None:
     at = getattr(a, "respawn_at", None)  # Batt 2026-11-13: another server's dialog: not hard-coded
     if at is not None and not rs_:
         return "--respawn-at goes with --respawn"
+    ca = getattr(a, "respawn_confirm_at", None)
+    if ca is not None and not rs_:
+        return "--respawn-confirm-at goes with --respawn"
+    if isinstance(ca, tuple) and not (0 <= ca[0] < GAME_PX[0] and 0 <= ca[1] < GAME_PX[1]):
+        return f"--respawn-confirm-at {ca[0]},{ca[1]} is off the game picture"
     if at is not None and not (0 <= at[0] < GAME_PX[0] and 0 <= at[1] < GAME_PX[1]):
         return f"--respawn-at {at[0]},{at[1]} is off the game picture ({GAME_PX[0]} x {GAME_PX[1]})"
     return None
 
 
 def respawn_end(*, dead: Callable[[], bool], press: Callable[[], None],
-                basic_info: Callable[[], bool], sleep: Callable[[float], None] = time.sleep,
+                basic_info: Callable[[], bool],
+                confirm_reads: Callable[[], bool] | None = None,
+                confirm_press: Callable[[], None] | None = None,
+                sleep: Callable[[float], None] = time.sleep,
                 now: Callable[[], float] = time.monotonic,
                 rec: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
     """dungeon@9.41: a --player-mode death's way out -- the death dialog's FIRST button ("move to
@@ -1309,7 +1329,10 @@ def respawn_end(*, dead: Callable[[], bool], press: Callable[[], None],
     Then the map change as the runner sees one: Basic Info unread (the load screen) within
     RESPAWN_LOAD_S, then read again within RESPAWN_WAIT_S (the save point's map drawn). It never
     presses again: a dialog that stays, or no load, is recorded and left to the person. ``rec``
-    is filled IN PLACE ({"pressed", "why", "dialog_gone_s", "load_s", "back_s"})."""
+    is filled IN PLACE ({"pressed", "confirm", "why", "dialog_gone_s", "load_s", "back_s"}).
+    With ``confirm_reads`` / ``confirm_press`` (2026-11-13: this client asks "Do you really want to
+    go back to your savepoint?"): after the menu's press, a confirmation that reads within
+    RESPAWN_CONFIRM_WAIT_S gets ONE press (its OK); none read: none pressed ("none seen")."""
     rec = {} if rec is None else rec
     rec.update(pressed=False)
     sleep(RESPAWN_SETTLE_S)
@@ -1318,6 +1341,16 @@ def respawn_end(*, dead: Callable[[], bool], press: Callable[[], None],
         return rec
     press()
     rec["pressed"] = True
+    if confirm_reads is not None and confirm_press is not None:
+        rec["confirm"] = "none seen"
+        tc = now()
+        while now() - tc < RESPAWN_CONFIRM_WAIT_S:
+            sleep(RESPAWN_POLL_S)
+            if confirm_reads():
+                confirm_press()
+                rec["confirm"] = "pressed"
+                rec["confirm_s"] = round(now() - tc, 2)
+                break
     t0 = now()
     gone: float | None = None
     load: float | None = None
@@ -1325,7 +1358,7 @@ def respawn_end(*, dead: Callable[[], bool], press: Callable[[], None],
     while now() - t0 < RESPAWN_WAIT_S:
         sleep(RESPAWN_POLL_S)
         t = now() - t0
-        if gone is None and not dead():
+        if gone is None and not dead() and not (confirm_reads is not None and confirm_reads()):
             gone = t
         if load is None:
             if not basic_info():
@@ -2837,6 +2870,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["fly_key"] = a.fly_key
     if getattr(a, "respawn_at", None) is not None:  # 2026-11-13: the person's respawn button
         out["respawn_at"] = list(a.respawn_at)
+    ca = getattr(a, "respawn_confirm_at", None)
+    if ca is not None:
+        out["respawn_confirm_at"] = ca if ca == "none" else list(ca)
     if getattr(a, "walk_ahead", WALK_AHEAD) != WALK_AHEAD:  # the long legs (idle study 6.1)
         out["walk_ahead"] = a.walk_ahead
     if getattr(a, "walk_through", False):
@@ -8817,11 +8853,33 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         time.sleep(0.3)
                         agent_raw.click(x_, y_)
 
+                    ca_ = getattr(a, "respawn_confirm_at", None)  # "none": this server asks none
+                    cat_ = None if ca_ == "none" else (ca_ or CONFIRM_AT)
+
+                    def confirm_press() -> None:
+                        assert cat_ is not None
+                        x_, y_ = gx0 + cat_[0], gy0 + cat_[1]
+                        agent_raw.move(x_ + 4, y_ + 3)
+                        time.sleep(0.08)
+                        agent_raw.move(x_, y_)
+                        time.sleep(0.3)
+                        agent_raw.click(x_, y_)
+
+                    has_sig = bool(r.signature_variants(RESPAWN_CONFIRM_STATE))
+
+                    def confirm_reads() -> bool:
+                        return r.is_state(screen, RESPAWN_CONFIRM_STATE)
+
                     try:
                         respawn_end(dead=lambda: r.is_state(screen, gv.DEAD_STATE),
                                     press=respawn_press,
                                     basic_info=lambda: hpp.read(frame(), glyphs) is not None,
+                                    confirm_reads=confirm_reads
+                                    if cat_ is not None and has_sig else None,
+                                    confirm_press=confirm_press if cat_ is not None else None,
                                     rec=rsp)  # fmt: skip
+                        if cat_ is not None and not has_sig:
+                            rsp["confirm"] = "no signature for it on this client: not pressed"
                     except Exception as exc:  # noqa: BLE001 -- recorded; the end goes on
                         rsp["error"] = repr(exc)[:300]
                     ev({"kind": "player_respawn", **rsp})
@@ -9208,6 +9266,15 @@ def main() -> int:
         help="dungeon@9.41 (Batt 2026-11-13, the map's other exit; --player-mode only): a death "
         "presses the death dialog's FIRST button (move to saved location) once, only while the "
         "dialog reads, and waits for the save point's map; OFF: the dialog is the person's",
+    )
+    t.add_argument(
+        "--respawn-confirm-at",
+        type=point_or_none,
+        default=None,
+        metavar="X,Y|none",
+        help="2026-11-13 (this client asks to confirm the respawn): the confirmation's OK point in "
+        "the game picture, pressed once only while its picture (the respawn_confirm signature) "
+        "reads (default 714,405); none: the server asks no confirmation",
     )
     t.add_argument(
         "--respawn-at",

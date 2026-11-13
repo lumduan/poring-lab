@@ -90,6 +90,7 @@ SETTING_FLAGS = {
     "home_key": "--player-home-key",
     "weight_home": "--weight-home",
     "respawn_at": "--respawn-at",  # Batt 2026-11-13: another server's death menu: not hard-coded
+    "respawn_confirm_at": "--respawn-confirm-at",  # its confirmation's OK, or "none"
 }
 GAME_PX = (1280, 720)  # the game picture: a respawn_at point lies inside it
 KEY_CHOICES = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
@@ -112,11 +113,15 @@ def settings_of(flow: Flow, raw: Mapping[str, Any] | None) -> dict[str, Any] | s
             return f"{k} {out[k]} is a key this run uses already ({', '.join(flow.reserved_keys)})"
     if "fly_key" in out and out.get("fly_key") == out.get("home_key"):
         return "the Fly Wing and the Butterfly Wing need two different keys"
-    if "respawn_at" in out:
-        m = re.fullmatch(r"(\d{1,4}),(\d{1,4})", str(out["respawn_at"]))
+    for k in ("respawn_at", "respawn_confirm_at"):
+        if k not in out:
+            continue
+        if k == "respawn_confirm_at" and out[k] == "none":  # this server asks no confirmation
+            continue
+        m = re.fullmatch(r"(\d{1,4}),(\d{1,4})", str(out[k]))
         if m is None or not (int(m[1]) < GAME_PX[0] and int(m[2]) < GAME_PX[1]):
-            return f"respawn_at {out['respawn_at']!r} is not a point X,Y in the game picture"
-        out["respawn_at"] = f"{int(m[1])},{int(m[2])}"
+            return f"{k} {out[k]!r} is not a point X,Y in the game picture"
+        out[k] = f"{int(m[1])},{int(m[2])}"
     if "weight_home" in out:
         w = out["weight_home"]
         if (
@@ -161,7 +166,13 @@ FLOWS: dict[str, Flow] = {
         # Batt 2026-11-13: "the Butterfly Wing on F9, the Fly Wing on F8" (a person may change
         # them, and the weight, on /flows before Run); the Rogue's other row-1 keys are taken:
         # F1 potion, F3 steal, F4 the Knife (--steal-opener), F5 the dagger (--bare-steal)
-        settings={"fly_key": "F8", "home_key": "F9", "weight_home": 0.50, "respawn_at": "645,481"},
+        settings={
+            "fly_key": "F8",
+            "home_key": "F9",
+            "weight_home": 0.50,
+            "respawn_at": "645,481",
+            "respawn_confirm_at": "714,405",
+        },
         reserved_keys=("F1", "F3", "F4", "F5"),
     ),
 }

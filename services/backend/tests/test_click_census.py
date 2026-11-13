@@ -104,7 +104,7 @@ ALLOWED = {
                                "inside it. And the storage window's own CLOSE button (store_loot, "
                                "Batt 2026-10-25: loot kept via @storage), only while its title "
                                "matched, after two motions"),
-    "scripts/dungeon_hunt.py": (3, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
+    "scripts/dungeon_hunt.py": (4, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
                                    "Crusader on orcsdun01): ONE world-click path (click_at) "
                                    "through FrameGuard (off-frame refused) -- the DEFEND-SCAN "
                                    "strike and its burst only where cursor_sword read SWORD at "
@@ -165,7 +165,11 @@ ALLOWED = {
                                    "2026-11-13: a death is the map's exit; --player-mode only) the "
                                    "death dialog's FIRST button (move to saved location, "
                                    "MOVE_TO_SAVE, measured on two real deaths), ONCE, only while "
-                                   "the dialog reads (gm_vitals.DEAD_STATE), never pressed again"),
+                                   "the dialog reads (gm_vitals.DEAD_STATE), never pressed again; "
+                                   "then this client's CONFIRMATION's OK (CONFIRM_AT, or "
+                                   "--respawn-confirm-at; none: no such step), ONCE, only while "
+                                   "its picture reads (the respawn_confirm signature, cut live "
+                                   "2026-11-13)"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
                                     "Basic Info's arrow and a chat TAB, two motions, each step "
                                     "verified on pixels (the chat's message area is "

@@ -714,6 +714,7 @@ function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: Ru
         </select>
       </label>
       <RespawnAt s={s} onChange={onChange} />
+      <ConfirmAt s={s} d={d} onChange={onChange} />
       <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} data-testid="run-settings-reset">
         defaults ({d.defaults.fly_key}, {d.defaults.home_key}, {Math.round(d.defaults.weight_home * 100)} %, respawn at {d.defaults.respawn_at})
       </button>
@@ -738,6 +739,24 @@ function RespawnAt({ s, onChange }: { s: RunSettings; onChange: (s: RunSettings)
       <input className="run-settings-num" value={x ?? ""} onChange={(e) => set(e.target.value, y ?? "")} inputMode="numeric" size={4} aria-label="respawn button x" data-testid="run-settings-respawn-x" />{" "}
       y{" "}
       <input className="run-settings-num" value={y ?? ""} onChange={(e) => set(x ?? "", e.target.value)} inputMode="numeric" size={4} aria-label="respawn button y" data-testid="run-settings-respawn-y" />
+    </span>
+  );
+}
+
+/** The confirmation's OK point (this client asks "go back to your savepoint?"), or none: another
+ * server may ask nothing. Pressed only while its picture (the respawn_confirm signature) reads. */
+function ConfirmAt({ s, d, onChange }: { s: RunSettings; d: RunnerSettingsDoc; onChange: (s: RunSettings) => void }) {
+  const asks = s.respawn_confirm_at !== "none";
+  const [x, y] = asks ? s.respawn_confirm_at.split(",") : ["", ""];
+  const set = (nx: string, ny: string) => onChange({ ...s, respawn_confirm_at: `${nx.replace(/\D/g, "").slice(0, 4)},${ny.replace(/\D/g, "").slice(0, 4)}` });
+  return (
+    <span className="mb-part" title="After the respawn button this client asks to confirm: its OK, in game-picture pixels. Untick for a server that asks nothing">
+      <label>
+        <input type="checkbox" checked={asks} onChange={(e) => onChange({ ...s, respawn_confirm_at: e.target.checked ? (d.defaults.respawn_confirm_at !== "none" ? d.defaults.respawn_confirm_at : "714,405") : "none" })} data-testid="run-settings-confirm" />{" "}
+        then confirm (OK) at
+      </label>{" "}
+      x <input className="run-settings-num" value={x ?? ""} disabled={!asks} onChange={(e) => set(e.target.value, y ?? "")} inputMode="numeric" size={4} aria-label="confirm OK x" data-testid="run-settings-confirm-x" /> y{" "}
+      <input className="run-settings-num" value={y ?? ""} disabled={!asks} onChange={(e) => set(x ?? "", e.target.value)} inputMode="numeric" size={4} aria-label="confirm OK y" data-testid="run-settings-confirm-y" />
     </span>
   );
 }

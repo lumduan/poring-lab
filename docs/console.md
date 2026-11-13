@@ -254,7 +254,10 @@ Amendment B); a not-adopted model is never offered.
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
   and the weight to go home at (defaults F8, F9, 50 %; the blocks show them); the map's exits: a bag
   over the limit -> a Butterfly Wing home, a death -> the death dialog's move to saved location
-  ([planning/player-mode.md](planning/player-mode.md), dungeon@9.41).
+  ([planning/player-mode.md](planning/player-mode.md), dungeon@9.41). The strip also sets the respawn
+  function block's points (the death menu's button; the confirmation's OK, or none for a server that
+  asks nothing). Live-verified 2026-11-13: the weight exit flies her home on F9; a death respawns her
+  in Geffen (her save point since 11:5x).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

@@ -220,8 +220,29 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
 - **What the person sets up on the hotbar:** the Fly Wings on the Fly Wing key, the Butterfly Wings
   on the Butterfly Wing key (11-13 11:12 her F8 and F9 were EMPTY: the 10:02 test's end read
   "no Butterfly Wing on the hotbar (count 0)").
-- **Live checks:** see the 11-13 report (the weight exit with a 30 % limit; the respawn waits for
-  Batt's OK to a test death: `@die` is not in group 20).
+- **Live checks (2026-11-13, all PASSED; archived on the NAS, scratch-archive/2026-11-13):**
+  - 11:34 the weight exit: 0.3107 > 0.30 -> run_end `weight_home` after 11.4 s (F9 empty then:
+    no wing, recorded).
+  - 11:45 found: the Butterfly Wing's icon tail in F9's count box read `[None, '5']` -> the count
+    read None and the wing never pressed. FIXED in hotbar_count (a digit's ink spans the box's
+    height; all ten templates do).
+  - 11:46-11:47 the full exit (fly F8, home F9, 30 %): weight 0.3111 -> run_end -> F9 "5 on the
+    hotbar" pressed once -> load 0.25 s, back 4.14 s, `home: true`.
+  - 11:57 the respawn, first try: the menu's press opened a CONFIRMATION this client asks ("Do
+    you really want to go back to your savepoint?", OK / Cancel); the function stopped safely
+    (no load, recorded). Its signature `respawn_confirm` was cut from that live frame (box game
+    505,300,280,119) and its OK measured at (714,405): `--respawn-confirm-at X,Y | none`, a Run
+    setting, a step of the respawn function block.
+  - 12:01 the respawn with the confirmation (Batt: "@die is easier"; @die + @save added to group
+    20): menu pressed -> confirmation read after 1.06 s, OK once -> load 0.25 s, back 4.23 s ->
+    Geffen (119, 40), alive (28 HP, healed).
+- **The save point (Batt 2026-11-13: "save her at Geffen first"):** `@save` on the Geffen Kafra's
+  own save cell (npc/kafras/kafras.txt: savepoint "geffen",119,40) at 11:5x; the reply "Your save
+  point has been changed." A Butterfly Wing and a respawn now land in Geffen.
+- **Everything is the person's (Batt: "make it editable in the code blocks, don't hard-code"):**
+  the Fly Wing key, the Butterfly Wing key, the weight limit, the respawn button's point and the
+  confirmation's OK (or none) are Run settings on /flows?runner=xmas_dun02, shown in the blocks;
+  the respawn is its own function block, `def respawn(at)`.
 
 ## Not built yet
 

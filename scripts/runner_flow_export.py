@@ -67,7 +67,8 @@ BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minu
 # The person's Run settings (2026-11-13, Batt: "don't hard-code the keys"): each one's param in the
 # doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
 SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
-                  "weight_home": "cmd.weight_home", "respawn_at": "cmd.respawn_at"}  # fmt: skip
+                  "weight_home": "cmd.weight_home", "respawn_at": "cmd.respawn_at",
+                  "respawn_confirm_at": "cmd.respawn_confirm_at"}  # fmt: skip
 # The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
 OPTIONAL: list[dict[str, Any]] = []
 
@@ -336,6 +337,30 @@ def respawn_fn() -> Node:
                     ),
                 ],
                 "Only a read menu gets the press.",
+            ),
+            cond(
+                "respawn_confirm",
+                S_IF,
+                [
+                    Branch(
+                        "a confirmation reads (its picture) within {RESPAWN_CONFIRM_WAIT_S} s: "
+                        "press its OK at ({cmd.respawn_confirm_at}), once",
+                        "if confirm_reads(within=RESPAWN_CONFIRM_WAIT_S):  # this client asks",
+                        [
+                            step(
+                                "respawn_confirm_press",
+                                S_ACT,
+                                "move there twice, then click OK",
+                                ["press_at($(cmd.respawn_confirm_at))  # never a second time"],
+                                "This client asks 'Do you really want to go back to your "
+                                "savepoint?' (found live 2026-11-13). Another server may ask "
+                                "nothing: its Run setting is then none.",
+                            )
+                        ],
+                    )
+                ],
+                "The confirmation is pressed only while its picture reads.",
+                flags=["--respawn-confirm-at"],
             ),
             step(
                 "respawn_load",
@@ -1247,6 +1272,7 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("PLAYER_POS_S", "--player-mode: her cell must read within this long (s)"),
         const("WEIGHT_MAX", "the weight share a run refuses to start at"),
         const("RESPAWN_SETTLE_S", "after a death: the menu drawn before the press (s)"),
+        const("RESPAWN_CONFIRM_WAIT_S", "after the press: a confirmation drawn by then (s)"),
         const("RESPAWN_LOAD_S", "after the press: the load screen starts by then (s)"),
         const("RESPAWN_WAIT_S", "after the press: the save point's map drawn by then (s)"),
         const(

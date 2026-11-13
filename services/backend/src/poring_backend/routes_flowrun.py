@@ -51,6 +51,8 @@ class RunSettings(BaseModel):
     weight_home: float | None = Field(default=None, ge=0.3, le=0.8)
     # the death menu's button, game-picture px "X,Y" (another server's menu may differ)
     respawn_at: str | None = Field(default=None, pattern=r"^\d{1,4},\d{1,4}$")
+    # its confirmation's OK, or "none" (a server that asks no confirmation)
+    respawn_confirm_at: str | None = Field(default=None, pattern=r"^(\d{1,4},\d{1,4}|none)$")
 
 
 class RunBody(BaseModel):
@@ -97,10 +99,11 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
     s = body.settings
     if s is not None and s.fly_key is not None and s.fly_key == s.home_key:
         return 400, "settings_same_key"
-    if s is not None and s.respawn_at is not None:
-        x, y = (int(v) for v in s.respawn_at.split(","))
-        if x >= 1280 or y >= 720:
-            return 400, "settings_off_picture"
+    for pt in (s.respawn_at, s.respawn_confirm_at) if s is not None else ():
+        if pt is not None and pt != "none":
+            x, y = (int(v) for v in pt.split(","))
+            if x >= 1280 or y >= 720:
+                return 400, "settings_off_picture"
     return None
 
 

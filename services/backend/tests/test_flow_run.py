@@ -52,7 +52,8 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
     # a start carries its SETTINGS, checked (the flow's defaults when the request names none)
     assert ok == {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
                   "settings": {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5,
-                               "respawn_at": "645,481"}}  # fmt: skip
+                               "respawn_at": "645,481",
+                               "respawn_confirm_at": "714,405"}}  # fmt: skip
     assert fr.parse_request("{") == "unparsable request"
     assert fr.parse_request(json.dumps({"id": "x", "action": "start"})) == "bad request id"
     assert "unknown flow" in str(fr.parse_request(json.dumps(
@@ -67,9 +68,12 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
 def test_the_settings_are_the_defaults_or_a_persons_from_fixed_lists() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
     assert fr.settings_of(f, None) == {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5,
-                                       "respawn_at": "645,481"}  # fmt: skip
+                                       "respawn_at": "645,481",
+                                       "respawn_confirm_at": "714,405"}  # fmt: skip
+    assert fr.settings_of(f, {"respawn_confirm_at": "none"})["respawn_confirm_at"] == "none"  # type: ignore[index]
     assert fr.settings_of(f, {"fly_key": "F6", "weight_home": 0.6, "respawn_at": "600,500"}) == {
-        "fly_key": "F6", "home_key": "F9", "weight_home": 0.6, "respawn_at": "600,500"}  # fmt: skip
+        "fly_key": "F6", "home_key": "F9", "weight_home": 0.6, "respawn_at": "600,500",
+        "respawn_confirm_at": "714,405"}  # fmt: skip
     bad = (({"fly_key": "F10"}, "not a row-1"), ({"home_key": "Enter"}, "not a row-1"),
            ({"fly_key": "F4"}, "uses already"), ({"home_key": "F1"}, "uses already"),
            ({"fly_key": "F9"}, "two different keys"), ({"weight_home": 0.33}, "is not one of"),
@@ -77,7 +81,9 @@ def test_the_settings_are_the_defaults_or_a_persons_from_fixed_lists() -> None:
            ({"steal_opener": "F2"}, "unknown setting"),
            ({"respawn_at": "1280,10"}, "not a point"), ({"respawn_at": "10,720"}, "not a point"),
            ({"respawn_at": "645;481"}, "not a point"),
-           ({"respawn_at": 645}, "not a point"))  # fmt: skip
+           ({"respawn_at": 645}, "not a point"),
+           ({"respawn_confirm_at": "1300,1"}, "not a point"),
+           ({"respawn_confirm_at": "NONE!"}, "not a point"))  # fmt: skip
     for raw, why in bad:
         got = fr.settings_of(f, raw)
         assert isinstance(got, str) and why in got, (raw, got)
@@ -93,6 +99,7 @@ def test_the_settings_become_flags_and_nothing_else_does() -> None:
     assert argv[argv.index("--weight-home") + 1] == "0.40"
     assert argv.count("--fly-key") == 1 and argv.count("--weight-home") == 1
     assert argv[argv.index("--respawn-at") + 1] == "645,481"  # the default point
+    assert argv[argv.index("--respawn-confirm-at") + 1] == "714,405"
     req = {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
            "settings": {"fly_key": "F4"}}  # fmt: skip
     assert "uses already" in str(fr.parse_request(json.dumps(req)))

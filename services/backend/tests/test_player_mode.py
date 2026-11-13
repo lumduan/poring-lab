@@ -777,3 +777,41 @@ def test_run_refuses_a_taken_fly_key_before_any_input(monkeypatch: Any) -> None:
     with pytest.raises(SystemExit) as exc:
         dh.run(a)
     assert "refused" in str(exc.value) and "potion" in str(exc.value)
+
+
+def test_the_respawn_presses_the_confirmation_once_only_while_it_reads() -> None:
+    """2026-11-13 11:57 (live): this client asks "go back to your savepoint?" after the menu."""
+    c = _Clock()
+    # the menu reads until the press (t=1.0); the confirmation reads from 1.5 s to the OK; a load
+    rec = dh.respawn_end(
+        dead=lambda: c.t <= 1.0,
+        press=lambda: c.log.append("press"),
+        basic_info=lambda: not 2.5 <= c.t < 6.0,
+        confirm_reads=lambda: c.t >= 1.5 and "ok" not in c.log,
+        confirm_press=lambda: c.log.append("ok"),
+        sleep=c.sleep,
+        now=c.now,
+    )
+    assert c.log == ["press", "ok"] and rec["confirm"] == "pressed" and "why" not in rec
+    assert rec["back_s"] is not None
+    c = _Clock()  # a server that asks nothing: no OK pressed, the load still counts
+    rec = dh.respawn_end(
+        dead=lambda: c.t <= 1.0,
+        press=lambda: c.log.append("press"),
+        basic_info=lambda: not 2.0 <= c.t < 5.0,
+        confirm_reads=lambda: False,
+        confirm_press=lambda: c.log.append("ok"),
+        sleep=c.sleep,
+        now=c.now,
+    )
+    assert c.log == ["press"] and rec["confirm"] == "none seen" and rec["back_s"] is not None
+
+
+def test_the_confirm_point_is_a_point_or_none(monkeypatch: Any) -> None:
+    a = _ns(monkeypatch, "--player-mode", "--respawn", "--respawn-confirm-at", "none")
+    assert a.respawn_confirm_at == "none" and dh.exits_refused(a) is None
+    a = _ns(monkeypatch, "--player-mode", "--respawn", "--respawn-confirm-at", "714,405")
+    assert a.respawn_confirm_at == (714, 405) and dh.fixes_of(a)["respawn_confirm_at"] == [714, 405]
+    ns = types.SimpleNamespace
+    off = ns(player_mode=True, weight_home=None, respawn=False, respawn_confirm_at=(1, 1))
+    assert "goes with --respawn" in str(dh.exits_refused(off))

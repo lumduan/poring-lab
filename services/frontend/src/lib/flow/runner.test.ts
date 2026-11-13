@@ -191,8 +191,8 @@ test("a runner flow is found by its id or its map; its link opens /flows", () =>
 test("the run settings show in the blocks and the params; the Python keeps its lines", () => {
   const d = DOC;
   assert.ok(d.settings, "the export carries the settings");
-  assert.deepEqual(d.settings.defaults, { fly_key: "F8", home_key: "F9", weight_home: 0.5, respawn_at: "645,481" });
-  const mine = withSettings(d, { fly_key: "F6", home_key: "F7", weight_home: 0.65, respawn_at: "600,500" });
+  assert.deepEqual(d.settings.defaults, { fly_key: "F8", home_key: "F9", weight_home: 0.5, respawn_at: "645,481", respawn_confirm_at: "714,405" });
+  const mine = withSettings(d, { fly_key: "F6", home_key: "F7", weight_home: 0.65, respawn_at: "600,500", respawn_confirm_at: "none" });
   const shown = (doc: RunnerDoc, param: string) =>
     allNodes(doc).flatMap((n) => [...(n.parts ?? []), ...(n.branches ?? []).flatMap((b) => b.parts)]).filter((p): p is Extract<RunnerPart, { param: string }> => "param" in p && p.param === param).map((p) => p.shown);
   assert.ok(shown(d, "cmd.weight_home").length >= 1 && shown(d, "cmd.weight_home").every((v) => v === "50"));
@@ -203,6 +203,7 @@ test("the run settings show in the blocks and the params; the Python keeps its l
   // the respawn function block shows the person's button point (Batt: another server's menu)
   assert.ok(shown(mine, "cmd.respawn_at").length >= 2 && shown(mine, "cmd.respawn_at").every((v) => v === "600,500"));
   assert.ok(findNode(d, "respawn_fn"), "the respawn is its own function block");
+  assert.ok(shown(mine, "cmd.respawn_confirm_at").length >= 1 && shown(mine, "cmd.respawn_confirm_at").every((v) => v === "none"));
   assert.equal(mine.python, d.python); // its lines are the blocks' marks
   assert.equal(allNodes(mine).length, allNodes(d).length);
   assert.deepEqual(checkDoc(mine, STYLES), []);
@@ -219,6 +220,8 @@ test("the run settings are checked against the export's own choices", () => {
   assert.match(String(settingsProblem({ ...s.defaults, weight_home: 0.33 }, s)), /not one of the choices/);
   assert.equal(settingsProblem({ ...s.defaults, respawn_at: "1279,719" }, s), null);
   for (const bad of ["1280,10", "10,720", "x,1", "645", "-1,5", ""]) assert.match(String(settingsProblem({ ...s.defaults, respawn_at: bad }, s)), /not a point/, bad);
+  assert.equal(settingsProblem({ ...s.defaults, respawn_confirm_at: "none" }, s), null); // a server that asks nothing
+  assert.match(String(settingsProblem({ ...s.defaults, respawn_confirm_at: "900,800" }, s)), /not a point/);
   assert.deepEqual(DOC.exits?.map((x) => x.id), ["weight_home", "respawn"]); // the map's two exits
 });
 
