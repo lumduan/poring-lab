@@ -27,6 +27,7 @@ export type RunnerNode = {
   flags: string[];
   code: string[];
   params: string[];
+  tab?: string; // a stack's tab on /flows (2026-11-13); absent: the stack's id
 };
 export type RunnerParam = { value: unknown; source: string; note: string };
 export type RunnerFlag = { help: string | null; default: unknown; value: unknown; kind: "bool" | "value"; base: boolean };
@@ -38,6 +39,7 @@ export type RunnerDoc = {
   description_only: true;
   id: string;
   title: string;
+  subtitle?: string; // 2026-11-13: the title is the map's name; this says what the flow is
   map: string;
   char: string;
   script: string;
@@ -117,7 +119,8 @@ export function withSettings(doc: RunnerDoc, s: RunSettings): RunnerDoc {
 }
 
 /** The runner view's own block styles, beside MatPilot's (theme.ts): the safety rules in its
- * red (sound), the optional flag set in its purple (light); their hats get the round cap. */
+ * red (sound), Batt's technique (the Knife swap, in the base since 4DQ) in its purple (light);
+ * their hats get the round cap. */
 export const RUNNER_STYLES: Record<string, BlockStyle> = {
   rd_safety_hat_blocks: { colourPrimary: CATEGORY_COLOURS.sound, hat: "cap" },
   rd_safety_blocks: { colourPrimary: CATEGORY_COLOURS.sound },
@@ -273,16 +276,44 @@ type SerBlock = {
   next?: { block: SerBlock };
 };
 
-/** Where each stack starts before the view lays them out by their drawn size. */
-export const STACK_XY: [number, number][] = [
-  [24, 24],
-  [900, 24],
-  [900, 900],
-];
+/** The view's TABS (Batt 2026-11-13: "I don't see the Knife swap's blocks"): each stack on the
+ * tab its export names (the run's own is the map's name), in the doc's order; a tab may hold more
+ * than one stack (the Knife swap's two functions). Nothing is placed off-screen any more. */
+export type RunnerTab = { name: string; stacks: string[] };
+export function runnerTabs(doc: RunnerDoc): RunnerTab[] {
+  const out: RunnerTab[] = [];
+  for (const s of doc.stacks) {
+    const name = s.tab ?? s.id;
+    const t = out.find((x) => x.name === name);
+    if (t) t.stacks.push(s.id);
+    else out.push({ name, stacks: [s.id] });
+  }
+  return out;
+}
 
-/** The workspace (Blockly's JSON serialization): every stack, every block fixed in place
- * (not movable, deletable or editable: a description is read, not edited). */
-export function runnerWorkspace(doc: RunnerDoc): { blocks: { languageVersion: 0; blocks: SerBlock[] } } {
+/** The stack (its top block's id) that holds a node; null when no stack does. */
+export function stackOf(doc: RunnerDoc, id: string | null): string | null {
+  if (!id) return null;
+  for (const s of doc.stacks) if (allNodes({ ...doc, stacks: [s] }).some((n) => n.id === id)) return s.id;
+  return null;
+}
+
+/** The tab that shows a node (the simulation's block, a clicked line of Python). */
+export function tabOf(doc: RunnerDoc, id: string | null): string | null {
+  const s = stackOf(doc, id);
+  return s ? (runnerTabs(doc).find((t) => t.stacks.includes(s))?.name ?? null) : null;
+}
+
+/** Where each stack of a tab starts before the view lays them out by their drawn size: one under
+ * the other. */
+export const STACK_X = 24;
+export const STACK_Y0 = 24;
+export const STACK_GAP_Y = 900;
+
+/** The workspace (Blockly's JSON serialization): the stacks named (every stack when none are),
+ * every block fixed in place (not movable, deletable or editable: a description is read, not
+ * edited). */
+export function runnerWorkspace(doc: RunnerDoc, only: readonly string[] | null = null): { blocks: { languageVersion: 0; blocks: SerBlock[] } } {
   const one = (n: RunnerNode): SerBlock => {
     const b: SerBlock = { type: blockType(doc, n), id: n.id, movable: false, deletable: false, editable: false };
     const inputs: Record<string, { block: SerBlock }> = {};
@@ -303,12 +334,13 @@ export function runnerWorkspace(doc: RunnerDoc): { blocks: { languageVersion: 0;
     }
     return first;
   };
-  const tops = doc.stacks.map((s, k) => {
-    const top = one(s);
-    if (s.kind === "hat" && s.body?.length) top.next = { block: chain(s.body) };
-    const [x, y] = STACK_XY[k] ?? [24 + 900 * k, 24];
-    return { ...top, x, y };
-  });
+  const tops = doc.stacks
+    .filter((s) => !only || only.includes(s.id))
+    .map((s, k) => {
+      const top = one(s);
+      if (s.kind === "hat" && s.body?.length) top.next = { block: chain(s.body) };
+      return { ...top, x: STACK_X, y: STACK_Y0 + STACK_GAP_Y * k };
+    });
   return { blocks: { languageVersion: 0, blocks: tops } };
 }
 

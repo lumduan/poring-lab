@@ -88,7 +88,8 @@ const s1 = (x: number) => `${Math.round(x * 10) / 10} s`;
 
 type Lock = { t: number; hits: number; lastHit: number; species: string };
 
-/** Run the description on a scenario. ``knife``: with the optional Knife opener flag set. */
+/** Run the description on a scenario. ``knife``: with Batt's Knife swap or without it (absent:
+ * as the doc's base command runs it; in the base since 4DQ, 2026-11-13). */
 export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean } = {}): SimResult {
   const N = (id: string) => num(doc, id);
   const minutes = N("cmd.minutes");
@@ -130,11 +131,13 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
   let knifeOn = false;
   let knifeT = 0;
   let end = "time";
-  const knife = Boolean(opts.knife);
+  const knife = opts.knife ?? doc.command.base.includes("--steal-opener");
+  const flyKey = String(doc.params["cmd.fly_key"]?.value ?? "F2");
 
   const dagger = (t: number, why: string) => {
     if (!knife || !knifeOn) return;
     knifeOn = false;
+    say(t, "knife_back_call", `knife_back(): ${why}`, "decide");
     say(t, "press_dagger", `the dagger back on (${doc.params["bs.EQUIP_KEY"]?.value ?? "F5"}): ${why}`);
     say(t, "swap_gap", "the swap restarts the no-hit clocks");
     lastOurs = Math.max(lastOurs, t);
@@ -142,7 +145,7 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
   const flyAway = (t: number, block: string, why: string): boolean => {
     dagger(t, "never fly with the Knife on");
     wings -= 1;
-    say(t, block, `Fly Wing (F2): ${why}; ${wings} left`, "safety");
+    say(t, block, `Fly Wing (${flyKey}): ${why}; ${wings} left`, "safety");
     flyT = t;
     mode = "search";
     lock = null;
@@ -276,14 +279,10 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
             if (w >= N("LEAD_PX")) say(t, "lead", `its feet moved ${w} px (a walker): aim where it will be`, "decide");
             else if (w >= N("WALKER_PX")) say(t, "still", `its feet moved ${w} px: wait until it stands (${N("HOLD_MAX_S")} s at most)`, "decide");
             else say(t, "still", "a still screen, a still target: aim at it", "decide");
-            if (knife && !knifeOn) {
-              knifeOn = true;
-              knifeT = t;
-              say(t, "press_knife", `the Knife on (${doc.params["cmd.steal_opener"]?.value ?? "F4"}) for the new target`);
-            }
+            if (knife && knifeOn) knifeT = t; // --bare-ready: the Knife went on at idle; its phase starts at this strike
             const far = tb.cells >= N("FAR_CELLS");
             say(t, "strike", far ? `strike: a SWORD cursor, ONE click (${tb.cells} cells away: the client walks her there, ${N("FAR_MAX_S")} s at most)` : `strike: a SWORD cursor, click (every ${N("BURST_GAP_S")} s until it connects)`);
-            if (knife) say(t, "knife_hit", "hit with the Knife: Snatcher may steal before it dies");
+            if (knife && knifeOn) say(t, "knife_hit", "hit with the Knife: Snatcher may steal before it dies");
             say(t, "lock_on", `locked on the ${tb.species}: her hits count from now`);
             lock = { t, hits: 0, lastHit: t, species: tb.species };
             strikes += 1;
@@ -327,7 +326,12 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
       continue;
     }
 
-    // --- search
+    // --- search: --bare-ready puts the Knife on at idle, never at the strike (knife_on)
+    if (knife && !knifeOn && !lock) {
+      knifeOn = true;
+      say(t, "knife_on_call", "knife_on(): idle, after the loot", "decide");
+      say(t, "press_knife", `the Knife on (${doc.params["cmd.steal_opener"]?.value ?? "F4"}) for the next monster`);
+    }
     if (!searching) {
       searching = true;
       say(t, "explore", "explore: aim for a region worth a visit");

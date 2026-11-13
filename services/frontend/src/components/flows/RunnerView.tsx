@@ -19,7 +19,26 @@ import CodeView from "@/components/flows/CodeView";
 import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, writeChoice } from "@/lib/flow/prefs";
-import { allNodes, commandPieces, findNode, markOf, type RunnerDoc, type RunnerNode, type RunnerSettingsDoc, type RunSettings, runnerWorkspace, settingsProblem, textOf, titleOf, valueText, withSettings } from "@/lib/flow/runner";
+import {
+  allNodes,
+  commandPieces,
+  findNode,
+  markOf,
+  type RunnerDoc,
+  type RunnerNode,
+  type RunnerSettingsDoc,
+  type RunSettings,
+  runnerTabs,
+  runnerWorkspace,
+  settingsProblem,
+  STACK_X,
+  STACK_Y0,
+  tabOf,
+  textOf,
+  titleOf,
+  valueText,
+  withSettings,
+} from "@/lib/flow/runner";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
 import { INJECT } from "@/lib/flow/theme";
 
@@ -78,7 +97,11 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
   });
   const [panes, setPanes] = useState<Record<Pane, boolean>>({ inspect: true, results: false, command: false });
   const [selected, setSelected] = useState<string>(doc.stacks[0]?.id ?? "");
-  const [knife, setKnife] = useState(false);
+  // the TABS (Batt 2026-11-13: "I don't see the Knife swap's blocks"): one part of the flow each
+  const tabs = useMemo(() => runnerTabs(doc), [doc]);
+  const [tabName, setTabName] = useState<string>(() => tabs[0]?.name ?? "");
+  const tab = tabs.find((t) => t.name === tabName) ?? tabs[0];
+  const [knife, setKnife] = useState(() => doc.command.base.includes("--steal-opener")); // in the base since 4DQ
   const [sim, setSim] = useState<SimResult | null>(null);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -109,7 +132,9 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
     setStep(k);
     setSelected(r.steps[k].block);
     setFollow(r.steps[k].block);
-  }, []);
+    const t = tabOf(doc, r.steps[k].block); // the simulation's block: its tab comes to the front
+    if (t) setTabName(t);
+  }, [doc]);
   const run = () => {
     const r = simulate(doc, EXAMPLE, { knife });
     setSim(r);
@@ -180,7 +205,10 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
       <p className="studio-panel-note">An outline of {doc.script} with the code&apos;s own numbers (generated); it is not the runner and never runs.</p>
       {runSettings && (
         <p className="studio-panel-note" data-testid="runner-python-settings">
-          Your Run settings (added to the command when you press Run): <code>--fly-key {runSettings.fly_key} --player-home-key {runSettings.home_key} --weight-home {runSettings.weight_home.toFixed(2)}</code>
+          Your Run settings (added to the command when you press Run):{" "}
+          <code>
+            --fly-key {runSettings.fly_key} --player-home-key {runSettings.home_key} --weight-home {runSettings.weight_home.toFixed(2)} --respawn-at {runSettings.respawn_at} --respawn-confirm-at {runSettings.respawn_confirm_at}
+          </code>
         </p>
       )}
       <CodeView ref={codeRef} code={doc.python} colour mark={mark} label={`Python: ${doc.file}`} testId="runner-python" />
@@ -195,7 +223,7 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
           <span className="status-pill" title="A description of the runner; Simulate plays an example; Run (beside it) starts the real runner in the game">
             {LIVE_FLOWS.includes(doc.id) ? "DESCRIPTION · SIMULATE · RUN" : "DESCRIPTION · SIMULATE only"}
           </span>
-          <h1 className="studio-title" title={doc.title}>
+          <h1 className="studio-title" title={doc.subtitle ?? doc.title} data-testid="runner-title">
             {doc.title}
           </h1>
         </div>
@@ -250,11 +278,26 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
         <div className="studio-canvas">
           <div className="block-tabs-bar">
             <div className="block-tabs" role="tablist" aria-label="Tabs">
-              <div className="block-tab" data-active={true}>
-                <button type="button" role="tab" aria-selected={true} className="block-tab-name" title="The runner's loop, its safety rules and the optional flag set">
-                  how it hunts
-                </button>
-              </div>
+              {tabs.map((t) => (
+                <div key={t.name} className="block-tab" data-active={t.name === tab?.name}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={t.name === tab?.name}
+                    className="block-tab-name"
+                    title={t.stacks.map((id) => titleOf(findNode(doc, id) as RunnerNode)).join(" · ")}
+                    onClick={() => {
+                      setTabName(t.name);
+                      setSelected(t.stacks[0]);
+                      setPlaying(false);
+                      setFollow(null);
+                    }}
+                    data-testid={`runner-tab-${t.name.replaceAll(" ", "-")}`}
+                  >
+                    {t.name}
+                  </button>
+                </div>
+              ))}
             </div>
             <div className="block-tabs-trailing robot-picker">
               <span className="robot-picker-label" title={`This description is bound to the map ${doc.map}`}>
@@ -263,7 +306,7 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
             </div>
           </div>
           <div className="blocks-area">
-            <RunnerBlocks doc={doc} follow={follow} hidden={view === "python"} onSelect={onBlock} />
+            <RunnerBlocks doc={doc} only={tab?.stacks ?? null} follow={follow} hidden={view === "python"} onSelect={onBlock} />
           </div>
           {view === "python" && (
             <section className="studio-python-full" aria-labelledby="runner-python-full">
@@ -346,13 +389,15 @@ function Chip({ label, value }: { label: string; value: string }) {
 /** The blocks: Blockly (zelos, the studio's themes), every block fixed in place. A click on a block
  * selects it (the inspector and the Python follow); the simulation's block is highlighted (Blockly's
  * glow, as for code being stepped through) and scrolled into view. */
-function RunnerBlocks({ doc, follow, hidden, onSelect }: { doc: RunnerDoc; follow: string | null; hidden: boolean; onSelect: (id: string) => void }) {
+function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc; only: readonly string[] | null; follow: string | null; hidden: boolean; onSelect: (id: string) => void }) {
   const host = useRef<HTMLDivElement | null>(null);
   const ws = useRef<BlocklyT.WorkspaceSvg | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
   const latest = useRef(onSelect);
+  const followNow = useRef(follow); // a tab's new workspace highlights the simulation's block itself
   useEffect(() => {
     latest.current = onSelect;
+    followNow.current = follow;
   });
 
   useEffect(() => {
@@ -376,11 +421,16 @@ function RunnerBlocks({ doc, follow, hidden, onSelect }: { doc: RunnerDoc; follo
         ws.current = w;
         B.Events.disable();
         try {
-          B.serialization.workspaces.load(runnerWorkspace(doc) as unknown as object, w);
+          B.serialization.workspaces.load(runnerWorkspace(doc, only) as unknown as object, w);
           B.renderManagement.triggerQueuedRenders(w); // drawn now: the layout needs their sizes
-          layout(B, w, doc);
+          layout(B, w, doc, only);
         } finally {
           B.Events.enable();
+        }
+        const f = followNow.current;
+        if (f && w.getBlockById(f)) {
+          w.highlightBlock(f, true);
+          w.centerOnBlock(f);
         }
         w.clearUndo();
         // a person's click on a block (Blockly's CLICK event: gestures only, never a selection
@@ -407,7 +457,7 @@ function RunnerBlocks({ doc, follow, hidden, onSelect }: { doc: RunnerDoc; follo
       ws.current?.dispose();
       ws.current = null;
     };
-  }, [doc]);
+  }, [doc, only]);
 
   // the simulation's block: highlighted and scrolled into view
   useEffect(() => {
@@ -428,17 +478,15 @@ function RunnerBlocks({ doc, follow, hidden, onSelect }: { doc: RunnerDoc; follo
   );
 }
 
-/** The stacks side by side by their drawn size: the run on the left, the safety rules and the
- * optional flag set to its right. */
-function layout(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, doc: RunnerDoc): void {
-  const tops = doc.stacks.map((s) => w.getBlockById(s.id) as BlocklyT.BlockSvg | null);
-  const main = tops[0];
-  if (!main) return;
-  const x = 24 + main.getHeightWidth().width + 72;
-  let y = 24;
-  for (const b of tops.slice(1)) {
+/** A tab's stacks one under the other by their drawn size, from the top left: a tab shows only
+ * its own part of the flow, so nothing sits off to the side (Batt 2026-11-13). */
+function layout(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, doc: RunnerDoc, only: readonly string[] | null): void {
+  let y = STACK_Y0;
+  for (const s of doc.stacks) {
+    if (only && !only.includes(s.id)) continue;
+    const b = w.getBlockById(s.id) as BlocklyT.BlockSvg | null;
     if (!b) continue;
-    b.moveTo(new B.utils.Coordinate(x, y));
+    b.moveTo(new B.utils.Coordinate(STACK_X, y));
     y += b.getHeightWidth().height + 56;
   }
 }
@@ -542,7 +590,7 @@ function ResultsPane(p: { sim: SimResult | null; step: number; playing: boolean;
       <div className="row">
         <label className="row">
           <input type="checkbox" checked={p.knife} onChange={(e) => p.onKnife(e.target.checked)} data-testid="runner-knife" />
-          with the Knife opener (an optional flag set)
+          with Batt&apos;s Knife swap (in the base; untick to compare without it)
         </label>
         <button type="button" className="button button-small" onClick={p.onRun}>
           {sim ? "Simulate again" : "Simulate"}

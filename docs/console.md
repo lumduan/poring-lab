@@ -258,6 +258,14 @@ Amendment B); a not-adopted model is never offered.
   function block's points (the death menu's button; the confirmation's OK, or none for a server that
   asks nothing). Live-verified 2026-11-13: the weight exit flies her home on F9; a death respawns her
   in Geffen (her save point since 11:5x).
+  ➡️ **Since 2026-11-13 ~13:2x it is named after its map** (Batt: "I don't see the xmas_dun02
+  flow; the Knife swap has no block? name it after the map"): the title is **xmas_dun02**, it is the
+  FIRST entry of Load (bold, on /flows and on /maps), the link is `/flows?runner=xmas_dun02`, and a
+  /maps map card's button reads "The xmas_dun02 flow". Its blocks are on **four tabs**, so no stack
+  sits off-screen: `xmas_dun02` (the run), `knife swap` (Batt's Knife swap as two functions,
+  `knife_on()` at idle and `knife_back()` on every tick), `respawn` and `safety rules`. The run's loop
+  CALLS both Knife functions where the runner runs them; Simulate plays the swap by default (it is in
+  the base since 4DQ) and turns to the tab of the block it is on.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

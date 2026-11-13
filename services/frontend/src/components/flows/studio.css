@@ -357,6 +357,15 @@
   color: var(--muted);
   font-size: 0.78rem;
 }
+/* the map flows (Batt 2026-11-13): first in Load, the map's name in bold, a line under them */
+.studio-menu-item-map {
+  font-weight: 600;
+}
+.studio-menu-item-map + .studio-menu-item:not(.studio-menu-item-map) {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
 
 /* --- notices ---------------------------------------------------------------------------------------- */
 .studio .notice {

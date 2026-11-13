@@ -588,6 +588,17 @@ export default function FlowsApp({
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
+                {/* the MAP FLOWS first, under their map's name (Batt 2026-11-13: "I don't see the
+                    xmas_dun02 flow; name it after the map") */}
+                {onRunner &&
+                  RUNNERS.map((r) => (
+                    <button key={r.id} type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
+                      {r.title}
+                      <small>
+                        the {r.char}&apos;s real flow on {r.map}: the hunt, Batt&apos;s Knife swap, the respawn, the safety rules, each on its tab; Simulate, or Run in the game. Your flow stays as it is
+                      </small>
+                    </button>
+                  ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="load-saved">
                   Open a saved flow…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
@@ -603,13 +614,6 @@ export default function FlowsApp({
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(oneMapStarter(), { undo: true, notice: "Opened the starter: one program, bound to no map." }))}>
                   Starter: one program (no map)<small>a plain flow, one tab “main”: wait, wait until the detector sees a monster, stop. Runs wherever the character stands</small>
                 </button>
-                {onRunner &&
-                  RUNNERS.map((r) => (
-                    <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
-                      How the bot works on {r.map}
-                      <small>the {r.char}&apos;s runner ({r.script}) as blocks with its Python, made from its code; your flow stays as it is</small>
-                    </button>
-                  ))}
               </div>
             )}
           </div>
@@ -993,7 +997,7 @@ function MapPicker({ flow, tab, onTab, onLeave, onRunner }: { flow: Flow; tab: s
       </label>
       {runner && onRunner && (
         <button type="button" className="runner-chip-button" onClick={() => onRunner(runner.id)} title={`${runner.title}: a description of ${runner.script}, made from its code`} data-testid="map-picker-runner">
-          How the bot hunts here ↗
+          The {runner.title} flow ↗
         </button>
       )}
       <Link href={block ? `/maps?node=${encodeURIComponent(`block:${block.name}`)}` : "/maps"} className="robot-picker-link" onClick={onLeave} title="The maps graph: login, characters, the maps and their exits, and the simulator">

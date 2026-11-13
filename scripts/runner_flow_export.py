@@ -102,6 +102,7 @@ class Node:
     tail: list[str] = field(default_factory=list)  # a hat's last lines (after its body)
     flags: list[str] = field(default_factory=list)
     code: list[str] = field(default_factory=list)  # symbols: name (dungeon_hunt), vt. / bs. / em.
+    tab: str = ""  # a stack's tab on /flows (Batt 2026-11-13: each part in view, none off-screen)
 
 
 def step(id_: str, style: str, text: str, py: list[str], why: str, flags: list[str] | None = None,
@@ -234,7 +235,7 @@ def spec() -> list[Node]:
                             step(
                                 "end_fly",
                                 S_SAFE,
-                                "press the Fly Wing (F2)",
+                                "press the Fly Wing ({cmd.fly_key})",
                                 ['press("fly", "end")'],
                                 "A safe end: the end warp takes seconds, so she teleports away "
                                 "from a "
@@ -250,13 +251,13 @@ def spec() -> list[Node]:
             step(
                 "respawn",
                 S_MOVE,
-                "after a death: respawn at ({cmd.respawn_at}), the function block below",
+                "after a death: respawn(at=({cmd.respawn_at})), the function on the respawn tab",
                 [
                     'if reason == "death":  # --respawn: the map\'s exit after a death',
                     "    respawn(at=$(cmd.respawn_at))",
                 ],
                 "Batt 2026-11-13: a death is an exit of the map too. The respawn is its own "
-                "function block (respawn, below): another server's death menu may put the button "
+                "function block (the respawn tab): another server's death menu may put the button "
                 "elsewhere, so its point is a Run setting, not part of the code.",
                 flags=["--respawn", "--respawn-at"],
                 code=["respawn_end"],
@@ -275,7 +276,7 @@ def spec() -> list[Node]:
             ),
         ],
     )
-    return [main, safety(), knife(), respawn_fn()]
+    return [main, *knife(), respawn_fn(), safety()]
 
 
 def respawn_fn() -> Node:
@@ -295,6 +296,7 @@ def respawn_fn() -> Node:
         "move to saved location, measured on two real deaths. It presses at most once.",
         flags=["--respawn", "--respawn-at"],
         code=["respawn_end"],
+        tab="respawn",
         body=[
             step(
                 "respawn_wait",
@@ -398,8 +400,8 @@ def main_loop() -> list[Node]:
         S_SAFE,
         [
             Branch(
-                "check the safety rules first (the red stack): a Fly Wing ({cmd.fly_key}) ends "
-                "this tick",
+                "check the safety rules first (tab: safety rules): a Fly Wing ({cmd.fly_key}) "
+                "ends this tick",
                 "if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here",
                 [
                     step(
@@ -414,7 +416,7 @@ def main_loop() -> list[Node]:
                 ],
             )
         ],
-        "The safety rules (on the right) run before anything else on every tick, and again "
+        "The safety rules (the safety rules tab) run before anything else on every tick, and again "
         "inside long actions (guard_tick reads the HP between clicks).",
         code=["guard_tick"],
     )
@@ -466,10 +468,23 @@ def main_loop() -> list[Node]:
         flags=["--engage-screen", "--reach-check"],
         code=["hp_dropped", "reach_ok", "self_box"],
     )
+    knife_back_call = step(
+        "knife_back_call",
+        S_OPT,
+        "the Knife swap, part 2: knife_back(): the Knife on and it stole (or {bs.BARE_MAX_S} s, "
+        "or HP under {bs.BARE_HP_MIN:pct} %): the dagger back on ({bs.EQUIP_KEY})",
+        ["knife_back(eyes)  # --bare-steal: every tick, before the fight (tab: knife swap)"],
+        "Batt's Knife swap, its second half: on every tick, before the fight is decided, the "
+        "runner checks whether the Knife has done its job. The function is on the knife swap "
+        "tab.",
+        flags=["--bare-steal"],
+        code=["bs.cyan_new", "bs.popup_new"],
+    )
     return [
         look,
         safe,
         boxes,
+        knife_back_call,
         engage,
         cond(
             "modes",
@@ -838,7 +853,22 @@ def search() -> list[Node]:
         "A walk decision takes about 0.9 s and a 5-6 cell walk about 0.9 s, so at this rhythm "
         "she stands for a moment before the next click.",
     )
-    return [explore, walk]
+    knife_on_call = step(
+        "knife_on_call",
+        S_OPT,
+        "the Knife swap, part 1: knife_on(): idle, so the Knife goes on ({cmd.steal_opener}) for "
+        "the next monster",
+        [
+            "knife_on(eyes)  # --bare-ready --steal-opener: at idle, never at the strike "
+            "(tab: knife swap)"
+        ],
+        "Batt's Knife swap, its first half: after the loot, while she searches and nothing else "
+        "is going on, the Knife goes on, so the next monster is hit with it at once. The "
+        "function is on the knife swap tab.",
+        flags=["--bare-ready", "--steal-opener"],
+        code=["bare_idle"],
+    )
+    return [knife_on_call, explore, walk]
 
 
 def safety() -> Node:
@@ -846,7 +876,7 @@ def safety() -> Node:
         return step(
             id_,
             S_SAFE,
-            "press the Fly Wing (F2): this tick ends",
+            "press the Fly Wing ({cmd.fly_key}): this tick ends",
             [f'press("fly", "{why_}")  # a same-map teleport, far from here', "return True"],
             "A Fly Wing teleports her to a random spot on the same map.",
         )
@@ -864,6 +894,7 @@ def safety() -> Node:
         "tick (and guard_tick() reads the HP inside long actions such as a strike's clicks or "
         "the loot hovers). Shown as their own stack so they are easy to read.",
         tail=["return False"],
+        tab="safety rules",
         body=[
             cond(
                 "stock_out",
@@ -1081,29 +1112,38 @@ def safety() -> Node:
     )
 
 
-def knife() -> Node:
-    return Node(
+KNIFE_WHY = (
+    "Batt's own technique (his 2026-11-12 run: a steal on 91 % of kills), in the base since "
+    "rogue-xmas02.md 4DQ (a steal on 78 % of kills, common items +8 % an hour). The Rogue's "
+    "Snatcher steals when she HITS, so a weak first weapon keeps the monster alive for more "
+    "hits, and more steals; once it stole, the dagger goes back on to kill fast. The swaps are "
+    "hotbar keys, each read back from the hotbar's pixels."
+)
+
+
+def knife() -> list[Node]:
+    """Batt's Knife swap as TWO function blocks on one tab (Batt 2026-11-13: "I don't see the
+    Knife swap's blocks"): the main loop calls each where the runner runs it."""
+    on = Node(
         "knife_opener",
         "hat",
-        S_OPT_HAT,
-        "Batt's technique, ON in this flow: the Knife opener",
+        S_FN_HAT,
+        "function knife_on(): Batt's Knife swap, part 1: the Knife on",
         [
-            "def knife_opener(eyes):",
-            '    """--bare-steal --bare-ready --steal-opener F4 --steal-cue popup --swap-gap"""',
+            "def knife_on(eyes):",
+            '    """--bare-steal --bare-ready --steal-opener F4: called at idle (the search)"""',
         ],
-        "Batt's own technique (his 2026-11-12 run: a steal on 91 % of kills), in the base since "
-        "rogue-xmas02.md 4DQ (a steal on 78 % of kills, common items +8 % an hour). The Rogue's "
-        "Snatcher steals when she HITS, so a weak first weapon keeps the monster alive for more "
-        "hits, and more steals; once it stole, the dagger goes back on to kill fast. The swaps "
-        "are hotbar keys, each read back from the hotbar's pixels.",
-        flags=["--bare-steal", "--bare-ready", "--steal-opener", "--swap-gap"],
+        KNIFE_WHY,
+        flags=["--bare-steal", "--bare-ready", "--steal-opener"],
+        tab="knife swap",
         body=[
             cond(
                 "knife_on",
                 S_OPT,
                 [
                     Branch(
-                        "idle (after the loot, no target): put the Knife on ({cmd.steal_opener})",
+                        "idle (after the loot, no target) and the Knife not on yet: put it on "
+                        "({cmd.steal_opener})",
                         "if idle(mode, lock) and not knife_worn():  # --bare-ready: never at the "
                         "strike",
                         [
@@ -1116,8 +1156,7 @@ def knife() -> Node:
                                     "dagger in the bag"
                                 ],
                                 "The swap happens while nothing else is going on, so the next "
-                                "strike is "
-                                "not delayed.",
+                                "strike is not delayed.",
                             )
                         ],
                     )
@@ -1134,14 +1173,31 @@ def knife() -> Node:
                 "The strike itself does not change.",
                 flags=["--bare-steal"],
             ),
+        ],
+    )
+    back = Node(
+        "knife_back_fn",
+        "hat",
+        S_FN_HAT,
+        "function knife_back(): Batt's Knife swap, part 2: the dagger back on",
+        [
+            "def knife_back(eyes):",
+            '    """--bare-steal --steal-cue popup --swap-gap: called on every tick, before the '
+            'fight"""',
+        ],
+        KNIFE_WHY,
+        flags=["--bare-steal", "--steal-cue", "--swap-gap"],
+        tab="knife swap",
+        body=[
             cond(
                 "knife_off",
                 S_OPT,
                 [
                     Branch(
-                        "a steal cue, {bs.BARE_MAX_S} s, or HP under {bs.BARE_HP_MIN:pct} %: the "
-                        "dagger back on",
-                        "if steal_cue() or now - knife_t > BARE_MAX_S or eyes.hp < BARE_HP_MIN:",
+                        "the Knife on and a steal cue, {bs.BARE_MAX_S} s, or HP under "
+                        "{bs.BARE_HP_MIN:pct} %: the dagger back on",
+                        "if knife_worn() and (steal_cue() or now - knife_t > BARE_MAX_S "
+                        "or eyes.hp < BARE_HP_MIN):",
                         [
                             step(
                                 "press_dagger",
@@ -1149,8 +1205,7 @@ def knife() -> Node:
                                 "press {bs.EQUIP_KEY}",
                                 ["press($(bs.EQUIP_KEY))  # the dagger on again, read back"],
                                 "Also before any escape and at the run's end: she never flees or "
-                                "ends "
-                                "with the Knife on.",
+                                "ends with the Knife on.",
                             )
                         ],
                     )
@@ -1158,7 +1213,7 @@ def knife() -> Node:
                 "The steal cue is the item popup (or a new cyan Battle Log line): no words are "
                 "read. After {bs.BARE_MAX_S} s without a steal, or under "
                 "{bs.BARE_HP_MIN:pct} % HP, the dagger goes back on anyway.",
-                flags=["--bare-steal"],
+                flags=["--bare-steal", "--steal-cue"],
                 code=["bs.cyan_new", "bs.popup_new"],
             ),
             step(
@@ -1172,6 +1227,7 @@ def knife() -> Node:
             ),
         ],
     )
+    return [on, back]
 
 
 # --- the numbers -------------------------------------------------------------------------------
@@ -1496,6 +1552,8 @@ class Builder:
         pad = " " * ind
         start = len(self.lines) + 1
         doc: dict[str, Any] = {"id": n.id, "kind": n.kind, "style": n.style}
+        if n.tab:
+            doc["tab"] = n.tab
         if n.kind == "if":
             branches = []
             head_end = start
@@ -1602,6 +1660,8 @@ def build() -> dict[str, Any]:
 
     stacks = []
     for n in spec():
+        if n.id == "run":
+            n.tab = cmd["map"]  # the run's own tab is named after its map (Batt 2026-11-13)
         b.lines += ["", ""]
         stacks.append(b.emit(n, 0))
     python = "\n".join(b.lines).rstrip("\n") + "\n"
@@ -1617,12 +1677,13 @@ def build() -> dict[str, Any]:
         "bare_steal.py) -- do not edit",
         "description_only": True,
         "id": rid,
-        "title": f"{cmd['map']}: how the {cmd['char'].title()} hunts",
+        "title": cmd["map"],  # Batt 2026-11-13: "name it after the map"
+        "subtitle": f"how the {cmd['char'].title()} plays {cmd['map']}: the real runner, as blocks",
         "map": cmd["map"],
         "char": cmd["char"],
         "script": "scripts/dungeon_hunt.py run",
         "version": dh.VERSION,
-        "file": f"{rid}.py",
+        "file": f"{cmd['map']}.py",
         "command": {
             "base": list(BASE_COMMAND),
             "optional": [

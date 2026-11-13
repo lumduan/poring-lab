@@ -134,8 +134,8 @@ test("a far target is approached first; a near one is struck at once", () => {
   assert.ok(!blocks(unreach).includes("fight_on"));
 });
 
-test("the optional Knife opener: on for a new target, back to the dagger on the cue and before every escape", () => {
-  const r = simulate(DOC, EXAMPLE, { knife: true });
+test("Batt's Knife swap (in the base): on at idle, back to the dagger on the cue and before every escape", () => {
+  const r = simulate(DOC, EXAMPLE);
   const b = blocks(r);
   assert.ok(b.includes("press_knife"));
   assert.ok(b.includes("knife_hit"));
@@ -144,7 +144,9 @@ test("the optional Knife opener: on for a new target, back to the dagger on the 
     const before = r.steps.slice(0, i).filter((s) => s.block === "press_knife" || s.block === "press_dagger").pop();
     assert.ok(!before || before.block === "press_dagger", "never a Fly Wing with the Knife on");
   }
-  assert.ok(!blocks(simulate(DOC, EXAMPLE)).includes("press_knife")); // not in the base
+  assert.ok(b.includes("knife_on_call") && b.includes("knife_back_call")); // the main loop's calls light up
+  assert.ok(b.indexOf("knife_on_call") < b.indexOf("press_knife"));
+  assert.ok(!blocks(simulate(DOC, EXAMPLE, { knife: false })).includes("press_knife")); // the comparison without it
 });
 
 test("the time box ends the loop; the safe end flies only when still hit or under END_FLY_BELOW", () => {

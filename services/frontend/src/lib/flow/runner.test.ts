@@ -10,7 +10,29 @@ import { fileURLToPath } from "node:url";
 import type * as BlocklyT from "blockly/core";
 
 import { registerRunner, runnerThemes } from "../../components/flows/blockly-runner.ts";
-import { allNodes, blockType, checkDoc, commandPieces, findNode, markOf, message, nodeAtLine, RUNNER_STYLES, type RunnerDoc, type RunnerPart, runnerDefs, runnerWorkspace, settingsProblem, textOf, withSettings, wrapParts } from "./runner.ts";
+import {
+  allNodes,
+  blockType,
+  checkDoc,
+  commandPieces,
+  findNode,
+  markOf,
+  message,
+  nodeAtLine,
+  RUNNER_STYLES,
+  type RunnerDoc,
+  type RunnerPart,
+  runnerDefs,
+  runnerTabs,
+  runnerWorkspace,
+  settingsProblem,
+  stackOf,
+  tabOf,
+  textOf,
+  titleOf,
+  withSettings,
+  wrapParts,
+} from "./runner.ts";
 import { findRunner, RUNNERS, runnerForMap, runnerHref } from "./runners/index.ts";
 import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
@@ -29,7 +51,7 @@ test("the committed description is well formed (styles, lines, numbers, flags)",
   assert.equal(DOC.map, "xmas_dun02");
   assert.deepEqual(
     DOC.stacks.map((s) => s.id),
-    ["run", "safety_rules", "knife_opener", "respawn_fn"], // 2026-11-13: the respawn function block
+    ["run", "knife_opener", "knife_back_fn", "respawn_fn", "safety_rules"], // 2026-11-13: the Knife swap's two functions, the respawn's
   );
   assert.ok(DOC.stacks.every((s) => s.kind === "hat"));
 });
@@ -145,7 +167,7 @@ test("the runner blocks load in the real Blockly, fixed in place, nested as the 
       .getTopBlocks(false)
       .map((b) => b.id)
       .sort(),
-    ["knife_opener", "respawn_fn", "run", "safety_rules"],
+    ["knife_back_fn", "knife_opener", "respawn_fn", "run", "safety_rules"],
   );
   for (const n of nodes) {
     const b = ws.getBlockById(n.id);
@@ -184,7 +206,60 @@ test("a runner flow is found by its id or its map; its link opens /flows", () =>
   assert.equal(findRunner(null), null);
   assert.equal(runnerForMap("xmas_dun02")?.id, "xmas_dun02_rogue");
   assert.equal(runnerForMap(undefined), null);
-  assert.equal(runnerHref(DOC), "/flows?runner=xmas_dun02_rogue");
+  assert.equal(runnerHref(DOC), "/flows?runner=xmas_dun02"); // by the map's name (one flow there)
+});
+
+// --- 2026-11-13 (Batt: "I don't see the xmas_dun02 flow; the Knife swap has no block? name it after the map")
+test("the flow is named after its map, and each part is on its own tab", () => {
+  assert.equal(DOC.title, "xmas_dun02");
+  assert.equal(DOC.file, "xmas_dun02.py");
+  const tabs = runnerTabs(DOC);
+  assert.deepEqual(
+    tabs.map((t) => t.name),
+    ["xmas_dun02", "knife swap", "respawn", "safety rules"],
+  );
+  assert.deepEqual(tabs[1].stacks, ["knife_opener", "knife_back_fn"]); // the Knife swap's two functions, together
+  for (const t of tabs) {
+    const ws = new B.Workspace();
+    registerRunner(B, DOC);
+    B.serialization.workspaces.load(runnerWorkspace(DOC, t.stacks) as unknown as object, ws);
+    assert.deepEqual(
+      ws.getTopBlocks(false).map((b) => b.id),
+      t.stacks,
+      t.name,
+    );
+    ws.dispose();
+  }
+  assert.equal(tabOf(DOC, "press_knife"), "knife swap");
+  assert.equal(tabOf(DOC, "press_dagger"), "knife swap");
+  assert.equal(tabOf(DOC, "respawn_confirm_press"), "respawn");
+  assert.equal(tabOf(DOC, "potion"), "safety rules");
+  assert.equal(tabOf(DOC, "loot"), "xmas_dun02");
+  assert.equal(tabOf(DOC, "no_such_block"), null);
+});
+
+test("the main loop calls Batt's Knife swap where the runner runs it", () => {
+  // part 2 on every tick, before the fight; part 1 at idle, first in the search
+  assert.equal(stackOf(DOC, "knife_back_call"), "run");
+  const loop = findNode(DOC, "loop");
+  assert.ok(loop?.body);
+  const ids = loop.body.map((n) => n.id);
+  assert.ok(ids.indexOf("knife_back_call") > ids.indexOf("boxes") && ids.indexOf("knife_back_call") < ids.indexOf("modes"));
+  const search = findNode(DOC, "modes")?.branches?.[2];
+  assert.equal(search?.body[0].id, "knife_on_call");
+  assert.match(titleOf(findNode(DOC, "knife_on_call") as never), /knife_on\(\).*F4/);
+  assert.match(titleOf(findNode(DOC, "knife_back_call") as never), /knife_back\(\).*F5/);
+  // the functions they call: their hats name them
+  assert.match(titleOf(findNode(DOC, "knife_opener") as never), /^function knife_on\(\)/);
+  assert.match(titleOf(findNode(DOC, "knife_back_fn") as never), /^function knife_back\(\)/);
+  assert.ok(DOC.python.includes("def knife_on(eyes):") && DOC.python.includes("def knife_back(eyes):"));
+});
+
+test("no block names a hotbar key the person's settings replaced", () => {
+  const mine = withSettings(DOC, { fly_key: "F6", home_key: "F7", weight_home: 0.5, respawn_at: "645,481", respawn_confirm_at: "714,405" });
+  const words = allNodes(mine).map((n) => titleOf(n) + (n.branches ?? []).map((b) => textOf(b.parts)).join(" "));
+  assert.ok(!words.some((w) => /Fly Wing \(F2\)/.test(w)), "the Fly Wing's key is the person's, never F2 in the words");
+  assert.ok(words.some((w) => /Fly Wing \(F6\)/.test(w)));
 });
 
 // --- 2026-11-13 (Batt: the hotbar keys and the weight limit are the person's, shown in the blocks)

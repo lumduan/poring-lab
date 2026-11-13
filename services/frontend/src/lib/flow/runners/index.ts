@@ -14,5 +14,6 @@ export function findRunner(key: string | null | undefined): RunnerDoc | null {
 /** The runner flow of a map (the Maps page's and the studio's "how the bot hunts here"). */
 export const runnerForMap = (map: string | null | undefined): RunnerDoc | null => (map ? (RUNNERS.find((r) => r.map === map) ?? null) : null);
 
-/** The /flows link that opens a runner flow. */
-export const runnerHref = (r: RunnerDoc) => `/flows?runner=${encodeURIComponent(r.id)}`;
+/** The /flows link that opens a runner flow: by its map's name while that names one flow
+ * (Batt 2026-11-13: "name it after the map"), else by its id. */
+export const runnerHref = (r: RunnerDoc) => `/flows?runner=${encodeURIComponent(RUNNERS.filter((x) => x.map === r.map).length === 1 ? r.map : r.id)}`;

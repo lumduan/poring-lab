@@ -604,6 +604,13 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
+                {/* the map flows first, under their map's name (Batt 2026-11-13) */}
+                {RUNNERS.map((r) => (
+                  <button key={r.id} type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), flush(), router.push(runnerHref(r)))} data-testid={`maps-load-runner-${r.id}`}>
+                    {r.title}
+                    <small>on /flows: the {r.char}&apos;s real flow on {r.map}, each part on its tab; Simulate, or Run in the game</small>
+                  </button>
+                ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." }))}>
                   Starter: two maps<small>town → NPC warp → field, a wing back (synthetic maps)</small>
                 </button>
@@ -613,12 +620,6 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setAdding({ map: "xmas_dun02", mode: "flow" }))} data-testid="maps-load-one-map">
                   One map from the lab data…<small>e.g. xmas_dun02, the Rogue&apos;s map: its walk grid and spawns</small>
                 </button>
-                {RUNNERS.map((r) => (
-                  <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), flush(), router.push(runnerHref(r)))} data-testid={`maps-load-runner-${r.id}`}>
-                    How the bot works on {r.map}
-                    <small>on /flows: the {r.char}&apos;s runner ({r.script}) as blocks with its Python, made from its code</small>
-                  </button>
-                ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="maps-load-saved">
                   Open a saved flow…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
@@ -969,10 +970,10 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                               flush();
                               router.push(runnerHref(r));
                             }}
-                            title="On /flows: a description of the live runner on this map, made from its code"
+                            title="On /flows: the real flow of this map (the live runner as blocks, made from its code), with Run"
                             data-testid="maps-runner-flow"
                           >
-                            How the bot hunts here ↗
+                            The {selectedBlock.map.map} flow ↗
                           </button>
                         )}
                       </div>

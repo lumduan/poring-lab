@@ -414,6 +414,10 @@ no map blocks, so the Map picker said "none" and the Maps page had no maps to li
 name was misleading (renamed, 14.2). The two-map starter (Load ▸ Starter: two maps) is the map
 example. The live bot on xmas_dun02 is not an IR flow: "How the bot hunts here" shows the runner
 (dungeon_hunt.py) as blocks made from its code, and the Run button plays it.
+➡️ Since 2026-11-13 ~13:2x that flow is NAMED **xmas_dun02** (Batt: "name it after the map"): the
+first entry of Load, `/flows?runner=xmas_dun02`, four tabs (the run, the knife swap, the respawn, the
+safety rules); docs/console.md has the details. It stays a description of the runner, not an IR
+flow: the IR's hunt block cannot hold the Knife swap's two halves (one at idle, one on every tick).
 
 ### 14.6 Checks (2026-11-13)
 
