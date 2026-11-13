@@ -340,6 +340,12 @@ function ownBlock(s: ActionStmt): WsBlock | null {
     const k = litText(s.params.key);
     if (k !== null && (HOTKEYS as readonly string[]).includes(k)) return { type: "pl_press_key", fields: { KEY: k }, extraState: actionRest(s) };
   }
+  if (s.block === "assert_save_point" && keys.length === 1 && keys[0] === "cell") {
+    const v = s.params.cell;
+    if (v.kind === "lit" && typeof v.value === "object" && !Array.isArray(v.value) && v.value.kind === "cell") {
+      return { type: "pl_save_point", fields: { MAP: v.value.map, X: v.value.x, Y: v.value.y }, extraState: actionRest(s) };
+    }
+  }
   if (s.block === "login" && keys.join(",") === "credential,server") {
     const sv = litText(s.params.server);
     const cr = litText(s.params.credential);
@@ -828,6 +834,13 @@ class Reader {
       }
       case "pl_return":
         return { kind: "return", value: b.inputs?.VALUE?.block ? this.expr(b.inputs.VALUE.block, where, "the value") : null };
+      case "pl_save_point":
+        return {
+          kind: "action",
+          block: "assert_save_point",
+          params: { cell: { kind: "lit", value: { kind: "cell", map: this.name(b, "MAP", where, MAP_ID), x: this.int(b, "X", where), y: this.int(b, "Y", where) } } },
+          ...this.rest(b, "assert_save_point", where),
+        };
       case "pl_login":
         return {
           kind: "action",

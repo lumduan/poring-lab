@@ -182,6 +182,7 @@ export const BLOCK_STYLE: Record<string, string> = {
   pl_callv: "mp_function_blocks",
   pl_vardecl: "variable_blocks",
   pl_login: "mp_output_blocks",
+  pl_save_point: "mp_movement_blocks",
   pl_choose_character: "mp_output_blocks",
   pl_press_key: "mp_output_blocks",
   pl_dungeon_hunt: "mp_movement_blocks",

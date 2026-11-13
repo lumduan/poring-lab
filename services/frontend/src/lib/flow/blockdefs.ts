@@ -243,6 +243,14 @@ export const BLOCK_DEFS: BlockDef[] = [
   }),
   // --- every key a FUNCTION (Batt 2026-11-13: "Fly Wing, Butterfly Wing, the Knife swap, a skill:
   // make each a function whose body says which key F1-F9 to press; share them with Save / Load")
+  // the save point, as a sentence (matpilot 2026-11-13 #12: it showed as raw Python)
+  stmt({
+    type: "pl_save_point",
+    message0: "the save point is %1 x %2 y %3 %4",
+    args0: [text("MAP", "geffen"), num("X"), num("Y"), run],
+    inputsInline: true,
+    tooltip: "assert_save_point(cell): YOU say where the save point is (a Butterfly Wing and a death land there); no input, and it stays a warning at approval",
+  }),
   stmt({
     type: "pl_press_key",
     message0: "press key %1 %2 %3",
@@ -265,25 +273,25 @@ export const BLOCK_DEFS: BlockDef[] = [
   // --- exits (13.1): they leave the map block ---
   stmt({
     type: "pl_exit_walk",
-    message0: "walk exit at %1 x %2 y %3 → %4 . %5 %6",
+    message0: "walk exit at %1 x %2 y %3, arrive on %4 at %5 %6",
     args0: [text("MAP"), num("X"), num("Y"), text("TO_BLOCK"), text("TO_ENTRY"), run],
     tooltip: "walk_exit: walk onto an L3 warp of this map; arrive at <block>.<entry>",
   }),
   stmt({
     type: "pl_exit_npc",
-    message0: "npc warp: talk to %1 choose %2 → %3 . %4 %5",
+    message0: "npc warp: talk to %1 choose %2, arrive on %3 at %4 %5",
     args0: [text("NPC"), text("OPTIONS"), text("TO_BLOCK"), text("TO_ENTRY"), run],
     tooltip: "npc_warp: talk to the NPC, choose each option key (comma separated) in order",
   }),
   stmt({
     type: "pl_exit_item",
-    message0: "item warp: use %1 → %2 . %3 %4",
+    message0: "item warp: use %1, arrive on %2 at %3 %4",
     args0: [text("ITEM"), text("TO_BLOCK"), text("TO_ENTRY"), run],
     tooltip: "item_warp: e.g. a Butterfly Wing, to the SAVE POINT (never 'the previous map')",
   }),
   stmt({
     type: "pl_exit_item_fn",
-    message0: "item warp: call %1 → %2 . %3 %4",
+    message0: "item warp: call %1, arrive on %2 at %3 %4",
     args0: [text("FN", "butterfly_wing"), text("TO_BLOCK"), text("TO_ENTRY"), run],
     tooltip: "item_warp by a function: call the function that presses the Butterfly Wing's key; she lands on the SAVE POINT",
   }),
@@ -481,7 +489,7 @@ const PALETTE_TYPES: Record<string, string> = {
 };
 const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
 /** Catalogue blocks with a block of their own (not repeated under "More skills"). */
-const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt", login: "pl_login", choose_character: "pl_choose_character" };
+const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt", login: "pl_login", choose_character: "pl_choose_character", assert_save_point: "pl_save_point" };
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
@@ -549,6 +557,7 @@ export function toolbox(
   if (onMap && blocks.dungeon_hunt) {
     movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
   }
+  if (onMap && blocks.assert_save_point) movement.push({ kind: "block", type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 }, extraState: rest(blocks.assert_save_point) });
   if (onMap) {
     movement.push(
       lbl("Leave this map (a map's main ends with one):"),
