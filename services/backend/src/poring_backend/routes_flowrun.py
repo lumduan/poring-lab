@@ -53,6 +53,12 @@ class RunSettings(BaseModel):
     respawn_at: str | None = Field(default=None, pattern=r"^\d{1,4},\d{1,4}$")
     # its confirmation's OK, or "none" (a server that asks no confirmation)
     respawn_confirm_at: str | None = Field(default=None, pattern=r"^(\d{1,4},\d{1,4}|none)$")
+    # Batt 2026-11-13 ~13:3x: "everything a user can set again; we only put the defaults"
+    heal_key: HotbarKey | None = None
+    knife_key: HotbarKey | None = None  # Batt's Knife swap: the Knife
+    dagger_key: HotbarKey | None = None  # ... and the dagger back on
+    knife_max_s: float | None = Field(default=None, ge=0.2, le=20.0)
+    knife_hp_min: float | None = Field(default=None, ge=0.2, le=0.9)
 
 
 class RunBody(BaseModel):
@@ -97,8 +103,10 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
     if mode != Mode.ASSIST:
         return 409, "mode_not_assist"
     s = body.settings
-    if s is not None and s.fly_key is not None and s.fly_key == s.home_key:
-        return 400, "settings_same_key"
+    if s is not None:
+        keys = [k for k in (s.heal_key, s.fly_key, s.home_key, s.knife_key, s.dagger_key) if k]
+        if len(keys) != len(set(keys)):  # every key its own (the helper checks the whole set)
+            return 400, "settings_same_key"
     for pt in (s.respawn_at, s.respawn_confirm_at) if s is not None else ():
         if pt is not None and pt != "none":
             x, y = (int(v) for v in pt.split(","))

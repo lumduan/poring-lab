@@ -91,10 +91,22 @@ SETTING_FLAGS = {
     "weight_home": "--weight-home",
     "respawn_at": "--respawn-at",  # Batt 2026-11-13: another server's death menu: not hard-coded
     "respawn_confirm_at": "--respawn-confirm-at",  # its confirmation's OK, or "none"
+    # Batt 2026-11-13 ~13:3x: "everything a user can set again; nothing fixed, only defaults"
+    "heal_key": "--heal-key",
+    "knife_key": "--steal-opener",  # the Knife (Batt's swap, part 1)
+    "dagger_key": "--dagger-key",  # the dagger back on (part 2)
+    "knife_max_s": "--knife-max-s",  # the Knife's time with no steal cue (s)
+    "knife_hp_min": "--knife-hp-min",  # under this HP share the dagger goes back at once
 }
+KEY_SETTINGS = ("heal_key", "fly_key", "home_key", "knife_key", "dagger_key")  # each its own key
+KEY_WORDS = {"heal_key": "the heal item", "fly_key": "the Fly Wing",
+             "home_key": "the Butterfly Wing", "knife_key": "the Knife",
+             "dagger_key": "the dagger"}  # fmt: skip
 GAME_PX = (1280, 720)  # the game picture: a respawn_at point lies inside it
 KEY_CHOICES = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
 WEIGHT_CHOICES = tuple(round(0.30 + 0.05 * i, 2) for i in range(11))  # 0.30 .. 0.80
+KNIFE_S_RANGE = (0.2, 20.0)  # bare_steal.KNIFE_MAX_RANGE: tenths of a second
+KNIFE_HP_CHOICES = tuple(round(0.20 + 0.05 * i, 2) for i in range(15))  # 0.20 .. 0.90
 
 
 def settings_of(flow: Flow, raw: Mapping[str, Any] | None) -> dict[str, Any] | str:
@@ -106,13 +118,34 @@ def settings_of(flow: Flow, raw: Mapping[str, Any] | None) -> dict[str, Any] | s
         if k not in flow.settings:
             return f"unknown setting {k!r}"
         out[k] = v
-    for k in ("fly_key", "home_key"):
+    for k in KEY_SETTINGS:
         if k in out and out[k] not in KEY_CHOICES:
             return f"{k} {out[k]!r} is not a row-1 hotbar key (F1-F9)"
         if k in out and out[k] in flow.reserved_keys:
             return f"{k} {out[k]} is a key this run uses already ({', '.join(flow.reserved_keys)})"
     if "fly_key" in out and out.get("fly_key") == out.get("home_key"):
         return "the Fly Wing and the Butterfly Wing need two different keys"
+    seen: dict[str, str] = {}
+    for k in KEY_SETTINGS:
+        if k in out:
+            if out[k] in seen:
+                return (f"{KEY_WORDS[seen[out[k]]]} and {KEY_WORDS[k]} are both on {out[k]}: "
+                        "each needs its own key")  # fmt: skip
+            seen[out[k]] = k
+    if "knife_max_s" in out:
+        v = out["knife_max_s"]
+        if (isinstance(v, bool) or not isinstance(v, (int, float))
+                or not KNIFE_S_RANGE[0] <= float(v) <= KNIFE_S_RANGE[1]):  # fmt: skip
+            return (
+                f"knife_max_s {v!r} is not a time from {KNIFE_S_RANGE[0]} to {KNIFE_S_RANGE[1]} s"
+            )
+        out["knife_max_s"] = round(float(v), 1)
+    if "knife_hp_min" in out:
+        v = out["knife_hp_min"]
+        if (isinstance(v, bool) or not isinstance(v, (int, float))
+                or round(float(v), 2) not in KNIFE_HP_CHOICES):  # fmt: skip
+            return f"knife_hp_min {v!r} is not one of {list(KNIFE_HP_CHOICES)}"
+        out["knife_hp_min"] = round(float(v), 2)
     for k in ("respawn_at", "respawn_confirm_at"):
         if k not in out:
             continue
@@ -152,8 +185,6 @@ FLOWS: dict[str, Flow] = {
             "--loot-memory",
             "--bare-steal",
             "--bare-ready",
-            "--steal-opener",
-            "F4",
             "--steal-cue",
             "popup",
             "--swap-gap",
@@ -163,17 +194,23 @@ FLOWS: dict[str, Flow] = {
         "rogue-xmas02.md 4DQ (the base) + --player-mode (Batt 2026-11-13: no GM lines) + the "
         "map's two exits (dungeon@9.41, Batt 2026-11-13): weight over 50 % -> the Butterfly Wing "
         "home; a death -> the death dialog's move to saved location",
-        # Batt 2026-11-13: "the Butterfly Wing on F9, the Fly Wing on F8" (a person may change
-        # them, and the weight, on /flows before Run); the Rogue's other row-1 keys are taken:
-        # F1 potion, F3 steal, F4 the Knife (--steal-opener), F5 the dagger (--bare-steal)
+        # Batt 2026-11-13: "the Butterfly Wing on F9, the Fly Wing on F8"; ~13:3x "everything a
+        # user can set again; we only put the defaults": every key and number below is a DEFAULT a
+        # person changes on /flows before Run. No key is taken by the run itself (the Rogue's
+        # Steal skill key F3 is pressed only by --steal, which this flow does not use)
         settings={
             "fly_key": "F8",
             "home_key": "F9",
             "weight_home": 0.50,
             "respawn_at": "645,481",
             "respawn_confirm_at": "714,405",
+            "heal_key": "F1",
+            "knife_key": "F4",
+            "dagger_key": "F5",
+            "knife_max_s": 8.0,
+            "knife_hp_min": 0.50,
         },
-        reserved_keys=("F1", "F3", "F4", "F5"),
+        reserved_keys=(),
     ),
 }
 
@@ -211,7 +248,7 @@ def settings_argv(st: Mapping[str, Any]) -> list[str]:
     for k, flag in SETTING_FLAGS.items():
         if k in st:
             v = st[k]
-            out += [flag, f"{v:.2f}" if isinstance(v, float) else str(v)]
+            out += [flag, f"{v:.2f}" if isinstance(v, float) else str(v)]  # 8.0 -> "8.00"
     return out
 
 
@@ -305,7 +342,9 @@ class Helper:
                 "flows": {k: {"title": f.title, "minutes": f.minutes, "settings": dict(f.settings),
                               "choices": {"keys": list(KEY_CHOICES),
                                           "reserved": list(f.reserved_keys),
-                                          "weights": list(WEIGHT_CHOICES)}}
+                                          "weights": list(WEIGHT_CHOICES),
+                                          "knife_s": list(KNIFE_S_RANGE),
+                                          "knife_hp": list(KNIFE_HP_CHOICES)}}
                           for k, f in FLOWS.items()}}  # fmt: skip
 
     def write_status(self) -> None:

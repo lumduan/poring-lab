@@ -62,8 +62,6 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "--loot-memory",
       "--bare-steal",
       "--bare-ready",
-      "--steal-opener",
-      "F4",
       "--steal-cue",
       "popup",
       "--swap-gap",
@@ -78,7 +76,17 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "--respawn-at",
       "645,481",
       "--respawn-confirm-at",
-      "714,405"
+      "714,405",
+      "--heal-key",
+      "F1",
+      "--steal-opener",
+      "F4",
+      "--dagger-key",
+      "F5",
+      "--knife-max-s",
+      "8.00",
+      "--knife-hp-min",
+      "0.50"
     ],
     "optional": []
   },
@@ -106,6 +114,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "cmd.char": {
       "value": "rogue",
       "source": "the base command: --char",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.dagger_key": {
+      "value": "F5",
+      "source": "the base command: --dagger-key",
       "note": "as the night pilots ran it"
     },
     "cmd.engage_screen": {
@@ -143,6 +156,11 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "source": "the base command: --garm-fly",
       "note": "as the night pilots ran it"
     },
+    "cmd.heal_key": {
+      "value": "F1",
+      "source": "the base command: --heal-key",
+      "note": "as the night pilots ran it"
+    },
     "cmd.hud": {
       "value": true,
       "source": "the base command: --hud",
@@ -156,6 +174,16 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "cmd.kill_gap": {
       "value": true,
       "source": "the base command: --kill-gap",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.knife_hp_min": {
+      "value": 0.5,
+      "source": "the base command: --knife-hp-min",
+      "note": "as the night pilots ran it"
+    },
+    "cmd.knife_max_s": {
+      "value": 8.0,
+      "source": "the base command: --knife-max-s",
       "note": "as the night pilots ran it"
     },
     "cmd.late_confirm": {
@@ -651,17 +679,17 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
     "bs.BARE_MAX_S": {
       "value": 8.0,
       "source": "bare_steal.py: BARE_MAX_S",
-      "note": "the opener on this long with no steal cue: the dagger back (s)"
+      "note": "the DEFAULT Knife time (a Run setting: --knife-max-s)"
     },
     "bs.BARE_HP_MIN": {
       "value": 0.5,
       "source": "bare_steal.py: BARE_HP_MIN",
-      "note": "under this HP share the dagger goes back at once"
+      "note": "the DEFAULT HP rule (a Run setting: --knife-hp-min)"
     },
     "bs.EQUIP_KEY": {
       "value": "F5",
       "source": "bare_steal.py: EQUIP_KEY",
-      "note": "the hotbar key holding the dagger"
+      "note": "the DEFAULT dagger key (a Run setting: --dagger-key)"
     }
   },
   "flags": {
@@ -697,6 +725,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "help": "dungeon@6: the test character (crusader.py --char)",
       "default": "crusader",
       "value": "rogue",
+      "kind": "value",
+      "base": true
+    },
+    "--dagger-key": {
+      "help": "dungeon@9.42: the dagger's row-1 hotbar key for --bare-steal (default F5): the key that puts it back on, and the slot whose picture says whether it is worn",
+      "default": null,
+      "value": "F5",
       "kind": "value",
       "base": true
     },
@@ -749,6 +784,13 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "kind": "bool",
       "base": true
     },
+    "--heal-key": {
+      "help": "dungeon@9.42 (Batt 2026-11-13: nothing fixed, only defaults): the heal item's row-1 hotbar key (default: the character's, F1). Its stock is read from that slot and every potion press uses it; refused when another key of the run's is the same",
+      "default": null,
+      "value": "F1",
+      "kind": "value",
+      "base": true
+    },
     "--hud": {
       "help": "dungeon@9.29 (Batt 2026-11-11): send the boxes the runner holds (by species) to the console's operator HUD, at its own rate limit; DISPLAY ONLY (no input, no decision)",
       "default": false,
@@ -768,6 +810,20 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "default": false,
       "value": true,
       "kind": "bool",
+      "base": true
+    },
+    "--knife-hp-min": {
+      "help": "dungeon@9.42: --bare-steal's HP rule: under this HP share the dagger goes back on at once (default 0.5; 0.2-0.9)",
+      "default": null,
+      "value": 0.5,
+      "kind": "value",
+      "base": true
+    },
+    "--knife-max-s": {
+      "help": "dungeon@9.42: --bare-steal's Knife time: the dagger goes back on this long after the first hit with the Knife when no steal cue came first (default 8; 0.2-20)",
+      "default": null,
+      "value": 8.0,
+      "kind": "value",
       "base": true
     },
     "--late-confirm": {
@@ -1348,21 +1404,21 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "text": "the Knife swap, part 2: knife_back(): the Knife on and it stole (or "
                 },
                 {
-                  "param": "bs.BARE_MAX_S",
+                  "param": "cmd.knife_max_s",
                   "shown": "8"
                 },
                 {
                   "text": " s, or HP under "
                 },
                 {
-                  "param": "bs.BARE_HP_MIN",
+                  "param": "cmd.knife_hp_min",
                   "shown": "50"
                 },
                 {
                   "text": " %): the dagger back on ("
                 },
                 {
-                  "param": "bs.EQUIP_KEY",
+                  "param": "cmd.dagger_key",
                   "shown": "F5"
                 },
                 {
@@ -1386,9 +1442,9 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 "bs.popup_new"
               ],
               "params": [
-                "bs.BARE_HP_MIN",
-                "bs.BARE_MAX_S",
-                "bs.EQUIP_KEY"
+                "cmd.dagger_key",
+                "cmd.knife_hp_min",
+                "cmd.knife_max_s"
               ]
             },
             {
@@ -2711,14 +2767,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "text": "the Knife on and a steal cue, "
                 },
                 {
-                  "param": "bs.BARE_MAX_S",
+                  "param": "cmd.knife_max_s",
                   "shown": "8"
                 },
                 {
                   "text": " s, or HP under "
                 },
                 {
-                  "param": "bs.BARE_HP_MIN",
+                  "param": "cmd.knife_hp_min",
                   "shown": "50"
                 },
                 {
@@ -2735,7 +2791,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                       "text": "press "
                     },
                     {
-                      "param": "bs.EQUIP_KEY",
+                      "param": "cmd.dagger_key",
                       "shown": "F5"
                     }
                   ],
@@ -2751,7 +2807,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "flags": [],
                   "code": [],
                   "params": [
-                    "bs.EQUIP_KEY"
+                    "cmd.dagger_key"
                   ]
                 }
               ]
@@ -2765,7 +2821,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             166,
             167
           ],
-          "why": "The steal cue is the item popup (or a new cyan Battle Log line): no words are read. After 8 s without a steal, or under 50 % HP, the dagger goes back on anyway.",
+          "why": "The steal cue is the item popup (or a new cyan Battle Log line): no words are read. After 8 s without a steal, or under 50 % HP, the dagger goes back on anyway. Both numbers and both keys are your Run settings (Batt: \"F4, wait 200 ms, F5\" is a Knife time of 0.2 s).",
           "flags": [
             "--bare-steal",
             "--steal-cue"
@@ -2775,8 +2831,8 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             "bs.popup_new"
           ],
           "params": [
-            "bs.BARE_HP_MIN",
-            "bs.BARE_MAX_S"
+            "cmd.knife_hp_min",
+            "cmd.knife_max_s"
           ]
         },
         {
@@ -3324,7 +3380,14 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "style": "rd_safety_blocks",
                   "parts": [
                     {
-                      "text": "press the potion key (F1)"
+                      "text": "press the heal key ("
+                    },
+                    {
+                      "param": "cmd.heal_key",
+                      "shown": "F1"
+                    },
+                    {
+                      "text": ")"
                     }
                   ],
                   "head": [
@@ -3338,7 +3401,9 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                   "why": "One press; the next only 0.7 s later (or at once if the HP rose), at most 3 in 2 s.",
                   "flags": [],
                   "code": [],
-                  "params": []
+                  "params": [
+                    "cmd.heal_key"
+                  ]
                 }
               ]
             }
@@ -3758,7 +3823,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "params": []
     }
   ],
-  "python": "# xmas_dun02: how the Rogue hunts -- a DESCRIPTION of `scripts/dungeon_hunt.py run`\n# GENERATED by scripts/runner_flow_export.py with dungeon_hunt.py's own numbers: an outline for\n# learners, not the real code (the real loop is dungeon_hunt.run(), with many more checks).\n# Nothing here runs, and nothing on /flows reaches the game.\n#\n#   dungeon_hunt.py run \\\n#       --char rogue --map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard\n#       --miss-cue --loot trim --box-strike --box-now --self-recheck --still-strike\n#       --engage-screen --reach-check --far-single --far-approach --explore --walk-pick\n#       --kill-gap --loot-first --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2\n#       --late-confirm --still-target --lead-press --minutes 120 --value-target --hud\n#       --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory --bare-steal --bare-ready\n#       --steal-opener F4 --steal-cue popup --swap-gap --player-mode --respawn --fly-key F8\n#       --player-home-key F9 --weight-home 0.50 --respawn-at 645,481\n#       --respawn-confirm-at 714,405\n\nimport time\n\n# --- the numbers, read from the code at export time -------------------------------\nSTRATEGY = {\"potion_below\": 0.4, \"fly_below\": 0.2, \"fly_rate\": 150.0, \"fly_rate_below\": 0.5, \"rest_below\": None, \"heal_below\": None, \"potions_to\": 30, \"wings_to\": 20}  # STRATEGIES[\"P2\"] (--strategy)\nCHAR = {\"job\": \"rogue\", \"max_hp\": 5070, \"max_sp\": 530, \"potions_to\": 10, \"wings_to\": 10, \"etc_hold_max\": 0.48}  # some of CHARS_CONF[\"rogue\"] (--char)\nPATROL_START = {\"xmas_dun02\": ((7, 21), (114, 23))}  # some of PATROL_START\nREAD_HZ = 5.0  # dungeon_hunt.py\nPLAYER_MIN_WINGS = 5  # dungeon_hunt.py\nPLAYER_MIN_HEALS = 5  # dungeon_hunt.py\nPLAYER_WINGS_KEEP = 1  # dungeon_hunt.py\nPLAYER_POS_S = 5.0  # dungeon_hunt.py\nWEIGHT_MAX = 0.48  # dungeon_hunt.py\nRESPAWN_SETTLE_S = 1.0  # dungeon_hunt.py\nRESPAWN_CONFIRM_WAIT_S = 3.0  # dungeon_hunt.py\nRESPAWN_LOAD_S = 4.0  # dungeon_hunt.py\nRESPAWN_WAIT_S = 20.0  # dungeon_hunt.py\nHOME_KEY = \"F8\"  # dungeon_hunt.py\nFIGHT_TAKEN_S = 2.5  # dungeon_hunt.py\nHP_DROP_PTS = 2  # dungeon_hunt.py\nHP_DROP_S = 1.5  # dungeon_hunt.py\nBOX_EVERY_S = 1.0  # dungeon_hunt.py\nBOX_FRESH_S = 1.5  # dungeon_hunt.py\nEXP_PAIR_S = 1.0  # dungeon_hunt.py\nKILL_GAP_S = 1.5  # dungeon_hunt.py\nKILL_GAP_HITS = 5  # dungeon_hunt.py\nLOCK_NO_HIT_S = 3.5  # dungeon_hunt.py\nD0_PX = 150.0  # value_target.py\nAPPROACH_CELLS = 9  # dungeon_hunt.py\nAPPROACH_KEEP = 4  # dungeon_hunt.py\nAPPROACH_MAX = 2  # dungeon_hunt.py\nSTILL_PX = 2.0  # dungeon_hunt.py\nSTILL_N = 3  # dungeon_hunt.py\nSTILL_MAX_S = 1.5  # dungeon_hunt.py\nWALKER_PX = 10.0  # dungeon_hunt.py\nHOLD_GAP_S = 0.25  # dungeon_hunt.py\nHOLD_MAX_S = 2.5  # dungeon_hunt.py\nLEAD_PX = 15.0  # dungeon_hunt.py\nLEAD_AGE_S = 0.57  # dungeon_hunt.py\nLEAD_CAP_CELLS = 1.0  # dungeon_hunt.py\nFAR_CELLS = 4  # dungeon_hunt.py\nFAR_MAX_S = 3.5  # dungeon_hunt.py\nBURST_GAP_S = 0.6  # dungeon_hunt.py\nQUIET_SCAN_S = 5.0  # dungeon_hunt.py\nSELF_RECHECK_S = 0.4  # dungeon_hunt.py\nLOOT_TRIM_HOVERS = 9  # dungeon_hunt.py\nLOOT_MAX_PICKS = 10  # dungeon_hunt.py\nLOOT_MAX_S = 25.0  # dungeon_hunt.py\nEXPLORE_LEG_MAX_S = 150.0  # dungeon_hunt.py\nWALK_AHEAD = 7  # dungeon_hunt.py\nWALK_EVERY_S = 1.2  # dungeon_hunt.py\nWALK_PICK_TOL = 1  # dungeon_hunt.py\nNOENTRY_CARVE_R = 0  # dungeon_hunt.py\nEND_HOT_S = 3.5  # dungeon_hunt.py\nEND_FLY_BELOW = 0.5  # dungeon_hunt.py\nSTOCK_READ_S = 1.0  # dungeon_hunt.py\nJUMP_CELLS = 20  # dungeon_hunt.py\nGARM_FRESH_S = 1.5  # dungeon_hunt.py\nBOSS_AVOID_S = 30.0  # dungeon_hunt.py\nUI_EVERY_S = 10.0  # dungeon_hunt.py\nREGEN_STOP = 0.5  # dungeon_hunt.py\nPOS_FLY_S = 20.0  # dungeon_hunt.py\nPOS_FLY_MAX = 3  # dungeon_hunt.py\nNPC_NO_FIGHT = 8  # dungeon_hunt.py\nBARE_MAX_S = 8.0  # bare_steal.py\nBARE_HP_MIN = 0.5  # bare_steal.py\nEQUIP_KEY = \"F5\"  # bare_steal.py\nSPECIES_VALUES = {}  # read at run time from data/econ/maps.json (never exported)\n\n\ndef run():\n    \"\"\"when the run starts: dungeon_hunt.run(a), a = the parsed command line\"\"\"\n    check_identity(job=\"rogue\")  # the status window must name her job, else no run\n    stock = hotbar_stock()  # the digits the hotbar draws: a player has no @item\n    if too_little(stock): stop(\"bring more Fly Wings / heal items first\")\n    if weight_unread() or weight_share() >= WEIGHT_MAX:  # never dropped\n        stop(\"the bag is too full: a person empties it first\")\n    here = minimap_cell()  # the minimap's readout, no warp\n    if not on_route_grid(here): stop(\"walk her onto the open ground first\")\n    t_end = time.monotonic() + 120.0 * 60  # --minutes: the time box\n    mode, lock, loot_list, kills = \"search\", None, [], []\n    while time.monotonic() < t_end:\n        eyes = look()  # pixels only: HP / SP %, the minimap readout, the Battle Log's new lines\n        now, here = eyes.t, eyes.cell\n        if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here\n            continue\n        boxes = box_watch.boxes(fresh_s=BOX_FRESH_S)  # the map's own model, one detection a second\n        hud_send(hud, boxes, mode, lock is not None)  # --hud: the console's HUD, DISPLAY ONLY\n        knife_back(eyes)  # --bare-steal: every tick, before the fight (tab: knife swap)\n        if mode != \"fight\" and (eyes.hit_on_us or eyes.hp_dropped or eyes.miss_at_us or near_box(boxes)):\n            mode, fight_t0 = \"fight\", now\n        if mode == \"fight\":\n            if lock is not None:\n                if exp_line and exp_kill(exp_line.type, now, pair)[0]:  # EXP_PAIR_S\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif not exp_seen and kill_gapped(lock.hits, now - lock.last_hit):\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif now - max(lock.last_hit, lock.t) > LOCK_NO_HIT_S:\n                    lock = None\n            else:\n                target = value_pick(candidates(boxes), SPECIES_VALUES)  # ties: the nearer one\n                if target and target.cells >= APPROACH_CELLS:  # at most APPROACH_MAX times a fight\n                    walk_click(approach_cell(target.rel, APPROACH_KEEP))\n                    continue  # the box path looks again once that walk has ended\n                aim = still_target(target)  # --still-strike + --still-target\n                aim = press_lead(target, aim)  # its speed x (LEAD_AGE_S + the time since the picture)\n                if aim and strike(*aim):  # hover, read the cursor: a SWORD -> click\n                    lock = Lock(t=now)\n                elif scan_needed(now, last_taken, last_ours, last_swing, eyes.hp_dropped):\n                    found = scan(\"defend\", ring(1), \"sword\")  # --self-recheck on her own sprite\n                    if found and strike(*found):\n                        lock = Lock(t=now)\n            if lock is None and quiet(eyes) and quiet_kill_ends(kills, now, fight_t0, True):\n                mode = \"after\"\n        elif mode == \"after\":\n            loot_step_v1(loot_list, fight_ref)  # --loot trim: LOOT_TRIM_HOVERS hovers, no sweep\n            loot_list, mode = [], \"search\"\n        else:\n            knife_on(eyes)  # --bare-ready --steal-opener: at idle, never at the strike (tab: knife swap)\n            goal = explore_goal(here)  # --search patrol --explore: explore + exploit\n            path = route(okr, carved, here, goal)\n            if now - last_walk >= WALK_EVERY_S:\n                cell = walk_target(path, WALK_AHEAD, fits)  # --walk-pick: picked_cell() within WALK_PICK_TOL\n                verdict = hover(cell)  # the cursor there: walk, sword, noentry or unknown\n                if verdict == \"walk\" or walk_trusted(cell):\n                    click_at(cell)\n                elif verdict == \"sword\":\n                    strike(cell)\n                elif verdict == \"noentry\":\n                    carve(carved, cell, NOENTRY_CARVE_R)\n    if end_escape_needed(now, last_taken, hist, \"time\"):  # a hit within END_HOT_S too\n        press(\"fly\", \"end\")\n    if reason == \"death\":  # --respawn: the map's exit after a death\n        respawn(at=\"645,481\")\n    press_home_if_stocked()  # one press; none on the hotbar: she stays put\n\n\ndef knife_on(eyes):\n    \"\"\"--bare-steal --bare-ready --steal-opener F4: called at idle (the search)\"\"\"\n    if idle(mode, lock) and not knife_worn():  # --bare-ready: never at the strike\n        press(\"F4\")  # read back: its slot empty, the dagger in the bag\n    # strike() as usual: a weak hit keeps it alive longer, so more chances to steal\n\n\ndef knife_back(eyes):\n    \"\"\"--bare-steal --steal-cue popup --swap-gap: called on every tick, before the fight\"\"\"\n    if knife_worn() and (steal_cue() or now - knife_t > BARE_MAX_S or eyes.hp < BARE_HP_MIN):\n        press(\"F5\")  # the dagger on again, read back\n    last_ours = max(last_ours, swap_t)  # --swap-gap\n\n\ndef respawn(at):\n    \"\"\"--respawn --respawn-at X,Y: the death menu's move to saved location\"\"\"\n    sleep(RESPAWN_SETTLE_S)\n    if death_menu_reads():  # gm_vitals.DEAD_STATE, from the pixels\n        press_at(at)  # a cold click is ignored: two motions first\n    else:\n        return  # the record says why\n    if confirm_reads(within=RESPAWN_CONFIRM_WAIT_S):  # this client asks\n        press_at(\"714,405\")  # never a second time\n    wait_load(RESPAWN_LOAD_S, RESPAWN_WAIT_S)  # else: recorded, the person's\n\n\ndef safety_rules(eyes) -> bool:\n    \"\"\"the guards run() checks first on every tick; True = this tick ends\"\"\"\n    if stock_out(hotbar_counts) is not None:  # re-read STOCK_READ_S after each press\n        raise Stop(\"stock_out\")\n    if eyes.dead or is_jump(here, eyes.cell, eyes.since_s):  # a map change?\n        raise Stop(\"death\" if eyes.dead else \"hard_bar: position jump\")\n    if eyes.hp < STRATEGY[\"fly_below\"] or (rate_hp_s(hist, now) or 0) > STRATEGY[\"fly_rate\"] and eyes.hp < STRATEGY[\"fly_rate_below\"]:\n        press(\"fly\", \"hp\")  # a same-map teleport, far from here\n        return True\n    if eyes.hp < STRATEGY[\"potion_below\"]:  # 0.7 s apart, at most 3 in 2 s\n        press(\"potion\", \"hp\")\n    if alarm_seen(boxes.alarm, now, streak=boxes.alarm_n, need=2):\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if boss_of(eyes.name_read, bosses, species):  # the map's boss and its summons\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if now - last_ui >= UI_EVERY_S and mode != \"fight\":\n        if client_state() != \"clear\":  # never click into an unknown state\n            raise Stop(\"hard_bar: unknown UI state\")\n        w_share = weight_share()  # at REGEN_STOP no natural regen\n        if weight_home_due(0.5, w_share, red):  # the map's exit\n            raise Stop(\"weight_home\")  # the end's Butterfly Wing takes her home\n    if now - last_pos_t > POS_FLY_S and pos_flies < POS_FLY_MAX:\n        press(\"fly\", \"pos_unread\")  # a same-map teleport, far from here\n        return True\n    # --npc-guard: npc_guard_blocks() refuses those clicks (a strike once opened a dialog)\n    return False\n",
+  "python": "# xmas_dun02: how the Rogue hunts -- a DESCRIPTION of `scripts/dungeon_hunt.py run`\n# GENERATED by scripts/runner_flow_export.py with dungeon_hunt.py's own numbers: an outline for\n# learners, not the real code (the real loop is dungeon_hunt.run(), with many more checks).\n# Nothing here runs, and nothing on /flows reaches the game.\n#\n#   dungeon_hunt.py run \\\n#       --char rogue --map xmas_dun02 --strategy P2 --search patrol --walk-trust --npc-guard\n#       --miss-cue --loot trim --box-strike --box-now --self-recheck --still-strike\n#       --engage-screen --reach-check --far-single --far-approach --explore --walk-pick\n#       --kill-gap --loot-first --walk-pick-step --quiet-scan --garm-fly --garm-confirm 2\n#       --late-confirm --still-target --lead-press --minutes 120 --value-target --hud\n#       --hud-fast 0.2 --loot-items xmas02fi5 --loot-memory --bare-steal --bare-ready\n#       --steal-cue popup --swap-gap --player-mode --respawn --fly-key F8 --player-home-key F9\n#       --weight-home 0.50 --respawn-at 645,481 --respawn-confirm-at 714,405 --heal-key F1\n#       --steal-opener F4 --dagger-key F5 --knife-max-s 8.00 --knife-hp-min 0.50\n\nimport time\n\n# --- the numbers, read from the code at export time -------------------------------\nSTRATEGY = {\"potion_below\": 0.4, \"fly_below\": 0.2, \"fly_rate\": 150.0, \"fly_rate_below\": 0.5, \"rest_below\": None, \"heal_below\": None, \"potions_to\": 30, \"wings_to\": 20}  # STRATEGIES[\"P2\"] (--strategy)\nCHAR = {\"job\": \"rogue\", \"max_hp\": 5070, \"max_sp\": 530, \"potions_to\": 10, \"wings_to\": 10, \"etc_hold_max\": 0.48}  # some of CHARS_CONF[\"rogue\"] (--char)\nPATROL_START = {\"xmas_dun02\": ((7, 21), (114, 23))}  # some of PATROL_START\nREAD_HZ = 5.0  # dungeon_hunt.py\nPLAYER_MIN_WINGS = 5  # dungeon_hunt.py\nPLAYER_MIN_HEALS = 5  # dungeon_hunt.py\nPLAYER_WINGS_KEEP = 1  # dungeon_hunt.py\nPLAYER_POS_S = 5.0  # dungeon_hunt.py\nWEIGHT_MAX = 0.48  # dungeon_hunt.py\nRESPAWN_SETTLE_S = 1.0  # dungeon_hunt.py\nRESPAWN_CONFIRM_WAIT_S = 3.0  # dungeon_hunt.py\nRESPAWN_LOAD_S = 4.0  # dungeon_hunt.py\nRESPAWN_WAIT_S = 20.0  # dungeon_hunt.py\nHOME_KEY = \"F8\"  # dungeon_hunt.py\nFIGHT_TAKEN_S = 2.5  # dungeon_hunt.py\nHP_DROP_PTS = 2  # dungeon_hunt.py\nHP_DROP_S = 1.5  # dungeon_hunt.py\nBOX_EVERY_S = 1.0  # dungeon_hunt.py\nBOX_FRESH_S = 1.5  # dungeon_hunt.py\nEXP_PAIR_S = 1.0  # dungeon_hunt.py\nKILL_GAP_S = 1.5  # dungeon_hunt.py\nKILL_GAP_HITS = 5  # dungeon_hunt.py\nLOCK_NO_HIT_S = 3.5  # dungeon_hunt.py\nD0_PX = 150.0  # value_target.py\nAPPROACH_CELLS = 9  # dungeon_hunt.py\nAPPROACH_KEEP = 4  # dungeon_hunt.py\nAPPROACH_MAX = 2  # dungeon_hunt.py\nSTILL_PX = 2.0  # dungeon_hunt.py\nSTILL_N = 3  # dungeon_hunt.py\nSTILL_MAX_S = 1.5  # dungeon_hunt.py\nWALKER_PX = 10.0  # dungeon_hunt.py\nHOLD_GAP_S = 0.25  # dungeon_hunt.py\nHOLD_MAX_S = 2.5  # dungeon_hunt.py\nLEAD_PX = 15.0  # dungeon_hunt.py\nLEAD_AGE_S = 0.57  # dungeon_hunt.py\nLEAD_CAP_CELLS = 1.0  # dungeon_hunt.py\nFAR_CELLS = 4  # dungeon_hunt.py\nFAR_MAX_S = 3.5  # dungeon_hunt.py\nBURST_GAP_S = 0.6  # dungeon_hunt.py\nQUIET_SCAN_S = 5.0  # dungeon_hunt.py\nSELF_RECHECK_S = 0.4  # dungeon_hunt.py\nLOOT_TRIM_HOVERS = 9  # dungeon_hunt.py\nLOOT_MAX_PICKS = 10  # dungeon_hunt.py\nLOOT_MAX_S = 25.0  # dungeon_hunt.py\nEXPLORE_LEG_MAX_S = 150.0  # dungeon_hunt.py\nWALK_AHEAD = 7  # dungeon_hunt.py\nWALK_EVERY_S = 1.2  # dungeon_hunt.py\nWALK_PICK_TOL = 1  # dungeon_hunt.py\nNOENTRY_CARVE_R = 0  # dungeon_hunt.py\nEND_HOT_S = 3.5  # dungeon_hunt.py\nEND_FLY_BELOW = 0.5  # dungeon_hunt.py\nSTOCK_READ_S = 1.0  # dungeon_hunt.py\nJUMP_CELLS = 20  # dungeon_hunt.py\nGARM_FRESH_S = 1.5  # dungeon_hunt.py\nBOSS_AVOID_S = 30.0  # dungeon_hunt.py\nUI_EVERY_S = 10.0  # dungeon_hunt.py\nREGEN_STOP = 0.5  # dungeon_hunt.py\nPOS_FLY_S = 20.0  # dungeon_hunt.py\nPOS_FLY_MAX = 3  # dungeon_hunt.py\nNPC_NO_FIGHT = 8  # dungeon_hunt.py\nBARE_MAX_S = 8.0  # bare_steal.py\nBARE_HP_MIN = 0.5  # bare_steal.py\nEQUIP_KEY = \"F5\"  # bare_steal.py\nSPECIES_VALUES = {}  # read at run time from data/econ/maps.json (never exported)\n\n\ndef run():\n    \"\"\"when the run starts: dungeon_hunt.run(a), a = the parsed command line\"\"\"\n    check_identity(job=\"rogue\")  # the status window must name her job, else no run\n    stock = hotbar_stock()  # the digits the hotbar draws: a player has no @item\n    if too_little(stock): stop(\"bring more Fly Wings / heal items first\")\n    if weight_unread() or weight_share() >= WEIGHT_MAX:  # never dropped\n        stop(\"the bag is too full: a person empties it first\")\n    here = minimap_cell()  # the minimap's readout, no warp\n    if not on_route_grid(here): stop(\"walk her onto the open ground first\")\n    t_end = time.monotonic() + 120.0 * 60  # --minutes: the time box\n    mode, lock, loot_list, kills = \"search\", None, [], []\n    while time.monotonic() < t_end:\n        eyes = look()  # pixels only: HP / SP %, the minimap readout, the Battle Log's new lines\n        now, here = eyes.t, eyes.cell\n        if safety_rules(eyes):  # a Fly Wing or a stop: this tick ends here\n            continue\n        boxes = box_watch.boxes(fresh_s=BOX_FRESH_S)  # the map's own model, one detection a second\n        hud_send(hud, boxes, mode, lock is not None)  # --hud: the console's HUD, DISPLAY ONLY\n        knife_back(eyes)  # --bare-steal: every tick, before the fight (tab: knife swap)\n        if mode != \"fight\" and (eyes.hit_on_us or eyes.hp_dropped or eyes.miss_at_us or near_box(boxes)):\n            mode, fight_t0 = \"fight\", now\n        if mode == \"fight\":\n            if lock is not None:\n                if exp_line and exp_kill(exp_line.type, now, pair)[0]:  # EXP_PAIR_S\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif not exp_seen and kill_gapped(lock.hits, now - lock.last_hit):\n                    kills.append(now)\n                    loot_list.append((here, now))  # the 5 x 5 cells around her\n                    lock = None\n                elif now - max(lock.last_hit, lock.t) > LOCK_NO_HIT_S:\n                    lock = None\n            else:\n                target = value_pick(candidates(boxes), SPECIES_VALUES)  # ties: the nearer one\n                if target and target.cells >= APPROACH_CELLS:  # at most APPROACH_MAX times a fight\n                    walk_click(approach_cell(target.rel, APPROACH_KEEP))\n                    continue  # the box path looks again once that walk has ended\n                aim = still_target(target)  # --still-strike + --still-target\n                aim = press_lead(target, aim)  # its speed x (LEAD_AGE_S + the time since the picture)\n                if aim and strike(*aim):  # hover, read the cursor: a SWORD -> click\n                    lock = Lock(t=now)\n                elif scan_needed(now, last_taken, last_ours, last_swing, eyes.hp_dropped):\n                    found = scan(\"defend\", ring(1), \"sword\")  # --self-recheck on her own sprite\n                    if found and strike(*found):\n                        lock = Lock(t=now)\n            if lock is None and quiet(eyes) and quiet_kill_ends(kills, now, fight_t0, True):\n                mode = \"after\"\n        elif mode == \"after\":\n            loot_step_v1(loot_list, fight_ref)  # --loot trim: LOOT_TRIM_HOVERS hovers, no sweep\n            loot_list, mode = [], \"search\"\n        else:\n            knife_on(eyes)  # --bare-ready --steal-opener: at idle, never at the strike (tab: knife swap)\n            goal = explore_goal(here)  # --search patrol --explore: explore + exploit\n            path = route(okr, carved, here, goal)\n            if now - last_walk >= WALK_EVERY_S:\n                cell = walk_target(path, WALK_AHEAD, fits)  # --walk-pick: picked_cell() within WALK_PICK_TOL\n                verdict = hover(cell)  # the cursor there: walk, sword, noentry or unknown\n                if verdict == \"walk\" or walk_trusted(cell):\n                    click_at(cell)\n                elif verdict == \"sword\":\n                    strike(cell)\n                elif verdict == \"noentry\":\n                    carve(carved, cell, NOENTRY_CARVE_R)\n    if end_escape_needed(now, last_taken, hist, \"time\"):  # a hit within END_HOT_S too\n        press(\"fly\", \"end\")\n    if reason == \"death\":  # --respawn: the map's exit after a death\n        respawn(at=\"645,481\")\n    press_home_if_stocked()  # one press; none on the hotbar: she stays put\n\n\ndef knife_on(eyes):\n    \"\"\"--bare-steal --bare-ready --steal-opener KEY: called at idle (the search)\"\"\"\n    if idle(mode, lock) and not knife_worn():  # --bare-ready: never at the strike\n        press(\"F4\")  # read back: its slot empty, the dagger in the bag\n    # strike() as usual: a weak hit keeps it alive longer, so more chances to steal\n\n\ndef knife_back(eyes):\n    \"\"\"--bare-steal --steal-cue popup --swap-gap: called on every tick, before the fight\"\"\"\n    if knife_worn() and (steal_cue() or now - knife_t > 8.0 or eyes.hp < 0.5):\n        press(\"F5\")  # the dagger on again, read back\n    last_ours = max(last_ours, swap_t)  # --swap-gap\n\n\ndef respawn(at):\n    \"\"\"--respawn --respawn-at X,Y: the death menu's move to saved location\"\"\"\n    sleep(RESPAWN_SETTLE_S)\n    if death_menu_reads():  # gm_vitals.DEAD_STATE, from the pixels\n        press_at(at)  # a cold click is ignored: two motions first\n    else:\n        return  # the record says why\n    if confirm_reads(within=RESPAWN_CONFIRM_WAIT_S):  # this client asks\n        press_at(\"714,405\")  # never a second time\n    wait_load(RESPAWN_LOAD_S, RESPAWN_WAIT_S)  # else: recorded, the person's\n\n\ndef safety_rules(eyes) -> bool:\n    \"\"\"the guards run() checks first on every tick; True = this tick ends\"\"\"\n    if stock_out(hotbar_counts) is not None:  # re-read STOCK_READ_S after each press\n        raise Stop(\"stock_out\")\n    if eyes.dead or is_jump(here, eyes.cell, eyes.since_s):  # a map change?\n        raise Stop(\"death\" if eyes.dead else \"hard_bar: position jump\")\n    if eyes.hp < STRATEGY[\"fly_below\"] or (rate_hp_s(hist, now) or 0) > STRATEGY[\"fly_rate\"] and eyes.hp < STRATEGY[\"fly_rate_below\"]:\n        press(\"fly\", \"hp\")  # a same-map teleport, far from here\n        return True\n    if eyes.hp < STRATEGY[\"potion_below\"]:  # 0.7 s apart, at most 3 in 2 s\n        press(\"potion\", \"hp\")\n    if alarm_seen(boxes.alarm, now, streak=boxes.alarm_n, need=2):\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if boss_of(eyes.name_read, bosses, species):  # the map's boss and its summons\n        boss_until = now + BOSS_AVOID_S\n        press(\"fly\", \"boss\")  # a same-map teleport, far from here\n        return True\n    if now - last_ui >= UI_EVERY_S and mode != \"fight\":\n        if client_state() != \"clear\":  # never click into an unknown state\n            raise Stop(\"hard_bar: unknown UI state\")\n        w_share = weight_share()  # at REGEN_STOP no natural regen\n        if weight_home_due(0.5, w_share, red):  # the map's exit\n            raise Stop(\"weight_home\")  # the end's Butterfly Wing takes her home\n    if now - last_pos_t > POS_FLY_S and pos_flies < POS_FLY_MAX:\n        press(\"fly\", \"pos_unread\")  # a same-map teleport, far from here\n        return True\n    # --npc-guard: npc_guard_blocks() refuses those clicks (a strike once opened a dialog)\n    return False\n",
   "entry": "where you place her: Run starts on the cell she stands on",
   "exits": [
     {
@@ -3784,14 +3849,24 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "home_key": "F9",
       "weight_home": 0.5,
       "respawn_at": "645,481",
-      "respawn_confirm_at": "714,405"
+      "respawn_confirm_at": "714,405",
+      "heal_key": "F1",
+      "knife_key": "F4",
+      "dagger_key": "F5",
+      "knife_max_s": 8.0,
+      "knife_hp_min": 0.5
     },
     "params": {
       "fly_key": "cmd.fly_key",
       "home_key": "cmd.player_home_key",
       "weight_home": "cmd.weight_home",
       "respawn_at": "cmd.respawn_at",
-      "respawn_confirm_at": "cmd.respawn_confirm_at"
+      "respawn_confirm_at": "cmd.respawn_confirm_at",
+      "heal_key": "cmd.heal_key",
+      "knife_key": "cmd.steal_opener",
+      "dagger_key": "cmd.dagger_key",
+      "knife_max_s": "cmd.knife_max_s",
+      "knife_hp_min": "cmd.knife_hp_min"
     },
     "keys": [
       "F1",
@@ -3804,12 +3879,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       "F8",
       "F9"
     ],
-    "reserved": [
-      "F1",
-      "F3",
-      "F4",
-      "F5"
-    ],
+    "reserved": [],
     "weights": [
       0.3,
       0.35,
@@ -3822,6 +3892,39 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
       0.7,
       0.75,
       0.8
-    ]
+    ],
+    "knife_s": [
+      0.2,
+      20.0
+    ],
+    "knife_hp": [
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9
+    ],
+    "flags": {
+      "fly_key": "--fly-key",
+      "home_key": "--player-home-key",
+      "weight_home": "--weight-home",
+      "respawn_at": "--respawn-at",
+      "respawn_confirm_at": "--respawn-confirm-at",
+      "heal_key": "--heal-key",
+      "knife_key": "--steal-opener",
+      "dagger_key": "--dagger-key",
+      "knife_max_s": "--knife-max-s",
+      "knife_hp_min": "--knife-hp-min"
+    }
   }
 };

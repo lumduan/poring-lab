@@ -156,7 +156,7 @@ export default function LiveRun({ live }: { live: Live }) {
         {st?.label ? ` · ${st.label}` : ""}
       </p>
       <p>
-        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under 48 %, at least 5 Fly Wings and 5 heal items on the hotbar, the Fly Wings and the Butterfly Wings on the keys of your run settings),
+        {title ?? "the bot plays this flow"}. Put her on the map yourself (open ground, chat closed, the bag under 48 %, at least 5 Fly Wings and 5 heal items on the hotbar; the heal item, the Fly Wing, the Butterfly Wing, the Knife and the dagger on the keys of your run settings),
         set the console to ASSIST, then press <strong>Run</strong> at the top (twice: the second press confirms). She plays until you press Stop, until her Fly Wings run low, until the bag is over
         50 % (the Butterfly Wing takes her home), until she dies (the respawn function block takes her to the save point), or for at most
         {` ${st?.flows?.[flow]?.minutes ?? 120} `}

@@ -764,6 +764,65 @@ def test_the_fly_key_is_a_free_row1_key_and_the_record_names_it(monkeypatch: Any
     assert "fly_key" not in dh.fixes_of(_ns(monkeypatch))
 
 
+# --- dungeon@9.42 (Batt 2026-11-13 ~13:3x: "everything a user can set again or edit; nothing
+# fixed, we only put the defaults"): the heal key, the dagger key, the Knife swap's numbers -------
+def test_the_persons_heal_and_dagger_keys_join_the_key_map() -> None:
+    keys = dh.CHARS_CONF["rogue"]["keys"]
+    got, why = dh.person_keys(keys, "F6", "F7")
+    assert why is None and got["potion"] == "F6" and got["equip"] == "F7"
+    assert keys["potion"] == "F1" and keys["equip"] == "F5"  # the character's own map: unchanged
+    assert dh.person_keys(keys, None, None) == (dict(keys), None)
+    assert "--heal-key" in str(dh.person_keys(keys, "F10", None)[1])
+    assert "--dagger-key" in str(dh.person_keys(keys, None, "Enter")[1])
+
+
+def test_no_two_of_the_runs_keys_alike() -> None:
+    run_keys = {"potion": "F1", "fly": "F8", "equip": "F5", "home": "F9", "sit": "Insert",
+                "stand": "Insert"}  # fmt: skip
+    assert dh.keys_clash(run_keys, "F4") is None  # sit / stand share Insert by design
+    assert "F4 is set for --steal-opener and fly" in str(
+        dh.keys_clash({**run_keys, "fly": "F4"}, "F4")
+    )
+    assert "F5 is set for equip and potion" in str(
+        dh.keys_clash({**run_keys, "potion": "F5"}, None)
+    )
+
+
+def test_the_knife_numbers_go_with_bare_steal_inside_their_ranges(monkeypatch: Any) -> None:
+    ok = _ns(monkeypatch, "--bare-steal", "--knife-max-s", "0.2", "--knife-hp-min", "0.35")
+    assert dh.knife_numbers_refused(ok) is None
+    rec = dh.fixes_of(ok)
+    assert rec["knife_max_s"] == 0.2 and rec["knife_hp_min"] == 0.35
+    assert "--bare-steal" in str(dh.knife_numbers_refused(_ns(monkeypatch, "--knife-max-s", "1")))
+    assert "outside" in str(
+        dh.knife_numbers_refused(_ns(monkeypatch, "--bare-steal", "--knife-max-s", "30"))
+    )
+    assert "outside" in str(
+        dh.knife_numbers_refused(_ns(monkeypatch, "--bare-steal", "--knife-hp-min", "0.1"))
+    )
+    keys = dh.fixes_of(_ns(monkeypatch, "--heal-key", "F6", "--dagger-key", "F7"))
+    assert keys["heal_key"] == "F6" and keys["dagger_key"] == "F7"
+    assert "heal_key" not in dh.fixes_of(_ns(monkeypatch))
+
+
+def test_run_refuses_a_clash_of_the_persons_keys_before_any_input(monkeypatch: Any) -> None:
+    import ro_agent as r
+
+    for argv, word in ((("--heal-key", "F2"), "F2 is set for fly and potion"),
+                       (("--bare-steal", "--knife-max-s", "30"), "outside")):  # fmt: skip
+        a = _ns(monkeypatch, *argv)
+        monkeypatch.undo()
+
+        def no_session(*_: Any, **__: Any) -> Any:
+            raise AssertionError("a session was opened")
+
+        monkeypatch.setattr(r, "session", no_session)
+        with pytest.raises(SystemExit) as exc:
+            dh.run(a)
+        assert "refused" in str(exc.value) and word in str(exc.value), str(exc.value)
+        monkeypatch.undo()
+
+
 def test_run_refuses_a_taken_fly_key_before_any_input(monkeypatch: Any) -> None:
     import ro_agent as r
 

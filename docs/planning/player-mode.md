@@ -243,6 +243,17 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   the Fly Wing key, the Butterfly Wing key, the weight limit, the respawn button's point and the
   confirmation's OK (or none) are Run settings on /flows?runner=xmas_dun02, shown in the blocks;
   the respawn is its own function block, `def respawn(at)`.
+- ➡️ **dungeon@9.42 (2026-11-13 ~13:4x; Batt: "remember: the user must be able to set everything
+  again or edit it; nothing is fixed, we only put the defaults"):** the heal item's key
+  (`--heal-key`, default F1), the Knife's key (`--steal-opener`, F4: no longer a fixed flag of the
+  flow), the dagger's key (`--dagger-key`, F5: `bare_steal.configure` moves the key AND the slot
+  whose picture says the dagger is worn) and the Knife swap's two numbers (`--knife-max-s`, 8 s,
+  0.2-20: Batt's "F4, wait 200 ms, F5" is 0.2; `--knife-hp-min`, 50 %, 20-90 %) are Run settings
+  too. The runner checks that no two of its row-1 keys are alike (`keys_clash`, the home key and
+  the Knife's included); the Steal skill's F3 is dropped from the key map when `--steal` is off,
+  so NO key is the run's own any more (`reserved_keys` empty). The settings list above
+  (`fly_key, home_key, weight_home`; "F1 potion, F3 steal, F4 the Knife, F5 the dagger" taken) is
+  ➡️ SUPERSEDED by this: ten settings, each from a checked range, none taken.
 
 ## Not built yet
 

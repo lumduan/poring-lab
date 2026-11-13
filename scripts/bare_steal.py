@@ -64,6 +64,42 @@ BARE_MAX_S = 8.0  # bare-handed this long with no steal cue: the dagger goes on 
 BARE_HP_MIN = 0.5  # HP share under which the dagger goes on at once
 EQUIP_KEY = "F5"  # the hotbar slot holding the dagger (Batt: "any free F1-F9, e.g. F5")
 EQUIP_SLOT = 4  # hotbar row 1 index of EQUIP_KEY (F1 = 0)
+# The DEFAULTS above; a run sets its own with configure() (Batt 2026-11-13: "everything a user can
+# set again; we only put the defaults"): the dagger's key, the Knife's time, the HP rule.
+KNIFE_MAX_RANGE = (0.2, 20.0)  # s: --knife-max-s (Batt's example "F4, wait 200 ms, F5" = 0.2)
+KNIFE_HP_RANGE = (0.2, 0.9)  # HP share: --knife-hp-min
+
+
+def configure_refused(equip_key: str | None = None, max_s: float | None = None,
+                      hp_min: float | None = None) -> str | None:  # fmt: skip
+    """PURE: why these values cannot be the run's (None: they can; a None keeps the default)."""
+    if equip_key is not None and not (len(equip_key) == 2 and equip_key[0] == "F"
+                                      and equip_key[1] in "123456789"):  # fmt: skip
+        return f"the dagger key {equip_key!r} is not a row-1 hotbar key (F1-F9)"
+    if max_s is not None and not (KNIFE_MAX_RANGE[0] <= max_s <= KNIFE_MAX_RANGE[1]):
+        return f"the Knife's time {max_s} s is outside {KNIFE_MAX_RANGE[0]}-{KNIFE_MAX_RANGE[1]} s"
+    if hp_min is not None and not (KNIFE_HP_RANGE[0] <= hp_min <= KNIFE_HP_RANGE[1]):
+        return f"the dagger's HP rule {hp_min} is outside {KNIFE_HP_RANGE[0]}-{KNIFE_HP_RANGE[1]}"
+    return None
+
+
+def configure(equip_key: str | None = None, max_s: float | None = None,
+              hp_min: float | None = None) -> dict[str, Any]:  # fmt: skip
+    """Set the run's own values (once, before the run's first read; a None keeps the current one)
+    and return the previous ones (a test puts them back with ``configure(**prev)``)."""
+    global EQUIP_KEY, EQUIP_SLOT, BARE_MAX_S, BARE_HP_MIN
+    why = configure_refused(equip_key, max_s, hp_min)
+    if why:
+        raise ValueError(why)
+    prev = {"equip_key": EQUIP_KEY, "max_s": BARE_MAX_S, "hp_min": BARE_HP_MIN}
+    if equip_key is not None:
+        EQUIP_KEY, EQUIP_SLOT = equip_key, int(equip_key[1]) - 1
+    if max_s is not None:
+        BARE_MAX_S = float(max_s)
+    if hp_min is not None:
+        BARE_HP_MIN = float(hp_min)
+    return prev
+
 
 # --- the swaps (dungeon@9.27; measured LIVE 2026-11-11 on the lab client by the parent agent,
 # 1280 x 720 game region, RDP) ------------------------------------------------------------------
@@ -97,17 +133,19 @@ def slot_gray(frame: np.ndarray) -> np.ndarray:
     return hb.gray(np.asarray(frame))
 
 
-def slot_crop(gray: np.ndarray, slot: int = EQUIP_SLOT) -> np.ndarray:
+def slot_crop(gray: np.ndarray, slot: int | None = None) -> np.ndarray:
     """PURE: hotbar row 1 slot ``slot``'s icon box (hotbar_count.ICON, its PITCH) from a game-region
-    grey frame, as a copy (the reference must not follow the frame buffer)."""
+    grey frame, as a copy (the reference must not follow the frame buffer). None: the dagger's
+    slot, as configured (read at call time, never at import)."""
+    slot = EQUIP_SLOT if slot is None else slot
     x0, y0, x1, y1 = hb.ICON
     return np.asarray(gray[y0:y1, x0 + hb.PITCH * slot : x1 + hb.PITCH * slot], np.float64).copy()
 
 
-def slot_empty(gray: np.ndarray, slot: int = EQUIP_SLOT) -> bool:
+def slot_empty(gray: np.ndarray, slot: int | None = None) -> bool:
     """PURE: hotbar_count's EMPTY slot (no digit and no icon): read_count's 0 with no digit
-    templates (a digit then reads None, never 0)."""
-    return hb.read_count(gray, slot, {}) == 0
+    templates (a digit then reads None, never 0). None: the dagger's slot, as configured."""
+    return hb.read_count(gray, EQUIP_SLOT if slot is None else slot, {}) == 0
 
 
 def slot_bare(crop: np.ndarray, ref: np.ndarray) -> bool | None:

@@ -357,9 +357,96 @@
   color: var(--muted);
   font-size: 0.78rem;
 }
+/* THE MAP FLOW's page (matpilot's 2026-11-13 review: at 1440 x 900 the rows above left the canvas
+   0-17 px): the canvas never goes under 22rem; when the rows and the panes need more, the page's
+   own column scrolls (the NavBar stays) */
+.studio.runner-studio,
+.studio[data-testid="flows-app"] {
+  overflow-y: auto; /* the studio too: the flows row above it takes height as well */
+}
+.runner-studio .studio-body,
+.studio[data-testid="flows-app"] .studio-body {
+  flex: 1 0 auto;
+  min-height: 22rem;
+}
+.runner-studio .studio-side {
+  overflow: hidden; /* the Python panel never draws over the panes under it */
+}
+.runner-studio .studio-drawer {
+  height: clamp(10rem, 28vh, 22rem);
+}
+.runner-about summary {
+  cursor: pointer;
+}
+.runner-about-more {
+  color: var(--muted);
+}
+.runner-about .device-bar {
+  margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+}
+.runner-about > .notice {
+  margin-top: 0.5rem;
+}
+
+/* THE FLOWS ROW (Batt 2026-11-13: "on /flows I don't see this flow's name"): every flow by name, always
+   in view under the header; the one shown is pressed */
+.flow-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.flow-switcher-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.flow-switcher-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.flow-switcher-item:hover,
+.flow-switcher-item:focus-visible {
+  background: var(--neutral-bg);
+}
+.flow-switcher-item[aria-pressed="true"] {
+  border-color: var(--accent, currentColor);
+  font-weight: 600;
+  cursor: default;
+}
+.flow-switcher-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-switcher-kind {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
 /* the map flows (Batt 2026-11-13): first in Load, the map's name in bold, a line under them */
 .studio-menu-item-map {
   font-weight: 600;
+}
+.studio-menu-item-map small {
+  font-weight: 400; /* the title bold, its line under it as the others (matpilot 2026-11-13) */
 }
 .studio-menu-item-map + .studio-menu-item:not(.studio-menu-item-map) {
   margin-top: 0.25rem;

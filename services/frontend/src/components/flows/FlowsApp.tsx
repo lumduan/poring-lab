@@ -41,6 +41,8 @@ import { lintErrors, looseText, PROBLEM_HEADS, statusText, tabOf } from "@/lib/f
 import { refreshRule } from "@/lib/maps/rules";
 import { backendHttpBase } from "@/lib/ws";
 
+import FlowSwitcher from "./FlowSwitcher";
+
 const FlowCanvas = dynamic(() => import("@/components/flows/FlowCanvas"), {
   ssr: false,
   loading: () => <p className="muted studio-loading">Loading the map…</p>,
@@ -595,7 +597,7 @@ export default function FlowsApp({
                     <button key={r.id} type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), onRunner(r.id))} data-testid={`load-runner-${r.id}`}>
                       {r.title}
                       <small>
-                        the {r.char}&apos;s real flow on {r.map}: the hunt, Batt&apos;s Knife swap, the respawn, the safety rules, each on its tab; Simulate, or Run in the game. Your flow stays as it is
+                        the {r.char}&apos;s real flow on this map, on its tabs; Simulate, or Run in the game
                       </small>
                     </button>
                   ))}
@@ -638,6 +640,8 @@ export default function FlowsApp({
           </button>
         </div>
       </header>
+
+      {onRunner && <FlowSwitcher current={{ kind: "mine" }} myName={flow.name} onMine={() => {}} onMap={(id) => (flush(), onRunner(id))} />}
 
       {notice && (
         <div className="studio-notices">

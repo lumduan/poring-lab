@@ -133,12 +133,15 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
   let end = "time";
   const knife = opts.knife ?? doc.command.base.includes("--steal-opener");
   const flyKey = String(doc.params["cmd.fly_key"]?.value ?? "F2");
+  // the person's Knife numbers (Run settings, 2026-11-13), else bare_steal's defaults
+  const knifeMax = doc.params["cmd.knife_max_s"] ? N("cmd.knife_max_s") : N("bs.BARE_MAX_S");
+  const knifeHp = doc.params["cmd.knife_hp_min"] ? N("cmd.knife_hp_min") : N("bs.BARE_HP_MIN");
 
   const dagger = (t: number, why: string) => {
     if (!knife || !knifeOn) return;
     knifeOn = false;
     say(t, "knife_back_call", `knife_back(): ${why}`, "decide");
-    say(t, "press_dagger", `the dagger back on (${doc.params["bs.EQUIP_KEY"]?.value ?? "F5"}): ${why}`);
+    say(t, "press_dagger", `the dagger back on (${String(doc.params["cmd.dagger_key"]?.value ?? doc.params["bs.EQUIP_KEY"]?.value)}): ${why}`);
     say(t, "swap_gap", "the swap restarts the no-hit clocks");
     lastOurs = Math.max(lastOurs, t);
   };
@@ -197,7 +200,7 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
         pots.push(t);
         potFrac = m.hp;
         potions -= 1;
-        say(t, "drink", `HP ${pct(m.hp)} is under ${pct(N("strategy.potion_below"))}: a potion (F1); ${potions} left`, "safety");
+        say(t, "drink", `HP ${pct(m.hp)} is under ${pct(N("strategy.potion_below"))}: a potion (${String(doc.params["cmd.heal_key"]?.value ?? "F1")}); ${potions} left`, "safety");
         if (potions <= 0) {
           say(t, "stock_stop", "the hotbar reads 0 potions: the run ends", "end");
           end = "stock_out";
@@ -300,8 +303,8 @@ export function simulate(doc: RunnerDoc, sc: Scenario, opts: { knife?: boolean }
       }
       if (knife && knifeOn && lock) {
         if (m.steal_cue) dagger(t, "a steal cue (the item popup)");
-        else if (t - knifeT > N("bs.BARE_MAX_S")) dagger(t, `${N("bs.BARE_MAX_S")} s with no steal`);
-        else if (m.hp < N("bs.BARE_HP_MIN")) dagger(t, `HP under ${pct(N("bs.BARE_HP_MIN"))}`);
+        else if (t - knifeT > knifeMax) dagger(t, `${knifeMax} s with no steal`);
+        else if (m.hp < knifeHp) dagger(t, `HP under ${pct(knifeHp)}`);
       }
       const quiet = t - lastTaken > N("FIGHT_TAKEN_S") && !dropped;
       if (!lock && quiet && quietKillEnds(kills, t, fightT0)) {

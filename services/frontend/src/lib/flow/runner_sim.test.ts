@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { allNodes, type RunnerDoc } from "./runner.ts";
+import { allNodes, type RunnerDoc, withSettings } from "./runner.ts";
 import { EXAMPLE, hpDropped, killGapped, type Moment, num, pick, quietKillEnds, rateHpS, type Scenario, score, simulate } from "./runner_sim.ts";
 import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
 
@@ -147,6 +147,13 @@ test("Batt's Knife swap (in the base): on at idle, back to the dagger on the cue
   assert.ok(b.includes("knife_on_call") && b.includes("knife_back_call")); // the main loop's calls light up
   assert.ok(b.indexOf("knife_on_call") < b.indexOf("press_knife"));
   assert.ok(!blocks(simulate(DOC, EXAMPLE, { knife: false })).includes("press_knife")); // the comparison without it
+  // the person's Knife settings (2026-11-13): Batt's "F4, wait 200 ms, F5" is a Knife time of 0.2 s
+  const d = DOC.settings;
+  assert.ok(d);
+  const fast = simulate(withSettings(DOC, { ...d.defaults, knife_key: "F6", dagger_key: "F7", knife_max_s: 0.2 }), EXAMPLE);
+  assert.ok(fast.steps.some((x) => x.block === "press_knife" && x.text.includes("F6")));
+  assert.ok(fast.steps.some((x) => x.block === "press_dagger" && x.text.includes("F7")));
+  assert.ok(fast.steps.some((x) => x.block === "press_dagger" && /0\.2 s with no steal/.test(x.text)), "the 0.2 s Knife time ends the Knife");
 });
 
 test("the time box ends the loop; the safe end flies only when still hit or under END_FLY_BELOW", () => {

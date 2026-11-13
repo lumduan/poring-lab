@@ -16,13 +16,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
+import FlowSwitcher from "@/components/flows/FlowSwitcher";
 import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
-import { browserStorage, KEYS, pythonDefault, readChoice, writeChoice } from "@/lib/flow/prefs";
+import { browserStorage, KEYS, pythonDefault, readChoice, savedFlowName, writeChoice } from "@/lib/flow/prefs";
 import {
   allNodes,
   commandPieces,
   findNode,
+  flagValue,
+  KEY_SETTINGS,
   markOf,
   type RunnerDoc,
   type RunnerNode,
@@ -39,6 +42,7 @@ import {
   valueText,
   withSettings,
 } from "@/lib/flow/runner";
+import { ACTIVE, liveLabel } from "@/lib/flow/liverun";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
 import { INJECT } from "@/lib/flow/theme";
 
@@ -70,8 +74,9 @@ function readSettings(store: ReturnType<typeof browserStorage>, id: string, d: R
   }
 }
 
-export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; backendUrl?: string | null }) {
+export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl = null }: { doc: RunnerDoc; onBack: () => void; onRunner?: (id: string) => void; backendUrl?: string | null }) {
   const store = useMemo(() => browserStorage(), []);
+  const myName = useMemo(() => savedFlowName(store), [store]);
   // 2026-11-13 (Batt): the hotbar keys and the weight limit are the person's, shown in the blocks
   const sdoc = rawDoc.settings ?? null;
   const [runSettings, setRunSettingsState] = useState<RunSettings | null>(() => (sdoc ? readSettings(store, rawDoc.id, sdoc) : null));
@@ -90,6 +95,16 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
   const settingsWhy = runSettings && sdoc ? settingsProblem(runSettings, sdoc) : null;
   const isLive = LIVE_FLOWS.includes(doc.id);
   const live = useLiveRun(backendUrl, doc.id, isLive); // one poller: the header's Run and the panel
+  const [about, setAbout] = useState(false);
+  const aboutOpen = about || (isLive && (live.err !== null || ACTIVE.includes(live.st?.state ?? "")));
+  // the browser tab names the flow too (matpilot 2026-11-13: it said "poring-lab flows")
+  useEffect(() => {
+    const before = document.title;
+    document.title = `${rawDoc.title} · poring-lab flows`;
+    return () => {
+      document.title = before;
+    };
+  }, [rawDoc.title]);
   const [view, setViewState] = useState<(typeof VIEWS)[number]>(() => readChoice(store, KEYS.view, VIEWS, "blocks"));
   const [pythonPanel, setPythonPanel] = useState<(typeof OPEN_CLOSED)[number]>(() => {
     const wide = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 48rem)").matches : true;
@@ -207,7 +222,9 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
         <p className="studio-panel-note" data-testid="runner-python-settings">
           Your Run settings (added to the command when you press Run):{" "}
           <code>
-            --fly-key {runSettings.fly_key} --player-home-key {runSettings.home_key} --weight-home {runSettings.weight_home.toFixed(2)} --respawn-at {runSettings.respawn_at} --respawn-confirm-at {runSettings.respawn_confirm_at}
+            {Object.entries(sdoc?.flags ?? {})
+              .map(([k, flag]) => `${flag} ${flagValue(runSettings[k as keyof RunSettings])}`)
+              .join(" ")}
           </code>
         </p>
       )}
@@ -216,7 +233,7 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
   );
 
   return (
-    <main className="studio" data-view={view} data-testid="runner-view">
+    <main className="studio runner-studio" data-view={view} data-testid="runner-view">
       <header className="studio-bar">
         <div className="studio-brand">
           <span className="studio-home">Flows</span>
@@ -235,10 +252,6 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
           ))}
         </div>
         <div className="studio-actions">
-          <button type="button" className="button button-small button-file" onClick={onBack} title="Back to the flow you were editing" data-testid="runner-back">
-            <span aria-hidden="true">◂</span>
-            <span className="button-text">My flow</span>
-          </button>
           <button type="button" className="button button-primary button-run" onClick={run} title="Play an example run of this description: no game, no input" data-testid="runner-simulate">
             <PlayIcon />
             <span className="button-text">Simulate</span>
@@ -247,13 +260,40 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
         </div>
       </header>
 
+      <FlowSwitcher current={{ kind: "map", id: doc.id }} myName={myName} onMine={onBack} onMap={(id) => onRunner?.(id)} />
+
       <div className="studio-notices">
-        <p className="notice" role="note" data-testid="runner-notice">
-          A DESCRIPTION of <code>{doc.script}</code>, made from its code by <code>scripts/runner_flow_export.py</code>: the blocks are the runner&apos;s loop in plain words, and every number
-          and flag is the code&apos;s own. Click a block to see them. The blocks and Simulate run nothing in the game
-          {isLive ? "; Run (at the top, beside Simulate) starts the real runner on this map (player mode)." : "."}
-        </p>
-        {isLive && <LiveRun live={live} />}
+        {/* matpilot 2026-11-13 (1440 x 900: no canvas left): the description, the Run panel and the
+            chips fold into ONE line; it opens by itself while a run is active or something is wrong */}
+        <details className="notice runner-about" open={aboutOpen} onToggle={(e) => setAbout(e.currentTarget.open)} data-testid="runner-about">
+          <summary>
+            <span>
+              <strong>{doc.title}</strong>: the real runner <code>{doc.script}</code> as blocks, made from its code
+            </span>
+            {isLive && (
+              <span className="runner-about-live">
+                {" "}
+                · Run in the game: <strong data-testid="runner-about-state">{liveLabel(live.st)}</strong>
+              </span>
+            )}
+            <span className="runner-about-more"> · {aboutOpen ? "less" : "more"}</span>
+          </summary>
+          <p className="notice-sub" data-testid="runner-notice">
+            A DESCRIPTION of <code>{doc.script}</code>, made from its code by <code>scripts/runner_flow_export.py</code>: the blocks are the runner&apos;s loop in plain words, and every
+            number and flag is the code&apos;s own. Click a block to see them. The blocks and Simulate run nothing in the game
+            {isLive ? "; Run (at the top, beside Simulate) starts the real runner on this map (player mode)." : "."}
+          </p>
+          <div className="device-bar" aria-label="The runner">
+            <Chip label="runner" value={doc.script} />
+            <Chip label="version" value={doc.version} />
+            <Chip label="map" value={doc.map} />
+            <Chip label="character" value={String(doc.params["cmd.char"]?.value ?? doc.char)} />
+            <Chip label="strategy" value={String(doc.params["cmd.strategy"]?.value ?? "")} />
+            <Chip label="time box" value={`${valueText(doc.params["cmd.minutes"]?.value)} min`} />
+            <Chip label="blocks" value={String(nBlocks)} />
+          </div>
+          {isLive && <LiveRun live={live} />}
+        </details>
         {copied === "failed" && (
           <p className="notice notice-warn" role="status">
             This browser would not copy automatically (the page is not a secure origin). The code is selected: press Ctrl+C (⌘C) to copy it.
@@ -263,16 +303,6 @@ export default function RunnerView({ doc: rawDoc, onBack, backendUrl = null }: {
 
       <RunnerBinding doc={doc} />
       {sdoc && runSettings && <RunSettingsStrip d={sdoc} s={runSettings} why={settingsWhy} onChange={setRunSettings} />}
-
-      <div className="device-bar" aria-label="The runner">
-        <Chip label="runner" value={doc.script} />
-        <Chip label="version" value={doc.version} />
-        <Chip label="map" value={doc.map} />
-        <Chip label="character" value={String(doc.params["cmd.char"]?.value ?? doc.char)} />
-        <Chip label="strategy" value={String(doc.params["cmd.strategy"]?.value ?? "")} />
-        <Chip label="time box" value={`${valueText(doc.params["cmd.minutes"]?.value)} min`} />
-        <Chip label="blocks" value={String(nBlocks)} />
-      </div>
 
       <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
         <div className="studio-canvas">
@@ -430,7 +460,7 @@ function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc;
         const f = followNow.current;
         if (f && w.getBlockById(f)) {
           w.highlightBlock(f, true);
-          w.centerOnBlock(f);
+          w.centerOnBlock(f, true); // the block itself, not the stack under it
         }
         w.clearUndo();
         // a person's click on a block (Blockly's CLICK event: gestures only, never a selection
@@ -466,7 +496,7 @@ function RunnerBlocks({ doc, only, follow, hidden, onSelect }: { doc: RunnerDoc;
     w.highlightBlock(null);
     if (follow && w.getBlockById(follow)) {
       w.highlightBlock(follow, true);
-      w.centerOnBlock(follow);
+      w.centerOnBlock(follow, true); // the block itself, not the stack under it (matpilot 2026-11-13)
     }
   }, [follow, state]);
 
@@ -725,32 +755,55 @@ function RunnerBinding({ doc }: { doc: RunnerDoc }) {
  * hard-code them, a user changes them"): the hotbar keys and the weight limit, each from the
  * export's fixed choices; the blocks show the choice at once, and Run sends it. */
 function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: RunSettings; why: string | null; onChange: (s: RunSettings) => void }) {
+  // Batt 2026-11-13: "everything a user can set again; nothing fixed, we only put the defaults"
   const keys = d.keys.filter((k) => !d.reserved.includes(k));
+  const [lo, hi] = d.knife_s ?? [0.2, 20];
+  const keyPick = (k: keyof RunSettings, label: string) => (
+    <label className="mb-part" key={k}>
+      {label}{" "}
+      <select value={String(s[k])} onChange={(e) => onChange({ ...s, [k]: e.target.value })} data-testid={`run-settings-${k}`}>
+        {keys.map((x) => (
+          <option key={x} value={x}>
+            {x}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   return (
     <div className="map-binding run-settings" data-kind={why ? "plain" : "block"} data-testid="run-settings">
       <span className="mb-part">
         <span className="mb-key">your run settings</span>
       </span>
+      <span className="mb-part muted">hotbar keys:</span>
+      {KEY_SETTINGS.map(([k, label]) => keyPick(k, label.replace(/^the /, "")))}
+      <span className="mb-part muted">the Knife swap:</span>
+      <label className="mb-part" title="The dagger goes back on this long after the first hit with the Knife, when no steal came first (Batt's 'F4, wait 200 ms, F5' is 0.2 s)">
+        dagger back after{" "}
+        <input
+          className="run-settings-num"
+          type="number"
+          min={lo}
+          max={hi}
+          step={0.1}
+          value={Number.isFinite(s.knife_max_s) ? s.knife_max_s : ""}
+          onChange={(e) => onChange({ ...s, knife_max_s: e.target.value === "" ? Number.NaN : Number(e.target.value) })}
+          aria-label="the Knife's time in seconds"
+          data-testid="run-settings-knife-s"
+        />{" "}
+        s (or at the steal)
+      </label>
       <label className="mb-part">
-        Fly Wing key{" "}
-        <select value={s.fly_key} onChange={(e) => onChange({ ...s, fly_key: e.target.value })} data-testid="run-settings-fly">
-          {keys.map((k) => (
-            <option key={k} value={k}>
-              {k}
+        or at once under HP{" "}
+        <select value={String(s.knife_hp_min)} onChange={(e) => onChange({ ...s, knife_hp_min: Number(e.target.value) })} data-testid="run-settings-knife-hp">
+          {(d.knife_hp ?? [s.knife_hp_min]).map((w) => (
+            <option key={w} value={String(w)}>
+              {Math.round(w * 100)} %
             </option>
           ))}
         </select>
       </label>
-      <label className="mb-part">
-        Butterfly Wing key{" "}
-        <select value={s.home_key} onChange={(e) => onChange({ ...s, home_key: e.target.value })} data-testid="run-settings-home">
-          {keys.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-      </label>
+      <span className="mb-part muted">the exits:</span>
       <label className="mb-part">
         go home when the bag is over{" "}
         <select value={String(s.weight_home)} onChange={(e) => onChange({ ...s, weight_home: Number(e.target.value) })} data-testid="run-settings-weight">
@@ -763,10 +816,10 @@ function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: Ru
       </label>
       <RespawnAt s={s} onChange={onChange} />
       <ConfirmAt s={s} d={d} onChange={onChange} />
-      <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} data-testid="run-settings-reset">
-        defaults ({d.defaults.fly_key}, {d.defaults.home_key}, {Math.round(d.defaults.weight_home * 100)} %, respawn at {d.defaults.respawn_at})
+      <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} title={Object.entries(d.defaults).map(([k, v]) => `${k} ${String(v)}`).join(" · ")} data-testid="run-settings-reset">
+        back to the defaults
       </button>
-      <span className="mb-part muted">taken by the run: {d.reserved.join(", ")}</span>
+      {d.reserved.length > 0 && <span className="mb-part muted">taken by the run: {d.reserved.join(", ")}</span>}
       {why && (
         <span className="mb-part mb-warn" role="status">
           {why}

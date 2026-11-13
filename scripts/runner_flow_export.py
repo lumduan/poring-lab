@@ -68,7 +68,11 @@ BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minu
 # doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
 SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
                   "weight_home": "cmd.weight_home", "respawn_at": "cmd.respawn_at",
-                  "respawn_confirm_at": "cmd.respawn_confirm_at"}  # fmt: skip
+                  "respawn_confirm_at": "cmd.respawn_confirm_at",
+                  # Batt 2026-11-13 ~13:3x: "everything a user can set again; only defaults"
+                  "heal_key": "cmd.heal_key", "knife_key": "cmd.steal_opener",
+                  "dagger_key": "cmd.dagger_key", "knife_max_s": "cmd.knife_max_s",
+                  "knife_hp_min": "cmd.knife_hp_min"}  # fmt: skip
 # The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
 OPTIONAL: list[dict[str, Any]] = []
 
@@ -471,8 +475,8 @@ def main_loop() -> list[Node]:
     knife_back_call = step(
         "knife_back_call",
         S_OPT,
-        "the Knife swap, part 2: knife_back(): the Knife on and it stole (or {bs.BARE_MAX_S} s, "
-        "or HP under {bs.BARE_HP_MIN:pct} %): the dagger back on ({bs.EQUIP_KEY})",
+        "the Knife swap, part 2: knife_back(): the Knife on and it stole (or {cmd.knife_max_s} s, "
+        "or HP under {cmd.knife_hp_min:pct} %): the dagger back on ({cmd.dagger_key})",
         ["knife_back(eyes)  # --bare-steal: every tick, before the fight (tab: knife swap)"],
         "Batt's Knife swap, its second half: on every tick, before the fight is decided, the "
         "runner checks whether the Knife has done its job. The function is on the knife swap "
@@ -975,7 +979,7 @@ def safety() -> Node:
                             step(
                                 "drink",
                                 S_SAFE,
-                                "press the potion key (F1)",
+                                "press the heal key ({cmd.heal_key})",
                                 ['press("potion", "hp")'],
                                 "One press; the next only 0.7 s later (or at once if the HP "
                                 "rose), at most "
@@ -1131,7 +1135,7 @@ def knife() -> list[Node]:
         "function knife_on(): Batt's Knife swap, part 1: the Knife on",
         [
             "def knife_on(eyes):",
-            '    """--bare-steal --bare-ready --steal-opener F4: called at idle (the search)"""',
+            '    """--bare-steal --bare-ready --steal-opener KEY: called at idle (the search)"""',
         ],
         KNIFE_WHY,
         flags=["--bare-steal", "--bare-ready", "--steal-opener"],
@@ -1194,16 +1198,16 @@ def knife() -> list[Node]:
                 S_OPT,
                 [
                     Branch(
-                        "the Knife on and a steal cue, {bs.BARE_MAX_S} s, or HP under "
-                        "{bs.BARE_HP_MIN:pct} %: the dagger back on",
-                        "if knife_worn() and (steal_cue() or now - knife_t > BARE_MAX_S "
-                        "or eyes.hp < BARE_HP_MIN):",
+                        "the Knife on and a steal cue, {cmd.knife_max_s} s, or HP under "
+                        "{cmd.knife_hp_min:pct} %: the dagger back on",
+                        "if knife_worn() and (steal_cue() or now - knife_t > $(cmd.knife_max_s) "
+                        "or eyes.hp < $(cmd.knife_hp_min)):",
                         [
                             step(
                                 "press_dagger",
                                 S_OPT,
-                                "press {bs.EQUIP_KEY}",
-                                ["press($(bs.EQUIP_KEY))  # the dagger on again, read back"],
+                                "press {cmd.dagger_key}",
+                                ["press($(cmd.dagger_key))  # the dagger on again, read back"],
                                 "Also before any escape and at the run's end: she never flees or "
                                 "ends with the Knife on.",
                             )
@@ -1211,8 +1215,10 @@ def knife() -> list[Node]:
                     )
                 ],
                 "The steal cue is the item popup (or a new cyan Battle Log line): no words are "
-                "read. After {bs.BARE_MAX_S} s without a steal, or under "
-                "{bs.BARE_HP_MIN:pct} % HP, the dagger goes back on anyway.",
+                "read. After {cmd.knife_max_s} s without a steal, or under "
+                "{cmd.knife_hp_min:pct} % HP, the dagger goes back on anyway. Both numbers and "
+                'both keys are your Run settings (Batt: "F4, wait 200 ms, F5" is a Knife time '
+                "of 0.2 s).",
                 flags=["--bare-steal", "--steal-cue"],
                 code=["bs.cyan_new", "bs.popup_new"],
             ),
@@ -1381,9 +1387,9 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("POS_FLY_S", "no position read for this long = a Fly Wing (s)"),
         const("POS_FLY_MAX", "such Fly Wings a run at most"),
         const("NPC_NO_FIGHT", "--npc-guard: no fight click within this many cells of an NPC"),
-        const("BARE_MAX_S", "the opener on this long with no steal cue: the dagger back (s)", "bs"),
-        const("BARE_HP_MIN", "under this HP share the dagger goes back at once", "bs"),
-        const("EQUIP_KEY", "the hotbar key holding the dagger", "bs"),
+        const("BARE_MAX_S", "the DEFAULT Knife time (a Run setting: --knife-max-s)", "bs"),
+        const("BARE_HP_MIN", "the DEFAULT HP rule (a Run setting: --knife-hp-min)", "bs"),
+        const("EQUIP_KEY", "the DEFAULT dagger key (a Run setting: --dagger-key)", "bs"),
     ]
     return out
 
@@ -1721,6 +1727,9 @@ def build() -> dict[str, Any]:
             "keys": list(_fr.KEY_CHOICES),
             "reserved": list(_RUN_FLOW.reserved_keys),
             "weights": list(_fr.WEIGHT_CHOICES),
+            "knife_s": list(_fr.KNIFE_S_RANGE),
+            "knife_hp": list(_fr.KNIFE_HP_CHOICES),
+            "flags": dict(_fr.SETTING_FLAGS),
         },  # fmt: skip
     }
 

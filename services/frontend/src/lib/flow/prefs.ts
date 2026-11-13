@@ -58,6 +58,18 @@ export function readText(store: StorageLike | null, key: string): string | null 
   }
 }
 
+/** The studio's flow's name as this browser saved it (the flows row shows it on a map flow's page,
+ * Batt 2026-11-13); a broken or missing save: "my flow". Display only: the studio checks the saved
+ * flow itself when it opens. */
+export function savedFlowName(store: StorageLike | null): string {
+  try {
+    const v = JSON.parse(readText(store, KEYS.flow) ?? "null") as { name?: unknown } | null;
+    return typeof v?.name === "string" && v.name.trim() ? v.name : "my flow";
+  } catch {
+    return "my flow";
+  }
+}
+
 export function forget(store: StorageLike | null, key: string): void {
   try {
     store?.removeItem(key);

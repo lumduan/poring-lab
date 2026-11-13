@@ -9,7 +9,7 @@ import { BLOCK_DEFS, categoryOf, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { fromWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, type Flow } from "./ir.ts";
 import { classFor, classOptions, firstDetector, modelOptions, type Models, notAdopted } from "./models.ts";
-import { browserStorage, forget, KEYS, pythonDefault, readChoice, readText, type StorageLike, writeChoice } from "./prefs.ts";
+import { browserStorage, forget, KEYS, pythonDefault, readChoice, readText, savedFlowName, type StorageLike, writeChoice } from "./prefs.ts";
 import { matchEntries, normalise, searchFlyout, type SearchEntry } from "./search.ts";
 import { oneMapStarter, STARTER_WORLD, starterFlow } from "./starter.ts";
 import { BLOCK_STYLE, BLOCK_STYLES, CATEGORY_COLOURS, CATEGORY_STYLES, COMPONENT_STYLES, contrast, INJECT } from "./theme.ts";
@@ -209,4 +209,17 @@ test("the starters are their committed canonical fixtures, and every tab round-t
   // the town's save point shows as its sentence block (Actions)
   const town = toWorkspace(two, { kind: "block", name: "town" }).blocks.blocks[0].inputs?.DO?.block;
   assert.equal(town?.type, "pl_set_save_point");
+});
+
+// 2026-11-13 (Batt: "on /flows I don't see this flow's name"): the flows row names the studio's flow
+test("the flows row reads the studio's saved flow name, never failing", () => {
+  const mem = (v: string | null): StorageLike => ({ getItem: () => v, setItem: () => {}, removeItem: () => {} });
+  assert.equal(savedFlowName(mem(JSON.stringify({ name: "my_first_workflow", ir: 1 }))), "my_first_workflow");
+  assert.equal(savedFlowName(mem(null)), "my flow");
+  assert.equal(savedFlowName(mem("{broken")), "my flow");
+  assert.equal(savedFlowName(mem(JSON.stringify({ name: 7 }))), "my flow");
+  assert.equal(savedFlowName(mem(JSON.stringify({ name: "  " }))), "my flow");
+  assert.equal(savedFlowName(null), "my flow");
+  const throws: StorageLike = { getItem: () => { throw new Error("blocked"); }, setItem: () => {}, removeItem: () => {} };
+  assert.equal(savedFlowName(throws), "my flow");
 });

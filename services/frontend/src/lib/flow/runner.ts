@@ -61,7 +61,27 @@ export type RunnerExit = { id: string; kind: "item_warp" | "death_respawn"; when
 // --- the person's Run settings (2026-11-13, Batt: "don't hard-code the keys; a user changes them
 // in the blocks too"): the Fly Wing's key, the Butterfly Wing's key, the weight limit. The export
 // says which param shows each (`params`), the Run helper's defaults and the fixed choices. -------
-export type RunSettings = { fly_key: string; home_key: string; weight_home: number; respawn_at: string; respawn_confirm_at: string };
+export type RunSettings = {
+  fly_key: string;
+  home_key: string;
+  weight_home: number;
+  respawn_at: string;
+  respawn_confirm_at: string;
+  // Batt 2026-11-13 ~13:3x: "everything a user can set again; nothing fixed, we only put the defaults"
+  heal_key: string;
+  knife_key: string; // Batt's Knife swap: the Knife ...
+  dagger_key: string; // ... and the dagger back on
+  knife_max_s: number; // the Knife's time with no steal cue (s)
+  knife_hp_min: number; // under this HP share the dagger goes back at once
+};
+/** The settings that are hotbar keys, each its own key, with the words a person reads. */
+export const KEY_SETTINGS: [keyof RunSettings, string][] = [
+  ["heal_key", "the heal item"],
+  ["fly_key", "the Fly Wing"],
+  ["home_key", "the Butterfly Wing"],
+  ["knife_key", "the Knife"],
+  ["dagger_key", "the dagger"],
+];
 export const GAME_PX = [1280, 720] as const; // the game picture: a respawn point lies inside it
 export type RunnerSettingsDoc = {
   defaults: RunSettings;
@@ -69,15 +89,25 @@ export type RunnerSettingsDoc = {
   keys: string[];
   reserved: string[];
   weights: number[];
+  knife_s?: [number, number]; // the Knife time's range (s)
+  knife_hp?: number[]; // the HP rule's choices
+  flags?: Record<string, string>; // each setting's runner flag (the Python panel says them)
 };
 
 /** Why these settings cannot run (null: they can), against the export's own choices. */
 export function settingsProblem(s: RunSettings, d: RunnerSettingsDoc): string | null {
-  for (const [k, label] of [["fly_key", "the Fly Wing"], ["home_key", "the Butterfly Wing"]] as const) {
-    if (!d.keys.includes(s[k])) return `${label}'s key ${s[k]} is not one of ${d.keys.join(" ")}`;
-    if (d.reserved.includes(s[k])) return `${label}'s key ${s[k]} is taken by the run (${d.reserved.join(", ")})`;
+  const seen = new Map<string, string>();
+  for (const [k, label] of KEY_SETTINGS) {
+    const v = String(s[k] ?? "");
+    if (!d.keys.includes(v)) return `${label}'s key ${v} is not one of ${d.keys.join(" ")}`;
+    if (d.reserved.includes(v)) return `${label}'s key ${v} is taken by the run (${d.reserved.join(", ")})`;
+    const other = seen.get(v);
+    if (other) return `${other} and ${label} are both on ${v}: each needs its own key`;
+    seen.set(v, label);
   }
-  if (s.fly_key === s.home_key) return "the Fly Wing and the Butterfly Wing need two different keys";
+  const [lo, hi] = d.knife_s ?? [0.2, 20];
+  if (!(typeof s.knife_max_s === "number" && Number.isFinite(s.knife_max_s) && s.knife_max_s >= lo && s.knife_max_s <= hi)) return `the Knife's time ${s.knife_max_s} s is not from ${lo} to ${hi} s`;
+  if (!(d.knife_hp ?? []).some((w) => Math.abs(w - s.knife_hp_min) < 1e-9)) return `the dagger at HP under ${Math.round(s.knife_hp_min * 100)} %: not one of the choices`;
   if (!d.weights.some((w) => Math.abs(w - s.weight_home) < 1e-9)) return `go home at ${Math.round(s.weight_home * 100)} %: not one of the choices`;
   const off = (v: string) => {
     const m = /^(\d{1,4}),(\d{1,4})$/.exec(v ?? "");
@@ -90,8 +120,26 @@ export function settingsProblem(s: RunSettings, d: RunnerSettingsDoc): string | 
 
 /** The settings as the blocks show them: each param's `shown` text (the export's own format). */
 export function settingsShown(s: RunSettings): Record<keyof RunSettings, string> {
-  return { fly_key: s.fly_key, home_key: s.home_key, weight_home: `${Math.round(s.weight_home * 100)}`, respawn_at: s.respawn_at, respawn_confirm_at: s.respawn_confirm_at };
+  return {
+    fly_key: s.fly_key,
+    home_key: s.home_key,
+    weight_home: `${Math.round(s.weight_home * 100)}`,
+    respawn_at: s.respawn_at,
+    respawn_confirm_at: s.respawn_confirm_at,
+    heal_key: s.heal_key,
+    knife_key: s.knife_key,
+    dagger_key: s.dagger_key,
+    knife_max_s: secondsText(s.knife_max_s),
+    knife_hp_min: `${Math.round(s.knife_hp_min * 100)}`,
+  };
 }
+
+/** A time in seconds as the export writes it: 8 -> "8", 0.2 -> "0.2" (tenths). */
+export const secondsText = (v: number) => String(Math.round(v * 10) / 10);
+
+/** A setting's value as its runner flag takes it (scripts/flow_run.py settings_argv: a number with
+ * two decimals). */
+export const flagValue = (v: unknown) => (typeof v === "number" ? v.toFixed(2) : String(v));
 
 /** PURE: the doc with the person's settings in its blocks (every part showing one of the settings'
  * params) and in its params. The Python outline is left as exported: its line numbers are the

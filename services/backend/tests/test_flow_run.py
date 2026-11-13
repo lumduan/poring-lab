@@ -51,9 +51,7 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
     ok = fr.parse_request(json.dumps(req))
     # a start carries its SETTINGS, checked (the flow's defaults when the request names none)
     assert ok == {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
-                  "settings": {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5,
-                               "respawn_at": "645,481",
-                               "respawn_confirm_at": "714,405"}}  # fmt: skip
+                  "settings": DEFAULTS}  # fmt: skip
     assert fr.parse_request("{") == "unparsable request"
     assert fr.parse_request(json.dumps({"id": "x", "action": "start"})) == "bad request id"
     assert "unknown flow" in str(fr.parse_request(json.dumps(
@@ -64,18 +62,34 @@ def test_requests_name_a_flow_and_never_carry_arguments() -> None:
     assert isinstance(stop, dict) and stop["action"] == "stop"
 
 
-# --- 2026-11-13 (Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't hard-code them") ----
+# --- 2026-11-13 (Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't hard-code them";
+# ~13:3x "everything a user can set again; nothing fixed, we only put the defaults") -------------
+DEFAULTS = {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5, "respawn_at": "645,481",
+            "respawn_confirm_at": "714,405", "heal_key": "F1", "knife_key": "F4",
+            "dagger_key": "F5", "knife_max_s": 8.0, "knife_hp_min": 0.5}  # fmt: skip
+
+
 def test_the_settings_are_the_defaults_or_a_persons_from_fixed_lists() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    assert fr.settings_of(f, None) == {"fly_key": "F8", "home_key": "F9", "weight_home": 0.5,
-                                       "respawn_at": "645,481",
-                                       "respawn_confirm_at": "714,405"}  # fmt: skip
+    assert fr.settings_of(f, None) == DEFAULTS
+    assert f.reserved_keys == ()  # no key is the run's own: every one is the person's
     assert fr.settings_of(f, {"respawn_confirm_at": "none"})["respawn_confirm_at"] == "none"  # type: ignore[index]
     assert fr.settings_of(f, {"fly_key": "F6", "weight_home": 0.6, "respawn_at": "600,500"}) == {
-        "fly_key": "F6", "home_key": "F9", "weight_home": 0.6, "respawn_at": "600,500",
-        "respawn_confirm_at": "714,405"}  # fmt: skip
+        **DEFAULTS, "fly_key": "F6", "weight_home": 0.6, "respawn_at": "600,500"}  # fmt: skip
+    # the Knife swap, the heal key (Batt's "F4, wait 200 ms, F5" = a Knife time of 0.2 s)
+    mine = fr.settings_of(f, {"heal_key": "F2", "knife_key": "F6", "dagger_key": "F7",
+                              "knife_max_s": 0.2, "knife_hp_min": 0.35})  # fmt: skip
+    assert isinstance(mine, dict) and mine["knife_max_s"] == 0.2 and mine["knife_hp_min"] == 0.35
+    assert fr.settings_of(f, {"knife_max_s": 20})["knife_max_s"] == 20.0  # type: ignore[index]
     bad = (({"fly_key": "F10"}, "not a row-1"), ({"home_key": "Enter"}, "not a row-1"),
-           ({"fly_key": "F4"}, "uses already"), ({"home_key": "F1"}, "uses already"),
+           ({"fly_key": "F4"}, "the Fly Wing and the Knife are both on F4"),
+           ({"home_key": "F1"}, "the heal item and the Butterfly Wing are both on F1"),
+           ({"dagger_key": "F4"}, "the Knife and the dagger are both on F4"),
+           ({"heal_key": "F8"}, "the heal item and the Fly Wing are both on F8"),
+           ({"knife_key": "F12"}, "not a row-1"),
+           ({"knife_max_s": 0.1}, "is not a time"), ({"knife_max_s": 21}, "is not a time"),
+           ({"knife_max_s": "8"}, "is not a time"), ({"knife_max_s": True}, "is not a time"),
+           ({"knife_hp_min": 0.33}, "is not one of"), ({"knife_hp_min": 0.95}, "is not one of"),
            ({"fly_key": "F9"}, "two different keys"), ({"weight_home": 0.33}, "is not one of"),
            ({"weight_home": True}, "is not one of"), ({"weight_home": "0.5"}, "is not one of"),
            ({"steal_opener": "F2"}, "unknown setting"),
@@ -100,23 +114,30 @@ def test_the_settings_become_flags_and_nothing_else_does() -> None:
     assert argv.count("--fly-key") == 1 and argv.count("--weight-home") == 1
     assert argv[argv.index("--respawn-at") + 1] == "645,481"  # the default point
     assert argv[argv.index("--respawn-confirm-at") + 1] == "714,405"
+    for flag, v in (("--heal-key", "F1"), ("--steal-opener", "F4"), ("--dagger-key", "F5"),
+                    ("--knife-max-s", "8.00"), ("--knife-hp-min", "0.50")):  # fmt: skip
+        assert argv[argv.index(flag) + 1] == v and argv.count(flag) == 1, flag
     req = {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue",
            "settings": {"fly_key": "F4"}}  # fmt: skip
-    assert "uses already" in str(fr.parse_request(json.dumps(req)))
+    assert "both on F4" in str(fr.parse_request(json.dumps(req)))
     req["settings"] = ["F8"]
     assert fr.parse_request(json.dumps(req)) == "settings must be an object"
 
 
 def test_the_runner_accepts_the_default_keys_with_the_runs_own() -> None:
-    """The defaults pass the runner's own key checks (no key of the run's is taken twice)."""
+    """The defaults pass the runner's own key checks (no key of the run's is taken twice), and
+    a person's other set of keys does too, as the runner composes them (dungeon@9.42)."""
     conf = dh.CHARS_CONF["rogue"]
     f = fr.FLOWS["xmas_dun02_rogue"]
-    keys = {**conf["keys"], "fly": f.settings["fly_key"]}
-    assert dh.fly_key_refused(f.settings["fly_key"], conf["keys"], "F4") is None
-    assert set(f.reserved_keys) == {
-        k for w, k in conf["keys"].items() if w != "fly" and k.startswith("F")
-    } | {"F4"}
-    assert f.settings["home_key"] not in keys.values()
+    for st in (dict(f.settings), {**f.settings, "heal_key": "F3", "fly_key": "F1", "home_key": "F2",
+                                  "knife_key": "F6", "dagger_key": "F7"}):  # fmt: skip
+        no_steal = {w: k for w, k in conf["keys"].items() if w != "steal"}  # --steal is off
+        keys, why = dh.person_keys(no_steal, st["heal_key"], st["dagger_key"])
+        assert why is None
+        assert dh.fly_key_refused(st["fly_key"], keys, st["knife_key"]) is None
+        keys = {**keys, "fly": st["fly_key"], "home": st["home_key"]}
+        assert dh.keys_clash(keys, st["knife_key"]) is None, st
+        assert dh.steal_opener_refused(st["knife_key"], True, keys) is None, st
 
 
 def test_one_input_writer_at_a_time() -> None:

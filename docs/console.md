@@ -266,6 +266,13 @@ Amendment B); a not-adopted model is never offered.
   `knife_on()` at idle and `knife_back()` on every tick), `respawn` and `safety rules`. The run's loop
   CALLS both Knife functions where the runner runs them; Simulate plays the swap by default (it is in
   the base since 4DQ) and turns to the tab of the block it is on.
+  ➡️ **~13:4x (Batt: "nothing fixed, we only put the defaults"):** the run settings strip sets every
+  hotbar key (heal item, Fly Wing, Butterfly Wing, Knife, dagger: each its own key, none taken by
+  the run), the Knife swap's time (0.2-20 s; "F4, wait 200 ms, F5" = 0.2) and its HP rule, the
+  weight to go home at and the respawn's two points. A **FLOWS row** under the header names every
+  flow on both views (your own flow, then each map flow): one press switches. The description, the
+  Run panel and the chips fold into one line that opens by itself while a run is active; the canvas
+  keeps at least 22rem and the page scrolls instead (matpilot's 1440 x 900 review).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

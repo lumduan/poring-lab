@@ -1278,6 +1278,53 @@ def weight_home_due(limit: float | None, share: float | None, red: bool) -> str 
     return None
 
 
+# dungeon@9.42 (Batt 2026-11-13: "everything a user can set again or edit; nothing fixed, we only
+# put the defaults"): the heal item's key, the dagger's key and the Knife swap's two numbers are the
+# person's too (/flows' Run settings), like the Fly Wing's and the Butterfly Wing's keys (9.41)
+PERSON_KEYS_VERSION = "9.42"
+
+
+def person_keys(keys: Mapping[str, str], heal: str | None,
+                dagger: str | None) -> tuple[dict[str, str], str | None]:  # fmt: skip
+    """PURE: the character's key map with the person's heal key (--heal-key: "potion") and dagger
+    key (--dagger-key: "equip"), and why they cannot be (None: they can). Each a row-1 hotbar key
+    (F1-F9); a clash with another of the run's keys is keys_clash's, once every key is known."""
+    out = dict(keys)
+    for role, key, flag in (("potion", heal, "--heal-key"), ("equip", dagger, "--dagger-key")):
+        if key is None:
+            continue
+        try:
+            hotbar_slot(key)
+        except ValueError:
+            return out, f"{flag} {key!r} is not a row-1 hotbar key (F1-F9)"
+        out[role] = key
+    return out, None
+
+
+def keys_clash(keys: Mapping[str, str], opener: str | None) -> str | None:
+    """PURE: why the run's row-1 hotbar keys cannot be (None: no two alike). ``keys``: the run's
+    whole key map (its "home" and candies included); ``opener``: --steal-opener's key. sit /
+    stand (Insert) are not row-1 keys and share one key by design."""
+    by_key: dict[str, list[str]] = {}
+    for role, key in keys.items():
+        if isinstance(key, str) and len(key) == 2 and key[0] == "F" and key[1] in "123456789":
+            by_key.setdefault(key, []).append(role)
+    if opener is not None:
+        by_key.setdefault(opener, []).append("--steal-opener")
+    for key, roles in sorted(by_key.items()):
+        if len(roles) > 1:
+            return f"{key} is set for {' and '.join(sorted(roles))}: each needs its own key"
+    return None
+
+
+def knife_numbers_refused(a: argparse.Namespace) -> str | None:
+    """PURE: why --knife-max-s / --knife-hp-min cannot run (None: they can, or they are off)."""
+    mx, hp = getattr(a, "knife_max_s", None), getattr(a, "knife_hp_min", None)
+    if (mx is not None or hp is not None) and not getattr(a, "bare_steal", False):
+        return "--knife-max-s and --knife-hp-min go with --bare-steal (the Knife swap's numbers)"
+    return bs.configure_refused(getattr(a, "dagger_key", None), mx, hp)
+
+
 def fly_key_refused(key: str | None, keys: Mapping[str, str], opener: str | None) -> str | None:
     """PURE (2026-11-13, Batt: "don't hard-code the keys; a user changes them"): why --fly-key
     cannot be the Fly Wing's key (None: it can, or it is not given). A row-1 hotbar key (F1-F9),
@@ -2868,6 +2915,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["respawn"] = True
     if getattr(a, "fly_key", None) is not None:  # 2026-11-13: the person's Fly Wing key
         out["fly_key"] = a.fly_key
+    for k_ in ("heal_key", "dagger_key", "knife_max_s", "knife_hp_min"):  # dungeon@9.42
+        if getattr(a, k_, None) is not None:
+            out[k_] = getattr(a, k_)
     if getattr(a, "respawn_at", None) is not None:  # 2026-11-13: the person's respawn button
         out["respawn_at"] = list(a.respawn_at)
     ca = getattr(a, "respawn_confirm_at", None)
@@ -4944,6 +4994,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     crk = conf.get("data", a.char)  # dungeon@8: the crusader.py data dir (the Rogue is data/thief)
     map_ = a.map
     keys_ = conf["keys"]
+    # dungeon@9.42: the person's heal / dagger keys and the Knife swap's numbers, before all
+    keys_, why_pk = person_keys(keys_, getattr(a, "heal_key", None), getattr(a, "dagger_key", None))
+    if not getattr(a, "steal", False):  # the Steal skill's key (F3) is pressed only by --steal: a
+        keys_ = {w: k for w, k in keys_.items() if w != "steal"}  # run without it leaves it free
+    why_pk = why_pk or knife_numbers_refused(a)
+    if why_pk:
+        raise SystemExit(f"dungeon@{PERSON_KEYS_VERSION} refused: {why_pk}")
+    bs.configure(getattr(a, "dagger_key", None), getattr(a, "knife_max_s", None),
+                 getattr(a, "knife_hp_min", None))  # fmt: skip
     fly_key = getattr(a, "fly_key", None)  # 2026-11-13: the person's Fly Wing key (before all)
     if fly_key is not None:
         why_fk = fly_key_refused(fly_key, keys_, getattr(a, "steal_opener", None))
@@ -5078,6 +5137,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         home_key = getattr(a, "player_home_key", None) or conf.get("home_key")
         if home_key is not None:  # press("home") at the end; the lab's keys stay as they were
             keys_ = {**keys_, "home": home_key}
+    why_kc = keys_clash(keys_, opener_key)  # dungeon@9.42: every key known: no two alike
+    if why_kc:
+        raise SystemExit(f"dungeon@{PERSON_KEYS_VERSION} refused: {why_kc}")
     heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
@@ -9249,6 +9311,37 @@ def main() -> int:
         help="2026-11-13 (Batt: the person sets the hotbar keys): the Fly Wing's row-1 hotbar key "
         "(default: the character's, F2). Its stock is read from that slot and every escape presses "
         "it; refused when it is another key of the run's",
+    )
+    t.add_argument(
+        "--heal-key",
+        default=None,
+        metavar="KEY",
+        help="dungeon@9.42 (Batt 2026-11-13: nothing fixed, only defaults): the heal item's row-1 "
+        "hotbar key (default: the character's, F1). Its stock is read from that slot and every "
+        "potion press uses it; refused when another key of the run's is the same",
+    )
+    t.add_argument(
+        "--dagger-key",
+        default=None,
+        metavar="KEY",
+        help="dungeon@9.42: the dagger's row-1 hotbar key for --bare-steal (default F5): the key "
+        "that puts it back on, and the slot whose picture says whether it is worn",
+    )
+    t.add_argument(
+        "--knife-max-s",
+        type=float,
+        default=None,
+        metavar="S",
+        help="dungeon@9.42: --bare-steal's Knife time: the dagger goes back on this long after "
+        "the first hit with the Knife when no steal cue came first (default 8; 0.2-20)",
+    )
+    t.add_argument(
+        "--knife-hp-min",
+        type=float,
+        default=None,
+        metavar="SHARE",
+        help="dungeon@9.42: --bare-steal's HP rule: under this HP share the dagger goes back on at "
+        "once (default 0.5; 0.2-0.9)",
     )
     t.add_argument(
         "--weight-home",

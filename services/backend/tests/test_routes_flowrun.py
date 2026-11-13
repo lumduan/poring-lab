@@ -125,6 +125,23 @@ def test_a_start_may_carry_settings_from_fixed_ranges(client: TestClient, tmp_pa
         client, {"action": "start", "flow": FLOW, "settings": {"fly_key": "F8", "home_key": "F8"}}
     )
     assert r.status_code == 400 and r.json()["detail"]["reason"] == "settings_same_key"
+    # Batt 2026-11-13 ~13:3x: the heal key, the Knife swap's keys and numbers are the person's too
+    for bad in ({"knife_key": "F10"}, {"dagger_key": "Tab"}, {"heal_key": "F0"},
+                {"knife_max_s": 0.1}, {"knife_max_s": 25}, {"knife_hp_min": 0.1},
+                {"knife_hp_min": 0.95}):  # fmt: skip
+        assert (
+            post(client, {"action": "start", "flow": FLOW, "settings": bad}).status_code == 422
+        ), bad
+    for same in ({"knife_key": "F4", "dagger_key": "F4"}, {"heal_key": "F8", "fly_key": "F8"},
+                 {"home_key": "F5", "dagger_key": "F5"}):  # fmt: skip
+        r = post(client, {"action": "start", "flow": FLOW, "settings": same})
+        assert r.status_code == 400 and r.json()["detail"]["reason"] == "settings_same_key", same
+    mine = {"heal_key": "F2", "knife_key": "F6", "dagger_key": "F7", "knife_max_s": 0.2,
+            "knife_hp_min": 0.35}  # fmt: skip
+    r = post(client, {"action": "start", "flow": FLOW, "settings": mine})
+    assert r.status_code == 200, r.text
+    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
+    assert req["settings"] == mine  # the helper checks the whole set again (flow_run.settings_of)
 
 
 def test_the_write_gate_holds(client: TestClient, tmp_path: Path) -> None:

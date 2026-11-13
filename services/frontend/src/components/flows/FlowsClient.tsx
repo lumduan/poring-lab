@@ -35,6 +35,6 @@ export default function FlowsClient({ backendUrl, initialBlock = null, initialRu
     }
   }, []);
   const doc = findRunner(runner);
-  if (doc) return <RunnerView doc={doc} onBack={() => open(null)} backendUrl={backendUrl} />;
+  if (doc) return <RunnerView key={doc.id} doc={doc} onBack={() => open(null)} onRunner={open} backendUrl={backendUrl} />;
   return <FlowsApp backendUrl={backendUrl} initialBlock={block} onRunner={open} />;
 }

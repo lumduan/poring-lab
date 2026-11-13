@@ -266,3 +266,34 @@ def test_the_popup_only_cue_ignores_the_battle_log(bs: ModuleType) -> None:
     assert st.tick(0.5, [{"colour": "cyan"}], scene(), 0.9) == (None, None)
     assert st.tick(1.0, [{"colour": "cyan"}], draw_popup(scene(), bs), 0.9) == ("equip", "popup")
     assert bs.BareSteal().cue == "both" and bs.STEAL_CUES == ("both", "popup")
+
+
+# --- dungeon@9.42 (Batt 2026-11-13: "everything a user can set again; we only put the defaults") --
+def test_configure_sets_the_runs_own_dagger_key_and_knife_numbers(bs: ModuleType) -> None:
+    """The defaults stay the module's; a run's configure() moves the dagger's key AND the slot its
+    picture is read from (read at call time: a default argument bound at import would not)."""
+    gray = np.full((720, 1280), 255.0)
+    gray[0:10, 0:10] = 0.0
+    before = bs.slot_crop(gray).copy()
+    prev = bs.configure("F7", 0.2, 0.35)
+    try:
+        assert (bs.EQUIP_KEY, bs.EQUIP_SLOT, bs.BARE_MAX_S, bs.BARE_HP_MIN) == ("F7", 6, 0.2, 0.35)
+        assert np.array_equal(bs.slot_crop(gray), bs.slot_crop(gray, 6))  # the new slot, by default
+        st = bs.BareSteal()
+        st.wait_bare()
+        st.begin(10.0, n_lines=0, sig=None, box=None)
+        assert st.tick(10.1, [], scene(), 0.9) == (None, None)
+        assert st.tick(10.25, [], scene(), 0.9) == ("equip", "time")  # Batt's "wait 200 ms"
+        st.begin(20.0, n_lines=0, sig=None, box=None)
+        assert st.tick(20.05, [], scene(), 0.3) == ("equip", "hp")  # under the person's 35 %
+    finally:
+        bs.configure(**prev)
+    assert (bs.EQUIP_KEY, bs.EQUIP_SLOT, bs.BARE_MAX_S, bs.BARE_HP_MIN) == ("F5", 4, 8.0, 0.5)
+    assert np.array_equal(bs.slot_crop(gray), before)
+    assert "row-1" in str(bs.configure_refused("F10"))
+    assert "outside" in str(bs.configure_refused(None, 0.1))
+    assert "outside" in str(bs.configure_refused(None, 25.0))
+    assert "outside" in str(bs.configure_refused(None, None, 0.95))
+    assert bs.configure_refused("F1", 0.2, 0.2) is None and bs.configure_refused() is None
+    with pytest.raises(ValueError):
+        bs.configure(None, 30.0)
