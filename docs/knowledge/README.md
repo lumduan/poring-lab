@@ -13,7 +13,7 @@ What an action IS, in every RO client and server (Batt, 2026-10-07). How a clien
 
 Every entry starts **unverified**: written from memory, which may mix renewal, pre-renewal and regional versions. It flips to **verified** only when its rule passes a pre-registered alone-test on RDP AND S2 (docs/demonstrations.md); `verified_on` then names the client build, server, locale, path and session. The runtime outcome is a SCREEN check (packets are never decision input, ADR-0007); the offline outcome is the packet verifier used for tests and labels.
 
-40 concepts; 0 verified.
+41 concepts; 0 verified.
 
 | id | purpose | workflow wave | status | runtime outcome (screen) |
 |---|---|---|---|---|
@@ -56,6 +56,7 @@ Every entry starts **unverified**: written from memory, which may mix renewal, p
 | `ui.close_window` | Close a client window. | 1 Novice basics | unverified | the window's anchor is present before and absent after |
 | `ui.open_window` | Open a client window (character status, skill list, items, equipment, world map, options, basic info, cart). | 1 Novice basics | unverified | the window's anchor is absent before and present after |
 | `ui.press_button` | Press a button inside a window (OK, a stat raise button, a tab). | 1 Novice basics | unverified | the state change the button is for (per button) |
+| `ui.press_hotkey` | Press one hotbar key (row 1, F1-F9); whatever the player put on that slot is used (an item, a skill, equipment, a wing). | - | unverified | none of its own -- the slot's content decides the effect (an item count drops, the SP bar drops, a map loads); the step that presses it checks that effect |
 | `vitals.read` | Know our HP, SP, weight and zeny from the screen. | 1 Novice basics | unverified | values parsed from the bars and readouts |
 
 ## `cart.rent`
@@ -708,6 +709,29 @@ Press a button inside a window (OK, a stat raise button, a tab).
 - **Outcome, runtime (screen):** the state change the button is for (per button)
 - **Outcome, offline (packets):** per button (some buttons send a request, others are client-side)
 - **Bindings needed:** `L2.window`, `L2.element`
+
+## `ui.press_hotkey`
+
+Press one hotbar key (row 1, F1-F9); whatever the player put on that slot is used (an item, a skill, equipment, a wing).
+
+- **Parameters:** key
+- **Status:** unverified
+- **Steps:**
+  1. Press the slot's key once (down, then up); the client uses what the slot holds.
+- **Preconditions:**
+  - The client is in front and accepts keys; the chat input is closed; the hotbar shows row 1.
+- **Failure modes:**
+  - The slot is empty, so nothing happens.
+  - A skill on the slot is still on its cooldown (or the cast delay), so the client refuses it.
+  - The chat input is open and swallows the key.
+  - The slot holds something other than what the flow assumes (the player moved it).
+- **Game rules:**
+  - What a slot holds is the player's choice; the key alone says nothing about it.
+- **Exceptions:**
+  - Builds differ in how many slots a row has and which keys press them (L2.shortcut.hotbar).
+- **Outcome, runtime (none):** none of its own -- the slot's content decides the effect (an item count drops, the SP bar drops, a map loads); the step that presses it checks that effect
+- **Outcome, offline (packets):** the request the slot's content sends (an item use, a skill use, an equip)
+- **Bindings needed:** `L2.shortcut.hotbar`
 
 ## `vitals.read`
 

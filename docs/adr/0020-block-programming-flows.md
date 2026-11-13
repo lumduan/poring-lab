@@ -53,6 +53,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
   (Batt asked: "design the trained model files as blocks"): two catalogue sensors,
   `detector_sees(model, label)` and `detector_count(model, label)`, over a committed model
   catalogue; no IR change. The studio around them: [flows-studio.md](../planning/flows-studio.md).
+- ➡️ 2026-11-13: [Amendment C](#amendment-c-2026-11-13-batt-asked-functions-that-press-hotbar-keys-the-runner-as-a-block)
+  (Batt: "every key a function"): a `press_key` block (hotbar row 1 only), an `item_warp` that
+  runs a function (`Exit.proc`, left out of the JSON when None: no IR bump), and the Rogue's runner
+  as a `dungeon_hunt` block whose parameters name those functions.
 - **Related:**
   - [ADR-0002](0002-input-mux.md): one input writer, the lease, releases on handoff;
   - [ADR-0003](0003-env-abstraction.md): the `Env` contract the blocks act through;
@@ -435,6 +439,9 @@ from its L1 entry.
 social research is Phase 6, and other players' text stays local); raw clicks, raw keys or
 coordinates (section 3); anything on the Windows desktop or shell (those steps stay ro_agent's,
 ADR-0019); anything that reads packets (ADR-0007).
+➡️ **2026-11-13 (Batt, [Amendment C](#amendment-c-2026-11-13-batt-asked-functions-that-press-hotbar-keys-the-runner-as-a-block)):**
+ONE key block, `press_key`, limited to the hotbar's row 1 (F1-F9, `L2.shortcut.hotbar`): "use
+what is on that slot", inside functions. Every other raw key, chord or click stays out.
 
 ### 2.2 Outcomes
 
@@ -2361,3 +2368,41 @@ amendment ADDS to section 2.3; nothing above is rewritten.
   - The always-on `dead` and `hp_critical` events' bindings are written: L2 death dialog + its
     buttons (numbers only), L3 map flags (local, generated). So their "not ready" clears for
     every flow (flows-studio.md section 10).
+
+## Amendment C (2026-11-13, Batt asked): functions that press hotbar keys; the runner as a block
+
+**Batt (2026-11-13, translated):** "Fly Wing and Butterfly Wing must not be written as fixed items.
+Make them FUNCTIONS whose body says which shortcut key (F1-F9) to press; the Knife swap too;
+casting skills or anything else the same way. We have Save and Load, so functions can be shared;
+global functions live in their own tab. The xmas_dun02 flow must be an ordinary map block in the
+same studio as my_first_workflow, not a separate view." This amendment ADDS to sections 2.1, 3 and
+13.1; it changes ONE line of 2.1 ("never a block ... raw keys"), with a pointer there.
+
+- **`press_key(key)`** (L1 `ui.press_hotkey`, unverified): ONE key of the hotbar's row 1 (F1-F9:
+  `L2.shortcut.hotbar`, the keys the runner reads, scripts/flow_config.py KEYS), never any other
+  key. It is still task-level in section 3's sense: "use what the player put on that slot" (an
+  item, a skill, equipment, a wing); a raw key, a chord or a click stays out (2.1). Its batch has a
+  key down, so the mux and the foreground gate apply as to every key. Insertable, as the hotbar
+  `use_item` Batt allowed on 2026-10-08 (Q17).
+- **Functions are procedures** (`Flow.procedures`, 7.2's `def name():`). Since what a slot holds is
+  the player's, the linter reads a press conservatively (`poring_flow/functions.py`,
+  `lint/functions.py`): a key that a Butterfly Wing function presses IS that wing everywhere in the
+  flow (the save-point rule of 13.5, "then relocate or stop", a map change only through take_exit:
+  ERRORS exactly as for `use_item(WING)`); any other key pressed in an event that resumes is a
+  WARNING (it may hold a wing).
+- **An item warp by function** (13.1): `Exit.proc`, optional, names the function an `item_warp`
+  runs; an item_warp takes exactly one of `item` and `proc`. Left out of the canonical JSON when
+  None (the ZonesRef precedent), so every flow written before keeps its JSON and its hash: no IR
+  version bump (an engine that does not know the field refuses a flow that has one). The function
+  must be defined and press a key. Python view: `take_exit(item_warp(using=butterfly_wing,
+  to=entry("geffen", "save")))`.
+- **`dungeon_hunt(heal=, fly=, knife_on=, knife_back=)`**: the Rogue's runner
+  (scripts/dungeon_hunt.py, as scripts/flow_run.py starts it) as ONE task-level block in a map
+  node, like Amendment A's `hunt`. Each parameter (type `proc`) names a function of exactly one
+  press_key: the key the runner presses for that role; four different keys, none the wing's. It
+  runs only on a map that has a runner (`functions.RUNNER_MAPS`, today xmas_dun02: flow_run.py
+  FLOWS, drift-tested). The flow engine only SIMULATES it, as `hunt`; the game is still played by
+  the runner through the Run button (the note at the top).
+- **The fixture** `services/frontend/src/lib/flow/fixtures/xmas_dun02_flow.json`: the xmas_dun02
+  flow as two map blocks (xmas_dun02 -> geffen), every key a function
+  (`packages/poring_flow/tests/test_flow_functions.py`).

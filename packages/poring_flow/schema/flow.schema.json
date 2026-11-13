@@ -637,6 +637,19 @@
           "title": "Options",
           "type": "array"
         },
+        "proc": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proc"
+        },
         "timeout_s": {
           "default": 120,
           "exclusiveMinimum": 0,

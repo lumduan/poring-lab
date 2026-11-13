@@ -17,6 +17,13 @@ Additions to 7.2's allow-list, each needed by 13.6.8's example or by the IR (all
 - the bare `_` as a `for` target: `for _ in range(n)` is the `repeat` block (7.2 has no form for
   it);
 - `x = block(...)` stores the block's outcome (`outcome_to`, 2.2).
+- FUNCTION names as values (Amendment C, Batt 2026-11-13): a `proc` parameter takes a bare
+  function name (`dungeon_hunt(heal=heal, fly=fly_wing, ...)`), and an item warp by function is
+  `item_warp(using=butterfly_wing, to=entry(...))`. In those places a name is ALWAYS a function's
+  (stored as its name; the linter refuses one that is a variable), never read as a variable.
+  The one exception to the exact round trip: an IR that puts something other than a string there
+  (a variable, a number: the linter's `hunt_function` error) prints as a name and reads back as
+  that name.
 Comments are dropped (open question 12). The printer heads each part with a section comment in
 matpilot's style (`# --- Config ---`, Setup, Functions, Map blocks, Events, Main: 2026-11-09,
 flows-studio.md section 3); the parser drops them like any comment, so the round trips hold.
@@ -857,8 +864,9 @@ def _args(
         ctx.err(call, f"{name}(...) takes at most {len(positional)} positional arguments")
         raise _Bad
     for p, node in zip(positional, call.args, strict=False):
-        out[p.name] = _expr(node, ctx)
-    known = {p.name for p in params}
+        out[p.name] = _param(p, node, name, ctx)
+    by_name = {p.name: p for p in params}
+    known = set(by_name)
     for k, node in _kw(call).items():
         if k in extra:
             continue
@@ -868,12 +876,32 @@ def _args(
         if k in out:
             ctx.err(node, f"{name}(...) got {k} twice")
             raise _Bad
-        out[k] = _expr(node, ctx)
+        out[k] = _param(by_name[k], node, name, ctx)
     missing = [p.name for p in params if p.required and p.name not in out]
     if missing:
         ctx.err(call, f"{name}(...) needs {', '.join(missing)}")
         raise _Bad
     return out
+
+
+def _param(p: Any, node: ast.expr, name: str, ctx: _Ctx) -> dict[str, Any]:
+    """A parameter's value: an expression, or for a FUNCTION parameter (type proc, Amendment C:
+    dungeon_hunt(heal=heal, ...)) the function's name as a string literal."""
+    if p.type == "proc":
+        return {"kind": "lit", "value": _function_name(node, ctx, f"{name}(...)'s {p.name}")}
+    return _expr(node, ctx)
+
+
+def _function_name(node: ast.expr, ctx: _Ctx, what: str) -> str:
+    """A FUNCTION's name where one goes (a role of dungeon_hunt, item_warp's using=): the bare
+    name, never read as a variable (the IR stores the name; the linter checks it is a function and
+    not a variable), or a string for a name that is not a Python name."""
+    if isinstance(node, ast.Name) and ASCII_NAME.match(node.id):
+        return node.id
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    ctx.err(node, f"{what} takes a function's name (def name(): ...)")
+    raise _Bad
 
 
 def _action(call: ast.Call, ctx: _Ctx, outcome_to: str | None = None) -> dict[str, Any]:
@@ -1119,13 +1147,28 @@ def _exit(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
         ctx.err(call, f'{name}(...) needs to=entry("block", "entry")')
         raise _Bad
     for k in kw:
-        if k not in ("to", "timeout_s"):
+        if k not in ("to", "timeout_s") and not (k == "using" and name == "item_warp"):
             ctx.err(kw[k], f"{name}(...) has no argument {k}")
             raise _Bad
     b, e = _entry_ref(kw["to"], ctx)
     out: dict[str, Any] = {"kind": name, "to_block": b, "to_entry": e}
     if "timeout_s" in kw:
         out["timeout_s"] = _const(kw["timeout_s"], ctx)
+    if name == "item_warp" and "using" in kw:  # an item warp by FUNCTION (Amendment C)
+        if call.args:
+            ctx.err(call, "item_warp(...) takes an item or using=<function>, not both")
+            raise _Bad
+        out["proc"] = _function_name(kw["using"], ctx, "item_warp(...)'s using")
+        return out
+    if (
+        name == "item_warp"
+        and len(call.args) == 1
+        and isinstance(call.args[0], ast.Name)
+        and call.args[0].id in ctx.procedures
+    ):
+        f = call.args[0].id
+        ctx.err(call.args[0], f"{f} is a function: item_warp(using={f}, to=...)")
+        raise _Bad
     need = {"walk_exit": 1, "npc_warp": 2, "item_warp": 1}[name]
     if len(call.args) != need:
         ctx.err(call, f"{name}(...) takes {need} positional argument(s)")
@@ -1420,7 +1463,7 @@ def _call_args(args: dict[str, Any], params: Any, cat: Catalogue) -> str:
             if p.positional:
                 positional = False
             continue
-        val = expr_src(args[p.name], cat)
+        val = _param_src(p, args[p.name], cat)
         if p.positional and positional:
             parts.append(val)
         else:
@@ -1430,6 +1473,18 @@ def _call_args(args: dict[str, Any], params: Any, cat: Catalogue) -> str:
         if k not in order:
             parts.append(f"{k}={expr_src(args[k], cat)}")
     return ", ".join(parts)
+
+
+def _function_src(name: str) -> str:
+    """A FUNCTION's name where one goes (Amendment C): bare (heal=heal), quoted only when it is
+    not a Python name (the parser reads both back as the same name)."""
+    return name if ASCII_NAME.match(name) else _s(name)
+
+
+def _param_src(p: Any, e: Any, cat: Catalogue) -> str:
+    if p.type == "proc" and isinstance(e, ir.Lit) and isinstance(e.value, str):
+        return _function_src(e.value)
+    return expr_src(e, cat)
 
 
 def _action_call(a: ir.ActionStmt, cat: Catalogue) -> str:
@@ -1462,6 +1517,8 @@ def _exit_src(x: ir.Exit, cat: Catalogue) -> str:
     if x.kind == "npc_warp" and x.npc is not None:
         opts = "[" + ", ".join(_ref_src(o) for o in x.options) + "]"
         return f"npc_warp({_ref_src(x.npc)}, {opts}, {to}{tail})"
+    if x.proc is not None:  # an item warp by FUNCTION (Amendment C)
+        return f"item_warp(using={_function_src(x.proc)}, {to}{tail})"
     item = x.item.name if isinstance(x.item, ir.Var) else _ref_src(x.item)
     return f"item_warp({item}, {to}{tail})"
 

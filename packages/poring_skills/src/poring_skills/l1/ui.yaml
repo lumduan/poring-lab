@@ -71,3 +71,27 @@ concepts:
         signal: per button (some buttons send a request, others are client-side)
     bindings_needed: [L2.window, L2.element]
     workflow_wave: 1
+  - id: ui.press_hotkey
+    purpose: Press one hotbar key (row 1, F1-F9); whatever the player put on that slot is used (an item, a skill, equipment, a wing).
+    params: [key]
+    steps:
+      - Press the slot's key once (down, then up); the client uses what the slot holds.
+    preconditions:
+      - The client is in front and accepts keys; the chat input is closed; the hotbar shows row 1.
+    failure_modes:
+      - The slot is empty, so nothing happens.
+      - A skill on the slot is still on its cooldown (or the cast delay), so the client refuses it.
+      - The chat input is open and swallows the key.
+      - The slot holds something other than what the flow assumes (the player moved it).
+    game_rules:
+      - What a slot holds is the player's choice; the key alone says nothing about it.
+    outcome:
+      runtime:
+        kind: none
+        signal: none of its own -- the slot's content decides the effect (an item count drops, the SP bar drops, a map loads); the step that presses it checks that effect
+      offline:
+        kind: packets
+        signal: the request the slot's content sends (an item use, a skill use, an equip)
+    exceptions:
+      - Builds differ in how many slots a row has and which keys press them (L2.shortcut.hotbar).
+    bindings_needed: [L2.shortcut.hotbar]

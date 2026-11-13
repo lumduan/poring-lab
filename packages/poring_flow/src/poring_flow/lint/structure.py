@@ -68,6 +68,7 @@ ACCEPTS = {
     "str": ("str", "outcome"),
     "value": ("int", "str"),
     "items": ("list:item", "list"),
+    "proc": ("str",),  # a function's NAME (Amendment C): lint/functions.py checks it names one
 }
 
 
@@ -78,7 +79,8 @@ def accepts(param: str, t: str) -> bool:
 
 
 def _article(t: str) -> str:
-    shown = {"list:item": "list of items", "percent": "number", "float": "number"}.get(t, t)
+    shown = {"list:item": "list of items", "percent": "number", "float": "number",
+             "proc": "function's name"}.get(t, t)  # fmt: skip
     return f"an {shown}" if shown[0] in "aeiou" else f"a {shown}"
 
 

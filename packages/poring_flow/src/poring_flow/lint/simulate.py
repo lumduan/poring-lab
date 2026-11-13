@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from poring_flow import functions as fn
 from poring_flow import ir
 from poring_flow.lint.common import Consts, Ctx, Severity, assigned_vars, body_actions
 from poring_flow.lint.semantics import arrival
@@ -62,8 +63,19 @@ def escape_kind(sheet: MapSheet | None) -> str | None:
     return "none" if sheet.flags.noreturn else "butterfly_wing"
 
 
+def wing_press(ctx: Ctx, a: ir.ActionStmt) -> str | None:
+    """A press of a key the flow's Butterfly Wing function presses (Amendment C): its words, e.g.
+    "the Butterfly Wing on F9 (butterfly_wing)"; None for any other action or key."""
+    key = fn.key_of(a)
+    names = ctx.wing_keys().get(key) if key is not None else None
+    return f"the Butterfly Wing on {key} ({', '.join(names)})" if names else None
+
+
 def _uses_wing(ctx: Ctx, consts: Consts, a: ir.ActionStmt, sheet: MapSheet | None) -> bool:
-    """Does this action go to the SAVE POINT (a Butterfly Wing, or an escape that takes one)?"""
+    """Does this action go to the SAVE POINT (a Butterfly Wing, the key of a Butterfly Wing
+    function, or an escape that takes one)?"""
+    if a.block == fn.PRESS:
+        return wing_press(ctx, a) is not None
     if a.block == "use_item":
         return item_kind(ctx, consts.item(a.params.get("item"))) == "butterfly_wing"
     if a.block == "escape":
@@ -326,8 +338,15 @@ class SavePoint:
                 state = self._stmts(ctx.flow.procedures.get(st.proc, []), st.proc, state, b)
         return state
 
-    def _wing(self, path: str, a: ir.ActionStmt, state: States, to: ir.MapBlock | None) -> None:
-        what = self._what(a)
+    def _wing(
+        self,
+        path: str,
+        a: ir.ActionStmt,
+        state: States,
+        to: ir.MapBlock | None,
+        what: str | None = None,
+    ) -> None:
+        what = what or self._what(a)
         if None in state:
             if to is not None:
                 self.ctx.add(
@@ -363,6 +382,9 @@ class SavePoint:
     def _what(self, a: ir.ActionStmt) -> str:
         if a.block == "escape":
             return "the escape's Butterfly Wing"
+        pressed = wing_press(self.ctx, a)
+        if pressed is not None:
+            return pressed
         iid = self.consts.item(a.params.get("item"))
         return item_name(self.ctx, iid) if iid is not None else "a Butterfly Wing"
 
@@ -421,10 +443,12 @@ class SavePoint:
         )
         if to is None:
             return
-        self._wing(path, fake, state, to)
+        # an item warp by FUNCTION (Amendment C) is that function's Butterfly Wing: the same rules
+        what = f"the Butterfly Wing function {x.proc}" if x.proc is not None else self._what(fake)
+        self._wing(path, fake, state, to, what)
         for s in state:
             if s is not None and s[1] == to.map.map and s[2] is not None:
-                arrival(ctx, path, self._what(fake), to, x.to_entry, s[1], s[2])
+                arrival(ctx, path, what, to, x.to_entry, s[1], s[2])
 
     def _resume_block(self, map_id: str) -> ir.MapBlock | None:
         bs = [b for b in self.ctx.blocks if b.map.map == map_id]
@@ -786,11 +810,16 @@ def _irreversible(ctx: Ctx, consts: Consts) -> None:
 
 # --- a map change inside a map block's main is an exit ------------------------------------------
 def _map_change(ctx: Ctx, consts: Consts) -> None:
+    """Through the functions it calls too (Amendment C: `call butterfly_wing` in a main is the
+    wing's map change, not an exit)."""
     for b in ctx.blocks:
         for site in ir.walk(b.main, b.name, root=b.name, scope="block", block=b):
             if isinstance(site.stmt, ir.TakeExit):
                 continue
-            for a in ir.actions_in(site.stmt):
+            acts = list(ir.actions_in(site.stmt))
+            if isinstance(site.stmt, ir.CallProc):
+                acts += body_actions(ctx.flow.procedures.get(site.stmt.proc, []), ctx.flow)
+            for a in acts:
                 what = _changes_map(ctx, consts, a, ctx.sheet(b.map.map))
                 if what:
                     ctx.add(
@@ -808,6 +837,8 @@ def _changes_map(ctx: Ctx, consts: Consts, a: ir.ActionStmt, sheet: MapSheet | N
         return None
     if spec.changes_map == "always":
         return a.block
+    if a.block == fn.PRESS:  # by_item: a key a Butterfly Wing function presses (Amendment C)
+        return wing_press(ctx, a)
     if spec.changes_map == "by_item":
         iid = consts.item(a.params.get("item"))
         return item_name(ctx, iid) if iid and item_kind(ctx, iid) == "butterfly_wing" else None

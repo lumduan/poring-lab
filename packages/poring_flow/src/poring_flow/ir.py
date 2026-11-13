@@ -24,6 +24,8 @@ Deviations from the ADR's illustrative sketch (each one reported, none decided s
 - `Override`, `Extend` and `Add` carry an optional `label`: the Python view's function name
   (`farm_hp_low`), which is also the event's node path;
 - `until` and `rearm` are exclusive (13.6.7: `until` for repeating events, `rearm` for one-shot).
+- `Exit.proc` (Amendment C, Batt 2026-11-13): an item_warp runs a FUNCTION (a procedure that
+  presses the Butterfly Wing's hotbar key) instead of naming an item; exactly one of the two.
 
 IR VERSIONS (section 1: "a breaking change is a new version with a converter, never a silent
 edit"):
@@ -33,6 +35,9 @@ edit"):
   orders their queue, and only events of equal rank queue first in, first out.
 - IR 2 also carries `Flow.where_budget` (Batt 2026-10-09, contradictions #10; added before IR 2
   was released): the per-run budget of ACTIVE position reads (/where), default 12.
+- Optional fields left out of the canonical JSON when None (`MapBlock.zones`, Amendment A 4;
+  `Exit.proc`, Amendment C): every flow written before them keeps its JSON and its hash, so they
+  are no new IR version.
 - IR 1 is CONVERTED on load (`upgrade`): every handler gets `rank: None`, the flow gets the
   default `where_budget`, nothing else changes. Its
   meaning changes (equal-class events were FIFO only), so the converted flow is IR 2 and its hash
@@ -343,6 +348,19 @@ class Exit(BaseModel):
     to_block: str = Field(pattern=NAME)
     to_entry: str = Field(pattern=NAME)
     timeout_s: float = Field(default=120, gt=0, le=600)
+    # Amendment C (Batt 2026-11-13: "every key is a function"): the FUNCTION an item_warp runs (a
+    # procedure whose body presses the Butterfly Wing's hotbar key), instead of an item. Left out
+    # of the canonical JSON when None (the ZonesRef precedent), so every flow written before it
+    # keeps its JSON and its hash: no IR version bump (an engine that does not know the field
+    # refuses a flow that has one, extra="forbid")
+    proc: str | None = Field(default=None, pattern=NAME)
+
+    @model_serializer(mode="wrap")
+    def _absent_proc(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if self.proc is None and isinstance(data, dict):
+            data.pop("proc", None)
+        return data
 
     @model_validator(mode="after")
     def _shape(self) -> Exit:
@@ -353,14 +371,20 @@ class Exit(BaseModel):
             "npc": self.npc is not None,
             "options": bool(self.options),
             "item": self.item is not None,
+            "proc": self.proc is not None,
         }
+        if self.kind == "item_warp" and given["item"] and given["proc"]:
+            raise ValueError("item_warp takes an item or a function (proc), not both")
         need = {"walk_exit": {"warp"}, "npc_warp": {"npc", "options"}, "item_warp": {"item"}}
-        wanted = need[self.kind]
+        wanted = {"proc"} if self.kind == "item_warp" and given["proc"] else need[self.kind]
         missing = sorted(k for k in wanted if not given[k])
         extra = sorted(k for k, v in given.items() if v and k not in wanted)
         if missing or extra:
+            takes = ", ".join(sorted(wanted))
+            if self.kind == "item_warp" and not given["proc"]:
+                takes = "item or proc (a function)"
             raise ValueError(
-                f"{self.kind} takes {', '.join(sorted(wanted))} (missing "
+                f"{self.kind} takes {takes} (missing "
                 f"{missing or 'none'}, not allowed {extra or 'none'})"
             )
         return self

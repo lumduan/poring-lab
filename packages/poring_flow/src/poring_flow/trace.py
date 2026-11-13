@@ -19,10 +19,10 @@ THE PLAY LIST (2026-11-10, Batt's Maps page: "watch the bot walk a -> b -> c, me
 talk to NPCs at the flow's positions", docs/planning/world-map-flows.md): `play` is the run in
 ORDER, one step per thing the character does, with its start and end time (`t0`, `t1`), the map
 block and map it happens on, and its cells: walk (the route), talk (the NPC and its cell), menu
-(an option key), fight (the monster, its cell, whether it dropped loot), item, loot, respawn, act
-(any other block), wait, exit (from block / map -> to block / map / cell) and arrive (the map
-changed outside an exit: a wing, a respawn). The browser animates it; it adds nothing the run did
-not do.
+(an option key), fight (the monster, its cell, whether it dropped loot), item (an item warp by
+function names its `proc`), loot, respawn, act (any other block; a press_key's names its `key`),
+wait, exit (from block / map -> to block / map / cell) and arrive (the map changed outside an
+exit: a wing, a respawn). The browser animates it; it adds nothing the run did not do.
 - ENCOUNTERS (`Scenario.encounters`, off by default so every older caller's trace is unchanged
   but for the added `play`): an attack places ONE monster deterministically from `Scenario.seed`
   (the block's target species the sheet spawns, weighted by spawn count; the explicit `mob` when
@@ -46,10 +46,11 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from poring_env.protocol import Key, MouseButton, MouseMove, ReleaseAll
+from poring_flow import functions as fn
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.models import detector_keys
-from poring_flow.runtime import TICK_S, Plan, Sim, _Halt, _Tick
+from poring_flow.runtime import TICK_S, Plan, Sim, _Halt, _Tick, default_plan
 from poring_flow.sheet import Cell, MapSheet, World
 
 WALK_MS = 150  # RO's default walk speed: one cell
@@ -66,7 +67,10 @@ ENGAGE_TRIES = 60
 # the blocks that walk up to an NPC and talk (the planner's NPC set)
 NPC_BLOCKS = ("talk_npc", "set_save_point", "kafra_store", "kafra_withdraw", "buy", "sell",
               "rent_cart", "refine")  # fmt: skip
-FIGHT_BLOCKS = ("attack_nearest", "finish_target", "hunt")
+FIGHT_BLOCKS = ("attack_nearest", "finish_target", "hunt", "dungeon_hunt")
+# the task-level hunts (the hunt block; the runner's dungeon_hunt, Amendment C): one monster per
+# call with encounters on, else their default 1 s
+HUNT_BLOCKS = ("hunt", "dungeon_hunt")
 DetectKey = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}/[a-z][a-z0-9_]{0,47}$")]
 ScenarioKey = Literal[
     "hp_percent", "sp_percent", "weight_percent", "is_dead", "engagement_seen", "engaged_species"
@@ -450,7 +454,7 @@ class TraceSim(Sim):
             self.dialog_npc = None
             return Plan(ticks=5)
         if a.block in ("attack_nearest", "finish_target") or (
-            a.block == "hunt" and sc.encounters
+            a.block in HUNT_BLOCKS and sc.encounters
         ):  # a hunt meets one monster per call with encounters on (else its default 1 s, as before)
             w = min(100.0, float(self.world.get("weight_percent") or 0) + sc.weight_per_attack)
             hp = max(1.0, float(self.world.get("hp_percent") or 0) - sc.hp_per_attack)
@@ -472,6 +476,8 @@ class TraceSim(Sim):
             return Plan(ticks=1)
         if a.block == "respawn":
             return Plan(ticks=30, effects={"hp_percent": 50.0})
+        if a.block == fn.PRESS:  # one hotbar press (runtime.default_plan's)
+            return default_plan(a, self)
         spec = self.cat.blocks[a.block].spec if a.block in self.cat.blocks else None
         if spec is not None and spec.profile == "atomic":
             return Plan(ticks=10, atomic=(0, 10))
@@ -501,7 +507,8 @@ class TraceSim(Sim):
     # --- the trace ------------------------------------------------------------------------------
     def _batch(self, a: ir.ActionStmt, hold: bool) -> list[Any]:
         spec = self.cat.blocks[a.block].spec if a.block in self.cat.blocks else None
-        return _KEY if a.block == "use_item" or (spec is not None and spec.types) else _CLICK
+        keyed = a.block in ("use_item", fn.PRESS) or (spec is not None and spec.types)
+        return _KEY if keyed else _CLICK
 
     def _emit(self, owner: str, events: list[Any], why: str) -> None:
         self.batches += 1
@@ -658,7 +665,7 @@ class TraceSim(Sim):
             self._play_step({**base, "kind": "menu", "t0": t0, "t1": self.t, "npc": before[3],
                              "option": ref.key if isinstance(ref, ir.OptionRef) else None},
                             before)  # fmt: skip
-        elif a.block in FIGHT_BLOCKS and (a.block != "hunt" or fight is not None):
+        elif a.block in FIGHT_BLOCKS and (a.block not in HUNT_BLOCKS or fight is not None):
             t = self._play_walk(before, t0, walk_ms, planned, node, "engage", out)
             gained = float(self.world.get("weight_percent") or 0) > float(before[4] or 0)
             self._play_step({**base, "kind": "fight", "t0": t, "t1": self.t, "seen_t": t0,
@@ -673,6 +680,9 @@ class TraceSim(Sim):
                              "item_kind": kind}, before)  # fmt: skip
         elif a.block in ("loot", "respawn"):
             self._play_step({**base, "kind": a.block, "t0": t0, "t1": self.t}, before)
+        elif a.block == fn.PRESS:  # an act that names its hotbar key (Amendment C)
+            self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t, "key": fn.key_of(a)},
+                            before)  # fmt: skip
         else:
             self._play_step({**base, "kind": "act", "t0": t0, "t1": self.t}, before)
         m1 = self.world.get("map")
@@ -774,8 +784,10 @@ class TraceSim(Sim):
             item = self._eval(x.item) if isinstance(x.item, ir.Var) else x.item
             iid = item.id if isinstance(item, ir.ItemRef) else None
             kind = self.static.items[iid].kind if self.static and iid in self.static.items else None
-            self._play_step({**base, "kind": "item", "t0": t, "t1": self.t, "item": iid,
-                             "item_kind": kind}, before)  # fmt: skip
+            step = {**base, "kind": "item", "t0": t, "t1": self.t, "item": iid, "item_kind": kind}
+            if x.proc is not None:  # an item warp by function (Amendment C): its presses ran
+                step["proc"] = x.proc
+            self._play_step(step, before)
         cell = self.world.get("cell")
         self._play_step({**base, "kind": "exit", "t0": self.t, "t1": self.t, "exit": x.kind,
                          "from_block": before[0] or None, "to_block": x.to_block,

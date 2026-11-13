@@ -94,6 +94,11 @@ def test_catalogue_and_sample(make: Make) -> None:
     # #17: the configured run-time limits (flows_settings.runtime_limits; Batt's defaults for now)
     assert doc["runtime_limits"] == {"default_s": 14_400, "max_s": 86_400}
     assert "basic_info" in doc["windows"] and "walk_to" in doc["palette"]
+    # Amendment C (2026-11-13): the hotbar key block, the runner block and where it may run
+    (key,) = doc["blocks"]["press_key"]["spec"]["params"]
+    assert key["type"] == "str" and key["options"] == [f"F{i}" for i in range(1, 10)]
+    assert {p["type"] for p in doc["blocks"]["dungeon_hunt"]["spec"]["params"]} == {"proc"}
+    assert doc["runner_maps"] == ["xmas_dun02"]
     s = client.get("/flows/sample", headers=H).json()
     assert s["flow"] == sample() and s["world"] == "sample"
     w = client.get("/flows/world?source=sample&maps=town_1&walk=true", headers=H).json()

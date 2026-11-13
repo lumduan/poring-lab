@@ -14,13 +14,15 @@
 #   moves        none | to_cell | near: where the character is afterwards (route simulation)
 #   changes_map  never | always | by_item | escape (13.6.9 relocating events)
 #   adds_weight  it can raise weight_percent() (13.5 weight rule)
-#   insertable   may run as an INSERT: Batt 2026-10-08 (Q17), hotbar use_item ONLY
+#   insertable   may run as an INSERT: Batt 2026-10-08 (Q17), the hotbar ONLY (use_item, press_key)
 #   irreversible why the owner must acknowledge it at approval (section 5)
 #   kafra        the Kafra service it needs (13.5)
 #   assume       L1 preconditions that must be in the flow's `assumes` (13.5)
 #   affects      sensors it moves: + up, - down, ~ either way (loops, re-trigger)
 #   types        it types (the foreground gate applies)
 #   needs_targets it attacks the map block's TARGET species only: a map block with targets (13.3)
+# Parameter types: cell map npc option item items mob skill window int float bool str value, and
+#   proc: a FUNCTION's name (a string literal naming a procedure; Batt 2026-11-13, Amendment C)
 # Per parameter, besides name / type / required / positional:
 #   group        its group in the editor (Batt D2, 2026-10-21: one hunt block with groups)
 #   choices      the RULE VERSIONS a person may pick (name@N: PARAMS[N]'s numbers, read-only;
@@ -132,6 +134,27 @@ blocks:
     moves: near
     affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
     note: in a map block without a mob it attacks only the block's TARGET species (13.3)
+  dungeon_hunt:
+    # Batt 2026-11-13 ("the xmas_dun02 flow must be an ordinary map block"; ADR-0020 Amendment C):
+    # the Rogue's RUNNER (scripts/dungeon_hunt.py, as scripts/flow_run.py starts it) as ONE
+    # task-level block in a map node, like `hunt` below. Its parameters are a person's choices:
+    # the FUNCTION the runner presses for each role, each exactly one press_key (lint/functions.py:
+    # four different keys, none the Butterfly Wing's). Every other technique stays the runner's
+    # own setting (scripts/flow_config.py: the /flows Run settings). It runs only on a map that
+    # has a runner (poring_flow.functions.RUNNER_MAPS: flow_run.py FLOWS' maps, drift-tested).
+    # The runner reads its own map's zones and targets, so it needs no TARGET list here.
+    concept: combat.hunt
+    params:
+      - {name: heal, type: proc, required: true, group: keys, note: "the function the runner presses to heal: one press_key, the heal item's hotbar key (its default F1)"}
+      - {name: fly, type: proc, required: true, group: keys, note: "the function the runner presses for a Fly Wing (a jump on this map): one press_key (its default F8)"}
+      - {name: knife_on, type: proc, required: true, group: keys, note: "the function the runner presses to wield the Knife: one press_key (its default F4)"}
+      - {name: knife_back, type: proc, required: true, group: keys, note: "the function the runner presses to wield the dagger again: one press_key (its default F5)"}
+    timeout_s: 600
+    long: true
+    moves: near
+    adds_weight: true
+    affects: {position: "~", hp_percent: "-", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: the stop group is the enclosing loop (13.5) -- its condition and max_s; one call hunts at most timeout_s. Each parameter names a FUNCTION of exactly one press_key (the runner presses one key a role); only on a map with a runner (xmas_dun02)
   hunt:
     # Amendment A 3 (DRAFT; Batt D2 2026-10-21: one `hunt` block with groups): hunt-flow's ADOPTED
     # rules as ONE task-level block inside a map node. Its parameters are a person's choices, each
@@ -251,6 +274,23 @@ blocks:
     insertable: true
     changes_map: by_item
     affects: {hp_percent: "+", sp_percent: "+", item_count: "-", weight_percent: "-"}
+  press_key:
+    # Batt 2026-11-13 ("Fly Wing and Butterfly Wing must not be written as fixed items: make them
+    # FUNCTIONS whose body says which shortcut key to press; the Knife swap, casting skills or
+    # anything else the same way"; ADR-0020 Amendment C): ONE key of the hotbar's row 1, never any
+    # other key (2.1 keeps raw keys out): the options are L2.shortcut.hotbar's, the keys the
+    # runner reads (scripts/flow_config.py KEYS). What the slot holds is the player's, so the
+    # linter reads a press conservatively (lint/functions.py): a key a Butterfly Wing function
+    # presses IS that wing (the save-point rule, then relocate or stop); changes_map by_item and
+    # every vital "~" so nothing behind a press is taken for harmless.
+    concept: ui.press_hotkey
+    params:
+      - {name: key, type: str, required: true, positional: true, options: [F1, F2, F3, F4, F5, F6, F7, F8, F9], note: "the hotbar key (row 1): whatever is on that slot is used -- an item, a skill, equipment or a wing"}
+    timeout_s: 2
+    insertable: true
+    changes_map: by_item
+    affects: {hp_percent: "~", sp_percent: "~", item_count: "~", weight_percent: "~"}
+    note: a hotbar press, the one Batt's 2026-10-08 Q17 allows as an INSERT (as use_item's hotbar use). Whatever the slot holds is used; a key a Butterfly Wing function presses counts as that wing (the save-point rule; an event that presses it relocates or stops)
   equip:
     concept: item.equip
     params: [{name: item, type: item, required: true, positional: true}]

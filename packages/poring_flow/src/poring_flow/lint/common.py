@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from poring_flow import ir
+from poring_flow import functions, ir
 from poring_flow.catalogue import Catalogue
 from poring_flow.effective import Merged, global_set, merge
 from poring_flow.patrol import RoutesProvider
@@ -63,6 +63,14 @@ class Ctx:
     _seen: set[tuple[str, str, str]] = field(default_factory=set)
     _merged: dict[str, Merged] = field(default_factory=dict)
     _names: ir.PathNames | None = None
+    _wings: dict[str, list[str]] | None = None
+
+    def wing_keys(self) -> dict[str, list[str]]:
+        """key -> the Butterfly Wing functions that press it (an item warp runs them; Amendment C,
+        `poring_flow.functions`): a press of such a key is that wing, everywhere in the flow."""
+        if self._wings is None:
+            self._wings = functions.wing_keys(self.flow)
+        return self._wings
 
     def shown(self, path: str) -> str:
         """A node path in the grammar a person reads (#3): `maps.town.3`, `handlers.dead`."""

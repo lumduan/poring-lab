@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from poring_env.protocol import AgentInput, InputEvent, Key, MouseButton, MouseMove, ReleaseAll
+from poring_flow import functions as fn
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import Effective, global_set, merge
@@ -99,6 +100,8 @@ def default_plan(a: ir.ActionStmt, sim: Sim) -> Plan:
     spec = sim.cat.blocks[a.block].spec if a.block in sim.cat.blocks else None
     if a.block == "use_item":
         return Plan(ticks=1)
+    if a.block == fn.PRESS:  # one hotbar press; a key off the hotbar sends nothing and fails
+        return Plan(ticks=1) if fn.key_of(a) in sim.hotbar else Plan(ticks=0, outcome="failed")
     if spec is not None and spec.profile == "atomic":
         return Plan(ticks=3, atomic=(0, 3))
     return Plan(ticks=3)
@@ -201,6 +204,11 @@ class Sim:
         self._where_blocks = {
             n for n, b in self.cat.blocks.items() if b.spec.concept == "nav.read_position"
         }
+        # Amendment C (2026-11-13): the hotbar keys a press may name, and the keys the flow's
+        # Butterfly Wing functions press (an item warp runs them): such a press goes to the save
+        # point, as use_item(WING) does
+        self.hotbar = frozenset(fn.hotbar_keys())
+        self.wing_keys = fn.wing_keys(flow)
 
     # --- the world ------------------------------------------------------------------------------
     def _apply_timeline(self) -> None:
@@ -288,6 +296,12 @@ class Sim:
                 Key(t_mono_ns=ns, code="F1", action="down"),
                 Key(t_mono_ns=ns, code="F1", action="up"),
             ]
+        if a.block == fn.PRESS:  # the press's own hotbar key (default_plan refuses another)
+            code = fn.key_of(a) or "F1"
+            return [
+                Key(t_mono_ns=ns, code=code, action="down"),
+                Key(t_mono_ns=ns, code=code, action="up"),
+            ]
         if spec is not None and spec.types:
             return [
                 Key(t_mono_ns=ns, code="Enter", action="down"),
@@ -325,9 +339,12 @@ class Sim:
             # The block is done: a restart or a failure sent now is ignored.
             yield _Tick(None, False, f"{a.block} check")
             if plan.outcome == "ok":
-                cause = "expected" if a.block in ("respawn", "escape", "use_item") else "action"
+                expected = ("respawn", "escape", "use_item", fn.PRESS)  # a press may be a wing
+                cause = "expected" if a.block in expected else "action"
                 effects = dict(plan.effects)
-                if a.block in ("respawn",) or (a.block == "use_item" and self._is_wing(a)):
+                if a.block in ("respawn",) or (
+                    a.block in ("use_item", fn.PRESS) and self._is_wing(a)
+                ):
                     if self.save_point and "map" not in effects:
                         effects["map"], effects["cell"] = self.save_point
                     effects.setdefault("is_dead", False)
@@ -335,6 +352,8 @@ class Sim:
             return plan.outcome
 
     def _is_wing(self, a: ir.ActionStmt) -> bool:
+        if a.block == fn.PRESS:  # a key the flow's Butterfly Wing function presses
+            return fn.key_of(a) in self.wing_keys
         v = self._eval(a.params["item"]) if "item" in a.params else None
         return isinstance(v, ir.ItemRef) and self.world.get(f"wing:{v.id}") == "butterfly"
 
@@ -455,9 +474,13 @@ class Sim:
         )
         self.expect_map_change = True
         try:
-            plan = self.planner(a, self)
-            for _ in range(plan.ticks):
-                yield _Tick(self._batch(a, False), False, f"take_exit {x.kind}")
+            if x.kind == "item_warp" and x.proc is not None:
+                # an item warp by FUNCTION (Amendment C): its body runs (its presses are the wing)
+                yield from self._stmts(list(self.flow.procedures.get(x.proc, [])), owner)
+            else:
+                plan = self.planner(a, self)
+                for _ in range(plan.ticks):
+                    yield _Tick(self._batch(a, False), False, f"take_exit {x.kind}")
             if to is not None:
                 cell: tuple[int, int] | None
                 if x.kind == "item_warp" and self.save_point:  # a wing goes to the SAVE POINT
