@@ -651,6 +651,15 @@ def test_the_exits_go_with_player_mode_and_a_sane_limit() -> None:
     )
     assert "outside" in str(dh.exits_refused(ns(player_mode=True, weight_home=0.05, respawn=False)))
     assert "outside" in str(dh.exits_refused(ns(player_mode=True, weight_home=1.5, respawn=False)))
+    # 2026-11-13: the respawn point is the person's (another server's menu), inside the picture
+    ok = ns(player_mode=True, weight_home=None, respawn=True, respawn_at=(600, 500))
+    assert dh.exits_refused(ok) is None
+    assert "goes with --respawn" in str(
+        dh.exits_refused(ns(player_mode=True, weight_home=None, respawn=False, respawn_at=(1, 1)))
+    )
+    assert "off the game picture" in str(
+        dh.exits_refused(ns(player_mode=True, weight_home=None, respawn=True, respawn_at=(1280, 5)))
+    )
 
 
 def _respawn(clock: _Clock, dead: Any, seen: Any) -> dict[str, Any]:

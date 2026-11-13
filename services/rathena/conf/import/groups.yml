@@ -57,6 +57,15 @@
 #                  ACMD_FUNC(param) (the six names, :11563-11568): the base stat moves to at most
 #                  pc_maxparameter (99), status points untouched. Through the character's name + job
 #                  check like every group-20 line.
+#   die            lab only (Batt, 2026-11-13, "@die is easier"): a death ON DEMAND for the live test
+#                  of the runner's respawn exit (dungeon@9.41 --respawn: the death menu's move to
+#                  saved location). rAthena atcommand.cpp ACMD_FUNC(die) -> status_kill. Typed only
+#                  by the lab's own test steps, never by a run; through the name + job check.
+#   save           lab only (Batt, 2026-11-13, "save her at Geffen first, so the map is easy to
+#                  reach"): the save point at the cell she stands on, as a Kafra's Save sets it --
+#                  the Geffen Kafra's own save cell (npc/kafras/kafras.txt: savepoint "geffen",119,40).
+#                  rAthena atcommand.cpp ACMD_FUNC(save) -> pc_setsavepoint. Through the name + job
+#                  check like every group-20 line.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny commands, no any_warp, no hide_session (the stat
 # commands: only the six above, since 2026-11-05).
@@ -98,3 +107,5 @@ Body:
       int: true
       dex: true
       luk: true
+      die: true
+      save: true

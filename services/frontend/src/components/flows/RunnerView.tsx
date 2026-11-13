@@ -713,8 +713,9 @@ function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: Ru
           ))}
         </select>
       </label>
+      <RespawnAt s={s} onChange={onChange} />
       <button type="button" className="mb-link" onClick={() => onChange({ ...d.defaults })} data-testid="run-settings-reset">
-        defaults ({d.defaults.fly_key}, {d.defaults.home_key}, {Math.round(d.defaults.weight_home * 100)} %)
+        defaults ({d.defaults.fly_key}, {d.defaults.home_key}, {Math.round(d.defaults.weight_home * 100)} %, respawn at {d.defaults.respawn_at})
       </button>
       <span className="mb-part muted">taken by the run: {d.reserved.join(", ")}</span>
       {why && (
@@ -723,6 +724,21 @@ function RunSettingsStrip({ d, s, why, onChange }: { d: RunnerSettingsDoc; s: Ru
         </span>
       )}
     </div>
+  );
+}
+
+/** The respawn button's point, X and Y in the game picture (Batt 2026-11-13: another server's death
+ * menu may differ; the respawn function block shows it). Typed numbers; checked by settingsProblem. */
+function RespawnAt({ s, onChange }: { s: RunSettings; onChange: (s: RunSettings) => void }) {
+  const [x, y] = (s.respawn_at ?? "").split(",");
+  const set = (nx: string, ny: string) => onChange({ ...s, respawn_at: `${nx.replace(/\D/g, "").slice(0, 4)},${ny.replace(/\D/g, "").slice(0, 4)}` });
+  return (
+    <span className="mb-part" title="Where the respawn function block presses: the death menu's 'move to saved location' button, in game-picture pixels">
+      respawn button at x{" "}
+      <input className="run-settings-num" value={x ?? ""} onChange={(e) => set(e.target.value, y ?? "")} inputMode="numeric" size={4} aria-label="respawn button x" data-testid="run-settings-respawn-x" />{" "}
+      y{" "}
+      <input className="run-settings-num" value={y ?? ""} onChange={(e) => set(x ?? "", e.target.value)} inputMode="numeric" size={4} aria-label="respawn button y" data-testid="run-settings-respawn-y" />
+    </span>
   );
 }
 

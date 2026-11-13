@@ -59,7 +59,8 @@ export type RunnerExit = { id: string; kind: "item_warp" | "death_respawn"; when
 // --- the person's Run settings (2026-11-13, Batt: "don't hard-code the keys; a user changes them
 // in the blocks too"): the Fly Wing's key, the Butterfly Wing's key, the weight limit. The export
 // says which param shows each (`params`), the Run helper's defaults and the fixed choices. -------
-export type RunSettings = { fly_key: string; home_key: string; weight_home: number };
+export type RunSettings = { fly_key: string; home_key: string; weight_home: number; respawn_at: string };
+export const GAME_PX = [1280, 720] as const; // the game picture: a respawn point lies inside it
 export type RunnerSettingsDoc = {
   defaults: RunSettings;
   params: Record<keyof RunSettings, string>;
@@ -76,12 +77,14 @@ export function settingsProblem(s: RunSettings, d: RunnerSettingsDoc): string | 
   }
   if (s.fly_key === s.home_key) return "the Fly Wing and the Butterfly Wing need two different keys";
   if (!d.weights.some((w) => Math.abs(w - s.weight_home) < 1e-9)) return `go home at ${Math.round(s.weight_home * 100)} %: not one of the choices`;
+  const m = /^(\d{1,4}),(\d{1,4})$/.exec(s.respawn_at ?? "");
+  if (!m || Number(m[1]) >= GAME_PX[0] || Number(m[2]) >= GAME_PX[1]) return `the respawn button ${s.respawn_at} is not a point X,Y in the ${GAME_PX[0]} x ${GAME_PX[1]} game picture`;
   return null;
 }
 
 /** The settings as the blocks show them: each param's `shown` text (the export's own format). */
 export function settingsShown(s: RunSettings): Record<keyof RunSettings, string> {
-  return { fly_key: s.fly_key, home_key: s.home_key, weight_home: `${Math.round(s.weight_home * 100)}` };
+  return { fly_key: s.fly_key, home_key: s.home_key, weight_home: `${Math.round(s.weight_home * 100)}`, respawn_at: s.respawn_at };
 }
 
 /** PURE: the doc with the person's settings in its blocks (every part showing one of the settings'
@@ -116,6 +119,9 @@ export const RUNNER_STYLES: Record<string, BlockStyle> = {
   rd_safety_blocks: { colourPrimary: CATEGORY_COLOURS.sound },
   rd_optional_hat_blocks: { colourPrimary: CATEGORY_COLOURS.light, hat: "cap" },
   rd_optional_blocks: { colourPrimary: CATEGORY_COLOURS.light },
+  // 2026-11-13 (Batt: "the respawn as a function block"): a function's definition, the Functions
+  // colour with the round cap
+  rd_function_hat_blocks: { colourPrimary: CATEGORY_COLOURS.functions, hat: "cap" },
 };
 
 /** A block's row width (characters) before its words wrap onto the next row. */

@@ -64,4 +64,5 @@ export const REFUSALS: Record<string, string> = {
   lab_host_peer: "Run is refused from the bot server itself: use your own browser on the LAN.",
   rate_limited: "Too many requests: wait a moment.",
   settings_same_key: "The Fly Wing and the Butterfly Wing need two different keys.",
+  settings_off_picture: "The respawn button's point must lie inside the 1280 x 720 game picture.",
 };

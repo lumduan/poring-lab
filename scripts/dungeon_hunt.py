@@ -1244,7 +1244,8 @@ WEIGHT_HOME_RANGE = (0.20, 0.90)  # --weight-home's accepted shares
 # deaths of the F1 trial's recording (20261112T084927-rdp-flee-xmas02-sk frames 83 and 108,
 # game-region pixels): face rows 473-490, columns ~535-755; the second button ("return to game",
 # gm_vitals.RETURN_TO_GAME, rows 496-513) is the setup's known step.
-MOVE_TO_SAVE = (645, 481)
+MOVE_TO_SAVE = (645, 481)  # the DEFAULT; --respawn-at X,Y (the Run settings) sets another server's
+GAME_PX = (1280, 720)  # the game region's size: a --respawn-at point lies inside it
 RESPAWN_SETTLE_S = 1.0  # after the death read, the dialog drawn before the press
 RESPAWN_LOAD_S = 4.0  # after the press, the load screen (Basic Info unread) starts by then ...
 RESPAWN_WAIT_S = 20.0  # ... and Basic Info reads again (the save point's map drawn) by then
@@ -1291,6 +1292,11 @@ def exits_refused(a: argparse.Namespace) -> str | None:
         return "--weight-home and --respawn go with --player-mode (the lab's runs warp and revive)"
     if wh is not None and not (WEIGHT_HOME_RANGE[0] <= wh <= WEIGHT_HOME_RANGE[1]):
         return f"--weight-home {wh} is outside {WEIGHT_HOME_RANGE[0]}-{WEIGHT_HOME_RANGE[1]}"
+    at = getattr(a, "respawn_at", None)  # Batt 2026-11-13: another server's dialog: not hard-coded
+    if at is not None and not rs_:
+        return "--respawn-at goes with --respawn"
+    if at is not None and not (0 <= at[0] < GAME_PX[0] and 0 <= at[1] < GAME_PX[1]):
+        return f"--respawn-at {at[0]},{at[1]} is off the game picture ({GAME_PX[0]} x {GAME_PX[1]})"
     return None
 
 
@@ -2829,6 +2835,8 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["respawn"] = True
     if getattr(a, "fly_key", None) is not None:  # 2026-11-13: the person's Fly Wing key
         out["fly_key"] = a.fly_key
+    if getattr(a, "respawn_at", None) is not None:  # 2026-11-13: the person's respawn button
+        out["respawn_at"] = list(a.respawn_at)
     if getattr(a, "walk_ahead", WALK_AHEAD) != WALK_AHEAD:  # the long legs (idle study 6.1)
         out["walk_ahead"] = a.walk_ahead
     if getattr(a, "walk_through", False):
@@ -8799,8 +8807,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if reason == "death" and getattr(a, "respawn", False):  # dungeon@9.41: the exit
                     rsp: dict[str, Any] = {"pressed": False}  # filled in place
 
+                    at_ = getattr(a, "respawn_at", None) or MOVE_TO_SAVE  # the person's, else ours
+
                     def respawn_press() -> None:
-                        x_, y_ = gx0 + MOVE_TO_SAVE[0], gy0 + MOVE_TO_SAVE[1]
+                        x_, y_ = gx0 + at_[0], gy0 + at_[1]
                         agent_raw.move(x_ + 4, y_ + 3)  # two motions: a cold click is ignored
                         time.sleep(0.08)
                         agent_raw.move(x_, y_)
@@ -9198,6 +9208,15 @@ def main() -> int:
         help="dungeon@9.41 (Batt 2026-11-13, the map's other exit; --player-mode only): a death "
         "presses the death dialog's FIRST button (move to saved location) once, only while the "
         "dialog reads, and waits for the save point's map; OFF: the dialog is the person's",
+    )
+    t.add_argument(
+        "--respawn-at",
+        type=cell_arg,
+        default=None,
+        metavar="X,Y",
+        help="2026-11-13 (Batt: another server's menu may differ; nothing hard-coded): the game-"
+        "picture point --respawn presses (default 645,481: this client's move to saved location, "
+        "measured on two real deaths)",
     )
     t.add_argument(
         "--defend-box",

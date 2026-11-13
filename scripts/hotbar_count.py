@@ -88,7 +88,10 @@ def read_count(frame_gray: Gray, slot: int,
     and no icon); None when unreadable."""
     x0, y0, x1, y1 = box(slot)
     ink = frame_gray[y0:y1, x0:x1] < INK
-    gs = glyphs(ink)
+    # 2026-11-13: an ICON's stray ink is no digit -- a digit's ink spans the box's height (all ten
+    # templates touch its top and bottom rows); the Butterfly Wing's tail on F9 drew a 3-column
+    # mark in the top rows before its "5", and the count read None (the wing home never pressed)
+    gs = [g for g in glyphs(ink) if g[0].any() and g[-1].any()]
     if not gs:
         ix0, iy0, ix1, iy1 = ICON
         icon = frame_gray[iy0:iy1, ix0 + PITCH * slot : ix1 + PITCH * slot]

@@ -67,7 +67,7 @@ BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minu
 # The person's Run settings (2026-11-13, Batt: "don't hard-code the keys"): each one's param in the
 # doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
 SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
-                  "weight_home": "cmd.weight_home"}  # fmt: skip
+                  "weight_home": "cmd.weight_home", "respawn_at": "cmd.respawn_at"}  # fmt: skip
 # The optional flag sets (not in the base). The Knife opener JOINED the base (4DQ, 2026-11-13).
 OPTIONAL: list[dict[str, Any]] = []
 
@@ -77,6 +77,7 @@ S_MOVE, S_ACT, S_DECIDE = "mp_movement_blocks", "mp_output_blocks", "mp_function
 S_LOOP, S_IF = "loop_blocks", "logic_blocks"
 S_SAFE_HAT, S_SAFE = "rd_safety_hat_blocks", "rd_safety_blocks"
 S_OPT_HAT, S_OPT = "rd_optional_hat_blocks", "rd_optional_blocks"
+S_FN_HAT = "rd_function_hat_blocks"  # 2026-11-13: a function's definition (the respawn)
 
 
 # --- the spec's building blocks ------------------------------------------------------------------
@@ -248,16 +249,15 @@ def spec() -> list[Node]:
             step(
                 "respawn",
                 S_MOVE,
-                "after a death: press the death dialog's move to saved location, once",
+                "after a death: respawn at ({cmd.respawn_at}), the function block below",
                 [
                     'if reason == "death":  # --respawn: the map\'s exit after a death',
-                    "    respawn_end()  # its first button, once, while the dialog reads",
+                    "    respawn(at=$(cmd.respawn_at))",
                 ],
-                "Batt 2026-11-13: a death is an exit of the map too. The death dialog's first "
-                "button (move to saved location, its place measured on two real deaths) is "
-                "pressed ONCE, and only while the dialog reads; then the runner waits for the "
-                "save point's map to be drawn. Anything else is left to a person.",
-                flags=["--respawn"],
+                "Batt 2026-11-13: a death is an exit of the map too. The respawn is its own "
+                "function block (respawn, below): another server's death menu may put the button "
+                "elsewhere, so its point is a Run setting, not part of the code.",
+                flags=["--respawn", "--respawn-at"],
                 code=["respawn_end"],
             ),
             step(
@@ -274,7 +274,80 @@ def spec() -> list[Node]:
             ),
         ],
     )
-    return [main, safety(), knife()]
+    return [main, safety(), knife(), respawn_fn()]
+
+
+def respawn_fn() -> Node:
+    """The respawn as a FUNCTION block (Batt 2026-11-13: "make it a function block, in case
+    another server's menu differs; let everything be changed in the blocks, don't hard-code")."""
+    return Node(
+        "respawn_fn",
+        "hat",
+        S_FN_HAT,
+        "function respawn(at): the way out after a death",
+        [
+            "def respawn(at):",
+            '    """--respawn --respawn-at X,Y: the death menu\'s move to saved location"""',
+        ],
+        "Called at the end of a run that ended in a death. Its one number is the point of the "
+        "death menu's button in the game picture (the Run settings: X, Y); this client's is "
+        "move to saved location, measured on two real deaths. It presses at most once.",
+        flags=["--respawn", "--respawn-at"],
+        code=["respawn_end"],
+        body=[
+            step(
+                "respawn_wait",
+                S_SENSE,
+                "wait {RESPAWN_SETTLE_S} s for the death menu to be drawn",
+                ["sleep(RESPAWN_SETTLE_S)"],
+                "The menu appears a moment after the death.",
+            ),
+            cond(
+                "respawn_menu",
+                S_IF,
+                [
+                    Branch(
+                        "the death menu reads (its picture): press at ({cmd.respawn_at}), once",
+                        "if death_menu_reads():  # gm_vitals.DEAD_STATE, from the pixels",
+                        [
+                            step(
+                                "respawn_press",
+                                S_ACT,
+                                "move there twice, then click: never a second time",
+                                ["press_at(at)  # a cold click is ignored: two motions first"],
+                                "The client ignores a click that arrives with no motion before "
+                                "it, so the pointer moves twice and then clicks.",
+                            )
+                        ],
+                    ),
+                    Branch(
+                        "else: press nothing (a person decides)",
+                        "else:",
+                        [
+                            step(
+                                "respawn_none",
+                                S_SAFE,
+                                "nothing pressed: recorded",
+                                ["return  # the record says why"],
+                                "No menu on the screen means something else happened: the "
+                                "bot never clicks into a state it does not know.",
+                            )
+                        ],
+                    ),
+                ],
+                "Only a read menu gets the press.",
+            ),
+            step(
+                "respawn_load",
+                S_SENSE,
+                "wait for the load screen (within {RESPAWN_LOAD_S} s), then the save point's "
+                "map (within {RESPAWN_WAIT_S} s)",
+                ["wait_load(RESPAWN_LOAD_S, RESPAWN_WAIT_S)  # else: recorded, the person's"],
+                "Arriving at the save point means a map change: the load screen, then the "
+                "status window again. A menu that stays, or no load, is left to a person.",
+            ),
+        ],
+    )
 
 
 def main_loop() -> list[Node]:
@@ -1173,6 +1246,9 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("PLAYER_WINGS_KEEP", "--player-mode: the run ends at this many Fly Wings"),
         const("PLAYER_POS_S", "--player-mode: her cell must read within this long (s)"),
         const("WEIGHT_MAX", "the weight share a run refuses to start at"),
+        const("RESPAWN_SETTLE_S", "after a death: the menu drawn before the press (s)"),
+        const("RESPAWN_LOAD_S", "after the press: the load screen starts by then (s)"),
+        const("RESPAWN_WAIT_S", "after the press: the save point's map drawn by then (s)"),
         const(
             "HOME_KEY",
             "the character's default Butterfly Wing key (--player-home-key wins: the Run settings)",
