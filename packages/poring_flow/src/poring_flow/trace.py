@@ -489,7 +489,7 @@ class TraceSim(Sim):
             return Plan(ticks=1)
         if a.block == "respawn":
             return Plan(ticks=30, effects={"hp_percent": 50.0})
-        if a.block == fn.PRESS:  # one hotbar press (runtime.default_plan's)
+        if a.block in (fn.PRESS, fn.MODEL):  # one hotbar press; use_model: no input
             return default_plan(a, self)
         spec = self.cat.blocks[a.block].spec if a.block in self.cat.blocks else None
         if spec is not None and spec.profile == "atomic":

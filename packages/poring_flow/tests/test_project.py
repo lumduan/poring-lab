@@ -69,6 +69,9 @@ def zones_provider() -> Any:
 
 
 # --- the fixtures (section 7) ---------------------------------------------------------------------
+HUNT = 2  # the one box's hunt core: main.2 (stage 4a: use_model stands before it)
+
+
 def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     """Batt 2026-11-13 ~21:4x: "START > map xmas_dun02, ONE box is enough; login and choosing the
     character come later; the user puts the character on xmas_dun02 themself"."""
@@ -83,8 +86,11 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert x.zones is not None and x.zones.sha256 == hashlib.sha256(ZONES.read_bytes()).hexdigest()
     assert x.resume_here and (x.entries[0].name, x.entries[0].at, x.entries[0].radius) == (
         "here", None, 2)  # fmt: skip
-    assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits"]
-    save, hunt, stop = x.main
+    assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits", "monsters"]
+    save, model, hunt, stop = x.main
+    # stage 4a (live-blocks.md 3.4): the trained data before the hunt core
+    assert isinstance(model, ir.ActionStmt) and model.block == "use_model"
+    assert model.params["model"] == ir.Lit(value="xmas02") and model.concept == "core.use_model"
     assert isinstance(save, ir.ActionStmt) and save.block == "assert_save_point"
     assert save.note == "the world rule: the save point (where a Butterfly Wing and a death land)"
     assert save.params["cell"] == ir.Lit(value=ir.CellRef(map="geffen", x=119, y=40))
@@ -143,6 +149,33 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
         ir.Cmp(op="<", left=ir.Sense(sensor="hp_percent"), right=ir.Lit(value=25))])  # fmt: skip
     assert P.session_path(p).map_start and P.start_map(p) is x
     assert "edges" in json.loads(text) and json.loads(text)["edges"] == []
+    # stage 4a (Batt 2026-11-13: "break the core into functions, e.g. attack_myst_case,
+    # attack_cookie"): one recipe per monster xmas02 strikes, each TODAY's technique
+    t = ir.Var(name="t")
+    want = [
+        ir.CallProc(proc="knife_on"),
+        *[
+            ir.ActionStmt(block=b, concept=c, params={"target": t}, timeout_s=s)
+            for b, c, s in (
+                ("strike", "combat.attack_target", 60.0),
+                ("wait_steal", "core.wait_steal", 10.0),
+            )
+        ],
+        ir.CallProc(proc="knife_back"),
+        *[
+            ir.ActionStmt(block=b, concept=c, params={"target": t}, timeout_s=s)
+            for b, c, s in (("wait_kill", "core.wait_kill", 120.0), ("loot", "loot.pick_up", 30.0))
+        ],
+    ]
+    rec = x.tabs[5].defs
+    assert [d.name for d in rec] == ["attack_mystcase", "attack_cruiser", "attack_cookie",
+                                     "attack_cookie_xmas"]  # fmt: skip
+    for d in rec:
+        assert d.body == want and d.on is None, d.name
+        assert [(q.name, q.default) for q in d.params] == [
+            ("t", None),
+            ("priority", ir.Lit(value=1)),
+        ]
 
 
 def test_the_xmas_dun02_fixture_lints_without_an_error() -> None:
@@ -698,7 +731,8 @@ def test_a_map_start_simulates_from_its_entry_with_no_session() -> None:
     # the one-box fixture too: the save point, the runner, then the stop
     one = P.simulate(P.from_json(XMAS.read_text()), None, Scenario(horizon_s=900))
     assert one["session"] is None and one["end"] == "home"
-    assert [s.get("action") for s in one["play"]][:2] == ["assert_save_point", "dungeon_hunt"]
+    assert [s.get("action") for s in one["play"]][:3] == ["assert_save_point", "use_model",
+                                                         "dungeon_hunt"]  # fmt: skip
 
 
 def test_the_box_s_survival_events_simulate_on_scripted_sensors() -> None:
@@ -741,7 +775,8 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
     files = V.print_files(p)
     by = {f.path: f.text for f in files}
     assert list(by) == ["xmas_dun02/main.py", "xmas_dun02/keys.py", "xmas_dun02/survival.py",
-                        "xmas_dun02/knife.py", "xmas_dun02/exits.py", "project.py"]  # fmt: skip
+                        "xmas_dun02/knife.py", "xmas_dun02/exits.py",
+                        "xmas_dun02/monsters.py", "project.py"]  # fmt: skip
     assert (
         "@on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)\n"
         "def fly_away():\n    fly_wing()\n"
@@ -787,7 +822,7 @@ def test_runner_keys_take_home_from_the_home_role_first() -> None:
     assert rk.functions["home_key"] == "wing_two"
     # no home role and no item warp: refused in words
     d = copy.deepcopy(json.loads(XMAS.read_text()))
-    del d["nodes"][0]["tabs"][0]["main"][1]["params"]["home"]
+    del d["nodes"][0]["tabs"][0]["main"][HUNT]["params"]["home"]
     assert P.runner_keys(build(d), "xmas_dun02").problems == [
         "xmas_dun02 has no Butterfly Wing home: dungeon_hunt's home names no function and the "
         "map has no item warp by function"
@@ -799,7 +834,7 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
 
     d = json.loads(XMAS.read_text())
     keys = d["nodes"][0]["tabs"][1]["defs"]
-    hunt_ = d["nodes"][0]["tabs"][0]["main"][1]
+    hunt_ = d["nodes"][0]["tabs"][0]["main"][HUNT]
     p = build(d)
     c = P.compile_project(p)
     assert c.flow is not None and fn.wing_keys(c.flow) == {"F9": ["fly_home"]}
@@ -808,7 +843,7 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
     next(x for x in bad["nodes"][0]["tabs"][1]["defs"] if x["name"] == "butterfly_wing")["body"] = [
         press("F9"), press("F9")]  # fmt: skip
     assert errors(build(bad)) == [
-        "xmas_dun02/main/main.1: dungeon_hunt's home (the Butterfly Wing's key, to fly home): "
+        "xmas_dun02/main/main.2: dungeon_hunt's home (the Butterfly Wing's key, to fly home): "
         "fly_home presses 2 keys: the way home is ONE Butterfly Wing (one press_key, waits "
         "around it)"
     ]
@@ -818,16 +853,16 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
     next(x for x in same["nodes"][0]["tabs"][1]["defs"] if x["name"] == "fly_wing")["body"] = [
         press("F9")]  # fmt: skip
     assert [m for m in errors(build(same)) if "F9" in m] == [
-        "xmas_dun02/main/main.1: dungeon_hunt's fly and home both press F9: each role needs its "
+        "xmas_dun02/main/main.2: dungeon_hunt's fly and home both press F9: each role needs its "
         "own key",
         "xmas_dun02/survival/fly_away: the Butterfly Wing on F9 (fly_home) changes the map: "
         "then must be relocate or stop",
     ]
     # an undefined function
     gone = copy.deepcopy(d)
-    gone["nodes"][0]["tabs"][0]["main"][1]["params"]["home"] = lit("nowhere")
+    gone["nodes"][0]["tabs"][0]["main"][HUNT]["params"]["home"] = lit("nowhere")
     assert errors(build(gone)) == [
-        "xmas_dun02/main/main.1: dungeon_hunt's home (the Butterfly Wing's key, to fly home): "
+        "xmas_dun02/main/main.2: dungeon_hunt's home (the Butterfly Wing's key, to fly home): "
         "there is no function nowhere"
     ]
     assert keys and hunt_["block"] == "dungeon_hunt"

@@ -19,8 +19,10 @@ same keys, checked -- and --minutes M), both `flow_play.py play` on the node xma
 - B2: services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage2.json (the ready-made box
   as stage 2 left it: heal and the Fly Wing as its events; the Knife, the way home, the respawn
   and the weight exit the runner's own);
-- B3: services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json (the ready-made box: also
-  the knife tab's two functions, the exits tab's way home and respawn clicks, survival's bag_full).
+- B3: services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage3.json (the ready-made box
+  as stage 3 left it: also the knife tab's two functions, the exits tab's way home and respawn
+  clicks, survival's bag_full; kept byte for byte when stage 4a gave the one box its use_model and
+  its monsters tab: scripts/stage4_ab.py measures that one).
 The order: "alternate" (the default) is B2 B3, B3 B2, ... ; "ab" is B2 B3, B2 B3, ...
 
 THE SETUP before every run: exactly stage2_ab.py's (the read; clear-bag at 40 %; the lab GM's
@@ -58,7 +60,8 @@ import stage2_ab as s2  # noqa: E402
 VERSION = "9.50"  # dungeon_hunt.BOX_FUNCTIONS_VERSION: the stage it measures
 NODE = s2.NODE
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
-PROJECTS = {"B2": FIX / "project_xmas_dun02_stage2.json", "B3": FIX / "project_xmas_dun02.json"}
+PROJECTS = {"B2": FIX / "project_xmas_dun02_stage2.json",
+            "B3": FIX / "project_xmas_dun02_stage3.json"}  # fmt: skip
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage3-ab")
 STEAL_CUES = ("popup", "cyan")  # a swap back on the steal's own cue (bare_steal.BareSteal.tick)
 # THE PRE-REGISTERED BAR (live-blocks.md 3.3, written before any live run): what B3 must hold vs B2

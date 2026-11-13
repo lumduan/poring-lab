@@ -509,6 +509,15 @@ const PALETTE_TYPES: Record<string, string> = {
 const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
 /** Catalogue blocks with a block of their own (not repeated under "More skills"). */
 const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt", login: "pl_login", choose_character: "pl_choose_character", assert_save_point: "pl_save_point" };
+/** Live blocks stage 4a (live-blocks.md 3.4): the trained data and a monster's recipe steps,
+ * offered only where they play -- use_model in a map node's main, the primitives in its
+ * `monsters` tab -- never under "More skills". */
+export const RECIPE_TAB = "monsters";
+export const RECIPE_STEPS = ["strike", "wait_steal", "wait_kill", "loot"] as const;
+const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill"]);
+/** The model a node's recipes name (its use_model's models.yaml entry): its monsters the runner
+ * strikes and their mob ids (the KB names them at run time). */
+export type Monsters = { model: string; strikes: string[]; mobs: Record<string, number[]> };
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
@@ -555,8 +564,9 @@ export function toolboxBlocks(tb: Toolbox | ToolboxCategory): { category: string
  * registered (hunt.ts), else the hunt block is offered as a generic block with its parameters by
  * name. `huntOmit`: its optional parameters' defaults (hunt.ts `omitted`), left out of the IR at that
  * value. `sensors`: the model blocks' first model and class, and the not-adopted models' notes. */
-/** Which tab the toolbox is for (the project model): the node's kind and whether it is its main. */
-export type ToolboxScope = { node: "login" | "character" | "map" | "global"; main: boolean };
+/** Which tab the toolbox is for (the project model): the node's kind and whether it is its main;
+ * `tab` its name (stage 4a: "monsters" offers the recipes), `model` the node's use_model. */
+export type ToolboxScope = { node: "login" | "character" | "map" | "global"; main: boolean; tab?: string; model?: string | null };
 
 export function toolbox(
   blocks: Record<string, CatBlock>,
@@ -564,6 +574,7 @@ export function toolbox(
   huntFields: Record<string, string> | null = null,
   huntOmit: Record<string, string> = {},
   sensors: SensorDefaults = { model: "v1", label: "monster", notes: [] },
+  monsters: Monsters | null = null,
 ): Toolbox {
   const palette = (name: string): ToolboxItem[] =>
     blocks[name] ? [{ kind: "block", type: PALETTE_TYPES[name], extraState: rest(blocks[name]) }] : [];
@@ -577,6 +588,29 @@ export function toolbox(
     movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
   }
   if (onMap && blocks.assert_save_point) movement.push({ kind: "block", type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 }, extraState: rest(blocks.assert_save_point) });
+  if (onMap && scope.main && blocks.use_model) {
+    movement.push(lbl("The trained data (before the runner: its monsters are the recipes' names):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_model", ARGS: `model=${JSON.stringify(monsters?.model ?? "xmas02")}` }, extraState: rest(blocks.use_model) });
+  }
+  // stage 4a: the monsters tab -- one function per monster of the model, a recipe of the steps the
+  // runner plays with its own code (knife_on / knife_back: the hunt core's Knife functions)
+  const recipes: ToolboxItem[] = [];
+  if (scope.tab === RECIPE_TAB && (onMap || scope.node === "global")) {
+    if (monsters) {
+      recipes.push(lbl(`The monsters of ${monsters.model}: one function each (the runner asks it when it locks that monster):`));
+      for (const sp of monsters.strikes) recipes.push({ kind: "block", type: "pl_def", fields: { NAME: `attack_${sp}`, PARAMS: "t, priority=1" } });
+      recipes.push(lbl("A monster as a value:"));
+      for (const sp of monsters.strikes) recipes.push(lbl(sp), { kind: "block", type: "pl_expr", fields: { TEXT: `mob(${monsters.mobs[sp]?.[0] ?? 1})` } });
+    } else {
+      recipes.push(lbl("use_model(...) in the main names the monsters (a trained model)"));
+    }
+    recipes.push(lbl("A recipe's steps, in this order (no Knife on a monster: leave out knife_on, wait_steal, knife_back):"));
+    recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_on", ARGS: "" } });
+    for (const s of RECIPE_STEPS) {
+      if (s === "wait_kill") recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_back", ARGS: "" } });
+      if (blocks[s]) recipes.push({ kind: "block", type: "pl_action", fields: { BLOCK: s, ARGS: "target=t" }, extraState: rest(blocks[s]) });
+    }
+    if (blocks.use_skill) recipes.push(lbl("A skill before the strike (checked, not played live yet: 4b):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_skill", ARGS: 'key="F6"' }, extraState: rest(blocks.use_skill) });
+  }
   if (onMap) {
     movement.push(
       lbl("Leave this map (a map's main ends with one):"),
@@ -650,7 +684,7 @@ export function toolbox(
     ...(blocks.press_key ? [{ kind: "block" as const, type: "pl_press_key_v", inputs: { KEY: exprBlock("key") }, extraState: rest(blocks.press_key) }] : []),
   ];
   const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK))
+    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK) && !RECIPE_ONLY.has(n))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
@@ -661,6 +695,7 @@ export function toolbox(
     contents: [
       { kind: "search", name: "Search", categorystyle: "mp_setup_category" },
       cat("Movement", "mp_movement_category", movement),
+      ...(recipes.length ? [cat("Monsters", "mp_sensor_category", recipes)] : []),
       cat("Actions", "mp_output_category", actions),
       cat("Control", "loop_category", control),
       cat("Conditions", "loop_category", conditions),

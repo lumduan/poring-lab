@@ -17,6 +17,8 @@ export type ModelDoc = {
   classes: string[];
   untrained: string[];
   mobs: Record<string, number[]>;
+  /** stage 4a: the classes the runner strikes (a box's recipes name them) */
+  strikes?: string[];
   why: string;
   available: boolean;
   counts: boolean;
@@ -77,4 +79,19 @@ export function notAdopted(models: Models | null): string[] {
   return Object.entries(models ?? {})
     .filter(([, m]) => !m.available)
     .map(([id, m]) => `${id}: not adopted, so not offered (${m.kind === "boss_recognizer" ? "a boss recognizer" : "a detector"})`);
+}
+
+/** Stage 4a (live-blocks.md 3.4): the monsters a node's recipes name -- its use_model's model, or
+ * (none named) the first live detector whose monsters the runner strikes. Null: no such model. */
+export function monstersOf(models: Models | null, model: string | null): { model: string; strikes: string[]; mobs: Record<string, number[]> } | null {
+  const pick = (id: string, m: ModelDoc) => (m.available && m.strikes?.length ? { model: id, strikes: [...m.strikes], mobs: { ...m.mobs } } : null);
+  if (model) {
+    const m = models?.[model];
+    return m ? pick(model, m) : null;
+  }
+  for (const [id, m] of Object.entries(models ?? {})) {
+    const got = pick(id, m);
+    if (got) return got;
+  }
+  return null;
 }

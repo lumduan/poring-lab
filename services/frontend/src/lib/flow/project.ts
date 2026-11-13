@@ -175,6 +175,18 @@ export function* nodeStmts(n: PNode): Generator<Stmt> {
   }
 }
 
+/** Stage 4a (live-blocks.md 3.4): the model a node's main names with use_model (its first), or
+ * null -- the monsters its recipes name. */
+export function modelOn(n: PNode | undefined): string | null {
+  for (const s of allStmts(n ? (mainOf(n)?.main ?? []) : [])) {
+    if (s.kind === "action" && s.block === "use_model") {
+      const m = s.params.model;
+      return m?.kind === "lit" && typeof m.value === "string" ? m.value : null;
+    }
+  }
+  return null;
+}
+
 /** The node's runner block (dungeon_hunt), else null. */
 export function runnerBlockOn(n: PNode | undefined): ActionStmt | null {
   if (!n) return null;
@@ -349,6 +361,35 @@ export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
   ...extra,
 });
 
+/** use_model(model): the trained data (live blocks stage 4a, live-blocks.md 3.4): the hunt core's
+ * model, by its models.yaml id; its monsters are what the recipes name. */
+export const modelBlock = (model: string, note: string | null = null): ActionStmt => ({ kind: "action", block: "use_model", concept: "core.use_model", params: { model: lit(model) }, timeout_s: 1, ...rest, note });
+/** The recipe primitives (stage 4a): each takes the recipe's own input `t`, the monster the runner
+ * locked; the runner plays each with its own code at its own moment. */
+export const RECIPE_PRIMITIVES = [
+  { block: "strike", concept: "combat.attack_target", timeout_s: 60 },
+  { block: "wait_steal", concept: "core.wait_steal", timeout_s: 10 },
+  { block: "wait_kill", concept: "core.wait_kill", timeout_s: 120 },
+  { block: "loot", concept: "loot.pick_up", timeout_s: 30 },
+] as const;
+export type Primitive = (typeof RECIPE_PRIMITIVES)[number]["block"];
+const primitive = (block: Primitive, t = "t"): ActionStmt => {
+  const p = RECIPE_PRIMITIVES.find((x) => x.block === block)!;
+  return { kind: "action", block, concept: p.concept, params: { target: { kind: "var", name: t } }, timeout_s: p.timeout_s, ...rest };
+};
+/** A monster's function name (its recipe): attack_<the model's class>. */
+export const RECIPE_PREFIX = "attack_";
+export const MONSTERS_TAB = "monsters";
+/** A monster's recipe as the runner plays it today: the Knife on, the strike, the steal's cue, the
+ * dagger back, the kill, the loot (`knife` false: the same without the Knife swap). */
+export const recipeBody = (knife = true): Stmt[] =>
+  knife ? [call("knife_on"), primitive("strike"), primitive("wait_steal"), call("knife_back"), primitive("wait_kill"), primitive("loot")] : [primitive("strike"), primitive("wait_kill"), primitive("loot")];
+/** A monster's function: def attack_<species>(t, priority=N) with a recipe body. */
+export const recipeDef = (species: string, knife = true, priority: number | null = 1): Def =>
+  def(`${RECIPE_PREFIX}${species}`, recipeBody(knife), { params: [{ name: "t", default: null }, ...(priority === null ? [] : [{ name: "priority", default: lit(priority) }])] });
+/** xmas02's monsters the runner strikes (models.yaml `strikes`; garm_baby: its Fly Wing rule). */
+export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] as const;
+
 /** The Rogue's project, ONE BOX (Batt 2026-11-13 ~21:4x: "take every box out: START > map
  * xmas_dun02, one box is enough; login and choosing the character come later; the user puts the
  * character on xmas_dun02 themself"): the run starts where she stands on xmas_dun02. Its main: the
@@ -364,13 +405,17 @@ export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
  * survival's bag_full (the weight home at 50 %: the run stops and the runner flies her home), the
  * tab knife (the swap as two functions at the runner's moments: the Knife before the steal strike,
  * the Damascus back after it -- the runner's own today; the open question is written there) and
- * the tab exits (the way home, the death dialog's two clicks). The keys stay in tab keys. */
+ * the tab exits (the way home, the death dialog's two clicks). The keys stay in tab keys. Stage 4a
+ * (live-blocks.md 3.4, Batt 2026-11-13: "break the core into functions, e.g. attack_myst_case,
+ * attack_cookie; on some we may not swap the knife at all"): use_model("xmas02") in the main (the
+ * trained data) and the tab monsters, one recipe per monster the runner strikes, each TODAY's
+ * technique (the Knife swap on every one, priority 1: the values as they are). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink, fly_away, bag_full at 50 % weight); knife (the swap); exits (the way home, the respawn).",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink, fly_away, bag_full at 50 %); knife (the swap); exits (home, respawn); monsters (a recipe per monster).",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -391,6 +436,7 @@ export function xmasProject(): Project {
         tabs: [
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
+            modelBlock("xmas02", "the trained data: xmas_dun02's detector (its monsters are the recipes' names)"),
             { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("fly_home"), respawn: lit("respawn_button"), respawn_confirm: lit("respawn_ok") } },
             { kind: "stop", reason: "home" },
           ]),
@@ -406,6 +452,7 @@ export function xmasProject(): Project {
             def("respawn_button", [clickAt(645, 481, "the death dialog's first button: move to the saved location")]),
             def("respawn_ok", [clickAt(714, 405, "this client's confirmation: OK")]),
           ]),
+          tab(MONSTERS_TAB, XMAS02_STRIKES.map((sp) => recipeDef(sp))),
         ],
       },
     ],

@@ -210,12 +210,16 @@ def taps(io_: FakeIO) -> list[str]:
 # --- the set is ONE place ------------------------------------------------------------------------
 def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
     cat = catalogue.catalogue()
-    # stage 3: click_at (only inside dungeon_hunt's respawn functions: live.click_problems)
-    assert live.live_blocks() == ["assert_save_point", "click_at", "dungeon_hunt", "press_key"]
+    # stage 3: click_at (only inside dungeon_hunt's respawn functions: live.click_problems);
+    # stage 4a: use_model and the recipe primitives (only inside a monster's recipe: recipes.py)
+    assert live.live_blocks() == ["assert_save_point", "click_at", "dungeon_hunt", "loot",
+                                  "press_key", "strike", "use_model", "wait_kill",
+                                  "wait_steal"]  # fmt: skip
     assert live.live_sensors() == ["current_map", "hp_percent", "is_dead", "map_load_seen",
                                    "sees_boss", "sp_percent", "weight_percent"]  # fmt: skip
     doc = editor.catalogue_doc()
-    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 3
+    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 4
+    assert doc["live"]["hunt_core"]["recipes"]["shapes"] == [list(x) for x in dh.RECIPE_SHAPES]
     assert doc["live"]["hunt_core"]["sensors"] == ["hp_percent", "sp_percent", "sees_boss",
                                                    "weight_percent"]  # fmt: skip
     assert doc["live"]["hunt_core"]["calls"]["max_wait_s"] == 1.0
@@ -227,9 +231,11 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
         *live.live_blocks(),
         *live.live_sensors(),
     }
-    # one version, three places (stage 3: the box's functions; stage 2's survival events stay
-    # 9.49, stage 1's library seam 9.48); the runner's own version is unchanged
-    assert dh.BOX_FUNCTIONS_VERSION == live.VERSION == fp.VERSION == "9.50"
+    # one version, three places (stage 4a: the box's model and recipes; stage 3's functions stay
+    # 9.50, stage 2's survival events 9.49, stage 1's library seam 9.48); the runner's own version
+    # is unchanged
+    assert dh.BOX_RECIPES_VERSION == live.VERSION == fp.VERSION == "9.51"
+    assert dh.BOX_FUNCTIONS_VERSION == "9.50"
     assert dh.SURVIVAL_EVENTS_VERSION == "9.49"
     assert dh.LIVE_BLOCKS_VERSION == "9.48" and dh.VERSION == "dungeon@8.7"
     assert dh.BOX_PLAYS == live.PLAYS

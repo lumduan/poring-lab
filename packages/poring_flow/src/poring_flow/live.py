@@ -57,6 +57,24 @@ them through the runner's OWN press of that role (scripts/flow_play.py HuntHook.
 A role function that is exactly one press_key stays the runner's own key (the stage 1-2 shape): a
 box without these plays exactly as stage 2.
 
+Stage 4a (Batt 2026-11-13: "break the core into functions, e.g. attack_myst_case, attack_cookie,
+because in the future each monster may get a different skill or killing technique, and on some we
+may not swap the knife at all"; live-blocks.md 2b and 3.4, ADR-0020 Amendment H; poring_flow.recipes
+holds the rules): the box decides WHICH technique per monster, the runner still plays every step.
+PLAYS:
+- "model": `use_model("xmas02")` in the map node's main, before its dungeon_hunt: the hunt core's
+  box detector takes that models.yaml entry (the runner refuses, before any input, one that is not
+  the file its detector loads there: dungeon_hunt.box_model_refused);
+- "recipes": one function per monster, attack_<class>(t, priority=N), a recipe of the primitives
+  strike / wait_steal / wait_kill / loot(t) and the hunt core's knife_on() / knife_back(), in one of
+  the two orders the runner plays (recipes.SHAPES). At its lock the hunt core asks the box which
+  recipe attacks that species (HuntPlan.recipes, decided before any input) and plays it with its own
+  code: a recipe without knife_on() strikes that monster without the Knife swap; a monster without
+  a function gets the runner's own recipe. The primitives play nowhere else; use_skill in a recipe
+  is linted and refused live (4b).
+A box without use_model and recipes plays exactly as stage 3 (run() gets no box_model, no
+box_recipes).
+
 Everything the compiled flow holds is checked (every map node's main, events and extensions,
 every function, every Global event), not only what one path reaches: a relocation can land on any
 map node, and a person reads one refusal list before Run, not a surprise mid-run.
@@ -70,12 +88,14 @@ from typing import Any
 
 from poring_flow import functions as fn
 from poring_flow import ir
+from poring_flow import recipes as rc
 from poring_flow.catalogue import Catalogue, catalogue
 
-STAGE = 3
-# scripts/dungeon_hunt.py BOX_FUNCTIONS_VERSION (stage 1 was 9.48, its LIVE_BLOCKS_VERSION; stage 2
-# 9.49, its SURVIVAL_EVENTS_VERSION); test_live_player.py pins them together
-VERSION = "9.50"
+STAGE = 4
+# scripts/dungeon_hunt.py BOX_RECIPES_VERSION (stage 4a; stage 3 was 9.50, its
+# BOX_FUNCTIONS_VERSION; stage 2 9.49, its SURVIVAL_EVENTS_VERSION; stage 1 9.48, its
+# LIVE_BLOCKS_VERSION); test_live_player.py pins them together
+VERSION = rc.VERSION
 STATEMENTS = (
     "action",
     "if",
@@ -101,8 +121,8 @@ LATER: dict[str, str] = {
     "walk_away": "stage 4",
     "attack_nearest": "stage 4",
     "finish_target": "stage 4",
-    "loot": "stage 4",
-    "use_skill": "stage 4",
+    "use_skill": "stage 4b: a skill press of a declared role key at the strike, in a monster's "
+    "recipe",
     "hunt": "stage 4",
     "sees": "stage 4",
     "count_visible": "stage 4",
@@ -127,7 +147,8 @@ HUNT_STATEMENTS = ("action", "call", "if", "set", "return")
 # the runner's in stage 2), and the runner's own handler each pressed key switches off
 HUNT_ROLES = ("heal", "fly")
 # stage 3 adds the role functions the hunt core CALLS and the weight home (the module docstring)
-PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end")
+PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end",
+         "model", "recipes")  # fmt: skip  # stage 4a: the box's model and its monsters' recipes
 CALL_ROLES = ("knife_on", "knife_back", "home", "respawn", "respawn_confirm")
 
 
@@ -196,6 +217,14 @@ def problems(flow: ir.Flow, cat: Catalogue | None = None) -> list[NotLive]:
                 expr(label, cond)
     if flow.stop_when is not None:
         expr("stop_when", flow.stop_when)
+    for site in ir.sites(flow):  # stage 4a: loot plays only as loot(t), inside a recipe
+        for a in ir.actions_in(site.stmt):
+            if a.block == rc.LOOT and "target" not in a.params:
+                bad(site.path, rc.LOOT, f"loot() without its target {rc.PRIMITIVE_WORDS}: "
+                    "loot(t) in a monster's recipe")  # fmt: skip
+    for iss in rc.analyse(flow)[1]:  # stage 4a: the model, the recipes, the primitives' places
+        if iss.live:
+            bad(iss.path, iss.what, iss.words)
     for nl in click_problems(flow):  # stage 3: click_at only in the death exit
         if (nl.path, nl.what) not in seen:
             seen.add((nl.path, nl.what))
@@ -262,7 +291,9 @@ def _reached(flow: ir.Flow, name: str) -> set[str]:
 # Blocks whose live binding is the player's OWN code, not an L2 binding: the hunt core is the
 # runner (scripts/dungeon_hunt.py run, in-process), so a readiness item of combat.hunt's L2
 # binding (L2.input.attack_click ...) is answered by it. Every other readiness item still refuses.
-OWN_BINDING = (fn.RUNNER_BLOCK, fn.CLICK)  # stage 3: click_at is the runner's own respawn press
+OWN_BINDING = (fn.RUNNER_BLOCK, fn.CLICK, *rc.PRIMITIVES, rc.MODEL_BLOCK)
+# (stage 3: click_at is the runner's own respawn press; stage 4a: a recipe's primitives are the
+# runner's own strike, steal cue, kill read and loot step, and use_model its own box detector)
 
 
 def own_binding_paths(c: Any) -> set[str]:
@@ -329,6 +360,13 @@ class HuntPlan:
     call_names: dict[str, str] = field(default_factory=dict)
     weight_events: tuple[str, ...] = ()
     knife_ends: str = "opener"
+    # stage 4a: the box's model (use_model: its id and catalogue entry for the runner) and its
+    # monsters' recipes (species -> the recipe the hunt core plays at its lock), and the species
+    # the runner strikes with no function (its own recipe)
+    model: str | None = None
+    model_doc: dict[str, Any] | None = None
+    recipes: dict[str, rc.Recipe] = field(default_factory=dict)
+    default_species: tuple[str, ...] = ()
 
 
 def _sensors(e: Any) -> set[str]:
@@ -471,8 +509,17 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     hpath = next((s.path for s in ir.sites(flow)
                   if any(a is hunt for a in ir.actions_in(s.stmt))), block)  # fmt: skip
     calls, names, ends = _role_calls(flow, hunt, plays, out, hpath)
+    rplans, issues = rc.analyse(flow)  # stage 4a: the model and the recipes of THIS hunt core
+    out += [NotLive(i.path, i.what, i.words) for i in issues if i.live and i.block == block]
+    rp = rplans.get(block)
+    if rp is not None and rp.model is not None:
+        plays.add("model")
+    if rp is not None and rp.recipes:
+        plays.add("recipes")
     return HuntPlan(block, keys, tuple(events), frozenset(plays), tuple(out), calls, names,
-                    tuple(weights), ends)  # fmt: skip
+                    tuple(weights), ends, None if rp is None else rp.model,
+                    None if rp is None else rp.model_doc(), {} if rp is None else dict(rp.recipes),
+                    () if rp is None else rp.default)  # fmt: skip
 
 
 def _weight_event(e: Any, conds: list[Any], out: list[NotLive]) -> None:
@@ -620,6 +667,20 @@ def document(cat: Catalogue | None = None) -> dict[str, Any]:
                 "words": "a role function that is more than one press_key is played by the box "
                 "at the runner's own moment (the Knife swap, the way home); the respawn functions "
                 "click; one press_key alone stays the runner's own key (stage 3)",
+            },
+            # stage 4a: the box's model and its monsters' recipes (poring_flow.recipes)
+            "recipes": {
+                "model_block": rc.MODEL_BLOCK,
+                "prefix": rc.PREFIX,
+                "primitives": list(rc.PRIMITIVES),
+                "knife": [rc.KNIFE_ON, rc.KNIFE_BACK],
+                "shapes": [list(x) for x in rc.SHAPES],
+                "default": list(rc.DEFAULT_SHAPE),
+                "priority_max": rc.PRIORITY_MAX,
+                "words": "use_model names the trained data; a function attack_<monster>(t) per "
+                "monster is its recipe, which the hunt core asks at its lock and plays with its "
+                "own code (no knife_on: no Knife swap on that monster); use_skill in a recipe is "
+                "4b's",
             },
         },
         "later": later,

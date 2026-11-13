@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { BLOCK_DEFS, categoryOf, toolbox, toolboxBlocks } from "./blockdefs.ts";
 
-import { classFor, classOptions, firstDetector, modelOptions, type Models, notAdopted } from "./models.ts";
+import { classFor, classOptions, firstDetector, modelOptions, type Models, monstersOf, notAdopted } from "./models.ts";
 import { browserStorage, forget, KEYS, pythonDefault, readChoice, readText, savedFlowName, type StorageLike, writeChoice } from "./prefs.ts";
 import { matchEntries, normalise, searchFlyout, type SearchEntry } from "./search.ts";
 import { BLOCK_STYLE, BLOCK_STYLES, CATEGORY_COLOURS, CATEGORY_STYLES, COMPONENT_STYLES, contrast, INJECT } from "./theme.ts";
@@ -148,6 +148,16 @@ test("a not-adopted model is never offered as a working sensor", () => {
   assert.deepEqual(modelOptions(null, null, false), [["v1", "v1"]]);
   assert.deepEqual(notAdopted(MODELS), ["stormy-v1: not adopted, so not offered (a boss recognizer)"]);
   assert.deepEqual(firstDetector(MODELS), { model: "v1", label: "monster" });
+});
+
+test("the monsters a node's recipes name: its use_model's strikes, else the first model that has them", () => {
+  const m: Models = { ...MODELS, xmas02: { ...MODELS.xmas02, strikes: ["mystcase", "cookie_xmas"], mobs: { mystcase: [1249] } } };
+  assert.deepEqual(monstersOf(m, "xmas02"), { model: "xmas02", strikes: ["mystcase", "cookie_xmas"], mobs: { mystcase: [1249] } });
+  assert.deepEqual(monstersOf(m, null)?.model, "xmas02"); // v1 strikes none named
+  assert.equal(monstersOf(m, "v1"), null);
+  assert.equal(monstersOf(m, "stormy-v1"), null); // not adopted
+  assert.equal(monstersOf(m, "v9"), null);
+  assert.equal(monstersOf(MODELS, null), null); // a catalogue before stage 4a
 });
 
 test("the class menu follows the model; an untrained class is not offered", () => {

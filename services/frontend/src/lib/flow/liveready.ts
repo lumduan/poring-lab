@@ -13,7 +13,7 @@
 // only as the item warp by a function (stage 1: "the item warp by a function, its arrival read on
 // the minimap"); a walk exit, an NPC warp and an item warp by an item are not live yet. Pure, tested.
 import type { Exit, Expr, Stmt } from "./ir.ts";
-import { HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RESPAWN_ROLES, resolve, RUNNER_ROLE_KEYS } from "./project.ts";
+import { HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RECIPE_PREFIX, RESPAWN_ROLES, resolve, RUNNER_ROLE_KEYS } from "./project.ts";
 
 /** GET /flows/catalogue's `blocks`, as far as this reads it. */
 export type LiveCatalogue = Record<string, { spec?: { live?: boolean } } | undefined>;
@@ -86,6 +86,9 @@ export function reachable(p: Project, nodeId: string): Reach {
   };
   const action = (node: string, block: string, params: Record<string, Expr>) => {
     blocks.add(block);
+    // stage 4a (live-blocks.md 3.4): with the trained data the hunt core asks each monster's
+    // function (attack_<monster>) at its lock: their steps play too
+    if (block === "use_model") for (const name of recipeNames(node)) fn(node, name);
     for (const [k, v] of Object.entries(params)) {
       // the runner's roles name FUNCTIONS (each one press_key): the player presses them too
       if (block === "dungeon_hunt" && ROLE_PARAMS.includes(k) && v.kind === "lit" && typeof v.value === "string") fn(node, v.value);
@@ -141,6 +144,14 @@ export function reachable(p: Project, nodeId: string): Reach {
           break;
       }
     }
+  };
+  /** The monsters' functions a node's hunt core may ask (its own and Global's): attack_<monster>. */
+  const recipeNames = (id: string): string[] => {
+    const n = nodeById(p, id);
+    const g = globalOf(p);
+    const names = new Set<string>();
+    for (const m of [n ? namesOf(n) : new Map(), g ? namesOf(g) : new Map()]) for (const [name, x] of m) if (x.kind === "def" && name.startsWith(RECIPE_PREFIX)) names.add(name);
+    return [...names].sort();
   };
   /** The events that run on a node: its own, then Global's it does not define (a plain function of
    * the same name turns Global's off there). */

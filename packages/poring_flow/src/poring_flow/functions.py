@@ -33,6 +33,7 @@ from poring_flow.catalogue import registry
 
 PRESS = "press_key"
 RUNNER_BLOCK = "dungeon_hunt"
+MODEL = "use_model"  # stage 4a: the trained data, the hunt core's model (poring_flow.recipes)
 # The maps a RUNNER plays: scripts/flow_run.py FLOWS, each Flow's `map` (today one: the Rogue's
 # xmas_dun02). `dungeon_hunt` runs only on a map block whose map is here (lint/functions.py);
 # tests/test_flow_functions.py fails when this set and flow_run.FLOWS' maps disagree.

@@ -63,6 +63,18 @@ UI watch (its own moment, never mid-fight): it ends the run normally, and the ru
 her home. A role function that is one press_key stays the runner's own key: a box without these
 plays exactly as stage 2 (run() gets no box_roles).
 
+THE BOX'S MONSTERS (stage 4a, live-blocks.md section 3.4; dungeon@9.51): `use_model("xmas02")` in
+the node's main names the hunt core's model (a models.yaml entry: the runner refuses, before any
+input, one that is not the file its box detector loads there), and one function per monster,
+`attack_<class>(t, priority=N)` (the tab `monsters`), is that monster's RECIPE of the runner's
+steps (poring_flow.recipes: strike / wait_steal / wait_kill / loot(t) and the hunt core's knife_on()
+/ knife_back(), in one of the two orders the runner plays). The plan is decided before any input
+(live.hunt_plan -> RunnerPlan.recipes); at its LOCK -- a new target's first strike -- the runner
+calls the hook's ``recipe(species, why)`` and the player answers with that species' recipe
+(LivePlayer.hunt_recipe, recorded), or None (the runner's own). The runner plays it with its own
+code: a recipe without knife_on strikes that monster without the Knife swap. A box without
+use_model and recipes plays exactly as stage 3 (run() gets no box_model, no box_recipes).
+
 THE START, before any input: the project validates; the node is a map node; every block plays live;
 the time box fits the Settings maximum (--max-s); each hunt core's keys resolve from the node's
 functions (project.runner_keys) and its runner settings from the config file; then the START CHECK
@@ -112,6 +124,7 @@ from poring_env.protocol import Key, ReleaseAll  # noqa: E402
 from poring_flow import functions as fn  # noqa: E402
 from poring_flow import ir, live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
+from poring_flow import recipes as rc  # noqa: E402
 from poring_flow.runtime import (  # noqa: E402
     MAIN_RANK,
     Relocate,
@@ -161,6 +174,23 @@ class RunnerPlan:
     call_names: Mapping[str, str] = field(default_factory=dict)
     weight_events: tuple[str, ...] = ()
     knife_ends: str = "opener"
+    # stage 4a: the box's model (use_model's catalogue entry) and its monsters' recipes (species
+    # -> poring_flow.recipes.Recipe), the species the runner strikes with its own recipe
+    model_doc: Mapping[str, Any] | None = None
+    recipes: Mapping[str, Any] = field(default_factory=dict)
+    default_species: tuple[str, ...] = ()
+
+    def box_kwargs(self) -> dict[str, Any]:
+        """dungeon_hunt run(...)'s box arguments: none at all for a box without events, functions,
+        model or recipes (the CLI's run); each stage's only where the box plays it."""
+        box: dict[str, Any] = {"box_plays": sorted(self.plays)} if self.plays else {}  # stage 2
+        if self.calls:  # stage 3: the roles the box's functions play (none: exactly as 9.49)
+            box["box_roles"] = self.box_roles()
+        if self.model_doc is not None:  # stage 4a: use_model (none: exactly as 9.50)
+            box["box_model"] = dict(self.model_doc)
+        if self.recipes:  # stage 4a: the monsters' recipes
+            box["box_recipes"] = {sp: r.doc() for sp, r in sorted(self.recipes.items())}
+        return box
 
     def box_roles(self) -> dict[str, str]:
         """dungeon_hunt run(box_roles=...): each called role, with where its body leaves her."""
@@ -209,7 +239,11 @@ class Prepared:
                                 **({"box_roles": p.box_roles(),
                                     "calls": {r: [x.doc() for x in st]
                                               for r, st in p.calls.items()}}
-                                   if p.calls else {})} for b, p in
+                                   if p.calls else {}),
+                                **({"box_model": dict(p.model_doc)} if p.model_doc else {}),
+                                **({"box_recipes": p.box_kwargs()["box_recipes"],
+                                    "default_species": list(p.default_species)}
+                                   if p.recipes else {})} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -273,7 +307,8 @@ def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CO
         hp = live.hunt_plan(c.flow, block)  # its problems refused above (live.problems)
         runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals, hp.events, hp.plays,
                                     dict(hp.calls), dict(hp.call_names), hp.weight_events,
-                                    hp.knife_ends)  # fmt: skip
+                                    hp.knife_ends, hp.model_doc, dict(hp.recipes),
+                                    hp.default_species)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
 
@@ -412,6 +447,7 @@ class HuntResult:
     ticks: int = 0
     survive_calls: int = 0  # stage 2: the hook's survive calls (main ticks and quick reads)
     calls: int = 0  # stage 3: the hook's calls of the box's role functions
+    recipes: int = 0  # stage 4a: the hook's recipe answers (one per target, at its lock)
 
     @property
     def left(self) -> bool:
@@ -451,6 +487,12 @@ class HuntHook:
         hunt_call)."""
         self.res.calls += 1
         return self.player.hunt_call(role, why, press, click)
+
+    def recipe(self, species: str | None, why: str) -> dict[str, Any] | None:
+        """dungeon@9.51: the box's recipe for a target's species at the runner's lock (LivePlayer.
+        hunt_recipe): the plan decided before any input, or None (the runner's own)."""
+        self.res.recipes += 1
+        return self.player.hunt_recipe(species, why)
 
     def event(self, rec: Mapping[str, Any], t_mono: float) -> None:
         k = rec.get("kind")
@@ -494,13 +536,15 @@ class HuntCore:
             res.error = "under a minute of the time box left: the hunt core does not start"
             return res
         argv = plan.argv(f"{self.label}-hunt{self.n}", self.stop_file, left_min)
+        box = plan.box_kwargs()  # stage 2-4a: only what the box plays (none: the CLI's run)
         player.rec.ev({"kind": "hunt_start", "node": player.node_path, "n": self.n,
                        "flow": plan.flow_id, "keys": plan.keys, "argv": argv,
-                       "events": list(plan.events), "box_plays": sorted(plan.plays)})  # fmt: skip
+                       "events": list(plan.events), "box_plays": sorted(plan.plays),
+                       **({"box_model": box["box_model"]["id"]} if "box_model" in box else {}),
+                       **({"box_recipes": box["box_recipes"],
+                           "default_species": list(plan.default_species)}
+                          if "box_recipes" in box else {})})  # fmt: skip
         hook = HuntHook(player, res)
-        box: dict[str, Any] = {"box_plays": sorted(plan.plays)} if plan.plays else {}  # stage 2
-        if plan.calls:  # stage 3: the roles the box's functions play (none: exactly as 9.49)
-            box["box_roles"] = plan.box_roles()
         try:
             a = args_fn(argv)
             res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
@@ -509,7 +553,7 @@ class HuntCore:
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
                        "ticks": res.ticks, "survive_calls": res.survive_calls,
-                       "calls": res.calls, "rc": res.rc})  # fmt: skip
+                       "calls": res.calls, "recipes": res.recipes, "rc": res.rc})  # fmt: skip
         return res
 
 
@@ -705,6 +749,9 @@ class LivePlayer(Sim):
             return "ok"
         if a.block == "assert_save_point":  # the author's assertion: no input
             yield _Tick(None, False, "assert_save_point")
+            return "ok"
+        if a.block == rc.MODEL_BLOCK:  # stage 4a: the hunt core's model (no input; prepared)
+            yield _Tick(None, False, rc.MODEL_BLOCK)
             return "ok"
         if a.block == fn.RUNNER_BLOCK:
             return (yield from self._hunt_core())
@@ -937,6 +984,21 @@ class LivePlayer(Sim):
                             f"{role}: a click it does not take there")  # fmt: skip
                 self.rec.ev({"kind": "click", "at": [st.x, st.y], "node": path, "in": "hunt"})
         return None
+
+    def hunt_recipe(self, species: str | None, why: str) -> dict[str, Any] | None:
+        """Stage 4a: the box's recipe for a target's species at the runner's LOCK (the module
+        docstring) -- its plan, decided before any input; the runner plays its steps with its own
+        code. None: the runner's own recipe (no function for that species, or unknown). Recorded
+        once per target (`recipe`: the species, the function, its node path, its steps)."""
+        plan = self.prep.runners.get(self.block)
+        r = None if plan is None or species is None else plan.recipes.get(species)
+        rec: dict[str, Any] = {"kind": "recipe", "species": species, "why": why, "in": "hunt"}
+        if r is None:
+            self.rec.ev({**rec, "function": None, "default": True})
+            return None
+        self.rec.ev({**rec, "function": r.function, "node": self.c.where(r.function).path
+                     or r.function, "steps": list(r.steps), "knife": r.knife})  # fmt: skip
+        return dict(r.doc())
 
     def _preempt_now(self, keys: frozenset[str]) -> None:
         """The box's due PRE-EMPTS, each played to its end now (the runner it suspends is between

@@ -37,7 +37,10 @@ from poring_flow import live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
 
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
-B3 = FIX / "project_xmas_dun02.json"  # the ready-made box (stage 3)
+# the box as stage 3 left it (stage 4a gave the ready-made one its use_model and monsters tab:
+# test_box_recipes.py); stage3_ab.py's B3 arm
+B3 = FIX / "project_xmas_dun02_stage3.json"
+STAGE3_PLAYS = ["boss_fly", "fly_hp", "home_end", "knife", "potion", "respawn", "weight_home"]
 B2 = FIX / "project_xmas_dun02_stage2.json"  # the box as stage 2 left it (the A/B's B2 arm)
 STAGE2_PLAYS = ["boss_fly", "fly_hp", "potion"]
 
@@ -217,7 +220,7 @@ def test_a_box_without_the_new_functions_calls_run_exactly_as_stage_2(tmp_path: 
         return 0
 
     for path, want in ((B2, {"box_plays": STAGE2_PLAYS}),
-                       (B3, {"box_plays": sorted(live.PLAYS),
+                       (B3, {"box_plays": STAGE3_PLAYS,
                              "box_roles": {"knife_on": "opener", "knife_back": "armed",
                                            "home": "home", "respawn": "save_point",
                                            "respawn_confirm": "save_point"}})):  # fmt: skip
@@ -762,7 +765,7 @@ def test_box_plays_refused_names_each_stage3_refusal_before_any_input() -> None:
     kw: dict[str, Any] = {"heal_candy": False, "boss_walk": False, "bosses": ("Stormy Knight",)}
     roles = {"knife_on": "opener", "knife_back": "armed", "home": "home", "respawn": "save_point",
              "respawn_confirm": "save_point"}  # fmt: skip
-    all_ = list(dh.BOX_PLAYS)
+    all_ = STAGE3_PLAYS  # stage 4a's model and recipes: test_box_recipes.py
     assert dh.box_plays_refused(all_, _Hook(), roles=roles, **kw) is None
     assert dh.box_plays_refused([], None, **kw) is None  # the CLI: nothing to check
     assert "without its functions" in str(dh.box_plays_refused(["knife"], _Hook(), **kw))
@@ -792,8 +795,9 @@ def test_the_cli_and_the_old_run_path_are_unchanged() -> None:
     sig = inspect.signature(dh.run)
     assert sig.parameters["box_plays"].default == () and sig.parameters["box_roles"].default is None
     assert "return run(a)" in inspect.getsource(dh.main)  # no hook, no box
-    assert dh.VERSION == "dungeon@8.7" and dh.BOX_FUNCTIONS_VERSION == live.VERSION == "9.50"
-    assert dh.BOX_PLAYS == live.PLAYS
+    assert dh.VERSION == "dungeon@8.7" and dh.BOX_FUNCTIONS_VERSION == "9.50"
+    assert dh.BOX_RECIPES_VERSION == live.VERSION == "9.51"  # stage 4a (test_box_recipes.py)
+    assert dh.BOX_PLAYS == live.PLAYS and set(STAGE3_PLAYS) < set(dh.BOX_PLAYS)
     # opener_seq's default reads exactly as before; "armed" only with the box's other answer
     assert inspect.signature(dh.opener_seq).parameters["ends"].default == "opener"
     assert inspect.signature(dh.BareCtl).parameters["opener_ends"].default == "opener"

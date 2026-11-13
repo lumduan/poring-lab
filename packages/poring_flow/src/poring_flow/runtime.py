@@ -125,6 +125,8 @@ def default_plan(a: ir.ActionStmt, sim: Sim) -> Plan:
         return Plan(ticks=1) if sim.key(a) in sim.hotbar else Plan(ticks=0, outcome="failed")
     if a.block == fn.CLICK:  # stage 3: one click (two motions, then it), at its point
         return Plan(ticks=1)
+    if a.block == fn.MODEL:  # stage 4a: the trained data names the hunt core's model: no input
+        return Plan(ticks=0)
     if spec is not None and spec.profile == "atomic":
         return Plan(ticks=3, atomic=(0, 3))
     return Plan(ticks=3)
