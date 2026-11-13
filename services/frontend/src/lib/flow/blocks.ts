@@ -11,8 +11,8 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { DEF_BY_TYPE, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
-import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
+import { CREDENTIALS, DEF_BY_TYPE, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
@@ -24,6 +24,7 @@ import {
   type Flow,
   type Handler,
   type ItemRef,
+  type Lit,
   type MapBlock,
   type MapEvent,
   type Ref,
@@ -36,6 +37,7 @@ import {
   MAX_RANK,
   NAME,
 } from "./ir.ts";
+import { type Def, globalOf, MAIN_TAB, namesOf, nodeById, paramsText, type PNode, type Project, tabOf } from "./project.ts";
 
 export type Scope = { kind: "block"; name: string } | { kind: "global" } | { kind: "main" } | { kind: "functions" };
 export type WsBlock = {
@@ -131,6 +133,7 @@ function blockish(e: Expr): boolean {
 }
 
 function exprBlock(e: Expr, path: string, ids: Ids): WsBlock {
+  if (e.kind === "callv") return { type: "pl_callv", fields: { PROC: e.proc, ARGS: callArgsText(e.args, e.kwargs) } };
   const det = e.kind === "sense" ? detectFields(e) : null;
   if (det && e.kind === "sense") return { type: SENSOR_BLOCK[e.sensor], fields: det };
   if (e.kind === "do" && paramsPlain(e.action)) {
@@ -307,7 +310,9 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
       case "set":
         return { type: "pl_set", fields: { VAR: s.var }, inputs: { VALUE: { block: exprBlock(s.value, path, ids) } } };
       case "call":
-        return { type: "pl_call", fields: { PROC: s.proc } };
+        return { type: "pl_call", fields: { PROC: s.proc, ARGS: callArgsText(s.args ?? [], s.kwargs ?? {}) } };
+      case "return":
+        return { type: "pl_return", inputs: s.value ? { VALUE: { block: exprBlock(s.value, path, ids) } } : {} };
       case "stop":
         return { type: "pl_stop", fields: { REASON: s.reason } };
       case "break":
@@ -334,6 +339,15 @@ function ownBlock(s: ActionStmt): WsBlock | null {
   if (s.block === "press_key" && keys.length === 1 && keys[0] === "key") {
     const k = litText(s.params.key);
     if (k !== null && (HOTKEYS as readonly string[]).includes(k)) return { type: "pl_press_key", fields: { KEY: k }, extraState: actionRest(s) };
+  }
+  if (s.block === "login" && keys.join(",") === "credential,server") {
+    const sv = litText(s.params.server);
+    const cr = litText(s.params.credential);
+    if (sv !== null && cr !== null && (CREDENTIALS as readonly string[]).includes(cr)) return { type: "pl_login", fields: { SERVER: sv, CREDENTIAL: cr }, extraState: actionRest(s) };
+  }
+  if (s.block === "choose_character" && (keys.length === 0 || (keys.length === 1 && keys[0] === "name"))) {
+    const nm = keys.length ? litText(s.params.name) : "";
+    if (nm !== null) return { type: "pl_choose_character", fields: { CHAR: nm }, extraState: actionRest(s) };
   }
   if (s.block === "dungeon_hunt" && keys.join(",") === RUNNER_ROLES.map((r) => r.param).sort().join(",")) {
     const fields: Record<string, string> = {};
@@ -541,7 +555,7 @@ class Reader {
     switch (b.type) {
       case "pl_expr":
         try {
-          const e = parseExpr(this.field(b, "TEXT"));
+          const e = this.asCalls(parseExpr(this.field(b, "TEXT")));
           return e;
         } catch (e) {
           this.err(where, `${what}: ${e instanceof ExprError ? e.message : "cannot be read"}`);
@@ -583,6 +597,11 @@ class Reader {
       }
       case "pl_do":
         return { kind: "do", action: this.generic(b, where) };
+      case "pl_callv": {
+        const proc = this.name(b, "PROC", where);
+        const a = this.callArgs(b, where, proc);
+        return { kind: "callv", proc, args: a.args, kwargs: a.kwargs };
+      }
       case "pl_raw_expr": {
         const st = (b.extraState ?? {}) as { expr?: Expr };
         if (st.expr) return clone(st.expr);
@@ -593,6 +612,46 @@ class Reader {
         this.err(where, `${what}: a ${b.type} block is not a value`);
         return { kind: "lit", value: false };
     }
+  }
+
+  /** A call block's inputs from their Python text. */
+  callArgs(b: WsBlock, where: string, proc: string): { args: Expr[]; kwargs: Record<string, Expr> } {
+    try {
+      const a = parseCallArgs(this.field(b, "ARGS"));
+      return { args: a.args.map((e) => this.asCalls(e)), kwargs: Object.fromEntries(Object.entries(a.kwargs).map(([k, v]) => [k, this.asCalls(v)])) };
+    } catch (e) {
+      this.err(where, `${proc}: ${e instanceof ExprError ? e.message : "its inputs cannot be read"}`);
+      return { args: [], kwargs: {} };
+    }
+  }
+
+  /** The project model: a name the node calls a FUNCTION reads as its call, not a sensor
+   * (`heal()` in a condition is the function's value). */
+  fns: ReadonlySet<string> = new Set();
+  asCalls(e: Expr): Expr {
+    const walk = (x: Expr): Expr => {
+      switch (x.kind) {
+        case "sense":
+          if (this.fns.has(x.sensor)) return { kind: "callv", proc: x.sensor, args: [], kwargs: Object.fromEntries(Object.entries(x.args).map(([k, v]) => [k, walk(v)])) };
+          return { ...x, args: Object.fromEntries(Object.entries(x.args).map(([k, v]) => [k, walk(v)])) };
+        case "cmp":
+          return { ...x, left: walk(x.left), right: walk(x.right) };
+        case "arith":
+          return { ...x, left: walk(x.left), right: walk(x.right) };
+        case "and":
+        case "or":
+          return { ...x, terms: x.terms.map(walk) };
+        case "not":
+          return { ...x, term: walk(x.term) };
+        case "list":
+          return { ...x, items: x.items.map(walk) };
+        case "callv":
+          return { ...x, args: x.args.map(walk), kwargs: Object.fromEntries(Object.entries(x.kwargs).map(([k, v]) => [k, walk(v)])) };
+        default:
+          return x;
+      }
+    };
+    return walk(e);
   }
 
   rest(b: WsBlock, block: string, where: string): ActionRest {
@@ -740,8 +799,24 @@ class Reader {
         };
       case "pl_set":
         return { kind: "set", var: this.name(b, "VAR", where), value: this.expr(b.inputs?.VALUE?.block, where, "the value") };
-      case "pl_call":
-        return { kind: "call", proc: this.name(b, "PROC", where) };
+      case "pl_call": {
+        const proc = this.name(b, "PROC", where);
+        const a = this.callArgs(b, where, proc);
+        return { kind: "call", proc, args: a.args, kwargs: a.kwargs };
+      }
+      case "pl_return":
+        return { kind: "return", value: b.inputs?.VALUE?.block ? this.expr(b.inputs.VALUE.block, where, "the value") : null };
+      case "pl_login":
+        return {
+          kind: "action",
+          block: "login",
+          params: { server: { kind: "lit", value: this.name(b, "SERVER", where, KEY) }, credential: { kind: "lit", value: this.name(b, "CREDENTIAL", where, /^[a-z][a-z0-9_]{0,31}$/) } },
+          ...this.rest(b, "login", where),
+        };
+      case "pl_choose_character": {
+        const nm = this.field(b, "CHAR").trim();
+        return { kind: "action", block: "choose_character", params: nm ? { name: { kind: "lit", value: nm } } : {}, ...this.rest(b, "choose_character", where) };
+      }
       case "pl_press_key": {
         const k = this.field(b, "KEY");
         if (!(HOTKEYS as readonly string[]).includes(k)) this.err(where, `press key ${JSON.stringify(k)}: one of ${HOTKEYS.join(", ")}`);
@@ -849,14 +924,16 @@ type Hat = { b: WsBlock; order: number; y: number };
 
 const HATS = new Set(["pl_main", "pl_event", "pl_extend", "pl_disable"]);
 
-function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs: WsBlock[]; loose: Loose[] } {
+function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs: WsBlock[]; vars: WsBlock[]; loose: Loose[] } {
   const main: WsBlock[] = [];
   const events: Hat[] = [];
   const defs: WsBlock[] = [];
+  const vars: WsBlock[] = [];
   const loose: Loose[] = [];
   for (const b of ws.blocks?.blocks ?? []) {
     if (b.type === "pl_main") main.push(b);
     else if (b.type === "pl_def") defs.push(b);
+    else if (b.type === "pl_vardecl") vars.push(b);
     else if (HATS.has(b.type)) {
       const order = Number((b.extraState as { order?: number } | undefined)?.order);
       events.push({ b, order: Number.isFinite(order) ? order : Infinity, y: b.y ?? 0 });
@@ -868,7 +945,8 @@ function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs:
   if (loose.length) r.warnings.push(`${loose.length} loose block(s) outside any hat were not applied`);
   events.sort((a, c) => a.order - c.order || a.y - c.y);
   defs.sort((a, c) => (a.y ?? 0) - (c.y ?? 0));
-  return { main, events, defs, loose };
+  vars.sort((a, c) => (a.y ?? 0) - (c.y ?? 0));
+  return { main, events, defs, vars, loose };
 }
 
 /** The flow with one scope replaced by the workspace's content (or the errors, nothing applied). */
@@ -941,3 +1019,126 @@ export function fromWorkspace(flow: Flow, scope: Scope, ws: Workspace, defaults:
   if (r.errors.length) return { ok: false, errors: r.errors, issues: r.issues, loose };
   return { ok: true, flow: out, warnings: r.warnings, paths: r.paths, loose };
 }
+
+// --- THE PROJECT MODEL (2026-11-13, docs/planning/project-model.md): one tab of one node <-> blocks --
+export type TabScope = { node: string; tab: string };
+export type TabResult =
+  | { ok: true; project: Project; warnings: string[]; paths: Record<string, string>; loose: Loose[] }
+  | { ok: false; errors: string[]; issues: Issue[]; loose: Loose[] };
+
+/** The functions a node can call: its own and Global's (a node's replaces Global's of that name). */
+export function callableOn(p: Project, nodeId: string): Set<string> {
+  const out = new Set<string>();
+  for (const n of [nodeById(p, nodeId), globalOf(p)]) if (n) for (const [k, v] of namesOf(n)) if (v.kind !== "var") out.add(k);
+  return out;
+}
+
+function defHat(p: Project, node: PNode, d: Def, order: number, ids: Ids): WsBlock {
+  if (d.on) {
+    const h: Handler = { ...d.on, name: d.name, body: d.body };
+    const b = eventHat(h, "global", null, order, ids);
+    const replaces = node.kind !== "global" && globalOf(p) !== undefined && namesOf(globalOf(p)!).has(d.name);
+    b.fields = { ...b.fields, SCOPE: node.kind === "global" ? "every node" : replaces ? "replaces Global's" : "this node" };
+    b.extraState = { order, rest: restOf(h) };
+    return b;
+  }
+  return {
+    type: "pl_def",
+    id: ids.take(`h:def:${d.name}`),
+    fields: { NAME: d.name, PARAMS: paramsText(d, (l) => exprText(l)) },
+    inputs: chainInput("DO", d.body, d.name, ids),
+    extraState: { order },
+  };
+}
+
+/** One tab's blocks: the main hat (the main tab only), then its functions and events, then its
+ * variables. A statement's node path is the engine's site inside the tab ("main.2", "heal.0"). */
+export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions = {}): Workspace {
+  const node = nodeById(p, scope.node);
+  const t = node ? tabOf(node, scope.tab) : undefined;
+  if (!node || !t) throw new Error(`no tab ${scope.node}/${scope.tab}`);
+  const ids = new Ids(opts.hunt ?? null);
+  const top: WsBlock[] = [];
+  let y = 20;
+  const place = (b: WsBlock) => {
+    b.x = 20;
+    b.y = y;
+    y += 90 + 46 * height(b.inputs?.DO?.block);
+    top.push(b);
+  };
+  if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });
+  t.defs.forEach((d, i) => place(defHat(p, node, d, i, ids)));
+  for (const [name, v] of Object.entries(t.vars)) place({ type: "pl_vardecl", id: ids.take(`h:var:${name}`), fields: { NAME: name }, inputs: { VALUE: { block: exprBlock(v, name, ids) } }, extraState: {} });
+  return { blocks: { languageVersion: 0, blocks: top } };
+}
+
+/** The project with one tab replaced by its blocks (or the errors, nothing applied). */
+export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, defaults: Defaults = {}): TabResult {
+  const r = new Reader(defaults);
+  r.fns = callableOn(p, scope.node);
+  const out = clone(p);
+  const node = nodeById(out, scope.node);
+  const t = node ? tabOf(node, scope.tab) : undefined;
+  if (!node || !t) return { ok: false, errors: [`no tab ${scope.node}/${scope.tab}`], issues: [], loose: [] };
+  const { main, events, defs, vars, loose } = hats(ws, r);
+  for (const d of defs) {
+    const nm = String(d.fields?.NAME ?? "").trim();
+    if (nm) r.fns = new Set([...r.fns, nm]); // a function written on this tab is callable at once
+  }
+  const isMain = t.name === MAIN_TAB && node.kind !== "global";
+  if (isMain) {
+    if (main.length !== 1) r.err("main", main.length ? "only one start block" : "the start block is missing (a main tab begins with it)");
+    t.main = main[0] ? r.under(main[0], "main", () => r.stmts(main[0].inputs?.DO?.block, "main")) : [];
+  } else {
+    if (main.length) r.warnings.push("the start block belongs on the main tab: not applied here");
+    t.main = null;
+  }
+  const out_defs: Def[] = [];
+  const seen = new Set<string>();
+  const order = [...defs.map((b) => ({ b, ev: false })), ...events.map((h) => ({ b: h.b, ev: true }))].sort((a, c) => (a.b.y ?? 0) - (c.b.y ?? 0));
+  for (const { b, ev } of order) {
+    if (b.type === "pl_extend" || b.type === "pl_disable") {
+      r.under(b, null, () => r.err(String(b.fields?.KEY ?? "event"), "a map replaces Global's event by writing its own event of the same name (extend / disable are gone)"));
+      continue;
+    }
+    const nm = String(b.fields?.NAME ?? "").trim();
+    const where = `${ev ? "event" : "function"} ${nm || "?"}`;
+    const d = r.under(b, nm || null, (): Def | null => {
+      const name = r.name(b, "NAME", where);
+      if (seen.has(name)) r.err(where, "two definitions on this tab have this name");
+      seen.add(name);
+      if (ev) {
+        const h = r.handler(b, where, name);
+        const { name: _n, body, ...on } = h;
+        void _n;
+        return { name, params: [], varargs: null, kwargs: null, body, on };
+      }
+      let ps: ReturnType<typeof parseParams> = { params: [], varargs: null, kwargs: null };
+      try {
+        ps = parseParams(r.field(b, "PARAMS"));
+      } catch (e) {
+        r.err(where, `its inputs: ${e instanceof ExprError ? e.message : "cannot be read"}`);
+      }
+      const body = r.stmts(b.inputs?.DO?.block, name);
+      if (!body.length) r.err(where, "a function needs at least one block inside");
+      return { name, ...ps, body, on: null };
+    });
+    if (d) out_defs.push(d);
+  }
+  t.defs = out_defs;
+  const vs: Record<string, Lit> = {};
+  for (const b of vars) {
+    const nm = String(b.fields?.NAME ?? "").trim();
+    r.under(b, null, () => {
+      const name = r.name(b, "NAME", `variable ${nm || "?"}`);
+      const v = r.expr(b.inputs?.VALUE?.block, `variable ${name}`, "its value");
+      if (v.kind !== "lit") r.err(`variable ${name}`, "its first value must be a plain value (a number, a text, True / False)");
+      else if (name in vs || seen.has(name)) r.err(`variable ${name}`, "this name is used twice on this tab");
+      else vs[name] = v;
+    });
+  }
+  t.vars = vs;
+  if (r.errors.length) return { ok: false, errors: r.errors, issues: r.issues, loose };
+  return { ok: true, project: out, warnings: r.warnings, paths: r.paths, loose };
+}
+

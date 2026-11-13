@@ -35,7 +35,9 @@ export type Cmp = { kind: "cmp"; op: CmpOp; left: Expr; right: Expr };
 export type ArithOp = "+" | "-" | "*" | "//" | "%";
 export type Arith = { kind: "arith"; op: ArithOp; left: Expr; right: Expr };
 export type Do = { kind: "do"; action: ActionStmt };
-export type Expr = Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not | Arith | Do;
+/** A function's value (the project model, 2026-11-13: functions return values, like Python). */
+export type CallV = { kind: "callv"; proc: string; args: Expr[]; kwargs: Record<string, Expr> };
+export type Expr = Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not | Arith | Do | CallV;
 export type Range = { kind: "range"; start: Expr; stop: Expr; step: Expr };
 
 export type ActionStmt = {
@@ -60,7 +62,10 @@ export type WaitUntil = { kind: "wait_until"; cond: Expr; timeout_s: number; out
 export type Repeat = { kind: "repeat"; times: Expr; body: Stmt[] };
 export type ForEach = { kind: "for"; var: string; items: Lit | Var | Range; body: Stmt[] };
 export type SetVar = { kind: "set"; var: string; value: Expr };
-export type CallProc = { kind: "call"; proc: string };
+/** A call of a function, with positional and keyword arguments (the project model, 2026-11-13). */
+export type CallProc = { kind: "call"; proc: string; args: Expr[]; kwargs: Record<string, Expr> };
+/** `return value` inside a function (the project model). */
+export type Return = { kind: "return"; value: Expr | null };
 export type Stop = { kind: "stop"; reason: string };
 export type Break = { kind: "break" };
 export type Continue = { kind: "continue" };
@@ -91,6 +96,7 @@ export type Stmt =
   | ForEach
   | SetVar
   | CallProc
+  | Return
   | Stop
   | Break
   | Continue

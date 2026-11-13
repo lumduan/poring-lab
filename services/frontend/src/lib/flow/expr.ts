@@ -90,7 +90,85 @@ export function exprText(e: Expr): string {
         .sort()
         .map((k) => `${k}=${exprText(e.action.params[k])}`)
         .join(", ")})`;
+    case "callv":
+      return `${e.proc}(${callArgsText(e.args, e.kwargs)})`;
   }
+}
+
+/** A call's arguments as Python writes them: positional first, then keywords in their order. */
+export function callArgsText(args: Expr[], kwargs: Record<string, Expr>): string {
+  return [...args.map(exprText), ...Object.entries(kwargs).map(([k, v]) => `${k}=${exprText(v)}`)].join(", ");
+}
+
+/** A call's arguments from their Python text ("F8, times=2"): positional and keyword ones. */
+export function parseCallArgs(src: string): { args: Expr[]; kwargs: Record<string, Expr> } {
+  if (!src.trim()) return { args: [], kwargs: {} };
+  if (src.length > MAX_EXPR_CHARS) throw new ExprError(`longer than ${MAX_EXPR_CHARS} characters`);
+  const e = parseExpr(`f_(${src})`);
+  if (e.kind === "callv") return { args: e.args, kwargs: e.kwargs };
+  if (e.kind === "sense") return { args: [], kwargs: e.args };
+  throw new ExprError("write the inputs as in Python: value, ..., name=value, ...");
+}
+
+/** A function's inputs from their Python text ("key, times=1, *args, **kwargs"). Defaults are
+ * plain values (a number, a text in quotes, True / False, a reference such as item(602)). */
+export function parseParams(src: string): { params: { name: string; default: Lit | null }[]; varargs: string | null; kwargs: string | null } {
+  const out: { name: string; default: Lit | null }[] = [];
+  let varargs: string | null = null;
+  let kwargs: string | null = null;
+  const parts = splitTop(src);
+  for (const raw of parts) {
+    const t = raw.trim();
+    if (!t) throw new ExprError("an empty input between two commas");
+    const m = /^(\*\*|\*)?([A-Za-z][A-Za-z0-9_]{0,47})\s*(?:=\s*(.+))?$/.exec(t);
+    if (!m) throw new ExprError(`${JSON.stringify(t)} is not an input (name, name=value, *name or **name)`);
+    const [, star, name, dflt] = m;
+    if ([...out.map((x) => x.name), varargs, kwargs].includes(name)) throw new ExprError(`the input ${name} is there twice`);
+    if (kwargs) throw new ExprError("**" + kwargs + " comes last");
+    if (star === "**") {
+      if (dflt !== undefined) throw new ExprError(`**${name} takes no default`);
+      kwargs = name;
+    } else if (star === "*") {
+      if (dflt !== undefined) throw new ExprError(`*${name} takes no default`);
+      if (varargs) throw new ExprError("one *name only");
+      varargs = name;
+    } else {
+      if (varargs) throw new ExprError(`${name} after *${varargs}: put the inputs before it`);
+      let d: Lit | null = null;
+      if (dflt !== undefined) {
+        const e = parseExpr(dflt);
+        if (e.kind !== "lit") throw new ExprError(`the default of ${name} must be a plain value`);
+        d = e;
+      } else if (out.some((x) => x.default !== null)) throw new ExprError(`${name} needs a default: it comes after one that has one`);
+      out.push({ name, default: d });
+    }
+  }
+  return { params: out, varargs, kwargs };
+}
+
+/** Split at the commas that are not inside brackets or quotes. */
+function splitTop(src: string): string[] {
+  if (!src.trim()) return [];
+  const out: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let cur = "";
+  for (const ch of src) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out;
 }
 
 export function hasDo(e: Expr): boolean {
@@ -314,10 +392,11 @@ class Parser {
     }
     this.expect(")");
     if (REF_CALLS.includes(name.v)) return { kind: "lit", value: refCall(name, pos, kw) };
-    if (pos.length) {
-      throw new ExprError(`col ${name.at + 1}: ${name.v}(...) takes its arguments by name, e.g. ${name.v}(mob=mob(1))`);
-    }
     if (!NAME.test(name.v)) throw new ExprError(`col ${name.at + 1}: ${name.v} is not a valid name`);
+    // positional inputs: a FUNCTION's call (the project model, 2026-11-13); sensors and actions
+    // take theirs by name. A call with keywords only reads as a sensor here, and the block reader
+    // turns it into a function's call when the node has a function of that name.
+    if (pos.length) return { kind: "callv", proc: name.v, args: pos, kwargs: kw };
     return { kind: "sense", sensor: name.v, args: kw };
   }
 }

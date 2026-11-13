@@ -4,6 +4,7 @@
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
 import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
+import type { Project } from "./project.ts";
 import type { Models } from "./models.ts";
 import type { ZonesCheck, ZonesFile } from "./zones.ts";
 
@@ -21,7 +22,16 @@ export interface Finding {
   text: string;
   message: string;
   ack: boolean;
-  owner: string; // block:<name> | global | flow
+  owner?: string; // IR 2's (block:<name> | global | flow); the project's findings name node and tab
+  /** The project model (2026-11-13): the node and the tab a finding is on ("" = the project). */
+  node?: string;
+  tab?: string;
+}
+
+/** A finding's statement path INSIDE its tab ("main.2", "heal.0"), from "<node>/<tab>/<site>". */
+export function sitePath(f: Pick<Finding, "path" | "node" | "tab">): string {
+  const pre = f.node && f.tab ? `${f.node}/${f.tab}/` : "";
+  return pre && f.path.startsWith(pre) ? f.path.slice(pre.length) : f.path;
 }
 
 export interface EffectiveEvent {
@@ -38,7 +48,8 @@ export interface EffectiveEvent {
 }
 
 export interface LintDoc {
-  flow_hash: string;
+  flow_hash?: string;
+  project_hash?: string;
   findings: Finding[];
   counts: Record<Severity, number>;
   by_owner: Record<string, Record<Severity, number>>;
@@ -157,7 +168,8 @@ export interface Scenario {
 }
 
 export interface SimDoc {
-  flow_hash: string;
+  flow_hash?: string;
+  project_hash?: string;
   trace: Trace;
   lint: LintDoc;
 }
@@ -202,6 +214,17 @@ export interface CatalogueDoc {
   hunt_rules_error?: string | null;
   // the trained models a detector block may name (poring_flow models.yaml; 2026-11-09)
   models?: Models;
+  // the project model (2026-11-13): the maps that have a runner, the lab's credentials by name, and
+  // the engine's tab-name rule (the browser refuses the same names at once)
+  runner_maps?: string[];
+  credentials?: string[];
+  tab_name_rule?: { pattern: string; refused: string[] };
+}
+
+/** The Python view of a project: one file per tab. */
+export interface PythonFiles {
+  project_hash?: string;
+  files: { node: string; tab: string; path: string; text: string }[];
 }
 
 export interface WorldMap {
@@ -295,16 +318,16 @@ export class FlowsApi {
     return this.get(`/flows/world?${q}`);
   }
 
-  lint(flow: Flow, world: WorldSource): Promise<LintDoc> {
-    return this.post("/flows/lint", { flow, world });
+  lint(project: Project, world: WorldSource): Promise<LintDoc> {
+    return this.post("/flows/lint", { project, world });
   }
 
-  simulate(flow: Flow, world: WorldSource, scenario: Scenario): Promise<SimDoc> {
-    return this.post("/flows/simulate", { flow, world, scenario });
+  simulate(project: Project, world: WorldSource, scenario: Scenario): Promise<SimDoc> {
+    return this.post("/flows/simulate", { project, world, scenario });
   }
 
-  python(flow: Flow): Promise<{ flow_hash: string; python: string }> {
-    return this.post("/flows/python", { flow });
+  python(project: Project): Promise<PythonFiles> {
+    return this.post("/flows/python", { project });
   }
 
   /** B2: config/map_zones/<map>.yaml as the editor imports it (never its reviewer). */

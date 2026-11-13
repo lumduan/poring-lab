@@ -121,3 +121,18 @@ export function shelve(store: StorageLike | null, name: string, text: string, wo
   shelf[name] = { text, world };
   return writeShelf(store, shelf);
 }
+
+/** THE PROJECT this browser has open (format 3, 2026-11-13): /maps and /flows read and write the
+ * same one. A bad or old value reads as none (the pages offer the ready-made projects); the old
+ * IR 2 flow (`KEYS.flow`) is not opened any more (Batt: "refactor fresh"). */
+export const PROJECT_STORE = "poring-lab.flows.project.v3";
+export function readProjectText(store: StorageLike | null): string | null {
+  return readText(store, PROJECT_STORE);
+}
+export function writeProjectText(store: StorageLike | null, text: string): boolean {
+  return writeChoice(store, PROJECT_STORE, text);
+}
+/** Whether this browser still holds a flow of the old format (the pages say it was not converted). */
+export function hasOldFlow(store: StorageLike | null): boolean {
+  return readText(store, KEYS.flow) !== null;
+}

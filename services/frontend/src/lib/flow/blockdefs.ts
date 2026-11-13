@@ -86,6 +86,8 @@ export const THEN_OPTIONS = ["resume", "skip_block", "restart_flow", "relocate",
 export const HOTKEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"] as const;
 /** The Rogue's runner block (blocks.yaml `dungeon_hunt`): each ROLE names the function the runner
  * calls for it (Batt 2026-11-13: "every key a function"), in the block's order. */
+/** The lab's credentials by name (catalogue `credentials`; .env's account prefixes, never secrets). */
+export const CREDENTIALS = ["lab_gm", "lab_player"] as const;
 export const RUNNER_ROLES = [
   { param: "heal", field: "HEAL", words: "heal", fn: "heal" },
   { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing" },
@@ -219,8 +221,26 @@ export const BLOCK_DEFS: BlockDef[] = [
     message0: "set %1 to %2",
     args0: [text("VAR", "x"), { type: "input_value", name: "VALUE" }],
   }),
-  stmt({ type: "pl_call", message0: "call %1 ( )", args0: [text("PROC", "my_function")],
-    tooltip: "call a function of the functions tab (every map can call it)" }),
+  stmt({ type: "pl_call", message0: "call %1 ( %2 )", args0: [text("PROC", "my_function"), text("ARGS", "")], inputsInline: true,
+    tooltip: "call a function: this node's own, or Global's. Its inputs as in Python: F8, times=2" }),
+  stmt({ type: "pl_return", message0: "return %1", args0: [{ type: "input_value", name: "VALUE" }],
+    tooltip: "end the function here; with a value, the call gives it back (a function used as a value)" }),
+  value({ type: "pl_callv", message0: "%1 ( %2 )", args0: [text("PROC", "my_function"), text("ARGS", "")], inputsInline: true,
+    tooltip: "a function's value: what its return gives back" }),
+  // --- the session (the project model, 2026-11-13): a login node's and a character node's main;
+  // simulated (the bot's real login is ro_agent's Python); the account is a CREDENTIAL NAME, never a secret
+  stmt({
+    type: "pl_login",
+    message0: "log in to %1 as %2 %3 %4",
+    args0: [text("SERVER", "lab-rathena"), { type: "field_dropdown", name: "CREDENTIAL", options: opts(CREDENTIALS) }, badge, run],
+    tooltip: "login(server, credential): the server's id (the Settings page) and a credential by NAME (as n8n's): the password is never in a block",
+  }),
+  stmt({
+    type: "pl_choose_character",
+    message0: "choose the character %1 %2 %3",
+    args0: [text("CHAR", ""), badge, run],
+    tooltip: "choose_character(name=...): empty = the slot the client remembers (as the bot's login does)",
+  }),
   // --- every key a FUNCTION (Batt 2026-11-13: "Fly Wing, Butterfly Wing, the Knife swap, a skill:
   // make each a function whose body says which key F1-F9 to press; share them with Save / Load")
   stmt({
@@ -337,13 +357,22 @@ export const BLOCK_DEFS: BlockDef[] = [
   },
   {
     type: "pl_def",
-    message0: "function %1 ( )",
-    args0: [text("NAME", "my_function")],
+    message0: "function %1 ( %2 )",
+    args0: [text("NAME", "my_function"), text("PARAMS", "")],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
     style: st("pl_def"),
     mutator: STATE,
-    tooltip: "A FUNCTION (the functions tab): every map's blocks can call it by its name. Save and Load carry it, so it can be shared",
+    inputsInline: true,
+    tooltip: "A FUNCTION: any tab of this node (and, in Global, every node) can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs. The same name on a map replaces Global's there",
+  },
+  {
+    type: "pl_vardecl",
+    message0: "variable %1 = %2",
+    args0: [text("NAME", "x"), { type: "input_value", name: "VALUE" }],
+    style: st("pl_vardecl"),
+    mutator: STATE,
+    tooltip: "A variable of this tab (in Global: shared by every node); its first value. A map's variable of the same name replaces Global's there",
   },
   {
     type: "pl_event",
@@ -452,7 +481,7 @@ const PALETTE_TYPES: Record<string, string> = {
 };
 const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
 /** Catalogue blocks with a block of their own (not repeated under "More skills"). */
-const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt" };
+const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt", login: "pl_login", choose_character: "pl_choose_character" };
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
@@ -499,9 +528,12 @@ export function toolboxBlocks(tb: Toolbox | ToolboxCategory): { category: string
  * registered (hunt.ts), else the hunt block is offered as a generic block with its parameters by
  * name. `huntOmit`: its optional parameters' defaults (hunt.ts `omitted`), left out of the IR at that
  * value. `sensors`: the model blocks' first model and class, and the not-adopted models' notes. */
+/** Which tab the toolbox is for (the project model): the node's kind and whether it is its main. */
+export type ToolboxScope = { node: "login" | "character" | "map" | "global"; main: boolean };
+
 export function toolbox(
   blocks: Record<string, CatBlock>,
-  scope: "block" | "global" | "main" | "functions",
+  scope: ToolboxScope,
   huntFields: Record<string, string> | null = null,
   huntOmit: Record<string, string> = {},
   sensors: SensorDefaults = { model: "v1", label: "monster", notes: [] },
@@ -512,13 +544,14 @@ export function toolbox(
     blocks.hunt && huntFields
       ? [{ kind: "block", type: "pl_hunt", fields: huntFields, extraState: Object.keys(huntOmit).length ? { ...rest(blocks.hunt), omit: huntOmit } : rest(blocks.hunt) }]
       : [];
-  const movement: ToolboxItem[] = [...palette("walk_to"), ...hunt];
-  if (scope === "block" && blocks.dungeon_hunt) {
+  const onMap = scope.node === "map";
+  const movement: ToolboxItem[] = onMap ? [...palette("walk_to"), ...hunt] : [];
+  if (onMap && blocks.dungeon_hunt) {
     movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
   }
-  if (scope === "block") {
+  if (onMap) {
     movement.push(
-      lbl("Leave this map (a map block ends with one):"),
+      lbl("Leave this map (a map's main ends with one):"),
       { kind: "block", type: "pl_exit_walk" },
       { kind: "block", type: "pl_exit_npc" },
       { kind: "block", type: "pl_exit_item_fn", fields: { FN: "butterfly_wing" } },
@@ -526,7 +559,10 @@ export function toolbox(
     );
   }
   const pressKey: ToolboxItem[] = blocks.press_key ? [{ kind: "block", type: "pl_press_key", fields: { KEY: "F1" }, extraState: rest(blocks.press_key) }] : [];
-  const actions: ToolboxItem[] = [...pressKey, ...ACTIONS.flatMap(palette)];
+  const session: ToolboxItem[] = [];
+  if (scope.node === "login" && blocks.login) session.push(lbl("Log in (a credential by name, never a password):"), { kind: "block", type: "pl_login", fields: { SERVER: "lab-rathena", CREDENTIAL: "lab_gm" }, extraState: rest(blocks.login) });
+  if (scope.node === "character" && blocks.choose_character) session.push(lbl("Choose the character:"), { kind: "block", type: "pl_choose_character", fields: { CHAR: "" }, extraState: rest(blocks.choose_character) });
+  const actions: ToolboxItem[] = [...session, ...pressKey, ...(scope.node === "global" || onMap ? ACTIONS.flatMap(palette) : [])];
   const sentences = Object.entries(SENTENCE).filter(([name]) => blocks[name]);
   if (sentences.length) actions.push(lbl("At a shop or a Kafra:"));
   for (const [name, sb] of sentences) actions.push({ kind: "block", type: sb.type, extraState: rest(blocks[name]) });
@@ -538,13 +574,9 @@ export function toolbox(
     { kind: "block", type: "pl_stop" },
     { kind: "block", type: "pl_break" },
     { kind: "block", type: "pl_continue" },
-    ...(scope === "functions"
-      ? []
-      : [
-          lbl(scope === "global" ? "When something happens (every map):" : "When something happens:"),
-          { kind: "block" as const, type: "pl_event", fields: { SCOPE: scope === "global" ? "global" : "map", NAME: "my_event" },
-            inputs: { WHEN: exprBlock("hp_percent() < 30") } },
-        ]),
+    lbl(scope.node === "global" ? "An EVENT, a function that runs by itself when … (every node; a map's of the same name replaces it there):" : "An EVENT, a function that runs by itself when … (this node; it replaces Global's of the same name here):"),
+    { kind: "block" as const, type: "pl_event", fields: { SCOPE: scope.node === "global" ? "global" : "map", NAME: "my_event" },
+      inputs: { WHEN: exprBlock("hp_percent() < 30") } },
   ];
   const conditions: ToolboxItem[] = [
     { kind: "block", type: "pl_if", inputs: { COND: exprBlock("hp_percent() < 50") } },
@@ -573,10 +605,17 @@ export function toolbox(
     { kind: "block", type: "pl_expr", fields: { TEXT: "1 + 2" } },
     { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } },
   ];
-  const variables: ToolboxItem[] = [{ kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } }];
+  const variables: ToolboxItem[] = [
+    lbl(scope.node === "global" ? "A variable every node shares:" : "A variable of this tab:"),
+    { kind: "block", type: "pl_vardecl", fields: { NAME: "x" }, inputs: { VALUE: exprBlock("0") } },
+    { kind: "block", type: "pl_set", inputs: { VALUE: exprBlock("0") } },
+  ];
   const functions: ToolboxItem[] = [
-    ...(scope === "functions" ? [{ kind: "block" as const, type: "pl_def", fields: { NAME: "my_function" } }] : [lbl("Functions are written on the functions tab:")]),
-    { kind: "block", type: "pl_call", fields: { PROC: "my_function" } },
+    lbl("A function: write it once, call it from any tab (Global's: from every node):"),
+    { kind: "block", type: "pl_def", fields: { NAME: "my_function", PARAMS: "" } },
+    { kind: "block", type: "pl_call", fields: { PROC: "my_function", ARGS: "" } },
+    { kind: "block", type: "pl_return" },
+    { kind: "block", type: "pl_callv", fields: { PROC: "my_function", ARGS: "" } },
     ...pressKey,
   ];
   const others: ToolboxItem[] = Object.keys(blocks)
@@ -584,9 +623,8 @@ export function toolbox(
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
-  if (scope === "block") {
-    advanced.push(cat("Map events", "loop_category", [{ kind: "block", type: "pl_extend" }, { kind: "block", type: "pl_disable" }]));
-  }
+  // (the project model: a map replaces Global's event by writing its own of the same name; no extend /
+  // disable blocks any more)
   return {
     kind: "categoryToolbox",
     contents: [
