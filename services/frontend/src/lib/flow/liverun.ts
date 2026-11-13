@@ -11,7 +11,7 @@
 
 import type { Project } from "./project.ts";
 
-export type LiveState = "no_helper" | "idle" | "starting" | "running" | "stopping" | "ended" | "failed" | "refused";
+export type LiveState = "no_helper" | "idle" | "busy" | "starting" | "running" | "stopping" | "ended" | "failed" | "refused";
 
 export type LiveStatus = {
   state: LiveState | string;
@@ -31,7 +31,16 @@ export type LiveStatus = {
   config?: Record<string, unknown> | null; // the values this run took
   keys_src?: string | null; // the run's keys: "the flow's functions" or "the settings"
   check?: LiveCheck | null; // dungeon@9.45: the last check of the game screen
+  // matpilot round 17 N5: another input writer of ours plays (a night chain, a runner, the live
+  // block player, an A/B series; scripts/flow_run.py writer_busy), in its words; null: none. The
+  // helper's state is then "busy" (or a last run's end, which keeps its words)
+  busy?: string | null;
 };
+
+/** PURE: why Run and the check wait: another input writer of ours plays (null: none). */
+export function busyWhy(st: LiveStatus | null): string | null {
+  return st?.busy ? `${st.busy}: Run waits until it ends (the Run helper refuses to start meanwhile)` : null;
+}
 
 /** One line of the live check (scripts/dungeon_hunt.py check_item): ok true / false / null (not
  * read), its words, the value read, and whether the runner's own start refuses on it. */
@@ -114,6 +123,7 @@ export function canCheck(st: LiveStatus | null, flow: string): { can: boolean; w
   if (st === null) return { can: false, why: "reading the Run helper…" };
   if (!st.helper_alive) return { can: false, why: st.detail || "the Run helper is not running on the bot server" };
   if (ACTIVE.includes(st.state)) return { can: false, why: "a run is going: the game is checked before a run" };
+  if (busyWhy(st)) return { can: false, why: busyWhy(st) };
   if (!st.flows || !(flow in st.flows)) return { can: false, why: "the Run helper does not list this flow" };
   if (st.check?.state === "checking") return { can: false, why: "checking the game…" };
   return { can: true, why: null };
@@ -168,6 +178,7 @@ export function liveButtons(st: LiveStatus | null, flow: string): LiveButtons {
   if (!st.helper_alive) return { canStart: false, canStop: false, why: st.detail || "the Run helper is not running on the bot server" };
   const active = ACTIVE.includes(st.state);
   if (active) return { canStart: false, canStop: st.state !== "stopping", why: null };
+  if (busyWhy(st)) return { canStart: false, canStop: false, why: busyWhy(st) }; // round 17 N5
   if (flow !== PROJECT_FLOW && (!st.flows || !(flow in st.flows))) return { canStart: false, canStop: false, why: "the Run helper does not list this flow" };
   if (st.mode !== "ASSIST") return { canStart: false, canStop: false, why: "set the console to ASSIST first (the bot never takes over in HUMAN)" };
   return { canStart: true, canStop: false, why: null };
@@ -176,6 +187,7 @@ export function liveButtons(st: LiveStatus | null, flow: string): LiveButtons {
 const WORDS: Record<string, string> = {
   no_helper: "the Run helper is not running",
   idle: "ready",
+  busy: "busy: another input writer of ours plays",
   starting: "starting…",
   running: "playing in the game",
   stopping: "stopping…",
@@ -188,6 +200,7 @@ const WORDS: Record<string, string> = {
 export function liveLabel(st: LiveStatus | null): string {
   if (st === null) return "…";
   if (!st.helper_alive) return WORDS.no_helper;
+  if (st.busy && !ACTIVE.includes(st.state)) return `busy: ${st.busy}`; // round 17 N5, in its words
   return WORDS[st.state] ?? st.state;
 }
 
@@ -198,6 +211,7 @@ export const REFUSALS: Record<string, string> = {
   nothing_running: "Nothing is running.",
   unknown_flow: "The Run helper does not list this flow.",
   already_running: "A run is already going: press Stop first.",
+  input_writer_busy: "Another input writer of ours plays (a night chain, a runner, the live block player or an A/B series): Run waits until it ends.",
   mode_not_assist: "Set the console to ASSIST first.",
   csrf_invalid: "The page's security token expired: reload the page and try again.",
   origin_required: "Open the console from its own address to use Run.",

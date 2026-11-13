@@ -674,7 +674,7 @@ def test_the_helper_starts_the_player_with_the_checked_file_only(
             return None
 
     monkeypatch.setattr(fr, "SCRATCH", tmp_path / "scratch")
-    monkeypatch.setattr(fr, "busy_reason", lambda _lines: None)
+    monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     monkeypatch.setattr(
         fr.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="", returncode=0)
     )
