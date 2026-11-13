@@ -38,6 +38,7 @@ import {
   ReactFlow,
   type ReactFlowInstance,
   useInternalNode,
+  useStore,
   useUpdateNodeInternals,
 } from "@xyflow/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -49,7 +50,7 @@ import type { AuthoredExit } from "@/lib/flow/ir";
 import { type Project } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
 import { sessionLinkProblem } from "@/lib/maps/edit";
-import { type EdgeData, entryHandle, exitHandle, exitRuns, FIT_FLOOR, FIT_NAME, fitChoice, fitLeftOut, fitTitle, followCentre, IN, labelPlace, mapsGraph, type MapsNodeData, OUT, type Rect, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
+import { type EdgeData, entryHandle, exitHandle, exitRuns, FIT_FLOOR, FIT_NAME, fitChoice, fitLeft, fitLeftOut, fitName, fitTitle, followCentre, IN, labelPlace, labelReadable, mapsGraph, type MapsNodeData, OUT, type Rect, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
 import { entryCaption, EXIT_WORDS, nodeLinks } from "@/lib/maps/links";
 import { nodeLint, tabList, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
@@ -322,7 +323,9 @@ function useRect(id: string): Rect | null {
  * is shortened or wrapped. A label with no lines is not drawn: the edge's own SVG title (the
  * tooltip of its line) keeps the words. */
 function EdgeLabel({ at, label, colour }: { at: { x: number; y: number; lines: string[] }; label: string; colour: string }) {
-  if (!at.lines.length) return null;
+  // round 18 #5: text under 9 px at this zoom is not drawn either (labelReadable)
+  const zoom = useStore((s) => s.transform[2]);
+  if (!at.lines.length || !labelReadable(zoom)) return null;
   return (
     <EdgeLabelRenderer>
       <div className="nodrag nopan mp-edge-label" title={at.lines.join(" ") !== label ? label : undefined} style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)`, color: colour }}>
@@ -446,7 +449,7 @@ function MapsCanvas(p: MapsCanvasProps) {
     const bounds = (xs: Node[]) => (xs.length ? inst.getNodesBounds(xs) : null);
     const box = { width: el.clientWidth, height: el.clientHeight };
     // round 4: null while folded (0 x 0) or for any non-finite number: nothing is animated then
-    const c = fitChoice(box, { all: bounds(ns), path: bounds(ns.filter((n) => n.type !== "global")), maps: bounds(ns.filter((n) => n.type === "map" || n.type === "start")) }, MIN_ZOOM, MAX_ZOOM, PAD);
+    const c = fitChoice(box, { all: bounds(ns), path: bounds(ns.filter((n) => n.type !== "global")), maps: bounds(ns.filter((n) => n.type === "map" || n.type === "start")) }, MIN_ZOOM, MAX_ZOOM, PAD, fitLeft(PAD));
     if (!c) return false;
     const kinds = ns.map((n) => {
       const d = n.data as MapsNodeData;
@@ -616,10 +619,10 @@ function MapsCanvas(p: MapsCanvasProps) {
       >
         <Background gap={24} />
         {/* round 6: Fit is OURS (never below MIN_ZOOM on a wide canvas: text >= 11 px); React Flow's
-            own went to 0.41 (5 px text). Round 17: its title says what the last fit showed; its
-            name (aria-label) stays the same */}
+            own went to 0.41 (5 px text). Round 17: its title says what the last fit showed; round
+            18 #6: its name (aria-label) is that title's first sentence */}
         <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={() => void fit()} title={fitText} aria-label={FIT_NAME} data-testid="maps-fit">
+          <ControlButton onClick={() => void fit()} title={fitText} aria-label={fitName(fitText)} data-testid="maps-fit">
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
               <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.8" />
             </svg>
