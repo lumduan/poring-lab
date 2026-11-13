@@ -1736,3 +1736,36 @@
     clip: auto;
   }
 }
+
+/* matpilot round 16 #6 (phone 390 x 844, Before Run open): the context bar is a scroll box
+   (overflow-x), so its flex minimum was 0 and an open pane SHRANK it to one row: the tab row moved
+   up over its second row (◂ Maps 13 % visible, "Inside the runner" 0 %, under the tab "keys"). The
+   rows above and below the body never shrink, at any width; when they and an open pane need more
+   than the window, the page's own column scrolls */
+.studio > .studio-bar,
+.studio > .studio-notices,
+.studio > .device-bar,
+.studio > .studio-problems,
+.studio > .studio-status {
+  flex-shrink: 0;
+}
+/* ... and on a phone the drawer is as tall as its panes: the checklist was a scroll box inside the
+   scrolling page (1,720 px in 333 px). Now the page is the one scroller, and the status row with
+   More ▾ stays at the screen's bottom while it scrolls */
+@media (max-width: 48rem) {
+  .studio[data-testid="flows-app"] .studio-drawer,
+  .studio[data-testid="flows-app"] .studio-drawer[data-panes] {
+    height: auto;
+    overflow: visible;
+  }
+  .studio[data-testid="flows-app"] .pane-body {
+    flex: none;
+    overflow-x: auto;
+    overflow-y: visible; /* computes to auto with overflow-x: auto, but the box is as tall as its content */
+  }
+  .studio[data-testid="flows-app"] > .studio-status {
+    position: sticky;
+    bottom: 0;
+    z-index: 90;
+  }
+}
