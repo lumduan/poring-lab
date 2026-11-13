@@ -85,6 +85,11 @@ CLEAR_AT = 0.40  # the night chain's WEIGHT_CLEAR: at or over it, clear-bag befo
 # (item, its key, floor, to): a GM @item only when the read count is under the floor
 TOPUP = ((602, "F9", 2, 3), (601, "F8", 7, 10), (504, "F1", 7, 10))
 WARP_SETTLE_S, ARRIVE_S = 4.0, 20.0
+# 2026-11-14 01:00: a death respawns her with almost no HP (the lab server's restart HP), and the
+# next run (B) met the player's built-in hp_critical at once (0.1 min): the setup heals her first,
+# the lab GM's @heal (group 20; demo_aftercare's), when her HP reads under HEAL_BELOW or unread
+HEAL_BELOW = 95
+SHORT_RUN_S = 60.0  # a run that ends sooner never played: the series stops (a person first)
 START_GRACE_S, STOP_GRACE_S = 180.0, 90.0
 SERVE_EXTRA_S = 600
 CHAT_GUARD_RUN = 3  # chat_guard refuses the 3rd identical line in a row
@@ -169,6 +174,11 @@ def guard_ok(lines: Iterable[str], run: int = CHAT_GUARD_RUN) -> bool:
         if n >= run:
             return False
     return True
+
+
+def needs_heal(hp: Any) -> bool:
+    """PURE: the setup heals her when her HP percent reads under HEAL_BELOW, or does not read."""
+    return not isinstance(hp, int) or hp < HEAL_BELOW
 
 
 def guard_history(state: Mapping[str, Any]) -> list[str]:
@@ -539,6 +549,12 @@ class Series:
         for ln in lines:
             self.gm(ln)
             time.sleep(0.8)
+        if needs_heal(got.get("hp")):
+            self.gm("@heal")
+            time.sleep(1.5)
+            got = self.read()
+            if needs_heal(got.get("hp")):
+                raise Stop(f"after @heal her HP reads {got.get('hp')}, not {HEAL_BELOW} % or more")
         cc = self.sh([PY, str(Path(__file__)), "close-chat"], 120)
         last = (cc.stdout.strip().splitlines() or ["{}"])[-1]
         if '"closed": true' not in last:
@@ -617,8 +633,12 @@ class Series:
                 self.log(f"{rr['label']}: no end after Stop: SIGINT")
                 stop_t = now + 10**9
         rc = proc.returncode
-        self.log(f"{rr['label']} ended rc {rc} after {(time.monotonic() - t0) / 60:.1f} min")
-        return {"label": rr["label"], "rc": rc, "s": round(time.monotonic() - t0, 1)}
+        s_ = time.monotonic() - t0
+        self.log(f"{rr['label']} ended rc {rc} after {s_ / 60:.1f} min")
+        out = {"label": rr["label"], "rc": rc, "s": round(s_, 1)}
+        if s_ < SHORT_RUN_S:  # it never played (a start refusal, a safe end at once)
+            out["short"] = True
+        return out
 
     def run(self) -> int:
         done: list[dict[str, Any]] = []
@@ -632,6 +652,8 @@ class Series:
                 (self.dir / "done.json").write_text(json.dumps(done, indent=1) + "\n")
                 if done[-1]["rc"] not in (0, 130):  # a refused start (rc 2 / 1): a person first
                     raise Stop(f"{rr['label']} rc {done[-1]['rc']} (its log first)")
+                if done[-1].get("short"):
+                    raise Stop(f"{rr['label']} ended within {SHORT_RUN_S:.0f} s (its log first)")
         except Stop as e:
             self.log(f"STOPPED: {e} (a person first)")
             return 2
@@ -644,10 +666,11 @@ class Series:
 # --- the two setup steps that touch the game (child processes) -----------------------------------
 def read_now() -> dict[str, Any]:
     """Pixels only (no Agent): the map's name (the minimap), the weight share, the chat input,
-    the hotbar counts on the box's keys (dungeon_hunt's own readers)."""
+    the hotbar counts on the box's keys, her HP percent (dungeon_hunt's own readers)."""
     import dungeon_hunt as dh
     import gm_state
     import hotbar_count as hb
+    import hp_percent as hpp
     import minimap_id as mi
     import numpy as np
     import ro_agent as r
@@ -661,7 +684,10 @@ def read_now() -> dict[str, Any]:
         tpl = hb.load()
         g = hb.gray(img)
         counts = {k: hb.read_count(g, dh.hotbar_slot(k), tpl) for _i, k, _f, _t in TOPUP}
+        z = np.load(hpp.GLYPHS)
+        glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
         return {"map": None if refs is None else mi.read_map(img, refs).map,
+                "hp": hpp.read(img, glyphs),
                 "weight": None if share is None else round(share, 4),
                 "chat_open": bool(r.is_state(screen, "chat_open")), "counts": counts}  # fmt: skip
     finally:

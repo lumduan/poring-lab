@@ -231,3 +231,11 @@ def test_the_warp_takes_the_other_cell_when_the_guards_own_history_would_refuse_
     assert ab.pick_warp(b, a, hist) == b  # the planned cell when it is not the repeated one
     assert ab.pick_warp(a, b, ab.guard_history({"chat": {"text": a, "count": 1}})) == a
     assert ab.guard_history({}) == [] and ab.guard_history({"chat": "x"}) == []
+
+
+def test_the_setup_heals_her_when_her_hp_is_not_full_or_unread() -> None:
+    # 2026-11-14 01:00: run 1 (A) died to the MVP; she respawned with almost no HP and run 2 (B)
+    # met the player's built-in hp_critical at once
+    assert ab.needs_heal(None) and ab.needs_heal(3) and ab.needs_heal(ab.HEAL_BELOW - 1)
+    assert not ab.needs_heal(ab.HEAL_BELOW) and not ab.needs_heal(100)
+    assert ab.guard_ok(["@warp xmas_dun02 7 21", "@heal", "@warp xmas_dun02 114 23", "@heal"])
