@@ -11,7 +11,7 @@ import { REFUSALS } from "@/lib/flow/liverun";
 import { effectiveSurvival, groupLevel, type Survival, type SurvivalConfig, type SurvivalDoc, type SurvivalKey, survivalProblem } from "@/lib/flow/survival";
 import { backendHttpBase } from "@/lib/ws";
 
-export type SurvivalState = { cfg: SurvivalConfig | null; err: string | null; busy: boolean; save: (scope: "global" | "map", values: Survival | null) => Promise<void> };
+export type SurvivalState = { cfg: SurvivalConfig | null; err: string | null; busy: boolean; save: (scope: "global" | "map", values: Survival | null) => Promise<boolean> };
 
 export function useSurvival(backendUrl: string | null, map: string): SurvivalState {
   const base = backendHttpBase(backendUrl);
@@ -38,9 +38,10 @@ export function useSurvival(backendUrl: string | null, map: string): SurvivalSta
   }, [base]);
 
   const save = useCallback(
-    async (scope: "global" | "map", values: Survival | null) => {
+    async (scope: "global" | "map", values: Survival | null): Promise<boolean> => {
       setBusy(true);
       setErr(null);
+      let ok = false;
       try {
         for (let attempt = 0; attempt < 2; attempt++) {
           if (csrf.current === null) {
@@ -57,6 +58,7 @@ export function useSurvival(backendUrl: string | null, map: string): SurvivalSta
           if (r.ok) {
             const body = (await r.json()) as SurvivalConfig;
             setCfg({ global: body.global ?? {}, maps: body.maps ?? {} });
+            ok = true;
             break;
           }
           const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string } | unknown[] };
@@ -73,6 +75,7 @@ export function useSurvival(backendUrl: string | null, map: string): SurvivalSta
       } finally {
         setBusy(false);
       }
+      return ok;
     },
     [base, map],
   );
@@ -81,6 +84,12 @@ export function useSurvival(backendUrl: string | null, map: string): SurvivalSta
 }
 
 const LEVEL_WORDS = { default: "the defaults", global: "every map's values", map: "this map's own values" } as const;
+const NAMES: Record<SurvivalKey, string> = { potion_below: "heal at HP under", fly_below: "Fly Wing at HP under", fly_rate: "the fast fall", fly_rate_below: "the fast fall's HP" };
+const shownOf = (k: SurvivalKey, v: number) => (k === "fly_rate" ? `${Math.round(v)} HP/s` : `${Math.round(v * 100)} %`);
+
+/** The last saved change and what was there before it (matpilot 2026-11-13: these save on the
+ * server at once, and on a phone they sit where a child scrolls -- so every change can be undone). */
+type Last = { scope: "global" | "map"; prev: Survival | null; text: string };
 
 export default function SurvivalStrip({ d, map, sv }: { d: SurvivalDoc; map: string; sv: SurvivalState }) {
   const eff = effectiveSurvival(d, sv.cfg, map);
@@ -89,13 +98,23 @@ export default function SurvivalStrip({ d, map, sv }: { d: SurvivalDoc; map: str
   const [rate, setRate] = useState<string | null>(null); // the fast fall's number while it is typed
   const scopeVals = (scope: "global" | "map"): Survival => (scope === "map" ? eff.values : effectiveSurvival(d, sv.cfg ? { global: sv.cfg.global, maps: {} } : null, map).values);
   const [why, setWhy] = useState<string | null>(null);
+  const [last, setLast] = useState<Last | null>(null);
+  // what a level holds now (null: nothing of its own), for the undo
+  const held = (scope: "global" | "map"): Survival | null => {
+    const g = scope === "map" ? sv.cfg?.maps?.[map] : sv.cfg?.global;
+    return g && Object.keys(g).length ? ({ ...effectiveSurvival(d, null, map).values, ...g } as Survival) : null;
+  };
+  const saveUndoable = (scope: "global" | "map", values: Survival | null, text: string) => {
+    const prev = held(scope);
+    void sv.save(scope, values).then((ok) => setLast(ok ? { scope, prev, text } : null));
+  };
 
   const change = (k: SurvivalKey, v: number) => {
     const scope = own ? "map" : "global";
     const next = { ...scopeVals(scope), [k]: v };
     const p = survivalProblem(next, d);
     setWhy(p);
-    if (p === null) void sv.save(scope, next);
+    if (p === null) saveUndoable(scope, next, `${NAMES[k]} ${shownOf(k, eff.values[k])} → ${shownOf(k, v)}, for ${scope === "map" ? `${map} only` : "every map"}`);
   };
   const pick = (k: Exclude<SurvivalKey, "fly_rate">, label: string) => (
     <label className="mb-part" key={k}>
@@ -116,10 +135,10 @@ export default function SurvivalStrip({ d, map, sv }: { d: SurvivalDoc; map: str
       </span>
       <span className="mb-part" role="radiogroup" aria-label="Whose numbers">
         <label title="The numbers every map's flow uses (a map with its own numbers uses those instead)">
-          <input type="radio" name="survival-scope" checked={!own} disabled={sv.busy || sv.cfg === null} onChange={() => void sv.save("map", null)} data-testid="survival-scope-global" /> every map
+          <input type="radio" name="survival-scope" checked={!own} disabled={sv.busy || sv.cfg === null} onChange={() => saveUndoable("map", null, `${map} uses every map's numbers again`)} data-testid="survival-scope-global" /> every map
         </label>{" "}
         <label title={`Numbers for ${map} only: they override every map's`}>
-          <input type="radio" name="survival-scope" checked={own} disabled={sv.busy || sv.cfg === null} onChange={() => void sv.save("map", eff.values)} data-testid="survival-scope-map" /> {map} only
+          <input type="radio" name="survival-scope" checked={own} disabled={sv.busy || sv.cfg === null} onChange={() => saveUndoable("map", eff.values, `${map} has its own numbers now`)} data-testid="survival-scope-map" /> {map} only
         </label>
       </span>
       {pick("potion_below", "heal at HP under")}
@@ -150,9 +169,26 @@ export default function SurvivalStrip({ d, map, sv }: { d: SurvivalDoc; map: str
         {level === "global" ? " (set for every map)" : ""}
       </span>
       {level === "global" && (
-        <button type="button" className="mb-link" disabled={sv.busy} onClick={() => void sv.save("global", null)} data-testid="survival-reset-global">
+        <button type="button" className="mb-link" disabled={sv.busy} onClick={() => saveUndoable("global", null, "every map is back to the defaults")} data-testid="survival-reset-global">
           every map back to the defaults
         </button>
+      )}
+      {last && (
+        <span className="mb-part" role="status" data-testid="survival-saved">
+          saved on the bot server: {last.text}{" "}
+          <button
+            type="button"
+            className="mb-link"
+            disabled={sv.busy}
+            onClick={() => {
+              const u = last;
+              void sv.save(u.scope, u.prev).then((ok) => ok && setLast(null));
+            }}
+            data-testid="survival-undo"
+          >
+            undo
+          </button>
+        </span>
       )}
       {(why || sv.err || sv.cfg?.broken) && (
         <span className="mb-part mb-warn" role="status">
