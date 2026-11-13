@@ -3036,7 +3036,13 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     # the I/O is the runner's own: the gate's window read, its chord, press(), ui_double_click
     assert "windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg)" in src
     assert "chord=lambda: agent_raw.chord(*bare_keys)" in src
-    assert 'press=lambda why_: press("equip", why_)' in src
+    # dungeon@9.50: the dagger's key through bare_equip_press -- the runner's own press("equip")
+    # unless the box plays the Knife swap (then its knife_back, but never for the escape)
+    assert "press=bare_equip_press," in src
+    bep = src[src.index("            def bare_equip_press(why_: str) -> None:") :]
+    bep = bep[: bep.index("\n\n")]
+    assert bep.rstrip().endswith('press("equip", why_)')
+    assert 'if box_knife and why_ != "safety":' in bep
     assert "ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)" in src
     assert src.count("ui_double_click(") == 2  # its definition + the one call
 

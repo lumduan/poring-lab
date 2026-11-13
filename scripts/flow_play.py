@@ -48,6 +48,21 @@ A tick with no HP read and no boss line decides nothing (the runner's own sustai
 without an HP read either). An event's limit (handler_runaway, max_per_run) or a refused key ends
 the run through the runner's normal end, then the player ends with that reason.
 
+THE BOX'S FUNCTIONS AT THE RUNNER'S MOMENTS (stage 3, live-blocks.md section 3.3; dungeon@9.50):
+the Knife swap (knife_on before the steal strike, knife_back after the steal or its time box), the
+way home at the end (home) and the death exit's two presses (respawn, respawn_confirm) are the
+box's FUNCTIONS when the project writes them so (poring_flow.live.hunt_plan: a knife / home
+function that is more than one press_key; a respawn function of click_at). The runner keeps
+deciding WHEN: at each of its moments it calls the hook's ``call(role, why, press, click)``, and
+the player plays that function's STEPS (prepared before any input: presses, waits, clicks, through
+calls with literal arguments) NOW -- each press through the runner's own press of a key of that
+moment, each click as its own two-motion click (the death exit only), each wait slept exactly (at
+most 1 s in all) -- while the runner waits; its read-backs and retries stay its own. The WEIGHT
+event (an event that reads weight_percent() and stops) decides on the runner's weight read, at its
+UI watch (its own moment, never mid-fight): it ends the run normally, and the runner's end flies
+her home. A role function that is one press_key stays the runner's own key: a box without these
+plays exactly as stage 2 (run() gets no box_roles).
+
 THE START, before any input: the project validates; the node is a map node; every block plays live;
 the time box fits the Settings maximum (--max-s); each hunt core's keys resolve from the node's
 functions (project.runner_keys) and its runner settings from the config file; then the START CHECK
@@ -140,6 +155,18 @@ class RunnerPlan:
     # they replace (poring_flow.live.hunt_plan; dungeon_hunt run(box_plays=...))
     events: tuple[str, ...] = ()
     plays: frozenset[str] = frozenset()
+    # stage 3: the role functions the hunt core calls (role -> its steps, its function's name),
+    # the events that decide on the weight read, where knife_on's body leaves her
+    calls: Mapping[str, tuple[fn.Step, ...]] = field(default_factory=dict)
+    call_names: Mapping[str, str] = field(default_factory=dict)
+    weight_events: tuple[str, ...] = ()
+    knife_ends: str = "opener"
+
+    def box_roles(self) -> dict[str, str]:
+        """dungeon_hunt run(box_roles=...): each called role, with where its body leaves her."""
+        ends = {"knife_on": self.knife_ends, "knife_back": "armed", "home": "home",
+                "respawn": "save_point", "respawn_confirm": "save_point"}  # fmt: skip
+        return {r: ends[r] for r in self.calls}
 
     def argv(self, label: str, stop_file: Path | None, minutes: float | None) -> list[str]:
         """Exactly the Run helper's runner argv for this map (flow_run.command without its head),
@@ -178,7 +205,11 @@ class Prepared:
         return {"version": VERSION, "project": self.project.name, "node": self.node,
                 "map": self.map, "project_hash": self.project_hash, "cap_s": self.cap_s,
                 "runners": {b: {"flow": p.flow_id, "keys": p.keys, "events": list(p.events),
-                                "box_plays": sorted(p.plays)} for b, p in
+                                "box_plays": sorted(p.plays),
+                                **({"box_roles": p.box_roles(),
+                                    "calls": {r: [x.doc() for x in st]
+                                              for r, st in p.calls.items()}}
+                                   if p.calls else {})} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -240,7 +271,9 @@ def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CO
         if why:
             return refuse(f"{block}'s runner settings: {why}")
         hp = live.hunt_plan(c.flow, block)  # its problems refused above (live.problems)
-        runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals, hp.events, hp.plays)
+        runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals, hp.events, hp.plays,
+                                    dict(hp.calls), dict(hp.call_names), hp.weight_events,
+                                    hp.knife_ends)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
 
@@ -378,6 +411,7 @@ class HuntResult:
     rc: int | None = None
     ticks: int = 0
     survive_calls: int = 0  # stage 2: the hook's survive calls (main ticks and quick reads)
+    calls: int = 0  # stage 3: the hook's calls of the box's role functions
 
     @property
     def left(self) -> bool:
@@ -410,6 +444,13 @@ class HuntHook:
         """dungeon@9.49: the box's survival events on this runner tick (LivePlayer.hunt_tick)."""
         self.res.survive_calls += 1
         return self.player.hunt_tick(view, press)
+
+    def call(self, role: str, why: str, press: Callable[[str, str], str | None],
+             click: Callable[[int, int, str], bool] | None = None) -> str | None:  # fmt: skip
+        """dungeon@9.50: the box's function for a role, at the runner's moment (LivePlayer.
+        hunt_call)."""
+        self.res.calls += 1
+        return self.player.hunt_call(role, why, press, click)
 
     def event(self, rec: Mapping[str, Any], t_mono: float) -> None:
         k = rec.get("kind")
@@ -457,7 +498,9 @@ class HuntCore:
                        "flow": plan.flow_id, "keys": plan.keys, "argv": argv,
                        "events": list(plan.events), "box_plays": sorted(plan.plays)})  # fmt: skip
         hook = HuntHook(player, res)
-        box = {"box_plays": sorted(plan.plays)} if plan.plays else {}  # stage 2 (none: as 9.48)
+        box: dict[str, Any] = {"box_plays": sorted(plan.plays)} if plan.plays else {}  # stage 2
+        if plan.calls:  # stage 3: the roles the box's functions play (none: exactly as 9.49)
+            box["box_roles"] = plan.box_roles()
         try:
             a = args_fn(argv)
             res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
@@ -466,7 +509,7 @@ class HuntCore:
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
                        "ticks": res.ticks, "survive_calls": res.survive_calls,
-                       "rc": res.rc})  # fmt: skip
+                       "calls": res.calls, "rc": res.rc})  # fmt: skip
         return res
 
 
@@ -501,6 +544,7 @@ class LivePlayer(Sim):
         # stage 2: the box's events inside a running hunt core (hunt_tick)
         self._port: Callable[[str, str], str | None] | None = None  # the runner's own press
         self._hunt_keys: frozenset[str] = frozenset()  # the events that play in the hunt core
+        self._hunt_weight: frozenset[str] = frozenset()  # stage 3: those on the weight read
         self._hunt_halt: _Halt | None = None  # one of them ended the run (its words: words)
         self._playing: str | None = None  # the event whose body plays now (its key)
         self._readings: dict[str, dict[str, Any]] = {}  # event key -> the reading that fired it
@@ -673,10 +717,11 @@ class LivePlayer(Sim):
             self.words = f"no runner for {self.block}"
             return "failed"
         self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
+        self._hunt_weight = frozenset(plan.weight_events)  # stage 3: on its weight read only
         try:
             res = self.hunt.play(self, plan)
         finally:
-            self._hunt_keys = frozenset()
+            self._hunt_keys = self._hunt_weight = frozenset()
             self.world["sees_boss"] = None  # the runner's boss read: unknown outside it
         self._next = self.io.clock()
         self.t = self.io.clock() - self._t0
@@ -685,6 +730,8 @@ class LivePlayer(Sim):
         self.read()
         if self._hunt_halt is not None:  # a box event ended it (the runner's normal end ran)
             halt, self._hunt_halt = self._hunt_halt, None
+            if res.home and self.words:  # stage 3: the weight home's stop, then the way home
+                self.words = f"{self.words}; the hunt core flew her home"
             raise halt
         if res.error is not None:
             self.words = f"the hunt core ended: {res.error}"
@@ -694,9 +741,11 @@ class LivePlayer(Sim):
         if why == "Stop pressed":
             raise _Halt("stopped")
         if res.dead or res.reason == "death":
-            self.words = ("she died in the hunt; the runner pressed her respawn at the save "
-                          "point" if res.respawned else "she died in the hunt: the death "
-                          "dialog is a person's (stage 2 plays it)")  # fmt: skip
+            by = (f"the box's {plan.call_names['respawn']}()" if "respawn" in plan.calls
+                  else "the runner")  # fmt: skip
+            self.words = (f"she died in the hunt; {by} pressed her respawn at the save point"
+                          if res.respawned else "she died in the hunt: the death dialog is a "
+                          "person's (the respawn did not arrive)")  # fmt: skip
             raise _Halt("dead")
         if why is not None:  # the time box: the runner's own end ran (a player's way home)
             self.words = "the hunt core flew her home" if res.home else None
@@ -806,7 +855,10 @@ class LivePlayer(Sim):
         the runner goes on; words: the run ends (the runner's normal end)."""
         if self._hunt_halt is not None:
             return self.hunt_halt_words()
-        keys = self._hunt_keys
+        w = getattr(view, "weight_pct", None)
+        if w is not None:  # stage 3: the runner's weight read (its UI watch): the weight events
+            return self._weight_tick(int(w), press)
+        keys = self._hunt_keys - self._hunt_weight
         if not keys:
             return None
         boss = None if view.quick else view.boss is not None  # quick: no Battle Log read
@@ -829,6 +881,61 @@ class LivePlayer(Sim):
             return self.hunt_halt_words()
         finally:
             self._port, self.node_path = None, node_path
+        return None
+
+    def _weight_tick(self, w: int, press: Callable[[str, str], str | None]) -> str | None:
+        """Stage 3: the weight read of the runner's UI watch -- only the WEIGHT events are
+        evaluated (its own moment, never mid-fight), and a due one plays now (a pre-empt: its
+        stop ends the run, the runner's normal end flies her home). No insert plays here."""
+        keys = self._hunt_weight
+        if not keys:
+            return None
+        self.t = self.io.clock() - self._t0
+        self._set({"weight_percent": w}, "world")
+        node_path, self._port = self.node_path, press
+        try:
+            for e in self._perceive(lambda x: x.key in keys):
+                self._fire(e)
+            self._preempt_now(keys)
+        except _Halt as h:
+            self._hunt_halt = h
+            return self.hunt_halt_words()
+        finally:
+            self._port, self.node_path = None, node_path
+        return None
+
+    def hunt_call(self, role: str, why: str, press: Callable[[str, str], str | None],
+                  click: Callable[[int, int, str], bool] | None = None) -> str | None:  # fmt: skip
+        """Stage 3: the box's function for ``role`` at the runner's moment (the module docstring):
+        its steps NOW -- a press through ``press`` (the runner's own press of a key of this
+        moment), a click through ``click`` (the death exit's), a wait slept exactly -- while the
+        runner waits. None: played; words: it could not (the runner records it and ends the run
+        normally). It plays during the runner's normal end too (the swap back, the way home),
+        after a box event ended the run."""
+        plan = self.prep.runners.get(self.block)
+        steps = None if plan is None else plan.calls.get(role)
+        if plan is None or steps is None:
+            return f"the box has no function for the hunt core's {role}"
+        name = plan.call_names[role]
+        path = self.c.where(name).path or name
+        tag = f"box {name} ({why})"
+        self.rec.ev({"kind": "call", "role": role, "function": name, "why": why, "node": path,
+                     "in": "hunt", "steps": [x.doc() for x in steps]})  # fmt: skip
+        for st in steps:
+            if st.kind == "wait":
+                self.io.sleep(st.s)
+            elif st.kind == "press":
+                assert st.key is not None
+                if press(st.key, tag) is None:
+                    return (f"the box's {name} pressed {st.key} at the hunt core's {role}: a key "
+                            "it does not hand the box there")  # fmt: skip
+                self.keys_sent.append(st.key)
+                self.rec.ev({"kind": "key", "key": st.key, "node": path, "in": "hunt"})
+            else:
+                if click is None or not click(st.x, st.y, tag):
+                    return (f"the box's {name} clicked at {st.x}, {st.y} at the hunt core's "
+                            f"{role}: a click it does not take there")  # fmt: skip
+                self.rec.ev({"kind": "click", "at": [st.x, st.y], "node": path, "in": "hunt"})
         return None
 
     def _preempt_now(self, keys: frozenset[str]) -> None:
@@ -873,8 +980,8 @@ HUNT_HALT_WORDS = {
     "insert_failed": "an inserted event failed inside the hunt core: the run ends",
 }  # fmt: skip
 BUILT_IN_WORDS = {
-    "dead": "she died: the run ends and the death dialog is a person's (respawn plays live in "
-            "stage 2)",
+    "dead": "she died: the run ends and the death dialog is a person's (outside a hunt core the "
+            "respawn is a later stage)",
     "hp_critical": "her HP fell under 20 %: the run ends (the escape plays live in stage 2)",
     "unexpected_map": "the minimap named another map, not by one of the project's exits: the run "
                       "ends (a person looks)",

@@ -83,7 +83,7 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert x.zones is not None and x.zones.sha256 == hashlib.sha256(ZONES.read_bytes()).hexdigest()
     assert x.resume_here and (x.entries[0].name, x.entries[0].at, x.entries[0].radius) == (
         "here", None, 2)  # fmt: skip
-    assert [t.name for t in x.tabs] == ["main", "keys", "survival"]
+    assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits"]
     save, hunt, stop = x.main
     assert isinstance(save, ir.ActionStmt) and save.block == "assert_save_point"
     assert save.note == "the world rule: the save point (where a Butterfly Wing and a death land)"
@@ -91,14 +91,43 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert isinstance(hunt, ir.ActionStmt) and hunt.block == "dungeon_hunt"
     assert {k: v.value for k, v in hunt.params.items()} == {  # type: ignore[union-attr]
         "heal": "heal", "fly": "fly_wing", "knife_on": "knife_on", "knife_back": "knife_back",
-        "home": "butterfly_wing"}  # fmt: skip
+        "home": "fly_home", "respawn": "respawn_button",
+        "respawn_confirm": "respawn_ok"}  # fmt: skip
     assert stop == ir.Stop(reason="home")
     keys = {d.name: d.body[0].params["key"].value for d in x.tabs[1].defs}  # type: ignore[union-attr]
-    assert keys == {"heal": "F1", "fly_wing": "F8", "butterfly_wing": "F9", "knife_on": "F4",
-                    "knife_back": "F5"}  # fmt: skip
+    assert keys == {"heal": "F1", "fly_wing": "F8", "butterfly_wing": "F9", "wield_knife": "F4",
+                    "wield_damascus": "F5"}  # fmt: skip
+    # stage 3 (live-blocks.md 3.3): the Knife swap's two functions (each calls its key's function:
+    # the strike between, the runner's own today), the way home, the respawn's two clicks
+    assert [(d.name, d.body) for d in x.tabs[3].defs] == [
+        ("knife_on", [ir.CallProc(proc="wield_knife")]),
+        ("knife_back", [ir.CallProc(proc="wield_damascus")])]  # fmt: skip
+    home, rsp, ok = x.tabs[4].defs
+    assert (home.name, home.body) == ("fly_home", [ir.CallProc(proc="butterfly_wing")])
+    pts = [
+        (
+            d.name,
+            [
+                (a.block, a.params["x"].value, a.params["y"].value)  # type: ignore[union-attr]
+                for a in d.body
+                if isinstance(a, ir.ActionStmt)
+            ],
+        )
+        for d in (rsp, ok)
+    ]
+    assert pts == [
+        ("respawn_button", [("click_at", 645, 481)]),
+        ("respawn_ok", [("click_at", 714, 405)]),
+    ]  # the runner's own defaults
     # stage 2 (Batt 2026-11-13: "Heal: press F1 when HP < 30 %. Fly Wing: press F8 when a boss is
-    # seen or HP < 25 %"; live-blocks.md 3.2): two events, each calling its key's function
-    drink, fly = x.tabs[2].defs
+    # seen or HP < 25 %"; live-blocks.md 3.2): two events, each calling its key's function; stage 3
+    # adds the weight home (Batt: "if the weight is over 50 %, use a Butterfly Wing to go back")
+    drink, fly, bag = x.tabs[2].defs
+    assert (bag.name, bag.body) == ("bag_full", [ir.Stop(reason="home")])
+    assert bag.on is not None and (bag.on.mode, bag.on.priority, bag.on.max_per_run) == (
+        "preempt", "upkeep", 1)  # fmt: skip
+    assert bag.on.when == ir.Cmp(op=">=", left=ir.Sense(sensor="weight_percent"),
+                                 right=ir.Lit(value=50))  # fmt: skip
     assert (drink.name, drink.body, fly.name, fly.body) == (
         "drink", [ir.CallProc(proc="heal")],
         "fly_away", [ir.CallProc(proc="fly_wing")])  # fmt: skip
@@ -712,7 +741,7 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
     files = V.print_files(p)
     by = {f.path: f.text for f in files}
     assert list(by) == ["xmas_dun02/main.py", "xmas_dun02/keys.py", "xmas_dun02/survival.py",
-                        "project.py"]  # fmt: skip
+                        "xmas_dun02/knife.py", "xmas_dun02/exits.py", "project.py"]  # fmt: skip
     assert (
         "@on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)\n"
         "def fly_away():\n    fly_wing()\n"
@@ -747,7 +776,7 @@ def test_runner_keys_take_home_from_the_home_role_first() -> None:
     rk = P.runner_keys(p, "xmas_dun02")
     assert rk.problems == [] and rk.keys == {"heal_key": "F1", "fly_key": "F8", "home_key": "F9",
                                              "knife_key": "F4", "dagger_key": "F5"}  # fmt: skip
-    assert rk.functions["home_key"] == "butterfly_wing"
+    assert rk.functions["home_key"] == "fly_home"  # stage 3: a body (it calls butterfly_wing)
     # the home role wins over the item warp's function (the session fixture has one: F9)
     d = session()
     xm = node(d, "xmas_dun02")
@@ -773,15 +802,15 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
     hunt_ = d["nodes"][0]["tabs"][0]["main"][1]
     p = build(d)
     c = P.compile_project(p)
-    assert c.flow is not None and fn.wing_keys(c.flow) == {"F9": ["butterfly_wing"]}
-    # two presses: not one key
+    assert c.flow is not None and fn.wing_keys(c.flow) == {"F9": ["fly_home"]}
+    # two presses: not one Butterfly Wing (stage 3: a home BODY presses exactly one key)
     bad = copy.deepcopy(d)
     next(x for x in bad["nodes"][0]["tabs"][1]["defs"] if x["name"] == "butterfly_wing")["body"] = [
         press("F9"), press("F9")]  # fmt: skip
     assert errors(build(bad)) == [
-        "xmas_dun02/main/main.1: dungeon_hunt's home (the Butterfly Wing's key, to fly home) "
-        "names butterfly_wing, whose body is not exactly one press_key: the runner presses one "
-        "key for each role"
+        "xmas_dun02/main/main.1: dungeon_hunt's home (the Butterfly Wing's key, to fly home): "
+        "fly_home presses 2 keys: the way home is ONE Butterfly Wing (one press_key, waits "
+        "around it)"
     ]
     # the home key taken by another role: ONE error of the runner's, the clash -- and the box's
     # fly_away event (stage 2), which then presses the Butterfly Wing, must relocate or stop
@@ -791,7 +820,7 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
     assert [m for m in errors(build(same)) if "F9" in m] == [
         "xmas_dun02/main/main.1: dungeon_hunt's fly and home both press F9: each role needs its "
         "own key",
-        "xmas_dun02/survival/fly_away: the Butterfly Wing on F9 (butterfly_wing) changes the map: "
+        "xmas_dun02/survival/fly_away: the Butterfly Wing on F9 (fly_home) changes the map: "
         "then must be relocate or stop",
     ]
     # an undefined function

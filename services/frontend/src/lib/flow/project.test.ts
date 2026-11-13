@@ -7,9 +7,10 @@ import { test } from "node:test";
 import { toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { parseCallArgs, parseParams } from "./expr.ts";
-import { canonical } from "./ir.ts";
+import { canonical, type Stmt } from "./ir.ts";
 import {
   call,
+  clickAt,
   def,
   globalOf,
   isMapStart,
@@ -21,6 +22,7 @@ import {
   pressKey,
   type Project,
   resolve,
+  roleKeyOf,
   runnerKeysOn,
   sampleProject,
   sessionPath,
@@ -70,16 +72,22 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.equal(x.start, "xmas_dun02");
   assert.deepEqual(x.edges, []);
   const n = nodeById(x, "xmas_dun02")!;
-  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival"]);
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits"]);
   assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "dungeon_hunt", "stop"]);
   // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function
   const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks;
-  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"]]);
-  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]]]);
+  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"], ["pl_event", "bag_full", "preempt", "upkeep"]]);
+  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]], ["bag_full", 0, [{ kind: "stop", reason: "home" }]]]);
+  // stage 3 (live-blocks.md 3.3): the weight home fires once a run; the knife swap's two functions
+  // call the keys' functions; the way home and the death dialog's two clicks
+  assert.equal(n.tabs[2].defs[2].on?.max_per_run, 1);
+  assert.deepEqual(n.tabs[3].defs.map((d) => [d.name, d.body]), [["knife_on", [call("wield_knife")]], ["knife_back", [call("wield_damascus")]]]);
+  assert.deepEqual(n.tabs[4].defs.map((d) => d.name), ["fly_home", "respawn_button", "respawn_ok"]);
+  assert.deepEqual(n.tabs[4].defs[1].body, [clickAt(645, 481, "the death dialog's first button: move to the saved location")]);
   // the runner block shows its five roles, the home one included
   const hunt = tabToWorkspace(x, { node: "xmas_dun02", tab: "main" }).blocks.blocks[0].inputs?.DO?.block?.next?.block;
   assert.equal(hunt?.type, "pl_dungeon_hunt");
-  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "butterfly_wing" });
+  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok" });
   // the start is the map: no login, no character, its first entry
   const sp = sessionPath(x);
   assert.deepEqual([sp.login, sp.character, sp.map?.id, sp.entry, sp.problems], [null, null, "xmas_dun02", "here", []]);
@@ -89,7 +97,22 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   const r = runnerKeysOn(x, "xmas_dun02");
   assert.ok(r.ok);
   assert.deepEqual(r.keys, { heal_key: "F1", fly_key: "F8", home_key: "F9", knife_key: "F4", dagger_key: "F5" });
-  assert.equal(r.from.home_key, "butterfly_wing");
+  assert.equal(r.from.home_key, "fly_home");
+});
+
+test("stage 3: a knife function of presses and waits gives Run its FIRST press (both answers to the open question)", () => {
+  const x = xmasProject();
+  const n = nodeById(x, "xmas_dun02")!;
+  const knife = n.tabs.find((t) => t.name === "knife")!;
+  const wait: Stmt = { kind: "wait_until", cond: { kind: "lit", value: false }, timeout_s: 0.1, outcome_to: null };
+  knife.defs[0].body = [call("wield_knife"), wait, call("wield_damascus")]; // "F4, wait 100 ms, F5"
+  const r = runnerKeysOn(x, "xmas_dun02");
+  assert.ok(r.ok);
+  assert.deepEqual([r.keys.knife_key, r.keys.dagger_key], ["F4", "F5"]);
+  assert.deepEqual(roleKeyOf(x, "xmas_dun02", "knife_on", "knife_on"), { key: "F4" });
+  // the heal role stays ONE key: a body there is not a key
+  assert.ok("why" in roleKeyOf(x, "xmas_dun02", "knife_on", "heal"));
+  roundTrip(x);
 });
 
 test("a runner block of four roles: an empty home field; with neither a home role nor an item warp Run says so", () => {
@@ -158,11 +181,16 @@ test("the Run keys: resolved on THAT node (its override first), through calls wi
   roundTrip(p); // the key as a value (press key <input>) round-trips through its block (matpilot round 15 #2)
   const helper = tabToWorkspace(p, { node: "global", tab: "helpers" }).blocks.blocks[0].inputs?.DO?.block;
   assert.equal(helper?.type, "pl_press_key_v");
-  // a role function of two presses: refused in words
+  // stage 3 (live-blocks.md 3.3): a knife role function of two presses is a BODY the hunt core
+  // calls; Run takes its first press (its other keys are checked by the lint and the run check)
   g.tabs[0].defs[3] = def("knife_on", [pressKey("F4"), pressKey("F3")]);
   const r3 = runnerKeysOn(p, "xmas_dun02");
-  assert.equal(r3.ok, false);
-  assert.match(r3.ok ? "" : r3.problems.join(" "), /knife_on\(\) must be exactly one "press key"/);
+  assert.ok(r3.ok && r3.keys.knife_key === "F4");
+  // the heal role stays ONE key: two presses there are refused in words
+  g.tabs[0].defs[0] = def("heal", [pressKey("F1"), pressKey("F3")]);
+  const r4 = runnerKeysOn(p, "xmas_dun02");
+  assert.equal(r4.ok, false);
+  assert.match(r4.ok ? "" : r4.problems.join(" "), /heal\(\) must be exactly one "press key"/);
 });
 
 test("tab names are Python module names; a new tab is tab2, tab3 ...", () => {

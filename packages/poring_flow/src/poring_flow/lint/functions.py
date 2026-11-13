@@ -8,7 +8,10 @@ Layer 1:
   and its optional fifth `home` (the Butterfly Wing the runner flies home on; Batt 2026-11-13, the
   one box), is a string literal naming a defined procedure whose body is EXACTLY ONE press_key
   statement, or (the project model) one call, with literal arguments, of such a function
-  (`resolve_key`: the runner presses one key for each role);
+  (`resolve_key`: the runner presses one key for each role). Stage 3 (live-blocks.md 3.3): knife_on,
+  knife_back and home may be a BODY of presses and waits (`functions.BODY_ROLES`, its key the first
+  press, within `steps_problem`'s caps), and the optional `respawn` / `respawn_confirm` name
+  functions of click_at and waits;
 - `key_argument` (the project model): a function whose press_key presses its PARAMETER is given
   a literal hotbar key at every call (or the parameter's default is one);
 - `hotbar_keys`: dungeon_hunt's roles press DIFFERENT keys (four, five with `home`), and none of
@@ -97,7 +100,7 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
         if why is not None:
             ctx.add("hunt_function", "error", 1, site.path, f"{what}: {why}")
             continue
-        key, _ = fn.resolve_key(flow, name)
+        key, _ = fn.role_key(flow, name, role)
         if key is None:
             ctx.add(
                 "hunt_function",
@@ -108,9 +111,53 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
                 "presses one key for each role",
             )
             continue
+        if role in fn.BODY_ROLES and fn.is_body(flow, name):
+            steps, _w = fn.body_steps(flow, name)
+            why_s = None if steps is None else fn.steps_problem(steps, name, role)
+            if why_s is not None:
+                ctx.add("hunt_function", "error", 1, site.path, f"{what}: {why_s}")
+                continue
         if key not in fn.hotbar_keys():
             continue  # param_option / key_argument name a key that is not a hotbar key
         resolved[role] = key
+    # stage 3 (live-blocks.md 3.3): a knife or home BODY presses only the keys of its moment -- the
+    # Knife's and the dagger's, or the Butterfly Wing's -- which the start's slot check reads
+    moment = {"knife_on": ("knife_on", "knife_back"), "knife_back": ("knife_on", "knife_back"),
+              fn.HOME_ROLE: (fn.HOME_ROLE,)}  # fmt: skip
+    for role, name in fn.role_functions(a).items():
+        if role not in moment or role not in resolved or not fn.is_body(flow, name):
+            continue
+        assert name is not None
+        steps, _w = fn.body_steps(flow, name)
+        ok = {resolved[r] for r in moment[role] if r in resolved}
+        other = next((s.key for s in steps or [] if s.kind == "press" and s.key not in ok), None)
+        if other is not None:
+            ctx.add(
+                "hunt_function",
+                "error",
+                1,
+                site.path,
+                f"dungeon_hunt's {role} ({fn.ROLE_WORDS[role]}): {name} presses {other}: at "
+                f"that moment the hunt core hands the box only {', '.join(sorted(ok))}",
+            )
+    for role, name in fn.role_functions(a, fn.CLICK_ROLES).items():  # stage 3: the respawn
+        if role not in a.params:
+            continue
+        what = f"dungeon_hunt's {role} ({fn.CLICK_ROLES[role]})"
+        if name is None:
+            ctx.add("hunt_function", "error", 1, site.path,
+                    f"{what} takes a function's name, not {ctx.src(a.params[role])}")  # fmt: skip
+            continue
+        why = _function(ctx, name)
+        steps, why2 = (None, why) if why is not None else fn.body_steps(flow, name)
+        why3 = why2 if steps is None else fn.steps_problem(steps, name)
+        if why3 is None and steps is not None and any(s.kind == "press" for s in steps):
+            why3 = f"{name} presses a key: the death dialog takes clicks (click_at) and waits"
+        if why3 is not None:
+            ctx.add("hunt_function", "error", 1, site.path, f"{what}: {why3}")
+    if "respawn_confirm" in a.params and "respawn" not in a.params:
+        ctx.add("hunt_function", "error", 1, site.path, "dungeon_hunt's respawn_confirm goes with "
+                "respawn: the confirmation comes after the death dialog's button")  # fmt: skip
     home_key = resolved.get(fn.HOME_ROLE)
     keys: dict[str, str] = {}  # key -> the first role that presses it
     for role, key in resolved.items():

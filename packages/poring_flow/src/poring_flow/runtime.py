@@ -123,6 +123,8 @@ def default_plan(a: ir.ActionStmt, sim: Sim) -> Plan:
         return Plan(ticks=1)
     if a.block == fn.PRESS:  # one hotbar press; a key off the hotbar sends nothing and fails
         return Plan(ticks=1) if sim.key(a) in sim.hotbar else Plan(ticks=0, outcome="failed")
+    if a.block == fn.CLICK:  # stage 3: one click (two motions, then it), at its point
+        return Plan(ticks=1)
     if spec is not None and spec.profile == "atomic":
         return Plan(ticks=3, atomic=(0, 3))
     return Plan(ticks=3)
@@ -347,6 +349,17 @@ class Sim:
             return [
                 Key(t_mono_ns=ns, code=code, action="down"),
                 Key(t_mono_ns=ns, code=code, action="up"),
+            ]
+        if a.block == fn.CLICK:  # stage 3: two motions, then the click (the runner's own)
+            gx, gy = fn.GAME_PX
+            px = [self._eval(a.params.get(k)) for k in ("x", "y")]
+            x, y = (min(max(float(v if isinstance(v, int | float) else 0) / d, 0.0), 1.0)
+                    for v, d in zip(px, (gx, gy), strict=True))  # fmt: skip
+            return [
+                MouseMove(t_mono_ns=ns, x=min(x + 4 / gx, 1.0), y=min(y + 3 / gy, 1.0)),
+                MouseMove(t_mono_ns=ns, x=x, y=y),
+                MouseButton(t_mono_ns=ns, button="left", action="down"),
+                MouseButton(t_mono_ns=ns, button="left", action="up"),
             ]
         if spec is not None and spec.types:
             return [

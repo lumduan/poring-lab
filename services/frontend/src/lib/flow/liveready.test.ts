@@ -9,15 +9,18 @@ import { sessionProject } from "./testkit.ts";
 
 const LIVE = (names: string[]) => Object.fromEntries(names.map((n) => [n, { spec: { live: true } }]));
 
-test("the one box reaches its save point, the runner, its role functions' presses", () => {
+test("the one box reaches its save point, the runner, its role functions' presses and clicks", () => {
   const r = reachable(xmasProject(), "xmas_dun02");
-  assert.deepEqual(r, { blocks: ["assert_save_point", "dungeon_hunt", "press_key"], exits: [], nodes: ["xmas_dun02"] });
-  assert.deepEqual(liveReady(xmasProject(), "xmas_dun02", LIVE(["assert_save_point", "dungeon_hunt", "press_key"])).ready, true);
+  // stage 3 (live-blocks.md 3.3): the respawn roles' functions click (click_at, live there)
+  assert.deepEqual(r, { blocks: ["assert_save_point", "click_at", "dungeon_hunt", "press_key"], exits: [], nodes: ["xmas_dun02"] });
+  assert.deepEqual(liveReady(xmasProject(), "xmas_dun02", LIVE(["assert_save_point", "click_at", "dungeon_hunt", "press_key"])).ready, true);
+  const old = liveReady(xmasProject(), "xmas_dun02", LIVE(["assert_save_point", "dungeon_hunt", "press_key"]));
+  assert.equal(old.ready ? "" : old.why, "click_at: not live yet"); // a backend before stage 3
 });
 
 test("a missing flag is not live; the reason lists the blocks, the exits too", () => {
   const p = xmasProject();
-  const no = liveReady(p, "xmas_dun02", { ...LIVE(["assert_save_point", "press_key"]), dungeon_hunt: { spec: {} } });
+  const no = liveReady(p, "xmas_dun02", { ...LIVE(["assert_save_point", "click_at", "press_key"]), dungeon_hunt: { spec: {} } });
   assert.equal(no.ready, false);
   assert.equal(no.ready ? "" : no.why, "dungeon_hunt: not live yet");
   // the sample's town: walk_to, an NPC warp; following the exit onto the field: attack_nearest

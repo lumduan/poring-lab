@@ -5371,33 +5371,39 @@ def bare_equip_seq(io: BareIo, ref: Any, why: str, *, press: bool = True,
                if opener is not None else {})}  # fmt: skip
 
 
-def opener_seq(io: BareIo, opener: OpenerRead, why: str) -> dict[str, Any]:
+def opener_seq(io: BareIo, opener: OpenerRead, why: str, ends: str = "opener") -> dict[str, Any]:
     """--steal-opener's "unequip" (dungeon@9.27c): the opener's KEY (no Alt+Q, no window, no
     click), then the state must read "opener" (its slot EMPTY: worn; F5 shows the dagger: in the
     bag) within ON_S; a READABLE read with the opener still in the bag ("armed" / "bare") -> ONE
     more press and ON_S again. ok: True / False / None (unreadable). ``bare``: the dagger read in
-    the bag on the last readable frame (the truth the runner keeps, as bare_unequip_seq's)."""
+    the bag on the last readable frame (the truth the runner keeps, as bare_unequip_seq's).
+    ``ends`` (dungeon@9.50, the box's knife_on): "armed" -- its body ends on the dagger's key (no
+    strike between): the state must read "armed" (the Knife back in the bag), one more press of
+    the body only on a READABLE "opener" / "bare", and ``bare`` is False (no bare phase)."""
     assert io.opener is not None
     t0 = io.clock()
     io.opener(why)
     n = 1
     last: list[str | None] = [None]
+    want, again = (
+        ("armed", ("opener", "bare")) if ends == "armed" else ("opener", ("armed", "bare"))
+    )
 
     def on(f_: Any) -> bool:
         s_ = opener.state(f_)
         if s_ is not None:
             last[0] = s_
-        return s_ == "opener"
+        return s_ == want
 
     ok, f, _e = bare_poll(io, on, bs.ON_S)
-    if not ok and opener.state(f) in ("armed", "bare"):
+    if not ok and opener.state(f) in again:
         io.opener(why)
         n += 1
         ok, f, _e = bare_poll(io, on, bs.ON_S)
     s = opener.state(f)
     return {"ok": True if ok else (None if s is None else False), "presses": n,
             "ms": round((io.clock() - t0) * 1e3), "state": s, "frame": f,
-            "bare": last[0] in ("opener", "bare"),
+            "bare": ends != "armed" and last[0] in ("opener", "bare"),
             "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), opener.ref5),
             "opener_slot": opener.stats(f)}  # fmt: skip
 
@@ -5424,9 +5430,13 @@ class BareCtl:
     def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
                  ev: Callable[[dict[str, Any]], None],
                  stop: type[Exception] = RuntimeError, *, ready: bool = False,
-                 opener: OpenerRead | None = None, cue: str = "both") -> None:  # fmt: skip
+                 opener: OpenerRead | None = None, cue: str = "both",
+                 opener_ends: str = "opener") -> None:  # fmt: skip
         self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
         self.opener = opener
+        # dungeon@9.50: the box's knife_on body ends on the dagger ("armed": no strike between):
+        # one swap per target, read back armed, no bare phase (opener_seq's ``ends``)
+        self.opener_ends = opener_ends
         self.st = bs.BareSteal(cue=cue)  # 9.27d: --steal-cue
         self.tgt: dict[str, Any] | None = None
         self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
@@ -5552,10 +5562,12 @@ class BareCtl:
         assert self.opener is not None
         self.busy = True
         try:
-            res = opener_seq(self.io, self.opener, by)
+            res = opener_seq(self.io, self.opener, by, self.opener_ends)
         finally:
             self.busy = False
             self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
+        if self.opener_ends == "armed":  # dungeon@9.50: the box's swap left her armed
+            return self._through(by, res)
         if res["bare"]:
             if idle:
                 self.st.wait_bare()
@@ -5573,6 +5585,24 @@ class BareCtl:
             self.counts["bare_opener"] += 1
             self.fails = 0
             return True
+        self._failed("bare_opener_fail")
+        return False
+
+    def _through(self, by: str, res: Mapping[str, Any]) -> bool:
+        """dungeon@9.50: the box's knife_on body ended on the dagger's key (no strike between):
+        read back ARMED it is this target's one swap (its phase taken: no swap again on it; no
+        bare phase, nothing to swap back); the strike goes on with the dagger (False, as an armed
+        unequip's)."""
+        if self.tgt is not None:
+            self.tgt["phase"] = True
+        self.ev({"kind": "bare", "what": "opener", "ok": res["ok"], "ms": res["ms"], "by": by,
+                 "presses": res["presses"], "state": res["state"], "slot": res["slot"],
+                 "opener_slot": res["opener_slot"], "ends": "armed"})  # fmt: skip
+        if res["ok"]:
+            self.counts["bare_opener"] += 1
+            self.counts["bare_opener_through"] += 1
+            self.fails = 0
+            return False
         self._failed("bare_opener_fail")
         return False
 
@@ -5745,7 +5775,30 @@ LIVE_BLOCKS_VERSION = "9.48"
 # runner's (the HP-rate fly, the Garm Baby, the stock, the dead jump, an unread position, the NPC
 # guard, the knife, the way home). No box_plays (the CLI, a box without such events): as before.
 SURVIVAL_EVENTS_VERSION = "9.49"
-BOX_PLAYS = ("potion", "fly_hp", "boss_fly")  # == poring_flow.live.PLAYS (test_live_player.py)
+# --- dungeon@9.50 (Batt 2026-11-13: "The Knife swap (Damascus): a function: press F4, wait 100 ms,
+# press F5; the other way back to the Knife: the same swapped"; "make respawn a function block, in
+# case another server's menu differs; make everything editable in blocks, don't hard-code";
+# docs/planning/live-blocks.md stage 3): the Knife swap, the respawn, the weight home and the way
+# home at the end are the BOX's FUNCTIONS (and an event). The runner still decides WHEN; at each of
+# its moments it CALLS the hook's ``call(role, why, press, click)`` instead of pressing itself, and
+# the box's body plays through ``press`` / ``click`` -- the runner's OWN press of a key of that
+# moment, its own two-motion click in the death exit (one Agent, one writer). Its read-backs, its
+# retries, its waits and every rule around them stay its own. ``box_roles`` (run()) names the roles
+# the box plays, each with where its body leaves her (knife_on: "opener" or "armed"). The new
+# BOX_PLAYS: "knife" (the opener's and the swap back's key presses; the escape's dagger press before
+# a Fly Wing stays the runner's: never delayed by a body's waits), "respawn" (the death dialog's
+# button and its confirmation's OK: the runner's respawn_at / respawn_confirm_at points unused),
+# "weight_home" (the box's weight event decides on each READ weight, at the UI watch as the
+# runner's own; an unread weight drawn red keeps the runner's own rule) and "home_end" (the end's
+# Butterfly Wing press; the count read, the stand-up, the load wait stay the runner's). None of
+# them: exactly as 9.49 (the CLI, the old Run path, a box whose role functions are one press_key).
+BOX_FUNCTIONS_VERSION = "9.50"
+BOX_PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end")
+# == poring_flow.live.PLAYS (test_live_player.py); the roles a call plays, each play's
+BOX_CALL_ROLES = {"knife": ("knife_on", "knife_back"), "respawn": ("respawn",),
+                  "home_end": ("home",)}  # fmt: skip
+BOX_OPTIONAL_ROLES = ("respawn_confirm",)  # with "respawn": this client's confirmation (or none)
+KNIFE_ENDS = ("opener", "armed")  # knife_on's body leaves the Knife worn (strike between) or not
 
 
 @dataclass(frozen=True)
@@ -5766,6 +5819,9 @@ class HuntTick:
     # guard_tick read inside a long action (no Battle Log read there: the boss is not known)
     boss: str | None = None
     quick: bool = False
+    # dungeon@9.50: the WEIGHT read of this tick (a percent, the UI watch's fresh read; None on
+    # every other tick): the box's weight event decides on it there, the runner's own moment
+    weight_pct: int | None = None
 
 
 def hook_stop(hook: Any, view: HuntTick) -> str | None:
@@ -5788,17 +5844,70 @@ def hook_survive(hook: Any, view: HuntTick, press: Callable[[str, str], str | No
     return None if why is None else str(why)
 
 
+def hook_call(
+    hook: Any,
+    role: str,
+    why: str,
+    press: Callable[[str, str], str | None],
+    click: Callable[[int, int, str], bool] | None = None,
+) -> str | None:
+    """dungeon@9.50: the box's function for ``role`` at this moment of the runner (the hook plays
+    its body through ``press`` -- and ``click`` in the death exit -- while the runner waits): None
+    (played), or why it could not (recorded; the loop's next tick ends the run normally). No hook:
+    never called (box_roles is empty without one: box_plays_refused)."""
+    if hook is None:
+        return "no hook"
+    got = hook.call(role, why, press, click)
+    return None if got is None else str(got)
+
+
 def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss_walk: bool,
-                      bosses: Sequence[str]) -> str | None:  # fmt: skip
-    """PURE (dungeon@9.49): why the box cannot play these handlers in this run (None: it can).
-    Every refusal is before any input."""
+                      bosses: Sequence[str], roles: Mapping[str, str] | None = None,
+                      player: bool = True, knife_swap: bool = True, bare_ready: bool = False,
+                      respawn: bool = True, home_key: str | None = "F9") -> str | None:  # fmt: skip
+    """PURE (dungeon@9.49; 9.50: the box's functions): why the box cannot play these handlers in
+    this run (None: it can). ``roles``: the roles its functions play (box_roles), with where
+    knife_on's body leaves her; ``player`` / ``knife_swap`` (--bare-steal + --steal-opener) /
+    ``bare_ready`` / ``respawn`` / ``home_key``: this run's. Every refusal is before any input."""
+    roles = dict(roles or {})
     bad = sorted(set(plays) - set(BOX_PLAYS))
     if bad:
         return f"box_plays {bad}: not one of {list(BOX_PLAYS)}"
+    known = {r for rs in BOX_CALL_ROLES.values() for r in rs} | set(BOX_OPTIONAL_ROLES)
+    stray = sorted(set(roles) - known)
+    if stray:
+        return f"box_roles {stray}: not one of {sorted(known)}"
+    want = {r for p_ in plays for r in BOX_CALL_ROLES.get(p_, ())}
+    if sorted(want - set(roles)):
+        return f"the box plays {sorted(set(plays) & set(BOX_CALL_ROLES))} without its functions " \
+               f"for {sorted(want - set(roles))}"  # fmt: skip
+    extra = sorted(set(roles) - want - set(BOX_OPTIONAL_ROLES))
+    if extra or ("respawn_confirm" in roles and "respawn" not in plays):
+        return f"box_roles {extra or ['respawn_confirm']} without their play in box_plays"
+    if roles.get("knife_on", "opener") not in KNIFE_ENDS:
+        return f"knife_on ends {roles['knife_on']!r}: one of {list(KNIFE_ENDS)}"
     if not plays:
         return None
     if hook is None or not callable(getattr(hook, "survive", None)):
         return "box_plays without a hook that plays survival (hook.survive)"
+    if roles and not callable(getattr(hook, "call", None)):
+        return "box_plays with the box's functions, but the hook plays no calls (hook.call)"
+    if "knife" in plays and not knife_swap:
+        return ("the box plays the Knife swap, but this run swaps no Knife (the Run settings' "
+                "knife swap: --bare-steal with --steal-opener)")  # fmt: skip
+    if "knife" in plays and roles.get("knife_on") == "armed" and bare_ready:
+        return (
+            "the box's knife_on ends on the dagger (no strike between its presses), but "
+            "--bare-ready waits with the Knife on between targets, which that swap never "
+            "leaves: the knife's bare_ready off, or a knife_on that ends on the Knife"
+        )
+    if set(plays) & {"respawn", "weight_home", "home_end"} and not player:
+        return "the box plays the map's exits, but this run is not a player's (--player-mode)"
+    if "respawn" in plays and not respawn:
+        return ("the box plays the respawn, but this run's respawn is off (the Run settings' "
+                "respawn switch): after a death she would stay where she fell")  # fmt: skip
+    if "home_end" in plays and home_key is None:
+        return "the box plays the way home, but this run has no Butterfly Wing key"
     if "potion" in plays and heal_candy:
         return ("the box plays the potion, but --heal-candy picks the heal item: one heal key "
                 "(the box's) or the runner's candies, not both")  # fmt: skip
@@ -5829,14 +5938,17 @@ def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
 
 
 def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | None = None,
-        box_plays: Sequence[str] = ()) -> int:  # noqa: PLR0915, C901  # fmt: skip
+        box_plays: Sequence[str] = (),
+        box_roles: Mapping[str, str] | None = None) -> int:  # noqa: PLR0915, C901  # fmt: skip
     """The runner. ``hook`` / ``session`` (dungeon@9.48, the live block player only): an object
     whose ``tick(HuntTick)`` is called once per tick of the loop (a str back ends the run there)
     and, when it has one, ``event(rec, t_mono)`` with every event (a passive observer); and the
     (Agent, Screen) to play with instead of a session of its own (the caller keeps and closes
     them). ``box_plays`` (dungeon@9.49, the box's survival events; SURVIVAL_EVENTS_VERSION's
-    comment): the runner's handlers the hook's ``survive`` plays instead. All None / empty: the
-    CLI's run, unchanged."""
+    comment): the runner's handlers the hook's ``survive`` plays instead. ``box_roles``
+    (dungeon@9.50, the box's functions; BOX_FUNCTIONS_VERSION's comment): the roles the hook's
+    ``call`` plays at the runner's own moments, each with where its body leaves her. All None /
+    empty: the CLI's run, unchanged."""
     import bench
     import crusader as cr
     import cursor_sword as csw
@@ -6007,18 +6119,14 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     # dungeon@9.49 (live-blocks.md stage 2): the handlers the BOX's events play instead, before
     # any input; box_off: sustain()'s two of them
     box_set = frozenset(box_plays)
-    why_bx = box_plays_refused(
-        sorted(box_set),
-        hook,
-        heal_candy=heal_candy,
-        boss_walk=bool(getattr(a, "boss_walk", False)),
-        bosses=bosses,
-    )
-    if why_bx:
-        raise SystemExit(f"dungeon@{SURVIVAL_EVENTS_VERSION} refused: {why_bx}")
+    box_roles_ = dict(box_roles or {})  # dungeon@9.50: the roles the box's functions play
     box_on = bool(box_set)
     box_off = box_set & {"potion", "fly_hp"}
     box_boss = "boss_fly" in box_set
+    box_knife = "knife" in box_set  # dungeon@9.50: the opener's / the swap back's presses
+    box_respawn = "respawn" in box_set  # the death dialog's two presses
+    box_weight = "weight_home" in box_set  # the weight exit on a read weight
+    box_home = "home_end" in box_set  # the end's Butterfly Wing press
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
     why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
     if why_hk:
@@ -6034,6 +6142,25 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     why_kc = keys_clash(keys_, opener_key)  # dungeon@9.42: every key known: no two alike
     if why_kc:
         raise SystemExit(f"dungeon@{PERSON_KEYS_VERSION} refused: {why_kc}")
+    # dungeon@9.49 (live-blocks.md stage 2): the handlers the BOX's events play instead;
+    # dungeon@9.50 (stage 3): the roles its functions play at the runner's moments -- before any
+    # input
+    why_bx = box_plays_refused(
+        sorted(box_set),
+        hook,
+        heal_candy=heal_candy,
+        boss_walk=bool(getattr(a, "boss_walk", False)),
+        bosses=bosses,
+        roles=box_roles_,
+        player=player,
+        knife_swap=bare_on and opener_key is not None,
+        bare_ready=bare_ready_on,
+        respawn=bool(getattr(a, "respawn", False)),
+        home_key=home_key,
+    )
+    if why_bx:
+        version = BOX_FUNCTIONS_VERSION if box_roles_ or box_weight else SURVIVAL_EVENTS_VERSION
+        raise SystemExit(f"dungeon@{version} refused: {why_bx}")
     heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
@@ -6547,6 +6674,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             # dungeon@9.49: the handlers the box's events play in this run (none: absent)
             **({"box_plays": sorted(box_set), "box_version": SURVIVAL_EVENTS_VERSION}
                if box_on else {}),
+            # dungeon@9.50: the roles the box's functions play (none: absent)
+            **({"box_roles": box_roles_, "box_version": BOX_FUNCTIONS_VERSION}
+               if box_roles_ or box_weight else {}),
             **({"player_map": None if map_read is None else map_read.record()} if player
                else {}),
             **({"player_slots": slot_read} if player else {}),  # dungeon@9.47
@@ -6829,6 +6959,73 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             """The why of this survive call's box Fly Wing (None: it pressed none)."""
             return next((w for r_, w in box_pressed if r_ == "fly"), None)
 
+        def opener_press(why_: str) -> None:
+            """--steal-opener (dungeon@9.27c): the opener's hotbar key, sent as press() sends a
+            key (agent_raw.keys: the agent's own input path, through the mux); its count, record."""
+            assert opener_key is not None
+            agent_raw.keys(opener_key)
+            counts["opener"] += 1
+            ev({"kind": "press", "what": "opener", "key": opener_key, "why": why_})
+
+        def two_motion_click(u_: int, v_: int) -> None:
+            """The death exit's click (dungeon@9.41's respawn press): two motions, then the click
+            -- the client ignores a cold click -- at game-region pixels (u_, v_)."""
+            x_, y_ = gx0 + u_, gy0 + v_
+            agent_raw.move(x_ + 4, y_ + 3)
+            time.sleep(0.08)
+            agent_raw.move(x_, y_)
+            time.sleep(0.3)
+            agent_raw.click(x_, y_)
+
+        # dungeon@9.50 (live-blocks.md stage 3): the keys each called role may press -- a key of
+        # that moment, pressed the runner's own way (opener_press, press: their counts, records)
+        call_keys: dict[str, dict[str, Callable[[str], None]]] = {}
+        if box_knife and opener_key is not None:
+            knife_keys_: dict[str, Callable[[str], None]] = {
+                opener_key: opener_press,
+                keys_["equip"]: lambda why_: press("equip", why_),
+            }
+            call_keys["knife_on"] = call_keys["knife_back"] = knife_keys_
+        if box_home and home_key is not None:
+            call_keys["home"] = {home_key: lambda why_: press("home", why_)}
+
+        def box_call(role: str, why: str) -> bool:
+            """dungeon@9.50: the box's function for ``role``, played NOW through the hook (the
+            runner waits): its presses through the runner's own press of a key of this moment,
+            its clicks (the death exit only) as the runner's two-motion click. False: refused
+            (recorded; the loop's next tick ends the run, its normal end)."""
+            keys_now = call_keys.get(role, {})
+            clicks_ = role in ("respawn", "respawn_confirm")
+
+            def port(code: str, why_: str) -> str | None:
+                do_ = keys_now.get(code)
+                if do_ is None:
+                    counts["box_refused"] += 1
+                    ev({"kind": "box_refused", "key": code, "why": why_, "role": role})
+                    return None
+                do_(why_)
+                return role
+
+            def click(u_: int, v_: int, why_: str) -> bool:
+                if not (clicks_ and 0 <= u_ < GAME_PX[0] and 0 <= v_ < GAME_PX[1]):
+                    counts["box_refused"] += 1
+                    ev({"kind": "box_refused", "click": [u_, v_], "why": why_, "role": role})
+                    return False
+                two_motion_click(u_, v_)
+                counts[f"click_box_{role}"] += 1
+                ev({"kind": "click", "what": role, "at": [u_, v_], "why": why_})
+                return True
+
+            t_c = time.monotonic()
+            got_ = hook_call(hook, role, why, port, click if clicks_ else None)
+            counts[f"box_call_{role}"] += 1
+            ev({"kind": "box_call", "role": role, "why": why,
+                "ms": round((time.monotonic() - t_c) * 1e3),
+                **({"refused": got_} if got_ is not None else {})})  # fmt: skip
+            if got_ is not None and box_stop[0] is None:
+                box_stop[0] = got_
+            return got_ is None
+
         n_ring_diag = [0]  # dungeon@8.6: ring-vs-red evidence crops kept
 
         def hover(u: float, v: float) -> dict[str, Any]:
@@ -7013,12 +7210,21 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 counts["click_bare_dclick"] += 1
 
             def bare_opener(why_: str) -> None:
-                """--steal-opener (dungeon@9.27c): the opener's hotbar key, sent as press() sends
-                a key (agent_raw.keys: the agent's own input path, through the mux)."""
-                assert opener_key is not None
-                agent_raw.keys(opener_key)
-                counts["opener"] += 1
-                ev({"kind": "press", "what": "opener", "key": opener_key, "why": why_})
+                """--steal-opener (dungeon@9.27c): the opener's hotbar key (opener_press).
+                dungeon@9.50: with the box's Knife swap, its knife_on function at this moment."""
+                if box_knife:
+                    box_call("knife_on", why_)
+                    return
+                opener_press(why_)
+
+            def bare_equip_press(why_: str) -> None:
+                """The dagger's key (press("equip")). dungeon@9.50: with the box's Knife swap, its
+                knife_back function at this moment -- but the escape's dagger before a Fly Wing
+                ("safety") stays the runner's own key: never delayed by a body's waits."""
+                if box_knife and why_ != "safety":
+                    box_call("knife_back", why_)
+                    return
+                press("equip", why_)
 
             bare = BareCtl(
                 BareIo(frame=frame,
@@ -7026,13 +7232,15 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                        origin=lambda f_: window_origin(f_, bare_reg, bs.EQUIP_WINDOW),
                        chord=lambda: agent_raw.chord(*bare_keys),
                        double_click=bare_dclick,
-                       press=lambda why_: press("equip", why_),
+                       press=bare_equip_press,
                        lines=bare_lines, guard=guard_tick,
                        opener=bare_opener if opener_key is not None else None),
                 bare_ref, counts, ev, r.Stop, ready=bare_ready_on,
                 opener=None if opener_key is None else OpenerRead(opener_key, bare_ref,
                                                                   opener_ref),
-                cue=getattr(a, "steal_cue", "both"))  # fmt: skip
+                cue=getattr(a, "steal_cue", "both"),
+                opener_ends=box_roles_.get("knife_on", "opener") if box_knife
+                else "opener")  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -9142,7 +9350,25 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     red_seen = red_now
                     # dungeon@9.41: heavier than --weight-home -> the run ends (never mid-fight:
                     # the UI watch waits) and the end's Butterfly Wing takes her home
-                    why_wh = weight_home_due(getattr(a, "weight_home", None), w_share, red_seen)
+                    if box_weight:  # dungeon@9.50 (live-blocks.md stage 3): the box's weight event
+                        # decides on this READ weight, here (the runner's own moment); an unread
+                        # weight drawn red keeps the runner's own rule (the box cannot read it)
+                        why_wh = (weight_home_due(getattr(a, "weight_home", None), None, red_seen)
+                                  if w_now is None else None)  # fmt: skip
+                        if w_now is not None:
+                            box_pressed.clear()
+                            why_bw = hook_survive(hook, HuntTick(
+                                tick, pct, spp, False, here, mode, MappingProxyType(counts), img,
+                                None, False, int(round(w_now * 100))), box_press)  # fmt: skip
+                            if why_bw is not None:
+                                reason = f"weight_home: {why_bw}"
+                                ev({"kind": "weight_home", "share": round(w_now, 4),
+                                    "red": red_seen, "limit": None, "by": "box",
+                                    "why": why_bw})  # fmt: skip
+                                break
+                    else:
+                        why_wh = weight_home_due(getattr(a, "weight_home", None), w_share,
+                                                 red_seen)  # fmt: skip
                     if why_wh is not None:
                         reason = f"weight_home: {why_wh}"
                         sh_ = None if w_share is None else round(w_share, 4)
@@ -9918,24 +10144,23 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     at_ = getattr(a, "respawn_at", None) or MOVE_TO_SAVE  # the person's, else ours
 
                     def respawn_press() -> None:
-                        x_, y_ = gx0 + at_[0], gy0 + at_[1]
-                        agent_raw.move(x_ + 4, y_ + 3)  # two motions: a cold click is ignored
-                        time.sleep(0.08)
-                        agent_raw.move(x_, y_)
-                        time.sleep(0.3)
-                        agent_raw.click(x_, y_)
+                        if box_respawn:  # dungeon@9.50: the box's respawn function clicks
+                            box_call("respawn", "death")
+                            return
+                        two_motion_click(at_[0], at_[1])  # two motions: a cold click is ignored
 
                     ca_ = getattr(a, "respawn_confirm_at", None)  # "none": this server asks none
                     cat_ = None if ca_ == "none" else (ca_ or CONFIRM_AT)
+                    if box_respawn:  # dungeon@9.50: the box's confirm function, or none asked
+                        cat_ = (0, 0) if "respawn_confirm" in box_roles_ else None
+                        rsp["by"] = "box"
 
                     def confirm_press() -> None:
                         assert cat_ is not None
-                        x_, y_ = gx0 + cat_[0], gy0 + cat_[1]
-                        agent_raw.move(x_ + 4, y_ + 3)
-                        time.sleep(0.08)
-                        agent_raw.move(x_, y_)
-                        time.sleep(0.3)
-                        agent_raw.click(x_, y_)
+                        if box_respawn:
+                            box_call("respawn_confirm", "death")
+                            return
+                        two_motion_click(cat_[0], cat_[1])
 
                     has_sig = bool(r.signature_variants(RESPAWN_CONFIRM_STATE))
 
@@ -9965,9 +10190,15 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         g_h = hb_h.gray(np.asarray(frame()))
                         return hb_h.read_count(g_h, hotbar_slot(home_key), stock_watch[0])
 
+                    def home_press() -> None:
+                        if box_home:  # dungeon@9.50: the box's way home (its butterfly_wing body)
+                            box_call("home", "end")
+                            return
+                        press("home", "end")
+
                     player_home_end(
                         home_key, reason, seated_end, read_count=home_count,
-                        press=lambda: press("home", "end"),
+                        press=home_press,
                         stand=lambda: agent_raw.keys(keys_["stand"]),
                         basic_info=lambda: hpp.read(frame(), glyphs) is not None,
                         rec=home_rec)  # fmt: skip
