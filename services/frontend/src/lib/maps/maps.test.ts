@@ -11,9 +11,29 @@ import { test } from "node:test";
 import type { PlayStep, Trace } from "../flow/api.ts";
 import { mapNodes, nodeById, sampleProject, xmasProject } from "../flow/project.ts";
 import { sessionProject } from "../flow/testkit.ts";
-import { addMapNode, centreCell, mapNodeFor, newNodePos, targetGuess } from "./build.ts";
+import { addMapNode, centreCell, mapNodeFor, NEW_NODE_DX, newNodePos, targetGuess } from "./build.ts";
 import { type Ctx, drawGrid, drawScene, FALLBACK_COLOURS, fitScale, mapSize } from "./draw.ts";
-import { activeEdgeAt, entryHandle, exitRuns, fitViewport, followCentre, mapsGraph, POS_SCALE, START_DX, START_DY, START_EDGE, START_ID, toScreen, toUnits } from "./graph.ts";
+import {
+  activeEdgeAt,
+  CARD_MAX_PX,
+  cardGap,
+  entryHandle,
+  exitRuns,
+  fitViewport,
+  followCentre,
+  LABEL_CLEAR_PX,
+  LABEL_LANE_PX,
+  labelLines,
+  labelWidth,
+  mapsGraph,
+  POS_SCALE,
+  START_DX,
+  START_DY,
+  START_EDGE,
+  START_ID,
+  toScreen,
+  toUnits,
+} from "./graph.ts";
 import { makeWanderers, shares, WANDER_CAP, wanderersAt } from "./wander.ts";
 import { along, approximatePlay, beatAt, beatText, buildTimeline, overlayAt, poseAt, runChecks, traceHasSession, trailAt, walkSeconds } from "./play.ts";
 import { CREDENTIALS, characterOf, loginOf, SERVERS, sessionLength, sessionOf, sessionProblems, sessionSteps, setCharacter, setLogin } from "./session.ts";
@@ -153,8 +173,8 @@ test("a map node from the static data: its id, the centre-most entry, a target g
   assert.deepEqual(n.tabs.map((t) => t.name), ["main"], "IRON RULE: every node has a main");
   assert.equal(n.tabs[0].main![0].kind, "repeat");
   assert.equal(n.tabs[0].main!.at(-1)?.kind, "stop");
-  assert.deepEqual(n.pos, { x: 690, y: 0 }, "right of the rightmost map");
-  assert.deepEqual(newNodePos(r.project), { x: 920, y: 0 });
+  assert.deepEqual(n.pos, { x: 460 + NEW_NODE_DX, y: 0 }, "right of the rightmost map");
+  assert.deepEqual(newNodePos(r.project), { x: 460 + 2 * NEW_NODE_DX, y: 0 });
   const bare = mapNodeFor(sampleProject(), "syn_town", null);
   assert.equal(bare.entries[0].at, null);
   assert.deepEqual(bare.tabs[0].main, [{ kind: "stop", reason: "done" }]);
@@ -482,4 +502,57 @@ test("other monsters are never where the run's monster stands, at its meeting ti
   }
   // and it is drawing only: off (null) draws none, the run's words do not change
   assert.equal(drawScene(recorder().ctx, { map: "field_1", w: 100, h: 100, scale: 2, sheet: null, tl, time: 20, labels: null, savePoint: null, colours: FALLBACK_COLOURS, decor: null }).decor, 0);
+});
+
+
+// --- an exit's label between its cards (matpilot round 15 #13, round 16 #8) -----------------------
+// Not measured in a browser here (the reviewer re-measures): the cards are drawn over the labels,
+// so the label must fit the GAP between them. At round 16 "+ map geffen" put geffen 230 units
+// right (437 px; a 400 px card left 37 px) and "death respawn (derived)" (208 px) was 83 % under.
+const DEATH = "death respawn (derived)";
+
+test("a label's width estimate covers what the browser measured (round 16: 208 px)", () => {
+  assert.ok(labelWidth(DEATH) >= 208, String(labelWidth(DEATH)));
+});
+
+test("an exit's label shows what fits in the gap between its cards, never more", () => {
+  assert.deepEqual(labelLines(DEATH, "death", 400), [DEATH], "a wide gap: one line");
+  assert.deepEqual(labelLines(DEATH, "death", 160), ["death respawn", "(derived)"], "a lane: wrapped on words");
+  assert.deepEqual(labelLines(DEATH, "death", 90), ["death"], "narrow: the short word");
+  assert.deepEqual(labelLines(DEATH, "death", 437 - CARD_MAX_PX), [], "round 16's 37 px: no label (the card's port row says it)");
+  assert.deepEqual(labelLines(DEATH, "death", Number.NaN), []);
+  for (const gap of [30, 60, 90, 120, 160, 200, 240, 400]) {
+    for (const l of labelLines(DEATH, "death", gap)) assert.ok(labelWidth(l) + 2 * LABEL_CLEAR_PX <= gap, `${gap}: ${l}`);
+  }
+});
+
+test("the gap between two cards: either order, overlapping cards have none, an unmeasured card is unknown", () => {
+  assert.deepEqual(cardGap({ x: 0, width: 400 }, { x: 570, width: 360 }), { gap: 170, centre: 485 });
+  assert.deepEqual(cardGap({ x: 570, width: 360 }, { x: 0, width: 400 }), { gap: 170, centre: 485 }, "a loop back");
+  assert.ok(cardGap({ x: 0, width: 400 }, { x: 0, width: 300 })!.gap <= 0, "one under the other");
+  assert.equal(cardGap({ x: 0, width: 0 }, { x: 570, width: 360 }), null);
+});
+
+test("+ map leaves a lane beside the widest card for a two-line label", () => {
+  const lane = NEW_NODE_DX * POS_SCALE.x - CARD_MAX_PX;
+  assert.ok(lane >= LABEL_LANE_PX, String(lane));
+  assert.deepEqual(labelLines(DEATH, "death", lane), ["death respawn", "(derived)"]);
+  // the reviewer's case: geffen placed by + map beside the one box's xmas_dun02
+  const r = addMapNode(xmasProject(), "geffen", null);
+  assert.ok(r.ok);
+  assert.equal(nodeById(r.project, "geffen")!.pos.x - nodeById(r.project, "xmas_dun02")!.pos.x, NEW_NODE_DX);
+  // the card's widest is maps.css's .mp-card max-width
+  const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, new RegExp(`\\.mp-card \\{[^}]*max-width: ${CARD_MAX_PX}px`));
+});
+
+test("maps.css: port captions wrap (no cut entry line) and the phone graph has no minimap over the cards", () => {
+  const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const cap = /\.mp-port-cap \{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.doesNotMatch(cap, /nowrap|ellipsis/);
+  assert.match(cap, /overflow-wrap: anywhere/);
+  const phone = css.lastIndexOf("@media (max-width: 48rem)");
+  assert.ok(phone > 0);
+  assert.match(css.slice(phone), /\.maps-graph \.react-flow__minimap \{\s*display: none;/);
+  assert.match(css, /\.mp-edge-label \{[^}]*white-space: nowrap/);
 });

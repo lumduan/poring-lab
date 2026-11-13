@@ -836,12 +836,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* matpilot round 15 #13 / round 16 #8: a caption WRAPS (an entry read "START: the run starts here…",
+   the rest only in its title); the dot stays beside the port's name row */
 .mp-port-cap {
-  overflow: hidden;
   color: var(--muted);
   font-size: 0.8rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .mp-port-none {
   color: var(--muted);
@@ -964,6 +964,11 @@
   .maps-side-body {
     overflow: visible;
   }
+  /* matpilot round 16 #8: on a phone the graph always overflows (a card is most of the width), and
+     the minimap covered the start card's corner; a finger pans the graph, Fit brings the maps back */
+  .maps-graph .react-flow__minimap {
+    display: none;
+  }
   .mat-playback {
     gap: 0.25rem;
     padding: 0.25rem 0.4rem;
@@ -1023,7 +1028,13 @@
   background: var(--surface);
   font-size: 0.85rem;
   font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap; /* the lines are lib/maps/graph.ts labelLines' (sized to the gap between the cards) */
   pointer-events: all;
+}
+.mp-edge-line {
+  display: block;
 }
 /* Global: shared by every node, no ports; a dashed teal border says so */
 .mp-global {

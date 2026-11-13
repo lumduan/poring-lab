@@ -193,3 +193,49 @@ export function followCentre(box: Box, vp: Viewport, node: Rect): { x: number; y
   const inView = px >= 0 && py >= 0 && px + node.width * vp.zoom <= box.width && py + node.height * vp.zoom <= box.height;
   return inView ? null : { x: node.x + node.width / 2, y: node.y + node.height / 2, zoom: vp.zoom };
 }
+
+// --- an exit's label between its two cards (matpilot round 15 #13, round 16 #8) -----------------
+// React Flow draws the cards OVER the edge labels, and a label sat at the edge's midpoint: with
+// "+ map" 230 units right (round 15 #5's compact spacing) "death respawn (derived)" was 83 % under
+// the cards at 1440. The label now sits in the GAP between the two cards, in what fits there: the
+// words on one line, else wrapped on words, else one short word, else nothing (each card's port
+// row says the exit in full). Flow pixels throughout: the label and the gap scale together.
+/** .mp-edge-label's text, measured (round 16: "death respawn (derived)", 23 characters, 208 px
+ * wide at 0.85rem / 600 with 0.4rem of padding a side): a little more, to be safe. */
+export const LABEL_CH_PX = 8.6;
+export const LABEL_PAD_PX = 14;
+export const LABEL_CLEAR_PX = 10; // between the label and each card
+export const LABEL_MAX_LINES = 3;
+/** The widest map card (.mp-card's max-width in maps.css) and the lane "+ map" leaves beside it,
+ * room for a two-line label ("death respawn" / "(derived)"). */
+export const CARD_MAX_PX = 400;
+export const LABEL_LANE_PX = 170;
+
+export const labelWidth = (text: string): number => Math.ceil(text.length * LABEL_CH_PX + LABEL_PAD_PX);
+
+export type Span = { x: number; width: number };
+/** The horizontal gap between two cards (flow pixels): from the left one's right edge to the
+ * right one's left edge (negative or 0: they overlap in x, e.g. one under the other), and its
+ * centre. Null for a non-finite or a not-yet-measured (width 0) card. */
+export function cardGap(a: Span, b: Span): { gap: number; centre: number } | null {
+  if (![a.x, a.width, b.x, b.width].every((n) => Number.isFinite(n)) || a.width <= 0 || b.width <= 0) return null;
+  const [l, r] = a.x <= b.x ? [a, b] : [b, a];
+  const left = l.x + l.width;
+  return { gap: r.x - left, centre: left + (r.x - left) / 2 };
+}
+
+/** The label's lines in a gap of `gap` flow pixels: `full` on one line when it fits, else `full`
+ * wrapped on its words into at most LABEL_MAX_LINES lines, else `short`, else [] (no label). */
+export function labelLines(full: string, short: string, gap: number): string[] {
+  const room = gap - 2 * LABEL_CLEAR_PX;
+  if (!Number.isFinite(room) || room <= 0) return [];
+  if (labelWidth(full) <= room) return [full];
+  const lines: string[] = [];
+  for (const w of full.split(" ").filter(Boolean)) {
+    const last = lines.at(-1);
+    if (last !== undefined && labelWidth(`${last} ${w}`) <= room) lines[lines.length - 1] = `${last} ${w}`;
+    else lines.push(w);
+  }
+  if (lines.length <= LABEL_MAX_LINES && lines.every((l) => labelWidth(l) <= room)) return lines;
+  return labelWidth(short) <= room ? [short] : [];
+}

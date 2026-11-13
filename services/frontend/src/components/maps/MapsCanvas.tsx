@@ -37,6 +37,7 @@ import {
   Position,
   ReactFlow,
   type ReactFlowInstance,
+  useInternalNode,
   useUpdateNodeInternals,
 } from "@xyflow/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -48,7 +49,7 @@ import type { AuthoredExit } from "@/lib/flow/ir";
 import { type Project } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
 import { sessionLinkProblem } from "@/lib/maps/edit";
-import { type EdgeData, entryHandle, exitHandle, exitRuns, fitViewport, followCentre, IN, mapsGraph, type MapsNodeData, OUT, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
+import { cardGap, type EdgeData, entryHandle, exitHandle, exitRuns, fitViewport, followCentre, IN, labelLines, mapsGraph, type MapsNodeData, OUT, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
 import { entryCaption, EXIT_WORDS, nodeLinks } from "@/lib/maps/links";
 import { nodeLint, tabList, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
@@ -306,9 +307,18 @@ function GlobalNodeCard({ id, data }: NodeProps<MNode>) {
 type ExitEdgeT = Edge<EdgeData & { runs?: number; active?: boolean }, "exit">;
 // Edge labels of different kinds between the same two nodes would sit on one midpoint.
 const LABEL_DY: Record<string, number> = { walk_exit: -30, npc_warp: -10, item_warp: 10, death_respawn: 30 };
+// the one word a label keeps in a narrow gap (lib/maps/graph.ts labelLines)
+const LABEL_SHORT: Record<string, string> = { walk_exit: "walk", npc_warp: "NPC warp", item_warp: "wing", death_respawn: "death" };
+
+/** A card's horizontal span in flow pixels, once React Flow has measured it (else null). */
+function useSpan(id: string): { x: number; width: number } | null {
+  const n = useInternalNode(id);
+  const w = n?.measured.width;
+  return n && w ? { x: n.internals.positionAbsolute.x, width: w } : null;
+}
 
 function ExitEdge(props: EdgeProps<ExitEdgeT>) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } = props;
+  const { id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } = props;
   const [path, lx, ly] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const kind = data?.kind ?? "walk_exit";
   const colour = EXIT_COLOURS[kind] ?? "var(--muted)";
@@ -316,14 +326,27 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
   const dy = (LABEL_DY[kind] ?? 0) + (sourceX > targetX ? 48 : 0); // a loop back: its label lower
   const entry = data && "entry" in data ? data.entry : null;
   const label = data?.label ?? `${kind.replace("_", " ")}${entry ? ` → ${entry}` : ""}${data?.runs ? ` · ${data.runs}×` : ""}${derived ? " (derived)" : ""}`;
+  // matpilot round 16 #8: the cards are drawn over the labels, so a label sits in the GAP between
+  // its two cards, in what fits there (two cards one under the other: the midpoint, as before)
+  const a = useSpan(source);
+  const b = useSpan(target);
+  const g = a && b ? cardGap(a, b) : null;
+  const inGap = g !== null && g.gap > 0;
+  const lines = inGap ? labelLines(label, LABEL_SHORT[kind] ?? kind, g.gap) : [label];
   return (
     <>
       <BaseEdge id={id} path={path} style={{ stroke: colour, strokeWidth: selected || data?.active ? 3.5 : 2, strokeDasharray: derived ? "6 5" : undefined }} />
-      <EdgeLabelRenderer>
-        <div className="nodrag nopan mp-edge-label" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + dy}px)`, color: colour }}>
-          {label}
-        </div>
-      </EdgeLabelRenderer>
+      {lines.length > 0 && (
+        <EdgeLabelRenderer>
+          <div className="nodrag nopan mp-edge-label" title={lines.join(" ") !== label ? label : undefined} style={{ transform: `translate(-50%, -50%) translate(${inGap ? g.centre : lx}px, ${ly + dy}px)`, color: colour }}>
+            {lines.map((l, i) => (
+              <span key={i} className="mp-edge-line">
+                {l}
+              </span>
+            ))}
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
 }

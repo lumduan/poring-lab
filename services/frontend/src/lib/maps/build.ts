@@ -13,6 +13,7 @@
 //   newMapNode's own (stop at once until it is written).
 import { MAP_ID, type Stmt } from "../flow/ir.ts";
 import { type MapNode, mapNodes, newMapNode, type Project } from "../flow/project.ts";
+import { CARD_MAX_PX, LABEL_LANE_PX, POS_SCALE } from "./graph.ts";
 
 export type MapFacts = {
   rows: string[] | null; // rows[y][x], '.' walkable (the backend's walk grid)
@@ -21,8 +22,11 @@ export type MapFacts = {
 
 export const ATTACKS = 5;
 export const WITHIN = 9;
-/** Where "+ map" places a new node: right of the rightmost map node, in the project's units. */
-export const NEW_NODE_DX = 230; // the ready-made projects' map spacing (matpilot round 15 #5: a compact first view)
+/** Where "+ map" places a new node: right of the rightmost map node, in the project's units. Round
+ * 15 #5 made it the ready-made projects' compact 230 (437 px: a 400 px card left a 37 px gap, and
+ * the new node's "death respawn (derived)" label was 83 % under the cards, matpilot round 16 #8);
+ * now the widest card plus a lane for a two-line label: 300 units, 570 px. */
+export const NEW_NODE_DX = Math.ceil((CARD_MAX_PX + LABEL_LANE_PX) / POS_SCALE.x);
 
 /** The walkable cell nearest the grid's centre (ties: the lower y, then the lower x), or null. */
 export function centreCell(rows: readonly string[] | null): [number, number] | null {
