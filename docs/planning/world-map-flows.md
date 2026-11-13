@@ -541,9 +541,31 @@ the way home, the functions, the events.
   The two are not tied yet.
 - The live block highlight runs on the runner's inside view, not on the studio's blocks.
 
-### 15.5 The engine's side
+### 15.5 The engine's side (packages/poring_flow, ADR-0020 Amendment C)
 
-(Filled in at the merge: the Python-view spellings, the lint rules and codes.)
+- Python view: `press_key("F8")`; `take_exit(item_warp(using=butterfly_wing, to=entry("geffen",
+  "save")))` (a bare function name as the first argument is refused: "butterfly_wing is a function:
+  item_warp(using=butterfly_wing, to=...)"); `dungeon_hunt(heal=heal, fly=fly_wing,
+  knife_on=knife_on, knife_back=knife_back)`. All round-trip.
+- ADR-0020 section 2.1 said "never a block: raw keys". Amendment C narrows it: `press_key` takes
+  exactly the L2 hotbar keys F1-F9 (a guard test pins it and still bans key / press / chord /
+  click); everything else of 2.1 stands.
+- The catalogue (GET /flows/catalogue) gains param type `proc` (a function's name) and
+  `runner_maps` (poring_flow/functions.py RUNNER_MAPS = ["xmas_dun02"], tested against
+  scripts/flow_run.py FLOWS).
+- Lint (lint/functions.py), all ERRORS: `exit_function` (the item warp's function is missing, a
+  variable, or presses no key); `hunt_function` (a role's function is not exactly one press_key);
+  `hotbar_keys` (two roles, or a role and the wing, on one key); `runner_map` (dungeon_hunt on a map
+  without a runner, or outside a map block's steps). A key pressed by the wing exit's function is
+  that Butterfly Wing everywhere: the save-point rule (14.4), relocating and exit placement treat it
+  as use_item(WING). A press of any other key in an event that does not relocate is a WARNING.
+- The simulators: an item warp by function is ONE item step (with its proc and key) then the exit;
+  a wing press elsewhere (e.g. `call butterfly_wing` in an event) keeps its own map change.
+- On the live backend (2026-11-13 19:02) the xmas_dun02 flow lints with 0 errors on the lab's data
+  (left: the assertion's warning, map flags not extracted, one readiness item as hunt's).
+- The live ticks (dungeon@9.45, docs/planning/player-mode.md): the Run pane's checklist is ticked
+  from the screen by `dungeon_hunt.py check` (no input). The map's NAME is not read from pixels: a
+  cell of another map can pass as xmas_dun02's open ground (Geffen 119, 40 does).
 
 ### 15.6 For Batt to try
 
