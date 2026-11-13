@@ -292,3 +292,77 @@ for (const [name, make] of [["project_xmas_dun02", xmasProject], ["project_sampl
     assert.equal(canonical(make()), canonical(JSON.parse(readFileSync(url, "utf8"))));
   });
 }
+
+// matpilot round 17 N4: the survival events' Python says cooldown_s=0.7 (drink), cooldown_s=3
+// (fly_away), max_per_run=1 (bag_full), and no field on their blocks showed them; the blocks were
+// 1022-1102 px wide on a 1008 px canvas (every row on one line)
+test("an event block shows every trigger field the Python writes, and edits round-trip", () => {
+  const x = xmasProject();
+  const scope = { node: "xmas_dun02", tab: "survival" };
+  const ws = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
+  const ev = ws.blocks.blocks;
+  const lim = (b: (typeof ev)[number]) => [b.fields?.NAME, b.fields?.COOLDOWN, b.fields?.MAX_RUN, b.fields?.MAX_MIN, b.fields?.MAX_10, b.fields?.FAILS, b.fields?.ESCALATE];
+  assert.deepEqual(ev.map(lim), [
+    ["drink", 0.7, "", "", 10, 3, ""],
+    ["fly_away", 3, "", "", 10, 3, ""],
+    ["bag_full", 0, "1", "", 10, 3, ""],
+  ]);
+  // nothing rides hidden any more: the fields are the whole trigger
+  for (const b of ev) assert.equal(JSON.stringify(b.extraState).includes("cooldown"), false);
+  // the round trip is exact: the fixture's canonical bytes do not change
+  const back = tabFromWorkspace(x, scope, ws);
+  assert.ok(back.ok);
+  if (!back.ok) return;
+  const url = new URL("./fixtures/project_xmas_dun02.json", import.meta.url);
+  assert.equal(canonical(back.project), canonical(JSON.parse(readFileSync(url, "utf8"))));
+  // a person edits them on the block
+  ev[0].fields = { ...ev[0].fields, COOLDOWN: 1.5, MAX_RUN: "4", MAX_MIN: "6", MAX_10: 20, FAILS: 2, ESCALATE: "heal" };
+  const ed = tabFromWorkspace(x, scope, ws);
+  assert.ok(ed.ok, ed.ok ? "" : ed.errors.join("; "));
+  if (!ed.ok) return;
+  const on = nodeById(ed.project, "xmas_dun02")!.tabs[2].defs[0].on!;
+  assert.deepEqual([on.cooldown_s, on.max_per_run, on.max_per_min, on.max_fires_per_10min, on.max_insert_fails, on.escalate], [1.5, 4, 6, 20, 2, "heal"]);
+  // a value off its range is refused in words, with nothing applied
+  for (const [f, v, words] of [["MAX_RUN", "0", /at most … a run "0": a whole number 1\.\.100, or empty for no limit/], ["MAX_MIN", "x", /at most … a minute "x"/], ["FAILS", 11, /an insert's failures "11": a whole number 1\.\.10/], ["COOLDOWN", -1, /the pause after each run "-1": a number 0\.\.3600/], ["ESCALATE", "no way", /escalate "no way" is not a valid name/]] as const) {
+    const bad = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
+    bad.blocks.blocks[0].fields = { ...bad.blocks.blocks[0].fields, [f]: v };
+    const r = tabFromWorkspace(x, scope, bad);
+    assert.equal(r.ok, false, f);
+    if (!r.ok) assert.match(r.errors.join("; "), words, f);
+  }
+  // a block from the toolbox (no limit fields yet): the IR's defaults
+  const fresh = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
+  for (const k of ["COOLDOWN", "MAX_RUN", "MAX_MIN", "MAX_10", "FAILS", "ESCALATE"]) delete fresh.blocks.blocks[2].fields![k];
+  const fr = tabFromWorkspace(x, scope, fresh);
+  assert.ok(fr.ok);
+  if (fr.ok) assert.equal(nodeById(fr.project, "xmas_dun02")!.tabs[2].defs[2].on!.max_per_run, null);
+});
+
+test("the event block puts its inputs on rows of their own (narrow enough for a 1008 px canvas)", async () => {
+  const { DEF_BY_TYPE } = await import("./blockdefs.ts");
+  const d = DEF_BY_TYPE.pl_event;
+  // zelos starts a row at every input only when the block is not inline (isMultiRow)
+  assert.equal(d.inputsInline, false);
+  const rows = [d.message0, d.message1, d.message2, d.message3, d.message4, d.message5, d.message6, d.message7, d.message8];
+  assert.deepEqual(rows, ["%1 when %2", "event %1 class %2 rank %3", "mode %1 then %2", "until %1", "rearm %1", "pause %1 s after each run · at most %2 a run", "at most %1 a minute · %2 in 10 minutes", "an insert that fails %1 times: escalate to %2", "do %1"]);
+  // no row holds two value inputs (an expression each): a row is never two conditions wide
+  for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5, d.args6, d.args7, d.args8]) {
+    assert.ok((args ?? []).filter((a) => a.type === "input_value").length <= 1);
+  }
+  // the longest row's own words (without its fields) stay short
+  assert.ok(Math.max(...rows.map((r) => (r ?? "").replace(/%\d/g, "").length)) <= 45);
+});
+
+test("a tab's first block starts below the Undo / Redo buttons at the studio's start scale", async () => {
+  const { TAB_TOP_Y } = await import("./blocks.ts");
+  const { INJECT } = await import("./theme.ts");
+  const css = readFileSync(new URL("../../components/flows/studio.css", import.meta.url), "utf8");
+  const rem = (sel: string, prop: string) => Number(new RegExp(`\\${sel} \\{[^}]*${prop}: ([0-9.]+)rem`).exec(css)?.[1]);
+  const band = (rem(".history-buttons", "top") + rem(".history-button", "height")) * 16; // px from the canvas's top
+  assert.ok(band > 50 && band < 60, String(band));
+  assert.ok(TAB_TOP_Y * INJECT.zoom.startScale >= band, `${TAB_TOP_Y * INJECT.zoom.startScale} px < ${band} px`);
+  for (const tabName of ["main", "survival", "monsters"]) {
+    const ws = tabToWorkspace(xmasProject(), { node: "xmas_dun02", tab: tabName });
+    assert.equal(Math.min(...ws.blocks.blocks.map((b) => b.y ?? 0)), TAB_TOP_Y, tabName);
+  }
+});

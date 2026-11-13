@@ -17,7 +17,7 @@ export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "fie
 import { BLOCK_STYLE } from "./theme.ts";
 
 export type ArgDef =
-  | { type: FieldKind; name: string; text?: string; value?: number; options?: [string, string][]; class?: string }
+  | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string }
   | { type: "input_value" | "input_statement"; name: string; check?: string | string[] }
   | { type: "input_dummy" }
   | { type: "field_image"; src: string; width: number; height: number; alt: string };
@@ -35,6 +35,12 @@ export type BlockDef = {
   args4?: ArgDef[];
   message5?: string;
   args5?: ArgDef[];
+  message6?: string;
+  args6?: ArgDef[];
+  message7?: string;
+  args7?: ArgDef[];
+  message8?: string;
+  args8?: ArgDef[];
   previousStatement?: null | string;
   nextStatement?: null | string;
   output?: null | string;
@@ -402,22 +408,35 @@ export const BLOCK_DEFS: BlockDef[] = [
     tooltip: "A variable of this tab (in Global: shared by every node); its first value. A map's variable of the same name replaces Global's there",
   },
   {
+    // matpilot round 17 N4: EVERY trigger field the Python view writes (@on(..., cooldown_s=0.7,
+    // max_per_run=1, ...)) is a field here, one row each (inputsInline false: under the zelos
+    // renderer every input starts its own row, so the block is as wide as its widest row, not as
+    // all of them in one line: the survival events were 1022-1102 px wide on a 1008 px canvas)
     type: "pl_event",
     message0: "%1 when %2",
     args0: [label("SCOPE"), { type: "input_value", name: "WHEN" }],
-    message1: "event %1 class %2 rank %3 mode %4 then %5",
+    message1: "event %1 class %2 rank %3",
     args1: [text("NAME", "my_event"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) },
-      text("RANK"), // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
-      { type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) },
-      { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
-    message2: "until %1 rearm %2",
-    args2: [{ type: "input_value", name: "UNTIL" }, { type: "input_value", name: "REARM" }],
-    message3: "do %1",
-    args3: [{ type: "input_statement", name: "DO" }],
+      text("RANK")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
+    message2: "mode %1 then %2",
+    args2: [{ type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) }, { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
+    message3: "until %1",
+    args3: [{ type: "input_value", name: "UNTIL" }],
+    message4: "rearm %1",
+    args4: [{ type: "input_value", name: "REARM" }],
+    message5: "pause %1 s after each run · at most %2 a run",
+    args5: [{ type: "field_number", name: "COOLDOWN", value: 0, min: 0, max: 3600 }, text("MAX_RUN")],
+    message6: "at most %1 a minute · %2 in 10 minutes",
+    args6: [text("MAX_MIN"), { type: "field_number", name: "MAX_10", value: 10, min: 1, max: 100, precision: 1 }],
+    message7: "an insert that fails %1 times: escalate to %2",
+    args7: [{ type: "field_number", name: "FAILS", value: 3, min: 1, max: 10, precision: 1 }, text("ESCALATE")],
+    message8: "do %1",
+    args8: [{ type: "input_statement", name: "DO" }],
+    inputsInline: false,
     style: st("pl_event"),
     mutator: STATE,
     tooltip:
-      "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order)",
+      "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order); pause = cooldown_s (seconds after the body's last run), at most … a run / a minute (empty: no limit), … in 10 minutes (the runaway guard), and an insert's failures before it escalates to a function (empty: none)",
   },
   {
     type: "pl_extend",
@@ -470,7 +489,7 @@ export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; sa
   const saved = new Set<string>();
   const inputs = new Set<string>();
   if (!d) return { fields, saved, inputs };
-  for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5]) {
+  for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5, d.args6, d.args7, d.args8]) {
     for (const a of args ?? []) {
       if (a.type === "input_value" || a.type === "input_statement") inputs.add(a.name);
       else if (a.type !== "input_dummy" && a.type !== "field_image") {

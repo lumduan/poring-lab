@@ -52,7 +52,7 @@ test("the workspace uses only the fields, inputs and connections the block types
   const inputKind = (type: string, name: string): string | undefined => {
     if (type === "pl_logic" && /^T[0-9]+$/.test(name)) return "input_value";
     const d = DEF_BY_TYPE[type];
-    for (const args of [d.args0, d.args1, d.args2, d.args3]) {
+    for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5, d.args6, d.args7, d.args8]) {
       for (const a of args ?? []) if ("name" in a && a.name === name) return a.type;
     }
     return undefined;
