@@ -1148,18 +1148,33 @@ def to_char_select(agent: Agent, screen: Screen, which: str) -> None:
     log("character select")
 
 
-def enter_game(agent: Agent, screen: Screen, which: str, char: str | None = None) -> None:
+def enter_game(
+    agent: Agent, screen: Screen, which: str, char: str | None = None, *, any_char: bool = False
+) -> None:
     """Enter the game from character select with the SELECTED slot (Enter). ``char``: the character
     that slot holds when it is not the account's .env one (the GM account's Rogue / Crusader
-    slots; the caller clicked that slot first); it must be one of the account's characters."""
-    char = char or account(which)[2]
-    if char not in account_chars(which):
-        raise Stop(f"{which}: no character {char!r} yet: run `ro_agent.py create-char {which}`")
+    slots; the caller clicked that slot first); it must be one of the account's characters.
+    ``any_char`` (with no ``char``): accept whichever of the account's characters the selected
+    slot holds. ``recover`` uses it: the client re-selects the LAST slot played, which on the GM
+    account is usually the Rogue, not the .env character (2026-11-13: two false "never came
+    online" failures, and a needless relaunch, while the Rogue was online)."""
+    chars = account_chars(which)
+    if any_char and char is None:
+        wanted = set(chars)
+        if not wanted:
+            raise Stop(f"{which}: no character yet: run `ro_agent.py create-char {which}`")
+    else:
+        char = char or account(which)[2]
+        if char not in chars:
+            raise Stop(f"{which}: no character {char!r} yet: run `ro_agent.py create-char {which}`")
+        wanted = {char}
     ensure_window("login", "enter-game")  # covers the gap until the session is attested
     agent.keys("Enter")
     end = time.monotonic() + 40
+    came: list[str] = []
     while time.monotonic() < end:
-        if char in online_chars(which):
+        came = sorted(wanted & set(online_chars(which)))
+        if came:
             break
         time.sleep(1)
     else:
@@ -1167,7 +1182,7 @@ def enter_game(agent: Agent, screen: Screen, which: str, char: str | None = None
         raise Stop(f"{which}: the character never came online=1")
     for _ in range(20):
         if not black(screen):
-            log(f"{which} in game: online=1 and drawing")
+            log(f"{which} in game ({', '.join(came)}): online=1 and drawing")
             ensure_chat_window(agent, screen, f"enter_game:{which}")
             return
         time.sleep(1)
@@ -1218,9 +1233,9 @@ def create_char(agent: Agent, screen: Screen, which: str) -> None:
     log(f"{which}: created {char!r}")
 
 
-def login(agent: Agent, screen: Screen, which: str) -> None:
+def login(agent: Agent, screen: Screen, which: str, *, any_char: bool = False) -> None:
     to_char_select(agent, screen, which)
-    enter_game(agent, screen, which)
+    enter_game(agent, screen, which, any_char=any_char)
 
 
 # Login-screen layout, client-relative (GAME_REGION origin), per client size, measured on the live
@@ -1722,7 +1737,7 @@ def recover(which: str, retries: int = 2, agent_id: str = "ro_agent-recover") ->
                     log(f"recover attempt {attempt}: closing the client")
                     close_client(agent, screen)
                 launch_client(agent, screen)
-                login(agent, screen, which)
+                login(agent, screen, which, any_char=True)  # the remembered slot (2026-11-13)
                 return
         except Stop as exc:
             log(f"recover attempt {attempt} failed: {exc}")
