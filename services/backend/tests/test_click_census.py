@@ -104,7 +104,7 @@ ALLOWED = {
                                "inside it. And the storage window's own CLOSE button (store_loot, "
                                "Batt 2026-10-25: loot kept via @storage), only while its title "
                                "matched, after two motions"),
-    "scripts/dungeon_hunt.py": (4, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
+    "scripts/dungeon_hunt.py": (3, "dungeon@1 (Batt 2026-10-22, demonstrations 3.98, the "
                                    "Crusader on orcsdun01): ONE world-click path (click_at) "
                                    "through FrameGuard (off-frame refused) -- the DEFEND-SCAN "
                                    "strike and its burst only where cursor_sword read SWORD at "
@@ -169,7 +169,14 @@ ALLOWED = {
                                    "then this client's CONFIRMATION's OK (CONFIRM_AT, or "
                                    "--respawn-confirm-at; none: no such step), ONCE, only while "
                                    "its picture reads (the respawn_confirm signature, cut live "
-                                   "2026-11-13)"),
+                                   "2026-11-13). dungeon@9.50 (live-blocks.md stage 3): those two "
+                                   "presses are ONE helper now, two_motion_click (the count went "
+                                   "4 -> 3: the same motions, the same points by default); with "
+                                   "the box's respawn functions (Batt 2026-11-13: 'make respawn a "
+                                   "function block') the points are their click_at's, inside the "
+                                   "game picture, still only in that death exit, at the same "
+                                   "moments and reads (the box's click_at is refused anywhere "
+                                   "else before any input: poring_flow.live.click_problems)"),
     "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
                                     "Basic Info's arrow and a chat TAB, two motions, each step "
                                     "verified on pixels (the chat's message area is "
