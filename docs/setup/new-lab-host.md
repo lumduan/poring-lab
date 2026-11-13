@@ -659,6 +659,7 @@ are byte-identical to kRO there (docs/thai-data-experiment.md). Use your own cli
 | battle-log glyphs, per language | `scripts/battle_log.py formats-init en`, `clusters`, `cut`, `cut-names` | `data/ui_anchors/battle_log/<lang>/` |
 | minimap position digits | `scripts/selfpos_calibrate.py` (labelled by packet truth from recorded sessions) | `data/ui_anchors/minimap_digits.npz` |
 | minimap references (which map she is on; dungeon@9.46) | `OMP_NUM_THREADS=2 python3 scripts/minimap_id.py build --grf <GRF> --decode-mixcrypt` (every server map of the map cache; ~30 s; most minimap bitmaps are MIXCRYPT: without the study decoder those maps read "cannot tell") | `data/minimap_refs/refs.npz` |
+| item icon references (which item each hotbar key shows; dungeon@9.47) | `OMP_NUM_THREADS=2 python3 scripts/slot_items.py build --grf <GRF> --decode-mixcrypt` (every item of the KB's `data/kb/items.json`; ~8 s; most item bitmaps are MIXCRYPT: without the study decoder those items read "cannot tell", and a player start refuses on a key it cannot read) | `data/slot_items/refs.npz` |
 | hotbar stock digits | `scripts/hotbar_count.py cut --cal DIR` | `data/hotbar/digits.npz` |
 | HP percent glyphs, job identity references | `scripts/hp_percent.py fit FRAMES_DIR` then `prove FRAMES_DIR` (labelled by hp packets); `scripts/crusader.py --char <char> init --name <NAME>` (once), `cut-name`, `cut-job <JOB>`; add `--no-db` on a server with no DB of ours (section 11.1) | `data/crusader/`, `data/thief/` |
 

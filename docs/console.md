@@ -348,6 +348,10 @@ Amendment B); a not-adopted model is never offered.
   It needs the references built once per host (`OMP_NUM_THREADS=2 python3 scripts/minimap_id.py
   build --decode-mixcrypt`); without them the line is a ? and a player start refuses. The version chip
   reads dungeon@9.46.
+  ➡️ **dungeon@9.47:** the wings / heals / home / Knife lines read WHICH ITEM each key shows, from
+  its icon (`scripts/slot_items.py`; built once per host: `OMP_NUM_THREADS=2 python3
+  scripts/slot_items.py build --decode-mixcrypt`): another item is a red ✗ ("F1 shows a White Potion,
+  not a Fly Wing: ..."), unread a ?, and a player start refuses both before any input.
 - ➡️ **SUPERSEDED 2026-11-13 ~20:xx by THE PROJECT MODEL** (Batt: "/maps first: login, character, each
   map and a Global node, linked like modular code; double-click a node for its flows; one main
   tab, the rest the person's; every tab and Global imported into main"; design:

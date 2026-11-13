@@ -1,13 +1,13 @@
 ---
 doc_type: plan
 hypothesis: null
-status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; 9.46 (the map's name from the minimap) BUILT 2026-11-13, its pre-registered held-out bar PASSED; NOT live-verified as a run (Batt 11-12: no lab live test of player mode)
+status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; 9.46 (the map's name from the minimap) BUILT 2026-11-13, its pre-registered held-out bar PASSED; 9.47 (the items on the keys, from their icons) BUILT 2026-11-13; NOT live-verified as a run (Batt 11-12: no lab live test of player mode)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../setup/new-lab-host.md, rogue-xmas02.md]
-next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.) Since 9.46 the map's name is read from the minimap's picture: build its references on each host (OMP_NUM_THREADS=2 python3 scripts/minimap_id.py build --decode-mixcrypt) or a player start refuses."
+next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.) Since 9.46 the map's name is read from the minimap's picture: build its references on each host (OMP_NUM_THREADS=2 python3 scripts/minimap_id.py build --decode-mixcrypt) or a player start refuses. Since 9.47 the item on each role's key is read from its icon: build those references too (OMP_NUM_THREADS=2 python3 scripts/slot_items.py build --decode-mixcrypt) or a player start refuses."
 ---
 
 # Player mode: the hunting bot without GM commands
@@ -560,6 +560,175 @@ She stands in Geffen at (119, 40) (19:02's position; the lab database said last_
 - The thresholds are constants, not Run settings (a person loosening them would loosen the
   safety line); `PLAYER_MAP_S` could be one.
 - Maps without a minimap (indoor) always "cannot tell".
+
+## The items on the keys (dungeon@9.47; matpilot's review 2026-11-13, round 15 #1)
+
+**The gap (safety).** The runner presses ONE hotbar key per role: the heal item (`heal_key`, the
+White Potion 504; with `--heal-candy` also the Candy Cane 530 on F6 and the Candy 529 on F7), the
+Fly Wing (`fly_key`, 601), the Butterfly Wing (`home_key`, 602), the Knife (`knife_key`, 1201) and
+the dagger (`dagger_key`). Since the keys come from the person's flow functions (any F1-F9), a key
+can point at the wrong slot. The start (the check, and run()'s player start) read only the stack
+COUNT under each key (`hotbar_count.py`), never WHAT ITEM is there: with `fly_key` = F1 (the
+potions' slot) the check said "✓ at least 5 Fly Wings on F1 · read: 10 Fly Wings on F1", Run stayed
+enabled, and the runner's escape would have drunk a potion instead of flying.
+
+### The cue (studied 2026-11-13 21:31-21:42 ICT from `date`)
+
+- **What the screen offers.** The 1-row hotbar draws the item's OWN ICON: the archive's 24 x 24
+  item bitmap (`data/texture/<the UI folder>/item/<resource name>.bmp`, the name through
+  `data/idnum2itemresnametable.txt`), 1:1, at game-region (246 + 29 k, 4) for slot k (F1 = 0). Its
+  magenta key colour is transparent over the slot's white face (255; the face's top row is the
+  frame line, 198). The stack count's black digits are drawn over the icon's lower right
+  (hotbar_count's count box). Equipment in the bag shows its icon (the Knife on F4, the Damascus on
+  F5); worn equipment is not drawn (an empty slot: bare_steal's readout). A skill (F3, Steal) is
+  not an item bitmap. Measured on the live frame (21:31:06): each role icon's bitmap at (246, 4)
+  read 0.8-4.2 (mean colour difference); one pixel off read >= 38.
+- **How** (`scripts/slot_items.py`, numpy only; the same `read_slot` for the check, the start and
+  the scorer):
+  1. the slot's 24 x 24 square, in COLOUR (four potions share one bottle);
+  2. every reference picture composited as the client draws it (the key colour = the white face),
+     compared by the mean absolute colour difference over the square minus the count box and the
+     frame's top line (`COMPARE`);
+  3. the best picture is NAMED when its distance is <= `NAME_MAX` (20) and it beats every RIVAL
+     (a picture within `RIVAL_RANGE` 30 of it) on the pixels that tell the two apart (where the two
+     pictures differ by > `DIFF_PX` 30) by a LEAD >= `PAIR_LEAD` (0.5): (the read's difference from
+     the rival - from the best) / the pictures' own difference there (1 = the best picture, 0 =
+     halfway). Two pictures that differ on fewer than `DISCRIM_MIN` (6) pixels are ONE picture (a
+     copy group: the Knife's 1201 / 1202 / 1203). The lead is what separates the colour variants:
+     the White Potion is 11.3 from the Blue Potion as whole squares but leads it by 0.96; the
+     Butterfly Wing (10.8 from the Green Butterfly Wing, whose picture differs by only 37 on 74
+     pixels) leads by 0.81;
+  4. EMPTY = hotbar_count's empty rule (no digit, no dark icon pixel) AND the slot's white face
+     (`FACE_MIN` 250: a load screen's flat picture also has no digit and no dark pixel);
+  5. otherwise "cannot tell": a dark frame (< 40), no face, no picture within `NAME_MAX`, or a
+     rival too close.
+- **The references** (`build`; CLIENT-derived, `data/slot_items/refs.npz`, gitignored, never
+  committed; ~8 s): every item of the server's KB (`data/kb/items.json`, 6,169 ids; 4,456 of them
+  in the archive's table, 4,449 with a bitmap) -> its resource name -> its bitmap. 2026-11-13
+  21:35: 2,381 distinct pictures; 4,275 of the archive's 6,497 item bitmaps are MIXCRYPT (the
+  lab's host-local study decoder, `--decode-mixcrypt`). The words' names are the KB's English
+  ones. Rebuild (once per host; the NAS Thai archive read in place, read-only):
+
+      OMP_NUM_THREADS=2 python3 scripts/slot_items.py build --decode-mixcrypt
+
+### The development set (seen while designing)
+
+`NAME_MAX`, `PAIR_LEAD`, `DIFF_PX`, `DISCRIM_MIN` and `RIVAL_RANGE` were set on the live frame
+alone; `FACE_MIN` on these recordings. 18 NAS recordings, 2,076 frames: 12 sessions 11-06 .. 11-13,
+every 5th frame of their first, middle and last shards (788), and 6 of them again, EVERY frame of
+the first and last shards (1,288). Labels: a recording keeps one layout, so a slot's item is the
+one its reads name in >= 3 frames (checked by eye on enlarged strips of 4 recordings). The
+confusion, true item -> read:
+
+    true \ read     itself   empty   cannot tell   ANOTHER item
+    White Potion     2,032       .            44              0
+    Fly Wing         2,032       .            44              0
+    Knife            1,399     301 (worn)     40              0
+    Damascus           301     564 (worn)     15              0
+    Candy Cane         615     580 (used up)  32              0
+    Candy              789     406 (used up)  32              0
+    F3 (a skill)         -       .         2,076   0 (never named an item)
+
+The "cannot tell" frames are whole-hotbar events: the client dims the screen before a map change
+and then draws its load screen (no hotbar). Before `FACE_MIN`, 11 load-screen frames read all nine
+slots "empty" (the flat sky has no digit and no dark pixel). START windows (3 consecutive frames,
+1 s apart; a live start reads ~4 frames a second for `PLAYER_SLOT_S` 3 s): 1,252 of 1,266 decided
+every layout slot; the 14 others are 7 map changes (the setup's warp, the end's warp, a respawn;
+3 of them seen by eye: a dimmed hotbar, then the load screen). Own distances <= 5.1, the next
+picture >= 11.1, the least lead over a rival 0.84 (the bar 0.5).
+
+### PRE-REGISTERED (2026-11-13, before the held-out set is read; the commit that carries this)
+
+- **The held-out set:** 7 NAS recordings none of the development set read: 20261028T151136-rdp-
+  stage-gef10-e3 (gef_fild10, 10-28), 20261111T041708-rdp-xmas02-fsTn3, 20261111T160248-rdp-hunt-
+  xmas02-bs0, 20261112T005615-rdp-hunt-xmas02-fiT26, 20261112T072541-rdp-xmas02-sk2a,
+  20261112T170954-rdp-hunt-xmas02-fiT44, 20261113T031511-rdp-hunt-xmas02-fiT61. EVERY frame of the
+  first and last shards. Scored ONCE by `slot_items.py eval SESSION... --shards first,last`
+  (`scripts/slot_items_eval.py`) with the constants above frozen and the 21:35 references. Before
+  the scores count, a person (Claude, from the `--strips` pictures) confirms each recording's
+  layout; a layout item that is not what the strip shows makes all its reads WRONG.
+- **The bar:**
+  - **S1 (the danger):** 0 reads name an item that is not the slot's (layout slots and the
+    never-item slots: a skill named as an item is wrong too).
+  - **S2:** >= 97 % of the 3-frame start windows decide every layout slot, and every undecided
+    window is a map change (a frame with >= 7 of the 9 slots unread).
+  - **S3:** of the layout slots' reads, >= 95 % name their item or "empty".
+- **The runner's "cannot tell" rule, decided by S1 and S2:** both pass -> `PLAYER_SLOT_UNREAD =
+  "refuse"` (a player start that cannot tell what a key shows within `PLAYER_SLOT_S` refuses, as
+  it does on another item; a map change is no legitimate start). Either fails -> "warn" (the start
+  prints a WARNING line and goes on; another item still refuses).
+
+### The result
+
+(scored after the commit above; filled in below)
+
+### The live case (read only, the lab's screen; pixels only, no input)
+
+She stands in Geffen at (119, 40); her hotbar (read by eye on the 21:31 frame): F1 10 White
+Potions, F2 empty, F3 a skill (Steal, 10), F4 the Knife (1), F5 empty (the dagger worn), F6 empty,
+F7 4 Candies, F8 10 Fly Wings, F9 3 Butterfly Wings.
+- 21:31:06-08 ICT: one game-region frame (study). `slot_items.py read`: F1 White Potion (0.9, lead
+  0.96), F4 Knife (0.8, 0.99), F7 Candy (3.6, 0.92), F8 Fly Wing (3.0, 0.95), F9 Butterfly Wing
+  (4.2, 0.81), F2 / F5 / F6 empty, F3 cannot tell (nearest picture 76.7).
+- **21:52:43-47 ICT, `dungeon_hunt.py check` with the flow's own argv** (`flow_run.check_command`,
+  the worktree, the 21:35 references): wings ✓ "10 Fly Wings on F8: at least 5; F8 shows a Fly
+  Wing (read from its icon)"; heals ✓ "10 heal items on F1 ...; F1 shows a White Potion"; home ✓
+  "3 Butterfly Wings on F9 ...; F9 shows a Butterfly Wing"; knife ✓ "F4 shows the Knife (read from
+  its icon) with no stack count"; the map line ✗ (Geffen), so `ok: false, refuses: true`.
+- **21:52:58-21:53:02 ICT, the WRONG mapping through the real check** (the same argv with the
+  flow's keys swapped: `--fly-key F1 --heal-key F8`; one key for each role, so the preamble's clash
+  rule passes): wings ✗ `refuses: true`, value "10 on F1": "F1 shows a White Potion, not a Fly Wing:
+  set the Fly Wing's key to the Fly Wing's slot"; heals ✗ "F8 shows a Fly Wing, not a White Potion:
+  set the heal item's key to the White Potion's slot"; home and knife ✓.
+- **21:53:16-17 ICT, the runner's own start function** `player_start_slots` with the same wrong
+  keys (its own screen, no Agent, no session; `no_input_guard` on): "dungeon@9.47 refused:
+  --player-mode: F1 shows a White Potion, not a Fly Wing: set the Fly Wing's key to the Fly Wing's
+  slot; F8 shows a Fly Wing, not a White Potion: set the heal item's key to the White Potion's
+  slot".
+
+### Wired in (dungeon@9.47; `SLOT_ITEMS_VERSION = "9.47"`, `VERSION` stays dungeon@8.7)
+
+- **The roles read** (`slot_role_keys`): the Fly Wing, the heal item (+ the Candy Cane and the
+  Candy with `--heal-candy`), the Butterfly Wing (when there is a key) and the Knife (`--bare-steal`
+  with `--steal-opener`). The dagger's key is read EMPTY by bare_ref_cut (worn: no icon to name).
+- **The check's lines** (`start_check`: `read_role_slots`, frames until every role's slot reads,
+  for up to `PLAYER_SLOT_S`; `slot_role_state`): ANOTHER item first -- ✗ `refuses: true`, "<key>
+  shows <item>, not <role's item>: <fix>", the value the count ("10 on F1"); then the count rule as
+  before; then "cannot tell" -- ? "<n> on <key>: at least 5, but cannot tell whether <key> shows a
+  Fly Wing (<why>) (the runner refuses a start that cannot tell)"; else ✓ with "<key> shows a Fly
+  Wing (read from its icon)". An EMPTY slot is no item: the count rules speak (0 Fly Wings refuse; a
+  used-up Candy Cane does not; an empty Knife slot is opener_ref_cut's "the opener is worn"). The
+  home line, which never refused on its count, refuses on another item (its way home would use it).
+  Without references the four lines are ? with the build command.
+- **The runner's player start** (`run()`, `player_start_slots`): after the check's branch and the
+  map read, BEFORE the session folder and the session -- a screen of its own, no Agent -- it refuses
+  with "dungeon@9.47 refused: --player-mode: <key> shows <item>, not <role's item>: <fix>" (every
+  wrong key in one line), or, cannot tell, "... cannot tell whether <key> shows <item> (<why>) --
+  within 3.0 s: a person first". Missing references refuse the same way. `run_start` records the
+  reads (`player_slots`: per role its key, the verdict and the read) and `fixes.player_slots` =
+  [NAME_MAX, PAIR_LEAD, PLAYER_SLOT_S, PLAYER_SLOT_UNREAD, "9.47"], player mode only.
+- The runner export is regenerated (feature_version dungeon@9.47). The /flows checklist's own text
+  is unchanged (the check's words say what each slot shows).
+- Tests (SYNTHETIC icons only): `test_slot_items.py` (the reader: where the client draws, a copy
+  group, two potions that differ only in the liquid and a half-covered one, empty / flat / dark /
+  unknown slots, read-until-decisive, the references' round trip; the role words; the refusal rule
+  both ways; the start refuses a wrong key and a start that cannot tell before any session or
+  Agent, goes on with every role right; the order in run(); the records), `test_live_check.py`
+  (matpilot's swapped keys through the check; the three outcomes of each of wings / heals / home /
+  knife; no references; the heal candies each on its own key).
+
+### What is left
+
+- **The references are per host and per client** (the Thai archive's bitmaps; 4,275 of 6,497 need
+  the lab's study decoder). An item of the server's KB with no line in the archive's table (1,713
+  of 6,169: the newer items, which the 2021 client names in its iteminfo instead) has no reference:
+  on a role key it reads "cannot tell" (a refusal), never a false "right".
+- Only the 1-row hotbar at its home is modelled; a moved or 2-row hotbar reads "cannot tell" (a
+  refusal at a player start).
+- The thresholds are constants, not Run settings (a person loosening them would loosen the safety
+  line); `PLAYER_SLOT_S` could be one.
+- In the run itself the keys are not re-read: a person who drags another item onto a key mid-run
+  is not caught (the count guards still read their counts).
 
 ## Not built yet
 

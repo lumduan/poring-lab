@@ -36,7 +36,8 @@ INPUT_CALLS = dh.TYPING_CALLS | {
 }  # fmt: skip
 CHECK_FUNCS = ("start_check", "_wings_line", "_heals_line", "_home_line", "_knife_line",
                "_dagger_line", "check_used", "check_item", "check_verdict", "read_start_map",
-               "player_map_verdict")  # fmt: skip
+               "player_map_verdict", "read_role_slots", "slot_role_state", "slot_role_keys",
+               "_slot_of", "_slot_then")  # fmt: skip  # dungeon@9.47: + the keys' items
 
 
 def _func(name: str) -> ast.FunctionDef:
@@ -219,10 +220,50 @@ def _readers(monkeypatch: pytest.MonkeyPatch, counts: dict[int, int | None], *,
 GOOD = {0: 10, 7: 12, 8: 3, 3: None, 4: 0}  # F1 potions, F8 wings, F9 butterfly, F4 knife, F5
 
 
+# dungeon@9.47: SYNTHETIC item icons (the client's are client-derived, never in git), drawn where
+# the client draws a row-1 slot's icon, and the references the check reads them with
+def _icon(seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    img = np.zeros((24, 24, 3), np.uint8)
+    img[:] = (255, 0, 255)  # the key colour: the slot's white face shows
+    img[3:21, 3:21] = np.kron(rng.integers(0, 200, (3, 3, 3), dtype=np.uint8),
+                              np.ones((6, 6, 1), np.uint8))  # fmt: skip
+    return img
+
+
+ITEM_ICONS = {504: _icon(11), 601: _icon(12), 602: _icon(13), 1201: _icon(14), 529: _icon(15),
+              530: _icon(16)}  # fmt: skip
+ITEM_NAMES = {504: "White Potion", 601: "Fly Wing", 602: "Butterfly Wing", 1201: "Knife",
+              529: "Candy", 530: "Candy Cane"}  # fmt: skip
+BAR: dict[int, Any] = {0: 504, 7: 601, 8: 602, 3: 1201, 4: "empty"}  # 2026-11-13's hotbar
+
+
+def _slot_refs() -> Any:
+    import slot_items as si
+
+    return si.SlotRefs.from_icons(ITEM_ICONS, ITEM_NAMES)
+
+
+def _bar(screen: FakeScreen, bar: dict[int, Any]) -> FakeScreen:
+    """Each slot of ``bar``: an item id's icon, "empty" (the white face) or an array (an icon no
+    reference knows)."""
+    import hotbar_count as hb
+    import slot_items as si
+
+    for s, what in bar.items():
+        x, y = si.ICON_ORIGIN[0] + hb.PITCH * s, si.ICON_ORIGIN[1]
+        if isinstance(what, str):
+            sq = np.full((24, 24, 3), 255.0)
+        else:
+            sq = si.composite(ITEM_ICONS[what] if isinstance(what, int) else what)
+        screen.img[y : y + 24, x : x + 24, :3] = sq[..., ::-1].astype(np.uint8)
+    return screen
+
+
 def test_a_check_run_sends_nothing_and_ticks_every_line(monkeypatch: pytest.MonkeyPatch) -> None:
     made = _readers(monkeypatch, GOOD, weight=[300, 1000])
-    screen = FakeScreen()
-    got = dh.start_check(screen, _ctx())
+    screen = _bar(FakeScreen(), BAR)
+    got = dh.start_check(screen, _ctx(slot_refs=_slot_refs()))
     assert made == []  # no Agent, no session
     assert set(screen.calls) <= {"grab", "grab_meta"} and screen.calls
     ids = [i["id"] for i in got["items"]]
@@ -323,7 +364,8 @@ def test_the_feature_version_is_the_checks() -> None:
 
     assert dh.LIVE_CHECK_VERSION == "9.45" and dh.VERSION == "dungeon@8.7"
     assert dh.MAP_IDENTITY_VERSION == "9.46"  # the map line's reader (minimap_id)
-    assert rfe.feature_version(dh) == "dungeon@9.46"
+    assert dh.SLOT_ITEMS_VERSION == "9.47"  # the keys' items (slot_items)
+    assert rfe.feature_version(dh) == "dungeon@9.47"
 
 
 # --- (c) dungeon@9.46: the map line, from the minimap's picture -----------------------------------
@@ -359,8 +401,8 @@ def _refs() -> Any:
 def test_the_map_line_ticks_only_on_the_runs_minimap(monkeypatch: pytest.MonkeyPatch) -> None:
     made = _readers(monkeypatch, GOOD, weight=[300, 1000])
     monkeypatch.setattr(dh, "PLAYER_MAP_S", 0.3)
-    screen = _paint(FakeScreen(), 1)
-    got = dh.start_check(screen, _ctx(map_refs=_refs()))
+    screen = _bar(_paint(FakeScreen(), 1), BAR)
+    got = dh.start_check(screen, _ctx(map_refs=_refs(), slot_refs=_slot_refs()))
     by = {i["id"]: i for i in got["items"]}
     assert made == [] and set(screen.calls) <= {"grab", "grab_meta"}
     assert by["cell"]["ok"] is True and by["cell"]["value"] == "(7, 21)"
@@ -393,3 +435,74 @@ def test_the_map_line_asks_a_person_when_it_cannot_tell(monkeypatch: pytest.Monk
     assert "look at the game -- is she on xmas_dun02?" in w
     assert "the runner refuses a start that cannot tell" in w
     assert screen.calls.count("grab_meta") >= 2  # it read frames for PLAYER_MAP_S, no more
+
+
+# --- (d) dungeon@9.47: WHAT each role's key shows (matpilot's review 2026-11-13, round 15 #1) ----
+
+
+def _check(monkeypatch: pytest.MonkeyPatch, bar: dict[int, Any], counts: dict[int, int | None],
+           refs: Any = "default", **ctx: Any) -> dict[str, Any]:  # fmt: skip
+    made = _readers(monkeypatch, counts, weight=[300, 1000])
+    monkeypatch.setattr(dh, "PLAYER_SLOT_S", 0.3)
+    screen = _bar(FakeScreen(), bar)
+    got = dh.start_check(screen, _ctx(slot_refs=_slot_refs() if refs == "default" else refs,
+                                      **ctx))  # fmt: skip
+    assert made == [] and set(screen.calls) <= {"grab", "grab_meta"}  # pixels only, no input
+    return {i["id"]: i for i in got["items"]}
+
+
+def test_a_wrong_key_is_crossed_and_the_runner_refuses_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """matpilot's case: the Fly Wing's key on F1, the White Potions' slot (and the heal key on
+    F8): the count alone read "10 Fly Wings on F1"; now each line names what the slot shows."""
+    keys = {"potion": "F8", "fly": "F1", "home": "F9", "equip": "F5"}
+    by = _check(monkeypatch, BAR, {0: 10, 7: 10, 8: 3, 3: 1, 4: 0}, keys=keys)
+    assert by["wings"] == dh.check_item("wings", False, "F1 shows a White Potion, not a Fly Wing: "
+                                        "set the Fly Wing's key to the Fly Wing's slot",
+                                        "10 on F1")  # fmt: skip
+    assert by["heals"]["ok"] is False and by["heals"]["refuses"] is True
+    assert by["heals"]["words"].startswith("F8 shows a Fly Wing, not a White Potion")
+    assert by["heals"]["value"] == "10 on F8"  # the count stays in the value
+
+
+def test_each_role_has_three_outcomes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per role: its item -> tick; ANOTHER item -> cross (the runner refuses); an icon no
+    reference knows -> "?" (cannot tell: the runner refuses that too)."""
+    counts = {0: 10, 7: 12, 8: 3, 3: 1, 4: 0}
+    unknown = np.full((24, 24, 3), 90, np.uint8)  # an icon of no known item (a skill's)
+    for line, slot, other in (("wings", 7, 504), ("heals", 0, 601), ("home", 8, 504),
+                              ("knife", 3, 504)):  # fmt: skip
+        right = _check(monkeypatch, BAR, counts)[line]
+        assert right["ok"] is True, (line, right)
+        assert "(read from its icon)" in right["words"]
+        wrong = _check(monkeypatch, {**BAR, slot: other}, counts)[line]
+        assert wrong["ok"] is False and wrong["refuses"] is True, (line, wrong)
+        assert f"F{slot + 1} shows a " in wrong["words"] and ", not " in wrong["words"]
+        cant = _check(monkeypatch, {**BAR, slot: unknown}, counts)[line]
+        assert cant["ok"] is None, (line, cant)
+        assert f"cannot tell whether F{slot + 1} shows" in cant["words"]
+        assert cant["words"].endswith("(the runner refuses a start that cannot tell)")
+    # the counts keep their own rule: the right item, too few of it
+    few = _check(monkeypatch, BAR, {**counts, 7: 3})["wings"]
+    assert few["ok"] is False and few["words"] == dh.player_wings_refused({601: 3})
+
+
+def test_without_references_every_role_is_a_question(monkeypatch: pytest.MonkeyPatch) -> None:
+    by = _check(monkeypatch, BAR, {0: 10, 7: 12, 8: 3, 3: 1, 4: 0}, refs=None)
+    for line in ("wings", "heals", "home", "knife"):
+        assert by[line]["ok"] is None, line
+        assert "slot_items.py build --decode-mixcrypt" in by[line]["words"], line
+    assert by["wings"]["value"] == "12 on F8"  # the count is still read
+
+
+def test_heal_candies_each_on_its_own_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    keys = {"potion": "F1", "fly": "F8", "home": "F9", "equip": "F5", "cane": "F6",
+            "candy": "F7"}  # fmt: skip
+    stock = {**dh.STOCK_ITEMS, **dh.HEAL_CANDY_ITEMS}
+    bar = {**BAR, 5: 530, 6: "empty"}  # the Candy Canes on F6, the Candies used up (F7 empty)
+    counts = {0: 10, 7: 12, 8: 3, 3: 1, 4: 0, 5: 4, 6: 0}
+    by = _check(monkeypatch, bar, counts, keys=keys, stock_items=stock, heal_candy=True)
+    assert by["heals"]["ok"] is True and "F7 is empty" in by["heals"]["words"]
+    by = _check(monkeypatch, {**bar, 5: 601}, {**counts, 5: 10}, keys=keys, stock_items=stock,
+                heal_candy=True)  # fmt: skip
+    assert by["heals"]["ok"] is False
+    assert by["heals"]["words"].startswith("F6 shows a Fly Wing, not a Candy Cane: put the Candy")

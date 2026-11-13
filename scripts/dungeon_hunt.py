@@ -1575,6 +1575,157 @@ def player_map_warning(map_: str, read: Any, refs: Any) -> str | None:
     return f"WARNING: --player-mode: is she on {map_}? the screen does not say ({words})"
 
 
+# --- dungeon@9.47 (matpilot's review 2026-11-13, round 15 #1, safety): WHICH ITEM each role's key
+# shows, read from its icon's PIXELS (scripts/slot_items.py; docs/planning/player-mode.md "The
+# items on the keys"). 9.45's gap: the start read only the stack COUNT on each role's slot, so with
+# the Fly Wing's key set to F1 (the White Potions') the check said "10 Fly Wings on F1", Run stayed
+# enabled, and an escape would have drunk a potion. Now each role's slot must SHOW its item: the
+# check's lines wings / heals / home / knife tick only on it, and a player's start refuses BEFORE
+# ANY INPUT (a screen of its own, before the session) when a role's slot shows ANOTHER item -- a
+# wrong key is never safe -- or cannot tell (PLAYER_SLOT_UNREAD; the recorded frames decided it:
+# player-mode.md "The result"). An EMPTY slot is no item: the count rules speak for it (0 Fly Wings
+# refuse; a used-up Candy Cane does not; an empty Knife slot is the opener worn: opener_ref_cut).
+SLOT_ITEMS_VERSION = "9.47"
+PLAYER_SLOT_S = 3.0  # a start reads frames for up to this long until every role's slot reads
+PLAYER_SLOT_UNREAD = "refuse"  # "cannot tell" at a player's start: "refuse" | "warn"
+SLOT_BUILD = "OMP_NUM_THREADS=2 python scripts/slot_items.py build --decode-mixcrypt"
+
+
+@dataclass(frozen=True)
+class SlotRole:
+    """A key's role: the items its slot may show, the item in words, the person's fix."""
+
+    items: tuple[int, ...]
+    what: str
+    fix: str
+
+
+SLOT_ROLES: dict[str, SlotRole] = {
+    "fly": SlotRole((601,), "a Fly Wing", "set the Fly Wing's key to the Fly Wing's slot"),
+    "potion": SlotRole((504,), "a White Potion",
+                       "set the heal item's key to the White Potion's slot"),
+    "cane": SlotRole((530,), "a Candy Cane",
+                     f"put the Candy Canes on {HEAL_CANDY_KEYS['cane']} (--heal-candy's key)"),
+    "candy": SlotRole((529,), "a Candy",
+                      f"put the Candies on {HEAL_CANDY_KEYS['candy']} (--heal-candy's key)"),
+    "home": SlotRole((PLAYER_HOME_ITEM,), "a Butterfly Wing",
+                     "set the Butterfly Wing's key to the Butterfly Wing's slot"),
+    "opener": SlotRole((1201,), "the Knife", "set the Knife's key to the Knife's slot"),
+}  # fmt: skip
+
+
+def slot_role_keys(keys: Mapping[str, str], heal_candy: bool, opener: str | None,
+                   bare: bool) -> dict[str, str]:  # fmt: skip
+    """PURE (dungeon@9.47): each role whose slot a player's start reads -> its key: the Fly Wing,
+    the heal item (with --heal-candy the Candy Cane and the Candy too), the Butterfly Wing (when
+    there is a key) and the Knife (--bare-steal's --steal-opener). The dagger's key is read EMPTY
+    (worn) by bare_ref_cut: no icon to name."""
+    out = {r: keys[r] for r in ("fly", "potion", "home") if keys.get(r)}
+    if heal_candy:
+        out.update({r: keys[r] for r in ("cane", "candy") if keys.get(r)})
+    if bare and opener is not None:
+        out["opener"] = opener
+    return out
+
+
+def load_slot_refs(path: Path | None = None) -> Any:
+    """dungeon@9.47: the item icon references (slot_items.SlotRefs), or None when the file is
+    missing or stale (every slot read is then "cannot tell", with the build command)."""
+    import slot_items as si
+
+    try:
+        return si.SlotRefs.load(si.REFS if path is None else path)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def read_role_slots(frame_fn: Callable[[], Any], roles: Mapping[str, str], refs: Any,
+                    wait_s: float) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.47: each role's slot read (slot_items.SlotRead): frames from ``frame_fn`` until
+    every role's slot reads an item or an empty slot, or ``wait_s`` passes; {} without references
+    (no frame is read)."""
+    import slot_items as si
+
+    if refs is None or not roles:
+        return {}
+    got, _n = si.read_slots_until(frame_fn, [hotbar_slot(k) for k in roles.values()], refs,
+                                  wait_s)  # fmt: skip
+    return {role: got[hotbar_slot(k)] for role, k in roles.items()}
+
+
+def slot_role_state(role: str, key: str, read: Any, refs: Any) -> tuple[str, str]:
+    """PURE (dungeon@9.47): what slot ``key`` shows for ``role`` -- "right" | "wrong" (ANOTHER
+    item: the runner refuses) | "empty" | "unknown" (slot_items.shows) -- and the words."""
+    import slot_items as si
+
+    sr = SLOT_ROLES[role]
+    if refs is None:
+        return "unknown", (f"cannot tell whether {key} shows {sr.what}: no item references "
+                           f"(data/slot_items/) -- build them: {SLOT_BUILD}")  # fmt: skip
+    st = si.shows(read, sr.items)
+    if st == "right":
+        return st, f"{key} shows {sr.what} (read from its icon)"
+    if st == "wrong":
+        return st, f"{key} shows {si.article(read.name or '?')}, not {sr.what}: {sr.fix}"
+    if st == "empty":
+        return st, f"{key} is empty"
+    why = "it was not read" if read is None else read.why
+    return st, f"cannot tell whether {key} shows {sr.what} ({why})"
+
+
+def player_slots_refused(states: Mapping[str, tuple[str, str]]) -> str | None:
+    """PURE (dungeon@9.47): why a player-mode run cannot start on what its keys' slots show (None:
+    it can). A slot that shows ANOTHER item always refuses (an escape that drinks a potion);
+    "cannot tell" refuses while PLAYER_SLOT_UNREAD is "refuse" (read when called), else the start
+    warns (player_slots_warning). An empty slot is the count rules' (player_stock_refused)."""
+    wrong = [w for st, w in states.values() if st == "wrong"]
+    if wrong:
+        return "; ".join(wrong)
+    unknown = [w for st, w in states.values() if st == "unknown"]
+    if not unknown or PLAYER_SLOT_UNREAD != "refuse":
+        return None
+    return f"{'; '.join(unknown)} -- within {PLAYER_SLOT_S} s: a person first"
+
+
+def player_slots_warning(states: Mapping[str, tuple[str, str]]) -> str | None:
+    """PURE (dungeon@9.47): the WARNING line of a start that cannot tell what a key's slot shows
+    while PLAYER_SLOT_UNREAD is "warn" (None: no warning)."""
+    unknown = [w for st, w in states.values() if st == "unknown"]
+    if not unknown or PLAYER_SLOT_UNREAD == "refuse":
+        return None
+    return f"WARNING: --player-mode: {'; '.join(unknown)}"
+
+
+def player_start_slots(roles: Mapping[str, str], refs: Any,
+                       region: tuple[int, int, int, int]) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.47: a player's start reads what each role's key shows from a screen of ITS OWN,
+    before the session -- no Agent exists yet, so no input path is open -- and refuses (a
+    SystemExit, like the preamble's) on another item, and on "cannot tell" while
+    PLAYER_SLOT_UNREAD is "refuse". The reads go into run_start (``player_slots``)."""
+    import ro_agent as r
+
+    screen = r.Screen()
+    try:
+
+        def grab() -> Any:
+            return np.ascontiguousarray(np.asarray(r.grab_after(screen, region, r.ns()))[..., :3])
+
+        reads = read_role_slots(grab, roles, refs, PLAYER_SLOT_S)
+    finally:
+        screen.close()
+    states = {role: slot_role_state(role, key, reads.get(role), refs)
+              for role, key in roles.items()}  # fmt: skip
+    why = player_slots_refused(states)
+    if why is not None:
+        raise SystemExit(f"dungeon@{SLOT_ITEMS_VERSION} refused: --player-mode: {why}")
+    warn = player_slots_warning(states)
+    if warn is not None:
+        print(warn, flush=True)
+    return {role: {"key": roles[role], "verdict": st,
+                   "read": reads[role].record() if role in reads else None}
+            for role, (st, _w) in states.items()}  # fmt: skip
+
+
 @dataclass(frozen=True)
 class CheckCtx:
     """What run()'s preamble resolved, for start_check (the same values its own start uses)."""
@@ -1593,6 +1744,7 @@ class CheckCtx:
     digits: Any
     region: tuple[int, int, int, int]
     map_refs: Any = None  # dungeon@9.46: minimap_id.MapRefs (None: not built -> "cannot tell")
+    slot_refs: Any = None  # dungeon@9.47: slot_items.SlotRefs (None: not built -> "cannot tell")
 
 
 def check_item(id_: str, ok: bool | None, words: str, value: str | None = None,
@@ -1648,8 +1800,9 @@ def start_check(screen: Any, ctx: CheckCtx) -> dict[str, Any]:
     each line decided by the SAME function run()'s player start uses (cr.check without the DB,
     player_chat_refused, player_start_refused + explore_from, etc_hold_refused +
     player_weight_refused, player_wings_refused, player_heals_refused, player_home_count_why,
-    opener_ref_cut, bare_ref_cut). No agent is passed, none is made: nothing here can send input.
-    A read that raises (a frozen stream, a missing template) is that line's "not read"."""
+    opener_ref_cut, bare_ref_cut; dungeon@9.47: slot_role_state, what each role's key SHOWS). No
+    agent is passed, none is made: nothing here can send input. A read that raises (a frozen
+    stream, a missing template) is that line's "not read"."""
     import crusader as cr
     import gm_state
     import hotbar_count as hb
@@ -1745,66 +1898,125 @@ def start_check(screen: Any, ctx: CheckCtx) -> dict[str, Any]:
             items.append(check_item(id_, None, f"the hotbar was not read ({e})", None,
                                     id_ != "home"))  # fmt: skip
     else:
-        line("wings", lambda: _wings_line(ctx, counts))
-        line("heals", lambda: _heals_line(ctx, counts))
-        line("home", lambda: _home_line(ctx, gray, tpl), refuses=False)
+        # dungeon@9.47: WHAT each role's key shows (its icon), read as the player start reads it
+        # (player_start_slots: the same frames-until-decisive read, the same words)
+        roles = slot_role_keys(ctx.keys, ctx.heal_candy, ctx.opener, ctx.bare)
+        try:
+            reads = read_role_slots(grab, roles, ctx.slot_refs, PLAYER_SLOT_S)
+        except (SystemExit, OSError, ValueError, LookupError):
+            reads = {}  # each role then "cannot tell" (it was not read)
+        states = {role: slot_role_state(role, key, reads.get(role), ctx.slot_refs)
+                  for role, key in roles.items()}  # fmt: skip
+        line("wings", lambda: _wings_line(ctx, counts, states))
+        line("heals", lambda: _heals_line(ctx, counts, states))
+        line("home", lambda: _home_line(ctx, gray, tpl, states), refuses=False)
         if ctx.bare and ctx.opener is not None:
-            line("knife", lambda: _knife_line(ctx.opener or "", gray))
+            line("knife", lambda: _knife_line(ctx.opener or "", gray, states.get("opener")))
         if ctx.bare:
             line("dagger", lambda: _dagger_line(gray))
     return {"version": LIVE_CHECK_VERSION, "map": ctx.map_, "items": items,
             "used": check_used(ctx), **check_verdict(items)}  # fmt: skip
 
 
-def _wings_line(ctx: CheckCtx, counts: Mapping[int, int | None]) -> dict[str, Any]:
+SlotStates = Mapping[str, tuple[str, str]]  # role -> slot_role_state's (state, words)
+
+
+def _slot_then() -> str:
+    """The words a "cannot tell" line ends with (read when called)."""
+    refuse = PLAYER_SLOT_UNREAD == "refuse"
+    return " (the runner refuses a start that cannot tell)" if refuse else ""
+
+
+def _slot_of(states: SlotStates, role: str, key: str | None) -> tuple[str, str]:
+    return states.get(role, ("unknown", f"cannot tell what {key} shows (it was not read)"))
+
+
+def _wings_line(ctx: CheckCtx, counts: Mapping[int, int | None],
+                states: SlotStates) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.47: the Fly Wing's key must SHOW a Fly Wing (another item: the runner refuses
+    before any input), then the count (player_wings_refused); the count stays in the value."""
     key, n = ctx.keys.get("fly"), counts.get(STOCK_ITEMS["fly"])
+    st, s_words = _slot_of(states, "fly", key)
+    if st == "wrong":
+        return check_item("wings", False, s_words, None if n is None else f"{n} on {key}")
     why = player_wings_refused(counts)
     value = None if n is None else f"{n} Fly Wings on {key}"
-    return check_item("wings", why is None, why or f"{n} Fly Wings on {key}: at least "
-                      f"{PLAYER_MIN_WINGS}", value)  # fmt: skip
+    if why is not None:
+        return check_item("wings", False, why, value)
+    if st != "right":
+        return check_item("wings", None, f"{n} on {key}: at least {PLAYER_MIN_WINGS}, but "
+                          f"{s_words}{_slot_then()}", f"{n} on {key}")  # fmt: skip
+    return check_item("wings", True, f"{n} Fly Wings on {key}: at least {PLAYER_MIN_WINGS}; "
+                      f"{s_words}", value)  # fmt: skip
 
 
-def _heals_line(ctx: CheckCtx, counts: Mapping[int, int | None]) -> dict[str, Any]:
+def _heals_line(ctx: CheckCtx, counts: Mapping[int, int | None],
+                states: SlotStates) -> dict[str, Any]:  # fmt: skip
+    """dungeon@9.47: every heal key must show ITS item (or be empty: a used-up candy), then the
+    count (player_heals_refused); the count stays in the value."""
     heal_items = player_heal_items(ctx.heal_candy)
     role = {i: k for k, i in ctx.stock_items.items()}
     keys = " + ".join(str(ctx.keys.get(role[i])) for i in heal_items)
+    hs = [_slot_of(states, role[i], ctx.keys.get(role[i])) for i in heal_items]
     why = player_heals_refused(counts, heal_items)
     got = [counts.get(i) for i in heal_items]
     n = None if any(c is None for c in got) else sum(int(c or 0) for c in got)
+    if wrong := [w for st, w in hs if st == "wrong"]:
+        return check_item("heals", False, "; ".join(wrong), None if n is None else f"{n} on {keys}")
     value = None if n is None else f"{n} heal items on {keys}"
-    return check_item("heals", why is None, why or f"{n} heal items on {keys}: at least "
-                      f"{PLAYER_MIN_HEALS}", value)  # fmt: skip
+    if why is not None:
+        return check_item("heals", False, why, value)
+    if unknown := [w for st, w in hs if st == "unknown"]:
+        return check_item("heals", None, f"{n} on {keys}: at least {PLAYER_MIN_HEALS}, but "
+                          f"{'; '.join(unknown)}{_slot_then()}", f"{n} on {keys}")  # fmt: skip
+    return check_item("heals", True, f"{n} heal items on {keys}: at least {PLAYER_MIN_HEALS}; "
+                      f"{'; '.join(w for _st, w in hs)}", value)  # fmt: skip
 
 
-def _home_line(ctx: CheckCtx, gray: Any, tpl: Any) -> dict[str, Any]:
-    """The Butterfly Wings: the runner's start never refuses on them (player_home_refused checks
-    only the key); its way home reads the same count with player_home_count_why."""
+def _home_line(ctx: CheckCtx, gray: Any, tpl: Any, states: SlotStates) -> dict[str, Any]:
+    """The Butterfly Wings: the runner's start never refuses on their COUNT (player_home_refused
+    checks only the key); its way home reads the same count with player_home_count_why. dungeon@
+    9.47: ANOTHER item on the key refuses (its way home would use that item)."""
     import hotbar_count as hb
 
     key = ctx.keys.get("home")
-    note = " (the runner does not refuse on it: its way home reads this count again)"
+    note = " (the runner does not refuse on the count: its way home reads it again)"
     if key is None:
         return check_item("home", None, "no Butterfly Wing key: no way home" + note, None, False)
     n = hb.read_count(gray, hotbar_slot(key), tpl)
+    st, s_words = _slot_of(states, "home", key)
+    if st == "wrong":
+        return check_item("home", False, f"{s_words} (its way home would use it)",
+                          None if n is None else f"{n} on {key}", True)  # fmt: skip
     why = player_home_count_why(n)
     value = None if n is None else f"{n} Butterfly Wings on {key}"
-    if why is None:
+    if why is None and st == "right":
         return check_item("home", True, f"{n} Butterfly Wings on {key}: her way home (the bag "
-                          "full, the end)" + note, value, False)  # fmt: skip
+                          f"full, the end); {s_words}" + note, value, False)  # fmt: skip
+    if why is None:
+        return check_item("home", None, f"{n} on {key}, but {s_words}{_slot_then()}",
+                          f"{n} on {key}", False)  # fmt: skip
     return check_item("home", None if n is None else False,
                       f"{why} ({key}): no way home when the bag fills or at the end" + note,
                       value, False)  # fmt: skip
 
 
-def _knife_line(key: str, gray: Any) -> dict[str, Any]:
+def _knife_line(key: str, gray: Any, state: tuple[str, str] | None) -> dict[str, Any]:
+    """dungeon@9.47: the Knife's key must SHOW the Knife (another item: the runner refuses before
+    any input), then run()'s --steal-opener start read (opener_ref_cut)."""
+    st, s_words = state or ("unknown", f"cannot tell what {key} shows (it was not read)")
+    if st == "wrong":
+        return check_item("knife", False, s_words, f"another item on {key}")
     ref, rec, why = opener_ref_cut(gray, key)  # run()'s --steal-opener start read
     if why is not None:
         return check_item("knife", False, why, "an empty slot" if rec.get("empty") else None)
     if ref is None:
         return check_item("knife", None, f"the {key} slot is dark (a load screen?): not read")
-    return check_item("knife", True, f"{key} shows one item with no stack count: the Knife in the "
-                      "bag, as the runner reads it (the icon itself is not matched)",
-                      f"one item on {key}")  # fmt: skip
+    if st != "right":
+        return check_item("knife", None, f"{key} shows one item with no stack count, but "
+                          f"{s_words}{_slot_then()}", f"one item on {key}")  # fmt: skip
+    return check_item("knife", True, f"{s_words} with no stack count: the Knife in the bag, as "
+                      "the runner reads it", f"the Knife on {key}")  # fmt: skip
 
 
 def _dagger_line(gray: Any) -> dict[str, Any]:
@@ -3575,6 +3787,10 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
 
         out["player_map"] = [mi_f.MATCH_MIN, mi_f.NAME_MIN, mi_f.MARGIN_MIN, PLAYER_MAP_S,
                              PLAYER_MAP_UNREAD, MAP_IDENTITY_VERSION]  # fmt: skip
+        import slot_items as si_f  # dungeon@9.47: what each role's key shows, at the start
+
+        out["player_slots"] = [si_f.NAME_MAX, si_f.PAIR_LEAD, PLAYER_SLOT_S,
+                               PLAYER_SLOT_UNREAD, SLOT_ITEMS_VERSION]  # fmt: skip
     return out
 
 
@@ -5857,12 +6073,14 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         return camera.project(rel_, alt)
 
     map_refs = load_map_refs() if player else None  # dungeon@9.46: the minimap references
+    slot_refs = load_slot_refs() if player else None  # dungeon@9.47: the item icon references
+    slot_roles = slot_role_keys(keys_, heal_candy, opener_key, bare_on)  # 9.47: the keys read
     if getattr(a, "cmd", "run") == "check":  # dungeon@9.45: every refusal above passed; now the
         # player start's checks, READ ONLY (a screen, no session, no agent; no session folder)
         ctx = CheckCtx(map_=map_, conf=conf, crk=crk, keys=dict(keys_), stock_items=stock_items,
                        heal_candy=heal_candy, opener=opener_key, bare=bare_on, explore=explore_on,
                        okr=okr, area=area, digits=digits, region=(gx0, gy0, gw, gh),
-                       map_refs=map_refs)  # fmt: skip
+                       map_refs=map_refs, slot_refs=slot_refs)  # fmt: skip
         screen_ck = r.Screen()
         try:
             got_ck = start_check(screen_ck, ctx)
@@ -5873,6 +6091,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     # dungeon@9.46: a player's start reads the map she is on BEFORE ANY INPUT -- a screen of its
     # own, before the session (no Agent exists yet) -- and refuses on another map
     map_read = player_start_map(map_, map_refs, (gx0, gy0, gw, gh)) if player else None
+    # dungeon@9.47: ... and WHAT each role's key shows (its icon), refusing on another item
+    slot_read = (player_start_slots(slot_roles, slot_refs, (gx0, gy0, gw, gh)) if player
+                 else None)  # fmt: skip
     mr_tag = "-mr" if a.engage == "melee_ring" else ""
     if (a.char, map_) != ("crusader", "orcsdun01"):  # dungeon@6: the session name says who / where
         mr_tag = f"-{a.char}-{map_}{mr_tag}"
@@ -6190,6 +6411,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
             **({"player_map": None if map_read is None else map_read.record()} if player
                else {}),
+            **({"player_slots": slot_read} if player else {}),  # dungeon@9.47
             **({"player_home_key": home_key} if player else {}),
             **({"bare_steal": fixes_of(a)["bare_steal"], "bare_ref": bare_rec,
                 "bare_keys": bare_keys} if bare_on else {}),

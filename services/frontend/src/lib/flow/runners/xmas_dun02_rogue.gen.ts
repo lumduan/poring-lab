@@ -15,7 +15,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
   "char": "rogue",
   "script": "scripts/dungeon_hunt.py run",
   "version": "dungeon@8.7",
-  "feature_version": "dungeon@9.46",
+  "feature_version": "dungeon@9.47",
   "file": "xmas_dun02.py",
   "command": {
     "base": [
