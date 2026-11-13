@@ -326,7 +326,9 @@ def test_the_record_carries_player_mode_only_when_on() -> None:
     assert on["player_mode"] == [5, 5, 1, "9.35"]
     assert on["player_mode"] == [dh.PLAYER_MIN_WINGS, dh.PLAYER_MIN_HEALS, dh.PLAYER_WINGS_KEEP,
                                  dh.PLAYER_MODE_VERSION]  # fmt: skip
-    assert {k: v for k, v in on.items() if k not in ("player_mode", "player_map")} == off
+    # dungeon@9.47: + player_slots (test_slot_items.py checks it)
+    assert {k: v for k, v in on.items()
+            if k not in ("player_mode", "player_map", "player_slots")} == off  # fmt: skip
     i_start = SRC.index('ev({"kind": "run_start", "strategy": a.strategy')
     assert '**({"player_mode": fixes_of(a)["player_mode"]} if player else {}),' in SRC[i_start:]
     # dungeon@9.46: the map read's rule, and the read itself in run_start
@@ -738,7 +740,8 @@ def test_the_record_carries_the_exits_only_when_on(monkeypatch: Any) -> None:
     assert "weight_home" not in base and "respawn" not in base
     on = dh.fixes_of(_ns(monkeypatch, "--player-mode", "--weight-home", "0.5", "--respawn"))
     assert on["weight_home"] == 0.5 and on["respawn"] is True
-    pm = ("weight_home", "respawn", "player_mode", "player_map")  # player_map: dungeon@9.46
+    # player_map: dungeon@9.46; player_slots: dungeon@9.47
+    pm = ("weight_home", "respawn", "player_mode", "player_map", "player_slots")
     assert {k: v for k, v in on.items() if k not in pm} == {
         k: v for k, v in base.items() if k != "player_mode"
     }
