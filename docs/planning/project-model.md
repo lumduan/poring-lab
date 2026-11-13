@@ -303,7 +303,19 @@ The engine may keep IR 2 internally as its execution form; nothing user-facing r
 | 10 | who flies home (three weight numbers) | OPEN: the loop's 50 % is the flow's, the runner's weight setting decides the real run |
 | 11 | the inside view does not follow the function keys | OPEN |
 | 12 | raw Python words on blocks, "xmas_dun02 · xmas_dun02" | DONE: the save point sentence, "arrive on … at …", the node chip |
-| 13 | the tab row and the phone canvas | PART: the runner link left the tab row; the phone canvas not re-measured |
+| 13 | the tab row and the phone canvas | PART: the runner link left the tab row; the phone canvas not re-measured. ➡️ round 16 #6 below: the node row no longer shrinks under an open pane |
 | 14 | the FLOWS row reorders on a press | DONE: by name |
 | 15 | Load names the Map tab; Escape | DONE |
 | 16 | the check shares the start's endpoint | DONE: POST /flows/run/check; a check body on /flows/run is refused |
+
+### 10b. matpilot's round 16 (measured on main 27776592), the items still open after 5628fd79
+
+Built on `fix/round16` (2026-11-14, offline: code and unit tests). The layout items (6, 8) are NOT
+measured in a browser here: the reviewer re-measures them.
+
+| # | Finding | State |
+|---|---|---|
+| 6 | phone /flows, Before Run open: the tab row over the node row (◂ Maps 13 % visible, Inside the runner 0 %); the checklist scrolls inside the pane (1,720 px in 333 px) | FIXED, not re-measured: the context bar is a scroll box, so its flex minimum was 0 and the open pane shrank it; every row above and below the body keeps its height (`flex-shrink: 0`), and on a phone the drawer is as tall as its panes (the page is the one scroller; the status row sticks to the screen's bottom). Pinned: `editor_css.test.ts` |
+| 7 | the /maps chip counts a warning no card shows ("3 warnings", the card 2; the third on the project itself) | FIXED: the chip is a button that opens the list of every finding (the project's own first, then each node's by the cards' own rule); the panel with nothing selected names the project's own. Pinned: `edit.test.ts` (the groups add up to the chip's counts, each card's group is the card's findings) |
+| 8 | round 15 #13: the "death respawn (derived)" label 83 % under the cards after + map geffen; the entry line cut to "START: the run starts here…"; at 390 the minimap over the start card | FIXED, not re-measured: the label sits in the gap between its two cards in what fits (one line, wrapped, one word, or none; `graph.ts` labelLines / cardGap), "+ map" spacing 230 -> 300 units (the widest card + a two-line lane); captions wrap; no minimap on a phone. Pinned: `maps.test.ts`. The card's scrollWidth stays a few px over its clientWidth: the exits' dots sit half outside its right border (n8n's look), not cut text |
+| 10 | round 15 #9: "read from the minimap: 0.47; xmas_dun02 is not that picture" | FIXED: `minimap_id.map_verdict` / `read_map` say each score with its scale and threshold ("a match score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or more, 0.15 ahead of the next; xmas_dun02's picture scores at most 0.21"). Pinned: `test_minimap_id.py`, `test_live_check.py`. Still bare: the runner's own start refusal (`dungeon_hunt.player_map_refused`), left to the branch that owns dungeon_hunt.py |

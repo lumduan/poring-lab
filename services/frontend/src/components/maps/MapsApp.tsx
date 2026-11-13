@@ -37,6 +37,7 @@ import CodeView from "@/components/flows/CodeView";
 import { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
 import { CaretIcon, CloseIcon, FolderIcon, PlayIcon, SaveIcon } from "@/components/maps/icons";
 import LinksPanel from "@/components/maps/LinksPanel";
+import LintList from "@/components/maps/LintList";
 import NodeInspector from "@/components/maps/NodeInspector";
 import RulesPanel from "@/components/maps/RulesPanel";
 import { DEFAULT_RUN, PlaybackBar, RunPanel, type RunForm, SPEEDS } from "@/components/maps/SidePanels";
@@ -54,7 +55,7 @@ import { lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts } from "@/lib/maps/build";
 import { connectExit, connectSession, type Edit, moveNodes, removeExit, removeSession, retargetExit, setStart, setZones } from "@/lib/maps/edit";
 import { activeEdgeAt, mapsGraph, type XY } from "@/lib/maps/graph";
-import { nodeTitle } from "@/lib/maps/nodewords";
+import { type LintGroup, lintGroups, nodeTitle } from "@/lib/maps/nodewords";
 import { beatAt, beatText, buildTimeline, type Check, type Labels, poseAt, runChecks, type Timeline } from "@/lib/maps/play";
 import { refreshRule } from "@/lib/maps/rules";
 import { characterOf, credentialOf, loginOf, sessionOf, sessionProblems, sessionSteps, slotText } from "@/lib/maps/session";
@@ -90,7 +91,8 @@ const RULES = "rules"; // the side panel's world rules (not a node id: ids are n
 const PROJECT_FILE = ".project.json";
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { project: Project; world: WorldSource } | null };
 type Sim = { doc: SimDoc; for: string; tl: Timeline; seed: number | null; old: boolean; mock: boolean };
-type Selection = { kind: "node"; id: string } | { kind: "rules" } | null;
+// "lint": the lint chip's list (matpilot round 16 #7: every finding the chip counts, the project's own too)
+type Selection = { kind: "node"; id: string } | { kind: "rules" } | { kind: "lint" } | null;
 
 /** The ready-made projects (project.ts; docs/planning/project-model.md section 7). */
 const READY: { id: string; make: () => Project; world: WorldSource; title: string; words: string }[] = [
@@ -537,6 +539,14 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
     setSelection({ kind: "rules" });
     openPanel("node");
   }, [openPanel]);
+  // matpilot round 16 #7: the lint chip opens the list of every finding it counts (on a phone the
+  // panel is under the graph: it is brought into view)
+  const sideRef = useRef<HTMLElement | null>(null);
+  const onLint = useCallback(() => {
+    setSelection({ kind: "lint" });
+    openPanel("node");
+    requestAnimationFrame(() => sideRef.current?.scrollIntoView({ block: "nearest" }));
+  }, [openPanel]);
   // the Python pane: the selected node's files (else every file), and the project's JSON
   const files = python?.doc.files ?? [];
   const shown = selected && files.some((f) => f.node === selected) ? files.filter((f) => f.node === selected) : files;
@@ -563,6 +573,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   // --- words --------------------------------------------------------------------------------------
   const lintDoc = lint?.doc ?? null;
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
+  const projectLint = lintGroups(lintDoc, project).find((g) => g.node === null) ?? null; // on no node: no card shows it
   const session = sessionOf(project);
   const problems = sessionProblems(session, project.target.server);
   const sp = sessionPath(project);
@@ -743,10 +754,20 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
           <span className="device-label">maps</span>
           <span className="device-value">{maps.length}</span>
         </div>
-        <div className="device-chip" data-level={total?.level}>
+        {/* matpilot round 16 #7: the chip counts every finding, the cards a node's: it opens the list of all */}
+        <button
+          type="button"
+          className="device-chip mp-chip"
+          data-level={total?.level}
+          onClick={onLint}
+          disabled={!lintDoc}
+          aria-pressed={selection?.kind === "lint" && panelOpen && side === "node"}
+          title="Every finding the lint counts, the project's own (on no node) and each node's: open the list"
+          data-testid="maps-lint-chip"
+        >
           <span className="device-label">lint</span>
           <span className="device-value">{total ? `${total.text}${lint && lint.for !== key ? " (checking…)" : ""}` : "…"}</span>
-        </div>
+        </button>
         {!sm && problems.length > 0 && (
           <div className="device-chip" data-level="warning" title={problems.join(" · ")}>
             {problems[0]}
@@ -945,7 +966,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         </div>
 
         {panelOpen && (
-          <aside className="maps-side" aria-label="The node, the simulation and the Python">
+          <aside className="maps-side" aria-label="The node, the simulation and the Python" ref={sideRef}>
             <div className="maps-side-tabs">
               <div className="segmented" role="group" aria-label="Panel">
                 {SIDES.map((s) => (
@@ -962,8 +983,9 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             <div className="maps-side-body">
               {side === "node" && (
                 <>
-                  {selection === null && <Intro />}
+                  {selection === null && <Intro own={projectLint} onLint={onLint} />}
                   {selection?.kind === "rules" && <RulesPanel project={project} onEdit={(r) => edit(r)} onOpen={openFlow} />}
+                  {selection?.kind === "lint" && <LintList lint={lintDoc} project={project} stale={Boolean(lint && lint.for !== key)} onSelect={onSelect} />}
                   {selected && (
                     <NodeInspector
                       project={project}
@@ -1094,9 +1116,28 @@ function nodeWords(p: Project, id: string): string {
   return n.kind === "map" ? `${n.id} (${n.map.map})` : `${nodeTitle(n)} (simulated)`;
 }
 
-function Intro() {
+/** The panel with nothing selected. `own`: the lint's findings on the project itself (no card
+ * shows them; matpilot round 16 #7), said here and in the lint chip's list. */
+function Intro({ own, onLint }: { own: LintGroup | null; onLint: () => void }) {
   return (
     <div className="stack">
+      {own && (
+        <div className="notice notice-warn" data-testid="maps-project-lint">
+          <p>
+            <strong>On the project itself</strong> (no card shows {own.findings.length === 1 ? "it" : "them"}; the lint chip lists every finding):
+          </p>
+          <ul className="plain-list">
+            {own.findings.map((f, i) => (
+              <li key={`${f.rule}-${i}`}>
+                {f.severity === "readiness" ? "not ready" : f.severity} · {f.text || f.message}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="button button-small" onClick={onLint} data-testid="maps-project-lint-all">
+            Every finding
+          </button>
+        </div>
+      )}
       <p className="strong">The project: its nodes, how they link, and the bot walking them.</p>
       <ul className="plain-list">
         <li>START is where the run begins. On a map node (the ready-made xmas_dun02: ONE box), the run starts where a person put her: drag START&apos;s connection onto another map to start there. Run (amber) plays the project in the game from START, box by box, once every block on the way is live.</li>

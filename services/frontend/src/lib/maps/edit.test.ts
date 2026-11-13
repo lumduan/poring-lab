@@ -9,7 +9,8 @@ import { def, globalOf, nodeById, pressKey, type Project, sampleProject, session
 import { sessionProject } from "../flow/testkit.ts";
 import { connectExit, connectSession, exitsInto, moveNodes, removeExit, removeNode, removeSession, renameNode, renameProblem, sessionLinkProblem, setStart, setZones, updateMapNode } from "./edit.ts";
 import { exitRows, nodeLinks } from "./links.ts";
-import { nodeLint, nodeTitle, tabRows } from "./nodewords.ts";
+import { addMapNode } from "./build.ts";
+import { lintGroups, nodeLint, nodeTitle, tabRows } from "./nodewords.ts";
 import { readRules, ruleMaps, setUnknownMap } from "./rules.ts";
 
 const ok = (r: { ok: true; project: Project } | { ok: false; error: string }): Project => {
@@ -159,4 +160,38 @@ test("what a node says: its tabs and names, the overrides both ways, its lint", 
   assert.deepEqual(nodeLint(lint, "xmas_dun02").counts, { error: 1, readiness: 0, warning: 0, info: 0 });
   assert.deepEqual(nodeLint(lint, "geffen").counts, { error: 0, readiness: 0, warning: 1, info: 0 });
   assert.equal(readRules(p).custom, false);
+});
+
+// matpilot round 16 #7: the /maps chip said "3 warnings", the xmas_dun02 card "2 warnings"; the
+// third was on the project itself and nothing on the page showed it. The lint list (the chip opens
+// it) and the Intro read lintGroups: every finding in exactly one group, the cards' groups the
+// cards' own findings, so the page shows what the chip counts.
+test("the lint list shows every finding the chip counts: the project's own first, each card's as the card counts it", () => {
+  const added = addMapNode(xmasProject(), "geffen", null);
+  assert.ok(added.ok);
+  const p = added.project;
+  const f = (severity: string, node: string, tab: string, path: string, text: string) => ({ rule: "r", severity, layer: 1, node, tab, path, text, message: path ? `${path}: ${text}` : text, ack: false });
+  // the reviewer's lint (POST /flows/lint, fresh /maps + geffen): warning 3, info 6, readiness 1
+  const findings = [
+    f("warning", "xmas_dun02", "main", "xmas_dun02/main/main.0", "the save point is asserted, not set: ..."),
+    f("warning", "xmas_dun02", "", "xmas_dun02", "hp_critical's escape on xmas_dun02 is unknown: ..."),
+    f("warning", "", "", "", "a death returns to the save point on geffen, where no block is: a death then stops the run"),
+    f("readiness", "geffen", "main", "geffen/main/main.0", "not there yet"),
+    ...Array.from({ length: 5 }, (_, i) => f("info", "xmas_dun02", "survival", `xmas_dun02/survival/drink.${i}`, `info ${i}`)),
+    f("info", "nowhere", "main", "nowhere/main/main.0", "a node this project does not have"),
+  ];
+  const lint = { findings, counts: { error: 0, readiness: 1, warning: 3, info: 6 }, by_node: {}, run: { allowed: false, summary: "", reasons: [] }, effective: {}, world: { server: null, maps: [] } } as unknown as LintDoc;
+  const groups = lintGroups(lint, p);
+  // what the page shows adds up to the chip, severity by severity
+  for (const sev of ["error", "readiness", "warning", "info"] as const) {
+    assert.equal(groups.reduce((n, g) => n + g.counts[sev], 0), lint.counts[sev], sev);
+  }
+  assert.equal(groups.flatMap((g) => g.findings).length, findings.length, "every finding in exactly one group");
+  // the project's own first: the save-point warning, and the finding on a node that is not here
+  assert.deepEqual(groups.map((g) => g.node), [null, "xmas_dun02", "geffen"]);
+  assert.deepEqual(groups[0].findings.map((x) => x.text), ["a death returns to the save point on geffen, where no block is: a death then stops the run", "a node this project does not have"]);
+  // each card's group is the card's own findings (nodeLint): its card says "2 warnings", as before
+  for (const g of groups.slice(1)) assert.deepEqual(g.findings, nodeLint(lint, g.node!).findings);
+  assert.equal(groups[1].counts.warning, 2);
+  assert.deepEqual(lintGroups(null, p), []);
 });

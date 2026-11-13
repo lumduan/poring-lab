@@ -72,6 +72,10 @@ NAME_MIN = 0.40  # the best picture scores at least this to be named ...
 MARGIN_MIN = 0.15  # ... and beats the next different picture by this much
 MATCH_MIN = 0.60  # the run's map is ticked only at this score (and the name's margin)
 COPY_NCC = 0.95  # two reference pictures this alike are ONE picture (a copy group)
+# what a verdict's number is (matpilot round 16 #10): every score is said with its scale and the
+# threshold it is measured against, never bare
+SCALE = "where 1.00 is the same picture"
+NAMED = f"a map is named at {NAME_MIN:.2f} or more, {MARGIN_MIN:.2f} ahead of the next"
 TOP_K = 12  # the copy test looks at so many best pictures
 MAP_BMP = re.compile(r"(?:^|/)map/([^/]+)\.bmp$")  # an archive / resnametable minimap name
 
@@ -290,13 +294,15 @@ def read_map(frame: Any, refs: MapRefs, origin: tuple[int, int] | None = None) -
     pic = refs.pic_names[best]
     label = names[0] if names else pic
     if s1 < NAME_MIN:
-        return MapRead(None, names, s1, s2, nn, pic, f"no map's minimap matches (the best, "
-                       f"{label}, scores {s1:.2f} < {NAME_MIN})")  # fmt: skip
+        return MapRead(None, names, s1, s2, nn, pic, f"no map's picture matches the minimap (the "
+                       f"best, {label}'s, has a match score of {s1:.2f}, {SCALE} and "
+                       f"{NAMED})")  # fmt: skip
     if s1 - s2 < MARGIN_MIN:
-        return MapRead(None, names, s1, s2, nn, pic, f"two maps' minimaps match alike ({label} "
-                       f"{s1:.2f}, {nn[0] if nn else '?'} {s2:.2f})")  # fmt: skip
-    return MapRead(label, names, s1, s2, nn, pic, f"the minimap is {label}'s ({s1:.2f}; the "
-                   f"next map {s2:.2f})")  # fmt: skip
+        return MapRead(None, names, s1, s2, nn, pic, f"two maps' pictures match the minimap alike "
+                       f"({label}'s with a match score of {s1:.2f} and {nn[0] if nn else '?'}'s "
+                       f"with {s2:.2f}, {SCALE} and {NAMED})")  # fmt: skip
+    return MapRead(label, names, s1, s2, nn, pic, f"the minimap is {label}'s (a match score of "
+                   f"{s1:.2f}, {SCALE}; the next map's picture scores {s2:.2f})")  # fmt: skip
 
 
 def map_verdict(read: MapRead, map_: str, refs: MapRefs | None) -> tuple[bool | None, str]:
@@ -312,12 +318,20 @@ def map_verdict(read: MapRead, map_: str, refs: MapRefs | None) -> tuple[bool | 
         copies = [m for m in read.names if m != map_]
         also = f"; the same picture as {', '.join(copies[:4])}" if copies else ""
         if read.score < MATCH_MIN:
-            return None, (f"the minimap looks like {map_}'s but weakly ({read.score:.2f} < "
-                          f"{MATCH_MIN}{also})")  # fmt: skip
-        return True, (f"the minimap is {map_}'s ({read.score:.2f}; the next map "
+            return None, (f"the minimap looks like {map_}'s, but only weakly (it matches {map_}'s "
+                          f"map picture with a match score of {read.score:.2f}, {SCALE} and the "
+                          f"run's map needs {MATCH_MIN:.2f} or more{also})")  # fmt: skip
+        return True, (f"the minimap is {map_}'s (it matches {map_}'s map picture with a match "
+                      f"score of {read.score:.2f}, {SCALE} and the run's map needs "
+                      f"{MATCH_MIN:.2f} or more; the next map's picture scores "
                       f"{read.next_score:.2f}{also})")  # fmt: skip
-    return False, (f"she is on {read.map}, not {map_} (read from the minimap: {read.score:.2f}; "
-                   f"{map_} is not that picture)")  # fmt: skip
+    # matpilot round 16 #10: a bare "0.47" said nothing to a reader (a teacher, a child): the words
+    # say what was read, what the number is and what it is measured against. The run's map is not
+    # in the named group, so its own picture scores at most the next different picture's
+    own = "scores" if map_ in read.next_names else "scores at most"
+    return False, (f"she is on {read.map}, not {map_} (the minimap shows {read.map}'s map picture "
+                   f"with a match score of {read.score:.2f}, {SCALE} and {NAMED}; {map_}'s "
+                   f"picture {own} {read.next_score:.2f})")  # fmt: skip
 
 
 def decisive(reads: Sequence[MapRead]) -> MapRead | None:

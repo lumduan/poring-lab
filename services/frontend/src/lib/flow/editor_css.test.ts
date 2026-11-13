@@ -38,3 +38,37 @@ test("studio.css stays unlayered and defines the tokens light and dark", () => {
   assert.match(studio, /\.studio-side \{[^}]*width: clamp\(18rem, 30vw, 28rem\)/);
   assert.match(studio, /@media \(max-width: 48rem\)[\s\S]*\.studio-side \{[^}]*height: 55%/);
 });
+
+// matpilot round 16 #6 (phone 390 x 844, Before Run open): the context bar (a scroll box, so its
+// flex minimum was 0) shrank under an open pane and the tab row covered ◂ Maps and "Inside the
+// runner"; the checklist scrolled inside a 333 px pane body in the scrolling page. Not measured in
+// a browser here: these pin the rules (the reviewer re-measures).
+/** The declarations of the rule whose selector list has `selector` (after `from`), or null. */
+function ruleWith(css: string, selector: string, from = 0): { at: number; body: string } | null {
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  re.lastIndex = from;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    if (m[1].split(",").some((s) => s.trim() === selector)) return { at: m.index, body: m[2] };
+  }
+  return null;
+}
+
+test("the studio's rows above and below the body never shrink (the node row stays whole)", () => {
+  for (const row of [".studio > .studio-bar", ".studio > .device-bar", ".studio > .studio-problems", ".studio > .studio-status"]) {
+    assert.match(ruleWith(studio, row)?.body ?? "", /flex-shrink:\s*0/, row);
+  }
+});
+
+test("on a phone the drawer is as tall as its panes and the page is the one scroller", () => {
+  const phone = studio.lastIndexOf("@media (max-width: 48rem)");
+  const drawer = ruleWith(studio, '.studio[data-testid="flows-app"] .studio-drawer[data-panes]', phone);
+  assert.ok(drawer, "the phone rule for the flows page's drawer");
+  assert.match(drawer.body, /height:\s*auto/);
+  assert.match(drawer.body, /overflow:\s*visible/);
+  // it comes after the older phone rule that gave the drawer 45vh (and a scroll)
+  assert.ok(drawer.at > studio.indexOf("height: 45vh"));
+  const body = ruleWith(studio, '.studio[data-testid="flows-app"] .pane-body', phone);
+  assert.match(body?.body ?? "", /flex:\s*none/);
+  assert.doesNotMatch(body?.body ?? "", /max-height|(^|[^-])height:/);
+  assert.match(ruleWith(studio, '.studio[data-testid="flows-app"] > .studio-status', phone)?.body ?? "", /position:\s*sticky/);
+});

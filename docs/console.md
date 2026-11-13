@@ -344,7 +344,10 @@ Amendment B); a not-adopted model is never offered.
   version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
   ➡️ **SUPERSEDED by dungeon@9.46 (the same evening):** the map's name IS read, from the minimap's
   picture (`scripts/minimap_id.py`). The cell line ticks only when the minimap is the run's map,
-  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (read from the minimap ...)"), and
+  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (the minimap shows geffen's map
+  picture with a match score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or
+  more, 0.15 ahead of the next; xmas_dun02's picture scores at most 0.21)": every score with its
+  scale, since matpilot's round 16 #10), and
   a ? asking you when it cannot tell; the runner's player start refuses both before any input.
   It needs the references built once per host (`OMP_NUM_THREADS=2 python3 scripts/minimap_id.py
   build --decode-mixcrypt`); without them the line is a ? and a player start refuses. The version chip
@@ -399,6 +402,22 @@ Amendment B); a not-adopted model is never offered.
   - **/flows:** Run on a map node plays the same project run from THAT node, enabled when every
     block it can reach is live in the player (the catalogue says so), else greyed with the reason.
     "Before Run" keeps the checklist, the live line, the settings and the read-only check.
+  ➡️ **2026-11-14, matpilot's round 16 #6-#8** ([planning/project-model.md](planning/project-model.md)
+  section 10; built offline, the reviewer re-measures in a browser):
+  - **/maps' lint chip is a button:** it opens, in the side panel, the list of EVERY finding it
+    counts: the project's own (on no node, so no card shows it: e.g. "a death returns to the save
+    point on geffen, where no block is") first, then each node's as its card counts them (a node's
+    name selects it). With nothing selected the panel names the project's own findings too.
+  - **/maps' graph:** an exit's label sits in the GAP between its two cards, in what fits there
+    (one line, wrapped on words, one word, or none: the card's port row says the exit in full);
+    "+ map" places a new map 300 units right of the rightmost one (the widest card plus a lane for
+    a two-line label); an entry's or exit's caption wraps instead of ending in "…"; on a phone the
+    graph has no minimap (it covered the start card's corner; a finger pans, Fit brings the maps
+    back).
+  - **/flows on a phone:** the node row (◂ Maps, Inside the runner) never shrinks under an open
+    pane; the drawer is as tall as its panes, so the page is the one scroller (Before Run's
+    checklist no longer scrolls inside a 333 px box), and the status row with More ▾ stays at the
+    screen's bottom.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
