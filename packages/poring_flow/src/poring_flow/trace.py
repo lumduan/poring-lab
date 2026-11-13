@@ -20,9 +20,10 @@ talk to NPCs at the flow's positions", docs/planning/world-map-flows.md): `play`
 ORDER, one step per thing the character does, with its start and end time (`t0`, `t1`), the map
 block and map it happens on, and its cells: walk (the route), talk (the NPC and its cell), menu
 (an option key), fight (the monster, its cell, whether it dropped loot), item (an item warp by
-function names its `proc`), loot, respawn, act (any other block; a press_key's names its `key`),
-wait, exit (from block / map -> to block / map / cell) and arrive (the map changed outside an
-exit: a wing, a respawn). The browser animates it; it adds nothing the run did not do.
+function: ONE step, its press, naming its `proc` and `key`), loot, respawn, act (any other block;
+a press_key's names its `key`), wait, exit (from block / map -> to block / map / cell) and arrive
+(the map changed outside an exit: a wing, a respawn). The browser animates it; it adds nothing the
+run did not do.
 - ENCOUNTERS (`Scenario.encounters`, off by default so every older caller's trace is unchanged
   but for the added `play`): an attack places ONE monster deterministically from `Scenario.seed`
   (the block's target species the sheet spawns, weighted by spawn count; the explicit `mob` when
@@ -258,6 +259,8 @@ class TraceSim(Sim):
         # that GeneratorExit is no pre-emption: it must not add a step after the result
         self._done = False
         self._exit_ctx: ir.Exit | None = None
+        # an item warp by FUNCTION: its presses (t0, t1, key), played as the exit's ONE item step
+        self._exit_presses: list[tuple[float, float, str | None]] = []
         self._exit_stmt: ir.TakeExit | None = None  # the take_exit running (its node path)
         self._pending_respawn: str | None = None
         self._last_outcome: dict[int, str] = {}
@@ -589,7 +592,12 @@ class TraceSim(Sim):
         m = self.world.get("map")
         if out == "ok" and planned is not None and isinstance(m, str):
             self._segment(planned, self._where(a), m)
-        self._play_action(a, t0, before, out, planned, walk_ms, fight)
+        if a.block == fn.PRESS and self.in_exit_function:
+            # the press IS the exit (an item warp by function): no step of its own, no arrive;
+            # _play_exit plays it as the exit's item step
+            self._exit_presses.append((t0, self.t, fn.key_of(a)))
+        else:
+            self._play_action(a, t0, before, out, planned, walk_ms, fight)
         if out == "ok" and a.block == "set_save_point":
             self._set_save_point(a)
         if out == "ok" and a.block == "respawn":
@@ -738,6 +746,7 @@ class TraceSim(Sim):
                 "point)"
             )
         self._exit_ctx = x
+        self._exit_presses = []
         try:
             yield from super()._exit(x, owner)
         finally:
@@ -785,8 +794,11 @@ class TraceSim(Sim):
             iid = item.id if isinstance(item, ir.ItemRef) else None
             kind = self.static.items[iid].kind if self.static and iid in self.static.items else None
             step = {**base, "kind": "item", "t0": t, "t1": self.t, "item": iid, "item_kind": kind}
-            if x.proc is not None:  # an item warp by function (Amendment C): its presses ran
-                step["proc"] = x.proc
+            if x.proc is not None:  # an item warp by function (Amendment C): ONE step, its press
+                presses, self._exit_presses = self._exit_presses, []
+                if presses:  # from its first press (a step before it in the function is its own)
+                    step["t0"] = max(t, presses[0][0])
+                step["proc"], step["key"] = x.proc, presses[-1][2] if presses else None
             self._play_step(step, before)
         cell = self.world.get("cell")
         self._play_step({**base, "kind": "exit", "t0": self.t, "t1": self.t, "exit": x.kind,
