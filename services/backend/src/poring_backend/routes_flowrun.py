@@ -3,6 +3,10 @@ press run on flows, and the bot plays by itself").
 
     GET  /flows/run   the host helper's status (scripts/flow_run.py) and whether it is alive
     POST /flows/run   {"action": "start" | "stop", "flow": "<id>"}: one request for the helper
+    GET  /flows/survival  the heal and escape numbers: every map's ("global") and each map's own
+    PUT  /flows/survival  {"scope": "global" | "map", "map": "<map>", "values": {...} | null}
+         (Batt 2026-11-13 ~14:2x: "a global config for every map's flow; a map's flow that sets
+         them again overrides it"); the helper reads the file at each start
 
 The backend starts nothing itself (it cannot reach the host's processes, by design). It writes ONE
 request file into the human-only settings store (``settings/flowrun/request.json``, mounted only
@@ -25,7 +29,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from poring_backend.routes_settings import _who, browser_gate, write_gate
 from poring_backend.state import AppState
@@ -59,6 +63,55 @@ class RunSettings(BaseModel):
     dagger_key: HotbarKey | None = None  # ... and the dagger back on
     knife_max_s: float | None = Field(default=None, ge=0.2, le=20.0)
     knife_hp_min: float | None = Field(default=None, ge=0.2, le=0.9)
+
+
+def _on_step(v: float, step: float = 0.05) -> float:
+    """A share on the helper's 0.05 grid (scripts/flow_run.py SURVIVAL_CHOICES), else refused."""
+    if abs(v / step - round(v / step)) > 1e-6:
+        raise ValueError(f"{v} is not a multiple of {step}")
+    return round(v, 2)
+
+
+class Survival(BaseModel):
+    """The SURVIVAL group, all four numbers (a level's group is set whole): the ranges of
+    dungeon_hunt.SURVIVAL_RANGES; the helper checks them again (flow_run.survival_check)."""
+
+    model_config = ConfigDict(extra="forbid")
+    potion_below: float = Field(ge=0.10, le=0.90)  # a heal item under this HP share
+    fly_below: float = Field(ge=0.05, le=0.60)  # a Fly Wing under this HP share
+    fly_rate: float = Field(ge=50.0, le=1000.0)  # a Fly Wing when the HP falls faster (HP/s) ...
+    fly_rate_below: float = Field(ge=0.20, le=0.90)  # ... while under this share
+
+    @field_validator("potion_below", "fly_below", "fly_rate_below")
+    @classmethod
+    def _grid(cls, v: float) -> float:
+        return _on_step(v)
+
+    @field_validator("fly_rate")
+    @classmethod
+    def _whole(cls, v: float) -> float:
+        return float(round(v))
+
+
+class SurvivalBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: Literal["global", "map"]
+    map: str | None = Field(default=None, pattern=r"^[a-z0-9_@-]{1,40}$")
+    values: Survival | None = None  # None: clear this level (the next one down applies)
+
+
+def read_survival(d: Path) -> dict[str, Any]:
+    """PURE but for the file read: {"global": {...}, "maps": {...}} (empty when there is none;
+    ``broken`` when it cannot be read: the helper then refuses to start a run)."""
+    try:
+        doc = json.loads((d / "survival.json").read_text())
+    except FileNotFoundError:
+        return {"global": {}, "maps": {}}
+    except (OSError, ValueError):
+        return {"global": {}, "maps": {}, "broken": True}
+    if not isinstance(doc, dict) or doc.get("v") != 1:
+        return {"global": {}, "maps": {}, "broken": True}
+    return {"global": doc.get("global") or {}, "maps": doc.get("maps") or {}}
 
 
 class RunBody(BaseModel):
@@ -140,3 +193,35 @@ def post_run(body: RunBody, request: Request,
     with open(d / "requests.jsonl", "a") as fh:
         fh.write(json.dumps({**req, **_who(request).model_dump()}) + "\n")
     return {"ok": True, "id": rid, "action": body.action, "flow": body.flow}
+
+
+@router.get("/survival")
+def get_survival(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
+    return read_survival(run_dir(state))
+
+
+@router.put("/survival")
+def put_survival(body: SurvivalBody, request: Request,
+                 state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    if body.scope == "map" and not body.map:
+        raise HTTPException(400, {"reason": "survival_map_missing"})
+    d = run_dir(state)
+    cur = read_survival(d)
+    if cur.get("broken"):  # never write over a file a person must look at first
+        raise HTTPException(409, {"reason": "survival_file_broken"})
+    doc: dict[str, Any] = {"v": 1, "global": dict(cur["global"]), "maps": dict(cur["maps"])}
+    vals = body.values.model_dump() if body.values is not None else None
+    if body.scope == "global":
+        doc["global"] = vals or {}
+    elif vals is None:
+        doc["maps"].pop(body.map, None)
+    else:
+        doc["maps"][body.map] = vals
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / f".survival.{uuid.uuid4().hex}"
+    tmp.write_text(json.dumps(doc, indent=2) + "\n")
+    os.replace(tmp, d / "survival.json")
+    with open(d / "survival.jsonl", "a") as fh:
+        fh.write(json.dumps({"at": time.time(), "scope": body.scope, "map": body.map,
+                             "values": vals, **_who(request).model_dump()}) + "\n")  # fmt: skip
+    return {"ok": True, "global": doc["global"], "maps": doc["maps"]}

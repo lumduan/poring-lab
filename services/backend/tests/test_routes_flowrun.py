@@ -165,3 +165,70 @@ def test_stop_and_busy(client: TestClient, tmp_path: Path) -> None:
     helper(tmp_path, state="running", age=routes_flowrun.HELPER_FRESH_S + 5)  # the helper died
     r = post(client, {"action": "stop"})
     assert r.status_code == 503
+
+
+# --- 2026-11-13 ~14:2x (Batt: "the heal and escape numbers: a global config for every map's flow;
+# a map's flow that sets them again overrides it") ---------------------------------------------
+def put_survival(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
+    h = dict(H)
+    if csrf:
+        h["X-CSRF-Token"] = c.get("/settings/csrf", headers=H).json()["token"]
+    return c.put("/flows/survival", json=body, headers=h)
+
+
+def test_the_survival_numbers_every_map_then_a_maps_own(client: TestClient, tmp_path: Path) -> None:
+    f = tmp_path / "settings" / "flowrun" / "survival.json"
+    assert client.get("/flows/survival", headers=H).json() == {"global": {}, "maps": {}}
+    g = {"potion_below": 0.3, "fly_below": 0.15, "fly_rate": 200, "fly_rate_below": 0.6}
+    r = put_survival(client, {"scope": "global", "values": g})
+    assert r.status_code == 200, r.text
+    m = {"potion_below": 0.5, "fly_below": 0.25, "fly_rate": 120.4, "fly_rate_below": 0.55}
+    assert (
+        put_survival(client, {"scope": "map", "map": "xmas_dun02", "values": m}).status_code == 200
+    )
+    doc = json.loads(f.read_text())
+    assert doc["v"] == 1 and doc["global"]["potion_below"] == 0.3
+    assert doc["maps"]["xmas_dun02"]["fly_rate"] == 120.0  # whole HP per second
+    got = client.get("/flows/survival", headers=H).json()
+    assert got["maps"]["xmas_dun02"]["potion_below"] == 0.5 and got["global"]["fly_below"] == 0.15
+    # the helper reads the same file the same way (scripts/flow_run.py, checked again there)
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+    import flow_run as fr
+
+    vals, src = fr.survival_of(fr.FLOWS[FLOW], fr.read_survival(f))  # type: ignore[arg-type]
+    assert vals["potion_below"] == 0.5 and set(src.values()) == {"map"}
+    # clearing the map's own: every map's apply again; clearing every map's: the defaults
+    assert (
+        put_survival(client, {"scope": "map", "map": "xmas_dun02", "values": None}).status_code
+        == 200
+    )
+    assert json.loads(f.read_text())["maps"] == {}
+    assert put_survival(client, {"scope": "global", "values": None}).status_code == 200
+    assert json.loads(f.read_text())["global"] == {}
+    audit = (tmp_path / "settings" / "flowrun" / "survival.jsonl").read_text().splitlines()
+    assert len(audit) == 4 and json.loads(audit[1])["map"] == "xmas_dun02"
+
+
+def test_the_survival_numbers_are_refused_off_their_grid(
+    client: TestClient, tmp_path: Path
+) -> None:
+    ok = {"potion_below": 0.4, "fly_below": 0.2, "fly_rate": 150, "fly_rate_below": 0.5}
+    for bad in ({**ok, "potion_below": 0.33}, {**ok, "potion_below": 0.95},
+                {**ok, "fly_below": 0.0},
+                {**ok, "fly_rate": 20}, {**ok, "fly_rate": 5000}, {**ok, "fly_rate_below": 0.1},
+                {**ok, "extra": 1}, {"potion_below": 0.4}):  # fmt: skip
+        r = put_survival(client, {"scope": "global", "values": bad})
+        assert r.status_code == 422, bad
+    assert put_survival(client, {"scope": "map", "values": ok}).status_code == 400  # which map?
+    assert put_survival(client, {"scope": "map", "map": "../etc", "values": ok}).status_code == 422
+    assert put_survival(client, {"scope": "global", "values": ok}, csrf=False).status_code == 403
+    # a file a person must look at is never written over
+    f = tmp_path / "settings" / "flowrun" / "survival.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("{not json")
+    assert client.get("/flows/survival", headers=H).json().get("broken") is True
+    r = put_survival(client, {"scope": "global", "values": ok})
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "survival_file_broken"
+    assert f.read_text() == "{not json"

@@ -254,6 +254,18 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   so NO key is the run's own any more (`reserved_keys` empty). The settings list above
   (`fly_key, home_key, weight_home`; "F1 potion, F3 steal, F4 the Knife, F5 the dagger" taken) is
   ➡️ SUPERSEDED by this: ten settings, each from a checked range, none taken.
+- ➡️ **dungeon@9.43, the heal and escape numbers (2026-11-13 ~14:2x; Batt: "make them a GLOBAL
+  config for every map's flow; a map's flow that sets them again overrides it, with that map's
+  config first"):** `--potion-below` (40 %), `--fly-below` (20 %), `--fly-rate` (150 HP/s) and
+  `--fly-rate-below` (50 %) replace the strategy's own numbers (`with_survival`; ranges in
+  `SURVIVAL_RANGES`). They live in ONE file of the human-only settings store,
+  `settings/flowrun/survival.json` = {"v": 1, "global": {...}, "maps": {"<map>": {...}}}, written
+  only by the backend (`PUT /flows/survival`, the Settings write gate; audited in
+  `survival.jsonl`; a broken file is never written over). At each start the Run helper takes, per
+  number, the flow's default < every map's < that map's own (`flow_run.survival_of`) and passes
+  them as flags; a request never carries them, and a broken file refuses the run before any input.
+  /flows shows a "heal and escape" strip: every map / <map> only, each change saved at once; the
+  blocks show the numbers the next Run uses.
 
 ## Not built yet
 

@@ -273,6 +273,12 @@ Amendment B); a not-adopted model is never offered.
   flow on both views (your own flow, then each map flow): one press switches. The description, the
   Run panel and the chips fold into one line that opens by itself while a run is active; the canvas
   keeps at least 22rem and the page scrolls instead (matpilot's 1440 x 900 review).
+  ➡️ **~14:2x, "heal and escape" (Batt: a global config for every map's flow, a map's own on top):**
+  a strip under the run settings sets the heal item's HP %, the Fly Wing's HP % and the fast-fall
+  rule (HP/s, under a %), for **every map** or for **this map only**; each change is saved at once
+  on the bot server (`settings/flowrun/survival.json`, the Settings write gate) and says which
+  values the next Run uses: this map's own, every map's, or the defaults. Unlike the run settings
+  (this browser), these follow the person to any browser.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

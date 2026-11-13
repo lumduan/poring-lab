@@ -805,11 +805,34 @@ def test_the_knife_numbers_go_with_bare_steal_inside_their_ranges(monkeypatch: A
     assert "heal_key" not in dh.fixes_of(_ns(monkeypatch))
 
 
+# --- dungeon@9.43 (Batt 2026-11-13 ~14:2x: the heal and escape numbers are the person's) -------
+def test_the_survival_numbers_replace_the_strategys_inside_their_ranges(monkeypatch: Any) -> None:
+    p2 = dh.STRATEGIES["P2"]
+    a = _ns(monkeypatch, "--potion-below", "0.55", "--fly-below", "0.25", "--fly-rate", "120",
+            "--fly-rate-below", "0.65")  # fmt: skip
+    assert dh.survival_refused(a) is None
+    st = dh.with_survival(p2, a)
+    assert (st["potion_below"], st["fly_below"], st["fly_rate"], st["fly_rate_below"]) == (
+        0.55, 0.25, 120.0, 0.65)  # fmt: skip
+    assert p2["potion_below"] == 0.40  # the strategy itself is unchanged
+    assert dh.with_survival(p2, _ns(monkeypatch)) == dict(p2)  # no flag: the strategy's own
+    rec = dh.fixes_of(a)
+    assert rec["potion_below"] == 0.55 and rec["fly_rate"] == 120.0
+    for flag, v in (("--potion-below", "0.95"), ("--fly-below", "0.01"), ("--fly-rate", "10"),
+                    ("--fly-rate-below", "1.2")):  # fmt: skip
+        assert "outside" in str(dh.survival_refused(_ns(monkeypatch, flag, v))), flag
+    # sustain() uses them: a potion at 0.50 HP with --potion-below 0.55, none with the default
+    s_ = dh.Sustain()
+    assert ("potion", "hp 0.50") in dh.sustain(s_, 10.0, 0.50, None, {**st, "max_hp": 5070})
+    assert dh.sustain(dh.Sustain(), 10.0, 0.50, None, {**p2, "max_hp": 5070}) == []
+
+
 def test_run_refuses_a_clash_of_the_persons_keys_before_any_input(monkeypatch: Any) -> None:
     import ro_agent as r
 
     for argv, word in ((("--heal-key", "F2"), "F2 is set for fly and potion"),
-                       (("--bare-steal", "--knife-max-s", "30"), "outside")):  # fmt: skip
+                       (("--bare-steal", "--knife-max-s", "30"), "outside"),
+                       (("--fly-below", "0.9"), "--fly-below 0.9 is outside")):  # fmt: skip
         a = _ns(monkeypatch, *argv)
         monkeypatch.undo()
 

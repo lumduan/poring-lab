@@ -65,4 +65,6 @@ export const REFUSALS: Record<string, string> = {
   rate_limited: "Too many requests: wait a moment.",
   settings_same_key: "Two of your run settings use the same hotbar key: each one needs its own key.",
   settings_off_picture: "The respawn button's point must lie inside the 1280 x 720 game picture.",
+  survival_file_broken: "The survival file on the bot server cannot be read: a person looks at settings/flowrun/survival.json first.",
+  survival_map_missing: "Which map's numbers? (no map was named)",
 };

@@ -9,6 +9,7 @@
 // flow IR: it never goes to the backend's lint / simulate / Python routes, and nothing here reaches
 // the executor, the mux or any input path. Pure data and functions (no Blockly import): the view
 // (components/flows/RunnerView.tsx) and the headless test feed these to Blockly.
+import type { SurvivalDoc } from "./survival.ts";
 import { type BlockStyle, CATEGORY_COLOURS } from "./theme.ts";
 
 export type RunnerPart = { text: string } | { param: string; shown: string };
@@ -92,6 +93,7 @@ export type RunnerSettingsDoc = {
   knife_s?: [number, number]; // the Knife time's range (s)
   knife_hp?: number[]; // the HP rule's choices
   flags?: Record<string, string>; // each setting's runner flag (the Python panel says them)
+  survival?: SurvivalDoc; // 2026-11-13: the heal and escape numbers (every map's, a map's own)
 };
 
 /** Why these settings cannot run (null: they can), against the export's own choices. */

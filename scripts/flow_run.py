@@ -81,6 +81,10 @@ class Flow:
     # each from a fixed list (settings_of): the defaults, and the row-1 keys the run uses already
     settings: dict[str, Any] = field(default_factory=dict)
     reserved_keys: tuple[str, ...] = ()
+    # 2026-11-13 ~14:2x: the map this flow plays (a map's survival config is looked up by it) and
+    # its SURVIVAL defaults (its --strategy's own numbers)
+    map: str = ""
+    survival: dict[str, float] = field(default_factory=dict)
 
 
 # The settings a Run request may carry, and the runner flag each becomes. NOTHING else in a
@@ -106,6 +110,103 @@ GAME_PX = (1280, 720)  # the game picture: a respawn_at point lies inside it
 KEY_CHOICES = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
 WEIGHT_CHOICES = tuple(round(0.30 + 0.05 * i, 2) for i in range(11))  # 0.30 .. 0.80
 KNIFE_S_RANGE = (0.2, 20.0)  # bare_steal.KNIFE_MAX_RANGE: tenths of a second
+
+# --- THE SURVIVAL GROUP (Batt 2026-11-13 ~14:2x: "the heal and escape numbers: a global config
+# for every map's flow; a map's flow that sets them again overrides it, that map's config first").
+# ONE file in the human-only settings store, written only by the backend (PUT /flows/survival,
+# the Settings write gate): {"v": 1, "global": {...}, "maps": {"<map>": {...}}}. At each start the
+# run takes, per number: the flow's default < "global" < "maps"[its map]. A request never
+# carries them; a broken file refuses the run (a person must know which numbers keep her alive).
+SURVIVAL_FILE = DIR / "survival.json"
+SURVIVAL_FLAGS = {"potion_below": "--potion-below", "fly_below": "--fly-below",
+                  "fly_rate": "--fly-rate", "fly_rate_below": "--fly-rate-below"}  # fmt: skip
+SURVIVAL_CHOICES: dict[str, tuple[float, ...]] = {
+    "potion_below": tuple(round(0.10 + 0.05 * i, 2) for i in range(17)),  # 0.10 .. 0.90
+    "fly_below": tuple(round(0.05 + 0.05 * i, 2) for i in range(12)),  # 0.05 .. 0.60
+    "fly_rate_below": tuple(round(0.20 + 0.05 * i, 2) for i in range(15)),  # 0.20 .. 0.90
+}
+FLY_RATE_RANGE = (50.0, 1000.0)  # HP per second: dungeon_hunt.SURVIVAL_RANGES
+MAP_NAME = re.compile(r"[a-z0-9_@-]{1,40}")
+
+
+def survival_check(raw: Any) -> dict[str, float] | str:
+    """PURE: a survival group (some or all of its four numbers), normalised, or why not one."""
+    if not isinstance(raw, dict):
+        return "a survival group must be an object"
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        if k not in SURVIVAL_FLAGS:
+            return f"unknown survival number {k!r}"
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return f"{k} {v!r} is not a number"
+        if k == "fly_rate":
+            if not FLY_RATE_RANGE[0] <= float(v) <= FLY_RATE_RANGE[1]:
+                return (
+                    f"fly_rate {v} is not from {FLY_RATE_RANGE[0]:g} to {FLY_RATE_RANGE[1]:g} HP/s"
+                )
+            out[k] = float(round(float(v)))
+        elif round(float(v), 2) not in SURVIVAL_CHOICES[k]:
+            return f"{k} {v!r} is not one of {list(SURVIVAL_CHOICES[k])}"
+        else:
+            out[k] = round(float(v), 2)
+    return out
+
+
+def read_survival(path: Path) -> dict[str, Any] | str:
+    """The survival file, checked ({} when there is none), or why it cannot be used."""
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+    except OSError as e:
+        return f"the survival config could not be read ({e.__class__.__name__})"
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        return "the survival config is not valid JSON"
+    if not isinstance(doc, dict) or doc.get("v") != 1:
+        return "the survival config is not version 1"
+    out: dict[str, Any] = {"global": {}, "maps": {}}
+    g = doc.get("global") or {}
+    got = survival_check(g)
+    if isinstance(got, str):
+        return f"the survival config's global group: {got}"
+    out["global"] = got
+    maps = doc.get("maps") or {}
+    if not isinstance(maps, dict):
+        return "the survival config's maps must be an object"
+    for m, grp in maps.items():
+        if not isinstance(m, str) or not MAP_NAME.fullmatch(m):
+            return f"the survival config names a map {m!r} that is not a map name"
+        got = survival_check(grp)
+        if isinstance(got, str):
+            return f"the survival config's {m} group: {got}"
+        out["maps"][m] = got
+    return out
+
+
+def survival_of(flow: Flow, cfg: Mapping[str, Any]) -> tuple[dict[str, float], dict[str, str]]:
+    """PURE: the run's survival numbers and where each came from: the flow's default, then every
+    map's ("global"), then this map's own ("map") -- the map's config first (Batt)."""
+    vals, src = dict(flow.survival), {k: "default" for k in flow.survival}
+    for level, grp in (("global", cfg.get("global") or {}),
+                       ("map", (cfg.get("maps") or {}).get(flow.map) or {})):  # fmt: skip
+        for k, v in grp.items():
+            if k in vals:
+                vals[k], src[k] = v, level
+    return vals, src
+
+
+def survival_argv(vals: Mapping[str, float]) -> list[str]:
+    """PURE: the runner flags of the survival numbers (in SURVIVAL_FLAGS' order)."""
+    out: list[str] = []
+    for k, flag in SURVIVAL_FLAGS.items():
+        if k in vals:
+            v = vals[k]
+            out += [flag, f"{v:g}" if k == "fly_rate" else f"{v:.2f}"]
+    return out
+
+
 KNIFE_HP_CHOICES = tuple(round(0.20 + 0.05 * i, 2) for i in range(15))  # 0.20 .. 0.90
 
 
@@ -211,6 +312,14 @@ FLOWS: dict[str, Flow] = {
             "knife_hp_min": 0.50,
         },
         reserved_keys=(),
+        map="xmas_dun02",
+        # its --strategy P2's own numbers (test_flow_run pins them to dungeon_hunt.STRATEGIES)
+        survival={
+            "potion_below": 0.40,
+            "fly_below": 0.20,
+            "fly_rate": 150.0,
+            "fly_rate_below": 0.50,
+        },  # fmt: skip
     ),
 }
 
@@ -220,7 +329,8 @@ STOP_GRACE_S = 90.0  # Stop: the runner ends at its next tick; SIGINT only if it
 
 
 def command(flow: Flow, label: str, stop_file: Path | None = None,
-            settings: Mapping[str, Any] | None = None) -> list[str]:  # fmt: skip
+            settings: Mapping[str, Any] | None = None,
+            survival: Mapping[str, float] | None = None) -> list[str]:  # fmt: skip
     """PURE: the runner's argv for ``flow`` (the label names its session; ``stop_file`` is the
     runner's --stop-file: its Stop ends the run through the normal end, with the packets;
     ``settings``: settings_of's output, else the flow's defaults)."""
@@ -239,6 +349,7 @@ def command(flow: Flow, label: str, stop_file: Path | None = None,
         *stop,
         *flow.flags,
         *settings_argv(st),
+        *survival_argv(flow.survival if survival is None else survival),
     ]
 
 
@@ -318,6 +429,8 @@ class Helper:
         self.detail = "waiting for the Run button"
         self.flow: str | None = None
         self.settings: dict[str, Any] | None = None  # the run's settings (settings_of)
+        self.survival: dict[str, float] | None = None  # the run's survival numbers (survival_of)
+        self.survival_src: dict[str, str] | None = None  # each one's level
         self.label: str | None = None
         self.request_id: str | None = None
         self.started: str | None = None
@@ -339,12 +452,14 @@ class Helper:
                 "ended": self.ended, "rc": self.rc, "t_wall": time.time(),
                 "log_tail": [] if log is None else tail(log),
                 "settings": self.settings,
+                "survival": self.survival, "survival_src": self.survival_src,
                 "flows": {k: {"title": f.title, "minutes": f.minutes, "settings": dict(f.settings),
                               "choices": {"keys": list(KEY_CHOICES),
                                           "reserved": list(f.reserved_keys),
                                           "weights": list(WEIGHT_CHOICES),
                                           "knife_s": list(KNIFE_S_RANGE),
-                                          "knife_hp": list(KNIFE_HP_CHOICES)}}
+                                          "knife_hp": list(KNIFE_HP_CHOICES)},
+                              "map": f.map, "survival": dict(f.survival)}
                           for k, f in FLOWS.items()}}  # fmt: skip
 
     def write_status(self) -> None:
@@ -383,8 +498,11 @@ class Helper:
     def start(self, flow: Flow, rid: str, settings: Mapping[str, Any] | None = None) -> None:
         ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
         why = busy_reason(ps.splitlines())
-        if why is not None:
-            self.state, self.detail, self.request_id = "refused", why, rid
+        cfg = read_survival(SURVIVAL_FILE)  # 2026-11-13: default < every map < this map
+        if why is None and isinstance(cfg, str):
+            why = f"refused before any input: {cfg}"
+        if why is not None or isinstance(cfg, str):
+            self.state, self.detail, self.request_id = "refused", str(why), rid
             self.note(event="start_refused", why=why, request=rid)
             return
         self.state, self.flow, self.request_id = "starting", flow.id, rid
@@ -395,8 +513,15 @@ class Helper:
         self.cap_s = flow.minutes * 60 + CAP_GRACE_S
         got = settings_of(flow, settings)  # parse_request checked them; the defaults when absent
         self.settings = flow.settings if isinstance(got, str) else got
+        self.survival, self.survival_src = survival_of(flow, cfg)
         self.note(
-            event="start", flow=flow.id, label=self.label, request=rid, settings=self.settings
+            event="start",
+            flow=flow.id,
+            label=self.label,
+            request=rid,
+            settings=self.settings,
+            survival=self.survival,
+            survival_src=self.survival_src,
         )
         self.detail = "starting the vision worker"
         self.write_status()
@@ -440,7 +565,7 @@ class Helper:
         self.stop_file.unlink(missing_ok=True)
         self.stop_t = None
         with open(self.run_dir / "run.log", "wb") as fh:
-            argv = command(flow, self.label, self.stop_file, self.settings)
+            argv = command(flow, self.label, self.stop_file, self.settings, self.survival)
             self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
                                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                            start_new_session=True)  # fmt: skip

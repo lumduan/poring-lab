@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registerRunner, runnerThemes } from "@/components/flows/blockly-runner";
 import CodeView from "@/components/flows/CodeView";
 import FlowSwitcher from "@/components/flows/FlowSwitcher";
+import SurvivalStrip, { useSurvival } from "@/components/flows/SurvivalStrip";
 import LiveRun, { LiveRunButtons, useLiveRun } from "@/components/flows/LiveRun";
 import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
 import { browserStorage, KEYS, pythonDefault, readChoice, savedFlowName, writeChoice } from "@/lib/flow/prefs";
@@ -44,6 +45,7 @@ import {
 } from "@/lib/flow/runner";
 import { ACTIVE, liveLabel } from "@/lib/flow/liverun";
 import { EXAMPLE, type SimResult, simulate } from "@/lib/flow/runner_sim";
+import { effectiveSurvival, SURVIVAL_KEYS, survivalShown, withSurvival } from "@/lib/flow/survival";
 import { INJECT } from "@/lib/flow/theme";
 
 const VIEWS = ["blocks", "python"] as const;
@@ -91,7 +93,14 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
     },
     [store, rawDoc.id],
   );
-  const doc = useMemo(() => (runSettings ? withSettings(rawDoc, runSettings) : rawDoc), [rawDoc, runSettings]);
+  // 2026-11-13 ~14:2x (Batt): the heal and escape numbers: every map's, or this map's own
+  const svDoc = sdoc?.survival ?? null;
+  const sv = useSurvival(backendUrl, rawDoc.map);
+  const svNow = useMemo(() => (svDoc ? effectiveSurvival(svDoc, sv.cfg, rawDoc.map).values : null), [svDoc, sv.cfg, rawDoc.map]);
+  const doc = useMemo(() => {
+    const d = runSettings ? withSettings(rawDoc, runSettings) : rawDoc;
+    return svDoc && svNow ? withSurvival(d, svDoc, svNow) : d;
+  }, [rawDoc, runSettings, svDoc, svNow]);
   const settingsWhy = runSettings && sdoc ? settingsProblem(runSettings, sdoc) : null;
   const isLive = LIVE_FLOWS.includes(doc.id);
   const live = useLiveRun(backendUrl, doc.id, isLive); // one poller: the header's Run and the panel
@@ -233,9 +242,10 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
         <details className="studio-panel-note" data-testid="runner-python-settings">
           <summary>Your Run settings, as the flags Run adds</summary>
           <code>
-            {Object.entries(sdoc?.flags ?? {})
-              .map(([k, flag]) => `${flag} ${flagValue(runSettings[k as keyof RunSettings])}`)
-              .join(" ")}
+            {[
+              ...Object.entries(sdoc?.flags ?? {}).map(([k, flag]) => `${flag} ${flagValue(runSettings[k as keyof RunSettings])}`),
+              ...(svDoc && svNow ? SURVIVAL_KEYS.map((k) => `${svDoc.flags[k]} ${k === "fly_rate" ? survivalShown(k, svNow[k]) : svNow[k].toFixed(2)}`) : []),
+            ].join(" ")}
           </code>
         </details>
       )}
@@ -314,6 +324,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
 
       <RunnerBinding doc={doc} />
       {sdoc && runSettings && <RunSettingsStrip d={sdoc} s={runSettings} why={settingsWhy} onChange={setRunSettings} />}
+      {svDoc && <SurvivalStrip d={svDoc} map={rawDoc.map} sv={sv} />}
 
       <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
         <div className="studio-canvas">

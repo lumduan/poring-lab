@@ -63,7 +63,8 @@ def _without_seed(argv: list[str]) -> list[str]:
 
 
 BASE_COMMAND = [*_without_seed(list(_fr.FIXED)), "--minutes", str(_RUN_FLOW.minutes),
-                *_RUN_FLOW.flags, *_fr.settings_argv(_RUN_FLOW.settings)]  # fmt: skip
+                *_RUN_FLOW.flags, *_fr.settings_argv(_RUN_FLOW.settings),
+                *_fr.survival_argv(_RUN_FLOW.survival)]  # fmt: skip
 # The person's Run settings (2026-11-13, Batt: "don't hard-code the keys"): each one's param in the
 # doc, so /flows shows the chosen value in the blocks; the defaults are the Run's own
 SETTING_PARAMS = {"fly_key": "cmd.fly_key", "home_key": "cmd.player_home_key",
@@ -1730,6 +1731,15 @@ def build() -> dict[str, Any]:
             "knife_s": list(_fr.KNIFE_S_RANGE),
             "knife_hp": list(_fr.KNIFE_HP_CHOICES),
             "flags": dict(_fr.SETTING_FLAGS),
+            # 2026-11-13 ~14:2x (Batt: every map's config, a map's own on top): the SURVIVAL
+            # group's defaults, choices and the params its blocks show
+            "survival": {
+                "defaults": dict(_RUN_FLOW.survival),
+                "params": {k: [f"strategy.{k}", f"cmd.{k}"] for k in _fr.SURVIVAL_FLAGS},
+                "choices": {k: list(v) for k, v in _fr.SURVIVAL_CHOICES.items()},
+                "fly_rate": list(_fr.FLY_RATE_RANGE),
+                "flags": dict(_fr.SURVIVAL_FLAGS),
+            },
         },  # fmt: skip
     }
 

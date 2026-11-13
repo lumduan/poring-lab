@@ -1317,6 +1317,35 @@ def keys_clash(keys: Mapping[str, str], opener: str | None) -> str | None:
     return None
 
 
+# dungeon@9.43 (Batt 2026-11-13 ~14:2x: "the heal and escape numbers: a global config for every
+# map's flow; a map's flow that sets them again overrides it"): the strategy's four SURVIVAL
+# numbers are the person's (scripts/flow_run.py picks the default < every map < this map, and
+# passes them as flags)
+SURVIVAL_VERSION = "9.43"
+SURVIVAL_RANGES = {"potion_below": (0.10, 0.90), "fly_below": (0.05, 0.60),
+                   "fly_rate": (50.0, 1000.0), "fly_rate_below": (0.20, 0.90)}  # fmt: skip
+
+
+def survival_refused(a: argparse.Namespace) -> str | None:
+    """PURE: why --potion-below / --fly-below / --fly-rate / --fly-rate-below cannot run (None:
+    they can, or they are off): each inside SURVIVAL_RANGES."""
+    for k, (lo, hi) in SURVIVAL_RANGES.items():
+        v = getattr(a, k, None)
+        if v is not None and not lo <= v <= hi:
+            return f"--{k.replace('_', '-')} {v} is outside {lo:g}-{hi:g}"
+    return None
+
+
+def with_survival(strat: Mapping[str, Any], a: argparse.Namespace) -> dict[str, Any]:
+    """PURE: the strategy with the person's survival numbers in place of its own."""
+    out = dict(strat)
+    for k in SURVIVAL_RANGES:
+        v = getattr(a, k, None)
+        if v is not None:
+            out[k] = float(v)
+    return out
+
+
 def knife_numbers_refused(a: argparse.Namespace) -> str | None:
     """PURE: why --knife-max-s / --knife-hp-min cannot run (None: they can, or they are off)."""
     mx, hp = getattr(a, "knife_max_s", None), getattr(a, "knife_hp_min", None)
@@ -2915,7 +2944,16 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["respawn"] = True
     if getattr(a, "fly_key", None) is not None:  # 2026-11-13: the person's Fly Wing key
         out["fly_key"] = a.fly_key
-    for k_ in ("heal_key", "dagger_key", "knife_max_s", "knife_hp_min"):  # dungeon@9.42
+    for k_ in (
+        "heal_key",
+        "dagger_key",
+        "knife_max_s",
+        "knife_hp_min",  # dungeon@9.42
+        "potion_below",
+        "fly_below",
+        "fly_rate",
+        "fly_rate_below",
+    ):  # 9.43
         if getattr(a, k_, None) is not None:
             out[k_] = getattr(a, k_)
     if getattr(a, "respawn_at", None) is not None:  # 2026-11-13: the person's respawn button
@@ -5009,7 +5047,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         if why_fk:
             raise SystemExit(f"dungeon@{WEIGHT_HOME_VERSION} refused: {why_fk}")
         keys_ = {**keys_, "fly": fly_key}  # the stock read, the presses and the checks follow it
-    strat = {**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}
+    why_sv = survival_refused(a)  # dungeon@9.43: the person's heal and escape numbers
+    if why_sv:
+        raise SystemExit(f"dungeon@{SURVIVAL_VERSION} refused: {why_sv}")
+    strat = with_survival({**STRATEGIES[a.strategy], "max_hp": conf["max_hp"]}, a)
     player = bool(getattr(a, "player_mode", False))  # dungeon@9.35 (docs/planning/player-mode.md)
     why_pm = player_mode_refused(a)  # before any input: the flags that type GM lines
     if why_pm:
@@ -9311,6 +9352,40 @@ def main() -> int:
         help="2026-11-13 (Batt: the person sets the hotbar keys): the Fly Wing's row-1 hotbar key "
         "(default: the character's, F2). Its stock is read from that slot and every escape presses "
         "it; refused when it is another key of the run's",
+    )
+    t.add_argument(
+        "--potion-below",
+        type=float,
+        default=None,
+        metavar="N",
+        help="dungeon@9.43 (Batt 2026-11-13: the survival numbers are the person's, for every "
+        "map or one map's own): a heal item is pressed under this HP share (default: --strategy's)",
+    )
+    t.add_argument(
+        "--fly-below",
+        type=float,
+        default=None,
+        metavar="N",
+        help="dungeon@9.43 (Batt 2026-11-13: the survival numbers are the person's, for every "
+        "map or one map's own): a Fly Wing is pressed under this HP share (default: --strategy's)",
+    )
+    t.add_argument(
+        "--fly-rate",
+        type=float,
+        default=None,
+        metavar="N",
+        help="dungeon@9.43 (Batt 2026-11-13: the survival numbers are the person's, for every "
+        "map or one map's own): a Fly Wing when the HP falls faster than this many HP/s, "
+        "with (default: --strategy's)",
+    )
+    t.add_argument(
+        "--fly-rate-below",
+        type=float,
+        default=None,
+        metavar="N",
+        help="dungeon@9.43 (Batt 2026-11-13: the survival numbers are the person's, for every "
+        "map or one map's own): ... the HP share under this (the fast-fall rule) "
+        "(default: --strategy's)",
     )
     t.add_argument(
         "--heal-key",

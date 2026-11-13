@@ -169,3 +169,62 @@ def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
     i = src.index("if stop_file is not None and stop_file.exists():")
     assert "break  # the NORMAL end" in src[i : i + 400]
     assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
+
+
+# --- 2026-11-13 ~14:2x (Batt: "the heal and escape numbers: a global config for every map's flow;
+# a map's flow that sets them again overrides it, that map's config first") ---------------------
+def test_the_survival_defaults_are_the_strategys_own() -> None:
+    f = fr.FLOWS["xmas_dun02_rogue"]
+    strat = dh.STRATEGIES["P2"]
+    assert f.map == "xmas_dun02" and "--strategy" in fr.FIXED
+    assert fr.FIXED[fr.FIXED.index("--strategy") + 1] == "P2"
+    assert f.survival == {k: strat[k] for k in fr.SURVIVAL_FLAGS}
+    assert set(fr.SURVIVAL_FLAGS) == set(dh.SURVIVAL_RANGES)
+
+
+def test_the_maps_own_numbers_first_then_every_maps_then_the_defaults() -> None:
+    f = fr.FLOWS["xmas_dun02_rogue"]
+    g = {"potion_below": 0.3, "fly_below": 0.15, "fly_rate": 200.0, "fly_rate_below": 0.6}
+    m = {"potion_below": 0.5, "fly_below": 0.25, "fly_rate": 120.0, "fly_rate_below": 0.55}
+    assert fr.survival_of(f, {}) == (f.survival, dict.fromkeys(f.survival, "default"))
+    assert fr.survival_of(f, {"global": g, "maps": {}}) == (g, dict.fromkeys(g, "global"))
+    assert fr.survival_of(f, {"global": g, "maps": {"xmas_dun02": m}}) == (
+        m,
+        dict.fromkeys(m, "map"),
+    )
+    assert fr.survival_of(f, {"global": g, "maps": {"prt_fild08": m}})[0] == g  # another map's
+    vals, src = fr.survival_of(f, {"global": {"fly_below": 0.1}, "maps": {}})
+    assert vals == {**f.survival, "fly_below": 0.1} and src["fly_below"] == "global"
+    argv = fr.command(f, "x", None, None, m)
+    for flag, v in (("--potion-below", "0.50"), ("--fly-below", "0.25"), ("--fly-rate", "120"),
+                    ("--fly-rate-below", "0.55")):  # fmt: skip
+        assert argv[argv.index(flag) + 1] == v and argv.count(flag) == 1, flag
+    assert "--fly-rate" in fr.command(f, "x")  # the defaults when no config is given
+
+
+def test_the_survival_file_is_checked_and_a_broken_one_refuses(tmp_path: Path) -> None:
+    p = tmp_path / "survival.json"
+    assert fr.read_survival(p) == {}
+    p.write_text(json.dumps({"v": 1, "global": {"potion_below": 0.35}, "maps": {"xmas_dun02": {
+        "fly_rate": 199.6}}}))  # fmt: skip
+    assert fr.read_survival(p) == {"global": {"potion_below": 0.35},
+                                   "maps": {"xmas_dun02": {"fly_rate": 200.0}}}  # fmt: skip
+    for bad, why in (("{", "not valid JSON"), (json.dumps({"v": 2}), "version 1"),
+                     (json.dumps({"v": 1, "global": {"potion_below": 0.33}}), "is not one of"),
+                     (json.dumps({"v": 1, "global": {"fly_rate": 20}}), "HP/s"),
+                     (json.dumps({"v": 1, "global": {"heal": 1}}), "unknown survival"),
+                     (json.dumps({"v": 1, "maps": {"../x": {}}}), "not a map name"),
+                     (json.dumps({"v": 1, "maps": {"m": {"fly_below": True}}}),
+                      "not a number")):  # fmt: skip
+        p.write_text(bad)
+        got = fr.read_survival(p)
+        assert isinstance(got, str) and why in got, (bad, got)
+    # the helper refuses to start on a broken file, before anything starts
+    h = fr.Helper(tmp_path)
+    orig = fr.SURVIVAL_FILE
+    try:
+        fr.SURVIVAL_FILE = p
+        h.start(fr.FLOWS["xmas_dun02_rogue"], "a1b2c3d4e5")
+    finally:
+        fr.SURVIVAL_FILE = orig
+    assert h.state == "refused" and "refused before any input" in h.detail and h.runner is None
