@@ -34,7 +34,7 @@ import type { Scope } from "@/lib/flow/blocks";
 import { addBlock, type BlockProps, type EditResult, removeBlock, setStart, setZonesRef, updateBlock } from "@/lib/flow/canvas";
 import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
-import { runnerKeys, runnerMapBlock } from "@/lib/flow/functions";
+import { mergeFunctions, runnerKeys, runnerMapBlock } from "@/lib/flow/functions";
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { canonical, emptyFlow, type Flow } from "@/lib/flow/ir";
 import { browserStorage, KEYS, pythonDefault, readChoice, readShelf, readText, shelve, writeChoice, writeShelf } from "@/lib/flow/prefs";
@@ -412,8 +412,23 @@ export default function FlowsApp({
     }
   };
   // Save and Load (components/flowfile/): a loaded file is already checked into a scratch flow
+  // Load ▸ "Add the functions of a saved flow" (2026-11-13: sharing functions): the next opened
+  // file gives only its functions
+  const loadFunctions = useRef(false);
   const onOpened = (o: Opened) => {
     setDialog(null);
+    if (loadFunctions.current) {
+      loadFunctions.current = false;
+      const m = mergeFunctions(flowRef.current, o.flow);
+      const words = [
+        m.added.length ? `added ${m.added.join(", ")}` : "nothing new",
+        m.same.length ? `the same already: ${m.same.join(", ")}` : "",
+        m.kept.length ? `yours kept (the file's differ): ${m.kept.join(", ")}` : "",
+      ].filter(Boolean);
+      replace(m.flow, { undo: true, keepView: true, notice: `The functions of ${o.flow.name}: ${words.join("; ")}.` });
+      if (m.added.length) setTab("functions");
+      return;
+    }
     replace(o.flow, { undo: true, file: o.meta, notice: `${o.notice} The backend checks it with MW1's schema at the next lint.` });
   };
   const pythonCached = useCallback((f: Flow) => (python && python.for === canonical(f) ? python.text : null), [python]);
@@ -539,6 +554,7 @@ export default function FlowsApp({
   const zonesBlock = zonesFor ? flow.workflow?.blocks.find((x) => x.name === zonesFor) : undefined;
   useFileShortcuts(
     (d) => {
+      loadFunctions.current = false; // Ctrl+O opens a whole flow
       setMenu(false);
       setDialog(d);
     },
@@ -654,7 +670,10 @@ export default function FlowsApp({
                       <small>the runner {r.title} plays, as blocks made from its code (read only): what &ldquo;hunt with the runner&rdquo; does</small>
                     </button>
                   ))}
-                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), setDialog("load"))} data-testid="load-saved">
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => ((loadFunctions.current = true), setMenu(false), setDialog("load"))} data-testid="load-functions">
+                  Add the functions of a saved flow…<small>only its functions join this flow (a name you have already keeps yours); from this computer or GitHub</small>
+                </button>
+                <button type="button" role="menuitem" className="studio-menu-item" onClick={() => ((loadFunctions.current = false), setMenu(false), setDialog("load"))} data-testid="load-saved">
                   Open a saved flow…<small>from this computer or from GitHub (checked before it opens; Ctrl+O)</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => void loadSample()} data-testid="load-sample">
@@ -979,7 +998,7 @@ export default function FlowsApp({
 
       <FlowFileDialogs
         open={dialog}
-        onClose={() => setDialog(null)}
+        onClose={() => ((loadFunctions.current = false), setDialog(null))}
         meta={file}
         onMeta={setFile}
         getFlow={getFlow}

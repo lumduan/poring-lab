@@ -13,7 +13,7 @@
 // packages/poring_flow, the dungeon_hunt block). PURE: no I/O; the Run request carries the result
 // and the Run helper checks the keys again (F1-F9, no two roles in use on one key).
 import { RUNNER_ROLES } from "./blockdefs.ts";
-import type { ActionStmt, Flow, MapBlock, Stmt } from "./ir.ts";
+import { type ActionStmt, canonical, clone, type Flow, type MapBlock, type Stmt } from "./ir.ts";
 
 export type RunnerKeys = { heal_key: string; fly_key: string; home_key: string; knife_key: string; dagger_key: string };
 /** Which function each key came from (the Run pane says so). */
@@ -89,4 +89,24 @@ export function runnerKeys(flow: Flow, block: MapBlock): KeysResult {
   else take("home_key", home, "the way home (Butterfly Wing)");
   if (problems.length) return { ok: false, problems };
   return { ok: true, keys: keys as RunnerKeys, from: from as KeySource };
+}
+
+/** SHARING FUNCTIONS (Batt 2026-11-13: "we have Save and Load, so these can be shared"): the
+ * functions of another flow added to this one. A name this flow has already: kept as it is (the
+ * file's differs: `kept`; the same body: `same`); a new name: `added`. The rest of the file is not
+ * used. PURE. */
+export function mergeFunctions(into: Flow, from: Flow): { flow: Flow; added: string[]; same: string[]; kept: string[] } {
+  const flow = clone(into);
+  const added: string[] = [];
+  const same: string[] = [];
+  const kept: string[] = [];
+  for (const [name, body] of Object.entries(from.procedures)) {
+    const mine = flow.procedures[name];
+    if (!mine) {
+      flow.procedures[name] = clone(body);
+      added.push(name);
+    } else if (canonical(mine) === canonical(body)) same.push(name);
+    else kept.push(name);
+  }
+  return { flow, added, same, kept };
 }

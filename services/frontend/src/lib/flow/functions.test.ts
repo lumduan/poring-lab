@@ -102,3 +102,20 @@ test("the toolbox: function definitions on the functions tab only; the runner an
   // press_key and dungeon_hunt are not repeated as generic blocks
   assert.ok(!toolboxBlocks(toolbox(cat, "block")).some((e) => e.item.type === "pl_action" && (e.item.fields?.BLOCK === "press_key" || e.item.fields?.BLOCK === "dungeon_hunt")));
 });
+
+test("sharing functions: another flow's functions join this one, yours kept on a name clash", async () => {
+  const { mergeFunctions } = await import("./functions.ts");
+  const mine = starterFlow(); // butterfly_wing = F9
+  const other = xmasFlow(); // five functions, butterfly_wing = F9 too
+  const m = mergeFunctions(mine, other);
+  assert.deepEqual(m.added.sort(), ["fly_wing", "heal", "knife_back", "knife_on"]);
+  assert.deepEqual(m.same, ["butterfly_wing"]);
+  assert.deepEqual(m.kept, []);
+  assert.equal(Object.keys(m.flow.procedures).length, 5);
+  assert.deepEqual(m.flow.workflow, mine.workflow); // only the functions join
+  const g = clone(other);
+  g.procedures.butterfly_wing = [pressKey("F7")];
+  const k = mergeFunctions(mine, g);
+  assert.deepEqual(k.kept, ["butterfly_wing"]);
+  assert.deepEqual(k.flow.procedures.butterfly_wing, [pressKey("F9")]);
+});
