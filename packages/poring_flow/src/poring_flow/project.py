@@ -1482,24 +1482,35 @@ def lint_doc(
     envs: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """POST /flows/lint's document (the browser reads counts, findings, run, project_hash)."""
-    from poring_flow.runstart import verdict
 
     c, findings = project_lint(
         p, world=world, resolver=resolver, detector=detector, runtime_max_s=runtime_max_s,
         zones_provider=zones_provider, routes_provider=routes_provider, envs=envs,
     )  # fmt: skip
+    from poring_flow import live
+
+    # matpilot round 16 #1: the page's run verdict is the LIVE player's (live.verdict), the same the
+    # Run route uses: a `bindings` readiness item on a hunt core is answered by the runner, so it is
+    # shown as answered (info), never as "1 not ready" beside a Run that plays it
+    own = live.own_binding_paths(c) if c.flow is not None else set()
+    docs = []
+    for f in findings:
+        d = f.doc()
+        if f.rule == "bindings" and f.severity == "readiness" and f.where.path in own:
+            d = {**d, "severity": "info", "answered": True,
+                 "message": f"{d['message']} -- answered: the live player plays this block with "
+                            "the runner (its own binding)"}  # fmt: skip
+        docs.append(d)
     zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
     counts = dict(zero)
     by_node: dict[str, dict[str, int]] = {}
-    for f in findings:
-        counts[f.severity] += 1
-        by_node.setdefault(f.where.node, dict(zero))[f.severity] += 1
+    for f, d in zip(findings, docs, strict=True):
+        counts[d["severity"]] += 1
+        by_node.setdefault(f.where.node, dict(zero))[d["severity"]] += 1
     if c.flow is not None:
-        v = verdict(
-            c.flow, [f.finding() for f in findings], world_loaded=world is not None,
-            resolver_given=resolver is not None, runtime_max_s=runtime_max_s,
-            zones_loaded=zones_provider is not None,
-            world_server=world.server if world is not None else None,
+        v = live.verdict(
+            c, findings, world=world, resolver_given=resolver is not None,
+            runtime_max_s=runtime_max_s, zones_loaded=zones_provider is not None,
             routes_loaded=routes_provider is not None,
         )  # fmt: skip
         run = {"allowed": v.allowed, "summary": c.text(v.summary()),
@@ -1509,7 +1520,7 @@ def lint_doc(
         run = {"allowed": False, "summary": f"run refused: {why}", "reasons": [why]}
     return {
         "project_hash": shown_hash(p),
-        "findings": [f.doc() for f in findings],
+        "findings": docs,
         "counts": counts,
         "by_node": by_node,
         "run": run,

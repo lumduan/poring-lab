@@ -238,6 +238,8 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
                   {it.text}
                   {t.value && !t.stale && <span className="live-tick-value"> · read: {t.value}</span>}
                   {t.mark !== "ok" && t.mark !== "none" && !t.stale && t.words && <span className="live-tick-words"> · {t.words}</span>}
+                  {/* matpilot round 16 #2: a ✓ line says what was read from the icon too */}
+                  {t.mark === "ok" && !t.stale && t.words?.includes(";") && <span className="live-tick-words"> · {t.words.split(";").pop()?.trim()}</span>}
                   {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
                   {/* matpilot #5: a key that reads none may simply be the wrong key */}
                   {t.mark === "fail" && /^0 /.test(t.value ?? "") && ["wings", "heals", "home"].includes(it.id) && (

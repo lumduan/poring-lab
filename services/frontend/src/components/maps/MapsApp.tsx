@@ -572,7 +572,9 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const smRunner = sm && runnerBlockOn(sm) ? runnerForMap(sm.map.map) : null;
   const runnable = !!sm && startReady?.ready === true && (!runnerBlockOn(sm) || (!!smRunner && LIVE_FLOWS.includes(smRunner.id)));
   const keysR = runnable && sm && smRunner ? runnerKeysOn(project, sm.id) : null;
-  const runBlocked = keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : null;
+  // matpilot round 16 #4: a lint ERROR blocks Run (the Run route refuses it too: lint_errors)
+  const lintErr = lintDoc && lintDoc.counts.error > 0 ? (lintDoc.findings.find((f) => f.severity === "error")?.message ?? "") : null;
+  const runBlocked = keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : lintErr !== null ? `the lint has ${lintDoc?.counts.error} error(s): ${lintErr}` : null;
   const notRunWhy = !sm
     ? "login is not live yet: put START on a map node (drag START's connection onto a map, or “Start here” in a map node's inspector); the run then starts where a person put her"
     : runnerBlockOn(sm) && !smRunner
@@ -799,7 +801,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
               )}
             </div>
             <datalist id="maps-known">
-              {[...new Set([...EXAMPLE_MAPS, ...(lintDoc?.world.maps ?? []), ...maps.map((b) => b.map)])].sort().map((m) => (
+              {[...new Set([...(world === "sample" ? EXAMPLE_MAPS : []), ...(lintDoc?.world.maps ?? []), ...maps.map((b) => b.map)])].sort().map((m) => (
                 <option key={m} value={m} />
               ))}
             </datalist>
@@ -967,6 +969,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                       project={project}
                       nodeId={selected}
                       lint={lintDoc}
+                      onStart={onSetStart}
                       onChange={(p) => {
                         // a node deleted in the inspector: said, with Undo (a rename keeps the count)
                         const gone = p.nodes.length < projectRef.current.nodes.length ? selected : null;

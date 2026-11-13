@@ -286,11 +286,13 @@ function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: L
     if (name && badgeField) {
       const doc = catalogue?.blocks[name];
       const badge = doc?.badge ?? "unknown";
-      badgeField.setValue(`● ${BADGE_TEXT[badge]}`);
+      // matpilot round 16 #11: a block the live player plays says so (its L1 status stays in the tooltip)
+      const plays = (doc?.spec as { live?: boolean } | undefined)?.live === true;
+      badgeField.setValue(plays ? "● plays live" : `● ${BADGE_TEXT[badge]}`);
       const svg = (badgeField as unknown as { getSvgRoot?: () => SVGElement | null }).getSvgRoot?.();
       svg?.classList.add(`pl-badge-${badge}`);
       const runs = doc?.verified_on.map((v) => `${v.path} ${v.rule} ${v.date}`).join("; ");
-      b.setTooltip(`${name}: ${doc?.purpose ?? ""}\nL1: ${BADGE_TEXT[badge]}${runs ? ` (${runs})` : ""}`);
+      b.setTooltip(`${name}: ${doc?.purpose ?? ""}\nL1: ${BADGE_TEXT[badge]}${runs ? ` (${runs})` : ""}${plays ? "\nplays live: the live block player plays it in the game (Run)" : ""}`);
       const rules = catalogue?.hunt_rules ?? null;
       const ev = b.getField("EVIDENCE");
       if (b.type === HUNT_TYPE && rules) {

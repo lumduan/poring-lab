@@ -507,6 +507,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const simDoc = sim?.doc ?? null;
   const simStale = sim !== null && sim.for !== key;
   const errors = lintStale ? [] : lintErrors(lintDoc);
+  // matpilot round 16 #4: a lint ERROR blocks Run (the Run route refuses it too: lint_errors)
+  const lintBlock = errors.length ? `the lint has ${errors.length} error${errors.length > 1 ? "s" : ""}: ${errors[0].message}` : null;
   const showFinding = (f: Finding) => {
     const id = f.node && nodeById(project, f.node) ? f.node : node.id;
     const t = f.tab || MAIN_TAB;
@@ -695,7 +697,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable ? <LiveRunButtons live={live} blocked={runWhy} keys={runKeys} /> : <RunNotReady why={notRunWhy} />}
+          {runnable ? <LiveRunButtons live={live} blocked={runWhy ?? lintBlock} keys={runKeys} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
 
@@ -945,7 +947,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                 {p === "run" && runnable && !runDoc && (
                   <div className="run-pane" data-testid="run-pane-blocks">
                     <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
-                    <LiveRun live={live} check={false} blocked={runWhy} />
+                    <LiveRun live={live} check={false} blocked={runWhy ?? lintBlock} />
                   </div>
                 )}
                 {p === "run" && runDoc && (
@@ -954,7 +956,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                       Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is <code>{runDoc.script}</code>&apos;s hunt on {runDoc.map}, in the same process. Its keys are this node&apos;s functions
                       (its own first, then Global&apos;s): {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy ?? (runnable ? null : notRunWhy)} />
+                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} />
                     {/* matpilot #7: say where these are kept */}
                     <p className="muted">The settings below are saved on the bot server the moment one changes (every browser sees them). The blocks and their functions are this browser&apos;s, until you Save.</p>
                     {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} />}

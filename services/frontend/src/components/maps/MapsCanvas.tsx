@@ -397,7 +397,7 @@ function MapsCanvas(p: MapsCanvasProps) {
     const box = { width: el.clientWidth, height: el.clientHeight };
     // round 4: null while folded (0 x 0) or for any non-finite number: nothing is animated then
     let f = fitViewport(box, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
-    const maps = ns.filter((n) => n.type === "map");
+    const maps = ns.filter((n) => n.type === "map" || n.type === "start"); // matpilot round 16 #3: START stays in view
     if (f?.overflow && maps.length && maps.length < ns.length) f = fitViewport(box, inst.getNodesBounds(maps), MIN_ZOOM, MAX_ZOOM, PAD) ?? f;
     if (!f) return;
     setOverflow(f.overflow);

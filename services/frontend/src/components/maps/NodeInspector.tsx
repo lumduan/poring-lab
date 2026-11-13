@@ -38,6 +38,8 @@ export type NodeInspectorProps = {
   onRules?: () => void;
   onRenamed?: (from: string, to: string) => void;
   canOpen?: boolean;
+  /** "Start here": the page's own (its notice); else the edit is applied as any other */
+  onStart?: (id: string) => void;
 };
 
 const MAX_FINDINGS = 6;
@@ -80,7 +82,7 @@ export default function NodeInspector(props: NodeInspectorProps) {
           <button
             type="button"
             className="button button-small"
-            onClick={() => apply(setStart(project, n.id))}
+            onClick={() => (props.onStart ? props.onStart(n.id) : apply(setStart(project, n.id)))}
             title={n.kind === "map" ? `The run starts on ${n.id}, where a person puts her (no login, no character): START moves here` : "The run starts with this login node (the session path: login → character → a map)"}
             data-testid="inspector-start-here"
           >
