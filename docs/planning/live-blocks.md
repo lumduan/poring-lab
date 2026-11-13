@@ -436,3 +436,48 @@ In order; each step only after the one before is proven; nothing of the hunt pla
 - Found: the detect server of a refused start kept the socket, so the next start's wait timed out
   (the runner used the running server; harmless); the helper's path starts it once per run.
 
+
+## 7. Stage 2 live A/B (2026-11-14 from 00:38 ICT; IN PROGRESS)
+
+The series: `scripts/stage2_ab.py run --pairs 4 --minutes 20` (AB, BA, AB, BA; the bar of 3.2,
+unchanged). Main is frozen for code while a series runs (every run starts main's scripts); only
+the series tool's own setup was fixed between series, never an arm.
+
+**What stopped a series, in order (each fixed in the SETUP, before the next series):**
+
+| Series | Stopped | Why | Fix (commit) |
+|---|---|---|---|
+| s2ab-1114 | 00:38, before run 1 | the chat guard's state is per host: stage 1's two setups had typed `@warp xmas_dun02 7 21` twice, so the series' first warp was a 3rd identical line (refused, no input) | the warp reads the guard's history and takes the other patrol cell (26fa0dd8) |
+| s2ab-1114b | 01:02, run 3's setup | run 1 (A) DIED to the Stormy Knight at 19.0 min; she respawned with almost no HP and run 2 (B) met the player's built-in hp_critical safe end at once (0.1 min, rc 0, counted as a run); then clear-bag ended rc 1 on its own stock read-back | the setup reads her HP and types the lab GM's `@heal` under 95 % (940a4e7f); a run under 60 s stops the series; a clear-bag rc is judged by the series' own read (0715521e) |
+| s2ab-1114c | 01:06, run 2's start | run 1 (A) DIED to the Stormy Knight after 1.3 min at full HP (three ~1,200 hits in under 1 s with its Christmas Goblins; no boss line read first) with the Knife worn; run 2's start check refused rightly (F4 empty, F5 the dagger in the bag) | the setup reads a worn Knife and presses the dagger key once (a081df50) |
+| s2ab-1114d | 02:09, run 4's setup | run 3 (B) ended by the box's RUNAWAY guard (below) with the Knife worn; clear-bag refused with the dagger in the bag | the dagger on BEFORE clear-bag (3f29f9fc) |
+
+**Runs so far (stage2_ab.py score):**
+
+| Run | Arm | Min | Deaths | Potions | Fly Wings (cause) | Kills/h | Lowest HP | Box events |
+|---|---|---|---|---|---|---|---|---|
+| b-r01A | A | 19.0 | 1 (Knight) | 4 | 4 (boss 2) | 157.6 | 0 | - |
+| b-r02B | B | 0.1 | 0 | 0 | 0 | - | - | (hp_critical at the start) |
+| c-r01A | A | 1.3 | 1 (Knight) | 0 | 0 | - | - | - |
+| d-r01A | A | 20.0 | 0 | 0 | 1 (garm) | 128.9 | 54 | - |
+| d-r02B | B | 19.8 | 0 | 6 | 4 (garm 2, rate 2) | 148.1 | 27 | drink 6 |
+| d-r03B | B | 18.0 | 0 | 10 pressed, 0 used | 1 (box, hp "0") | 153.0 | "0" | drink 10, fly_away 1 |
+
+- d's pair 1 (d-r01A, d-r02B) is the first VALID pair. The box's `drink` fired live 6 times at
+  HP 27-29 %, each one White Potion through the runner's own press (consumed: the next setup
+  topped F1 up).
+- The Stormy Knight was seen in EVERY A and B run tonight that lasted (packets, job 1251); it
+  roams cells ~(126-188, 70-95), on the patrol route. On 2026-11-12's night: 0 deaths in 18 runs,
+  met 3 times. Its two-hit kill is faster than any Battle-Log guard (memory: the MVP schedule).
+
+**d-r03B: a CLIENT HP desync (unexplained, one run tonight).** From 1,065.7 s to the run's end
+(1,083 s) the client's Basic Information read HP **0 %** (25 reads) while the SERVER's packets
+said HP 3,312-3,390 of 5,070 (about 65 %), and she went on fighting (attack requests, damage
+dealt). In that time the client IGNORED every item: the box's `fly_away` (HP "0" < 25) pressed
+one Fly Wing (no teleport packet), `drink` pressed 10 White Potions (F1 still 10 after), and the
+end's Butterfly Wing (pressed, no load screen; F9 still 3). The engine's runaway guard (an event
+over its max_fires_per_10min: drink 10) ended the run normally. She was left standing on the map
+and the Knight killed her ~50 s later (the server's death packet; no death dialog drawn after it,
+so no respawn button could be pressed). Aftercare: the lab GM's `@alive`, then `@warp geffen 119
+40` (her save point). Not seen in any other run tonight. Open: why the client drew 0 %, and why it
+refused items while the server still had her alive.
