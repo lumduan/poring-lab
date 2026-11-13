@@ -153,3 +153,12 @@ function fixtureTrigger() {
   const d = globalOf(fixture)!.tabs.find((t) => t.name === "safety")!.defs[0];
   return structuredClone(d.on!);
 }
+
+test("a project lint (by_node, no by_owner) never breaks the node words (matpilot round 15: /maps crashed)", async () => {
+  const { nodeLint } = await import("./nodewords.ts");
+  const { lintOf } = await import("../flow/status.ts");
+  const lint = { findings: [], counts: { error: 0, readiness: 0, warning: 1, info: 0 }, by_node: { login: { error: 0, readiness: 0, warning: 1, info: 0 } }, run: { allowed: true, summary: "", reasons: [] }, effective: {}, world: { server: null, maps: [] } };
+  assert.equal(nodeLint(lint as never, "login").counts.warning, 1);
+  assert.equal(nodeLint(lint as never, "nobody").counts.warning, 0);
+  assert.equal(lintOf(lint as never, "login").warning, 1);
+});

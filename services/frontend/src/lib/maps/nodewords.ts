@@ -4,6 +4,7 @@
 // Global's names the nodes that override them (project.ts overridesOn / overriddenBy), and the
 // lint counts on the node. Pure functions, tested in project_maps.test.ts.
 import type { Finding, LintDoc, Severity } from "../flow/api.ts";
+import { countsFor } from "../flow/api.ts";
 import { exprText } from "../flow/expr.ts";
 import type { Lit } from "../flow/ir.ts";
 import { type Def, globalOf, keyOfCall, MAIN_TAB, namesOf, overriddenBy, paramsText, type PNode, type Project, type Trigger } from "../flow/project.ts";
@@ -100,6 +101,7 @@ export function nodeLint(lint: LintDoc | null, id: string): NodeLint {
   if (!lint) return { counts, findings: [] };
   const findings = lint.findings.filter((f) => (f.node !== undefined ? f.node === id : f.path === id || f.path.startsWith(`${id}/`)));
   for (const f of findings) counts[f.severity] += 1;
-  if (!findings.length && lint.by_owner[id]) return { counts: { ...counts, ...lint.by_owner[id] }, findings };
+  const own = countsFor(lint, id); // the project lint's by_node (IR 2's by_owner as before)
+  if (!findings.length && own) return { counts: { ...counts, ...own }, findings };
   return { counts, findings };
 }

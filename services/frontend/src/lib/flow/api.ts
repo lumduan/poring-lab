@@ -28,6 +28,11 @@ export interface Finding {
   tab?: string;
 }
 
+/** A node's (or IR 2 owner's) counts, whichever the lint carries; none -> undefined. */
+export function countsFor(lint: Pick<LintDoc, "by_owner" | "by_node"> | null | undefined, id: string): Record<Severity, number> | undefined {
+  return lint?.by_node?.[id] ?? lint?.by_owner?.[id];
+}
+
 /** A finding's statement path INSIDE its tab ("main.2", "heal.0"), from "<node>/<tab>/<site>". */
 export function sitePath(f: Pick<Finding, "path" | "node" | "tab">): string {
   const pre = f.node && f.tab ? `${f.node}/${f.tab}/` : "";
@@ -52,7 +57,10 @@ export interface LintDoc {
   project_hash?: string;
   findings: Finding[];
   counts: Record<Severity, number>;
-  by_owner: Record<string, Record<Severity, number>>;
+  /** IR 2's counts per canvas node; ABSENT on the project model's lint, which has `by_node` (per
+   * node id). Read them through countsFor (matpilot round 15: /maps crashed on the missing key). */
+  by_owner?: Record<string, Record<Severity, number>>;
+  by_node?: Record<string, Record<Severity, number>>;
   run: { allowed: boolean; summary: string; reasons: string[] }; // the run-start check's verdict (MW3)
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };

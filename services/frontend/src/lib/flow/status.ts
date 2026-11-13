@@ -1,6 +1,7 @@
 // What the canvas and the blocks SHOW from a lint and a simulate run (Node-RED's status badge idea:
 // a line under each node). Pure functions, tested in status.test.ts.
 import type { Finding, LintDoc, NodeRun, Severity, Trace } from "./api.ts";
+import { countsFor } from "./api.ts";
 import type { GEdge } from "./canvas.ts";
 
 export type LintCounts = Record<Severity, number>;
@@ -10,7 +11,7 @@ const ZERO: LintCounts = { error: 0, readiness: 0, warning: 0, info: 0 };
  * (unsupported bindings, ADR-0020 contradictions #6, decided by Batt 2026-10-09) are their own
  * severity: they block the run, not the design, so they never turn a node red. */
 export function lintOf(lint: LintDoc | null, owner: string): LintCounts {
-  return { ...ZERO, ...(lint?.by_owner[owner] ?? {}) };
+  return { ...ZERO, ...(countsFor(lint, owner) ?? {}) };
 }
 
 export function lintLine(c: LintCounts): { text: string; level: Severity | "ok" } {
