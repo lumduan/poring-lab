@@ -109,3 +109,26 @@ So the box is written like this (a sketch; the spellings are the engine's):
 ## 4. Not in stage 1
 
 Login, choose character, walk_to on the live player, talk to NPC, the shop / Kafra blocks.
+
+## 5. The night of 2026-11-13 (Batt: "plan a long night, go on without me; I read it tomorrow")
+
+In order; each step only after the one before is proven; nothing of the hunt plays worse:
+
+1. Merge stage 1 (the live player, the one box, Run on /maps and /flows) and the slot item check
+   (dungeon@9.47: a role key holding another item refuses the start); every suite green; deploy
+   (backend, Run helper); the minimap and slot references built on main.
+2. Live stage 1, short: place her on xmas_dun02 with the lab's setup tool (a GM @warp line, the
+   setup's, as this afternoon), the start check all ✓, Run the one-box project for 10 min through
+   the new player, Stop: she flies home. Compare with the runner's own numbers (kills/h, loot,
+   deaths, potions). The Stormy Knight's schedule is checked first (memory: the MVP).
+3. Stage 2: heal and the Fly Wing as the box's EVENTS (section 2a) through the tick hook; the
+   runner's own potion and fly switched off where the box plays them; offline tests; live A/B
+   (the runner vs the box), alternating runs, as many pairs as the night allows.
+4. Stage 3: the Knife swap as functions, the respawn, the weight home (the Knife question in the
+   report for Batt: the strike between F4 and F5, or not).
+5. Stage 4 begins: use_model (the trained data block) and the first primitives (choose_target,
+   strike, wait_kill, loot, explore) with one function per monster for the two most common
+   monsters; offline first; live only once the A/B of stage 2 holds.
+6. matpilot re-reviews the pages (read only); its findings fixed.
+7. The report for Batt in the morning: every run's numbers, what was proven, what is not.
+
