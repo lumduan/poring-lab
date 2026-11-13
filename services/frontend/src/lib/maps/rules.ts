@@ -21,6 +21,7 @@ import { knownMaps } from "./links.ts";
 export const WING_ID = 602; // Butterfly Wing (the lab's rAthena item db)
 export const MAX_PER_RUN = 3;
 export const RULE_NOTE = "the world rule: on an unknown map, a Butterfly Wing to the save point";
+export const SAVE_NOTE = "the world rule: the save point (where a Butterfly Wing and a death land)";
 
 export type UnknownMap = "stop" | "wing";
 export type SavePoint = { cell: CellRef | null; asserted: boolean };
@@ -146,7 +147,7 @@ export function setSavePoint(flow: Flow, cell: CellRef | null): RuleEdit {
     if (!/^[a-z0-9_@-]{1,40}$/i.test(cell.map) || !Number.isInteger(cell.x) || !Number.isInteger(cell.y) || cell.x < 0 || cell.y < 0 || cell.x > 1000 || cell.y > 1000) {
       return { ok: false, error: "the save point needs a map id and a cell (x, y) between 0 and 1000" };
     }
-    const stmt = act("assert_save_point", "core.assert_save_point", { cell: { kind: "lit", value: { ...cell, kind: "cell" } } }, "the world rule: the save point (where a Butterfly Wing and a death land)", 1);
+    const stmt = act("assert_save_point", "core.assert_save_point", { cell: { kind: "lit", value: { ...cell, kind: "cell" } } }, SAVE_NOTE, 1);
     if (has) start.main[0] = stmt;
     else start.main.unshift(stmt);
   }

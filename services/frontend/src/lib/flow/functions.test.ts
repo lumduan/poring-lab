@@ -119,3 +119,14 @@ test("sharing functions: another flow's functions join this one, yours kept on a
   assert.deepEqual(k.kept, ["butterfly_wing"]);
   assert.deepEqual(k.flow.procedures.butterfly_wing, [pressKey("F9")]);
 });
+
+// (the zones reference's sha256 against config/map_zones/xmas_dun02.yaml is the flow engine's test:
+// the frontend's container has no config/)
+test("the xmas_dun02 starter is the flow engine's fixture (the engine lints it clean)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { SAVE_NOTE } = await import("../maps/rules.ts");
+  const text = readFileSync(new URL("./fixtures/xmas_dun02_flow.json", import.meta.url), "utf8");
+  assert.equal(canonical(xmasFlow()), canonical(JSON.parse(text)));
+  const blk = xmasFlow().workflow!.blocks[0];
+  assert.equal(blk.main[0].kind === "action" ? blk.main[0].note : null, SAVE_NOTE);
+});

@@ -31,6 +31,10 @@ export const XMAS_NAME = "xmas_dun02";
 /** The lab's static data (data/kb): xmas_dun02 and Geffen are real lab maps, not the sample's. */
 export const XMAS_WORLD: WorldSource = "local";
 const GEFFEN_SAVE = { kind: "cell" as const, map: "geffen", x: 119, y: 40 };
+/** maps/rules.ts SAVE_NOTE, word for word (a test checks; no import: rules.ts -> links.ts -> canvas.ts) */
+const SAVE_NOTE = "the world rule: the save point (where a Butterfly Wing and a death land)";
+/** sha256 of config/map_zones/xmas_dun02.yaml (the flow engine's test checks it is the file's). */
+export const XMAS_ZONES_SHA = "89ea7a9c98d5d62b869a99189119548ea114868566bd293d43d46e3f24ebe345";
 
 /** The Rogue's map as an ordinary flow (Batt 2026-11-13: "why is the xmas_dun02 flow separate? make
  * it like my_first_flow, a map tab; every key a function"): xmas_dun02 hunts with the runner
@@ -71,8 +75,11 @@ export function xmasFlow(): Flow {
           ignore: [],
           events: [],
           resume_here: true,
+          // the map's zones file (config/map_zones/xmas_dun02.yaml, by its sha256; Amendment A 4):
+          // the runner reads the same file; a change to it changes this reference (zones_changed)
+          zones: { map: "xmas_dun02", sha256: XMAS_ZONES_SHA },
           main: [
-            { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, ...rest, params: { cell: { kind: "lit", value: { ...GEFFEN_SAVE } } } },
+            { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, ...rest, note: SAVE_NOTE, params: { cell: { kind: "lit", value: { ...GEFFEN_SAVE } } } },
             {
               kind: "while",
               cond: { kind: "cmp", op: "<", left: { kind: "sense", sensor: "weight_percent", args: {} }, right: { kind: "lit", value: 50 } },

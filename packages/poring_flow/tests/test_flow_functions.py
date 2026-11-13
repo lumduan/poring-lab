@@ -203,8 +203,9 @@ def test_an_item_warp_takes_an_item_or_a_function_and_walks_and_npcs_take_neithe
 
 
 def test_proc_is_left_out_when_none_so_every_older_flow_keeps_its_json_and_hash() -> None:
-    for name in ("farm_loop", "starter", "starter_one_map", "starter_world_rules",
-                 "town_warp_farm", "visit_and_choose"):  # fmt: skip
+    # starter / starter_world_rules changed ON PURPOSE the same evening (Batt 2026-11-13: "a wing is
+    # a function"): their wing exit is item_warp(using=butterfly_wing), so they carry a proc now
+    for name in ("farm_loop", "starter_one_map", "town_warp_farm", "visit_and_choose"):
         text = (FIXTURES / f"{name}.json").read_text(encoding="utf-8")
         f = ir.from_json(text)
         assert ir.to_json(f) + "\n" == text, name  # the same bytes, so the same hash
