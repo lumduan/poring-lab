@@ -16,8 +16,9 @@ THE ARMS (the same runner settings for both: the Run config, the box's five keys
 --minutes M):
 - A: `dungeon_hunt.py run` with the Run helper's own argv (flow_run.command: FIXED, --player-mode,
   every technique of the config) -- the old Run path;
-- B: `flow_play.py play` of the ready-made project (services/frontend/src/lib/flow/fixtures/
-  project_xmas_dun02.json, its time box set to M minutes) on the node xmas_dun02, with those
+- B: `flow_play.py play` of the stage-2 box (services/frontend/src/lib/flow/fixtures/
+  project_xmas_dun02_stage2.json: the ready-made project as stage 2 left it; stage 3's box is
+  scripts/stage3_ab.py's), its time box set to M minutes, on the node xmas_dun02, with those
   settings as its runner config (flow_run.play_command): the hunt core is the same runner, its
   potion, Fly Wing on HP and boss fly played by the box's events (live.hunt_plan).
 The order: "alternate" (the default) is AB, BA, AB, ... (each pair's first arm alternates, so a
@@ -77,7 +78,9 @@ VERSION = "9.49"  # dungeon_hunt.SURVIVAL_EVENTS_VERSION: the stage it measures
 MAP = "xmas_dun02"
 NODE = "xmas_dun02"
 FLOW_ID = "xmas_dun02_rogue"  # flow_run.FLOWS: the old Run path's runner
-PROJECT = ROOT / "services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json"
+# the STAGE-2 box (the ready-made box as stage 2 left it; since stage 3 the ready-made box grew:
+# scripts/stage3_ab.py compares the two)
+PROJECT = ROOT / "services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage2.json"
 DEMO = Path("/dev/shm/poring-lab-demo")
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage2-ab")
 PY = str(ROOT / ".venv" / "bin" / "python")
@@ -436,6 +439,8 @@ class Series:
     """The live series (`run`): the setup, the runs, the detect server; its log and record in
     its folder. Never used by the tests (they test the pure parts)."""
 
+    score_cmd = "stage2_ab.py"  # the script whose `score` reads the series (stage3_ab.py's own)
+
     def __init__(self, doc: Mapping[str, Any], folder: Path) -> None:
         self.doc, self.dir = dict(doc), folder
         self.log_path = folder / "series.log"
@@ -596,7 +601,7 @@ class Series:
             return 2
         finally:
             self.end_server()
-        self.log("the series is done: stage2_ab.py score --label " + str(self.doc["label"]))
+        self.log(f"the series is done: {self.score_cmd} score --label {self.doc['label']}")
         return 0
 
 
