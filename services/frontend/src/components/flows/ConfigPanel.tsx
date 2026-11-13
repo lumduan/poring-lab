@@ -90,8 +90,11 @@ const LEVEL_TAG: Record<Level, string> = { default: "", global: "every map", map
 type Last = { scope: "global" | "map"; group: string; prev: Record<string, ConfigValue> | null; text: string };
 
 /** `replaced`: a group shown as this line instead of its inputs (2026-11-13: on /flows the hotbar
- * keys are the flow's FUNCTIONS, Batt "every key a function", so the keys group says where they are). */
-export default function ConfigPanel({ d, map, cs, problem, replaced = {} }: { d: ConfigDoc; map: string; cs: ConfigState; problem: string | null; replaced?: Record<string, ReactNode> }) {
+ * keys are the flow's FUNCTIONS, Batt "every key a function", so the keys group says where they are).
+ * `boxed`: a setting -> the words saying what in THIS project's box replaces it in a box run (matpilot
+ * round 17 N1, lib/flow/box.ts boxedSettings: the engine's takeovers); the input stays (the runner's
+ * own value: the old Run path, a box without that event). */
+export default function ConfigPanel({ d, map, cs, problem, replaced = {}, boxed = {} }: { d: ConfigDoc; map: string; cs: ConfigState; problem: string | null; replaced?: Record<string, ReactNode>; boxed?: Record<string, string> }) {
   const eff = effectiveConfig(d, cs.file, map);
   const [last, setLast] = useState<Last | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -127,7 +130,7 @@ export default function ConfigPanel({ d, map, cs, problem, replaced = {} }: { d:
       );
     }
     const fields = d.fields.filter((f) => f.group === g.id);
-    return <GroupRow key={g.id} g={g} fields={fields} d={d} map={map} eff={eff} cs={cs} onChange={change} onClear={(scope) => saveUndoable(scope, g.id, null, `${g.title}: ${scope === "map" ? `${map} uses every map's values again` : "every map is back to the defaults"}`)} />;
+    return <GroupRow key={g.id} g={g} fields={fields} d={d} map={map} eff={eff} cs={cs} boxed={boxed} onChange={change} onClear={(scope) => saveUndoable(scope, g.id, null, `${g.title}: ${scope === "map" ? `${map} uses every map's values again` : "every map is back to the defaults"}`)} />;
   };
   return (
     <section className="config-panel" aria-label="The settings" data-testid="config-panel">
@@ -164,6 +167,7 @@ function GroupRow({
   map,
   eff,
   cs,
+  boxed,
   onChange,
   onClear,
 }: {
@@ -173,6 +177,7 @@ function GroupRow({
   map: string;
   eff: ReturnType<typeof effectiveConfig>;
   cs: ConfigState;
+  boxed: Record<string, string>;
   onChange: (scope: "global" | "map", f: ConfigField, v: ConfigValue) => void;
   onClear: (scope: "global" | "map") => void;
 }) {
@@ -200,7 +205,7 @@ function GroupRow({
         </label>
       </span>
       {ordered.map((f) => (
-        <FieldInput key={f.name} f={f} d={d} v={eff.values[f.name]} level={eff.source[f.name]} off={off} why={notInUseWhy(d, eff.values, f.name)} onChange={(v) => onChange(scope, f, v)} />
+        <FieldInput key={f.name} f={f} d={d} v={eff.values[f.name]} level={eff.source[f.name]} off={off} why={notInUseWhy(d, eff.values, f.name)} boxed={boxed[f.name] ?? null} onChange={(v) => onChange(scope, f, v)} />
       ))}
       {scope === "map" && ownMap && (
         <button
@@ -234,14 +239,20 @@ function GroupRow({
   );
 }
 
-function FieldInput({ f, d, v, level, off, why, onChange }: { f: ConfigField; d: ConfigDoc; v: ConfigValue; level: Level; off: boolean; why: string | null; onChange: (v: ConfigValue) => void }) {
+function FieldInput({ f, d, v, level, off, why, boxed, onChange }: { f: ConfigField; d: ConfigDoc; v: ConfigValue; level: Level; off: boolean; why: string | null; boxed: string | null; onChange: (v: ConfigValue) => void }) {
   const [draft, setDraft] = useState<string | null>(null); // a number or a point while it is typed
   const tag = LEVEL_TAG[level];
   const label = (
     <>
       {f.words}
       {tag && <span className="config-tag"> ({tag})</span>}
-      {why && <span className="config-tag"> (not in use: {why})</span>}{" "}
+      {why && <span className="config-tag"> (not in use: {why})</span>}
+      {boxed && (
+        <span className="config-tag config-boxed" data-testid={`config-boxed-${f.name}`}>
+          {" "}
+          ({boxed})
+        </span>
+      )}{" "}
     </>
   );
   const id = `config-${f.name}`;

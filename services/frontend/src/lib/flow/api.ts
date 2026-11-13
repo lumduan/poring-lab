@@ -2,6 +2,7 @@
 // COMPUTATION ONLY. Lint, simulate and the Python view take the IR and return documents; nothing
 // here reaches the mux, the executor or any agent channel. POSTs carry the console's CSRF token
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
+import type { BoxDoc } from "./box.ts";
 import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
 import type { Project } from "./project.ts";
@@ -62,6 +63,9 @@ export interface LintDoc {
   by_owner?: Record<string, Record<Severity, number>>;
   by_node?: Record<string, Record<Severity, number>>;
   run: { allowed: boolean; summary: string; reasons: string[] }; // the run-start check's verdict (MW3)
+  /** matpilot round 17 N1: per map node with a hunt core, what its box plays in a box run and which
+   * run settings that replaces (poring_flow.live.takeovers); absent on an older backend. */
+  box?: Record<string, BoxDoc>;
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };
   world_notes?: string[]; // how the static data was found (e.g. no GAT here: routes are estimates)

@@ -17,6 +17,7 @@ import "./inspector.css";
 import { useState } from "react";
 
 import type { LintDoc } from "@/lib/flow/api";
+import { boxNameWords } from "@/lib/flow/box";
 import type { Entry, MobRef } from "@/lib/flow/ir";
 import { nodeById, type MapNode, type PNode, type Project, sessionPath } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
@@ -126,7 +127,7 @@ export default function NodeInspector(props: NodeInspectorProps) {
           <GlobalRule project={project} onRules={onRules} />
         </section>
       )}
-      <TabsSection project={project} node={n} />
+      <TabsSection project={project} node={n} lint={lint} />
       {n.kind === "map" && <DeleteRow key={`del-${n.id}`} project={project} node={n} apply={apply} />}
     </div>
   );
@@ -411,8 +412,9 @@ function GlobalRule({ project, onRules }: { project: Project; onRules?: () => vo
   );
 }
 
-function TabsSection({ project, node }: { project: Project; node: PNode }) {
+function TabsSection({ project, node, lint }: { project: Project; node: PNode; lint: LintDoc | null }) {
   const tabs = tabRows(project, node);
+  const box = lint?.box?.[node.id] ?? null; // matpilot round 17 N1: what the box plays in a Run
   return (
     <section className="ni-section" aria-label="Tabs and names">
       <h4>Tabs and names</h4>
@@ -439,6 +441,12 @@ function TabsSection({ project, node }: { project: Project; node: PNode }) {
                 <li key={x.name}>
                   {x.text}
                   {x.kind === "event" && <span className="ni-mark" data-k="event">event</span>}
+                  {boxNameWords(box, `${node.id}/${t.tab}/${x.name}`) && (
+                    <span className="ni-muted" data-testid={`inspector-box-${x.name}`}>
+                      {" "}
+                      · {boxNameWords(box, `${node.id}/${t.tab}/${x.name}`)}
+                    </span>
+                  )}
                   {x.key && (
                     <span className="ni-mark" data-k="key" title="The one key this function presses on this node">
                       presses {x.key}

@@ -1518,12 +1518,21 @@ def lint_doc(
     else:
         why = "no map node: nothing runs (Run starts on a map node)"
         run = {"allowed": False, "summary": f"run refused: {why}", "reasons": [why]}
+    # matpilot round 17 N1: per map node with a hunt core, what the box plays there in a box run
+    # and which run settings / runner handlers that replaces (live.takeovers, hunt_plan's rule)
+    box: dict[str, Any] = {}
+    if c.flow is not None and c.flow.workflow is not None:
+        for b in c.flow.workflow.blocks:
+            doc = live.takeovers(c.flow, b.name, lambda s: c.where(s).path)
+            if doc is not None:
+                box[b.name] = doc
     return {
         "project_hash": shown_hash(p),
         "findings": docs,
         "counts": counts,
         "by_node": by_node,
         "run": run,
+        "box": box,
         "effective": effective_doc(c),
         "world": {
             "server": world.server if world is not None else None,

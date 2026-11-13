@@ -719,3 +719,63 @@ def test_the_helpers_project_entry_reads_the_same_way_before_any_run(tmp_path: P
     assert st["flows"]["project"] == {"title": "a project", "minutes": 0, "map": "",
                                       "defaults": {}, "kind": "project"}  # fmt: skip
     assert fc.clash({}) is None  # the backend's config check over an empty defaults entry
+
+
+# --- matpilot round 17 N1: what a box run's box replaces in the run settings ----------------------
+def test_the_box_takeovers_name_real_settings_and_follow_the_plan() -> None:
+    """live.PLAY_SETTINGS names flow_config FIELDS (the settings rows Before Run shows); a play's
+    settings are the runner's own handler that dungeon_hunt switches off for it (stage 2: sustain's
+    off= potion / fly_hp; stage 3: the weight exit and the respawn clicks on box_plays); the HP-rate
+    fly stays the runner's."""
+    names = {f.name for f in fc.FIELDS}
+    for play, settings in live.PLAY_SETTINGS.items():
+        assert play in live.PLAYS and set(settings) <= names, play
+    assert set(live.RUNNER_STAYS) <= names
+    assert set(live.PLAY_WORDS) == set(live.PLAYS)
+    src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
+    assert 'box_off = box_set & {"potion", "fly_hp"}' in src  # potion_below / fly_below off
+    assert '"fly_hp" not in off and hp < strat["fly_below"]' in src
+    assert '"potion" not in off and hp < strat["potion_below"]' in src
+    assert 'rate > strat["fly_rate"] and hp < strat["fly_rate_below"]' in src  # never `off`
+    fixtures = ROOT / "services" / "frontend" / "src" / "lib" / "flow" / "fixtures"
+    one = pj.from_json((fixtures / "project_xmas_dun02.json").read_text())
+    c = pj.compile_project(one)
+    assert c.flow is not None
+    doc = live.takeovers(c.flow, "xmas_dun02", lambda s: c.where(s).path)
+    assert doc is not None and doc["playable"] is True
+    assert doc["plays"] == sorted(live.hunt_plan(c.flow, "xmas_dun02").plays)
+    rows = {(r["play"], r["by"]): r for r in doc["takeovers"]}
+    drink = rows[("potion", "drink")]
+    assert (drink["settings"], drink["when"], drink["until"], drink["path"]) == (
+        ["potion_below"],
+        "HP < 30 %",
+        "HP >= 31 %",
+        "xmas_dun02/survival/drink",
+    )
+    fly = rows[("fly_hp", "fly_away")]
+    assert (fly["settings"], fly["when"]) == (["fly_below"], "a boss is seen or HP < 25 %")
+    assert rows[("boss_fly", "fly_away")]["settings"] == []  # no setting: the boss line itself
+    bag = rows[("weight_home", "bag_full")]
+    assert (bag["settings"], bag["when"]) == (["weight_home"], "weight >= 50 %")
+    assert (rows[("respawn", "respawn_button")]["settings"], rows[("respawn", "respawn_button")]
+            ["steps"]) == (["respawn_at"], "a click at 645,481")  # fmt: skip
+    assert rows[("respawn", "respawn_ok")]["settings"] == ["respawn_confirm_at"]
+    assert doc["stays"] == ["fly_rate", "fly_rate_below"]
+    # the stage-2 box: its two events only; the runner keeps its weight exit and its respawn points
+    s2 = pj.from_json((fixtures / "project_xmas_dun02_stage2.json").read_text())
+    c2 = pj.compile_project(s2)
+    assert c2.flow is not None
+    d2 = live.takeovers(c2.flow, "xmas_dun02")
+    assert d2 is not None
+    took = sorted({x for r in d2["takeovers"] for x in r["settings"]})
+    assert took == ["fly_below", "potion_below"]
+    # a box without the survival events replaces none of them (the runner's own, as stage 1)
+    raw = json.loads((fixtures / "project_xmas_dun02_stage2.json").read_text())
+    raw["nodes"][0]["tabs"] = [t for t in raw["nodes"][0]["tabs"] if t["name"] != "survival"]
+    c3 = pj.compile_project(pj.validate(raw))
+    assert c3.flow is not None
+    d3 = live.takeovers(c3.flow, "xmas_dun02")
+    assert d3 is not None and d3["takeovers"] == [] and d3["plays"] == []
+    # the lint document carries it per node (the pages read it)
+    lint = pj.lint_doc(one, world=None, resolver=None)
+    assert set(lint["box"]) == {"xmas_dun02"} and lint["box"]["xmas_dun02"] == doc

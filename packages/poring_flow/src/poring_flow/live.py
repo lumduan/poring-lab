@@ -367,6 +367,10 @@ class HuntPlan:
     model_doc: dict[str, Any] | None = None
     recipes: dict[str, rc.Recipe] = field(default_factory=dict)
     default_species: tuple[str, ...] = ()
+    # matpilot round 17 N1: what plays each of `plays` -- the event labels (potion, fly_hp,
+    # boss_fly, weight_home) or the role functions (knife, home_end, respawn) -- for the pages'
+    # words (takeovers); nothing here changes what plays
+    play_by: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _sensors(e: Any) -> set[str]:
@@ -400,6 +404,11 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     out: list[NotLive] = []
     events: list[str] = []
     plays: set[str] = set()
+    by: dict[str, list[str]] = {}
+
+    def took(play: str, who: str) -> None:
+        plays.add(play)
+        by.setdefault(play, []).append(who)
 
     def bad(path: str, what: str, text: str) -> None:
         out.append(NotLive(path, what, text))
@@ -473,7 +482,7 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
         if any(WEIGHT_SENSOR in _sensors(c) for c in conds):  # stage 3: the weight home
             weights.append(e.key)
             _weight_event(e, conds, out)
-            plays.add("weight_home")
+            took("weight_home", e.label)
             continue
         if h.then != "resume":
             bad(e.label, "then", f"{e.key} ends with then={h.then}: inside the hunt core an event "
@@ -491,13 +500,13 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
             bad(e.label, "event", f"{e.key} presses no key inside the hunt core: there an event "
                 f"plays dungeon_hunt's {shown} keys (stage 2)")  # fmt: skip
         if keys.get("heal") in pressed:
-            plays.add("potion")
+            took("potion", e.label)
         if keys.get("fly") in pressed:
             reads = _sensors(h.when)
             if "hp_percent" in reads:
-                plays.add("fly_hp")
+                took("fly_hp", e.label)
             if "sees_boss" in reads:
-                plays.add("boss_fly")
+                took("boss_fly", e.label)
             if not reads & {"hp_percent", "sees_boss"}:
                 bad(
                     e.label,
@@ -509,6 +518,10 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     hpath = next((s.path for s in ir.sites(flow)
                   if any(a is hunt for a in ir.actions_in(s.stmt))), block)  # fmt: skip
     calls, names, ends = _role_calls(flow, hunt, plays, out, hpath)
+    for play, roles_ in (("knife", ("knife_on", "knife_back")), ("home_end", ("home",)),
+                         ("respawn", ("respawn", "respawn_confirm"))):  # fmt: skip
+        if play in plays:
+            by[play] = [names[r] for r in roles_ if r in names]
     rplans, issues = rc.analyse(flow)  # stage 4a: the model and the recipes of THIS hunt core
     out += [NotLive(i.path, i.what, i.words) for i in issues if i.live and i.block == block]
     rp = rplans.get(block)
@@ -516,10 +529,15 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
         plays.add("model")
     if rp is not None and rp.recipes:
         plays.add("recipes")
+    if "model" in plays and rp is not None and rp.model is not None:
+        by["model"] = [rp.model]
+    if "recipes" in plays and rp is not None:
+        by["recipes"] = [r.function for r in rp.recipes.values()]
     return HuntPlan(block, keys, tuple(events), frozenset(plays), tuple(out), calls, names,
                     tuple(weights), ends, None if rp is None else rp.model,
                     None if rp is None else rp.model_doc(), {} if rp is None else dict(rp.recipes),
-                    () if rp is None else rp.default)  # fmt: skip
+                    () if rp is None else rp.default,
+                    {k: tuple(v) for k, v in by.items()})  # fmt: skip
 
 
 def _weight_event(e: Any, conds: list[Any], out: list[NotLive]) -> None:
@@ -628,6 +646,119 @@ def _role_calls(
         if rok is not None and rok in flow.procedures:
             steps_of("respawn_confirm", set(), True)
     return calls, names, ends
+
+
+# --- matpilot round 17 N1: what the box's plays replace in the RUN SETTINGS ----------------------
+# Heal and the Fly Wing each showed two thresholds (the survival tab's drink "hp_percent() < 30" and
+# fly_away "< 25"; Before Run's "heal at HP under 40 %", "Fly Wing at HP under 20 %"), and neither
+# page said which one a live run uses. In a BOX run (Run of a project: the live block player) the
+# box's events and functions decide what they play (hunt_plan's `plays`), and the runner's own
+# handler for it is off; its setting then applies to the runner alone (the old Run path, and a box
+# without that event). The settings are scripts/flow_config.py FIELDS' names (drift-tested in
+# services/backend/tests/test_live_player.py).
+PLAY_SETTINGS: dict[str, tuple[str, ...]] = {
+    "potion": ("potion_below",),
+    "fly_hp": ("fly_below",),
+    "weight_home": ("weight_home",),
+    "respawn": ("respawn_at", "respawn_confirm_at"),
+}
+# the runner's own handler each play switches off, in words
+PLAY_WORDS: dict[str, str] = {
+    "potion": "the runner's potion on HP",
+    "fly_hp": "the runner's Fly Wing on HP",
+    "boss_fly": "the runner's boss fly (a Battle Log boss line)",
+    "weight_home": "the runner's weight exit on a read weight (an unread weight drawn red keeps "
+    "its own rule)",
+    "respawn": "the runner's clicks on the death dialog",
+    "knife": "the runner's Knife and dagger presses (the swap's moments stay the runner's)",
+    "home_end": "the runner's Butterfly Wing press at the end",
+    "model": "the hunt core's model (the map's own detector)",
+    "recipes": "the runner's own technique per monster",
+}
+# the survival settings that stay the runner's in a box run (stage 2: the HP-RATE fly)
+RUNNER_STAYS = ("fly_rate", "fly_rate_below")
+_OPS = {"<": "<", "<=": "<=", ">": ">", ">=": ">=", "==": "=", "!=": "≠"}
+_PCT = {"hp_percent": "HP", "sp_percent": "SP", "weight_percent": "weight"}
+
+
+def cond_words(e: Any) -> str | None:
+    """PURE: a trigger's condition in a person's words where it is simple ("HP < 30 %", "a boss is
+    seen or HP < 25 %", "weight >= 50 %"), else its Python (pyview.expr_src). None: no condition."""
+    if e is None:
+        return None
+    if isinstance(e, ir.Sense) and e.sensor == "sees_boss" and not e.args:
+        return "a boss is seen"
+    if isinstance(e, ir.Cmp) and isinstance(e.left, ir.Sense) and isinstance(e.right, ir.Lit):
+        v = e.right.value
+        num = isinstance(v, int | float) and not isinstance(v, bool)
+        if num and e.op in _OPS and e.left.sensor in _PCT and not e.left.args:
+            return f"{_PCT[e.left.sensor]} {_OPS[e.op]} {v:g} %"
+    if isinstance(e, ir.Logic):
+        parts = [cond_words(x) for x in e.terms]
+        if all(x is not None for x in parts):
+            return f" {e.kind} ".join(str(x) for x in parts)
+    from poring_flow import pyview
+
+    return pyview.expr_src(e)
+
+
+def _steps_words(steps: tuple[fn.Step, ...]) -> str:
+    out = []
+    for s in steps:
+        if s.kind == "click":
+            out.append(f"a click at {s.x},{s.y}")
+        elif s.kind == "press":
+            out.append(f"press {s.key}")
+        else:
+            out.append(f"wait {s.s:g} s")
+    return ", then ".join(out) or "nothing"
+
+
+def takeovers(flow: ir.Flow, block: str, where: Any = None,
+              cat: Catalogue | None = None) -> dict[str, Any] | None:  # fmt: skip
+    """PURE: what the box plays inside `block`'s hunt core in a box run and what of the runner's
+    each one replaces -- in the run settings (PLAY_SETTINGS) and in words -- by hunt_plan, the ONE
+    place the live player reads (matpilot round 17 N1). `where`: an IR label -> its project path
+    (project.Compiled.where), for the pages to point at the event or function. None: no hunt core.
+    ``playable`` False: the box cannot play as it is (hunt_plan's problems: Run refuses before any
+    input, so no setting is used at all)."""
+    from poring_flow.effective import merge
+
+    b = next((x for x in (flow.workflow.blocks if flow.workflow else []) if x.name == block), None)
+    if b is None or not any(bl == block for bl, _ in runner_blocks(flow)):
+        return None
+    hp = hunt_plan(flow, block, cat)
+    path = (lambda s: str(where(s))) if where is not None else (lambda s: s)  # noqa: E731
+    handlers = {e.label: e for e in merge(flow, b).active()}
+    rows: list[dict[str, Any]] = []
+    for play in PLAYS:
+        if play not in hp.plays:
+            continue
+        base = {"play": play, "settings": list(PLAY_SETTINGS.get(play, ())),
+                "replaces": PLAY_WORDS.get(play, play)}  # fmt: skip
+        whos = hp.play_by.get(play, ())
+        if play in ("potion", "fly_hp", "boss_fly", "weight_home"):
+            for lab in whos:
+                e = handlers.get(lab)
+                h = e.handler if e is not None else None
+                rows.append({**base, "kind": "event", "by": e.key if e is not None else lab,
+                             "path": path(lab), "when": cond_words(h.when) if h else None,
+                             "until": cond_words(h.until) if h else None})  # fmt: skip
+        elif play == "respawn":
+            for role, setting in (("respawn", "respawn_at"),
+                                  ("respawn_confirm", "respawn_confirm_at")):  # fmt: skip
+                name = hp.call_names.get(role)
+                rows.append({**base, "settings": [setting], "kind": "function", "by": name,
+                             "path": path(name) if name else None,
+                             "steps": _steps_words(hp.calls[role]) if name else
+                             "no confirmation function: none is pressed"})  # fmt: skip
+        else:
+            for name in whos:
+                kind = "model" if play == "model" else "function"
+                rows.append({**base, "kind": kind, "by": name,
+                             "path": path(name) if kind == "function" else None})  # fmt: skip
+    return {"plays": sorted(hp.plays), "takeovers": rows, "stays": list(RUNNER_STAYS),
+            "playable": not hp.problems}  # fmt: skip
 
 
 def document(cat: Catalogue | None = None) -> dict[str, Any]:
