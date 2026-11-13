@@ -186,6 +186,9 @@ class Sim:
         self.block = flow.workflow.start_block if flow.workflow else ""
         self.held = False
         self.expect_map_change = False
+        # an item warp by FUNCTION is running its body (Amendment C): its presses ARE the exit's
+        # action, so they never move the character themselves; the exit's arrival does, once
+        self.in_exit_function = False
         # pre-empts waiting: (class, safety lead, rank, seq, key) -- sorted, so FIFO by seq only
         # between events of equal rank (#13)
         self.queue: list[tuple[int, int, int, int, str]] = []
@@ -342,9 +345,10 @@ class Sim:
                 expected = ("respawn", "escape", "use_item", fn.PRESS)  # a press may be a wing
                 cause = "expected" if a.block in expected else "action"
                 effects = dict(plan.effects)
-                if a.block in ("respawn",) or (
-                    a.block in ("use_item", fn.PRESS) and self._is_wing(a)
-                ):
+                wing = a.block in ("use_item", fn.PRESS) and self._is_wing(a)
+                if a.block == fn.PRESS and self.in_exit_function:
+                    wing = False  # the exit it belongs to arrives (_exit), not the press
+                if a.block in ("respawn",) or wing:
                     if self.save_point and "map" not in effects:
                         effects["map"], effects["cell"] = self.save_point
                     effects.setdefault("is_dead", False)
@@ -475,8 +479,13 @@ class Sim:
         self.expect_map_change = True
         try:
             if x.kind == "item_warp" and x.proc is not None:
-                # an item warp by FUNCTION (Amendment C): its body runs (its presses are the wing)
-                yield from self._stmts(list(self.flow.procedures.get(x.proc, [])), owner)
+                # an item warp by FUNCTION (Amendment C): its body runs; its presses are the wing,
+                # and the arrival below is the one map change (never a second one by the press)
+                self.in_exit_function = True
+                try:
+                    yield from self._stmts(list(self.flow.procedures.get(x.proc, [])), owner)
+                finally:
+                    self.in_exit_function = False
             else:
                 plan = self.planner(a, self)
                 for _ in range(plan.ticks):

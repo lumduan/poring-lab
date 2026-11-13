@@ -355,27 +355,80 @@ def test_the_simulator_hunts_then_presses_the_wing_and_arrives_home() -> None:
     doc = trace.simulate(fixture(), None, trace.Scenario(encounters=True))
     assert doc["end"] == "home" and doc["final"]["block"] == "geffen"
     assert doc["transitions"][0]["kind"] == "item_warp" and doc["transitions"][0]["arrived"]
-    steps = [(s["kind"], s.get("key"), s.get("proc")) for s in doc["play"]][-3:]
-    assert steps == [("act", "F9", None), ("item", None, "butterfly_wing"), ("exit", None, None)]
+    # the press IS the exit: ONE item step (the press, its proc and key), then the exit
+    steps = [(s["kind"], s.get("key"), s.get("proc")) for s in doc["play"]][-2:]
+    assert steps == [("item", "F9", "butterfly_wing"), ("exit", None, None)]
+
+
+def test_an_item_warp_by_function_is_one_item_step_then_the_exit_in_time_order() -> None:
+    """The two-map starter (field's exit item_warp(using=butterfly_wing) -> town.spawn): the
+    press is the exit's item step, never an act + arrive of its own, and the play list never goes
+    back in time. runtime.Sim: the press inside the exit moves nothing; the exit arrives once."""
+    flow = ir.from_json((FIXTURES / "starter.json").read_text(encoding="utf-8"))
+    world = editor.sample_world(editor.maps_of(flow))
+    doc = trace.simulate(flow, world, trace.Scenario(horizon_s=60, encounters=True, seed=3))
+    play = doc["play"]
+    assert all(a["t0"] <= b["t0"] for a, b in zip(play, play[1:], strict=False))
+    assert not [s for s in play if s["kind"] == "arrive" and s.get("via") == "press_key"]
+    assert not [s for s in play if s.get("action") == "press_key"]
+    i = next(i for i, s in enumerate(play) if s["kind"] == "item")
+    item, exit_ = play[i], play[i + 1]
+    assert (item["proc"], item["key"], item["map"]) == ("butterfly_wing", "F9", "field_1")
+    assert item["t1"] == exit_["t0"]
+    assert item["t1"] > item["t0"]
+    assert (exit_["kind"], exit_["arrived"], exit_["to_map"]) == ("exit", True, "town_1")
+    sim = MapChanges(flow, world={"map": "field_1", "cell": (30, 30)},
+                     save_point=("town_1", (40, 40)))  # fmt: skip
+    sim.block = "field"
+    sim.run()
+    assert sim.changes[:1] == [("exit", "town_1")]  # once, by the exit; never by the press
+
+
+class MapChanges(Sim):
+    """runtime.Sim recording every map change with its cause."""
+
+    def __init__(self, *args: Any, **kw: Any) -> None:
+        super().__init__(*args, **kw)
+        self.changes: list[tuple[str, str]] = []
+
+    def _set(self, changes: dict[str, Any], cause: str) -> None:
+        if "map" in changes and changes["map"] != self.world.get("map"):
+            self.changes.append((cause, changes["map"]))
+        super()._set(changes, cause)
+
+
+def test_a_wing_press_outside_an_exit_keeps_its_own_map_change() -> None:
+    """call butterfly_wing in an event (the world rule's body) still lands on the save point."""
+    flow = ir.from_json((FIXTURES / "starter.json").read_text(encoding="utf-8"))
+    sim = Sim(flow, world={"map": "field_1"}, save_point=("town_1", (40, 40)))
+    gen = sim._stmts([ir.CallProc(proc="butterfly_wing")], "unexpected_map")
+    for _ in gen:
+        pass
+    assert (sim.world["map"], sim.world["cell"]) == ("town_1", (40, 40))
 
 
 # --- the world rule's body (14.3): call butterfly_wing lints like use_item(WING) -----------------
 def _rules(by_function: bool, assert_first: bool = True, then: str = "relocate") -> ir.Flow:
-    """starter_world_rules.json (rules.ts's output), its wing written as a FUNCTION when asked:
-    the field's home exit `item_warp(using=butterfly_wing)`, the unknown-map rule's body
-    `call butterfly_wing` in place of `use_item(WING)`."""
+    """starter_world_rules.json (rules.ts's output since 2026-11-13: the wing is a FUNCTION, the
+    field's home exit `item_warp(using=butterfly_wing)`, the unknown-map rule's body
+    `call butterfly_wing`), or, when not by_function, the same flow with the wing as the ITEM it
+    was before (`WING = item(9002)`: the exit's item, the rule's `use_item(WING)`)."""
     d = json.loads(RULES.read_text(encoding="utf-8"))
     h = d["handlers"][0]
     assert h["name"] == "unexpected_map" and h["priority"] == "critical"
     h["then"] = then
-    if by_function:
-        d["procedures"]["butterfly_wing"] = [press("F9")]
-        h["body"][1]["then"] = [{"kind": "call", "proc": "butterfly_wing"}]
-        field = d["workflow"]["blocks"][1]
-        exit_ = field["main"][-1]["exit"]
-        assert exit_["kind"] == "item_warp"
-        exit_["item"] = None
-        exit_["proc"] = "butterfly_wing"
+    field = d["workflow"]["blocks"][1]
+    exit_ = field["main"][-1]["exit"]
+    assert exit_["kind"] == "item_warp" and exit_["proc"] == "butterfly_wing"
+    assert h["body"][1]["then"] == [{"kind": "call", "proc": "butterfly_wing"}]
+    if not by_function:
+        d["variables"]["WING"] = {"kind": "lit", "value": {"kind": "item", "id": 9002}}
+        d["procedures"].pop("butterfly_wing")
+        exit_["proc"] = None
+        exit_["item"] = {"kind": "var", "name": "WING"}
+        h["body"][1]["then"] = [{"kind": "action", "block": "use_item", "concept": "item.use",
+                                 "params": {"item": {"kind": "var", "name": "WING"}},
+                                 "timeout_s": 10}]  # fmt: skip
     if not assert_first:
         d["workflow"]["blocks"][0]["main"].pop(0)
     return ir.validate(d)

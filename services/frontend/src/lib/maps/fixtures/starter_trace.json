@@ -1,114 +1,150 @@
 {
- "blocks": {
-  "field": {
-   "time_s": 29.9,
-   "visits": 2
-  },
-  "town": {
-   "time_s": 30.1,
-   "visits": 2
-  }
- },
  "end": "horizon",
- "events": [
-  {
-   "kind": "block",
-   "t": 15.0,
-   "what": "field"
-  },
-  {
-   "kind": "block",
-   "t": 39.8,
-   "what": "town"
-  },
-  {
-   "kind": "block",
-   "t": 54.8,
-   "what": "field"
-  },
-  {
-   "kind": "end",
-   "t": 60.0,
-   "what": "max_ticks"
-  }
- ],
- "events_capped": false,
+ "t_end_s": 60.0,
+ "start": {
+  "block": "town",
+  "entry": "spawn",
+  "map": "town_1",
+  "cell": [
+   40,
+   40
+  ]
+ },
  "final": {
   "block": "field",
+  "map": "field_1",
   "cell": [
    24,
    30
   ],
   "hp_percent": 100.0,
-  "map": "field_1",
   "weight_percent": 22.0
  },
- "input_batches_counted": 591,
+ "save_point": {
+  "map": "town_1",
+  "cell": [
+   40,
+   40
+  ]
+ },
  "nodes": {
-  "field.0": {
-   "first_t": 15.0,
+  "butterfly_wing.0": {
+   "runs": 1,
+   "total_s": 0.2,
+   "first_t": 38.8,
+   "last_t": 39.0,
    "last": "ok",
-   "last_t": 38.8,
    "outcomes": {
     "ok": 1
-   },
+   }
+  },
+  "field.0": {
    "runs": 1,
-   "total_s": 23.8
+   "total_s": 23.8,
+   "first_t": 15.0,
+   "last_t": 38.8,
+   "last": "ok",
+   "outcomes": {
+    "ok": 1
+   }
   },
   "field.0.body.0": {
+   "runs": 6,
+   "total_s": 27.8,
    "first_t": 15.0,
+   "last_t": 58.0,
    "last": "ok",
-   "last_t": 58.8,
    "outcomes": {
     "ok": 6
-   },
-   "runs": 6,
-   "total_s": 27.8
+   }
   },
   "field.1": {
+   "runs": 1,
+   "total_s": 0.2,
    "first_t": 38.8,
+   "last_t": 39.0,
    "last": "exit",
-   "last_t": 39.8,
    "outcomes": {
     "exit": 1
-   },
-   "runs": 1,
-   "total_s": 1.0
+   }
   },
   "town.0": {
+   "runs": 2,
+   "total_s": 8.2,
    "first_t": 0.0,
+   "last_t": 43.1,
    "last": "ok",
-   "last_t": 43.9,
    "outcomes": {
     "ok": 2
-   },
-   "runs": 2,
-   "total_s": 8.2
+   }
   },
   "town.1": {
+   "runs": 2,
+   "total_s": 17.8,
    "first_t": 4.1,
+   "last_t": 52.0,
    "last": "ok",
-   "last_t": 52.8,
    "outcomes": {
     "ok": 2
-   },
-   "runs": 2,
-   "total_s": 17.8
+   }
   },
   "town.2": {
+   "runs": 2,
+   "total_s": 4.0,
    "first_t": 13.0,
+   "last_t": 54.0,
    "last": "exit",
-   "last_t": 54.8,
    "outcomes": {
     "exit": 2
-   },
-   "runs": 2,
-   "total_s": 4.0
+   }
   }
  },
- "notes": [],
+ "blocks": {
+  "field": {
+   "visits": 2,
+   "time_s": 29.9
+  },
+  "town": {
+   "visits": 2,
+   "time_s": 30.1
+  }
+ },
+ "transitions": [
+  {
+   "t": 15.0,
+   "kind": "npc_warp",
+   "from": "town",
+   "to": "field",
+   "entry": "arrival",
+   "arrived": true,
+   "map": "field_1",
+   "s": 2.0
+  },
+  {
+   "t": 39.0,
+   "kind": "item_warp",
+   "from": "field",
+   "to": "town",
+   "entry": "spawn",
+   "arrived": true,
+   "map": "town_1",
+   "s": 0.2
+  },
+  {
+   "t": 54.0,
+   "kind": "npc_warp",
+   "from": "town",
+   "to": "field",
+   "entry": "arrival",
+   "arrived": true,
+   "map": "field_1",
+   "s": 2.0
+  }
+ ],
  "paths": [
   {
+   "map": "town_1",
+   "node": "town.0",
    "cells": [
     [
      40,
@@ -175,13 +211,13 @@
      43
     ]
    ],
-   "count": 2,
    "estimated": false,
-   "map": "town_1",
-   "node": "town.0",
+   "count": 2,
    "t": 4.1
   },
   {
+   "map": "town_1",
+   "node": "town.1",
    "cells": [
     [
      55,
@@ -388,26 +424,26 @@
      71
     ]
    ],
-   "count": 2,
    "estimated": false,
-   "map": "town_1",
-   "node": "town.1",
+   "count": 2,
    "t": 13.0
   },
   {
+   "map": "town_1",
+   "node": "town: exit npc_warp",
    "cells": [
     [
      97,
      71
     ]
    ],
-   "count": 2,
    "estimated": false,
-   "map": "town_1",
-   "node": "town: exit npc_warp",
+   "count": 2,
    "t": 15.0
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      30,
@@ -458,13 +494,13 @@
      40
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
+   "count": 1,
    "t": 20.4
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      19,
@@ -495,13 +531,13 @@
      34
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
+   "count": 1,
    "t": 24.8
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      24,
@@ -524,13 +560,13 @@
      37
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
+   "count": 1,
    "t": 28.7
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      28,
@@ -573,13 +609,13 @@
      46
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
+   "count": 1,
    "t": 33.7
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      20,
@@ -626,13 +662,13 @@
      39
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
+   "count": 1,
    "t": 38.8
   },
   {
+   "map": "field_1",
+   "node": "field.0.body.0",
    "cells": [
     [
      30,
@@ -663,16 +699,49 @@
      30
     ]
    ],
-   "count": 1,
    "estimated": false,
-   "map": "field_1",
-   "node": "field.0.body.0",
-   "t": 58.8
+   "count": 1,
+   "t": 58.0
   }
  ],
+ "events": [
+  {
+   "t": 15.0,
+   "kind": "block",
+   "what": "field"
+  },
+  {
+   "t": 39.0,
+   "kind": "block",
+   "what": "town"
+  },
+  {
+   "t": 54.0,
+   "kind": "block",
+   "what": "field"
+  },
+  {
+   "t": 60.0,
+   "kind": "end",
+   "what": "max_ticks"
+  }
+ ],
+ "events_capped": false,
+ "input_batches_counted": 590,
+ "where": {
+  "count": 0,
+  "budget": 12,
+  "over": false,
+  "reads": []
+ },
+ "notes": [],
  "play": [
   {
    "block": "town",
+   "map": "town_1",
+   "kind": "walk",
+   "t0": 0.0,
+   "t1": 2.44,
    "cells": [
     [
      40,
@@ -740,31 +809,31 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "town_1",
    "node": "town.0",
-   "outcome": "ok",
    "purpose": "npc",
-   "t0": 0.0,
-   "t1": 2.44
+   "outcome": "ok"
   },
   {
+   "block": "town",
+   "map": "town_1",
+   "node": "town.0",
    "action": "set_save_point",
+   "outcome": "ok",
+   "kind": "talk",
+   "t0": 2.44,
+   "t1": 4.1,
+   "npc": "n_kafra",
    "at": [
     56,
     44
-   ],
-   "block": "town",
-   "kind": "talk",
-   "map": "town_1",
-   "node": "town.0",
-   "npc": "n_kafra",
-   "outcome": "ok",
-   "t0": 2.44,
-   "t1": 4.1
+   ]
   },
   {
    "block": "town",
+   "map": "town_1",
+   "kind": "walk",
+   "t0": 4.1,
+   "t1": 12.84,
    "cells": [
     [
      55,
@@ -972,55 +1041,55 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "town_1",
    "node": "town.1",
-   "outcome": "ok",
    "purpose": "walk",
-   "t0": 4.1,
-   "t1": 12.84
+   "outcome": "ok"
   },
   {
+   "block": "town",
+   "map": "town_1",
+   "node": "town.2",
    "action": "take_exit npc_warp",
+   "outcome": "ok",
+   "kind": "talk",
+   "t0": 13.0,
+   "t1": 15.0,
+   "npc": "n_warper",
    "at": [
     98,
     72
    ],
-   "block": "town",
-   "kind": "talk",
-   "map": "town_1",
-   "node": "town.2",
-   "npc": "n_warper",
    "options": [
     "o_to_field"
-   ],
-   "outcome": "ok",
-   "t0": 13.0,
-   "t1": 15.0
+   ]
   },
   {
-   "action": "take_exit npc_warp",
-   "arrived": true,
    "block": "town",
+   "map": "town_1",
+   "node": "town.2",
+   "action": "take_exit npc_warp",
+   "outcome": "ok",
+   "kind": "exit",
+   "t0": 15.0,
+   "t1": 15.0,
+   "exit": "npc_warp",
+   "from_block": "town",
+   "to_block": "field",
+   "to_entry": "arrival",
+   "to_map": "field_1",
    "cell": [
     30,
     30
    ],
-   "exit": "npc_warp",
-   "from_block": "town",
-   "kind": "exit",
-   "map": "town_1",
-   "node": "town.2",
-   "outcome": "ok",
-   "t0": 15.0,
-   "t1": 15.0,
-   "to_block": "field",
-   "to_entry": "arrival",
-   "to_map": "field_1",
+   "arrived": true,
    "warp": null
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 15.0,
+   "t1": 17.27,
    "cells": [
     [
      30,
@@ -1072,33 +1141,33 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 15.0,
-   "t1": 17.27
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 17.27,
+   "t1": 20.4,
+   "seen_t": 15.0,
+   "mob": 9101,
    "at": [
     18,
     41
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9101,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 15.0,
-   "t0": 17.27,
-   "t1": 20.4
+   "loot": true
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 20.4,
+   "t1": 21.61,
    "cells": [
     [
      19,
@@ -1130,33 +1199,33 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 20.4,
-   "t1": 21.61
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 21.61,
+   "t1": 24.8,
+   "seen_t": 20.4,
+   "mob": 9102,
    "at": [
     25,
     33
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9102,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 20.4,
-   "t0": 21.61,
-   "t1": 24.8
+   "loot": true
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 24.8,
+   "t1": 25.59,
    "cells": [
     [
      24,
@@ -1180,33 +1249,33 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 24.8,
-   "t1": 25.59
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 25.59,
+   "t1": 28.7,
+   "seen_t": 24.8,
+   "mob": 9101,
    "at": [
     29,
     38
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9101,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 24.8,
-   "t0": 25.59,
-   "t1": 28.7
+   "loot": true
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 28.7,
+   "t1": 30.55,
    "cells": [
     [
      28,
@@ -1250,33 +1319,33 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 28.7,
-   "t1": 30.55
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 30.55,
+   "t1": 33.7,
+   "seen_t": 28.7,
+   "mob": 9105,
    "at": [
     19,
     47
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9105,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 28.7,
-   "t0": 30.55,
-   "t1": 33.7
+   "loot": true
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 33.7,
+   "t1": 35.63,
    "cells": [
     [
      20,
@@ -1324,66 +1393,68 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 33.7,
-   "t1": 35.63
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 35.63,
+   "t1": 38.8,
+   "seen_t": 33.7,
+   "mob": 9102,
    "at": [
     9,
     38
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9102,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 33.7,
-   "t0": 35.63,
-   "t1": 38.8
+   "loot": true
   },
   {
-   "action": "take_exit item_warp",
    "block": "field",
-   "item": 9002,
-   "item_kind": "butterfly_wing",
-   "kind": "item",
    "map": "field_1",
    "node": "field.1",
+   "action": "take_exit item_warp",
    "outcome": "ok",
+   "kind": "item",
    "t0": 38.8,
-   "t1": 39.8
+   "t1": 39.0,
+   "item": null,
+   "item_kind": null,
+   "proc": "butterfly_wing",
+   "key": "F9"
   },
   {
-   "action": "take_exit item_warp",
-   "arrived": true,
    "block": "field",
+   "map": "field_1",
+   "node": "field.1",
+   "action": "take_exit item_warp",
+   "outcome": "ok",
+   "kind": "exit",
+   "t0": 39.0,
+   "t1": 39.0,
+   "exit": "item_warp",
+   "from_block": "field",
+   "to_block": "town",
+   "to_entry": "spawn",
+   "to_map": "town_1",
    "cell": [
     40,
     40
    ],
-   "exit": "item_warp",
-   "from_block": "field",
-   "kind": "exit",
-   "map": "field_1",
-   "node": "field.1",
-   "outcome": "ok",
-   "t0": 39.8,
-   "t1": 39.8,
-   "to_block": "town",
-   "to_entry": "spawn",
-   "to_map": "town_1",
+   "arrived": true,
    "warp": null
   },
   {
    "block": "town",
+   "map": "town_1",
+   "kind": "walk",
+   "t0": 39.0,
+   "t1": 41.44,
    "cells": [
     [
      40,
@@ -1451,31 +1522,31 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "town_1",
    "node": "town.0",
-   "outcome": "ok",
    "purpose": "npc",
-   "t0": 39.8,
-   "t1": 42.24
+   "outcome": "ok"
   },
   {
+   "block": "town",
+   "map": "town_1",
+   "node": "town.0",
    "action": "set_save_point",
+   "outcome": "ok",
+   "kind": "talk",
+   "t0": 41.44,
+   "t1": 43.1,
+   "npc": "n_kafra",
    "at": [
     56,
     44
-   ],
-   "block": "town",
-   "kind": "talk",
-   "map": "town_1",
-   "node": "town.0",
-   "npc": "n_kafra",
-   "outcome": "ok",
-   "t0": 42.24,
-   "t1": 43.9
+   ]
   },
   {
    "block": "town",
+   "map": "town_1",
+   "kind": "walk",
+   "t0": 43.1,
+   "t1": 51.84,
    "cells": [
     [
      55,
@@ -1683,55 +1754,55 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "town_1",
    "node": "town.1",
-   "outcome": "ok",
    "purpose": "walk",
-   "t0": 43.9,
-   "t1": 52.64
+   "outcome": "ok"
   },
   {
+   "block": "town",
+   "map": "town_1",
+   "node": "town.2",
    "action": "take_exit npc_warp",
+   "outcome": "ok",
+   "kind": "talk",
+   "t0": 52.0,
+   "t1": 54.0,
+   "npc": "n_warper",
    "at": [
     98,
     72
    ],
-   "block": "town",
-   "kind": "talk",
-   "map": "town_1",
-   "node": "town.2",
-   "npc": "n_warper",
    "options": [
     "o_to_field"
-   ],
-   "outcome": "ok",
-   "t0": 52.8,
-   "t1": 54.8
+   ]
   },
   {
-   "action": "take_exit npc_warp",
-   "arrived": true,
    "block": "town",
+   "map": "town_1",
+   "node": "town.2",
+   "action": "take_exit npc_warp",
+   "outcome": "ok",
+   "kind": "exit",
+   "t0": 54.0,
+   "t1": 54.0,
+   "exit": "npc_warp",
+   "from_block": "town",
+   "to_block": "field",
+   "to_entry": "arrival",
+   "to_map": "field_1",
    "cell": [
     30,
     30
    ],
-   "exit": "npc_warp",
-   "from_block": "town",
-   "kind": "exit",
-   "map": "town_1",
-   "node": "town.2",
-   "outcome": "ok",
-   "t0": 54.8,
-   "t1": 54.8,
-   "to_block": "field",
-   "to_entry": "arrival",
-   "to_map": "field_1",
+   "arrived": true,
    "warp": null
   },
   {
    "block": "field",
+   "map": "field_1",
+   "kind": "walk",
+   "t0": 54.0,
+   "t1": 54.9,
    "cells": [
     [
      30,
@@ -1763,108 +1834,49 @@
     ]
    ],
    "estimated": false,
-   "kind": "walk",
-   "map": "field_1",
    "node": "field.0.body.0",
-   "outcome": "ok",
    "purpose": "engage",
-   "t0": 54.8,
-   "t1": 55.7
+   "outcome": "ok"
   },
   {
+   "block": "field",
+   "map": "field_1",
+   "node": "field.0.body.0",
    "action": "attack_nearest",
+   "outcome": "ok",
+   "kind": "fight",
+   "t0": 54.9,
+   "t1": 58.0,
+   "seen_t": 54.0,
+   "mob": 9101,
    "at": [
     23,
     30
    ],
-   "block": "field",
-   "kind": "fight",
-   "loot": true,
-   "map": "field_1",
-   "mob": 9101,
-   "node": "field.0.body.0",
-   "outcome": "ok",
-   "seen_t": 54.8,
-   "t0": 55.7,
-   "t1": 58.8
+   "loot": true
   }
  ],
  "play_capped": false,
- "save_point": {
-  "cell": [
-   40,
-   40
-  ],
-  "map": "town_1"
- },
  "scenario": {
-  "attack_s": 3.0,
-  "encounters": true,
-  "horizon_s": 60.0,
-  "hp_per_attack": 0.0,
-  "hp_percent": 100.0,
-  "seed": 3,
-  "single_block": false,
-  "sp_percent": 100.0,
   "start_block": null,
   "start_entry": null,
-  "timeline": [],
+  "single_block": false,
+  "horizon_s": 60.0,
+  "hp_percent": 100.0,
+  "sp_percent": 100.0,
+  "weight_percent": 10.0,
   "weight_per_attack": 2.0,
-  "weight_percent": 10.0
- },
- "start": {
-  "block": "town",
-  "cell": [
-   40,
-   40
-  ],
-  "entry": "spawn",
-  "map": "town_1"
- },
- "t_end_s": 60.0,
- "transitions": [
-  {
-   "arrived": true,
-   "entry": "arrival",
-   "from": "town",
-   "kind": "npc_warp",
-   "map": "field_1",
-   "s": 2.0,
-   "t": 15.0,
-   "to": "field"
-  },
-  {
-   "arrived": true,
-   "entry": "spawn",
-   "from": "field",
-   "kind": "item_warp",
-   "map": "town_1",
-   "s": 1.0,
-   "t": 39.8,
-   "to": "town"
-  },
-  {
-   "arrived": true,
-   "entry": "arrival",
-   "from": "town",
-   "kind": "npc_warp",
-   "map": "field_1",
-   "s": 2.0,
-   "t": 54.8,
-   "to": "field"
-  }
- ],
- "where": {
-  "budget": 12,
-  "count": 0,
-  "over": false,
-  "reads": []
+  "hp_per_attack": 0.0,
+  "attack_s": 3.0,
+  "timeline": [],
+  "encounters": true,
+  "seed": 3
  },
  "world": {
+  "server": "sample",
   "maps": [
    "field_1",
    "town_1"
-  ],
-  "server": "sample"
+  ]
  }
 }
