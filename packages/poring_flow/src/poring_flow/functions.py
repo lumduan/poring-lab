@@ -9,7 +9,10 @@ the `press_key` block. Three things use them:
   home). Its keys are WING KEYS: a press of one, anywhere in the flow, counts as that Butterfly
   Wing (the save-point rule, "then must be relocate or stop", a map change in a map block's main);
 - the `dungeon_hunt` block: the runner (scripts/dungeon_hunt.py) as one block, whose four ROLE
-  parameters each name a function of exactly one `press_key` (the runner presses one key a role);
+  parameters each name a function of exactly one `press_key` (the runner presses one key a role),
+  and its optional fifth, `home` (Batt 2026-11-13, the one box: the Butterfly Wing the runner
+  itself flies home on). The home role's function is a Butterfly Wing function too: its key is a
+  WING KEY, as an item warp's;
 - `call <function>` anywhere a block may run (an event's body: the world rule's
   `call butterfly_wing`).
 
@@ -36,11 +39,18 @@ RUNNER_MAPS = frozenset({"xmas_dun02"})
 # dungeon_hunt's ROLE parameters -> the runner's key setting each one is (scripts/flow_config.py
 # FIELDS; scripts/flow_run.py FLOWS' defaults: heal_key F1, fly_key F8, knife_key F4, dagger_key F5)
 ROLES = {"heal": "heal_key", "fly": "fly_key", "knife_on": "knife_key", "knife_back": "dagger_key"}
+# The OPTIONAL fifth role (Batt 2026-11-13 ~21:4x, the one box "START > xmas_dun02"): the function
+# the runner presses to fly HOME on a Butterfly Wing (the bag half full, or Stop: its settings).
+# Absent: the map's item warp by function gives the home key (project.runner_keys), as before.
+HOME_ROLE = "home"
+HOME_FIELD = "home_key"
+ALL_ROLES = {**ROLES, HOME_ROLE: HOME_FIELD}
 ROLE_WORDS = {
     "heal": "the heal item's key",
     "fly": "the Fly Wing's key",
     "knife_on": "the Knife's key",
     "knife_back": "the dagger's key",
+    "home": "the Butterfly Wing's key, to fly home",
 }
 
 
@@ -86,11 +96,17 @@ def item_warps(flow: ir.Flow) -> Iterator[tuple[ir.MapBlock, str, ir.Exit]]:
 
 
 def wing_functions(flow: ir.Flow) -> list[str]:
-    """The functions an item_warp runs (`Exit.proc`), in the order the flow first names them."""
+    """The Butterfly Wing functions: the ones an item_warp runs (`Exit.proc`), in the order the flow
+    first names them, then dungeon_hunt's `home` role (the wing the runner flies home on)."""
     out: list[str] = []
     for _, _, x in item_warps(flow):
         if x.proc is not None and x.proc not in out:
             out.append(x.proc)
+    for site in ir.sites(flow):
+        for a in ir.actions_in(site.stmt):
+            name = role_functions(a).get(HOME_ROLE) if a.block == RUNNER_BLOCK else None
+            if name is not None and name not in out:
+                out.append(name)
     return out
 
 
@@ -198,10 +214,10 @@ def single_press(flow: ir.Flow, name: str) -> ir.ActionStmt | None:
 
 
 def role_functions(a: ir.ActionStmt) -> dict[str, str | None]:
-    """dungeon_hunt's role -> the function name it gives (a string literal), None when absent or
-    not a string literal (the linter names that)."""
+    """dungeon_hunt's role (the four and `home`) -> the function name it gives (a string literal),
+    None when absent or not a string literal (the linter names that)."""
     out: dict[str, str | None] = {}
-    for role in ROLES:
+    for role in ALL_ROLES:
         e = a.params.get(role)
         out[role] = e.value if isinstance(e, ir.Lit) and isinstance(e.value, str) else None
     return out

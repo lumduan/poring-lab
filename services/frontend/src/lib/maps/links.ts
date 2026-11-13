@@ -156,7 +156,7 @@ export function knownMaps(p: Project): string[] {
 
 /** One line about an arrival, for a port's caption and the tables. */
 export function arrivalText(a: Arrival): string {
-  if (a.kind === "start") return "the session enters here";
+  if (a.kind === "start") return a.from ? "the session enters here" : "START: the run starts here, where she stands";
   if (a.kind === "death_respawn") return "respawn";
   const how = a.kind === "walk_exit" ? "warp in" : a.kind === "npc_warp" ? "NPC warp in" : "wing arrival";
   return a.fromMap ? `${how} from ${a.fromMap}` : how;

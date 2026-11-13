@@ -357,9 +357,15 @@ function ownBlock(s: ActionStmt): WsBlock | null {
     const nm = keys.length ? litText(s.params.name) : "";
     if (nm !== null) return { type: "pl_choose_character", fields: { CHAR: nm }, extraState: actionRest(s) };
   }
-  if (s.block === "dungeon_hunt" && keys.join(",") === RUNNER_ROLES.map((r) => r.param).sort().join(",")) {
+  // the four roles, and the optional home (absent: an empty HOME field)
+  const required = RUNNER_ROLES.filter((r) => !r.optional).map((r) => r.param);
+  if (s.block === "dungeon_hunt" && required.every((k) => keys.includes(k)) && keys.every((k) => RUNNER_ROLES.some((r) => r.param === k))) {
     const fields: Record<string, string> = {};
     for (const r of RUNNER_ROLES) {
+      if (r.optional && !(r.param in s.params)) {
+        fields[r.field] = "";
+        continue;
+      }
       const v = litText(s.params[r.param]);
       if (v === null || !NAME.test(v)) return null;
       fields[r.field] = v;
@@ -863,7 +869,10 @@ class Reader {
         return { kind: "action", block: "press_key", params: { key: this.expr(b.inputs?.KEY?.block, where, "the key") }, ...this.rest(b, "press_key", where) };
       case "pl_dungeon_hunt": {
         const params: Record<string, Expr> = {};
-        for (const r of RUNNER_ROLES) params[r.param] = { kind: "lit", value: this.name(b, r.field, where) };
+        for (const r of RUNNER_ROLES) {
+          if (r.optional && this.field(b, r.field).trim() === "") continue; // no home role
+          params[r.param] = { kind: "lit", value: this.name(b, r.field, where) };
+        }
         return { kind: "action", block: "dungeon_hunt", params, ...this.rest(b, "dungeon_hunt", where) };
       }
       case "pl_stop":

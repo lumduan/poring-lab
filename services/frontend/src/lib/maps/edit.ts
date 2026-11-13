@@ -48,6 +48,18 @@ export function connectSession(p: Project, from: string, to: string, entry?: str
   return done(out);
 }
 
+/** Where the run starts (Batt 2026-11-13: "START > map xmas_dun02"): a MAP node -- the run starts
+ * where she stands on it, at its first entry, no session -- or a login node (the session path).
+ * The /maps START marker's connection dragged onto a map, or "Start here" in the inspector. */
+export function setStart(p: Project, id: string): Edit {
+  const n = nodeById(p, id);
+  if (!n) return fail(`there is no node ${id}`);
+  if (n.kind !== "map" && n.kind !== "login") return fail(`the run starts on a map node (where she stands) or on a login node, not on ${KIND_WORDS[n.kind]}`);
+  if (n.kind === "map" && !n.entries.length) return fail(`${n.id} has no entry: the run starts at a map's first entry`);
+  if (p.start === id) return done(p);
+  return done({ ...clone(p), start: id });
+}
+
 /** Delete a session connection. */
 export function removeSession(p: Project, from: string, to: string): Edit {
   if (!p.edges.some((e) => e.from === from && e.to === to)) return fail(`no connection ${from} → ${to}`);

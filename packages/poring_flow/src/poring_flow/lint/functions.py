@@ -4,15 +4,17 @@
 Layer 1:
 - `exit_function`: an item_warp's function (`Exit.proc`) is a defined procedure, never a
   variable, and its body presses a key (at least one press_key, through the procedures it calls);
-- `hunt_function`: each of dungeon_hunt's four ROLE parameters (heal, fly, knife_on, knife_back)
-  is a string literal naming a defined procedure whose body is EXACTLY ONE press_key statement, or
-  (the project model) one call, with literal arguments, of such a function (`resolve_key`: the
-  runner presses one key for each role);
+- `hunt_function`: each of dungeon_hunt's four ROLE parameters (heal, fly, knife_on, knife_back),
+  and its optional fifth `home` (the Butterfly Wing the runner flies home on; Batt 2026-11-13, the
+  one box), is a string literal naming a defined procedure whose body is EXACTLY ONE press_key
+  statement, or (the project model) one call, with literal arguments, of such a function
+  (`resolve_key`: the runner presses one key for each role);
 - `key_argument` (the project model): a function whose press_key presses its PARAMETER is given
   a literal hotbar key at every call (or the parameter's default is one);
-- `hotbar_keys`: dungeon_hunt's roles press four DIFFERENT keys, and none is a key the flow's
-  Butterfly Wing function presses (scripts/flow_config.py refuses two settings on one key, and a
-  Fly Wing press on the wing's slot would send her home).
+- `hotbar_keys`: dungeon_hunt's roles press DIFFERENT keys (four, five with `home`), and none of
+  the four is a key the flow's Butterfly Wing function presses (scripts/flow_config.py refuses two
+  settings on one key, and a Fly Wing press on the wing's slot would send her home). The `home`
+  role's function IS a Butterfly Wing function (`functions.wing_functions`).
 Layer 2:
 - `runner_map`: dungeon_hunt runs in a map block's own steps, on a map that has a runner
   (`functions.RUNNER_MAPS`: scripts/flow_run.py FLOWS' maps).
@@ -77,7 +79,7 @@ def check(ctx: Ctx) -> None:
 
 def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, list[str]]) -> None:
     flow = ctx.flow
-    keys: dict[str, str] = {}  # key -> the first role that presses it
+    resolved: dict[str, str] = {}  # role -> the hotbar key its function presses
     for role, name in fn.role_functions(a).items():
         what = f"dungeon_hunt's {role} ({fn.ROLE_WORDS[role]})"
         if role not in a.params:
@@ -108,6 +110,10 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
             continue
         if key not in fn.hotbar_keys():
             continue  # param_option / key_argument name a key that is not a hotbar key
+        resolved[role] = key
+    home_key = resolved.get(fn.HOME_ROLE)
+    keys: dict[str, str] = {}  # key -> the first role that presses it
+    for role, key in resolved.items():
         if key in keys:
             ctx.add(
                 "hotbar_keys",
@@ -119,14 +125,15 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
             )
         else:
             keys[key] = role
-        if key in wings:
+        # the home role IS the wing; a role on the home role's key is the clash above, once
+        if role != fn.HOME_ROLE and key in wings and key != home_key:
             ctx.add(
                 "hotbar_keys",
                 "error",
                 1,
                 site.path,
-                f"{what} presses {key}, the key {wings[key][0]} uses as the Butterfly Wing home: "
-                "each role needs its own key",
+                f"dungeon_hunt's {role} ({fn.ROLE_WORDS[role]}) presses {key}, the key "
+                f"{wings[key][0]} uses as the Butterfly Wing home: each role needs its own key",
             )
     b = site.block
     maps = ", ".join(sorted(fn.RUNNER_MAPS))

@@ -8,6 +8,11 @@
 // the Python view and the simulator; this file is the browser's copy of the JSON's shape and the
 // PURE helpers both pages share: names and overrides, tab names, the Run keys, the ready-made
 // projects. The statements and expressions are ir.ts's (IR 2's, with call arguments and return).
+//
+// THE START (Batt 2026-11-13 ~21:4x: "START > map xmas_dun02, ONE box is enough; login and choosing
+// the character come later"): `start` is a login node (the session path, by edges) or a MAP node --
+// the run starts where she stands on it (a person put her there), at its first entry; login and
+// character nodes are then optional and `edges` may be empty.
 import type { ActionStmt, CellRef, Entry, Expr, Handler, Lit, MapRef, MobRef, Stmt, Target, ZonesRef } from "./ir.ts";
 import { NAME, RUNTIME_DEFAULT_S, WHERE_BUDGET_DEFAULT } from "./ir.ts";
 
@@ -38,7 +43,8 @@ export type MapNode = NodeBase & {
 };
 export type GlobalNode = NodeBase & { kind: "global" };
 export type PNode = LoginNode | CharacterNode | MapNode | GlobalNode;
-/** The session path: login -> character -> the start map (its entry). Map -> map links are exits. */
+/** The session path: login -> character -> the start map (its entry). Map -> map links are exits.
+ * A project that starts on a map node needs none. */
 export type Edge = { from: string; to: string; entry?: string };
 export type Project = {
   format: typeof PROJECT_FORMAT;
@@ -141,6 +147,8 @@ export const RUNNER_ROLE_KEYS = [
   { param: "knife_on", key: "knife_key", words: "Knife on" },
   { param: "knife_back", key: "dagger_key", words: "Knife back" },
 ] as const;
+/** The runner block's OPTIONAL fifth role (the one box): the Butterfly Wing it flies home on. */
+export const HOME_ROLE = "home";
 const MAX_DEPTH = 6;
 
 /** Every statement of a body, nested ones too. */
@@ -172,8 +180,12 @@ export function runnerBlockOn(n: PNode | undefined): ActionStmt | null {
 /** The first map node holding a runner block. */
 export const runnerNode = (p: Project): MapNode | undefined => mapNodes(p).find((n) => runnerBlockOn(n) !== null);
 
-/** The function the node's item warp calls (its way home), else null. */
+/** The node's way home: the runner block's `home` role first (the runner flies home itself on that
+ * Butterfly Wing), else the function its item warp calls; null when neither names one. */
 export function homeFunctionOn(n: PNode): string | null {
+  const hunt = runnerBlockOn(n);
+  const role = hunt?.params[HOME_ROLE];
+  if (role && role.kind === "lit" && typeof role.value === "string") return role.value;
   for (const s of nodeStmts(n)) if (s.kind === "take_exit" && s.exit.kind === "item_warp" && s.exit.proc) return s.exit.proc;
   return null;
 }
@@ -233,7 +245,7 @@ export function runnerKeysOn(p: Project, nodeId: string): KeysResult {
     take(r.key, v && v.kind === "lit" && typeof v.value === "string" ? v.value : null, r.words);
   }
   const home = homeFunctionOn(n);
-  if (!home) problems.push('the way home: an "item warp: call ..." exit (the Butterfly Wing\'s function) is missing on this map');
+  if (!home) problems.push('the way home: the runner block\'s "home (Butterfly Wing): call ..." is empty and the map has no "item warp: call ..." exit');
   else take("home_key", home, "the way home (Butterfly Wing)");
   if (problems.length) return { ok: false, problems };
   return { ok: true, keys: keys as RunnerKeys, from: from as KeySource };
@@ -273,47 +285,29 @@ const GEFFEN_SAVE: CellRef = { kind: "cell", map: "geffen", x: 119, y: 40 };
 export const SAVE_NOTE = "the world rule: the save point (where a Butterfly Wing and a death land)";
 export const XMAS_ZONES_SHA = "89ea7a9c98d5d62b869a99189119548ea114868566bd293d43d46e3f24ebe345";
 
-function hpLow(): Def {
-  return def("hp_low", [call("heal")], {
-    on: {
-      when: { kind: "cmp", op: "<", left: { kind: "sense", sensor: "hp_percent", args: {} }, right: lit(30) },
-      until: null,
-      rearm: { kind: "cmp", op: ">", left: { kind: "sense", sensor: "hp_percent", args: {} }, right: lit(50) }, // a one-shot event re-arms (IR 2's rule)
-      priority: "survival",
-      rank: null,
-      mode: "insert",
-      escalate: null,
-      max_insert_fails: 3,
-      cooldown_s: 0,
-      max_per_min: null,
-      max_fires_per_10min: 10,
-      max_per_run: null,
-      then: "resume",
-    },
-  });
-}
-
-/** The Rogue's project: login -> character -> xmas_dun02 (hunt with the runner, the wing home to
- * Geffen); Global holds every key as a function and an hp_low event a map may override. */
+/** The Rogue's project, ONE BOX (Batt 2026-11-13 ~21:4x: "take every box out: START > map
+ * xmas_dun02, one box is enough; login and choosing the character come later; the user puts the
+ * character on xmas_dun02 themself"): the run starts where she stands on xmas_dun02. Its main: the
+ * save point (Geffen), hunt with the runner (everything the bot has trained), stop -- the runner
+ * itself flies home on the Butterfly Wing (the bag half full, or Stop: its settings). Its tab keys:
+ * every key a function (the names grow into stage 2's functions and events: live-blocks.md 2a). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "The Rogue on xmas_dun02: log in, enter the remembered character, hunt with the runner until the bag is half full, then a Butterfly Wing home to Geffen. Every key is a function in Global's keys tab.",
+    description: "One box: a person puts the Rogue on xmas_dun02; the run starts where she stands. She hunts with the runner, which flies home on the Butterfly Wing (bag half full, or Stop). Keys: tab keys.",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
     stop_when: null,
     assumes: [],
-    start: "login",
+    start: "xmas_dun02",
     nodes: [
-      { id: "login", kind: "login", pos: { x: 0, y: 0 }, tabs: [mainTab(loginMain())] },
-      { id: "character", kind: "character", pos: { x: 0, y: 120 }, tabs: [mainTab(characterMain())] },
       {
         id: "xmas_dun02",
         kind: "map",
-        pos: { x: 230, y: 0 },
+        pos: { x: 0, y: 0 },
         map: { kind: "map", map: "xmas_dun02" },
         entries: [{ name: "here", at: null, radius: 2 }],
         targets: [],
@@ -323,44 +317,14 @@ export function xmasProject(): Project {
         tabs: [
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
-            {
-              kind: "while",
-              cond: { kind: "cmp", op: "<", left: { kind: "sense", sensor: "weight_percent", args: {} }, right: lit(50) },
-              body: [
-                { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back") } },
-              ],
-              max_iter: null,
-              max_s: null,
-            },
-            { kind: "take_exit", exit: { kind: "item_warp", warp: null, npc: null, options: [], item: null, proc: "butterfly_wing", to_block: "geffen", to_entry: "save", timeout_s: 120 } },
+            { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("butterfly_wing") } },
+            { kind: "stop", reason: "home" },
           ]),
-        ],
-      },
-      {
-        id: "geffen",
-        kind: "map",
-        pos: { x: 460, y: 0 },
-        map: { kind: "map", map: "geffen" },
-        entries: [{ name: "save", at: { ...GEFFEN_SAVE }, radius: 2 }],
-        targets: [],
-        ignore: [],
-        resume_here: true,
-        tabs: [mainTab([{ kind: "stop", reason: "home" }])],
-      },
-      {
-        id: GLOBAL_ID,
-        kind: "global",
-        pos: { x: 230, y: 170 },
-        tabs: [
           tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("knife_on", [pressKey("F4")]), def("knife_back", [pressKey("F5")])]),
-          tab("safety", [hpLow()]),
         ],
       },
     ],
-    edges: [
-      { from: "login", to: "character" },
-      { from: "character", to: "xmas_dun02", entry: "here" },
-    ],
+    edges: [],
   };
 }
 
@@ -450,15 +414,25 @@ export function* nodeSites(n: PNode): Generator<{ path: string; tab: string; sit
 }
 
 /** THE SESSION PATH (section 2, Edge): from `start` along `edges` -- login -> character -> the
- * start map node and its entry. Each step is the node's ONE outgoing edge; `problems` says in words
+ * start map node and its entry; a MAP start is that map node at its first entry (no login, no
+ * character: `isMapStart`). Each step is the node's ONE outgoing edge; `problems` says in words
  * where the path breaks (Simulate starts at `start`, the save point rule reads the start map). */
 export type SessionPath = { login: LoginNode | null; character: CharacterNode | null; map: MapNode | null; entry: string | null; problems: string[] };
+
+/** The start when it is a MAP node (the run starts where she stands on it), else null. */
+export function startMap(p: Project): MapNode | null {
+  const n = nodeById(p, p.start);
+  return n?.kind === "map" ? n : null;
+}
+export const isMapStart = (p: Project): boolean => startMap(p) !== null;
 export function sessionPath(p: Project): SessionPath {
   const out: SessionPath = { login: null, character: null, map: null, entry: null, problems: [] };
   const next = (id: string) => p.edges.filter((e) => e.from === id);
   const start = nodeById(p, p.start);
   if (!start) return { ...out, problems: [`the start ${p.start} is not a node`] };
-  if (start.kind !== "login") return { ...out, problems: [`the start ${p.start} is not a login node`] };
+  // a MAP start (the one box): the map node itself at its first entry, no session
+  if (start.kind === "map") return { ...out, map: start, entry: start.entries[0]?.name ?? null, problems: start.entries.length ? [] : [`${start.id} has no entry`] };
+  if (start.kind !== "login") return { ...out, problems: [`the start ${p.start} is neither a login node nor a map node`] };
   out.login = start;
   const a = next(start.id);
   if (a.length !== 1) return { ...out, problems: [a.length ? "the login node has more than one connection" : "the login node is not connected to a character node"] };

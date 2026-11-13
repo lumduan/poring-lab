@@ -30,11 +30,16 @@ events too: virtual dispatch).
     a relocation, which ends everything), so resolving per node when compiling is the run's own
     resolution;
   * login and character nodes are not compiled: their session blocks are SIMULATED (section 5,
-    `simulate`), and Run starts on a map node (section 6).
+    `simulate`), and Run starts on a map node (section 6);
+  * the START (Batt 2026-11-13 ~21:4x, "START > map xmas_dun02, one box is enough; login and
+    choosing the character come later"): `start` is a login node (the session path, by edges), or
+    a MAP node: the run starts where she stands on it (a person put her there), at its first entry,
+    with no session; login and character nodes are then optional and `edges` may be empty.
   Findings and the trace come back in the project's terms: `node`, `tab`, `path`
   "<node>/<tab>/<site>" (`site` IR 2's path inside the tab: "main.2", "heal.0"); an internal name
   in a text reads as the user's.
-- `runner_keys(project, node_id)`: the Run button's five keys from that node's functions.
+- `runner_keys(project, node_id)`: the Run button's five keys from that node's functions (the
+  home key from dungeon_hunt's optional `home` role first, else the node's item warp by function).
 
 The Python view of a project (one file per tab) is `poring_flow.pyproject`.
 """
@@ -265,7 +270,8 @@ class Project(BaseModel):
     # (13.5's `run_until_stopped`); `compile_project` says so
     stop_when: ir.Expr | None = None
     assumes: list[ir.Expr] = Field(default=[], max_length=50)
-    start: str = Field(pattern=NODE_ID)  # where Simulate starts: a login node
+    # where Simulate and Run start: a login node (the session path), or a map node (she is on it)
+    start: str = Field(pattern=NODE_ID)
     nodes: list[Node] = Field(min_length=1, max_length=MAX_NODES)
     edges: list[Edge] = Field(default=[], max_length=MAX_NODES)
 
@@ -496,8 +502,9 @@ def shape(p: Project) -> list[Problem]:
     start = p.node(p.start)
     if start is None:
         bad(Where(site="start"), f"start names no node ({p.start})")
-    elif not isinstance(start, LoginNode):
-        bad(Where(site="start"), f"start is a login node, not the {start.kind} node {p.start}")
+    elif not isinstance(start, LoginNode | MapNode):
+        bad(Where(site="start"), f"start is a login node or a map node (she stands on it), not the "
+            f"{start.kind} node {p.start}")  # fmt: skip
     return out
 
 
@@ -599,9 +606,24 @@ class SessionPath:
     map: MapNode | None
     entry: str | None
 
+    @property
+    def map_start(self) -> bool:
+        """The run starts on the map node itself (she stands on it): no login, no character."""
+        return self.login is None and self.map is not None
+
+
+def start_map(p: Project) -> MapNode | None:
+    """The start when it is a MAP node (Batt 2026-11-13: "START > map xmas_dun02"), else None."""
+    n = p.node(p.start)
+    return n if isinstance(n, MapNode) else None
+
 
 def session_path(p: Project) -> SessionPath:
-    """start (a login node) -> its edge -> a character node -> its edge -> a map node (an entry)."""
+    """start (a login node) -> its edge -> a character node -> its edge -> a map node (an entry);
+    a MAP start is the map node itself at its first entry, with no session."""
+    m0 = start_map(p)
+    if m0 is not None:
+        return SessionPath(None, None, m0, m0.entries[0].name)
     nxt = {e.from_: e for e in p.edges}
     start = p.node(p.start)
     login = start if isinstance(start, LoginNode) else None
@@ -1293,10 +1315,18 @@ def _session_rules(p: Project, add: Any, envs: dict[str, str] | None) -> None:
             if any(t.defs or t.vars for t in n.tabs):
                 add("session_defs", "warning", Where(n.id), f"{n.id}'s functions and variables "
                     f"never run: a {n.kind} node runs only its main ({SIMULATED})")  # fmt: skip
-    if p.map_nodes and session_path(p).map is None:
+    sp = session_path(p)
+    if p.map_nodes and sp.map is None:
         add("session_path", "error", Where(site="edges"), "the session path is not complete: "
             "start (a login node) -> a character node -> a map node's entry, by edges (Simulate "
-            "from login follows it)")  # fmt: skip
+            "from login follows it); or start on a map node, where she stands")  # fmt: skip
+    if sp.map_start:
+        unused = [n.id for n in p.nodes if isinstance(n, LoginNode | CharacterNode)]
+        if unused or p.edges:
+            what = f"the nodes {', '.join(unused)}" if unused else "the edges"
+            add("session_path", "warning", Where(site="start"), f"start is the map node {p.start}: "
+                f"the run starts where she stands there; {what} are not played (a login start "
+                "plays the session)")  # fmt: skip
 
 
 def _login(p: Project, n: NodeT, a: ir.ActionStmt, add: Any, envs: dict[str, str] | None) -> None:
@@ -1535,9 +1565,10 @@ def simulate(
     compiled: Compiled | None = None,
 ) -> dict[str, Any]:
     """The trace (poring_flow.trace's document) of the project: from the login node (the session
-    mock, then the start map's entry through the edges), or from the scenario's map node. `block`
-    is a map node's id; a step's `node` is "<node>/<tab>/<site>". ValueError: nothing to run from
-    there (the route's invalid_scenario)."""
+    mock, then the start map's entry through the edges), from a MAP start (its first entry, no
+    session: `session` null), or from the scenario's map node. `block` is a map node's id; a step's
+    `node` is "<node>/<tab>/<site>". ValueError: nothing to run from there (the route's
+    invalid_scenario)."""
     from poring_flow.trace import Scenario
 
     cat = cat or _cat()
@@ -1548,7 +1579,9 @@ def simulate(
     t0 = 0.0
     run_sc = sc
     session: dict[str, Any] | None = None
-    if sc.start_block is None or isinstance(start_node, LoginNode):
+    if isinstance(start_node, MapNode):
+        pass  # a map start or the scenario's map node: no session, the map flow from its entry
+    elif sc.start_block is None or isinstance(start_node, LoginNode):
         sp = c.session or session_path(p)
         if sp.login is None or sp.character is None or sp.map is None or sp.entry is None:
             raise ValueError("no session path: start (a login node) -> a character node -> a map "
@@ -1558,7 +1591,7 @@ def simulate(
         run_sc = sc.model_copy(update={"start_block": sp.map.id, "start_entry": sp.entry})
         session = {"login": sp.login.id, "character": sp.character.id, "map": sp.map.id,
                    "entry": sp.entry, "length_s": t0}  # fmt: skip
-    elif not isinstance(start_node, MapNode):
+    else:
         raise ValueError(f"{sc.start_block} is no map node (Run and Simulate start on one)")
     if c.flow is None:
         raise ValueError("no map node: nothing to simulate after the session")
@@ -1616,9 +1649,10 @@ class RunnerKeys:
 
 def runner_keys(p: Project, node_id: str, compiled: Compiled | None = None) -> RunnerKeys:
     """The Run request's five hotbar keys, read from the functions the node's dungeon_hunt names
-    (heal, fly, knife_on, knife_back) and its item warp by function (home): resolved on THAT node
-    (its override first, then Global's), through calls with literal arguments, to exactly one
-    press_key each, every key a different hotbar key."""
+    (heal, fly, knife_on, knife_back, and home when it names one; Batt 2026-11-13, the one box),
+    else (home) the node's item warp by function: resolved on THAT node (its override first, then
+    Global's), through calls with literal arguments, to exactly one press_key each, every key a
+    different hotbar key."""
     from poring_flow import functions as fn
 
     node = p.node(node_id)
@@ -1648,9 +1682,15 @@ def runner_keys(p: Project, node_id: str, compiled: Compiled | None = None) -> R
                 problems.append(f"dungeon_hunt's {role} names no function")
             else:
                 names[field_name] = name
+        home = roles[0].get(fn.HOME_ROLE)
+        if home is not None:  # the runner flies home on this function's key
+            names[fn.HOME_FIELD] = home
     wings = [x.proc for b, _, x in fn.item_warps(flow) if b.name == node_id and x.proc]
-    if not wings:
-        problems.append(f"{node_id} has no item warp by function (the Butterfly Wing home)")
+    if fn.HOME_FIELD in names:
+        pass
+    elif not wings:
+        problems.append(f"{node_id} has no Butterfly Wing home: dungeon_hunt's home names no "
+                        "function and the map has no item warp by function")  # fmt: skip
     elif len(set(wings)) > 1:
         problems.append(f"{node_id}'s item warps run different functions: one home key")
     else:

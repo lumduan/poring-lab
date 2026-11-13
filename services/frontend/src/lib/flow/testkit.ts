@@ -4,11 +4,19 @@
 import { readFileSync } from "node:fs";
 
 import type { ActionStmt, Exit, Expr, Flow, Handler, MapBlock, MapEvent, Ref, Stmt } from "./ir.ts";
+import type { Project } from "./project.ts";
 
 export const FIXTURES = ["visit_and_choose", "farm_loop", "town_warp_farm"] as const;
 
 export function fixture(name: (typeof FIXTURES)[number]): Flow {
   return JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")) as Flow;
+}
+
+/** The LOGIN-START project the tests build on (fixtures/project_session.json, the engine's test
+ * fixture too): login -> character -> xmas_dun02 -> geffen, a Global with tabs keys and safety. It
+ * was the ready-made xmas_dun02 before the one box (Batt 2026-11-13 ~21:4x); a fresh copy a call. */
+export function sessionProject(): Project {
+  return JSON.parse(readFileSync(new URL("./fixtures/project_session.json", import.meta.url), "utf8")) as Project;
 }
 
 /** Every expression of a flow (statement fields, handler conditions, nested), for the text tests. */

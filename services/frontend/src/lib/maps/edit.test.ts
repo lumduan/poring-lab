@@ -6,7 +6,8 @@ import { test } from "node:test";
 
 import type { LintDoc } from "../flow/api.ts";
 import { def, globalOf, nodeById, pressKey, type Project, sampleProject, sessionPath, tab, xmasProject } from "../flow/project.ts";
-import { connectExit, connectSession, exitsInto, moveNodes, removeExit, removeNode, removeSession, renameNode, renameProblem, sessionLinkProblem, setZones, updateMapNode } from "./edit.ts";
+import { sessionProject } from "../flow/testkit.ts";
+import { connectExit, connectSession, exitsInto, moveNodes, removeExit, removeNode, removeSession, renameNode, renameProblem, sessionLinkProblem, setStart, setZones, updateMapNode } from "./edit.ts";
 import { exitRows, nodeLinks } from "./links.ts";
 import { nodeLint, nodeTitle, tabRows } from "./nodewords.ts";
 import { readRules, ruleMaps, setUnknownMap } from "./rules.ts";
@@ -30,6 +31,21 @@ test("the session path is ONE path: login -> character -> a map's entry, a new c
   assert.match(sessionPath(r).problems[0], /not connected to a map/);
   assert.equal(removeSession(r, "character", "field").ok, false);
   assert.deepEqual(p.edges, sampleProject().edges, "pure");
+});
+
+test("START: a map node (she stands on it) or a login node; never Global or a character node", () => {
+  const p = sessionProject();
+  const q = ok(setStart(p, "xmas_dun02"));
+  assert.equal(q.start, "xmas_dun02");
+  assert.equal(p.start, "login", "the old project is untouched");
+  assert.equal(sessionPath(q).map?.id, "xmas_dun02");
+  assert.equal(sessionPath(q).login, null);
+  assert.equal(ok(setStart(q, "login")).start, "login");
+  assert.match((setStart(p, "global") as { error: string }).error, /map node .* or on a login node, not on the Global node/);
+  assert.match((setStart(p, "character") as { error: string }).error, /not on the choose-character node/);
+  assert.match((setStart(p, "nowhere") as { error: string }).error, /no node nowhere/);
+  // a rename follows the start (the one box)
+  assert.equal(ok(renameNode(xmasProject(), "xmas_dun02", "dun")).start, "dun");
 });
 
 test("an exit drawn onto another map is a take_exit with placeholders; deleting it removes its statement", () => {
@@ -112,7 +128,7 @@ test("a map node's own fields: checked, an entry renamed in place is followed", 
 });
 
 test("what a node says: its tabs and names, the overrides both ways, its lint", () => {
-  const p = xmasProject();
+  const p = sessionProject();
   const xm = nodeById(p, "xmas_dun02")!;
   xm.tabs.push(tab("hunt", [def("heal", [pressKey("F2")]), def("look", [{ kind: "stop", reason: "x" }], { params: [{ name: "far", default: { kind: "lit", value: 9 } }], varargs: "more" })], { WEIGHT: { kind: "lit", value: 50 } }));
   assert.equal(nodeTitle(xm), "xmas_dun02");
