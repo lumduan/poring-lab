@@ -1,13 +1,13 @@
 ---
 doc_type: plan
 hypothesis: null
-status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; NOT live-verified (Batt 11-12: no lab live test of player mode)
+status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; 9.46 (the map's name from the minimap) BUILT 2026-11-13, its pre-registered held-out bar PASSED; NOT live-verified as a run (Batt 11-12: no lab live test of player mode)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0023-learner-mode.md, ../adr/0025-run-records-sqlite.md, ../setup/new-lab-host.md, rogue-xmas02.md]
-next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.) The map's name is not read from the screen (9.45's gap): a person checks it before Run."
+next_action: "Batt's later steps: Kafra warps, NPC shops, selling. (Batt 2026-11-12, rogue-xmas02.md 4DF: no lab live test of player mode.) Since 9.46 the map's name is read from the minimap's picture: build its references on each host (OMP_NUM_THREADS=2 python3 scripts/minimap_id.py build --decode-mixcrypt) or a player start refuses."
 ---
 
 # Player mode: the hunting bot without GM commands
@@ -345,6 +345,9 @@ press_key("F8")`): /flows compiles the functions into five keys and sends them w
   would accept that cell too. The line's words say so ("IF she is on xmas_dun02: the map's name is
   not read from the screen"), and the checklist line asks the person to check the map. A map
   recogniser was NOT built (out of this task's scope).
+  ➡️ **SUPERSEDED the same evening by dungeon@9.46** ("The map's name from the minimap", below):
+  the map is read from the minimap's picture; the line ticks only on the run's map, and a player
+  start refuses another map (and one it cannot tell) before any input.
 - **The Run helper** (`flow_run.py`): action `check` -- refused while a run starts, runs or stops,
   or another runner / the night chain plays (the start's busy rule); one at a time; it builds the
   start's argv with "check" for "run" (`check_command`), runs it in its own process group, time-
@@ -402,7 +405,8 @@ press_key("F8")`): /flows compiles the functions into five keys and sends them w
   gitignored, never committed): every server map of the lab's pre-re map cache (1,296) -> its
   bitmap through resnametable -> rendered as the client draws it (the key out, box-scaled).
   2026-11-13 20:00: 668 pictures read, 599 maps with a picture drawn on >= 10 % of the square,
-  422 distinct pictures, 1 min 14 s. 629 of the archive's 731 minimap bitmaps (xmas_dun02's,
+  422 distinct pictures, 1 min 14 s (with every BLAS thread; 28 s and the same pictures with
+  `OMP_NUM_THREADS=2`, the way to run it on a host that plays). 629 of the archive's 731 minimap bitmaps (xmas_dun02's,
   orcsdun01's and gef_fild10's among them) are MIXCRYPT: they need `--decode-mixcrypt`, the lab's
   host-local study decoder (grf_read, never in the repo). Without it those maps have no reference
   and read "cannot tell".
@@ -412,7 +416,7 @@ press_key("F8")`): /flows compiles the functions into five keys and sends them w
 
 ### The development set (seen while designing; `docs/records/minimap-id-dev-20261113.json`)
 
-12 NAS sessions + today's 6 session pictures + the live frame: 88 frames. The true map is the
+12 NAS sessions + 7 pictures of today's 5 runs + the live frame: 88 frames. The true map is the
 session's packets' last map change (offline ground truth only; a frame 2 s before to 5 s after a
 change is not labelled: 3 here). Of the 85 labelled, 84 named right, 0 named wrong, 1 "cannot
 tell" (new_1-1: the lab client's picture of the training grounds is closer to the Thai archive's
@@ -425,7 +429,7 @@ frame and the 15:18 flowrun's end picture alike). Towns score lower: their NPC m
 picture. MATCH_MIN 0.60 sits over every wrong-picture score seen (<= 0.52) and under every
 dungeon / field score (>= 0.79); a town can be NAMED (a cross) but never TICKED.
 
-### PRE-REGISTERED (2026-11-13 20:05 ICT from `date`, before the held-out set is read)
+### PRE-REGISTERED (2026-11-13, commit 9c1a1ba1 at 20:04:47 ICT, before the held-out set is read)
 
 - **The held-out set:** `docs/records/minimap-id-heldout-20261113.json` (78 items, none in the
   development set): 24 xmas_dun02 recordings (11-05 .. 11-13; their prt_fild08 stand at the
@@ -448,6 +452,114 @@ dungeon / field score (>= 0.79); a town can be NAMED (a cross) but never TICKED.
   xmas_dun02 frames "cannot tell" (frames taken IN PLAY: fights, effects, windows; a standing
   start is the easy case, and the start reads frames for up to PLAYER_MAP_S), the runner REFUSES
   a start that cannot tell. Otherwise it warns in the run's log and goes on.
+
+### The result: PASS (scored once, 2026-11-13 20:04:55-20:12:12 ICT from `date`, 436 s)
+
+`minimap_id.py eval docs/records/minimap-id-heldout-20261113.json --expect xmas_dun02`, the 20:00
+references, the constants above unchanged: 1,024 frames (the demo sessions held more stand frames
+than the 2-per-shard recordings), 999 labelled (25 in a load window). Map read (columns, "?" =
+cannot tell) by the true map (rows):
+
+    true \ read  alberta gef_fild10 morocc orcsdun01 pay_fild07 prontera prt_fild08 xmas_dun02    ?
+    alberta           26          .      .         .          .        .          .          .    .
+    alberta_in         .          .      .         .          .        .          .          .   71
+    gef_fild10         .         46      .         .          .        .          .          .    .
+    morocc             .          .      9         .          .        .          .          .    .
+    new_1-2            .          .      .         .          .        .          .          .   13
+    orcsdun01          .          .      .        24          .        .          .          .    .
+    pay_fild07         .          .      .         .         32        .          .          .    .
+    prontera           .          .      .         .          .      289          .          .    .
+    prt_church         .          .      .         .          .        .          .          .  334
+    prt_fild08         .          .      .         .          .        .         35          .    .
+    xmas_dun02         .          .      .         .          .        .          .        120    .
+
+| Bar | Registered | Result | |
+|---|---|---|---|
+| B1 | 0 other frames ticked as xmas_dun02 | 0 of 879 | PASS |
+| B2 | >= 97 % of xmas_dun02 ticked, 0 crossed | 120 / 120 (100 %), 0 crossed, 0 "?" | PASS |
+| B3 | named wrong <= 1 %, never xmas_dun02 | 0 of 999 | PASS |
+| B4 | >= 90 % named right where a minimap is drawn | 581 / 594 (97.8 %) | PASS |
+| B5 | prt_church / alberta_in never named | 0 of 405 | PASS |
+
+- **The 13 not named in B4** are new_1-2 (the training grounds): the client draws its minimap
+  BLACK there (her arrow only; the Thai archive's `new_zone02` bitmap is blank, so it is no
+  reference). "Cannot tell" is the right answer.
+- **The scores:** xmas_dun02 0.756-0.889 (5th percentile 0.809, median 0.855; the next picture at
+  most 0.374); gef_fild10 0.85-0.89, prt_fild08 0.86-0.89, orcsdun01 0.79-0.84, alberta 0.78-0.82,
+  pay_fild07 0.77-0.83, morocc 0.59-0.62, prontera 0.52-0.60. The highest WRONG-picture score on
+  any labelled frame was 0.515 (prt_fild08's runner-up); on the no-minimap frames the best picture
+  reached 0.513 (prt_church's scene against `pvp_n_1-2`), held off by the margin rule. MATCH_MIN
+  (0.60) is 0.085 over both. No other map's frame had xmas_dun02 as its best or second picture.
+- **The 25 unlabelled frames** (inside a load window): 22 named the map before or after, 3 "?".
+- **The rows** (one per frame: the session, the true map, the read, scores, words), the dev
+  rows, the live check's output and the live frame: the NAS
+  `scratch-archive/2026-11-13/minimap-id/` (SHA256SUMS, README.txt).
+- **The runner's rule, as registered:** B2 passed with 0 % "cannot tell", so `PLAYER_MAP_UNREAD =
+  "refuse"`: a player start that cannot tell its map within `PLAYER_MAP_S` (3.0 s of frames)
+  refuses, as one that reads another map does.
+
+### The live case (read only, the lab's screen; pixels only, no input)
+
+She stands in Geffen at (119, 40) (19:02's position; the lab database said last_map geffen 119 40).
+- 19:39:17 ICT: one game-region frame grabbed (study): the minimap shows Geffen's picture.
+- **20:13:13.98-20:13:18.37 ICT (4.4 s), `dungeon_hunt.py check` with the flow's own argv**
+  (`flow_run.check_command`, the worktree, the 20:00 references): the map line is a red ✗,
+  `ok: false, refuses: true`, value "(119, 40)": "she is on geffen, not xmas_dun02 (read from the
+  minimap: 0.47; xmas_dun02 is not that picture): walk or warp her to xmas_dun02 first". Every
+  other line ✓ as at 18:23 (Thief8fce / rogue, chat closed, 825 / 2430 = 34 %, 10 Fly Wings on
+  F8, 10 heal items on F1, 3 Butterfly Wings on F9, one item on F4, F5 empty); the check's verdict
+  `ok: false, refuses: true`.
+- **20:13:26.34-20:13:27.85 ICT, the runner's own start function** `player_start_map` (its own
+  screen, no Agent, no session; `no_input_guard` on): "dungeon@9.46 refused: --player-mode: the
+  screen shows geffen, not xmas_dun02: walk or warp her there first (a person) [read from the
+  minimap: 0.47, the next map 0.15]".
+
+### Wired in (dungeon@9.46; `MAP_IDENTITY_VERSION = "9.46"`, `VERSION` stays dungeon@8.7)
+
+- **The check's map line** (`CHECK_IDS` "cell"; `start_check`): the map FIRST (`read_start_map`:
+  frames for up to `PLAYER_MAP_S` until one names a map; `player_map_verdict`), then her cell:
+  - ✓ only when the minimap is the run's map AND her cell passes `player_start_refused` (+ the
+    explore regions): "the minimap is xmas_dun02's (0.85; the next map 0.33); her cell (7, 21) is
+    on xmas_dun02's open ground, in reach of its search area";
+  - ✗ (`refuses: true`) on another map, before the cell rule: "she is on geffen, not xmas_dun02
+    (read from the minimap: ...): walk or warp her to xmas_dun02 first"; a cell off the grid is
+    the cell rule's ✗ as before;
+  - ? when it cannot tell: "the map is not read from the minimap: <why>: look at the game -- is
+    she on xmas_dun02? (her cell ... if she is) (the runner refuses a start that cannot tell)".
+  The value stays the cell. Without references: "? -- no minimap reference for xmas_dun02 (build
+  them: python3 scripts/minimap_id.py build)".
+- **The runner's player start** (`run()`, `player_start_map`): after the check's branch and BEFORE
+  the session folder and the session -- a screen of its own, no Agent -- it reads the map and
+  refuses with "dungeon@9.46 refused: --player-mode: the screen shows <map>, not <run map>: walk
+  or warp her there first (a person)", or, cannot tell, "... the screen does not show that she is
+  on <run map> (<why>) within 3.0 s: a person first". Missing references refuse the same way
+  (with the build command). `PLAYER_MAP_UNREAD = "warn"` would print a WARNING line instead (not
+  used). `run_start` records the read (`player_map`) and `fixes.player_map` = [MATCH_MIN,
+  NAME_MIN, MARGIN_MIN, PLAYER_MAP_S, PLAYER_MAP_UNREAD, "9.46"], player mode only.
+- The /flows checklist text says the map is read from the minimap (config.ts); the runner export
+  is regenerated (feature_version dungeon@9.46).
+- Tests: `test_minimap_id.py` (the reader on SYNTHETIC bitmaps: translucency, marks, the key
+  colour, copies, alike pictures, no picture, read_until, the scorer's labels), `test_live_check.py`
+  (the three map-line outcomes through a fake screen's pixels, no input), `test_player_mode.py`
+  (the start refuses another map and a start that cannot tell before any session or Agent; the
+  order in run(); the records).
+
+### What is left
+
+- **The references are per host and per client.** They are built from the Thai archive (the lab's
+  maps are byte-identical to kRO there); a client whose minimap bitmaps differ reads "cannot tell"
+  (or, if a different picture matches better, the other picture's map -- seen once, new_1-1's
+  frame matched `new_event` best in the development set). 629 of 731 bitmaps need the lab's study
+  decoder; a learner without it has references for the 102 plain ones only, so a player start on
+  an encrypted map refuses. A reference cut from the client's own frames (the median minimap of a
+  recorded stand) would close that; not built.
+- **Zoom:** only the whole-map view is modelled (the lab's). A zoomed-in minimap reads "cannot
+  tell" (a refusal at a player start): zoom out first.
+- **Towns are named, never ticked** (their NPC marks keep them at 0.47-0.62 < MATCH_MIN): a run
+  that starts IN a town would refuse. No such run exists.
+- The thresholds are constants, not Run settings (a person loosening them would loosen the
+  safety line); `PLAYER_MAP_S` could be one.
+- Maps without a minimap (indoor) always "cannot tell".
 
 ## Not built yet
 

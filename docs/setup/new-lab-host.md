@@ -658,6 +658,7 @@ are byte-identical to kRO there (docs/thai-data-experiment.md). Use your own cli
 | the chat window standard | `uv run python scripts/chat_window.py cut-tabs ...`, `cut-padlock ...`, then `read` / `ensure` (rathena-client.md, "The chat window standard") | `data/ui_anchors/` |
 | battle-log glyphs, per language | `scripts/battle_log.py formats-init en`, `clusters`, `cut`, `cut-names` | `data/ui_anchors/battle_log/<lang>/` |
 | minimap position digits | `scripts/selfpos_calibrate.py` (labelled by packet truth from recorded sessions) | `data/ui_anchors/minimap_digits.npz` |
+| minimap references (which map she is on; dungeon@9.46) | `OMP_NUM_THREADS=2 python3 scripts/minimap_id.py build --grf <GRF> --decode-mixcrypt` (every server map of the map cache; ~30 s; most minimap bitmaps are MIXCRYPT: without the study decoder those maps read "cannot tell") | `data/minimap_refs/refs.npz` |
 | hotbar stock digits | `scripts/hotbar_count.py cut --cal DIR` | `data/hotbar/digits.npz` |
 | HP percent glyphs, job identity references | `scripts/hp_percent.py fit FRAMES_DIR` then `prove FRAMES_DIR` (labelled by hp packets); `scripts/crusader.py --char <char> init --name <NAME>` (once), `cut-name`, `cut-job <JOB>`; add `--no-db` on a server with no DB of ours (section 11.1) | `data/crusader/`, `data/thief/` |
 
@@ -1027,6 +1028,9 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
     (and, since dungeon@9.45, the flow's five hotbar keys when its functions give them).
   - "Check the game" ticks the checklist from the screen (dungeon@9.45: `dungeon_hunt.py check`,
     read only); the map's name is not read, so check that she is on the map yourself.
+    ➡️ Since dungeon@9.46 the map's name is read from the minimap's picture, once its references
+    are built (the "minimap references" row of section 8's table); a player start refuses another
+    map, and a start that cannot tell.
 
 ## 12. Known differences of the Thai client
 

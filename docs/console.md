@@ -327,6 +327,13 @@ Amendment B); a not-adopted model is never offered.
   does not lock Run: its title says the runner will refuse. The map's NAME is not read from the
   screen: the cell line ticks her cell on the map's open ground, and you check the map. The
   version chip reads dungeon@9.45 since. Details: [planning/player-mode.md](planning/player-mode.md).
+  ➡️ **SUPERSEDED by dungeon@9.46 (the same evening):** the map's name IS read, from the minimap's
+  picture (`scripts/minimap_id.py`). The cell line ticks only when the minimap is the run's map,
+  is a red ✗ on another map ("she is on geffen, not xmas_dun02 (read from the minimap ...)"), and
+  a ? asking you when it cannot tell; the runner's player start refuses both before any input.
+  It needs the references built once per host (`OMP_NUM_THREADS=2 python3 scripts/minimap_id.py
+  build --decode-mixcrypt`); without them the line is a ? and a player start refuses. The version chip
+  reads dungeon@9.46.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

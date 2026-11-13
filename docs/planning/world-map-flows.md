@@ -566,6 +566,8 @@ the way home, the functions, the events.
 - The live ticks (dungeon@9.45, docs/planning/player-mode.md): the Run pane's checklist is ticked
   from the screen by `dungeon_hunt.py check` (no input). The map's NAME is not read from pixels: a
   cell of another map can pass as xmas_dun02's open ground (Geffen 119, 40 does).
+  ➡️ dungeon@9.46 (player-mode.md "The map's name from the minimap"): it is read from the
+  minimap's picture now; the line ticks only on the run's map and a player start refuses another.
 
 ### 15.6 For Batt to try
 
