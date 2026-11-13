@@ -17,6 +17,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
 > built. It starts the proven runner (`dungeon_hunt.py run --player-mode`, a command fixed in
 > `scripts/flow_run.py`) through a request file behind the Settings page's write rules. The blocks
 > the page shows are generated from that same command (`runner_flow_export.py`).
+> ➡️ **2026-11-13 ~22:3x (Batt: "build the player of blocks in the real game first"):** the real
+> executor's FIRST STAGE exists: the live block player (`scripts/flow_play.py`, Amendment E) plays a
+> PROJECT's map node through POST /flows/run/project. The runner's own Run path above is unchanged
+> until the browser switches to it.
 
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
@@ -2469,3 +2473,32 @@ the name semantics in section 3); what was decided while building it is recorded
   and `project_sample.json`, the Maps page's `lib/maps/fixtures/project_sample_trace.json`
   (`packages/poring_flow/tests/test_project.py`, `test_project_pyview.py`).
 
+
+## Amendment E (2026-11-13, Batt decided): the real executor's FIRST STAGE -- the live block player
+
+**Batt (2026-11-13 ~21:4x, translated; [live-blocks.md](../planning/live-blocks.md) section 0):**
+"Build the player of blocks in the real game first." This amendment ADDS to section 6 (Runtime),
+13.6 and 13.8 (MW3, "the real executor (F2 / MW2) replaces the fake environment"); nothing above
+is rewritten. The contract and the stages are live-blocks.md; what stage 1 built is its section 3.
+
+- **The executor is the engine's own tree runtime with a LIVE environment**
+  (`scripts/flow_play.py` `LivePlayer`, a subclass of `runtime.Sim`): the same scheduler, event
+  classes, inserts at safe points, pre-empts, atomic sections, functions with inputs and
+  relocation. `runtime.py` gained four seams that change nothing in the simulator (`_advance`,
+  `_waited`, `_guard`, the `Relocate` signal); the player puts the real clock, the pixel sensors and
+  ONE ro_agent Agent behind them.
+- **What may play live is written in ONE place** (`poring_flow/live.py` with blocks.yaml's `live:
+  true` per block and sensor; GET /flows/catalogue serves it as `live`). Everything else is refused
+  BEFORE ANY INPUT, named with the stage it is planned for. Stage 1: press_key, dungeon_hunt (the
+  runner IN-PROCESS: one process, one input writer, `dungeon_hunt.run(a, hook=..., session=...)`,
+  dungeon@9.48), assert_save_point; the sensors HP / SP / weight / the death dialog / the map's
+  NAME from the minimap; the control statements; an item warp by a function.
+- **The safety-critical three** (13.6.1) stay always on. Where a project does not write them, stage
+  1 plays them as the SAFE END (everything held released, the run ends, named); their bodies
+  (respawn, the escape, the /where read) play live in stage 2. While the hunt core runs the
+  runner's own survival plays; its tick hook is where stage 2 moves survival into the box's events.
+- **Relocation reads the map's NAME** (minimap_id.py: no /where typed); the player types no line,
+  ever (player mode).
+- **The run-start check** (section 5, runstart.py) gates it at POST /flows/run/project: 0 lint
+  errors, the live set, the verdict with one difference written down -- a `bindings` readiness
+  item on a hunt core is answered by the runner, which is that block's binding (`live.OWN_BINDING`).
