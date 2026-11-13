@@ -6,7 +6,10 @@ For the current map block B, in this order:
    2026-10-09, contradictions #15), state `built_in`;
 2. apply B's map events, at most one per key:
    - DISABLE k: k global and not safety-critical; removed;
-   - OVERRIDE k: k global and not safety-critical; replaced, all of it;
+   - OVERRIDE k: k global and not safety-critical; replaced, all of it. A STRICT override (the
+     project model: a map node's def of a safety-critical event's name) replaces a
+     safety-critical k too, under the "not weakened" rule a written global one follows
+     (lint/events.py);
    - EXTEND k: k global; an ordinary k runs the map steps, then the global body; a
      safety-critical k runs the global body, then the map steps (Batt, 2026-10-08); limits: the
      tighter of the two;
@@ -165,7 +168,7 @@ def merge(flow: Flow, block: MapBlock) -> Merged:
                 k, "disabled", g, g.name, max_per_run=g.max_per_run, built_in=k in builtin
             )
         elif isinstance(ev, Override):
-            if critical:
+            if critical and not ev.strict:
                 out.issues.append(
                     MergeIssue(
                         "safety_critical",

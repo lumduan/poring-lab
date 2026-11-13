@@ -81,6 +81,12 @@ def _safety_critical(ctx: Ctx, consts: Consts) -> None:
         if h.name in BUILT_IN:
             for text in weakened(ctx, consts, h, BUILT_IN[h.name]):
                 ctx.add("safety_critical", "error", 3, h.name, text)
+    for b in ctx.blocks:  # a map node's replacement (the project model's strict override)
+        for ev in b.events:
+            if isinstance(ev, ir.Override) and ev.strict and ev.event.name in BUILT_IN:
+                label = ir.event_label(ev, b)
+                for text in weakened(ctx, consts, ev.event, BUILT_IN[ev.event.name]):
+                    ctx.add("safety_critical", "error", 3, label, text)
 
 
 def weakened(ctx: Ctx, consts: Consts, h: ir.Handler, d: ir.Handler) -> list[str]:

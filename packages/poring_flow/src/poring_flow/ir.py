@@ -58,6 +58,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializationInfo,
     SerializerFunctionWrapHandler,
     ValidationError,
     model_serializer,
@@ -67,6 +68,16 @@ from pydantic import (
 from poring_skills.schema import CONCEPT_ID
 
 CFG = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+# The serialisation CONTEXT a project (format 3) dumps with: the fields IR 2 leaves out when empty
+# (CallProc.args / kwargs) stay in, as the project's JSON contract has them (project.py)
+PROJECT_JSON = {"poring_flow": "project"}
+
+
+def _project_json(info: SerializationInfo) -> bool:
+    ctx = info.context
+    return isinstance(ctx, dict) and ctx.get("poring_flow") == "project"
+
+
 NAME = r"^[A-Za-z][A-Za-z0-9_]{0,47}$"  # ASCII only (7.2: identifier normalisation)
 FLOW_NAME = r"^[a-z][a-z0-9_]{0,47}$"
 MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
@@ -85,6 +96,7 @@ WHERE_BUDGET_DEFAULT = 12
 WHERE_BUDGET_MAX = 1000
 MAX_STR = 200
 MAX_LIST = 100
+MAX_ARGS = 20  # a call's arguments and a function's parameters (the project model)
 MAX_JSON_BYTES = 1 << 20  # imported JSON is hostile input (7.1)
 MAX_JSON_DEPTH = 256
 # Fixed in code, never user-editable (13.6.1; hp_critical added by Batt, 2026-10-08, Q29).
@@ -241,8 +253,20 @@ class Do(BaseModel):  # an action block used as an expression: its outcome (2.2)
     action: ActionStmt
 
 
+class CallV(BaseModel):
+    """A FUNCTION's value (the project model, format 3: docs/planning/project-model.md section 2):
+    `x = pick(3, near=True)`. The function runs (its statements may act), then its `return` value
+    is the expression's value; no return (or `return` alone) is unknown (None)."""
+
+    model_config = CFG
+    kind: Literal["callv"] = "callv"
+    proc: str = Field(pattern=NAME)
+    args: list[Expr] = Field(default=[], max_length=MAX_ARGS)
+    kwargs: dict[Annotated[str, Field(pattern=NAME)], Expr] = Field(default={}, max_length=MAX_ARGS)
+
+
 Expr = Annotated[
-    Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do,
+    Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do | CallV,
     Field(discriminator="kind"),
 ]
 
@@ -316,9 +340,34 @@ class SetVar(BaseModel):
 
 
 class CallProc(BaseModel):
+    """A procedure call. `args` / `kwargs` (the project model, format 3): its positional and
+    keyword arguments. Left out of the IR's canonical JSON when empty, so every IR 2 flow keeps
+    its JSON and its hash; a PROJECT's canonical JSON always has them (`PROJECT_JSON` context)."""
+
     model_config = CFG
     kind: Literal["call"] = "call"
     proc: str = Field(pattern=NAME)
+    args: list[Expr] = Field(default=[], max_length=MAX_ARGS)
+    kwargs: dict[Annotated[str, Field(pattern=NAME)], Expr] = Field(default={}, max_length=MAX_ARGS)
+
+    @model_serializer(mode="wrap")
+    def _absent_args(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and not _project_json(info):
+            if not self.args:
+                data.pop("args", None)
+            if not self.kwargs:
+                data.pop("kwargs", None)
+        return data
+
+
+class Return(BaseModel):
+    """`return` / `return value` (the project model, format 3): inside a function only (the
+    linter's `return_placement`); it ends the function, and a call used as a value gets `value`."""
+
+    model_config = CFG
+    kind: Literal["return"] = "return"
+    value: Expr | None = None
 
 
 class Stop(BaseModel):
@@ -408,7 +457,8 @@ Stmt = Annotated[
     | Stop
     | Break_
     | Continue_
-    | TakeExit,
+    | TakeExit
+    | Return,
     Field(discriminator="kind"),
 ]
 
@@ -469,6 +519,18 @@ class Override(BaseModel):  # map scope: replaces the global event of the same k
     kind: Literal["override"] = "override"
     event: Handler
     label: str | None = Field(default=None, pattern=NAME)
+    # The project model (format 3, section 3): a map node's def of a SAFETY-CRITICAL event's name
+    # (or Global's, run on a node that overrides a name it calls) REPLACES it on that node, under
+    # the rule a written global one follows (the linter's "not weakened", lint/events.py). Left
+    # out of the canonical JSON when False: an IR 2 map block still only extends one.
+    strict: bool = False
+
+    @model_serializer(mode="wrap")
+    def _absent_strict(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if not self.strict and isinstance(data, dict):
+            data.pop("strict", None)
+        return data
 
 
 class Extend(BaseModel):  # map scope: adds steps to the global event of the same key
@@ -563,6 +625,51 @@ class Workflow(BaseModel):
     run_until_stopped: bool = False  # an explicit choice for an unbounded loop (13.5)
 
 
+# --- function signatures (the project model, format 3) -------------------------------------------
+class Param(BaseModel):
+    """A function's parameter: `default` None = required (the required ones come first)."""
+
+    model_config = CFG
+    name: str = Field(pattern=NAME)
+    default: Lit | None = None
+
+
+class Signature(BaseModel):
+    """A procedure's inputs, like a Python def's: positional-or-keyword parameters with defaults,
+    then `*varargs` (a list of the extra positional values) and `**kwargs` (the extra keyword
+    values). A procedure without a signature takes none (IR 2's)."""
+
+    model_config = CFG
+    params: list[Param] = Field(default=[], max_length=MAX_ARGS)
+    varargs: str | None = Field(default=None, pattern=NAME)
+    kwargs: str | None = Field(default=None, pattern=NAME)
+
+    @model_validator(mode="after")
+    def _shape(self) -> Signature:
+        check_params(self.params, self.varargs, self.kwargs)
+        return self
+
+    def names(self) -> list[str]:
+        return [p.name for p in self.params] + [n for n in (self.varargs, self.kwargs) if n]
+
+
+def check_params(params: list[Param], varargs: str | None, kwargs: str | None) -> None:
+    """Required parameters before defaulted ones; every name once (a ValueError says which)."""
+    seen_default = None
+    for p in params:
+        if p.default is not None:
+            seen_default = p.name
+        elif seen_default is not None:
+            raise ValueError(
+                f"parameter {p.name} has no default but comes after {seen_default}, which has "
+                "one: required parameters come first"
+            )
+    names = [p.name for p in params] + [n for n in (varargs, kwargs) if n]
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        raise ValueError(f"parameter {dup[0]} is named twice")
+
+
 # --- the flow -----------------------------------------------------------------------------------
 class Target(BaseModel):
     model_config = CFG
@@ -588,6 +695,16 @@ class Flow(BaseModel):
     handlers: list[Handler] = Field(default=[], max_length=50)  # the GLOBAL events
     main: list[Stmt] | None = None
     workflow: Workflow | None = None
+    # The project model (format 3): the inputs of the procedures that take any (a procedure not
+    # named here takes none). Left out of the canonical JSON when empty: no IR 2 flow has one.
+    signatures: dict[Annotated[str, Field(pattern=NAME)], Signature] = {}
+
+    @model_serializer(mode="wrap")
+    def _absent_signatures(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if not self.signatures and isinstance(data, dict):
+            data.pop("signatures", None)
+        return data
 
     @model_validator(mode="after")
     def _one_body(self) -> Flow:
@@ -607,8 +724,13 @@ for _model in (
     Cmp,
     Arith,
     Do,
+    CallV,
     Range,
     ActionStmt,
+    CallProc,
+    Return,
+    Param,
+    Signature,
     If,
     While,
     WaitUntil,
@@ -640,8 +762,9 @@ StmtT = (
     | Break_
     | Continue_
     | TakeExit
+    | Return
 )
-ExprT = Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do
+ExprT = Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do | CallV
 MapEventT = Override | Extend | Disable | Add
 
 
@@ -748,6 +871,8 @@ def sub_exprs(expr: ExprT) -> Iterator[ExprT]:
         children = [expr.left, expr.right]
     elif isinstance(expr, Do):
         children = list(expr.action.params.values())
+    elif isinstance(expr, CallV):
+        children = [*expr.args, *expr.kwargs.values()]
     else:
         children = []
     for c in children:
@@ -774,7 +899,25 @@ def stmt_exprs(stmt: StmtT) -> list[tuple[str, ExprT]]:
         return [("items", stmt.items)]
     if isinstance(stmt, TakeExit) and isinstance(stmt.exit.item, Var):
         return [("exit.item", stmt.exit.item)]
+    if isinstance(stmt, CallProc):
+        return [(f"args.{i}", a) for i, a in enumerate(stmt.args)] + [
+            (f"kwargs.{k}", v) for k, v in stmt.kwargs.items()
+        ]
+    if isinstance(stmt, Return) and stmt.value is not None:
+        return [("value", stmt.value)]
     return []
+
+
+def calls_in(stmt: StmtT) -> list[str]:
+    """The procedures a statement calls ITSELF (not its nested statements): the functions its
+    expressions take the value of (`callv`, innermost first: the order they run in), then a call
+    statement's own procedure."""
+    out: list[str] = []
+    for _, e in stmt_exprs(stmt):
+        out += [x.proc for x in reversed(list(sub_exprs(e))) if isinstance(x, CallV)]
+    if isinstance(stmt, CallProc):
+        out.append(stmt.proc)
+    return out
 
 
 def actions_in(stmt: StmtT) -> Iterator[ActionStmt]:

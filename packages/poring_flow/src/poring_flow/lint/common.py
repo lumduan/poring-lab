@@ -274,7 +274,8 @@ def body_actions(
     out: list[ir.ActionStmt] = []
     for site in ir.walk(stmts, "x", root="x", scope="main", block=None):
         out.extend(ir.actions_in(site.stmt))
-        if isinstance(site.stmt, ir.CallProc) and site.stmt.proc not in seen:
-            seen.add(site.stmt.proc)
-            out.extend(body_actions(flow.procedures.get(site.stmt.proc, []), flow, seen))
+        for proc in ir.calls_in(site.stmt):  # a call statement, and a function's value (callv)
+            if proc not in seen:
+                seen.add(proc)
+                out.extend(body_actions(flow.procedures.get(proc, []), flow, seen))
     return out

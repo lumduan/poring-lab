@@ -23,9 +23,10 @@ def _assigned_in(stmts: list[Any], flow: ir.Flow, seen: set[str] | None = None) 
             out.add(st.var)
         if isinstance(st, ir.WaitUntil) and st.outcome_to:
             out.add(st.outcome_to)
-        if isinstance(st, ir.CallProc) and st.proc not in seen:
-            seen.add(st.proc)
-            out |= _assigned_in(flow.procedures.get(st.proc, []), flow, seen)
+        for proc in ir.calls_in(st):  # a call statement, and a function's value (callv)
+            if proc not in seen:
+                seen.add(proc)
+                out |= _assigned_in(flow.procedures.get(proc, []), flow, seen)
     for a in body_actions(stmts, flow):
         if a.outcome_to:
             out.add(a.outcome_to)

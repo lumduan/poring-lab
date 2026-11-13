@@ -37,6 +37,7 @@ blocks-from-hunt-flow.md B1, 2026-10-21, and sections 7c and 7d, Batt 2026-10-22
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from typing import Any
 
 from poring_flow import ir
 from poring_flow.catalogue import BlockSpec
@@ -168,6 +169,14 @@ def _melee_ring(ctx: Ctx, site: ir.Site, a: ir.ActionStmt) -> None:
         )
 
 
+def _press_param(flow: ir.Flow, site: ir.Site, a: ir.ActionStmt, e: Any) -> bool:
+    """press_key(k) where k is the enclosing function's PARAMETER (the project model)."""
+    if a.block != "press_key" or not isinstance(e, ir.Var) or site.scope != "procedure":
+        return False
+    sig = flow.signatures.get(site.root)
+    return sig is not None and e.name in sig.names()
+
+
 def check(ctx: Ctx) -> None:
     for site in ir.sites(ctx.flow):
         for a in ir.actions_in(site.stmt):
@@ -182,6 +191,8 @@ def check(ctx: Ctx) -> None:
                 val = e.value if isinstance(e, ir.Lit) else None
                 if isinstance(val, str) and val in allowed:
                     continue
+                if _press_param(ctx.flow, site, a, e):
+                    continue  # its callers give the key (lint/functions.py key_argument)
                 shown = repr(val) if isinstance(val, str) else ctx.src(e)
                 if p.choices:
                     ctx.add(
