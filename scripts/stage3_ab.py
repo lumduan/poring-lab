@@ -323,6 +323,9 @@ def verdict(scores: Sequence[Score3], minutes: float,
                            for x, arm in (("B2", b2), ("B3", b3))},
         "equip_ms_median": {x: _median([v for s in arm for v in s.equip_ms])
                             for x, arm in (("B2", b2), ("B3", b3))},
+        # the steals per Knife opener (Batt's own run 2026-11-12: 91 % stolen)
+        "steal_share": {x: _share(sum(s.steals for s in arm), sum(s.openers for s in arm))
+                        for x, arm in (("B2", b2), ("B3", b3))},
         "openers_h": {x: round(rate(arm, lambda s: s.openers, x), 1)
                       for x, arm in (("B2", b2), ("B3", b3))},
         "runs": rep, "report_only": True}  # fmt: skip
@@ -337,6 +340,10 @@ def verdict(scores: Sequence[Score3], minutes: float,
         v = "PASS"
     out["not_exercised"] = [k for k in ("respawn", "home", "weight") if lines[k]["pass"] is None]
     return {**out, "lines": lines, "verdict": v}
+
+
+def _share(n: int, of: int) -> float | None:
+    return None if of == 0 else round(n / of, 3)
 
 
 def _median(v: list[float] | list[int]) -> float | None:

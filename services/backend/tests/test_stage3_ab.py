@@ -134,6 +134,8 @@ def test_the_verdict_applies_the_pre_registered_bar(tmp_path: Path) -> None:
     assert v["verdict"] == "PASS" and v["pairs_valid"] == 4
     assert v["not_exercised"] == ["respawn", "weight"]  # no death, no heavy bag: not judged
     assert v["lines"]["home"] == {"B2": 1.0, "B3": 1.0, "pass": True}
+    rep = v["lines"]["report"]
+    assert rep["steal_share"] == {"B2": 1.0, "B3": 1.0} and rep["steal_s_median"]["B3"] == 1.4
     # fewer steals in every pair: FAIL on steals / h
     (tmp_path / "s").mkdir()
     few = [{"kills": 50, "steals": s} for s in (8, 9, 7)]

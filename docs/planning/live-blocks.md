@@ -494,8 +494,9 @@ hold, against B2, over the valid pairs:
 | the weight home | every B3 run that read the bag at >= 50 % ended by the box's weight event, and no box weight event fired under 49.5 % (judged when a B3 run read >= 50 %) |
 | a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
 
-Reported, not judged: loot steps per hour, the Knife openers per hour, the opener -> steal seconds
-and the swap-back ms (Batt's own: the Damascus 1.36 s after the steal), the box's calls. The
+Reported, not judged: loot steps per hour, the Knife openers per hour, the steal share (steals per
+opener; Batt's own: 91 % stolen), the opener -> steal seconds and the swap-back ms (Batt's own: the
+Damascus 1.36 s after the steal), the box's calls. The
 verdict: FAIL when a judged line fails; INCONCLUSIVE when fewer than 3 pairs are valid (kills and
 steals unjudged) and nothing failed; else PASS, with the respawn / way-home / weight lines that had
 nothing to judge listed as not exercised. Why these margins: the default bodies press the same keys
