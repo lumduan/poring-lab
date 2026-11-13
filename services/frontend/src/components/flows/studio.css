@@ -667,6 +667,10 @@
   font-size: 0.86rem;
   line-height: 1.35;
 }
+/* matpilot round 18 #4: the strip's fold toggle shows on a phone only (below) */
+.map-binding-toggle {
+  display: none;
+}
 .map-binding[data-kind="plain"] {
   background: var(--warn-bg);
   color: var(--warn-text);
@@ -1355,6 +1359,25 @@
 
 /* --- phones and narrow windows: the Python becomes a sheet over the blocks, panes stack -------- */
 @media (max-width: 48rem) {
+  /* matpilot round 18 #4: at 390 px the strip was 366 x 204 px and the blocks' area shrank from 416
+     to 208 px, under Blockly's zoom controls: on a phone it folds to ONE line until opened */
+  .map-binding-toggle {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    padding: 0.15rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .map-binding[data-open="false"] .map-binding-part {
+    display: none;
+  }
   /* the header in ONE row: the NavBar names the page; Blocks | Python, the file icons, ▶ */
   .studio-brand {
     display: none;

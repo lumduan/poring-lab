@@ -387,6 +387,32 @@ test("the event block's runaway guard and insert failure limit show the engine's
   assert.deepEqual([again.fields?.MAX_10, again.fields?.FAILS], ["", ""]);
 });
 
+// matpilot round 18 #4: at 390 x 844 the strip (366 x 204) left the blocks 208 px of 416, and
+// Blockly's zoom controls and trashcan (a column 209 px tall from the bottom) sat over drink's
+// class and "resume ▾" fields. Folded to one line the strip leaves ~380 px: the first rows clear
+test("on a phone the folded strip leaves the tab's first rows clear of Blockly's bottom-right controls", async () => {
+  const { FIRST_ROWS_Y, TAB_TOP_Y } = await import("./blocks.ts");
+  const { BLOCKLY_CONTROLS, controlsTop, PHONE_START_SCALE } = await import("./theme.ts");
+  assert.equal(controlsTop(208), -1); // the measured column: 20 + 60 + 20 + 109 = 209 px
+  assert.equal(BLOCKLY_CONTROLS.zoomH, 109);
+  const rowsEnd = (TAB_TOP_Y + FIRST_ROWS_Y) * PHONE_START_SCALE; // px from the area's top
+  const css = readFileSync(new URL("../../components/flows/studio.css", import.meta.url), "utf8");
+  const rem = (prop: string) => Number(new RegExp(`\\.map-binding \\{[^}]*${prop}: ([0-9.]+)rem`).exec(css)?.[1]);
+  const pad = /\.map-binding \{[^}]*padding: ([0-9.]+)rem/.exec(css);
+  assert.ok(pad, "the strip's padding");
+  const line = rem("font-size") * 16 * Number(/\.map-binding \{[^}]*line-height: ([0-9.]+)/.exec(css)?.[1]);
+  const folded = 2 * Number(pad[1]) * 16 + line + 2 * 0.15 * 16 + 1; // padding, one line, the toggle's padding, the border
+  const area = 416 - folded;
+  assert.ok(area > 370 && area < 390, String(area));
+  assert.ok(rowsEnd <= controlsTop(area), `rows end ${rowsEnd} px > controls at ${controlsTop(area)} px`);
+  // the positive case: the strip unfolded (204 px) still fails the same arithmetic
+  assert.ok(rowsEnd > controlsTop(416 - 204));
+  // and the fold exists on a phone only: the toggle hidden on a wide screen, the parts hidden while folded
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(code, /\.map-binding-toggle \{\s*display: none;\s*\}/);
+  assert.match(code, /@media \(max-width: 48rem\) \{\s*\.map-binding-toggle \{[^}]*display: block;[\s\S]*?\.map-binding\[data-open="false"\] \.map-binding-part \{\s*display: none;/);
+});
+
 test("a tab's first block starts below the Undo / Redo buttons at the studio's start scale", async () => {
   const { TAB_TOP_Y } = await import("./blocks.ts");
   const { INJECT } = await import("./theme.ts");
@@ -395,6 +421,12 @@ test("a tab's first block starts below the Undo / Redo buttons at the studio's s
   const band = (rem(".history-buttons", "top") + rem(".history-button", "height")) * 16; // px from the canvas's top
   assert.ok(band > 50 && band < 60, String(band));
   assert.ok(TAB_TOP_Y * INJECT.zoom.startScale >= band, `${TAB_TOP_Y * INJECT.zoom.startScale} px < ${band} px`);
+  // matpilot round 18 #4: and at the phone's start scale
+  const { PHONE_START_SCALE, injectFor } = await import("./theme.ts");
+  assert.ok(TAB_TOP_Y * PHONE_START_SCALE >= band, `${TAB_TOP_Y * PHONE_START_SCALE} px < ${band} px`);
+  assert.equal(injectFor(true).zoom.startScale, PHONE_START_SCALE);
+  assert.equal(injectFor(false).zoom.startScale, INJECT.zoom.startScale);
+  assert.deepEqual({ ...injectFor(true), zoom: null }, { ...INJECT, zoom: null }); // only the scale differs
   for (const tabName of ["main", "survival", "monsters"]) {
     const ws = tabToWorkspace(xmasProject(), { node: "xmas_dun02", tab: tabName });
     assert.equal(Math.min(...ws.blocks.blocks.map((b) => b.y ?? 0)), TAB_TOP_Y, tabName);

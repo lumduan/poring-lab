@@ -1148,8 +1148,12 @@ function defHat(p: Project, node: PNode, d: Def, order: number, ids: Ids): WsBlo
 /** Where a tab's first block sits (workspace units): BELOW the Undo / Redo buttons, which float
  * over the canvas's top right (studio.css .history-buttons: top 0.6rem, 2.75rem tall = 53.6 px;
  * at the studio's start scale 0.75, theme.ts INJECT, 72 units), so they never sit on a block's
- * first row however wide it is (matpilot round 17 N4: Undo / Redo over drink's "resume ▾ until"). */
-export const TAB_TOP_Y = 76;
+ * first row however wide it is (matpilot round 17 N4: Undo / Redo over drink's "resume ▾ until").
+ * Round 18 #4: 90, so it holds at the phone's start scale 0.6 too (54 px). */
+export const TAB_TOP_Y = 90;
+/** An event block's first three rows (when; event / class / rank; mode / then: the fields a person
+ * reads first), workspace units, generously: the zelos rows are ~48 units, the first one taller. */
+export const FIRST_ROWS_Y = 3 * 56;
 /** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
 const EVENT_ROWS_Y = 6 * 48;
 

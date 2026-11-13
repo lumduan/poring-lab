@@ -26,7 +26,7 @@ import { canonical } from "@/lib/flow/ir";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { Project } from "@/lib/flow/project";
 import { runLine } from "@/lib/flow/status";
-import { INJECT } from "@/lib/flow/theme";
+import { injectFor } from "@/lib/flow/theme";
 import type { Issue, Loose } from "@/lib/flow/words";
 
 const PALETTE_BLOCK: Record<string, string> = {
@@ -159,8 +159,10 @@ export default function BlockEditor(p: BlockEditorProps) {
         const hunt = registerHunt(B, cat?.hunt_rules ?? null) ? (cat?.hunt_rules ?? null) : null;
         const th = themesOf(B);
         tbRef.current = toolboxOf(cat, latest.current.toolboxScope);
+        // matpilot round 18 #4: a phone starts smaller (more of each row shows beside the toolbox)
+        const phone = typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(max-width: 48rem)").matches;
         const w = B.inject(host.current, {
-          ...INJECT,
+          ...injectFor(phone),
           theme: media?.matches ? th.dark : th.light,
           toolbox: tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition,
         } as unknown as BlocklyT.BlocklyOptions);

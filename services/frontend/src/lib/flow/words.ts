@@ -106,6 +106,22 @@ export type StatusIn = {
   run?: boolean;
 };
 
+/** One part of the strip under /flows' tabs (what the node is, what it imports, IN A RUN ...);
+ * ``short``: its words folded to one line on a phone. */
+export type StripPart = { head: string; text: string; short?: string | null };
+
+/** PURE (matpilot round 18 #4): the strip's ONE line while folded on a phone (the whole strip was
+ * 366 x 204 px at 390 wide, halving the blocks' area): the IN A RUN part's short words when the
+ * tab has one ("IN A RUN: 3 events replace the runner's own"), else the first part; with how many
+ * parts the unfolded strip shows. */
+export function stripFoldLine(parts: StripPart[]): string {
+  const run = parts.find((p) => p.head === "IN A RUN");
+  const first = run ?? parts[0];
+  if (!first) return "";
+  const more = parts.length - 1;
+  return `${first.head}: ${first.short ?? first.text}${more > 0 ? ` · ${more} more` : ""}`;
+}
+
 /** The footer's sentence: what to do next, never a live run. */
 export function statusText(s: StatusIn): string {
   if (s.loading) return "Loading the block editor…";
