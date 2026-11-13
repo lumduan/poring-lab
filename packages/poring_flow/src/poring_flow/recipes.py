@@ -41,7 +41,7 @@ from typing import Any, Literal
 
 from poring_flow import functions as fn
 from poring_flow import ir
-from poring_flow.models import ModelCatalogue, ModelSpec, models
+from poring_flow.models import ModelCatalogue, ModelSpec, map_detector, models
 
 VERSION = "9.51"  # scripts/dungeon_hunt.py BOX_RECIPES_VERSION (test_recipes.py pins them)
 MODEL_BLOCK = fn.MODEL
@@ -169,6 +169,33 @@ def recipe_functions(flow: ir.Flow, block: str | None = None) -> dict[str, str]:
         elif owner is None:
             shared.setdefault(sp, n)
     return {**shared, **mine}
+
+
+def has_hunt_core(flow: ir.Flow, block: ir.MapBlock) -> bool:
+    """The map block's main runs the runner (dungeon_hunt), itself or through a function."""
+    return any(a.block == fn.RUNNER_BLOCK for a in fn.actions(list(block.main), flow))
+
+
+def hunt_model(
+    flow: ir.Flow,
+    block: ir.MapBlock,
+    plans: dict[str, BlockPlan] | None = None,
+    cat: ModelCatalogue | None = None,
+) -> tuple[str, ModelSpec, bool] | None:
+    """PURE: the model a map block's hunt core boxes its monsters with -- its main's use_model
+    (True), else the map's own detector (False; models.map_detector, the runner's own box detector
+    there). None: the block runs no hunt core, or no detector names what the runner strikes
+    there. The runner strikes EVERY class of that model's `strikes`, whatever the recipes say: a
+    recipe chooses HOW a monster is attacked (stage 4a), never WHETHER (matpilot round 17 N3)."""
+    if not has_hunt_core(flow, block):
+        return None
+    cat = models() if cat is None else cat
+    plans = analyse(flow, cat)[0] if plans is None else plans
+    bp = plans.get(block.name)
+    if bp is not None and bp.model is not None and bp.spec is not None:
+        return bp.model, bp.spec, True
+    got = map_detector(block.map.map, cat)
+    return None if got is None else (got[0], got[1], False)
 
 
 def has_recipes(flow: ir.Flow) -> bool:

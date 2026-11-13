@@ -133,6 +133,18 @@ def detector_keys(flow: ir.Flow) -> list[str]:
     return sorted(keys)
 
 
+def map_detector(map_id: str, cat: ModelCatalogue | None = None) -> tuple[str, ModelSpec] | None:
+    """The live detector trained for `map_id` that names the monsters the runner strikes there
+    (models.yaml `maps` and `strikes`): the runner's own box detector on that map (unit_detector
+    MAP_MODELS), the hunt core's model when no use_model names one (matpilot round 17 N3). None:
+    no such model (the runner strikes v1's every "monster" box there)."""
+    cat = models() if cat is None else cat
+    for mid, spec in cat.models.items():
+        if spec.available and spec.kind == "detector" and spec.strikes and map_id in spec.maps:
+            return mid, spec
+    return None
+
+
 @cache
 def models() -> ModelCatalogue:
     text = (resources.files("poring_flow") / "models.yaml").read_text(encoding="utf-8")
