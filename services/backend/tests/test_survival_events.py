@@ -31,7 +31,9 @@ import flow_run as fr  # noqa: E402
 from poring_flow import live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
 
-XMAS = ROOT / "services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json"
+# stage 2's own box: the ready-made box as stage 2 left it (the B2 arm of stage 3's A/B; the stage-3
+# box is test_box_functions.py's)
+XMAS = ROOT / "services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage2.json"
 TICK = 0.4  # the runner's main tick on xmas_dun02 (the 2026-11-13 runs: ~2.4 a second)
 STRAT = {**dh.STRATEGIES["P2"], "max_hp": 5070}  # the Run path's strategy, the Rogue's max HP
 
@@ -326,8 +328,10 @@ def test_an_event_that_cannot_play_inside_the_hunt_core_refuses_before_any_input
          "and fly (F8) keys"),
         (lambda t: set_def(t, "drink", body=[wait, heal]),
          "a wait_until statement cannot play inside the hunt core"),
+        # stage 3: an event that reads the weight inside the hunt core is the weight home
         (lambda t: set_def(t, "fly_away", on={"when": weight}),
-         "weight_percent() cannot be read inside the hunt core"),
+         "fly_away reads weight_percent() inside the hunt core: there it is the weight home, and "
+         "its body is one stop"),
         (lambda t: set_def(t, "fly_away", on={"then": "relocate"}),
          "fly_away ends with then=relocate: inside the hunt core an event must resume"),
         (lambda t: set_def(t, "fly_away", on={"when": cmp("<", sense("sp_percent"), lit(10))}),
@@ -393,7 +397,7 @@ def test_box_plays_refused_names_each_refusal_before_any_input() -> None:
 
     kw: dict[str, Any] = {"heal_candy": False, "boss_walk": False, "bosses": ("Stormy Knight",)}
     assert dh.box_plays_refused([], None, **kw) is None  # the CLI: nothing to check
-    assert dh.box_plays_refused(list(dh.BOX_PLAYS), Hook(), **kw) is None
+    assert dh.box_plays_refused(["potion", "fly_hp", "boss_fly"], Hook(), **kw) is None  # stage 2's
     assert "not one of" in str(dh.box_plays_refused(["stock"], Hook(), **kw))
     assert "hook.survive" in str(dh.box_plays_refused(["potion"], None, **kw))
     assert "--heal-candy" in str(dh.box_plays_refused(["potion"], Hook(),
@@ -441,7 +445,9 @@ def _continues(stmts: list[ast.stmt]) -> int:
 
 def test_the_box_plays_once_a_tick_before_the_runners_own_survival() -> None:
     body = _loop().body
-    at = [i for i, st in enumerate(body) if "hook_survive(hook" in ast.unparse(st)]
+    # (stage 3's weight read calls it too, inside the UI watch: test_box_functions.py)
+    at = [i for i, st in enumerate(body) if "hook_survive(hook" in ast.unparse(st)
+          and isinstance(st, ast.If) and ast.unparse(st.test) == "box_on"]  # fmt: skip
     assert len(at) == 1  # ONE top-level statement of the loop: every tick that gets there
     st = body[at[0]]
     assert isinstance(st, ast.If) and ast.unparse(st.test) == "box_on"

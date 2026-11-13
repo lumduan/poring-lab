@@ -4,16 +4,20 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { toolbox, toolboxBlocks } from "./blockdefs.ts";
+import { categoryOf, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { parseCallArgs, parseParams } from "./expr.ts";
-import { canonical } from "./ir.ts";
+import { canonical, type Stmt } from "./ir.ts";
 import {
   call,
+  clickAt,
   def,
   globalOf,
   isMapStart,
   keyOfCall,
+  mapNodes,
+  modelOn,
+  MONSTERS_TAB,
   newTabName,
   nodeById,
   overriddenBy,
@@ -21,6 +25,8 @@ import {
   pressKey,
   type Project,
   resolve,
+  roleKeyOf,
+  recipeDef,
   runnerKeysOn,
   sampleProject,
   sessionPath,
@@ -70,16 +76,25 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.equal(x.start, "xmas_dun02");
   assert.deepEqual(x.edges, []);
   const n = nodeById(x, "xmas_dun02")!;
-  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival"]);
-  assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "dungeon_hunt", "stop"]);
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits", "monsters"]);
+  // stage 4a (live-blocks.md 3.4): the trained data before the runner
+  assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "use_model", "dungeon_hunt", "stop"]);
   // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function
   const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks;
-  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"]]);
-  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]]]);
+  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"], ["pl_event", "bag_full", "preempt", "upkeep"]]);
+  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]], ["bag_full", 0, [{ kind: "stop", reason: "home" }]]]);
+  // stage 3 (live-blocks.md 3.3): the weight home fires once a run; the knife swap's two functions
+  // call the keys' functions; the way home and the death dialog's two clicks
+  assert.equal(n.tabs[2].defs[2].on?.max_per_run, 1);
+  assert.deepEqual(n.tabs[3].defs.map((d) => [d.name, d.body]), [["knife_on", [call("wield_knife")]], ["knife_back", [call("wield_damascus")]]]);
+  assert.deepEqual(n.tabs[4].defs.map((d) => d.name), ["fly_home", "respawn_button", "respawn_ok"]);
+  assert.deepEqual(n.tabs[4].defs[1].body, [clickAt(645, 481, "the death dialog's first button: move to the saved location")]);
   // the runner block shows its five roles, the home one included
-  const hunt = tabToWorkspace(x, { node: "xmas_dun02", tab: "main" }).blocks.blocks[0].inputs?.DO?.block?.next?.block;
+  const use = tabToWorkspace(x, { node: "xmas_dun02", tab: "main" }).blocks.blocks[0].inputs?.DO?.block?.next?.block;
+  assert.deepEqual([use?.type, use?.fields?.BLOCK, use?.fields?.ARGS], ["pl_action", "use_model", 'model="xmas02"']);
+  const hunt = use?.next?.block;
   assert.equal(hunt?.type, "pl_dungeon_hunt");
-  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "butterfly_wing" });
+  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok" });
   // the start is the map: no login, no character, its first entry
   const sp = sessionPath(x);
   assert.deepEqual([sp.login, sp.character, sp.map?.id, sp.entry, sp.problems], [null, null, "xmas_dun02", "here", []]);
@@ -89,7 +104,22 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   const r = runnerKeysOn(x, "xmas_dun02");
   assert.ok(r.ok);
   assert.deepEqual(r.keys, { heal_key: "F1", fly_key: "F8", home_key: "F9", knife_key: "F4", dagger_key: "F5" });
-  assert.equal(r.from.home_key, "butterfly_wing");
+  assert.equal(r.from.home_key, "fly_home");
+});
+
+test("stage 3: a knife function of presses and waits gives Run its FIRST press (both answers to the open question)", () => {
+  const x = xmasProject();
+  const n = nodeById(x, "xmas_dun02")!;
+  const knife = n.tabs.find((t) => t.name === "knife")!;
+  const wait: Stmt = { kind: "wait_until", cond: { kind: "lit", value: false }, timeout_s: 0.1, outcome_to: null };
+  knife.defs[0].body = [call("wield_knife"), wait, call("wield_damascus")]; // "F4, wait 100 ms, F5"
+  const r = runnerKeysOn(x, "xmas_dun02");
+  assert.ok(r.ok);
+  assert.deepEqual([r.keys.knife_key, r.keys.dagger_key], ["F4", "F5"]);
+  assert.deepEqual(roleKeyOf(x, "xmas_dun02", "knife_on", "knife_on"), { key: "F4" });
+  // the heal role stays ONE key: a body there is not a key
+  assert.ok("why" in roleKeyOf(x, "xmas_dun02", "knife_on", "heal"));
+  roundTrip(x);
 });
 
 test("a runner block of four roles: an empty home field; with neither a home role nor an item warp Run says so", () => {
@@ -99,7 +129,7 @@ test("a runner block of four roles: an empty home field; with neither a home rol
   assert.equal(hunt?.fields?.HOME, "");
   const x = xmasProject();
   const m = nodeById(x, "xmas_dun02")!.tabs[0].main!;
-  const h = m[1];
+  const h = m.find((st) => st.kind === "action" && st.block === "dungeon_hunt")!;
   assert.ok(h.kind === "action");
   delete h.params.home;
   roundTrip(x); // four roles: the empty field round-trips as no home role
@@ -158,11 +188,16 @@ test("the Run keys: resolved on THAT node (its override first), through calls wi
   roundTrip(p); // the key as a value (press key <input>) round-trips through its block (matpilot round 15 #2)
   const helper = tabToWorkspace(p, { node: "global", tab: "helpers" }).blocks.blocks[0].inputs?.DO?.block;
   assert.equal(helper?.type, "pl_press_key_v");
-  // a role function of two presses: refused in words
+  // stage 3 (live-blocks.md 3.3): a knife role function of two presses is a BODY the hunt core
+  // calls; Run takes its first press (its other keys are checked by the lint and the run check)
   g.tabs[0].defs[3] = def("knife_on", [pressKey("F4"), pressKey("F3")]);
   const r3 = runnerKeysOn(p, "xmas_dun02");
-  assert.equal(r3.ok, false);
-  assert.match(r3.ok ? "" : r3.problems.join(" "), /knife_on\(\) must be exactly one "press key"/);
+  assert.ok(r3.ok && r3.keys.knife_key === "F4");
+  // the heal role stays ONE key: two presses there are refused in words
+  g.tabs[0].defs[0] = def("heal", [pressKey("F1"), pressKey("F3")]);
+  const r4 = runnerKeysOn(p, "xmas_dun02");
+  assert.equal(r4.ok, false);
+  assert.match(r4.ok ? "" : r4.problems.join(" "), /heal\(\) must be exactly one "press key"/);
 });
 
 test("tab names are Python module names; a new tab is tab2, tab3 ...", () => {
@@ -200,6 +235,54 @@ test("the toolbox: exits and the runner on map tabs, the login sentence on a log
   assert.ok(types("character").includes("pl_choose_character"));
   assert.ok(types("map").includes("pl_dungeon_hunt") && !types("global").includes("pl_dungeon_hunt"));
   for (const n of ["login", "character", "map", "global"] as const) assert.ok(types(n).includes("pl_def") && types(n).includes("pl_event") && types(n).includes("pl_vardecl"));
+});
+
+// stage 4a (live-blocks.md 3.4): the trained data in a map's main, the monsters tab's recipes
+test("the toolbox offers use_model in a map's main and a monster's recipe in its monsters tab", () => {
+  const core = { concept: "core.x", timeout_s: 1 };
+  const cat = { press_key: { concept: "ui.press_hotkey", timeout_s: 2 }, dungeon_hunt: { concept: "combat.hunt", timeout_s: 600 }, use_model: core, strike: { concept: "combat.attack_target", timeout_s: 60 }, wait_steal: core, wait_kill: core, loot: { concept: "loot.pick_up", timeout_s: 30 }, use_skill: { concept: "combat.use_skill", timeout_s: 30 }, sit: { concept: "char.sit", timeout_s: 5 } };
+  const monsters = { model: "xmas02", strikes: ["mystcase", "cookie"], mobs: { mystcase: [1249], cookie: [1265] } };
+  const items = (scope: { node: "map" | "global"; main: boolean; tab?: string }) => toolboxBlocks(toolbox(cat, scope, null, {}, undefined, monsters));
+  const main = items({ node: "map", main: true, tab: "main" });
+  const use = main.find((e) => e.item.type === "pl_action" && e.item.fields?.BLOCK === "use_model");
+  assert.ok(use && use.category === "Movement" && use.item.fields?.ARGS === 'model="xmas02"');
+  // the primitives play only inside a recipe: never under "More skills", nowhere but the monsters tab
+  const more = main.filter((e) => e.category === "More skills").map((e) => e.item.fields?.BLOCK);
+  for (const b of ["strike", "wait_steal", "wait_kill", "loot", "use_skill", "use_model"]) assert.ok(!more.includes(b), b);
+  assert.ok(more.includes("sit"));
+  assert.equal(categoryOf(toolbox(cat, { node: "map", main: true, tab: "main" }, null, {}, undefined, monsters), "Monsters"), undefined);
+  const mon = toolbox(cat, { node: "map", main: false, tab: MONSTERS_TAB }, null, {}, undefined, monsters);
+  const blocksOf = (tb: ReturnType<typeof toolbox>) => (categoryOf(tb, "Monsters")?.contents ?? []).flatMap((i) => (i.kind === "block" ? [i] : []));
+  const got = blocksOf(mon).map((i) => [i.type, i.fields?.NAME ?? i.fields?.BLOCK ?? i.fields?.PROC ?? i.fields?.TEXT, i.fields?.ARGS ?? i.fields?.PARAMS ?? null]);
+  assert.deepEqual(got, [
+    ["pl_def", "attack_mystcase", "t, priority=1"],
+    ["pl_def", "attack_cookie", "t, priority=1"],
+    ["pl_expr", "mob(1249)", null],
+    ["pl_expr", "mob(1265)", null],
+    ["pl_call", "knife_on", ""],
+    ["pl_action", "strike", "target=t"],
+    ["pl_action", "wait_steal", "target=t"],
+    ["pl_call", "knife_back", ""],
+    ["pl_action", "wait_kill", "target=t"],
+    ["pl_action", "loot", "target=t"],
+    ["pl_action", "use_skill", 'key="F6"'],
+  ]);
+  // no model named yet: the steps, and a word about use_model
+  const none = toolbox(cat, { node: "map", main: false, tab: MONSTERS_TAB });
+  assert.ok(blocksOf(none).length > 0 && blocksOf(none).every((i) => i.type !== "pl_def"));
+});
+
+test("the one box names xmas02 and writes today's technique for each monster", () => {
+  const p = xmasProject();
+  const [n] = mapNodes(p);
+  assert.equal(modelOn(n), "xmas02");
+  assert.equal(modelOn(sampleProject().nodes[0]), null);
+  const mon = n.tabs.find((t) => t.name === MONSTERS_TAB)!;
+  assert.deepEqual(mon.defs.map((d) => d.name), ["attack_mystcase", "attack_cruiser", "attack_cookie", "attack_cookie_xmas"]);
+  assert.deepEqual(mon.defs[0], recipeDef("mystcase"));
+  assert.deepEqual(mon.defs[0].body.map((s) => (s.kind === "call" ? `${s.proc}()` : s.kind === "action" ? s.block : s.kind)), ["knife_on()", "strike", "wait_steal", "knife_back()", "wait_kill", "loot"]);
+  assert.deepEqual(recipeDef("cookie", false, null).body.map((s) => (s.kind === "action" ? s.block : s.kind)), ["strike", "wait_kill", "loot"]);
+  assert.deepEqual(recipeDef("cookie", false, null).params, [{ name: "t", default: null }]);
 });
 
 // the flow engine's fixtures (its branch writes them): the browser's ready-made projects ARE them

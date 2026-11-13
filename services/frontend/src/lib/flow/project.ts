@@ -149,6 +149,11 @@ export const RUNNER_ROLE_KEYS = [
 ] as const;
 /** The runner block's OPTIONAL fifth role (the one box): the Butterfly Wing it flies home on. */
 export const HOME_ROLE = "home";
+/** Stage 3 (live-blocks.md 3.3): the roles whose function may be a BODY of presses and waits (the
+ * hunt core calls it at its own moment; its key for Run is its FIRST press), and the OPTIONAL
+ * respawn roles (functions of click_at: the death exit's two presses). */
+export const BODY_ROLES: readonly string[] = ["knife_on", "knife_back", HOME_ROLE];
+export const RESPAWN_ROLES: readonly string[] = ["respawn", "respawn_confirm"];
 const MAX_DEPTH = 6;
 
 /** Every statement of a body, nested ones too. */
@@ -168,6 +173,18 @@ export function* nodeStmts(n: PNode): Generator<Stmt> {
     if (t.main) yield* allStmts(t.main);
     for (const d of t.defs) yield* allStmts(d.body);
   }
+}
+
+/** Stage 4a (live-blocks.md 3.4): the model a node's main names with use_model (its first), or
+ * null -- the monsters its recipes name. */
+export function modelOn(n: PNode | undefined): string | null {
+  for (const s of allStmts(n ? (mainOf(n)?.main ?? []) : [])) {
+    if (s.kind === "action" && s.block === "use_model") {
+      const m = s.params.model;
+      return m?.kind === "lit" && typeof m.value === "string" ? m.value : null;
+    }
+  }
+  return null;
 }
 
 /** The node's runner block (dungeon_hunt), else null. */
@@ -225,6 +242,42 @@ export function keyOfCall(p: Project, nodeId: string, name: string, args: Expr[]
   return { why: `${name}() must be exactly one "press key" (or one call): the runner presses one key for it` };
 }
 
+/** A role's key (stage 3): `keyOfCall`'s one key; for a knife or home function that is a BODY of
+ * presses, waits and calls with plain values, its FIRST press (poring_flow.functions.role_key). */
+export function roleKeyOf(p: Project, nodeId: string, name: string, role: string): { key: string } | { why: string } {
+  const one = keyOfCall(p, nodeId, name);
+  if ("key" in one || !BODY_ROLES.includes(role)) return one;
+  const first = (fn: string, args: Expr[], kwargs: Record<string, Expr>, env: Env, depth: number): string | null | undefined => {
+    if (depth > MAX_DEPTH) return undefined;
+    const r = resolve(p, nodeId, fn);
+    if (!r || r.kind === "var" || !r.def) return undefined;
+    const d = r.def;
+    const bound: Env = {};
+    for (let i = 0; i < d.params.length; i++) {
+      const pr = d.params[i];
+      const given = i < args.length ? litOf(args[i], env) : pr.name in kwargs ? litOf(kwargs[pr.name], env) : pr.default;
+      if (!given) return undefined;
+      bound[pr.name] = given;
+    }
+    for (const s of d.body) {
+      if (s.kind === "wait_until" && s.cond.kind === "lit" && s.cond.value === false && !s.outcome_to) continue;
+      if (s.kind === "action" && s.block === "press_key") {
+        const k = litOf(s.params.key, bound);
+        return k && typeof k.value === "string" ? k.value : undefined;
+      }
+      if (s.kind === "call") {
+        const inner = first(s.proc, s.args, s.kwargs, bound, depth + 1);
+        if (inner !== null) return inner; // a key, or undefined (not a body of presses)
+        continue; // waits only: on to the next statement
+      }
+      return undefined;
+    }
+    return null;
+  };
+  const k = first(name, [], {}, {}, 0);
+  return typeof k === "string" ? { key: k } : one;
+}
+
 /** The five keys a Run of this map node takes, from its functions (overrides first). */
 export function runnerKeysOn(p: Project, nodeId: string): KeysResult {
   const n = nodeById(p, nodeId);
@@ -233,20 +286,20 @@ export function runnerKeysOn(p: Project, nodeId: string): KeysResult {
   const problems: string[] = [];
   const keys: Partial<RunnerKeys> = {};
   const from: Partial<KeySource> = {};
-  const take = (k: keyof RunnerKeys, fn: string | null, role: string) => {
+  const take = (k: keyof RunnerKeys, fn: string | null, role: string, param: string) => {
     if (!fn) return problems.push(`${role}: no function named`);
-    const r = keyOfCall(p, nodeId, fn);
+    const r = roleKeyOf(p, nodeId, fn, param);
     if ("why" in r) return problems.push(`${role}: ${r.why}`);
     keys[k] = r.key;
     from[k] = fn;
   };
   for (const r of RUNNER_ROLE_KEYS) {
     const v = hunt.params[r.param];
-    take(r.key, v && v.kind === "lit" && typeof v.value === "string" ? v.value : null, r.words);
+    take(r.key, v && v.kind === "lit" && typeof v.value === "string" ? v.value : null, r.words, r.param);
   }
   const home = homeFunctionOn(n);
   if (!home) problems.push('the way home: the runner block\'s "home (Butterfly Wing): call ..." is empty and the map has no "item warp: call ..." exit');
-  else take("home_key", home, "the way home (Butterfly Wing)");
+  else take("home_key", home, "the way home (Butterfly Wing)", HOME_ROLE);
   if (problems.length) return { ok: false, problems };
   return { ok: true, keys: keys as RunnerKeys, from: from as KeySource };
 }
@@ -286,6 +339,8 @@ export const SAVE_NOTE = "the world rule: the save point (where a Butterfly Wing
 export const XMAS_ZONES_SHA = "89ea7a9c98d5d62b869a99189119548ea114868566bd293d43d46e3f24ebe345";
 
 const sense = (sensor: string): Expr => ({ kind: "sense", sensor, args: {} });
+/** click_at(x, y): one click at a point of the game picture (stage 3; live only in the death exit). */
+export const clickAt = (x: number, y: number, note: string | null = null): ActionStmt => ({ kind: "action", block: "click_at", concept: "ui.press_button", params: { x: lit(x), y: lit(y) }, timeout_s: 2, ...rest, note });
 const below = (sensor: string, v: number): Expr => ({ kind: "cmp", op: "<", left: sense(sensor), right: lit(v) });
 /** An event's trigger with the engine's defaults (a repeating event: `until`; a one-shot: `rearm`,
  * or its condition going false; both paced by `cooldown_s`). */
@@ -306,6 +361,35 @@ export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
   ...extra,
 });
 
+/** use_model(model): the trained data (live blocks stage 4a, live-blocks.md 3.4): the hunt core's
+ * model, by its models.yaml id; its monsters are what the recipes name. */
+export const modelBlock = (model: string, note: string | null = null): ActionStmt => ({ kind: "action", block: "use_model", concept: "core.use_model", params: { model: lit(model) }, timeout_s: 1, ...rest, note });
+/** The recipe primitives (stage 4a): each takes the recipe's own input `t`, the monster the runner
+ * locked; the runner plays each with its own code at its own moment. */
+export const RECIPE_PRIMITIVES = [
+  { block: "strike", concept: "combat.attack_target", timeout_s: 60 },
+  { block: "wait_steal", concept: "core.wait_steal", timeout_s: 10 },
+  { block: "wait_kill", concept: "core.wait_kill", timeout_s: 120 },
+  { block: "loot", concept: "loot.pick_up", timeout_s: 30 },
+] as const;
+export type Primitive = (typeof RECIPE_PRIMITIVES)[number]["block"];
+const primitive = (block: Primitive, t = "t"): ActionStmt => {
+  const p = RECIPE_PRIMITIVES.find((x) => x.block === block)!;
+  return { kind: "action", block, concept: p.concept, params: { target: { kind: "var", name: t } }, timeout_s: p.timeout_s, ...rest };
+};
+/** A monster's function name (its recipe): attack_<the model's class>. */
+export const RECIPE_PREFIX = "attack_";
+export const MONSTERS_TAB = "monsters";
+/** A monster's recipe as the runner plays it today: the Knife on, the strike, the steal's cue, the
+ * dagger back, the kill, the loot (`knife` false: the same without the Knife swap). */
+export const recipeBody = (knife = true): Stmt[] =>
+  knife ? [call("knife_on"), primitive("strike"), primitive("wait_steal"), call("knife_back"), primitive("wait_kill"), primitive("loot")] : [primitive("strike"), primitive("wait_kill"), primitive("loot")];
+/** A monster's function: def attack_<species>(t, priority=N) with a recipe body. */
+export const recipeDef = (species: string, knife = true, priority: number | null = 1): Def =>
+  def(`${RECIPE_PREFIX}${species}`, recipeBody(knife), { params: [{ name: "t", default: null }, ...(priority === null ? [] : [{ name: "priority", default: lit(priority) }])] });
+/** xmas02's monsters the runner strikes (models.yaml `strikes`; garm_baby: its Fly Wing rule). */
+export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] as const;
+
 /** The Rogue's project, ONE BOX (Batt 2026-11-13 ~21:4x: "take every box out: START > map
  * xmas_dun02, one box is enough; login and choosing the character come later; the user puts the
  * character on xmas_dun02 themself"): the run starts where she stands on xmas_dun02. Its main: the
@@ -315,13 +399,23 @@ export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
  * Fly Wing: press F8 when a boss is seen or HP < 25 %"; live-blocks.md 3.2): two EVENTS that play
  * inside the hunt core on every runner tick -- drink (repeating while HP is under 30 %, a potion
  * every 0.7 s at most, as the runner paces its own) and fly_away (once per sighting or per fall
- * under 25 %, re-armed 3 s after its Fly Wing, the runner's own Fly Wing pace). */
+ * under 25 %, re-armed 3 s after its Fly Wing, the runner's own Fly Wing pace). Stage 3
+ * (live-blocks.md 3.3, Batt 2026-11-13: "The Knife swap (Damascus): a function: press F4, wait
+ * 100 ms, press F5; the other way back: the same swapped"; "make respawn a function block"):
+ * survival's bag_full (the weight home at 50 %: the run stops and the runner flies her home), the
+ * tab knife (the swap as two functions at the runner's moments: the Knife before the steal strike,
+ * the Damascus back after it -- the runner's own today; the open question is written there) and
+ * the tab exits (the way home, the death dialog's two clicks). The keys stay in tab keys. Stage 4a
+ * (live-blocks.md 3.4, Batt 2026-11-13: "break the core into functions, e.g. attack_myst_case,
+ * attack_cookie; on some we may not swap the knife at all"): use_model("xmas02") in the main (the
+ * trained data) and the tab monsters, one recipe per monster the runner strikes, each TODAY's
+ * technique (the Knife swap on every one, priority 1: the values as they are). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts and flies her home on the Butterfly Wing. Tabs: keys; survival (drink under 30 % HP, fly_away on a boss or under 25 %).",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink, fly_away, bag_full at 50 %); knife (the swap); exits (home, respawn); monsters (a recipe per monster).",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -342,14 +436,23 @@ export function xmasProject(): Project {
         tabs: [
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
-            { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("butterfly_wing") } },
+            modelBlock("xmas02", "the trained data: xmas_dun02's detector (its monsters are the recipes' names)"),
+            { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("fly_home"), respawn: lit("respawn_button"), respawn_confirm: lit("respawn_ok") } },
             { kind: "stop", reason: "home" },
           ]),
-          tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("knife_on", [pressKey("F4")]), def("knife_back", [pressKey("F5")])]),
+          tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("wield_knife", [pressKey("F4")]), def("wield_damascus", [pressKey("F5")])]),
           tab("survival", [
             def("drink", [call("heal")], { on: trigger(below("hp_percent", 30), { until: { kind: "cmp", op: ">=", left: sense("hp_percent"), right: lit(31) }, cooldown_s: 0.7 }) }),
             def("fly_away", [call("fly_wing")], { on: trigger({ kind: "or", terms: [sense("sees_boss"), below("hp_percent", 25)] }, { cooldown_s: 3, priority: "critical", mode: "preempt" }) }),
+            def("bag_full", [{ kind: "stop", reason: "home" }], { on: trigger({ kind: "cmp", op: ">=", left: sense("weight_percent"), right: lit(50) }, { priority: "upkeep", mode: "preempt", max_per_run: 1 }) }),
           ]),
+          tab("knife", [def("knife_on", [call("wield_knife")]), def("knife_back", [call("wield_damascus")])]),
+          tab("exits", [
+            def("fly_home", [call("butterfly_wing")]),
+            def("respawn_button", [clickAt(645, 481, "the death dialog's first button: move to the saved location")]),
+            def("respawn_ok", [clickAt(714, 405, "this client's confirmation: OK")]),
+          ]),
+          tab(MONSTERS_TAB, XMAS02_STRIKES.map((sp) => recipeDef(sp))),
         ],
       },
     ],

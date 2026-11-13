@@ -38,6 +38,7 @@ from poring_flow.lint import (
     functions,
     hunt,
     loops,
+    recipes,
     semantics,
     simulate,
     structure,
@@ -116,6 +117,7 @@ def lint(
     zones.check(ctx)  # the map node's zones (Amendment A 4, 2026-10-21)
     detectors.check(ctx)  # the trained models a flow reads (Amendment B, 2026-11-09)
     functions.check(ctx)  # functions that press hotbar keys; dungeon_hunt (Amendment C, 2026-11-13)
+    recipes.check(ctx)  # the box's model and its monsters' recipes (stage 4a, Amendment H)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 
 

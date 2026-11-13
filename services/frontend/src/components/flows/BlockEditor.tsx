@@ -23,7 +23,7 @@ import { SENTENCE_BY_TYPE, type Toolbox, toolbox, type ToolboxScope } from "@/li
 import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
-import { firstDetector, notAdopted } from "@/lib/flow/models";
+import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { Project } from "@/lib/flow/project";
 import { runLine } from "@/lib/flow/status";
 import { INJECT } from "@/lib/flow/theme";
@@ -226,7 +226,7 @@ export default function BlockEditor(p: BlockEditorProps) {
     }
     if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope);
     // the scopes as plain values: their objects are new on every render of the page
-  }, [ready, catalogue, lint, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, catalogue, lint, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -236,20 +236,27 @@ export default function BlockEditor(p: BlockEditorProps) {
   );
 }
 
+/** The core blocks a person places (no input of their own): the save point, and stage 4a's trained
+ * data and its two waits (live-blocks.md 3.4). */
+const CORE_OFFERED = ["assert_save_point", "use_model", "wait_steal", "wait_kill"];
+
 function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox {
   const cat = Object.fromEntries(
     Object.entries(catalogue?.blocks ?? {})
-      .filter(([, b]) => b.spec.kind !== "core" || b.name === "assert_save_point")
+      .filter(([, b]) => b.spec.kind !== "core" || CORE_OFFERED.includes(b.name))
       .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
   );
   const rules = catalogue?.hunt_rules ?? null;
   const models = catalogue?.models ?? null;
   const first = firstDetector(models);
-  return toolbox(cat, scope, rules && huntKey() ? defaultFields(rules) : null, rules && huntKey() ? omitted(rules) : {}, {
-    model: first.model,
-    label: first.label,
-    notes: notAdopted(models),
-  });
+  return toolbox(
+    cat,
+    scope,
+    rules && huntKey() ? defaultFields(rules) : null,
+    rules && huntKey() ? omitted(rules) : {},
+    { model: first.model, label: first.label, notes: notAdopted(models) },
+    monstersOf(models, scope.model ?? null),
+  );
 }
 
 /** Badges (L1 verification), lint warnings and the last run on each block. `paths`: block id ->

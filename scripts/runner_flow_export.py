@@ -1769,8 +1769,12 @@ def build() -> dict[str, Any]:
 # dungeon@9.48 (live-blocks.md stage 1): the hunt core as a LIBRARY for the live block player --
 # no feature of the runner's own play, so the description this export documents does not change.
 # dungeon@9.49 (stage 2): the box's survival events played through that library's hook: the
-# runner's own play (the CLI, the old Run path) is unchanged, so it is no feature here either
-NOT_FEATURES = ("LIVE_BLOCKS_VERSION", "SURVIVAL_EVENTS_VERSION")
+# runner's own play (the CLI, the old Run path) is unchanged, so it is no feature here either;
+# dungeon@9.50 (stage 3): the box's functions called at the runner's own moments, the same;
+# dungeon@9.51 (stage 4a): the box's model and its monsters' recipes, asked at the runner's own
+# lock, the same (the CLI and the old Run path pass neither)
+NOT_FEATURES = ("LIVE_BLOCKS_VERSION", "SURVIVAL_EVENTS_VERSION", "BOX_FUNCTIONS_VERSION",
+                "BOX_RECIPES_VERSION")  # fmt: skip
 
 
 def feature_version(dh: Any) -> str:

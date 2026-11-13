@@ -392,6 +392,20 @@ Amendment B); a not-adopted model is never offered.
   Wing, Knife on, Knife back and **home**: the Butterfly Wing the runner flies home on when the bag
   is half full or on Stop) and a stop; its `keys` tab every key a function (heal F1, fly_wing F8,
   butterfly_wing F9, knife_on F4, knife_back F5). A project may start on any map node.
+  ➡️ **2026-11-14 (stage 3, [planning/live-blocks.md](planning/live-blocks.md) 3.3):** the runner
+  block has a last line "after a death: call ... then confirm: call ..." (the death dialog's two
+  clicks; empty: the runner's own points), and the one box has five tabs: keys (wield_knife F4,
+  wield_damascus F5 among them), survival (+ bag_full at 50 % weight), knife (the swap's two
+  functions), exits (the way home, the respawn's two `click_at` functions).
+  ➡️ **2026-11-14 (stage 4a, [planning/live-blocks.md](planning/live-blocks.md) 3.4):** the one box
+  has a sixth tab, `monsters` (one function per monster, `attack_<monster>(t, priority=1)`, each a
+  recipe of the runner's steps), and its main names the trained data, `use_model("xmas02")`, before
+  the runner block. On /flows the toolbox offers `use_model(...)` under Movement in a map's main,
+  and in a tab named `monsters` a **Monsters** category: a function per monster of the node's model,
+  each monster as a `mob(<id>)` value, and the recipe's steps in their order (knife_on(), strike,
+  wait_steal, knife_back(), wait_kill, loot; use_skill marked "not played live yet: 4b"). The steps
+  are no longer listed under "More skills" (they play only inside a monster's function). Run's
+  readiness reads the monsters' functions too.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the

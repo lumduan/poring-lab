@@ -579,12 +579,34 @@ def test_the_end_presses_nothing_on_zero_unread_no_key_death_or_a_hard_bar() -> 
     assert rec["waited_s"] == pytest.approx(dh.PLAYER_HOME_WAIT_S, abs=dh.PLAYER_HOME_POLL_S)
 
 
+def _ancestors(node: ast.AST) -> list[ast.AST]:
+    out: list[ast.AST] = []
+    while node in PARENT:
+        node = PARENT[node]
+        out.append(node)
+    return out
+
+
 def test_the_home_press_is_on_the_player_path_only_and_types_nothing() -> None:
     run_ = _func("run")
     presses = [n for n in ast.walk(run_) if isinstance(n, ast.Call) and _call_name(n) == "press"
                and n.args and isinstance(n.args[0], ast.Constant)
                and n.args[0].value == "home"]  # fmt: skip
-    assert len(presses) == 1
+    # dungeon@9.50 (live-blocks.md stage 3): the second is the box's way home's port (call_keys,
+    # under `if box_home ...`), pressed only through box_call("home"), which only home_press calls
+    # -- on the same player path as the runner's own press below
+    assert len(presses) == 2
+    port = [p for p in presses if any(isinstance(up, ast.If) and ast.unparse(up.test)
+                                      == "box_home and home_key is not None"
+                                      for up in _ancestors(p))]  # fmt: skip
+    assert len(port) == 1
+    presses = [p for p in presses if p is not port[0]]
+    box_calls = [n for n in ast.walk(run_) if isinstance(n, ast.Call)
+                 and _call_name(n) == "box_call" and n.args and isinstance(n.args[0], ast.Constant)
+                 and n.args[0].value == "home"]  # fmt: skip
+    assert len(box_calls) == 1
+    home_press = next(up for up in _ancestors(box_calls[0]) if isinstance(up, ast.FunctionDef))
+    assert home_press.name == "home_press" and presses[0] in list(ast.walk(home_press))
     node: ast.AST = presses[0]
     in_player_else = False
     while node in PARENT:

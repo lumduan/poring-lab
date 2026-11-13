@@ -41,6 +41,9 @@ class ModelSpec(BaseModel):
     classes: list[str] = Field(min_length=1)
     untrained: list[str] = []
     mobs: dict[str, list[int]] = {}
+    # live blocks stage 4a: the classes the RUNNER strikes (unit_detector MAP_MODELS' collapse),
+    # the monsters a box's recipes may name (poring_flow.recipes)
+    strikes: list[str] = []
     why: str = Field(max_length=400)
 
     @model_validator(mode="after")
@@ -53,6 +56,10 @@ class ModelSpec(BaseModel):
             raise ValueError(f"classes are distinct keys: {bad or names}")
         if set(self.mobs) - set(self.classes):
             raise ValueError("mobs name classes the model has")
+        if [c for c in self.classes if c in self.strikes] != self.strikes:
+            raise ValueError("strikes name classes the model has, in its class order")
+        if self.strikes and self.kind != "detector":
+            raise ValueError("only a detector boxes what the runner strikes")
         if self.kind == "boss_recognizer" and len(self.classes) != 1:
             raise ValueError("a boss recognizer answers one question: one class")
         return self

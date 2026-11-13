@@ -47,6 +47,7 @@ import {
   MAIN_TAB,
   mainOf,
   mapNodes,
+  modelOn,
   namesOf,
   newTabName,
   nodeById,
@@ -175,7 +176,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const tabs: Tab[] = node.kind === "global" ? node.tabs : [...node.tabs.filter((t) => t.name === MAIN_TAB), ...node.tabs.filter((t) => t.name !== MAIN_TAB)];
   const tab: Tab | undefined = tabs.find((t) => t.name === tabName) ?? tabs[0];
   const scopeKey = tab ? `${node.id}/${tab.name}` : `${node.id}/`;
-  const toolboxScope: ToolboxScope = { node: node.kind, main: tab?.name === MAIN_TAB && node.kind !== "global" };
+  const toolboxScope: ToolboxScope = { node: node.kind, main: tab?.name === MAIN_TAB && node.kind !== "global", tab: tab?.name, model: modelOn(node) };
 
   // --- RUN: the PROJECT from this map node (the live block player), when every block it reaches is
   // live; the runner's checklist, settings and read-only check where the node holds its block ------

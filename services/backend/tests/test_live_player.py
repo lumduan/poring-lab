@@ -210,12 +210,19 @@ def taps(io_: FakeIO) -> list[str]:
 # --- the set is ONE place ------------------------------------------------------------------------
 def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
     cat = catalogue.catalogue()
-    assert live.live_blocks() == ["assert_save_point", "dungeon_hunt", "press_key"]
+    # stage 3: click_at (only inside dungeon_hunt's respawn functions: live.click_problems);
+    # stage 4a: use_model and the recipe primitives (only inside a monster's recipe: recipes.py)
+    assert live.live_blocks() == ["assert_save_point", "click_at", "dungeon_hunt", "loot",
+                                  "press_key", "strike", "use_model", "wait_kill",
+                                  "wait_steal"]  # fmt: skip
     assert live.live_sensors() == ["current_map", "hp_percent", "is_dead", "map_load_seen",
                                    "sees_boss", "sp_percent", "weight_percent"]  # fmt: skip
     doc = editor.catalogue_doc()
-    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 2
-    assert doc["live"]["hunt_core"]["sensors"] == ["hp_percent", "sp_percent", "sees_boss"]
+    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 4
+    assert doc["live"]["hunt_core"]["recipes"]["shapes"] == [list(x) for x in dh.RECIPE_SHAPES]
+    assert doc["live"]["hunt_core"]["sensors"] == ["hp_percent", "sp_percent", "sees_boss",
+                                                   "weight_percent"]  # fmt: skip
+    assert doc["live"]["hunt_core"]["calls"]["max_wait_s"] == 1.0
     assert doc["blocks"]["press_key"]["spec"]["live"] is True
     assert doc["blocks"]["walk_to"]["spec"]["live"] is False
     assert doc["sensors"]["hp_percent"]["spec"]["live"] is True
@@ -224,9 +231,12 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
         *live.live_blocks(),
         *live.live_sensors(),
     }
-    # one version, three places (stage 2: the box's survival events; stage 1's library seam stays
-    # 9.48); the runner's own version is unchanged
-    assert dh.SURVIVAL_EVENTS_VERSION == live.VERSION == fp.VERSION == "9.49"
+    # one version, three places (stage 4a: the box's model and recipes; stage 3's functions stay
+    # 9.50, stage 2's survival events 9.49, stage 1's library seam 9.48); the runner's own version
+    # is unchanged
+    assert dh.BOX_RECIPES_VERSION == live.VERSION == fp.VERSION == "9.51"
+    assert dh.BOX_FUNCTIONS_VERSION == "9.50"
+    assert dh.SURVIVAL_EVENTS_VERSION == "9.49"
     assert dh.LIVE_BLOCKS_VERSION == "9.48" and dh.VERSION == "dungeon@8.7"
     assert dh.BOX_PLAYS == live.PLAYS
 
@@ -358,7 +368,8 @@ def test_the_built_in_safety_events_play_as_the_safe_end(tmp_path: Path) -> None
         fp.play(p, io_, label=key, stop_file=None, demo=d, checker=ok_check)
         end = events(d)[-1]
         assert end["reason"] == key, (key, end)
-        assert end["words"] and ("stage 2" in end["words"] or "a person looks" in end["words"])
+        assert end["words"] and ("stage 2" in end["words"] or "a person looks" in end["words"]
+                                 or "a later stage" in end["words"])  # fmt: skip
         assert ("release",) in io_.out and io_.out[-1] == ("release",)
         assert "tap" not in {o[0] for o in io_.out} or key == "hp_critical"
 

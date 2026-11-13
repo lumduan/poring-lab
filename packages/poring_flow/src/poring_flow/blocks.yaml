@@ -151,13 +151,22 @@ blocks:
     params:
       - {name: heal, type: proc, required: true, group: keys, note: "the function the runner presses to heal: one press_key, the heal item's hotbar key (its default F1)"}
       - {name: fly, type: proc, required: true, group: keys, note: "the function the runner presses for a Fly Wing (a jump on this map): one press_key (its default F8)"}
-      - {name: knife_on, type: proc, required: true, group: keys, note: "the function the runner presses to wield the Knife: one press_key (its default F4)"}
-      - {name: knife_back, type: proc, required: true, group: keys, note: "the function the runner presses to wield the dagger again: one press_key (its default F5)"}
+      - {name: knife_on, type: proc, required: true, group: keys, note: "the function the runner presses to wield the Knife: one press_key (its default F4); stage 3: or a body of presses and waits the hunt core calls at that moment, its first press the key"}
+      - {name: knife_back, type: proc, required: true, group: keys, note: "the function the runner presses to wield the dagger again: one press_key (its default F5); stage 3: or a body of presses and waits the hunt core calls at that moment, its first press the key"}
       # ➡️ Batt 2026-11-13 ~21:4x (the one box, START > xmas_dun02): the runner flies HOME itself, on
       # a Butterfly Wing (the bag half full, or Stop: its settings), so a fifth role names that
       # function. Optional: without it the map's item warp by function gives the home key, as before
       # (poring_flow.project.runner_keys). Its function is a Butterfly Wing function (its key a wing key).
       - {name: home, type: proc, group: keys, note: "the function the runner presses to fly home on a Butterfly Wing (the bag half full, or Stop): one press_key (its default F9); absent: the map's item warp by function"}
+      # ➡️ Batt 2026-11-13 ("make respawn a function block, in case another server's menu differs;
+      # make everything editable in blocks, don't hard-code"; live-blocks.md stage 3, ADR-0020
+      # Amendment G): the death exit's two presses as FUNCTIONS of click_at. Optional: without
+      # `respawn` the runner presses its own points (the Run settings' respawn_at /
+      # respawn_confirm_at); with it, `respawn_confirm` absent = this server asks no confirmation.
+      # Stage 3 also lets knife_on, knife_back and home be a BODY of presses and waits (the hunt core
+      # calls it at its own moment; poring_flow.functions.BODY_ROLES).
+      - {name: respawn, type: proc, group: exits, note: "the function the hunt core calls after a death to press the death dialog's button (move to the saved location): click_at and wait only; absent: the runner's own point (the Run settings)"}
+      - {name: respawn_confirm, type: proc, group: exits, note: "the function it calls when the confirmation reads after that press (this client: OK): click_at and wait only; absent with respawn: this server asks none"}
     timeout_s: 600
     long: true
     moves: near
@@ -221,20 +230,75 @@ blocks:
     affects: {hp_percent: "-", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
     note: attack the unit we are engaged with until it dies (13.9's finish policy)
   use_skill:
+    # ➡️ live blocks stage 4a (Batt 2026-11-13: "in the future each monster may get a different skill
+    # or killing technique"; live-blocks.md 3.4, ADR-0020 Amendment H): `key`, the skill's HOTBAR key
+    # (a monster's recipe: use_skill(key="F6")); `skill` is no longer required (one of the two names
+    # it). Expressible and linted in a recipe; it does NOT play live in 4a (poring_flow.recipes: 4b).
     concept: combat.use_skill
     params:
-      - {name: skill, type: skill, required: true, positional: true}
+      - {name: skill, type: skill, positional: true}
       - {name: target, type: mob}
+      - {name: key, type: str, options: [F1, F2, F3, F4, F5, F6, F7, F8, F9], note: "the skill's hotbar key (row 1), e.g. in a monster's recipe use_skill(key=\"F6\"); stage 4a lints it and does not play it live (4b)"}
     timeout_s: 30
     affects: {sp_percent: "-", hp_percent: "~", base_level: "+", job_level: "+"}
   loot:
+    # ➡️ live blocks stage 4a (live-blocks.md 3.4, ADR-0020 Amendment H): `target`, the monster whose
+    # kill is looted, is its first parameter now (a monster's recipe: loot(t)); `item` stays, by name.
+    # With a target it is a recipe PRIMITIVE: the runner's own loot step, live ONLY inside a monster's
+    # recipe (poring_flow.recipes); without one it is the old block (not live: 4b).
     concept: loot.pick_up
-    params: [{name: item, type: item, positional: true}]
+    params:
+      - {name: target, type: mob, positional: true, note: "the monster whose kill is looted: a recipe's own input t"}
+      - {name: item, type: item}
     timeout_s: 30
     moves: near
     adds_weight: true
+    live: true  # stage 4a: loot(t) inside a monster's recipe only (the runner's own loot step)
     affects: {weight_percent: "+", item_count: "+"}
-    note: Batt 2026-10-08 (Q21) -- a hover-scan around the death cell for the PICKUP cursor; verified by the weight readout rising
+    note: Batt 2026-10-08 (Q21) -- a hover-scan around the death cell for the PICKUP cursor; verified by the weight readout rising. Stage 4a, loot(t) in a monster's recipe -- the runner's own loot step after that kill
+  # --- live blocks STAGE 4a (Batt 2026-11-13: "the core of the hunt: break it into functions, e.g.
+  # attack_myst_case, attack_cookie, because in the future each monster may get a different skill or
+  # killing technique, and on some we may not swap the knife at all"; docs/planning/live-blocks.md
+  # 2b / 3.4, ADR-0020 Amendment H): the RECIPE PRIMITIVES. A monster's function attack_<class>(t)
+  # is a recipe of them (and the hunt core's knife_on() / knife_back()); the runner plays each with
+  # its OWN code at its own moment -- live ONLY inside such a recipe, refused anywhere else before
+  # any input (poring_flow.recipes); their binding is the runner's (live.OWN_BINDING).
+  strike:
+    concept: combat.attack_target
+    params: [{name: target, type: mob, required: true, positional: true, note: "the recipe's own input t: the monster the runner locked"}]
+    timeout_s: 60
+    long: true
+    moves: near
+    live: true  # stage 4a: inside a monster's recipe only (the runner's strike)
+    affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: the runner's strike on the monster it locked (the two-motion click, the lead, the reach check); live only inside a monster's recipe
+  wait_steal:
+    concept: core.wait_steal
+    kind: core
+    params: [{name: target, type: mob, required: true, positional: true, note: "the recipe's own input t"}]
+    timeout_s: 10
+    live: true  # stage 4a: inside a monster's recipe only (the runner's bare-steal cue)
+    note: the runner waits for the steal's cue (the item popup), its time box or its HP floor -- no input of its own; live only inside a monster's recipe, after knife_on() and the strike
+  wait_kill:
+    concept: core.wait_kill
+    kind: core
+    params: [{name: target, type: mob, required: true, positional: true, note: "the recipe's own input t"}]
+    timeout_s: 120
+    long: true
+    live: true  # stage 4a: inside a monster's recipe only (the runner's kill read)
+    note: the runner's kill read (the EXP line, else the kill gap) -- no input of its own; live only inside a monster's recipe
+  use_model:
+    # The TRAINED DATA (Batt 2026-11-13: "the flow page should also have a block to LOAD THE TRAINED
+    # DATA, with the monsters the bot already knows"): a models.yaml entry by its id. Its `strikes`
+    # are the monsters a box's recipes may name; live, the hunt core's box detector takes that model
+    # (refused before any input when it is not live, not for the map, or not the file the detector
+    # loads there). In a map node's main, before its dungeon_hunt.
+    concept: core.use_model
+    kind: core
+    params: [{name: model, type: str, required: true, positional: true, note: "a trained model's id (models.yaml), e.g. xmas02"}]
+    timeout_s: 1
+    live: true  # stage 4a: the hunt core's model (no input)
+    note: the trained data -- the model the hunt core's box detector uses and whose monsters the recipes name; no input; in a map node's main before its dungeon_hunt
   buy:
     concept: trade.buy
     params:
@@ -342,6 +406,20 @@ blocks:
       - {name: window, type: window, required: true, positional: true}
       - {name: button, type: str, required: true, positional: true}
     timeout_s: 10
+  click_at:
+    # Batt 2026-11-13 (live-blocks.md stage 3, ADR-0020 Amendment G): ONE click at a point of the
+    # game picture (game-region pixels, 1280 x 720), as the runner's own respawn press clicks: two
+    # motions, then the click (the client ignores a cold click). LIVE only inside dungeon_hunt's
+    # respawn functions, in its death exit (poring_flow.live: refused before any input anywhere
+    # else; a person-written click in the world is stage 4's question). Its binding is the
+    # runner's own press (live.OWN_BINDING).
+    concept: ui.press_button
+    params:
+      - {name: x, type: int, required: true, positional: true, note: "game-region pixels from the left, 0-1279"}
+      - {name: y, type: int, required: true, positional: true, note: "game-region pixels from the top, 0-719"}
+    timeout_s: 2
+    live: true  # stage 3: in the hunt core's death exit only (the respawn functions)
+    note: a click at a fixed point of the game picture (a dialog's button); two motions, then the click. Live only inside dungeon_hunt's respawn and respawn_confirm functions
   sit:
     concept: char.sit
     timeout_s: 5

@@ -881,7 +881,8 @@ def test_the_box_watcher_takes_the_maps_model_with_a_v1_rollback() -> None:
     assert "self.det: Any = unit_detector.for_map(map_name)" in src  # T-11 (Batt 2026-11-07)
     assert "self.det = unit_detector.for_map_gpu(map_name)" in src  # dungeon@8.9, same model
     assert 'None if a.box_model == "v1" else a.map' in src
-    assert 'ev({"kind": "box_model", "choice": a.box_model, **boxes.model,' in src  # + every_s
+    # + every_s; dungeon@9.51: "box" when the box names its model (use_model; test_box_recipes)
+    assert 'ev({"kind": "box_model", "choice": a.box_model if box_model_ is None else "box",' in src
     assert '"--box-model",\n        choices=["map", "v1"],\n        default="map",' in src
 
 
@@ -931,7 +932,7 @@ def test_box_strike_is_wired_once_per_box_fight_and_off_by_default() -> None:
     assert 'and box_fight.get("box") is not None\n' in src
     assert 'and not box_fight.get("tried")\n' in src
     assert 'box_fight["tried"] = True  # dungeon@8.8: once per box fight' in src
-    assert 'strike(u_b, v_b, rel_b, "box")' in src
+    assert 'strike(u_b, v_b, rel_b, "box", box_sp[0])' in src  # 9.51: the struck box's species
     # the ring scan still follows when the box target finds no SWORD
     i_box = src.index("got_b = box_target()")
     i_ring = src.index('found = scan("defend", ring(1), "sword")', i_box)
@@ -1070,7 +1071,8 @@ def test_walk_stop_ring1_walked_and_false_cells() -> None:
     assert on["walk_stop"] == [dh.WALK_STOP_PX, dh.WALK_STOP_N, dh.WALK_STOP_GAP_S, dh.FALSE_REL_S]
     src = Path(dh.__file__).read_text()
     # a walked strike takes no lock on any fight path
-    assert 'if strike(u, v, c, "scan"):' in src and 'if strike(u_b, v_b, rel_b, "box"):' in src
+    assert 'if strike(u, v, c, "scan"):' in src
+    assert 'if strike(u_b, v_b, rel_b, "box", box_sp[0]):' in src  # 9.51: + its species
     assert 'if strike(u2, v2, c2, "stall_scan"):' in src
     assert 'if not strike(u_q, v_q, rel_q, "queue"):' in src
     assert '"walked" if walked is not None else' in src
@@ -3011,9 +3013,11 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     i_on = src.index("        if bare_on:  # dungeon@9.27: every input is the runner's own")
     assert i_on < src.index("bare = BareCtl(") < src.index("        def strike(u: float")
     assert "bare: BareCtl | None = None" in src
-    body = src[src.index("        def strike(u: float, v: float, rel: Cell, by: str) -> bool:") :]
+    head = "        def strike(u: float, v: float, rel: Cell, by: str, species: str"  # 9.51
+    body = src[src.index(head) :]
     body = body[: body.index("\n        def box_target(")]
-    hook = 'if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword"):'
+    # dungeon@9.51: + the box's recipe at this decision (rcp_; test_box_recipes.py)
+    hook = 'if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword",'
     i_b = body.index(hook)
     assert i_b < body.index("if escaped[0]:\n                    return True") < body.index(
         "ref = frame()") < body.index('click_at(u, v, "strike")')  # fmt: skip
@@ -3036,7 +3040,13 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     # the I/O is the runner's own: the gate's window read, its chord, press(), ui_double_click
     assert "windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg)" in src
     assert "chord=lambda: agent_raw.chord(*bare_keys)" in src
-    assert 'press=lambda why_: press("equip", why_)' in src
+    # dungeon@9.50: the dagger's key through bare_equip_press -- the runner's own press("equip")
+    # unless the box plays the Knife swap (then its knife_back, but never for the escape)
+    assert "press=bare_equip_press," in src
+    bep = src[src.index("            def bare_equip_press(why_: str) -> None:") :]
+    bep = bep[: bep.index("\n\n")]
+    assert bep.rstrip().endswith('press("equip", why_)')
+    assert 'if box_knife and why_ != "safety":' in bep
     assert "ui_double_click(agent, gx0 + u_, gy0 + v_, r.desktop(), r.ns)" in src
     assert src.count("ui_double_click(") == 2  # its definition + the one call
 
@@ -3974,7 +3984,7 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
     import re
 
     calls_ = re.findall(r"\bstrike\((?!\))", qn)  # calls, not the docstring's "strike()"
-    assert len(calls_) == 1 and 'if strike(u_p, v_p, rel_p, "queue"):' in qn
+    assert len(calls_) == 1 and 'if strike(u_p, v_p, rel_p, "queue", box_species(b_)):' in qn
     assert qn.count("hover(") == 1 and 'vds_.append(str(hover(u_, v_)["verdict"]))' in qn
     assert 'if vds_[-1] == "sword":' in qn  # the strike only where the cursor read SWORD
     for skip in (

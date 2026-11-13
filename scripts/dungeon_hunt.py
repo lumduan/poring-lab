@@ -4390,6 +4390,7 @@ class BoxWatch:
             self.det = unit_detector.for_map_gpu(map_name)
         self.gpu = detector != "cpu"
         self.last_pick: dict[str, Any] | None = None  # dungeon@9.28: --value-target's choice
+        self.last_species: str | None = None  # dungeon@9.51: the box near() returned, its species
         self.model = {"onnx": self.det.model.name, "collapse": sorted(self.det.collapse),
                       "threads": unit_detector.THREADS, "detector": detector}  # fmt: skip
         if self.gpu:
@@ -4539,6 +4540,7 @@ class BoxWatch:
         if time.monotonic() - t > fresh_s:
             return None
         best = None
+        best_b: Any = None  # dungeon@9.51: the nearest box itself (its species)
         cands: list[tuple[float, Any]] = []  # dungeon@9.28: the same candidates, for --value-target
         for b in got:
             if self_box((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2):
@@ -4551,13 +4553,15 @@ class BoxWatch:
             if d <= max_px:
                 cands.append((d, b))
             if d <= max_px and (best is None or d < best[0]):
-                best = (d, b.x0, b.y0, b.x1, b.y1)
+                best, best_b = (d, b.x0, b.y0, b.x1, b.y1), b
         self.last_pick = None
         if values and cands:  # dungeon@9.28 (--value-target): the box worth the most
             d_v, b_v = value_pick(cands, values)
             self.last_pick = {"species": box_species(b_v), "d": round(d_v),
                               "nearest_d": None if best is None else round(best[0])}  # fmt: skip
+            self.last_species = box_species(b_v)
             return (b_v.x0, b_v.y0, b_v.x1, b_v.y1)
+        self.last_species = None if best_b is None else box_species(best_b)
         return None if best is None else best[1:]
 
     def start_hud(self, every_s: float, log_path: Path | None = None) -> None:
@@ -5371,33 +5375,39 @@ def bare_equip_seq(io: BareIo, ref: Any, why: str, *, press: bool = True,
                if opener is not None else {})}  # fmt: skip
 
 
-def opener_seq(io: BareIo, opener: OpenerRead, why: str) -> dict[str, Any]:
+def opener_seq(io: BareIo, opener: OpenerRead, why: str, ends: str = "opener") -> dict[str, Any]:
     """--steal-opener's "unequip" (dungeon@9.27c): the opener's KEY (no Alt+Q, no window, no
     click), then the state must read "opener" (its slot EMPTY: worn; F5 shows the dagger: in the
     bag) within ON_S; a READABLE read with the opener still in the bag ("armed" / "bare") -> ONE
     more press and ON_S again. ok: True / False / None (unreadable). ``bare``: the dagger read in
-    the bag on the last readable frame (the truth the runner keeps, as bare_unequip_seq's)."""
+    the bag on the last readable frame (the truth the runner keeps, as bare_unequip_seq's).
+    ``ends`` (dungeon@9.50, the box's knife_on): "armed" -- its body ends on the dagger's key (no
+    strike between): the state must read "armed" (the Knife back in the bag), one more press of
+    the body only on a READABLE "opener" / "bare", and ``bare`` is False (no bare phase)."""
     assert io.opener is not None
     t0 = io.clock()
     io.opener(why)
     n = 1
     last: list[str | None] = [None]
+    want, again = (
+        ("armed", ("opener", "bare")) if ends == "armed" else ("opener", ("armed", "bare"))
+    )
 
     def on(f_: Any) -> bool:
         s_ = opener.state(f_)
         if s_ is not None:
             last[0] = s_
-        return s_ == "opener"
+        return s_ == want
 
     ok, f, _e = bare_poll(io, on, bs.ON_S)
-    if not ok and opener.state(f) in ("armed", "bare"):
+    if not ok and opener.state(f) in again:
         io.opener(why)
         n += 1
         ok, f, _e = bare_poll(io, on, bs.ON_S)
     s = opener.state(f)
     return {"ok": True if ok else (None if s is None else False), "presses": n,
             "ms": round((io.clock() - t0) * 1e3), "state": s, "frame": f,
-            "bare": last[0] in ("opener", "bare"),
+            "bare": ends != "armed" and last[0] in ("opener", "bare"),
             "slot": bs.slot_stats(bs.slot_crop(bs.slot_gray(f)), opener.ref5),
             "opener_slot": opener.stats(f)}  # fmt: skip
 
@@ -5424,9 +5434,13 @@ class BareCtl:
     def __init__(self, io: BareIo, ref: Any, counts: Counter[str],
                  ev: Callable[[dict[str, Any]], None],
                  stop: type[Exception] = RuntimeError, *, ready: bool = False,
-                 opener: OpenerRead | None = None, cue: str = "both") -> None:  # fmt: skip
+                 opener: OpenerRead | None = None, cue: str = "both",
+                 opener_ends: str = "opener") -> None:  # fmt: skip
         self.io, self.ref, self.counts, self.ev, self.stop = io, ref, counts, ev, stop
         self.opener = opener
+        # dungeon@9.50: the box's knife_on body ends on the dagger ("armed": no strike between):
+        # one swap per target, read back armed, no bare phase (opener_seq's ``ends``)
+        self.opener_ends = opener_ends
         self.st = bs.BareSteal(cue=cue)  # 9.27d: --steal-cue
         self.tgt: dict[str, Any] | None = None
         self.pending: str | None = None  # a key-only equip (escape) awaiting its read-back
@@ -5552,10 +5566,12 @@ class BareCtl:
         assert self.opener is not None
         self.busy = True
         try:
-            res = opener_seq(self.io, self.opener, by)
+            res = opener_seq(self.io, self.opener, by, self.opener_ends)
         finally:
             self.busy = False
             self.swap_t = self.io.clock()  # 9.27e: a swap pauses our hit lines
+        if self.opener_ends == "armed":  # dungeon@9.50: the box's swap left her armed
+            return self._through(by, res)
         if res["bare"]:
             if idle:
                 self.st.wait_bare()
@@ -5573,6 +5589,24 @@ class BareCtl:
             self.counts["bare_opener"] += 1
             self.fails = 0
             return True
+        self._failed("bare_opener_fail")
+        return False
+
+    def _through(self, by: str, res: Mapping[str, Any]) -> bool:
+        """dungeon@9.50: the box's knife_on body ended on the dagger's key (no strike between):
+        read back ARMED it is this target's one swap (its phase taken: no swap again on it; no
+        bare phase, nothing to swap back); the strike goes on with the dagger (False, as an armed
+        unequip's)."""
+        if self.tgt is not None:
+            self.tgt["phase"] = True
+        self.ev({"kind": "bare", "what": "opener", "ok": res["ok"], "ms": res["ms"], "by": by,
+                 "presses": res["presses"], "state": res["state"], "slot": res["slot"],
+                 "opener_slot": res["opener_slot"], "ends": "armed"})  # fmt: skip
+        if res["ok"]:
+            self.counts["bare_opener"] += 1
+            self.counts["bare_opener_through"] += 1
+            self.fails = 0
+            return False
         self._failed("bare_opener_fail")
         return False
 
@@ -5632,7 +5666,8 @@ class BareCtl:
         self.ev({"kind": "bare", "what": "begin", "ok": True, "by": by, "state": s})
         return True
 
-    def before_strike(self, by: str, hp: float | None, aim: Callable[[], bool] | None) -> bool:
+    def before_strike(self, by: str, hp: float | None, aim: Callable[[], bool] | None,
+                      recipe: Callable[[], bool] | None = None) -> bool:  # fmt: skip
         """strike()'s FIRST step (strikes are made with no lock held): the previous target is over
         if its lock went (_end); a new target's first strike, armed, UNEQUIPS; then ``aim`` reads
         the strike point again -- the swap takes ~2 s and the target may have walked: no SWORD
@@ -5640,7 +5675,9 @@ class BareCtl:
         plant is struck as it is; under BARE_HP_MIN nothing comes off (bare_skip_hp).
         --bare-ready: already bare (the idle unequip) -> NO swap, the phase begins at this strike
         (_begin); under BARE_HP_MIN the dagger goes on first ("hp"); read armed after all -> the
-        swap below, as without it."""
+        swap below, as without it. ``recipe`` (dungeon@9.51, the box's recipes): asked ONCE, at a
+        new target's decision (its LOCK): False -> this target is struck WITHOUT the Knife swap
+        (_no_knife); True -> exactly as without it. None: never asked (as before)."""
         if by == "plant":
             return True
         if self.pending is not None:
@@ -5651,6 +5688,8 @@ class BareCtl:
             self.tgt = {"t": self.io.clock(), "by": by, "locked": False, "phase": False}
         if self.tgt["phase"] or self.pending is not None:
             return True
+        if recipe is not None and not recipe():
+            return self._no_knife(by, aim)
         if self.ready and not self.st.armed and self.st.t_bare is None:
             if hp is not None and hp < bs.BARE_HP_MIN:
                 self.equip("hp")  # never a bare strike under BARE_HP_MIN: armed, as it is
@@ -5665,6 +5704,28 @@ class BareCtl:
         if not self.unequip(by):
             return True  # armed (skipped / failed: the strike goes on with the dagger) or flown
         if aim is not None and not aim():
+            self.counts["bare_aim_lost"] += 1
+            self.ev({"kind": "bare", "what": "aim", "ok": False, "by": by})
+            return False
+        return True
+
+    def _no_knife(self, by: str, aim: Callable[[], bool] | None) -> bool:
+        """dungeon@9.51: the box's recipe for this target has no knife_on -- it is struck with the
+        dagger, no bare phase (its decision taken: nothing swaps on it). Armed: as it is. Already
+        bare (--bare-ready's idle swap): the dagger on FIRST ("recipe", read back as every equip),
+        then ``aim`` reads the strike point again (the swap took time: no SWORD -> no click, False,
+        bare_aim_lost). The next idle moment takes the Knife again (ready_tick), as after a fight
+        that ended armed."""
+        assert self.tgt is not None
+        self.tgt["phase"] = True
+        self.counts["bare_recipe_no_knife"] += 1
+        if self.st.armed:
+            self.ev({"kind": "bare", "what": "recipe", "knife": False, "by": by, "swap": False})
+            return True
+        ok = self.equip("recipe")
+        self.ev({"kind": "bare", "what": "recipe", "knife": False, "by": by, "swap": True,
+                 "ok": ok})  # fmt: skip
+        if ok and aim is not None and not aim():
             self.counts["bare_aim_lost"] += 1
             self.ev({"kind": "bare", "what": "aim", "ok": False, "by": by})
             return False
@@ -5745,7 +5806,51 @@ LIVE_BLOCKS_VERSION = "9.48"
 # runner's (the HP-rate fly, the Garm Baby, the stock, the dead jump, an unread position, the NPC
 # guard, the knife, the way home). No box_plays (the CLI, a box without such events): as before.
 SURVIVAL_EVENTS_VERSION = "9.49"
-BOX_PLAYS = ("potion", "fly_hp", "boss_fly")  # == poring_flow.live.PLAYS (test_live_player.py)
+# --- dungeon@9.50 (Batt 2026-11-13: "The Knife swap (Damascus): a function: press F4, wait 100 ms,
+# press F5; the other way back to the Knife: the same swapped"; "make respawn a function block, in
+# case another server's menu differs; make everything editable in blocks, don't hard-code";
+# docs/planning/live-blocks.md stage 3): the Knife swap, the respawn, the weight home and the way
+# home at the end are the BOX's FUNCTIONS (and an event). The runner still decides WHEN; at each of
+# its moments it CALLS the hook's ``call(role, why, press, click)`` instead of pressing itself, and
+# the box's body plays through ``press`` / ``click`` -- the runner's OWN press of a key of that
+# moment, its own two-motion click in the death exit (one Agent, one writer). Its read-backs, its
+# retries, its waits and every rule around them stay its own. ``box_roles`` (run()) names the roles
+# the box plays, each with where its body leaves her (knife_on: "opener" or "armed"). The new
+# BOX_PLAYS: "knife" (the opener's and the swap back's key presses; the escape's dagger press before
+# a Fly Wing stays the runner's: never delayed by a body's waits), "respawn" (the death dialog's
+# button and its confirmation's OK: the runner's respawn_at / respawn_confirm_at points unused),
+# "weight_home" (the box's weight event decides on each READ weight, at the UI watch as the
+# runner's own; an unread weight drawn red keeps the runner's own rule) and "home_end" (the end's
+# Butterfly Wing press; the count read, the stand-up, the load wait stay the runner's). None of
+# them: exactly as 9.49 (the CLI, the old Run path, a box whose role functions are one press_key).
+BOX_FUNCTIONS_VERSION = "9.50"
+# --- dungeon@9.51 (Batt 2026-11-13: "the core of the hunt: break it into functions, e.g.
+# attack_myst_case, attack_cookie, because in the future each monster may get a different skill or
+# killing technique, and on some we may not swap the knife at all"; docs/planning/live-blocks.md
+# 2b / 3.4, stage 4a): the box decides WHICH technique per monster; the runner still plays every
+# step with its own code. ``box_model`` (run()): the box's use_model, the models.yaml entry its box
+# detector must be (box_model_refused: refused before any input when it is not live, not for this
+# map, or not the file the runner's detector loads here -- choosing another model than the map's
+# own is a follow-up: the detect server serves the map's, and a run never restarts it).
+# ``box_recipes``: the box's recipe per species (poring_flow.recipes.Recipe.doc, decided before any
+# input). At a new target's first strike (BareCtl.before_strike's decision: the LOCK) the runner
+# asks the hook which recipe attacks that target's species -- the detector's species before the
+# collapse: a box strike's box, a queue pick's entry; every other strike's species is unknown -- and
+# plays it with its own code: a recipe without knife_on strikes that monster without the Knife swap
+# (already bare, --bare-ready: the dagger on first, "recipe"); a recipe with it, no recipe for the
+# species, or an unknown species: exactly as before. A recipe's priority weighs its species'
+# --value-target value (1, or none written: the values as they are). Neither: exactly as 9.50.
+BOX_RECIPES_VERSION = "9.51"
+BOX_PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end",
+             "model", "recipes")  # fmt: skip
+# == poring_flow.recipes.SHAPES (test_box_recipes.py): the two orders the runner plays
+RECIPE_SHAPES = (("knife_on", "strike", "wait_steal", "knife_back", "wait_kill", "loot"),
+                 ("strike", "wait_kill", "loot"))  # fmt: skip
+# == poring_flow.live.PLAYS (test_live_player.py); the roles a call plays, each play's
+BOX_CALL_ROLES = {"knife": ("knife_on", "knife_back"), "respawn": ("respawn",),
+                  "home_end": ("home",)}  # fmt: skip
+BOX_OPTIONAL_ROLES = ("respawn_confirm",)  # with "respawn": this client's confirmation (or none)
+KNIFE_ENDS = ("opener", "armed")  # knife_on's body leaves the Knife worn (strike between) or not
 
 
 @dataclass(frozen=True)
@@ -5766,6 +5871,9 @@ class HuntTick:
     # guard_tick read inside a long action (no Battle Log read there: the boss is not known)
     boss: str | None = None
     quick: bool = False
+    # dungeon@9.50: the WEIGHT read of this tick (a percent, the UI watch's fresh read; None on
+    # every other tick): the box's weight event decides on it there, the runner's own moment
+    weight_pct: int | None = None
 
 
 def hook_stop(hook: Any, view: HuntTick) -> str | None:
@@ -5788,17 +5896,78 @@ def hook_survive(hook: Any, view: HuntTick, press: Callable[[str, str], str | No
     return None if why is None else str(why)
 
 
+def hook_call(
+    hook: Any,
+    role: str,
+    why: str,
+    press: Callable[[str, str], str | None],
+    click: Callable[[int, int, str], bool] | None = None,
+) -> str | None:
+    """dungeon@9.50: the box's function for ``role`` at this moment of the runner (the hook plays
+    its body through ``press`` -- and ``click`` in the death exit -- while the runner waits): None
+    (played), or why it could not (recorded; the loop's next tick ends the run normally). No hook:
+    never called (box_roles is empty without one: box_plays_refused)."""
+    if hook is None:
+        return "no hook"
+    got = hook.call(role, why, press, click)
+    return None if got is None else str(got)
+
+
 def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss_walk: bool,
-                      bosses: Sequence[str]) -> str | None:  # fmt: skip
-    """PURE (dungeon@9.49): why the box cannot play these handlers in this run (None: it can).
-    Every refusal is before any input."""
+                      bosses: Sequence[str], roles: Mapping[str, str] | None = None,
+                      player: bool = True, knife_swap: bool = True, bare_ready: bool = False,
+                      respawn: bool = True, home_key: str | None = "F9",
+                      model: Mapping[str, Any] | None = None,
+                      recipes: Mapping[str, Mapping[str, Any]] | None = None,
+                      value_target: bool = True) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.49; 9.50: the box's functions; 9.51: its model and recipes): why the box
+    cannot play these handlers in this run (None: it can). ``roles``: the roles its functions play
+    (box_roles), with where knife_on's body leaves her; ``model`` / ``recipes``: box_model /
+    box_recipes; ``player`` / ``knife_swap`` (--bare-steal + --steal-opener) / ``bare_ready`` /
+    ``respawn`` / ``home_key`` / ``value_target``: this run's. Every refusal is before any input."""
+    roles = dict(roles or {})
     bad = sorted(set(plays) - set(BOX_PLAYS))
     if bad:
         return f"box_plays {bad}: not one of {list(BOX_PLAYS)}"
+    why_rc = recipes_refused(plays, hook, model, recipes, knife_swap=knife_swap,
+                             value_target=value_target)  # fmt: skip
+    if why_rc:
+        return why_rc
+    known = {r for rs in BOX_CALL_ROLES.values() for r in rs} | set(BOX_OPTIONAL_ROLES)
+    stray = sorted(set(roles) - known)
+    if stray:
+        return f"box_roles {stray}: not one of {sorted(known)}"
+    want = {r for p_ in plays for r in BOX_CALL_ROLES.get(p_, ())}
+    if sorted(want - set(roles)):
+        return f"the box plays {sorted(set(plays) & set(BOX_CALL_ROLES))} without its functions " \
+               f"for {sorted(want - set(roles))}"  # fmt: skip
+    extra = sorted(set(roles) - want - set(BOX_OPTIONAL_ROLES))
+    if extra or ("respawn_confirm" in roles and "respawn" not in plays):
+        return f"box_roles {extra or ['respawn_confirm']} without their play in box_plays"
+    if roles.get("knife_on", "opener") not in KNIFE_ENDS:
+        return f"knife_on ends {roles['knife_on']!r}: one of {list(KNIFE_ENDS)}"
     if not plays:
         return None
     if hook is None or not callable(getattr(hook, "survive", None)):
         return "box_plays without a hook that plays survival (hook.survive)"
+    if roles and not callable(getattr(hook, "call", None)):
+        return "box_plays with the box's functions, but the hook plays no calls (hook.call)"
+    if "knife" in plays and not knife_swap:
+        return ("the box plays the Knife swap, but this run swaps no Knife (the Run settings' "
+                "knife swap: --bare-steal with --steal-opener)")  # fmt: skip
+    if "knife" in plays and roles.get("knife_on") == "armed" and bare_ready:
+        return (
+            "the box's knife_on ends on the dagger (no strike between its presses), but "
+            "--bare-ready waits with the Knife on between targets, which that swap never "
+            "leaves: the knife's bare_ready off, or a knife_on that ends on the Knife"
+        )
+    if set(plays) & {"respawn", "weight_home", "home_end"} and not player:
+        return "the box plays the map's exits, but this run is not a player's (--player-mode)"
+    if "respawn" in plays and not respawn:
+        return ("the box plays the respawn, but this run's respawn is off (the Run settings' "
+                "respawn switch): after a death she would stay where she fell")  # fmt: skip
+    if "home_end" in plays and home_key is None:
+        return "the box plays the way home, but this run has no Butterfly Wing key"
     if "potion" in plays and heal_candy:
         return ("the box plays the potion, but --heal-candy picks the heal item: one heal key "
                 "(the box's) or the runner's candies, not both")  # fmt: skip
@@ -5811,6 +5980,131 @@ def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss
             "--engage-screen, or no boss on the map): the event would never see one"
         )
     return None
+
+
+def recipes_refused(plays: Sequence[str], hook: Any, model: Mapping[str, Any] | None,
+                    recipes: Mapping[str, Mapping[str, Any]] | None, *, knife_swap: bool,
+                    value_target: bool) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.51): why the box's model and recipes cannot play in this run (None: they
+    can, or there are none). Before any input."""
+    recipes = dict(recipes or {})
+    if ("model" in plays) != (model is not None):
+        return "box_plays 'model' goes with box_model (the box's use_model), and only with it"
+    if ("recipes" in plays) != bool(recipes):
+        return "box_plays 'recipes' goes with box_recipes (the box's monsters), and only with them"
+    if not recipes:
+        return None
+    if model is None:
+        return "the box's recipes without its use_model: the model's monsters are what they name"
+    strikes = list(model.get("strikes") or [])
+    stray = sorted(set(recipes) - set(strikes))
+    if stray:
+        return (f"the box's recipes for {stray}: not monsters the runner strikes with "
+                f"{model.get('id')} ({', '.join(strikes)})")  # fmt: skip
+    for sp, r in sorted(recipes.items()):
+        steps = tuple(str(x) for x in r.get("steps") or ())
+        if steps not in RECIPE_SHAPES:
+            shapes = [list(x) for x in RECIPE_SHAPES]
+            return (f"the box's recipe for {sp} ({r.get('function')}) plays {list(steps)}: the "
+                    f"runner plays {shapes} (4a; use_skill is 4b)")  # fmt: skip
+        if bool(r.get("knife")) != ("knife_on" in steps):
+            return f"the box's recipe for {sp}: its knife flag is not its steps' (knife_on)"
+        w = r.get("priority")
+        if w is not None and not (isinstance(w, int | float) and 0 < float(w) <= 10):
+            return f"the box's recipe for {sp}: priority {w!r} is not a number in (0, 10]"
+    if any(r.get("knife") for r in recipes.values()) and not knife_swap:
+        return ("the box's recipes swap the Knife, but this run swaps no Knife (the Run settings' "
+                "knife swap: --bare-steal with --steal-opener)")  # fmt: skip
+    if not knife_swap:
+        return ("the box's recipes decide the Knife swap per monster, and this run swaps no Knife: "
+                "there is nothing for them to decide (4a)")  # fmt: skip
+    if not value_target and any(r.get("priority") not in (None, 1, 1.0) for r in recipes.values()):
+        return ("the box's recipes weigh monsters by priority, but this run's --value-target is "
+                "off (the Run settings' 'choose the monster worth the most')")  # fmt: skip
+    if hook is None or not callable(getattr(hook, "recipe", None)):
+        return "the box's recipes, but the hook answers no recipe (hook.recipe)"
+    return None
+
+
+def recipe_values(values: Mapping[str, float],
+                  recipes: Mapping[str, Mapping[str, Any]]) -> dict[str, float]:  # fmt: skip
+    """PURE (dungeon@9.51): --value-target's values with each recipe's priority as a weight on its
+    species' value (a species with no value of its own: the map mean's); 1 or none: as it is."""
+    out = dict(values)
+    for sp, r in recipes.items():
+        w = r.get("priority")
+        if w is None or float(w) == 1.0:
+            continue
+        out[sp] = round(float(values.get(sp, values.get("*", 0.0))) * float(w), 2)
+    return out
+
+
+def box_model_refused(model: Mapping[str, Any] | None, map_: str, *, boxes: bool = True,
+                      choice: str = "map", detector: str = "gpu") -> str | None:  # fmt: skip
+    """PURE but for unit_detector's pins (dungeon@9.51): why the box's use_model cannot be this
+    run's box detector (None: it is, or the box names none). It must be live, a detector, for this
+    map, and EXACTLY the model the runner's box detector loads here: the map's MAP_MODELS file and
+    sha256 (the CPU's, checked again on the file at load) and its GPU_WEIGHTS ONNX (the detect
+    server's hello is checked against the same pin at connect: GpuDetector._connect). Another model
+    than the map's own is a follow-up: the detect server serves the map's, and a run never restarts
+    it. Before any input."""
+    if model is None:
+        return None
+    import unit_detector as ud
+
+    mid = model.get("id")
+    if model.get("status") != "live":
+        return f"the box's use_model({mid!r}) is not a live model ({model.get('status')})"
+    if model.get("kind") != "detector":
+        return f"the box's use_model({mid!r}) is not a detector: the box watcher boxes monsters"
+    maps = list(model.get("maps") or [])
+    if maps and map_ not in maps:
+        return f"the box's use_model({mid!r}) is trained for {', '.join(maps)}, not {map_}"
+    if not boxes:
+        return f"the box names the model {mid}, but this run has no box watcher (--no-boxes)"
+    if choice != "map":
+        return (f"the box names the model {mid}, but this run's --box-model is {choice} (the "
+                "rollback): one choice, not two")  # fmt: skip
+    spec = ud.MAP_MODELS.get(map_)
+    file_, sha = (ud.MODEL.name, ud.GPU_WEIGHTS["v1"].onnx_sha256) if spec is None else (
+        spec.onnx, spec.sha256)  # fmt: skip
+    pre = str(model.get("sha256") or "")
+    if model.get("file") != file_ or len(pre) < 12 or not sha.startswith(pre):
+        return (f"the box's use_model({mid!r}) ({model.get('file')}, {pre}) is not the model the "
+                f"runner's box detector loads on {map_} ({file_}, {sha[:12]}): another model than "
+                "the map's own is a follow-up (the detect server serves the map's; a run never "
+                "restarts it)")  # fmt: skip
+    weights = "v1" if spec is None else spec.gpu
+    if detector != "cpu" and weights is not None:
+        w = ud.GPU_WEIGHTS[weights]
+        if w.onnx != file_ or not w.onnx_sha256.startswith(pre):
+            return (f"the box's use_model({mid!r}): the detect server's weights {weights} "
+                    f"({w.onnx}, {w.onnx_sha256[:12]}) are not that file")  # fmt: skip
+    return None
+
+
+def recipe_choice(got: Mapping[str, Any] | None, plan: Mapping[str, Any] | None
+                  ) -> tuple[bool, str | None, bool]:  # fmt: skip
+    """PURE (dungeon@9.51): a target's recipe at the lock, from the hook's answer ``got`` and the
+    run's own plan for that species ``plan`` (box_recipes, checked before any input): (struck with
+    the Knife swap?, the recipe's function or None, the answer is not the plan). Only an answer that
+    IS the plan's recipe plays; anything else -- no recipe for that species, an unknown species, a
+    disagreement -- is the runner's own recipe (its Knife swap, as before)."""
+    same = got is not None and plan is not None and got.get("function") == plan.get("function")
+    odd = (got is None) != (plan is None) or (got is not None and not same)
+    if not same or plan is None:
+        return True, None, odd
+    return bool(plan.get("knife", True)), str(plan.get("function")), False
+
+
+def hook_recipe(hook: Any, species: str | None, why: str) -> dict[str, Any] | None:
+    """dungeon@9.51: the box's recipe for a target's species at the runner's lock (the plan the
+    hook decided before any input), or None: the runner's own recipe (no function for that
+    species, an unknown species, no hook)."""
+    if hook is None or not callable(getattr(hook, "recipe", None)):
+        return None
+    got = hook.recipe(species, why)
+    return None if got is None else dict(got)
 
 
 def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
@@ -5829,14 +6123,22 @@ def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
 
 
 def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | None = None,
-        box_plays: Sequence[str] = ()) -> int:  # noqa: PLR0915, C901  # fmt: skip
+        box_plays: Sequence[str] = (), box_roles: Mapping[str, str] | None = None,
+        box_model: Mapping[str, Any] | None = None,
+        box_recipes: Mapping[str, Mapping[str, Any]] | None = None,
+        ) -> int:  # noqa: PLR0915, C901  # fmt: skip
     """The runner. ``hook`` / ``session`` (dungeon@9.48, the live block player only): an object
     whose ``tick(HuntTick)`` is called once per tick of the loop (a str back ends the run there)
     and, when it has one, ``event(rec, t_mono)`` with every event (a passive observer); and the
     (Agent, Screen) to play with instead of a session of its own (the caller keeps and closes
     them). ``box_plays`` (dungeon@9.49, the box's survival events; SURVIVAL_EVENTS_VERSION's
-    comment): the runner's handlers the hook's ``survive`` plays instead. All None / empty: the
-    CLI's run, unchanged."""
+    comment): the runner's handlers the hook's ``survive`` plays instead. ``box_roles``
+    (dungeon@9.50, the box's functions; BOX_FUNCTIONS_VERSION's comment): the roles the hook's
+    ``call`` plays at the runner's own moments, each with where its body leaves her. ``box_model``
+    / ``box_recipes`` (dungeon@9.51, the box's use_model and its monsters' recipes;
+    BOX_RECIPES_VERSION's comment): the model its box detector must be, and the recipe per
+    species the hook's ``recipe`` answers at each lock. All None / empty: the CLI's run,
+    unchanged."""
     import bench
     import crusader as cr
     import cursor_sword as csw
@@ -6007,18 +6309,17 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     # dungeon@9.49 (live-blocks.md stage 2): the handlers the BOX's events play instead, before
     # any input; box_off: sustain()'s two of them
     box_set = frozenset(box_plays)
-    why_bx = box_plays_refused(
-        sorted(box_set),
-        hook,
-        heal_candy=heal_candy,
-        boss_walk=bool(getattr(a, "boss_walk", False)),
-        bosses=bosses,
-    )
-    if why_bx:
-        raise SystemExit(f"dungeon@{SURVIVAL_EVENTS_VERSION} refused: {why_bx}")
+    box_roles_ = dict(box_roles or {})  # dungeon@9.50: the roles the box's functions play
     box_on = bool(box_set)
     box_off = box_set & {"potion", "fly_hp"}
     box_boss = "boss_fly" in box_set
+    box_knife = "knife" in box_set  # dungeon@9.50: the opener's / the swap back's presses
+    box_respawn = "respawn" in box_set  # the death dialog's two presses
+    box_weight = "weight_home" in box_set  # the weight exit on a read weight
+    box_home = "home_end" in box_set  # the end's Butterfly Wing press
+    box_model_ = dict(box_model) if box_model is not None else None  # dungeon@9.51: use_model
+    box_recipes_ = {str(k): dict(v) for k, v in (box_recipes or {}).items()}  # its recipes
+    box_recipe_on = "recipes" in box_set
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
     why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
     if why_hk:
@@ -6034,6 +6335,36 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     why_kc = keys_clash(keys_, opener_key)  # dungeon@9.42: every key known: no two alike
     if why_kc:
         raise SystemExit(f"dungeon@{PERSON_KEYS_VERSION} refused: {why_kc}")
+    # dungeon@9.49 (live-blocks.md stage 2): the handlers the BOX's events play instead;
+    # dungeon@9.50 (stage 3): the roles its functions play at the runner's moments -- before any
+    # input
+    why_bx = box_plays_refused(
+        sorted(box_set),
+        hook,
+        heal_candy=heal_candy,
+        boss_walk=bool(getattr(a, "boss_walk", False)),
+        bosses=bosses,
+        roles=box_roles_,
+        player=player,
+        knife_swap=bare_on and opener_key is not None,
+        bare_ready=bare_ready_on,
+        respawn=bool(getattr(a, "respawn", False)),
+        home_key=home_key,
+        model=box_model_,
+        recipes=box_recipes_,
+        value_target=vt_values is not None,
+    )
+    if why_bx:
+        version = (BOX_RECIPES_VERSION if box_model_ is not None or box_recipes_
+                   else BOX_FUNCTIONS_VERSION if box_roles_ or box_weight
+                   else SURVIVAL_EVENTS_VERSION)  # fmt: skip
+        raise SystemExit(f"dungeon@{version} refused: {why_bx}")
+    why_bm = box_model_refused(box_model_, map_, boxes=bool(a.boxes) and a.engage != "melee_ring",
+                               choice=a.box_model, detector=a.box_detector)  # fmt: skip
+    if why_bm:  # dungeon@9.51: the box's use_model is this run's box detector, or no run
+        raise SystemExit(f"dungeon@{BOX_RECIPES_VERSION} refused: {why_bm}")
+    if box_recipe_on and vt_values:  # dungeon@9.51: a recipe's priority weighs its species' value
+        vt_values = recipe_values(vt_values, box_recipes_)
     heal_left: dict[int, int | None] = {}  # 9.31: the heal items' last hotbar reads
     why_box = box_flags_refused(a.box_strike, a.box_now, a.box_detector)
     if why_box:
@@ -6547,6 +6878,14 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             # dungeon@9.49: the handlers the box's events play in this run (none: absent)
             **({"box_plays": sorted(box_set), "box_version": SURVIVAL_EVENTS_VERSION}
                if box_on else {}),
+            # dungeon@9.50: the roles the box's functions play (none: absent)
+            **({"box_roles": box_roles_, "box_version": BOX_FUNCTIONS_VERSION}
+               if box_roles_ or box_weight else {}),
+            # dungeon@9.51: the box's model and its monsters' recipes (none: absent)
+            **({"box_model": box_model_, "box_version": BOX_RECIPES_VERSION}
+               if box_model_ is not None else {}),
+            **({"box_recipes": box_recipes_, "box_version": BOX_RECIPES_VERSION}
+               if box_recipes_ else {}),
             **({"player_map": None if map_read is None else map_read.record()} if player
                else {}),
             **({"player_slots": slot_read} if player else {}),  # dungeon@9.47
@@ -6569,8 +6908,13 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                              None if a.box_model == "v1" else a.map,
                              "cpu" if a.box_detector == "cpu" else "gpu",
                              getattr(a, "box_every", BOX_EVERY_S))  # fmt: skip
-            ev({"kind": "box_model", "choice": a.box_model, **boxes.model,
-                "every_s": boxes.every_s})  # fmt: skip
+            ev({"kind": "box_model", "choice": a.box_model if box_model_ is None else "box",
+                **boxes.model, "every_s": boxes.every_s,
+                **({"box_model": box_model_["id"]} if box_model_ is not None else {})})  # fmt: skip
+            if box_model_ is not None and boxes.model["onnx"] != box_model_["file"]:
+                raise r.Stop(f"dungeon@{BOX_RECIPES_VERSION} refused: the box watcher loaded "
+                             f"{boxes.model['onnx']}, not the box's use_model "
+                             f"{box_model_['id']} ({box_model_['file']})")  # fmt: skip
             if boxes.gpu:  # dungeon@8.9: each detection's path + wall time (R3's windows, 4N G1)
                 boxes.det.log_path = out / "detections.jsonl"
         if getattr(a, "loot_items", None):
@@ -6829,6 +7173,90 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             """The why of this survive call's box Fly Wing (None: it pressed none)."""
             return next((w for r_, w in box_pressed if r_ == "fly"), None)
 
+        def opener_press(why_: str) -> None:
+            """--steal-opener (dungeon@9.27c): the opener's hotbar key, sent as press() sends a
+            key (agent_raw.keys: the agent's own input path, through the mux); its count, record."""
+            assert opener_key is not None
+            agent_raw.keys(opener_key)
+            counts["opener"] += 1
+            ev({"kind": "press", "what": "opener", "key": opener_key, "why": why_})
+
+        def two_motion_click(u_: int, v_: int) -> None:
+            """The death exit's click (dungeon@9.41's respawn press): two motions, then the click
+            -- the client ignores a cold click -- at game-region pixels (u_, v_)."""
+            x_, y_ = gx0 + u_, gy0 + v_
+            agent_raw.move(x_ + 4, y_ + 3)
+            time.sleep(0.08)
+            agent_raw.move(x_, y_)
+            time.sleep(0.3)
+            agent_raw.click(x_, y_)
+
+        # dungeon@9.50 (live-blocks.md stage 3): the keys each called role may press -- a key of
+        # that moment, pressed the runner's own way (opener_press, press: their counts, records)
+        call_keys: dict[str, dict[str, Callable[[str], None]]] = {}
+        if box_knife and opener_key is not None:
+            knife_keys_: dict[str, Callable[[str], None]] = {
+                opener_key: opener_press,
+                keys_["equip"]: lambda why_: press("equip", why_),
+            }
+            call_keys["knife_on"] = call_keys["knife_back"] = knife_keys_
+        if box_home and home_key is not None:
+            call_keys["home"] = {home_key: lambda why_: press("home", why_)}
+
+        def box_call(role: str, why: str) -> bool:
+            """dungeon@9.50: the box's function for ``role``, played NOW through the hook (the
+            runner waits): its presses through the runner's own press of a key of this moment,
+            its clicks (the death exit only) as the runner's two-motion click. False: refused
+            (recorded; the loop's next tick ends the run, its normal end)."""
+            keys_now = call_keys.get(role, {})
+            clicks_ = role in ("respawn", "respawn_confirm")
+
+            def port(code: str, why_: str) -> str | None:
+                do_ = keys_now.get(code)
+                if do_ is None:
+                    counts["box_refused"] += 1
+                    ev({"kind": "box_refused", "key": code, "why": why_, "role": role})
+                    return None
+                do_(why_)
+                return role
+
+            def click(u_: int, v_: int, why_: str) -> bool:
+                if not (clicks_ and 0 <= u_ < GAME_PX[0] and 0 <= v_ < GAME_PX[1]):
+                    counts["box_refused"] += 1
+                    ev({"kind": "box_refused", "click": [u_, v_], "why": why_, "role": role})
+                    return False
+                two_motion_click(u_, v_)
+                counts[f"click_box_{role}"] += 1
+                ev({"kind": "click", "what": role, "at": [u_, v_], "why": why_})
+                return True
+
+            t_c = time.monotonic()
+            got_ = hook_call(hook, role, why, port, click if clicks_ else None)
+            counts[f"box_call_{role}"] += 1
+            ev({"kind": "box_call", "role": role, "why": why,
+                "ms": round((time.monotonic() - t_c) * 1e3),
+                **({"refused": got_} if got_ is not None else {})})  # fmt: skip
+            if got_ is not None and box_stop[0] is None:
+                box_stop[0] = got_
+            return got_ is None
+
+        def recipe_knife(species_: str | None, by_: str) -> bool:
+            """dungeon@9.51 (the box's recipes): asked ONCE at a new target's lock (BareCtl.
+            before_strike's decision) -- the box's recipe for that target's species, which the
+            runner plays with its own code. False: no Knife swap on it (its recipe has no
+            knife_on). True: the Knife swap as before -- its recipe has one, the box has none for
+            that species, the species is unknown, or the hook's answer is not the plan the run
+            started with (the runner's own recipe: counted, recipe_mismatch)."""
+            knife_, fn_, odd_ = recipe_choice(hook_recipe(hook, species_, by_),
+                                              box_recipes_.get(species_ or ""))  # fmt: skip
+            if odd_:
+                counts["recipe_mismatch"] += 1
+            counts["recipe_knife" if knife_ else "recipe_no_knife"] += 1
+            counts[f"recipe_species_{species_ or 'unknown'}"] += 1
+            ev({"kind": "recipe", "species": species_, "by": by_, "knife": knife_,
+                "function": fn_, **({"mismatch": True} if odd_ else {})})  # fmt: skip
+            return knife_
+
         n_ring_diag = [0]  # dungeon@8.6: ring-vs-red evidence crops kept
 
         def hover(u: float, v: float) -> dict[str, Any]:
@@ -7013,12 +7441,21 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 counts["click_bare_dclick"] += 1
 
             def bare_opener(why_: str) -> None:
-                """--steal-opener (dungeon@9.27c): the opener's hotbar key, sent as press() sends
-                a key (agent_raw.keys: the agent's own input path, through the mux)."""
-                assert opener_key is not None
-                agent_raw.keys(opener_key)
-                counts["opener"] += 1
-                ev({"kind": "press", "what": "opener", "key": opener_key, "why": why_})
+                """--steal-opener (dungeon@9.27c): the opener's hotbar key (opener_press).
+                dungeon@9.50: with the box's Knife swap, its knife_on function at this moment."""
+                if box_knife:
+                    box_call("knife_on", why_)
+                    return
+                opener_press(why_)
+
+            def bare_equip_press(why_: str) -> None:
+                """The dagger's key (press("equip")). dungeon@9.50: with the box's Knife swap, its
+                knife_back function at this moment -- but the escape's dagger before a Fly Wing
+                ("safety") stays the runner's own key: never delayed by a body's waits."""
+                if box_knife and why_ != "safety":
+                    box_call("knife_back", why_)
+                    return
+                press("equip", why_)
 
             bare = BareCtl(
                 BareIo(frame=frame,
@@ -7026,13 +7463,15 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                        origin=lambda f_: window_origin(f_, bare_reg, bs.EQUIP_WINDOW),
                        chord=lambda: agent_raw.chord(*bare_keys),
                        double_click=bare_dclick,
-                       press=lambda why_: press("equip", why_),
+                       press=bare_equip_press,
                        lines=bare_lines, guard=guard_tick,
                        opener=bare_opener if opener_key is not None else None),
                 bare_ref, counts, ev, r.Stop, ready=bare_ready_on,
                 opener=None if opener_key is None else OpenerRead(opener_key, bare_ref,
                                                                   opener_ref),
-                cue=getattr(a, "steal_cue", "both"))  # fmt: skip
+                cue=getattr(a, "steal_cue", "both"),
+                opener_ends=box_roles_.get("knife_on", "opener") if box_knife
+                else "opener")  # fmt: skip
 
         n_shots = [0]
         n_strike = [0]  # dungeon@5: strikes so far (a box-started fight with none = a miss)
@@ -7220,17 +7659,23 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             c_, uv_, _res = found
             return c_, (float(uv_[0]), float(uv_[1]))
 
-        def strike(u: float, v: float, rel: Cell, by: str) -> bool:
+        box_sp: list[str | None] = [None]  # dungeon@9.51: box_target's struck box's species
+
+        def strike(u: float, v: float, rel: Cell, by: str, species: str | None = None) -> bool:
             """arm C: click the SWORD point, re-click every BURST_GAP_S until the lock arrow --
             dungeon@4 (decision 5): or until OUR first damage line in the Battle Log; the HP is
             read between the clicks (guard_tick). dungeon@6: the name tag read + banked first.
             dungeon@7: with --steal, ONE Steal first on every monster while the SP pays for it
             (Batt ~16:0x); the strike then goes to where the target stands beside us.
             dungeon@9.27 (--bare-steal): a new target's first strike takes the dagger off first
-            (BareCtl.before_strike); the swap's aim check may drop the click (False: no lock)."""
+            (BareCtl.before_strike); the swap's aim check may drop the click (False: no lock).
+            dungeon@9.51 (the box's recipes): ``species`` -- the struck box's own species, when
+            the strike knows it -- picks the box's recipe at that decision (recipe_knife)."""
             if bare is not None:
                 hp_b = st.hist[-1][1] if st.hist else None
-                if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword"):
+                rcp_ = (lambda: recipe_knife(species, by)) if box_recipe_on else None
+                if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword",
+                                          rcp_):  # fmt: skip
                     return False  # the target left the point during the swap: the scan finds it
                 if escaped[0]:
                     return True  # a Fly Wing inside the swap (guard_tick): the loop takes over
@@ -7362,6 +7807,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             re-pick, no walk-up (the record says ``defend``)."""
             nonlocal last_walk_click
             assert boxes is not None
+            box_sp[0] = None  # dungeon@9.51: the species of the box this call strikes
             t_0 = time.monotonic()
             time.sleep(settle_left(last_walk_click, t_0))
             still_rec: dict[str, Any] = {}
@@ -7400,6 +7846,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             else:
                 near_b = (boxes.near(FOOT_PX, BOX_TARGET_PX, BOX_TARGET_WAIT_S + 1.0) if fresh
                           else None)  # fmt: skip
+            sp_near = boxes.last_species if near_b is not None else None  # dungeon@9.51
             if vt_values and fresh and near_b is not None and radius_px is None:  # 9.28 (4CB)
                 es_ = getattr(a, "engage_screen", False)
                 near_v = boxes.near(  # the SAME candidates and skips, chosen by value
@@ -7409,9 +7856,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 if near_v is not None:
                     near_b = near_v
                     rec["pick"] = boxes.last_pick
+                    sp_near = boxes.last_species
             if near_b is None:
                 ev({**rec, "box": None, "verdicts": [], "struck": False})
                 return None
+            box_sp[0] = sp_near
             foot = ((near_b[0] + near_b[2]) / 2, near_b[3])
             rec.update(
                 box=[round(x_, 1) for x_ in near_b],
@@ -7914,7 +8363,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             fight_t0 = time.monotonic()
             if fight_ref is None and here is not None:
                 fight_ref = {"img": frame(), "here": here, "t": fight_t0}
-            if strike(u_p, v_p, rel_p, "queue"):  # False: --walk-stop / --quick-drop / a swap
+            if strike(u_p, v_p, rel_p, "queue", box_species(b_)):  # False: it walked, a swap
                 lock = {"t": time.monotonic(), "rel": rel_p,
                         "cell": None if here is None else
                         [here[0] + rel_p[0], here[1] + rel_p[1]]}  # fmt: skip
@@ -9142,7 +9591,25 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     red_seen = red_now
                     # dungeon@9.41: heavier than --weight-home -> the run ends (never mid-fight:
                     # the UI watch waits) and the end's Butterfly Wing takes her home
-                    why_wh = weight_home_due(getattr(a, "weight_home", None), w_share, red_seen)
+                    if box_weight:  # dungeon@9.50 (live-blocks.md stage 3): the box's weight event
+                        # decides on this READ weight, here (the runner's own moment); an unread
+                        # weight drawn red keeps the runner's own rule (the box cannot read it)
+                        why_wh = (weight_home_due(getattr(a, "weight_home", None), None, red_seen)
+                                  if w_now is None else None)  # fmt: skip
+                        if w_now is not None:
+                            box_pressed.clear()
+                            why_bw = hook_survive(hook, HuntTick(
+                                tick, pct, spp, False, here, mode, MappingProxyType(counts), img,
+                                None, False, int(round(w_now * 100))), box_press)  # fmt: skip
+                            if why_bw is not None:
+                                reason = f"weight_home: {why_bw}"
+                                ev({"kind": "weight_home", "share": round(w_now, 4),
+                                    "red": red_seen, "limit": None, "by": "box",
+                                    "why": why_bw})  # fmt: skip
+                                break
+                    else:
+                        why_wh = weight_home_due(getattr(a, "weight_home", None), w_share,
+                                                 red_seen)  # fmt: skip
                     if why_wh is not None:
                         reason = f"weight_home: {why_wh}"
                         sh_ = None if w_share is None else round(w_share, 4)
@@ -9305,7 +9772,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         got_b = box_target()
                         if got_b is not None:
                             rel_b, (u_b, v_b) = got_b
-                            if strike(u_b, v_b, rel_b, "box"):  # False: --walk-stop, it walked
+                            if strike(u_b, v_b, rel_b, "box", box_sp[0]):  # False: it walked
                                 lock = {"t": time.monotonic(), "rel": rel_b,
                                         "cell": None if here is None else
                                         [here[0] + rel_b[0], here[1] + rel_b[1]]}  # fmt: skip
@@ -9317,7 +9784,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         got_d = box_target(DEFEND_BOX_PX)
                         if got_d is not None:
                             rel_d, (u_d, v_d) = got_d
-                            if strike(u_d, v_d, rel_d, "box"):  # a box strike, as the box path's
+                            if strike(u_d, v_d, rel_d, "box", box_sp[0]):  # as the box path's
                                 counts["defend_box_strike"] += 1
                                 lock = {"t": time.monotonic(), "rel": rel_d,
                                         "cell": None if here is None else
@@ -9918,24 +10385,23 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     at_ = getattr(a, "respawn_at", None) or MOVE_TO_SAVE  # the person's, else ours
 
                     def respawn_press() -> None:
-                        x_, y_ = gx0 + at_[0], gy0 + at_[1]
-                        agent_raw.move(x_ + 4, y_ + 3)  # two motions: a cold click is ignored
-                        time.sleep(0.08)
-                        agent_raw.move(x_, y_)
-                        time.sleep(0.3)
-                        agent_raw.click(x_, y_)
+                        if box_respawn:  # dungeon@9.50: the box's respawn function clicks
+                            box_call("respawn", "death")
+                            return
+                        two_motion_click(at_[0], at_[1])  # two motions: a cold click is ignored
 
                     ca_ = getattr(a, "respawn_confirm_at", None)  # "none": this server asks none
                     cat_ = None if ca_ == "none" else (ca_ or CONFIRM_AT)
+                    if box_respawn:  # dungeon@9.50: the box's confirm function, or none asked
+                        cat_ = (0, 0) if "respawn_confirm" in box_roles_ else None
+                        rsp["by"] = "box"
 
                     def confirm_press() -> None:
                         assert cat_ is not None
-                        x_, y_ = gx0 + cat_[0], gy0 + cat_[1]
-                        agent_raw.move(x_ + 4, y_ + 3)
-                        time.sleep(0.08)
-                        agent_raw.move(x_, y_)
-                        time.sleep(0.3)
-                        agent_raw.click(x_, y_)
+                        if box_respawn:
+                            box_call("respawn_confirm", "death")
+                            return
+                        two_motion_click(cat_[0], cat_[1])
 
                     has_sig = bool(r.signature_variants(RESPAWN_CONFIRM_STATE))
 
@@ -9965,9 +10431,15 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         g_h = hb_h.gray(np.asarray(frame()))
                         return hb_h.read_count(g_h, hotbar_slot(home_key), stock_watch[0])
 
+                    def home_press() -> None:
+                        if box_home:  # dungeon@9.50: the box's way home (its butterfly_wing body)
+                            box_call("home", "end")
+                            return
+                        press("home", "end")
+
                     player_home_end(
                         home_key, reason, seated_end, read_count=home_count,
-                        press=lambda: press("home", "end"),
+                        press=home_press,
                         stand=lambda: agent_raw.keys(keys_["stand"]),
                         basic_info=lambda: hpp.read(frame(), glyphs) is not None,
                         rec=home_rec)  # fmt: skip

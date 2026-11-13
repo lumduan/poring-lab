@@ -26,6 +26,11 @@
 #   classes   the classes a flow may test, in the model's class-id order
 #   untrained classes the model HAS but was trained on no example (they never fire)
 #   mobs      class -> the mob ids it stands for (display through the local KB)
+#   strikes   (a detector) the classes the RUNNER strikes: unit_detector MAP_MODELS' collapse
+#             (species -> "monster"), in the model's class order; empty = none named. Live
+#             blocks stage 4a (docs/planning/live-blocks.md 3.4): the monsters a box's recipes
+#             attack_<class> may name; a class the runner never strikes (garm_baby: its Fly Wing
+#             rule) has no recipe
 #   why       the decision or verdict, with its date and plan
 version: 1
 models:
@@ -49,6 +54,7 @@ models:
     classes: [player, mystcase, cruiser, cookie, cookie_xmas, garm_baby]
     untrained: [npc, warp]
     mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515]}
+    strikes: [mystcase, cruiser, cookie, cookie_xmas]
     why: "xmas02-gb: PASSED its held-out score 2026-11-10 (docs/planning/xmas02-detector.md M11) and DEPLOYED on xmas_dun02 (M12), the 4 species of the 11-07 model (Amendment J) plus garm_baby (Amendment M; the runner never strikes it, --garm-fly flies on it); npc and warp are EMPTY fixed classes (Amendment H)"
   stormy-v1:
     kind: boss_recognizer

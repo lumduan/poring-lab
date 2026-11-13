@@ -1663,7 +1663,8 @@ def runner_keys(p: Project, node_id: str, compiled: Compiled | None = None) -> R
     (heal, fly, knife_on, knife_back, and home when it names one; Batt 2026-11-13, the one box),
     else (home) the node's item warp by function: resolved on THAT node (its override first, then
     Global's), through calls with literal arguments, to exactly one press_key each, every key a
-    different hotbar key."""
+    different hotbar key. Stage 3 (live-blocks.md 3.3): a knife or home function that is a BODY of
+    presses and waits gives its FIRST press (functions.role_key)."""
     from poring_flow import functions as fn
 
     node = p.node(node_id)
@@ -1708,11 +1709,13 @@ def runner_keys(p: Project, node_id: str, compiled: Compiled | None = None) -> R
         names["home_key"] = wings[0]
     keys: dict[str, str] = {}
     hotbar = fn.hotbar_keys()
+    role_of = {f: r for r, f in fn.ALL_ROLES.items()}
     for field_name in RUNNER_KEY_FIELDS:
         name = names.get(field_name)
         if name is None:
             continue
-        key, why = fn.resolve_key(flow, name)
+        # stage 3 (live-blocks.md 3.3): a knife / home BODY's key is its first press
+        key, why = fn.role_key(flow, name, role_of.get(field_name, ""))
         if key is None:
             problems.append(f"{field_name}: {c.text(why)}")
         elif key not in hotbar:

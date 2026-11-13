@@ -89,13 +89,18 @@ export const CREDENTIALS = ["lab_gm", "lab_player"] as const;
 /** The Rogue's runner block (blocks.yaml `dungeon_hunt`): each ROLE names the function the runner
  * calls for it (Batt 2026-11-13: "every key a function"), in the block's order. The fifth, `home`
  * (the one box, Batt 2026-11-13 ~21:4x: the runner flies home itself on the Butterfly Wing), is
- * OPTIONAL: an empty field is no home role (the map's item warp by function gives the key). */
+ * OPTIONAL: an empty field is no home role (the map's item warp by function gives the key). Stage 3
+ * (live-blocks.md 3.3, Batt 2026-11-13: "make respawn a function block"): the OPTIONAL respawn
+ * roles name the death exit's two functions of click_at (empty: the runner's own points; an empty
+ * confirm with a respawn: this server asks no confirmation). */
 export const RUNNER_ROLES = [
   { param: "heal", field: "HEAL", words: "heal", fn: "heal", optional: false },
   { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing", optional: false },
   { param: "knife_on", field: "KNIFE_ON", words: "Knife on", fn: "knife_on", optional: false },
   { param: "knife_back", field: "KNIFE_BACK", words: "Knife back", fn: "knife_back", optional: false },
   { param: "home", field: "HOME", words: "home (Butterfly Wing)", fn: "butterfly_wing", optional: true },
+  { param: "respawn", field: "RESPAWN", words: "respawn", fn: "respawn_button", optional: true },
+  { param: "respawn_confirm", field: "RESPAWN_OK", words: "respawn confirm", fn: "respawn_ok", optional: true },
 ] as const;
 
 export const BLOCK_DEFS: BlockDef[] = [
@@ -277,7 +282,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     args2: [text("KNIFE_ON", "knife_on"), text("KNIFE_BACK", "knife_back")],
     message3: "home (Butterfly Wing): call %1",
     args3: [text("HOME", "butterfly_wing")],
-    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: the function's one key press is the key the runner presses. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). Its other settings: the Run pane",
+    message4: "after a death: call %1 then confirm: call %2",
+    args4: [text("RESPAWN", ""), text("RESPAWN_OK", "")],
+    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points from the Run settings). Its other settings: the Run pane",
   }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),
@@ -502,6 +509,15 @@ const PALETTE_TYPES: Record<string, string> = {
 const ACTIONS = ["talk_npc", "choose_menu", "use_item", "open_window"];
 /** Catalogue blocks with a block of their own (not repeated under "More skills"). */
 const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_hunt: "pl_dungeon_hunt", login: "pl_login", choose_character: "pl_choose_character", assert_save_point: "pl_save_point" };
+/** Live blocks stage 4a (live-blocks.md 3.4): the trained data and a monster's recipe steps,
+ * offered only where they play -- use_model in a map node's main, the primitives in its
+ * `monsters` tab -- never under "More skills". */
+export const RECIPE_TAB = "monsters";
+export const RECIPE_STEPS = ["strike", "wait_steal", "wait_kill", "loot"] as const;
+const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill"]);
+/** The model a node's recipes name (its use_model's models.yaml entry): its monsters the runner
+ * strikes and their mob ids (the KB names them at run time). */
+export type Monsters = { model: string; strikes: string[]; mobs: Record<string, number[]> };
 
 function rest(c: CatBlock) {
   return { rest: { concept: c.concept, timeout_s: c.timeout_s, on_fail: "stop", outcome_to: null, note: null } };
@@ -548,8 +564,9 @@ export function toolboxBlocks(tb: Toolbox | ToolboxCategory): { category: string
  * registered (hunt.ts), else the hunt block is offered as a generic block with its parameters by
  * name. `huntOmit`: its optional parameters' defaults (hunt.ts `omitted`), left out of the IR at that
  * value. `sensors`: the model blocks' first model and class, and the not-adopted models' notes. */
-/** Which tab the toolbox is for (the project model): the node's kind and whether it is its main. */
-export type ToolboxScope = { node: "login" | "character" | "map" | "global"; main: boolean };
+/** Which tab the toolbox is for (the project model): the node's kind and whether it is its main;
+ * `tab` its name (stage 4a: "monsters" offers the recipes), `model` the node's use_model. */
+export type ToolboxScope = { node: "login" | "character" | "map" | "global"; main: boolean; tab?: string; model?: string | null };
 
 export function toolbox(
   blocks: Record<string, CatBlock>,
@@ -557,6 +574,7 @@ export function toolbox(
   huntFields: Record<string, string> | null = null,
   huntOmit: Record<string, string> = {},
   sensors: SensorDefaults = { model: "v1", label: "monster", notes: [] },
+  monsters: Monsters | null = null,
 ): Toolbox {
   const palette = (name: string): ToolboxItem[] =>
     blocks[name] ? [{ kind: "block", type: PALETTE_TYPES[name], extraState: rest(blocks[name]) }] : [];
@@ -570,6 +588,29 @@ export function toolbox(
     movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
   }
   if (onMap && blocks.assert_save_point) movement.push({ kind: "block", type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 }, extraState: rest(blocks.assert_save_point) });
+  if (onMap && scope.main && blocks.use_model) {
+    movement.push(lbl("The trained data (before the runner: its monsters are the recipes' names):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_model", ARGS: `model=${JSON.stringify(monsters?.model ?? "xmas02")}` }, extraState: rest(blocks.use_model) });
+  }
+  // stage 4a: the monsters tab -- one function per monster of the model, a recipe of the steps the
+  // runner plays with its own code (knife_on / knife_back: the hunt core's Knife functions)
+  const recipes: ToolboxItem[] = [];
+  if (scope.tab === RECIPE_TAB && (onMap || scope.node === "global")) {
+    if (monsters) {
+      recipes.push(lbl(`The monsters of ${monsters.model}: one function each (the runner asks it when it locks that monster):`));
+      for (const sp of monsters.strikes) recipes.push({ kind: "block", type: "pl_def", fields: { NAME: `attack_${sp}`, PARAMS: "t, priority=1" } });
+      recipes.push(lbl("A monster as a value:"));
+      for (const sp of monsters.strikes) recipes.push(lbl(sp), { kind: "block", type: "pl_expr", fields: { TEXT: `mob(${monsters.mobs[sp]?.[0] ?? 1})` } });
+    } else {
+      recipes.push(lbl("use_model(...) in the main names the monsters (a trained model)"));
+    }
+    recipes.push(lbl("A recipe's steps, in this order (no Knife on a monster: leave out knife_on, wait_steal, knife_back):"));
+    recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_on", ARGS: "" } });
+    for (const s of RECIPE_STEPS) {
+      if (s === "wait_kill") recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_back", ARGS: "" } });
+      if (blocks[s]) recipes.push({ kind: "block", type: "pl_action", fields: { BLOCK: s, ARGS: "target=t" }, extraState: rest(blocks[s]) });
+    }
+    if (blocks.use_skill) recipes.push(lbl("A skill before the strike (checked, not played live yet: 4b):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_skill", ARGS: 'key="F6"' }, extraState: rest(blocks.use_skill) });
+  }
   if (onMap) {
     movement.push(
       lbl("Leave this map (a map's main ends with one):"),
@@ -643,7 +684,7 @@ export function toolbox(
     ...(blocks.press_key ? [{ kind: "block" as const, type: "pl_press_key_v", inputs: { KEY: exprBlock("key") }, extraState: rest(blocks.press_key) }] : []),
   ];
   const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK))
+    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK) && !RECIPE_ONLY.has(n))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
@@ -654,6 +695,7 @@ export function toolbox(
     contents: [
       { kind: "search", name: "Search", categorystyle: "mp_setup_category" },
       cat("Movement", "mp_movement_category", movement),
+      ...(recipes.length ? [cat("Monsters", "mp_sensor_category", recipes)] : []),
       cat("Actions", "mp_output_category", actions),
       cat("Control", "loop_category", control),
       cat("Conditions", "loop_category", conditions),
