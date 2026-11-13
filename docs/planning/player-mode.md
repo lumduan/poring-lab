@@ -1,7 +1,7 @@
 ---
 doc_type: plan
 hypothesis: null
-status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; 9.46 (the map's name from the minimap) BUILT 2026-11-13, its pre-registered held-out bar PASSED; 9.47 (the items on the keys, from their icons) BUILT 2026-11-13; NOT live-verified as a run (Batt 11-12: no lab live test of player mode)
+status: BUILT (first cut, 2026-11-12; decided by Batt 2026-11-12 "after SQLite"); 9.35b (the boss-map warning, the Butterfly Wing home) BUILT 2026-11-12; 9.46 (the map's name from the minimap) BUILT 2026-11-13, its pre-registered held-out bar PASSED; 9.47 (the items on the keys, from their icons) BUILT 2026-11-13, its pre-registered held-out bar PASSED; NOT live-verified as a run (Batt 11-12: no lab live test of player mode)
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -637,7 +637,7 @@ every layout slot; the 14 others are 7 map changes (the setup's warp, the end's 
 3 of them seen by eye: a dimmed hotbar, then the load screen). Own distances <= 5.1, the next
 picture >= 11.1, the least lead over a rival 0.84 (the bar 0.5).
 
-### PRE-REGISTERED (2026-11-13, before the held-out set is read; the commit that carries this)
+### PRE-REGISTERED (2026-11-13, commit 53c18e16 at 22:13:49 ICT, before the held-out set is read)
 
 - **The held-out set:** 7 NAS recordings none of the development set read: 20261028T151136-rdp-
   stage-gef10-e3 (gef_fild10, 10-28), 20261111T041708-rdp-xmas02-fsTn3, 20261111T160248-rdp-hunt-
@@ -658,9 +658,37 @@ picture >= 11.1, the least lead over a rival 0.84 (the bar 0.5).
   it does on another item; a map change is no legitimate start). Either fails -> "warn" (the start
   prints a WARNING line and goes on; another item still refuses).
 
-### The result
+### The result: PASS (scored once, 2026-11-13 22:13:57-22:17:11 ICT from `date`, 194 s)
 
-(scored after the commit above; filled in below)
+`slot_items.py eval <the 7 sessions> --shards first,last`, the 21:35 references, the constants as
+committed: 1,451 frames. The layouts, confirmed by eye on one fetched frame per labelled slot
+(every label matches what the strip shows): F1 White Potion and F2 Fly Wing in all 7; F4 the Knife
+in 4; F5 the Damascus (in the bag) in bs0; F6 the Candy Cane in 3; F7 the Candy in 4. F3 is a
+skill in all 7, and fsTn3 has two more skills on F4 and F5 (a person icon, a heart with a cross).
+True item (rows) -> read:
+
+    true \ read     itself   empty   cannot tell   ANOTHER item
+    White Potion     1,414       .            37              0
+    Fly Wing         1,414       .            37              0
+    Knife              909       .            20              0
+    Damascus            27     145 (worn)      8              0
+    Candy Cane         495     164 (used up)  15              0
+    Candy              588     321 (used up)  20              0
+    the never-item slots (empty slots, 3 kinds of skill): 5,554 empty, 1,891 cannot tell, 0 items
+
+| Bar | Registered | Result | |
+|---|---|---|---|
+| S1 | 0 reads name an item that is not the slot's | 0 of 13,059 slot reads | PASS |
+| S2 | >= 97 % of the 3-frame windows decide; every undecided one a map change | 1,409 / 1,423 (99.0 %); the 14 others all map changes (7 events: the first / last frames of a shard, the warps) | PASS |
+| S3 | >= 95 % of the layout slots' reads name their item or "empty" | 5,477 / 5,614 (97.6 %) | PASS |
+
+- **The runner's rule, as registered:** S1 and S2 passed, so `PLAYER_SLOT_UNREAD = "refuse"`
+  stays: a player start that cannot tell what a role's key shows within `PLAYER_SLOT_S` (3.0 s of
+  frames) refuses, as one whose key shows another item does. Its only undecided windows, here and
+  in the development set, are map changes, where no legitimate start happens.
+- **The rows** (one per frame: the session, every slot's read and words), the development rows,
+  the live check's outputs, the live frame and the layout strips: the NAS
+  `scratch-archive/2026-11-13/slot-items/` (SHA256SUMS, README.txt).
 
 ### The live case (read only, the lab's screen; pixels only, no input)
 
