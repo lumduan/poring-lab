@@ -124,6 +124,13 @@ def warp_lines(n: int, cells: Sequence[tuple[int, int]]) -> list[str]:
     return [f"@warp {MAP} {cells[i % 2][0]} {cells[i % 2][1]}" for i in range(n)]
 
 
+def dh_cells() -> Sequence[tuple[int, int]]:
+    """The map's two patrol starts (dungeon_hunt.PATROL_START): the setup's warp cells."""
+    import dungeon_hunt as dh
+
+    return dh.PATROL_START[MAP]
+
+
 def series(label: str, pairs: int, order: str = "alternate",
            cells: Sequence[tuple[int, int]] | None = None) -> list[Run]:  # fmt: skip
     """PURE: the runs of a series, in order."""
@@ -162,6 +169,35 @@ def guard_ok(lines: Iterable[str], run: int = CHAT_GUARD_RUN) -> bool:
         if n >= run:
             return False
     return True
+
+
+def guard_history(state: Mapping[str, Any]) -> list[str]:
+    """PURE: the chat guard's own repeat history (its per-host state, chat_guard.STATE: the last
+    chat line and how many times in a row), as the lines a guard_ok check starts from. Lines
+    typed by OTHER processes (stage 1's setups, clear-bag) count: the guard counts them too."""
+    last = state.get("chat") if isinstance(state, Mapping) else None
+    if not isinstance(last, Mapping) or not isinstance(last.get("text"), str):
+        return []
+    return [str(last["text"])] * max(0, int(last.get("count") or 0))
+
+
+def pick_warp(planned: str, other: str, history: Sequence[str]) -> str:
+    """PURE: the setup's warp line -- the planned cell, or the other one when the planned line
+    would be the chat guard's 3rd identical line in a row (2026-11-14 00:38: stage 1's two setups
+    had typed the first cell twice, and the series stopped before any run)."""
+    if guard_ok([*history, planned]):
+        return planned
+    return other
+
+
+def read_guard_state() -> dict[str, Any]:
+    """The chat guard's state file (a read; {} when it is missing or unreadable)."""
+    import chat_guard
+
+    try:
+        return dict(json.loads(chat_guard.STATE.read_text()))
+    except (OSError, ValueError):
+        return {}
 
 
 def project_text(minutes: float, path: Path | None = None) -> str:
@@ -462,7 +498,7 @@ class Series:
         return dict(got)
 
     def gm(self, line: str) -> None:
-        if not guard_ok([*self.typed, line]):
+        if not guard_ok([*guard_history(read_guard_state()), line]):
             raise Stop(f"{line!r} would be the chat guard's 3rd identical line in a row")
         out = self.sh([PY, "scripts/crusader.py", "--char", "thief", "gm", "--job", "rogue", line],
                       180)  # fmt: skip
@@ -484,12 +520,17 @@ class Series:
                 raise Stop(f"clear-bag rc {cb.returncode}: {cb.stdout.strip()[-200:]}")
             self.typed.append("(clear-bag's own lines)")  # its lines are not ours to count
             got = self.read()
-        self.gm(r.warp)
+        lines_ = warp_lines(2, dh_cells())
+        other = lines_[1] if r.warp == lines_[0] else lines_[0]
+        warp = pick_warp(r.warp, other, guard_history(read_guard_state()))
+        if warp != r.warp:
+            self.log(f"{r.label}: {r.warp!r} would be the chat guard's 3rd in a row: {warp!r}")
+        self.gm(warp)
         time.sleep(WARP_SETTLE_S)
         t0 = time.monotonic()
         while got.get("map") != MAP or got.get("counts") is None:
             if time.monotonic() - t0 > ARRIVE_S:
-                raise Stop(f"after {r.warp!r} the minimap reads {got.get('map')}, not {MAP}")
+                raise Stop(f"after {warp!r} the minimap reads {got.get('map')}, not {MAP}")
             time.sleep(1.0)
             got = self.read()
         lines = topup_lines(got["counts"])

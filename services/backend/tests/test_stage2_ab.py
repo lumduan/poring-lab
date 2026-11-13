@@ -219,3 +219,15 @@ def test_the_verdict_applies_the_pre_registered_bar(tmp_path: Path) -> None:
     short[0].minutes = 10.0
     assert ab.verdict(short, 20)["pairs_valid"] == 3 and short[0].label in ab.verdict(
         short, 20)["invalid"]  # fmt: skip
+
+
+def test_the_warp_takes_the_other_cell_when_the_guards_own_history_would_refuse_it() -> None:
+    # 2026-11-14 00:38: stage 1's two setups had typed the first cell twice (the guard's state
+    # is per host), so the series' first warp would have been the 3rd identical line in a row
+    a, b = ab.warp_lines(2, dh.PATROL_START["xmas_dun02"])
+    hist = ab.guard_history({"chat": {"text": a, "count": 2}, "last_t": 1.0})
+    assert hist == [a, a]
+    assert ab.pick_warp(a, b, hist) == b
+    assert ab.pick_warp(b, a, hist) == b  # the planned cell when it is not the repeated one
+    assert ab.pick_warp(a, b, ab.guard_history({"chat": {"text": a, "count": 1}})) == a
+    assert ab.guard_history({}) == [] and ab.guard_history({"chat": "x"}) == []
