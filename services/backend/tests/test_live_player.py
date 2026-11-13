@@ -212,9 +212,10 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
     cat = catalogue.catalogue()
     assert live.live_blocks() == ["assert_save_point", "dungeon_hunt", "press_key"]
     assert live.live_sensors() == ["current_map", "hp_percent", "is_dead", "map_load_seen",
-                                   "sp_percent", "weight_percent"]  # fmt: skip
+                                   "sees_boss", "sp_percent", "weight_percent"]  # fmt: skip
     doc = editor.catalogue_doc()
-    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 1
+    assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 2
+    assert doc["live"]["hunt_core"]["sensors"] == ["hp_percent", "sp_percent", "sees_boss"]
     assert doc["blocks"]["press_key"]["spec"]["live"] is True
     assert doc["blocks"]["walk_to"]["spec"]["live"] is False
     assert doc["sensors"]["hp_percent"]["spec"]["live"] is True
@@ -223,9 +224,11 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
         *live.live_blocks(),
         *live.live_sensors(),
     }
-    # one version, three places; the runner's own version is unchanged
-    assert dh.LIVE_BLOCKS_VERSION == live.VERSION == fp.VERSION == "9.48"
-    assert dh.VERSION == "dungeon@8.7"
+    # one version, three places (stage 2: the box's survival events; stage 1's library seam stays
+    # 9.48); the runner's own version is unchanged
+    assert dh.SURVIVAL_EVENTS_VERSION == live.VERSION == fp.VERSION == "9.49"
+    assert dh.LIVE_BLOCKS_VERSION == "9.48" and dh.VERSION == "dungeon@8.7"
+    assert dh.BOX_PLAYS == live.PLAYS
 
 
 def test_a_block_without_a_live_binding_refuses_before_any_input(tmp_path: Path) -> None:
@@ -399,8 +402,8 @@ class FakeRunner:
         self.calls: list[dict[str, Any]] = []
         self.stops: list[str | None] = []
 
-    def __call__(self, a: Any, *, hook: Any = None, session: Any = None) -> int:
-        self.calls.append({"a": a, "hook": hook, "session": session})
+    def __call__(self, a: Any, *, hook: Any = None, session: Any = None, **kw: Any) -> int:
+        self.calls.append({"a": a, "hook": hook, "session": session, **kw})
         if self.raise_ is not None:
             raise self.raise_
         hook.event({"kind": "run_start", "map": "xmas_dun02"}, self.io.now)
@@ -452,6 +455,9 @@ def test_the_hunt_core_runs_in_process_with_the_same_agent_and_the_tick_hook(
     (call_,) = runner.calls
     assert call_["session"] == ("AGENT", "SCREEN")  # ONE input writer: the player's own
     assert runner.stops == [None] * 5  # called once per runner tick, no stop asked
+    # stage 2: Global's hp_low presses the heal key, so inside the hunt core the box plays the
+    # potion and the runner's own is off for this run (live.hunt_plan)
+    assert call_["box_plays"] == ["potion"] and plan.events == ("hp_low",)
     # the runner's argv is exactly the Run helper's for that map (its head left out), its time box
     # the player's remaining time, its label its own
     (argv,) = argvs

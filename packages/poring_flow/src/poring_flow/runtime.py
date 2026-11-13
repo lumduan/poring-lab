@@ -44,7 +44,11 @@ subclasses `Sim` and replaces the fake environment through four seams, each a no
 `_advance` (the clock between two ticks: here `t += TICK_S`), `_waited` (how long a wait_until has
 waited: here its ticks), `_guard` (a check at the top of every tick: here none) and `Relocate` (a
 block that left its map by its own way raises it; the scheduler then relocates, as a `relocate`
-event's end does). The rules above are unchanged by them.
+event's end does). The rules above are unchanged by them. Stage 2 (2026-11-13: the box's survival
+events inside the hunt core) adds two more, both used by the simulator itself: `_perceive(which)`
+evaluates only some events (the player: the user's, on each hunt tick), and `_play_sync` runs one
+event's body to its end between two ticks (an insert at a safe point; the player's hunt core).
+An insert's pacing (`_paced`) counts `cooldown_s` from the end of its last body run.
 """
 
 from __future__ import annotations
@@ -137,6 +141,9 @@ class _EvState:
     on: bool = False  # a repeating event between its start and its stop threshold
     prev: bool = False
     last_end: float = -1e9
+    # the end of its last BODY RUN (live-blocks.md stage 2, 2026-11-13): an insert's pacing counts
+    # from it, never from `last_end`, which a fire sets provisionally to the fire's own time
+    ran_end: float = -1e9
     runs: deque[float] = field(default_factory=deque)  # body runs in the last minute
     fires: deque[float] = field(default_factory=deque)  # fires since until last held (10 min)
     per_run: int = 0
@@ -665,10 +672,26 @@ class Sim:
             return False
         return self.t - s.last_end >= h.cooldown_s
 
-    def _perceive(self) -> list[Effective]:
-        """Evaluate every effective event on this tick; return the ones that fire now."""
+    def _paced(self, e: Effective, s: _EvState) -> bool:
+        """May a fired insert run now: `max_per_min`, and `cooldown_s` since its last BODY RUN
+        ended. (Until 2026-11-13 this read `_due`, whose `last_end` the fire had just set to now:
+        every insert with a cooldown ran `cooldown_s` after its own fire, and a repeating insert
+        once every 2 x cooldown_s; live-blocks.md stage 2's potion would have waited 0.7 s.)"""
+        h = e.handler
+        while s.runs and self.t - s.runs[0] >= 60:
+            s.runs.popleft()
+        if h.max_per_min is not None and len(s.runs) >= h.max_per_min:
+            return False
+        return self.t - s.ran_end >= h.cooldown_s
+
+    def _perceive(self, which: Callable[[Effective], bool] | None = None) -> list[Effective]:
+        """Evaluate every effective event on this tick; return the ones that fire now. `which`
+        (the live player's hunt core, live-blocks.md stage 2): only the events it admits are
+        evaluated, and the momentary map-load cue stays for the next full perceive."""
         fired = []
         for e in self.tree.active(self.block):
+            if which is not None and not which(e):
+                continue
             h, s = e.handler, self._st(e.key)
             self._reason = f"{e.label}.when"
             c = self._eval(h.when)
@@ -698,8 +721,9 @@ class Sim:
                     s.armed = False
                     fired.append(e)
             s.prev = c
-        self.world["map_load_seen"] = False
-        self.world.pop("_map_cause", None)
+        if which is None:
+            self.world["map_load_seen"] = False
+            self.world.pop("_map_cause", None)
         return fired
 
     def _waiting(self) -> set[str]:
@@ -777,36 +801,44 @@ class Sim:
                 self.inserts.remove(key)
                 continue
             s = self._st(key)
-            if RANK[e.handler.priority] >= self._top_rank() or not self._due(e, s):
+            if RANK[e.handler.priority] >= self._top_rank() or not self._paced(e, s):
                 continue  # it waits: a handler of its class or higher runs, or it is paced
             self.inserts.remove(key)
             if self.held:
                 self._release(f"insert {key}: something was held")
             self.log.append((self.t, "insert", key))
             s.runs.append(self.t)
-            gen = self._stmts(list(e.handler.body), e.label)
-            outcome = "ok"
-            saved, self.frame = self.frame, _Frame(e.label, RANK[e.handler.priority], gen)
-            try:
-                tick = next(gen)
-                while True:
-                    if tick.batch is not None:
-                        self._emit(e.label, tick.batch, tick.why)
-                    self._advance(TICK_S)
-                    tick = gen.send(None)
-            except StopIteration:
-                pass
-            except _Halt as h:
-                outcome = h.reason
-            finally:
-                self.frame = saved
-            s.last_end = self.t
+            outcome = self._play_sync(e, self._stmts(list(e.handler.body), e.label))
             if outcome != "ok":
                 s.insert_fails += 1
                 self.log.append((self.t, "insert_failed", key))
                 if s.insert_fails >= e.handler.max_insert_fails:
                     s.insert_fails = 0
                     self._escalate(e)
+
+    def _play_sync(self, e: Effective, gen: Generator[_Tick, str | None, str]) -> str:
+        """Run an event's body to its end NOW, between two ticks of the flow it suspends (an
+        insert at a safe point; the live player's hunt core plays its events this way inside the
+        runner's tick): its own frame (its locals), the clock advanced between its ticks. "ok",
+        or the reason a statement of it halted. Its end is the event's `last_end` and `ran_end`."""
+        s = self._st(e.key)
+        outcome = "ok"
+        saved, self.frame = self.frame, _Frame(e.label, RANK[e.handler.priority], gen)
+        try:
+            tick = next(gen)
+            while True:
+                if tick.batch is not None:
+                    self._emit(e.label, tick.batch, tick.why)
+                self._advance(TICK_S)
+                tick = gen.send(None)
+        except StopIteration:
+            pass
+        except _Halt as h:
+            outcome = h.reason
+        finally:
+            self.frame = saved
+        s.last_end = s.ran_end = self.t
+        return outcome
 
     def _escalate(self, e: Effective) -> None:
         proc = e.handler.escalate
@@ -825,7 +857,8 @@ class Sim:
         """A handler ended: its `then` decides (2.5 rule 7, 13.6.6)."""
         e = frame.event
         if e is not None:
-            self._st(e.key).last_end = self.t
+            s = self._st(e.key)
+            s.last_end = s.ran_end = self.t
         then = frame.then
         if then == "stop":
             raise _Halt(f"{frame.owner}_stop")

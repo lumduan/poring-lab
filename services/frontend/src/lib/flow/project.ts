@@ -285,18 +285,43 @@ const GEFFEN_SAVE: CellRef = { kind: "cell", map: "geffen", x: 119, y: 40 };
 export const SAVE_NOTE = "the world rule: the save point (where a Butterfly Wing and a death land)";
 export const XMAS_ZONES_SHA = "89ea7a9c98d5d62b869a99189119548ea114868566bd293d43d46e3f24ebe345";
 
+const sense = (sensor: string): Expr => ({ kind: "sense", sensor, args: {} });
+const below = (sensor: string, v: number): Expr => ({ kind: "cmp", op: "<", left: sense(sensor), right: lit(v) });
+/** An event's trigger with the engine's defaults (a repeating event: `until`; a one-shot: `rearm`,
+ * or its condition going false; both paced by `cooldown_s`). */
+export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
+  when,
+  until: null,
+  rearm: null,
+  priority: "survival",
+  rank: null,
+  mode: "insert",
+  escalate: null,
+  max_insert_fails: 3,
+  cooldown_s: 0,
+  max_per_min: null,
+  max_fires_per_10min: 10,
+  max_per_run: null,
+  then: "resume",
+  ...extra,
+});
+
 /** The Rogue's project, ONE BOX (Batt 2026-11-13 ~21:4x: "take every box out: START > map
  * xmas_dun02, one box is enough; login and choosing the character come later; the user puts the
  * character on xmas_dun02 themself"): the run starts where she stands on xmas_dun02. Its main: the
  * save point (Geffen), hunt with the runner (everything the bot has trained), stop -- the runner
  * itself flies home on the Butterfly Wing (the bag half full, or Stop: its settings). Its tab keys:
- * every key a function (the names grow into stage 2's functions and events: live-blocks.md 2a). */
+ * every key a function. Its tab survival (stage 2, Batt 2026-11-13: "Heal: press F1 when HP < 30 %.
+ * Fly Wing: press F8 when a boss is seen or HP < 25 %"; live-blocks.md 3.2): two EVENTS that play
+ * inside the hunt core on every runner tick -- drink (repeating while HP is under 30 %, a potion
+ * every 0.7 s at most, as the runner paces its own) and fly_away (once per sighting or per fall
+ * under 25 %, re-armed 3 s after its Fly Wing, the runner's own Fly Wing pace). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the run starts where she stands. She hunts with the runner, which flies home on the Butterfly Wing (bag half full, or Stop). Keys: tab keys.",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts and flies her home on the Butterfly Wing. Tabs: keys; survival (drink under 30 % HP, fly_away on a boss or under 25 %).",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -321,6 +346,10 @@ export function xmasProject(): Project {
             { kind: "stop", reason: "home" },
           ]),
           tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("knife_on", [pressKey("F4")]), def("knife_back", [pressKey("F5")])]),
+          tab("survival", [
+            def("drink", [call("heal")], { on: trigger(below("hp_percent", 30), { until: { kind: "cmp", op: ">=", left: sense("hp_percent"), right: lit(31) }, cooldown_s: 0.7 }) }),
+            def("fly_away", [call("fly_wing")], { on: trigger({ kind: "or", terms: [sense("sees_boss"), below("hp_percent", 25)] }, { cooldown_s: 3, priority: "critical", mode: "preempt" }) }),
+          ]),
         ],
       },
     ],

@@ -2313,15 +2313,19 @@ def rate_hp_s(hist: Sequence[tuple[float, float]], now: float, win: float = 2.0,
 
 
 def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping[str, Any],
-            calm: bool = False) -> list[tuple[str, str]]:  # fmt: skip
+            calm: bool = False,
+            off: frozenset[str] = frozenset()) -> list[tuple[str, str]]:  # fmt: skip
     """PURE: the sustain keys to press now with why: the escape first (alone), then a potion,
     then Heal. ``hp`` / ``sp`` are shares (0..1); ``st`` is updated for what is returned.
-    ``calm`` (no hit on us for CALM_S, not fighting): H's between-fights Heal may fire."""
+    ``calm`` (no hit on us for CALM_S, not fighting): H's between-fights Heal may fire.
+    ``off`` (dungeon@9.49, live-blocks.md stage 2: what the BOX's events play instead): "fly_hp"
+    drops the Fly Wing below ``fly_below`` (the HP-RATE fly stays the runner's), "potion" the
+    potion; the HP history (the rate, the end's escape) is kept either way. Empty: as before."""
     st.hist.append((now, hp))
     rate = rate_hp_s(st.hist, now, max_hp=float(strat.get("max_hp", MAX_HP)))
     if now - st.fly >= 3.0:
         why = None
-        if hp < strat["fly_below"]:
+        if "fly_hp" not in off and hp < strat["fly_below"]:
             why = f"hp {hp:.2f}"
         elif rate is not None and rate > strat["fly_rate"] and hp < strat["fly_rate_below"]:
             why = f"rate {rate:.0f} at hp {hp:.2f}"
@@ -2329,7 +2333,7 @@ def sustain(st: Sustain, now: float, hp: float, sp: float | None, strat: Mapping
             st.fly = now
             return [("fly", why)]
     out: list[tuple[str, str]] = []
-    if hp < strat["potion_below"]:
+    if "potion" not in off and hp < strat["potion_below"]:
         recent = [t for t in st.pots if now - t <= 2.0]
         rose = st.pot_frac is not None and hp > st.pot_frac + 0.01
         if (not st.pots or now - st.pots[-1] >= 0.7 or rose) and len(recent) < 3:
@@ -5728,12 +5732,26 @@ class BareCtl:
 # (`dungeon_hunt.py run ...`, the Run helper's path) passes neither and runs exactly as before:
 # ro_agent.session() opens the session, no hook is called. VERSION stays dungeon@8.7.
 LIVE_BLOCKS_VERSION = "9.48"
+# --- dungeon@9.49 (Batt 2026-11-13: "Heal, Fly Wing, Knife swap: write every one as a FUNCTION.
+# Heal: press F1 when HP < 30 %. Fly Wing: press F8 when a boss is seen or HP < 25 %";
+# docs/planning/live-blocks.md stage 2): the BOX's survival EVENTS play inside the hunt core.
+# run(..., box_plays=)
+# names the runner's own handlers the box's events replace (BOX_PLAYS: the potion, the Fly Wing on
+# HP, the boss fly; poring_flow.live.hunt_plan derives them from the project). Each tick -- the
+# loop's survival point, and guard_tick's quick read inside a long action -- calls the hook's
+# ``survive(HuntTick, press)``; the box's bodies press through ``press`` (box_press below: the
+# runner's OWN press of that role, its before-steps, counts, record and stock read); after a box
+# Fly Wing the runner runs its own after-the-fly steps. Everything the box does not play stays the
+# runner's (the HP-rate fly, the Garm Baby, the stock, the dead jump, an unread position, the NPC
+# guard, the knife, the way home). No box_plays (the CLI, a box without such events): as before.
+SURVIVAL_EVENTS_VERSION = "9.49"
+BOX_PLAYS = ("potion", "fly_hp", "boss_fly")  # == poring_flow.live.PLAYS (test_live_player.py)
 
 
 @dataclass(frozen=True)
 class HuntTick:
     """What the TICK HOOK reads once per tick of the loop (read access only: values, and the
-    counters as a read-only view). Stage 2 moves survival into the box's events through it."""
+    counters as a read-only view). dungeon@9.49: the box's survival events read it too."""
 
     t: float  # the tick's time.monotonic()
     hp_pct: int | None  # the HP percent line (hp_percent.read)
@@ -5743,6 +5761,11 @@ class HuntTick:
     mode: str  # search, fight, loot, after, ...
     counts: Mapping[str, int]  # the run's counters (a read-only view)
     frame: Any  # the tick's game-region frame (BGR), shared: never written
+    # dungeon@9.49: the boss read of this tick -- the boss guard's Battle Log line whose name fits
+    # the map's boss or a summon (boss_of over boss_names), None when none came; and ``quick``: a
+    # guard_tick read inside a long action (no Battle Log read there: the boss is not known)
+    boss: str | None = None
+    quick: bool = False
 
 
 def hook_stop(hook: Any, view: HuntTick) -> str | None:
@@ -5753,6 +5776,41 @@ def hook_stop(hook: Any, view: HuntTick) -> str | None:
         return None
     why = hook.tick(view)
     return None if why is None else str(why)
+
+
+def hook_survive(hook: Any, view: HuntTick, press: Callable[[str, str], str | None]) -> str | None:
+    """dungeon@9.49: the box's survival events on this tick (the hook plays their bodies through
+    ``press`` while the runner waits) -- None (go on), or why the run ends here (its NORMAL end:
+    an event's limit, a refused input). No hook: none."""
+    if hook is None:
+        return None
+    why = hook.survive(view, press)
+    return None if why is None else str(why)
+
+
+def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss_walk: bool,
+                      bosses: Sequence[str]) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.49): why the box cannot play these handlers in this run (None: it can).
+    Every refusal is before any input."""
+    bad = sorted(set(plays) - set(BOX_PLAYS))
+    if bad:
+        return f"box_plays {bad}: not one of {list(BOX_PLAYS)}"
+    if not plays:
+        return None
+    if hook is None or not callable(getattr(hook, "survive", None)):
+        return "box_plays without a hook that plays survival (hook.survive)"
+    if "potion" in plays and heal_candy:
+        return ("the box plays the potion, but --heal-candy picks the heal item: one heal key "
+                "(the box's) or the runner's candies, not both")  # fmt: skip
+    if "boss_fly" in plays and boss_walk:
+        return ("the box plays the boss fly, but --boss-walk walks away on the same read: the "
+                "walk-away is the runner's answer to it")  # fmt: skip
+    if "boss_fly" in plays and not bosses:
+        return (
+            "the box plays the boss fly on sees_boss(), but this run reads no boss (no "
+            "--engage-screen, or no boss on the map): the event would never see one"
+        )
+    return None
 
 
 def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
@@ -5770,13 +5828,15 @@ def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
     return a
 
 
-def run(a: argparse.Namespace, *, hook: Any = None,
-        session: tuple[Any, Any] | None = None) -> int:  # noqa: PLR0915, C901  # fmt: skip
+def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | None = None,
+        box_plays: Sequence[str] = ()) -> int:  # noqa: PLR0915, C901  # fmt: skip
     """The runner. ``hook`` / ``session`` (dungeon@9.48, the live block player only): an object
     whose ``tick(HuntTick)`` is called once per tick of the loop (a str back ends the run there)
     and, when it has one, ``event(rec, t_mono)`` with every event (a passive observer); and the
     (Agent, Screen) to play with instead of a session of its own (the caller keeps and closes
-    them). Both None: the CLI's run, unchanged."""
+    them). ``box_plays`` (dungeon@9.49, the box's survival events; SURVIVAL_EVENTS_VERSION's
+    comment): the runner's handlers the hook's ``survive`` plays instead. All None / empty: the
+    CLI's run, unchanged."""
     import bench
     import crusader as cr
     import cursor_sword as csw
@@ -5944,6 +6004,21 @@ def run(a: argparse.Namespace, *, hook: Any = None,
         if why_hc:
             raise SystemExit(f"dungeon@9.31 refused: {why_hc}")
         keys_ = {**keys_, **HEAL_CANDY_KEYS}
+    # dungeon@9.49 (live-blocks.md stage 2): the handlers the BOX's events play instead, before
+    # any input; box_off: sustain()'s two of them
+    box_set = frozenset(box_plays)
+    why_bx = box_plays_refused(
+        sorted(box_set),
+        hook,
+        heal_candy=heal_candy,
+        boss_walk=bool(getattr(a, "boss_walk", False)),
+        bosses=bosses,
+    )
+    if why_bx:
+        raise SystemExit(f"dungeon@{SURVIVAL_EVENTS_VERSION} refused: {why_bx}")
+    box_on = bool(box_set)
+    box_off = box_set & {"potion", "fly_hp"}
+    box_boss = "boss_fly" in box_set
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
     why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
     if why_hk:
@@ -6469,6 +6544,9 @@ def run(a: argparse.Namespace, *, hook: Any = None,
             "potions_to": p_to, "potions_drunk": drunk,
             "params": strat, "rest_spots": spots,
             **({"player_mode": fixes_of(a)["player_mode"]} if player else {}),
+            # dungeon@9.49: the handlers the box's events play in this run (none: absent)
+            **({"box_plays": sorted(box_set), "box_version": SURVIVAL_EVENTS_VERSION}
+               if box_on else {}),
             **({"player_map": None if map_read is None else map_read.record()} if player
                else {}),
             **({"player_slots": slot_read} if player else {}),  # dungeon@9.47
@@ -6719,6 +6797,38 @@ def run(a: argparse.Namespace, *, hook: Any = None,
             time.sleep(0.25)
             click_at(SELF_PX[0], SELF_PX[1], "heal_self")
 
+        # dungeon@9.49 (live-blocks.md stage 2): the keys the BOX may press, each the runner's role
+        box_keys: dict[str, str] = {}
+        if "potion" in box_set:
+            box_keys[keys_["potion"]] = "potion"
+        if box_set & {"fly_hp", "boss_fly"}:
+            box_keys[keys_["fly"]] = "fly"
+        box_pressed: list[tuple[str, str]] = []  # one survive call's (role, why), in press order
+        box_stop: list[str | None] = [None]  # a stop the box asked for inside a long action
+
+        def box_press(code: str, why: str) -> str | None:
+            """dungeon@9.49: a press of the box's event body (through the hook): the runner's OWN
+            press of that role -- a Fly Wing stands her up first if she sits, then press()'s own
+            before-steps (the unread escape's end, the dagger before flying bare), its count, its
+            record and the stock read after it. Another key is not pressed (None)."""
+            nonlocal sitting
+            what_ = box_keys.get(code)
+            if what_ is None:
+                counts["box_refused"] += 1
+                ev({"kind": "box_refused", "key": code, "why": why})
+                return None
+            if what_ == "fly" and sitting:
+                press("stand", "escape")
+                sitting = False
+            press(what_, why)
+            counts[f"box_{what_}"] += 1
+            box_pressed.append((what_, why))
+            return what_
+
+        def box_fly_why() -> str | None:
+            """The why of this survive call's box Fly Wing (None: it pressed none)."""
+            return next((w for r_, w in box_pressed if r_ == "fly"), None)
+
         n_ring_diag = [0]  # dungeon@8.6: ring-vs-red evidence crops kept
 
         def hover(u: float, v: float) -> dict[str, Any]:
@@ -6863,8 +6973,22 @@ def run(a: argparse.Namespace, *, hook: Any = None,
             ev({"kind": "hp_read", "pct": p_, "sp_pct": s_, "quick": True})
             if p_ is None:
                 return escaped[0]
+            off_q = box_off
+            if box_on:  # dungeon@9.49: the box's events on this quick read (no boss read here)
+                box_pressed.clear()
+                why_q = hook_survive(hook, HuntTick(now_, p_, s_, False, here, mode,
+                                                    MappingProxyType(counts), img_, None, True),
+                                     box_press)  # fmt: skip
+                if why_q is not None and box_stop[0] is None:
+                    box_stop[0] = why_q  # the loop's next tick ends the run (its normal end)
+                fly_q = box_fly_why()
+                if fly_q is not None:  # its own Fly Wing's after-steps, as after the runner's
+                    st.fly = time.monotonic()  # the HP-rate fly waits 3 s after it
+                    ev({"kind": "escape", "how": "fly", "why": fly_q, "inside": True, "by": "box"})
+                    escaped[0] = True
+                    off_q = box_off | {"potion"}  # the escape goes alone, as the runner's own
             for what_, why_ in sustain(st, now_, p_ / 100.0, None if s_ is None else s_ / 100.0,
-                                       strat):  # fmt: skip
+                                       strat, off=off_q):  # fmt: skip
                 if what_ == "fly":
                     press("fly", why_)
                     ev({"kind": "escape", "how": "fly", "why": why_, "inside": True})
@@ -8600,6 +8724,10 @@ def run(a: argparse.Namespace, *, hook: Any = None,
                     reason = "stopped: the person pressed Stop"
                     ev({"kind": "stop_file", "path": str(stop_file)})
                     break  # the NORMAL end: the safe-end escape, the packets, a player's way home
+                if box_stop[0] is not None:  # dungeon@9.49: the box ended it inside a long action
+                    reason = f"stopped: {box_stop[0]}"
+                    ev({"kind": "hook_stop", "why": box_stop[0]})
+                    break
                 if escaped[0]:  # a Fly Wing inside a scan or a strike (guard_tick)
                     escaped[0] = False
                     fly_at = tick
@@ -8770,8 +8898,32 @@ def run(a: argparse.Namespace, *, hook: Any = None,
                         "sp_pct": spp})  # fmt: skip
                 calm = (tick - last_taken > CALM_S and mode != "fight" and not sitting
                         and not hp_dropped(st.hist, tick))  # fmt: skip
+                off_t = box_off
+                box_fly: str | None = None
+                if box_on:  # dungeon@9.49 (live-blocks.md stage 2): the BOX's survival events on
+                    # this tick's values (its boss: the Battle Log read above), BEFORE the runner's
+                    box_pressed.clear()
+                    why_bx = hook_survive(hook, HuntTick(tick, pct, spp, bool(dead), here, mode,
+                                                         MappingProxyType(counts), img, boss_hit),
+                                          box_press)  # fmt: skip
+                    box_fly = box_fly_why()
+                    if box_fly is not None:  # its Fly Wing's after-steps: exactly the runner's own
+                        st.fly = time.monotonic()  # sustain's 3-s pace: the HP-rate fly waits
+                        fly_at = time.monotonic()
+                        ev({"kind": "escape", "how": "fly", "why": box_fly, "by": "box",
+                            "boss": boss_hit})  # fmt: skip
+                        lock, goal_path = None, None
+                        loot_list, fight_ref = [], None  # far away now
+                        mode = "search"
+                        here, last_taken = None, -1e9  # Amendment F
+                        off_t = box_off | {"potion"}  # the escape goes alone, as the runner's own
+                        time.sleep(1.0)
+                    if why_bx is not None:  # the box ends the run: the NORMAL end
+                        reason = f"stopped: {why_bx}"
+                        ev({"kind": "hook_stop", "why": why_bx})
+                        break
                 if frac is not None:
-                    for what, why in sustain(st, tick, frac, spf, strat, calm):
+                    for what, why in sustain(st, tick, frac, spf, strat, calm, off=off_t):
                         if what == "fly":
                             if sitting:
                                 press("stand", "escape")
@@ -8822,6 +8974,7 @@ def run(a: argparse.Namespace, *, hook: Any = None,
                 if unreach_on and dropped:
                     ua_drop_t = tick  # dungeon@9.26: an attacked sign
                 near_ = None
+                garm_now = False  # dungeon@9.49: this tick's boss_hit is the Garm Baby box's
                 if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
                     streak_ = boxes.alarm_n  # 9.19b: --garm-confirm's consecutive detections
                     seen_ = alarm_seen(
@@ -8836,11 +8989,16 @@ def run(a: argparse.Namespace, *, hook: Any = None,
                             "streak": streak_})  # fmt: skip
                         counts["garm_seen"] += 1
                         boss_hit = "Garm Baby"  # the boss guard's own Fly Wing path below
+                        garm_now = True
                 if boss_hit is not None and tick < boss_grace_until:
                     counts["boss_walk_grace"] += 1  # 9.18: the dog's last hit as we walk off
                     boss_hit = None
                 if boss_hit is not None:  # --engage-screen's boss guard (Amendment J): fly away
-                    ev({"kind": "boss_guard", "name": boss_hit, "fly": tick - fly_at > 2.0})
+                    # dungeon@9.49: a Battle Log boss line, with the box playing the boss fly: its
+                    # event decided this line in the hook above (the Garm Baby box stays ours)
+                    box_line = box_boss and not garm_now
+                    ev({"kind": "boss_guard", "name": boss_hit, "fly": tick - fly_at > 2.0,
+                        **({"box": box_fly is not None} if box_line else {})})  # fmt: skip
                     counts["boss_guard"] += 1
                     boss_until = tick + BOSS_AVOID_S
                     wa_: Cell | None = None
@@ -8886,7 +9044,11 @@ def run(a: argparse.Namespace, *, hook: Any = None,
                         mode = "search"
                         box_fight.clear()
                         continue
-                    if tick - fly_at > 2.0:
+                    if box_line:  # the box's Fly Wing (if it flew) had the runner's own steps
+                        if box_fly is not None:
+                            box_fight.clear()
+                            continue
+                    elif tick - fly_at > 2.0:
                         if sitting:
                             press("stand", "boss")
                             sitting = False

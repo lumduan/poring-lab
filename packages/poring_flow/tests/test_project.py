@@ -83,7 +83,7 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert x.zones is not None and x.zones.sha256 == hashlib.sha256(ZONES.read_bytes()).hexdigest()
     assert x.resume_here and (x.entries[0].name, x.entries[0].at, x.entries[0].radius) == (
         "here", None, 2)  # fmt: skip
-    assert [t.name for t in x.tabs] == ["main", "keys"]
+    assert [t.name for t in x.tabs] == ["main", "keys", "survival"]
     save, hunt, stop = x.main
     assert isinstance(save, ir.ActionStmt) and save.block == "assert_save_point"
     assert save.note == "the world rule: the save point (where a Butterfly Wing and a death land)"
@@ -96,6 +96,22 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     keys = {d.name: d.body[0].params["key"].value for d in x.tabs[1].defs}  # type: ignore[union-attr]
     assert keys == {"heal": "F1", "fly_wing": "F8", "butterfly_wing": "F9", "knife_on": "F4",
                     "knife_back": "F5"}  # fmt: skip
+    # stage 2 (Batt 2026-11-13: "Heal: press F1 when HP < 30 %. Fly Wing: press F8 when a boss is
+    # seen or HP < 25 %"; live-blocks.md 3.2): two events, each calling its key's function
+    drink, fly = x.tabs[2].defs
+    assert (drink.name, drink.body, fly.name, fly.body) == (
+        "drink", [ir.CallProc(proc="heal")],
+        "fly_away", [ir.CallProc(proc="fly_wing")])  # fmt: skip
+    assert drink.on is not None and fly.on is not None
+    assert (drink.on.mode, drink.on.priority, drink.on.cooldown_s) == ("insert", "survival", 0.7)
+    hp = ir.Sense(sensor="hp_percent")
+    assert drink.on.when == ir.Cmp(op="<", left=hp, right=ir.Lit(value=30))
+    assert drink.on.until == ir.Cmp(op=">=", left=hp, right=ir.Lit(value=31))
+    assert (fly.on.mode, fly.on.priority, fly.on.cooldown_s, fly.on.until, fly.on.rearm) == (
+        "preempt", "critical", 3.0, None, None)  # fmt: skip
+    assert fly.on.when == ir.Logic(kind="or", terms=[
+        ir.Sense(sensor="sees_boss"),
+        ir.Cmp(op="<", left=ir.Sense(sensor="hp_percent"), right=ir.Lit(value=25))])  # fmt: skip
     assert P.session_path(p).map_start and P.start_map(p) is x
     assert "edges" in json.loads(text) and json.loads(text)["edges"] == []
 
@@ -656,6 +672,27 @@ def test_a_map_start_simulates_from_its_entry_with_no_session() -> None:
     assert [s.get("action") for s in one["play"]][:2] == ["assert_save_point", "dungeon_hunt"]
 
 
+def test_the_box_s_survival_events_simulate_on_scripted_sensors() -> None:
+    """live-blocks.md stage 2: the simulator plays the one box's events like any other: drink on
+    a scripted HP under 30 %, fly_away on a scripted sees_boss (the hunt core's boss read)."""
+    p = P.from_json(XMAS.read_text())
+    sc = Scenario(horizon_s=60, timeline=[{"t": 0.3, "set": {"hp_percent": 28}},
+                                          {"t": 0.8, "set": {"hp_percent": 60, "sees_boss": True}},
+                                          {"t": 1.0, "set": {"sees_boss": False}}])  # fmt: skip
+    doc = P.simulate(p, None, sc)
+    fired = [(e["t"], e["what"]) for e in doc["events"] if e["kind"] == "fire"]
+    assert fired == [(0.3, "drink"), (0.8, "fly_away")] and doc["end"] == "home"
+    assert [e["what"] for e in doc["events"] if e["kind"] == "until"] == ["drink"]
+    # no boss scripted: sees_boss is unknown (None), HP under 25 % flies once (one-shot) and the
+    # drink repeats at its pace while the scenario keeps HP there (a simulated press heals none)
+    quiet = P.simulate(
+        p, None, Scenario(horizon_s=60, timeline=[{"t": 0.3, "set": {"hp_percent": 24}}])
+    )
+    fires = [e["what"] for e in quiet["events"] if e["kind"] == "fire"]
+    assert fires[:2] == ["fly_away", "drink"] and fires.count("fly_away") == 1
+    assert set(fires[2:]) == {"drink"}
+
+
 def test_a_map_start_with_session_nodes_warns_they_are_not_played() -> None:
     d = session()
     d["start"] = "xmas_dun02"
@@ -674,7 +711,12 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
     p = P.from_json(XMAS.read_text())
     files = V.print_files(p)
     by = {f.path: f.text for f in files}
-    assert list(by) == ["xmas_dun02/main.py", "xmas_dun02/keys.py", "project.py"]
+    assert list(by) == ["xmas_dun02/main.py", "xmas_dun02/keys.py", "xmas_dun02/survival.py",
+                        "project.py"]  # fmt: skip
+    assert (
+        "@on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)\n"
+        "def fly_away():\n    fly_wing()\n"
+    ) in by["xmas_dun02/survival.py"]
     assert 'START = "xmas_dun02"\n' in by["project.py"] and "edge(" not in by["project.py"]
     assert V.parse_files(by) == p
 
@@ -741,13 +783,16 @@ def test_the_home_role_is_one_press_on_its_own_key_and_a_wing_key() -> None:
         "names butterfly_wing, whose body is not exactly one press_key: the runner presses one "
         "key for each role"
     ]
-    # the home key taken by another role: ONE error, the clash
+    # the home key taken by another role: ONE error of the runner's, the clash -- and the box's
+    # fly_away event (stage 2), which then presses the Butterfly Wing, must relocate or stop
     same = copy.deepcopy(d)
     next(x for x in same["nodes"][0]["tabs"][1]["defs"] if x["name"] == "fly_wing")["body"] = [
         press("F9")]  # fmt: skip
     assert [m for m in errors(build(same)) if "F9" in m] == [
         "xmas_dun02/main/main.1: dungeon_hunt's fly and home both press F9: each role needs its "
-        "own key"
+        "own key",
+        "xmas_dun02/survival/fly_away: the Butterfly Wing on F9 (butterfly_wing) changes the map: "
+        "then must be relocate or stop",
     ]
     # an undefined function
     gone = copy.deepcopy(d)

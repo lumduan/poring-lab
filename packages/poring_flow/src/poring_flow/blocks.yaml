@@ -426,7 +426,7 @@ blocks:
 #   cue      a momentary cue (true for an instant): it cannot hold on every tick
 #   danger   low | high: which side of a threshold is the dangerous one ("looser", 13.6.9)
 #   live     the live block player reads it from pixels (stage 1: HP / SP / weight, the death
-#            dialog, the map's name from the minimap)
+#            dialog, the map's name from the minimap; stage 2: sees_boss, inside a hunt core)
 sensors:
   hp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
   sp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
@@ -444,6 +444,11 @@ sensors:
   window_open: {concept: ui.open_window, type: bool, passive: true, params: [{name: window, type: window, required: true, positional: true}]}
   dialog_shows: {concept: npc.choose, type: bool, passive: true, params: [{name: option, type: option, required: true, positional: true}]}
   map_load_seen: {type: bool, passive: true, drift: true, cue: true, live: true, note: "the loading screen or the map-load notice (open question 28); the LIVE player: the minimap names another map than the last one it named"}
+  # Batt 2026-11-13 (docs/planning/live-blocks.md stage 2: "Fly Wing: press F8 when a boss is seen or
+  # HP < 25 %"): the hunt core's OWN boss read as a sensor. Live ONLY inside a hunt core (its tick
+  # hook: dungeon_hunt.HuntTick.boss); anywhere else it is unknown (None), so it never fires there.
+  # Not "boss_seen": that name is a map event of the IR 2 samples (town_warp_farm, farm_loop).
+  sees_boss: {type: bool, passive: true, drift: true, cue: true, live: true, note: "the hunt core's boss read on this tick: a Battle Log line (damage or taken) whose bracketed name fits the map's boss or one of its summons (dungeon_hunt boss_of over boss_names; the runner's --engage-screen boss guard). Read only while the hunt core plays; elsewhere unknown"}
   engagement_seen: {type: bool, passive: true, drift: true, cue: true, note: "an engagement we did not order, from pixels (13.9)"}
   engaged_species: {type: mob, passive: true, drift: true, note: "needs a detector that names species (13.9, open question 33)"}
   # The TRAINED MODELS as sensors (Batt 2026-11-09; models.yaml, ADR-0020 Amendment B): `model` is a

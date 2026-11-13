@@ -162,6 +162,23 @@ def test_cooldown_keeps_the_event_disarmed() -> None:
     assert fires == [0.2, 2.8]
 
 
+def test_an_insert_with_a_cooldown_runs_at_its_fire_and_repeats_at_its_pace() -> None:
+    """live-blocks.md stage 2 (2026-11-13): an insert's pacing counts `cooldown_s` from the end
+    of its last BODY RUN. Before, the fire's own provisional end held every insert with a cooldown
+    back by cooldown_s, and a repeating one ran every 2 x cooldown_s."""
+    sim = run(
+        "@on(hp_percent() < 30, until=hp_percent() >= 31, priority=SURVIVAL, mode=INSERT, "
+        "cooldown_s=0.7)\ndef drink():\n    use_item(item(9001))\n\n\n"
+        "wait_until(hp_percent() > 1000, timeout_s=4)\n",
+        timeline=[(1.0, {"hp_percent": 28}), (3.0, {"hp_percent": 35})],
+    )
+    log = [(round(t, 1), k) for t, k, d in sim.log if d == "drink" and k in ("fire", "insert")]
+    # fired and inserted on the same tick; again 0.7 s after each run ended (a run: 0.2 s)
+    assert log == [(1.0, "fire"), (1.0, "insert"), (1.9, "fire"), (1.9, "insert"),
+                   (2.8, "fire"), (2.8, "insert")]  # fmt: skip
+    assert_wellformed(sim)
+
+
 def test_the_runaway_bound_stops_the_run_and_releases() -> None:
     sim = run(
         "@on(hp_percent() < 50, until=hp_percent() > 80, priority=SURVIVAL, mode=INSERT, "

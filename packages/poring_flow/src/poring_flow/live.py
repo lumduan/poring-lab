@@ -21,8 +21,21 @@ Stage 1 (the stages: live-blocks.md section 2):
   `then` relocate relocates by the map's NAME (no /where). The always-on safety events the
   project does not write (dead, hp_critical, unexpected_map: always_on.BUILT_IN) play as the
   SAFE END in stage 1: everything held is released and the run ends, named (their bodies --
-  respawn, escape, /where -- are stage 2); while the hunt core runs, the runner's own survival
-  plays (stage 2 moves it into the box's events through the hunt core's tick hook).
+  respawn, escape, /where -- are a later stage).
+
+Stage 2 (Batt 2026-11-13: "Heal, Fly Wing, Knife swap: write every one as a FUNCTION. Heal: press
+F1 when HP < 30 %. Fly Wing: press F8 when a boss is seen or HP < 25 %"): the box's own EVENTS play
+INSIDE the hunt core, through its tick hook (`hunt_plan`; scripts/flow_play.py HuntHook.survive,
+scripts/dungeon_hunt.py run(box_plays=...)). On a map node with a hunt core, every user event
+active there (its own, Global's) is evaluated on EVERY tick of the runner with the tick's own
+values (HUNT_SENSORS: hp_percent, sp_percent and the new sensor sees_boss, the runner's boss read)
+by the engine's rules, and its body is played at once through the SAME Agent while the runner
+waits. Inside the hunt core such an event may press only dungeon_hunt's heal and fly keys
+(HUNT_ROLES), through calls, if, set and return (HUNT_STATEMENTS), and it must resume; anything else
+is refused before any input, named. The runner's own handler for each thing the box plays is
+switched off for that run (PLAYS: the potion, the Fly Wing on HP, the boss fly); everything else
+stays the runner's (the HP-rate fly, the Garm Baby, the stock, the dead jump, an unread position,
+the NPC guard, the knife, the way home).
 
 Everything the compiled flow holds is checked (every map node's main, events and extensions,
 every function, every Global event), not only what one path reaches: a relocation can land on any
@@ -39,8 +52,10 @@ from poring_flow import functions as fn
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
 
-STAGE = 1
-VERSION = "9.48"  # scripts/dungeon_hunt.py LIVE_BLOCKS_VERSION (test_live_player.py pins both)
+STAGE = 2
+# scripts/dungeon_hunt.py SURVIVAL_EVENTS_VERSION (stage 1 was 9.48, its LIVE_BLOCKS_VERSION);
+# test_live_player.py pins them together
+VERSION = "9.49"
 STATEMENTS = (
     "action",
     "if",
@@ -80,6 +95,15 @@ LATER: dict[str, str] = {
 }
 LATER_DEFAULT = "a later stage"
 HELPER_SENSORS = ("known",)  # `known(x)`: no read of its own (runtime.Sim._sense)
+# Stage 2: what an event may read and do while the HUNT CORE plays (its tick hook, the module
+# docstring). The sensors a hunt tick carries (dungeon_hunt.HuntTick: hp_pct, sp_pct, boss)
+HUNT_SENSORS = ("hp_percent", "sp_percent", "sees_boss")
+# the statements its body may hold: the runner WAITS while the box plays, so no wait, no loop
+HUNT_STATEMENTS = ("action", "call", "if", "set", "return")
+# dungeon_hunt's roles whose key the box may press inside it (the knife, the dagger and home stay
+# the runner's in stage 2), and the runner's own handler each pressed key switches off
+HUNT_ROLES = ("heal", "fly")
+PLAYS = ("potion", "fly_hp", "boss_fly")
 
 
 @dataclass(frozen=True)
@@ -147,6 +171,11 @@ def problems(flow: ir.Flow, cat: Catalogue | None = None) -> list[NotLive]:
                 expr(label, cond)
     if flow.stop_when is not None:
         expr("stop_when", flow.stop_when)
+    for block in dict.fromkeys(b for b, _ in runner_blocks(flow)):  # stage 2: inside the hunt
+        for nl in hunt_plan(flow, block, cat).problems:
+            if (nl.path, nl.what) not in seen:
+                seen.add((nl.path, nl.what))
+                out.append(nl)
     return out
 
 
@@ -202,6 +231,151 @@ def runner_blocks(flow: ir.Flow) -> list[tuple[str, ir.ActionStmt]]:
     return out
 
 
+# --- stage 2: the box's events INSIDE the hunt core ----------------------------------------------
+@dataclass(frozen=True)
+class HuntPlan:
+    """What the box plays inside one map node's hunt core (the module docstring, stage 2)."""
+
+    block: str
+    keys: dict[str, str]  # the role -> its key: heal F1, fly F8 (what the box may press there)
+    events: tuple[str, ...]  # the user events that play inside it (their keys), in order
+    plays: frozenset[str]  # the runner's own handlers they replace (PLAYS)
+    problems: tuple[NotLive, ...]  # why it cannot play (each one refuses before any input)
+
+
+def _sensors(e: Any) -> set[str]:
+    return {x.sensor for x in ir.sub_exprs(e) if isinstance(x, ir.Sense)}
+
+
+def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPlan:
+    """PURE: the user events active on `block` (its own and Global's; the always-on safety three
+    keep stage 1's rule) and what they take over from its hunt core. An event plays inside the
+    hunt core when it reads only HUNT_SENSORS, presses only the heal / fly role keys (literal
+    keys, through calls with literal arguments), holds only HUNT_STATEMENTS and resumes. PLAYS:
+    `potion` when one presses the heal key; `fly_hp` / `boss_fly` when one presses the fly key on
+    a condition (`when`) that reads hp_percent / sees_boss."""
+    from poring_flow.effective import merge
+
+    cat = cat or catalogue()
+    b = next((x for x in (flow.workflow.blocks if flow.workflow else []) if x.name == block), None)
+    hunt = next((a for bl, a in runner_blocks(flow) if bl == block), None)
+    if b is None or hunt is None:
+        return HuntPlan(block, {}, (), frozenset(), ())
+    roles = fn.role_functions(hunt)
+    keys: dict[str, str] = {}
+    for role in HUNT_ROLES:
+        name = roles.get(role)
+        key = fn.resolve_key(flow, name)[0] if name else None
+        if key is not None:
+            keys[role] = key
+    allowed = set(keys.values())
+    shown = " and ".join(f"{r} ({k})" for r, k in keys.items()) or "no role key"
+    readable = set(HUNT_SENSORS) | set(HELPER_SENSORS)
+    out: list[NotLive] = []
+    events: list[str] = []
+    plays: set[str] = set()
+
+    def bad(path: str, what: str, text: str) -> None:
+        out.append(NotLive(path, what, text))
+
+    def expr(path: str, e: Any) -> None:
+        for x in ir.sub_exprs(e):
+            if isinstance(x, ir.Sense) and x.sensor not in readable:
+                bad(path, x.sensor, f"{x.sensor}() cannot be read inside the hunt core: there an "
+                    f"event reads only {', '.join(HUNT_SENSORS)} (stage 2)")  # fmt: skip
+            elif isinstance(x, ir.Do | ir.CallV):
+                what = x.action.block if isinstance(x, ir.Do) else x.proc
+                bad(path, what, f"{what} as a value cannot play inside the hunt core (stage 2)")
+
+    def body(path: str, stmts: list[Any], env: dict[str, Any], depth: int,
+             pressed: list[str]) -> None:  # fmt: skip
+        for st in stmts:
+            if st.kind not in HUNT_STATEMENTS:
+                bad(
+                    path,
+                    st.kind,
+                    f"a {st.kind} statement cannot play inside the hunt core: the "
+                    "runner waits while the box plays (presses, calls, if, set, return; stage 2)",
+                )
+                continue
+            for _, e in ir.stmt_exprs(st):
+                expr(path, e)
+            if isinstance(st, ir.ActionStmt):
+                if st.block != fn.PRESS:
+                    bad(path, st.block, f"{st.block} cannot play inside the hunt core (stage 2: "
+                        "press_key only)")  # fmt: skip
+                    continue
+                known, v = fn.literal_value(st.params.get("key"), env)
+                if not known or not isinstance(v, str):
+                    bad(path, fn.PRESS, "a press_key inside the hunt core needs its key known "
+                        "before the run (a literal, or an input given one)")  # fmt: skip
+                elif v not in allowed:
+                    bad(path, fn.PRESS, f"presses {v} inside the hunt core: there the box presses "
+                        f"only dungeon_hunt's {shown} keys (the knife, the dagger and the way "
+                        "home stay the runner's in stage 2)")  # fmt: skip
+                else:
+                    pressed.append(v)
+            elif isinstance(st, ir.If):
+                body(path, list(st.then), env, depth, pressed)
+                body(path, list(st.orelse), env, depth, pressed)
+            elif isinstance(st, ir.CallProc):
+                vals = [fn.literal_value(a, env) for a in st.args]
+                kws = {k: fn.literal_value(a, env) for k, a in st.kwargs.items()}
+                if not all(k for k, _ in [*vals, *kws.values()]):
+                    bad(
+                        path,
+                        st.proc,
+                        f"{st.proc} is called with an argument that is not a "
+                        "literal: inside the hunt core its keys must be known before the run",
+                    )
+                    continue
+                inner = fn.bind_literals(flow, st.proc, [v for _, v in vals],
+                                         {k: v for k, (_, v) in kws.items()})  # fmt: skip
+                if inner is None or depth >= fn.MAX_KEY_DEPTH:
+                    bad(path, st.proc, f"{st.proc}() cannot be followed inside the hunt core "
+                        "(its inputs do not fit, or its calls go too deep)")  # fmt: skip
+                    continue
+                body(path, list(flow.procedures.get(st.proc, [])), inner, depth + 1, pressed)
+
+    for e in merge(flow, b).active():
+        if e.built_in or e.key in ir.SAFETY_CRITICAL:
+            continue
+        h = e.handler
+        events.append(e.key)
+        if h.then != "resume":
+            bad(e.label, "then", f"{e.key} ends with then={h.then}: inside the hunt core an event "
+                "must resume (the runner goes on after it; stage 2)")  # fmt: skip
+        if h.escalate is not None:
+            bad(e.label, "escalate", f"{e.key} escalates to {h.escalate}: not inside the hunt "
+                "core (stage 2)")  # fmt: skip
+        for cond in (h.when, h.until, h.rearm):
+            if cond is not None:
+                expr(e.label, cond)
+        pressed: list[str] = []
+        n_bad = len(out)
+        body(e.label, [*e.extension, *h.body], {}, 0, pressed)
+        if not pressed and len(out) == n_bad:
+            bad(e.label, "event", f"{e.key} presses no key inside the hunt core: there an event "
+                f"plays dungeon_hunt's {shown} keys (stage 2)")  # fmt: skip
+        if keys.get("heal") in pressed:
+            plays.add("potion")
+        if keys.get("fly") in pressed:
+            reads = _sensors(h.when)
+            if "hp_percent" in reads:
+                plays.add("fly_hp")
+            if "sees_boss" in reads:
+                plays.add("boss_fly")
+            if not reads & {"hp_percent", "sees_boss"}:
+                bad(
+                    e.label,
+                    "when",
+                    f"{e.key} presses the Fly Wing ({keys['fly']}) inside the "
+                    "hunt core on a condition that reads neither hp_percent() nor sees_boss(): "
+                    "there the box's Fly Wing replaces the runner's on HP or on a boss (stage 2)",
+                )
+    return HuntPlan(block, keys, tuple(events), frozenset(plays), tuple(out))
+
+
 def document(cat: Catalogue | None = None) -> dict[str, Any]:
     """GET /flows/catalogue's `live`: what the live block player plays (the browser greys the rest
     and words why). Per block and sensor the same flag is `spec.live`."""
@@ -220,6 +394,15 @@ def document(cat: Catalogue | None = None) -> dict[str, Any]:
             "modes": ["insert", "preempt"],
             "relocate": "by the map's name (minimap)",
             "built_in_safety": "the safe end: release everything, end the run (stage 1)",
+        },
+        "hunt_core": {
+            "sensors": list(HUNT_SENSORS),
+            "statements": list(HUNT_STATEMENTS),
+            "roles": list(HUNT_ROLES),
+            "plays": list(PLAYS),
+            "words": "inside a hunt core the box's events play on every runner tick; they press "
+            "only its heal and fly keys, and the runner's own potion, Fly Wing on HP and boss "
+            "fly are off where the box plays them (stage 2)",
         },
         "later": later,
     }

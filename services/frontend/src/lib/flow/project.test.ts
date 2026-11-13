@@ -70,8 +70,12 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.equal(x.start, "xmas_dun02");
   assert.deepEqual(x.edges, []);
   const n = nodeById(x, "xmas_dun02")!;
-  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys"]);
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival"]);
   assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "dungeon_hunt", "stop"]);
+  // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function
+  const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks;
+  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"]]);
+  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]]]);
   // the runner block shows its five roles, the home one included
   const hunt = tabToWorkspace(x, { node: "xmas_dun02", tab: "main" }).blocks.blocks[0].inputs?.DO?.block?.next?.block;
   assert.equal(hunt?.type, "pl_dungeon_hunt");
