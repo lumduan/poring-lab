@@ -37,9 +37,9 @@ import { type BlockProps, connectExit, type EditResult, removeBlock, removeExit,
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { type AuthoredExit, canonical, type Flow, MAP_ID } from "@/lib/flow/ir";
-import { browserStorage, KEYS, readChoice, readText, writeChoice } from "@/lib/flow/prefs";
+import { browserStorage, KEYS, readChoice, readText, shelve, writeChoice } from "@/lib/flow/prefs";
 import { RUNNERS, runnerForMap, runnerHref } from "@/lib/flow/runners";
-import { STARTER_WORLD, starterFlow } from "@/lib/flow/starter";
+import { STARTER_WORLD, starterFlow, XMAS_NAME, XMAS_WORLD, xmasFlow } from "@/lib/flow/starter";
 import { END_TEXT, lintLine } from "@/lib/flow/status";
 import { addMapNode, type MapFacts, oneMapFlow } from "@/lib/maps/build";
 import { mapsGraph, UNKNOWN_ID } from "@/lib/maps/graph";
@@ -604,11 +604,26 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
             </button>
             {menu && (
               <div className="studio-menu-list" role="menu">
-                {/* the map flows first, under their map's name (Batt 2026-11-13) */}
+                {/* the map flows first, under their map's name (Batt 2026-11-13); since that evening an
+                    ORDINARY flow (its maps here, its blocks on /flows; the flow open now is kept) */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="studio-menu-item studio-menu-item-map"
+                  onClick={() => {
+                    setMenu(false);
+                    shelve(store, flowRef.current.name, exportText(flowRef.current), world);
+                    replace(xmasFlow(), { world: XMAS_WORLD, undo: true, notice: `Opened ${XMAS_NAME}; the flow before is kept (the FLOWS row on /flows opens it again).` });
+                  }}
+                  data-testid="maps-load-xmas"
+                >
+                  {XMAS_NAME}
+                  <small>the Rogue&apos;s map and Geffen: hunt with the runner, a Butterfly Wing home; every key a function; Run on /flows</small>
+                </button>
                 {RUNNERS.map((r) => (
-                  <button key={r.id} type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => (setMenu(false), flush(), router.push(runnerHref(r)))} data-testid={`maps-load-runner-${r.id}`}>
-                    {r.title}
-                    <small>on /flows: the {r.char}&apos;s real flow on {r.map}, each part on its tab; Simulate, or Run in the game</small>
+                  <button key={r.id} type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), flush(), router.push(runnerHref(r)))} data-testid={`maps-load-runner-${r.id}`}>
+                    Inside {r.script}
+                    <small>on /flows, read only: what the block &ldquo;hunt with the runner&rdquo; does on {r.map}</small>
                   </button>
                 ))}
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), replace(starterFlow(), { world: STARTER_WORLD, undo: true, notice: "Opened the starter: two maps." }))}>
@@ -970,10 +985,10 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
                               flush();
                               router.push(runnerHref(r));
                             }}
-                            title="On /flows: the real flow of this map (the live runner as blocks, made from its code), with Run"
+                            title="On /flows, read only: what the block \u201chunt with the runner\u201d does on this map (the runner as blocks, made from its code)"
                             data-testid="maps-runner-flow"
                           >
-                            The {selectedBlock.map.map} flow ↗
+                            Inside the runner ↗
                           </button>
                         )}
                       </div>

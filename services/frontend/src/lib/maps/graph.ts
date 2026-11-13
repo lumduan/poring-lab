@@ -6,7 +6,7 @@
 // The map nodes and exit edges are /flows' own (lib/flow/canvas.ts toGraph: one node per map
 // block, one edge per take_exit, the derived death_respawn edges), so the IR stays the one source
 // of truth; the three session nodes and their edges are the page's MOCK (lib/maps/session.ts), never
-// IR. Event nodes stay on /flows' Map tab.
+// IR. Event nodes are on /flows (every map tab, and each map tab).
 import { autoLayout, blockId, type GEdge, type MapNodeData, savePointBlock, toGraph, type XY } from "../flow/canvas.ts";
 import type { Flow } from "../flow/ir.ts";
 import { readRules, type Rules } from "./rules.ts";

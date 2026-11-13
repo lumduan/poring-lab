@@ -1639,3 +1639,13 @@
     padding: 0.2rem 0.6rem 0.3rem;
   }
 }
+
+/* the Run pane (2026-11-13): a flow whose map holds the runner's block -- the live run, the start
+   checklist and the settings, in the studio's drawer */
+.studio .run-pane {
+  display: grid;
+  gap: 0.5rem;
+}
+.studio .run-pane .config-panel {
+  max-height: none;
+}

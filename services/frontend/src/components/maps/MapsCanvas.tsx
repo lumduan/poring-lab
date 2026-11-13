@@ -3,7 +3,7 @@
 // The Maps page's GRAPH (React Flow, Node-RED / n8n's way of placing blocks; Batt 2026-11-10):
 // START -> Login -> Choose character -> the flow's map nodes, joined by their typed exits. The graph
 // is DERIVED (lib/maps/graph.ts over lib/flow/canvas.ts); drawing an exit from a map node's port
-// onto another map node, or deleting one, edits the IR as /flows' Map tab does. The session nodes
+// onto another map node, or deleting one, edits the IR (the one map graph since 2026-11-13: /flows has no Map tab). The session nodes
 // are the page's MOCK (never IR). During a playback the node the character is in glows and the
 // exit it last took is drawn thicker. Ideas from Node-RED (typed ports, status lines); no code from
 // it or from n8n.

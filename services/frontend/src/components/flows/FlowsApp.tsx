@@ -37,7 +37,7 @@ import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/f
 import { runnerKeys, runnerMapBlock } from "@/lib/flow/functions";
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { canonical, emptyFlow, type Flow } from "@/lib/flow/ir";
-import { browserStorage, KEYS, pythonDefault, readChoice, readShelf, readText, writeChoice, writeShelf } from "@/lib/flow/prefs";
+import { browserStorage, KEYS, pythonDefault, readChoice, readShelf, readText, shelve, writeChoice, writeShelf } from "@/lib/flow/prefs";
 import { ACTIVE } from "@/lib/flow/liverun";
 import { LIVE_FLOWS, RUNNERS, runnerForMap } from "@/lib/flow/runners";
 import { oneMapStarter, STARTER_NAME, STARTER_WORLD, starterFlow, XMAS_NAME, XMAS_WORLD, xmasFlow } from "@/lib/flow/starter";
@@ -280,9 +280,9 @@ export default function FlowsApp({
   const [shelfNames, setShelfNames] = useState<string[]>(() => Object.keys(readShelf(store)));
   const switchTo = (name: string, wantTab?: string) => {
     flush();
-    const shelf = readShelf(store);
     const here = flowRef.current;
-    shelf[here.name] = { text: exportText(here), world };
+    shelve(store, here.name, exportText(here), world);
+    const shelf = readShelf(store);
     let next: { flow: Flow; world: WorldSource } | null = null;
     const kept = shelf[name];
     if (kept && name !== here.name) {

@@ -113,3 +113,11 @@ export function writeShelf(store: StorageLike | null, shelf: Shelf): boolean {
   const kept = Object.fromEntries(names.slice(Math.max(0, names.length - SHELF_MAX)).map((n) => [n, shelf[n]]));
   return writeChoice(store, KEYS.shelf, JSON.stringify(kept));
 }
+
+/** Keep a flow on the shelf by its name (the FLOWS row opens it again). */
+export function shelve(store: StorageLike | null, name: string, text: string, world: string): boolean {
+  const shelf = readShelf(store);
+  delete shelf[name]; // re-added last: the newest stays when the shelf is full
+  shelf[name] = { text, world };
+  return writeShelf(store, shelf);
+}
