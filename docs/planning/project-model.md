@@ -283,6 +283,14 @@ calls wield_damascus: the swap at the runner's two moments), `exits` (fly_home c
 butterfly_wing; respawn_button `click_at(645, 481)`, respawn_ok `click_at(714, 405)`); main's
 `dungeon_hunt(..., home=fly_home, respawn=respawn_button, respawn_confirm=respawn_ok)`. Still 0 lint
 errors. The stage-2 box is kept as `project_xmas_dun02_stage2.json` (stage 3's A/B).
+➡️ **2026-11-14 (live-blocks.md stage 4a, section 3.4):** six tabs: main holds
+`use_model("xmas02")` before its dungeon_hunt (the trained data: the hunt core's model), and the new
+tab `monsters` one function per monster xmas02's runner strikes -- `attack_mystcase(t,
+priority=1)`, `attack_cruiser`, `attack_cookie`, `attack_cookie_xmas`, each TODAY's technique
+(knife_on(), strike(t), wait_steal(t), knife_back(), wait_kill(t), loot(t)); the hunt core asks
+the recipe of a target's species when it locks it. A function named `attack_<class>` is a monster's
+RECIPE (poring_flow.recipes). Still 0 lint errors. The stage-3 box is kept as
+`project_xmas_dun02_stage3.json` (its tests, stage 3's A/B).
 
 ## 8. Not converted (Batt's answer 6)
 

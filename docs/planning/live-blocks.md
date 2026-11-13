@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet. Stage 3 (the Knife swap, the respawn, the weight home and the way home as the box's functions and event at the runner's moments): BUILT 2026-11-14 (feat/stage3, offline tests only; section 3.3); its live A/B (the stage-2 box vs the stage-3 box) pre-registered, NOT run yet; the Knife's open question is Batt's (3.3)."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet. Stage 3 (the Knife swap, the respawn, the weight home and the way home as the box's functions and event at the runner's moments): BUILT 2026-11-14 (feat/stage3, offline tests only; section 3.3); its live A/B (the stage-2 box vs the stage-3 box) pre-registered, NOT run yet; the Knife's open question is Batt's (3.3). Stage 4a (use_model and one recipe per monster: the box decides which technique per monster, the runner plays every step): BUILT 2026-11-14 (feat/stage4, offline tests only; section 3.4); its live A/B (the stage-3 box vs the stage-4a box, an equivalence check) pre-registered, NOT run yet."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Stage 2's A/B (3.2, scripts/stage2_ab.py) first. Then merge feat/stage3, deploy (backend, Run helper), and the A/B of section 3.3 (scripts/stage3_ab.py run; its bar pre-registered there) -- the parent runs it. Batt answers the Knife question (3.3: the strike between F4 and F5, or not)."
+next_action: "Stage 2's A/B (3.2, scripts/stage2_ab.py) first. Then merge feat/stage3, deploy (backend, Run helper), and the A/B of section 3.3 (scripts/stage3_ab.py run; its bar pre-registered there) -- the parent runs it. Batt answers the Knife question (3.3: the strike between F4 and F5, or not). Then merge feat/stage4, deploy, and stage 4a's A/B (3.4, scripts/stage4_ab.py; its bar pre-registered there); only after it holds, B4 vs B4' (no Knife swap on the cookies)."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -49,7 +49,7 @@ owner: Batt
 | 1 | The ONE-BOX project (START > xmas_dun02). The LIVE BLOCK PLAYER: press key, wait, wait until (HP, weight, dead, the map's name: pixels), if / while / repeat, functions with inputs, variables, events, stop, the item warp by a function (its arrival read on the minimap). The hunt core as ONE block played IN-PROCESS (the runner's loop as a library with a tick hook: one process, one input writer). Run on /flows and on /maps (from START, box by box). | offline: fakes prove the input it sends; live: Batt's OK, she placed on xmas_dun02 by a person |
 | 2 | SURVIVAL out of the runner into the box's EVENTS (functions with a trigger, section 2a): heal (F1 at HP < 30 %), the Fly Wing (F8 on a boss or HP < 25 %), stock out, the dead jump, the Garm Baby, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`); the event plays through the tick hook. ➡️ BUILT 2026-11-14 for heal and the Fly Wing (section 3.2; the switch is a new run() argument, not a flag); stock out, the dead jump, the Garm Baby and an unread position stay the runner's (a later stage) | live A/B against the monolithic runner: deaths, potions, flies, kills/h (➡️ pre-registered in 3.2) |
 | 3 | The Knife swap as two FUNCTIONS of presses and a wait (section 2a), the respawn, the weight home, the end. ➡️ BUILT 2026-11-14 (section 3.3): the runner keeps WHEN, the box's functions say WHAT at its moments (knife_on / knife_back, the way home, the death dialog's two clicks: the new block click_at) and the weight home is a box event; the Knife's open question (the strike between F4 and F5, or not) is Batt's, both written | live A/B: steals, swaps, respawn, home (➡️ the stage-2 box vs the stage-3 box, pre-registered in 3.3) |
-| 4+ | The CORE as PRIMITIVE blocks + ONE FUNCTION PER MONSTER (attack_myst_case, attack_cookie, ...; section 2a), and use_model (the trained data) | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) |
+| 4+ | The CORE as PRIMITIVE blocks + ONE FUNCTION PER MONSTER (attack_myst_case, attack_cookie, ...; section 2a), and use_model (the trained data). ➡️ 4a BUILT 2026-11-14 (section 3.4): use_model("xmas02") and a `monsters` tab, one recipe per monster (attack_<class>(t, priority=1): knife_on, strike, wait_steal, knife_back, wait_kill, loot = today's technique); at its lock the runner asks the box which recipe attacks that species and plays it with its own code (no knife_on: no Knife swap on it); use_skill linted, not played (4b); 4b (the steps as blocks) not built | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) (➡️ 4a: the stage-3 box vs the stage-4a box, an equivalence check, pre-registered in 3.4) |
 
 ## 2a. Batt's shape for stages 2-4 (2026-11-13 ~22:0x, Thai, translated)
 
@@ -141,6 +141,15 @@ the primitives share: a refactor of the runner, done behind the CLI's unchanged 
 
 What 4a does NOT change: search / patrol / explore, the loot model, the stock, the safety events
 (stage 2), the way home (stage 3).
+
+➡️ **4a BUILT 2026-11-14 (section 3.4)**, as designed here but for four decisions made while
+building it, each written there: (1) a recipe is exactly one of two orders (the Knife swap's, or
+the same without it): wait_kill and loot are in every recipe, since the runner reads every kill
+and loots it; (2) the priority is a WEIGHT on the species' --value-target value (1 = today's
+order); (3) use_skill is linted and refused live (4b); (4) use_model may name only the map's own
+model live (the switch of the detect server's model is a follow-up). With --bare-ready (the Run
+config's) the Knife is already on when the runner locks a target, so a recipe without knife_on
+puts the dagger on first.
 
 ## 3. Stage 1 in detail
 
@@ -398,7 +407,9 @@ another server's menu differs; make everything editable in blocks, don't hard-co
 "if the weight is over 50 %, use a Butterfly Wing to go back to town" (dungeon@9.41). The runner
 keeps deciding WHEN; the box decides WHAT is pressed at each of the runner's moments. The one box
 (`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; 0 lint errors, run allowed,
-the same four warnings as stage 2's box) has five tabs now, its Python view:
+the same four warnings as stage 2's box) has five tabs now, its Python view (➡️ since stage 4a,
+3.4, the one box also has use_model and a monsters tab; the box as stage 3 left it is kept byte for
+byte as `project_xmas_dun02_stage3.json`, stage3_ab.py's B3 and stage 3's tests):
 
     # tab main (the same shape: the save point, the hunt core, stop)
     dungeon_hunt(heal=heal, fly=fly_wing, knife_on=knife_on, knife_back=knife_back, home=fly_home,
@@ -525,9 +536,10 @@ and runner score; run by the parent; NOT run yet):
     .venv/bin/python scripts/stage3_ab.py score --label s3ab-1114
 
 - The arms, both `flow_play.py play` with the same runner config (the same five keys, checked):
-  B2 = the stage-2 box, B3 = the one box. Order B2 B3, B3 B2, ... The setup before every run is
-  stage2_ab's (3.2). `plan` refuses before any input if either box cannot play, if B2 plays a
-  stage-3 function or if B3 plays none.
+  B2 = the stage-2 box, B3 = the one box (➡️ since stage 4a: `project_xmas_dun02_stage3.json`,
+  the box as stage 3 left it; stage4_ab.py measures the one box). Order B2 B3, B3 B2, ... The setup
+  before every run is stage2_ab's (3.2). `plan` refuses before any input if either box cannot play,
+  if B2 plays a stage-3 function or if B3 plays none.
 - The score per run (the runner's own session, the same reader for both): stage 2's lines and the
   Knife (openers, opener fails, swaps back, swap fails, steals = swaps back on the steal's cue, the
   opener -> steal seconds, the swap-back read-back ms), the respawn (pressed, arrived), the way home
@@ -555,6 +567,221 @@ steals unjudged) and nothing failed; else PASS, with the respawn / way-home / we
 nothing to judge listed as not exercised. Why these margins: the default bodies press the same keys
 at the same moments, so the Knife lines are held to the pairs' own noise, and two failed swaps an
 hour is about one in a 30-min run; the exits are held to "every time".
+
+### 3.4 ➡️ Stage 4a BUILT 2026-11-14 (feat/stage4; offline only, NOT run live)
+
+Batt's words (section 2a): "The core of the hunt (look, choose a target, walk up, strike, loot,
+explore): break it into functions, never one block, e.g. attack_myst_case, attack_cookie, because
+in the future each monster may get a different skill or killing technique, and on some we may not
+swap the knife at all"; "the flow page should also have a block to LOAD THE TRAINED DATA, with the
+monsters the bot already knows". 4a is section 2b's first step: the box decides WHICH technique
+per monster; the runner still plays every step with its own code (the runner says WHEN, the box
+says WHAT).
+
+**Today's technique per species, as found in the code (feat/stage4's line numbers):**
+- The species the runner strikes on xmas_dun02 are the four of xmas02 that collapse to "monster"
+  (scripts/unit_detector.py:89 MAP_MODELS["xmas_dun02"].collapse: mystcase, cruiser, cookie,
+  cookie_xmas). garm_baby is never struck: it is not collapsed (an alarm class; --garm-fly takes
+  the Fly Wing on it). models.yaml now records the four as xmas02's `strikes` (drift-tested
+  against MAP_MODELS).
+- The Knife swap applies to EVERY target, whatever its species: the Run config
+  (scripts/flow_run.py:159-162: knife_swap, bare_ready, steal_cue popup, swap_gap) puts the Knife
+  on while idle (--bare-ready: BareCtl.ready_tick, scripts/dungeon_hunt.py:5627, called at :9875 --
+  searching, no lock, HP >= 50 %), strikes the new target bare at once (BareCtl.before_strike
+  :5669, _begin), puts the Damascus back on the steal's popup cue (bare_steal.BareSteal.tick), its
+  time box (BARE_MAX_S 8 s, scripts/bare_steal.py:63) or the HP floor (BARE_HP_MIN 0.5, :64) --
+  an escape puts it on first; with --bare-ready a fight that ends bare stays bare --; then the kill
+  read (the EXP line, --kill-gap) and the loot step (--loot trim, the xmas02fi5 item model).
+  Neither BareCtl nor BareSteal looks at the species; a plant is struck as it is.
+- What differs per species today is only the CHOICE: --value-target (flow_run.py:176;
+  scripts/value_target.py) ranks the candidates by value(species) / (1 + d / 150 px), the values
+  read at run time from data/econ/maps.json (Myst Case ~262 z a kill, Christmas Cookie ~125, Cookie
+  ~100, Cruiser ~76; value_target.py's docstring). The species of a box is the detector's own class
+  before the collapse (dungeon_hunt.box_species :2883).
+So "today's technique for every monster" is one recipe, the same four times:
+`knife_on(); strike(t); wait_steal(t); knife_back(); wait_kill(t); loot(t)`.
+
+**The one box** (`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; 0 lint
+errors, the same four warnings as stage 3's, run allowed; the stage-3 box kept byte for byte as
+`project_xmas_dun02_stage3.json`: stage3_ab.py's B3 and stage 3's tests) has six tabs now:
+
+    # tab main: the trained data before the hunt core
+    assert_save_point(cell("geffen", 119, 40))
+    use_model("xmas02")
+    dungeon_hunt(heal=heal, fly=fly_wing, knife_on=knife_on, knife_back=knife_back, home=fly_home,
+                 respawn=respawn_button, respawn_confirm=respawn_ok)
+    stop("home")
+    # tab monsters: one function per monster xmas02's runner strikes, each TODAY's technique
+    def attack_mystcase(t, priority=1):
+        knife_on()
+        strike(t)
+        wait_steal(t)
+        knife_back()
+        wait_kill(t)
+        loot(t)
+    def attack_cruiser(t, priority=1): ...      # the same
+    def attack_cookie(t, priority=1): ...       # the same
+    def attack_cookie_xmas(t, priority=1): ...  # the same
+
+**The new blocks** (blocks.yaml; poring_flow/recipes.py holds every rule, the lint and the live
+set read it):
+- `use_model(model)` (core: no input): a models.yaml entry by id, in a map node's main, one
+  statement, before its dungeon_hunt. Its `strikes` are the monsters the recipes may name.
+- `strike(t)` (combat.attack_target), `wait_steal(t)`, `wait_kill(t)` (core: the runner's reads),
+  `loot(t)` (the existing loot block: `target` is its first parameter now, `item` by name; `loot()`
+  without a target is the old block, not live). Live ONLY inside a recipe; their binding is the
+  runner's (live.OWN_BINDING).
+- `use_skill(key="F6")`: the existing block gained a `key` parameter (a hotbar key; `skill` no
+  longer required). Expressible and linted in a recipe; REFUSED live in 4a ("stage 4b"): binding it
+  safely needs a declared role key the start's slot check reads, its SP read and its cast /
+  after-cast waits, none of which the runner models at the strike.
+- A RECIPE: a function named `attack_<class>` (the box's tab `monsters`), its first input the
+  target `t`, an optional `priority=N`, its body exactly one of the two orders the runner plays
+  (recipes.SHAPES): `knife_on, strike, wait_steal, knife_back, wait_kill, loot` (the Knife swap)
+  or `strike, wait_kill, loot` (no Knife swap). knife_on() / knife_back() are calls of the hunt
+  core's own Knife functions (its knife_on / knife_back roles: stage 3's bodies, or one press_key).
+
+**How the hunt core asks** (dungeon@9.51, `run(a, hook=..., box_plays=..., box_roles=...,
+box_model=..., box_recipes=...)`; BOX_PLAYS gains "model" and "recipes", == live.PLAYS):
+
+    the player (flow_play, before any input)           the runner (dungeon_hunt.run)
+      live.hunt_plan: model, recipes (species -> steps)
+      run(box_model=<models.yaml entry>,          -->  box_model_refused: live, a detector, for
+          box_recipes=<species -> recipe>)              this map, the file and sha256 its box
+                                                        detector loads here (MAP_MODELS, GPU_WEIGHTS)
+                                                        recipes_refused: shapes, species, knife,
+                                                        priority (before any input)
+                                                        box_model record: choice "box"
+                                                        a strike: box_target's box -> its species
+                                                        (BoxWatch.near: last_species), a queue pick's
+                                                        entry; any other strike: unknown (None)
+                                                        BareCtl.before_strike, a NEW target's
+                                                        decision (its LOCK): recipe() ->
+      HuntHook.recipe(species, why)               <--  hook_recipe -> recipe_choice(answer, plan)
+      -> the plan's recipe (a `recipe` record)
+                                                        knife True: exactly as before
+                                                        knife False: _no_knife -- armed: struck as
+                                                        it is; bare (--bare-ready): the dagger on
+                                                        first ("recipe", read back), the aim read
+                                                        again; the next idle: the Knife again
+      strike / wait_steal / knife_back / wait_kill / loot: the runner's own code, at its moments
+
+- The answer is asked ONCE per target (BareCtl's decision point: a new target's first strike);
+  only an answer that IS the run's plan for that species plays (`recipe_choice`); no function for
+  a species, an unknown species, a disagreement (counted `recipe_mismatch`): the runner's own
+  recipe -- its Knife swap, as before.
+- The priority: a recipe's `priority` default weighs its species' --value-target value
+  (`recipe_values`: value x priority; 1 or none written: the values as they are, so B4 plays the
+  same order). A priority other than 1 needs the run's value target (refused otherwise). The one
+  box writes priority=1 on each: the place to change it, with today's order.
+
+**What the box decides** (4a): the hunt core's model (use_model: today only the map's own model
+can be named live, below) and, per species, the Knife swap or none, and a weight on its value.
+**What stays the runner's**: WHEN (the lock, the swaps' moments, the cue, the kill read, the loot
+step), WHICH monster (its candidates, its value ordering), how it strikes (the two-motion click,
+the lead, the reach check), the search / patrol / explore, the loot model, the stock, the safety
+events (stage 2), the way home and the respawn (stage 3). **Linted, not played (4b)**: use_skill
+in a recipe; any other order or step; a recipe without loot or without wait_kill (the runner loots
+and reads every kill); a recipe CALLED from a block; the primitives anywhere but in a recipe;
+choose_target() and the steps as blocks the player schedules (2b's 4b).
+
+**The model switch is a follow-up**: the runner's box detector loads the map's own model
+(unit_detector.for_map / for_map_gpu) and the detect server is started once per series with the
+pinned weights. A use_model that names another model than the map's own (v1 on xmas_dun02, a
+future model) is REFUSED before any input in named words ("another model than the map's own is a
+follow-up: the detect server serves the map's; a run never restarts it"). xmas02 IS the map's
+model (xmas02gb-last-736x1280.onnx, b22d972b714f), so the one box plays exactly the detector it
+played before; the record says `box_model {choice: "box", box_model: "xmas02"}`, and the runner
+checks the loaded file again after the watcher starts.
+
+**Refused before any input** (live.problems / hunt_plan, the backend's not_live, and the lint's
+errors; each named): a recipe step outside the set; an order the runner cannot play (wait_kill
+before strike, loot before wait_kill, knife_back without knife_on, wait_steal without knife_on,
+knife_on without knife_back or without wait_steal, knife_back before the cue, a step twice, no
+strike, no wait_kill, no loot); a target that is not the recipe's own input; a recipe for a class
+the model lacks, or one the runner never strikes (garm_baby); recipes without use_model; a
+use_model that is not live, not a detector, not for the map, unknown, misplaced or written twice;
+use_skill in a recipe (4b); a primitive outside a recipe; a recipe called from a block. The
+runner's own (`box_plays_refused` -> `recipes_refused`, `box_model_refused`): the plays without
+their arguments, a recipe the runner cannot play, a Knife recipe without the run's Knife swap,
+recipes in a run with no Knife swap at all (nothing for them to decide in 4a), a priority without
+--value-target, a hook without `recipe`, a model that is not the run's box detector (above). The
+lint's `recipe_default` (info) names each monster without a function: "cookie: no attack
+function (attack_cookie); the runner's own recipe (...)".
+
+**A box without use_model and a monsters tab plays exactly as stage 3**: its hunt plan has no
+model and no recipes, so `RunnerPlan.box_kwargs()` passes run() exactly stage 3's arguments (the
+test takes the one box, removes use_model and the tab, and checks the run() call byte for byte
+against the stage-3 box's); the CLI and the old Run path pass none at all (`return run(a)`).
+VERSION stays dungeon@8.7; BOX_RECIPES_VERSION = live.VERSION = flow_play.VERSION =
+recipes.VERSION = 9.51 (stage 3's 9.50, stage 2's 9.49 and stage 1's 9.48 stay), in
+runner_flow_export.NOT_FEATURES.
+
+**The record**: the runner's session: run_start `box_model` / `box_recipes` (box_version 9.51),
+the box_model event's `choice: "box"`, a `recipe` event at each lock (species, by, knife,
+function; `mismatch` when the answer was not the plan), `bare {what: "recipe", knife: false}` for
+a monster struck without the Knife, the counters recipe_knife / recipe_no_knife /
+recipe_species_<sp> / recipe_mismatch / bare_recipe_no_knife / bare_equip_recipe. The player's
+events.jsonl: `hunt_start` with box_model, box_recipes and default_species, a `recipe` record per
+lock (species, the function, its node path, its steps), `hunt_end` with `recipes`.
+
+**The editor** (/flows): in a map node's main the Movement category offers `use_model(...)`; a tab
+named `monsters` gets a Monsters category: one `def attack_<monster>(t, priority=1)` per monster
+of the node's model (its use_model; models.yaml `strikes`), each monster as a `mob(<id>)` value,
+and the recipe's steps in their order (knife_on(), strike, wait_steal, knife_back(), wait_kill,
+loot; use_skill marked 4b). The primitives are no longer offered under "More skills". Run's
+readiness follows the recipes too (liveready: a use_model reaches the node's attack_* functions).
+
+**Known differences to watch live** (B4 against B3):
+- every lock asks the hook (one Python call and one record more per target);
+- the box_model record says `choice: "box"` (the same file, the same sha256);
+- a strike that knows no species (the ring scan, a plant, a loot or walk SWORD, the cursor) gets
+  the runner's own recipe -- for B4 the same as its recipes, so no difference; for a later B4'
+  (no Knife on cookies) those strikes still swap;
+- nothing else differs by construction: every recipe is today's (stage4_ab.py's plan refuses a B4
+  that is not).
+
+**THE A/B** (`scripts/stage4_ab.py`, a sibling sharing stage3_ab.py's and stage2_ab.py's setup,
+detect server, run and score; run by the parent; NOT run yet):
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage4_ab.py plan  --label s4ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage4_ab.py run   --label s4ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage4_ab.py score --label s4ab-1114
+
+- Before it: merged and deployed (the backend, the Run helper); ASSIST; the Rogue in the game; the
+  Run helper idle; no chain. `plan` prints everything it will do and refuses before any input if
+  either box cannot play, if B3 names a model or recipes, if B4 names none, if B4's recipes are
+  not today's technique, or if the two boxes' stage-3 functions or keys differ.
+- The arms, both `flow_play.py play` with the same runner config (the same five keys, checked):
+  B3 = the stage-3 box, B4 = the one box. Order B3 B4, B4 B3, ... The setup before every run is
+  stage2_ab's (3.2).
+- The score per run (the runner's own session, the same reader for both): stage 3's lines and the
+  recipes asked (per species), the locks without the Knife, the mismatches, the loot steps per
+  hour, the openers per hour, and the species mix of the box strikes (box_target's struck box).
+
+**THE PRE-REGISTERED BAR** (written 2026-11-14, before any live run; `stage4_ab.BAR`): B4 must
+hold, against B3, over the valid pairs:
+
+| Line | B4 must hold |
+|---|---|
+| deaths | B4's total <= B3's total |
+| kills per hour | the mean paired difference (B4 - B3) >= -2 x its standard error, over at least 3 valid pairs |
+| steals per hour | the same rule (the swaps back on the steal's cue) |
+| loot steps per hour | the same rule |
+| Knife openers per hour | B4's series rate within +-20 % of B3's |
+| the recipes | every B4 run that struck asked the box at its locks, no lock's answer differed from the run's plan (recipe_mismatch 0), and B3 asked none |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+Reported, not judged: the species mix of the strikes per arm (box_target's struck box), B4's
+recipes asked per species, the locks without the Knife (0 for today's recipes), the steal share
+and the opener -> steal seconds. The verdict: FAIL when a judged line fails; INCONCLUSIVE when
+fewer than 3 pairs are valid (kills, steals and loot unjudged) and nothing failed; else PASS. Why
+these margins: B4 plays the same technique by construction, so the rates are held to the pairs'
+own noise; the openers (about one a target, ~50-75 in a 20-min run) are held to +-20 % of B3's
+series rate, about two standard errors of the difference of two 4-run Poisson rates; the recipes
+line is held to "every time" (it is what 4a adds). Only after it holds: the first real experiment
+in blocks, no Knife swap on cookie / cookie_xmas (B4 vs B4', section 2b).
 
 ## 4. Not in stage 1
 

@@ -2330,7 +2330,9 @@ what works; the result should become blocks a person can read and change."
 
 **Batt (2026-11-09, translated):** "Design the trained model files as blocks." Built offline the
 same day with the /flows studio ([flows-studio.md](../planning/flows-studio.md) section 4). This
-amendment ADDS to section 2.3; nothing above is rewritten.
+amendment ADDS to section 2.3; nothing above is rewritten. ➡️ 2026-11-14 (Amendment H): the
+trained data is also a BLOCK, `use_model(model)`, the hunt core's model; models.yaml's new
+`strikes` name the monsters a box's recipes may name.
 
 - **Two sensors in the catalogue** (`blocks.yaml`): `detector_sees(model, label)` (bool: the model
   boxes that class in the frame) and `detector_count(model, label)` (int: how many boxes). Both are
@@ -2581,7 +2583,7 @@ F (pointers there); nothing above is rewritten. What was built is live-blocks.md
   the runner's own moment); its stop ends the run through the runner's normal end (its way home).
   The runner's own exit on a read weight is off then; its red-line rule on an unread weight stays.
 - **PLAYS** (`live.PLAYS` == `dungeon_hunt.BOX_PLAYS`) gains knife, respawn, weight_home and
-  home_end; `box_plays_refused` refuses, before any input, the combinations that cannot work (the
+  home_end (➡️ Amendment H, 2026-11-14: and model, recipes); `box_plays_refused` refuses, before any input, the combinations that cannot work (the
   box's Knife swap without the run's, the other Knife answer with --bare-ready, the exits without
   --player-mode, the respawn with the run's respawn off, a play without its functions).
 - **The open question** ("F4, wait 100 ms, F5": the strike between, or not) is Batt's: both are
@@ -2590,3 +2592,54 @@ F (pointers there); nothing above is rewritten. What was built is live-blocks.md
   `opener_seq(ends="armed")`, one swap a target, no bare phase).
 - **Proven by** a live A/B, the stage-2 box against the stage-3 box (`scripts/stage3_ab.py`), its
   bar pre-registered in live-blocks.md 3.3 before any live run.
+
+## Amendment H (2026-11-14, stage 4a of Batt's shape): the trained data and ONE FUNCTION PER MONSTER
+
+**Batt (2026-11-13 ~22:0x, translated; [live-blocks.md](../planning/live-blocks.md) section 2a):**
+"The flow page should also have a block to LOAD THE TRAINED DATA, with the monsters the bot already
+knows. The core of the hunt (look, choose a target, walk up, strike, loot, explore): break it into
+functions, never one block, e.g. attack_myst_case, attack_cookie, because in the future each monster
+may get a different skill or killing technique, and on some we may not swap the knife at all."
+Stage 4a is live-blocks.md 2b's first step; what was built is its section 3.4. This amendment ADDS
+to Amendments B, C, E, F and G (pointers there); nothing above is rewritten.
+
+- **Four new blocks** (blocks.yaml): `use_model(model)` (core, no input: a models.yaml entry by id;
+  in a map node's main, one statement, before its dungeon_hunt), `strike(target)`
+  (combat.attack_target), `wait_steal(target)` and `wait_kill(target)` (core: the runner's own
+  reads). All `live: true`, but the three primitives play ONLY inside a monster's recipe, refused
+  before any input anywhere else (poring_flow.recipes; "a primitive outside a recipe"). Their
+  binding is the runner's (`live.OWN_BINDING`).
+- **Two blocks changed** (additive; no IR or hash changes): `loot` takes `target` (a mob) as its
+  first, positional parameter, `item` by name only -- `loot(t)` in a recipe is the runner's loot
+  step (live there), `loot()` without a target stays the old block (not live); `use_skill` gains
+  `key` (a hotbar key) and `skill` is no longer required -- `use_skill(key="F6")` in a recipe is
+  expressible and linted (a warning) and refused live ("stage 4b").
+- **models.yaml gains `strikes`**: a detector's classes the RUNNER strikes (unit_detector
+  MAP_MODELS' collapse; drift-tested): xmas02's mystcase, cruiser, cookie, cookie_xmas (garm_baby
+  is never struck: its Fly Wing rule). They are the monsters a box's recipes may name.
+- **A RECIPE** is a function named `attack_<class>`: its first input the target `t`, an optional
+  `priority=N` (a number, 0 < N <= 10), its body one of the two orders the runner plays
+  (`recipes.SHAPES`): knife_on(), strike(t), wait_steal(t), knife_back(), wait_kill(t), loot(t) --
+  or strike(t), wait_kill(t), loot(t), no Knife swap. knife_on() / knife_back() are calls of the
+  hunt core's own Knife role functions (Amendment G). No block calls a recipe: the hunt core asks.
+- **The hunt core asks at its LOCK** (`dungeon_hunt.run(..., box_model=..., box_recipes=...)`,
+  dungeon@9.51; `flow_play.HuntHook.recipe`): at a new target's decision (BareCtl.before_strike)
+  the runner asks the hook which recipe attacks that target's species (the detector's species
+  before the collapse: a box strike's box, a queue pick's entry; any other strike: unknown) and
+  plays it with its OWN code. A recipe without knife_on strikes that monster without the Knife swap
+  (already bare with --bare-ready: the dagger on first, read back); a recipe with it, no recipe for
+  the species, an unknown species, or an answer that is not the run's plan: the runner's own
+  technique, as before. A priority weighs its species' --value-target value (1: as it is).
+- **The model**: live, the box detector must be exactly the use_model's file and sha256 prefix
+  (unit_detector MAP_MODELS / GPU_WEIGHTS; the detect server's hello is checked against the same
+  pin). Naming another model than the map's own is refused before any input: the switch of the
+  detect server's model is a follow-up (a run never restarts it).
+- **PLAYS** (`live.PLAYS` == `dungeon_hunt.BOX_PLAYS`) gains `model` and `recipes`; a box without
+  use_model and recipes passes run() exactly stage 3's arguments. The lint (`lint/recipes.py`)
+  names every rule (use_model_place / _model, recipe_model / _class / _input / _priority / _target
+  / _step / _order / _skill / _primitive / _call, recipe_default as info); the backend's not_live
+  and the player refuse the same, before any input.
+- **Not in 4a (4b)**: use_skill live, other orders, a recipe without loot or wait_kill,
+  choose_target() and the steps as blocks the player schedules (the HuntState refactor).
+- **Proven by** a live A/B, the stage-3 box against the stage-4a box (`scripts/stage4_ab.py`, an
+  equivalence check), its bar pre-registered in live-blocks.md 3.4 before any live run.
