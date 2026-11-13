@@ -833,7 +833,7 @@ In order; each step only after the one before is proven; nothing of the hunt pla
   (the runner used the running server; harmless); the helper's path starts it once per run.
 
 
-## 7. Stage 2 live A/B (2026-11-14 from 00:38 ICT; IN PROGRESS)
+## 7. Stage 2 live A/B (2026-11-14 00:38-04:12 ICT): INCONCLUSIVE by its bar (1 valid pair)
 
 The series: `scripts/stage2_ab.py run --pairs 4 --minutes 20` (AB, BA, AB, BA; the bar of 3.2,
 unchanged). Main is frozen for code while a series runs (every run starts main's scripts); only
@@ -879,3 +879,38 @@ and the Knight killed her ~50 s later (the server's death packet; no death dialo
 so no respawn button could be pressed). Aftercare: the lab GM's `@alive`, then `@warp geffen 119
 40` (her save point). Not seen in any other run tonight. Open: why the client drew 0 %, and why it
 refused items while the server still had her alive.
+
+**Series e (02:13-04:12, the last; the setup fixes all in):**
+
+| Run | Arm | Min | Deaths | Potions | Fly Wings | Kills/h | Loot/h | Lowest HP |
+|---|---|---|---|---|---|---|---|---|
+| e-r01A | A | 1.4 | 1 (Knight) | 0 | 1 | - | - | 0 |
+| e-r02B | B | 19.9 | 0 | 0 | 3 | 169.2 | 208.5 | 33 |
+| e-r03B | B | 19.8 | 0 | 0 | 0 | 160.2 | 205.6 | 30 |
+| e-r04A | A | 2.2 | 1 (Knight) | 0 | 0 | - | - | 0 |
+| e-r05A | A | 20.0 | 0 | 0 | 1 | 147.0 | 194.9 | 64 |
+| e-r06B | B | 19.9 | 0 | 0 | 1 | 136.0 | 166.2 | 73 |
+| e-r07B | B | 2.1 | 1 (Knight) | 0 | 1 | - | - | 0 |
+| e-r08A | A | 20.0 | 0 | 0 | 0 | 131.9 | 176.9 | 54 |
+
+- **The pre-registered verdict (3.2's bar, `stage2_ab.py score --label s2ab-1114e`): INCONCLUSIVE.**
+  Only pair 3 (e-r05A / e-r06B) is valid: kills/h B - A = -11.0 (one pair: no standard error,
+  so the kills line is not judged); deaths 0 / 0, potions/h 0 / 0, Fly Wings/h 3.0 / 3.02 all
+  within the bar. The other three pairs each lost a run to the Stormy Knight (a death ends a run
+  under 80 % of its minutes, so it is invalid).
+- **A flaw in the bar, found by running it:** the death line counts only VALID pairs, and a death
+  makes its run invalid, so the line can never see a death that ends a run early. Tonight's
+  deaths are therefore reported below, outside the bar; the bar itself is unchanged (it was
+  pre-registered). A next bar should count deaths over every run that played.
+- **Report-only, pooled over series b-e (not the bar):** runs that played (>= 1 min): A 7, B 6;
+  deaths A 4, B 1 (all five to the Stormy Knight, four of them in the first 2.5 min at 98-100 %
+  HP, before any survival rule could act). Valid runs: A 4 (1.32 h) 141.2 kills/h, 182.9 loot
+  steps/h; B 5 (1.62 h) 153.3 kills/h, 185.3 loot steps/h. Potions/h A 3.0, B 9.9 -- but 10 of
+  B's 16 presses were d-r03B's desync presses the client ignored (none used); without them B is
+  3.7/h. Fly Wings/h (not the end's) A 4.6, B 5.5.
+- What stage 2 PROVED live: the box's `drink` plays inside the hunt core at Batt's 30 % (d-r02B:
+  6 potions at HP 27-29 %, each used); the box's `fly_away` pressed on its condition (d-r03B, on a
+  false "0 %" read); the runaway guard ends a run that repeats an event past its limit, normally,
+  with the way home tried; nothing of the runner was worse in the valid runs. What it did NOT
+  prove: a kills/h equivalence under the bar, and the boss fly by the box (no box boss Fly Wing
+  fired in a valid run: the Knight's kills came before any Battle Log line could be acted on).
