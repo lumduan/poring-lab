@@ -365,6 +365,15 @@ Amendment B); a not-adopted model is never offered.
   saved on the bot server at once. Save / Load carry PROJECTS (file version 2); flows of the old
   format are refused in words, not converted. The read-only check has its own route
   (`POST /flows/run/check`).
+  ➡️ **~21:3x (Batt: "the FLOWS row confuses; a project is /maps' save; every flow has Simulate
+  and Run, to tune one map, then chain them"):** no FLOWS row; /maps and /flows Save and Load the
+  SAME project with the same dialogs (this computer or GitHub); Load of a ready-made project asks
+  first (Undo still brings yours back). On a map node, Simulate plays THAT map alone (/maps plays
+  the whole chain) and Run is always there: it plays in the game where the bot can (the block
+  "hunt with the runner" on xmas_dun02) and is greyed with the reason elsewhere ("Before Run"
+  lists what the flow engine says is not ready for a live run on that node). The toolbox no longer
+  closes by itself; a function's input can be used in its body ("press key <value>", the input by
+  name); both pages open the lab's xmas_dun02 project first.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
