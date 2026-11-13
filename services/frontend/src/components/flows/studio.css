@@ -366,7 +366,10 @@
 }
 .runner-studio .studio-body,
 .studio[data-testid="flows-app"] .studio-body {
-  flex: 1 0 auto;
+  /* matpilot's re-check: a 22rem BASIS, not "auto" -- with auto the row took the Python
+     listing's whole height (4,372 px) and Simulate centred blocks ~2,500 px down the page. Now
+     it fills the room left (grow) and never goes under 22rem; the listing scrolls inside */
+  flex: 1 0 22rem;
   min-height: 22rem;
 }
 .runner-studio .studio-side {
@@ -377,6 +380,26 @@
 }
 .runner-about summary {
   cursor: pointer;
+}
+@media (max-width: 48rem) {
+  /* the phone (matpilot): Simulate first and named; Run last and smaller -- a child taps the
+     first big button */
+  .runner-studio .button-run .button-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  .runner-studio .button-live {
+    order: 6;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+  }
+  /* the tabs get the whole row: the map's name is in the title and the binding strip */
+  .runner-studio .block-tabs-trailing {
+    display: none;
+  }
 }
 .runner-about-more {
   color: var(--muted);

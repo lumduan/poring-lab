@@ -15,6 +15,9 @@ export function registerRunner(B: typeof BlocklyT, doc: RunnerDoc): void {
   const defs = runnerDefs(doc);
   const key = JSON.stringify(defs);
   if (defined.get(doc.id) === key) return;
+  // a settings change re-defines the doc's blocks (their numbers changed): drop the old
+  // definitions first, so Blockly does not warn 81 times per change (matpilot 2026-11-13)
+  for (const d of defs) delete (B.Blocks as Record<string, unknown>)[String(d.type)];
   B.common.defineBlocksWithJsonArray(defs as unknown as object[]);
   for (const d of defs) {
     const type = String(d.type);

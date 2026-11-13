@@ -100,8 +100,16 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
   // the browser tab names the flow too (matpilot 2026-11-13: it said "poring-lab flows")
   useEffect(() => {
     const before = document.title;
-    document.title = `${rawDoc.title} · poring-lab flows`;
+    const want = `${rawDoc.title} · poring-lab flows`;
+    const apply = () => {
+      if (document.title !== want) document.title = want;
+    };
+    apply();
+    // matpilot: on a fresh load Next's metadata title sometimes lands after this effect
+    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(apply) : null;
+    mo?.observe(document.head, { childList: true, subtree: true, characterData: true });
     return () => {
+      mo?.disconnect();
       document.title = before;
     };
   }, [rawDoc.title]);
@@ -123,6 +131,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
   const [follow, setFollow] = useState<string | null>(null); // the block the simulation is on
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
   const codeRef = useRef<HTMLPreElement | null>(null);
+  const areaRef = useRef<HTMLDivElement | null>(null); // the canvas: Simulate brings it into view
 
   const node = findNode(doc, selected) ?? doc.stacks[0];
   const mark = node ? markOf(node) : null;
@@ -156,6 +165,8 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
     show(r, 0);
     setPlaying(true);
     setPane("results", true);
+    // a phone shows the canvas under the fold: the highlight must be where the person looks
+    areaRef.current?.scrollIntoView?.({ block: "nearest" });
   };
   const goStep = useCallback((i: number) => show(sim, i), [show, sim]);
   // Play: one step every PLAY_MS (the state changes in the timer, never in the effect itself)
@@ -335,7 +346,7 @@ export default function RunnerView({ doc: rawDoc, onBack, onRunner, backendUrl =
               </span>
             </div>
           </div>
-          <div className="blocks-area">
+          <div className="blocks-area" ref={areaRef}>
             <RunnerBlocks doc={doc} only={tab?.stacks ?? null} follow={follow} hidden={view === "python"} onSelect={onBlock} />
           </div>
           {view === "python" && (
