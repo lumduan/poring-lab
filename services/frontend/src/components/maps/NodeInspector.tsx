@@ -22,7 +22,7 @@ import { nodeById, type MapNode, type PNode, type Project, sessionPath } from "@
 import { lintLine } from "@/lib/flow/status";
 import { type Edit, removeNode, renameNode, renameProblem, setStart, setZones, updateMapNode } from "@/lib/maps/edit";
 import { entryCaption, nodeLinks } from "@/lib/maps/links";
-import { KIND_TITLE, nodeLint, nodeTitle, tabRows } from "@/lib/maps/nodewords";
+import { cappedFindings, findingWhere, KIND_TITLE, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
 import { characterOf, characterWords, CHAR_NAME, CREDENTIAL_NAME, CREDENTIALS, credentialOf, loginOf, loginWords, MAX_SLOT, SERVERS, setCharacter, setLogin } from "@/lib/maps/session";
 
@@ -57,6 +57,7 @@ export default function NodeInspector(props: NodeInspectorProps) {
   };
   const nl = nodeLint(lint, n.id);
   const ll = lint ? lintLine(nl.counts) : null;
+  const capped = cappedFindings(nl.findings, MAX_FINDINGS);
   const sp = sessionPath(project);
   return (
     <div className="ni" data-testid="node-inspector">
@@ -100,15 +101,16 @@ export default function NodeInspector(props: NodeInspectorProps) {
           <h4>
             Lint: <span className={ll.level === "ok" ? "ni-ok" : undefined}>{ll.text}</span>
           </h4>
-          {nl.findings.length > 0 && (
-            <ul className="ni-findings">
-              {nl.findings.slice(0, MAX_FINDINGS).map((f, i) => (
+          {capped.shown.length > 0 && (
+            // matpilot round 17 N2: the most serious first, each line labelled; the rest in words
+            <ul className="ni-findings" data-testid="inspector-findings">
+              {capped.shown.map((f, i) => (
                 <li key={`${f.path}-${f.rule}-${i}`} data-level={f.severity}>
-                  {f.tab ? `${f.tab}: ` : ""}
-                  {f.message}
+                  <strong>{SEVERITY_WORDS[f.severity]}</strong> · {findingWhere(f)}
+                  {f.text || f.message}
                 </li>
               ))}
-              {nl.findings.length > MAX_FINDINGS && <li>…and {nl.findings.length - MAX_FINDINGS} more (on /flows)</li>}
+              {capped.more && <li data-testid="inspector-findings-more">{capped.more}</li>}
             </ul>
           )}
         </section>
@@ -116,7 +118,7 @@ export default function NodeInspector(props: NodeInspectorProps) {
       {n.kind !== "global" && <RenameRow key={`rename-${n.id}`} project={project} node={n} apply={apply} onRenamed={props.onRenamed} />}
       {n.kind === "login" && <LoginSection project={project} node={n} credentials={props.credentials} apply={apply} />}
       {n.kind === "character" && <CharacterSection key={`ch-${n.id}-${characterOf(n).name}`} project={project} node={n} apply={apply} />}
-      {n.kind === "map" && <MapSection key={`map-${n.id}-${JSON.stringify([n.map, n.entries, n.targets, n.ignore, n.resume_here])}`} project={project} node={n} apply={apply} onZones={props.onZones} />}
+      {n.kind === "map" && <MapSection key={`map-${n.id}-${JSON.stringify([n.map, n.entries, n.targets, n.ignore, n.resume_here])}`} project={project} node={n} lint={lint} apply={apply} onZones={props.onZones} />}
       {n.kind === "global" && (
         <section className="ni-section" aria-label="Shared by every node">
           <h4>Shared by every node</h4>
@@ -255,13 +257,14 @@ function parseIds(text: string): MobRef[] | null {
   return out;
 }
 
-function MapSection({ project, node, apply, onZones }: { project: Project; node: MapNode; apply: (r: Edit) => void; onZones?: (id: string) => void }) {
+function MapSection({ project, node, lint, apply, onZones }: { project: Project; node: MapNode; lint: LintDoc | null; apply: (r: Edit) => void; onZones?: (id: string) => void }) {
   const [map, setMap] = useState(node.map.map);
   const [entries, setEntries] = useState<EntryForm[]>(() => node.entries.map((e) => ({ name: e.name, x: e.at ? String(e.at.x) : "", y: e.at ? String(e.at.y) : "", radius: String(e.radius) })));
   const [targets, setTargets] = useState(idsText(node.targets));
   const [ignore, setIgnore] = useState(idsText(node.ignore));
   const [resume, setResume] = useState(node.resume_here);
   const links = nodeLinks(project, node.id);
+  const rs = runnerSpecies(node, lint);
   const t = parseIds(targets);
   const ig = parseIds(ignore);
   const setEntry = (i: number, v: Partial<EntryForm>) => setEntries(entries.map((e, k) => (k === i ? { ...e, ...v } : e)));
@@ -349,6 +352,19 @@ function MapSection({ project, node, apply, onZones }: { project: Project; node:
           ignore (monster ids)
           <input value={ignore} onChange={(e) => setIgnore(e.target.value)} aria-invalid={ig === null} />
         </label>
+        {rs && (
+          // matpilot round 17 N3: on a node that runs the runner these lists are not what it strikes
+          <div className="ni-muted" data-testid="inspector-runner-targets">
+            {rs.words}
+            {rs.lines.length > 0 && (
+              <ul className="ni-names">
+                {rs.lines.map((l, i) => (
+                  <li key={i}>{l}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <label className="ni-field ni-check">
           <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} />
           resume here (a relocation onto this map carries on with this node)

@@ -10,7 +10,7 @@ import { sessionProject } from "../flow/testkit.ts";
 import { connectExit, connectSession, exitsInto, moveNodes, removeExit, removeNode, removeSession, renameNode, renameProblem, sessionLinkProblem, setStart, setZones, updateMapNode } from "./edit.ts";
 import { exitRows, nodeLinks } from "./links.ts";
 import { addMapNode } from "./build.ts";
-import { lintGroups, nodeLint, nodeTitle, tabRows } from "./nodewords.ts";
+import { bySeverity, cappedFindings, findingWhere, lintGroups, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows } from "./nodewords.ts";
 import { readRules, ruleMaps, setUnknownMap } from "./rules.ts";
 
 const ok = (r: { ok: true; project: Project } | { ok: false; error: string }): Project => {
@@ -194,4 +194,47 @@ test("the lint list shows every finding the chip counts: the project's own first
   for (const g of groups.slice(1)) assert.deepEqual(g.findings, nodeLint(lint, g.node!).findings);
   assert.equal(groups[1].counts.warning, 2);
   assert.deepEqual(lintGroups(null, p), []);
+});
+
+// matpilot round 17 N2: the /maps inspector showed a node's first 6 findings in layer order -- on
+// xmas_dun02 6 unlabelled info lines -- and "...and 18 more (on /flows)" hid all 4 warnings.
+test("a capped finding list shows the most serious first, labels each line and says what it hides", () => {
+  const f = (severity: string, i: number) => ({ rule: "r", severity, layer: 2, node: "xmas_dun02", tab: "main", path: `xmas_dun02/main/main.${i}`, text: `${severity} ${i}`, message: `xmas_dun02/main/main.${i}: ${severity} ${i}`, ack: false });
+  // the reviewer's node: "Lint: 4 warnings · 20 info", the info lines first in the engine's order
+  const fs = [...Array.from({ length: 6 }, (_, i) => f("info", i)), f("warning", 6), ...Array.from({ length: 14 }, (_, i) => f("info", 7 + i)), f("warning", 21), f("warning", 22), f("warning", 23)] as never[];
+  const c = cappedFindings(fs, 6);
+  assert.deepEqual(c.shown.map((x: { text: string }) => x.text), ["warning 6", "warning 21", "warning 22", "warning 23", "info 0", "info 1"]);
+  assert.equal(c.more, "…and 18 more (18 info): the lint chip lists every one; so does /flows' Lint pane");
+  // an error and what is not ready lead; plural words; the order inside a severity is the engine's
+  const mixed = [f("info", 0), f("readiness", 1), f("warning", 2), f("error", 3), f("readiness", 4), f("error", 5), f("warning", 6)] as never[];
+  assert.deepEqual(bySeverity(mixed).map((x: { text: string }) => x.text), ["error 3", "error 5", "readiness 1", "readiness 4", "warning 2", "warning 6", "info 0"]);
+  assert.equal(cappedFindings(mixed, 1).more, "…and 6 more (1 error, 2 not ready, 2 warnings, 1 info): the lint chip lists every one; so does /flows' Lint pane");
+  assert.equal(cappedFindings(mixed, 7).more, null);
+  assert.deepEqual(Object.values(SEVERITY_WORDS), ["error", "not ready", "warning", "info"]);
+  assert.equal(findingWhere(fs[0] as never), "main main.0: ");
+  // the node's own list (the card, the inspector) and the chip's list read the same order
+  const lint = { findings: fs, counts: { error: 0, readiness: 0, warning: 4, info: 20 }, by_node: {} } as unknown as LintDoc;
+  assert.deepEqual(nodeLint(lint, "xmas_dun02").findings.slice(0, 4).map((x) => x.severity), ["warning", "warning", "warning", "warning"]);
+  assert.deepEqual(lintGroups(lint, xmasProject())[0].findings.slice(0, 5).map((x) => x.severity), ["warning", "warning", "warning", "warning", "info"]);
+});
+
+// matpilot round 17 N3: every xmas_dun02 spawn read "on neither list: treated as IGNORE" while the
+// runner strikes four of them; the inspector now says who picks the targets on a runner node
+test("on a node that runs the runner the inspector says the runner strikes by its model, and lists the engine's lines", () => {
+  const p = xmasProject();
+  const n = nodeById(p, "xmas_dun02");
+  assert.ok(n && n.kind === "map");
+  const line = "mob 1249 spawns on xmas_dun02: the runner strikes it (mystcase, a class of xmas02; its recipe attack_mystcase chooses how)";
+  const lint = { findings: [{ rule: "species_lists", severity: "info", layer: 2, node: "xmas_dun02", tab: "", path: "xmas_dun02", text: line, message: `xmas_dun02: ${line}`, ack: false }, { rule: "escape", severity: "warning", layer: 2, node: "xmas_dun02", tab: "", path: "xmas_dun02", text: "x", message: "xmas_dun02: x", ack: false }], counts: { error: 0, readiness: 0, warning: 1, info: 1 }, by_node: {} } as unknown as LintDoc;
+  const rs = runnerSpecies(n, lint);
+  assert.ok(rs);
+  assert.match(rs.words, /strikes every monster the model its main names \(use_model\("xmas02"\)\) boxes/);
+  assert.match(rs.words, /chooses HOW that monster is attacked, never WHETHER/);
+  assert.match(rs.words, /The lists are the simulator's/);
+  assert.deepEqual(rs.lines, [line]);
+  assert.deepEqual(runnerSpecies(n, null)?.lines, []);
+  // a node without the runner: the lists decide (no such words)
+  const town = nodeById(sampleProject(), "town");
+  assert.ok(town && town.kind === "map");
+  assert.equal(runnerSpecies(town, lint), null);
 });
