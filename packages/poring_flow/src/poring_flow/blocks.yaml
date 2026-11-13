@@ -21,6 +21,10 @@
 #   affects      sensors it moves: + up, - down, ~ either way (loops, re-trigger)
 #   types        it types (the foreground gate applies)
 #   needs_targets it attacks the map block's TARGET species only: a map block with targets (13.3)
+#   live         the LIVE BLOCK PLAYER plays it in the real game (scripts/flow_play.py; Batt
+#                2026-11-13, docs/planning/live-blocks.md stage 1, ADR-0020 Amendment E). The ONE
+#                place the live set is written, with poring_flow/live.py's statement kinds and
+#                exits; every block or sensor without it is refused BEFORE ANY INPUT, by name
 # Parameter types: cell map npc option item items mob skill window int float bool str value, and
 #   proc: a FUNCTION's name (a string literal naming a procedure; Batt 2026-11-13, Amendment C)
 # Per parameter, besides name / type / required / positional:
@@ -153,6 +157,7 @@ blocks:
     long: true
     moves: near
     adds_weight: true
+    live: true  # stage 1: the hunt core, the runner's play IN-PROCESS (flow_play.py; one input writer)
     affects: {position: "~", hp_percent: "-", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
     note: the stop group is the enclosing loop (13.5) -- its condition and max_s; one call hunts at most timeout_s. Each parameter names a FUNCTION of exactly one press_key (the runner presses one key a role); only on a map with a runner (xmas_dun02)
   hunt:
@@ -289,6 +294,7 @@ blocks:
     timeout_s: 2
     insertable: true
     changes_map: by_item
+    live: true  # stage 1: ro_agent's paced key tap (down, 50 ms, up), through the mux
     affects: {hp_percent: "~", sp_percent: "~", item_count: "~", weight_percent: "~"}
     note: a hotbar press, the one Batt's 2026-10-08 Q17 allows as an INSERT (as use_item's hotbar use). Whatever the slot holds is used; a key a Butterfly Wing function presses counts as that wing (the save-point rule; an event that presses it relocates or stops)
   equip:
@@ -404,6 +410,7 @@ blocks:
     kind: core
     params: [{name: cell, type: cell, required: true, positional: true}]
     timeout_s: 1
+    live: true  # stage 1: no input (the author's assertion), as in the simulator
     note: the AUTHOR asserts the save point (13.5); no input; stays a visible warning at approval
 
 # Sensors (2.3): every one reads pixels. A sensor whose read concept is not in L1 yet is UNKNOWN
@@ -413,23 +420,25 @@ blocks:
 #   drift    it changes without our input (regeneration, damage, movement): loops may wait on it
 #   cue      a momentary cue (true for an instant): it cannot hold on every tick
 #   danger   low | high: which side of a threshold is the dangerous one ("looser", 13.6.9)
+#   live     the live block player reads it from pixels (stage 1: HP / SP / weight, the death
+#            dialog, the map's name from the minimap)
 sensors:
-  hp_percent: {concept: vitals.read, type: percent, passive: true, drift: true, range: [0, 100], resolution: 1, danger: low}
-  sp_percent: {concept: vitals.read, type: percent, passive: true, drift: true, range: [0, 100], resolution: 1, danger: low}
-  weight_percent: {concept: vitals.read, type: percent, passive: true, range: [0, 100], resolution: 1, danger: high}
+  hp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
+  sp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
+  weight_percent: {concept: vitals.read, type: percent, passive: true, live: true, range: [0, 100], resolution: 1, danger: high}
   zeny: {concept: vitals.read, type: int, passive: true, range: [0, 2000000000]}
   position: {concept: nav.read_position, type: cell, passive: false, note: "the /where read types (13.6.6)"}
-  current_map: {concept: nav.read_position, type: map, passive: false, note: "the /where read types (13.6.6)"}
+  current_map: {concept: nav.read_position, type: map, passive: false, live: true, note: "the /where read types (13.6.6); the LIVE player reads the map's NAME from the minimap's picture instead (minimap_id.py: no input)"}
   base_level: {type: int, passive: true, range: [1, 999], note: "a new L1 read concept, not written yet"}
   job_level: {type: int, passive: true, range: [1, 999], note: "a new L1 read concept, not written yet"}
   item_count: {type: int, passive: false, params: [{name: item, type: item, required: true, positional: true}], note: "opens the inventory"}
   skill_level: {type: int, passive: false, params: [{name: skill, type: skill, required: true, positional: true}], note: "opens the skill window; for assumes"}
   sees: {type: bool, passive: true, drift: true, params: [{name: mob, type: mob, required: true, positional: true}, {name: within, type: int}], note: "the world detector + tracker (Phase 3)"}
   count_visible: {type: int, passive: true, drift: true, params: [{name: mob, type: mob, required: true, positional: true}, {name: within, type: int}], note: "the world detector + tracker (Phase 3)"}
-  is_dead: {concept: char.respawn, type: bool, passive: true, drift: true, note: "the death dialog's anchor (char.respawn's L2 binding)"}
+  is_dead: {concept: char.respawn, type: bool, passive: true, drift: true, live: true, note: "the death dialog's anchor (char.respawn's L2 binding)"}
   window_open: {concept: ui.open_window, type: bool, passive: true, params: [{name: window, type: window, required: true, positional: true}]}
   dialog_shows: {concept: npc.choose, type: bool, passive: true, params: [{name: option, type: option, required: true, positional: true}]}
-  map_load_seen: {type: bool, passive: true, drift: true, cue: true, note: "the loading screen or the map-load notice (open question 28)"}
+  map_load_seen: {type: bool, passive: true, drift: true, cue: true, live: true, note: "the loading screen or the map-load notice (open question 28); the LIVE player: the minimap names another map than the last one it named"}
   engagement_seen: {type: bool, passive: true, drift: true, cue: true, note: "an engagement we did not order, from pixels (13.9)"}
   engaged_species: {type: mob, passive: true, drift: true, note: "needs a detector that names species (13.9, open question 33)"}
   # The TRAINED MODELS as sensors (Batt 2026-11-09; models.yaml, ADR-0020 Amendment B): `model` is a

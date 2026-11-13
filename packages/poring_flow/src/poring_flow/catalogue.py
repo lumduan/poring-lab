@@ -168,6 +168,9 @@ class BlockSpec(BaseModel):
     types: bool = False
     # it attacks the map block's TARGET species only (13.3): it runs in a map block with targets
     needs_targets: bool = False
+    # the LIVE BLOCK PLAYER plays it in the real game (scripts/flow_play.py; live-blocks.md stage
+    # 1, ADR-0020 Amendment E): poring_flow.live reads this flag, nothing else decides it
+    live: bool = False
     note: str | None = None
 
     @model_validator(mode="after")
@@ -191,6 +194,7 @@ class SensorSpec(BaseModel):
     range: tuple[float, float] | None = None
     resolution: float | None = None
     danger: Literal["low", "high"] | None = None
+    live: bool = False  # the live block player reads it from pixels (poring_flow.live)
     note: str | None = None
 
 
