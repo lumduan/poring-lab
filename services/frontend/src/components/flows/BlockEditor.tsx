@@ -17,16 +17,17 @@ import { useEffect, useRef, useState } from "react";
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
 import { huntKey, register, registerHunt, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
-import type { CatalogueDoc, LintDoc, Trace } from "@/lib/flow/api";
-import { BADGE_TEXT } from "@/lib/flow/api";
-import { SENTENCE_BY_TYPE, type Toolbox, toolbox } from "@/lib/flow/blockdefs";
-import { type Defaults, fromWorkspace, type Scope, toWorkspace, type Workspace } from "@/lib/flow/blocks";
+import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
+import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
+import { SENTENCE_BY_TYPE, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
+import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
-import { canonical, type Flow } from "@/lib/flow/ir";
+import { canonical } from "@/lib/flow/ir";
 import { firstDetector, notAdopted } from "@/lib/flow/models";
-import { findingsByPath, runLine } from "@/lib/flow/status";
+import type { Project } from "@/lib/flow/project";
+import { runLine } from "@/lib/flow/status";
 import { INJECT } from "@/lib/flow/theme";
-import { hatTitle, type Issue, type Loose } from "@/lib/flow/words";
+import type { Issue, Loose } from "@/lib/flow/words";
 
 const PALETTE_BLOCK: Record<string, string> = {
   pl_walk_to: "walk_to",
@@ -34,6 +35,10 @@ const PALETTE_BLOCK: Record<string, string> = {
   pl_choose_menu: "choose_menu",
   pl_open_window: "open_window",
   pl_use_item: "use_item",
+  pl_press_key: "press_key",
+  pl_dungeon_hunt: "dungeon_hunt",
+  pl_login: "login",
+  pl_choose_character: "choose_character",
   ...SENTENCE_BY_TYPE, // the shop / Kafra / storage sentences (2026-11-09 pm)
 };
 const CONVERT_MS = 120; // a drag fires many events: convert once they settle
@@ -50,16 +55,21 @@ export type EditorApi = {
 export type EditorState = { ready: boolean; failed: boolean; issues: Issue[]; loose: Loose[]; canUndo: boolean; canRedo: boolean };
 
 export type BlockEditorProps = {
-  scope: Scope;
-  /** The tab: a new key, or a new `epoch` (the flow was replaced from outside), reloads it. */
+  /** One tab of one node (the project model, 2026-11-13). */
+  scope: TabScope;
+  /** Which blocks its toolbox offers (the node's kind, its main or another tab). */
+  toolboxScope: ToolboxScope;
+  /** The main tab's start block's words, e.g. "when she arrives on xmas_dun02". */
+  title: string;
+  /** The tab: a new key, or a new `epoch` (the project was replaced from outside), reloads it. */
   scopeKey: string;
   epoch: number;
-  getFlow: () => Flow;
+  getProject: () => Project;
   catalogue: CatalogueDoc | null;
   lint: LintDoc | null;
   trace: Trace | null;
   hidden: boolean;
-  onFlow: (flow: Flow) => void;
+  onProject: (project: Project) => void;
   onState: (state: EditorState) => void;
   onApi: (api: EditorApi | null) => void;
 };
@@ -95,11 +105,11 @@ export default function BlockEditor(p: BlockEditorProps) {
       const w = ws.current;
       if (!B || !w) return;
       const json = B.serialization.workspaces.save(w) as unknown as Workspace;
-      const flow = latest.current.getFlow();
-      const r = fromWorkspace(flow, latest.current.scope, json, defaults());
+      const project = latest.current.getProject();
+      const r = tabFromWorkspace(project, latest.current.scope, json, defaults());
       if (r.ok) {
         paths.current = r.paths;
-        if (announce && canonical(r.flow) !== canonical(flow)) latest.current.onFlow(r.flow);
+        if (announce && canonical(r.project) !== canonical(project)) latest.current.onProject(r.project);
       }
       latest.current.onState({
         ready: true,
@@ -109,7 +119,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         canUndo: w.getUndoStack().length > 0,
         canRedo: w.getRedoStack().length > 0,
       });
-      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.trace, paths.current);
+      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.trace, paths.current, latest.current.scope);
     };
 
     const api: EditorApi = {
@@ -148,7 +158,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         const cat = latest.current.catalogue;
         const hunt = registerHunt(B, cat?.hunt_rules ?? null) ? (cat?.hunt_rules ?? null) : null;
         const th = themesOf(B);
-        tbRef.current = toolboxOf(cat, scope);
+        tbRef.current = toolboxOf(cat, latest.current.toolboxScope);
         const w = B.inject(host.current, {
           ...INJECT,
           theme: media?.matches ? th.dark : th.light,
@@ -157,8 +167,8 @@ export default function BlockEditor(p: BlockEditorProps) {
         ws.current = w;
         B.Events.disable();
         try {
-          B.serialization.workspaces.load(toWorkspace(latest.current.getFlow(), scope, { hunt }) as unknown as object, w);
-          for (const b of w.getBlocksByType("pl_main", false)) b.getField("TITLE")?.setValue(hatTitle(scope));
+          B.serialization.workspaces.load(tabToWorkspace(latest.current.getProject(), scope, { hunt }) as unknown as object, w);
+          for (const b of w.getBlocksByType("pl_main", false)) b.getField("TITLE")?.setValue(latest.current.title);
         } finally {
           B.Events.enable();
         }
@@ -207,10 +217,10 @@ export default function BlockEditor(p: BlockEditorProps) {
     if (!ready || !ws.current) return;
     // the lists may arrive after the workspace: the type is defined before the toolbox names it
     if (blockly.current) registerHunt(blockly.current, catalogue?.hunt_rules ?? null);
-    tbRef.current = toolboxOf(catalogue, scope);
+    tbRef.current = toolboxOf(catalogue, p.toolboxScope);
     ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
-    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current);
-  }, [ready, catalogue, lint, trace, scope]);
+    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope);
+  }, [ready, catalogue, lint, trace, scope, p.toolboxScope]);
 
   return (
     <>
@@ -220,7 +230,7 @@ export default function BlockEditor(p: BlockEditorProps) {
   );
 }
 
-function toolboxOf(catalogue: CatalogueDoc | null, scope: Scope): Toolbox {
+function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox {
   const cat = Object.fromEntries(
     Object.entries(catalogue?.blocks ?? {})
       .filter(([, b]) => b.spec.kind !== "core" || b.name === "assert_save_point")
@@ -229,7 +239,7 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: Scope): Toolbox {
   const rules = catalogue?.hunt_rules ?? null;
   const models = catalogue?.models ?? null;
   const first = firstDetector(models);
-  return toolbox(cat, scope.kind, rules && huntKey() ? defaultFields(rules) : null, rules && huntKey() ? omitted(rules) : {}, {
+  return toolbox(cat, scope, rules && huntKey() ? defaultFields(rules) : null, rules && huntKey() ? omitted(rules) : {}, {
     model: first.model,
     label: first.label,
     notes: notAdopted(models),
@@ -239,18 +249,30 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: Scope): Toolbox {
 /** Badges (L1 verification), lint warnings and the last run on each block. `paths`: block id ->
  * node path, as converted last (edits move blocks; their ids stay). The labels change with events
  * off: a decoration is not an edit (no undo step, no conversion). */
-function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>): void {
+function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope): void {
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
-    paint(w, catalogue, lint, trace, paths);
+    paint(w, catalogue, lint, trace, paths, scope);
   } finally {
     if (was) B.Events.enable();
   }
 }
 
-function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>): void {
-  const byPath = findingsByPath(lint);
+/** This tab's findings by their statement path inside the tab. */
+function tabFindings(lint: LintDoc | null, scope: TabScope): Map<string, Finding[]> {
+  const out = new Map<string, Finding[]>();
+  for (const f of lint?.findings ?? []) {
+    if (f.node !== scope.node || f.tab !== scope.tab) continue;
+    const k = sitePath(f);
+    out.set(k, [...(out.get(k) ?? []), f]);
+  }
+  return out;
+}
+
+function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope): void {
+  const byPath = tabFindings(lint, scope);
+  const prefix = `${scope.node}/${scope.tab}/`;
   for (const b of w.getAllBlocks(false)) {
     const name =
       b.type === HUNT_TYPE ? "hunt" : (PALETTE_BLOCK[b.type] ?? (b.type === "pl_action" || b.type === "pl_do" ? String(b.getFieldValue("BLOCK")) : null));
@@ -274,7 +296,7 @@ function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: L
     const path = paths[b.id] ?? (b.id.startsWith("n:") ? b.id.slice(2).split("#")[0] : null);
     if (path === null || b.isInFlyout) continue;
     const runField = b.getField("RUN");
-    if (runField) runField.setValue(trace ? runLine(trace.nodes[path]) || "not run" : "");
+    if (runField) runField.setValue(trace ? runLine(trace.nodes[prefix + path] ?? trace.nodes[path]) || "not run" : "");
     if (b.outputConnection) continue; // findings sit on the statement that holds the value
     const own = byPath.get(path);
     b.setWarningText(own?.length ? own.map((f) => `${f.severity}: ${f.text}`).join("\n") : null);

@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type FileMeta, FLOW_FILE_EXTENSION, FLOW_FILE_MAX_BYTES, flowNameFromFileName, parseFlowFile } from "@/lib/flow/file";
-import type { Flow } from "@/lib/flow/ir";
+import type { Project } from "@/lib/flow/project";
 import { describeGitHubError, describeSaved, describeSize } from "@/lib/github/describe";
 import type { RemoteFlow } from "@/lib/github/flows";
 import { folderUrl, repositoryLabel } from "@/lib/github/repository";
@@ -26,7 +26,7 @@ type RemoteState =
   | { readonly kind: "error"; readonly message: string };
 
 /** A flow that passed every check, its meta, and the words for the page's notice. */
-export type Opened = { readonly flow: Flow; readonly meta: FileMeta; readonly notice: string };
+export type Opened = { readonly project: Project; readonly meta: FileMeta; readonly notice: string };
 
 export default function LoadDialog({ github, onClose, onOpened, onSetUpGitHub }: { github: GitHubApi; onClose: () => void; onOpened: (o: Opened) => void; onSetUpGitHub: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -79,7 +79,7 @@ export default function LoadDialog({ github, onClose, onOpened, onSetUpGitHub }:
       setError(`${file.name}: ${r.errors.slice(0, 8).join(" · ")}`);
       return;
     }
-    onOpened({ flow: r.flow, meta: { name: r.name, link: null }, notice: words(r.name, r.savedBy, r.savedAt, "") });
+    onOpened({ project: r.project, meta: { name: r.name, link: null }, notice: words(r.name, r.savedBy, r.savedAt, "") });
   };
 
   const openFromGitHub = async (f: RemoteFlow) => {
@@ -102,7 +102,7 @@ export default function LoadDialog({ github, onClose, onOpened, onSetUpGitHub }:
         return;
       }
       onOpened({
-        flow: r.flow,
+        project: r.project,
         meta: { name: r.name, link: { repository: repositoryLabel(repository), path: file.path, sha: file.sha } },
         notice: words(r.name, r.savedBy, r.savedAt, ` from ${repositoryLabel(repository)}`),
       });
@@ -143,7 +143,7 @@ export default function LoadDialog({ github, onClose, onOpened, onSetUpGitHub }:
           Choose a file…
         </button>
         <p className="muted" style={{ marginTop: "0.5rem" }}>
-          A <code>.flow.json</code> file saved here, or a flow&apos;s JSON from before (checked before it opens).
+          A <code>.flow.json</code> file saved here (a project: nodes and tabs), checked before it opens. Flows saved before 2026-11-13 are an older format and do not open.
         </p>
       </section>
 

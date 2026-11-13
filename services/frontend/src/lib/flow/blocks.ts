@@ -556,6 +556,7 @@ class Reader {
       case "pl_expr":
         try {
           const e = this.asCalls(parseExpr(this.field(b, "TEXT")));
+          this.unknownCalls(e, where, what);
           return e;
         } catch (e) {
           this.err(where, `${what}: ${e instanceof ExprError ? e.message : "cannot be read"}`);
@@ -652,6 +653,27 @@ class Reader {
       }
     };
     return walk(e);
+  }
+
+  /** A call with positional inputs of a name that is no function here: a sensor or an action
+   * takes its inputs by name (the parser cannot tell them apart; the node's names can). */
+  unknownCalls(e: Expr, where: string, what: string): void {
+    const seen: string[] = [];
+    const walk = (x: Expr): void => {
+      if (x.kind === "callv") {
+        if (!this.fns.has(x.proc)) seen.push(x.proc);
+        x.args.forEach(walk);
+        Object.values(x.kwargs).forEach(walk);
+      } else if (x.kind === "cmp" || x.kind === "arith") {
+        walk(x.left);
+        walk(x.right);
+      } else if (x.kind === "and" || x.kind === "or") x.terms.forEach(walk);
+      else if (x.kind === "not") walk(x.term);
+      else if (x.kind === "list") x.items.forEach(walk);
+      else if (x.kind === "sense") Object.values(x.args).forEach(walk);
+    };
+    walk(e);
+    for (const n of seen) this.err(where, `${what}: ${n}(...) is not a function of this node: a sensor or an action takes its inputs by name, e.g. sees(mob=mob(1))`);
   }
 
   rest(b: WsBlock, block: string, where: string): ActionRest {

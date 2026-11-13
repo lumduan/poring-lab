@@ -11,7 +11,7 @@ import { useCallback, useState } from "react";
 
 import { findRunner, runnerHref } from "@/lib/flow/runners";
 
-const FlowsApp = dynamic(() => import("@/components/flows/FlowsApp"), {
+const ProjectStudio = dynamic(() => import("@/components/flows/ProjectStudio"), {
   ssr: false,
   loading: () => <div className="flex-1 p-4 text-sm text-neutral-400">Loading the flow studio…</div>,
 });
@@ -36,5 +36,5 @@ export default function FlowsClient({ backendUrl, initialBlock = null, initialRu
   }, []);
   const doc = findRunner(runner);
   if (doc) return <RunnerView key={doc.id} doc={doc} onBack={() => open(null)} onRunner={open} backendUrl={backendUrl} />;
-  return <FlowsApp backendUrl={backendUrl} initialBlock={block} onRunner={open} />;
+  return <ProjectStudio backendUrl={backendUrl} initialNode={block} onRunner={open} />;
 }

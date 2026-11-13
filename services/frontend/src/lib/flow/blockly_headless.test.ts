@@ -59,7 +59,7 @@ test("every block the toolbox offers loads, and its words are what the search fi
   const cat = { walk_to: { concept: "nav.walk_to", timeout_s: 120 }, talk_npc: { concept: "npc.talk", timeout_s: 60 }, use_item: { concept: "inv.use_item", timeout_s: 10 }, sit: { concept: "char.sit", timeout_s: 5 } };
   const ws = new B.Workspace();
   const words = new Map<string, string>();
-  for (const scope of ["block", "global", "main"] as const) {
+  for (const scope of [{ node: "map", main: true }, { node: "global", main: false }, { node: "login", main: true }, { node: "character", main: true }] as const) {
     for (const { item } of toolboxBlocks(toolbox(cat, scope, null, {}, { model: "v1", label: "monster", notes: [] }))) {
       const { kind: _kind, ...state } = item;
       void _kind;

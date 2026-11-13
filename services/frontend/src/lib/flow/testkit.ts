@@ -219,7 +219,7 @@ function stmt(r: Rng, depth: number, blocks: string[]): Stmt {
     case 7:
       return { kind: "set", var: r.pick(VARS), value: expr(r, 0) };
     case 8:
-      return { kind: "call", proc: "helper" };
+      return { kind: "call", proc: "helper", args: [], kwargs: {} };
     case 9:
       return { kind: "stop", reason: r.pick(["done", "menu_mismatch"]) };
     case 10:

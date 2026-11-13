@@ -117,7 +117,8 @@ export function InspectPanel({
 /** The flow's run settings (ADR-0020 #17 max_runtime_s, #10 where_budget). A change is part of
  * the flow, so it shows in its JSON export / diff; the global default and maximum are the
  * Settings page's (human-only writes, audited). */
-function FlowSettings({ flow, limits, onFlow }: { flow: Flow; limits: { default_s: number; max_s: number } | null; onFlow: (f: Flow) => void }) {
+/** The run's time box and /where budget (a flow's, now a PROJECT's: the same two fields). */
+export function FlowSettings<F extends { name: string; max_runtime_s: number; where_budget: number }>({ flow, limits, onFlow }: { flow: F; limits: { default_s: number; max_s: number } | null; onFlow: (f: F) => void }) {
   const [runtime, setRuntime] = useState(String(flow.max_runtime_s));
   const [budget, setBudget] = useState(String(flow.where_budget));
   const [err, setErr] = useState("");
@@ -130,7 +131,7 @@ function FlowSettings({ flow, limits, onFlow }: { flow: Flow; limits: { default_
   const hours = (s: number) => `${(s / 3600).toFixed(s % 3600 ? 2 : 0)} h`;
   return (
     <div className="box stack">
-      <div className="strong">Flow {flow.name}: run settings</div>
+      <div className="strong">{flow.name}: run settings</div>
       <div className="grid2">
         <label>
           max_runtime_s ({hours(Number(runtime) || 0)})
@@ -488,7 +489,7 @@ export function scenarioOf(f: SimForm): Scenario {
 }
 
 export function SimulatePanel({
-  flow,
+  blocks,
   form,
   setForm,
   sim,
@@ -498,7 +499,8 @@ export function SimulatePanel({
   models,
   onRun,
 }: {
-  flow: Flow;
+  /** The map nodes a run may start on (empty: the project's start). */
+  blocks: string[];
   form: SimForm;
   setForm: (f: SimForm) => void;
   sim: SimDoc | null;
@@ -509,7 +511,6 @@ export function SimulatePanel({
   onRun: () => void;
 }) {
   const t = sim?.trace;
-  const blocks = flow.workflow?.blocks.map((b) => b.name) ?? [];
   const set = (k: keyof SimForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value });
   return (
@@ -525,9 +526,9 @@ export function SimulatePanel({
         <label>start weight %<input className="field" value={form.weight} onChange={set("weight")} /></label>
         <label>weight per attack (loot model)<input className="field" value={form.perAttack} onChange={set("perAttack")} /></label>
         <label>
-          start block
+          start on the map
           <select className="field" value={form.startBlock} onChange={set("startBlock")}>
-            <option value="">the flow&apos;s start</option>
+            <option value="">the project&apos;s start (login)</option>
             {blocks.map((b) => (
               <option key={b} value={b}>
                 {b}
@@ -650,7 +651,7 @@ export function SimulatePanel({
 }
 
 // --- the path map of the last run ------------------------------------------------------------------
-export function PathPanel({ flow, sim, stale, world, api }: { flow: Flow; sim: SimDoc | null; stale: boolean; world: WorldSource; api: FlowsApi | null }) {
+export function PathPanel({ server, sim, stale, world, api }: { server: string; sim: SimDoc | null; stale: boolean; world: WorldSource; api: FlowsApi | null }) {
   const [maps, setMaps] = useState<WorldDoc | null>(null);
   const t = sim?.trace;
   const mapNames = useMemo(() => [...new Set((t?.paths ?? []).map((p) => p.map))].sort(), [t]);
@@ -658,13 +659,13 @@ export function PathPanel({ flow, sim, stale, world, api }: { flow: Flow; sim: S
     if (!api || !t || !mapNames.length) return;
     let alive = true;
     api
-      .world(world, flow.target.server, mapNames, true)
+      .world(world, server, mapNames, true)
       .then((w) => alive && setMaps(w))
       .catch(() => alive && setMaps(null));
     return () => {
       alive = false;
     };
-  }, [api, t, mapNames, world, flow.target.server]);
+  }, [api, t, mapNames, world, server]);
   if (!t) return <div className="muted">Simulate first: the cells each map node walked are drawn here.</div>;
   if (!mapNames.length) return <div className="muted">The last run walked no map (a plain flow, or no route).</div>;
   return (

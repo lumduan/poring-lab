@@ -83,18 +83,6 @@ export function stackSize(b: WsBlock | undefined): number {
   return n;
 }
 
-/** The tab a lint finding belongs to: its map block's, every map's (the global events), the
- * functions tab (a finding under a function: its node path starts with the function's name), or
- * the flow's own: main in a plain flow, else the START map's tab (2026-11-13, Batt: no Map tab on
- * /flows any more; the maps graph is the Maps page). */
-export function tabOf(f: Pick<Finding, "owner"> & { path?: string }, plain: boolean, procs: readonly string[] = [], start: string | null = null): string {
-  if (f.owner.startsWith("block:")) return f.owner;
-  if (f.owner === "global") return "events";
-  const root = (f.path ?? "").split(".", 1)[0].split(":", 1)[0];
-  if (root && procs.includes(root)) return "functions";
-  if (plain) return "main";
-  return start ? `block:${start}` : "functions";
-}
 
 /** The lint ERRORS, for the problems list (warnings and readiness stay in the Lint pane). */
 export function lintErrors(lint: LintDoc | null): Finding[] {

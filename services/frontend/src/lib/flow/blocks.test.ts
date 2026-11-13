@@ -140,7 +140,7 @@ test("bad fields are refused with their node, and nothing is applied", () => {
 
 test("new blocks from the toolbox take the catalogue's defaults", () => {
   const flow = fixture("visit_and_choose");
-  const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, respawn: { concept: "char.respawn", timeout_s: 30 } }, "main");
+  const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, respawn: { concept: "char.respawn", timeout_s: 30 } }, { node: "map", main: true });
   const walk = blockOf(categoryOf(tb, "Movement"), "pl_walk_to")!; // MatPilot's categories (2026-11-09)
   const ws: Workspace = {
     blocks: {
@@ -332,7 +332,7 @@ test("Actions holds the shop and Kafra sentences, after the four NPC / item / wi
   const cat = Object.fromEntries(
     ["talk_npc", "choose_menu", "use_item", "open_window", "buy", "sell", "kafra_store", "set_save_point", "sit"].map((n) => [n, { concept: "x.y", timeout_s: 60 }]),
   );
-  const tb = toolbox(cat, "block");
+  const tb = toolbox(cat, { node: "map", main: true });
   const actions = categoryOf(tb, "Actions")!.contents.filter((i) => i.kind === "block").map((i) => (i as { type: string }).type);
   assert.deepEqual(actions, ["pl_talk_npc", "pl_choose_menu", "pl_use_item", "pl_open_window", "pl_set_save_point", "pl_kafra_store", "pl_buy", "pl_sell"]);
   const more = categoryOf(tb, "More skills")!.contents.map((i) => (i as { fields?: { BLOCK?: string } }).fields?.BLOCK);

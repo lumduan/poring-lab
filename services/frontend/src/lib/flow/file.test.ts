@@ -23,83 +23,80 @@ import {
   utf8Bytes,
   writeFileMeta,
 } from "./file.ts";
-import { exportText } from "./importer.ts";
-import { canonical, type Flow } from "./ir.ts";
+import { exportProject } from "./projectfile.ts";
+import { type Project, sampleProject, xmasProject } from "./project.ts";
+import { canonical } from "./ir.ts";
 import { KEYS, type StorageLike } from "./prefs.ts";
-import { FIXTURES, fixture } from "./testkit.ts";
 
 const SAVED_AT = "2026-11-12T04:12:00.000Z";
-const parts = (flow: Flow, over: Partial<{ name: string; savedBy: string; python: string }> = {}) => ({
+const PROJECTS = [xmasProject, sampleProject];
+const parts = (project: Project, over: Partial<{ name: string; savedBy: string; python: string }> = {}) => ({
   name: "ฟาร์มโพริง farm 1",
   savedBy: " Ploy ",
   savedAt: SAVED_AT,
-  python: "from poring import *\n\ndef main():\n    pass\n",
-  flow,
+  python: "# --- global/keys.py\ndef heal():\n    press_key(\"F1\")\n",
+  project,
   ...over,
 });
 
-test("a flow file round-trips exactly: seven fields, the Python as lines, the flow in canonical key order", () => {
-  for (const name of FIXTURES) {
-    const flow = fixture(name);
-    const text = serializeFlowFile(parts(flow));
+test("a project file round-trips exactly: seven fields, the Python as lines, the project in canonical key order", () => {
+  for (const make of PROJECTS) {
+    const project = make();
+    const text = serializeFlowFile(parts(project));
     assert.ok(text.endsWith("}\n"));
     const data = JSON.parse(text) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(data), ["format", "version", "name", "savedBy", "savedAt", "python", "flow"]);
+    assert.deepEqual(Object.keys(data), ["format", "version", "name", "savedBy", "savedAt", "python", "project"]);
     assert.equal(data.format, "poring-lab-flow");
-    assert.equal(data.version, 1);
+    assert.equal(data.version, 2);
     assert.equal(data.savedBy, "Ploy");
-    assert.deepEqual(data.python, ["from poring import *", "", "def main():", "    pass"]);
-    assert.deepEqual(Object.keys(data.flow as object), Object.keys(data.flow as object).slice().sort());
+    assert.deepEqual(data.python, ["# --- global/keys.py", "def heal():", '    press_key("F1")']);
+    assert.deepEqual(Object.keys(data.project as object), Object.keys(data.project as object).slice().sort());
     const r = parseFlowFile(text, "ignored.flow.json");
     assert.ok(r.ok, JSON.stringify(r));
     if (!r.ok) continue;
-    assert.equal(canonical(r.flow), canonical(flow));
+    assert.equal(canonical(r.project), canonical(project));
     assert.equal(r.name, "ฟาร์มโพริง farm 1");
     assert.equal(r.savedBy, "Ploy");
     assert.equal(r.savedAt, SAVED_AT);
     assert.equal(r.bare, false);
-    assert.equal(serializeFlowFile({ ...parts(r.flow), name: r.name }), text); // stable: saving again changes nothing
+    assert.equal(serializeFlowFile({ ...parts(r.project), name: r.name }), text); // stable: saving again changes nothing
   }
-  assert.deepEqual(JSON.parse(serializeFlowFile(parts(fixture("farm_loop"), { python: "" }))).python, []);
+  assert.deepEqual(JSON.parse(serializeFlowFile(parts(xmasProject(), { python: "" }))).python, []);
 });
 
 test("the static data (the world) never goes into a file, whatever the caller hands over", () => {
-  const sneaky = { ...parts(fixture("farm_loop")), world: { maps: { prt_fild08: { spawns: [1002] } } }, sample: "sheets" };
+  const sneaky = { ...parts(xmasProject()), world: { maps: { prt_fild08: { spawns: [1002] } } }, sample: "sheets" };
   const text = serializeFlowFile(sneaky as unknown as Parameters<typeof serializeFlowFile>[0]);
-  assert.ok(!text.includes("world") && !text.includes("prt_fild08") && !text.includes("sheets"));
-  assert.deepEqual(Object.keys(JSON.parse(text)), ["format", "version", "name", "savedBy", "savedAt", "python", "flow"]);
+  assert.ok(!text.includes("prt_fild08") && !text.includes("sheets"));
+  assert.deepEqual(Object.keys(JSON.parse(text)), ["format", "version", "name", "savedBy", "savedAt", "python", "project"]);
 });
 
-test("a bare IR file (a download from before 2026-11-12) still opens, named after its file", () => {
-  const flow = fixture("visit_and_choose");
-  const r = parseFlowFile(exportText(flow), flowNameFromFileName("Downloads/visit_and_choose.flow.json"));
-  assert.ok(r.ok && r.bare && canonical(r.flow) === canonical(flow));
-  if (r.ok) assert.deepEqual([r.name, r.savedBy, r.savedAt], ["visit_and_choose", "", ""]);
-  const noName = parseFlowFile(exportText(flow), "");
-  assert.ok(noName.ok && noName.name === flow.name);
-  const bad = parseFlowFile(JSON.stringify({ ...flow, name: "Bad Name" }), "x"); // the IR's own checks apply
-  assert.ok(!bad.ok && /name:/.test(bad.errors.join(" ")));
+test("a bare project (format 3 JSON) opens, named after its file; OLD flows (IR 2, version 1 files) are refused in words", () => {
+  const project = xmasProject();
+  const r = parseFlowFile(exportProject(project), flowNameFromFileName("Downloads/xmas.flow.json"));
+  assert.ok(r.ok && r.bare && canonical(r.project) === canonical(project));
+  const oldBare = parseFlowFile(JSON.stringify({ ir: 2, name: "farm_loop", workflow: null, main: [] }), "x");
+  assert.ok(!oldBare.ok && /OLD format/.test(oldBare.errors[0]));
+  const oldFile = parseFlowFile(JSON.stringify({ format: "poring-lab-flow", version: 1, name: "x", flow: { ir: 2 } }), "x");
+  assert.ok(!oldFile.ok && /OLD format/.test(oldFile.errors[0]));
 });
 
 test("the python field is IGNORED on load: never read, never trusted", () => {
-  const flow = fixture("farm_loop");
-  const data = JSON.parse(serializeFlowFile(parts(flow)));
+  const project = xmasProject();
+  const data = JSON.parse(serializeFlowFile(parts(project)));
   for (const python of [12345, { evil: true }, ["import os", "os.system('rm -rf /')"], "x".repeat(50_000), null]) {
     const r = parseFlowFile(JSON.stringify({ ...data, python }), "x");
     assert.ok(r.ok, String(python));
     if (r.ok) {
-      assert.equal(canonical(r.flow), canonical(flow));
+      assert.equal(canonical(r.project), canonical(project));
       assert.ok(!("python" in r));
     }
   }
-  const without = { ...data };
-  delete without.python;
-  assert.ok(parseFlowFile(JSON.stringify(without), "x").ok);
 });
 
 test("a newer version is refused with a plain message; a damaged version too", () => {
-  const data = JSON.parse(serializeFlowFile(parts(fixture("farm_loop"))));
-  const newer = parseFlowFile(JSON.stringify({ ...data, version: 2 }), "x");
+  const data = JSON.parse(serializeFlowFile(parts(xmasProject())));
+  const newer = parseFlowFile(JSON.stringify({ ...data, version: 3 }), "x");
   assert.ok(!newer.ok);
   if (!newer.ok) assert.equal(newer.errors[0], "this flow was saved by a newer poring-lab: pull the update, then open it again");
   for (const version of [0, -1, 1.5, "1", null, undefined]) {
@@ -108,24 +105,21 @@ test("a newer version is refused with a plain message; a damaged version too", (
   }
 });
 
-test("hostile files are refused with a message before anything changes: size, depth, shape, the IR", () => {
-  const data = JSON.parse(serializeFlowFile(parts(fixture("farm_loop"))));
+test("hostile files are refused with a message before anything changes: size, depth, shape, the project", () => {
+  const data = JSON.parse(serializeFlowFile(parts(xmasProject())));
   const big = JSON.stringify({ ...data, python: ["x".repeat(FLOW_FILE_MAX_BYTES)] });
   const cases: [string, RegExp][] = [
     [big, /bytes; a flow file is at most 2000000/],
     ["[".repeat(300) + "]".repeat(300), /nested deeper/],
     ["{not json", /not JSON/],
     ["[1, 2]", /a JSON object/],
-    ['{"hello": 1}', /not a poring-lab flow/],
+    ['{"hello": 1}', /not a poring-lab project/],
     [JSON.stringify({ ...data, format: "matpilot-blocks" }), /not a poring-lab flow/],
     [JSON.stringify({ ...data, name: 7 }), /name: text/],
     [JSON.stringify({ ...data, savedBy: ["x"] }), /savedBy: text/],
-    [JSON.stringify({ ...data, flow: null }), /flow: missing/],
-    [JSON.stringify({ ...data, flow: [] }), /flow: missing/],
-    [JSON.stringify({ ...data, flow: { ...data.flow, ir: 3 } }), /flow: ir: IR version 3 is not supported/],
-    [JSON.stringify({ ...data, flow: { ...data.flow, main: [] } }), /flow: a flow has exactly one of main and workflow/],
-    // the IR inside keeps its own 1 MiB cap (importFlow), under the file's 2 MB
-    [JSON.stringify({ ...data, flow: { ...data.flow, description: "y".repeat((1 << 20) + 10) } }), /flow: the file is \d+ bytes; at most 1048576/],
+    [JSON.stringify({ ...data, project: null }), /project: missing/],
+    [JSON.stringify({ ...data, project: { ...data.project, version: 9 } }), /project: not a project of format 3/],
+    [JSON.stringify({ ...data, project: { ...data.project, nodes: [] } }), /project: nodes: at least one/],
   ];
   for (const [text, msg] of cases) {
     const r = parseFlowFile(text, "x");
@@ -135,7 +129,7 @@ test("hostile files are refused with a message before anything changes: size, de
 });
 
 test("saved-by and saved-at are cleaned: one short line, a time that parses", () => {
-  const data = JSON.parse(serializeFlowFile(parts(fixture("farm_loop"))));
+  const data = JSON.parse(serializeFlowFile(parts(xmasProject())));
   const r = parseFlowFile(JSON.stringify({ ...data, savedBy: "Ploy\n\u202eevil\u0000" + "z".repeat(100), savedAt: "yesterday" }), "x");
   assert.ok(r.ok);
   if (r.ok) {
@@ -199,7 +193,7 @@ function memoryStore(): StorageLike & { data: Map<string, string> } {
 }
 
 test("the file meta (its saved name, its GitHub file) is kept beside the flow it belongs to", () => {
-  const flow = fixture("farm_loop");
+  const flow = xmasProject();
   const store = memoryStore();
   assert.deepEqual(readFileMeta(store, flow), newFileMeta(flow));
   const link = { repository: "teacher-class/flows", path: "poring-lab/ฟาร์ม.flow.json", sha: "a".repeat(40) };

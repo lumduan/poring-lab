@@ -92,7 +92,7 @@ test("without the lists, or with a value not among them, the hunt stays a generi
 });
 
 test("dragged from the toolbox: the adopted base's rules, the catalogue's concept and timeout", () => {
-  const tb = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 }, walk_to: { concept: "nav.walk_to", timeout_s: 120 } }, "block", defaultFields(RULES), omitted(RULES));
+  const tb = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 }, walk_to: { concept: "nav.walk_to", timeout_s: 120 } }, { node: "map", main: true }, defaultFields(RULES), omitted(RULES));
   // the hunt block is Movement since the studio (2026-11-09: MatPilot's categories)
   const item = blockOf(categoryOf(tb, "Movement"), HUNT_TYPE);
   assert.ok(item);
@@ -109,7 +109,7 @@ test("dragged from the toolbox: the adopted base's rules, the catalogue's concep
   assert.ok(h.kind === "action" && h.block === "hunt" && h.concept === "combat.hunt" && h.timeout_s === 600);
   assert.deepEqual(Object.fromEntries(Object.entries(h.params).map(([k, e]) => [k, e.kind === "lit" ? e.value : null])), ADOPTED);
   // without the catalogue's toolbox lists the hunt is offered as a generic block
-  const plain = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 } }, "block");
+  const plain = toolbox({ hunt: { concept: "combat.hunt", timeout_s: 600 } }, { node: "map", main: true });
   assert.ok(blockOf(categoryOf(plain, "More skills"), "pl_action"));
 });
 

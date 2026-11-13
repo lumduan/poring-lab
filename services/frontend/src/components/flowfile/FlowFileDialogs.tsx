@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type FileMeta, fileShortcut } from "@/lib/flow/file";
-import type { Flow } from "@/lib/flow/ir";
+import type { Project } from "@/lib/flow/project";
 
 import GitHubSettingsDialog from "./GitHubSettingsDialog";
 import LoadDialog, { type Opened } from "./LoadDialog";
@@ -26,9 +26,9 @@ export type FlowFileDialogsProps = {
   readonly onClose: () => void;
   readonly meta: FileMeta;
   readonly onMeta: (meta: FileMeta) => void;
-  readonly getFlow: () => Flow;
-  readonly pythonCached: (flow: Flow) => string | null;
-  readonly pythonFor: (flow: Flow) => Promise<string>;
+  readonly getFlow: () => Project;
+  readonly pythonCached: (flow: Project) => string | null;
+  readonly pythonFor: (flow: Project) => Promise<string>;
   /** A flow that passed every check: the page replaces its flow as ONE undo step. */
   readonly onOpened: (o: Opened) => void;
 };

@@ -338,12 +338,12 @@ export function stmtAt(stmts: Stmt[], rest: string[]): { list: Stmt[]; index: nu
 
 /** A flow's run settings (ADR-0020 #10 / #17), checked before they reach the IR. `maxS` is the
  * CONFIGURED maximum run time (the Settings page), when known. */
-export function runSettings(
-  flow: Flow,
+export function runSettings<F extends { max_runtime_s: number; where_budget: number }>(
+  flow: F,
   maxRuntimeS: string,
   whereBudget: string,
   maxS: number | null,
-): { ok: true; flow: Flow } | { ok: false; error: string } {
+): { ok: true; flow: F } | { ok: false; error: string } {
   const cap = maxS ?? MAX_RUNTIME_CAP_S;
   if (!/^[0-9]{1,6}$/.test(maxRuntimeS.trim()) || Number(maxRuntimeS) < 1 || Number(maxRuntimeS) > cap) {
     return { ok: false, error: `max_runtime_s: whole seconds, 1..${cap}${maxS ? " (the configured maximum)" : ""}` };

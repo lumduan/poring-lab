@@ -13,15 +13,19 @@
 // it passes. `python` is never read: it is made again from the flow (a derived field in a file is
 // never trusted). The static data the page lints on (prefs KEYS.world: derived from rAthena and the
 // client) is never written into a file: it must never reach GitHub (CLAUDE.md rule 4).
-import type { Flow } from "./ir.ts";
+// 2026-11-13 (the project model, docs/planning/project-model.md): a file carries a PROJECT (version
+// 2); a version 1 file (an IR 2 flow) and a bare IR file are refused with words that say why (Batt:
+// "refactor fresh", nothing is converted).
 import { MAX_JSON_DEPTH } from "./ir.ts";
-import { importFlow, jsonDepth, sorted } from "./importer.ts";
+import { jsonDepth, sorted } from "./importer.ts";
+import type { Project } from "./project.ts";
+import { importProject } from "./projectfile.ts";
 import { KEYS, type StorageLike } from "./prefs.ts";
 import { parseRepository, repositoryLabel, safePath } from "../github/repository.ts";
 
 export const FLOW_FILE_FORMAT = "poring-lab-flow";
 /** The newest version this page reads and writes. */
-export const FLOW_FILE_VERSION = 1;
+export const FLOW_FILE_VERSION = 2;
 export const FLOW_FILE_EXTENSION = ".flow.json";
 /** A flow file is a few kilobytes; anything larger is refused before it is read. */
 export const FLOW_FILE_MAX_BYTES = 2_000_000;
@@ -142,9 +146,10 @@ export type FlowFileParts = {
   readonly savedBy: string;
   /** ISO 8601, or "" when unknown. */
   readonly savedAt: string;
-  /** The Python the flow engine made from the flow ("" when it was not reachable). */
+  /** The Python the flow engine made from the project, its files one after another ("" when it
+   * was not reachable). */
   readonly python: string;
-  readonly flow: Flow;
+  readonly project: Project;
 };
 
 const lines = (code: string): string[] => {
@@ -158,18 +163,18 @@ export function serializeFlowFile(p: FlowFileParts): string {
   const file = {
     format: FLOW_FILE_FORMAT,
     version: FLOW_FILE_VERSION,
-    name: cleanFlowName(p.name) || cleanFlowName(p.flow.name) || DEFAULT_FLOW_NAME,
+    name: cleanFlowName(p.name) || cleanFlowName(p.project.name) || DEFAULT_FLOW_NAME,
     savedBy: cleanSavedBy(p.savedBy),
     savedAt: p.savedAt,
     python: lines(p.python),
-    flow: sorted(p.flow),
+    project: sorted(p.project),
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
 
 // --- reading --------------------------------------------------------------------------------------------
 export type ParsedFlowFile =
-  | { readonly ok: true; readonly flow: Flow; readonly name: string; readonly savedBy: string; readonly savedAt: string; readonly bare: boolean }
+  | { readonly ok: true; readonly project: Project; readonly name: string; readonly savedBy: string; readonly savedAt: string; readonly bare: boolean }
   | { readonly ok: false; readonly errors: string[] };
 
 /**
@@ -190,30 +195,35 @@ export function parseFlowFile(text: string, fallbackName: string): ParsedFlowFil
   }
   if (!isObj(data)) return { ok: false, errors: ["this file is not a flow (a flow file is a JSON object)"] };
   const fallback = cleanFlowName(fallbackName);
+  const OLD = "this is a flow of the OLD format (before 2026-11-13): the pages now read projects (nodes and tabs), and old flows are not converted";
   if (!("format" in data)) {
-    if (!("ir" in data)) return { ok: false, errors: ["this file is not a poring-lab flow"] };
-    const r = importFlow(text); // a bare IR file, as Save wrote it before 2026-11-12
+    if ("ir" in data) return { ok: false, errors: [OLD] };
+    return { ok: false, errors: ["this file is not a poring-lab project"] };
+  }
+  if (data.format === "poring-lab.project") {
+    const r = importProject(text); // a bare project (the format-3 JSON itself)
     if (!r.ok) return r;
-    return { ok: true, flow: r.flow, name: fallback || cleanFlowName(r.flow.name) || DEFAULT_FLOW_NAME, savedBy: "", savedAt: "", bare: true };
+    return { ok: true, project: r.project, name: fallback || cleanFlowName(r.project.name) || DEFAULT_FLOW_NAME, savedBy: "", savedAt: "", bare: true };
   }
   if (data.format !== FLOW_FILE_FORMAT) return { ok: false, errors: ["this file is not a poring-lab flow"] };
   const v = data.version;
   if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return { ok: false, errors: ["version: a whole number from 1"] };
   if (v > FLOW_FILE_VERSION) return { ok: false, errors: ["this flow was saved by a newer poring-lab: pull the update, then open it again"] };
+  if (v < FLOW_FILE_VERSION || isObj(data.flow)) return { ok: false, errors: [OLD] };
   const errors: string[] = [];
   for (const k of ["name", "savedBy", "savedAt"] as const) {
     if (data[k] !== undefined && typeof data[k] !== "string") errors.push(`${k}: text`);
   }
-  if (!isObj(data.flow)) errors.push("flow: missing (a flow file carries its flow)");
+  if (!isObj(data.project)) errors.push("project: missing (a project file carries its project)");
   if (errors.length) return { ok: false, errors };
-  // `python` is not read: it is made again from the flow
-  const r = importFlow(JSON.stringify(data.flow));
-  if (!r.ok) return { ok: false, errors: r.errors.map((e) => `flow: ${e}`) };
+  // `python` is not read: it is made again from the project
+  const r = importProject(JSON.stringify(data.project));
+  if (!r.ok) return { ok: false, errors: r.errors.map((e) => `project: ${e}`) };
   const name = typeof data.name === "string" ? cleanFlowName(data.name) : "";
   return {
     ok: true,
-    flow: r.flow,
-    name: name || fallback || cleanFlowName(r.flow.name) || DEFAULT_FLOW_NAME,
+    project: r.project,
+    name: name || fallback || cleanFlowName(r.project.name) || DEFAULT_FLOW_NAME,
     savedBy: typeof data.savedBy === "string" ? cleanSavedBy(data.savedBy) : "",
     savedAt: savedAtOf(data.savedAt),
     bare: false,
@@ -234,7 +244,7 @@ export type FileMeta = { readonly name: string; readonly link: GitHubLink | null
 
 const SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
-export function newFileMeta(flow: Flow): FileMeta {
+export function newFileMeta(flow: { name: string }): FileMeta {
   return { name: cleanFlowName(flow.name) || DEFAULT_FLOW_NAME, link: null };
 }
 
@@ -247,7 +257,7 @@ function readLink(v: unknown): GitHubLink | null {
 
 /** This browser's meta for its last flow (both pages share it), checked like anything stored; a
  * meta written for another flow, or one that does not parse, gives the defaults. */
-export function readFileMeta(store: StorageLike | null, flow: Flow): FileMeta {
+export function readFileMeta(store: StorageLike | null, flow: { name: string }): FileMeta {
   try {
     const v: unknown = JSON.parse(store?.getItem(KEYS.file) ?? "null");
     if (!isObj(v) || v.flow !== flow.name || typeof v.name !== "string") return newFileMeta(flow);
@@ -258,7 +268,7 @@ export function readFileMeta(store: StorageLike | null, flow: Flow): FileMeta {
 }
 
 /** Store the meta beside the flow it belongs to (the flow's IR name tags it). */
-export function writeFileMeta(store: StorageLike | null, meta: FileMeta, flow: Flow): boolean {
+export function writeFileMeta(store: StorageLike | null, meta: FileMeta, flow: { name: string }): boolean {
   try {
     if (!store) return false;
     store.setItem(KEYS.file, JSON.stringify({ flow: flow.name, name: meta.name, link: meta.link }));

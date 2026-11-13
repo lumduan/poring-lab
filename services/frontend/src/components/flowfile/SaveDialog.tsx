@@ -12,7 +12,7 @@
 import { useState } from "react";
 
 import { cleanFlowName, DEFAULT_FLOW_NAME, downloadText, type FileMeta, FLOW_FILE_MAX_BYTES, flowFileName, NAME_MAX_CHARS, serializeFlowFile, utf8Bytes } from "@/lib/flow/file";
-import type { Flow } from "@/lib/flow/ir";
+import type { Project } from "@/lib/flow/project";
 import { describeGitHubError } from "@/lib/github/describe";
 import { commitMessage, nextFreeName, NOTE_MAX_CHARS } from "@/lib/github/flows";
 import { folderUrl, historyUrl, joinPath, repositoryLabel, type RepositoryName } from "@/lib/github/repository";
@@ -31,11 +31,11 @@ type SaveState =
 export type SaveDialogProps = {
   readonly github: GitHubApi;
   readonly meta: FileMeta;
-  readonly getFlow: () => Flow;
+  readonly getFlow: () => Project;
   /** The Python the flow engine made for this flow, when it is current (no request). */
-  readonly pythonCached: (flow: Flow) => string | null;
+  readonly pythonCached: (flow: Project) => string | null;
   /** The Python for this flow, asking the engine if need be ("" when it is not reachable). */
-  readonly pythonFor: (flow: Flow) => Promise<string>;
+  readonly pythonFor: (flow: Project) => Promise<string>;
   readonly onMeta: (meta: FileMeta) => void;
   readonly onClose: () => void;
   readonly onSetUpGitHub: () => void;
@@ -53,8 +53,8 @@ export default function SaveDialog({ github, meta, getFlow, pythonCached, python
   const busy = state.kind === "busy";
 
   /** The file's text, or null (and the reason shown) when it is too large to open again. */
-  const fileText = (flow: Flow, python: string, saveAs: string): string | null => {
-    const text = serializeFlowFile({ name: saveAs, savedBy: author, savedAt: new Date().toISOString(), python, flow });
+  const fileText = (flow: Project, python: string, saveAs: string): string | null => {
+    const text = serializeFlowFile({ name: saveAs, savedBy: author, savedAt: new Date().toISOString(), python, project: flow });
     const bytes = utf8Bytes(text);
     if (bytes <= FLOW_FILE_MAX_BYTES) return text;
     setState({ kind: "error", message: `This flow makes a file of ${bytes} bytes; Load opens at most ${FLOW_FILE_MAX_BYTES}. Split it into smaller flows.` });

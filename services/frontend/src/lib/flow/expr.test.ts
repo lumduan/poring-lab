@@ -63,12 +63,16 @@ test("the text form reads like the Python view", () => {
   assert.equal(exprText(parseExpr("1 + 2 * 3")), "1 + (2 * 3)");
 });
 
+test("positional inputs read as a FUNCTION's call (the project model): the block reader refuses one of a name that is no function", () => {
+  same(parseExpr("heal(2)"), { kind: "callv", proc: "heal", args: [{ kind: "lit", value: 2 }], kwargs: {} });
+  same(parseExpr("sees(mob(1))"), { kind: "callv", proc: "sees", args: [{ kind: "lit", value: { kind: "mob", id: 1 } }], kwargs: {} });
+});
+
 test("bad text is refused with a column, and nothing is ever evaluated", () => {
   const bad = [
     "",
     "hp_percent( < 50",
     "1 < 2 < 3",
-    "sees(mob(1))", // sensor arguments by name
     "cell(1, 2)",
     "[1, 2]", // a list holds references or variables
     "__import__('os')",

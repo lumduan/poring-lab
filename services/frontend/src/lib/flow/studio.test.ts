@@ -2,18 +2,15 @@
 // our mapping onto it, the per-browser preferences and their fallbacks, the problems wording, the
 // model blocks' menus, the block search, and the starter program.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { BLOCK_DEFS, categoryOf, toolbox, toolboxBlocks } from "./blockdefs.ts";
-import { fromWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
-import { canonical, type Flow } from "./ir.ts";
+
 import { classFor, classOptions, firstDetector, modelOptions, type Models, notAdopted } from "./models.ts";
 import { browserStorage, forget, KEYS, pythonDefault, readChoice, readText, savedFlowName, type StorageLike, writeChoice } from "./prefs.ts";
 import { matchEntries, normalise, searchFlyout, type SearchEntry } from "./search.ts";
-import { oneMapStarter, STARTER_WORLD, starterFlow } from "./starter.ts";
 import { BLOCK_STYLE, BLOCK_STYLES, CATEGORY_COLOURS, CATEGORY_STYLES, COMPONENT_STYLES, contrast, INJECT } from "./theme.ts";
-import { blockWords, hatTitle, lintErrors, looseText, statusText, tabOf } from "./words.ts";
+import { blockWords, hatTitle, lintErrors, looseText, statusText } from "./words.ts";
 
 // --- the theme -------------------------------------------------------------------------------------
 test("MatPilot's category colours, each >= 4.5:1 against white block text", () => {
@@ -47,17 +44,18 @@ test("every block type has a MatPilot style, as the brief maps them", () => {
 });
 
 test("the toolbox is in MatPilot's order, each category styled as MatPilot's", () => {
-  const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, talk_npc: { concept: "npc.talk", timeout_s: 60 }, sit: { concept: "char.sit", timeout_s: 5 } }, "block");
+  const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, talk_npc: { concept: "npc.talk", timeout_s: 60 }, sit: { concept: "char.sit", timeout_s: 5 } }, { node: "map", main: true });
   assert.deepEqual(tb.contents.map((c) => c.name), ["Search", "Movement", "Actions", "Control", "Conditions", "Sensors", "Operators", "Variables", "Functions", "Advanced"]);
   assert.equal(tb.contents[0].kind, "search");
   for (const c of tb.contents) assert.ok(CATEGORY_STYLES[c.categorystyle], c.name);
   const sensors = categoryOf(tb, "Sensors")!.contents.filter((i) => i.kind === "block").map((i) => (i as { type: string }).type);
   assert.deepEqual(sensors.slice(0, 2), ["pl_detect_sees", "pl_detect_count"]);
   assert.ok(categoryOf(tb, "More skills")!.contents.some((i) => i.kind === "block" && i.fields?.BLOCK === "sit"));
-  // exits only in a map block's toolbox
-  const exits = (s: "block" | "main") => toolboxBlocks(toolbox({}, s)).filter((e) => e.item.type.startsWith("pl_exit_")).length;
-  assert.equal(exits("block"), 4); // walk, NPC, the wing by a function (2026-11-13), the wing by an item
-  assert.equal(exits("main"), 0);
+  // exits only on a map node's tabs (the project model, 2026-11-13)
+  const exits = (node: "map" | "global" | "login") => toolboxBlocks(toolbox({}, { node, main: node !== "global" })).filter((e) => e.item.type.startsWith("pl_exit_")).length;
+  assert.equal(exits("map"), 4); // walk, NPC, the wing by a function, the wing by an item
+  assert.equal(exits("global"), 0);
+  assert.equal(exits("login"), 0);
 });
 
 // --- the preferences ----------------------------------------------------------------------------
@@ -129,14 +127,6 @@ test("the status sentence says what to do next, and never offers a live run", ()
   assert.match(statusText({ ...base, lintErrors: 1 }), /^Lint found 1 error:/);
   assert.match(statusText({ ...base, engine: "http_503" }), /not reachable \(http_503\)/);
   for (const s of [base, { ...base, mapTab: true }]) assert.doesNotMatch(statusText(s), /\brun the bot\b|live/i);
-  assert.equal(tabOf({ owner: "block:farm" }, false), "block:farm");
-  assert.equal(tabOf({ owner: "global" }, true), "events");
-  assert.equal(tabOf({ owner: "flow" }, true), "main");
-  // 2026-11-13: no Map tab; a flow-level finding goes to the START map's tab, a function's to the
-  // functions tab (its node path starts with the function's name)
-  assert.equal(tabOf({ owner: "flow" }, false, [], "town"), "block:town");
-  assert.equal(tabOf({ owner: "flow", path: "heal.0" }, false, ["heal"], "town"), "functions");
-  assert.equal(tabOf({ owner: "flow", path: "heal.0" }, true, ["heal"]), "functions");
   assert.deepEqual(lintErrors(null), []);
 });
 
@@ -184,35 +174,6 @@ test("the search finds blocks by their words, other words and their Python", () 
   const fly = searchFlyout("wa", entries);
   assert.deepEqual(fly.map((f) => f.kind === "label" ? `label:${f.text}` : f.type), ["label:Control", "pl_wait", "label:Movement", "pl_walk_to"]);
   assert.equal(searchFlyout("", entries)[0].kind, "label");
-});
-
-// --- the starter -------------------------------------------------------------------------------------
-test("the starters are their committed canonical fixtures, and every tab round-trips", () => {
-  const load = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8")) as Flow;
-  // the FIRST SCREEN (2026-11-09 pm): two map blocks, so the studio opens on the Map tab
-  const two = starterFlow();
-  assert.equal(canonical(two), canonical(load("starter")));
-  assert.deepEqual(two.workflow?.blocks.map((b) => b.name), ["town", "field"]);
-  assert.equal(two.workflow?.start_block, "town");
-  assert.equal(STARTER_WORLD, "sample"); // the sample's synthetic sheets
-  const exits = two.workflow!.blocks.flatMap((b) => b.main.filter((st) => st.kind === "take_exit").map((st) => st.kind === "take_exit" && `${b.name}->${st.exit.kind}->${st.exit.to_block}`));
-  assert.deepEqual(exits, ["town->npc_warp->field", "field->item_warp->town"]);
-  const one = oneMapStarter();
-  assert.equal(canonical(one), canonical(load("starter_one_map")));
-  assert.equal(one.workflow, null);
-  for (const [flow, scopes] of [
-    [two, [{ kind: "block", name: "town" }, { kind: "block", name: "field" }, { kind: "global" }, { kind: "functions" }]],
-    [one, [{ kind: "main" }, { kind: "global" }, { kind: "functions" }]],
-  ] as const) {
-    for (const scope of scopes) {
-      const ws = JSON.parse(JSON.stringify(toWorkspace(flow, scope))) as Workspace;
-      const back = fromWorkspace(flow, scope, ws);
-      assert.ok(back.ok && canonical(back.flow) === canonical(flow), `${flow.name} ${JSON.stringify(scope)}`);
-    }
-  }
-  // the town's save point shows as its sentence block (Actions)
-  const town = toWorkspace(two, { kind: "block", name: "town" }).blocks.blocks[0].inputs?.DO?.block;
-  assert.equal(town?.type, "pl_set_save_point");
 });
 
 // 2026-11-13 (Batt: "on /flows I don't see this flow's name"): the flows row names the studio's flow
