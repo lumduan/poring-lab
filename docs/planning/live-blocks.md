@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet. Stage 3 (the Knife swap, the respawn, the weight home and the way home as the box's functions and event at the runner's moments): BUILT 2026-11-14 (feat/stage3, offline tests only; section 3.3); its live A/B (the stage-2 box vs the stage-3 box) pre-registered, NOT run yet; the Knife's open question is Batt's (3.3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Stage 2: merge feat/stage2, deploy (backend, Run helper), then the A/B of section 3.2 (scripts/stage2_ab.py run; its bar pre-registered there) -- the parent runs it. Then stage 3 (the Knife swap as two functions, the respawn, the weight home)."
+next_action: "Stage 2's A/B (3.2, scripts/stage2_ab.py) first. Then merge feat/stage3, deploy (backend, Run helper), and the A/B of section 3.3 (scripts/stage3_ab.py run; its bar pre-registered there) -- the parent runs it. Batt answers the Knife question (3.3: the strike between F4 and F5, or not)."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -48,7 +48,7 @@ owner: Batt
 |---|---|---|
 | 1 | The ONE-BOX project (START > xmas_dun02). The LIVE BLOCK PLAYER: press key, wait, wait until (HP, weight, dead, the map's name: pixels), if / while / repeat, functions with inputs, variables, events, stop, the item warp by a function (its arrival read on the minimap). The hunt core as ONE block played IN-PROCESS (the runner's loop as a library with a tick hook: one process, one input writer). Run on /flows and on /maps (from START, box by box). | offline: fakes prove the input it sends; live: Batt's OK, she placed on xmas_dun02 by a person |
 | 2 | SURVIVAL out of the runner into the box's EVENTS (functions with a trigger, section 2a): heal (F1 at HP < 30 %), the Fly Wing (F8 on a boss or HP < 25 %), stock out, the dead jump, the Garm Baby, an unread position. The runner's own handler is switched off for each one the box plays (its flags exist: `flow_config.py`); the event plays through the tick hook. ➡️ BUILT 2026-11-14 for heal and the Fly Wing (section 3.2; the switch is a new run() argument, not a flag); stock out, the dead jump, the Garm Baby and an unread position stay the runner's (a later stage) | live A/B against the monolithic runner: deaths, potions, flies, kills/h (➡️ pre-registered in 3.2) |
-| 3 | The Knife swap as two FUNCTIONS of presses and a wait (section 2a), the respawn, the weight home, the end | live A/B: steals, swaps, respawn, home |
+| 3 | The Knife swap as two FUNCTIONS of presses and a wait (section 2a), the respawn, the weight home, the end. ➡️ BUILT 2026-11-14 (section 3.3): the runner keeps WHEN, the box's functions say WHAT at its moments (knife_on / knife_back, the way home, the death dialog's two clicks: the new block click_at) and the weight home is a box event; the Knife's open question (the strike between F4 and F5, or not) is Batt's, both written | live A/B: steals, swaps, respawn, home (➡️ the stage-2 box vs the stage-3 box, pre-registered in 3.3) |
 | 4+ | The CORE as PRIMITIVE blocks + ONE FUNCTION PER MONSTER (attack_myst_case, attack_cookie, ...; section 2a), and use_model (the trained data) | live A/B each: kills/h, loot/h, zeny/h, deaths (Batt's own run is the bar) |
 
 ## 2a. Batt's shape for stages 2-4 (2026-11-13 ~22:0x, Thai, translated)
@@ -335,6 +335,172 @@ noise.
 **Not yet (stage 3)**: the Knife swap as two functions (F4, wait 100 ms, F5 and back), the respawn,
 the weight home, the end; stock out, the dead jump, the Garm Baby, an unread position as the box's
 events; the built-ins' bodies (respawn, escape, /where) live; `sees_boss()` outside a hunt core.
+➡️ The first four BUILT 2026-11-14 (section 3.3); the rest is still not built (a later stage).
+
+### 3.3 ➡️ Stage 3 BUILT 2026-11-14 (feat/stage3; offline only, NOT run live)
+
+Batt's words: "The Knife swap (Damascus): a function: press F4, wait 100 ms, press F5; the other
+way back to the Knife: the same swapped" (section 2a); "make respawn a function block, in case
+another server's menu differs; make everything editable in blocks, don't hard-code" (2026-11-13);
+"if the weight is over 50 %, use a Butterfly Wing to go back to town" (dungeon@9.41). The runner
+keeps deciding WHEN; the box decides WHAT is pressed at each of the runner's moments. The one box
+(`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; 0 lint errors, run allowed,
+the same four warnings as stage 2's box) has five tabs now, its Python view:
+
+    # tab main (the same shape: the save point, the hunt core, stop)
+    dungeon_hunt(heal=heal, fly=fly_wing, knife_on=knife_on, knife_back=knife_back, home=fly_home,
+                 respawn=respawn_button, respawn_confirm=respawn_ok)
+    # tab keys: every key a function (the item on each slot)
+    heal F1, fly_wing F8, butterfly_wing F9, wield_knife F4, wield_damascus F5
+    # tab survival: stage 2's drink and fly_away, and the weight home
+    @on(weight_percent() >= 50, priority=UPKEEP, max_per_run=1)
+    def bag_full():
+        stop("home")
+    # tab knife: the swap at the runner's two moments (the strike between: the runner's own today)
+    def knife_on():     wield_knife()        # before the steal strike
+    def knife_back():   wield_damascus()     # after the steal's cue, or its time box
+    # tab exits: the way home and the death dialog
+    def fly_home():        butterfly_wing()
+    def respawn_button():  click_at(645, 481)   # the death dialog's first button
+    def respawn_ok():      click_at(714, 405)   # this client's confirmation: OK
+
+The stage-2 box is kept, byte for byte, as `project_xmas_dun02_stage2.json` (the A/B's B2 arm and
+stage 2's own tests; `scripts/stage2_ab.py` plays it as its B arm).
+
+**Which role functions the box plays** (`poring_flow.functions.is_body`): a role function that is
+exactly ONE press_key statement is the stage 1-2 KEY shape -- the runner presses that key itself, as
+before (the same key at the same moment either way). Anything else -- a call of a key function,
+presses and waits -- is a BODY the hunt core CALLS at its moment. So the stage-2 box (every role one
+press_key) plays exactly as stage 2; the one box's knife tab calls the key functions, so the box
+plays its swap. A body's KEY for the Run settings and the start's slot check is its FIRST press
+(`functions.role_key`); `runner_keys` gives the same five keys for both boxes (the same runner
+argv).
+
+**How the hunt core calls them** (dungeon@9.50, `run(a, hook=..., session=..., box_plays=...,
+box_roles=...)`; `box_roles` = the called roles, each with where its body leaves her):
+
+| The runner's moment | Today's press (stays when the box does not play it) | With the box |
+|---|---|---|
+| the opener before the steal strike (`opener_seq`: a press, the read-back, at most one more press) | `opener_press`: the Knife's key | `box_call("knife_on")`: the body's steps; the runner's read-back and retry unchanged |
+| the swap back (`bare_equip_seq`: on the steal's cue, its time box, the HP floor, the fight's end, the run's end) | `press("equip")`: the dagger's key | `box_call("knife_back")` |
+| the escape's dagger before a Fly Wing (`BareCtl.escape`, "safety") | `press("equip")` | the SAME: the runner's own key, never delayed by a body's waits |
+| the end's way home (`player_home_end`: the count read, the stand-up, the load wait) | `press("home")` | `box_call("home")`; no Butterfly Wing after a death (the runner's rule) |
+| the death exit (`respawn_end`: the dialog read, the confirmation read, the load wait) | two-motion clicks at `--respawn-at` / `--respawn-confirm-at` | `box_call("respawn")`, then (the confirmation read) `box_call("respawn_confirm")`; no confirm function: none pressed |
+| the UI watch's weight read (every UI_EVERY_S, never in a fight) | `weight_home_due(--weight-home)` on the read | the box's weight events on THAT read (`HuntTick.weight_pct`); an unread weight drawn red keeps the runner's own rule |
+
+- The player plays a call's STEPS, prepared before any input (`live.hunt_plan` -> `HuntPlan.calls`:
+  presses, waits, clicks, flattened through calls with literal arguments) NOW, while the runner
+  waits: a press through the runner's own press of a key of that moment (the opener's three lines,
+  `press()`'s count, record and stock read), a click through the runner's own two-motion click
+  (dungeon@9.41's respawn press, now `two_motion_click`), a wait slept exactly. No engine tick sits
+  between two steps (the runner's timing: the default bodies are one press each, so the keys go out
+  exactly as today). A call plays during the runner's normal end too (the swap back, the way home)
+  after a box event ended the run.
+- The weight event: on the UI watch's read the player evaluates ONLY the events that read
+  `weight_percent()`, by the engine's rules; a due one plays at once (a pre-empt: its ReleaseAll,
+  then its `stop`); the runner ends its run there with the reason `weight_home: the box: ...`, its
+  NORMAL end (the swap back, the way home); the player then ends with `home` ("The flow stopped
+  after N min. The flow stopped at xmas_dun02/survival/bag_full.0 (stop "home"); the hunt core flew
+  her home."). On every other tick the weight events are not evaluated (and no insert plays on the
+  weight read).
+
+**What may be written** (`live.hunt_plan` / `live.problems`, the backend's `not_live`; each refused
+before any input, named):
+- knife_on / knife_back: presses of the two knife keys only (the role keys the slot check reads),
+  waits and calls; at most 4 presses and 1 s of waits in all (`functions.STEPS_MAX`,
+  `STEPS_WAIT_MAX_S`); knife_back ends on the dagger's key; no click, no loop, no if, no sensor
+  read, no exit, no stop.
+- home: ONE press of the home key (one Butterfly Wing: the runner's rule), waits around it.
+- respawn / respawn_confirm (optional roles; respawn_confirm only with respawn): click_at and waits
+  only, every point inside the game picture (1280 x 720).
+- click_at ANYWHERE else (a main, an event, a function no respawn role names, an exit's function, a
+  call of a clicking function) cannot play live ("a click anywhere else in the world is stage 4's").
+- an event that reads `weight_percent()` inside the hunt core reads only it, is a pre-empt, and its
+  body is ONE stop.
+- the runner refuses (`box_plays_refused`, before any input): the box's Knife swap without the
+  run's knife swap (--bare-steal + --steal-opener), the other Knife answer with --bare-ready, the
+  map's exits without --player-mode, the respawn with the run's respawn off, the way home without a
+  Butterfly Wing key, a play without its functions, a hook without `call`.
+The lint names the same shapes in the editor (`hunt_function`: a body's caps, its keys, the
+respawn functions' clicks).
+
+**THE OPEN QUESTION FOR BATT (not decided; both are written and both play):** "press F4, wait
+100 ms, press F5" -- is the strike between F4 and F5, or not?
+- (a) The strike between (BUILT as the one box's, and the runner's own today): knife_on = the
+  Knife's key before the steal strike, knife_back = the Damascus's key after the steal's cue. Batt's
+  own run (2026-11-12): the Damascus 1.36 s after the steal, 91 % stolen.
+- (b) No strike between: ONE function at the opener's moment, `def knife_on(): wield_knife();
+  wait(0.1); wield_damascus()`. The runner then reads back the dagger worn (`opener_seq(ends=
+  "armed")`): one swap per target, no bare phase, nothing to swap back after the steal, the strike
+  goes on with the Damascus (`bare_opener_through`). It needs the knife's bare_ready off (refused
+  otherwise: --bare-ready waits with the Knife on between targets).
+Batt picks; the box changes in its knife tab only.
+
+**What stays the runner's**: WHEN (every moment above, its read-backs, retries and waits); the
+escape's dagger before a Fly Wing; the HP-rate fly, the Garm Baby, stock out, the dead jump, an
+unread position, the NPC guard; the weight's red-line rule on an unread weight; the Butterfly Wing
+count read, the stand-up and the load wait; the death dialog's and the confirmation's reads.
+
+**The record**: the player's events.jsonl has each call (`call`: the role, the function, the
+runner's why, its node path, its steps, `in: "hunt"`) with its keys and clicks, the weight event
+fired (`event` bag_full with its reading), `hunt_end` with its `calls`. The runner's session:
+run_start `box_roles` / `box_version` 9.50, `box_call` (role, why, ms), `click` (the respawn's),
+`weight_home {by: "box"}`, `bare` opener events with `ends: "armed"` for answer (b), the counters
+box_call_<role>, click_box_<role>, bare_opener_through.
+
+**Versions**: `dungeon_hunt.VERSION` stays dungeon@8.7; `BOX_FUNCTIONS_VERSION` = `live.VERSION`
+= `flow_play.VERSION` = 9.50 (stage 2's `SURVIVAL_EVENTS_VERSION` 9.49 and stage 1's 9.48 stay);
+the runner export counts none of them (`runner_flow_export.NOT_FEATURES`).
+
+**Known differences to watch live** (B3 against B2):
+- the weight line: B3's event reads the ROUNDED percent (`weight_percent() >= 50`: a share from
+  0.495), the runner's own exit a share over 0.50: B3 may go home half a point earlier, at the same
+  moment (the UI watch);
+- the end's words: B3 ends `home` (the flow's stop), B2 `relocate_no_block` (she is on geffen);
+- a ReleaseAll at the weight event's pre-empt (nothing is held at the UI watch);
+- every Knife press, the way home and the respawn go through the hook: the same keys and clicks
+  at the same moments, one Python call and one record more each;
+- in a 20-min run with the bag cleared at 40 %, the weight line and a death may not happen: their
+  lines are then "not exercised" (reported, not judged).
+
+**THE A/B** (`scripts/stage3_ab.py`, a sibling sharing `stage2_ab.py`'s setup, detect server, run
+and runner score; run by the parent; NOT run yet):
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage3_ab.py plan  --label s3ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage3_ab.py run   --label s3ab-1114 --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage3_ab.py score --label s3ab-1114
+
+- The arms, both `flow_play.py play` with the same runner config (the same five keys, checked):
+  B2 = the stage-2 box, B3 = the one box. Order B2 B3, B3 B2, ... The setup before every run is
+  stage2_ab's (3.2). `plan` refuses before any input if either box cannot play, if B2 plays a
+  stage-3 function or if B3 plays none.
+- The score per run (the runner's own session, the same reader for both): stage 2's lines and the
+  Knife (openers, opener fails, swaps back, swap fails, steals = swaps back on the steal's cue, the
+  opener -> steal seconds, the swap-back read-back ms), the respawn (pressed, arrived), the way home
+  (pressed, arrived), the weight (the highest read, a weight-home end and by whom), the box's calls.
+
+**THE PRE-REGISTERED BAR** (written 2026-11-14, before any live run; `stage3_ab.BAR`): B3 must
+hold, against B2, over the valid pairs:
+
+| Line | B3 must hold |
+|---|---|
+| deaths | B3's total <= B2's total |
+| kills per hour | the mean paired difference (B3 - B2) >= -2 x its standard error, over at least 3 valid pairs |
+| steals per hour | the same rule (the swaps back on the steal's cue) |
+| failed Knife swaps (opener fails + swap-back fails) | B3's per hour <= B2's + 2 |
+| the respawn | every B3 death respawned and arrived (judged when B3 died) |
+| the way home | B3's share of non-death runs that pressed the Butterfly Wing and arrived >= B2's |
+| the weight home | every B3 run that read the bag at >= 50 % ended by the box's weight event, and no box weight event fired under 49.5 % (judged when a B3 run read >= 50 %) |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+Reported, not judged: loot steps per hour, the Knife openers per hour, the opener -> steal seconds
+and the swap-back ms (Batt's own: the Damascus 1.36 s after the steal), the box's calls. The
+verdict: FAIL when a judged line fails; INCONCLUSIVE when fewer than 3 pairs are valid (kills and
+steals unjudged) and nothing failed; else PASS, with the respawn / way-home / weight lines that had
+nothing to judge listed as not exercised. Why these margins: the default bodies press the same keys
+at the same moments, so the Knife lines are held to the pairs' own noise, and two failed swaps an
+hour is about one in a 30-min run; the exits are held to "every time".
 
 ## 4. Not in stage 1
 
@@ -356,7 +522,9 @@ In order; each step only after the one before is proven; nothing of the hunt pla
    (the runner vs the box), alternating runs, as many pairs as the night allows. ➡️ BUILT
    2026-11-14 (section 3.2, feat/stage2); its A/B pre-registered there, not run yet.
 4. Stage 3: the Knife swap as functions, the respawn, the weight home (the Knife question in the
-   report for Batt: the strike between F4 and F5, or not).
+   report for Batt: the strike between F4 and F5, or not). ➡️ BUILT 2026-11-14 (section 3.3,
+   feat/stage3); its A/B (the stage-2 box vs the stage-3 box) pre-registered there, not run yet;
+   the Knife question is open, both answers written.
 5. Stage 4 begins: use_model (the trained data block) and the first primitives (choose_target,
    strike, wait_kill, loot, explore) with one function per monster for the two most common
    monsters; offline first; live only once the A/B of stage 2 holds.

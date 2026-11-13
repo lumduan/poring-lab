@@ -389,6 +389,11 @@ Amendment B); a not-adopted model is never offered.
   Wing, Knife on, Knife back and **home**: the Butterfly Wing the runner flies home on when the bag
   is half full or on Stop) and a stop; its `keys` tab every key a function (heal F1, fly_wing F8,
   butterfly_wing F9, knife_on F4, knife_back F5). A project may start on any map node.
+  ➡️ **2026-11-14 (stage 3, [planning/live-blocks.md](planning/live-blocks.md) 3.3):** the runner
+  block has a last line "after a death: call ... then confirm: call ..." (the death dialog's two
+  clicks; empty: the runner's own points), and the one box has five tabs: keys (wield_knife F4,
+  wield_damascus F5 among them), survival (+ bag_full at 50 % weight), knife (the swap's two
+  functions), exits (the way home, the respawn's two `click_at` functions).
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the

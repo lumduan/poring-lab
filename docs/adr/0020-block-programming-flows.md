@@ -2412,7 +2412,9 @@ same studio as my_first_workflow, not a separate view." This amendment ADDS to s
 - **`dungeon_hunt(heal=, fly=, knife_on=, knife_back=)`**: the Rogue's runner
   (scripts/dungeon_hunt.py, as scripts/flow_run.py starts it) as ONE task-level block in a map
   node, like Amendment A's `hunt`. Each parameter (type `proc`) names a function of exactly one
-  press_key: the key the runner presses for that role; four different keys, none the wing's. It
+  press_key: the key the runner presses for that role; four different keys, none the wing's
+  (➡️ 2026-11-14, Amendment G: knife_on, knife_back and home may also be a BODY of presses and
+  waits the hunt core calls at its moment, its key the first press; two optional respawn roles). It
   runs only on a map that has a runner (`functions.RUNNER_MAPS`, today xmas_dun02: flow_run.py
   FLOWS, drift-tested). The flow engine only SIMULATES it, as `hunt`; the game is still played by
   the runner through the Run button (the note at the top).
@@ -2528,7 +2530,8 @@ section 3.2.
 - **The runner's own handler for each thing the box plays is switched off** for that run (the
   potion, the Fly Wing on HP, the boss fly); everything else stays the runner's (the HP-rate fly,
   the Garm Baby box, the stock, the dead jump, an unread position, the NPC guard, the knife, the
-  way home). After a box Fly Wing the runner runs its own after-the-fly steps.
+  way home). After a box Fly Wing the runner runs its own after-the-fly steps. ➡️ **2026-11-14
+  (Amendment G):** the knife, the way home, the respawn and the weight home are the box's too now.
 - **A correction to 2.5's insert rule (the simulator too):** an insert's pacing counts
   `cooldown_s` from the end of its last BODY RUN (`_paced`). Until 2026-11-13 the fire's own
   provisional end held every insert with a cooldown back by `cooldown_s` after its fire, and a
@@ -2537,3 +2540,53 @@ section 3.2.
   repeating insert's next fire) moved earlier.
 - **Proven by** a live A/B against the runner alone (`scripts/stage2_ab.py`), its bar
   pre-registered in live-blocks.md 3.2 before any live run.
+
+## Amendment G (2026-11-14, Batt decided stage 3): the box's FUNCTIONS at the runner's moments; click_at
+
+**Batt (2026-11-13, translated; [live-blocks.md](../planning/live-blocks.md) sections 2a and 3.3):**
+"The Knife swap (Damascus): a function: press F4, wait 100 ms, press F5; the other way back to the
+Knife: the same swapped"; "make respawn a function block, in case another server's menu differs;
+make everything editable in blocks, don't hard-code". This amendment ADDS to Amendments C, E and
+F (pointers there); nothing above is rewritten. What was built is live-blocks.md section 3.3.
+
+- **A role function may be a BODY** (`poring_flow.functions`: `BODY_ROLES`, `body_steps`,
+  `steps_problem`, `is_body`, `role_key`). dungeon_hunt's knife_on, knife_back and home may name a
+  function of presses and waits, through calls with literal arguments; its KEY (the Run settings,
+  the start's slot check) is its FIRST press. A body is anything but exactly one press_key
+  statement; one press_key alone stays the runner's own key (Amendment C's shape, unchanged). The
+  caps: at most 4 presses / clicks and 1 s of waits in all (the runner waits while it plays); the
+  way home presses exactly one key. heal and fly stay one key (the box presses them through its
+  events, Amendment F).
+- **Two optional roles, `respawn` and `respawn_confirm`** (type proc, group exits): the death
+  exit's two presses as functions of click_at and waits; respawn_confirm only with respawn (absent:
+  the server asks no confirmation). Without `respawn` the runner keeps its own points (the Run
+  settings' respawn_at / respawn_confirm_at).
+- **A new block `click_at(x, y)`** (concept ui.press_button; game-region pixels, 1280 x 720): one
+  click, two motions first (the client ignores a cold click), exactly the runner's respawn press.
+  `live: true`, but LIVE ONLY inside the functions a hunt core's respawn roles name, in its death
+  exit: anywhere else -- a main, an event, another function, an exit's function, a call of a
+  clicking function -- it is refused before any input (`live.click_problems`: "a click anywhere
+  else in the world is stage 4's question"). Its binding is the runner's own press
+  (`live.OWN_BINDING`). The simulator emits its two moves and the click at the point.
+- **The hunt core CALLS the box's function at its own moments** (`dungeon_hunt.run(...,
+  box_roles=...)`, dungeon@9.50; `flow_play.HuntHook.call`): the opener before the steal strike, the
+  swap back, the end's way home, the death dialog's button and its confirmation. The player plays
+  the function's STEPS (prepared before any input) at once, each press through the runner's own
+  press of a key of that moment, each click as its own two-motion click; the runner's read-backs,
+  retries, waits and reads stay its own. The escape's dagger before a Fly Wing stays the runner's
+  key (never delayed by a body's waits).
+- **The weight home is a box EVENT**: inside a hunt core an event that reads `weight_percent()`
+  (now a hunt sensor: the runner's weight read at its UI watch, `HuntTick.weight_pct`) reads only
+  it, is a pre-empt and its body is one `stop`; it is evaluated only on that read (never mid-fight,
+  the runner's own moment); its stop ends the run through the runner's normal end (its way home).
+  The runner's own exit on a read weight is off then; its red-line rule on an unread weight stays.
+- **PLAYS** (`live.PLAYS` == `dungeon_hunt.BOX_PLAYS`) gains knife, respawn, weight_home and
+  home_end; `box_plays_refused` refuses, before any input, the combinations that cannot work (the
+  box's Knife swap without the run's, the other Knife answer with --bare-ready, the exits without
+  --player-mode, the respawn with the run's respawn off, a play without its functions).
+- **The open question** ("F4, wait 100 ms, F5": the strike between, or not) is Batt's: both are
+  expressible -- two functions at the runner's two moments (the default, the runner's own) or one
+  function at the opener's moment ending on the dagger (the runner then reads her back armed:
+  `opener_seq(ends="armed")`, one swap a target, no bare phase).
+- **Proven by** a live A/B, the stage-2 box against the stage-3 box (`scripts/stage3_ab.py`), its
+  bar pre-registered in live-blocks.md 3.3 before any live run.

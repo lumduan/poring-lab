@@ -236,6 +236,12 @@ before); neither is the problem "no Butterfly Wing home". Run on a map node now 
 through the live block player ([live-blocks.md](live-blocks.md) section 3: `POST
 /flows/run/project`).
 
+➡️ **2026-11-14 (live-blocks.md stage 3, section 3.3; ADR-0020 Amendment G):** knife_on, knife_back
+and home may be a BODY of presses and waits (through calls with literal arguments) that the hunt
+core calls at its own moment; `runner_keys` then takes the body's FIRST press
+(`functions.role_key`; the browser's `roleKeyOf`). dungeon_hunt has two more optional roles,
+`respawn` and `respawn_confirm` (functions of the new block click_at): they give no key.
+
 ## 7. The ready-made project (the fixture both sides test)
 
 `services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json`: login (lab-rathena, lab_gm) ->
@@ -270,6 +276,13 @@ and `fly_away` (`sees_boss() or hp_percent() < 25`, a one-shot pre-empt re-armed
 Wing; calls fly_wing). They play INSIDE the hunt core, where the runner's own potion, Fly Wing on
 HP and boss fly are then off. Its description now names the tabs (the Python view holds a string
 of at most 200 characters). Still 0 lint errors.
+➡️ **2026-11-14 (live-blocks.md stage 3, section 3.3):** five tabs: `keys` (heal F1, fly_wing F8,
+butterfly_wing F9, wield_knife F4, wield_damascus F5), `survival` (drink, fly_away and `bag_full`:
+`weight_percent() >= 50`, one stop("home") a run), `knife` (knife_on calls wield_knife, knife_back
+calls wield_damascus: the swap at the runner's two moments), `exits` (fly_home calls
+butterfly_wing; respawn_button `click_at(645, 481)`, respawn_ok `click_at(714, 405)`); main's
+`dungeon_hunt(..., home=fly_home, respawn=respawn_button, respawn_confirm=respawn_ok)`. Still 0 lint
+errors. The stage-2 box is kept as `project_xmas_dun02_stage2.json` (stage 3's A/B).
 
 ## 8. Not converted (Batt's answer 6)
 
