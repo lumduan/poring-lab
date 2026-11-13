@@ -1,0 +1,189 @@
+/* The NODE INSPECTOR (NodeInspector.tsx; /maps and /flows): its own .ni-* classes only, on the
+   studio's tokens (studio.css), so it looks the same on both pages and styles nothing else. */
+.ni {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.ni-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+}
+.ni-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.ni-kind {
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.ni-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+.ni-section h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.ni-muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.ni-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+.ni-row label,
+.ni-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.ni input[type="text"],
+.ni input:not([type]),
+.ni select {
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.ni input[aria-invalid="true"] {
+  border-color: var(--error-text);
+}
+.ni-entries {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.ni-entries th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: left;
+}
+.ni-entries td {
+  padding: 0.1rem 0.25rem 0.1rem 0;
+}
+.ni-entries input {
+  width: 100%;
+}
+.ni-num {
+  width: 3.6rem;
+}
+.ni-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 0.85rem;
+}
+.ni-ok {
+  color: var(--ok-text);
+}
+.ni-tab {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+}
+.ni-tab-name {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.ni-names {
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ni-names li {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.ni-names li + li {
+  margin-top: 0.1rem;
+}
+.ni-mark {
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 0.25rem;
+  font-family: var(--font-sans, inherit);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.ni-mark[data-k="overrides"] {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.ni-mark[data-k="overridden"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.ni-mark[data-k="key"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.ni-mark[data-k="event"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.ni-findings {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+.ni-findings li[data-level="error"] {
+  color: var(--error-text);
+}
+.ni-findings li[data-level="warning"] {
+  color: var(--warn-text);
+}
+.ni-choice {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  font-size: 0.88rem;
+}
+.ni-choice[data-disabled="true"] {
+  opacity: 0.6;
+}
+.ni-choice input {
+  margin-top: 0.2rem;
+}
+.ni-why {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.ni-check {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text) !important;
+}

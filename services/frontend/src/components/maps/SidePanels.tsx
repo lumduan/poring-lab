@@ -1,8 +1,8 @@
 "use client";
 
-// The Maps page's side panels (docs/planning/world-map-flows.md): the session's two MOCK nodes
-// (Login, Choose character), "Run on the maps" (matpilot's MatRunPanel for maps: the run's form,
-// how it ended, its checks, and what happened, step by step) and the playback bar over the map view
+// The Maps page's side panels (docs/planning/world-map-flows.md): "Run on the maps" (matpilot's
+// MatRunPanel for maps: the run's form, how it ended, its checks, and what happened, step by step)
+// and the playback bar over the map view
 // (matpilot's PlaybackBar: play / pause, the time, the speed; plus a step back / forward and back to
 // the start). Text only: every value from the backend or the static data is rendered as React text.
 //
@@ -14,101 +14,13 @@ import { memo, useEffect, useRef } from "react";
 import { PauseIcon, PlayIcon, StepBackIcon, StepIcon, ToStartIcon } from "@/components/maps/icons";
 import type { Beat, Check, Labels, Timeline } from "@/lib/maps/play";
 import { beatText } from "@/lib/maps/play";
-import { ACCOUNTS, CHAR_NAME, MAX_SLOT, type Session, SERVERS, sessionSteps } from "@/lib/maps/session";
 
 const seconds = (s: number) => `${s.toFixed(1)} s`;
 
-export function LoginPanel({ session, onSession }: { session: Session; onSession: (s: Session) => void }) {
-  return (
-    <div className="stack">
-      <p className="notice notice-warn">
-        <strong>A mock.</strong> This page never logs in: Simulate plays these steps. The bot&apos;s real login is <code>scripts/ro_agent.py</code>{" "}
-        <code>to_char_select(agent, screen, which)</code>.
-      </p>
-      <fieldset className="mp-fieldset">
-        <legend>Server</legend>
-        {SERVERS.map((s) => (
-          <label key={s.id} className="mp-choice" data-disabled={!s.automatable}>
-            <input type="radio" name="server" value={s.id} checked={session.server === s.id} disabled={!s.automatable} onChange={() => onSession({ ...session, server: s.id })} />
-            <span>
-              <span className="strong">{s.title}</span> <span className="muted">· {s.status}</span>
-              <span className="mp-why">{s.automatable ? s.why : `Not selectable: ${s.why}.`}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <label className="mp-field">
-        <span className="strong">Account</span>
-        <select value={session.account} onChange={(e) => onSession({ ...session, account: e.target.value === "player" ? "player" : "gm" })} data-testid="login-account">
-          {ACCOUNTS.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.title} ({a.id})
-            </option>
-          ))}
-        </select>
-        <span className="muted">
-          The lab account from the server: its id and password are in {ACCOUNTS.find((a) => a.id === session.account)?.env}. This page never asks for them, stores them or
-          shows them.
-        </span>
-      </label>
-    </div>
-  );
-}
-
-export function CharacterPanel({ session, onSession }: { session: Session; onSession: (s: Session) => void }) {
-  const bad = session.char !== "" && !CHAR_NAME.test(session.char);
-  return (
-    <div className="stack">
-      <p className="notice notice-warn">
-        <strong>A mock.</strong> The bot&apos;s real step is <code>enter_game(agent, screen, which, char=None)</code>: Enter on the slot the client remembers, then it waits until the
-        database says the character is online and checks the chat window.
-      </p>
-      <label className="mp-field">
-        <span className="strong">Slot</span>
-        <select
-          value={session.slot === null ? "" : String(session.slot)}
-          onChange={(e) => onSession({ ...session, slot: e.target.value === "" ? null : Number(e.target.value) })}
-          data-testid="character-slot"
-        >
-          <option value="">the remembered slot (as the bot does)</option>
-          {Array.from({ length: MAX_SLOT }, (_, i) => i + 1).map((n) => (
-            <option key={n} value={n}>
-              slot {n} (selected first, by hand)
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="mp-field">
-        <span className="strong">Character name (optional)</span>
-        <input value={session.char} maxLength={23} placeholder="the account's own character (.env)" onChange={(e) => onSession({ ...session, char: e.target.value })} aria-invalid={bad} />
-        <span className={bad ? "err-text" : "muted"}>
-          {bad ? "Letters, digits, spaces and _ only, at most 23." : "The character that slot holds, when it is not the account's own: enter_game checks it is one of the account's characters."}
-        </span>
-      </label>
-    </div>
-  );
-}
-
-export function StartPanel({ session }: { session: Session }) {
-  const steps = sessionSteps(session);
-  return (
-    <div className="stack">
-      <p>START is where every run begins: the Ragnarok client open on its login screen. Then the two MOCK steps, then the first map.</p>
-      <ol className="mp-steps">
-        {steps.map((s) => (
-          <li key={s.node}>
-            <span className="muted">{seconds(s.t0)}</span> {s.text} <code>{s.call}</code>
-          </li>
-        ))}
-      </ol>
-      <p className="muted">The times are illustrative (a mock); the real login waits on the client and the database.</p>
-    </div>
-  );
-}
-
 // --- the run --------------------------------------------------------------------------------------
+/** `from`: the node Simulate starts at ("" = the project's start, its login node). */
 export type RunForm = { from: string; seed: string; horizon: string; deathAt: string };
-export const DEFAULT_RUN: RunForm = { from: "login", seed: "1", horizon: "120", deathAt: "" };
+export const DEFAULT_RUN: RunForm = { from: "", seed: "1", horizon: "120", deathAt: "" };
 
 const Checks = memo(function Checks({ checks }: { checks: Check[] }) {
   return (
@@ -146,7 +58,7 @@ const BeatList = memo(function BeatList({ tl, current, labels, onSeek }: { tl: T
             <span className="run-time">{seconds(b.t0)}</span>
             <span className="mp-mark" data-kind={b.kind} aria-hidden="true" />
             <span>
-              {b.node.startsWith("block:") ? <span className="muted">{b.node.slice(6)}: </span> : null}
+              {b.node && b.kind !== "session" ? <span className="muted">{b.node}: </span> : null}
               {beatText(b, labels)}
             </span>
           </button>
@@ -160,7 +72,7 @@ const BeatList = memo(function BeatList({ tl, current, labels, onSeek }: { tl: T
 export function RunPanel({
   form,
   setForm,
-  blocks,
+  starts,
   busy,
   onRun,
   result,
@@ -170,7 +82,7 @@ export function RunPanel({
 }: {
   form: RunForm;
   setForm: (f: RunForm) => void;
-  blocks: { name: string; map: string }[];
+  starts: { id: string; map: string }[]; // the map nodes Simulate may start at (else the login)
   busy: boolean;
   onRun: () => void;
   result: { tl: Timeline; checks: Check[]; endText: string; notes: string[]; old: boolean; stale: boolean } | null;
@@ -188,10 +100,10 @@ export function RunPanel({
         <label>
           start at
           <select className="field" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} data-testid="run-from">
-            <option value="login">START (login, character, then the first map)</option>
-            {blocks.map((b) => (
-              <option key={b.name} value={b.name}>
-                the map node {b.name} ({b.map})
+            <option value="">the login node (login, character, then the first map)</option>
+            {starts.map((b) => (
+              <option key={b.id} value={b.id}>
+                the map node {b.id} ({b.map})
               </option>
             ))}
           </select>
@@ -217,7 +129,7 @@ export function RunPanel({
       </div>
       {result && (
         <div className="run-result" style={result.stale ? { opacity: 0.65 } : undefined} data-testid="run-result">
-          {result.stale && <p className="notice notice-warn">The flow changed after this run: Simulate again to see the new one.</p>}
+          {result.stale && <p className="notice notice-warn">The project changed after this run: Simulate again to see the new one.</p>}
           {result.old && (
             <p className="notice notice-warn">
               The backend is older than this page: it placed no monsters and gave no step list. The playback shows each walked route once, in order. (A backend restart brings the

@@ -198,6 +198,20 @@ nodes is on (stop, the built-in; or a Butterfly Wing home). On /flows a strip un
 which map the tab's flow is bound to, how the character arrives and where each exit goes; a plain
 flow says it is bound to no map. Design: [planning/world-map-flows.md](planning/world-map-flows.md)
 section 14.
+➡️ **Since 2026-11-13 evening /maps edits a PROJECT** ([planning/project-model.md](planning/project-model.md)):
+its nodes are real project nodes, each with its own tabs on /flows (double-click a node, or "Open
+flow": `/flows?node=<id>`). **Login** (a server and a credential BY NAME, `lab_gm` / `lab_player`;
+never a secret) -> **Choose character** (the remembered slot, or one) -> the first map are the
+project's connections, drawn from a node's right port, dragged to another node or deleted (one
+path); map -> map links stay the exits. **Global** (dashed, "shared by every node", no ports) lists
+its tabs and names, which keys its functions press, and which map nodes override each name; its
+**World rules** write the save point as the start map's first step and the unknown-map rule as
+Global's event `unexpected_map` (the node "Any other map" is gone). The side panel's **Node** tab
+is the node inspector (id and rename, the map's entries / targets / zones, the login and character
+in words, tabs and names with the override marks, delete a map node); **Simulation** is the run.
+Load offers the two ready-made projects and "Open a project file…"; Save downloads
+`<name>.project.json`. An old flow in this browser is not converted (a notice says so). Login and
+Choose character are played as a mock timeline until the engine's trace names them.
 ➡️ **Since 2026-11-09 it is laid out as matpilot.org/blocks** (a "studio", Batt: learners who know
 matpilot are at home), in matpilot's colours, light or dark as the system is
 ([planning/flows-studio.md](planning/flows-studio.md)): a header (Blocks | Python, Load,

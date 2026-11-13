@@ -1,7 +1,7 @@
 "use client";
 
 // Loads the Maps page in the browser only (it reads window.location for the backend's address and
-// this browser's saved flow, as /flows does) and keeps its code out of every other page's bundle.
+// this browser's saved project, as /flows does) and keeps its code out of every other page's bundle.
 import dynamic from "next/dynamic";
 
 const MapsApp = dynamic(() => import("@/components/maps/MapsApp"), {

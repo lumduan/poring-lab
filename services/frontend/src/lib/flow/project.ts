@@ -421,3 +421,55 @@ export function sampleProject(): Project {
     ],
   };
 }
+
+// =================================================================================================
+// ADDED BY /maps (2026-11-13, the project-maps branch): pure helpers both pages may use. Nothing
+// above this line was changed.
+// =================================================================================================
+
+/** Every statement a node holds, with its ENGINE PATH "<node>/<tab>/<site>" (the lint findings'
+ * `path`, api.ts sitePath): a tab's main is the site root "main", a function its own name, nested
+ * bodies as IR 2's paths (`main.2.body.0`, `heal.0.then.1`). */
+export function* nodeSites(n: PNode): Generator<{ path: string; tab: string; site: string; stmt: Stmt }> {
+  function* walkSites(stmts: readonly Stmt[], prefix: string): Generator<[string, Stmt]> {
+    for (let i = 0; i < stmts.length; i++) {
+      const site = `${prefix}.${i}`;
+      const s = stmts[i];
+      yield [site, s];
+      if (s.kind === "if") {
+        yield* walkSites(s.then, `${site}.then`);
+        yield* walkSites(s.orelse, `${site}.orelse`);
+      } else if (s.kind === "while" || s.kind === "repeat" || s.kind === "for") yield* walkSites(s.body, `${site}.body`);
+    }
+  }
+  for (const t of n.tabs) {
+    if (t.main) for (const [site, stmt] of walkSites(t.main, MAIN_TAB)) yield { path: `${n.id}/${t.name}/${site}`, tab: t.name, site, stmt };
+    for (const d of t.defs) for (const [site, stmt] of walkSites(d.body, d.name)) yield { path: `${n.id}/${t.name}/${site}`, tab: t.name, site, stmt };
+  }
+}
+
+/** THE SESSION PATH (section 2, Edge): from `start` along `edges` -- login -> character -> the
+ * start map node and its entry. Each step is the node's ONE outgoing edge; `problems` says in words
+ * where the path breaks (Simulate starts at `start`, the save point rule reads the start map). */
+export type SessionPath = { login: LoginNode | null; character: CharacterNode | null; map: MapNode | null; entry: string | null; problems: string[] };
+export function sessionPath(p: Project): SessionPath {
+  const out: SessionPath = { login: null, character: null, map: null, entry: null, problems: [] };
+  const next = (id: string) => p.edges.filter((e) => e.from === id);
+  const start = nodeById(p, p.start);
+  if (!start) return { ...out, problems: [`the start ${p.start} is not a node`] };
+  if (start.kind !== "login") return { ...out, problems: [`the start ${p.start} is not a login node`] };
+  out.login = start;
+  const a = next(start.id);
+  if (a.length !== 1) return { ...out, problems: [a.length ? "the login node has more than one connection" : "the login node is not connected to a character node"] };
+  const ch = nodeById(p, a[0].to);
+  if (!ch || ch.kind !== "character") return { ...out, problems: ["the login node must connect to a character node"] };
+  out.character = ch;
+  const b = next(ch.id);
+  if (b.length !== 1) return { ...out, problems: [b.length ? "the character node has more than one connection" : "the character node is not connected to a map"] };
+  const m = nodeById(p, b[0].to);
+  if (!m || m.kind !== "map") return { ...out, problems: ["the character node must connect to a map node"] };
+  out.map = m;
+  out.entry = b[0].entry && m.entries.some((e) => e.name === b[0].entry) ? b[0].entry : null;
+  if (!out.entry) out.problems.push(b[0].entry ? `${m.id} has no entry ${b[0].entry}` : `the connection into ${m.id} names no entry`);
+  return out;
+}
