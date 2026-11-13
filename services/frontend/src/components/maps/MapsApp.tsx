@@ -690,7 +690,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
         </div>
         <div className="device-chip" data-level={total?.level}>
           <span className="device-label">lint</span>
-          <span className="device-value">{total ? total.text : "…"}</span>
+          <span className="device-value">{total ? `${total.text}${lint && lint.for !== key ? " (checking…)" : ""}` : "…"}</span>
         </div>
         {problems.length > 0 && (
           <div className="device-chip" data-level="warning" title={problems.join(" · ")}>
@@ -700,7 +700,7 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
       </div>
 
       <div className="maps-body" data-panel={panelOpen ? "open" : "closed"}>
-        <div className="maps-stage" data-mat={matOpen ? "open" : "closed"} data-graph={folded ? "folded" : "open"}>
+        <div className="maps-stage" data-mat={matOpen ? "open" : "closed"} data-graph={folded ? "folded" : "open"} data-bottom={matOpen ? bottom : "none"}>
           <section className="maps-graph" aria-label="The maps and how they link">
             <div className="maps-toolbar">
               {folded ? (

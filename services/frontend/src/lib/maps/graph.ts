@@ -40,6 +40,7 @@ const SESSION_AT: Record<(typeof SESSION_IDS)[number], XY> = {
 };
 const MAPS_X = 800; // the first column of map nodes
 const MAPS_Y = 70;
+const ROW_SCALE = 1.35; // round 6: the cards (a port per entry and exit) are taller than /flows' blocks
 
 export function mapsGraph(flow: Flow, session: Session, positions: Record<string, XY> = {}): MapsGraph {
   const g = toGraph(flow, {});
@@ -67,12 +68,10 @@ export function mapsGraph(flow: Flow, session: Session, positions: Record<string
   }
   const entriesOf = new Map(wf.blocks.map((b) => [blockId(b.name), b.entries.map((e) => e.name)]));
   const onto = (block: string, entry: string | undefined) => (entry !== undefined && entriesOf.get(block)?.includes(entry) ? entryHandle(entry) : "in");
-  let lowest = MAPS_Y;
   for (const n of g.nodes) {
     if (n.data.kind !== "map") continue;
     const a = auto[n.id] ?? { x: 40, y: 240 };
-    const p = at(n.id, { x: MAPS_X + (a.x - 40), y: MAPS_Y + (a.y - 240) });
-    lowest = Math.max(lowest, p.y);
+    const p = at(n.id, { x: MAPS_X + (a.x - 40), y: MAPS_Y + (a.y - 240) * ROW_SCALE });
     nodes.push({ id: n.id, type: "map", position: p, data: n.data });
   }
   edges.push({
@@ -92,7 +91,9 @@ export function mapsGraph(flow: Flow, session: Session, positions: Record<string
   const rules = readRules(flow);
   const sp = savePointBlock(flow);
   const saveBlock = rules.savePoint.cell ? (wf.blocks.find((b) => b.map.map === rules.savePoint.cell?.map)?.name ?? null) : sp.block;
-  nodes.push({ id: UNKNOWN_ID, type: "unknown", position: at(UNKNOWN_ID, { x: MAPS_X, y: lowest + 300 }), data: { kind: "unknown", rules, saveBlock, maps: wf.blocks.length } });
+  // under the session row, left of the maps: its edge to the save town runs through open space
+  // (round 6: under the maps its label sat under its own card)
+  nodes.push({ id: UNKNOWN_ID, type: "unknown", position: at(UNKNOWN_ID, { x: 150, y: MAPS_Y + 260 }), data: { kind: "unknown", rules, saveBlock, maps: wf.blocks.length } });
   if (rules.unknownMap === "wing" && saveBlock) {
     const target = blockId(saveBlock);
     edges.push({

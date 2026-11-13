@@ -100,7 +100,7 @@ export default function RulesPanel({ flow, onEdit }: { flow: Flow; onEdit: (r: E
           <div className="mp-rule-choice" role="radiogroup" aria-label="On an unknown map">
             <label>
               <input type="radio" name="unknown-map" checked={r.unknownMap === "stop"} onChange={() => onEdit(setUnknownMap(flow, "stop"))} data-testid="rules-unknown-stop" />
-              Stop the run there <span className="muted">(the built-in, always on)</span>
+              Stop the run there <span className="muted">(the built-in default)</span>
             </label>
             <label>
               <input type="radio" name="unknown-map" checked={r.unknownMap === "wing"} onChange={() => onEdit(setUnknownMap(flow, "wing"))} data-testid="rules-unknown-wing" />

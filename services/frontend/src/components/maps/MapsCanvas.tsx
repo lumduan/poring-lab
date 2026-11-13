@@ -15,6 +15,7 @@ import {
   Background,
   BaseEdge,
   type Connection,
+  ControlButton,
   Controls,
   type Edge,
   type EdgeChange,
@@ -29,6 +30,7 @@ import {
   Position,
   ReactFlow,
   type ReactFlowInstance,
+  useUpdateNodeInternals,
 } from "@xyflow/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -80,10 +82,10 @@ function LoginNode({ data }: NodeProps<MNode>) {
         <span className="mp-title">Login</span>
         <Mock />
       </div>
-      <div className="mp-line">
+      <div className="mp-line mp-wrap" title={`server: ${server ? server.title : s.server}`}>
         <span className="mp-key">server</span> {server ? server.title : s.server}
       </div>
-      <div className="mp-line">
+      <div className="mp-line mp-wrap" title={`account: ${acc?.title ?? s.account} (from the server)`}>
         <span className="mp-key">account</span> {acc?.title ?? s.account} (from the server)
       </div>
       <div className="mp-call">to_char_select(…, &quot;{s.account}&quot;)</div>
@@ -129,7 +131,28 @@ function flowSize(b: MapBlock): number {
   return n;
 }
 
-function MapNode({ data }: NodeProps<MNode>) {
+/** React Flow measures a node's handles once; when a node's ports change (an exit's path moves
+ * when a step is inserted above it, e.g. the stated save point; an exit is added), it must be told,
+ * or the edge on the new handle is dropped (matpilot's round-6 review: "Couldn't create edge for
+ * source handle id x:town.3", the town -> field link gone until a reload). */
+function useHandles(id: string, sig: string) {
+  const update = useUpdateNodeInternals();
+  useEffect(() => update(id), [id, sig, update]);
+}
+
+function portSig(data: MNode["data"]): string {
+  if (data.kind === "map") {
+    const b = data.block;
+    const l = blockLinks(data.flow, b.name);
+    const sp = savePointBlock(data.flow);
+    return [...(l?.entries.map((e) => `e:${e.name}`) ?? []), ...(l?.exits.map((x) => `x:${x.path}`) ?? []), sp.block && sp.block !== b.name ? "respawn" : ""].join("|");
+  }
+  if (data.kind === "unknown") return data.rules.unknownMap;
+  return "";
+}
+
+function MapNode({ id, data }: NodeProps<MNode>) {
+  useHandles(id, portSig(data));
   if (data.kind !== "map") return null;
   const b = data.block;
   const l = data.lint ? lintLine(lintOf(data.lint, `block:${b.name}`)) : null;
@@ -209,7 +232,8 @@ function MapNode({ data }: NodeProps<MNode>) {
 }
 
 /** "Any other map": the world rule for a map none of the map nodes is on (rules.ts). */
-function UnknownNode({ data }: NodeProps<MNode>) {
+function UnknownNode({ id, data }: NodeProps<MNode>) {
+  useHandles(id, portSig(data));
   if (data.kind !== "unknown") return null;
   const r = data.rules;
   const wing = r.unknownMap === "wing";
@@ -223,16 +247,15 @@ function UnknownNode({ data }: NodeProps<MNode>) {
         <span className="mp-title">Any other map</span>
         <span className="mp-rule-pill">world rule</span>
       </div>
-      <div className="mp-line mp-muted">a map none of the {data.maps} map node{data.maps === 1 ? " is" : "s are"} on, e.g. a teleport walked into by accident</div>
+      <div className="mp-line mp-muted mp-wrap">a map none of the {data.maps} map node{data.maps === 1 ? " is" : "s are"} on, e.g. a teleport walked into by accident</div>
       <div className="mp-line">
         {r.custom ? "this flow writes its own unexpected_map event (/flows, events)" : wing ? `→ a Butterfly Wing to the save point${save ? ` (${save})` : ": not known yet, state it"}` : "→ the run stops there (the built-in)"}
       </div>
-      {wing && (
-        <div className="mp-port" data-side="out" style={{ color: EXIT_COLOURS.item_warp }}>
-          <span className="mp-port-cap">wing home</span>
-          <Handle type="source" position={Position.Right} id="out" isConnectable={false} className="mp-dot" style={{ background: EXIT_COLOURS.item_warp }} />
-        </div>
-      )}
+      {/* always rendered (matpilot round 6): the edge and its handle must not appear in one render */}
+      <div className="mp-port" data-side="out" style={{ color: EXIT_COLOURS.item_warp, visibility: wing ? "visible" : "hidden" }}>
+        <span className="mp-port-cap">wing home</span>
+        <Handle type="source" position={Position.Right} id="out" isConnectable={false} className="mp-dot" style={{ background: EXIT_COLOURS.item_warp }} />
+      </div>
       <div className="mp-actions nodrag">
         <button type="button" className="mp-button" onClick={() => data.onRules()} title="The world rules: the save point and what happens on an unknown map">
           World rules
@@ -257,13 +280,15 @@ type SessionEdgeT = Edge<{ kind: "session"; label: string; active?: boolean }, "
 
 function SessionEdge(props: EdgeProps<SessionEdgeT>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
-  const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  // round 6: the label sits ABOVE the session row (the cards are wider than the gaps between
+  // them; matpilot: the labels read "en the cli", "cter s")
+  const [path, lx] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   return (
     <>
       <BaseEdge id={id} path={path} style={{ stroke: "var(--neutral-border)", strokeWidth: data?.active ? 3.5 : 2 }} />
       {data?.label && (
         <EdgeLabelRenderer>
-          <div className="nodrag nopan fc-edge-label" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly - 12}px)`, color: "var(--muted)" }}>
+          <div className="nodrag nopan fc-edge-label" style={{ transform: `translate(-50%, -100%) translate(${lx}px, ${Math.min(sourceY, targetY) - 64}px)`, color: "var(--muted)" }}>
             {data.label}
           </div>
         </EdgeLabelRenderer>
@@ -312,8 +337,13 @@ function MapsCanvas(p: MapsCanvasProps) {
     if (!inst || !el || !el.clientWidth || !el.clientHeight) return;
     const ns = inst.getNodes();
     if (!ns.length) return;
+    const box = { width: el.clientWidth, height: el.clientHeight };
     // round 4: null while folded (0 x 0) or for any non-finite number: nothing is animated then
-    const f = fitViewport({ width: el.clientWidth, height: el.clientHeight }, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
+    let f = fitViewport(box, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
+    // round 6 (matpilot: at 1440 x 900 one map in view, the session row took the first 650 px): a
+    // graph too big for the view opens on its MAPS (and Any other map), the session row to the left
+    const maps = ns.filter((n) => n.type === "map" || n.type === "unknown" || n.type === "main");
+    if (f?.overflow && maps.length && maps.length < ns.length) f = fitViewport(box, inst.getNodesBounds(maps), MIN_ZOOM, MAX_ZOOM, PAD) ?? f;
     if (!f) return;
     setOverflow(f.overflow);
     void inst.setViewport(f.viewport, { duration: 250 });
@@ -430,13 +460,22 @@ function MapsCanvas(p: MapsCanvasProps) {
         fitView
         fitViewOptions={{ padding: 0.12, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }}
         proOptions={{ hideAttribution: false }}
+        attributionPosition="top-left"
         minZoom={0.2}
       >
         <Background gap={24} />
-        <Controls showInteractive={false} />
+        {/* round 6: Fit is OURS (the maps first, never below MIN_ZOOM: text >= 11 px); React Flow's
+            own went to 0.41 (5 px text) */}
+        <Controls showInteractive={false} showFitView={false}>
+          <ControlButton onClick={fit} title="Fit the maps" aria-label="Fit the maps" data-testid="maps-fit">
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+          </ControlButton>
+        </Controls>
         {overflow && (
           <MiniMap
-            position="top-right"
+            position="bottom-right"
             pannable
             zoomable
             style={{ width: 120, height: 80 }}

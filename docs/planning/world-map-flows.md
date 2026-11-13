@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [flows-studio.md, mw2-block-editor.md, blocks-from-hunt-flow.md, ADR-0020, ADR-0006, ADR-0016, ../../THIRD_PARTY.md, ../../services/frontend/src/components/maps/MapsApp.tsx, ../../packages/poring_flow/src/poring_flow/trace.py]
-next_action: "Batt: try round 6 (section 14.7); matpilot: a headless review of /maps and /flows (section 14.6). Round 5 is committed (its section)."
+next_action: "Batt: try round 6 (section 14.7); matpilot: re-run steps a and c after the 14.8 fixes. Round 5 is committed (its section)."
 title: "The Maps page: the flow as a graph of maps, each map bound to its flow, and the bot walking them"
 date: 2026-11-10
 owner: Batt
@@ -432,3 +432,24 @@ example. The live bot on xmas_dun02 is not an IR flow: "How the bot hunts here" 
    Wing ...": an orange edge goes to town_1; the lint chip stays without an error.
 3. /flows ▸ the field tab: the strip says "bound to map field_1 · arrives ... · exits → town_1".
 
+
+### 14.8 matpilot's review of round 6 (received 2026-11-13 ~10:45) and what was done
+
+Headless Chrome, a fresh profile, 1440 x 900 and 390 x 844. 0 console errors on every step; 13
+warnings in step c; no NaN in any SVG attribute (round 4's bug is gone). Passed: the top bar, every
+port dot on its card's edge, all six edges on the right dots, the Links tables, the world-rules line,
+Simulate switching to Map view, the /flows strip (plain and bound), the renamed starter.
+
+| # | Finding (matpilot's rank) | Cause | Done |
+|---|---|---|---|
+| 1 | HIGH: after "State it" the town_1 -> field_1 edge vanished until a reload; 12x React Flow error#008 for `x:town.3`; 1x for `rule:unknown` | an exit's handle id is its statement PATH, so the stated save point (a step inserted above the exit) renamed `town.2` to `town.3`, and React Flow kept the node's old handle list | every map node tells React Flow when its ports change (`useUpdateNodeInternals`, keyed by its handle ids); "Any other map" always renders its `out` handle (hidden while the rule is off). Paths stay the IR's address (lint, removeExit, the trace use them): stable exit ids would be an IR change, not done |
+| 2 | HIGH: choosing the wing ended with 1 lint ERROR ("nothing sets it before maps.town.0") although the save point was stated | the BACKEND had not been restarted, so it ran the old linter; the new rule (14.4) was only in the host's code | guarded `restart:backend@30` 10:51 (ASSIST kept, interlock green); the backend's poring_flow has `_start_state`; the same flow (town_1 40 40 + the wing) lints 0 errors on that code. The chip now says "(checking…)" while a re-lint is pending (it showed the old result for ~3.5 s) |
+| 3 | HIGH: at 1440 x 900 the graph was a 191 px strip (Links 452 px, mostly empty); one map in view; START / Login / Character took ~650 px; Fit View went to 0.41 (5 px text); at 390 only START and Login showed | the graph kept round 2's cap (`clamp(11rem, 32 %, 20rem)`, sized for the map view) and the fit starts at START | with Links under it the graph takes the height (`flex: 1`, min 18rem) and Links at most 40 %; a graph too big for the view opens on its MAPS (and Any other map); Fit is ours (the maps, never below 0.85); on a phone the graph is 24rem and Links as tall as its rows |
+| 4 | MEDIUM: the minimap covered town_1's EXITS header; the attribution covered "+ Butterfly Wing" | top-right minimap, bottom-right attribution | minimap bottom-right, attribution top-left |
+| 5 | MEDIUM: session edge labels under the cards ("en the cli", "cter s"); the rule edge's label 100 % under Any other map | the cards are wider than the gaps; Any other map sat under the maps | session labels above the session row; Any other map under the session row, left of the maps (its edge runs through open space); map rows 1.35x apart (taller cards) |
+| 6 | LOW-MEDIUM: Login's server / account lines and Any other map's line cut off, no tooltip | one-line ellipsis | they wrap, and the Login lines have a title |
+| 7 | LOW: a grey dot at each card's top-left that does nothing | the head's `in` handle (for what names no entry) | invisible, no pointer events |
+| 8 | LOW: no gap between radio and words; "(the built-in, always on)" on a switchable radio | | a gap; "(the built-in default)" |
+
+Asked of matpilot: a re-run of steps a and c (the edge after State it, the lint chip after the wing,
+the graph's height and first view at both sizes).
