@@ -239,3 +239,11 @@ def test_the_setup_heals_her_when_her_hp_is_not_full_or_unread() -> None:
     assert ab.needs_heal(None) and ab.needs_heal(3) and ab.needs_heal(ab.HEAL_BELOW - 1)
     assert not ab.needs_heal(ab.HEAL_BELOW) and not ab.needs_heal(100)
     assert ab.guard_ok(["@warp xmas_dun02 7 21", "@heal", "@warp xmas_dun02 114 23", "@heal"])
+
+
+def test_a_clear_bag_rc_is_judged_by_the_series_own_read() -> None:
+    ok = {"weight": 0.284, "counts": {"F9": 0, "F8": 10, "F1": 10}}  # 2026-11-14 01:02's read
+    assert ab.clear_bag_refused(ok) is None
+    assert "0.45" in str(ab.clear_bag_refused({**ok, "weight": 0.45}))
+    assert ab.clear_bag_refused({**ok, "weight": None}) is not None
+    assert "F8" in str(ab.clear_bag_refused({**ok, "counts": {"F9": 0, "F8": None, "F1": 10}}))

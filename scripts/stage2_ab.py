@@ -176,6 +176,19 @@ def guard_ok(lines: Iterable[str], run: int = CHAT_GUARD_RUN) -> bool:
     return True
 
 
+def clear_bag_refused(got: Mapping[str, Any]) -> str | None:
+    """PURE: why the series cannot go on after a clear-bag that did not end rc 0, from its own
+    read (None: the bag reads cleared and every top-up count reads)."""
+    w = got.get("weight")
+    if not isinstance(w, (int, float)) or w >= CLEAR_AT:
+        return f"the bag reads {w} after it (at or over {CLEAR_AT}, or unread)"
+    counts = got.get("counts") or {}
+    missing = [k for _i, k, _f, _t in TOPUP if counts.get(k) is None]
+    if missing:
+        return f"the counts on {', '.join(missing)} did not read after it"
+    return None
+
+
 def needs_heal(hp: Any) -> bool:
     """PURE: the setup heals her when her HP percent reads under HEAL_BELOW, or does not read."""
     return not isinstance(hp, int) or hp < HEAL_BELOW
@@ -526,10 +539,24 @@ class Series:
             out_dir = self.dir / f"clear-bag-{r.label}"
             cb = self.sh([PY, "scripts/dungeon_hunt.py", "clear-bag", "--char", "rogue", "--tabs",
                           "etc,use", "--out", str(out_dir)], 900)  # fmt: skip
-            if cb.returncode != 0:
-                raise Stop(f"clear-bag rc {cb.returncode}: {cb.stdout.strip()[-200:]}")
             self.typed.append("(clear-bag's own lines)")  # its lines are not ours to count
             got = self.read()
+            if cb.returncode != 0:  # 2026-11-14 01:02: rc 1 on its own stock read-back (Fly
+                # Wings "0" after the add, while the hotbar read 10): the series judges by ITS
+                # read -- the weight cleared and the counts read -- and the run's start check
+                # refuses anything still wrong before any input
+                why_cb = clear_bag_refused(got)
+                self.log(f"{r.label}: clear-bag rc {cb.returncode} ({cb.stdout.strip()[-160:]}); "
+                         f"the series' read: {why_cb or 'cleared, counts read'}")  # fmt: skip
+                if why_cb:
+                    raise Stop(f"clear-bag rc {cb.returncode}: {why_cb}")
+        # healed BEFORE the warp: she never arrives on the map with a respawn's HP
+        if needs_heal(got.get("hp")):
+            self.gm("@heal")
+            time.sleep(1.5)
+            got = self.read()
+            if needs_heal(got.get("hp")):
+                raise Stop(f"after @heal her HP reads {got.get('hp')}, not {HEAL_BELOW} % or more")
         lines_ = warp_lines(2, dh_cells())
         other = lines_[1] if r.warp == lines_[0] else lines_[0]
         warp = pick_warp(r.warp, other, guard_history(read_guard_state()))
@@ -538,6 +565,7 @@ class Series:
         self.gm(warp)
         time.sleep(WARP_SETTLE_S)
         t0 = time.monotonic()
+        got = self.read()  # after the warp (the read before it may already say the map)
         while got.get("map") != MAP or got.get("counts") is None:
             if time.monotonic() - t0 > ARRIVE_S:
                 raise Stop(f"after {warp!r} the minimap reads {got.get('map')}, not {MAP}")
@@ -549,17 +577,11 @@ class Series:
         for ln in lines:
             self.gm(ln)
             time.sleep(0.8)
-        if needs_heal(got.get("hp")):
-            self.gm("@heal")
-            time.sleep(1.5)
-            got = self.read()
-            if needs_heal(got.get("hp")):
-                raise Stop(f"after @heal her HP reads {got.get('hp')}, not {HEAL_BELOW} % or more")
         cc = self.sh([PY, str(Path(__file__)), "close-chat"], 120)
         last = (cc.stdout.strip().splitlines() or ["{}"])[-1]
         if '"closed": true' not in last:
             raise Stop(f"the chat input did not read closed: {(cc.stderr or last)[-200:]}")
-        self.log(f"{r.label}: setup done ({r.warp}; {len(lines)} top-up line(s); chat closed)")
+        self.log(f"{r.label}: setup done ({warp}; {len(lines)} top-up line(s); chat closed)")
 
     def serve(self) -> None:
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", fr.WORKER],
