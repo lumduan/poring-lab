@@ -466,8 +466,10 @@ the series tool's own setup was fixed between series, never an arm.
 - d's pair 1 (d-r01A, d-r02B) is the first VALID pair. The box's `drink` fired live 6 times at
   HP 27-29 %, each one White Potion through the runner's own press (consumed: the next setup
   topped F1 up).
-- The Stormy Knight was seen in EVERY A and B run tonight that lasted (packets, job 1251); it
-  roams cells ~(126-188, 70-95), on the patrol route. On 2026-11-12's night: 0 deaths in 18 runs,
+- The Stormy Knight was seen in all 5 of tonight's series runs that lasted (packets, job 1251;
+  checked run by run), and in none of the 6 xmas_dun02 runs of 2026-11-13 before them (10:02 to
+  23:11); it roams cells ~(126-188, 70-95), on the patrol route; it hit her in b-r01A (2 hits)
+  and c-r01A (3 hits), both deaths. On 2026-11-12's night: 0 deaths in 18 runs,
   met 3 times. Its two-hit kill is faster than any Battle-Log guard (memory: the MVP schedule).
 
 **d-r03B: a CLIENT HP desync (unexplained, one run tonight).** From 1,065.7 s to the run's end
