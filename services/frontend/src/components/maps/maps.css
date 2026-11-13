@@ -691,17 +691,6 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
   font-size: 0.95rem;
 }
-.mp-node .fc-status,
-.mp-node .fc-run,
-.mp-node .fc-port {
-  font-size: 0.85rem;
-}
-.mp-node .fc-start {
-  font-size: 0.82rem; /* round 3: 13 px, 11 px at the fit's 0.85 */
-}
-.maps-graph .fc-edge-label {
-  font-size: 0.85rem;
-}
 .mp-node[data-selected="true"] {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
@@ -709,16 +698,6 @@
 .mp-node[data-active="true"] {
   border-color: var(--run-bg);
   box-shadow: 0 0 0 3px var(--run-bg), 0 0 18px var(--run-bg);
-}
-.mp-start {
-  min-width: 0;
-  padding: 0.45rem 0.9rem;
-  border-color: var(--run-bg);
-  border-radius: 999px;
-  background: var(--run-bg);
-  color: var(--run-text);
-  font-weight: 800;
-  letter-spacing: 0.04em;
 }
 .mp-session {
   border-style: dashed;
@@ -903,39 +882,6 @@
   border: 2px solid currentColor !important;
   background: var(--surface) !important;
 }
-.mp-unknown {
-  min-width: 300px;
-  max-width: 360px;
-  border: 2px dashed var(--neutral-border);
-}
-.mp-unknown[data-rule="wing"] {
-  border-color: #f5a623;
-}
-.mp-q {
-  display: inline-grid;
-  place-items: center;
-  width: 1.3rem;
-  height: 1.3rem;
-  border-radius: 999px;
-  background: var(--neutral-border);
-  color: var(--surface);
-  font-weight: 800;
-}
-.mp-unknown[data-rule="wing"] .mp-q {
-  background: #f5a623;
-}
-.mp-rule-pill {
-  padding: 0 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 0.3rem;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-.mp-unknown .mp-port {
-  margin-top: 0.2rem;
-  text-align: right;
-}
 .mp-chip {
   font: inherit;
   color: var(--text);
@@ -1021,5 +967,92 @@
   .mat-playback {
     gap: 0.25rem;
     padding: 0.25rem 0.4rem;
+  }
+}
+
+/* --- the project model (2026-11-13): the Global card, the badges, the lint and run lines ------ */
+.mp-status {
+  font-size: 0.85rem;
+}
+.mp-status[data-level="error"] {
+  color: var(--error-text);
+}
+.mp-status[data-level="warning"] {
+  color: var(--warn-text);
+}
+.mp-status[data-level="readiness"] {
+  color: var(--accent);
+}
+.mp-status[data-level="ok"] {
+  color: var(--ok-text);
+}
+.mp-run {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.mp-pill {
+  padding: 0 0.4rem;
+  border-radius: 0.3rem;
+  font-size: 0.82rem; /* 13 px, 11 px at the fit's 0.85 */
+  font-weight: 700;
+}
+.mp-pill-start {
+  background: var(--run-bg);
+  color: var(--run-text);
+}
+.mp-pill-shared {
+  border: 1px dashed #0f766e;
+  color: #0f766e;
+}
+.mp-edge-label {
+  position: absolute;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 600;
+  pointer-events: all;
+}
+/* Global: shared by every node, no ports; a dashed teal border says so */
+.mp-global {
+  min-width: 300px;
+  max-width: 380px;
+  border: 2px dashed #0f766e;
+}
+.mp-names {
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+.mp-names-tab {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.mp-name {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+}
+.mp-override {
+  color: var(--warn-text);
+  font-size: 0.86rem;
+}
+.mp-rule-line {
+  margin-top: 0.4rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+.studio-menu-note {
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.45rem;
+  font-size: 0.8rem;
+}
+@media (prefers-color-scheme: dark) {
+  .mp-pill-shared {
+    border-color: #5eead4;
+    color: #5eead4;
+  }
+  .mp-global {
+    border-color: #5eead4;
   }
 }

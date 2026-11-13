@@ -1,35 +1,35 @@
 "use client";
 
 // THE LINKS PANEL under the Maps graph (Batt 2026-11-13: "show which map links to which and how,
-// with the information below"): the selected map's entries (how the character arrives) and exits
-// (where each goes and how), or, with no map selected, every link of the flow. Clicking a map name
-// selects that node; "Open flow" opens the map's blocks on /flows. Read-only: links are drawn on
-// the graph or written in a map's flow.
-import { EXIT_COLOURS } from "@/components/flows/FlowCanvas";
-import type { Flow } from "@/lib/flow/ir";
-import { arrivalText, blockLinks, EXIT_WORDS, worldLinks } from "@/lib/maps/links";
-import { readRules } from "@/lib/maps/rules";
+// with the information below"): the selected map node's entries (how the character arrives) and
+// exits (where each goes and how, in which tab), or, with no map selected, every link of the
+// project. Clicking a map selects its node; "Open flow" opens the node's tabs on /flows. Read-only:
+// links are drawn on the graph or written in a map node's tabs.
+import { EXIT_COLOURS } from "@/components/maps/colours";
+import { mapNodes, nodeById, type Project, sessionPath } from "@/lib/flow/project";
+import { arrivalText, EXIT_WORDS, nodeLinks, worldLinks } from "@/lib/maps/links";
+import { readRules, wingText } from "@/lib/maps/rules";
 
-type P = { flow: Flow; block: string | null; onSelect: (id: string) => void; onOpenFlow: (block: string) => void; onRules: () => void };
+type P = { project: Project; node: string | null; onSelect: (id: string) => void; onOpen: (id: string) => void; onRules: () => void };
 
 const cell = (c: { x: number; y: number } | null) => (c ? `(${c.x}, ${c.y})` : "anywhere");
 
-function MapButton({ flow, block, onSelect }: { flow: Flow; block: string; onSelect: P["onSelect"] }) {
-  const b = flow.workflow?.blocks.find((x) => x.name === block);
-  if (!b) return <span className="mp-rule-warn">{block} (not in this flow)</span>;
+function MapButton({ project, node, onSelect }: { project: Project; node: string; onSelect: P["onSelect"] }) {
+  const n = nodeById(project, node);
+  if (!n) return <span className="mp-rule-warn">{node} (not in this project)</span>;
   return (
-    <button type="button" className="mp-link-map" onClick={() => onSelect(`block:${b.name}`)} title={`Select ${b.map.map} (${b.name})`}>
-      {b.map.map}
+    <button type="button" className="mp-link-map" onClick={() => onSelect(n.id)} title={`Select ${n.id}`}>
+      {n.kind === "map" ? n.map.map : n.id}
     </button>
   );
 }
 
-function RulesLine({ flow, onRules }: { flow: Flow; onRules: () => void }) {
-  const r = readRules(flow);
+function RulesLine({ project, onRules }: { project: Project; onRules: () => void }) {
+  const r = readRules(project);
   return (
     <p className="mp-links-rules" data-testid="links-rules">
       <strong>World rules:</strong> save point {r.savePoint.cell ? `${r.savePoint.cell.map} ${cell(r.savePoint.cell)}` : "not stated"} · any other map →{" "}
-      {r.custom ? "the flow's own event" : r.unknownMap === "wing" ? "a Butterfly Wing home" : "the run stops"}{" "}
+      {r.custom ? "Global's own event" : r.unknownMap === "wing" ? `${wingText(r.wingItem)} home` : "the run stops"}{" "}
       <button type="button" className="mp-button" onClick={onRules} data-testid="links-rules-edit">
         Change
       </button>
@@ -37,26 +37,15 @@ function RulesLine({ flow, onRules }: { flow: Flow; onRules: () => void }) {
   );
 }
 
-export default function LinksPanel({ flow, block, onSelect, onOpenFlow, onRules }: P) {
-  const wf = flow.workflow;
-  if (!wf) {
-    return (
-      <div className="mp-links" data-testid="links-panel">
-        <p>
-          <strong>This flow is not bound to any map.</strong> A plain flow is ONE program (the tab “main” on /flows) that runs wherever the character stands, so there are no maps to link. Load ▸
-          Starter: two maps, or One map from the lab data, to place maps.
-        </p>
-      </div>
-    );
-  }
-  const links = block ? blockLinks(flow, block) : null;
+export default function LinksPanel({ project, node, onSelect, onOpen, onRules }: P) {
+  const links = node ? nodeLinks(project, node) : null;
   if (links) {
     return (
       <div className="mp-links" data-testid="links-panel">
         <div className="mp-links-head">
           <strong>{links.map}</strong>
-          <span className="muted">its flow: the map node {links.block}</span>
-          <button type="button" className="mp-button" onClick={() => onOpenFlow(links.block)} data-testid="links-open-flow">
+          <span className="muted">the map node {links.node}</span>
+          <button type="button" className="mp-button" onClick={() => onOpen(links.node)} data-testid="links-open-flow">
             Open flow ↗
           </button>
         </div>
@@ -82,9 +71,9 @@ export default function LinksPanel({ flow, block, onSelect, onOpenFlow, onRules 
                     {e.arrivals.length === 0 && <span className="muted">nothing arrives here yet</span>}
                     {e.arrivals.map((a, i) => (
                       <span key={i} className="mp-arrival" style={{ color: a.kind === "start" ? undefined : EXIT_COLOURS[a.kind] }}>
-                        {a.from ? (
+                        {a.from && a.kind !== "start" ? (
                           <>
-                            {arrivalText({ ...a, fromMap: null })} from <MapButton flow={flow} block={a.from} onSelect={onSelect} />
+                            {arrivalText({ ...a, fromMap: null })} from <MapButton project={project} node={a.from} onSelect={onSelect} />
                           </>
                         ) : (
                           arrivalText(a)
@@ -116,18 +105,19 @@ export default function LinksPanel({ flow, block, onSelect, onOpenFlow, onRules 
               {links.exits.map((x) => (
                 <tr key={x.path} style={{ color: EXIT_COLOURS[x.kind] }}>
                   <td>
-                    <MapButton flow={flow} block={x.toBlock} onSelect={onSelect} />
+                    <MapButton project={project} node={x.toNode} onSelect={onSelect} />
                   </td>
                   <td>
                     {EXIT_WORDS[x.kind]}: {x.how}
+                    {x.tab !== "main" ? <span className="muted"> (tab {x.tab})</span> : null}
                   </td>
                   <td>{x.entryKnown ? x.toEntry : <span className="mp-rule-warn">{x.toEntry} (no such entry)</span>}</td>
                 </tr>
               ))}
-              {links.respawnTo && links.respawnTo.block !== links.block && (
+              {links.respawnTo && links.respawnTo.node !== links.node && (
                 <tr style={{ color: EXIT_COLOURS.death_respawn }}>
                   <td>
-                    <MapButton flow={flow} block={links.respawnTo.block} onSelect={onSelect} />
+                    <MapButton project={project} node={links.respawnTo.node} onSelect={onSelect} />
                   </td>
                   <td>a death respawns at the save point (derived)</td>
                   <td>the save point</td>
@@ -136,21 +126,30 @@ export default function LinksPanel({ flow, block, onSelect, onOpenFlow, onRules 
             </tbody>
           </table>
         </div>
-        <RulesLine flow={flow} onRules={onRules} />
+        <RulesLine project={project} onRules={onRules} />
       </div>
     );
   }
-  const all = worldLinks(flow);
+  const all = worldLinks(project);
+  const sp = sessionPath(project);
+  const count = mapNodes(project).length;
   return (
     <div className="mp-links" data-testid="links-panel">
       <div className="mp-links-head">
         <strong>Every link</strong>
         <span className="muted">
-          {wf.blocks.length} map{wf.blocks.length === 1 ? "" : "s"}, {all.length} exit{all.length === 1 ? "" : "s"} · the run starts on <MapButton flow={flow} block={wf.start_block} onSelect={onSelect} /> ({wf.start_entry}) ·
-          click a map for its entries and exits
+          {count} map{count === 1 ? "" : "s"}, {all.length} exit{all.length === 1 ? "" : "s"} ·{" "}
+          {sp.map ? (
+            <>
+              the session enters on <MapButton project={project} node={sp.map.id} onSelect={onSelect} /> ({sp.entry ?? "no entry"})
+            </>
+          ) : (
+            "the session path does not reach a map yet"
+          )}{" "}
+          · click a map for its entries and exits
         </span>
       </div>
-      <table className="mp-links-table" aria-label="Every link of the flow">
+      <table className="mp-links-table" aria-label="Every link of the project">
         <thead>
           <tr>
             <th>from</th>
@@ -170,20 +169,21 @@ export default function LinksPanel({ flow, block, onSelect, onOpenFlow, onRules 
           {all.map((x) => (
             <tr key={x.path} style={{ color: EXIT_COLOURS[x.kind] }}>
               <td>
-                <MapButton flow={flow} block={x.fromBlock} onSelect={onSelect} />
+                <MapButton project={project} node={x.fromNode} onSelect={onSelect} />
               </td>
               <td>
-                <MapButton flow={flow} block={x.toBlock} onSelect={onSelect} />
+                <MapButton project={project} node={x.toNode} onSelect={onSelect} />
               </td>
               <td>
                 {EXIT_WORDS[x.kind]}: {x.how}
+                {x.tab !== "main" ? <span className="muted"> (tab {x.tab})</span> : null}
               </td>
               <td>{x.toEntry}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <RulesLine flow={flow} onRules={onRules} />
+      <RulesLine project={project} onRules={onRules} />
     </div>
   );
 }
