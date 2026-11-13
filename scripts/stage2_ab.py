@@ -90,6 +90,10 @@ WARP_SETTLE_S, ARRIVE_S = 4.0, 20.0
 # the lab GM's @heal (group 20; demo_aftercare's), when her HP reads under HEAL_BELOW or unread
 HEAL_BELOW = 95
 SHORT_RUN_S = 60.0  # a run that ends sooner never played: the series stops (a person first)
+# 2026-11-14 01:06: she died with the Knife worn (the opener on for a steal): F4 read EMPTY and F5
+# showed the Damascus in the bag, and the next run's start check refused (rightly). The setup
+# puts the dagger back on with the run's own dagger key, once, in town, then reads the slots again
+KNIFE_KEY, DAGGER_KEY = "F4", "F5"
 START_GRACE_S, STOP_GRACE_S = 180.0, 90.0
 SERVE_EXTRA_S = 600
 CHAT_GUARD_RUN = 3  # chat_guard refuses the 3rd identical line in a row
@@ -186,6 +190,20 @@ def clear_bag_refused(got: Mapping[str, Any]) -> str | None:
     missing = [k for _i, k, _f, _t in TOPUP if counts.get(k) is None]
     if missing:
         return f"the counts on {', '.join(missing)} did not read after it"
+    return None
+
+
+def knife_worn(knife: Mapping[str, Any] | None) -> bool | None:
+    """PURE: True when the slots read "the Knife worn" (its key EMPTY, the dagger's key showing
+    an icon: the dagger in the bag), False when they read as a run's start wants them (the Knife
+    in the bag, the dagger's key empty: worn), None when they read neither (a person first)."""
+    if not isinstance(knife, Mapping):
+        return None
+    k, d = knife.get("knife_empty"), knife.get("dagger_empty")
+    if k is True and d is False:
+        return True
+    if k is False and d is True:
+        return False
     return None
 
 
@@ -550,6 +568,18 @@ class Series:
                          f"the series' read: {why_cb or 'cleared, counts read'}")  # fmt: skip
                 if why_cb:
                     raise Stop(f"clear-bag rc {cb.returncode}: {why_cb}")
+        worn = knife_worn(got.get("knife"))
+        if worn:  # the dagger back on (the run's own dagger key), once, then read again
+            self.log(
+                f"{r.label}: the Knife reads worn (F4 empty, F5 shows the dagger): {DAGGER_KEY}"
+            )
+            kb_ = self.sh([PY, str(Path(__file__)), "dagger-on"], 120)
+            got = self.read()
+            if knife_worn(got.get("knife")) is not False:
+                raise Stop(f"after {DAGGER_KEY} the slots read {got.get('knife')} "
+                           f"({(kb_.stdout or kb_.stderr).strip()[-160:]})")  # fmt: skip
+        elif worn is None:
+            raise Stop(f"the Knife / dagger slots read neither way: {got.get('knife')}")
         # healed BEFORE the warp: she never arrives on the map with a respawn's HP
         if needs_heal(got.get("hp")):
             self.gm("@heal")
@@ -689,6 +719,7 @@ class Series:
 def read_now() -> dict[str, Any]:
     """Pixels only (no Agent): the map's name (the minimap), the weight share, the chat input,
     the hotbar counts on the box's keys, her HP percent (dungeon_hunt's own readers)."""
+    import bare_steal as bs
     import dungeon_hunt as dh
     import gm_state
     import hotbar_count as hb
@@ -706,14 +737,30 @@ def read_now() -> dict[str, Any]:
         tpl = hb.load()
         g = hb.gray(img)
         counts = {k: hb.read_count(g, dh.hotbar_slot(k), tpl) for _i, k, _f, _t in TOPUP}
+        knife = {
+            "knife_empty": bool(bs.slot_empty(g, dh.hotbar_slot(KNIFE_KEY))),
+            "dagger_empty": bool(bs.slot_empty(g, dh.hotbar_slot(DAGGER_KEY))),
+        }
         z = np.load(hpp.GLYPHS)
         glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
         return {"map": None if refs is None else mi.read_map(img, refs).map,
-                "hp": hpp.read(img, glyphs),
+                "hp": hpp.read(img, glyphs), "knife": knife,
                 "weight": None if share is None else round(share, 4),
                 "chat_open": bool(r.is_state(screen, "chat_open")), "counts": counts}  # fmt: skip
     finally:
         screen.close()
+
+
+def dagger_on() -> dict[str, Any]:
+    """The dagger back on: ONE paced tap of the run's own dagger key (the runner's swap back),
+    after the human-activity wait, through the mux like every input (no chat, no typing)."""
+    import ro_agent as r
+
+    with r.session("rule:stage2-ab-dagger") as (agent, screen):
+        agent.wait_for_human()
+        agent.keys(DAGGER_KEY)
+        time.sleep(1.0)
+        return {"pressed": DAGGER_KEY}
 
 
 def close_chat() -> dict[str, Any]:
@@ -747,12 +794,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--json", action="store_true")
     sub.add_parser("read")
     sub.add_parser("close-chat")
+    sub.add_parser("dagger-on")
     a = ap.parse_args(argv)
     if a.cmd == "read":
         print(json.dumps(read_now()))
         return 0
     if a.cmd == "close-chat":
         print(json.dumps(close_chat()))
+        return 0
+    if a.cmd == "dagger-on":
+        print(json.dumps(dagger_on()))
         return 0
     folder = SCRATCH / a.label
     if a.cmd == "score":

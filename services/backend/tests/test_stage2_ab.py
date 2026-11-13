@@ -247,3 +247,13 @@ def test_a_clear_bag_rc_is_judged_by_the_series_own_read() -> None:
     assert "0.45" in str(ab.clear_bag_refused({**ok, "weight": 0.45}))
     assert ab.clear_bag_refused({**ok, "weight": None}) is not None
     assert "F8" in str(ab.clear_bag_refused({**ok, "counts": {"F9": 0, "F8": None, "F1": 10}}))
+
+
+def test_the_setup_reads_a_worn_knife_and_puts_the_dagger_back_on() -> None:
+    # 2026-11-14 01:06: she died with the Knife worn; the next start check refused (rightly)
+    assert ab.knife_worn({"knife_empty": True, "dagger_empty": False}) is True
+    assert ab.knife_worn({"knife_empty": False, "dagger_empty": True}) is False
+    assert ab.knife_worn({"knife_empty": True, "dagger_empty": True}) is None
+    assert ab.knife_worn({"knife_empty": False, "dagger_empty": False}) is None
+    assert ab.knife_worn(None) is None
+    assert (ab.KNIFE_KEY, ab.DAGGER_KEY) == ("F4", "F5")  # the Run config's knife / dagger keys
