@@ -34,11 +34,11 @@ import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/f
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
-import { boxedSettings, boxTabNote } from "@/lib/flow/box";
+import { boxedSettings, boxTabNote, boxTabShort } from "@/lib/flow/box";
 import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
-import { ACTIVE } from "@/lib/flow/liverun";
+import { ACTIVE, busyWhy } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
@@ -67,7 +67,7 @@ import {
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { LIVE_FLOWS, runnerForMap } from "@/lib/flow/runners";
 import { lintLine } from "@/lib/flow/status";
-import { lintErrors, looseText, PROBLEM_HEADS, statusText } from "@/lib/flow/words";
+import { lintErrors, looseText, PROBLEM_HEADS, statusText, stripFoldLine, type StripPart } from "@/lib/flow/words";
 import { backendHttpBase } from "@/lib/ws";
 
 
@@ -159,6 +159,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const [notice, setNotice] = useState<Notice | null>(start.note ? { text: start.note, tone: "warn", undo: null } : null);
   const [menu, setMenu] = useState(false);
   const [more, setMore] = useState(false);
+  // matpilot round 18 #4: on a phone the strip under the tabs folds to one line (CSS: the toggle
+  // shows and the parts hide only under 48rem); folded until a person opens it
+  const [stripOpen, setStripOpen] = useState(false);
   const [dialog, setDialog] = useState<FileDialog>(null);
   const store = useMemo(() => browserStorage(), []);
   const [view, setViewState] = useState<(typeof VIEWS)[number]>(() => readChoice(store, KEYS.view, VIEWS, "blocks"));
@@ -533,7 +536,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const getProject = useCallback(() => projectRef.current, []);
   const issues = editor.issues;
   const loose = editor.loose;
-  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false, run: runnable });
+  const status = statusText({ loading: !editor.ready && !editor.failed, engine: engineErr, issues: issues.length, lintErrors: errors.length, simulating: simBusy, mapTab: false, run: runnable, busy: busyWhy(live.st) }); // round 18 (b)
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
@@ -630,7 +633,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   // runner's (and of Before Run's settings) it replaces: the engine's takeovers (POST /flows/lint)
   const box = lintStale ? null : (lintDoc?.box?.[node.id] ?? null);
   const boxNote = tab ? boxTabNote(box, node.id, tab.name, cdoc, runValues) : null;
-  if (boxNote) strip.push({ head: "IN A RUN", text: boxNote });
+  if (boxNote && tab) strip.push({ head: "IN A RUN", text: boxNote, short: boxTabShort(box, node.id, tab.name) });
 
   return (
     <main className="studio" data-view={view} data-testid="flows-app">
@@ -830,7 +833,12 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
               </button>
             </div>
           </div>
-          <div className="map-binding" data-kind={node.kind} data-testid="node-strip">
+          <div className="map-binding" data-kind={node.kind} data-open={stripOpen ? "true" : "false"} data-testid="node-strip">
+            {strip.length > 0 && (
+              <button type="button" className="map-binding-toggle" aria-expanded={stripOpen} onClick={() => setStripOpen(!stripOpen)} title={stripOpen ? "Fold the strip to one line" : "Show the whole strip"} data-testid="node-strip-toggle">
+                {stripOpen ? "Fold ▾" : `${stripFoldLine(strip)} ▸`}
+              </button>
+            )}
             {strip.map((s) => (
               <span key={s.head} className="map-binding-part">
                 <span className="map-binding-head">{s.head}</span> {s.text}
@@ -1062,8 +1070,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
 }
 
 /** The strip under the tabs: what this node is, what it imports, what it replaces of Global's. */
-function nodeStrip(p: Project, n: PNode, overrides: string[]): { head: string; text: string }[] {
-  const out: { head: string; text: string }[] = [];
+function nodeStrip(p: Project, n: PNode, overrides: string[]): StripPart[] {
+  const out: StripPart[] = [];
   const g = globalOf(p);
   if (n.kind === "global") {
     const names = [...namesOf(n).entries()];

@@ -177,8 +177,10 @@ export function lintGroups(lint: LintDoc | null, p: Project): LintGroup[] {
 export function runnerSpecies(n: MapNode, lint: LintDoc | null): { words: string; lines: string[] } | null {
   if (runnerBlockOn(n) === null) return null;
   const model = modelOn(n);
-  const by = model ? `the model its main names (use_model("${model}"))` : "the map's own detector (no use_model)";
-  const words = `This node runs the runner (hunt with the runner): in the game it strikes every monster ${by} boxes as one it strikes, whatever these two lists say. A monster's function (attack_<monster>, the monsters tab) chooses HOW that monster is attacked, never WHETHER; the model's other classes and the monsters it has no class for (the map's boss) are never struck: the runner's own rules. The lists are the simulator's.${lint ? " The lint names each spawn:" : ""}`;
+  // matpilot round 18 #2: "every monster ${by} boxes as one it strikes" was hard to parse
+  const by = model ? `the model named in main (use_model("${model}"))` : "the map's own detector (main names no use_model)";
+  const its = model ? "the model's" : "the detector's";
+  const words = `This node runs the runner (hunt with the runner): in the game it strikes every monster that ${by} boxes as a target, whatever these two lists say. A monster's function (attack_<monster>, the monsters tab) chooses HOW that monster is attacked, never WHETHER; ${its} other classes and the monsters it has no class for (the map's boss) are never struck: the runner's own rules. The lists are the simulator's.${lint ? " The lint names each spawn:" : ""}`;
   const lines = lint ? nodeLint(lint, n.id).findings.filter((f) => f.rule === "species_lists").map((f) => f.text || f.message) : [];
   return { words, lines };
 }

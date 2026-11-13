@@ -67,6 +67,12 @@ const run: ArgDef = { type: "field_label", name: "RUN", text: "", class: "pl-run
 const eye: ArgDef = { type: "field_image", src: EYE_ICON, width: 16, height: 16, alt: "detector" };
 const label = (name: string): ArgDef => ({ type: "field_label_serializable", name, text: "" });
 const text = (name: string, value = ""): ArgDef => ({ type: "field_input", name, text: value });
+
+/** The engine's defaults for a trigger's runaway guard and insert failure limit (poring_flow's
+ * Trigger / Handler: max_fires_per_10min 10, max_insert_fails 3; pinned against the Python by
+ * project.test.ts). An event block shows them as defaults (an empty field), not as values. */
+export const DEFAULT_MAX_10 = 10;
+export const DEFAULT_FAILS = 3;
 const num = (name: string, value = 0): ArgDef => ({ type: "field_number", name, value });
 const opts = (vals: readonly string[]): [string, string][] => vals.map((v) => [v, v]);
 // Blockly only lets a MUTATOR add saveExtraState / loadExtraState (a plain extension that does is
@@ -426,17 +432,20 @@ export const BLOCK_DEFS: BlockDef[] = [
     args4: [{ type: "input_value", name: "REARM" }],
     message5: "pause %1 s after each run · at most %2 a run",
     args5: [{ type: "field_number", name: "COOLDOWN", value: 0, min: 0, max: 3600 }, text("MAX_RUN")],
-    message6: "at most %1 a minute · %2 in 10 minutes",
-    args6: [text("MAX_MIN"), { type: "field_number", name: "MAX_10", value: 10, min: 1, max: 100, precision: 1 }],
-    message7: "an insert that fails %1 times: escalate to %2",
-    args7: [{ type: "field_number", name: "FAILS", value: 3, min: 1, max: 10, precision: 1 }, text("ESCALATE")],
+    // matpilot round 18 #3: the runaway guard and the insert failure limit are the ENGINE's defaults
+    // when nobody set them (poring_flow's Trigger: 10 and 3; the Python view omits them then), so
+    // their fields stay EMPTY for a default and the row names the default; a number = one a person set
+    message6: `at most %1 a minute · %2 per 10 min (default ${DEFAULT_MAX_10})`,
+    args6: [text("MAX_MIN"), text("MAX_10")],
+    message7: `%1 failed inserts (default ${DEFAULT_FAILS}): escalate to %2`,
+    args7: [text("FAILS"), text("ESCALATE")],
     message8: "do %1",
     args8: [{ type: "input_statement", name: "DO" }],
     inputsInline: false,
     style: st("pl_event"),
     mutator: STATE,
     tooltip:
-      "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order); pause = cooldown_s (seconds after the body's last run), at most … a run / a minute (empty: no limit), … in 10 minutes (the runaway guard), and an insert's failures before it escalates to a function (empty: none)",
+      `when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order); pause = cooldown_s (seconds after the body's last run), at most … a run / a minute (empty: no limit), … per 10 minutes (the runaway guard; empty: the engine's default, ${DEFAULT_MAX_10}), an insert's failures before it escalates (empty: the default, ${DEFAULT_FAILS}) and the function it escalates to (empty: none)`,
   },
   {
     type: "pl_extend",

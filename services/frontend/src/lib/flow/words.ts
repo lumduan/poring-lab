@@ -104,7 +104,35 @@ export type StatusIn = {
   mapTab: boolean;
   /** the node's Run plays in the game (a map node with the runner's block) */
   run?: boolean;
+  /** matpilot round 18 (b): why Run waits (liverun busyWhy: another input writer of ours plays);
+   * null / absent: it does not */
+  busy?: string | null;
 };
+
+/** One part of the strip under /flows' tabs (what the node is, what it imports, IN A RUN ...);
+ * ``short``: its words folded to one line on a phone. */
+export type StripPart = { head: string; text: string; short?: string | null };
+
+/** PURE (matpilot round 18 #4): the strip's ONE line while folded on a phone (the whole strip was
+ * 366 x 204 px at 390 wide, halving the blocks' area): the IN A RUN part's short words when the
+ * tab has one ("IN A RUN: 3 events replace the runner's own"), else the first part; with how many
+ * parts the unfolded strip shows. */
+export function stripFoldLine(parts: StripPart[]): string {
+  const run = parts.find((p) => p.head === "IN A RUN");
+  const first = run ?? parts[0];
+  if (!first) return "";
+  const more = parts.length - 1;
+  return `${first.head}: ${first.short ?? first.text}${more > 0 ? ` · ${more} more` : ""}`;
+}
+
+/** /maps' ready sentence (its START map node's id, else null: login is not live yet), and while
+ * another input writer of ours plays (``busy``, liverun busyWhy) the reason Run is off instead of
+ * "Run (amber) plays it" (matpilot round 18 (b)). */
+export function mapsReadyText(start: string | null, busy: string | null | undefined): string {
+  if (!start) return "Ready. Press Simulate to watch the bot log in, choose its character and walk its maps (simulated: nothing runs in the game).";
+  if (busy) return `Ready to simulate: Simulate plays the project from START (${start}) without the game. Run is off now: ${busy}.`;
+  return `Ready. Simulate plays the project from START (${start}) without the game; Run (amber) plays it in the game from there, box by box.`;
+}
 
 /** The footer's sentence: what to do next, never a live run. */
 export function statusText(s: StatusIn): string {
@@ -115,6 +143,8 @@ export function statusText(s: StatusIn): string {
   if (s.lintErrors) return `Lint found ${s.lintErrors} error${s.lintErrors > 1 ? "s" : ""}: press Simulate to see what would happen; a run is never approved with them.`;
   if (s.mapTab) return "Ready. Press Simulate (nothing here runs in the game).";
   // matpilot round 15 #7: a page with Run must not say that nothing runs in the game
+  // matpilot round 18 (b): while the helper says busy, Run is disabled: the line says why, not "Run plays it"
+  if (s.run && s.busy) return `Ready to simulate: Simulate plays this map without the game. Run is off now: ${s.busy}.`;
   if (s.run) return "Ready. Simulate plays this map without the game; Run (amber) plays it in the game.";
   return "Ready. Press Simulate to run the flow in the simulator (nothing here runs in the game).";
 }

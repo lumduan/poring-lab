@@ -83,6 +83,19 @@ export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: st
   return `${head}: ${parts.join("; ")}.${stays}`;
 }
 
+/** PURE (matpilot round 18 #4): the IN A RUN note in one short line, for the strip folded on a
+ * phone: "3 events replace the runner's own" (each name counted once, by its takeover's kind);
+ * null when boxTabNote has no note for the tab. */
+export function boxTabShort(box: BoxDoc | null | undefined, node: string, tab: string): string | null {
+  if (!box) return null;
+  const kinds = new Map<string, BoxTakeover["kind"]>();
+  for (const t of box.takeovers) if (t.path !== null && t.by && t.path.startsWith(`${node}/${tab}/`)) kinds.set(t.by, t.kind);
+  if (!kinds.size) return null;
+  const count = (word: BoxTakeover["kind"]) => [...kinds.values()].filter((k) => k === word).length;
+  const words = (["event", "function", "model"] as const).map((k) => [count(k), k] as const).filter(([n]) => n > 0).map(([n, k]) => `${n} ${k}${n === 1 ? "" : "s"}`);
+  return `${box.playable ? "" : "once it can play, "}${words.join(" and ")} replace${kinds.size === 1 ? "s" : ""} the runner's own`;
+}
+
 /** PURE: one name's words in a node's list of tabs and names (the /maps inspector), when the box
  * plays it in a Run of this project: "in a Run: replaces the runner's potion on HP (Before Run's
  * potion_below then applies to the runner alone)"; null: the box plays nothing of it. */

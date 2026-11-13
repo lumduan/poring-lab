@@ -144,6 +144,26 @@ export const INJECT = {
   media: "/blockly-media/", // self-hosted (no CDN: the CSP allows this origin only)
 } as const;
 
+/** matpilot round 18 #4: the start scale on a phone (under 48rem). At 0.75 the survival events
+ * showed 66-77 % of their width beside the 138 px toolbox at 390 px; at 0.6 more of each row shows,
+ * and the tab's first rows end above Blockly's zoom controls and trashcan (project.test.ts does
+ * the arithmetic with blocks.ts' TAB_TOP_Y and FIRST_ROWS_Y). */
+export const PHONE_START_SCALE = 0.6;
+
+/** The inject options for a phone or a wider screen (only the start scale differs). */
+export function injectFor(phone: boolean) {
+  return { ...INJECT, zoom: { ...INJECT.zoom, startScale: phone ? PHONE_START_SCALE : INJECT.zoom.startScale } };
+}
+
+/** Blockly 13's bottom-right controls, in screen px (core/zoom_controls.ts and core/trashcan.ts:
+ * three 32 px zoom buttons with 2 + 11 px between them, a 47 x 60 px trashcan, 20 px margins):
+ * the column's top edge in a blocks area ``areaH`` px tall. */
+export const BLOCKLY_CONTROLS = { margin: 20, zoomH: 3 * 32 + 2 + 11, trashH: 44 + 16 };
+export function controlsTop(areaH: number): number {
+  const c = BLOCKLY_CONTROLS;
+  return areaH - c.margin - c.trashH - c.margin - c.zoomH;
+}
+
 /** Our block types onto MatPilot's styles (only words, colours and categories change; the
  * types, fields and the IR are unchanged). The run-time hunt type is Movement too. */
 export const BLOCK_STYLE: Record<string, string> = {

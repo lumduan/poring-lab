@@ -37,9 +37,12 @@ export type LiveStatus = {
   busy?: string | null;
 };
 
-/** PURE: why Run and the check wait: another input writer of ours plays (null: none). */
-export function busyWhy(st: LiveStatus | null): string | null {
-  return st?.busy ? `${st.busy}: Run waits until it ends (the Run helper refuses to start meanwhile)` : null;
+/** PURE: why Run (``what`` "run") or the check (``what`` "check") waits: another input writer of
+ * ours plays (null: none). matpilot round 18 (c): "Check the game"'s title said "Run waits": it is
+ * the CHECK that waits there (the backend refuses a check meanwhile too, input_writer_busy). */
+export function busyWhy(st: LiveStatus | null, what: "run" | "check" = "run"): string | null {
+  if (!st?.busy) return null;
+  return what === "check" ? `${st.busy}: the check waits until it ends (the Run helper refuses a check meanwhile)` : `${st.busy}: Run waits until it ends (the Run helper refuses to start meanwhile)`;
 }
 
 /** One line of the live check (scripts/dungeon_hunt.py check_item): ok true / false / null (not
@@ -123,7 +126,7 @@ export function canCheck(st: LiveStatus | null, flow: string): { can: boolean; w
   if (st === null) return { can: false, why: "reading the Run helper…" };
   if (!st.helper_alive) return { can: false, why: st.detail || "the Run helper is not running on the bot server" };
   if (ACTIVE.includes(st.state)) return { can: false, why: "a run is going: the game is checked before a run" };
-  if (busyWhy(st)) return { can: false, why: busyWhy(st) };
+  if (busyWhy(st)) return { can: false, why: busyWhy(st, "check") };
   if (!st.flows || !(flow in st.flows)) return { can: false, why: "the Run helper does not list this flow" };
   if (st.check?.state === "checking") return { can: false, why: "checking the game…" };
   return { can: true, why: null };
@@ -147,6 +150,25 @@ export function tickFor(check: LiveCheck | null | undefined, flow: string, id: s
   if (!it) return { mark: "none", sign: "", words: null, value: null, stale: false, refuses: false };
   const mark = it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
   return { mark, sign: mark === "ok" ? "✓" : mark === "fail" ? "✗" : "?", words: it.words, value: it.value, stale: checkStale(check, flow, basis), refuses: it.ok === false && it.refuses !== false };
+}
+
+/** PURE (matpilot round 16 #2, round 18 #1): what a ✓ line adds after its value -- the words after
+ * the line's last ";" OUTSIDE parentheses (the runner writes "<what was checked>; <what was read>").
+ * A ";" inside a parenthesis is part of that aside, never a cut: the identity line's "(her
+ * references; no DB, as the player start)" showed as "no DB, as the player start)", its ")" with no
+ * "(". null when there is no such ";" (the value says it all). */
+export function okTail(words: string | null | undefined): string | null {
+  if (!words) return null;
+  let depth = 0;
+  let cut = -1;
+  for (let i = 0; i < words.length; i += 1) {
+    const c = words[i];
+    if (c === "(") depth += 1;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === ";" && depth === 0) cut = i;
+  }
+  const tail = cut < 0 ? "" : words.slice(cut + 1).trim();
+  return tail === "" ? null : tail;
 }
 
 /** PURE: the Run button's warning from the last check of this flow: the lines the runner refuses

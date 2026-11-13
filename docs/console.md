@@ -451,20 +451,29 @@ Amendment B); a not-adopted model is never offered.
     chooses HOW) or never does (garm_baby, the boss); the inspector says so under the target /
     ignore lists, which are the simulator's on such a node.
   - **Event blocks:** every trigger field the Python writes is on the block, one row each (pause
-    after each run = cooldown_s, at most N a run / a minute, N in 10 minutes, an insert's failures
-    and its escalation; empty = none); a tab's first block starts below Undo / Redo.
+    after each run = cooldown_s, at most N a run / a minute, N per 10 minutes, an insert's failures
+    and its escalation; empty = none, except the 10-minute guard and the insert failures: empty =
+    the engine's default, which their rows name: 10 and 3); a tab's first block starts below Undo
+    / Redo. On a phone the blocks start smaller (scale 0.6) and the strip under the tabs folds to
+    one line (its button opens it: "IN A RUN: 3 events replace the runner's own · 2 more ▸").
   - **Run waits for another input writer:** while a night chain, a runner, the live block player
     or an A/B series of ours plays, the Run helper's state is **busy** with those words, Run and
-    "Check the game" are greyed with them, and the backend refuses a start or a check
-    (`input_writer_busy`).
+    "Check the game" are greyed with them (the check's title says the CHECK waits), both pages'
+    status lines say "Run is off now: <the words>", and the backend refuses a start or a check
+    (`input_writer_busy`). A ✓ checklist line adds the words after its last ";" outside
+    parentheses.
   - **/maps' Fit:** at a readable size (0.85) it shows every card, else the run's path (all but
     Global), else START and the map cards; on a canvas of 768 px or less START and every map card
     are scaled down until they fit (after a load, after "+ map", on Fit). The button's tooltip
-    says what the last fit showed and what it left out (its accessible name stays "Fit the maps").
+    says what the last fit showed and what it left out; its accessible name is that tooltip's
+    first sentence ("Fit the maps" before the first fit). The fit keeps the zoom buttons' column
+    (bottom left) free, so no fitted card's left edge is under them.
   - **/maps' connection labels:** every label (the session's "log in, then choose", "enter the
     game → <entry>", and the exits) sits in the gap between its two cards -- beside: at the
     line's height, wrapped or one short word or none; one under the other: in the vertical gap,
-    as many lines as fit -- never under a card; a shortened label's full words are its tooltip.
+    as many lines as fit -- never under a card; a shortened label's full words are its tooltip. A
+    label whose text would be under 9 px at the view's zoom is not drawn (the cards' port rows
+    name the exits).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

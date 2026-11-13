@@ -11,7 +11,7 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { CREDENTIALS, DEF_BY_TYPE, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
@@ -444,21 +444,23 @@ function eventHat(
 
 /** matpilot round 17 N4: the trigger's limits as the event block's own fields (the Python view's
  * cooldown_s / max_per_run / max_per_min / max_fires_per_10min / max_insert_fails / escalate;
- * before, they rode in the block's hidden state and no field showed them). Empty = none. */
+ * before, they rode in the block's hidden state and no field showed them). Empty = none; for the
+ * runaway guard and the insert failure limit (round 18 #3), empty = the engine's default (the
+ * Python view omits a default too, so the block and the Python say the same). */
 function limitFields(h: Handler): Record<string, string | number> {
   return {
     COOLDOWN: h.cooldown_s,
     MAX_RUN: h.max_per_run === null ? "" : String(h.max_per_run),
     MAX_MIN: h.max_per_min === null ? "" : String(h.max_per_min),
-    MAX_10: h.max_fires_per_10min,
-    FAILS: h.max_insert_fails,
+    MAX_10: h.max_fires_per_10min === DEFAULT_MAX_10 ? "" : String(h.max_fires_per_10min),
+    FAILS: h.max_insert_fails === DEFAULT_FAILS ? "" : String(h.max_insert_fails),
     ESCALATE: h.escalate ?? "",
   };
 }
 
 /** A trigger's limits when its block carries none of their fields (an older workspace's hidden
  * state, else the IR's defaults). */
-const NO_LIMITS: HandlerRest = { escalate: null, max_insert_fails: 3, cooldown_s: 0, max_per_min: null, max_fires_per_10min: 10, max_per_run: null };
+const NO_LIMITS: HandlerRest = { escalate: null, max_insert_fails: DEFAULT_FAILS, cooldown_s: 0, max_per_min: null, max_fires_per_10min: DEFAULT_MAX_10, max_per_run: null };
 
 function mapEventHat(ev: MapEvent, block: MapBlock, order: number, ids: Ids): WsBlock {
   if (ev.kind === "override" || ev.kind === "add") return eventHat(ev.event, ev.kind, ev.label, order, ids);
@@ -958,6 +960,16 @@ class Reader {
     return null;
   }
 
+  /** A whole number lo..hi in a text field, or `dflt` when it is empty (the engine's default;
+   * round 18 #3). A number field's value (a workspace saved before) reads the same. */
+  defInt(b: WsBlock, field: string, where: string, what: string, lo: number, hi: number, dflt: number): number {
+    const t = this.field(b, field).trim();
+    if (t === "") return dflt;
+    if (/^[0-9]{1,3}$/.test(t) && Number(t) >= lo && Number(t) <= hi) return Number(t);
+    this.err(where, `${what} ${JSON.stringify(t)}: a whole number ${lo}..${hi}, or empty for the default ${dflt}`);
+    return dflt;
+  }
+
   /** A number lo..hi in a number field (`whole`: no fraction). */
   bounded(b: WsBlock, field: string, where: string, what: string, lo: number, hi: number, whole: boolean): number {
     const v = Number(b.fields?.[field]);
@@ -976,8 +988,8 @@ class Reader {
       cooldown_s: has("COOLDOWN") ? this.bounded(b, "COOLDOWN", where, "the pause after each run", 0, 3600, false) : base.cooldown_s,
       max_per_run: has("MAX_RUN") ? this.optInt(b, "MAX_RUN", where, "at most … a run", 1, 100) : base.max_per_run,
       max_per_min: has("MAX_MIN") ? this.optInt(b, "MAX_MIN", where, "at most … a minute", 1, 60) : base.max_per_min,
-      max_fires_per_10min: has("MAX_10") ? this.bounded(b, "MAX_10", where, "… in 10 minutes", 1, 100, true) : base.max_fires_per_10min,
-      max_insert_fails: has("FAILS") ? this.bounded(b, "FAILS", where, "an insert's failures", 1, 10, true) : base.max_insert_fails,
+      max_fires_per_10min: has("MAX_10") ? this.defInt(b, "MAX_10", where, "… per 10 minutes", 1, 100, DEFAULT_MAX_10) : base.max_fires_per_10min,
+      max_insert_fails: has("FAILS") ? this.defInt(b, "FAILS", where, "an insert's failures", 1, 10, DEFAULT_FAILS) : base.max_insert_fails,
       escalate: esc === null ? base.escalate : esc === "" ? null : this.name(b, "ESCALATE", where),
     };
     return r; // escalate on a pre-empt: the engine refuses it, in its words (IR 2's Handler)
@@ -1136,8 +1148,12 @@ function defHat(p: Project, node: PNode, d: Def, order: number, ids: Ids): WsBlo
 /** Where a tab's first block sits (workspace units): BELOW the Undo / Redo buttons, which float
  * over the canvas's top right (studio.css .history-buttons: top 0.6rem, 2.75rem tall = 53.6 px;
  * at the studio's start scale 0.75, theme.ts INJECT, 72 units), so they never sit on a block's
- * first row however wide it is (matpilot round 17 N4: Undo / Redo over drink's "resume ▾ until"). */
-export const TAB_TOP_Y = 76;
+ * first row however wide it is (matpilot round 17 N4: Undo / Redo over drink's "resume ▾ until").
+ * Round 18 #4: 90, so it holds at the phone's start scale 0.6 too (54 px). */
+export const TAB_TOP_Y = 90;
+/** An event block's first three rows (when; event / class / rank; mode / then: the fields a person
+ * reads first), workspace units, generously: the zelos rows are ~48 units, the first one taller. */
+export const FIRST_ROWS_Y = 3 * 56;
 /** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
 const EVENT_ROWS_Y = 6 * 48;
 

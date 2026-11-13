@@ -5,7 +5,7 @@
 // SYNTHETIC sample sheets, whose blocks are the sample project's map node ids; poring_flow's
 // test_maps_page.py checks it is current).
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import type { PlayStep, Trace } from "../flow/api.ts";
@@ -20,23 +20,30 @@ import {
   entryHandle,
   exitRuns,
   FIT_FLOOR,
+  CONTROLS_CLEAR_PX,
   FIT_NAME,
   fitChoice,
+  fitLeft,
   fitLeftOut,
+  fitName,
   fitTitle,
   fitViewport,
   followCentre,
   LABEL_CLEAR_PX,
+  LABEL_FONT_PX,
   LABEL_LANE_PX,
   LABEL_LINE_PX,
+  LABEL_MIN_PX,
   LABEL_PAD_PX,
   LABEL_VPAD_PX,
   labelHeight,
   labelLines,
   labelPlace,
+  labelReadable,
   labelWidth,
   mapsGraph,
   NARROW_PX,
+  RF_CONTROLS,
   POS_SCALE,
   type Rect,
   type XY,
@@ -791,7 +798,74 @@ test("the canvas wires the rules: one fit chooser, the button's title, both edge
   assert.equal(src.match(/labelPlace\(/g)?.length, 2, "ExitEdge and SessionEdge");
   assert.equal(src.match(/<title>\{label\}<\/title>/g)?.length, 2, "a hidden label's words stay on its line");
   assert.doesNotMatch(src, /- 64\}px/, "no label above the row");
-  assert.match(src, /title=\{fitText\} aria-label=\{FIT_NAME\}/);
+  assert.match(src, /title=\{fitText\} aria-label=\{fitName\(fitText\)\}/); // round 18 #6
+  assert.match(src, /MIN_ZOOM, MAX_ZOOM, PAD, fitLeft\(PAD\)\)/, "the fit keeps the controls' column free");
+  assert.match(src, /if \(!at\.lines\.length \|\| !labelReadable\(zoom\)\) return null;/, "round 18 #5: tiny labels are not drawn");
   assert.match(src, /minZoom=\{FIT_FLOOR\}/);
   assert.doesNotMatch(src, /fitViewport\(/, "the canvas fits only through fitChoice");
+});
+
+// --- matpilot round 18 #5: a label too small to read is not drawn ---------------------------------
+test("#5: an edge label whose text would render under 9 px is not drawn (the port rows name the exit)", () => {
+  const css = readFileSync(new URL("../../components/maps/maps.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = /\.mp-edge-label \{([^}]*)\}/.exec(css)![1];
+  assert.equal(LABEL_FONT_PX, Number(/font-size: ([\d.]+)rem/.exec(rule)![1]) * 16, "the label's font size, from maps.css");
+  assert.equal(LABEL_MIN_PX, 9);
+  assert.equal(labelReadable(0.85), true, "the readable minimum: 11.6 px");
+  assert.equal(labelReadable(0.31), false, "round 18's phone fit after + map: 4.2 px");
+  assert.equal(labelReadable(9 / LABEL_FONT_PX), true);
+  assert.equal(labelReadable(9 / LABEL_FONT_PX - 0.001), false);
+  assert.equal(labelReadable(Number.NaN), false);
+  // the phone fits of the one box after + map, and of the sample: scaled down, so no label; at 1440 the labels show
+  const added = addMapNode(xmasProject(), "geffen", null);
+  assert.ok(added.ok);
+  const plus = laidOut(added.project, { ...XMAS_SIZE, geffen: NEW_CARD });
+  const ph = fitChoice(PHONES[0], setsOf(plus), 0.85, 1.2, 24, fitLeft(24))!;
+  assert.ok(ph.scaled && !labelReadable(ph.viewport.zoom), String(ph.viewport.zoom));
+  assert.equal(labelReadable(fitOf({ width: 1020, height: 480 }, laidOut(sampleProject()))!.viewport.zoom), true);
+});
+
+// --- matpilot round 18 #6: the Fit button's name, and its box clear of React Flow's controls -----
+test("#6: Fit's accessible name is its title's first sentence", () => {
+  assert.equal(fitName(null), FIT_NAME);
+  assert.equal(fitName(FIT_NAME), FIT_NAME);
+  assert.equal(fitName("Fit the maps: the map cards. Login (START), Choose character and Global do not fit beside them at a readable size here: pan to them."), "Fit the maps: the map cards");
+  assert.equal(fitName("Fit: every card."), "Fit: every card");
+  assert.equal(fitName("Fit the maps: every map card, scaled down to fit this narrow view (zoom in to read). Login (START), Choose character and Global are left out: pan to them."), "Fit the maps: every map card, scaled down to fit this narrow view (zoom in to read)");
+  assert.equal(fitName("Fit: from START at the left, at a readable size (the cards do not all fit here: pan right)."), "Fit: from START at the left, at a readable size (the cards do not all fit here: pan right)");
+  // every title a fit gives starts its name with "Fit"
+  for (const box of [...PHONES, { width: 1020, height: 480 }, { width: 1400, height: 700 }]) assert.match(fitName(titleOf(box, laidOut(sampleProject()))), /^Fit/);
+});
+
+test("#6: the fit keeps React Flow's controls' column free, so no card's left edge is under it", () => {
+  const colRight = RF_CONTROLS.margin + RF_CONTROLS.button; // 41 px from the canvas's left
+  assert.equal(fitLeft(24) + 24, colRight + CONTROLS_CLEAR_PX, "a fitted card starts 8 px right of the column");
+  assert.equal(fitLeft(100), 0);
+  const cs = laidOut(sampleProject());
+  const global = cs.find((c) => c.type === "global")!;
+  const screenX = (vp: { x: number; zoom: number }, r: Rect) => r.x * vp.zoom + vp.x;
+  for (const box of [...PHONES, { width: 1020, height: 480 }, { width: 900, height: 300 }]) {
+    const c = fitChoice(box, setsOf(cs), 0.85, 1.2, 24, fitLeft(24))!;
+    // the fitted cards, and Global under town (the reviewer's 13 % at 390), clear the column
+    for (const x of [...cs.filter((y) => c.what === "all" || (c.what === "path" ? y.type !== "global" : y.type === "map" || y.type === "start")), global]) {
+      if (c.overflow && x.type === "global") continue; // from the left at 0.85: Global sits right of the cut
+      assert.ok(screenX(c.viewport, x.rect) >= colRight + CONTROLS_CLEAR_PX - EPS, `${box.width}x${box.height}: ${x.id} at ${screenX(c.viewport, x.rect)}`);
+    }
+    if (!c.overflow) for (const x of mapsAndStart(cs)) assert.ok(inView(box, c.viewport, x.rect), `${box.width}: ${x.id} still in view`);
+  }
+  // the positive case: without the margin, at 390 Global's left edge was under the column
+  const before = fitOf(PHONES[0], cs)!;
+  assert.ok(screenX(before.viewport, global.rect) < colRight, String(screenX(before.viewport, global.rect)));
+  // the cost on a phone: a little less zoom (342 px of width -> 317)
+  const after = fitChoice(PHONES[0], setsOf(cs), 0.85, 1.2, 24, fitLeft(24))!;
+  assert.ok(after.viewport.zoom < before.viewport.zoom && after.viewport.zoom > 0.9 * before.viewport.zoom);
+});
+
+const RF_CSS = new URL("../../../node_modules/@xyflow/react/dist/style.css", import.meta.url);
+test("#6: RF_CONTROLS is React Flow's own panel margin and button width", { skip: !existsSync(RF_CSS) }, () => {
+  const css = readFileSync(RF_CSS, "utf8");
+  const panel = /(?:^|\n)\.react-flow__panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(panel, new RegExp(`margin:\\s*${RF_CONTROLS.margin}px`), panel);
+  const button = /(?:^|\n)\.react-flow__controls-button\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  assert.match(button, new RegExp(`width:\\s*${RF_CONTROLS.button}px`), button);
 });

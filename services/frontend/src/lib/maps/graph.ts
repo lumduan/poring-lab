@@ -173,17 +173,33 @@ const finite = (...v: number[]) => v.every((n) => Number.isFinite(n));
 /** The viewport that fits `bounds` into `box` between minZoom and maxZoom; a graph too big for
  * minZoom starts at its LEFT and is centred vertically when it fits, else top-aligned.
  * `overflow`: it did not fit at minZoom. Null: no box (folded, not laid out) or a bad number. */
-export function fitViewport(box: Box, bounds: Rect, minZoom: number, maxZoom: number, pad: number): { viewport: Viewport; overflow: boolean } | null {
-  if (!finite(box.width, box.height, bounds.x, bounds.y, bounds.width, bounds.height, minZoom, maxZoom, pad)) return null;
-  if (box.width <= 2 * pad || box.height <= 2 * pad || bounds.width <= 0 || bounds.height <= 0 || minZoom <= 0 || maxZoom < minZoom) return null;
-  const z = Math.min(maxZoom, (box.width - 2 * pad) / bounds.width, (box.height - 2 * pad) / bounds.height);
+export function fitViewport(box: Box, bounds: Rect, minZoom: number, maxZoom: number, pad: number, left = 0): { viewport: Viewport; overflow: boolean } | null {
+  if (!finite(box.width, box.height, bounds.x, bounds.y, bounds.width, bounds.height, minZoom, maxZoom, pad, left)) return null;
+  // `left` (round 18 #6): px kept free at the box's left, beside the pad (React Flow's controls)
+  const w = box.width - Math.max(0, left);
+  if (w <= 2 * pad || box.height <= 2 * pad || bounds.width <= 0 || bounds.height <= 0 || minZoom <= 0 || maxZoom < minZoom) return null;
+  const x0 = box.width - w;
+  const z = Math.min(maxZoom, (w - 2 * pad) / bounds.width, (box.height - 2 * pad) / bounds.height);
   if (z >= minZoom) {
-    return { viewport: { x: (box.width - bounds.width * z) / 2 - bounds.x * z, y: (box.height - bounds.height * z) / 2 - bounds.y * z, zoom: z }, overflow: false };
+    return { viewport: { x: x0 + (w - bounds.width * z) / 2 - bounds.x * z, y: (box.height - bounds.height * z) / 2 - bounds.y * z, zoom: z }, overflow: false };
   }
   const zz = minZoom;
   const y = bounds.height * zz <= box.height - 2 * pad ? (box.height - bounds.height * zz) / 2 - bounds.y * zz : pad - bounds.y * zz;
-  return { viewport: { x: pad - bounds.x * zz, y, zoom: zz }, overflow: true };
+  return { viewport: { x: x0 + pad - bounds.x * zz, y, zoom: zz }, overflow: true };
 }
+
+// --- the fit stays clear of React Flow's controls (matpilot round 18 #6) -------------------------
+// At 390 in the sample the zoom buttons (bottom left) covered 13 % of the Global card's left edge,
+// its "Open flow" button included: the fit's cards started at the 24 px pad, under the 26 px wide
+// column that starts 15 px in. The fit now keeps the controls' column free at the LEFT (the cards
+// under or over a fitted card, like Global under town, then clear it too).
+/** React Flow 12's controls (@xyflow/react/dist/style.css: .react-flow__panel margin 15px,
+ * .react-flow__controls-button 26 px wide; pinned in maps.test.ts) and the clearance beside them. */
+export const RF_CONTROLS = { margin: 15, button: 26 };
+export const CONTROLS_CLEAR_PX = 8;
+/** The px the fit keeps free at its box's left, beside its pad, so a fitted card's left edge is
+ * CONTROLS_CLEAR_PX right of the controls' column. */
+export const fitLeft = (pad: number): number => Math.max(0, RF_CONTROLS.margin + RF_CONTROLS.button + CONTROLS_CLEAR_PX - pad);
 
 // --- which cards the Fit shows (matpilot round 17 N6, N7) ----------------------------------------
 // Fit never went below the readable minimum (round 6: 0.86rem node text stays >= 11 px at 0.85), so
@@ -210,22 +226,22 @@ export type FitChoice = { viewport: Viewport; overflow: boolean; what: FitWhat; 
 
 /** Which cards the Fit shows, and how (see above). Null: no box (folded, not laid out), a bad
  * number in the box, or no usable set. */
-export function fitChoice(box: Box, sets: FitSets, minZoom: number, maxZoom: number, pad: number): FitChoice | null {
+export function fitChoice(box: Box, sets: FitSets, minZoom: number, maxZoom: number, pad: number, left = 0): FitChoice | null {
   let last: { what: FitWhat; rect: Rect } | null = null;
   for (const what of ["all", "path", "maps"] as const) {
     const rect = sets[what];
     if (!rect) continue;
-    const f = fitViewport(box, rect, minZoom, maxZoom, pad);
+    const f = fitViewport(box, rect, minZoom, maxZoom, pad, left);
     if (!f) continue; // an unusable set (no size, a bad number); with a bad box, every set is
     last = { what, rect };
     if (!f.overflow) return { ...f, what, scaled: false };
   }
   if (!last) return null;
   if (box.width <= NARROW_PX && FIT_FLOOR < minZoom) {
-    const s = fitViewport(box, last.rect, FIT_FLOOR, maxZoom, pad);
+    const s = fitViewport(box, last.rect, FIT_FLOOR, maxZoom, pad, left);
     if (s && !s.overflow) return { viewport: s.viewport, overflow: false, what: last.what, scaled: s.viewport.zoom < minZoom };
   }
-  const f = fitViewport(box, last.rect, minZoom, maxZoom, pad);
+  const f = fitViewport(box, last.rect, minZoom, maxZoom, pad, left);
   return f ? { ...f, what: last.what, scaled: false } : null;
 }
 
@@ -245,9 +261,19 @@ export function fitLeftOut(nodes: readonly { type: string; start?: boolean }[], 
 
 const andList = (xs: readonly string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
-/** The Fit button's NAME (its aria-label, never changed: scripts find the button by it) and its
- * title before the first fit. */
+/** The Fit button's NAME and title before the first fit. Round 18 #6: after a fit its accessible
+ * name is its title's first sentence (fitName), so a screen reader hears what the fit showed too;
+ * scripts find the button by its data-testid (maps-fit). */
 export const FIT_NAME = "Fit the maps";
+
+/** PURE (matpilot round 18 #6): the Fit button's accessible name from its title: the title's first
+ * sentence, without its full stop ("Fit the maps: the map cards"); FIT_NAME for no title. */
+export function fitName(title: string | null | undefined): string {
+  const t = (title ?? "").trim();
+  if (!t) return FIT_NAME;
+  const end = t.search(/\.(\s|$)/);
+  return (end < 0 ? t : t.slice(0, end)).trim() || FIT_NAME;
+}
 
 /** The Fit button's title: what its last fit showed (the same fit runs after a load, after
  * "+ map", on a resize and on the button), and which cards it left out. `marker`: the START
@@ -296,6 +322,14 @@ export const LABEL_MAX_LINES = 3;
  * room for a two-line label ("death respawn" / "(derived)"). */
 export const CARD_MAX_PX = 400;
 export const LABEL_LANE_PX = 170;
+
+/** matpilot round 18 #5: a label's text at the view's zoom: .mp-edge-label's 0.85rem (13.6 px, pinned
+ * to maps.css in maps.test.ts) times the zoom. Under LABEL_MIN_PX (at 390 after "+ map" both cards
+ * fit at 0.31: 4.2 px text) the label is not drawn, as labelLines' "no label" case: each card's
+ * port row still names the exit, and the edge's title keeps the words. */
+export const LABEL_FONT_PX = 0.85 * 16;
+export const LABEL_MIN_PX = 9;
+export const labelReadable = (zoom: number): boolean => Number.isFinite(zoom) && LABEL_FONT_PX * zoom >= LABEL_MIN_PX;
 
 export const labelWidth = (text: string): number => Math.ceil(text.length * LABEL_CH_PX + LABEL_PAD_PX);
 

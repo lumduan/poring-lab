@@ -6,9 +6,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { type BoxDoc, boxedSettings, boxNameWords, boxTabNote } from "./box.ts";
+import { type BoxDoc, boxedSettings, boxNameWords, boxTabNote, boxTabShort } from "./box.ts";
 import { type ConfigDoc, effectiveConfig } from "./config.ts";
 import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
+import { stripFoldLine } from "./words.ts";
 
 const ev = (play: string, settings: string[], replaces: string, by: string, tab: string, when: string, until: string | null = null) => ({ play, settings, replaces, kind: "event" as const, by, path: `xmas_dun02/${tab}/${by}`, when, until });
 const fnRow = (play: string, settings: string[], replaces: string, by: string | null, tab: string, steps?: string) => ({ play, settings, replaces, kind: "function" as const, by, path: by ? `xmas_dun02/${tab}/${by}` : null, ...(steps ? { steps } : {}) });
@@ -75,4 +76,23 @@ test("the /maps inspector's tabs list says what the box plays of each name in a 
   assert.equal(boxNameWords(BOX, "xmas_dun02/survival/fly_away"), "in a Run: replaces the runner's Fly Wing on HP and the runner's boss fly (a Battle Log boss line) (Before Run's fly_below then applies to the runner alone)");
   assert.equal(boxNameWords(BOX, "xmas_dun02/keys/heal"), null);
   assert.equal(boxNameWords(null, "xmas_dun02/survival/drink"), null);
+});
+
+// matpilot round 18 #4: on a phone the strip folds to ONE line; the IN A RUN part's short words lead
+test("the strip's folded line: IN A RUN in a few words, else the first part", () => {
+  const short = boxTabShort(BOX, "xmas_dun02", "survival");
+  assert.equal(short, "3 events replace the runner's own");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "exits"), "3 functions replace the runner's own");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "keys"), null);
+  assert.equal(boxTabShort(null, "xmas_dun02", "survival"), null);
+  assert.match(boxTabShort({ ...BOX, playable: false }, "xmas_dun02", "survival") ?? "", /^once it can play, 3 events replace/);
+  const parts = [
+    { head: "MAP", text: "xmas_dun02" },
+    { head: "IMPORTS", text: "its tabs (keys, survival) and Global" },
+    { head: "IN A RUN", text: boxTabNote(BOX, "xmas_dun02", "survival", C, values) ?? "", short },
+  ];
+  assert.equal(stripFoldLine(parts), "IN A RUN: 3 events replace the runner's own · 2 more");
+  assert.equal(stripFoldLine(parts.slice(0, 2)), "MAP: xmas_dun02 · 1 more");
+  assert.equal(stripFoldLine([]), "");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "knife"), "2 functions replace the runner's own");
 });
