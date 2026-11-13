@@ -2,7 +2,7 @@
   "format": "poring-lab.project",
   "version": 3,
   "name": "my_first_project",
-  "description": "Town: set the save point, warp to the field. Field: attack 5 times, a Butterfly Wing back (the function butterfly_wing: press F9). The sample's SYNTHETIC maps and keys.",
+  "description": "Town: set the save point, warp to the field. Field: attack 5 times, a wing back (Global's function butterfly_wing: press F9). Runs until stopped. The sample's SYNTHETIC maps and keys.",
   "target": {
     "client": "kro-20211103-prere",
     "server": "lab-rathena",
@@ -11,7 +11,10 @@
   },
   "max_runtime_s": 14400,
   "where_budget": 12,
-  "stop_when": null,
+  "stop_when": {
+    "kind": "lit",
+    "value": false
+  },
   "assumes": [],
   "start": "login",
   "nodes": [
@@ -66,7 +69,7 @@
               "kind": "action",
               "block": "choose_character",
               "concept": "session.select_char",
-              "timeout_s": 30,
+              "timeout_s": 60,
               "on_fail": "stop",
               "outcome_to": null,
               "note": null,

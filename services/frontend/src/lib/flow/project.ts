@@ -253,7 +253,7 @@ export const loginMain = (server = "lab-rathena", credential = "lab_gm"): Stmt[]
   { kind: "action", block: "login", concept: "session.login", timeout_s: 60, ...rest, params: { server: lit(server), credential: lit(credential) } },
 ];
 /** The character node's program: the remembered slot (as the bot's login does). */
-export const characterMain = (): Stmt[] => [{ kind: "action", block: "choose_character", concept: "session.select_char", timeout_s: 30, ...rest, params: {} }];
+export const characterMain = (): Stmt[] => [{ kind: "action", block: "choose_character", concept: "session.select_char", timeout_s: 60, ...rest, params: {} }];
 
 /** A new map node for /maps "+ map" (one entry, a main that stops at once until written). */
 export function newMapNode(p: Project, map: string, pos: { x: number; y: number }): MapNode {
@@ -278,7 +278,7 @@ function hpLow(): Def {
     on: {
       when: { kind: "cmp", op: "<", left: { kind: "sense", sensor: "hp_percent", args: {} }, right: lit(30) },
       until: null,
-      rearm: null,
+      rearm: { kind: "cmp", op: ">", left: { kind: "sense", sensor: "hp_percent", args: {} }, right: lit(50) }, // a one-shot event re-arms (IR 2's rule)
       priority: "survival",
       rank: null,
       mode: "insert",
@@ -300,7 +300,7 @@ export function xmasProject(): Project {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "The Rogue on xmas_dun02: hunt with the runner until the bag is half full, then a Butterfly Wing home to Geffen. Every key is a function in Global.",
+    description: "The Rogue on xmas_dun02: log in, enter the remembered character, hunt with the runner until the bag is half full, then a Butterfly Wing home to Geffen. Every key is a function in Global's keys tab.",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -370,11 +370,12 @@ export function sampleProject(): Project {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "my_first_project",
-    description: "Town: set the save point, warp to the field. Field: attack 5 times, a Butterfly Wing back (the function butterfly_wing: press F9). The sample's SYNTHETIC maps and keys.",
+    description: "Town: set the save point, warp to the field. Field: attack 5 times, a wing back (Global's function butterfly_wing: press F9). Runs until stopped. The sample's SYNTHETIC maps and keys.",
     target: { ...TARGET },
     max_runtime_s: RUNTIME_DEFAULT_S,
     where_budget: WHERE_BUDGET_DEFAULT,
-    stop_when: null,
+    // "run until stopped" (IR 2's run_until_stopped), as the engine spells it in a project
+    stop_when: { kind: "lit", value: false },
     assumes: [],
     start: "login",
     nodes: [
