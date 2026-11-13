@@ -71,7 +71,9 @@ def flow_config(state: AppState) -> Any:
     if "fc" in _FC:
         return _FC["fc"]
     out: Any = None
-    for d in (state.settings.zones_code_dir, Path(__file__).resolve().parents[4] / "scripts"):
+    here = Path(__file__).resolve().parents
+    repo_scripts = here[4] / "scripts" if len(here) > 4 else None  # the host's tests only
+    for d in (state.settings.zones_code_dir, repo_scripts):
         if d is None or not (Path(d) / "flow_config.py").is_file():
             continue
         path = Path(d) / "flow_config.py"
