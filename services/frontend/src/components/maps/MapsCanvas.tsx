@@ -49,7 +49,7 @@ import type { AuthoredExit } from "@/lib/flow/ir";
 import { type Project } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
 import { sessionLinkProblem } from "@/lib/maps/edit";
-import { cardGap, type EdgeData, entryHandle, exitHandle, exitRuns, fitViewport, followCentre, IN, labelLines, mapsGraph, type MapsNodeData, OUT, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
+import { type EdgeData, entryHandle, exitHandle, exitRuns, FIT_FLOOR, FIT_NAME, fitChoice, fitLeftOut, fitTitle, followCentre, IN, labelPlace, mapsGraph, type MapsNodeData, OUT, type Rect, RESPAWN, START_ID, toUnits, type XY } from "@/lib/maps/graph";
 import { entryCaption, EXIT_WORDS, nodeLinks } from "@/lib/maps/links";
 import { nodeLint, tabList, tabRows } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
@@ -307,14 +307,33 @@ function GlobalNodeCard({ id, data }: NodeProps<MNode>) {
 type ExitEdgeT = Edge<EdgeData & { runs?: number; active?: boolean }, "exit">;
 // Edge labels of different kinds between the same two nodes would sit on one midpoint.
 const LABEL_DY: Record<string, number> = { walk_exit: -30, npc_warp: -10, item_warp: 10, death_respawn: 30 };
-// the one word a label keeps in a narrow gap (lib/maps/graph.ts labelLines)
+// the one word a label keeps in a narrow gap (lib/maps/graph.ts labelPlace)
 const LABEL_SHORT: Record<string, string> = { walk_exit: "walk", npc_warp: "NPC warp", item_warp: "wing", death_respawn: "death" };
 
-/** A card's horizontal span in flow pixels, once React Flow has measured it (else null). */
-function useSpan(id: string): { x: number; width: number } | null {
+/** A card's box in flow pixels, once React Flow has measured it (else null). */
+function useRect(id: string): Rect | null {
   const n = useInternalNode(id);
   const w = n?.measured.width;
-  return n && w ? { x: n.internals.positionAbsolute.x, width: w } : null;
+  const h = n?.measured.height;
+  return n && w && h ? { x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width: w, height: h } : null;
+}
+
+/** An edge's label where lib/maps/graph.ts labelPlace put it, its full words in its title when it
+ * is shortened or wrapped. A label with no lines is not drawn: the edge's own SVG title (the
+ * tooltip of its line) keeps the words. */
+function EdgeLabel({ at, label, colour }: { at: { x: number; y: number; lines: string[] }; label: string; colour: string }) {
+  if (!at.lines.length) return null;
+  return (
+    <EdgeLabelRenderer>
+      <div className="nodrag nopan mp-edge-label" title={at.lines.join(" ") !== label ? label : undefined} style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)`, color: colour }}>
+        {at.lines.map((l, i) => (
+          <span key={i} className="mp-edge-line">
+            {l}
+          </span>
+        ))}
+      </div>
+    </EdgeLabelRenderer>
+  );
 }
 
 function ExitEdge(props: EdgeProps<ExitEdgeT>) {
@@ -326,27 +345,19 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
   const dy = (LABEL_DY[kind] ?? 0) + (sourceX > targetX ? 48 : 0); // a loop back: its label lower
   const entry = data && "entry" in data ? data.entry : null;
   const label = data?.label ?? `${kind.replace("_", " ")}${entry ? ` → ${entry}` : ""}${data?.runs ? ` · ${data.runs}×` : ""}${derived ? " (derived)" : ""}`;
-  // matpilot round 16 #8: the cards are drawn over the labels, so a label sits in the GAP between
-  // its two cards, in what fits there (two cards one under the other: the midpoint, as before)
-  const a = useSpan(source);
-  const b = useSpan(target);
-  const g = a && b ? cardGap(a, b) : null;
-  const inGap = g !== null && g.gap > 0;
-  const lines = inGap ? labelLines(label, LABEL_SHORT[kind] ?? kind, g.gap) : [label];
+  // matpilot round 16 #8, round 17: the cards are drawn over the labels, so a label sits in the GAP
+  // between its two cards, in what fits there (labelPlace: beside, at its kind's height; stacked,
+  // in the vertical gap; overlapping, none). Not measured yet: at its midpoint, as before.
+  const a = useRect(source);
+  const b = useRect(target);
+  const mid = { x: lx, y: ly + dy };
+  const at = (a && b ? labelPlace(a, b, label, LABEL_SHORT[kind] ?? kind, mid) : null) ?? { ...mid, lines: [label] };
   return (
     <>
+      {/* the tooltip of the edge's line (an SVG title, first in the edge's group): the full words */}
+      <title>{label}</title>
       <BaseEdge id={id} path={path} style={{ stroke: colour, strokeWidth: selected || data?.active ? 3.5 : 2, strokeDasharray: derived ? "6 5" : undefined }} />
-      {lines.length > 0 && (
-        <EdgeLabelRenderer>
-          <div className="nodrag nopan mp-edge-label" title={lines.join(" ") !== label ? label : undefined} style={{ transform: `translate(-50%, -50%) translate(${inGap ? g.centre : lx}px, ${ly + dy}px)`, color: colour }}>
-            {lines.map((l, i) => (
-              <span key={i} className="mp-edge-line">
-                {l}
-              </span>
-            ))}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      <EdgeLabel at={at} label={label} colour={colour} />
     </>
   );
 }
@@ -354,21 +365,21 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
 type SessionEdgeT = Edge<EdgeData & { active?: boolean }, "session">;
 
 function SessionEdge(props: EdgeProps<SessionEdgeT>) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } = props;
-  // round 6: the label sits ABOVE the session row (the cards are wider than the gaps between
-  // them; matpilot: the labels read "en the cli", "cter s")
-  const [path, lx] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const { id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected } = props;
+  // round 17 (round 16 #8's leftover): the label by the same rule as an exit's (labelPlace): in the
+  // gap between its two cards, on its own line, wrapped or shortened to what fits, else none. It
+  // sat above the row (min y - 64): inside Login when Choose character is under it, never wrapped.
+  const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const label = data && (data.kind === "session" || data.kind === "start") ? data.label : "";
+  const short = data?.kind === "session" ? data.short : "";
+  const a = useRect(source);
+  const b = useRect(target);
+  const at = label && a && b ? labelPlace(a, b, label, short, { x: lx, y: ly }) : null;
   return (
     <>
+      {label && <title>{label}</title>}
       <BaseEdge id={id} path={path} style={{ stroke: selected ? "var(--accent)" : "var(--neutral-border)", strokeWidth: selected || data?.active ? 3.5 : 2 }} />
-      {label && (
-        <EdgeLabelRenderer>
-          <div className="nodrag nopan mp-edge-label" style={{ transform: `translate(-50%, -100%) translate(${lx}px, ${Math.min(sourceY, targetY) - 64}px)`, color: "var(--muted)" }}>
-            {label}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      {at && <EdgeLabel at={at} label={label} colour="var(--muted)" />}
     </>
   );
 }
@@ -376,6 +387,11 @@ function SessionEdge(props: EdgeProps<SessionEdgeT>) {
 const MIN_ZOOM = 0.85; // node text (0.86rem and up) stays >= 11 px
 const MAX_ZOOM = 1.2;
 const PAD = 24;
+// React Flow's own fit, ONCE, at mount (the `fitView` prop queues one fit for the first
+// measurement; this object is a constant, so a render never re-sends it). Ours (`fit`) runs after
+// it, every node measured, and has the last word; "+ map" and the Fit button never ask React
+// Flow's (round 17: they do not fight).
+const RF_FIT = { padding: 0.12, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
 
 const nodeTypes = { start: StartMarker, login: LoginNode, character: CharacterNode, map: MapNodeCard, global: GlobalNodeCard };
 const edgeTypes = { exit: ExitEdge, session: SessionEdge };
@@ -407,27 +423,46 @@ function MapsCanvas(p: MapsCanvasProps) {
   const rf = useRef<ReactFlowInstance | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
   const [overflow, setOverflow] = useState(false);
+  const [fitText, setFitText] = useState(FIT_NAME);
   const shape = graph.nodes.map((n) => n.id).join("|");
-  // round 2: fit, but never below MIN_ZOOM (the text stays >= 11 px); a graph wider than the view
-  // starts at its LEFT and pans, and only then a small minimap shows. Round 6: a graph too big for
-  // the view opens on its MAP cards (and Global under them), the session row to the left.
-  const fit = useCallback(() => {
+  // round 2: never below MIN_ZOOM on a wide canvas (the text stays >= 11 px); a set wider than the
+  // view starts at its LEFT and pans, and only then a small minimap shows. Round 17 (N6, N7,
+  // lib/maps/graph.ts fitChoice): every card, else the run's path (all but Global), else START +
+  // the map cards (round 16 #3: START stays in view); on a narrow canvas where none of them fits at
+  // MIN_ZOOM, START + the maps scaled down until they fit (to FIT_FLOOR). The button's title says
+  // which. Returns false when there is nothing to fit yet (folded, or a card not measured).
+  const fit = useCallback((): boolean => {
     const inst = rf.current;
     const el = wrap.current;
-    if (!inst || !el || !el.clientWidth || !el.clientHeight) return;
+    if (!inst || !el || !el.clientWidth || !el.clientHeight) return false;
     const ns = inst.getNodes();
-    if (!ns.length) return;
+    if (!ns.length) return false;
+    // a card "+ map" just added has no size for a frame or two: a fit then would leave it out
+    const unmeasured = (id: string) => {
+      const m = inst.getInternalNode(id)?.measured;
+      return !m?.width || !m?.height;
+    };
+    if (ns.some((n) => unmeasured(n.id))) return false;
+    const bounds = (xs: Node[]) => (xs.length ? inst.getNodesBounds(xs) : null);
     const box = { width: el.clientWidth, height: el.clientHeight };
     // round 4: null while folded (0 x 0) or for any non-finite number: nothing is animated then
-    let f = fitViewport(box, inst.getNodesBounds(ns), MIN_ZOOM, MAX_ZOOM, PAD);
-    const maps = ns.filter((n) => n.type === "map" || n.type === "start"); // matpilot round 16 #3: START stays in view
-    if (f?.overflow && maps.length && maps.length < ns.length) f = fitViewport(box, inst.getNodesBounds(maps), MIN_ZOOM, MAX_ZOOM, PAD) ?? f;
-    if (!f) return;
-    setOverflow(f.overflow);
-    void inst.setViewport(f.viewport, { duration: 250 });
+    const c = fitChoice(box, { all: bounds(ns), path: bounds(ns.filter((n) => n.type !== "global")), maps: bounds(ns.filter((n) => n.type === "map" || n.type === "start")) }, MIN_ZOOM, MAX_ZOOM, PAD);
+    if (!c) return false;
+    const kinds = ns.map((n) => {
+      const d = n.data as MapsNodeData;
+      return { type: n.type ?? "", start: d.kind === "login" && d.start };
+    });
+    setOverflow(c.overflow);
+    setFitText(fitTitle(c, fitLeftOut(kinds, c.what), ns.some((n) => n.type === "start")));
+    void inst.setViewport(c.viewport, { duration: 250 });
+    return true;
   }, []);
+  // after a load and after "+ map" (the node set changes); retried while a new card is unmeasured
   useEffect(() => {
-    const t = setTimeout(fit, 120);
+    let tries = 0;
+    let t: ReturnType<typeof setTimeout> = setTimeout(function go() {
+      if (!fit() && ++tries < 10) t = setTimeout(go, 100);
+    }, 120);
     return () => clearTimeout(t);
   }, [shape, fit]);
   useEffect(() => {
@@ -574,16 +609,17 @@ function MapsCanvas(p: MapsCanvasProps) {
           rf.current = inst as unknown as ReactFlowInstance;
         }}
         fitView
-        fitViewOptions={{ padding: 0.12, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }}
+        fitViewOptions={RF_FIT}
         proOptions={{ hideAttribution: false }}
         attributionPosition="top-right"
-        minZoom={0.2}
+        minZoom={FIT_FLOOR}
       >
         <Background gap={24} />
-        {/* round 6: Fit is OURS (the maps first, never below MIN_ZOOM: text >= 11 px); React Flow's
-            own went to 0.41 (5 px text) */}
+        {/* round 6: Fit is OURS (never below MIN_ZOOM on a wide canvas: text >= 11 px); React Flow's
+            own went to 0.41 (5 px text). Round 17: its title says what the last fit showed; its
+            name (aria-label) stays the same */}
         <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={fit} title="Fit the maps" aria-label="Fit the maps" data-testid="maps-fit">
+          <ControlButton onClick={() => void fit()} title={fitText} aria-label={FIT_NAME} data-testid="maps-fit">
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
               <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.8" />
             </svg>

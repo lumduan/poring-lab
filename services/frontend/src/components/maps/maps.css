@@ -1026,11 +1026,11 @@
   padding: 0.05rem 0.4rem;
   border-radius: 0.3rem;
   background: var(--surface);
-  font-size: 0.85rem;
+  font-size: 0.85rem; /* x line-height 1.25 = graph.ts LABEL_LINE_PX; the padding = LABEL_VPAD_PX, LABEL_PAD_PX */
   font-weight: 600;
   line-height: 1.25;
   text-align: center;
-  white-space: nowrap; /* the lines are lib/maps/graph.ts labelLines' (sized to the gap between the cards) */
+  white-space: nowrap; /* the lines are lib/maps/graph.ts labelPlace's (sized to the gap between the cards) */
   pointer-events: all;
 }
 .mp-edge-line {

@@ -50,7 +50,8 @@ export type MapsNodeData =
 export type MapsNode = { id: string; type: MapsNodeData["kind"]; position: XY; data: MapsNodeData };
 export type EdgeData =
   | { kind: "start"; to: string; entry: string | null; label: string; derived: false }
-  | { kind: "session"; from: string; to: string; entry: string | null; label: string; derived: false }
+  // `short`: the one word the label keeps where its full words do not fit (labelPlace)
+  | { kind: "session"; from: string; to: string; entry: string | null; label: string; short: string; derived: false }
   | { kind: AuthoredExit; path: string; entry: string; derived: false; label?: string }
   | { kind: "death_respawn"; derived: true; label?: string };
 export type MapsEdge = { id: string; source: string; target: string; sourceHandle: string; targetHandle: string; data: EdgeData };
@@ -101,7 +102,8 @@ export function mapsGraph(p: Project): MapsGraph {
     if (!nodeById(p, e.from) || !nodeById(p, e.to)) continue;
     const to = nodeById(p, e.to);
     const label = to?.kind === "character" ? "log in, then choose" : to?.kind === "map" ? `enter the game${e.entry ? ` → ${e.entry}` : ""}` : "";
-    edges.push({ id: sessionEdgeId(e.from, e.to), source: e.from, target: e.to, sourceHandle: OUT, targetHandle: onto(e.to, e.entry), data: { kind: "session", from: e.from, to: e.to, entry: e.entry ?? null, label, derived: false } });
+    const short = to?.kind === "character" ? "log in" : to?.kind === "map" ? "enter" : "";
+    edges.push({ id: sessionEdgeId(e.from, e.to), source: e.from, target: e.to, sourceHandle: OUT, targetHandle: onto(e.to, e.entry), data: { kind: "session", from: e.from, to: e.to, entry: e.entry ?? null, label, short, derived: false } });
   }
   for (const n of mapNodes(p)) {
     for (const x of exitRows(p, n)) {
@@ -183,6 +185,90 @@ export function fitViewport(box: Box, bounds: Rect, minZoom: number, maxZoom: nu
   return { viewport: { x: pad - bounds.x * zz, y, zoom: zz }, overflow: true };
 }
 
+// --- which cards the Fit shows (matpilot round 17 N6, N7) ----------------------------------------
+// Fit never went below the readable minimum (round 6: 0.86rem node text stays >= 11 px at 0.85), so
+// on a phone the one box's START + xmas_dun02 (530 flow px, 450 at 0.85, on a 342 px wide view)
+// opened at its LEFT with the card's exits cut, and a map "+ map" put right of it was 0 % in view.
+// At 1440 the sample project fitted its two maps only while the button said "Fit the maps", and
+// Login, Choose character and Global stayed off screen. Now the fit tries, at the readable minimum,
+// EVERY card, then the RUN'S PATH (all but Global), then START + the MAP cards; on a narrow canvas
+// where none of them fits, START + the maps are scaled down until they fit (down to FIT_FLOOR);
+// the button's title says which (fitTitle).
+/** The pages' phone breakpoint (maps.css `@media (max-width: 48rem)`, 16 px a rem): a canvas this
+ * wide or narrower is NARROW (inclusive, as max-width is). */
+export const NARROW_PX = 768;
+/** The least zoom the narrow fit scales down to: React Flow's own zoom-out limit (MapsCanvas passes
+ * it as the `minZoom` prop), so the fit never shows a zoom a person could not pinch back to. */
+export const FIT_FLOOR = 0.2;
+export type FitWhat = "all" | "path" | "maps";
+/** The three card sets' bounds (flow pixels): every card; the run's path (every card but Global);
+ * START + the map cards. A set that is missing (none of its cards) is skipped. */
+export type FitSets = { all?: Rect | null; path?: Rect | null; maps?: Rect | null };
+/** `scaled`: below the readable minimum (a narrow canvas); `overflow`: not even that fitted, and
+ * the set starts at its LEFT at the readable minimum (a finger, or the minimap, pans the rest). */
+export type FitChoice = { viewport: Viewport; overflow: boolean; what: FitWhat; scaled: boolean };
+
+/** Which cards the Fit shows, and how (see above). Null: no box (folded, not laid out), a bad
+ * number in the box, or no usable set. */
+export function fitChoice(box: Box, sets: FitSets, minZoom: number, maxZoom: number, pad: number): FitChoice | null {
+  let last: { what: FitWhat; rect: Rect } | null = null;
+  for (const what of ["all", "path", "maps"] as const) {
+    const rect = sets[what];
+    if (!rect) continue;
+    const f = fitViewport(box, rect, minZoom, maxZoom, pad);
+    if (!f) continue; // an unusable set (no size, a bad number); with a bad box, every set is
+    last = { what, rect };
+    if (!f.overflow) return { ...f, what, scaled: false };
+  }
+  if (!last) return null;
+  if (box.width <= NARROW_PX && FIT_FLOOR < minZoom) {
+    const s = fitViewport(box, last.rect, FIT_FLOOR, maxZoom, pad);
+    if (s && !s.overflow) return { viewport: s.viewport, overflow: false, what: last.what, scaled: s.viewport.zoom < minZoom };
+  }
+  const f = fitViewport(box, last.rect, minZoom, maxZoom, pad);
+  return f ? { ...f, what: last.what, scaled: false } : null;
+}
+
+/** The cards a fit of `what` leaves out, by the names their cards show, in the session's order
+ * (a project has one Login, one Choose character, one Global). Login says it holds START when the
+ * run starts there (`start`). */
+export function fitLeftOut(nodes: readonly { type: string; start?: boolean }[], what: FitWhat): string[] {
+  const inFit = (t: string) => what === "all" || (what === "path" ? t !== "global" : t === "map" || t === "start");
+  const out: string[] = [];
+  for (const t of ["login", "character", "global"]) {
+    const n = nodes.find((x) => x.type === t);
+    if (!n || inFit(t)) continue;
+    out.push(t === "login" ? (n.start ? "Login (START)" : "Login") : t === "character" ? "Choose character" : "Global");
+  }
+  return out;
+}
+
+const andList = (xs: readonly string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
+
+/** The Fit button's NAME (its aria-label, never changed: scripts find the button by it) and its
+ * title before the first fit. */
+export const FIT_NAME = "Fit the maps";
+
+/** The Fit button's title: what its last fit showed (the same fit runs after a load, after
+ * "+ map", on a resize and on the button), and which cards it left out. `marker`: the START
+ * marker is one of the fit's cards (the run starts on a map). */
+export function fitTitle(c: Pick<FitChoice, "what" | "scaled" | "overflow"> | null, out: readonly string[], marker: boolean): string {
+  if (!c) return FIT_NAME;
+  const all = out.length === 0;
+  const one = out.length === 1;
+  let s: string;
+  if (c.overflow) {
+    s = `${all ? "Fit" : "Fit the maps"}: ${marker ? "from START at the left" : "from the left"}, at a readable size (the ${all ? "cards" : "map cards"} do not all fit here: pan right).`;
+  } else {
+    const what = all ? "Fit: every card" : c.what === "path" ? "Fit: the run's path" : `Fit the maps: ${marker ? "START and " : ""}${c.scaled ? "every map card" : "the map cards"}`;
+    s = `${what}${c.scaled ? ", scaled down to fit this narrow view (zoom in to read)" : ""}.`;
+  }
+  if (all) return s;
+  if (c.scaled || c.overflow) return `${s} ${andList(out)} ${one ? "is" : "are"} left out: pan to ${one ? "it" : "them"}.`;
+  if (one && out[0] === "Global") return `${s} Global, shared by every node, does not fit beside it at a readable size here: pan to it.`;
+  return `${s} ${andList(out)} ${one ? "does" : "do"} not fit beside ${c.what === "path" ? "it" : "them"} at a readable size here: pan to ${one ? "it" : "them"}.`;
+}
+
 /** Where to centre the view so the playback's node is in it (at the current zoom), or null: the
  * node is already in view, the box has no size (folded), or a number is not finite. */
 export function followCentre(box: Box, vp: Viewport, node: Rect): { x: number; y: number; zoom: number } | null {
@@ -225,10 +311,11 @@ export function cardGap(a: Span, b: Span): { gap: number; centre: number } | nul
 }
 
 /** The label's lines in a gap of `gap` flow pixels: `full` on one line when it fits, else `full`
- * wrapped on its words into at most LABEL_MAX_LINES lines, else `short`, else [] (no label). */
-export function labelLines(full: string, short: string, gap: number): string[] {
+ * wrapped on its words into at most `maxLines` lines (LABEL_MAX_LINES), else `short`, else []
+ * (no label). */
+export function labelLines(full: string, short: string, gap: number, maxLines = LABEL_MAX_LINES): string[] {
   const room = gap - 2 * LABEL_CLEAR_PX;
-  if (!Number.isFinite(room) || room <= 0) return [];
+  if (!Number.isFinite(room) || room <= 0 || !(maxLines >= 1)) return [];
   if (labelWidth(full) <= room) return [full];
   const lines: string[] = [];
   for (const w of full.split(" ").filter(Boolean)) {
@@ -236,6 +323,44 @@ export function labelLines(full: string, short: string, gap: number): string[] {
     if (last !== undefined && labelWidth(`${last} ${w}`) <= room) lines[lines.length - 1] = `${last} ${w}`;
     else lines.push(w);
   }
-  if (lines.length <= LABEL_MAX_LINES && lines.every((l) => labelWidth(l) <= room)) return lines;
+  if (lines.length <= maxLines && lines.every((l) => labelWidth(l) <= room)) return lines;
   return labelWidth(short) <= room ? [short] : [];
+}
+
+// --- one placement rule for every edge label (matpilot round 17, round 16 #8's leftover) ---------
+// The session edges' labels sat ABOVE the row (min(source, target) y - 64), never wrapped: with
+// Choose character UNDER Login (the sample) "log in, then choose" was 100 % under the Login card,
+// and "enter the game → spawn" (204 px) was cut by the cards beside its 158 px gap. Every label now
+// takes the same rule: cards SIDE BY SIDE (a horizontal gap): in that gap (labelLines), at the
+// edge's own height; cards STACKED (their x spans overlap, a vertical gap between them): in that
+// gap, as many lines as its height holds, no wider than the narrower card; OVERLAPPING cards: no
+// label (the cards' port rows say it). The full words stay in the label's title.
+/** .mp-edge-label's line box: 0.85rem x line-height 1.25 = 17 px a line, and 0.05rem of padding
+ * above and below (1.6 px, rounded up). Pinned to maps.css in maps.test.ts. */
+export const LABEL_LINE_PX = 17;
+export const LABEL_VPAD_PX = 2;
+export const labelHeight = (lines: number): number => lines * LABEL_LINE_PX + LABEL_VPAD_PX;
+
+export type LabelPlace = { x: number; y: number; lines: string[]; how: "beside" | "stacked" | "overlap" };
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Where an edge's label goes between its two cards `a` and `b` (flow pixels), and its lines;
+ * `mid` is the edge's own label point (React Flow's getSmoothStepPath / getBezierPath centre).
+ * Beside: x = the gap's centre, y = mid's. Stacked: x = mid's (kept over both cards' columns),
+ * y = mid's kept inside the gap (so the label stays on its line whenever the gap allows). Null for
+ * a card not yet measured (size 0) or a non-finite number. */
+export function labelPlace(a: Rect, b: Rect, full: string, short: string, mid: XY): LabelPlace | null {
+  if (!finite(a.x, a.y, a.width, a.height, b.x, b.y, b.width, b.height, mid.x, mid.y) || a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) return null;
+  const h = cardGap(a, b);
+  if (h && h.gap > 0) return { x: h.centre, y: mid.y, lines: labelLines(full, short, h.gap), how: "beside" };
+  const [top, bottom] = a.y <= b.y ? [a, b] : [b, a];
+  const gapTop = top.y + top.height;
+  const vgap = bottom.y - gapTop;
+  if (vgap <= 0) return { x: mid.x, y: mid.y, lines: [], how: "overlap" };
+  const fit = Math.floor((vgap - 2 * LABEL_CLEAR_PX - LABEL_VPAD_PX) / LABEL_LINE_PX);
+  const lines = labelLines(full, short, Math.min(a.width, b.width), Math.min(fit, LABEL_MAX_LINES));
+  const half = labelHeight(lines.length) / 2;
+  const x = clamp(mid.x, Math.max(a.x, b.x), Math.min(a.x + a.width, b.x + b.width));
+  const y = lines.length ? clamp(mid.y, gapTop + LABEL_CLEAR_PX + half, bottom.y - LABEL_CLEAR_PX - half) : gapTop + vgap / 2;
+  return { x, y, lines, how: "stacked" };
 }
