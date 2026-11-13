@@ -468,6 +468,8 @@ function MapsCanvas(p: MapsCanvasProps) {
       if (!c.source || !c.target) return false;
       if (c.sourceHandle === OUT) return sessionLinkProblem(project, c.source, c.target, entryOf(c.targetHandle)) === null;
       if (isPort(c.sourceHandle)) return c.source !== c.target && project.nodes.some((n) => n.id === c.target && n.kind === "map");
+      // an exit's end dragged onto another map (its own port `x:<path>`: onReconnect retargets it)
+      if (c.sourceHandle?.startsWith("x:")) return project.nodes.some((n) => n.id === c.target && n.kind === "map");
       return false;
     },
     [project],
