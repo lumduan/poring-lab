@@ -11,7 +11,7 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
@@ -253,6 +253,11 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
         if (s.block === "hunt" && ids.hunt) {
           const f = huntFields(s, ids.hunt);
           if (f) return { type: HUNT_TYPE, fields: f, extraState: huntState(actionRest(s), ids.hunt) };
+        }
+        // live blocks 5b-2: the hunt loop's own blocks show their time box and their value's variable
+        if ((HUNT_LOOP_BLOCKS as readonly string[]).includes(s.block) && paramsPlain(s)) {
+          const f = { BLOCK: s.block, ARGS: argsText(s.params), TIMEOUT: s.timeout_s };
+          return s.outcome_to ? { type: "pl_hunt_take", fields: { VAR: s.outcome_to, ...f }, extraState: actionRest(s) } : { type: "pl_hunt_step", fields: f, extraState: actionRest(s) };
         }
         const own = ownBlock(s);
         if (own) return own;
@@ -798,6 +803,14 @@ class Reader {
     switch (b.type) {
       case "pl_action":
         return this.generic(b, where);
+      case "pl_hunt_take":
+      case "pl_hunt_step": {
+        // live blocks 5b-2: a hunt loop block -- its time box and its value's variable are fields
+        const a = this.generic(b, where);
+        const v = b.type === "pl_hunt_take" ? this.field(b, "VAR").trim() : "";
+        if (b.type === "pl_hunt_take" && !NAME.test(v)) this.err(where, `${a.block}: its value goes into a variable, e.g. t`);
+        return { ...a, timeout_s: this.num(b, "TIMEOUT", where), outcome_to: b.type === "pl_hunt_take" ? v : null };
+      }
       case HUNT_TYPE: {
         // the dropdowns ARE the parameters: P_<NAME> -> <name>, each a rule version (or option)
         // literal; an optional one at its default (extraState `omit`) is left out (absent = it)

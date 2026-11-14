@@ -35,6 +35,7 @@ import {
   startMap,
   tab,
   tabNameProblem,
+  xmasHuntProject,
   xmasProject,
 } from "./project.ts";
 import { exportProject, importProject } from "./projectfile.ts";
@@ -65,7 +66,7 @@ const roundTrip = (p: Project) => {
 };
 
 test("the ready-made projects: every tab of every node round-trips through its blocks", () => {
-  for (const p of [xmasProject(), sampleProject(), sessionProject()]) roundTrip(p);
+  for (const p of [xmasProject(), xmasHuntProject(), sampleProject(), sessionProject()]) roundTrip(p);
   const s = sessionProject();
   assert.deepEqual(s.nodes.map((n) => `${n.id}:${n.kind}`), ["login:login", "character:character", "xmas_dun02:map", "geffen:map", "global:global"]);
   assert.deepEqual(globalOf(s)?.tabs.map((t) => t.name), ["keys", "safety"]);
@@ -296,7 +297,7 @@ test("the one box names xmas02 and writes today's technique for each monster", (
 });
 
 // the flow engine's fixtures (its branch writes them): the browser's ready-made projects ARE them
-for (const [name, make] of [["project_xmas_dun02", xmasProject], ["project_sample", sampleProject]] as const) {
+for (const [name, make] of [["project_xmas_dun02", xmasProject], ["project_xmas_dun02_hunt", xmasHuntProject], ["project_sample", sampleProject]] as const) {
   const url = new URL(`./fixtures/${name}.json`, import.meta.url);
   test(`the ready-made project is the engine's fixture ${name}.json`, { skip: !existsSync(url) }, () => {
     assert.equal(canonical(make()), canonical(JSON.parse(readFileSync(url, "utf8"))));

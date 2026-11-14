@@ -499,6 +499,44 @@ export function xmasProject(): Project {
   };
 }
 
+/** Live blocks 5b-2 (live-blocks.md 14): the hunt tab -- hunt_loop(t), the hunt core's loop as its
+ * own steps (poring_flow.huntloop). The canonical loop: t = find_target() (13.4's explore()), then
+ * fight(t) (13.4's attack(t): the monsters tab's recipe for t's species), until the run ends. */
+export const HUNT_TAB = "hunt";
+export const huntLoopDef = (): Def =>
+  def(
+    "hunt_loop",
+    [
+      {
+        kind: "while",
+        cond: lit(true),
+        body: [
+          { kind: "action", block: "find_target", concept: "combat.hunt", params: {}, timeout_s: 120, ...rest, outcome_to: "t" },
+          { kind: "action", block: "fight", concept: "combat.attack_target", params: { target: { kind: "var", name: "t" } }, timeout_s: 300, ...rest },
+        ],
+        max_iter: null,
+        max_s: null,
+      },
+    ],
+    { params: [{ name: "t", default: null }] },
+  );
+
+/** The one box with its hunt tab (fixtures/project_xmas_dun02_hunt.json, 5b-2's live A/B arm B5b-2):
+ * exactly xmasProject() plus the tab hunt after monsters, whose hunt_loop(t) the hunt core plays
+ * instead of its own loop. The ready-made one box itself stays without it (5b-1's A/B plays it). */
+export function xmasHuntProject(): Project {
+  const p = xmasProject();
+  const n = p.nodes[0];
+  if (n.kind !== "map") throw new Error("the one box's node is a map node");
+  const i = n.tabs.findIndex((t) => t.name === MONSTERS_TAB);
+  n.tabs.splice(i + 1, 0, tab(HUNT_TAB, [huntLoopDef()]));
+  return {
+    ...p,
+    name: "xmas_dun02_hunt",
+    description: "One box with its hunt loop (live-blocks 5b-2): the box of project_xmas_dun02.json plus the tab hunt, whose hunt_loop(t) the hunt core plays instead of its own loop: t = find_target(), then fight(t).",
+  };
+}
+
 /** The two-map sample on the SYNTHETIC sample sheets (town_1 / field_1; the first screen). */
 export function sampleProject(): Project {
   return {

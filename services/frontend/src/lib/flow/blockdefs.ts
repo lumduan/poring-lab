@@ -561,6 +561,33 @@ export function titleLines(title: string): [string, string] {
 }
 BLOCK_DEFS.push(...SETTING_DEFS);
 
+// --- live blocks 5b-2 (live-blocks.md 14): THE HUNT LOOP's blocks. A map node's function
+// hunt_loop(t) (its tab `hunt`) is its hunt core's loop: each block plays the runner's own steps,
+// ONE bounded call (its time box: the IR's timeout_s, shown) -- poring_flow.huntloop. The five
+// blocks of its own have a block type of their own (the value into a variable, or none); the recipe
+// steps (strike, wait_steal, wait_kill, loot) and use_skill stay generic (pl_action), as in 4a.
+/** The tab whose toolbox offers the hunt loop (as `monsters` offers the recipes). */
+export const HUNT_LOOP_TAB = "hunt";
+export const HUNT_LOOP_FN = "hunt_loop";
+/** The hunt loop's own blocks (blocks.yaml; 13.4's explore() is find_target, its attack(t) fight). */
+export const HUNT_LOOP_BLOCKS = ["find_target", "choose_target", "walk_to_target", "look", "fight"] as const;
+BLOCK_DEFS.push(
+  stmt({
+    type: "pl_hunt_take",
+    message0: "%1 = %2 ( %3 ) · at most %4 s %5 %6",
+    args0: [text("VAR", "t"), label("BLOCK"), text("ARGS"), num("TIMEOUT", 120), badge, run],
+    inputsInline: true,
+    tooltip: "A block of the hunt loop (the runner's own steps, one bounded call): its value goes into the variable -- find_target: the monster engaged (none at its time box); choose_target: the fight's monster; look: the tick's reads. It hands back at once on the run's end or on Stop.",
+  }),
+  stmt({
+    type: "pl_hunt_step",
+    message0: "%1 ( %2 ) · at most %3 s %4 %5",
+    args0: [label("BLOCK"), text("ARGS"), num("TIMEOUT", 300), badge, run],
+    inputsInline: true,
+    tooltip: "A block of the hunt loop (the runner's own steps, one bounded call) -- fight(t): the monsters tab's recipe for t's species; walk_to_target(t): until t is in reach. It hands back at once on the run's end or on Stop.",
+  }),
+);
+
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
 
 /** The toolbox's Settings category (matpilot round 20 #5): ONE SUB-CATEGORY PER GROUP, named as its
@@ -652,7 +679,7 @@ const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_h
  * `monsters` tab -- never under "More skills". */
 export const RECIPE_TAB = "monsters";
 export const RECIPE_STEPS = ["strike", "wait_steal", "wait_kill", "loot"] as const;
-const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill"]);
+const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill", "find_target", "choose_target", "walk_to_target", "look", "fight"]);
 /** The model a node's recipes name (its use_model's models.yaml entry): its monsters the runner
  * strikes and their mob ids (the KB names them at run time). */
 export type Monsters = { model: string; strikes: string[]; mobs: Record<string, number[]> };
@@ -749,6 +776,31 @@ export function toolbox(
     }
     if (blocks.use_skill) recipes.push(lbl("A skill before the strike (checked, not played live yet: 4b):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_skill", ARGS: 'key="F6"' }, extraState: rest(blocks.use_skill) });
   }
+  // live blocks 5b-2 (live-blocks.md 14): the hunt tab -- hunt_loop(t), the hunt core's loop as its
+  // own steps; each block one bounded call (its time box shown), the canonical loop first
+  const huntLoop: ToolboxItem[] = [];
+  if (scope.tab === HUNT_LOOP_TAB && onMap && blocks.find_target) {
+    const own = (type: string, block: string, f: Record<string, unknown>) => (blocks[block] ? [{ kind: "block" as const, type, fields: { BLOCK: block, ...f }, extraState: rest(blocks[block]) }] : []);
+    huntLoop.push(
+      lbl("The hunt core plays this loop instead of its own (the node's main runs dungeon_hunt):"),
+      { kind: "block", type: "pl_def", fields: { NAME: HUNT_LOOP_FN, PARAMS: "t" } },
+      { kind: "block", type: "pl_while", inputs: { COND: exprBlock("True") } },
+      lbl("Each turn: find a target, then fight it (the monsters tab's recipe for its species):"),
+      ...own("pl_hunt_take", "find_target", { VAR: "t", ARGS: "", TIMEOUT: blocks.find_target.timeout_s }),
+      ...own("pl_hunt_step", "fight", { ARGS: "target=t", TIMEOUT: blocks.fight?.timeout_s ?? 300 }),
+      lbl("Or the fight's steps one by one (the runner's own, each until its exit):"),
+      ...own("pl_hunt_step", "walk_to_target", { ARGS: "target=t", TIMEOUT: blocks.walk_to_target?.timeout_s ?? 30 }),
+    );
+    for (const s of RECIPE_STEPS) if (blocks[s]) huntLoop.push({ kind: "block", type: "pl_action", fields: { BLOCK: s, ARGS: "target=t" }, extraState: rest(blocks[s]) });
+    huntLoop.push(
+      lbl("At once:"),
+      ...own("pl_hunt_take", "choose_target", { VAR: "t", ARGS: "", TIMEOUT: 1 }),
+      ...own("pl_hunt_take", "look", { VAR: "t", ARGS: "", TIMEOUT: 1 }),
+      ...(blocks.use_skill ? [lbl("A press of the hunt core's heal key, between two steps:"), { kind: "block" as const, type: "pl_action", fields: { BLOCK: "use_skill", ARGS: 'key="F1"' }, extraState: rest(blocks.use_skill) }] : []),
+      lbl("Is there a target (none at find_target's time box)?"),
+      { kind: "block", type: "pl_if", inputs: { COND: exprBlock("known(value=t)") } },
+    );
+  }
   if (onMap) {
     movement.push(
       lbl("Leave this map (a map's main ends with one):"),
@@ -835,6 +887,7 @@ export function toolbox(
       { kind: "search", name: "Search", categorystyle: "mp_setup_category" },
       cat("Movement", "mp_movement_category", movement),
       ...(recipes.length ? [cat("Monsters", "mp_sensor_category", recipes)] : []),
+      ...(huntLoop.length ? [cat("Hunt", "mp_movement_category", huntLoop)] : []),
       cat("Actions", "mp_output_category", actions),
       cat("Control", "loop_category", control),
       cat("Conditions", "loop_category", conditions),

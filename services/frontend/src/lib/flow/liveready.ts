@@ -90,6 +90,8 @@ export function reachable(p: Project, nodeId: string): Reach {
     // stage 4a (live-blocks.md 3.4): with the trained data the hunt core asks each monster's
     // function (attack_<monster>) at its lock: their steps play too
     if (block === "use_model") for (const name of recipeNames(node)) fn(node, name);
+    // live blocks 5b-2 (live-blocks.md 14): the hunt core plays the node's hunt loop (hunt_loop)
+    if (block === "dungeon_hunt" && loopNames(node).length) for (const name of loopNames(node)) fn(node, name);
     for (const [k, v] of Object.entries(params)) {
       // the runner's roles name FUNCTIONS (each one press_key): the player presses them too
       if (block === "dungeon_hunt" && ROLE_PARAMS.includes(k) && v.kind === "lit" && typeof v.value === "string") fn(node, v.value);
@@ -145,6 +147,13 @@ export function reachable(p: Project, nodeId: string): Reach {
           break;
       }
     }
+  };
+  /** The hunt loop a node's hunt core plays (its own, else Global's): hunt_loop (5b-2). */
+  const loopNames = (id: string): string[] => {
+    const n = nodeById(p, id);
+    const g = globalOf(p);
+    for (const m of [n ? namesOf(n) : new Map(), g ? namesOf(g) : new Map()]) if (m.get("hunt_loop")?.kind === "def") return ["hunt_loop"];
+    return [];
   };
   /** The monsters' functions a node's hunt core may ask (its own and Global's): attack_<monster>. */
   const recipeNames = (id: string): string[] => {
