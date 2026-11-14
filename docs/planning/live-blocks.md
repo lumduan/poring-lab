@@ -919,3 +919,39 @@ refused items while the server still had her alive.
   with the way home tried; nothing of the runner was worse in the valid runs. What it did NOT
   prove: a kills/h equivalence under the bar, and the boss fly by the box (no box boss Fly Wing
   fired in a valid run: the Knight's kills came before any Battle Log line could be acted on).
+
+## 8. Stage 3 live A/B (2026-11-14 04:14-08:02 ICT): INCONCLUSIVE by its bar (2 valid pairs of 3)
+
+The series: `scripts/stage3_ab.py run` (B2 = the stage-2 box, B3 = the stage-3 box; the bar of
+3.3, unchanged). s3ab-1114 (04:14-05:31, 4 pairs planned) stopped after a B2 death 46 s after its
+warp (the short-run rule, since fixed: 813893cc); s3ab-1114b (06:05-08:02, 3 pairs) ran through.
+
+| Run | Box | Min | Deaths | Kills/h | Steals/h | Openers / back | Failed swaps | Home at the end |
+|---|---|---|---|---|---|---|---|---|
+| s3ab-1114-r01B2 | B2 | 19.9 | 0 | 132.5 | 60.2 | 23 / 23 | 0 | yes |
+| s3ab-1114-r02B3 | B3 | 19.9 | 0 | 169.2 | 51.4 | 20 / 20 | 0 | yes |
+| s3ab-1114-r03B3 | B3 | 19.9 | 0 | 144.8 | 102.5 | 41 / 41 | 0 | yes |
+| s3ab-1114-r04B2 | B2 | 9.4 | 1 (one-shot from 65 %, no decoded damage packet) | - | - | 25 / 24 | 0 | (respawned) |
+| s3ab-1114-r05B2 | B2 | 0.4 | 1 (the Knight at the start cell) | - | - | 1 / 0 | 0 | (respawned) |
+| s3ab-1114b-r01B2 | B2 | 19.9 | 0 | 141.9 | 48.3 | 27 / 27 | 0 | yes |
+| s3ab-1114b-r02B3 | B3 | 19.9 | 0 | 136.0 | 75.5 | 37 / 37 | 0 | yes |
+| s3ab-1114b-r03B3 | B3 | 8.0 | 1 (the Knight, 1,309, from 81 %) | - | - | 18 / 18 | 0 | (respawned BY THE BOX) |
+| s3ab-1114b-r04B2 | B2 | 19.9 | 0 | 148.0 | 96.7 | 47 / 47 | 0 | yes |
+| s3ab-1114b-r05B2 | B2 | 19.9 | 0 | 132.8 | 75.4 | 37 / 37 | 0 | yes |
+| s3ab-1114b-r06B3 | B3 | 19.9 | 0 | 144.9 | 90.6 | 45 / 45 | 0 | yes |
+
+- **The pre-registered verdict (`stage3_ab.py score --label s3ab-1114b`): INCONCLUSIVE**: 2 valid
+  pairs, the bar needs 3. Its lines: deaths 0 / 0 (valid pairs only: the same flaw as 3.2's bar,
+  section 7); kills/h B3 - B2 +3.1 (SE 9.0; pairs -6.0, +12.1); steals/h +21.2 (SE 6.0; +27.2,
+  +15.1); failed swaps 0 / 0 (pass); home at the end 1.0 / 1.0 (pass); the respawn and the weight
+  lines NOT EXERCISED in the valid runs.
+- **Report-only:** with s3ab-1114's one valid pair (B2 132.5 / B3 169.2 kills/h; steals 60.2 /
+  51.4) the three valid pairs' kills/h differences are +36.7, -6.0, +12.1 (mean +14.3) and
+  steals/h -8.8, +27.2, +15.1 (mean +11.2). Not the bar (each series is scored on its own).
+- **What stage 3 PROVED live:** every Knife opener and swap back of the B3 runs came from the box's
+  knife_on / knife_back (box calls recorded; 161 openers, 161 swaps back, 0 failed); the way home
+  at the end pressed the box's fly_home() in every valid B3 run and arrived; the death exit played
+  the box's respawn_button() = click_at(645, 481) then respawn_ok() = click_at(714, 405) and she was
+  back in 4.33 s (s3ab-1114b-r03B3, outside the bar: that run is invalid). NOT proven: the weight
+  event (no run reached 50 %: the setup clears the bag at 40 %, and 20-min runs end at 32-43 %).
+- Deaths: 3 in 11 played runs (B2 2, B3 1), all to the Stormy Knight or a one-shot with it near.
