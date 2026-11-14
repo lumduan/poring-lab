@@ -24,6 +24,8 @@
 //
 // Our own: the synonyms and Python names of OUR blocks.
 
+import { settingOfType } from "./settings.ts";
+
 export type FlyoutItem = Record<string, unknown> & { kind: string };
 export type SearchEntry = { category: string; item: FlyoutItem; text: string };
 
@@ -117,8 +119,10 @@ export function matchEntries(query: string, entries: readonly SearchEntry[]): Se
   entries.forEach((entry, index) => {
     const own = normalise(entry.text).split(" ");
     const type = String(entry.item.type);
+    // matpilot round 20 #5: a setting block by its group's words and its own (the registry's find)
+    const find = settingOfType(type)?.find ?? [];
     const other = normalise(
-      `${entry.category} ${(BLOCK_SYNONYMS[type] ?? []).join(" ")} ${(PYTHON_NAMES[type] ?? []).join(" ")}`,
+      `${entry.category} ${(BLOCK_SYNONYMS[type] ?? []).join(" ")} ${(PYTHON_NAMES[type] ?? []).join(" ")} ${find.join(" ")}`,
     ).split(" ");
     const all = [...own, ...other];
     if (!words.every((word) => all.some((each) => each.startsWith(word)))) return;

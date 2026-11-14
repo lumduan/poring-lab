@@ -73,6 +73,9 @@ export const BLOCK_STYLES: Record<string, BlockStyle> = {
   text_blocks: { colourPrimary: CATEGORY_COLOURS.data },
   variable_blocks: { colourPrimary: CATEGORY_COLOURS.variables },
   mp_shared_variable_blocks: { colourPrimary: CATEGORY_COLOURS.sharedVariables },
+  // OURS (matpilot round 20 #4a): a setting block not used in a Run of this box, greyed: a light
+  // slate with dark words (flows.css .pl-setting-unused), never Blockly's disabled state
+  pl_unused_blocks: { colourPrimary: "#cbd5e1" },
 };
 
 /** Blockly category styles (the toolbox rows), keyed as MatPilot's. */

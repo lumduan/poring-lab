@@ -15,17 +15,17 @@ import type * as BlocklyT from "blockly/core";
 import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
-import { huntKey, register, registerHunt, themesOf } from "@/components/flows/blockly-register";
+import { huntKey, register, registerHunt, syncSetting, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
-import { SENTENCE_BY_TYPE, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
+import { SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
 import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { Project } from "@/lib/flow/project";
-import { settingFallback, settingOfType, settingTooltip } from "@/lib/flow/settings";
+import { noteLines, SETTING_NOTE_ROWS, settingFallback, type SettingNote, settingOfType, settingTooltip } from "@/lib/flow/settings";
 import { runLine } from "@/lib/flow/status";
 import { injectFor } from "@/lib/flow/theme";
 import type { Issue, Loose } from "@/lib/flow/words";
@@ -68,6 +68,9 @@ export type BlockEditorProps = {
   getProject: () => Project;
   catalogue: CatalogueDoc | null;
   lint: LintDoc | null;
+  /** matpilot round 20 #3, #4a: the lint's words per setting block (POST /flows/lint `settings`),
+   * kept while a new lint runs (the rows would blink on every edit otherwise). */
+  notes: Record<string, SettingNote> | null;
   trace: Trace | null;
   hidden: boolean;
   onProject: (project: Project) => void;
@@ -76,7 +79,7 @@ export type BlockEditorProps = {
 };
 
 export default function BlockEditor(p: BlockEditorProps) {
-  const { scope, scopeKey, epoch, catalogue, lint, trace, hidden } = p;
+  const { scope, scopeKey, epoch, catalogue, lint, notes, trace, hidden } = p;
   const host = useRef<HTMLDivElement | null>(null);
   const ws = useRef<BlocklyT.WorkspaceSvg | null>(null);
   const blockly = useRef<typeof BlocklyT | null>(null);
@@ -120,7 +123,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         canUndo: w.getUndoStack().length > 0,
         canRedo: w.getRedoStack().length > 0,
       });
-      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.trace, paths.current, latest.current.scope, r.ok ? r.project : project);
+      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.notes, latest.current.trace, paths.current, latest.current.scope, r.ok ? r.project : project);
     };
 
     const api: EditorApi = {
@@ -171,7 +174,12 @@ export default function BlockEditor(p: BlockEditorProps) {
         B.Events.disable();
         try {
           B.serialization.workspaces.load(tabToWorkspace(latest.current.getProject(), scope, { hunt }) as unknown as object, w);
-          for (const b of w.getBlocksByType("pl_main", false)) b.getField("TITLE")?.setValue(latest.current.title);
+          for (const b of w.getBlocksByType("pl_main", false)) {
+            const [one, two] = titleLines(latest.current.title);
+            b.getField("TITLE")?.setValue(one);
+            b.getField("TITLE2")?.setValue(two);
+            if (!two) b.getInput("ROW_TITLE2")?.setVisible(false); // one row: no empty second
+          }
         } finally {
           B.Events.enable();
         }
@@ -227,9 +235,9 @@ export default function BlockEditor(p: BlockEditorProps) {
       tbRef.current = next;
       ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
     }
-    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope, p.getProject());
+    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, notes, trace, paths.current, scope, p.getProject());
     // the scopes as plain values: their objects are new on every render of the page
-  }, [ready, catalogue, lint, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, catalogue, lint, notes, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -265,11 +273,49 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox
 /** Badges (L1 verification), lint warnings and the last run on each block. `paths`: block id ->
  * node path, as converted last (edits move blocks; their ids stay). The labels change with events
  * off: a decoration is not an edit (no undo step, no conversion). */
-function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
+function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  let grew: BlocklyT.BlockSvg[] = [];
+  try {
+    grew = paint(B, w, catalogue, lint, notes, trace, paths, scope, project);
+  } finally {
+    if (was) B.Events.enable();
+  }
+  // a setting block that gained rows (its warning, the lint's note) pushes the blocks under it down
+  // once Blockly has drawn it (its new height is known only then)
+  if (grew.length) void B.renderManagement.finishQueuedRenders().then(() => restack(B, w, grew), () => undefined);
+}
+
+/** The gap kept between two setting blocks when one grew (workspace units). */
+const RESTACK_GAP = 16;
+
+/** matpilot round 20 #2: when a setting block grew (its warning, the lint's note) over the block
+ * under it, every block under it moves down by the same amount (a list of settings stays a list, in
+ * its order); a move, never an edit (no event, no undo step). Blocks beside it stay. */
+function restack(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, grew: BlocklyT.BlockSvg[]): void {
+  if (grew.some((b) => b.isDisposed() || b.workspace !== w)) return; // the tab was closed meanwhile
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
-    paint(w, catalogue, lint, trace, paths, scope, project);
+    const box = (b: BlocklyT.BlockSvg) => {
+      const at = b.getRelativeToSurfaceXY();
+      const hw = b.getHeightWidth();
+      return { x: at.x, y: at.y, w: hw.width, h: hw.height };
+    };
+    const tops = w.getTopBlocks(false).filter((b) => !b.isDisposed());
+    for (const a of [...grew].sort((x, y) => box(x).y - box(y).y)) {
+      const ab = box(a);
+      const below = tops.filter((b) => {
+        const bb = box(b);
+        return b !== a && bb.y >= ab.y && bb.x < ab.x + ab.w && ab.x < bb.x + bb.w;
+      });
+      if (!below.length) continue;
+      const first = Math.min(...below.map((b) => box(b).y));
+      const under = ab.y + ab.h + RESTACK_GAP;
+      if (first >= under) continue;
+      for (const b of below) b.moveBy(0, under - first);
+    }
   } finally {
     if (was) B.Events.enable();
   }
@@ -286,17 +332,30 @@ function tabFindings(lint: LintDoc | null, scope: TabScope): Map<string, Finding
   return out;
 }
 
-function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
+/** The style a setting block takes while the lint says it is not used in a Run (greyed: a colour of
+ * its own, never Blockly's disabled state, which would drop it from the project). */
+export const UNUSED_STYLE = "pl_unused_blocks";
+const SETTING_STYLE = "mp_setup_blocks";
+
+function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): BlocklyT.BlockSvg[] {
   const byPath = tabFindings(lint, scope);
   const prefix = `${scope.node}/${scope.tab}/`;
+  const grew: BlocklyT.BlockSvg[] = [];
+  const hasGlobal = Boolean(project?.nodes.some((n) => n.kind === "global"));
   for (const b of w.getAllBlocks(false)) {
-    // a SETTING block (live-blocks.md 12): a safety switch says its warning while it is off; the
+    // a SETTING block (live-blocks.md 12): a safety switch shows its warning rows while it is off;
+    // matpilot round 20 #4a: the lint's "not used" words on rows of its own, the block greyed; the
     // tooltip says what deleting the block falls back to (Global's block, else the default)
     const setting = settingOfType(b.type);
-    if (setting) {
-      const off = setting.kind === "switch" && b.getFieldValue("VALUE") === "off";
-      b.getField("WARN")?.setValue(off && setting.warn ? `⚠ ${setting.warn}` : "");
-      if (project && !b.isInFlyout) b.setTooltip(settingTooltip(setting, settingFallback(project, scope.node, setting)));
+    if (setting && !b.isInFlyout) {
+      const note = notes?.[`${prefix}${setting.var}`] ?? null;
+      const lines = noteLines(note?.unused ?? "");
+      for (let i = 0; i < SETTING_NOTE_ROWS; i++) b.getField(`NOTE${i}`)?.setValue(lines[i] ?? "");
+      const unused = Boolean(note?.unused);
+      if (b.getStyleName() !== (unused ? UNUSED_STYLE : SETTING_STYLE)) b.setStyle(unused ? UNUSED_STYLE : SETTING_STYLE);
+      b.getSvgRoot()?.classList.toggle("pl-setting-unused", unused);
+      if (syncSetting(B, b)) grew.push(b);
+      if (project) b.setTooltip(settingTooltip(setting, { fallback: settingFallback(project, scope.node, setting), global: hasGlobal, note }));
     }
     const name =
       b.type === HUNT_TYPE ? "hunt" : (PALETTE_BLOCK[b.type] ?? (b.type === "pl_action" || b.type === "pl_do" ? String(b.getFieldValue("BLOCK")) : null));
@@ -327,4 +386,5 @@ function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: L
     const own = byPath.get(path);
     b.setWarningText(own?.length ? own.map((f) => `${f.severity}: ${f.text}`).join("\n") : null);
   }
+  return grew;
 }

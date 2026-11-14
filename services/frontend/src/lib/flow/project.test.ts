@@ -79,7 +79,7 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.deepEqual(x.edges, []);
   const n = nodeById(x, "xmas_dun02")!;
   // live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings' tabs after the box's own
-  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits", "monsters", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "loop"]);
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits", "monsters", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "timing"]);
   // stage 4a (live-blocks.md 3.4): the trained data before the runner
   assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "use_model", "dungeon_hunt", "stop"]);
   // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function

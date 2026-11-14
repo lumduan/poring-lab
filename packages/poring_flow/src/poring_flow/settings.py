@@ -64,11 +64,16 @@ class Field:
     options: tuple[str, ...] = ()  # a choice's values ("off": no flag at all)
     needs: tuple[tuple[str, Any], ...] = ()  # in use only while these hold (else not passed)
     off: str = ""  # a switch the runner has ON by default: the flag that turns it off
-    warn: str = ""  # said beside it while it is off (a safety technique)
+    # a SAFETY switch: what happens while it is off (its block's own row, a lint WARNING and the
+    # Python line's comment say it; matpilot round 20 #3)
+    warn: str = ""
     # 2026-11-14 (live-blocks.md 12): OUR value (DEFAULTS below): a run takes it when neither the
     # map node nor Global sets the setting; a runner constant's is the runner's own number
     # (test_flow_config pins them equal), so it is passed only when a block sets another
     default: Any = None
+    # matpilot round 20 #5: the words the block search finds it by besides its own (its group's,
+    # FIND_GROUP, and its own, FIND)
+    find: tuple[str, ...] = ()
 
     @property
     def tune(self) -> bool:
@@ -89,19 +94,23 @@ class Field:
 
 # The groups, in the page's order: (id, title, a line under the title). Each group but "keys" is
 # a TAB of the same name on /flows (Global's, and a map node's for the settings it sets itself).
+# matpilot round 20 #5 (2026-11-14): in the ready-made box's TAB order (survival before knife), so
+# the toolbox's Settings lists them as the tabs show them; "loop" became "timing" (a child read it
+# as Control's loop block). A project saved with a "loop" tab still works: a run reads a setting
+# from any tab of the node (node_values), only the strip's words are the group's.
 GROUPS: tuple[tuple[str, str, str], ...] = (
     ("keys", "hotbar keys", "each its own row-1 key, as on her hotbar"),
-    ("knife", "the Knife swap", "Batt's technique: the Knife at idle, the dagger back on"),
     ("survival", "heal and escape", "when she drinks, when she flies away"),
-    ("exits", "leaving the map", "the bag's limit for the Butterfly Wing home"),
-    ("respawn", "the respawn", "the death menu's button, its confirmation, the waits"),
+    ("knife", "the Knife swap", "Batt's technique: the Knife at idle, the dagger back on"),
+    ("exits", "leaving the map", "when the bag sends her home"),
+    ("respawn", "the respawn", "after a death: respawn or not, and the waits"),
     ("start", "the start", "what she needs before the first step"),
     ("fight", "the fight", "when a fight starts, when a target died"),
     ("aim", "choosing and striking", "which monster, how to aim, how fast to click"),
     ("loot", "loot", "the loot step after a fight"),
     ("walk", "walking and exploring", "the search between fights"),
     ("safety", "safety and the end", "the guards and the safe end"),
-    ("loop", "the loop", "how often the bot looks"),
+    ("timing", "timing", "how often the bot looks at the screen"),
 )
 
 _S = 0.01  # the grid of a time in seconds and of a share given to the hundredth
@@ -195,7 +204,7 @@ FIELDS: tuple[Field, ...] = (
         "respawn_confirm_at",
         "respawn",
         "point_or_none",
-        "then confirm (OK) at",
+        "then confirm with the OK button",
         flag="--respawn-confirm-at",
     ),  # fmt: skip
     # --- the runner's constants (dungeon@9.44): --tune NAME=VALUE ------------------------------
@@ -235,9 +244,28 @@ FIELDS: tuple[Field, ...] = (
         _S,
         unit="s",
     ),  # fmt: skip
-    Field("HP_DROP_PTS", "fight", "int", "HP points falling ...", 1, 30, 1, unit="%"),
+    # matpilot round 20 #4b/c: each block names its subject (moved or deleted alone, it still says
+    # what it belongs to); dungeon_hunt reads HP_DROP_PTS as PERCENT POINTS of her HP bar
+    # ((max - now) * 100 >= HP_DROP_PTS): a fall of 2 = 2 % of her max HP
     Field(
-        "HP_DROP_S", "fight", "number", "... within = a hit not in the log", 0.2, 10, _S, unit="s"
+        "HP_DROP_PTS",
+        "fight",
+        "int",
+        "a hit the Battle Log missed: her HP falls by at least",
+        1,
+        30,
+        1,
+        unit="% of max HP",
+    ),  # fmt: skip
+    Field(
+        "HP_DROP_S",
+        "fight",
+        "number",
+        "a hit the Battle Log missed: that HP fall within",
+        0.2,
+        10,
+        _S,
+        unit="s",
     ),  # fmt: skip
     Field(
         "EXP_PAIR_S",
@@ -284,7 +312,14 @@ FIELDS: tuple[Field, ...] = (
         unit="cells",
     ),  # fmt: skip
     Field(
-        "APPROACH_KEEP", "aim", "int", "... and stop this many cells short", 1, 10, 1, unit="cells"
+        "APPROACH_KEEP",
+        "aim",
+        "int",
+        "the walk toward a target stops this far short of it",
+        1,
+        10,
+        1,
+        unit="cells",
     ),  # fmt: skip
     Field("APPROACH_MAX", "aim", "int", "approach walks a fight at most", 0, 10, 1),
     Field(
@@ -297,7 +332,7 @@ FIELDS: tuple[Field, ...] = (
         _S,
         unit="px",
     ),  # fmt: skip
-    Field("STILL_N", "aim", "int", "... this many frame pairs in a row", 1, 10, 1),
+    Field("STILL_N", "aim", "int", "a still screen: this many frame pairs in a row", 1, 10, 1),
     Field("STILL_MAX_S", "aim", "number", "wait for a still screen at most", 0, 10, _S, unit="s"),
     Field(
         "WALKER_PX",
@@ -468,10 +503,12 @@ FIELDS: tuple[Field, ...] = (
         1,
         unit="cells",
     ),  # fmt: skip
-    Field("READ_HZ", "loop", "number", "looks a second", 1, 15, _S),
+    Field(
+        "READ_HZ", "timing", "number", "the bot reads the screen", 1, 15, _S, unit="times a second"
+    ),  # fmt: skip
     Field(
         "BOX_EVERY_S",
-        "loop",
+        "timing",
         "number",
         "the monster detector every",
         0.2,
@@ -482,7 +519,7 @@ FIELDS: tuple[Field, ...] = (
     ),  # fmt: skip
     Field(
         "BOX_FRESH_S",
-        "loop",
+        "timing",
         "number",
         "a monster box older than this is not used",
         0.2,
@@ -534,7 +571,7 @@ SWITCHES: tuple[Field, ...] = (
         "after a death, respawn at the save point",
         flag="--respawn",
         off="--no-respawn",
-        warn="off: after a death she stays where she fell, and the run ends there",
+        warn="after a death she stays where she fell, and the run ends there",
     ),  # fmt: skip
     # the start
     Field("minutes", "start", "int", "the time box", 5, 600, 1, "--minutes", "min"),
@@ -611,7 +648,7 @@ SWITCHES: tuple[Field, ...] = (
         "quick_drop_scaled",
         "fight",
         "switch",
-        "... its wait scaled by the distance",
+        "the quick drop's wait grows with the distance",
         flag="--quick-drop-scaled",
         needs=(("quick_drop", _ON),),
     ),  # fmt: skip
@@ -671,7 +708,7 @@ SWITCHES: tuple[Field, ...] = (
         "near_single",
         "aim",
         "switch",
-        "... from 2 cells already",
+        "a near strike too (from 2 cells): one click, then wait",
         flag="--near-single",
         needs=(("far_single", _ON),),
     ),  # fmt: skip
@@ -780,7 +817,7 @@ SWITCHES: tuple[Field, ...] = (
         "explore_cover",
         "walk",
         "switch",
-        "... favour the regions seen least",
+        "exploring favours the regions seen least",
         flag="--explore-cover",
         needs=(("explore", _ON),),
     ),  # fmt: skip
@@ -815,7 +852,7 @@ SWITCHES: tuple[Field, ...] = (
         "switch",
         "no fight click near an NPC",
         flag="--npc-guard",
-        warn="off: a strike near an NPC may open its dialog and stop the run",
+        warn="a strike near an NPC may open its dialog and stop the run",
     ),  # fmt: skip
     Field(
         "garm_fly",
@@ -823,13 +860,13 @@ SWITCHES: tuple[Field, ...] = (
         "switch",
         "a Garm Baby seen: a Fly Wing",
         flag="--garm-fly",
-        warn="off: she stays when a Garm Baby comes (two killed her, 11-09)",
+        warn="she stays when a Garm Baby comes (two killed her, 11-09)",
     ),  # fmt: skip
     Field(
         "garm_confirm",
         "safety",
         "int",
-        "... seen in this many detections in a row",
+        "Garm Baby alarm: seen in this many detections in a row",
         1,
         5,
         1,
@@ -840,17 +877,17 @@ SWITCHES: tuple[Field, ...] = (
         "alarm_fast",
         "safety",
         "switch",
-        "... also read on the HUD's boxes and inside a strike or a wait",
+        "Garm Baby alarm also read on the HUD's boxes and inside a strike or a wait",
         flag="--alarm-fast",
         needs=(("garm_fly", _ON),),
-        warn="off: the Garm Baby alarm is read only between steps (the knight's party killed her "
+        warn="the Garm Baby alarm is read only between steps (the knight's party killed her "
         "10 times on 11-13/14 with the alarm never read in time)",
     ),  # fmt: skip
     Field(
         "alarm_solo",
         "safety",
         "share",
-        "... or one box this sure (0 = off)",
+        "Garm Baby alarm: one box this sure is enough (0 = off)",
         0.0,
         1.0,
         0.05,
@@ -872,23 +909,27 @@ SWITCHES: tuple[Field, ...] = (
         "no position read: a step first, then a Fly Wing",
         flag="--unread-step",
     ),  # fmt: skip
-    # the loop
+    # timing
     Field(
         "box_detector",
-        "loop",
+        "timing",
         "choice",
         "the monster detector runs on",
         flag="--box-detector",
         options=("gpu", "cpu"),
     ),  # fmt: skip
     Field(
-        "hud", "loop", "switch", "show the boxes on the console's HUD (display only)", flag="--hud"
+        "hud",
+        "timing",
+        "switch",
+        "show the boxes on the console's HUD (display only)",
+        flag="--hud",
     ),  # fmt: skip
     Field(
         "hud_fast",
-        "loop",
+        "timing",
         "number",
-        "... a fresh HUD box every",
+        "the HUD: a fresh box every",
         0.1,
         0.9,
         _S,
@@ -1055,8 +1096,75 @@ DEFAULTS: dict[str, Any] = {
     "hud": True,
     "hud_fast": 0.2,
 }
+# matpilot round 20 #5 (2026-11-14): "knife" found 3 of the 6 knife settings (bare_ready,
+# steal_cue and swap_gap lack the word). Every setting block is found by its group's words and by
+# its own below, as a learner names what it is about (the toolbox's search; search.ts).
+FIND_GROUP: dict[str, tuple[str, ...]] = {
+    "survival": ("survival", "heal", "potion", "hp", "fly", "wing", "escape"),
+    "knife": ("knife", "dagger", "swap", "steal", "weapon"),
+    "exits": ("exits", "home", "bag", "weight", "butterfly", "wing"),
+    "respawn": ("respawn", "death", "die", "dead", "save"),
+    "start": ("start", "check", "hotbar", "stock"),
+    "fight": ("fight", "kill", "hit", "exp", "damage"),
+    "aim": ("aim", "target", "click", "strike", "monster"),
+    "loot": ("loot", "item", "pick", "drop"),
+    "walk": ("walk", "explore", "search", "patrol", "move"),
+    "safety": ("safety", "guard", "danger", "end"),
+    "timing": ("timing", "speed", "often", "seconds"),
+}
+FIND: dict[str, tuple[str, ...]] = {
+    "potion_below": ("drink",),
+    "knife_hp_min": ("hp",),
+    "respawn_at": ("click", "button"),
+    "respawn_confirm_at": ("click", "button"),
+    "minutes": ("minutes", "time", "long"),
+    "PLAYER_MIN_WINGS": ("fly", "wing"),
+    "PLAYER_WINGS_KEEP": ("fly", "wing"),
+    "PLAYER_MIN_HEALS": ("heal", "potion"),
+    "WEIGHT_MAX": ("weight", "bag"),
+    "HP_DROP_PTS": ("hp",),
+    "HP_DROP_S": ("hp",),
+    "vt.D0_PX": ("value", "worth"),
+    "value_target": ("value", "worth"),
+    "LOOT_TRIM_HOVERS": ("hover",),
+    "loot_items": ("model",),
+    "END_FLY_BELOW": ("fly", "wing", "hp"),
+    "END_HOT_S": ("fly", "wing"),
+    "POS_FLY_S": ("fly", "wing"),
+    "POS_FLY_MAX": ("fly", "wing"),
+    "unread_step": ("fly", "wing"),
+    "unreach_escape": ("fly", "wing"),
+    "garm_fly": ("garm", "alarm", "fly", "wing"),
+    "garm_confirm": ("garm", "alarm"),
+    "alarm_fast": ("garm", "alarm", "hud"),
+    "alarm_solo": ("garm", "alarm"),
+    "GARM_FRESH_S": ("garm", "alarm"),
+    "npc_guard": ("npc",),
+    "NPC_NO_FIGHT": ("npc",),
+    "boss_walk": ("boss", "walk"),
+    "BOSS_AVOID_S": ("boss",),
+    "REGEN_STOP": ("weight", "bag", "hp", "regen"),
+    "STOCK_READ_S": ("hotbar", "count"),
+    "hud": ("hud", "console", "box"),
+    "hud_fast": ("hud", "console", "box"),
+    "box_detector": ("detector", "box", "gpu", "model"),
+    "BOX_EVERY_S": ("detector", "box", "model"),
+    "BOX_FRESH_S": ("detector", "box"),
+    "READ_HZ": ("screen", "look"),
+}
+
+
+def _find(name: str, group: str) -> tuple[str, ...]:
+    out: list[str] = []
+    for w in (*FIND_GROUP.get(group, ()), *FIND.get(name, ())):
+        if w not in out:
+            out.append(w)
+    return tuple(out)
+
+
 FIELDS = tuple(
-    replace(f, needs=_NEEDS.get(f.name, f.needs), default=DEFAULTS[f.name])
+    replace(f, needs=_NEEDS.get(f.name, f.needs), default=DEFAULTS[f.name],
+            find=_find(f.name, f.group))
     for f in (*FIELDS, *SWITCHES)
 )  # fmt: skip
 
@@ -1174,6 +1282,17 @@ def norm(f: Field, v: Any) -> Any:
     return round(float(v), 4)
 
 
+# matpilot round 20 #4c: "1 cells" / "in steps of 1 cells": a unit said of ONE is singular
+SINGULAR: dict[str, str] = {"cells": "cell", "times a second": "time a second"}
+
+
+def unit_of(f: Field, v: Any = None) -> str:
+    """The unit after a value ("%" for a share), singular for a value of 1 ("1 cell")."""
+    u = "%" if f.kind == "share" else f.unit
+    one = isinstance(v, (int, float)) and not isinstance(v, bool) and float(v) == 1.0
+    return SINGULAR.get(u, u) if one else u
+
+
 def shown(f: Field, v: Any) -> str:
     """A value as a person reads it: a share as a percent, a number with its unit."""
     if f.kind == "share" and isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -1181,7 +1300,8 @@ def shown(f: Field, v: Any) -> str:
     if isinstance(v, bool):
         return "on" if v else "off"
     if isinstance(v, (int, float)):
-        return f"{v:g}{(' ' + f.unit) if f.unit else ''}"
+        u = unit_of(f, v)
+        return f"{v:g}{(' ' + u) if u else ''}"
     return str(v)
 
 
@@ -1242,6 +1362,36 @@ def not_in_use_why(name: str, vals: Mapping[str, Any]) -> str | None:
             return f"{o.words} ({o.var}) is off"
         return f"{o.words} ({o.var}) is {shown(o, v)}, not {shown(o, want)}"
     return "not in use"
+
+
+def unmet_need(name: str, vals: Mapping[str, Any]) -> tuple[Field, Any] | None:
+    """PURE: the ROOT of why a setting is not in use: the setting whose value stops it and the
+    value it needs (garm_fly off stops alarm_fast and, through it, alarm_solo); None: in use."""
+    f = BY_NAME.get(name)
+    if f is None or in_use(name, vals):
+        return None
+    for other, want in f.needs:
+        if not in_use(other, vals):
+            return unmet_need(other, vals)
+        v = vals.get(other)
+        if not (v not in (None, "off", False) if want == "!off" else v == want):
+            return BY_NAME[other], want
+    return None
+
+
+def unused_words(name: str, vals: Mapping[str, Any]) -> str | None:
+    """PURE (matpilot round 20 #4a): a setting block's short row while it is not in use: "not
+    used while npc_guard is off", "not used while loot_step is v1, not trim"; None: in use. The
+    lint's info (not_in_use_why: the long words), the block's row and the Python line's comment
+    read the same need (lint/settings.py notes)."""
+    got = unmet_need(name, vals)
+    if got is None:
+        return None
+    o, want = got
+    v = vals.get(o.name)
+    if want is True or want == "!off" or v is False:
+        return f"not used while {o.var} is off"
+    return f"not used while {o.var} is {shown(o, v)}, not {shown(o, want)}"
 
 
 def clash(vals: Mapping[str, Any]) -> str | None:
@@ -1406,7 +1556,7 @@ def comment(f: Field, v: Any) -> str:
     elif f.kind in ("point", "point_or_none"):
         how = '"X,Y" in the game picture' + (' or "none"' if f.kind == "point_or_none" else "")
     else:
-        how = f.unit
+        how = unit_of(f, v)
     return f"# {f.words}" + (f" ({how})" if how else "")
 
 
@@ -1440,12 +1590,14 @@ def registry() -> dict[str, Any]:
                 "warn": f.warn,
                 "needs": [[n, w] for n, w in f.needs],
                 "default": f.default,
+                "find": list(f.find),
             }
             for f in FIELDS
         ],  # fmt: skip
         "keys": list(KEYS),
         "game_px": list(GAME_PX),
         "tabs": list(TABS),
+        "singular": dict(SINGULAR),
     }
 
 

@@ -431,12 +431,19 @@ export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] a
  * stage 4a left it is fixtures/project_xmas_dun02_stage4.json (stage4_ab.py's B4). Batt 2026-11-14
  * ~15:2x (live-blocks.md 12: "no runner [page]; make them ALL blocks"): every runner setting the box
  * runs with is a SETTING BLOCK in its group's tab, at our defaults (settings.ts; a Run reads them). */
+/** matpilot round 20 #4a (the parent's decision, 2026-11-14): the settings the ready-made box's own
+ * events and functions play in a Run (poring_flow.live.takeovers: drink plays potion_below, fly_away
+ * fly_below, bag_full weight_home, the exits tab's respawn_button / respawn_ok the two death-menu
+ * points), so the box holds NO block of them: a block there did nothing. A person who adds one sees
+ * it marked "not used here" (the lint's notes). test_settings.py pins this list to the engine's. */
+export const BOX_PLAYS_THEM: readonly string[] = ["potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"];
+
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, candies); knife; exits; monsters; every runner setting a block in its tab.",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, candies); knife; exits; monsters; a block for each setting the box uses, in its tab.",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -456,7 +463,8 @@ export function xmasProject(): Project {
         resume_here: true,
         // live-blocks.md 12 (Batt 2026-11-14 ~15:2x: "make them ALL blocks"): every setting the box
         // runs with is a block in its group's tab (knife, survival, exits: beside their functions;
-        // respawn ... loop: tabs of their own), at our defaults (settings.ts withSettingTabs)
+        // respawn ... timing: tabs of their own), at our defaults (settings.ts withSettingTabs).
+        // matpilot round 20 #4a: but the five its own events and functions play (BOX_PLAYS_THEM)
         tabs: withSettingTabs([
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
@@ -484,7 +492,7 @@ export function xmasProject(): Project {
             def("respawn_ok", [clickAt(714, 405, "this client's confirmation: OK")]),
           ]),
           tab(MONSTERS_TAB, XMAS02_STRIKES.map((sp) => recipeDef(sp))),
-        ]),
+        ], {}, (f) => !BOX_PLAYS_THEM.includes(f.name)),
       },
     ],
     edges: [],

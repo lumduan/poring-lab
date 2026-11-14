@@ -6,6 +6,7 @@ import type * as BlocklyT from "blockly/core";
 
 import { BLOCK_DEFS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
+import { SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
 
 let registered = false;
@@ -59,6 +60,16 @@ export function register(B: typeof BlocklyT): void {
       this.appendValueInput("T1");
     },
   );
+  // matpilot round 20 #2, #3: a SETTING block's rows follow its value -- a safety switch's warning
+  // rows show while it is off, the note rows while the editor gave them words (the lint's "not
+  // used"), the unit is singular at 1 ("1 cell"). Labels are decorations: no event, no undo step.
+  B.Extensions.register("pl_setting", function (this: BlocklyT.Block & { plSync?: () => boolean }) {
+    this.plSync = () => syncSetting(B, this);
+    this.plSync();
+    this.setOnChange(function (this: BlocklyT.Block & { plSync?: () => boolean }, e: BlocklyT.Events.Abstract) {
+      if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) this.plSync?.();
+    });
+  });
   B.common.defineBlocksWithJsonArray(BLOCK_DEFS as unknown as object[]);
   // The IR has no "disabled" statement: a block the context menu disabled would still be converted
   // and run. Detached stacks are faded by disableOrphans instead (and listed as "Not running").
@@ -67,6 +78,40 @@ export function register(B: typeof BlocklyT): void {
   } catch {
     // not registered in this build: nothing to remove
   }
+}
+
+/** PURE of the page (Blockly only): a setting block's rows as its value says (the pl_setting
+ * extension; BlockEditor calls it after filling the note rows). True: a row was shown or hidden, so
+ * the block's height changed (the editor then pushes a block under it down). */
+export function syncSetting(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
+  const f = settingOfType(b.type);
+  if (!f) return false;
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  let rows = false;
+  try {
+    const show = (name: string, on: boolean) => {
+      const input = b.getInput(name);
+      if (input && input.isVisible() !== on) {
+        input.setVisible(on);
+        rows = true;
+      }
+    };
+    const off = f.kind === "switch" && b.getFieldValue("VALUE") === "off";
+    for (let i = 0; b.getInput(`ROW_WARN${i}`); i++) show(`ROW_WARN${i}`, off);
+    for (let i = 0; i < SETTING_NOTE_ROWS; i++) show(`ROW_NOTE${i}`, String(b.getField(`NOTE${i}`)?.getValue() ?? "") !== "");
+    const unit = b.getField("UNIT");
+    if (unit) {
+      const v = Number(b.getFieldValue("VALUE"));
+      const u = unitOf(f, f.kind === "share" ? v / 100 : v);
+      if (unit.getValue() !== u) unit.setValue(u);
+    }
+  } finally {
+    if (was) B.Events.enable();
+  }
+  const svg = b as BlocklyT.BlockSvg;
+  if (svg.rendered) void svg.queueRender();
+  return rows;
 }
 
 /** MatPilot's light and dark themes (lib/flow/theme.ts); the block colours are the same in both. */

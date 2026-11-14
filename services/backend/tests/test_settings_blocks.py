@@ -82,11 +82,44 @@ def test_a_frozen_arm_is_byte_identical_and_plays_todays_argv(name: str) -> None
     assert hunt_argv(raw.decode()) == TODAY
 
 
+# matpilot round 20 #4a (the parent's decision, 2026-11-14): the box holds no block of the five
+# settings its own events and functions play (drink, fly_away, bag_full, respawn_button, respawn_ok)
+BOX_PLAYS_THEM = {"potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"}
+
+
 def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> None:
     d = one_box()
-    n = sum(len(t["vars"]) for t in d["nodes"][0]["tabs"])
-    assert n == len(fc.BLOCKS) == 121  # every setting block is there
+    held = {k for t in d["nodes"][0]["tabs"] for k in t["vars"]}
+    assert held == {f.var for f in fc.BLOCKS if f.name not in BOX_PLAYS_THEM}
+    assert len(held) == len(fc.BLOCKS) - 5 == 116
     assert hunt_argv(json.dumps(d)) == TODAY
+
+
+def test_a_setting_the_box_plays_itself_is_unused_by_the_runner_with_or_without_a_block() -> None:
+    """The five left the box (round 20 #4a) and the argv is TODAY's: each is still passed, at its
+    default (the runner's own flag), and NOT USED -- the box plays it, so the runner's own handler
+    for it is off (its plays, which the live player hands to run()). A block a person adds with
+    another value changes only that flag's value, never what plays (the lint marks the block "not
+    used here")."""
+    prep = fp.prepare(json.dumps(one_box()), NODE, 7200)
+    assert not isinstance(prep, str), prep
+    r = prep.runners[NODE]
+    assert {"potion", "fly_hp", "weight_home", "respawn"} <= set(r.plays)
+    import poring_flow.live as live
+
+    played = {s for p in r.plays for s in live.PLAY_SETTINGS.get(p, ())}
+    assert played == BOX_PLAYS_THEM
+    for k in BOX_PLAYS_THEM:
+        assert r.vals[k] == fc.DEFAULTS[k], k  # the default stands in: no block holds it
+    d = one_box()
+    set_block(d, "potion_below", 0.3)
+    set_block(d, "respawn_at", "600,400")
+    a = hunt_argv(json.dumps(d))
+    assert isinstance(a, list)
+    changed = [(x, y) for x, y in zip(a, TODAY, strict=True) if x != y]
+    assert changed == [("0.30", "0.40"), ("600,400", "645,481")]  # the two values, nothing else
+    p2 = fp.prepare(json.dumps(d), NODE, 7200)
+    assert not isinstance(p2, str) and set(p2.runners[NODE].plays) == set(r.plays)
 
 
 def test_a_block_a_person_changes_is_what_the_runner_gets() -> None:
@@ -111,6 +144,8 @@ def test_a_block_a_person_changes_is_what_the_runner_gets() -> None:
 
 def test_the_maps_block_over_globals_over_the_default_and_a_deleted_one_falls_back() -> None:
     d = one_box()
+    set_block(d, "potion_below", 0.4)  # the map's own blocks (a person adds them back)
+    set_block(d, "fly_below", 0.2)
     d["nodes"].append({"id": "global", "kind": "global", "pos": {"x": 0, "y": 200}, "tabs": []})
     set_block(d, "potion_below", 0.3, node="global")
     set_block(d, "fly_below", 0.25, node="global")

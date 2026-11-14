@@ -14,13 +14,14 @@
 // (pl_detect_sees / pl_detect_count, models.ts; ADR-0020 Amendment B).
 
 export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "field_label_serializable" | "field_label";
-import { groupOf, SETTING_BLOCKS, type SettingField, settingFields, settingTooltip, settingType, SETTINGS, unitOf } from "./settings.ts";
+import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_ROW_BUDGET, type SettingField, settingFields, settingRows, settingTooltip, settingType, SETTINGS, unitOf, varText, wrapUnits } from "./settings.ts";
 import { BLOCK_STYLE } from "./theme.ts";
 
 export type ArgDef =
   | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string }
   | { type: "input_value" | "input_statement"; name: string; check?: string | string[] }
   | { type: "input_dummy" }
+  | { type: "input_end_row"; name: string }
   | { type: "field_image"; src: string; width: number; height: number; alt: string };
 export type BlockDef = {
   type: string;
@@ -270,8 +271,14 @@ export const BLOCK_DEFS: BlockDef[] = [
   // the save point, as a sentence (matpilot 2026-11-13 #12: it showed as raw Python)
   stmt({
     type: "pl_save_point",
-    message0: "the save point is %1 x %2 y %3 %4",
-    args0: [text("MAP", "geffen"), num("X"), num("Y"), run],
+    // matpilot round 20 #2: two rows, so the main tab's first block shows whole at 390 px
+    message0: "the save point is",
+    message1: "on %1",
+    args1: [text("MAP", "geffen")],
+    message2: "x %1 y %2",
+    args2: [num("X"), num("Y")],
+    message3: "%1",
+    args3: [run],
     inputsInline: true,
     tooltip: "assert_save_point(cell): YOU say where the save point is (a Butterfly Wing and a death land there); no input, and it stays a warning at approval",
   }),
@@ -290,19 +297,24 @@ export const BLOCK_DEFS: BlockDef[] = [
   }),
   stmt({
     type: "pl_dungeon_hunt",
-    message0: "hunt with the runner (dungeon_hunt.py) %1 %2",
-    args0: [badge, run],
-    message1: "heal: call %1 Fly Wing: call %2",
-    args1: [text("HEAL", "heal"), text("FLY", "fly_wing")],
-    message2: "Knife on: call %1 Knife back: call %2",
-    args2: [text("KNIFE_ON", "knife_on"), text("KNIFE_BACK", "knife_back")],
-    message3: "home (Butterfly Wing): call %1",
-    args3: [text("HOME", "butterfly_wing")],
-    message4: "after a death: call %1 then confirm: call %2",
-    args4: [text("RESPAWN", ""), text("RESPAWN_OK", "")],
-    message5: "eat (a food on the hotbar): call %1",
-    args5: [text("EAT", "")],
-    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points from the Run settings). eat: the function your events call to eat a food item from the hotbar, e.g. eat(key) pressing its input, called as eat(\"F6\") (empty: nothing is eaten in the hunt); hotbar_count(key=\"F6\") reads that slot's count. Its other settings: the Run pane",
+    // matpilot round 20 #2: one role a row (two where its words are long), so the main tab's
+    // program shows whole at 390 px (main's block ran 397 px wide); the fields are the same
+    message0: "hunt with the runner",
+    message1: "(dungeon_hunt.py) %1 %2 %3 %4",
+    args1: [{ type: "input_end_row", name: "ROW_NAME" }, badge, { type: "input_end_row", name: "ROW_BADGE" }, run],
+    message2: "heal: call %1 %2 Fly Wing: call %3",
+    args2: [text("HEAL", "heal"), { type: "input_end_row", name: "ROW_HEAL" }, text("FLY", "fly_wing")],
+    message3: "Knife on: call %1 %2 Knife back: %3 call %4",
+    args3: [text("KNIFE_ON", "knife_on"), { type: "input_end_row", name: "ROW_KNIFE" }, { type: "input_end_row", name: "ROW_KNIFE_BACK" }, text("KNIFE_BACK", "knife_back")],
+    message4: "home (Butterfly Wing): %1 call %2",
+    args4: [{ type: "input_end_row", name: "ROW_HOME" }, text("HOME", "butterfly_wing")],
+    message5: "after a death: %1 call %2",
+    args5: [{ type: "input_end_row", name: "ROW_RESPAWN" }, text("RESPAWN", "")],
+    message6: "then confirm: %1 call %2",
+    args6: [{ type: "input_end_row", name: "ROW_RESPAWN_OK" }, text("RESPAWN_OK", "")],
+    message7: "eat (from the hotbar): %1 call %2",
+    args7: [{ type: "input_end_row", name: "ROW_EAT" }, text("EAT", "")],
+    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points, the respawn tab's setting blocks). eat: the function your events call to eat a food item from the hotbar, e.g. eat(key) pressing its input, called as eat(\"F6\") (empty: nothing is eaten in the hunt); hotbar_count(key=\"F6\") reads that slot's count. Its other settings: the setting blocks in this node's tabs (the toolbox's Settings)",
   }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),
@@ -392,8 +404,14 @@ export const BLOCK_DEFS: BlockDef[] = [
   // --- hats ---
   {
     type: "pl_main",
-    message0: "%1",
-    args0: [{ type: "field_label", name: "TITLE", text: "when the program starts" }],
+    // matpilot round 20 #2: the title on up to two rows (titleLines), so it shows whole at 390 px
+    message0: "%1 %2 %3 %4",
+    args0: [
+      { type: "field_label", name: "TITLE", text: "when the program starts" },
+      { type: "input_end_row", name: "ROW_TITLE" },
+      { type: "field_label", name: "TITLE2", text: "" },
+      { type: "input_end_row", name: "ROW_TITLE2" },
+    ],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
     style: st("pl_main"),
@@ -475,70 +493,90 @@ export const BLOCK_DEFS: BlockDef[] = [
 
 /** THE SETTING BLOCKS (live-blocks.md 12; Batt 2026-11-14 ~15:2x: "make them ALL blocks"): one
  * block type per setting of the runner's hunt core (settings.ts), a top-level block like a
- * variable's: its words, its value by kind (a number / a share as a percent / a whole number with
- * its range, step and unit; a switch on / off; a choice's options; a point's X and Y, or none), its
- * variable's name, and for a safety switch a row its warning fills while it is off (the editor
- * paints it). The IR is a plain variable of the tab: `knife_hp_min = 0.5`. */
+ * variable's. matpilot round 20 #2: laid out on ROWS so no row is wider than what shows at 390 px
+ * (settings.ts settingRows, SETTING_ROW_BUDGET): its words wrapped over one or more label rows; then
+ * its value by kind (a number / a share as a percent / a whole number with its range, step and unit;
+ * a switch on / off; a choice's options; a point's X and Y, or none) and "· var" (on a row of its
+ * own where the value row would be too wide); a safety switch's warning rows (shown while it is off:
+ * the pl_setting extension, blockly-register.ts); and SETTING_NOTE_ROWS rows the editor fills with
+ * the lint's "not used" words (hidden while empty). The IR is a plain variable of the tab:
+ * `knife_hp_min = 0.5`. Only VALUE, X, Y and AT are saved: every label is a decoration. */
 export function settingDef(f: SettingField): BlockDef {
-  const words: ArgDef = { type: "field_label", name: "WORDS", text: f.words };
-  const name: ArgDef = { type: "field_label", name: "VAR", text: `· ${f.var}`, class: "pl-setting-var" };
-  const unit = unitOf(f);
+  const rows = settingRows(f);
+  const args: ArgDef[] = [];
+  const endRow = (name: string): ArgDef => ({ type: "input_end_row", name });
+  rows.words.forEach((w, i) => args.push({ type: "field_label", name: i === 0 ? "WORDS" : `WORDS${i}`, text: w }, endRow(`ROW_WORDS${i}`)));
+  const unit = unitOf(f, f.default);
   const pct = (v: number) => Math.round(v * 100 * 1e6) / 1e6;
   const number = (): ArgDef =>
     f.kind === "share"
       ? { type: "field_number", name: "VALUE", value: pct(Number(f.default)), min: pct(f.lo), max: pct(f.hi), precision: pct(f.step) }
       : { type: "field_number", name: "VALUE", value: Number(f.default), min: f.lo, max: f.hi, precision: f.kind === "int" ? 1 : f.step };
   const xy: ArgDef[] = [
+    { type: "field_label", name: "X_LABEL", text: "x" },
     { type: "field_number", name: "X", value: 0, min: 0, max: SETTINGS.game_px[0] - 1, precision: 1 },
+    { type: "field_label", name: "Y_LABEL", text: "y" },
     { type: "field_number", name: "Y", value: 0, min: 0, max: SETTINGS.game_px[1] - 1, precision: 1 },
   ];
-  let message0: string;
-  let args0: ArgDef[];
   switch (f.kind) {
     case "switch":
-      message0 = "%1 %2 %3";
-      args0 = [words, { type: "field_dropdown", name: "VALUE", options: [["on", "on"], ["off", "off"]] }, name];
+      args.push({ type: "field_dropdown", name: "VALUE", options: [["on", "on"], ["off", "off"]] });
       break;
     case "choice":
-      message0 = "%1 %2 %3";
-      args0 = [words, { type: "field_dropdown", name: "VALUE", options: opts(f.options) }, name];
+      args.push({ type: "field_dropdown", name: "VALUE", options: opts(f.options) });
       break;
     case "point":
-      message0 = "%1 x %2 y %3 %4";
-      args0 = [words, ...xy, name];
+      args.push(...xy);
       break;
     case "point_or_none":
-      message0 = "%1 %2 x %3 y %4 %5";
-      args0 = [words, { type: "field_dropdown", name: "AT", options: [["at", "at"], ["none", "none"]] }, ...xy, name];
+      args.push({ type: "field_dropdown", name: "AT", options: [["at", "at"], ["none", "none"]] }, endRow("ROW_AT"), ...xy);
       break;
     default:
-      message0 = unit ? "%1 %2 %3 %4" : "%1 %2 %3";
-      args0 = unit ? [words, number(), { type: "field_label", name: "UNIT", text: unit }, name] : [words, number(), name];
+      args.push(number(), ...(unit ? [{ type: "field_label", name: "UNIT", text: unit } as ArgDef] : []));
   }
-  const def: BlockDef = { type: settingType(f), message0, args0, style: "mp_setup_blocks", inputsInline: true, tooltip: settingTooltip(f) };
-  if (f.warn) {
-    def.message1 = "%1";
-    def.args1 = [{ type: "field_label", name: "WARN", text: "", class: "pl-setting-warn" }];
-  }
-  return def;
+  const name: ArgDef = { type: "field_label", name: "VAR", text: varText(f), class: "pl-setting-var" };
+  if (rows.varOwnRow) args.push(endRow("ROW_VALUE"), name, endRow("ROW_VAR"));
+  else args.push(name, endRow("ROW_VALUE"));
+  rows.warn.forEach((w, i) => args.push({ type: "field_label", name: `WARN${i}`, text: w, class: "pl-setting-warn" }, endRow(`ROW_WARN${i}`)));
+  for (let i = 0; i < SETTING_NOTE_ROWS; i++) args.push({ type: "field_label", name: `NOTE${i}`, text: "", class: "pl-setting-note" }, endRow(`ROW_NOTE${i}`));
+  return {
+    type: settingType(f),
+    message0: args.map((_, i) => `%${i + 1}`).join(" "),
+    args0: args,
+    style: "mp_setup_blocks",
+    inputsInline: true,
+    tooltip: settingTooltip(f),
+    extensions: ["pl_setting"],
+  };
 }
 export const SETTING_DEFS: BlockDef[] = SETTING_BLOCKS.map(settingDef);
+
+/** PURE (matpilot round 20 #2): the main hat's title on one or two rows as narrow as the setting
+ * blocks: split after "when the run starts:", else wrapped ("when she arrives on" / "xmas_dun02"). */
+export function titleLines(title: string): [string, string] {
+  const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side;
+  const cut = title.indexOf(": ");
+  const lines = cut > 0 ? [title.slice(0, cut + 1), title.slice(cut + 2)] : wrapUnits(title, width);
+  return [lines[0] ?? "", lines.slice(1).join(" ")];
+}
 BLOCK_DEFS.push(...SETTING_DEFS);
 
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
 
-/** The toolbox's Settings category: every setting block at our default, by its group (the tab it
- * belongs in), the tab shown first; a block dragged in that the tab already holds is refused there
- * ("used twice on this tab"). */
-export function settingItems(tab?: string): ToolboxItem[] {
-  const order = [...SETTINGS.tabs].sort((a, b) => Number(b === tab) - Number(a === tab));
-  const out: ToolboxItem[] = [lbl("A setting of the runner's hunt core: one block each, in its group's tab (a map node's replaces Global's; a deleted one falls back to Global's, else the default):")];
-  for (const g of order) {
+/** The toolbox's Settings category (matpilot round 20 #5): ONE SUB-CATEGORY PER GROUP, named as its
+ * tab and in the tabs' order (the flat list was 121 blocks, ~6,900 px, under a 1,062 px header that
+ * was cut at 1440 and ran 877 px wide at 390), each with a short header -- the group's title and its
+ * line, wrapped to the blocks' width -- then its setting blocks at our default. A block dragged into
+ * a tab that already holds it is refused there ("on this tab twice"); one another tab of the node
+ * holds is refused too ("on the tab ... already"). */
+export function settingItems(): ToolboxCategory[] {
+  const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side; // the setting blocks' own row budget
+  return SETTINGS.tabs.map((g) => {
     const grp = groupOf(g);
-    out.push(lbl(`${grp?.title ?? g} (tab ${g}):`));
-    for (const f of SETTING_BLOCKS.filter((x) => x.group === g)) out.push({ kind: "block", type: settingType(f), fields: settingFields(f, f.default) });
-  }
-  return out;
+    const head: ToolboxItem[] = [...wrapUnits(grp?.title ?? g, width), ...wrapUnits(grp?.note ?? "", width)].filter(Boolean).map(lbl);
+    const blocks: ToolboxItem[] = SETTING_BLOCKS.filter((x) => x.group === g).map((f) => ({ kind: "block", type: settingType(f), fields: settingFields(f, f.default) }));
+    return cat(g, "mp_setup_category", [...head, ...blocks]);
+  });
 }
 
 /** A sentence block's field: the catalogue parameter it holds and how (blocks.ts converts). */
@@ -803,7 +841,7 @@ export function toolbox(
       cat("Sensors", "mp_sensor_category", sensorItems),
       cat("Operators", "math_category", operators),
       cat("Variables", "variable_category", variables),
-      ...(onMap || scope.node === "global" ? [cat("Settings", "mp_setup_category", settingItems(scope.tab))] : []),
+      ...(onMap || scope.node === "global" ? [cat("Settings", "mp_setup_category", settingItems())] : []),
       cat("Functions", "mp_function_category", functions),
       cat("Advanced", "mp_setup_category", advanced),
     ],

@@ -3,7 +3,7 @@
 // blocks, no hardcoding like this"). Every number and switch of the runner's hunt core is a
 // PROJECT VARIABLE named like the setting (settings.gen.ts: the engine's registry,
 // packages/poring_flow/src/poring_flow/settings.py, drift-tested), shown as a block of its own in the
-// tab of its group (knife, survival, exits, respawn, start, fight, aim, loot, walk, safety, loop). A
+// tab of its group (survival, knife, exits, respawn, start, fight, aim, loot, walk, safety, timing). A
 // run on a map node takes, per setting: that node's block > Global's > the default (the project
 // model's name rule); a deleted block falls back to the level below. The hotbar keys are no setting
 // blocks: they come from the functions dungeon_hunt names (runnerKeysOn), as before.
@@ -30,12 +30,13 @@ export type SettingField = {
   flag: string;
   off: string;
   options: string[];
-  warn: string; // said while it is off (a safety technique)
+  warn: string; // what happens while it is off (a safety switch): its own row, a lint warning
   needs: [string, SettingValue][];
   default: SettingValue;
+  find: string[]; // the words the block search finds it by (its group's and its own)
 };
 export type SettingGroup = { id: string; title: string; note: string };
-export type SettingsRegistry = { version: number; groups: SettingGroup[]; fields: SettingField[]; keys: string[]; game_px: number[]; tabs: string[]; runner_maps: string[] };
+export type SettingsRegistry = { version: number; groups: SettingGroup[]; fields: SettingField[]; keys: string[]; game_px: number[]; tabs: string[]; singular: Record<string, string>; runner_maps: string[] };
 
 export const SETTINGS: SettingsRegistry = SETTINGS_REGISTRY;
 export const SETTING_BY_NAME: ReadonlyMap<string, SettingField> = new Map(SETTINGS.fields.map((f) => [f.name, f]));
@@ -60,9 +61,15 @@ export function shownValue(f: SettingField, v: SettingValue): string {
   return String(tidy(v));
 }
 
-/** The unit after a value ("%" for a share). */
-export const unitOf = (f: SettingField): string => (f.kind === "share" ? "%" : f.unit);
-const withUnit = (f: SettingField, v: SettingValue) => `${shownValue(f, v)}${unitOf(f) ? ` ${unitOf(f)}` : ""}`;
+/** The unit after a value ("%" for a share); singular for a value of 1 ("1 cell": matpilot round 20
+ * #4c; poring_flow.settings unit_of). */
+export function unitOf(f: SettingField, v?: SettingValue): string {
+  const u = f.kind === "share" ? "%" : f.unit;
+  return typeof v === "number" && v === 1 ? (SETTINGS.singular[u] ?? u) : u;
+}
+const withUnit = (f: SettingField, v: SettingValue) => `${shownValue(f, v)}${unitOf(f, v) ? ` ${unitOf(f, v)}` : ""}`;
+/** A value as the block and the /maps inspector show it: "40 %", "1.5 s", "2 cells", "on". */
+export const settingValueText = (f: SettingField, v: SettingValue): string => withUnit(f, v);
 
 /** PURE: why ``v`` cannot be the setting's value (null: it can) -- poring_flow.settings.problem_of. */
 export function settingProblem(f: SettingField, v: unknown): string | null {
@@ -157,8 +164,17 @@ export function settingFallback(p: Project, nodeId: string, f: SettingField): st
   return `the default, ${withUnit(f, f.default)}`;
 }
 
+/** What the tooltip knows of the block's place (BlockEditor fills it): what deleting it falls back
+ * to, whether the project has a Global node (round 20 #4d: say Global only when there is one), and
+ * the lint's words for THIS block (poring_flow lint/settings.py notes: not used here, a safety
+ * switch off). */
+export type SettingPlace = { fallback?: string; global?: boolean; note?: SettingNote | null };
+/** The lint's rows for one setting block (POST /flows/lint ``settings[path]``). */
+export type SettingNote = { unused?: string; safety?: string };
+
 /** A setting block's tooltip: its variable, tab, words, range, default and what deleting it does. */
-export function settingTooltip(f: SettingField, fallback?: string): string {
+export function settingTooltip(f: SettingField, place: SettingPlace | string = {}): string {
+  const at: SettingPlace = typeof place === "string" ? { fallback: place } : place;
   const range =
     f.kind === "switch"
       ? "on or off"
@@ -168,7 +184,147 @@ export function settingTooltip(f: SettingField, fallback?: string): string {
           ? `a point X, Y in the ${SETTINGS.game_px[0]} x ${SETTINGS.game_px[1]} game picture${f.kind === "point_or_none" ? ', or "none"' : ""}`
           : `${withUnit(f, f.lo)} to ${withUnit(f, f.hi)}, in steps of ${withUnit(f, f.step)}`;
   const runner = f.flag === "--tune" ? `the runner's ${f.name} (--tune)` : f.flag ? `the runner's ${f.flag}` : "a switch for the settings it needs";
-  return `${f.var} = ... (tab ${f.group}): ${f.words}. ${range}; our default ${withUnit(f, f.default)}; ${runner}. A map's block replaces Global's there. Delete this block: ${fallback ?? "Global's value (a map node), else the default"} applies.${f.warn ? `\nWhile it is off: ${f.warn}` : ""}`;
+  const global = at.global ? " A map's block replaces Global's there." : "";
+  const fallback = at.fallback ?? (at.global ? "Global's value (a map node), else the default" : `the default, ${withUnit(f, f.default)}`);
+  const note = at.note?.unused ? `\nIn a Run of this project: ${at.note.unused}.` : "";
+  return `${f.var} = ... (tab ${f.group}): ${f.words}. ${range}; our default ${withUnit(f, f.default)}; ${runner}.${global} Delete this block: ${fallback} applies.${note}${f.warn ? `\nWhile it is off: ${f.warn}.` : ""}`;
+}
+
+// --- the block's LAYOUT (matpilot round 20 #2) ------------------------------------------------------
+// At 390 px the toolbox takes 0-123, the blocks start at x 135 at the phone's scale 0.6, and Blockly's
+// trashcan / zoom column starts at x 323 (theme.ts BLOCKLY_CONTROLS): a block row wider than ~188 px
+// (313 units) was cut at the screen's edge or sat under the controls (108 of 121 setting blocks were
+// cut; alarm_fast showed 57 %). Blockly does not wrap fields, so the block is laid out on rows: its
+// words wrapped over one or more label rows, then the value with its unit and "· var" (the var on a
+// row of its own where that row would be too wide), then a safety switch's warning rows (shown while
+// it is off), then up to SETTING_NOTE_ROWS rows for the lint's "not used" words. The widths are a
+// MODEL of Blockly's own measuring (no browser here): per-character widths of a wide sans at the
+// theme's 12 pt (16 px) and zelos' paddings, fitted to the reviewer's measurements of round 20
+// (settings.test.ts pins the fit and that no row passes the budget).
+
+/** Per-character widths in em (a WIDE sans, so the model errs wide). */
+function charEm(c: string): number {
+  if (c === " ") return 0.32;
+  if ("il.,:;'!|j".includes(c)) return 0.28;
+  if ("ftr".includes(c)) return 0.4;
+  if ("()[]-".includes(c)) return 0.39;
+  if (c === "·") return 0.32;
+  if (c === "m") return 0.92;
+  if (c === "w") return 0.8;
+  if (c === "M") return 0.86;
+  if (c === "W") return 0.99;
+  if (c === "I") return 0.3;
+  if (c === "%" || c === "⚠" || c === "…") return 0.95;
+  if (c === "_") return 0.5;
+  if (c === "=") return 0.84;
+  if (/[0-9]/.test(c)) return 0.64;
+  if (/[A-Z]/.test(c)) return 0.7;
+  return 0.58;
+}
+/** zelos' spacing and the font's scale, FITTED to the reviewer's round-20 measurements at 1440 and
+ * 390 (npc_guard's row 430 units, with its warning 1018, alarm_fast's 745: settings.test.ts): the
+ * fit gave a scale of 1.166 on the table above and side + field + arrow = 72 with a gap of 8;
+ * ``scale`` is taken at 1.2 so the model errs wide. */
+export const SETTING_GEOMETRY = { scale: 1.2, side: 24, gap: 8, field: 24, arrow: 24, varPx: 12.8 } as const;
+/** A text's width in workspace units at ``px`` (the theme's 12 pt = 16 px; the var label 0.8 em). */
+export function textUnits(text: string, px = 16, bold = false): number {
+  let em = 0;
+  for (const c of text) em += charEm(c);
+  return em * px * SETTING_GEOMETRY.scale * (bold ? 1.02 : 1);
+}
+/** No row of a setting block wider than this (workspace units): 313 fit beside the toolbox and
+ * before the controls at 390 px (scale 0.6), kept 4 % under. */
+export const SETTING_ROW_BUDGET = 300;
+/** The rows the lint's "not used" words may take (BlockEditor fills them). */
+export const SETTING_NOTE_ROWS = 3;
+
+/** PURE: ``text`` wrapped into lines no wider than ``max`` units (a word longer stays whole). */
+export function wrapUnits(text: string, max: number, px = 16, bold = false): string[] {
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && textUnits(next, px, bold) > max) {
+      out.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) out.push(line);
+  return out.length ? out : [""];
+}
+/** PURE: ``text`` in as many lines as wrapUnits gives at ``max``, but BALANCED: the narrowest
+ * width that keeps that many lines (no lone last word: "look for items with the item / model"). */
+export function wrapBalanced(text: string, max: number, px = 16, bold = false): string[] {
+  const n = wrapUnits(text, max, px, bold).length;
+  let lo = 0;
+  let hi = max;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) / 2;
+    if (wrapUnits(text, mid, px, bold).length <= n) hi = mid;
+    else lo = mid;
+  }
+  return wrapUnits(text, hi, px, bold);
+}
+const G = SETTING_GEOMETRY;
+const LINE_MAX = SETTING_ROW_BUDGET - G.side;
+/** A row of fields' width: the side paddings, the fields, a gap between each two. */
+export const rowUnits = (fields: number[]): number => G.side + fields.reduce((a, b) => a + b, 0) + G.gap * Math.max(0, fields.length - 1);
+const numberUnits = (v: number | string): number => Math.max(40, textUnits(String(v)) + G.field);
+const dropdownUnits = (options: string[]): number => Math.max(...options.map((o) => textUnits(o))) + G.field + G.arrow;
+export const varText = (f: SettingField): string => `· ${f.var}`;
+const varUnits = (f: SettingField) => textUnits(varText(f), G.varPx);
+
+/** The value row's fields' widths (without the var label): a number with its unit, a switch's or a
+ * choice's menu, a point's x and y. */
+export function valueFieldUnits(f: SettingField): number[] {
+  const wide = (lo: number, hi: number, step: number) => {
+    const pct = f.kind === "share" ? 100 : 1;
+    return [lo, hi, hi - step].map((x) => String(tidy(x * pct)));
+  };
+  switch (f.kind) {
+    case "switch":
+      return [dropdownUnits(["on", "off"])];
+    case "choice":
+      return [dropdownUnits(f.options)];
+    case "point":
+      return [textUnits("x"), numberUnits(SETTINGS.game_px[0] - 1), textUnits("y"), numberUnits(SETTINGS.game_px[1] - 1)];
+    case "point_or_none": // its at / none menu is a row of its own (settingRows ``menuRow``)
+      return [textUnits("x"), numberUnits(SETTINGS.game_px[0] - 1), textUnits("y"), numberUnits(SETTINGS.game_px[1] - 1)];
+    default: {
+      const widest = Math.max(...wide(f.lo, f.hi, f.step).map((t) => numberUnits(t)));
+      const u = unitOf(f);
+      return u ? [widest, textUnits(u)] : [widest];
+    }
+  }
+}
+
+/** A setting block's rows (matpilot round 20 #2): the words' lines, a point-or-none's at / none
+ * menu on a row of its own, whether "· var" fits on the value row, and a safety switch's warning
+ * lines ("⚠ off: " first). */
+export type SettingRows = { words: string[]; menuRow: boolean; varOwnRow: boolean; warn: string[] };
+export function settingRows(f: SettingField): SettingRows {
+  const words = wrapBalanced(f.words, LINE_MAX);
+  const varOwnRow = rowUnits([...valueFieldUnits(f), varUnits(f)]) > SETTING_ROW_BUDGET;
+  const warn = f.warn ? wrapBalanced(`⚠ off: ${f.warn}`, LINE_MAX, 16, true) : [];
+  return { words, menuRow: f.kind === "point_or_none", varOwnRow, warn };
+}
+/** PURE: the lint's "not used" words as the block's note rows (at most SETTING_NOTE_ROWS; the rest
+ * in the tooltip), each line no wider than the budget. */
+export function noteLines(text: string): string[] {
+  if (!text) return [];
+  const lines = wrapBalanced(`· ${text}`, LINE_MAX);
+  return lines.length <= SETTING_NOTE_ROWS ? lines : [...lines.slice(0, SETTING_NOTE_ROWS - 1), `${lines[SETTING_NOTE_ROWS - 1]} …`];
+}
+/** Every row's width of a setting block as laid out (the test's measure; the note rows at their
+ * widest: a line of the budget). */
+export function settingRowUnits(f: SettingField): number[] {
+  const r = settingRows(f);
+  const out = r.words.map((w) => rowUnits([textUnits(w)]));
+  if (r.menuRow) out.push(rowUnits([dropdownUnits(["at", "none"])]));
+  out.push(rowUnits([...valueFieldUnits(f), ...(r.varOwnRow ? [] : [varUnits(f)])]));
+  if (r.varOwnRow) out.push(rowUnits([varUnits(f)]));
+  for (const w of r.warn) out.push(rowUnits([textUnits(w, 16, true)]));
+  return out;
 }
 
 // --- the block's fields (blockdefs.ts settingDef defines them; blocks.ts converts) ------------------

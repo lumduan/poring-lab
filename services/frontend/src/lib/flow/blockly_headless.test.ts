@@ -11,13 +11,14 @@ import { fileURLToPath } from "node:url";
 import type * as BlocklyT from "blockly/core";
 
 import { followModel, registerDetectorMenus } from "../../components/flows/blockly-fields.ts";
-import { register, themesOf } from "../../components/flows/blockly-register.ts";
+import { register, syncSetting, themesOf } from "../../components/flows/blockly-register.ts";
 import { registerSearch, SEARCH_KIND } from "../../components/flows/blockly-search.ts";
 import { BLOCK_DEFS, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, tabFromWorkspace, tabToWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone, type Flow } from "./ir.ts";
 import type { Models } from "./models.ts";
-import { sampleProject, xmasProject } from "./project.ts";
+import { nodeById, sampleProject, xmasProject } from "./project.ts";
+import { noteLines, SETTING_BLOCKS, SETTING_BY_NAME, settingType, withSettingTabs } from "./settings.ts";
 import { FIXTURES, fixture, sessionProject } from "./testkit.ts";
 
 const require = createRequire(import.meta.url);
@@ -105,6 +106,58 @@ test("PROJECT tabs -> the real Blockly -> the project is exact: every node's eve
       }
     }
   }
+});
+
+// matpilot round 20: EVERY setting block (the five the ready-made box leaves out too), the safety
+// switches OFF (their warning rows), in the real Blockly: the round trip of every tab stays exact
+test("every setting block in every tab, safety switches off, -> the real Blockly -> the project, exactly", () => {
+  const p = xmasProject();
+  const n = nodeById(p, "xmas_dun02")!;
+  const off = Object.fromEntries(SETTING_BLOCKS.filter((f) => f.warn).map((f) => [f.name, false]));
+  n.tabs = withSettingTabs(n.tabs, off);
+  assert.equal(n.tabs.reduce((k, t) => k + Object.keys(t.vars).length, 0), 121);
+  for (const t of n.tabs) {
+    const scope = { node: n.id, tab: t.name };
+    const ws = new B.Workspace();
+    B.serialization.workspaces.load(tabToWorkspace(p, scope) as unknown as object, ws);
+    const back = tabFromWorkspace(p, scope, B.serialization.workspaces.save(ws) as unknown as Workspace);
+    assert.ok(back.ok, `${t.name}: ${!back.ok && back.errors.join("; ")}`);
+    if (back.ok) assert.equal(canonical(back.project), canonical(p), t.name);
+    ws.dispose();
+  }
+});
+
+test("a setting block's rows follow its value: the warning while off, the note while given, a singular unit", () => {
+  const ws = new B.Workspace();
+  const make = (name: string, fields: Record<string, unknown>) => {
+    const f = SETTING_BY_NAME.get(name)!;
+    return B.serialization.blocks.append({ type: settingType(f), fields } as unknown as BlocklyT.serialization.blocks.State, ws);
+  };
+  const npc = make("npc_guard", { VALUE: "on" });
+  const rows = (b: BlocklyT.Block, prefix: string) => b.inputList.filter((i) => i.name.startsWith(prefix)).map((i) => i.isVisible());
+  syncSetting(B, npc);
+  assert.ok(rows(npc, "ROW_WARN").length >= 2 && rows(npc, "ROW_WARN").every((v) => !v)); // on: hidden
+  assert.ok(rows(npc, "ROW_NOTE").every((v) => !v)); // no note: hidden
+  npc.getField("VALUE")!.setValue("off");
+  assert.equal(syncSetting(B, npc), true); // rows changed: the editor pushes the blocks under it down
+  assert.ok(rows(npc, "ROW_WARN").every((v) => v));
+  assert.match(String(npc.getField("WARN0")!.getValue()), /^⚠ off: a strike near an/);
+  // the editor writes the lint's words into the note rows: they show
+  const lines = noteLines("not used while npc_guard is off");
+  lines.forEach((l, i) => npc.getField(`NOTE${i}`)!.setValue(l));
+  syncSetting(B, npc);
+  assert.deepEqual(rows(npc, "ROW_NOTE").slice(0, lines.length), lines.map(() => true));
+  // "1 cell", "2 cells"
+  const tol = make("WALK_PICK_TOL", { VALUE: 1 });
+  syncSetting(B, tol);
+  assert.equal(tol.getField("UNIT")!.getValue(), "cell");
+  tol.getField("VALUE")!.setValue(2);
+  syncSetting(B, tol);
+  assert.equal(tol.getField("UNIT")!.getValue(), "cells");
+  // only VALUE (X, Y, AT) is saved: the rows are decorations
+  const saved = B.serialization.blocks.save(npc) as { fields?: Record<string, unknown> };
+  assert.deepEqual(Object.keys(saved.fields ?? {}), ["VALUE"]);
+  ws.dispose();
 });
 
 test("a loaded model block keeps its value; the menus offer the live models and that model's classes", () => {
