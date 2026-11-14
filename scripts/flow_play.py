@@ -27,7 +27,8 @@ a function (its body runs, then the minimap must name the target node's map with
 timeout, else the run stops), and the HUNT CORE: a dungeon_hunt block plays the runner
 (scripts/dungeon_hunt.py run) IN THIS PROCESS with the SAME Agent and Screen (one process, one
 input writer; dungeon@9.48: run(a, hook=..., session=...)), its argv exactly the Run helper's for
-that map (flow_run.FIXED, the flow's flags, flow_config.argv of the config with the node's keys),
+that map (flow_run.FIXED, the flow's flags, flow_config.argv of the node's SETTING BLOCKS -- the
+node's > Global's > the defaults, live-blocks.md 12 -- with the node's keys),
 its time box the player's remaining time. Its TICK HOOK is called once per runner tick. When it
 ends on its own map exit (the Butterfly Wing home, the respawn), the player relocates by the map's
 name, or ends when no node of the project is there. Anything else is refused BEFORE ANY INPUT, each
@@ -179,7 +180,8 @@ def _sense_names(e: Any) -> set[str]:
 @dataclass(frozen=True)
 class RunnerPlan:
     """A hunt core's runner on one map node: the Run helper's flow for that map, the keys from the
-    node's functions, the settings (the config file's, the keys over them)."""
+    node's functions, the settings (the node's setting blocks > Global's > the defaults, the keys
+    over them)."""
 
     block: str
     flow_id: str
@@ -284,11 +286,14 @@ def runner_flow(map_: str) -> str | None:
     return next((k for k, f in fr.FLOWS.items() if f.map == map_), None)
 
 
-def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CONFIG_DIR,
+def prepare(text: str, node: str, max_s: int | None, *,
             runner_vals: Mapping[str, Mapping[str, Any]] | None = None,
             want_hash: str | None = None) -> Prepared | str:  # fmt: skip
-    """PURE but for the config file: the plan, or why the run is refused (words) -- everything
-    decided before any screen is read or any input path opened."""
+    """PURE: the plan, or why the run is refused (words) -- everything decided before any screen
+    is read or any input path opened. A hunt core's runner settings are the PROJECT's setting
+    blocks on its node (2026-11-14, live-blocks.md 12: the node's > Global's > the defaults;
+    flow_run.project_values), the node's keys over them; ``runner_vals`` ({block: values}, an A/B
+    series' runner config) replaces them for that block."""
     try:
         p = pj.from_json(text)
     except pj.ProjectError as e:
@@ -333,7 +338,7 @@ def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CO
         if runner_vals is not None and block in runner_vals:
             vals, why = dict(runner_vals[block]), fc.clash(dict(runner_vals[block]))
         else:
-            vals, _src, _ks, why = fr.run_values(fr.FLOWS[fid], rk.keys, config_dir)
+            vals, _src, _ks, why = fr.project_values(json.loads(text), block, rk.keys)
         if why:
             return refuse(f"{block}'s runner settings: {why}")
         hp = live.hunt_plan(c.flow, block)  # its problems refused above (live.problems)
@@ -1316,7 +1321,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--runner-config",
             type=Path,
             default=None,
-            help="the helper's resolved runner settings, {block: values}",
+            help="an A/B series' runner settings, {block: values} (else the project's blocks)",
         )
         if name == "play":
             p.add_argument("--label", required=True)

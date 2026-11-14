@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from poring_flow import ir, pyview
+from poring_flow import settings as setting_reg
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.project import (
     GLOBAL,
@@ -173,6 +174,15 @@ def _override(name: str, gdefs: dict[str, Any]) -> list[str]:
     return [f"# overrides Global's {name} (tab {g.tab})"] if g is not None else []
 
 
+def vars_in_order(t: Tab) -> list[tuple[str, ir.Lit]]:
+    """A tab's variables as its file and its blocks show them: the ordinary ones in their
+    order, then the settings in the registry's (poring_flow.settings: the page's order)."""
+    rank = {f.var: i for i, f in enumerate(setting_reg.FIELDS)}
+    plain = [(k, v) for k, v in t.vars.items() if k not in rank]
+    ranked = sorted(((k, v) for k, v in t.vars.items() if k in rank), key=lambda kv: rank[kv[0]])
+    return plain + ranked
+
+
 def print_tab(p: Project, n: NodeT, t: Tab, cat: Catalogue | None = None) -> str:
     """One tab's file (the module docstring)."""
     cat = cat or catalogue()
@@ -184,8 +194,11 @@ def print_tab(p: Project, n: NodeT, t: Tab, cat: Catalogue | None = None) -> str
     chunks: list[tuple[bool, list[str], str]] = []
     if t.vars:
         lines: list[str] = []
-        for k, v in t.vars.items():
-            lines += [*_override(k, gdefs), f"{k} = {pyview._lit_src(v.value)}"]
+        for k, v in vars_in_order(t):
+            # a SETTING (live-blocks.md 12): a plain assignment with its words as a comment
+            f = setting_reg.BY_VAR.get(k)
+            tail = f"  {setting_reg.comment(f, v.value)}" if f is not None and f.block else ""
+            lines += [*_override(k, gdefs), f"{k} = {pyview._lit_src(v.value)}{tail}"]
         chunks.append((False, lines, "Setup"))
     for d in t.defs:
         section = "Events" if d.on is not None else "Functions"

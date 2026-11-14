@@ -1,5 +1,7 @@
 """/flows/run (routes_flowrun.py): the Run button's backend side (Batt 2026-11-13). A request is
-written for the host helper only behind write_gate, and only for a flow the helper lists."""
+written for the host helper only behind write_gate. Since 2026-11-14 (live-blocks.md 12) a start
+and a check are a PROJECT's (its setting blocks decide the runner's settings): the runner-only
+start and GET / PUT /flows/config are gone."""
 
 from __future__ import annotations
 
@@ -88,7 +90,7 @@ def helper(tmp_path: Path, state: str = "idle", age: float = 0.0, busy: str | No
 
 def post(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
     """POST /flows/run, or /flows/run/check for an action "check" (its own route since matpilot's
-    2026-11-13 #16: the body there names no action)."""
+    2026-11-13 #16: the body there names no action; since 2026-11-14 it is {project, node})."""
     tok = routes_settings.csrf_token(c.app.state.poring)  # type: ignore[attr-defined]
     path = "/flows/run"
     if body.get("action") == "check":
@@ -98,6 +100,25 @@ def post(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
                   json=body)  # fmt: skip
 
 
+def hunt_project(**node_vars: Any) -> dict[str, Any]:
+    """test_live_player's project with a hunt core on its map node field (its keys from the
+    functions), the node's setting blocks ``node_vars`` in a tab of their own."""
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    d = tl.project([tl.HUNT, tl.wing_exit()])
+    if node_vars:
+        field = next(n for n in d["nodes"] if n["id"] == "field")
+        field["tabs"].append({"name": "settings", "main": None, "defs": [],
+                              "vars": {k: tl.lit(v) for k, v in node_vars.items()}})  # fmt: skip
+    return d
+
+
+def check(c: TestClient, project: dict[str, Any] | None = None, csrf: bool = True) -> Any:
+    return post(c, {"action": "check", "project": project or hunt_project(), "node": "field"},
+                csrf)  # fmt: skip
+
+
 def assist(c: TestClient) -> None:
     c.app.state.poring.mux.set_mode(Mode.ASSIST, time.monotonic_ns())  # type: ignore[attr-defined]
 
@@ -105,56 +126,44 @@ def assist(c: TestClient) -> None:
 def test_no_helper_reads_as_such_and_refuses(client: TestClient) -> None:
     r = client.get("/flows/run", headers=H)
     assert r.status_code == 200 and r.json()["state"] == "no_helper"
-    r = post(client, {"action": "start", "flow": FLOW})
+    r = post(client, {"action": "stop"})
+    assert r.status_code == 503 and r.json()["detail"]["reason"] == "helper_not_running"
+    r = check(client)
     assert r.status_code == 503 and r.json()["detail"]["reason"] == "helper_not_running"
 
 
-def test_a_start_writes_one_request_for_a_listed_flow(client: TestClient, tmp_path: Path) -> None:
+def test_the_runner_only_start_is_gone(client: TestClient, tmp_path: Path) -> None:
+    """2026-11-14 (Batt: "there should be no runner [page]"; live-blocks.md 12): a start of the
+    runner flow is refused in words (a start is a project's, POST /flows/run/project); nothing is
+    written; extra fields are refused, never passed on."""
     helper(tmp_path)
-    r = post(client, {"action": "start", "flow": FLOW})
-    assert r.status_code == 409 and r.json()["detail"]["reason"] == "mode_not_assist"  # HUMAN
     assist(client)
-    assert post(client, {"action": "start", "flow": "rm -rf"}).status_code == 400
-    r = post(client, {"action": "start", "flow": FLOW})
-    assert r.status_code == 200, r.text
-    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
-    assert req["action"] == "start" and req["flow"] == FLOW
-    assert set(req) == {"id", "action", "flow", "at"}
-    log = (tmp_path / "settings" / "flowrun" / "requests.jsonl").read_text().splitlines()
-    assert json.loads(log[-1])["client"] == LAN[0]
-    # extra fields are refused, never passed on (a request names a flow, nothing else)
+    for body in ({"action": "start", "flow": FLOW}, {"action": "start", "flow": "project"},
+                 {"action": "start", "flow": FLOW, "keys": KEYS}):  # fmt: skip
+        r = post(client, body)
+        assert r.status_code == 400 and r.json()["detail"]["reason"] == (
+            "project_has_its_own_route"), body  # fmt: skip
     assert post(client, {"action": "start", "flow": FLOW, "args": ["--x"]}).status_code == 422
+    assert post(client, {"action": "start", "flow": FLOW, "settings": {}}).status_code == 422
+    assert not (tmp_path / "settings" / "flowrun" / "request.json").exists()
 
 
-def test_a_start_or_a_check_is_refused_while_another_input_writer_plays(
+def test_a_check_is_refused_while_another_input_writer_plays(
     client: TestClient, tmp_path: Path
 ) -> None:
     """matpilot round 17 N5: the helper's status names another input writer of ours playing (its
-    `busy`: a night chain, a runner, the live block player, an A/B series); a start and a check
-    are refused with that reason before anything is written (the helper refuses them too)."""
+    `busy`: a night chain, a runner, the live block player, an A/B series); a check is refused
+    with that reason before anything is written (the helper refuses it too; a project start the
+    same, test_a_project_run_is_refused_with_words_the_page_can_say)."""
     why = "an A/B series is running (one input writer at a time)"
     helper(tmp_path, state="busy", busy=why)
-    assist(client)
     st = client.get("/flows/run", headers=H).json()
     assert st["state"] == "busy" and st["busy"] == why and st["helper_alive"] is True
-    for body in ({"action": "start", "flow": FLOW}, {"action": "check", "flow": FLOW}):
-        r = post(client, body)
-        assert r.status_code == 409 and r.json()["detail"]["reason"] == "input_writer_busy", body
+    r = check(client)
+    assert r.status_code == 409 and r.json()["detail"]["reason"] == "input_writer_busy"
     assert not (tmp_path / "settings" / "flowrun" / "request.json").exists()
-    helper(tmp_path, state="idle", busy=None)  # gone: Run is allowed again
-    assert post(client, {"action": "start", "flow": FLOW}).status_code == 200
-
-
-def test_a_start_carries_no_settings(client: TestClient, tmp_path: Path) -> None:
-    """Batt 2026-11-13 ~14:4x: every setting lives in the config file (every map's, a map's own);
-    a Run request names a flow and nothing else."""
-    helper(tmp_path)
-    assist(client)
-    r = post(client, {"action": "start", "flow": FLOW, "settings": {"fly_key": "F8"}})
-    assert r.status_code == 422  # extra fields are refused
-    assert post(client, {"action": "start", "flow": FLOW}).status_code == 200
-    req = json.loads((tmp_path / "settings" / "flowrun" / "request.json").read_text())
-    assert set(req) == {"id", "action", "flow", "at"}
+    helper(tmp_path, state="idle", busy=None)  # gone: the check is allowed again
+    assert check(client).status_code == 200
 
 
 def test_the_write_gate_holds(client: TestClient, tmp_path: Path) -> None:
@@ -172,7 +181,7 @@ def test_stop_and_busy(client: TestClient, tmp_path: Path) -> None:
     r = post(client, {"action": "stop"})
     assert r.status_code == 409 and r.json()["detail"]["reason"] == "nothing_running"
     helper(tmp_path, state="running")
-    r = post(client, {"action": "start", "flow": FLOW})
+    r = check(client)
     assert r.status_code == 409 and r.json()["detail"]["reason"] == "already_running"
     assert post(client, {"action": "stop"}).status_code == 200
     helper(tmp_path, state="running", age=routes_flowrun.HELPER_FRESH_S + 5)  # the helper died
@@ -180,71 +189,15 @@ def test_stop_and_busy(client: TestClient, tmp_path: Path) -> None:
     assert r.status_code == 503
 
 
-# --- 2026-11-13 (Batt: "nothing is fixed, we only put the defaults"; "a global config for every
-# map's flow, a map's own on top"; scripts/flow_config.py is the registry) ----------------------
-def put_config(c: TestClient, body: dict[str, Any], csrf: bool = True) -> Any:
-    h = dict(H)
-    if csrf:
-        h["X-CSRF-Token"] = c.get("/settings/csrf", headers=H).json()["token"]
-    return c.put("/flows/config", json=body, headers=h)
-
-
-def test_the_config_every_map_then_a_maps_own(client: TestClient, tmp_path: Path) -> None:
-    helper(tmp_path)  # its status lists the flow's map and defaults (the clash check reads them)
-    d = tmp_path / "settings" / "flowrun"
-    assert client.get("/flows/config", headers=H).json() == {"global": {}, "maps": {}}
-    g = {"potion_below": 0.3, "fly_below": 0.15, "fly_rate": 200, "fly_rate_below": 0.6}
-    r = put_config(client, {"scope": "global", "group": "survival", "values": g})
-    assert r.status_code == 200, r.text
-    r = put_config(client, {"scope": "map", "map": "xmas_dun02", "group": "loot",
-                            "values": {"LOOT_TRIM_HOVERS": 12, "LOOT_MAX_S": 30}})  # fmt: skip
-    assert r.status_code == 200, r.text
-    doc = json.loads((d / "config.json").read_text())
-    assert doc["v"] == 2 and doc["global"]["potion_below"] == 0.3
-    assert doc["maps"]["xmas_dun02"] == {"LOOT_TRIM_HOVERS": 12, "LOOT_MAX_S": 30.0}
-    # the helper reads the same file the same way
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-    import flow_config as fc
-    import flow_run as fr
-
-    vals, src = fr.config_of(fr.FLOWS[FLOW], fc.read_config(d))  # type: ignore[arg-type]
-    assert vals["potion_below"] == 0.3 and src["potion_below"] == "global"
-    assert vals["LOOT_TRIM_HOVERS"] == 12 and src["LOOT_TRIM_HOVERS"] == "map"
-    # a group's values replace only that group's at that level; None removes them
-    r = put_config(client, {"scope": "map", "map": "xmas_dun02", "group": "loot", "values": None})
-    assert r.status_code == 200 and json.loads((d / "config.json").read_text())["maps"] == {}
-    r = put_config(client, {"scope": "global", "group": "survival", "values": None})
-    assert r.status_code == 200
-    assert json.loads((d / "config.json").read_text())["global"] == {}
-    audit = (d / "config.jsonl").read_text().splitlines()
-    assert len(audit) == 4 and json.loads(audit[1])["group"] == "loot"
-
-
-def test_the_config_refuses_what_could_not_run(client: TestClient, tmp_path: Path) -> None:
+# --- 2026-11-14 (Batt: "make them ALL blocks"; live-blocks.md 12): the settings file is gone ------
+def test_the_settings_file_endpoints_are_gone(client: TestClient, tmp_path: Path) -> None:
     helper(tmp_path)
-    d = tmp_path / "settings" / "flowrun"
-    for body, word in (
-        ({"scope": "global", "group": "survival", "values": {"potion_below": 0.33}}, "step"),
-        ({"scope": "global", "group": "loot", "values": {"LOOT_TRIM_HOVERS": 99}}, "is not from"),
-        ({"scope": "global", "group": "loot", "values": {"potion_below": 0.3}}, "not in the group"),
-        ({"scope": "global", "group": "nope", "values": {}}, "unknown group"),
-        ({"scope": "map", "group": "loot", "values": {}}, "map's name"),
-        ({"scope": "global", "group": "keys", "values": {"dagger_key": "F4"}}, "both on F4"),
-    ):  # fmt: skip
-        r = put_config(client, body)
-        assert r.status_code == 400 and word in r.json()["detail"]["detail"], (body, r.text)
-    assert put_config(client, {"scope": "map", "map": "../etc", "group": "loot"}).status_code == 422
-    ok = {"scope": "global", "group": "loot", "values": {"LOOT_TRIM_HOVERS": 12}}
-    assert put_config(client, ok, csrf=False).status_code == 403
-    assert not (d / "config.json").exists()  # nothing refused was written
-    # a file a person must look at is never written over
-    (d / "config.json").write_text("{not json")
-    assert "not valid JSON" in client.get("/flows/config", headers=H).json()["broken"]
-    r = put_config(client, ok)
-    assert r.status_code == 409 and r.json()["detail"]["reason"] == "config_file_broken"
-    assert (d / "config.json").read_text() == "{not json"
+    assert client.get("/flows/config", headers=H).status_code == 404
+    tok = client.get("/settings/csrf", headers=H).json()["token"]
+    r = client.put("/flows/config", headers={**H, "X-CSRF-Token": tok},
+                   json={"scope": "global", "group": "loot", "values": {}})  # fmt: skip
+    assert r.status_code in (404, 405)
+    assert not (tmp_path / "settings" / "flowrun" / "config.json").exists()
 
 
 def test_the_end_picture_is_served_to_the_console(client: TestClient, tmp_path: Path) -> None:
@@ -263,24 +216,54 @@ KEYS = {"heal_key": "F2", "fly_key": "F3", "home_key": "F6", "knife_key": "F7", 
 
 
 def test_a_check_is_one_request_behind_the_write_gate(client: TestClient, tmp_path: Path) -> None:
-    helper(tmp_path)  # HUMAN: a check reads the screen only, so it needs no ASSIST
+    """A project's check (2026-11-14): its node, the keys of its functions and EVERY setting
+    block's value (the node's > Global's > the default), computed here and checked again by the
+    helper; HUMAN mode is enough (a check reads the screen only)."""
+    import flow_run as fr
+
+    helper(tmp_path)
     d = tmp_path / "settings" / "flowrun"
-    assert post(client, {"action": "check", "flow": FLOW}, csrf=False).status_code == 403
-    r = client.post("/flows/run/check", json={"flow": FLOW})  # no Origin
-    assert r.status_code == 403 and not (d / "request.json").exists()
-    r = post(client, {"action": "check", "flow": FLOW})
+    assert check(client, csrf=False).status_code == 403
+    r = client.post("/flows/run/check", json={"project": hunt_project(), "node": "field"})
+    assert r.status_code == 403 and not (d / "request.json").exists()  # no Origin
+    r = check(client, hunt_project(knife_hp_min=0.6, LOOT_TRIM_HOVERS=12))
     assert r.status_code == 200, r.text
     req = json.loads((d / "request.json").read_text())
-    assert (
-        req["action"] == "check"
-        and req["flow"] == FLOW
-        and set(req) == {"id", "action", "flow", "at"}
-    )
-    assert json.loads((d / "requests.jsonl").read_text().splitlines()[-1])["action"] == "check"
-    assert post(client, {"action": "check", "flow": "rm -rf"}).status_code == 400
+    assert (req["action"], req["flow"], req["node"]) == ("check", "project", "field")
+    assert set(req) == {"id", "action", "flow", "node", "keys", "vals", "at"}
+    assert req["keys"] == {"heal_key": "F1", "fly_key": "F8", "home_key": "F9",
+                           "knife_key": "F4", "dagger_key": "F5"}  # fmt: skip
+    assert req["vals"]["knife_hp_min"] == 0.6 and req["vals"]["LOOT_TRIM_HOVERS"] == 12
+    assert req["vals"]["potion_below"] == fr.fc.DEFAULTS["potion_below"]  # nobody set it
+    got = fr.parse_request(json.dumps(req))  # the helper takes exactly what was written
+    assert isinstance(got, dict) and got["vals"] == req["vals"] and got["keys"] == req["keys"]
+    log = json.loads((d / "requests.jsonl").read_text().splitlines()[-1])
+    assert log["action"] == "check" and "vals" not in log and log["vals_n"] == len(req["vals"])
     helper(tmp_path, state="running")
-    r = post(client, {"action": "check", "flow": FLOW})
+    r = check(client)
     assert r.status_code == 409 and r.json()["detail"]["reason"] == "already_running"
+
+
+def test_a_check_is_refused_in_words_when_the_project_cannot_be_checked(
+    client: TestClient, tmp_path: Path
+) -> None:
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    helper(tmp_path)
+    d = tmp_path / "settings" / "flowrun"
+    for project, node, want in (
+        (hunt_project(knife_hp_min=0.95), "field", "settings_refused"),
+        (hunt_project(hud_fast=0.5, BOX_EVERY_S=0.5), "field", "settings_refused"),
+        (tl.project([tl.press("F2"), tl.wing_exit()]), "field", "no_hunt_core"),
+        (hunt_project(), "login", "not_a_map_node"),
+        ({"format": "nope"}, "field", "invalid_project"),
+    ):  # fmt: skip
+        r = post(client, {"action": "check", "project": project, "node": node})
+        assert r.status_code in (400, 422) and r.json()["detail"]["reason"] == want, r.text
+    r = post(client, {"action": "check", "project": hunt_project(), "node": "field", "x": 1})
+    assert r.status_code == 422
+    assert not (d / "request.json").exists()  # nothing refused was passed on
 
 
 def test_a_check_waits_for_the_one_reading_and_its_result_reads_back(
@@ -289,10 +272,10 @@ def test_a_check_waits_for_the_one_reading_and_its_result_reads_back(
     helper(tmp_path)
     st_file = tmp_path / "settings" / "flowrun" / "status.json"
     st = json.loads(st_file.read_text())
-    st["check"] = {"state": "checking", "at": "2026-11-13T18:30:05+07:00", "flow": FLOW,
+    st["check"] = {"state": "checking", "at": "2026-11-13T18:30:05+07:00", "flow": "project",
                    "items": [], "ok": None}  # fmt: skip
     st_file.write_text(json.dumps(st))
-    r = post(client, {"action": "check", "flow": FLOW})
+    r = check(client)
     assert r.status_code == 409 and r.json()["detail"]["reason"] == "check_running"
     item = {"id": "chat", "ok": False, "words": "the chat input is open", "value": "open"}
     st["check"] = {**st["check"], "state": "done", "items": [item], "ok": False}
@@ -301,32 +284,11 @@ def test_a_check_waits_for_the_one_reading_and_its_result_reads_back(
     assert got["check"]["items"] == [item] and got["check"]["at"] == "2026-11-13T18:30:05+07:00"
 
 
-def test_the_flows_keys_go_with_start_and_check_all_five(
-    client: TestClient, tmp_path: Path
-) -> None:
-    helper(tmp_path)
-    assist(client)
-    d = tmp_path / "settings" / "flowrun"
-    for action in ("check", "start"):
-        r = post(client, {"action": action, "flow": FLOW, "keys": KEYS})
-        assert r.status_code == 200, r.text
-        assert r.json()["keys"] == KEYS
-        req = json.loads((d / "request.json").read_text())
-        assert req["keys"] == KEYS and req["action"] == action
-        assert json.loads((d / "requests.jsonl").read_text().splitlines()[-1])["keys"] == KEYS
-    (d / "request.json").unlink()
-    for keys, word in (({**KEYS, "steal_key": "F1"}, "only heal_key"),
-                       ({k: v for k, v in KEYS.items() if k != "dagger_key"}, "lack dagger_key"),
-                       ({**KEYS, "fly_key": "F10"}, "not a row-1 hotbar key")):  # fmt: skip
-        r = post(client, {"action": "start", "flow": FLOW, "keys": keys})
-        assert r.status_code == 400 and r.json()["detail"]["reason"] == "keys_refused", r.text
-        assert word in r.json()["detail"]["detail"], (keys, r.text)
+def test_stop_carries_no_keys(client: TestClient, tmp_path: Path) -> None:
     helper(tmp_path, state="running")
     r = post(client, {"action": "stop", "keys": KEYS})
-    assert r.status_code == 400 and "not stop" in r.json()["detail"]["detail"]
-    assert not (d / "request.json").exists()  # nothing refused was passed on
-    # any other field is still refused (a request names a flow and the flow's keys, nothing else)
-    assert post(client, {"action": "check", "flow": FLOW, "settings": {}}).status_code == 422
+    assert r.status_code == 400 and r.json()["detail"]["reason"] == "keys_refused"
+    assert not (tmp_path / "settings" / "flowrun" / "request.json").exists()
 
 
 def test_the_check_has_its_own_route_and_a_start_body_can_never_be_a_check(
@@ -341,11 +303,18 @@ def test_the_check_has_its_own_route_and_a_start_body_can_never_be_a_check(
     hd = {**H, "x-csrf-token": tok}
     bad = client.post("/flows/run", headers=hd, json={"action": "check", "flow": FLOW})
     assert bad.status_code == 400 and bad.json()["detail"]["reason"] == "check_has_its_own_route"
-    named = client.post("/flows/run/check", headers=hd, json={"action": "start", "flow": FLOW})
+    named = client.post(
+        "/flows/run/check",
+        headers=hd,
+        json={"action": "start", "project": hunt_project(), "node": "field"},
+    )
     assert named.status_code == 422
+    old = client.post("/flows/run/check", headers=hd, json={"flow": FLOW})  # the old body
+    assert old.status_code == 422
     assert client.post("/flows/run", headers=hd, json={"flow": FLOW}).status_code == 422
     assert not (d / "request.json").exists()
-    ok = client.post("/flows/run/check", headers=hd, json={"flow": FLOW})
+    ok = client.post("/flows/run/check", headers=hd, json={"project": hunt_project(),
+                                                            "node": "field"})  # fmt: skip
     assert ok.status_code == 200
     assert json.loads((d / "request.json").read_text())["action"] == "check"
 

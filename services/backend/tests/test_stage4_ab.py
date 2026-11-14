@@ -67,7 +67,7 @@ def test_the_series_alternates_b3_and_b4_with_stage2_abs_warp_cells() -> None:
 
 def test_both_arms_play_through_the_player_with_the_same_runner_settings(tmp_path: Path) -> None:
     folder = tmp_path / "series"
-    doc = ab.plan_doc("s", 2, 20, "alternate", folder, config_dir=tmp_path)
+    doc = ab.plan_doc("s", 2, 20, "alternate", folder)
     assert isinstance(doc, dict), doc
     assert doc["version"] == "9.51" == rc.VERSION
     b3, b4 = doc["arms"]["B3"], doc["arms"]["B4"]

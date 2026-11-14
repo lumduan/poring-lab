@@ -3,36 +3,43 @@ press run on flows, and the bot plays by itself").
 
     GET  /flows/run   the host helper's status (scripts/flow_run.py) and whether it is alive; its
          "check" is the last check of the game screen (dungeon@9.45), passed through as written
-    POST /flows/run   {"action": "start" | "check" | "stop", "flow": "<id>", "keys"?: {...}}: one
-         request for the helper. "check" (Batt 2026-11-13 "do it"): the start checklist ticked from
-         the game screen -- the runner's read-only check, which sends no input (no ASSIST needed).
-         "keys" (Batt 2026-11-13: every hotbar key from a FUNCTION of the flow): all five of
-         flow_config.KEY_FIELDS, each F1-F9, over the config file's for that run or check only
+    POST /flows/run   {"action": "stop"}: Stop. A start is a project's (POST /flows/run/project)
+         and a check has its own route (POST /flows/run/check); either here is refused in words
     POST /flows/run/project  {"project": <format 3>, "node": "<map node id>"} (Batt 2026-11-13,
          docs/planning/live-blocks.md stage 1): Run of a PROJECT by the LIVE BLOCK PLAYER
          (scripts/flow_play.py). The engine checks it first -- it validates, the node is a map
-         node, 0 lint errors, every block plays live (poring_flow.live), the run-start check's
-         verdict allows it (a hunt core's own L2 binding readiness is the runner's: answered),
-         each hunt core's keys resolve from that node's functions (project.runner_keys) -- then
-         the helper's state (alive, nothing running, ASSIST). Only then is the CHECKED project
-         written (settings/flowrun/project.json, its canonical JSON; never one that may hold a
-         secret) with ONE request {"action": "start", "flow": "project", "node", "project_hash",
-         "max_s", "keys"?, "at"}. Refusals: 400 / 409 / 503 {"reason", "detail"} with reasons
-         invalid_project (422, problems), not_a_map_node, lint_errors, not_live, run_start_refused,
-         keys_refused, helper_not_running, already_running, input_writer_busy (round 17 N5: the
-         helper's status names another input writer of ours playing, its `busy`), mode_not_assist.
-         Status stays GET /flows/run (flow id "project"); Stop is POST /flows/run {"action":
-         "stop"}
-    GET  /flows/config  every setting a person set: every map's ("global") and each map's own
-    PUT  /flows/config  {"scope": "global" | "map", "map": "<map>", "group": "<group>",
-         "values": {...} | null}: one group at one level (Batt 2026-11-13: "nothing is fixed, we
-         only put the defaults"; "a global config for every map's flow, a map's own on top";
-         scripts/flow_config.py is the registry); the helper reads the file at each start
+         node, 0 lint errors (the setting blocks' values and their clash rule among them), every
+         block plays live (poring_flow.live), the run-start check's verdict allows it (a hunt
+         core's own L2 binding readiness is the runner's: answered), each hunt core's keys resolve
+         from that node's functions (project.runner_keys) -- then the helper's state (alive,
+         nothing running, ASSIST). Only then is the CHECKED project written
+         (settings/flowrun/project.json, its canonical JSON; never one that may hold a secret) with
+         ONE request {"action": "start", "flow": "project", "node", "project_hash", "max_s",
+         "keys"?, "at"}. Refusals: 400 / 409 / 503 {"reason", "detail"} with reasons
+         invalid_project (422, problems), not_a_map_node, lint_errors, not_live,
+         run_start_refused, keys_refused, helper_not_running, already_running, input_writer_busy
+         (round 17 N5: the helper's status names another input writer of ours playing, its
+         `busy`), mode_not_assist. Status stays GET /flows/run (flow id "project"); Stop is POST
+         /flows/run {"action": "stop"}
+    POST /flows/run/check  {"project": <format 3>, "node": "<map node id>"} (dungeon@9.45, Batt
+         2026-11-13 "do it"; a project's since 2026-11-14): the start checklist ticked from the
+         game screen -- the runner's read-only check, which sends no input (no ASSIST needed),
+         with the node's keys (its functions) and its SETTINGS (its setting blocks > Global's >
+         the defaults: poring_flow.settings, live-blocks.md 12), which go in the request
+         ({"action": "check", "flow": "project", "node", "keys", "vals"}; the helper checks them
+         again). Refusals: invalid_project, not_a_map_node, no_hunt_core, keys_refused,
+         settings_refused, and the helper's states
+
+➡️ 2026-11-14 ~15:2x (Batt: "there should be no runner [page] ... make them ALL blocks"): GET /
+PUT /flows/config (the settings file settings/flowrun/config.json, empty when it went) and the
+runner-only start (POST /flows/run {"action": "start", "flow": "xmas_dun02_rogue"}) are gone: every
+setting is a block of the project, read from the project a start or a check sends.
 
 The backend starts nothing itself (it cannot reach the host's processes, by design). It writes ONE
 request file into the human-only settings store (``settings/flowrun/request.json``, mounted only
-into the backend) and the host helper, a user service, consumes it. A request only NAMES a flow the
-helper lists in its own status; the command line it runs lives in scripts/flow_run.py.
+into the backend) and the host helper, a user service, consumes it. A request names the project run
+(its checked file's hash) or a check's node, keys and settings; the command line it runs lives in
+scripts/flow_run.py.
 
 Writes pass routes_settings.write_gate unchanged: a console browser on the LAN, with the console's
 Origin and the CSRF token, never the lab host itself (any process there can forge the Origin) nor
@@ -42,10 +49,8 @@ is logged (requests.jsonl, who and what). Reads pass the console-browser gate.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -66,9 +71,8 @@ ACTIVE = ("starting", "running", "stopping")
 
 
 class RunBody(BaseModel):
-    """A Run request names a flow and nothing else (Batt 2026-11-13 ~14:4x: every setting lives in
-    the config file, every map's and each map's own; the helper reads it at the start) -- but the
-    five hotbar keys the flow's functions give (``keys``, checked by flow_config.keys_problem)."""
+    """POST /flows/run: Stop (``action`` "stop"). A start or a check here is refused in words:
+    each has its own route with the project (2026-11-14: the settings are the project's blocks)."""
 
     model_config = ConfigDict(extra="forbid")
     # matpilot 2026-11-13 #16: the read-only check has its OWN route (POST /flows/run/check), so a
@@ -88,54 +92,12 @@ class ProjectRunBody(BaseModel):
 
 
 class CheckBody(BaseModel):
-    """POST /flows/run/check: the read-only start check (dungeon@9.45; pixels only, no input)."""
+    """POST /flows/run/check: the read-only start check (dungeon@9.45; pixels only, no input) of
+    a project's map node: its keys and settings come from the project (2026-11-14)."""
 
     model_config = ConfigDict(extra="forbid")
-    flow: str = Field(max_length=64)
-    keys: dict[str, Any] | None = None
-
-
-class ConfigBody(BaseModel):
-    """PUT /flows/config: one GROUP of settings at one level (every map, or one map's own);
-    ``values`` None or {}: that group's own values there are removed (the next level applies)."""
-
-    model_config = ConfigDict(extra="forbid")
-    scope: Literal["global", "map"]
-    map: str | None = Field(default=None, pattern=r"^[a-z0-9_@-]{1,40}$")
-    group: str = Field(max_length=40)
-    values: dict[str, Any] | None = None
-
-
-def flow_config(state: AppState) -> Any:
-    """scripts/flow_config.py (the settings' registry: pure, stdlib only), from the read-only
-    scripts mount (ZONES_CODE_DIR, as flows_zones imports the zones loader) or, on the host's
-    tests, the repo's scripts/; None when it is not there (the routes then answer 503)."""
-    if "fc" in _FC:
-        return _FC["fc"]
-    out: Any = None
-    here = Path(__file__).resolve().parents
-    repo_scripts = here[4] / "scripts" if len(here) > 4 else None  # the host's tests only
-    for d in (state.settings.zones_code_dir, repo_scripts):
-        if d is None or not (Path(d) / "flow_config.py").is_file():
-            continue
-        path = Path(d) / "flow_config.py"
-        spec = importlib.util.spec_from_file_location("flow_config_backend", path)
-        if spec is None or spec.loader is None:
-            continue
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = mod  # its dataclasses look their module up while it loads
-        try:
-            spec.loader.exec_module(mod)
-        except Exception:  # noqa: BLE001 -- a broken module is "not there", never a 500
-            sys.modules.pop(spec.name, None)
-            continue
-        out = mod
-        break
-    _FC["fc"] = out
-    return out
-
-
-_FC: dict[str, Any] = {}
+    project: dict[str, Any]
+    node: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,39}$")
 
 
 def run_dir(state: AppState) -> Path:
@@ -161,13 +123,12 @@ def read_status(d: Path, now: float | None = None) -> dict[str, Any]:
 
 
 def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | None:
-    """PURE: why this request cannot be passed to the helper (None: it can)."""
+    """PURE: why this request cannot be passed to the helper (None: it can). A start or a check
+    of the project carries its own body (post_run_project, post_check); this is its state rule."""
     if not st.get("helper_alive"):
         return 503, "helper_not_running"
     if body.action == "stop":
         return None if st.get("state") in ACTIVE else (409, "nothing_running")
-    if body.flow not in (st.get("flows") or {}):
-        return 400, "unknown_flow"
     if st.get("state") in ACTIVE:
         return 409, "already_running"
     if st.get("busy"):  # round 17 N5: another input writer of ours plays (the helper refuses too)
@@ -178,19 +139,6 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
     if mode != Mode.ASSIST:
         return 409, "mode_not_assist"
     return None
-
-
-def keys_refusal(body: RunBody, fc: Any) -> tuple[int, str, str] | None:
-    """Why the request's ``keys`` cannot go to the helper (None: none given, or they can): the
-    helper's own rule (flow_config.keys_problem), refused here first with its words."""
-    if body.keys is None:
-        return None
-    if fc is None:
-        return 503, "config_engine_unavailable", "the settings list cannot be read here"
-    if body.action == "stop":
-        return 400, "keys_refused", "keys go with start or check, not stop"
-    why = fc.keys_problem(body.keys)
-    return None if why is None else (400, "keys_refused", str(why))
 
 
 @router.get("/run")
@@ -211,46 +159,88 @@ def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
 @router.post("/run")
 def post_run(body: RunBody, request: Request,
              state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
-    if body.action == "start" and body.flow == PROJECT:  # a project names its node and itself
+    if body.action == "start":  # a project names its node and itself (no runner-only start)
         state.drops.record("flowrun_http", "project_has_its_own_route", "post")
         raise HTTPException(400, {"reason": "project_has_its_own_route",
                                   "detail": "POST /flows/run/project {project, node}"})  # fmt: skip
     if body.action == "check":  # its own route since matpilot's #16
         state.drops.record("flowrun_http", "check_has_its_own_route", "post")
         raise HTTPException(400, {"reason": "check_has_its_own_route",
-                                  "detail": "POST /flows/run/check {flow, keys?}"})  # fmt: skip
+                                  "detail": "POST /flows/run/check {project, node}"})  # fmt: skip
     return _submit(body, request, state)
 
 
 @router.post("/run/check")
-def post_check(body: CheckBody, request: Request,
-               state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
-    return _submit(RunBody(action="check", flow=body.flow, keys=body.keys), request, state)
+async def post_check(request: Request,
+                     state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    from poring_backend import routes_flows as rf
+
+    body = await _project_body(request, state, CheckBody)
+    got = await rf._compute(request, state, lambda: check_values(state, body.project, body.node))
+    return _submit(RunBody(action="check"), request, state, extra=got)
 
 
-def _submit(body: RunBody, request: Request, state: AppState) -> dict[str, Any]:
+def _submit(body: RunBody, request: Request, state: AppState,
+            extra: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
     d = run_dir(state)
-    bad = keys_refusal(body, flow_config(state) if body.keys is not None else None)
-    if bad is not None:
-        state.drops.record("flowrun_http", bad[1], "post")
-        raise HTTPException(bad[0], {"reason": bad[1], "detail": bad[2]})
+    if body.keys is not None:
+        state.drops.record("flowrun_http", "keys_refused", "post")
+        raise HTTPException(400, {"reason": "keys_refused",
+                                  "detail": "keys come from a project's functions"})  # fmt: skip
     st = read_status(d)
     why = refusal(body, st, state.mux.mode)
     if why is not None:
         state.drops.record("flowrun_http", why[1], "post")
         raise HTTPException(why[0], {"reason": why[1]})
     rid = uuid.uuid4().hex
-    req: dict[str, Any] = {"id": rid, "action": body.action, "flow": body.flow, "at": time.time()}
-    if body.keys is not None:  # the flow's functions' keys (all five, checked): that run's only
-        req["keys"] = dict(body.keys)
+    flow = PROJECT if body.action == "check" else body.flow
+    req: dict[str, Any] = {"id": rid, "action": body.action, "flow": flow, "at": time.time()}
+    if extra:  # a check: the node, its keys and its settings (check_values)
+        req.update({k: extra[k] for k in ("node", "keys", "vals")})
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".request.{rid}"
     tmp.write_text(json.dumps(req) + "\n")
     os.replace(tmp, d / "request.json")
-    with open(d / "requests.jsonl", "a") as fh:
-        fh.write(json.dumps({**req, **_who(request).model_dump()}) + "\n")
-    return {"ok": True, "id": rid, "action": body.action, "flow": body.flow,
-            **({"keys": req["keys"]} if "keys" in req else {})}  # fmt: skip
+    with open(d / "requests.jsonl", "a") as fh:  # who and what (a check's settings by count)
+        logged = {k: v for k, v in req.items() if k != "vals"}
+        if "vals" in req:
+            logged["vals_n"] = len(req["vals"])
+        fh.write(json.dumps({**logged, **_who(request).model_dump()}) + "\n")
+    return {"ok": True, "id": rid, "action": body.action, "flow": flow,
+            **({"node": req["node"], "keys": req["keys"]} if extra else {})}  # fmt: skip
+
+
+def check_values(state: AppState, raw: dict[str, Any], node: str) -> dict[str, Any]:
+    """A project check's keys and settings (2026-11-14, live-blocks.md 12): the project validates,
+    the node is a map node with a hunt core, its keys resolve from its functions, its setting
+    blocks hold usable values that run together. Raises the refusal (HTTPException)."""
+    from poring_flow import live
+    from poring_flow import project as pj
+    from poring_flow import settings as st
+    from poring_flow.lint import settings as ls
+
+    text = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+    try:
+        p = pj.from_json(text)
+        c = pj.compile_project(p)
+    except pj.ProjectError as e:
+        raise _refuse_run(state, 422, "invalid_project",
+                          [q.doc() for q in e.problems[:50]]) from None  # fmt: skip
+    if not isinstance(p.node(node), pj.MapNode):
+        raise _refuse_run(state, 400, "not_a_map_node", f"{node} is no map node of the project")
+    hunts = {b for b, _ in live.runner_blocks(c.flow)} if c.flow is not None else set()
+    if node not in hunts:
+        raise _refuse_run(state, 400, "no_hunt_core", f"{node}'s main has no hunt with the "
+                          "runner: the check is the runner's")  # fmt: skip
+    rk = pj.runner_keys(p, node, c)
+    if rk.keys is None:
+        raise _refuse_run(state, 400, "keys_refused", {"node": node, "problems": rk.problems})
+    nv = ls.node_values(p, node, dict(rk.keys))
+    why = nv.problems[0] if nv.problems else st.clash(nv.vals)
+    if why:
+        raise _refuse_run(state, 400, "settings_refused", why)
+    vals = {f.name: nv.vals[f.name] for f in st.FIELDS if f.block}
+    return {"node": node, "keys": dict(rk.keys), "vals": vals}
 
 
 # --- Run of a PROJECT (live-blocks.md stage 1): the live block player -----------------------------
@@ -263,7 +253,8 @@ def _refuse_run(state: AppState, status: int, reason: str, detail: Any) -> HTTPE
     return HTTPException(status, {"reason": reason, "detail": detail})
 
 
-async def _project_body(request: Request, state: AppState) -> ProjectRunBody:
+async def _project_body(request: Request, state: AppState,
+                        model: type[BaseModel] = ProjectRunBody) -> Any:  # fmt: skip
     """The body, read with the flow routes' caps (size while reading, depth), then the model."""
     from poring_backend import routes_flows as rf
 
@@ -285,7 +276,7 @@ async def _project_body(request: Request, state: AppState) -> ProjectRunBody:
     if ir._depth(raw.decode("utf-8", errors="replace")) > ir.MAX_JSON_DEPTH + 2:
         raise _refuse_run(state, 422, "too_deep", "nested too deep")
     try:
-        return ProjectRunBody.model_validate_json(raw)
+        return model.model_validate_json(raw)
     except ValidationError as e:
         errs = [
             f"{'.'.join(str(x) for x in er['loc'])}: {er['msg']}"
@@ -394,47 +385,3 @@ async def post_run_project(request: Request,
     return {"ok": True, "id": rid, "action": "start", "flow": PROJECT, "node": body.node,
             "project_hash": got["hash"], "max_s": int(got["max_s"]), "verdict": got["verdict"],
             **({"keys": got["keys"]} if got["keys"] is not None else {})}  # fmt: skip
-
-
-@router.get("/config")
-def get_config(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
-    """Every map's values and each map's own (settings/flowrun/config.json, else 8e3ca2df's
-    survival.json); ``broken``: the file a person must look at (Run refuses until then)."""
-    fc = flow_config(state)
-    if fc is None:
-        raise HTTPException(503, {"reason": "config_engine_unavailable"})
-    got = fc.read_config(run_dir(state))
-    if isinstance(got, str):
-        return {"global": {}, "maps": {}, "broken": got}
-    return {"global": dict(got["global"]), "maps": dict(got["maps"])}
-
-
-@router.put("/config")
-def put_config(body: ConfigBody, request: Request,
-               state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
-    fc = flow_config(state)
-    if fc is None:
-        raise HTTPException(503, {"reason": "config_engine_unavailable"})
-    d = run_dir(state)
-    cur = fc.read_config(d)
-    if isinstance(cur, str):  # never write over a file a person must look at first
-        raise HTTPException(409, {"reason": "config_file_broken", "detail": cur})
-    doc = fc.put_level(cur, body.scope, body.map, body.group, body.values)
-    if isinstance(doc, str):
-        raise HTTPException(400, {"reason": "config_refused", "detail": doc})
-    # every flow the helper lists must still run: no two of its settings on one hotbar key
-    flows = (read_status(d).get("flows") or {}) if (d / "status.json").exists() else {}
-    for f in flows.values():
-        vals, _ = fc.effective(f.get("defaults") or {}, doc, f.get("map") or "")
-        why = fc.clash(vals)
-        if why:
-            raise HTTPException(400, {"reason": "config_refused", "detail": why})
-    d.mkdir(parents=True, exist_ok=True)
-    tmp = d / f".config.{uuid.uuid4().hex}"
-    tmp.write_text(json.dumps(doc, indent=2) + "\n")
-    os.replace(tmp, d / fc.FILE)
-    with open(d / "config.jsonl", "a") as fh:
-        fh.write(json.dumps({"at": time.time(), "scope": body.scope, "map": body.map,
-                             "group": body.group, "values": body.values,
-                             **_who(request).model_dump()}) + "\n")  # fmt: skip
-    return {"ok": True, "global": doc["global"], "maps": doc["maps"]}

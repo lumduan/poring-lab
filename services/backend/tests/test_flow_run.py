@@ -45,29 +45,31 @@ def test_every_flag_exists_and_player_mode_accepts_the_set() -> None:
     assert dh.player_mode_refused(ns) is None
 
 
-def test_requests_name_a_flow_and_never_carry_arguments() -> None:
-    req = {
-        "id": "a1b2c3d4e5",
-        "action": "start",
-        "flow": "xmas_dun02_rogue",
-        "args": ["--clear-map"],
-        "settings": {"fly_key": "F1"},
-    }  # an argument or a setting in a request is ignored: every setting is the config file's
-    assert fr.parse_request(json.dumps(req)) == {"id": "a1b2c3d4e5", "action": "start",
-                                                 "flow": "xmas_dun02_rogue"}  # fmt: skip
+def test_a_start_is_a_projects_and_never_carries_arguments() -> None:
+    """2026-11-14 (live-blocks.md 12): the runner-only start went with the runner page; a start
+    names the checked project (its node and hash) and nothing else -- no argument, no setting."""
+    base = {"id": "a1b2c3d4e5", "action": "start", "flow": "project", "node": "xmas_dun02",
+            "project_hash": "a" * 64, "max_s": 7200}  # fmt: skip
+    assert fr.parse_request(json.dumps(base)) == base
+    for extra in ({"args": ["--clear-map"]}, {"settings": {"fly_key": "F1"}},
+                  {"vals": {"minutes": 5}}):  # fmt: skip
+        assert "nothing else" in str(fr.parse_request(json.dumps({**base, **extra}))), extra
+    old = {"id": "a1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue"}
+    assert "unknown flow" in str(fr.parse_request(json.dumps(old)))
     assert fr.parse_request("{") == "unparsable request"
     assert fr.parse_request(json.dumps({"id": "x", "action": "start"})) == "bad request id"
     assert "unknown flow" in str(fr.parse_request(json.dumps(
         {"id": "a1b2c3d4e5", "action": "start", "flow": "rm -rf"})))  # fmt: skip
     assert "unknown action" in str(fr.parse_request(json.dumps(
-        {"id": "a1b2c3d4e5", "action": "exec", "flow": "xmas_dun02_rogue"})))  # fmt: skip
+        {"id": "a1b2c3d4e5", "action": "exec", "flow": "project"})))  # fmt: skip
     stop = fr.parse_request(json.dumps({"id": "a1b2c3d4e5", "action": "stop", "flow": None}))
     assert isinstance(stop, dict) and stop["action"] == "stop"
 
 
 # --- 2026-11-13 (Batt: "the Butterfly Wing on F9, the Fly Wing on F8; don't hard-code them";
 # "nothing is fixed, we only put the defaults"; "a global config for every map's flow, a map's own
-# on top") -- every setting is scripts/flow_config.py's, its value from settings/flowrun/config.json
+# on top") -- every setting is scripts/flow_config.py's (poring_flow.settings); since 2026-11-14 its
+# value is a project's setting block (the map node's > Global's > the default)
 def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
     assert f.map == "xmas_dun02"
@@ -83,21 +85,58 @@ def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
     assert set(dh.SURVIVAL_RANGES) <= set(f.defaults)
 
 
-def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
+def _project(node_vars: dict[str, Any], global_vars: dict[str, Any] | None) -> dict[str, Any]:
+    """A project as the checked file holds it (the dict): a map node xmas_dun02 and, given its
+    variables, a Global node; tab names are the settings' groups."""
+
+    def tabs(vs: dict[str, Any]) -> list[dict[str, Any]]:
+        by: dict[str, dict[str, Any]] = {}
+        for k, v in vs.items():
+            f = fc.BY_VAR.get(k)
+            by.setdefault(f.group if f else "misc", {})[k] = {"kind": "lit", "value": v}
+        return [{"name": t, "main": None, "defs": [], "vars": x} for t, x in by.items()]
+
+    nodes: list[dict[str, Any]] = [{"id": "xmas_dun02", "kind": "map", "tabs": [
+        {"name": "main", "main": [], "defs": [], "vars": {}}, *tabs(node_vars)]}]  # fmt: skip
+    if global_vars is not None:
+        nodes.append({"id": "global", "kind": "global", "tabs": tabs(global_vars)})
+    return {"nodes": nodes}
+
+
+def test_the_nodes_own_value_first_then_globals_then_the_default() -> None:
+    """The name rule (project-model.md section 3) for the setting blocks: the map node's own over
+    Global's over the default; a setting nobody wrote takes its default; deleting the node's
+    block falls back to Global's, deleting that to the default."""
     f = fr.FLOWS["xmas_dun02_rogue"]
-    cfg = {"global": {"potion_below": 0.3, "LOOT_TRIM_HOVERS": 12, "fly_key": "F7"},
-           "maps": {"xmas_dun02": {"potion_below": 0.5},
-                    "prt_fild08": {"fly_key": "F6"}}}  # fmt: skip
-    vals, src = fr.config_of(f, cfg)
-    assert vals["potion_below"] == 0.5 and src["potion_below"] == "map"
-    assert vals["fly_key"] == "F7" and src["fly_key"] == "global"  # another map's own is not hers
-    assert vals["LOOT_TRIM_HOVERS"] == 12 and src["LOOT_TRIM_HOVERS"] == "global"
+    doc = _project({"potion_below": 0.5}, {"potion_below": 0.3, "LOOT_TRIM_HOVERS": 12,
+                                           "fly_below": 0.25})  # fmt: skip
+    vals, src, keys_src, why = fr.project_values(doc, "xmas_dun02", None)
+    assert why is None and keys_src == "the settings"
+    assert vals["potion_below"] == 0.5 and src["potion_below"] == "xmas_dun02/survival"
+    assert vals["fly_below"] == 0.25 and src["fly_below"] == "global/survival"
+    assert vals["LOOT_TRIM_HOVERS"] == 12 and src["LOOT_TRIM_HOVERS"] == "global/loot"
     assert vals["home_key"] == "F9" and src["home_key"] == "default"
+    assert vals["KILL_GAP_S"] == fc.DEFAULTS["KILL_GAP_S"] and src["KILL_GAP_S"] == "default"
     argv = fr.command(f, "x", None, vals)
     assert argv[argv.index("--potion-below") + 1] == "0.50"
-    assert argv[argv.index("--fly-key") + 1] == "F7" and argv.count("--fly-key") == 1
+    assert argv[argv.index("--fly-below") + 1] == "0.25" and argv.count("--fly-below") == 1
     assert argv[argv.index("LOOT_TRIM_HOVERS=12") - 1] == "--tune"
+    assert argv.count("--tune") == 1  # every other runner number at its default: not passed
     assert "--tune" not in fr.command(f, "x")  # nobody set a runner number: the runner's own
+    # deleted on the node: Global's; deleted on Global too: the default
+    gone = fr.project_values(_project({}, {"potion_below": 0.3}), "xmas_dun02", None)
+    assert gone[0]["potion_below"] == 0.3 and gone[1]["potion_below"] == "global/survival"
+    none = fr.project_values(_project({}, None), "xmas_dun02", None)
+    assert none[0]["potion_below"] == fc.DEFAULTS["potion_below"] == 0.4
+    assert none[1]["potion_below"] == "default"
+    # a project without a setting block runs exactly the defaults (today's command)
+    assert fr.command(f, "x", None, none[0]) == fr.command(f, "x")
+    # the dotted runner constant and the two catalogue names take their variables' names
+    vs = {"D0_PX": 300, "loot_step": "v1", "respawn_on_death": False}
+    named = fr.project_values(_project(vs, None), "xmas_dun02", None)
+    assert (named[0]["vt.D0_PX"], named[0]["loot"], named[0]["respawn"]) == (300, "v1", False)
+    a = fr.command(f, "x", None, named[0])
+    assert "vt.D0_PX=300" in a and a[a.index("--loot") + 1] == "v1" and "--no-respawn" in a
 
 
 def test_two_settings_on_one_key_never_run() -> None:
@@ -197,24 +236,19 @@ def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
     assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
 
 
-def test_a_broken_config_or_a_key_clash_refuses_before_anything_starts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    f = fr.FLOWS["xmas_dun02_rogue"]
-    monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)  # a live run on this host: not ours
-    orig = fr.CONFIG_DIR
-    try:
-        fr.CONFIG_DIR = tmp_path
-        for text, word in (("{", "not valid JSON"),
-                           (json.dumps({"v": 2, "maps": {"xmas_dun02": {"dagger_key": "F4"}}}),
-                            "both on F4")):  # fmt: skip
-            (tmp_path / "config.json").write_text(text)
-            h = fr.Helper(tmp_path)
-            h.start(f, "a1b2c3d4e5")
-            assert h.state == "refused" and word in h.detail and h.runner is None, h.detail
-            assert "refused before any input" in h.detail
-    finally:
-        fr.CONFIG_DIR = orig
+def test_a_bad_setting_block_or_a_clash_refuses_before_anything_starts() -> None:
+    for node_vars, word in (
+        ({"knife_hp_min": 0.95}, "is not from 20 % to 90 %"),
+        ({"knife_swap": "yes"}, "is not on or off"),
+        ({"hud_fast": 0.5, "BOX_EVERY_S": 0.5}, "faster than the detector"),
+    ):
+        vals, _src, _ks, why = fr.project_values(_project(node_vars, None), "xmas_dun02", None)
+        assert why is not None and why.startswith("refused before any input") and word in why
+        assert word in why, (node_vars, why)
+    _, _, _, why = fr.project_values(_project({}, None), "xmas_dun02",
+                                     {**fr.FLOWS["xmas_dun02_rogue"].defaults,
+                                      "dagger_key": "F4"})  # fmt: skip
+    assert "both on F4" in str(why)
 
 
 # --- matpilot's player test 2026-11-13: "while she plays, the page tells me nothing"; "the end is
@@ -241,10 +275,23 @@ def test_the_live_line_follows_the_runs_own_events(tmp_path: Path) -> None:
     assert (s["kills"], s["loot_steps"], s["pickups"], s["hp"], s["hp_low"]) == (1, 1, 1, 88, 88)
     assert s["block"] == "loot" and s["doing"] == "picking up" and s["elapsed_s"] == 8
     assert s["pos"] == [8, 22]
-    # every block it may highlight is a block of the flow
-    src = (ROOT / "services/frontend/src/lib/flow/runners/xmas_dun02_rogue.gen.ts").read_text()
+    # every block it may highlight is a block of the runner's outline (scripts/runner_flow_export)
+    import runner_flow_export as rfe
+
+    ids: set[str] = set()
+
+    def walk(n: dict[str, Any]) -> None:
+        ids.add(n["id"])
+        for c in n.get("body", []):
+            walk(c)
+        for b in n.get("branches", []):
+            for c in b["body"]:
+                walk(c)
+
+    for st in rfe.build()["stacks"]:
+        walk(st)
     for b in {*fr.EVENT_BLOCK.values(), *fr.PRESS_BLOCK.values()}:
-        assert f'"id": "{b}"' in src, b
+        assert b in ids, b
 
 
 def test_the_end_in_a_players_words() -> None:
@@ -265,8 +312,11 @@ def test_the_end_in_a_players_words() -> None:
 
 
 # --- dungeon@9.45 (Batt 2026-11-13 "do it"): the start checklist ticked from the game screen; and
-# the flow's keys (Batt: every hotbar key from a FUNCTION of the flow) over the config file's ----
+# the flow's keys (Batt: every hotbar key from a FUNCTION of the flow) over the settings -----------
 KEYS = {"heal_key": "F2", "fly_key": "F3", "home_key": "F6", "knife_key": "F7", "dagger_key": "F9"}
+VALS = {f.name: f.default for f in fc.FIELDS if f.block}  # a check's settings: every block's
+CHECK = {"id": "a1b2c3d4e5", "action": "check", "flow": "project", "node": "xmas_dun02",
+         "keys": KEYS, "vals": VALS}  # fmt: skip
 
 
 def test_the_check_runs_the_starts_own_argv_read_only() -> None:
@@ -286,39 +336,31 @@ def test_the_check_runs_the_starts_own_argv_read_only() -> None:
         fr.command(f, "x", sub="clear-bag")
 
 
-def test_a_request_may_carry_the_flows_five_keys_and_nothing_else() -> None:
-    base = {"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"}
-    assert fr.parse_request(json.dumps(base)) == base  # no keys: the settings' keys
-    got = fr.parse_request(json.dumps({**base, "keys": KEYS}))
-    assert isinstance(got, dict) and got["keys"] == KEYS and got["action"] == "check"
-    assert isinstance(fr.parse_request(json.dumps({**base, "action": "start", "keys": KEYS})), dict)
+def test_a_check_carries_the_projects_five_keys_and_settings_and_nothing_else() -> None:
+    got = fr.parse_request(json.dumps(CHECK))
+    assert isinstance(got, dict) and got["keys"] == KEYS and got["vals"] == VALS
     for keys, word in (({**KEYS, "steal_key": "F1"}, "only heal_key"),
                        ({k: v for k, v in KEYS.items() if k != "home_key"}, "lack home_key"),
                        ({**KEYS, "fly_key": "F10"}, "not a row-1 hotbar key"),
                        ({**KEYS, "fly_key": 8}, "not a row-1 hotbar key"),
                        (["F1"], "must be an object")):  # fmt: skip
-        assert word in str(fr.parse_request(json.dumps({**base, "keys": keys}))), keys
+        assert word in str(fr.parse_request(json.dumps({**CHECK, "keys": keys}))), keys
+    assert "is not a whole number" in str(fr.parse_request(json.dumps(
+        {**CHECK, "vals": {**VALS, "minutes": 1.5}})))  # fmt: skip
     stop = {"id": "a1b2c3d4e5", "action": "stop", "keys": KEYS}
     assert "not stop" in str(fr.parse_request(json.dumps(stop)))
-    assert "unknown flow" in str(fr.parse_request(json.dumps({**base, "flow": "x"})))
+    assert "unknown flow" in str(fr.parse_request(json.dumps({**CHECK, "flow": "x"})))
 
 
-def test_the_flows_keys_go_over_the_config_for_that_run_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_flows_keys_go_over_the_settings_for_that_run_only() -> None:
     f = fr.FLOWS["xmas_dun02_rogue"]
-    monkeypatch.setattr(fr, "CONFIG_DIR", tmp_path)
-    cfg = {"v": 2, "global": {"fly_key": "F7"}, "maps": {}}
-    (tmp_path / "config.json").write_text(json.dumps(cfg))
-    h = fr.Helper(tmp_path)
-    vals, src, keys_src, why = h.values_for(f, KEYS)
+    vals, src, keys_src, why = fr.values_of({**f.defaults, "fly_key": "F7"}, {}, KEYS)
     assert why is None and keys_src == "the flow's functions"
     assert {k: vals[k] for k in KEYS} == KEYS and src["fly_key"] == "flow"
-    vals, src, keys_src, why = h.values_for(f, None)
-    assert vals["fly_key"] == "F7" and src["fly_key"] == "global" and keys_src == "the settings"
-    assert json.loads((tmp_path / "config.json").read_text()) == cfg  # the file is not written
+    vals, src, keys_src, why = fr.values_of({**f.defaults, "fly_key": "F7"}, {}, None)
+    assert vals["fly_key"] == "F7" and keys_src == "the settings"
     # two on one key: refused before any input, in the clash rule's own words
-    _, _, _, why = h.values_for(f, {**KEYS, "dagger_key": "F7"})
+    _, _, _, why = fr.values_of(dict(f.defaults), {}, {**KEYS, "dagger_key": "F7"})
     clash = fc.clash({**f.defaults, **KEYS, "dagger_key": "F7"})
     assert why == f"refused before any input: {clash}"
     assert "both on F7" in str(why)
@@ -344,7 +386,6 @@ def _helper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rc: int | None,
         made.append(FakeProc(argv, kw["stdout"], rc, text))
         return made[-1]
 
-    monkeypatch.setattr(fr, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(fr, "SCRATCH", tmp_path / "scratch")
     monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     import types
@@ -365,15 +406,19 @@ def test_a_check_runs_and_its_result_goes_into_the_status(
     line = fr.CHECK_MARK + json.dumps({"items": items, "ok": False, "refuses": True,
                                        "used": {"fly_key": "F3"}})  # fmt: skip
     h, made = _helper(tmp_path, monkeypatch, 0, f"some uv line\n{line}\n")
-    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue", "keys": KEYS})
+    req = fr.parse_request(json.dumps({**CHECK, "vals": {**VALS, "knife_hp_min": 0.6}}))
+    assert isinstance(req, dict)
+    h.handle(req)
     assert len(made) == 1 and made[0].argv[8] == "check"
     assert made[0].argv[made[0].argv.index("--heal-key") + 1] == "F2"  # the flow's keys
+    # the project's settings (its blocks, as the backend computed them): its 60 % Knife floor
+    assert made[0].argv[made[0].argv.index("--knife-hp-min") + 1] == "0.60"
     assert h.check is not None and h.check["state"] == "checking" and h.state == "idle"
     h.tick()
     st = json.loads((tmp_path / "status.json").read_text())
     ck = st["check"]
     assert ck["state"] == "done" and ck["ok"] is False and ck["refuses"] is True
-    assert ck["items"] == items and ck["flow"] == "xmas_dun02_rogue" and "T" in ck["at"]
+    assert ck["items"] == items and ck["flow"] == "project" and "T" in ck["at"]
     assert ck["keys_src"] == "the flow's functions" and ck["keys"] == KEYS
     assert ck["used"] == {"fly_key": "F3"} and ck["detail"] == "1 of 2 lines fail"
     assert st["state"] == "idle" and h.runner is None  # a check is no run
@@ -388,20 +433,20 @@ def test_a_check_is_refused_while_a_run_goes_and_is_time_boxed(
     h, made = _helper(tmp_path, monkeypatch, None, "")
     for state in ("starting", "running", "stopping"):
         h.state = state
-        h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+        h.handle(dict(CHECK))
         assert made == [] and h.check is None and "checked before a run" in h.detail
     h.state = "idle"
     monkeypatch.setattr(fr, "writer_busy", lambda _lines: "the night chain is running")
-    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    h.handle(dict(CHECK))
     assert made == [] and h.check is not None and h.check["state"] == "refused"
     assert "night chain" in h.check["detail"]
     # a check that does not end in CHECK_TIMEOUT_S: its process group ends
     monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     killed: list[tuple[int, int]] = []
     monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
-    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    h.handle(dict(CHECK))
     assert len(made) == 1 and h.check["state"] == "checking"
-    h.handle({"id": "b1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
+    h.handle({**CHECK, "id": "b1b2c3d4e5"})
     assert len(made) == 1  # one at a time
     h.check_t -= fr.CHECK_TIMEOUT_S + 1
     h.tick()
@@ -413,11 +458,12 @@ def test_run_ends_a_running_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     h, made = _helper(tmp_path, monkeypatch, None, "")
     killed: list[int] = []
     monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: killed.append(pid))
-    h.handle({"id": "a1b2c3d4e5", "action": "check", "flow": "xmas_dun02_rogue"})
-    (tmp_path / "config.json").write_text("{")  # the start then refuses before any input
-    h.handle({"id": "b1b2c3d4e5", "action": "start", "flow": "xmas_dun02_rogue", "keys": KEYS})
+    h.handle(dict(CHECK))
+    # a project start with no checked file refuses before any input (and the check ended first)
+    h.handle({"id": "b1b2c3d4e5", "action": "start", "flow": "project", "node": "xmas_dun02",
+              "project_hash": "a" * 64, "max_s": 7200, "keys": KEYS})  # fmt: skip
     assert killed == [424242] and h.check is not None and h.check["state"] == "cancelled"
-    assert h.state == "refused" and "not valid JSON" in h.detail and len(made) == 1
+    assert h.state == "refused" and "not there" in h.detail and len(made) == 1
 
 
 def test_the_checks_output_is_its_result_or_the_runners_refusal() -> None:

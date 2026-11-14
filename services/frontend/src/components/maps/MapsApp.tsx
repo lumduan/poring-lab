@@ -48,7 +48,7 @@ import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/l
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
 import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasProject } from "@/lib/flow/project";
-import { LIVE_FLOWS, runnerForMap } from "@/lib/flow/runners";
+import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
@@ -581,8 +581,8 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   // --- RUN: the project from START, box by box (the live block player) ----------------------------
   const sm = mapStartOf(project);
   const startReady = sm ? liveReady(project, sm.id, catalogue?.blocks ?? null) : null;
-  const smRunner = sm && runnerBlockOn(sm) ? runnerForMap(sm.map.map) : null;
-  const runnable = !!sm && startReady?.ready === true && (!runnerBlockOn(sm) || (!!smRunner && LIVE_FLOWS.includes(smRunner.id)));
+  const smRunner = sm && runnerBlockOn(sm) && RUNNER_MAPS.includes(sm.map.map) ? sm.map.map : null; // a map with a runner
+  const runnable = !!sm && startReady?.ready === true && (!runnerBlockOn(sm) || !!smRunner);
   const keysR = runnable && sm && smRunner ? runnerKeysOn(project, sm.id) : null;
   // matpilot round 16 #4: a lint ERROR blocks Run (the Run route refuses it too: lint_errors)
   const lintErr = lintDoc && lintDoc.counts.error > 0 ? (lintDoc.findings.find((f) => f.severity === "error")?.message ?? "") : null;

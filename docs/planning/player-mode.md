@@ -212,6 +212,7 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   F1 potion, F3 steal, F4 the Knife, F5 the dagger; weights 0.30, 0.35 ... 0.80) check them; they
   become the three flags, nothing else in a request does. Defaults (Batt): Fly Wing F8, Butterfly
   Wing F9, home over 50 %.
+- ➡️ **2026-11-14 ~15:2x (Batt: "no runner [page] ... make them ALL blocks"; live-blocks.md section 12):** the runner page is gone and every setting is a BLOCK of the project (the map node's over Global's over the default); the settings file and GET / PUT /flows/config are gone (the file was empty). The lines here are history.
 - **/flows?runner=xmas_dun02:** Run (amber, two presses: the second within 4 s confirms) and Stop
   beside Simulate; a "your run settings" strip (three selects, remembered in this browser; the
   blocks show the chosen keys and percent at once); the binding strip: bound to map xmas_dun02,
@@ -277,6 +278,8 @@ Wing on F8; don't hard-code them: a user changes them in the blocks too."
   arguments at import (a `--tune` would have been ignored SILENTLY): they are read at call time
   now, and `test_flow_config` fails if any setting is ever bound at import again, or if /flows
   shows a runner number that is neither a setting nor excluded with its reason.
+  ➡️ **SUPERSEDED 2026-11-14 (live-blocks.md section 12): the values are the project's SETTING
+  BLOCKS now; the file and its PUT are gone.** As they were:
   ➡️ The values: `settings/flowrun/config.json` (v2, the same shape as 8e3ca2df's survival.json,
   which it reads while config.json does not exist), `PUT /flows/config` per GROUP and level
   (every map / one map's own; audited in config.jsonl; refused when a value is off its range or

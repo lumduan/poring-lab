@@ -25,6 +25,7 @@ import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt"
 import { canonical } from "@/lib/flow/ir";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { Project } from "@/lib/flow/project";
+import { settingFallback, settingOfType, settingTooltip } from "@/lib/flow/settings";
 import { runLine } from "@/lib/flow/status";
 import { injectFor } from "@/lib/flow/theme";
 import type { Issue, Loose } from "@/lib/flow/words";
@@ -119,7 +120,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         canUndo: w.getUndoStack().length > 0,
         canRedo: w.getRedoStack().length > 0,
       });
-      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.trace, paths.current, latest.current.scope);
+      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.trace, paths.current, latest.current.scope, r.ok ? r.project : project);
     };
 
     const api: EditorApi = {
@@ -226,7 +227,7 @@ export default function BlockEditor(p: BlockEditorProps) {
       tbRef.current = next;
       ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
     }
-    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope);
+    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, trace, paths.current, scope, p.getProject());
     // the scopes as plain values: their objects are new on every render of the page
   }, [ready, catalogue, lint, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -264,11 +265,11 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox
 /** Badges (L1 verification), lint warnings and the last run on each block. `paths`: block id ->
  * node path, as converted last (edits move blocks; their ids stay). The labels change with events
  * off: a decoration is not an edit (no undo step, no conversion). */
-function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope): void {
+function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
-    paint(w, catalogue, lint, trace, paths, scope);
+    paint(w, catalogue, lint, trace, paths, scope, project);
   } finally {
     if (was) B.Events.enable();
   }
@@ -285,10 +286,18 @@ function tabFindings(lint: LintDoc | null, scope: TabScope): Map<string, Finding
   return out;
 }
 
-function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope): void {
+function paint(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
   const byPath = tabFindings(lint, scope);
   const prefix = `${scope.node}/${scope.tab}/`;
   for (const b of w.getAllBlocks(false)) {
+    // a SETTING block (live-blocks.md 12): a safety switch says its warning while it is off; the
+    // tooltip says what deleting the block falls back to (Global's block, else the default)
+    const setting = settingOfType(b.type);
+    if (setting) {
+      const off = setting.kind === "switch" && b.getFieldValue("VALUE") === "off";
+      b.getField("WARN")?.setValue(off && setting.warn ? `⚠ ${setting.warn}` : "");
+      if (project && !b.isInFlyout) b.setTooltip(settingTooltip(setting, settingFallback(project, scope.node, setting)));
+    }
     const name =
       b.type === HUNT_TYPE ? "hunt" : (PALETTE_BLOCK[b.type] ?? (b.type === "pl_action" || b.type === "pl_do" ? String(b.getFieldValue("BLOCK")) : null));
     const badgeField = b.getField("BADGE");

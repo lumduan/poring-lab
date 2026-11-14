@@ -351,9 +351,9 @@ def test_the_split_stock_rules_are_the_old_one() -> None:
 
 
 def test_the_check_ids_are_the_pages_checklist_ids() -> None:
-    """/flows' checklist (lib/flow/config.ts startChecklist) has a line for each id the check
-    ticks, with the same id."""
-    ts = (ROOT / "services/frontend/src/lib/flow/config.ts").read_text()
+    """/flows' checklist (lib/flow/settings.ts startChecklist; lib/flow/config.ts until
+    2026-11-14, live-blocks.md 12) has a line for each id the check ticks, with the same id."""
+    ts = (ROOT / "services/frontend/src/lib/flow/settings.ts").read_text()
     body = ts[ts.index("export const CHECKLIST_IDS") : ts.index("];", ts.index("CHECKLIST_IDS"))]
     assert re.findall(r'"([a-z_]+)"', body) == list(dh.CHECK_IDS)
     assert dh.CHECK_MARK == fr.CHECK_MARK
@@ -365,7 +365,10 @@ def test_the_feature_version_is_the_checks() -> None:
     assert dh.LIVE_CHECK_VERSION == "9.45" and dh.VERSION == "dungeon@8.7"
     assert dh.MAP_IDENTITY_VERSION == "9.46"  # the map line's reader (minimap_id)
     assert dh.SLOT_ITEMS_VERSION == "9.47"  # the keys' items (slot_items)
-    assert rfe.feature_version(dh) == "dungeon@9.47"
+    # the newest feature is the fast alarm (dungeon@9.53, live-blocks 11.2); 9.48-9.52 are
+    # NOT_FEATURES (the player's and the box's, not the runner's)
+    assert dh.ALARM_FAST_VERSION == "9.53"
+    assert rfe.feature_version(dh) == "dungeon@9.53"
 
 
 # --- (c) dungeon@9.46: the map line, from the minimap's picture -----------------------------------

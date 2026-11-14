@@ -53,7 +53,7 @@ def test_the_setup_lines_never_meet_the_chat_guard_and_top_up_only_under_a_floor
 def test_both_arms_take_the_same_runner_settings_and_the_old_run_path_argv(
     tmp_path: Path,
 ) -> None:
-    doc = ab.plan_doc("s", 2, 20, "alternate", tmp_path / "series", config_dir=tmp_path)
+    doc = ab.plan_doc("s", 2, 20, "alternate", tmp_path / "series")
     assert isinstance(doc, dict), doc
     assert doc["box_plays"] == ["boss_fly", "fly_hp", "potion"]
     assert doc["box_events"] == ["fly_away", "drink"] and doc["version"] == "9.49"
@@ -93,7 +93,7 @@ def test_a_plan_refuses_before_any_input_when_the_box_cannot_play(
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(d))
     monkeypatch.setattr(ab, "PROJECT", bad)
-    got = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "x", config_dir=tmp_path)
+    got = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "x")
     assert isinstance(got, str) and "refused before any input" in got
 
 

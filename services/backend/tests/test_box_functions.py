@@ -98,13 +98,13 @@ def tab_of(d: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def prep(tmp_path: Path, d: dict[str, Any]) -> fp.Prepared:
-    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
     assert isinstance(got, fp.Prepared), got
     return got
 
 
 def refused(tmp_path: Path, d: dict[str, Any]) -> str:
-    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
     assert isinstance(got, str) and "refused before any input" in got, got
     c = pj.compile_project(pj.from_json(json.dumps(d)))
     assert c.flow is not None and live.problems(c.flow)  # the backend's not_live: the same

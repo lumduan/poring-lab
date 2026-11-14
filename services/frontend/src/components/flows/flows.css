@@ -19,6 +19,18 @@
   fill: #f5d0fe !important;
   font-style: italic;
 }
+/* a setting block (live-blocks.md 12): its variable's name quieter than its words; a safety
+   switch's warning while it is off */
+.blocklyText.pl-setting-var,
+.pl-setting-var .blocklyText {
+  fill: #e5e7eb !important;
+  font-size: 0.8em;
+}
+.blocklyText.pl-setting-warn,
+.pl-setting-warn .blocklyText {
+  fill: #fde68a !important;
+  font-weight: 600;
+}
 
 /* Blockly hides an <svg> with the SVG PRESENTATION ATTRIBUTE display="none" (Scrollbar.updateDisplay_:
    the flyout's and the workspace's scrollbars). Tailwind's preflight (`svg { display: block }`, in

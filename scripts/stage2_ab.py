@@ -266,19 +266,52 @@ def project_text(minutes: float, path: Path | None = None) -> str:
     return pj.to_json(pj.validate(d))
 
 
-def run_vals(minutes: float, config_dir: Path = fr.CONFIG_DIR) -> dict[str, Any] | str:
-    """The runner settings BOTH arms take: the Run config (default < every map < this map), the
-    box's five keys over it (project.runner_keys), --minutes M. A refusal: its words."""
+def box_vals(path: Path, minutes: float) -> dict[str, Any] | str:
+    """The runner settings a box's hunt core takes (2026-11-14, live-blocks.md 12: its SETTING
+    BLOCKS > the defaults, flow_run.project_values), its keys over them (project.runner_keys),
+    --minutes M. A refusal: its words."""
     from poring_flow import project as pj
 
-    p = pj.from_json(PROJECT.read_text())
-    rk = pj.runner_keys(p, NODE)
+    text = path.read_text()
+    rk = pj.runner_keys(pj.from_json(text), NODE)
     if rk.keys is None:
         return f"the box's keys: {'; '.join(rk.problems)}"
-    vals, _src, _ks, why = fr.run_values(fr.FLOWS[FLOW_ID], rk.keys, config_dir)
+    vals, _src, _ks, why = fr.project_values(json.loads(text), NODE, rk.keys)
     if why:
         return why
     return {**vals, "minutes": minutes}
+
+
+def same_vals(arms: Mapping[str, Path], minutes: float) -> dict[str, Any] | str:
+    """The runner settings EVERY arm's box takes (box_vals): the same, or refused naming the first
+    setting that differs (an A/B changes one thing: the box, never the runner's settings)."""
+    got: dict[str, dict[str, Any]] = {}
+    for arm, path in arms.items():
+        v = box_vals(path, minutes)
+        if isinstance(v, str):
+            return f"{arm}: {v}"
+        got[arm] = v
+    first, *rest = list(got)
+    for arm in rest:
+        keys = [k for k in fr.fc.KEY_FIELDS if got[arm].get(k) != got[first].get(k)]
+        if keys:
+            return (f"the boxes' keys differ: {first} {[got[first][k] for k in keys]}, "
+                    f"{arm} {[got[arm][k] for k in keys]} ({', '.join(keys)})")  # fmt: skip
+        diff = sorted(k for k in set(got[arm]) | set(got[first])
+                      if got[arm].get(k) != got[first].get(k))  # fmt: skip
+        if diff:
+            k = diff[0]
+            return (
+                f"the boxes' runner settings differ: {k} is {got[first].get(k)!r} in {first}, "
+                f"{got[arm].get(k)!r} in {arm} (an A/B changes the box, not the settings)"
+            )
+    return got[first]
+
+
+def run_vals(minutes: float) -> dict[str, Any] | str:
+    """The runner settings BOTH arms take: the box's (its setting blocks, its keys, --minutes M);
+    arm A's runner gets exactly these. A refusal: its words."""
+    return box_vals(PROJECT, minutes)
 
 
 def commands(r: Run, folder: Path, vals: Mapping[str, Any], minutes: float,
@@ -292,15 +325,15 @@ def commands(r: Run, folder: Path, vals: Mapping[str, Any], minutes: float,
                            project_hash, folder / "runner-config.json")  # fmt: skip
 
 
-def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
-             config_dir: Path = fr.CONFIG_DIR) -> dict[str, Any] | str:  # fmt: skip
-    """PURE but for reads (the config, the fixture): everything a series will do, before any
-    screen is read or any input path opened; a refusal: its words."""
+def plan_doc(label: str, pairs: int, minutes: float, order: str,
+             folder: Path) -> dict[str, Any] | str:  # fmt: skip
+    """PURE but for reads (the fixture): everything a series will do, before any screen is read
+    or any input path opened; a refusal: its words."""
     import flow_play as fp
 
     from poring_flow import project as pj
 
-    vals = run_vals(minutes, config_dir)
+    vals = run_vals(minutes)
     if isinstance(vals, str):
         return f"refused before any input: {vals}"
     text = project_text(minutes)

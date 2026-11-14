@@ -1,12 +1,15 @@
 """runner_flow_export (Batt 2026-11-12, rogue-xmas02.md 4CQ: "make the flows of this map, so I can
-see how the bot works"): the committed /flows description of dungeon_hunt.py's xmas_dun02 Rogue is a
-fresh export, its Python outline is valid Python, its numbers are the module's own, its flags are
-`run`'s real flags, and it carries no GPL-derived value (the species' worth stays at run time)."""
+see how the bot works"): the description of dungeon_hunt.py's xmas_dun02 Rogue as blocks and an
+outline -- its Python outline is valid Python, its numbers are the module's own, its flags are
+`run`'s real flags, and it carries no GPL-derived value (the species' worth stays at run time).
+➡️ 2026-11-14 (live-blocks.md 12): the /flows runner page and its generated runners/*.gen.ts went
+(their drift test with them); the outline stays for stage 5b and the docs (`show`)."""
 
 from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -40,16 +43,6 @@ def _nodes(doc: dict[str, Any]) -> list[dict[str, Any]]:
     for s in doc["stacks"]:
         walk(s)
     return out
-
-
-def test_the_committed_description_is_current(doc: dict[str, Any]) -> None:
-    path = rfe.out_path(doc)
-    assert path.exists(), "run: .venv/bin/python scripts/runner_flow_export.py export"
-    assert path.read_text() == rfe.render(doc), (
-        f"{path.relative_to(ROOT)} is stale (dungeon_hunt.py's numbers, flags or the SPEC "
-        "changed): "
-        ".venv/bin/python scripts/runner_flow_export.py export"
-    )
 
 
 def test_the_outline_is_python_and_every_block_owns_its_lines(doc: dict[str, Any]) -> None:
@@ -128,5 +121,5 @@ def test_no_gpl_derived_value_is_exported(doc: dict[str, Any]) -> None:
     assert "SPECIES_VALUES = {}" in doc["python"]
     assert not any("species" in pid for pid in doc["params"])
     assert all("maps.json" not in p["source"] for p in doc["params"].values())
-    text = rfe.render(doc)
+    text = json.dumps(doc)
     assert "sell_oc" not in text and 'maps.json"' not in text

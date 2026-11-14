@@ -1,14 +1,15 @@
 // matpilot round 17 N1: heal and the Fly Wing each showed two thresholds (the survival tab's events
-// and Before Run's settings) and neither page said which one a live run uses. The pages now say it
-// from the engine's takeovers (POST /flows/lint `box`, poring_flow.live.takeovers; its own test is
+// and the settings) and neither page said which one a live run uses. The pages now say it from the
+// engine's takeovers (POST /flows/lint `box`, poring_flow.live.takeovers; its own test is
 // services/backend/tests/test_live_player.py). The doc below is that function's output for the one
-// box (project_xmas_dun02.json), the settings the generated runner doc's defaults.
+// box (project_xmas_dun02.json); the settings are its setting blocks (live-blocks.md 12), at our
+// defaults.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { type BoxDoc, boxedSettings, boxNameWords, boxTabNote, boxTabShort } from "./box.ts";
-import { type ConfigDoc, effectiveConfig } from "./config.ts";
-import { XMAS_DUN02_ROGUE as DOC } from "./runners/xmas_dun02_rogue.gen.ts";
+import { type BoxDoc, boxNameWords, boxTabNote, boxTabShort } from "./box.ts";
+import { xmasProject } from "./project.ts";
+import { nodeSettings } from "./settings.ts";
 import { stripFoldLine } from "./words.ts";
 
 const ev = (play: string, settings: string[], replaces: string, by: string, tab: string, when: string, until: string | null = null) => ({ play, settings, replaces, kind: "event" as const, by, path: `xmas_dun02/${tab}/${by}`, when, until });
@@ -31,51 +32,30 @@ const BOX: BoxDoc = {
   stays: ["fly_rate", "fly_rate_below"],
   playable: true,
 };
-const C = DOC.config as ConfigDoc;
-const values = effectiveConfig(C, null, "xmas_dun02").values;
-const ALONE = "this value is the runner's alone (the old Run path, a box without that event)";
+const values = nodeSettings(xmasProject(), "xmas_dun02").values;
 
-test("Before Run's settings rows say which of them this project's box replaces, and by what", () => {
-  const b = boxedSettings(BOX);
-  assert.deepEqual(Object.keys(b).sort(), ["fly_below", "potion_below", "respawn_at", "respawn_confirm_at", "weight_home"]);
-  assert.equal(b.potion_below, `in this project: replaced by the box's drink event (HP < 50 %, until HP >= 51 %); ${ALONE}`);
-  assert.equal(b.fly_below, `in this project: replaced by the box's fly_away event (a boss is seen or HP < 25 %); ${ALONE}`);
-  assert.equal(b.weight_home, `in this project: replaced by the box's bag_full event (weight >= 50 %); ${ALONE}`);
-  assert.equal(b.respawn_at, "in this project: replaced by the box's respawn_button (a click at 645,481); this value is the runner's alone (the old Run path, a box without that function)");
-  // the HP-rate fly stays the runner's: no word on its rows
-  assert.equal(b.fly_rate, undefined);
-  assert.equal(b.fly_rate_below, undefined);
-  // a respawn without a confirmation function presses none
-  const noOk: BoxDoc = { ...BOX, takeovers: BOX.takeovers.map((t) => (t.settings[0] === "respawn_confirm_at" ? { ...t, by: null, path: null, steps: "no confirmation function: none is pressed" } : t)) };
-  assert.match(boxedSettings(noOk).respawn_confirm_at, /replaced by nothing: the box presses no confirmation/);
-  // a box that cannot play says so; no box, no words
-  assert.match(boxedSettings({ ...BOX, playable: false }).potion_below, /^in this project, once its box can play \(Run refuses it as it is\): replaced by/);
-  assert.deepEqual(boxedSettings(null), {});
-  assert.deepEqual(boxedSettings({ plays: [], takeovers: [], stays: ["fly_rate", "fly_rate_below"], playable: true }), {});
-});
-
-test("the survival tab's note: each event, what it replaces with Before Run's setting and value, and what stays", () => {
-  assert.equal(values.potion_below, 0.4); // the runner's own defaults the note quotes
-  const note = boxTabNote(BOX, "xmas_dun02", "survival", C, values);
+test("the survival tab's note: each event, what it replaces with its setting block and value, and what stays", () => {
+  assert.equal(values.potion_below, 0.4); // the setting block's value (our default) the note quotes
+  const note = boxTabNote(BOX, "xmas_dun02", "survival", values);
   assert.equal(
     note,
     "In a Run of this project these play inside the hunt core, and the runner's own are off: " +
-      "drink replaces the runner's potion on HP (Before Run: heal at HP under 40 %); " +
-      "fly_away replaces the runner's Fly Wing on HP (Before Run: Fly Wing at HP under 20 %) and the runner's boss fly (a Battle Log boss line); " +
-      "bag_full replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (Before Run: go home when the bag is over 50 %). " +
-      "The HP-rate fly stays the runner's (Before Run: or HP falling faster than 150 HP/s while under 50 %).",
+      "drink replaces the runner's potion on HP (the setting heal at HP under 40 % (potion_below)); " +
+      "fly_away replaces the runner's Fly Wing on HP (the setting Fly Wing at HP under 20 % (fly_below)) and the runner's boss fly (a Battle Log boss line); " +
+      "bag_full replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (the setting go home when the bag is over 50 % (weight_home)). " +
+      "The HP-rate fly stays the runner's (the settings or HP falling faster than 150 HP/s (fly_rate) while under 50 % (fly_rate_below)).",
   );
   // the exits tab: the respawn's two functions with their points
-  assert.match(boxTabNote(BOX, "xmas_dun02", "exits", C, values) ?? "", /^In a Run of this project .*respawn_button replaces the runner's clicks on the death dialog \(Before Run: respawn button at [0-9]+,[0-9]+\); respawn_ok replaces .*fly_home replaces the runner's Butterfly Wing press at the end\.$/);
+  assert.match(boxTabNote(BOX, "xmas_dun02", "exits", values) ?? "", /^In a Run of this project .*respawn_button replaces the runner's clicks on the death dialog \(the setting respawn button at [0-9]+,[0-9]+ \(respawn_at\)\); respawn_ok replaces .*fly_home replaces the runner's Butterfly Wing press at the end\.$/);
   // a tab the box plays nothing of, no box: no note; without the settings: their words only
-  assert.equal(boxTabNote(BOX, "xmas_dun02", "keys", C, values), null);
-  assert.equal(boxTabNote(null, "xmas_dun02", "survival", C, values), null);
-  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null, null) ?? "", /drink replaces the runner's potion on HP \(Before Run: potion_below\)/);
+  assert.equal(boxTabNote(BOX, "xmas_dun02", "keys", values), null);
+  assert.equal(boxTabNote(null, "xmas_dun02", "survival", values), null);
+  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null) ?? "", /drink replaces the runner's potion on HP \(the setting heal at HP under \(potion_below\)\)/);
 });
 
 test("the /maps inspector's tabs list says what the box plays of each name in a Run", () => {
-  assert.equal(boxNameWords(BOX, "xmas_dun02/survival/drink"), "in a Run: replaces the runner's potion on HP (Before Run's potion_below then applies to the runner alone)");
-  assert.equal(boxNameWords(BOX, "xmas_dun02/survival/fly_away"), "in a Run: replaces the runner's Fly Wing on HP and the runner's boss fly (a Battle Log boss line) (Before Run's fly_below then applies to the runner alone)");
+  assert.equal(boxNameWords(BOX, "xmas_dun02/survival/drink"), "in a Run: replaces the runner's potion on HP (the setting potion_below then counts only in a box without it)");
+  assert.equal(boxNameWords(BOX, "xmas_dun02/survival/fly_away"), "in a Run: replaces the runner's Fly Wing on HP and the runner's boss fly (a Battle Log boss line) (the setting fly_below then counts only in a box without it)");
   assert.equal(boxNameWords(BOX, "xmas_dun02/keys/heal"), null);
   assert.equal(boxNameWords(null, "xmas_dun02/survival/drink"), null);
 });
@@ -91,7 +71,7 @@ test("the strip's folded line: IN A RUN in a few words, else the first part", ()
   const parts = [
     { head: "MAP", text: "xmas_dun02" },
     { head: "IMPORTS", text: "its tabs (keys, survival) and Global" },
-    { head: "IN A RUN", text: boxTabNote(BOX, "xmas_dun02", "survival", C, values) ?? "", short },
+    { head: "IN A RUN", text: boxTabNote(BOX, "xmas_dun02", "survival", values) ?? "", short },
   ];
   assert.equal(stripFoldLine(parts), "IN A RUN: 3 events replace the runner's own · 2 more");
   assert.equal(stripFoldLine(parts.slice(0, 2)), "MAP: xmas_dun02 · 1 more");

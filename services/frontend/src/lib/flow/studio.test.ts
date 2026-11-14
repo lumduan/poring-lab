@@ -45,7 +45,8 @@ test("every block type has a MatPilot style, as the brief maps them", () => {
 
 test("the toolbox is in MatPilot's order, each category styled as MatPilot's", () => {
   const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, talk_npc: { concept: "npc.talk", timeout_s: 60 }, sit: { concept: "char.sit", timeout_s: 5 } }, { node: "map", main: true });
-  assert.deepEqual(tb.contents.map((c) => c.name), ["Search", "Movement", "Actions", "Control", "Conditions", "Sensors", "Operators", "Variables", "Functions", "Advanced"]);
+  // live-blocks.md 12: the runner's settings, one block each, after the variables (a setting IS one)
+  assert.deepEqual(tb.contents.map((c) => c.name), ["Search", "Movement", "Actions", "Control", "Conditions", "Sensors", "Operators", "Variables", "Settings", "Functions", "Advanced"]);
   assert.equal(tb.contents[0].kind, "search");
   for (const c of tb.contents) assert.ok(CATEGORY_STYLES[c.categorystyle], c.name);
   const sensors = categoryOf(tb, "Sensors")!.contents.filter((i) => i.kind === "block").map((i) => (i as { type: string }).type);

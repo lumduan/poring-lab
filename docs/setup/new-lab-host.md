@@ -1017,6 +1017,9 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
   `--garm-fly`, the run prints one `WARNING:` line at its start and goes on.
 - **Not research:** a run on a declared server is never counted (ADR-0023 decision 2). Its record
   carries `fixes.player_mode`; no judge filters on it yet.
+- ➡️ **2026-11-14 (docs/planning/live-blocks.md section 12):** the runner page went; Run is on the
+  project's map node on /flows (and /maps), every setting a block of the project. The helper and
+  its rules below are unchanged; a start is a project's, and the check sends the project.
 - **From the console: the Run button (2026-11-13).** `/flows?runner=xmas_dun02` has a "Run in the
   game" panel. Run starts exactly this player-mode runner with the Knife base (rogue-xmas02.md
   4DQ), at most 120 min, until Stop or until the Fly Wings run low. Stop ends it through its

@@ -19,7 +19,7 @@ def test_the_series_alternates_b4_and_b5() -> None:
 
 
 def test_both_arms_play_with_the_same_settings_and_only_b5_eats(tmp_path: Path) -> None:
-    doc = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", config_dir=tmp_path)
+    doc = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s")
     assert isinstance(doc, dict), doc
     arms = doc["arms"]
     assert "eat" in arms["B5"]["box_plays"] and "eat" not in arms["B4"]["box_plays"]

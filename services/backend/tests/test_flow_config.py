@@ -1,11 +1,12 @@
 """scripts/flow_config.py: every number and key a person may set (Batt 2026-11-13: "nothing is
 fixed, we only put the defaults"; "a global config for every map's flow, a map's own on top";
-"all of them") -- and the runner really uses each one."""
+"all of them") -- and the runner really uses each one. Since 2026-11-14 (live-blocks.md 12) the
+registry is poring_flow.settings (flow_config re-exports it) and every setting is a BLOCK of a
+project: its default is pinned here to the runner's own number."""
 
 from __future__ import annotations
 
 import ast
-import json
 import sys
 from pathlib import Path
 
@@ -44,6 +45,45 @@ def test_a_runner_number_exists_and_its_default_fits_its_range(f: fc.Field) -> N
     v = getattr(MODS[key], attr)
     assert isinstance(v, (int, float)) and not isinstance(v, bool), f.name
     assert fc.problem_of(f, v) is None, (f.name, v)  # the runner's own value is a valid choice
+    # 2026-11-14: the setting block's default IS the runner's own number (argv passes a runner
+    # number only when a block sets another: at the default the runner keeps its own)
+    assert f.default == v, (f.name, f.default, v)
+
+
+def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> None:
+    """Every field's DEFAULT is a valid value of its kind; flow_run.FLOWS' defaults (derived from
+    them since 2026-11-14) are the dict the Run button played before, key for key."""
+    import flow_run as fr
+
+    for f in fc.FIELDS:
+        assert fc.problem_of(f, f.default) is None, (f.name, f.default)
+    assert set(fc.DEFAULTS) == set(fc.BY_NAME)
+    assert fc.clash(fc.DEFAULTS) is None
+    today = {
+        "heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
+        "dagger_key": "F5", "knife_max_s": 8.0, "knife_hp_min": 0.50, "potion_below": 0.40,
+        "fly_below": 0.20, "fly_rate": 150, "fly_rate_below": 0.50, "weight_home": 0.50,
+        "respawn_at": "645,481", "respawn_confirm_at": "714,405", "WALK_AHEAD": 7,
+        "WALK_EVERY_S": 1.2, "BOX_EVERY_S": 1.0, "minutes": 120, "knife_swap": True,
+        "bare_ready": True, "steal_cue": "popup", "swap_gap": True, "weight_exit": True,
+        "respawn": True, "engage_screen": True, "reach_check": True, "unreach_escape": False,
+        "miss_cue": True, "late_confirm": True, "exp_first": True, "kill_gap": True,
+        "quiet_scan": True, "defend_box": False, "quick_drop": False, "quick_drop_scaled": False,
+        "value_target": True, "box_strike": True, "box_now": True, "queue": False,
+        "self_recheck": True, "still_strike": True, "still_target": True, "lead_press": True,
+        "far_single": True, "near_single": False, "near_single_still": False,
+        "far_approach": True, "skip_own_cells": False, "walk_stop": False, "box_ignore": 2,
+        "loot": "trim", "loot_items": "xmas02fi5", "loot_memory": True, "loot_recheck": False,
+        "loot_aim": False, "loot_first": True, "search": "patrol", "explore": True,
+        "explore_cover": False, "walk_through": False, "walk_pick": True, "walk_pick_step": True,
+        "walk_trust": True, "npc_guard": True, "garm_fly": True, "garm_confirm": 2,
+        "alarm_fast": True, "alarm_solo": 0.7, "boss_walk": False, "unread_step": False,
+        "box_detector": "gpu", "hud": True, "hud_fast": 0.2,
+    }  # fmt: skip
+    got = fr.FLOWS["xmas_dun02_rogue"].defaults
+    assert got == today and list(got) == [f.name for f in fc.FIELDS if not f.tune]
+    # and so today's command: no runner number passed, every flag as before
+    assert "--tune" not in fc.argv(got) and fc.argv(fc.DEFAULTS) == fc.argv(today)
 
 
 @pytest.mark.parametrize("key", ["dh", "vt"])
@@ -103,34 +143,50 @@ def test_tune_sets_the_number_the_code_then_uses() -> None:
         assert got == {} and word in str(why), (bad, why)
 
 
-def test_every_number_the_page_shows_is_a_setting_or_says_why_not() -> None:
-    """Batt: "nothing is fixed". Every runner constant /flows shows is a field here, or one of
+def test_every_number_the_outline_shows_is_a_setting_or_says_why_not() -> None:
+    """Batt: "nothing is fixed". Every runner constant the runner's outline names
+    (scripts/runner_flow_export.py: the loop as blocks, stage 5b's map) is a field here, or one of
     these, each settable some other way (or not a number a person chooses)."""
+    import runner_flow_export as rfe
+
     not_fields = {
         "HOME_KEY": "the character's default Butterfly Wing key: home_key is the setting",
         "bs.BARE_MAX_S": "the default of knife_max_s (--knife-max-s)",
         "bs.BARE_HP_MIN": "the default of knife_hp_min (--knife-hp-min)",
         "bs.EQUIP_KEY": "the default of dagger_key (--dagger-key)",
     }
-    gen = ROOT / "services" / "frontend" / "src" / "lib" / "flow" / "runners"
-    src = (gen / "xmas_dun02_rogue.gen.ts").read_text()
-    doc = json.loads(src[src.index("= {") + 2 : src.rindex("};") + 1])
-    for pid in doc["params"]:
+    for pid in rfe.build()["params"]:
         if pid.startswith(("cmd.", "char.", "derived.", "PATROL_START", "strategy.")):
             continue  # the command's own values, the character, derived, the start cells
         assert pid in fc.BY_NAME or pid in not_fields, f"{pid} is fixed: make it a field"
 
 
-def test_the_maps_own_value_first_then_every_maps_then_the_default() -> None:
-    d = {"fly_key": "F8", "potion_below": 0.4}
-    cfg = {"global": {"potion_below": 0.3, "LOOT_TRIM_HOVERS": 12},
-           "maps": {"xmas_dun02": {"potion_below": 0.5}}}  # fmt: skip
-    vals, src = fc.effective(d, cfg, "xmas_dun02")
-    assert vals == {"fly_key": "F8", "potion_below": 0.5, "LOOT_TRIM_HOVERS": 12}
-    assert src == {"fly_key": "default", "potion_below": "map", "LOOT_TRIM_HOVERS": "global"}
-    assert fc.effective(d, cfg, "prt_fild08")[0]["potion_below"] == 0.3
-    none = {"fly_key": "default", "potion_below": "default"}
-    assert fc.effective(d, {}, "xmas_dun02") == (d, none)
+def test_a_settings_variable_name_and_the_name_rule() -> None:
+    """A setting is a project VARIABLE named like it (VAR_NAMES for a dotted constant and two
+    catalogue names); a run takes the node's level over Global's over the default."""
+    from poring_flow.catalogue import catalogue
+
+    reserved = catalogue().names()
+    for f in fc.FIELDS:
+        assert f.var.isidentifier() and f.var not in reserved, f.name
+    assert {f.name: f.var for f in fc.FIELDS if f.var != f.name} == {
+        "vt.D0_PX": "D0_PX", "loot": "loot_step", "respawn": "respawn_on_death"}  # fmt: skip
+    assert len(fc.BY_VAR) == len(fc.FIELDS) and not any(f.block for f in fc.FIELDS
+                                                        if f.group == "keys")  # fmt: skip
+    node = fc.Level("xmas_dun02/survival", "xmas_dun02", "survival", {"potion_below": 0.5})
+    glob = fc.Level("global/loot", "global", "loot", {"potion_below": 0.3,
+                                                      "LOOT_TRIM_HOVERS": 12})  # fmt: skip
+    nv = fc.node_values([node, glob])
+    assert nv.vals["potion_below"] == 0.5 and nv.src["potion_below"] == "xmas_dun02/survival"
+    assert nv.vals["LOOT_TRIM_HOVERS"] == 12 and nv.src["LOOT_TRIM_HOVERS"] == "global/loot"
+    assert nv.vals["fly_key"] == "F8" and nv.src["fly_key"] == "default"
+    assert fc.node_values([glob]).vals["potion_below"] == 0.3  # the node's block deleted
+    assert fc.node_values([]).vals == fc.DEFAULTS  # every block deleted: the defaults
+    # a value it cannot take: a problem, never used; a key as a variable: not read
+    bad = fc.node_values([fc.Level("n/t", "n", "t", {"knife_hp_min": 5, "heal_key": "F2"})])
+    assert bad.problems == ("n/t: knife_hp_min: or at once under HP: 500 % is not from 20 % to "
+                            "90 %",)  # fmt: skip
+    assert bad.vals["knife_hp_min"] == 0.5 and bad.vals["heal_key"] == "F1"
 
 
 def test_keys_clash_and_the_flags() -> None:
@@ -153,30 +209,13 @@ def test_keys_clash_and_the_flags() -> None:
         assert f'"{f.flag or "--tune"}"' in src, f.name
 
 
-def test_a_level_is_put_by_group_and_checked(tmp_path: Path) -> None:
-    cfg = {"global": {"potion_below": 0.3}, "maps": {}}
-    got = fc.put_level(cfg, "map", "xmas_dun02", "loot", {"LOOT_TRIM_HOVERS": 12})
-    assert isinstance(got, dict) and got["maps"]["xmas_dun02"] == {"LOOT_TRIM_HOVERS": 12}
-    assert got["global"] == {"potion_below": 0.3}  # another group, untouched
-    cleared = fc.put_level(got, "map", "xmas_dun02", "loot", None)
-    assert isinstance(cleared, dict) and cleared["maps"] == {}
-    stray = fc.put_level(cfg, "global", None, "loot", {"potion_below": 0.3})
-    assert "not in the group" in str(stray)
-    assert "unknown group" in str(fc.put_level(cfg, "global", None, "nope", {}))
-    assert "map's name" in str(fc.put_level(cfg, "map", None, "loot", {}))
-    assert "is not from" in str(fc.put_level(cfg, "global", None, "loot", {"LOOT_TRIM_HOVERS": 99}))
-    # the file: config.json, else 8e3ca2df's survival.json (v1, the same shape)
-    assert fc.read_config(tmp_path) == {"global": {}, "maps": {}}
-    (tmp_path / "survival.json").write_text(json.dumps({"v": 1, "global": {"potion_below": 0.35}}))
-    assert fc.read_config(tmp_path) == {"global": {"potion_below": 0.35}, "maps": {}}
-    (tmp_path / "config.json").write_text(json.dumps({"v": 2, "maps": {"xmas_dun02": {
-        "LOOT_MAX_S": 30}}}))  # fmt: skip
-    assert fc.read_config(tmp_path) == {"global": {}, "maps": {"xmas_dun02": {"LOOT_MAX_S": 30.0}}}
-    for bad, word in (("{", "not valid JSON"), (json.dumps({"v": 3}), "not version"),
-                      (json.dumps({"v": 2, "global": {"x": 1}}), "unknown setting"),
-                      (json.dumps({"v": 2, "maps": {"../a": {}}}), "not a map name")):  # fmt: skip
-        (tmp_path / "config.json").write_text(bad)
-        assert word in str(fc.read_config(tmp_path)), bad
+def test_a_checks_settings_are_checked_by_name() -> None:
+    got = fc.check_level({"LOOT_TRIM_HOVERS": 12, "knife_max_s": 8, "respawn_at": "0645,481"})
+    assert got == {"LOOT_TRIM_HOVERS": 12, "knife_max_s": 8.0, "respawn_at": "645,481"}
+    for bad, word in (([], "must be an object"), ({"x": 1}, "unknown setting"),
+                      ({"LOOT_TRIM_HOVERS": 99}, "is not from"),
+                      ({"STILL_PX": 1.234}, "a step of")):  # fmt: skip
+        assert word in str(fc.check_level(bad)), bad
 
 
 # --- 2026-11-13 ~15:2x (Batt: "do all of them": the techniques' on/off switches too) ------------

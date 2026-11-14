@@ -86,7 +86,16 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert x.zones is not None and x.zones.sha256 == hashlib.sha256(ZONES.read_bytes()).hexdigest()
     assert x.resume_here and (x.entries[0].name, x.entries[0].at, x.entries[0].radius) == (
         "here", None, 2)  # fmt: skip
-    assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits", "monsters"]
+    # live-blocks.md 12 (Batt 2026-11-14 ~15:2x: "make them ALL blocks"): the setting blocks in
+    # their groups' tabs -- knife, survival and exits beside their functions, the rest their own
+    assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits", "monsters",
+                                        "respawn", "start", "fight", "aim", "loot", "walk",
+                                        "safety", "loop"]  # fmt: skip
+    from poring_flow import settings as st
+
+    shown = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
+    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS}  # every one, at its default
+    assert not x.tabs[0].vars and not x.tabs[1].vars  # main and the keys hold no setting
     save, model, hunt, stop = x.main
     # stage 4a (live-blocks.md 3.4): the trained data before the hunt core
     assert isinstance(model, ir.ActionStmt) and model.block == "use_model"
@@ -799,7 +808,18 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
     by = {f.path: f.text for f in files}
     assert list(by) == ["xmas_dun02/main.py", "xmas_dun02/keys.py", "xmas_dun02/survival.py",
                         "xmas_dun02/knife.py", "xmas_dun02/exits.py",
-                        "xmas_dun02/monsters.py", "project.py"]  # fmt: skip
+                        "xmas_dun02/monsters.py", "xmas_dun02/respawn.py", "xmas_dun02/start.py",
+                        "xmas_dun02/fight.py", "xmas_dun02/aim.py", "xmas_dun02/loot.py",
+                        "xmas_dun02/walk.py", "xmas_dun02/safety.py", "xmas_dun02/loop.py",
+                        "project.py"]  # fmt: skip
+    # live-blocks.md 12: a setting is a plain assignment with its words as a comment
+    assert "\nknife_hp_min = 0.5  # or at once under HP (50 %)\n" in by["xmas_dun02/knife.py"]
+    assert "\nknife_swap = True  # Batt's Knife swap (on / off)\n" in by["xmas_dun02/knife.py"]
+    assert '\nsteal_cue = "popup"  # the steal cue (popup / both)\n' in by["xmas_dun02/knife.py"]
+    assert "\nD0_PX = 150  # the distance that halves a monster's worth (px)\n" in by[
+        "xmas_dun02/aim.py"]  # fmt: skip
+    assert '\nrespawn_at = "645,481"  # respawn button at ("X,Y" in the game picture)\n' in by[
+        "xmas_dun02/respawn.py"]  # fmt: skip
     assert (
         "@on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)\n"
         "def fly_away():\n    fly_wing()\n"

@@ -362,4 +362,4 @@ def test_the_record_and_the_version() -> None:
     i_start = SRC.index('ev({"kind": "run_start", "strategy": a.strategy')
     assert '**({"player_slots": slot_read} if player else {}),' in SRC[i_start:]
     assert dh.SLOT_ITEMS_VERSION == "9.47" and dh.VERSION == "dungeon@8.7"
-    assert rfe.feature_version(dh) == "dungeon@9.47"
+    assert rfe.feature_version(dh) == "dungeon@9.53"  # the fast alarm (live-blocks 11.2)

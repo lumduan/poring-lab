@@ -79,7 +79,7 @@ def set_def(tab: dict[str, Any], name: str, **changes: Any) -> None:
 
 
 def prep(tmp_path: Path, d: dict[str, Any]) -> fp.Prepared:
-    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
     assert isinstance(got, fp.Prepared), got
     return got
 
@@ -341,7 +341,7 @@ def test_an_event_that_cannot_play_inside_the_hunt_core_refuses_before_any_input
     ]  # fmt: skip
     for i, (mutate, words) in enumerate(cases):
         d = copy.deepcopy(box(mutate))
-        got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+        got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
         assert isinstance(got, str) and "refused before any input" in got, (i, got)
         assert words in got, (i, got)
         c = pj.compile_project(pj.from_json(json.dumps(d)))

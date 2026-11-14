@@ -220,6 +220,17 @@ runner. Its five keys are read from the functions the block names (and the item 
 resolved on THAT node (its override first, then Global), through calls with literal arguments, to
 exactly one press_key each; the request carries them (POST /flows/run keys), as today.
 
+➡️ **2026-11-14 ~15:2x (Batt: "there should be no runner [page] ... make them ALL blocks";
+[live-blocks.md](live-blocks.md) section 12; ADR-0020 Amendment J):** the runner's SETTINGS are the
+project's too. Each one (poring_flow.settings: 121, every flow_config field but the five keys) is a
+VARIABLE of a tab, named like the setting (three take another name, stated in one place:
+`vt.D0_PX` -> `D0_PX`, `loot` -> `loot_step`, `respawn` -> `respawn_on_death`), shown as a SETTING
+BLOCK of its own in the tab of its group (knife, survival, exits, respawn, start, fight, aim, loot,
+walk, safety, loop). Section 3's name rule decides: a run on a map node takes the node's block, else
+Global's, else our default. The settings FILE (settings/flowrun/config.json, GET / PUT
+/flows/config) and the runner description page (`/flows?runner=...`) are gone; a Run and the
+read-only check read the settings from the project they send.
+
 ➡️ **Built 2026-11-13:** `poring_flow.project.runner_keys(project, node_id)` -> the five keys
 (`heal_key`, `fly_key`, `home_key`, `knife_key`, `dagger_key`) and the functions they came from,
 or the problems (no dungeon_hunt, no item warp by function, a function that is not one press, a key
@@ -324,7 +335,7 @@ The engine may keep IR 2 internally as its execution form; nothing user-facing r
 | 4 | two buttons named Run | DONE: the drawer pane is "Before Run" |
 | 5 | 0 items read on a key: say where they may be | PART: a hint to set the function's key (the check reads only the keys it is given) |
 | 6 | "ready" with a ✗ or a clash | DONE: "not ready: …" |
-| 7 | settings saved on the server, unsaid | DONE: a line above them |
+| 7 | settings saved on the server, unsaid | DONE: a line above them. ➡️ 2026-11-14 (live-blocks.md 12): no settings on the server any more; they are blocks of the project |
 | 8 | the known warnings in plain words | OPEN |
 | 9 | the functions: what a function is, taken keys, a clash where it is | PART: the toolbox's words; the engine's hotbar_keys error names both roles |
 | 10 | who flies home (three weight numbers) | OPEN: the loop's 50 % is the flow's, the runner's weight setting decides the real run |
@@ -342,7 +353,7 @@ measured in a browser here: the reviewer re-measures them.
 
 | # | Finding | State |
 |---|---|---|
-| 6 | phone /flows, Before Run open: the tab row over the node row (◂ Maps 13 % visible, Inside the runner 0 %); the checklist scrolls inside the pane (1,720 px in 333 px) | FIXED, not re-measured: the context bar is a scroll box, so its flex minimum was 0 and the open pane shrank it; every row above and below the body keeps its height (`flex-shrink: 0`), and on a phone the drawer is as tall as its panes (the page is the one scroller; the status row sticks to the screen's bottom). Pinned: `editor_css.test.ts` |
+| 6 | phone /flows, Before Run open: the tab row over the node row (◂ Maps 13 % visible, Inside the runner 0 % -- ➡️ that link went with the runner page, 2026-11-14, live-blocks.md 12); the checklist scrolls inside the pane (1,720 px in 333 px) | FIXED, not re-measured: the context bar is a scroll box, so its flex minimum was 0 and the open pane shrank it; every row above and below the body keeps its height (`flex-shrink: 0`), and on a phone the drawer is as tall as its panes (the page is the one scroller; the status row sticks to the screen's bottom). Pinned: `editor_css.test.ts` |
 | 7 | the /maps chip counts a warning no card shows ("3 warnings", the card 2; the third on the project itself) | FIXED: the chip is a button that opens the list of every finding (the project's own first, then each node's by the cards' own rule); the panel with nothing selected names the project's own. Pinned: `edit.test.ts` (the groups add up to the chip's counts, each card's group is the card's findings) |
 | 8 | round 15 #13: the "death respawn (derived)" label 83 % under the cards after + map geffen; the entry line cut to "START: the run starts here…"; at 390 the minimap over the start card | FIXED, not re-measured: the label sits in the gap between its two cards in what fits (one line, wrapped, one word, or none; `graph.ts` labelLines / cardGap), "+ map" spacing 230 -> 300 units (the widest card + a two-line lane); captions wrap; no minimap on a phone. Pinned: `maps.test.ts`. The card's scrollWidth stays a few px over its clientWidth: the exits' dots sit half outside its right border (n8n's look), not cut text |
 | 10 | round 15 #9: "read from the minimap: 0.47; xmas_dun02 is not that picture" | FIXED: `minimap_id.map_verdict` / `read_map` say each score with its scale and threshold ("a match score of 0.47, where 1.00 is the same picture and a map is named at 0.40 or more, 0.15 ahead of the next; xmas_dun02's picture scores at most 0.21"). Pinned: `test_minimap_id.py`, `test_live_check.py`. Still bare: the runner's own start refusal (`dungeon_hunt.player_map_refused`), left to the branch that owns dungeon_hunt.py |
