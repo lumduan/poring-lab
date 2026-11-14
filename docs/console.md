@@ -483,24 +483,47 @@ Amendment B); a not-adopted model is never offered.
   be no runner [page]: it makes learning very hard. Everything in the xmas_dun02 flow, split into
   tabs ... make them ALL blocks, no hardcoding"; [planning/live-blocks.md](planning/live-blocks.md)
   section 12):
-  - **Every setting of the runner's hunt core is a block** (121 of them: the Knife swap, heal and
-    escape, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
-    walking and exploring, safety and the end, the loop), in the TAB of its group on a map node or
+  - **Every setting of the runner's hunt core is a block** (121 of them: heal and escape, the
+    Knife swap, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
+    walking and exploring, safety and the end, timing), in the TAB of its group on a map node or
     on Global: its words, its value as it is set (a number or a percent with its range, step and
     unit; on / off; a choice's options; a point's x and y, or none), its Python name after it
-    (`· knife_hp_min`), and for a safety switch a warning row while it is off. In Python it is a
-    plain assignment with its words as a comment (`knife_hp_min = 0.5  # or at once under HP (50 %)`).
-    The hotbar keys stay the keys tab's functions.
+    (`· knife_hp_min`). ➡️ Since round 20 (2026-11-14) a block is laid out on ROWS -- its words
+    wrapped over one or more rows, then the value with its unit and `· var` (the var on a row of
+    its own when the row would be too wide) -- so no row is wider than what shows at 390 px beside
+    the toolbox and before Blockly's zoom buttons and trashcan; a safety switch (respawn,
+    npc_guard, garm_fly, alarm_fast) shows its warning on rows of its own while it is off, and the
+    lint counts it as a WARNING (the chip and the /maps card show it). In Python it is a plain
+    assignment with its words as a comment (`knife_hp_min = 0.5  # or at once under HP (50 %)`);
+    the comment also carries the lint's words for that block (`· ⚠ off: ...`, `· not used here:
+    the drink event plays it`). The hotbar keys stay the keys tab's functions.
   - **The name rule:** a map node's block replaces Global's there; a deleted block falls back to
-    Global's, else our default (each block's tooltip says which). The toolbox has a **Settings**
-    category (every setting at its default, by group, the tab's own first).
-  - **The ready-made xmas_dun02** shows every setting it runs with: knife, survival and exits hold
-    their settings beside their functions; respawn, start, fight, aim, loot, walk, safety and loop
-    are tabs of settings. A Run, and "Check the game", send the project: the blocks are what the
-    runner gets. The lint says it in words on the block: a value out of range or of the wrong kind
-    (an error: Run refuses), a name that looks like a typo of a setting's or a hotbar key as a
-    variable (a warning), two settings that cannot run together (an error), and a setting not in
-    use ("while the Knife swap is off") or replaced by the box's own event (info).
+    Global's, else our default (each block's tooltip says which; it names Global only when the
+    project has a Global node). One setting has ONE block on a node: a second one on another tab
+    is refused on the block, naming that tab (the engine refuses a name on two tabs of a node). The
+    toolbox has a **Settings** category with one sub-category per group, named as its tab and in
+    the tabs' order, each with a short header; the block search finds a setting by its group's
+    words and its own (`knife` finds all six Knife settings, `garm` the Garm Baby ones).
+  - **The ready-made xmas_dun02** has a block for every setting it uses: survival, knife and exits
+    hold their settings beside their functions; respawn, start, fight, aim, loot, walk, safety and
+    timing are tabs of settings. ➡️ Since round 20 it holds NO block of the five settings its own
+    events and functions play in a Run (potion_below: drink, fly_below: fly_away, weight_home:
+    bag_full, respawn_at / respawn_confirm_at: the exits tab's respawn_button / respawn_ok); a
+    block a person adds that a Run of the box does not use -- one of those five, or one whose
+    switch is off (quick_drop_scaled while quick_drop is off) -- is GREYED with a row saying why
+    ("· not used while npc_guard is off"), in its tooltip and in its Python line too: the lint's own
+    facts, so the three never disagree. A Run, and "Check the game", send the project: the blocks
+    are what the runner gets. The lint says it in words on the block: a value out of range or of
+    the wrong kind (an error: Run refuses), a name that looks like a typo of a setting's or a
+    hotbar key as a variable (a warning), a safety switch off (a warning), two settings that cannot
+    run together (an error), and a setting not in use ("while the Knife swap is off") or replaced
+    by the box's own event (info).
+  - **On a phone** (round 20): the Python sheet's file buttons are ONE row that scrolls sideways
+    (the selected one kept in view), the sheet scrolls, and the code always keeps its room; the
+    Python view's file buttons likewise. On /maps, the inspector's "Tabs and names" folds each
+    tab (folded by default, its line saying what it holds: "aim · 33 settings (1 changed)"), a
+    setting reads as its block does ("heal at HP under 40 %"), and one that differs from our
+    default comes first, marked "changed".
   - **Gone:** the runner description page (`/flows?runner=...` now opens that map's node), its
     "Inside the runner" link and Load entry, Before Run's settings panel ("saved on the bot server
     at once") and the settings file behind it (GET / PUT /flows/config).
