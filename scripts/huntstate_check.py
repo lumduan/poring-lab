@@ -41,7 +41,12 @@ Why each rewrite keeps behaviour (the conditions `check` verifies on the base):
     huntstate_check.py check [--base REV] [--file F]
         F's run() must equal the rewrites of REV's run() (default: the base pinned in BASE_REV),
         compared as ASTs (formatting, comments, the class's and the steps' docstrings aside);
-        prints what moved and every condition, rc 1 on any difference
+        prints what moved and every condition, rc 1 on any difference (5b-2's drive branch is
+        read as its else: the driver loop)
+    huntstate_check.py drive [--base REV] [--file F]
+        live-blocks 5b-2 (section 14): F's run() without its drive branch must equal REV's run()
+        (default DRIVE_BASE, 5b-1's merged runner) as ASTs; the module outside run() is REV's plus
+        exactly DRIVE_ADDED; the guarded steps act only in their mode; rc 1 on any difference
 
 The text it derives is formatted by `ruff format` afterwards (formatting is AST-neutral); `check`
 reads the committed file, never trusts `derive`'s output.
@@ -67,6 +72,20 @@ LOOP_TEST = "time.monotonic() < t_end"  # the main loop's condition (exactly one
 TICK_DONE, RUN_END = "TICK_DONE", "RUN_END"  # the steps' signals (module constants in the target)
 INERT = (TICK_DONE, RUN_END, "HUNT_STEPS_VERSION")  # new module constants that change nothing
 DECL_COMMENT = "# run()'s locals only the steps bind (nonlocal): declared here, never set here"
+# live-blocks 5b-2 (section 14): the drive branch around the driver loop, and what 5b-2 added to
+# the module outside run() (the cursor, its tables, the hook helpers): `check` (5b-1) reads the
+# file without them; `drive` proves that run() without the branch IS 5b-1's run(), that the module
+# is 5b-1's plus exactly these, and the steps' guards the cursor relies on
+DRIVE_BASE = "bb6d41eb"  # main when 5b-2 began (2026-11-14 19:5x ICT): 5b-1's merged runner
+DRIVE_TEST = "hook_drives(hook)"  # the branch's condition (no hook, or a hook without drive: else)
+DRIVE_ADDED = (
+    "HUNT_BLOCKS_VERSION", "STEP_NAMES", "COMMON_STEPS", "MODE_STEPS", "HANDBACK_AT",
+    "STEP_GUARD", "BLOCK_OWNS", "DRIVE_SPIN_MAX", "DRIVE_SKILL_ROLES", "DRIVE_HOOK", "HuntTarget",
+    "HuntView", "HuntCursor", "hook_drives", "drive_refused", "hunt_drive",
+)  # fmt: skip
+# the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
+# body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)
+GUARDED = {"fight": "fight", "loot": "after"}
 
 # T1b: the containers that hold the loop's state in place (each bound exactly once in run()).
 ALIASED = (
@@ -831,11 +850,17 @@ def _strip_docstrings(fn: ast.AST) -> None:
             n.body = n.body[1:] or [ast.Pass()]
 
 
-def inline_steps(run: ast.FunctionDef) -> tuple[ast.FunctionDef, list[str], list[str]]:
+def inline_steps(run: ast.FunctionDef, *, drive_ok: bool = False
+                 ) -> tuple[ast.FunctionDef, list[str], list[str]]:  # fmt: skip
     """OUTLINE's inverse on the committed run(): the steps' bodies back into the loop, in the
-    driver's order; returns (run, the step names, the conditions that failed)."""
-    run = copy.deepcopy(run)
+    driver's order; returns (run, the step names, the conditions that failed). ``drive_ok``: a
+    5b-2 drive branch around the loop is read as its else (the driver loop; `drive` proves the
+    rest); else it is a failed condition (stage5b_ab: B must be 5b-1's rewrite alone)."""
+    run, branch = undrive(run)
     bad: list[str] = []
+    if branch is not None and not drive_ok:
+        bad.append(f"NOT 5b-1's rewrite alone: a 5b-2 drive branch (if {DRIVE_TEST}, line "
+                   f"{branch.lineno})")  # fmt: skip
     trys = [n for n in ast.walk(run) if isinstance(n, ast.Try)
             and any(isinstance(x, ast.While) and ast.unparse(x.test) == LOOP_TEST
                     for x in n.body)]  # fmt: skip
@@ -906,6 +931,136 @@ def inline_steps(run: ast.FunctionDef) -> tuple[ast.FunctionDef, list[str], list
     return run, order, bad
 
 
+def undrive(run: ast.FunctionDef) -> tuple[ast.FunctionDef, ast.If | None]:
+    """5b-2's inverse on a run(): its drive branch `if hook_drives(hook): <the drive> else: <the
+    driver loop>` becomes the else alone (run() as 5b-1 left it). (a copy of run, the branch
+    removed -- None: there was none)."""
+    run = copy.deepcopy(run)
+    for n in ast.walk(run):
+        for fld in ("body", "orelse", "finalbody"):
+            stmts = getattr(n, fld, None)
+            if not isinstance(stmts, list):
+                continue
+            for i, st in enumerate(stmts):
+                if isinstance(st, ast.If) and ast.unparse(st.test) == DRIVE_TEST:
+                    stmts[i : i + 1] = st.orelse
+                    return run, st
+    return run, None
+
+
+def _step_body(fn: ast.FunctionDef) -> list[ast.stmt]:
+    """A step's statements after its docstring and its nonlocal head."""
+    stmts = list(_nodoc(copy.deepcopy(fn)).body)
+    while stmts and isinstance(stmts[0], ast.Nonlocal):
+        stmts = stmts[1:]
+    return stmts
+
+
+def guard_problems(run: ast.FunctionDef, guarded: dict[str, str] = GUARDED) -> list[str]:
+    """The facts the cursor relies on, on the committed steps: each GUARDED step's statements are
+    `if` statements (no else) whose test is `hs.mode == "<mode>"`, alone or as the first term of
+    an `and` -- so with another mode the step does nothing (no test holds, so nothing runs and the
+    mode stays) -- and in the fight step every `return` is `return TICK_DONE` and its if ends with
+    one (in mode fight a tick's mode work ends there, as 13.2's table says). [] = all hold."""
+    steps = {n.name[5:]: n for n in ast.walk(run)
+             if isinstance(n, ast.FunctionDef) and n.name.startswith("step_")}  # fmt: skip
+    bad: list[str] = []
+    for name, mode in guarded.items():
+        fn = steps.get(name)
+        if fn is None:
+            bad.append(f"no step_{name}")
+            continue
+        want = f"{HS}.mode == {mode!r}"  # (ast.unparse quotes a string with ')
+        body = _step_body(fn)
+        for st in body:
+            t = st.test if isinstance(st, ast.If) else None
+            first = t.values[0] if isinstance(t, ast.BoolOp) and isinstance(t.op, ast.And) else t
+            if t is None or st.orelse or first is None or ast.unparse(first) != want:  # type: ignore[union-attr]
+                bad.append(f"step_{name}: {ast.unparse(st).splitlines()[0][:70]!r} is not an if "
+                           f"on {want} (its guard)")  # fmt: skip
+        if name == "fight" and body and isinstance(body[-1], ast.If):
+            rets = [n for st in body for n in _walk_no_scopes(st) if isinstance(n, ast.Return)]
+            if any(r.value is None or ast.unparse(r.value) != TICK_DONE for r in rets):
+                bad.append("step_fight: a return that is not TICK_DONE")
+            last = body[-1].body[-1] if body[-1].body else None
+            if not (isinstance(last, ast.Return) and last.value is not None
+                    and ast.unparse(last.value) == TICK_DONE):  # fmt: skip
+                bad.append("step_fight: its if does not end with return TICK_DONE")
+    return bad
+
+
+def drive_check(base_src: str, new_src: str) -> int:
+    """5b-2's proof (live-blocks.md 14): with no drive the program is 5b-1's. Prints each fact,
+    rc 0 when all hold."""
+    base_tree, new_tree = ast.parse(base_src), ast.parse(new_src)
+
+    def run_of(t: ast.Module) -> ast.FunctionDef:
+        return next(n for n in t.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+
+    base_run, new_run = run_of(base_tree), run_of(new_tree)
+    got, branch = undrive(new_run)
+    bad: list[str] = []
+    want_loop = f"while {LOOP_TEST}:\n    if hunt_tick() == {RUN_END}:\n        break"
+    if branch is None:
+        bad.append(f"no drive branch (if {DRIVE_TEST}: ... else: the driver loop)")
+    elif len(branch.orelse) != 1 or ast.unparse(branch.orelse[0]) != want_loop:
+        bad.append("the drive branch's else is not exactly 5b-1's driver loop")
+    same = dump(got) == dump(base_run)
+    print(f"base: {DRIVE_BASE}'s run() (5b-1), lines {base_run.lineno}-{base_run.end_lineno}")
+    print(f"the drive branch: {'line ' + str(branch.lineno) if branch else 'NONE'}; its "
+          f"condition: {DRIVE_TEST}; its else: 5b-1's driver loop"
+          f"{'' if not bad else ' -- NO: ' + '; '.join(bad)}")  # fmt: skip
+    if branch is not None:
+        calls = sorted({ast.unparse(c.func) for st in branch.body for c in ast.walk(st)
+                        if isinstance(c, ast.Call)})  # fmt: skip
+        print(f"the drive branch's body: {len(branch.body)} statements; it calls {calls}")
+    print(f"run() without the drive branch == 5b-1's run() (as ASTs, docstrings included): "
+          f"{'YES' if same else 'NO'}")  # fmt: skip
+    if not same:
+        import difflib
+
+        a, b = ast.unparse(base_run).splitlines(), ast.unparse(got).splitlines()
+        for ln in list(difflib.unified_diff(a, b, "5b-1", "committed", lineterm="", n=2))[:60]:
+            print("   ", ln)
+
+    def top(t: ast.Module) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for n in t.body:
+            if isinstance(n, ast.FunctionDef) and n.name == "run":
+                continue
+            key = getattr(n, "name", None)
+            if key is None and isinstance(n, ast.Assign | ast.AnnAssign):
+                tgt = n.targets[0] if isinstance(n, ast.Assign) else n.target
+                key = ast.unparse(tgt)
+            out[key or ast.unparse(n)[:60]] = dump(n)
+        return out
+
+    a, b = top(base_tree), top(new_tree)
+    changed = sorted(k for k in a if a[k] != b.get(k))
+    added = sorted(set(b) - set(a))
+    kept = "unchanged" if not changed else f"CHANGED: {changed}"
+    print(f"the module outside run(): 5b-1's statements {kept}; added {added}")
+    extra = sorted(set(added) ^ set(DRIVE_ADDED))
+    if extra:
+        bad.append(f"the added statements are not DRIVE_ADDED: {extra}")
+    print(f"the additions == DRIVE_ADDED: {'YES' if not extra else 'NO -- ' + bad[-1]}")
+    gb = guard_problems(new_run)
+    holds = "each acts only in its mode; step_fight ends a fight tick with TICK_DONE"
+    print(f"the guarded steps ({', '.join(f'{k}: mode {v}' for k, v in GUARDED.items())}): "
+          f"{holds if not gb else '; '.join(gb)}")  # fmt: skip
+    names: list[str] = []
+    for n in ast.walk(new_run):
+        if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == "hunt_steps":
+            names = [ast.literal_eval(e.elts[0]) for e in n.value.elts]  # type: ignore[attr-defined]
+    consts = {ast.unparse(n.targets[0]): n.value for n in new_tree.body
+              if isinstance(n, ast.Assign) and len(n.targets) == 1}  # fmt: skip
+    sn = consts.get("STEP_NAMES")
+    step_names = list(ast.literal_eval(sn)) if sn is not None else []
+    print(f"STEP_NAMES == hunt_steps' names: {'YES' if names == step_names else 'NO'}")
+    ok = same and not bad and not changed and not gb and names == step_names and bool(names)
+    return 0 if ok else 1
+
+
 def driver_loop(tree: ast.AST) -> ast.While:
     """For tests that reason about "the loop's statements": run()'s main loop as the driver PLAYS
     it -- the steps' bodies inlined in hunt_steps' order, `return TICK_DONE` as `continue`,
@@ -915,7 +1070,7 @@ def driver_loop(tree: ast.AST) -> ast.While:
         n for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef) and n.name == "run")  # fmt: skip
     outlined = any(isinstance(n, ast.FunctionDef) and n.name == "hunt_tick" for n in ast.walk(run))
-    got = inline_steps(run)[0] if outlined else run
+    got = inline_steps(run, drive_ok=True)[0] if outlined else run
     (loop,) = [n for n in ast.walk(got) if isinstance(n, ast.While)
                and ast.unparse(n.test) == LOOP_TEST]  # fmt: skip
     return loop
@@ -1002,7 +1157,10 @@ def check(
     aliased: Sequence[str] = ALIASED,
     not_lifted: Sequence[str] = NOT_LIFTED,
     extra: Sequence[str] = EXTRA_LIFTED,
+    *,
+    drive_ok: bool = False,
 ) -> int:
+    """``drive_ok`` (the CLI's): a 5b-2 drive branch is read as its else (inline_steps)."""
     ri = parse_run(base_src)
     lifted = lifted_names(ri, not_lifted, extra)
     cond = conditions(ri, lifted, aliased)
@@ -1012,7 +1170,8 @@ def check(
     new_run = next(n for n in new_tree.body if isinstance(n, ast.FunctionDef) and n.name == "run")
     outlined = any(isinstance(n, ast.FunctionDef) and n.name == "hunt_tick"
                    for n in ast.walk(new_run))  # fmt: skip
-    got, order, bad = inline_steps(new_run) if outlined else (copy.deepcopy(new_run), [], [])
+    got, order, bad = (inline_steps(new_run, drive_ok=drive_ok) if outlined
+                       else (copy.deepcopy(new_run), [], []))  # fmt: skip
     _strip_docstrings(want)
     _strip_docstrings(got)
     normalize_loop(want)
@@ -1063,9 +1222,15 @@ def _outside_run(base_src: str, new_src: str) -> str:
         out = {}
         for n in ast.parse(src).body:
             key = getattr(n, "name", None) or ast.unparse(n)[:60]
-            if key in ("run", "HuntState") or (
-                isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) in INERT
+            if (
+                key in ("run", "HuntState", *DRIVE_ADDED)
+                or (
+                    isinstance(n, ast.Assign)
+                    and ast.unparse(n.targets[0]) in (*INERT, *DRIVE_ADDED)
+                )
+                or (isinstance(n, ast.AnnAssign) and ast.unparse(n.target) in DRIVE_ADDED)
             ):
+                # (5b-2's additions: `drive` checks them)
                 continue
             out[key] = dump(n)
         return out
@@ -1091,7 +1256,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     c = sub.add_parser("check")
     c.add_argument("--base", default=BASE_REV)
     c.add_argument("--file", default=str(TARGET))
+    dv = sub.add_parser("drive", help="5b-2: with no drive, run() is 5b-1's (section 14)")
+    dv.add_argument("--base", default=DRIVE_BASE)
+    dv.add_argument("--file", default=str(TARGET))
     a = ap.parse_args(argv)
+    if a.cmd == "drive":
+        return drive_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "derive":
         src = Path(a.base).read_text()
         if a.steps:
@@ -1112,7 +1282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         Path(a.out).write_text(derive_lift(src, lifted, ALIASED))
         return 0
-    return check(git_show(a.base, TARGET), Path(a.file).read_text())
+    return check(git_show(a.base, TARGET), Path(a.file).read_text(), drive_ok=True)
 
 
 if __name__ == "__main__":

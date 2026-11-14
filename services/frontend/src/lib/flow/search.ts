@@ -46,6 +46,8 @@ export const BLOCK_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   pl_break: ["exit loop"],
   pl_walk_to: ["go", "move", "cell", "position", "drive"],
   pl_hunt: ["fight", "kill", "farm", "monster", "targets"],
+  pl_hunt_take: ["explore", "search", "target", "monster", "find", "look", "hunt loop"], // 5b-2
+  pl_hunt_step: ["fight", "kill", "recipe", "monster", "approach", "hunt loop"],
   pl_talk_npc: ["speak", "chat", "dialog", "person"],
   pl_choose_menu: ["answer", "option", "dialog", "select"],
   pl_use_item: ["potion", "wing", "drink", "eat"],

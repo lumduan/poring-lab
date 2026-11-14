@@ -47,7 +47,7 @@ import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
-import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasProject } from "@/lib/flow/project";
+import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasHuntProject, xmasProject } from "@/lib/flow/project";
 import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
@@ -98,6 +98,7 @@ type Selection = { kind: "node"; id: string } | { kind: "rules" } | { kind: "lin
 /** The ready-made projects (project.ts; docs/planning/project-model.md section 7). */
 const READY: { id: string; make: () => Project; world: WorldSource; title: string; words: string }[] = [
   { id: "xmas", make: xmasProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her (hunt with the runner; it flies home on the Butterfly Wing itself); every key a function in its keys tab" },
+  { id: "xmas_hunt", make: xmasHuntProject, world: "local", title: "xmas_dun02_hunt", words: "the same one box plus its tab hunt: hunt_loop(t) plays the runner's own steps as blocks (t = find_target(), then fight_target(t): the monsters tab's recipe)" },
   { id: "sample", make: sampleProject, world: "sample", title: "my_first_project", words: "two SYNTHETIC maps on the sample sheets: a town (save point, NPC warp) and a field (attack 5 times, a wing back)" },
 ];
 

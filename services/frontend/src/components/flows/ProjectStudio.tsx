@@ -63,6 +63,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
+  xmasHuntProject,
   xmasProject,
 } from "@/lib/flow/project";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
@@ -100,6 +101,7 @@ const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose:
 /** The READY-MADE projects, by name, with the static data each is linted and simulated on. */
 const READY: Record<string, () => { project: Project; world: WorldSource }> = {
   xmas_dun02: () => ({ project: xmasProject(), world: "local" }),
+  xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
 

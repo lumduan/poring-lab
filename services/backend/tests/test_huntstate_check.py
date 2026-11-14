@@ -254,8 +254,10 @@ def test_the_committed_runner_is_the_rewrite_of_its_base() -> None:
         pytest.skip(f"git cannot show {hc.BASE_REV} here (a shallow checkout)")
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        rc = hc.check(base, hc.TARGET.read_text())
+        rc = hc.check(base, hc.TARGET.read_text(), drive_ok=True)  # 5b-2's branch: its else
     text = out.getvalue()
     assert rc == 0, text
     assert "LIFT/ALIAS preconditions: all hold" in text and "OUTLINE conditions: all hold" in text
     assert "the module outside run(): the same" in text
+    with contextlib.redirect_stdout(io.StringIO()):  # without drive_ok the branch is named
+        assert hc.check(base, hc.TARGET.read_text()) == 1

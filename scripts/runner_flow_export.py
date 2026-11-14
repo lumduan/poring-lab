@@ -1783,7 +1783,8 @@ def build() -> dict[str, Any]:
 # the box's events eat from the hotbar, the same
 NOT_FEATURES = ("LIVE_BLOCKS_VERSION", "SURVIVAL_EVENTS_VERSION", "BOX_FUNCTIONS_VERSION",
                 "BOX_RECIPES_VERSION", "BOX_EAT_VERSION",
-                "HUNT_STEPS_VERSION")  # 5b-1: a refactor, no feature  # fmt: skip
+                "HUNT_STEPS_VERSION",  # 5b-1: a refactor, no feature
+                "HUNT_BLOCKS_VERSION")  # 5b-2: the box's hunt loop drives the steps  # fmt: skip
 
 
 def feature_version(dh: Any) -> str:

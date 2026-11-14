@@ -40,7 +40,7 @@ import { HOTKEYS, RECIPE_TAB, RUNNER_ROLES } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { type CmpOp, type Expr, type Lit, KEY, MAP_ID, NAME, type Stmt } from "./ir.ts";
 import { type Models, monstersOf } from "./models.ts";
-import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project } from "./project.ts";
+import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project, roleKeyOf } from "./project.ts";
 import { normalise } from "./search.ts";
 import { SETTINGS, textUnits, tidy } from "./settings.ts";
 import { contrast } from "./theme.ts";
@@ -761,11 +761,16 @@ export function complete(text: string, c: { from: number; to: number }, value: s
 type CatParam = { name: string; type: string; required: boolean; options?: string[]; choices?: string[]; note?: string | null };
 
 /** One input of a call as the picker shows it: its name, how it is chosen, its value's text. */
-export type ArgRow = { name: string; kind: "model" | "key" | "options" | "int" | "text"; text: string; required: boolean; options: string[]; note: string; positional: boolean };
+export type ArgRow = { name: string; kind: "model" | "key" | "options" | "int" | "text" | "variable"; text: string; required: boolean; options: string[]; note: string; positional: boolean };
+
+/** Live blocks 5b-2 (live-blocks.md 14): the blocks whose `target` is the hunt loop's (or a recipe's)
+ * target t -- a VARIABLE, chosen from the function's inputs and the tab's variables. */
+export const TARGET_BLOCKS: ReadonlySet<string> = new Set(["walk_to_target", "fight_target", "strike", "wait_steal", "wait_kill", "loot"]);
 
 const KEY_LIKE = (name: string, opts: readonly string[] | undefined) => name === "key" || (!!opts?.length && opts.every((o) => (HOTKEYS as readonly string[]).includes(o)));
 function rowKind(block: string, p: CatParam): ArgRow["kind"] {
   if (block === "use_model" && p.name === "model") return "model";
+  if (p.name === "target" && TARGET_BLOCKS.has(block)) return "variable"; // 5b-2: t
   if (KEY_LIKE(p.name, p.options)) return "key";
   if (p.options?.length) return "options";
   if (p.type === "int") return "int";
@@ -796,6 +801,19 @@ export function argsWith(text: string, name: string, valueText: string | null): 
   if (valueText === null || valueText.trim() === "") delete got[name];
   else got[name] = parseExpr(valueText);
   return argsText(got);
+}
+
+/** Live blocks 5b-2 (live-blocks.md 14.2 #9): the keys use_skill may press on this node -- the
+ * DECLARED role keys a block may press between two steps: its hunt core's heal key (poring_flow.
+ * huntloop SKILL_ROLES). [] without a hunt core or a heal function whose key reads. */
+export function skillKeysOn(data: PickerData): string[] {
+  const p = data.project;
+  const n = p && data.node ? nodeById(p, data.node) : undefined;
+  const hunt = n?.tabs.find((t) => t.main)?.main?.find((x) => x.kind === "action" && x.block === "dungeon_hunt");
+  const heal = hunt?.kind === "action" ? hunt.params.heal : undefined;
+  if (!p || !n || heal?.kind !== "lit" || typeof heal.value !== "string") return [];
+  const got = roleKeyOf(p, n.id, heal.value, "heal");
+  return "key" in got ? [got.key] : [];
 }
 
 /** A function call's inputs as rows: the function's inputs in order (a value given by position or

@@ -44,18 +44,20 @@ import {
   refChoices,
   refKnown,
   sensorsOf,
+  skillKeysOn,
   sliderKey,
   snap,
   stepBy,
   stopReasons,
   toArea,
+  TARGET_BLOCKS,
   toViewBox,
   typedProblem,
 } from "./pickers.ts";
 import * as PLACE from "./pickers.ts";
 import { SETTINGS } from "./settings.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
-import { MAIN_TAB, nodeById, type Project, sampleProject, xmasProject } from "./project.ts";
+import { MAIN_TAB, nodeById, type Project, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
 
 const MODELS: Models = {
   v1: { kind: "detector", status: "live", file: "a.onnx", sha256: "a", maps: [], classes: ["monster"], untrained: [], mobs: {}, why: "", available: true, counts: true },
@@ -303,6 +305,19 @@ test("a block's inputs as rows: use_model's model from the list, the text printe
   assert.equal(skill.find((r) => r.name === "key")?.kind, "key");
   assert.equal(argRows("use_model", "model=", CAT), null); // a text that does not read: fix it first
   assert.throws(() => argsWith("model=", "model", '"v1"'));
+});
+
+test("live blocks 5b-2: a hunt block's target is a variable row, use_skill's key the declared one", () => {
+  const cat = { ...CAT, blocks: { ...CAT.blocks, fight_target: { spec: { params: [{ name: "target", type: "mob", required: true }] } }, strike: { spec: { params: [{ name: "target", type: "mob", required: true }] } } } } as unknown as typeof CAT;
+  for (const b of ["fight_target", "strike"]) assert.deepEqual(argRows(b, "target=t", cat)!.map((r) => [r.name, r.kind, r.text]), [["target", "variable", "t"]]);
+  assert.ok(TARGET_BLOCKS.has("loot") && TARGET_BLOCKS.has("walk_to_target") && !TARGET_BLOCKS.has("use_skill"));
+  // the declared keys: the hunt core's heal key (the hunt box's F1); none on a node without one
+  const p = xmasHuntProject();
+  assert.deepEqual(skillKeysOn({ project: p, node: "xmas_dun02", tab: "hunt", catalogue: null, maps: null }), ["F1"]);
+  assert.deepEqual(skillKeysOn({ project: sampleProject(), node: "town", tab: "main", catalogue: null, maps: null }), []);
+  // the variable list for VAR and a target: the hunt loop's input t first
+  const v = refChoices({ kind: "ref", ref: "variable", title: "" }, { project: p, node: "xmas_dun02", tab: "hunt", catalogue: null, maps: null }, at("pl_hunt_take", "VAR", {}, { params: ["t"] }));
+  assert.equal(v[0].value, "t");
 });
 
 test("a call's inputs as rows: eat(key) by position stays by position; a new one by name", () => {

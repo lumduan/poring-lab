@@ -210,6 +210,27 @@ def test_the_xmas_dun02_project_simulates_from_its_map_start(make: Make) -> None
     assert all(s["block"] == "xmas_dun02" for s in play)
 
 
+def test_the_hunt_box_lints_as_the_one_box_and_a_spinning_hunt_loop_is_named(make: Make) -> None:
+    """live-blocks 14: the one box plus its hunt tab (the canonical hunt_loop) lints as the one box
+    does here (only the missing static data refuses), its Python view has the hunt tab's file, and
+    a hunt loop that could spin is an error in the lint's words, on its while."""
+    client = make()
+    proj = json.loads((FIXTURES / "project_xmas_dun02_hunt.json").read_text())
+    lint = post(client, "lint", {"project": proj, "world": "sample"}).json()
+    errs = {f["rule"] for f in lint["findings"] if f["severity"] == "error"}
+    assert errs <= {"map_sheet", "zones_missing"} and "map_sheet" in errs
+    files = post(client, "python", {"project": proj, "world": "sample"}).json()
+    assert "xmas_dun02/hunt.py" in json.dumps(files)
+    tab = next(t for t in proj["nodes"][0]["tabs"] if t["name"] == "hunt")
+    loop = tab["defs"][0]["body"][0]
+    loop["body"][1] = {**loop["body"][0], "block": "look", "concept": "core.look",
+                       "timeout_s": 1}  # no fight player: it could spin  # fmt: skip
+    lint2 = post(client, "lint", {"project": proj, "world": "sample"}).json()
+    spin = [f for f in lint2["findings"] if f["rule"] == "hunt_spin"]
+    assert spin and spin[0]["severity"] == "error" and spin[0]["path"].endswith("hunt_loop.0")
+    assert "could spin" in spin[0]["message"]
+
+
 def test_the_session_project_simulates_from_login(make: Make) -> None:
     """A login start (the test fixture project_session.json): the session's two steps first."""
     client = make()

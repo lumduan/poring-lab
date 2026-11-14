@@ -27,16 +27,26 @@ def _base() -> str:
         pytest.skip(f"git cannot show {hc.BASE_REV} here (a shallow checkout)")
 
 
+def _b5b1() -> str:
+    """5b-1's runner (the B this series measures): main bb6d41eb's file. ➡️ Since 5b-2 (live-blocks
+    14) the checkout's runner also has the drive branch, which this 5b-1 series refuses as B
+    (test_the_plan_refuses_the_5b2_runner_as_b)."""
+    try:
+        return hc.git_show(hc.DRIVE_BASE, hc.TARGET)
+    except (subprocess.CalledProcessError, OSError):
+        pytest.skip(f"git cannot show {hc.DRIVE_BASE} here (a shallow checkout)")
+
+
 def test_the_pinned_a_text_is_eb160ee1s_runner() -> None:
     assert ab.sha(_base()) == ab.A_SHA256 and ab.BASE_REV == "eb160ee1"
 
 
 def test_each_arm_runs_flow_play_through_the_launcher_with_its_own_text(tmp_path: Path) -> None:
-    doc = ab.plan_doc("s", 2, 20, "alternate", tmp_path / "s", _base(), hc.TARGET.read_text())
+    doc = ab.plan_doc("s", 2, 20, "alternate", tmp_path / "s", _base(), _b5b1())
     assert isinstance(doc, dict), doc
     assert [r["arm"] for r in doc["runs"]] == ["A", "B", "B", "A"]
     assert doc["runner_sha256"]["A"] == ab.A_SHA256
-    assert doc["runner_sha256"]["B"] == ab.sha(hc.TARGET.read_text()) != ab.A_SHA256
+    assert doc["runner_sha256"]["B"] == ab.sha(_b5b1()) != ab.A_SHA256
     assert doc["vals"]["alarm_fast"] is True and doc["bar"] is ab.BAR
     for r in doc["runs"]:
         argv = r["argv"]
@@ -58,13 +68,22 @@ def test_the_plan_refuses_a_b_that_is_not_as_rewrite_or_a_wrong_a(tmp_path: Path
     base = _base()
     got = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", base, base)  # B = A unrewritten
     assert isinstance(got, str) and "B is not the 5b-1 rewrite of A" in got
-    good = hc.TARGET.read_text()
+    good = _b5b1()
     bent = good.replace('hs.mode = "search"', 'hs.mode = "rest"', 1)  # one decision changed
     assert bent != good
     got2 = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", base, bent)
     assert isinstance(got2, str) and "B is not the 5b-1 rewrite of A" in got2
-    got3 = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", base + "\n", hc.TARGET.read_text())
+    got3 = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", base + "\n", _b5b1())
     assert got3 == "refused before any input: A's text (eb160ee1) is not the pinned one"
+
+
+def test_the_plan_refuses_the_5b2_runner_as_b(tmp_path: Path) -> None:
+    """live-blocks 14: the checkout's runner since 5b-2 holds the drive branch; it plays as 5b-1's
+    without a drive (huntstate_check drive), but 5b-1's series measures 5b-1's text alone: B must be
+    the 5b-1 rewrite and nothing else (huntstate_check.check without drive_ok)."""
+    got = ab.plan_doc("s", 1, 20, "alternate", tmp_path / "s", _base(), hc.TARGET.read_text())
+    assert isinstance(got, str) and "B is not the 5b-1 rewrite of A" in got
+    assert "drive branch" in got
 
 
 def test_the_base_texts_kinds_and_the_argv_wrap() -> None:

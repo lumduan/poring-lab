@@ -212,10 +212,12 @@ def taps(io_: FakeIO) -> list[str]:
 def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
     cat = catalogue.catalogue()
     # stage 3: click_at (only inside dungeon_hunt's respawn functions: live.click_problems);
-    # stage 4a: use_model and the recipe primitives (only inside a monster's recipe: recipes.py)
-    assert live.live_blocks() == ["assert_save_point", "click_at", "dungeon_hunt", "loot",
-                                  "press_key", "strike", "use_model", "wait_kill",
-                                  "wait_steal"]  # fmt: skip
+    # stage 4a: use_model and the recipe primitives (only inside a monster's recipe: recipes.py);
+    # 5b-2 (live-blocks.md 14): the hunt loop's blocks (only inside hunt_loop: huntloop.py)
+    assert live.live_blocks() == ["assert_save_point", "choose_target", "click_at",
+                                  "dungeon_hunt", "fight_target", "find_target", "look", "loot",
+                                  "press_key", "strike", "use_model", "use_skill", "wait_kill",
+                                  "wait_steal", "walk_to_target"]  # fmt: skip
     assert live.live_sensors() == ["current_map", "hotbar_count", "hp_percent", "is_dead",
                                    "map_load_seen", "sees_boss", "sp_percent",
                                    "weight_percent"]  # fmt: skip  # 2026-11-14: hotbar_count

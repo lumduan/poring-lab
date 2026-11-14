@@ -80,6 +80,7 @@ import {
   refKnown,
   type SensorInfo,
   sensorsOf,
+  skillKeysOn,
   sliderKey,
   snap,
   buttonStep,
@@ -836,9 +837,33 @@ function condRow(parent: Element, c0: Cond, sensors: SensorInfo[], d: PickerData
 const exprTextOf = (e: Expr): string => exprText(e);
 
 /** One input row of a call (a catalogue block's parameter, a function's input). */
-function argRow(parent: Element, row: ArgRow, d: PickerData, onValue: (text: string | null) => void): void {
+function argRow(parent: Element, row: ArgRow, d: PickerData, onValue: (text: string | null) => void, at: FieldAt | null = null): void {
   const el = htmlEl("div", { class: "pl-picker-argrow" }, parent);
   htmlEl("span", { class: "pl-picker-argname" }, el, `${row.name}${row.required ? " *" : ""}`);
+  // live blocks 5b-2 (live-blocks.md 14): a hunt block's target is a variable (the function's
+  // inputs, the tab's variables); use_skill's key one of the keys the hunt core declares
+  if (row.kind === "variable") {
+    const vars = refChoices({ kind: "ref", ref: "variable", title: "" }, d, at).map((c) => [c.value, `${c.label} · ${c.note ?? ""}`] as const);
+    const cur = row.text.trim();
+    const list = cur && !vars.some(([v]) => v === cur) ? [[cur, cur] as const, ...vars] : vars;
+    select(el, row.name, row.required ? list : [["", "(not given)"], ...list], cur, (v) => onValue(v || null));
+    htmlEl("span", { class: "pl-picker-note" }, el, "the target: a variable holding find_target()'s value");
+    return;
+  }
+  const skill = row.kind === "key" && at?.sibling("BLOCK") === "use_skill" ? skillKeysOn(d) : [];
+  if (skill.length) {
+    let cur = row.text;
+    try {
+      const e = parseExpr(row.text);
+      if (e.kind === "lit" && typeof e.value === "string") cur = e.value;
+    } catch {
+      // a text that does not read stays as it is (the typed field below says why)
+    }
+    const list = skill.map((k) => [k, `${k} · the hunt core's heal key`] as const);
+    select(el, row.name, row.required ? list : [["", "(not given)"], ...list], cur, (v) => onValue(v ? litOf(v) : null));
+    htmlEl("span", { class: "pl-picker-note" }, el, "a key the hunt core declares (its start check reads it)");
+    return;
+  }
   const lit = (t: string) => {
     try {
       const e = parseExpr(t);
@@ -947,7 +972,7 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
         } catch (e) {
           rowsFail(e);
         }
-      });
+      }, at);
     } else {
       const def = defOn(d, at.sibling("PROC"));
       const rows = callRows(def, t);

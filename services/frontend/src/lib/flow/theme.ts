@@ -210,6 +210,8 @@ export const BLOCK_STYLE: Record<string, string> = {
   pl_choose_character: "mp_output_blocks",
   pl_press_key: "mp_output_blocks",
   pl_dungeon_hunt: "mp_movement_blocks",
+  pl_hunt_take: "mp_movement_blocks", // live blocks 5b-2: the hunt loop's blocks
+  pl_hunt_step: "mp_movement_blocks",
   pl_exit_item_fn: "mp_movement_blocks",
   pl_main: "mp_start_blocks",
   pl_event: "mp_start_blocks",

@@ -9,12 +9,12 @@ import { DEF_BY_TYPE, titleLines } from "./blockdefs.ts";
 import { SETTING_GAP_Y, settingHeight, tabToWorkspace } from "./blocks.ts";
 import { BOX, blockHeight, blockRows, blockWidth, INDENT, overlaps, ROUND, rowsOf, STACK_GAP, stackTops, type TopBox } from "./layout.ts";
 import { EXPR_SHOW_UNITS, WRAP_UNITS, wrapExpr } from "./pickers.ts";
-import { type Project, sampleProject, xmasProject } from "./project.ts";
+import { type Project, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { rowUnits, SETTING_GEOMETRY as G, SETTING_ROW_BUDGET, settingOfType, textUnits } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 
 const fixture = (name: string): Project => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")) as Project;
-const PROJECTS: Project[] = [xmasProject(), sampleProject(), sessionProject(), ...["project_xmas_dun02_stage2.json", "project_xmas_dun02_stage3.json", "project_xmas_dun02_stage4.json"].map(fixture)];
+const PROJECTS: Project[] = [xmasProject(), xmasHuntProject(), sampleProject(), sessionProject(), ...["project_xmas_dun02_stage2.json", "project_xmas_dun02_stage3.json", "project_xmas_dun02_stage4.json"].map(fixture)];
 const [T1, T2] = titleLines("when the run starts: she stands on xmas_dun02");
 /** The labels the editor fills, at their widest: the longest badge, "replaces Global's". */
 const LABELS = { BADGE: "● verified RDP + S2", RUN: "", TITLE: T1, TITLE2: T2, SCOPE: "replaces Global's" };
