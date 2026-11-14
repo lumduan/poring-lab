@@ -7,6 +7,7 @@ import type * as BlocklyT from "blockly/core";
 import { registerPickers } from "./blockly-pickers.ts";
 import { BLOCK_DEFS, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
+import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
 
@@ -96,6 +97,13 @@ export function register(B: typeof BlocklyT): void {
       if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) this.plSync?.();
     });
   });
+  // round 22: a long expression wraps onto rows of its own (whole, never shortened)
+  B.Extensions.register("pl_expr_wrap", function (this: BlocklyT.Block) {
+    syncExprWrap(B, this);
+    this.setOnChange(function (this: BlocklyT.Block, e: BlocklyT.Events.Abstract) {
+      if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) syncExprWrap(B, this);
+    });
+  });
   // round 21: a badge row and a run-line row show only while they say something
   B.Extensions.register("pl_label_rows", function (this: BlocklyT.Block) {
     syncLabelRows(B, this);
@@ -165,6 +173,44 @@ export function syncLabelRows(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
   }
   const svg = b as BlocklyT.BlockSvg;
   if (changed && svg.rendered) void svg.queueRender();
+  return changed;
+}
+
+/** PURE of the page (Blockly only; round 22): a pl_expr's text WRAPPED onto rows (pickers.ts
+ * wrapExpr): its field shows the first line, each further line is a label in a row of its own
+ * (WRAP1, WRAP2, ...: one field a row, so Blockly still draws the block as ONE white box; the
+ * labels dark on it, flows.css). Labels are decorations: not saved, no event, no undo step. True:
+ * the rows changed (the block's height changed). */
+export function syncExprWrap(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
+  if (b.type !== "pl_expr") return false;
+  const lines = wrapExpr(String(b.getFieldValue("TEXT") ?? "")).slice(1);
+  let changed = false;
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  try {
+    for (let i = lines.length + 1; b.getInput(`WRAP${i}`); i++) {
+      b.removeInput(`WRAP${i}`);
+      changed = true;
+    }
+    lines.forEach((line, k) => {
+      const name = `WRAP${k + 1}`;
+      const f = b.getField(`${name}_T`);
+      if (!f) {
+        b.appendDummyInput(name).appendField(new B.FieldLabel(line, "pl-expr-wrap"), `${name}_T`);
+        changed = true;
+      } else if (f.getValue() !== line) {
+        f.setValue(line);
+        changed = true;
+      }
+    });
+  } finally {
+    if (was) B.Events.enable();
+  }
+  const svg = b as BlocklyT.BlockSvg;
+  if (changed && svg.rendered) {
+    b.getField("TEXT")?.forceRerender();
+    void svg.queueRender();
+  }
   return changed;
 }
 

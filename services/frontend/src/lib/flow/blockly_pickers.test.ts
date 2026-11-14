@@ -13,8 +13,8 @@ import { fileURLToPath } from "node:url";
 
 import type * as BlocklyT from "blockly/core";
 
-import { displayOf, PICK_NUM, PICK_TEXT, setPickerSource, specOf } from "../../components/flows/blockly-pickers.ts";
-import { register } from "../../components/flows/blockly-register.ts";
+import { displayOf, PICK_NUM, PICK_TEXT, pickerSession, setPickerSource, specOf } from "../../components/flows/blockly-pickers.ts";
+import { register, syncExprWrap } from "../../components/flows/blockly-register.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace, type WsBlock } from "./blocks.ts";
 import { canonical } from "./ir.ts";
 import { MAIN_TAB, type Project, sampleProject, xmasProject } from "./project.ts";
@@ -162,5 +162,48 @@ test("the real Blockly builds the rows layout.ts measures: each runner role with
   // the run line's row hides while it is empty, the badge's too (pl_label_rows)
   assert.equal(save.getInput("ROW_RUN")?.isVisible(), false);
   assert.equal(hunt.getInput("ROW_BADGE")?.isVisible(), false);
+  ws.dispose();
+});
+
+test("round 22: Escape / Cancel puts every value of the session back and leaves no undo step", async () => {
+  const ws = new B.Workspace();
+  const wait = B.serialization.blocks.append({ type: "pl_wait", fields: { SECONDS: 1 } }, ws);
+  const f = wait.getField("SECONDS")!;
+  await new Promise((r) => setTimeout(r, 0));
+  ws.clearUndo();
+  const s = pickerSession([f]);
+  s.run(() => f.setValue(5));
+  s.run(() => f.setValue(7.5));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(ws.getUndoStack().length > 0); // the session's steps, one group
+  s.cancel();
+  assert.equal(f.getValue(), 1);
+  assert.equal(s.cancelled(), true);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(ws.getUndoStack().length, 0); // nothing to undo: the picker never happened
+  // a kept session stays one undo step
+  const k = pickerSession([f]);
+  k.run(() => f.setValue(3));
+  k.run(() => f.setValue(4));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(new Set(ws.getUndoStack().map((e) => e.group)).size, 1);
+  ws.dispose();
+});
+
+test("round 22: a long condition wraps onto rows of the same box, whole; the saved fields stay the text alone", () => {
+  const ws = new B.Workspace();
+  const long = B.serialization.blocks.append({ type: "pl_expr", fields: { TEXT: 'hotbar_count(key="F6") == 0' } }, ws);
+  syncExprWrap(B, long);
+  // the field shows the first line (displayOf), each further line is a label row
+  const rows = long.inputList.map((i) => i.fieldRow.map((x) => (x.name === "TEXT" ? displayOf(x, x.getText()) : x.getText())).join(""));
+  assert.ok(rows.length >= 2, JSON.stringify(rows));
+  assert.equal(rows.join(" ").replace(/\( /g, "("), 'hotbar_count(key="F6") == 0'); // nothing cut
+  assert.ok(long.isSimpleReporter()); // one field a row: Blockly draws it as ONE white box
+  const saved = B.serialization.blocks.save(long) as { fields?: Record<string, unknown> };
+  assert.deepEqual({ ...saved.fields }, { TEXT: 'hotbar_count(key="F6") == 0' });
+  // a short one has no extra rows; a long one made short loses them
+  long.getField("TEXT")!.setValue("hp_percent() < 50");
+  syncExprWrap(B, long);
+  assert.equal(long.inputList.length, 1);
   ws.dispose();
 });

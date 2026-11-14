@@ -220,3 +220,15 @@ test("Run and Check are held while the blocks hold a problem, and say why", () =
   const editor = readFileSync(new URL("../../components/flows/BlockEditor.tsx", import.meta.url), "utf8");
   assert.match(editor, /noteLines\(problem\.note \?\? problem\.text, "⚠"\)/);
 });
+
+// round 22 (the reviewer: "Global" still in the Before Run pane, twice, in a project without it)
+test("the Before Run pane names Global only when the project has a Global node", () => {
+  const studio = readFileSync(new URL("../../components/flows/ProjectStudio.tsx", import.meta.url), "utf8");
+  assert.match(studio, /\{globalOf\(project\) \? " \(its own first, then Global's\)" : ""\}/);
+  assert.match(studio, /\{globalOf\(project\) \? "This node's block replaces Global's; a deleted one falls back to Global's, else the default\." : "A deleted block falls back to the default\."\}/);
+  assert.doesNotMatch(studio, /This node&apos;s block replaces Global&apos;s/);
+  const run = readFileSync(new URL("../../components/flows/LiveRun.tsx", import.meta.url), "utf8");
+  assert.match(run, /global \? "this node's, or Global's keys tab" : "this node's keys tab"/);
+  // and the picker's rank words are a learner's, with no spec section number
+  assert.doesNotMatch(readFileSync(new URL("./blockdefs.ts", import.meta.url), "utf8"), /the table order \(13\.6\.3\)/);
+});

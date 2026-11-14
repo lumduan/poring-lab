@@ -2755,7 +2755,8 @@ and Amendments B-J; nothing above is rewritten.
 - **At 390 px** every block ends before Blockly's controls (the re-measure of round 20): the
   editor's blocks are laid out on rows inside the setting blocks' 300-unit budget, measured by a
   model of zelos' own row rules (`lib/flow/layout.ts`); on a phone a long expression shows
-  shortened in the middle, whole in its tooltip and its picker.
+  shortened in the middle, whole in its tooltip and its picker (➡️ round 22, live-blocks.md 12.6:
+  it WRAPS onto more rows at a token boundary instead, nothing cut).
 - **Ported:** matpilot's picture-field pattern and DOM helpers (lumduan/matpilot at 4022c87, MIT,
   THIRD_PARTY.md), code only; no picture was copied; no dependency was added; the DOM is built
   element by element (the console's CSP).

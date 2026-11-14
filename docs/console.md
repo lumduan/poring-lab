@@ -562,7 +562,7 @@ Amendment B); a not-adopted model is never offered.
   - **At 390 px** (round 20's re-measure): every block of the ready-made box ends before Blockly's
     zoom buttons and trashcan -- the runner's block a role a row, its words beside its picker; the
     save point, an action's inputs, an event's fields and a function's name on rows of their own; a
-    long condition shows shortened in the middle on a phone (`hotbar_count(…) > 0`; its tooltip
+    long condition shows shortened in the middle on a phone (➡️ round 22: it WRAPS onto more rows of its box, whole, at a token boundary; `hotbar_count(…) > 0` read the same twice; its tooltip
     and its picker show it whole). The Settings category is LAST in the toolbox, so opening it
     never pushes Functions and Advanced away. In the Settings flyout and the search, a setting the
     node's box replaces is greyed with the lint's words ("not used here: the drink event plays
@@ -572,6 +572,18 @@ Amendment B); a not-adopted model is never offered.
     would send is the one from before it). The folded strip line fits ("IN A RUN: 3 events replace
     the runner · +4"); "Global" is named only in a project that has a Global node. The Python sheet
     keeps its file row and × in place while the code scrolls.
+  - **Round 22** (the reviewer's browser measure of round 21; [planning/live-blocks.md](planning/live-blocks.md)
+    12.6): a picker opens below or above its field and never covers it -- when it fits on neither
+    side the blocks scroll so the field sits where it fits, else it opens compact, else it scrolls
+    inside; every picker ends with **Cancel** and **Done** ("Esc: cancel · Enter or Done: keep"):
+    Escape or Cancel puts every value back as it was when the picker opened (no undo step left),
+    Done, Enter or a tap outside keep it; the arrow keys browse a list inside the condition picker
+    without closing it; +/− take a round step (about 1 % of the range) and the presets are round
+    values (10 / 25 / 50 / 75 / 90); a percent shows its lever only; an unfinished condition says
+    so in plain words ("not finished: a value is missing after >="); the point picture outlines
+    the client's fixed windows (basic info, hotbar, minimap, chat: where they usually are); a
+    role's list holds only the functions it can call (no inputs needed, no event, no monster's
+    recipe); a greyed block's picker is drawn in a darker shade so its words read.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
