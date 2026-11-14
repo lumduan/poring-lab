@@ -1407,3 +1407,277 @@ The loop as playable blocks: HuntState (section 2b, 4b) moves the loop's state o
 closures so look, choose_target, walk_to_target, strike, wait_kill, loot and explore each play as
 a bounded live block; then the outline's description blocks become the map's tabs, each one doing
 what it shows. Each step A/B'd against the step before, the hunt never playing worse.
+➡️ 5b is split in two (section 13): **5b-1** (the refactor: HuntState and the loop as steps; no
+behaviour) and **5b-2** (the steps as live blocks; designed in 13.4, not built).
+
+## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
+
+**Batt's words:** "break the runner into blocks" (2026-11-13); "there should be no runner [page]
+... everything in the xmas_dun02 flow, as tabs ... make them ALL blocks" (2026-11-14); on 5b: "go
+on, no need to ask me again" (2026-11-14 18:1x). **The parent's standing rule:** a block that does
+nothing when it is edited is worse than no block, so the loop's description blocks move into the
+map's tabs only once each one really plays (5b-2).
+
+**What 5b-1 is.** `dungeon_hunt.run()` (main eb160ee1: lines 6212-10605, the loop 9304-10423, 85
+top-level statements in the loop body, ~100 closures) keeps the hunt's state in its local
+variables, shared with the closures through `nonlocal`; the loop is one block of code, so nothing
+outside run() can play a part of it. 5b-1 changes NO behaviour: the same decisions, inputs and
+records for the same frames. It only moves the state onto one object and cuts the loop's body
+into named steps, so 5b-2 can let the block player call the steps. `dungeon_hunt.py run ...`, the
+old Run path and flow_play's `run(a, hook=..., session=..., box_plays=..., box_roles=...,
+box_model=..., box_recipes=..., box_eat=...)` stay exactly as they are.
+
+### 13.1 HuntState: what moves into one object
+
+The rule is mechanical, so a reviewer can re-derive it (13.3):
+- **REBOUND state** = every run()-scope variable that is bound before the loop AND again inside it
+  (or after it), or that a closure declares `nonlocal`: 48 names, plus `bare` (bound twice in the
+  setup: None, then the bare-steal controller). Each becomes an attribute: written `hs.<name>`
+  everywhere in run() (`hs = HuntState()` is run()'s first statement); the closures' `nonlocal`
+  declarations of them go.
+- **IN-PLACE state** = the containers the loop mutates but never rebinds (each bound exactly once):
+  49 of them. Each is created ON the object and keeps its old local name as an ALIAS of the same
+  object (`counts = hs.counts = Counter()`), so no use of it changes.
+- **Not moved:** the tick's own reads (`tick`, the frame `img`, `pct`, `frac`, the Battle Log's
+  `new` lines, `boss_hit`, `near_`, `calm`, ...: each tick makes them again; they stay run()'s
+  locals, which the steps reach through `nonlocal`); the setup's configuration and resources (the
+  map grids, the templates, the Agent and Screen, the box watcher, every refusal's value); three
+  names a tick reuses as temporaries (`why_bx`, `why_hk`, `cmd`).
+
+| Group | REBOUND (`hs.<name>`) | IN PLACE (alias) |
+|---|---|---|
+| the mode, the target, the end | mode, lock, reason, sitting, fight_ref, fight_t0, qscan_i, watch_i, bare (the bare-steal controller) | box_fight, box_sp, queue, n_strike, n_shots, n_box_target, last_strike, steal_done, false_rel |
+| the walk | goal_path, walk_from, stall, noentry_n, last_uncarve, idle_pos, idle_since, last_walk, last_walk_click | walk_st, wp_st, ex_st, stalls_here, carved, last_click_t, plant_last |
+| odometry | here, last_pos_t, pos_flies, n_reads | pos_ok, pos_hist, own_moves, frame_meta, ust |
+| the fight's clocks, the battle log | last_taken, last_ours, ours_used, last_swing, swing_floor, seen_lines, exp_seen, exp_pair, ua_marks, ua_drop_t | ours_ticks, kills_seen, ua_locks, ua_walks |
+| loot (the list, the budgets, the recheck, the memory) | loot_list, loot_settle_t | loot_used, loot_picked, empty_cells, rk_pending, rk_st, lm_kills, lm_mem, lm_st |
+| survival and safety | fly_at, boss_until, boss_grace_until, ag_last, ag_absent | st (Sustain), escaped, last_quick, boss_walks, box_stop, box_pressed, bq_st |
+| the UI watch, the weight, the stock, caches | last_ui, w_share, red_seen, rest_since, rest_skip_t | stock_due, stock_tries, reach_cache, reach_logged, reach_pick, reach_proj, spot_logged |
+| the house rest | hplan, house_fb, house_tries, house_click_t, gap_since | trip |
+| the counters | | counts |
+
+`class HuntState` (scripts/dungeon_hunt.py, before run()) has `__slots__` = exactly these 98 names
+(a misspelt attribute is an AttributeError, never a silent new field), each with its type and the
+comment its local had. Why an object and not the closures' cells: 5b-2's blocks hand back on the
+mode and the target (13.4), the hook's HuntTick can be read from it, and a later stage can move a
+step out of run() and test it with a constructed state. The one-item lists (`escaped = [False]`,
+`n_strike = [0]`, ...) were the closures' way around `nonlocal`; 5b-1 keeps them as they are (an
+alias each); turning them into plain attributes is a later, separate rewrite.
+
+### 13.2 The steps: run() becomes a driver
+
+The loop's 85 statements are cut, in order, into 20 consecutive SECTIONS; each becomes a closure
+`step_<name>() -> str | None`, defined just before the loop at the loop body's own indentation (so
+its text, comments and line breaks stay as they are). A step returns None (the next step runs),
+`TICK_DONE` (where the loop said `continue`: the rest of this tick is skipped) or `RUN_END` (where
+it said `break`: the loop ends, `hs.reason` says why, and the normal end follows unchanged). The
+loop becomes the driver:
+
+    hunt_steps = (("begin", step_begin), ("sense", step_sense), ..., ("pace", step_pace))
+    def hunt_tick() -> str | None:            # one tick: the steps in order, to the first signal
+        for _name, step_ in hunt_steps:
+            sig_ = step_()
+            if sig_ is not None:
+                return sig_
+        return None
+    while time.monotonic() < t_end:
+        if hunt_tick() == RUN_END:
+            break
+
+| Step | What it does (today's code, unchanged) | Can end the tick / the run |
+|---|---|---|
+| begin | the tick's clock; the Run's Stop file; a stop the box asked for inside an action; a Fly Wing inside an action (guard_tick) resets the target and loot | RUN_END |
+| sense | the frame; HP and SP; the stock re-reads after a press; the Miss cue; Auto Guard's icon; dead; the position (fresh after a Fly Wing, PosConfirm, late confirm, the jump bar); the hp_read record | RUN_END (stock out / kept, a jump) |
+| hook | the live player's tick hook (stage 1) | RUN_END (its stop) |
+| vitals | death; the house rest's unexpected load | RUN_END |
+| battle_log | the Battle Log's new lines: the boss line, hits taken and dealt, the exp kills, the loot list, the recheck / memory kills | RUN_END (its reader died) |
+| survive | the stand-up on damage; calm; the box's survival events (stage 2) and their Fly Wing's after-steps; the runner's sustain (the potion, the Fly Wings, heal); Auto Guard | RUN_END (the box's end) |
+| engage | the fight signs (hit, HP drop, Miss, a box near); the Garm Baby alarm; the boss guard (walk away or fly); the engage record and mode "fight" | TICK_DONE (a walk away, a fly) |
+| ui | the UI watch every UI_EVERY_S; the weight; the box's weight event (stage 3); the weight home | RUN_END |
+| upkeep | overweight; the idle clock; the recheck and memory ageing; the HUD; the bare-steal controller's tick | - |
+| fight | mode "fight": the lock's kill read (exp line, kill gap), unlock, the unreach escape, quick drop, the quiet kill's end, melee-ring scan and queue, the box strike, the defend box, the ring scan, the fight's end | TICK_DONE (always) |
+| hold | a lock without a fight waits; the loot recheck; the loot memory | TICK_DONE |
+| loot | mode "after": the queue cleared; the loot step | TICK_DONE (a fight began) |
+| after | the queue pick due; the stand-up when overweight; the rest decision; "after" becomes "search" | - |
+| ready | --bare-ready's idle swap; --queue's next target | TICK_DONE |
+| rest | mode "rest": sitting, the house rest, the walk to a rest spot | TICK_DONE |
+| idle | the idle watchdog (uncarve, or a Fly Wing) | TICK_DONE |
+| plant | the White Plant sweep | TICK_DONE |
+| search | the goal (heading, patrol, explore), the walk click (pick, dodge, trust, stall, carve), the walk-sword engage; melee-ring's forward watch | TICK_DONE (a stall's fly or scan) |
+| position | the unread position's Fly Wing; 30 s unread | RUN_END |
+| pace | the sleep to READ_HZ | - |
+
+Why the steps keep the tick's reads as `nonlocal`: a section's text then stays byte for byte as
+it was, and no step has a local of its own (checked), so every name means what it meant. Why the
+loot / after cut sits where it does: 5b-2's loot(t) must be able to be LEFT OUT of a recipe, so
+the loot step is its own step, apart from the rest decision that always runs (13.4).
+`HUNT_STEPS_VERSION` = "9.54" names 5b-1 (in runner_flow_export.NOT_FEATURES: no feature of its
+own; recorded nowhere: the records stay exactly as they were).
+
+### 13.3 How the equivalence is shown
+
+**Offline, proven** (scripts/huntstate_check.py, committed with the refactor):
+- `huntstate_check.py check [--base eb160ee1]` takes the BASE's run() (git show), applies the three
+  rewrites as AST transforms -- LIFT (13.1's rebound names -> `hs.<name>`), ALIAS (the containers),
+  OUTLINE's inverse on the committed file (the steps' bodies back into the loop, in the driver's
+  order, `return TICK_DONE` -> continue, `return RUN_END` -> break) -- and compares the two run()s
+  as ASTs (formatting, comments and docstrings aside). Equal ASTs = the same program on every
+  path, not only the paths a test reaches.
+- The rewrites' preconditions, each checked on the base and printed: no exec / eval / locals / vars
+  / globals in run(); no `except NameError` (an unset attribute raises AttributeError where an
+  unbound local raised NameError: the same only if nothing catches the difference); no lifted name
+  deleted or bound by import / def / class / except; the name `hs` unused; an alias bound exactly
+  once; no step binds a name of its own (every bound name `nonlocal`); no loop-level return / yield
+  / await; no `else:` on the loop; `HuntState.__slots__` == the lifted + aliased names; every
+  top-level statement outside run() unchanged but the class and three constants.
+- The scope resolver (which `here` is run()'s and which a closure's own) is cross-checked against
+  CPython's `symtable` twice: every table's locals, and, independently of the resolver's own chain
+  walk, every Name of a lifted name.
+- The rewrite rules are tested BY EXECUTION on small programs that have each hazard (a closure's
+  nonlocal, a shadowing parameter, a default argument, a comprehension, an except-as, a
+  continue / break in a nested loop, try / finally around a continue, a for-else): the original
+  and the rewritten function run on the same inputs and must give the same outputs and traces;
+  and the checker is shown a deliberate wrong rewrite of each kind and must name it (a verifier
+  proves a positive case).
+- The whole Python suite stays green at every commit called green.
+
+**The tests that read run()'s source** (many slice the file's text and assert code fragments):
+each fragment is re-written the same way the code was -- its occurrences in the base mapped
+through the same text edits -- so the test asserts the same fact on the new text; a fragment whose
+occurrences map to different texts, or that formatting broke, is changed by hand. Every changed
+test is listed in the 5b-1 report.
+
+**Not built: a scripted fake environment that drives the WHOLE run().** run()'s setup reads the map
+grid (GAT), the KB, nine template sets, the slot icons and the minimap references (client-derived:
+present on this host at run time, never in git), opens the session, runs the start check, a Battle
+Log reader process, the box watcher and the item model's client; a fake world plausible enough to
+reach the loop would stub ~30 modules and would mostly test its stubs, on the few paths it
+scripts. The AST identity covers every path; the rule tests cover the semantics of each rewrite.
+What neither can see is what only a live run shows:
+- the cost of the driver (20 function calls a tick, attribute access instead of locals: tens of
+  microseconds against a 200-ms tick);
+- the real I/O interleaving (the Battle Log process, the box watcher's thread, the detect server);
+- the A/B's own launcher (13.5).
+The live A/B (13.5) is the check of those.
+
+### 13.4 5b-2 (designed, NOT built): the steps as live blocks
+
+**The tick cursor.** The hunt core keeps a cursor: the current tick and the next step in
+hunt_steps. Each primitive block ADVANCES the cursor -- runs steps in order, a new tick after
+`pace` (or at a TICK_DONE) -- until ITS exit condition holds at a step boundary, then hands back to
+the block program; the next primitive resumes the cursor where it stopped. Two kinds of step:
+- COMMON steps run in every tick whichever block is playing (begin, sense, hook, vitals,
+  battle_log, survive, engage, ui, upkeep): perception and safety are never a block's to skip;
+- MODE steps (fight, hold, loot, after, ready, rest, idle, plant, search, position, pace) are
+  OWNED: a block runs only the ones it owns; a mode step no playing block owns is passed.
+So the box's canonical loop (below) calls exactly the driver's step sequence, tick for tick: the
+equivalence of 5b-2 is by construction, and is checked offline by comparing step traces (the
+driver against the block program, on scripted mode changes).
+
+**The blocks and their bounds** (each "one bounded call": a time box, its exit condition, a value):
+
+| Block | Owns | Hands back when | Returns |
+|---|---|---|---|
+| explore() | after (the rest decision and "after" -> "search"), ready, rest, idle, plant, search, position, pace | mode becomes "fight" (a target engaged) | the monster engaged (a value: species, box, cell), or none at its time box |
+| choose_target() | -- (no step: reads the state) | at once | the target the engage step chose (hs.box_fight / the lock), or none |
+| walk_to_target(t) | fight (the approach part: far approach, the reach check) | the target is in reach or gone | in reach / gone |
+| strike(t) | fight | hs.lock is set (the strike landed) or the target is gone | struck / gone |
+| wait_steal(t) | fight | the bare-steal controller's cue or time box | stolen / not |
+| wait_kill(t) | fight, hold | the lock clears by a kill read (exp line, kill gap), or the fight ends | killed / lost |
+| loot(t) | loot | the loot step ends (mode leaves "after"), or a fight begins | the pickups |
+| look() | -- | after the common steps of one tick | the tick's reads |
+| use_skill(key) | -- | one press of a declared role key, at a step boundary | pressed / refused |
+
+Every block has a time box (a literal argument with a default: explore 120 s, the fight blocks
+LOCK_MAX_S, loot the loot budget), and every block hands back at once on RUN_END (the run's end),
+on a safety step's change of mode (a Fly Wing: the target is gone) or on the player's Stop.
+
+**How the player schedules them.** The block `dungeon_hunt(...)` stays the hunt core, played
+in-process (one input writer). With a `hunt` tab, run() gets a hook with `drive`: instead of its
+own driver loop it calls `hook.drive(hunt)` (hunt = the cursor and the steps), and the player
+plays the tab's loop function there, synchronously, as `_play_sync` plays an event: each primitive
+call advances the cursor; the box's survival events keep playing through the same tick hook; when
+`drive` returns (the loop function ended, a stop, RUN_END), run()'s normal end runs unchanged
+(the swap back, the way home, the respawn).
+
+**What the xmas_dun02 tabs show** (the description blocks of scripts/runner_flow_export.py's
+outline become playing blocks): a `hunt` tab with the loop,
+
+    def hunt_loop():
+        while True:
+            t = explore()
+            attack(t)               # the monsters tab's recipe for t's species (stage 4a)
+
+and the `monsters` tab's recipes (`knife_on(); strike(t); wait_steal(t); knife_back();
+wait_kill(t); loot(t)`) played as blocks, not only read; each setting tab (5a) as now.
+
+**The lint and the refusals** (before any input; the backend's not_live names the same): a
+primitive outside a hunt core's `hunt` tab or a recipe; a loop with no block that always advances
+the cursor (explore or a time-boxed one; else it would spin without time passing); a recipe's
+order the cursor cannot play (wait_kill before strike, loot before wait_kill: recipes.SHAPES
+today, widened only with a trace test per new shape); use_skill without a declared role key the
+start's slot check reads; a common step left out (impossible to write: they have no block);
+`drive` with any other hook method missing.
+
+**5b-2's A/B:** B5b-1 (the one box, 5b-1's built-in driver) vs B5b-2 (the same box plus the hunt
+tab whose loop is the canonical one): an equivalence check with 13.5's bar; only after it holds,
+the first experiment in blocks (e.g. no loot(t) for the Christmas Cookie, or no Knife swap on it).
+
+### 13.5 THE A/B of 5b-1 -- pre-registered 2026-11-14 18:3x ICT from `date`, BEFORE any 5b-1 run
+
+**The arms differ ONLY in the runner's file.** Both play the one box (project_xmas_dun02.json,
+section 10) through `flow_play.py play`, with the same runner settings (the box's setting blocks
+and keys, checked as stage2_ab.same_vals does):
+- **A** = the runner as main eb160ee1 has it (`git show eb160ee1:scripts/dungeon_hunt.py`, its
+  sha256 pinned in the tool);
+- **B** = 5b-1's runner (the merged file, its sha256 pinned at the merge).
+
+How two arms run two runner files in one checkout: flow_play puts scripts/ first on sys.path
+when it is imported, so a path trick cannot pick the file. A launcher (scripts/runner_pin.py)
+reads the pinned file's TEXT, checks its sha256, compiles it as `dungeon_hunt` with `__file__` =
+scripts/dungeon_hunt.py (the module's ROOT is computed from it) into sys.modules BEFORE flow_play
+runs, then runs flow_play.py's main with the same argv. BOTH arms go through the launcher (the same
+launch path), each with its own pinned text, and it writes `<run label>.runner.json` (the file's
+sha256, the base revision, `HuntState` present or not). Why not a frozen copy committed in the
+repo: 11,425 lines duplicated, and a copy that drifts. Why not before / after series: the Stormy
+Knight's schedule and the map's state change over hours; alternating pairs share them. Why not a
+second checkout of the base: it would also run the base's flow_play, poring_flow and the rest;
+the launcher varies one file only (the tool refuses unless `git diff eb160ee1 <head>` touches no
+runner-side code but scripts/dungeon_hunt.py and the 5b-1 tools).
+
+**The series** (`scripts/stage5b_ab.py`, a sibling of stage5_ab.py sharing stage2_ab's setup,
+detect server, run and score; run by the parent after review, NOT run yet):
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage5b_ab.py plan  --label s5b1-ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage5b_ab.py run   --label s5b1-ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage5b_ab.py score --label s5b1-ab
+
+- 3 pairs of 20 min, order A B, B A, A B; stage2_ab's setup before every run; a STOP file ends the
+  series before its next run. Before it: merged and deployed; ASSIST; the Rogue in the game; the
+  Run helper idle; no chain; `plan` refuses before any input on any check above.
+- The score per run: stage5_ab's lines (the runner's own session, the same reader for both arms),
+  and the tick pace: the gaps between consecutive hp_read records (one per tick).
+
+**THE PRE-REGISTERED BAR** (`stage5b_ab.BAR`): B must hold, against A:
+
+| Line | B must hold |
+|---|---|
+| deaths | B's deaths <= A's, over EVERY run that played (>= 1 min, or a death) |
+| kills per hour | the mean paired difference (B - A) >= -2 x its standard error, over at least 3 valid pairs |
+| loot steps per hour | the same rule |
+| Knife openers per hour | B's series rate within +-20 % of A's (valid runs pooled) |
+| the tick pace | B's median and 95th-percentile gap between hp_read records each <= A's + 10 ms (valid runs pooled) |
+| no new record kind | every record kind B's runner sessions write is one the base runner's source writes (its `"kind": "..."` literals) |
+| no runner error | no B run ends by an exception of the runner (hunt_end `error`, or a traceback in its log) |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+Reported, not judged: potions / h, Fly Wings / h by cause, steals / h, eats / h, the lowest HP, the
+end reasons, each record kind's rate per hour per arm, the alarm's fires. The verdict: FAIL when
+a judged line fails; INCONCLUSIVE when fewer than 3 pairs are valid (kills and loot unjudged) and
+nothing failed; else PASS. Why these lines: B is the same program by construction, so the rates
+are held to the pairs' own noise (as stage 4a's); the tick pace is the one thing the refactor can
+change (the driver's calls): 10 ms is 5 % of the 200-ms tick, far above the expected tens of
+microseconds and far below anything that changes play; the record kinds and the runner errors
+catch a refactor slip that the rates would hide. No line is a strict "<" against an arm that may
+read 0 (10.2's lesson), and deaths count over every run that played (section 7's).
