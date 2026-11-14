@@ -349,6 +349,7 @@ XMAS02_FIT = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2", "-rdp-xmas02-fsH
 # Amendment S (2026-11-12, the Stormy Knight class): the held-out lattice watch sk3a (3a's TEST
 # stands, `--label xmas02-sk3a`) is refused by NAME like TEST, before it records (labels, T2's
 # pool, the cache); not in eval_suffixes (its scoring is the amendment after the model is frozen)
+# ➡️ S4 (2026-11-14): in eval_suffixes, like gw3 since M7 (the Goblin round scores on it once)
 XMAS02_SK3A = "-rdp-xmas02-sk3a"
 # Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
 # (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
@@ -399,8 +400,10 @@ XMAS02 = MapSpec(
     c1_rules=("round2",),  # 4h / 5: C1 always drops a label under a pickup notice (T-8)
     eval_flag="eval_test",  # 9 (T-9): the evaluation reads TEST only
     # Amendment M7 (2026-11-09): gw3, the held-out Garm Baby watch, is scored with TEST -- read only
-    # after the model is frozen (its last.pt sha256 recorded first)
-    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3),
+    # after the model is frozen (its last.pt sha256 recorded first); Amendment S4 (2026-11-14):
+    # sk3a, the held-out knight-party watch, the same way (read once, after the Goblin round's
+    # last.pt sha256 is recorded)
+    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,

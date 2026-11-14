@@ -1471,8 +1471,9 @@ def test_s_sk3a_is_refused_by_name_and_sk1a_sk2a_are_train(
     pool, *_ = ml.pack_pool([_xdoc(tmp_path, SK1A, [1251, 1515]), _xdoc(tmp_path, SK2A, [1251])],
                             spec, "/nas")  # fmt: skip
     assert sorted(pool) == [1251, 1515] and len(pool[1251]) == 2
-    # the evaluation flag does not read sk3a (its scoring is a later amendment's, as gw3's was M7)
-    assert "not a TEST part" in str(ml.eval_part_refusal(spec, SK3A, None, "eval_test"))
+    # S4 (2026-11-14): the evaluation flag reads sk3a with TEST (once, after the Goblin round's
+    # model is frozen), as M7 made it read gw3; every other flag and command still refuses it
+    assert ml.eval_part_refusal(spec, SK3A, None, "eval_test") is None
     params = _xparams(tmp_path)
     sha = hashlib.sha256(params.read_bytes()).hexdigest()
 
@@ -1812,10 +1813,11 @@ def test_t9_eval_flags_are_per_map() -> None:
     # TEST's names are the evaluation's, plus Amendment M's held-out gw3: refused like TEST, its
     # scoring (and the flag that reads it) left to the amendment after the model is frozen
     # Amendment O1 (2026-11-10): + the floor items' held-out names, refused like TEST but not M7's
-    # Amendment S (2026-11-12): + sk3a, refused like TEST, read by no flag yet (like gw3 before M7)
-    assert set(x.test_suffixes) - set(ml.XMAS02_FIT) - {ml.XMAS02_SK3A} == set(x.eval_suffixes)
+    # Amendment S (2026-11-12): + sk3a, refused like TEST; S4 (2026-11-14): read by --eval-test
+    # (the Goblin round's held-out), as gw3 since M7
+    assert set(x.test_suffixes) - set(ml.XMAS02_FIT) == set(x.eval_suffixes)
     assert ml.XMAS02_GW3 in x.eval_suffixes  # M7
-    assert ml.XMAS02_SK3A in x.test_suffixes and ml.XMAS02_SK3A not in x.eval_suffixes
+    assert ml.XMAS02_SK3A in x.test_suffixes and ml.XMAS02_SK3A in x.eval_suffixes  # S4
     assert not set(ml.XMAS02_FIT) & set(x.eval_suffixes)
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
