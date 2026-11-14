@@ -4458,3 +4458,17 @@ dedicated-intel is DEDICATED" and ran S4.5's command unchanged):** the trainer's
 class name`** (g_gobline_xmas and knight_of_windstorm fresh), `Transferred 499/499 items`,
 `AdamW(lr=0.000714, momentum=0.9)`, `amp=False`, `Using 3613 train, 1106 val images`, `Using 2
 dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields the worker to a Run.
+
+#### S4.8 (2026-11-15 00:12 ICT from `date`, BEFORE anything of sk3a is read): the training ended; THE SCORED MODEL FROZEN
+
+- `train ended rc=0` at 00:12:03 ICT (started 2026-11-14 19:15:43): **all 10 epochs**, 17,776.3 s
+  (~29.5 min an epoch), FP32 on the Arc A380 (torch 2.15.0+xpu), peak VRAM 2,178 MiB, no step sleep;
+  the guard's worst stall 0.0 %; the step ended "worker up and idle, nothing of ours on the GPU".
+- **No Run was pressed during it:** the watcher (S4.5) read the Run helper `idle` with `busy` null
+  every 10 s from 19:16:04 to the end (00:12:05); no runner process appeared; nothing yielded.
+- VAL (xw1 x 2, monitor only; NO Goblin, knight or Garm Baby in it) by epoch, P / R / mAP50 /
+  mAP50-95: 1: 0.982 / 0.984 / 0.993 / 0.905 ... 10: **0.985 / 0.992 / 0.994 / 0.927** (xmas02gb's
+  epoch 20, M8: 0.983 / 0.984 / 0.993 / 0.922); results.csv sha256 `40a3ed2f...`.
+- **The scored checkpoint: `data/train/xmas02-sk-20261114/weights/last.pt` after epoch 10, sha256
+  `0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10`** (5,533,786 bytes). Nothing is
+  refitted after this line. Next: S4.6 steps 2-6.
