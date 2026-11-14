@@ -2165,6 +2165,7 @@ merges): `pl_hunt_take.VAR` (a variable picker: the loop's input and the tab's v
 `pl_hunt_take.ARGS` / `pl_hunt_step.ARGS` `target=t` (a variable picker), `TIMEOUT` (a number with
 the block's range, 1-600 s), and on the generic `pl_action` of use_skill its `key="F1"` (a key
 picker of the declared keys) and of strike / wait_steal / wait_kill / loot their `target=t`.
+➡️ CONVERTED at the merge of main's round 21 (14.10).
 
 ### 14.6 The fixture
 
@@ -2277,3 +2278,34 @@ round-trip the hunt box too.
 loop's conditions (they would need the tick's reads as values); calls of helper functions from the
 loop; recipes beyond SHAPES (14.8); the loop on a Global node shared by several hunt cores (allowed
 by the name rule, not exercised); the 13.6 leftovers (the 155 declarations, the one-item cells).
+
+### 14.10 ➡️ The merge of main's round 21 (5d6bf17e: the pickers), 2026-11-14 ~21:3x ICT
+
+**The conflicts:** one, ADR-0020's last amendment. Main's Amendment K is round 21's ("a value that
+is not a name is a picker", written ~19:4x); 5b-2's (the hunt loop, ~20:5x) is now **Amendment L**,
+after it, adding to C-K (14.9's pointer says so). Everything else merged by itself: main changed no
+script, so the runner is the same on both sides, `huntstate_check.py drive` (base bb6d41eb) and
+`check` (base eb160ee1) stand as they were, and so does every Python test of 5b-2.
+
+**The two block types under round 21's rules** (blockdefs.ts, additive): `pl_hunt_take` and
+`pl_hunt_step` are laid out in ROWS as every block now is -- the variable and the block (`t =
+find_target`), its inputs (`( target=t )`), its time box (`at most 120 s`), then the badge and the run
+line on rows of their own (`ownLabelRows`, applied to them as the definitions are) -- and every row
+is within the 300-unit budget at 390 (layout.ts's model: the widest is 242 units;
+layout.test.ts now checks the hunt box's every tab too).
+
+**The fields converted** (the IR, the Python text and every round trip unchanged: a picker saves the
+same value as the plain field it replaces):
+
+| Field | Picker |
+|---|---|
+| `pl_hunt_take.VAR` | a variable reference (`ref: variable`): the function's inputs first (the loop's `t`), then the tab's, the node's and Global's variables; a typed name that is no variable's is kept |
+| `pl_hunt_take.ARGS`, `pl_hunt_step.ARGS` | round 21's inputs picker (`expr` / `args`); a `target` row of find_target / walk_to_target / fight_target / strike / wait_steal / wait_kill / loot is a VARIABLE row (pickers.ts `TARGET_BLOCKS`, `rowKind`), a list of the same variables |
+| `pl_action` ARGS of strike / wait_steal / wait_kill / loot | the same: their `target=t` row a variable row |
+| `pl_hunt_take.TIMEOUT`, `pl_hunt_step.TIMEOUT` | a stepper 1-600 s (presets 10, 30, 60, 120, 300); the field keeps no min / max, so a loaded time box (e.g. 0.5 s) is never clamped |
+| use_skill's `key` row | the DECLARED keys (pickers.ts `skillKeysOn`: the node's hunt core's heal key, as poring_flow.huntloop allows; the hunt box: F1), the key picker of round 21 where the node declares none |
+
+The tests: pickers.test.ts (the variable rows, the declared key, the variable list with `t` first),
+layout.test.ts (the hunt box), and huntloop.test.ts / project.test.ts / blockly_headless.test.ts
+(the hunt box's round trips, byte for byte, on the merged converter).
+

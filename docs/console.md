@@ -416,7 +416,10 @@ Amendment B); a not-adopted model is never offered.
   find_target()` and `fight_target(t)` (the canonical loop: the hunt core then plays this loop instead of
   its own, `fight_target(t)` being the monsters tab's recipe for t's species), walk_to_target, the recipe
   steps, choose_target, look, use_skill (the heal key) and `if known(value=t)`. The hunt loop's own
-  blocks show their value's variable and their time box ("t = find_target ( ) · at most 120 s").
+  blocks show their value's variable and their time box on rows of their own ("t = find_target" /
+  "( )" / "at most 120 s"): the variable is a variable picker (the loop's input t first), the time box
+  a stepper (1-600 s), a target in a block's inputs a variable row, use_skill's key the hunt core's
+  declared one (live-blocks 14.10).
   The Load lists of /flows and /maps offer **xmas_dun02_hunt** (the one box plus that tab); the
   one box itself has no hunt tab. Run's readiness reads the hunt loop too.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
