@@ -14,6 +14,7 @@
 import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
+import { rowsOf } from "./layout.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
 import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingRows, settingType } from "./settings.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
@@ -145,7 +146,9 @@ function exprBlock(e: Expr, path: string, ids: Ids): WsBlock {
       extraState: actionRest(e.action),
     };
   }
-  if (!hasDo(e) && !blockish(e)) return { type: "pl_expr", fields: { TEXT: exprText(e) } };
+  // round 21 (the re-measure of round 20: fly_away's `sees_boss() or hp_percent() < 25` ran past
+  // Blockly's controls at 390): and / or is a block of its terms, one a row; each term is text
+  if (!hasDo(e) && !blockish(e) && e.kind !== "and" && e.kind !== "or") return { type: "pl_expr", fields: { TEXT: exprText(e) } };
   if (e.kind === "do") return { type: "pl_raw_expr", fields: { TEXT: exprText(e) }, extraState: { expr: e } };
   if (e.kind === "cmp") {
     return {
@@ -478,12 +481,20 @@ function mapEventHat(ev: MapEvent, block: MapBlock, order: number, ids: Ids): Ws
   return { type: "pl_disable", id: ids.take(`h:disable:${ev.key}`), fields: { KEY: ev.key }, extraState: { order } };
 }
 
+/** A block's own rows as the editor draws them (round 21: layout.ts, the model of zelos' rows; its
+ * badge row counted, its empty run line not), without the blocks in its statement inputs. */
+function ownRows(b: WsBlock): number {
+  if (b.type === HUNT_TYPE) return 5; // the hunt block (hunt.ts): its rule rows
+  const values = Object.fromEntries(Object.entries(b.inputs ?? {}).filter(([, v]) => v.block && DEF_BY_TYPE[v.block.type]?.output !== undefined));
+  return Math.max(1, rowsOf({ ...b, next: undefined, inputs: values }, { BADGE: "●" }, 0, (n) => n === "ROW_RUN" || n.startsWith("ROW_WARN") || n.startsWith("ROW_NOTE")).length);
+}
+
 function height(b: WsBlock | undefined): number {
   let n = 0;
   for (let cur = b; cur; cur = cur.next?.block) {
-    // the hunt block is five lines tall; the runner's block fourteen (round 20: a role a row; round
-    // 21: sixteen, "Fly Wing:" and "Knife on:" on rows of their own), the save point four
-    n += cur.type === HUNT_TYPE ? 4 : cur.type === "pl_dungeon_hunt" ? 12 : cur.type === "pl_save_point" ? 4 : 1;
+    // round 21: a block's own rows (the runner's role a row, an action's inputs and badge on rows
+    // of their own), so a tab's blocks are placed apart, never over each other
+    n += ownRows(cur);
     for (const inp of Object.values(cur.inputs ?? {})) if (inp.block && !DEF_BY_TYPE[inp.block.type]?.output) n += height(inp.block);
   }
   return n;
@@ -530,10 +541,10 @@ class Reader {
     this.defaults = defaults;
   }
 
-  err(where: string, msg: string): void {
+  err(where: string, msg: string, note?: string): void {
     if (this.errors.length < 50) {
       this.errors.push(`${where}: ${msg}`);
-      this.issues.push({ where, text: msg, id: this.at });
+      this.issues.push(note ? { where, text: msg, id: this.at, note } : { where, text: msg, id: this.at });
     }
   }
 
@@ -1157,8 +1168,9 @@ export const TAB_TOP_Y = 90;
 /** An event block's first three rows (when; event / class / rank; mode / then: the fields a person
  * reads first), workspace units, generously: the zelos rows are ~48 units, the first one taller. */
 export const FIRST_ROWS_Y = 3 * 56;
-/** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
-const EVENT_ROWS_Y = 6 * 48;
+/** An event block's extra height in workspace units: its trigger's rows (round 17 N4; round 21:
+ * one or two fields a row, thirteen rows). */
+const EVENT_ROWS_Y = 11 * 48;
 /** A setting block's row, and the gap under the block (live-blocks.md 12: a tab of settings is a
  * list; matpilot round 20 #2: a block is several rows, settings.ts settingRows), workspace units,
  * generously (a zelos label row is ~32-40). The editor pushes a block down when the lint's "not
@@ -1187,7 +1199,8 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
     b.x = 20;
     b.y = y;
     const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
-    y += setting ? settingHeight(b.type, b.fields) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
+    // (round 21: a function's three header rows; the event's rows are EVENT_ROWS_Y)
+    y += setting ? settingHeight(b.type, b.fields) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 46 * (ownRows(b) - 1));
     top.push(b);
   };
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });
@@ -1273,8 +1286,10 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
         // on this block, naming that tab
         const other = node.tabs.find((x) => x.name !== t.name && f.var in x.vars);
         if ("error" in got) r.err(`setting ${f.var}`, got.error);
-        else if (f.var in vs || seen.has(f.var)) r.err(`setting ${f.var}`, "this setting is on this tab twice (one block each)");
-        else if (other) r.err(`setting ${f.var}`, `the tab ${other.name} of ${node.id} sets it already: one block per setting on a node (delete one of the two)`);
+        else if (f.var in vs || seen.has(f.var)) r.err(`setting ${f.var}`, "this setting is on this tab twice (one block each)", `already set on this tab (${t.name}): one block per setting on a node`);
+        // round 21 (the re-measure of round 20): the message names BOTH tabs, and the copy's own
+        // rows say it (BlockEditor: ⚠ and a row on the block)
+        else if (other) r.err(`setting ${f.var}`, `${f.var} is set on this tab (${t.name}) and on the tab ${other.name} of ${node.id}: one block per setting on a node (delete one of the two)`, `already set in tab ${other.name}; one block per setting on a node`);
         else vs[f.var] = settingLit(got.value);
       });
       continue;

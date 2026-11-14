@@ -329,7 +329,7 @@ test("every picker in the block definitions is a field the converter reads (a nu
   assert.ok(n >= 120, String(n)); // the setting blocks' values and points, and the blocks' fields
   // the names a block DEFINES stay text: a function's (with suggestions), a variable's, an event's
   const def = DEF_BY_TYPE.pl_def.args0!;
-  assert.deepEqual(def.map((a) => ("pick" in a && a.pick ? a.pick.kind : a.type)), ["name", "field_input"]);
+  assert.deepEqual(def.filter((a) => a.type !== "input_end_row").map((a) => ("pick" in a && a.pick ? a.pick.kind : a.type)), ["name", "field_input"]);
   assert.equal(DEF_BY_TYPE.pl_vardecl.args0![0].type, "field_input");
   assert.equal(DEF_BY_TYPE.pl_event.args1![0].type, "field_input");
   assert.ok(nodeById(xmasProject(), "xmas_dun02"));

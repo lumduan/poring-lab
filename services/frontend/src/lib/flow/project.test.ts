@@ -358,7 +358,9 @@ test("the event block puts its inputs on rows of their own (narrow enough for a 
   // zelos starts a row at every input only when the block is not inline (isMultiRow)
   assert.equal(d.inputsInline, false);
   const rows = [d.message0, d.message1, d.message2, d.message3, d.message4, d.message5, d.message6, d.message7, d.message8];
-  assert.deepEqual(rows, ["%1 when %2", "event %1 class %2 rank %3", "mode %1 then %2", "until %1", "rearm %1", "pause %1 s after each run · at most %2 a run", "at most %1 a minute · %2 per 10 min (default 10)", "%1 failed inserts (default 3): escalate to %2", "do %1"]);
+  // round 21 (the re-measure of round 20 at 390): one or two fields a row, split by end-row inputs
+  // (layout.test.ts measures every row against the 300-unit budget)
+  assert.deepEqual(rows, ["%1 when %2 %3", "event %1 %2 class %3 %4 rank %5", "mode %1 %2 then %3", "until %1 %2", "rearm %1 %2", "pause %1 s after each run %2 at most %3 a run", "at most %1 a minute %2 in 10 min: %3", "insert fails: %1 %2 then escalate to %3", "do %1"]);
   // no row holds two value inputs (an expression each): a row is never two conditions wide
   for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5, d.args6, d.args7, d.args8]) {
     assert.ok((args ?? []).filter((a) => a.type === "input_value").length <= 1);

@@ -133,7 +133,7 @@ test("a reference shows ▾, and ⚠ when it is not one of what exists; its valu
     assert.equal(shows("HOME"), "fly_hom ⚠ ▾"); // a typo: kept, marked
     assert.equal(shows("RESPAWN"), "none ▾"); // an empty optional role
     assert.equal(hunt.getFieldValue("HOME"), "fly_hom");
-    assert.match(hunt.toString(), /home \(Butterfly Wing\): call fly_hom/); // the block's words (the search's) stay the value
+    assert.match(hunt.toString(), /home: fly_hom/); // the block's words (the search's) stay the value
     const ev = B.serialization.blocks.append({ type: "pl_event", fields: { NAME: "e", MAX_RUN: "", RANK: "x" } }, ws);
     assert.equal(displayOf(ev.getField("MAX_RUN")!, ""), "—");
     assert.equal(displayOf(ev.getField("RANK")!, "x"), "x ⚠");
@@ -144,4 +144,23 @@ test("a reference shows ▾, and ⚠ when it is not one of what exists; its valu
   } finally {
     setPickerSource(null);
   }
+});
+
+test("the real Blockly builds the rows layout.ts measures: each runner role with its words in ONE end-row input", () => {
+  const ws = new B.Workspace();
+  const hunt = B.serialization.blocks.append({ type: "pl_dungeon_hunt" }, ws);
+  const words: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "Knife on:", KNIFE_BACK: "Knife off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
+  for (const [field, w] of Object.entries(words)) {
+    const input = hunt.inputList.find((i) => i.fieldRow.some((f) => f.name === field))!;
+    assert.ok(input instanceof B.inputs.EndRowInput, field); // the row ends after it (zelos)
+    assert.deepEqual(input.fieldRow.map((f) => f.getText()), [w, String(hunt.getFieldValue(field))], field);
+  }
+  // the save point: three rows, each an end-row input
+  const save = B.serialization.blocks.append({ type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 } }, ws);
+  const rows = save.inputList.filter((i) => i instanceof B.inputs.EndRowInput).map((i) => i.fieldRow.map((f) => f.getText()).join(" "));
+  assert.deepEqual(rows.slice(0, 3), ["the save point is", "on geffen", "x 119 y 40"]);
+  // the run line's row hides while it is empty, the badge's too (pl_label_rows)
+  assert.equal(save.getInput("ROW_RUN")?.isVisible(), false);
+  assert.equal(hunt.getInput("ROW_BADGE")?.isVisible(), false);
+  ws.dispose();
 });

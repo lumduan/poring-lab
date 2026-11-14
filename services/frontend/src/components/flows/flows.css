@@ -290,3 +290,11 @@
   fill: #92400e !important;
   font-weight: 700;
 }
+/* round 21 (the re-measure of round 20): a setting block that keeps its tab from becoming the
+   project (set on two tabs of the node): its own rows say so, in the warning colour */
+.pl-setting-problem .pl-setting-note .blocklyText,
+.pl-setting-problem .blocklyText.pl-setting-note {
+  fill: #fde68a !important;
+  font-style: normal;
+  font-weight: 700;
+}

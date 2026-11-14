@@ -500,7 +500,9 @@ Amendment B); a not-adopted model is never offered.
   - **The name rule:** a map node's block replaces Global's there; a deleted block falls back to
     Global's, else our default (each block's tooltip says which; it names Global only when the
     project has a Global node). One setting has ONE block on a node: a second one on another tab
-    is refused on the block, naming that tab (the engine refuses a name on two tabs of a node). The
+    is refused on the block, naming that tab (the engine refuses a name on two tabs of a node; ➡️
+    round 21: the message names both tabs, the copy's own rows say it, and Run and Check are held
+    until it is fixed). The
     toolbox has a **Settings** category with one sub-category per group, named as its tab and in
     the tabs' order, each with a short header; the block search finds a setting by its group's
     words and its own (`knife` finds all six Knife settings, `garm` the Garm Baby ones).
@@ -527,6 +529,49 @@ Amendment B); a not-adopted model is never offered.
   - **Gone:** the runner description page (`/flows?runner=...` now opens that map's node), its
     "Inside the runner" link and Load entry, Before Run's settings panel ("saved on the bot server
     at once") and the settings file behind it (GET / PUT /flows/config).
+  ➡️ **2026-11-14 ~19:4x, round 21: PICKERS instead of textboxes** (Batt: "fields that choose a
+  value ... should be DROPDOWNS with the values to choose from ... typing should work like a
+  search ... a visual UI, e.g. the turn angle"; [planning/live-blocks.md](planning/live-blocks.md)
+  section 12.5; ADR-0020 Amendment K). Free text stays ONLY where a name is DEFINED (a function's
+  name and inputs, a variable's name, an event's name, a tab's name); every other field opens a
+  picker under it, in the block's colour, by touch or by keyboard:
+  - **A reference** (the function a call, a runner role or an exit calls; the function an event
+    escalates to; use_model's model; the save point's and an exit's map; a stop reason; an exit's
+    node and entry; the window; the login server; the variable a `set` sets) shows `▾` and opens a
+    LIST of what exists now (the node's and Global's functions with what each presses, the models
+    with their map and status, the map names the world knows with a Kafra marked, ...). Typing
+    filters it (a word's start first, then inside, then letters in order). A word the list does
+    not have is kept as typed where it may be (a new stop reason); a value loaded that is not in
+    the list (an unknown function, a model not in models.yaml) is KEPT, shown with `⚠`, and the
+    lint names it as before.
+  - **A number**: seconds, counts and ranks a stepper (− / +) with a slider; a percent setting a
+    lever bar that fills like an HP bar (the bag's the other way round); a point of the game
+    picture (respawn_at) two steppers and the 1280 x 720 picture with its dot (tap to place it); a
+    map cell (the save point, walk to, a walk exit) two steppers. An event's "at most …", "rank"
+    and "insert fails" are a stepper with a "no limit" / "the default" button; an empty one shows
+    `—`, `auto` or `default 10`.
+  - **A condition** (an event's when / until / rearm, if, while, wait until): sensor ▾, comparison
+    ▾ and a value that follows the sensor (the lever for hp_percent()), and under it the text
+    itself, which autocompletes sensors, functions, variables and the comparisons while typing.
+    and / or is a block of its terms, one a row. A catalogue block's inputs (use_model's model,
+    use_skill's key) and a call's inputs are rows of pickers above the same text.
+  - The picker changes the SAME text or number the field held: the IR and the Python view are as
+    before, and old projects load unchanged.
+  - **The map names** come from the backend at run time (`GET /flows/maps`: the local KB's maps,
+    or the sample's), never from a committed list.
+  - **At 390 px** (round 20's re-measure): every block of the ready-made box ends before Blockly's
+    zoom buttons and trashcan -- the runner's block a role a row, its words beside its picker; the
+    save point, an action's inputs, an event's fields and a function's name on rows of their own; a
+    long condition shows shortened in the middle on a phone (`hotbar_count(…) > 0`; its tooltip
+    and its picker show it whole). The Settings category is LAST in the toolbox, so opening it
+    never pushes Functions and Advanced away. In the Settings flyout and the search, a setting the
+    node's box replaces is greyed with the lint's words ("not used here: the drink event plays
+    it"). A setting dropped onto a second tab of the node is marked on the block itself (`⚠
+    already set in tab knife; one block per setting on a node`) and the message names both tabs;
+    while the blocks hold such a problem, Run and Check are held and say why (the project they
+    would send is the one from before it). The folded strip line fits ("IN A RUN: 3 events replace
+    the runner · +4"); "Global" is named only in a project that has a Global node. The Python sheet
+    keeps its file row and × in place while the code scrolls.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

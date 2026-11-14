@@ -185,8 +185,10 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
 
 /** `blocked`: why Run cannot be pressed now (a key clash, a broken settings file): the state then
  * never says "ready" (matpilot 2026-11-13 #6). `check` false: no checklist and no "Check the game"
- * (a node without the runner: the live block player checks its own start). */
-export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null, check: withCheck = true }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null; check?: boolean }) {
+ * (a node without the runner: the live block player checks its own start). `held` (round 21, the
+ * re-measure of round 20): why the CHECK cannot run either -- the blocks hold problems that keep a
+ * tab from becoming the project, so a check would read the project as it was before them. */
+export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null, held = null, check: withCheck = true }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null; held?: string | null; check?: boolean }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   const active = ACTIVE.includes(st?.state ?? "");
@@ -202,10 +204,10 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   const auto = useRef(false);
   const { send } = live;
   useEffect(() => {
-    if (!withCheck || auto.current || !cc.can || st?.check?.state === "checking") return;
+    if (!withCheck || auto.current || !cc.can || held !== null || st?.check?.state === "checking") return;
     auto.current = true;
     void send("check");
-  }, [withCheck, cc.can, st?.check?.state, send]);
+  }, [withCheck, cc.can, held, st?.check?.state, send]);
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
@@ -215,6 +217,12 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
       {line && (
         <p className="live-line" data-testid="live-run-line">
           {line}
+        </p>
+      )}
+      {/* round 21: the reason itself, not only in the button's tooltip (a phone has no hover) */}
+      {!active && blocked && (
+        <p className="notice-sub" data-testid="live-run-blocked">
+          Run is held: {blocked}.
         </p>
       )}
       {!active && !withCheck && (
@@ -254,7 +262,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
             </li>
           </ul>
           <p className="notice-sub live-check-bar">
-            <button type="button" className="button" disabled={!cc.can || live.busy} onClick={() => void send("check")} title={cc.why ?? "Read the game screen now: the runner's own start checks, read only (it presses nothing)"} data-testid="live-run-check">
+            <button type="button" className="button" disabled={!cc.can || live.busy || held !== null} onClick={() => void send("check")} title={held ?? cc.why ?? "Read the game screen now: the runner's own start checks, read only (it presses nothing)"} data-testid="live-run-check">
               {st?.check?.state === "checking" ? "Checking the game…" : "Check the game"}
             </button>{" "}
             {check && check.state !== "checking" && (

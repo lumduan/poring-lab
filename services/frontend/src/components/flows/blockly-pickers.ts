@@ -93,6 +93,13 @@ const EMPTY: PickerData = { project: null, node: null, tab: null, catalogue: nul
 let source: () => PickerData = () => EMPTY;
 let BL: B_ | null = null;
 
+let compact = false;
+/** A phone (BlockEditor, under 48rem): a long expression shows shortened closed (pickers.ts
+ * shortExpr), its whole text in its tooltip. */
+export function setCompact(on: boolean): void {
+  compact = on;
+}
+
 /** What the pickers read when they open (BlockEditor sets it for the tab it shows). */
 export function setPickerSource(fn: (() => PickerData) | null): void {
   source = fn ?? (() => EMPTY);
@@ -886,7 +893,9 @@ export function displayOf(f: BlocklyT.Field, plain: string): string {
   const v = String(f.getValue() ?? "");
   const flyout = Boolean(f.getSourceBlock()?.isInFlyout);
   const known = spec?.kind === "ref" && !flyout ? refKnown(spec, v, data(), fieldAt(f)) : null;
-  return closedText(spec, plain, v, known);
+  const out = closedText(spec, plain, v, known, compact);
+  if (spec?.kind === "expr") f.setTooltip(out !== plain ? v : null); // shortened: the whole text on hover
+  return out;
 }
 
 /** What a reference field's marks depend on: its value and whether it is known. */

@@ -1421,10 +1421,26 @@
     overscroll-behavior-x: contain;
     scrollbar-width: thin;
   }
+  /* round 21 (the re-measure of round 20): the code box took the file's full height, so the SHEET
+     scrolled and the file row and the × went with it. The code box takes the room that is left (at
+     least 12rem) and scrolls inside; the header and the file row stay put (sticky) */
   .studio-side .code-view,
   .studio-python-full .code-view {
-    flex: 1 0 auto;
+    flex: 1 1 0;
     min-height: 12rem;
+    overflow: auto;
+  }
+  .studio-side > .studio-panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+  }
+  .studio-side > .python-files {
+    position: sticky;
+    top: 2.75rem;
+    z-index: 2;
+    background: var(--surface);
   }
   .studio-drawer {
     height: 45vh;

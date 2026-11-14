@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { BLOCK_DEFS, categoryOf, DEF_BY_TYPE, settingDef, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone } from "./ir.ts";
-import { closedText, type PickSpec } from "./pickers.ts";
+import { INDENT, rowsOf } from "./layout.ts";
 import { BOX_PLAYS_THEM, GLOBAL_ID, nodeById, type Project, tab, xmasProject } from "./project.ts";
 import { matchEntries } from "./search.ts";
 import {
@@ -197,14 +197,18 @@ test("matpilot round 20 #4d: the tooltip names Global only when the project has 
   assert.match(settingTooltip(f("potion_below"), { note: { unused: "not used here: the drink event plays it" } }), /\nIn a Run of this project: not used here: the drink event plays it\.$/);
 });
 
-test("matpilot round 20 #5: one block per setting on a NODE -- a second one on another tab is refused, naming that tab", () => {
+test("matpilot round 20 #5: one block per setting on a NODE -- a second one on another tab is refused, naming both tabs", () => {
   const x = xmasProject();
   const scope = { node: NODE, tab: "loot" };
   const ws = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
   ws.blocks.blocks.push({ type: settingType(f("vt.D0_PX")), id: "again", x: 20, y: 9999, fields: { VALUE: 300 } });
   const r = tabFromWorkspace(x, scope, ws);
   assert.equal(r.ok, false);
-  if (!r.ok) assert.match(r.errors.join("; "), /setting D0_PX: the tab aim of xmas_dun02 sets it already: one block per setting on a node/);
+  // round 21 (the re-measure of round 20): the message names BOTH tabs; the copy carries its own rows' words
+  if (!r.ok) {
+    assert.match(r.errors.join("; "), /setting D0_PX: D0_PX is set on this tab \(loot\) and on the tab aim of xmas_dun02: one block per setting on a node/);
+    assert.deepEqual(r.issues.map((i) => [i.id, i.note]), [["again", "already set in tab aim; one block per setting on a node"]]);
+  }
   // the same block on its own tab is the ordinary edit
   const aim = JSON.parse(JSON.stringify(tabToWorkspace(x, { node: NODE, tab: "aim" }))) as Workspace;
   aim.blocks.blocks.find((b) => b.type === settingType(f("vt.D0_PX")))!.fields = { VALUE: 300 };
@@ -315,36 +319,14 @@ test("matpilot round 20 #2: the main tab's program shows whole at 390 too: its t
     for (const l of titleLines(t)) assert.ok(rowUnits([textUnits(l)]) <= SETTING_ROW_BUDGET, l);
   }
   // each row of the runner's block and the save point, with the ready-made box's values, nested in
-  // main (zelos' statement input pads 16 units; taken at 32): no row past the budget
-  const G = SETTING_GEOMETRY;
-  const values: Record<string, string> = { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok", EAT: "eat", MAP: "geffen", X: "119", Y: "40", BADGE: "● plays live", RUN: "ran 1 · 600 s · ok" };
-  const rowsOf = (type: string): number[] => {
-    const d = DEF_BY_TYPE[type] as unknown as Record<string, unknown>;
-    const out: number[] = [];
-    for (let m = 0; m <= 8; m++) {
-      const msg = d[`message${m}`] as string | undefined;
-      if (msg === undefined) continue;
-      const args = (d[`args${m}`] as { type: string; name?: string; text?: string }[] | undefined) ?? [];
-      let row: number[] = [];
-      for (const tok of msg.split(/(%[0-9]+)/).map((x) => x.trim()).filter(Boolean)) {
-        const a = /^%([0-9]+)$/.exec(tok) ? args[Number(tok.slice(1)) - 1] : null;
-        if (!a) row.push(textUnits(tok));
-        else if (a.type === "input_end_row") {
-          out.push(rowUnits(row));
-          row = [];
-        }
-        else if (a.type === "field_label") row.push(textUnits(values[a.name ?? ""] ?? a.text ?? ""));
-        // round 21: a picker shows what closedText says (a reference adds " ▾")
-        else if (a.type.startsWith("field_")) row.push(textUnits(closedText((a as { pick?: PickSpec }).pick, values[a.name ?? ""] ?? "", values[a.name ?? ""] ?? "")) + G.field);
-      }
-      if (row.length) out.push(rowUnits(row));
-    }
-    return out;
-  };
-  const hunt = rowsOf("pl_dungeon_hunt");
+  // main: no row past the budget. ➡️ Round 21: measured by layout.ts, the model of zelos' own rows
+  // (this test's own model took each message for a row; Blockly joined them: round 20's re-measure)
+  const values: Record<string, string> = { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok", EAT: "eat", MAP: "geffen", X: "119", Y: "40" };
+  const labels = { BADGE: "● plays live", RUN: "ran 1 · 600 s · ok" };
+  const hunt = rowsOf({ type: "pl_dungeon_hunt", fields: values }, labels, INDENT);
+  const save = rowsOf({ type: "pl_save_point", fields: values }, labels, INDENT);
   assert.ok(hunt.length >= 12, String(hunt.length));
-  if (process.env.PL_ROWS) console.log("hunt rows", hunt.map(Math.round), "save point rows", rowsOf("pl_save_point").map(Math.round));
-  for (const [i, w] of [...hunt, ...rowsOf("pl_save_point")].entries()) assert.ok(w + 32 <= SETTING_ROW_BUDGET, `row ${i}: ${Math.round(w)} + 32 units`);
+  for (const r of [...hunt, ...save]) assert.ok(r.w <= SETTING_ROW_BUDGET, `${Math.round(r.w)} units: ${r.what}`);
 });
 
 test("matpilot round 20 #5: the block search finds every knife setting by 'knife', a Garm setting by 'garm'", () => {
@@ -383,4 +365,17 @@ test("the runner page is gone: no runner view, no settings panel, no generated d
   const studio = readFileSync(new URL("../../components/flows/ProjectStudio.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(studio, /Inside the runner|onRunner|ConfigPanel/);
   assert.match(studio, /the old runner page's link \(\/flows\?runner=xmas_dun02/);
+});
+
+test("round 21 (the re-measure of round 20): Global is named only where the project has one; a flagless switch says what it turns on", () => {
+  const x = xmasProject(); // the one box has no Global node
+  assert.match(settingTabNote(tabNamed(x, NODE, "aim"), "map", false) ?? "", /\(a deleted one falls back to the default\)$/);
+  assert.doesNotMatch(settingTabNote(tabNamed(x, NODE, "aim"), "map", false) ?? "", /Global/);
+  assert.match(settingTabNote(tabNamed(x, NODE, "aim"), "map", true) ?? "", /these replace Global's here/);
+  const exit = f("weight_exit");
+  assert.match(settingTooltip(exit), /a switch with no flag of its own: weight_home \(go home when the bag is over\) is used only while it is on/);
+  assert.doesNotMatch(settingTooltip(exit), /a switch for the settings it needs/);
+  // the two that read as fragments once fly_below left the box name their subject
+  assert.equal(f("fly_rate").words, "Fly Wing when HP falls faster than");
+  assert.equal(f("fly_rate_below").words, "the Fly Wing's fall rule: only while HP is under");
 });

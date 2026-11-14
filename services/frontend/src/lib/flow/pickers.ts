@@ -42,7 +42,7 @@ import { type CmpOp, type Expr, type Lit, KEY, MAP_ID, NAME, type Stmt } from ".
 import { type Models, monstersOf } from "./models.ts";
 import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project } from "./project.ts";
 import { normalise } from "./search.ts";
-import { SETTINGS, tidy } from "./settings.ts";
+import { SETTINGS, textUnits, tidy } from "./settings.ts";
 
 // --- what a picker field is (blockdefs.ts puts one on each field it converts) ---------------------
 /** What a reference picker lists. */
@@ -217,12 +217,34 @@ export function optNumOf(text: string): number | null {
   return /^[0-9]{1,6}$/.test(t) ? Number(t) : NaN;
 }
 
+/** Round 21 (the re-measure of round 20): on a PHONE an expression wider than this (workspace
+ * units: the 300-unit row budget less an event's sides, the field's box and a reporter's rounded
+ * ends, layout.ts) shows shortened in the middle, its head and tail kept ("hotbar_count(…) > 0");
+ * its whole text is the field's tooltip, the picker's and the Python view's. On a wider screen it
+ * shows whole. */
+export const EXPR_SHOW_UNITS = 232;
+
+/** An expression's text as a phone shows it closed: whole when it fits `max` units, else its head
+ * up to the first "(" and as much of its tail as fits, joined by "…". */
+export function shortExpr(text: string, max = EXPR_SHOW_UNITS): string {
+  if (textUnits(text) <= max) return text;
+  const open = text.indexOf("(");
+  for (let head = open > 0 && open < 24 ? open + 1 : Math.min(12, text.length); head > 0; head--) {
+    for (let tail = text.length - head - 1; tail >= 1; tail--) {
+      const cand = `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
+      if (textUnits(cand) <= max) return cand;
+    }
+  }
+  return "…";
+}
+
 /** What a picker field SHOWS on its block, closed (blockly-pickers.ts; settings.test.ts measures the
  * runner's block with it): a reference its value and ▾ (⚠ before it when it is not one of what
  * exists: `known` false), an empty optional one its word ("none"); an optional number its empty
  * word, or ⚠ after a text that is no whole number; any other picker its value as the plain field
  * showed it. `text`: the value as Blockly displays it (truncated, spaces kept). */
-export function closedText(spec: PickSpec | undefined, text: string, value: string, known: boolean | null = null): string {
+export function closedText(spec: PickSpec | undefined, text: string, value: string, known: boolean | null = null, compact = false): string {
+  if (spec?.kind === "expr") return compact ? shortExpr(text) : text;
   if (spec?.kind === "optnum") return value === "" ? spec.empty : Number.isNaN(optNumOf(value)) ? `${text} ⚠` : text;
   if (spec?.kind !== "ref") return text;
   return `${value === "" ? (spec.optional ?? "…") : text}${known === false ? " ⚠" : ""} ▾`;

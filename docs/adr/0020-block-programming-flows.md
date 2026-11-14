@@ -24,6 +24,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
 > ➡️ **2026-11-14 ~15:2x (Amendment J, Batt: "there should be no runner [page] ... make them ALL
 > blocks"):** the runner view and its own Run are GONE; every runner setting is a block of the
 > project (the map node's over Global's over the default), read by the project Run and the check.
+> ➡️ **2026-11-14 ~19:4x (Amendment K, Batt: "fields that choose a value ... should be DROPDOWNS
+> ... a visual UI"):** a value that is not a NAME is a PICKER (a list of what exists, a visual
+> number control, a condition's parts); free text only where a name is defined. The IR and the
+> Python view are unchanged.
 
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
@@ -2716,3 +2720,42 @@ live-blocks.md section 12 (5b, the loop itself as playable blocks, is planned th
   and its GET / PUT /flows/config (the file was empty, `{"v": 2, "global": {}, "maps": {}}`, so
   nothing was imported), the generated runners/*.gen.ts and Before Run's settings panel.
   scripts/runner_flow_export.py stays for its outline (`show`): stage 5b's map of the loop.
+
+## Amendment K (2026-11-14 ~19:4x, Batt asked): a value that is not a name is a PICKER
+
+**Batt (2026-11-14 ~19:4x, Thai, translated; [live-blocks.md](../planning/live-blocks.md) section
+12.5):** "Fields that choose a value, like use_model or 'this node when', should be DROPDOWNS with
+the values to choose from, so you know what there is. Typing should work like a search, guessing the
+word, and help with AUTO-COMPLETION. Check matpilot: where a value must be entered, I made it a
+visual UI, e.g. the turn angle, more/less speed. Our project should do that too, for values that are
+not naming, such as functions or variables." This amendment ADDS to section 7 (the editor's views)
+and Amendments B-J; nothing above is rewritten.
+
+- **The rule.** In the block editor, FREE TEXT stays only where a name is DEFINED: a function's
+  name and its inputs, a variable's name, an event's name, a tab's name. Every other field is a
+  picker, chosen by what the value means:
+  - a REFERENCE to something that exists is a searchable list of what exists at edit time (typing
+    filters and ranks it): a function to call, a runner role, the function an event escalates to, a
+    model, a map, a stop reason, an exit's node and entry, a window, a login server, a variable to
+    set;
+  - a NUMBER is a visual control: a stepper with a slider over its range and step, a lever bar for
+    a percent, two steppers and the game picture for a point, two steppers for a map cell;
+  - a CONDITION is a structured picker (sensor, comparison, a value that follows the sensor's unit)
+    with a typed fallback that autocompletes; and / or is a block of its terms.
+- **The IR and the Python view do not change.** A picker edits the same text or number the field
+  held (the fields are a FieldNumber and a FieldTextInput underneath: `field_pl_num`,
+  `field_pl_text`), so a project's JSON, its Python and every round trip are byte for byte as
+  before. A value the list does not have -- an unknown function, a model not in models.yaml -- is
+  KEPT and shown marked; the linter names it, as before. Nothing is silently replaced or clamped.
+- **Where the lists come from:** the project as converted last and the tab's own blocks (functions,
+  events, variables, stop reasons, nodes, entries), the catalogue (models, sensors, windows,
+  servers, a block's parameters), and the map names from a new read-only route, `GET /flows/maps`:
+  the backend's world at run time (the local KB, client- and GPL-derived, never committed; or the
+  committed synthetic sample), each map with whether a Kafra stands there.
+- **At 390 px** every block ends before Blockly's controls (the re-measure of round 20): the
+  editor's blocks are laid out on rows inside the setting blocks' 300-unit budget, measured by a
+  model of zelos' own row rules (`lib/flow/layout.ts`); on a phone a long expression shows
+  shortened in the middle, whole in its tooltip and its picker.
+- **Ported:** matpilot's picture-field pattern and DOM helpers (lumduan/matpilot at 4022c87, MIT,
+  THIRD_PARTY.md), code only; no picture was copied; no dependency was added; the DOM is built
+  element by element (the console's CSP).

@@ -5,12 +5,20 @@
 import type * as BlocklyT from "blockly/core";
 
 import { registerPickers } from "./blockly-pickers.ts";
-import { BLOCK_DEFS } from "../../lib/flow/blockdefs.ts";
+import { BLOCK_DEFS, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
-import { SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
+import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
 
 let registered = false;
+/** Round 21 (the re-measure of round 20): the words a setting block in the FLYOUT or the search
+ * shows when the open node's box replaces it (box.ts boxReplaced: the lint's own words); null: live. */
+let flyoutNote: (name: string) => string | null = () => null;
+export function setFlyoutNotes(fn: ((name: string) => string | null) | null): void {
+  flyoutNote = fn ?? (() => null);
+}
+/** The style a setting block takes while it is not used (theme.ts; BlockEditor UNUSED_STYLE). */
+const UNUSED_STYLE = "pl_unused_blocks";
 let huntLists: string | null = null; // the hunt lists the pl_hunt type was last defined with
 
 /** The hunt lists the pl_hunt type is defined with now (null: not defined yet). */
@@ -70,10 +78,27 @@ export function register(B: typeof BlocklyT): void {
   // used"), the unit is singular at 1 ("1 cell"). Labels are decorations: no event, no undo step.
   B.Extensions.register("pl_setting", function (this: BlocklyT.Block & { plSync?: () => boolean }) {
     this.plSync = () => syncSetting(B, this);
+    // round 21: in the flyout and the search, a setting the open node's box replaces says so on its
+    // rows (set before the flyout measures it) and is greyed once drawn
+    const f = this.workspace.isFlyout ? settingOfType(this.type) : undefined;
+    const note = f ? flyoutNote(f.name) : null;
+    if (note) {
+      noteLines(note).forEach((l, i) => this.getField(`NOTE${i}`)?.setValue(l));
+      setTimeout(() => {
+        const svg = this as unknown as BlocklyT.BlockSvg;
+        if (svg.isDisposed() || !svg.rendered) return;
+        svg.setStyle(UNUSED_STYLE);
+        svg.getSvgRoot()?.classList.add("pl-setting-unused");
+      }, 0);
+    }
     this.plSync();
     this.setOnChange(function (this: BlocklyT.Block & { plSync?: () => boolean }, e: BlocklyT.Events.Abstract) {
       if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) this.plSync?.();
     });
+  });
+  // round 21: a badge row and a run-line row show only while they say something
+  B.Extensions.register("pl_label_rows", function (this: BlocklyT.Block) {
+    syncLabelRows(B, this);
   });
   B.common.defineBlocksWithJsonArray(BLOCK_DEFS as unknown as object[]);
   // The IR has no "disabled" statement: a block the context menu disabled would still be converted
@@ -117,6 +142,30 @@ export function syncSetting(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
   const svg = b as BlocklyT.BlockSvg;
   if (svg.rendered) void svg.queueRender();
   return rows;
+}
+
+/** PURE of the page (Blockly only): the badge row and the run-line row (blockdefs.ts LABEL_ROWS)
+ * shown only while their label says something. True: a row was shown or hidden (the block's height
+ * changed). A decoration: no event, no undo step. */
+export function syncLabelRows(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
+  let changed = false;
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  try {
+    for (const [row, field] of Object.entries(LABEL_ROWS)) {
+      const input = b.getInput(row);
+      const on = String(b.getField(field)?.getValue() ?? "") !== "";
+      if (input && input.isVisible() !== on) {
+        input.setVisible(on);
+        changed = true;
+      }
+    }
+  } finally {
+    if (was) B.Events.enable();
+  }
+  const svg = b as BlocklyT.BlockSvg;
+  if (changed && svg.rendered) void svg.queueRender();
+  return changed;
 }
 
 /** MatPilot's light and dark themes (lib/flow/theme.ts); the block colours are the same in both. */

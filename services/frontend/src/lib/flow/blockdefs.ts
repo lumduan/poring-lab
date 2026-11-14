@@ -144,6 +144,11 @@ export const RUNNER_ROLES = [
   { param: "eat", field: "EAT", words: "eat", fn: "eat", optional: true },
 ] as const;
 
+const endRow = (name: string): ArgDef => ({ type: "input_end_row", name });
+/** Each runner role's words on its row, beside its picker (round 21: a role a row). */
+const ROLE_WORDS: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "Knife on:", KNIFE_BACK: "Knife off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
+/** Each role's field default, as before round 21 (home's: the Butterfly Wing's function). */
+const ROLE_DEFAULT: Record<string, string> = { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "butterfly_wing", RESPAWN: "", RESPAWN_OK: "", EAT: "" };
 /** A runner role's slot: the functions of the node and Global, its usual one first. `value`: the
  * field's default as before round 21 (home's is the Butterfly Wing's function; the other optional
  * roles start empty). */
@@ -152,14 +157,14 @@ function role(field: string, value: string): ArgDef {
   return ref(field, "role", `the function for ${r.words}`, value, r.optional ? { role: r.param, optional: "none" } : { role: r.param });
 }
 /** An exit's arrival: a map node of the project, and one of its entries. */
-const arrive = (): ArgDef[] => [ref("TO_BLOCK", "node", "the map node she arrives on"), ref("TO_ENTRY", "entry", "where she arrives on it")];
+const arrive = (): ArgDef[] => [ref("TO_BLOCK", "node", "the map node she arrives on"), endRow("ROW_TO"), ref("TO_ENTRY", "entry", "where she arrives on it")];
 
 export const BLOCK_DEFS: BlockDef[] = [
   // --- MW2's palette: one block per skill (section 3) ---
   stmt({
     type: "pl_walk_to",
-    message0: "walk to %1 x %2 y %3 %4 %5",
-    args0: [ref("MAP", "map", "the map"), ...cell("the cell to walk to"), badge, run],
+    message0: "walk to %1 %2 x %3 y %4 %5 %6", // round 21: the map, then the cell (the 390 budget)
+    args0: [ref("MAP", "map", "the map"), endRow("ROW_MAP"), ...cell("the cell to walk to"), badge, run],
     inputsInline: true,
     tooltip: "walk_to(cell): walk to a cell of this map",
   }),
@@ -192,44 +197,44 @@ export const BLOCK_DEFS: BlockDef[] = [
   // as fields; a parameter the field cannot hold exactly keeps the generic block (SENTENCE below)
   stmt({
     type: "pl_set_save_point",
-    message0: "set the save point at the Kafra %1 %2 %3",
-    args0: [text("NPC"), badge, run],
+    message0: "set the save point %1 at the Kafra %2 %3 %4", // round 21: rows inside the 390 budget
+    args0: [endRow("ROW_WORDS"), text("NPC"), badge, run],
     tooltip: "set_save_point(npc): save the respawn point with this Kafra (an L3 key)",
   }),
   stmt({
     type: "pl_kafra_teleport",
-    message0: "teleport with the Kafra %1 to %2 %3 %4",
-    args0: [text("NPC"), ref("TO", "map", "the map she arrives in"), badge, run],
+    message0: "teleport with the Kafra %1 %2 to %3 %4 %5",
+    args0: [text("NPC"), endRow("ROW_NPC"), ref("TO", "map", "the map she arrives in"), badge, run],
     tooltip: "kafra_teleport(npc, to=map): pay the Kafra and arrive in that map",
   }),
   stmt({
     type: "pl_kafra_store",
-    message0: "store %1 at the Kafra %2, or all but %3 %4 %5",
-    args0: [text("ITEMS"), text("NPC"), text("KEEP"), badge, run],
+    message0: "store %1 %2 at the Kafra %3, %4 or all but %5 %6 %7",
+    args0: [text("ITEMS"), endRow("ROW_ITEMS"), text("NPC"), endRow("ROW_NPC"), text("KEEP"), badge, run],
     tooltip: "kafra_store(npc, items=..., all_except=...): item ids or variables, comma separated; leave one of the two empty",
   }),
   stmt({
     type: "pl_kafra_withdraw",
-    message0: "take %1 from the Kafra %2 %3 %4",
-    args0: [text("ITEMS"), text("NPC"), badge, run],
+    message0: "take %1 %2 from the Kafra %3 %4 %5",
+    args0: [text("ITEMS"), endRow("ROW_ITEMS"), text("NPC"), badge, run],
     tooltip: "kafra_withdraw(npc, items=...): item ids or variables, comma separated",
   }),
   stmt({
     type: "pl_rent_cart",
-    message0: "rent a cart from the Kafra %1 %2 %3",
-    args0: [text("NPC"), badge, run],
+    message0: "rent a cart %1 from the Kafra %2 %3 %4",
+    args0: [endRow("ROW_WORDS"), text("NPC"), badge, run],
     tooltip: "rent_cart(npc)",
   }),
   stmt({
     type: "pl_buy",
-    message0: "buy %1 from %2 %3 %4",
-    args0: [text("ITEMS"), text("NPC"), badge, run],
+    message0: "buy %1 %2 from %3 %4 %5",
+    args0: [text("ITEMS"), endRow("ROW_ITEMS"), text("NPC"), badge, run],
     tooltip: "buy(npc, items=...): item ids or variables, comma separated",
   }),
   stmt({
     type: "pl_sell",
-    message0: "sell all but %1 to %2 %3 %4",
-    args0: [text("KEEP"), text("NPC"), badge, run],
+    message0: "sell all but %1 %2 to %3 %4 %5",
+    args0: [text("KEEP"), endRow("ROW_KEEP"), text("NPC"), badge, run],
     tooltip: "sell(npc, keep=...): sells every item NOT listed (irreversible); item ids or variables, comma separated",
   }),
   stmt({
@@ -241,15 +246,17 @@ export const BLOCK_DEFS: BlockDef[] = [
   // --- every other catalogue block, lossless: its parameters by name ---
   stmt({
     type: "pl_action",
-    message0: "%1 ( %2 ) %3 %4",
-    args0: [label("BLOCK"), expr("ARGS", "args", "", "its inputs"), badge, run],
+    // round 21: its name, then its inputs on a row of their own (use_model ( model="xmas02" ) ran
+    // past the controls at 390)
+    message0: "%1 %2 ( %3 ) %4 %5",
+    args0: [label("BLOCK"), endRow("ROW_BLOCK"), expr("ARGS", "args", "", "its inputs"), badge, run],
     tooltip: "A catalogue block. Parameters by name, e.g. within=12 or npc=npc(\"n_k1\")",
   }),
   // --- control ---
   stmt({
     type: "pl_if",
-    message0: "if %1 %2",
-    args0: [{ type: "input_value", name: "COND" }, run],
+    message0: "if %1 %2 %3", // round 21: the condition on a row of its own (the 390 budget)
+    args0: [endRow("ROW_IF"), { type: "input_value", name: "COND" }, run],
     message1: "then %1",
     args1: [{ type: "input_statement", name: "THEN" }],
     message2: "else %1",
@@ -257,8 +264,8 @@ export const BLOCK_DEFS: BlockDef[] = [
   }),
   stmt({
     type: "pl_while",
-    message0: "while %1 %2",
-    args0: [{ type: "input_value", name: "COND" }, run],
+    message0: "while %1 %2 %3", // round 21: the condition on a row of its own (the 390 budget)
+    args0: [endRow("ROW_WHILE"), { type: "input_value", name: "COND" }, run],
     message1: "do %1",
     args1: [{ type: "input_statement", name: "BODY" }],
   }),
@@ -272,15 +279,17 @@ export const BLOCK_DEFS: BlockDef[] = [
   }),
   stmt({
     type: "pl_wait_until",
-    message0: "wait until %1 at most %2 s %3",
-    args0: [{ type: "input_value", name: "COND" }, secs("TIMEOUT", 10, "seconds to wait at most", 120, 1, [5, 10, 30, 60]), run],
+    message0: "wait until %1 %2 %3 at most %4 s %5", // round 21: the condition on a row of its own
+    args0: [endRow("ROW_UNTIL"), { type: "input_value", name: "COND" }, endRow("ROW_COND"), secs("TIMEOUT", 10, "seconds to wait at most", 120, 1, [5, 10, 30, 60]), run],
+    inputsInline: true,
   }),
   stmt({
     type: "pl_set",
     message0: "set %1 to %2",
     args0: [ref("VAR", "variable", "the variable to set", "x"), { type: "input_value", name: "VALUE" }],
   }),
-  stmt({ type: "pl_call", message0: "call %1 ( %2 )", args0: [ref("PROC", "function", "the function to call", "my_function"), expr("ARGS", "callargs", "", "its inputs")], inputsInline: true,
+  // round 21: the function, then its inputs on a row of their own (the width budget at 390)
+  stmt({ type: "pl_call", message0: "call %1 %2 ( %3 ) %4", args0: [ref("PROC", "function", "the function to call", "my_function"), endRow("ROW_PROC"), expr("ARGS", "callargs", "", "its inputs"), endRow("ROW_ARGS")], inputsInline: true,
     tooltip: "call a function: this node's own, or Global's. Its inputs as in Python: F8, times=2" }),
   stmt({ type: "pl_return", message0: "return %1", args0: [{ type: "input_value", name: "VALUE" }],
     tooltip: "end the function here; with a value, the call gives it back (a function used as a value)" }),
@@ -290,8 +299,8 @@ export const BLOCK_DEFS: BlockDef[] = [
   // simulated (the bot's real login is ro_agent's Python); the account is a CREDENTIAL NAME, never a secret
   stmt({
     type: "pl_login",
-    message0: "log in to %1 as %2 %3 %4",
-    args0: [ref("SERVER", "server", "the server", "lab-rathena"), { type: "field_dropdown", name: "CREDENTIAL", options: opts(CREDENTIALS) }, badge, run],
+    message0: "log in to %1 %2 as %3 %4 %5", // round 21: rows inside the 390 budget
+    args0: [ref("SERVER", "server", "the server", "lab-rathena"), endRow("ROW_SERVER"), { type: "field_dropdown", name: "CREDENTIAL", options: opts(CREDENTIALS) }, badge, run],
     tooltip: "login(server, credential): the server's id (the Settings page) and a credential by NAME (as n8n's): the password is never in a block",
   }),
   stmt({
@@ -305,14 +314,11 @@ export const BLOCK_DEFS: BlockDef[] = [
   // the save point, as a sentence (matpilot 2026-11-13 #12: it showed as raw Python)
   stmt({
     type: "pl_save_point",
-    // matpilot round 20 #2: two rows, so the main tab's first block shows whole at 390 px
-    message0: "the save point is",
-    message1: "on %1",
-    args1: [ref("MAP", "save_map", "the save point's map (a Kafra's town)", "geffen")],
-    message2: "x %1 y %2",
-    args2: cell("the save point's cell"),
-    message3: "%1",
-    args3: [run],
+    // round 21 (the re-measure of round 20): with its inputs inline, round 20's four messages were
+    // ONE row ("the save point is on geffen x 119 y 40", 404 px at 390): each row ends with an
+    // end-row input (zelos breaks a row only there, layout.ts)
+    message0: "the save point is %1 on %2 %3 x %4 y %5 %6 %7",
+    args0: [endRow("ROW_SAVE"), ref("MAP", "save_map", "the save point's map (a Kafra's town)", "geffen"), endRow("ROW_MAP"), ...cell("the save point's cell"), endRow("ROW_CELL"), run],
     inputsInline: true,
     tooltip: "assert_save_point(cell): YOU say where the save point is (a Butterfly Wing and a death land there); no input, and it stays a warning at approval",
   }),
@@ -331,26 +337,19 @@ export const BLOCK_DEFS: BlockDef[] = [
   }),
   stmt({
     type: "pl_dungeon_hunt",
-    // matpilot round 20 #2: one role a row (two where its words are long), so the main tab's
-    // program shows whole at 390 px (main's block ran 397 px wide); the fields are the same
-    message0: "hunt with the runner",
-    message1: "(dungeon_hunt.py) %1 %2 %3 %4",
-    args1: [{ type: "input_end_row", name: "ROW_NAME" }, badge, { type: "input_end_row", name: "ROW_BADGE" }, run],
-    // round 21: a role is a picker (its ▾ widened "Fly Wing: call fly_wing ▾" to 309 units and
-    // "Knife on: call knife_on ▾" to 305, over the 300 budget): "Fly Wing:" and "Knife on:" on rows
-    // of their own, as "Knife back:"
-    message2: "heal: call %1 %2 Fly Wing: %3 call %4",
-    args2: [role("HEAL", "heal"), { type: "input_end_row", name: "ROW_HEAL" }, { type: "input_end_row", name: "ROW_FLY" }, role("FLY", "fly_wing")],
-    message3: "Knife on: %1 call %2 %3 Knife back: %4 call %5",
-    args3: [{ type: "input_end_row", name: "ROW_KNIFE_ON" }, role("KNIFE_ON", "knife_on"), { type: "input_end_row", name: "ROW_KNIFE" }, { type: "input_end_row", name: "ROW_KNIFE_BACK" }, role("KNIFE_BACK", "knife_back")],
-    message4: "home (Butterfly Wing): %1 call %2",
-    args4: [{ type: "input_end_row", name: "ROW_HOME" }, role("HOME", "butterfly_wing")],
-    message5: "after a death: %1 call %2",
-    args5: [{ type: "input_end_row", name: "ROW_RESPAWN" }, role("RESPAWN", "")],
-    message6: "then confirm: %1 call %2",
-    args6: [{ type: "input_end_row", name: "ROW_RESPAWN_OK" }, role("RESPAWN_OK", "")],
-    message7: "eat (from the hotbar): %1 call %2",
-    args7: [{ type: "input_end_row", name: "ROW_EAT" }, role("EAT", "")],
+    // round 21 (the re-measure of round 20): its rows were OFF BY ONE -- a message's leftover
+    // fields shared the next message's row ("call knife_back home (Butterfly Wing):" read as one
+    // step). Now ONE role a row, its words with its picker, every row ended by an end-row input
+    message0: `hunt with the runner %1 (dungeon_hunt.py) %2 %3 %4 ${RUNNER_ROLES.map((r, i) => `${ROLE_WORDS[r.field]} %${5 + 2 * i} %${6 + 2 * i}`).join(" ")} %${5 + 2 * RUNNER_ROLES.length}`,
+    args0: [
+      endRow("ROW_TITLE"),
+      endRow("ROW_NAME"),
+      badge,
+      endRow("ROW_BADGE"),
+      ...RUNNER_ROLES.flatMap((r) => [role(r.field, ROLE_DEFAULT[r.field]), endRow(`ROW_${r.field}`)]),
+      run,
+    ],
+    inputsInline: true,
     tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points, the respawn tab's setting blocks). eat: the function your events call to eat a food item from the hotbar, e.g. eat(key) pressing its input, called as eat(\"F6\") (empty: nothing is eaten in the hunt); hotbar_count(key=\"F6\") reads that slot's count. Its other settings: the setting blocks in this node's tabs (the toolbox's Settings)",
   }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [ref("REASON", "stop", "why it stops (the run's end words)", "done"), run] }),
@@ -359,26 +358,26 @@ export const BLOCK_DEFS: BlockDef[] = [
   // --- exits (13.1): they leave the map block ---
   stmt({
     type: "pl_exit_walk",
-    message0: "walk exit at %1 x %2 y %3, arrive on %4 at %5 %6",
-    args0: [ref("MAP", "map", "the map of the warp"), ...cell("the warp's cell"), ...arrive(), run],
+    message0: "walk exit at %1 %2 x %3 y %4 %5 arrive on %6 %7 at %8 %9", // round 21: rows (390)
+    args0: [ref("MAP", "map", "the map of the warp"), endRow("ROW_MAP"), ...cell("the warp's cell"), endRow("ROW_CELL"), ...arrive(), run],
     tooltip: "walk_exit: walk onto an L3 warp of this map; arrive at <block>.<entry>",
   }),
   stmt({
     type: "pl_exit_npc",
-    message0: "npc warp: talk to %1 choose %2, arrive on %3 at %4 %5",
-    args0: [text("NPC"), text("OPTIONS"), ...arrive(), run],
+    message0: "npc warp: %1 talk to %2 %3 choose %4 %5 arrive on %6 %7 at %8 %9", // round 21: rows (390)
+    args0: [endRow("ROW_KIND"), text("NPC"), endRow("ROW_NPC"), text("OPTIONS"), endRow("ROW_OPTIONS"), ...arrive(), run],
     tooltip: "npc_warp: talk to the NPC, choose each option key (comma separated) in order",
   }),
   stmt({
     type: "pl_exit_item",
-    message0: "item warp: use %1, arrive on %2 at %3 %4",
-    args0: [text("ITEM"), ...arrive(), run],
+    message0: "item warp: %1 use %2 %3 arrive on %4 %5 at %6 %7", // round 21: rows (390)
+    args0: [endRow("ROW_KIND"), text("ITEM"), endRow("ROW_ITEM"), ...arrive(), run],
     tooltip: "item_warp: e.g. a Butterfly Wing, to the SAVE POINT (never 'the previous map')",
   }),
   stmt({
     type: "pl_exit_item_fn",
-    message0: "item warp: call %1, arrive on %2 at %3 %4",
-    args0: [ref("FN", "function", "the function that presses the wing's key", "butterfly_wing"), ...arrive(), run],
+    message0: "item warp: %1 call %2 %3 arrive on %4 %5 at %6 %7", // round 21: rows (390)
+    args0: [endRow("ROW_KIND"), ref("FN", "function", "the function that presses the wing's key", "butterfly_wing"), endRow("ROW_FN"), ...arrive(), run],
     tooltip: "item_warp by a function: call the function that presses the Butterfly Wing's key; she lands on the SAVE POINT",
   }),
   stmt({
@@ -457,10 +456,11 @@ export const BLOCK_DEFS: BlockDef[] = [
   },
   {
     type: "pl_def",
-    message0: "function %1 ( %2 )",
-    // a function's NAME and its inputs are names it DEFINES: free text (on the monsters tab the name
-    // suggests attack_<class> for each monster of the node's model)
-    args0: [{ type: PICK_TEXT, name: "NAME", text: "my_function", pick: { kind: "name", title: "the function's name (on the monsters tab: a monster's recipe)" } }, text("PARAMS", "")],
+    // round 21: "function", its name and its inputs on three rows (attack_cookie_xmas ( t,
+    // priority=1 ) was past the controls at 390). A function's NAME and its inputs are names it DEFINES: free text (on the
+    // monsters tab the name suggests attack_<class> for each monster of the node's model)
+    message0: "function %1 %2 %3 ( %4 ) %5",
+    args0: [endRow("ROW_WORD"), { type: PICK_TEXT, name: "NAME", text: "my_function", pick: { kind: "name", title: "the function's name (on the monsters tab: a monster's recipe)" } }, endRow("ROW_NAME"), text("PARAMS", ""), endRow("ROW_PARAMS")],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
     style: st("pl_def"),
@@ -482,26 +482,30 @@ export const BLOCK_DEFS: BlockDef[] = [
     // renderer every input starts its own row, so the block is as wide as its widest row, not as
     // all of them in one line: the survival events were 1022-1102 px wide on a 1008 px canvas)
     type: "pl_event",
-    message0: "%1 when %2",
-    args0: [label("SCOPE"), { type: "input_value", name: "WHEN" }],
-    message1: "event %1 class %2 rank %3",
-    args1: [text("NAME", "my_event"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) },
+    // round 21 (the re-measure of round 20: at 390 fly_away's rank, "resume ▾" and "s after each
+    // run · at most" sat under Blockly's controls): one or two fields a row, every row inside the
+    // 300-unit budget (layout.test.ts); its condition alone on its row
+    message0: "%1 when %2 %3",
+    args0: [label("SCOPE"), endRow("ROW_WHEN"), { type: "input_value", name: "WHEN" }],
+    message1: "event %1 %2 class %3 %4 rank %5",
+    args1: [text("NAME", "my_event"), endRow("ROW_EVENT"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) }, endRow("ROW_CLASS"),
       optnum("RANK", 1, MAX_RANK, "auto", "the table order (13.6.3)", "its rank inside its class (1 runs first)")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
-    message2: "mode %1 then %2",
-    args2: [{ type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) }, { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
-    message3: "until %1",
-    args3: [{ type: "input_value", name: "UNTIL" }],
-    message4: "rearm %1",
-    args4: [{ type: "input_value", name: "REARM" }],
-    message5: "pause %1 s after each run · at most %2 a run",
-    args5: [secs("COOLDOWN", 0, "the pause after each run", 30, 0.1, [0, 0.5, 1, 3, 10], { min: 0, max: 3600 }), optnum("MAX_RUN", 1, 100, "—", "no limit", "at most this many runs in a run of the flow")],
+    message2: "mode %1 %2 then %3",
+    args2: [{ type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) }, endRow("ROW_MODE"), { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
+    message3: "until %1 %2",
+    args3: [endRow("ROW_UNTIL"), { type: "input_value", name: "UNTIL" }],
+    message4: "rearm %1 %2",
+    args4: [endRow("ROW_REARM"), { type: "input_value", name: "REARM" }],
+    message5: "pause %1 s after each run %2 at most %3 a run",
+    args5: [secs("COOLDOWN", 0, "the pause after each run", 30, 0.1, [0, 0.5, 1, 3, 10], { min: 0, max: 3600 }), endRow("ROW_PAUSE"), optnum("MAX_RUN", 1, 100, "—", "no limit", "at most this many runs in a run of the flow")],
     // matpilot round 18 #3: the runaway guard and the insert failure limit are the ENGINE's defaults
     // when nobody set them (poring_flow's Trigger: 10 and 3; the Python view omits them then), so
     // their fields stay EMPTY for a default and the row names the default; a number = one a person set
-    message6: `at most %1 a minute · %2 per 10 min (default ${DEFAULT_MAX_10})`,
-    args6: [optnum("MAX_MIN", 1, 60, "—", "no limit", "at most this many runs a minute"), optnum("MAX_10", 1, 100, "default", `the default (${DEFAULT_MAX_10})`, "the runaway guard: runs per 10 minutes")],
-    message7: `%1 failed inserts (default ${DEFAULT_FAILS}): escalate to %2`,
-    args7: [optnum("FAILS", 1, 10, "default", `the default (${DEFAULT_FAILS})`, "an insert's failures before it escalates"), ref("ESCALATE", "escalate", "the function it escalates to", "", { optional: "none" })],
+    // (round 21: an empty field says "default 10" itself, so the row stays short)
+    message6: "at most %1 a minute %2 in 10 min: %3",
+    args6: [optnum("MAX_MIN", 1, 60, "—", "no limit", "at most this many runs a minute"), endRow("ROW_MINUTE"), optnum("MAX_10", 1, 100, `default ${DEFAULT_MAX_10}`, `the default (${DEFAULT_MAX_10})`, "the runaway guard: runs per 10 minutes")],
+    message7: "insert fails: %1 %2 then escalate to %3",
+    args7: [optnum("FAILS", 1, 10, `default ${DEFAULT_FAILS}`, `the default (${DEFAULT_FAILS})`, "an insert's failures before it escalates"), endRow("ROW_FAILS"), ref("ESCALATE", "escalate", "the function it escalates to", "", { optional: "none" })],
     message8: "do %1",
     args8: [{ type: "input_statement", name: "DO" }],
     inputsInline: false,
@@ -529,6 +533,40 @@ export const BLOCK_DEFS: BlockDef[] = [
     tooltip: "DISABLE: the global event does not run here (never a safety-critical one)",
   },
 ];
+
+/** Round 21 (the re-measure of round 20): the input names of the rows the editor hides while their
+ * label is empty (blockly-register.ts pl_label_rows: the badge before the catalogue loads, the run
+ * line until a simulate run). */
+export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN" };
+
+/** Round 21 (the re-measure of round 20: "use_model ( model="xmas02" ) ● plays live" ran to x 402
+ * at 390): a statement block's verification badge and its last-run line each on a row of its own
+ * (ROW_BADGE, ROW_RUN after an end-row ROW_LEAD), shown only while they say something. A PASS over
+ * the definitions, so a block added later gets it too; the fields, their names and the IR are as
+ * before. A value block (the badge of an action used as a value) keeps its one row. */
+export function ownLabelRows(d: BlockDef): BlockDef {
+  if (d.output !== undefined) return d;
+  const args = d.args0 ?? [];
+  const at = (name: string) => args.findIndex((a) => "name" in a && a.name === name);
+  if (at("BADGE") < 0 && at("RUN") < 0) return d;
+  const toks: (string | ArgDef)[] = d.message0.split(/(%[0-9]+)/).filter((t) => t.trim() !== "").map((t) => {
+    const m = /^%([0-9]+)$/.exec(t.trim());
+    return m ? args[Number(m[1]) - 1] : t.trim();
+  });
+  const isEnd = (x: string | ArgDef | undefined) => typeof x === "object" && x.type === "input_end_row";
+  const out: (string | ArgDef)[] = [];
+  let lead = 0;
+  toks.forEach((x, i) => {
+    const which = typeof x === "object" && "name" in x && (x.name === "BADGE" || x.name === "RUN") ? x.name : null;
+    if (!which) return void out.push(x);
+    if (out.length && !isEnd(out[out.length - 1])) out.push({ type: "input_end_row", name: lead++ ? `ROW_LEAD${lead}` : "ROW_LEAD" });
+    out.push(x);
+    if (!isEnd(toks[i + 1])) out.push({ type: "input_end_row", name: `ROW_${which}` });
+  });
+  const args0: ArgDef[] = [];
+  const message0 = out.map((x) => (typeof x === "string" ? x : `%${args0.push(x)}`)).join(" ");
+  return { ...d, message0, args0, inputsInline: d.inputsInline ?? true, extensions: [...(d.extensions ?? []), "pl_label_rows"] };
+}
 
 /** THE SETTING BLOCKS (live-blocks.md 12; Batt 2026-11-14 ~15:2x: "make them ALL blocks"): one
  * block type per setting of the runner's hunt core (settings.ts), a top-level block like a
@@ -603,6 +641,7 @@ export function titleLines(title: string): [string, string] {
   const lines = cut > 0 ? [title.slice(0, cut + 1), title.slice(cut + 2)] : wrapUnits(title, width);
   return [lines[0] ?? "", lines.slice(1).join(" ")];
 }
+BLOCK_DEFS.splice(0, BLOCK_DEFS.length, ...BLOCK_DEFS.map(ownLabelRows));
 BLOCK_DEFS.push(...SETTING_DEFS);
 
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
@@ -885,9 +924,11 @@ export function toolbox(
       cat("Sensors", "mp_sensor_category", sensorItems),
       cat("Operators", "math_category", operators),
       cat("Variables", "variable_category", variables),
-      ...(onMap || scope.node === "global" ? [cat("Settings", "mp_setup_category", settingItems())] : []),
       cat("Functions", "mp_function_category", functions),
       cat("Advanced", "mp_setup_category", advanced),
+      // round 21 (the re-measure of round 20: at 390, Settings open was 22 rows and pushed Functions
+      // and Advanced below the canvas): Settings LAST, so its sub-categories open under the others
+      ...(onMap || scope.node === "global" ? [cat("Settings", "mp_setup_category", settingItems())] : []),
     ],
   };
 }

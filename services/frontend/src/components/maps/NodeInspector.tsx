@@ -19,7 +19,7 @@ import { useState } from "react";
 import type { LintDoc } from "@/lib/flow/api";
 import { boxNameWords } from "@/lib/flow/box";
 import type { Entry, MobRef } from "@/lib/flow/ir";
-import { nodeById, type MapNode, type PNode, type Project, sessionPath } from "@/lib/flow/project";
+import { globalOf, nodeById, type MapNode, type PNode, type Project, sessionPath } from "@/lib/flow/project";
 import { lintLine } from "@/lib/flow/status";
 import { type Edit, removeNode, renameNode, renameProblem, setStart, setZones, updateMapNode } from "@/lib/maps/edit";
 import { entryCaption, nodeLinks } from "@/lib/maps/links";
@@ -422,7 +422,10 @@ function TabsSection({ project, node, lint }: { project: Project; node: PNode; l
         <p className="ni-muted">“overridden on” lists the nodes whose own name of the same name runs there instead.</p>
       ) : (
         <p className="ni-muted">
-          One namespace for the whole node; main imports every tab and Global. A FUNCTION is a named list of steps any tab of the node can call; an EVENT is a function with a trigger. “overrides Global” marks a name Global has too: this node&apos;s runs here. “presses” is the one key a function presses here.
+          {/* round 21 (the re-measure of round 20): Global named only where the project has one */}
+          {globalOf(project)
+            ? "One namespace for the whole node; main imports every tab and Global. A FUNCTION is a named list of steps any tab of the node can call; an EVENT is a function with a trigger. “overrides Global” marks a name Global has too: this node’s runs here. “presses” is the one key a function presses here."
+            : "One namespace for the whole node; main imports every tab. A FUNCTION is a named list of steps any tab of the node can call; an EVENT is a function with a trigger. “presses” is the one key a function presses here."}
         </p>
       )}
       {tabs.length === 0 && <p className="ni-muted">No tabs yet.</p>}
@@ -447,6 +450,19 @@ function TabsSection({ project, node, lint }: { project: Project; node: PNode; l
                     </span>
                   )}
                   {x.kind === "event" && <span className="ni-mark" data-k="event">event</span>}
+                  {/* round 21 (the re-measure of round 20): the lint's own words for a setting
+                      block, as the block shows them (not used here; a safety switch off) */}
+                  {x.setting && lint?.settings?.[`${node.id}/${t.tab}/${x.setting.var}`]?.unused && (
+                    <span className="ni-muted" data-testid={`inspector-note-${x.name}`}>
+                      {" "}
+                      · {lint.settings[`${node.id}/${t.tab}/${x.setting.var}`]?.unused}
+                    </span>
+                  )}
+                  {x.setting && lint?.settings?.[`${node.id}/${t.tab}/${x.setting.var}`]?.safety && (
+                    <span className="ni-mark" data-k="overrides" title={`While it is off: ${lint.settings[`${node.id}/${t.tab}/${x.setting.var}`]?.safety}`}>
+                      ⚠ off
+                    </span>
+                  )}
                   {boxNameWords(box, `${node.id}/${t.tab}/${x.name}`) && (
                     <span className="ni-muted" data-testid={`inspector-box-${x.name}`}>
                       {" "}
