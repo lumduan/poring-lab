@@ -1,13 +1,15 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2). Stage 5b-1 (section 13; 5b, Batt 2026-11-14 18:1x: "go on"): the runner's loop state on one HuntState object and its loop as 20 steps run by a driver, BUILT 2026-11-14 (feat/huntstate, offline only), proven the same program as eb160ee1's run() by scripts/huntstate_check.py (as ASTs); its live A/B (13.5, stage5b_ab.py) pre-registered, not run; 5b-2 (the steps as live blocks) designed (13.4), ➡️ BUILT 2026-11-14 20:1x-20:5x ICT (section 14, feat/hunt-blocks, offline only): a map node's hunt_loop(t) (its tab hunt) drives the runner's steps through a tick cursor, each block one bounded call (find_target, choose_target, walk_to_target, strike, wait_steal, wait_kill, loot, look, use_skill, fight_target(t) = the monster's recipe); with no hunt loop run() is 5b-1's program (huntstate_check.py drive: AST identity), and the canonical loop calls the driver's step sequence tick for tick (hunt_trace.py: 223 scripted scenarios); its live A/B (14.7, stage5b2_ab.py) pre-registered, not run."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed."
+
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "5b-1 (section 13): review feat/huntstate (huntstate_check.py check), merge before any other change to scripts/dungeon_hunt.py, deploy, then the live A/B s5b1-ab (13.5: stage5b_ab.py plan / run / score); only after it holds, 5b-2 (13.4). ➡️ 5b-2 is BUILT (section 14, feat/hunt-blocks): merge it only AFTER s5b1-ab (stage5b_ab refuses the 5b-2 runner as its B), then deploy (the backend, the Run helper) and run s5b2-ab (14.7: stage5b2_ab.py plan / run / score); only after it holds, the first block experiment (14.8: no Knife on the Cookies). The pickers agent converts 14.5's fields after both merges. Earlier: Batt decides the drink threshold: 50 % cost 10 White Potions in B5's hour (about 12,100 z / h) with no dip below 41 % and none in B4 (10.2); it is one number on the drink block now. The Christmas Goblin class (11.4) waits on Batt. Section 12 (5a): a browser re-measure of the setting blocks (block widths, the phone layout, /maps' tab rows). Then 5b: the loop as playable blocks (dungeon_hunt split into steps), checked by a live A/B against today's runner."
+next_action: "For Batt: (1) the ready-made xmas_dun02 box gets the hunt tab (14.11 unlocks it); (2) the first real block experiment, 14.8 (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B against B5b-2; (3) whether 5b-1 needs a strict re-run (s5b1-ab2 with 14.7a's pace line, 13.7); (4) the Goblin class: a new precision rule and a fresh held-out need his word for staged knights (xmas02-detector S4.10). The drink stays at 50 % until a long series measures it with income (10.2)."
+
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -2563,3 +2565,45 @@ Python file changed: the frontend's test (497 passed, 1 skipped), typecheck and 
 layout.test.ts with the hunt box green; the 5b-2 Python tests, `huntstate_check.py drive` and
 `check`, and `hunt_trace.py check --seeds 50` (73 scenarios) as before.
 
+
+### 14.11 Result of s5b2-ab (run 2026-11-15 03:06-05:15 ICT, scored 05:1x): PASS on every line
+
+`stage5b2_ab.py score --label s5b2-ab`: 3 pairs, all 6 runs valid (19.9 min, each ended by its time
+box), 0 invalid, 0 deaths. A = the one box on run()'s own driver; B = the hunt box, whose `hunt` tab
+plays `t = find_target(); fight_target(t)` through hook.drive.
+
+    run      arm  kills/h loot/h open/h  tick median  p95     drive
+    r01A     A    132.9   154.0  138.9    201.5      1021.6    -
+    r02B     B    138.8   178.1  117.7    201.5      1038.6    run_end
+    r03B     B    132.7   159.8  114.6    201.7       989.6    run_end
+    r04A     A    114.7   132.8  114.7    201.8      1003.2    -
+    r05A     A    114.8   154.0  123.8    202.2       982.7    -
+    r06B     B    169.0   184.1  141.8    201.8      1020.6    run_end
+
+The bar (14.7, with 14.7a's pace line):
+- deaths A 0, B 0 -> PASS;
+- record kinds: none new in B -> PASS;
+- runner errors: none -> PASS;
+- openers/h: A 125.8, B 124.7 -> PASS;
+- pace: median A 201.8, B 201.7 ms -> PASS; the p95 is reported only: A 999.8, B 1002.2;
+- kills/h: paired +5.9, +17.9, +54.2; mean +26.0, SE 14.5 -> PASS;
+- loot steps/h: paired +24.0, +27.0, +30.0; mean +27.0, SE 1.7 -> PASS;
+- drive: all 3 B runs drove, passed no step, and ended run_end; no A run drove -> PASS.
+**VERDICT: PASS.**
+
+**B's extra loot steps are its extra kills, not a different loot program** (checked from the runner
+sessions, report-only; the bar is one-sided and already passes):
+- A loot step follows each kill:
+  - steps per kill: A 1.16 / 1.16 / 1.34, B 1.28 / 1.20 / 1.09;
+  - steps with a kill listed: A 39 / 36 / 35, B 46 / 38 / 54;
+  - steps with no kill listed: A 28 in all, B 26.
+- B killed more in its runs: +2, +6 and +18 a run, which is within noise (+26 +- 14.5 / h). A's two
+  lowest runs, r04A and r05A (38 kills each), were the night's back-to-back A runs, 04:1x-04:5x.
+- Picks in the loot steps: A 16, B 26.
+- So the hunt box plays as the driver does, as the step-trace proof said (14.3). This series is not
+  evidence that it plays BETTER.
+
+**What this unlocks:** the canonical hunt loop is proven live, so the hunt tab can become the
+ready-made box's (the description blocks of the outline now play). The first real experiment in blocks
+is 14.8's (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B
+against B5b-2. Not started: the next step, and the ready-made box's change, are recorded for Batt.
