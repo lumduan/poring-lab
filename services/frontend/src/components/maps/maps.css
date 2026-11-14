@@ -53,6 +53,9 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  /* round 20 #6: nothing in the body grows the page on a wide screen (a phone's page scrolls:
+     overflow: visible below) */
+  overflow: hidden;
 }
 .maps-stage {
   position: relative;
@@ -493,6 +496,12 @@
   border-bottom: 1px solid var(--border);
 }
 .maps-side-body {
+  /* matpilot round 20 #6: the CONTAINING BLOCK of what sits in it absolutely -- the node
+     inspector's visually hidden words (the entries table's sr-only "remove"). Without it their
+     containing block was .maps-body, outside this scroll box: one ~1,064 px down in the inspector
+     made the PAGE 1,064 px tall at 1440 x 900 (a 15 px page scrollbar), and a scrollIntoView then
+     moved the page up over a black band */
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -896,6 +905,7 @@
   }
   .maps-body {
     flex-direction: column;
+    overflow: visible;
   }
   .maps-stage {
     flex: none;

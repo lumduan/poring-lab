@@ -8,6 +8,7 @@ import { countsFor, sitePath } from "../flow/api.ts";
 import { exprText } from "../flow/expr.ts";
 import type { Lit } from "../flow/ir.ts";
 import { type Def, globalOf, keyOfCall, MAIN_TAB, type MapNode, modelOn, namesOf, overriddenBy, paramsText, type PNode, type Project, runnerBlockOn, type Trigger } from "../flow/project.ts";
+import { SETTING_BY_VAR, settingProblem, type SettingValue, settingValueText } from "../flow/settings.ts";
 
 export const KIND_TITLE: Record<PNode["kind"], string> = { login: "Login", character: "Choose character", map: "Map", global: "Global" };
 
@@ -37,6 +38,9 @@ export type NameRow = {
   overriddenOn: string[]; // a Global name: the nodes that override it
   key: string | null; // the one key a function without inputs presses (resolved on this node)
   clash: string[]; // other functions on this node that press the same key (matpilot 9: marked where it is)
+  /** matpilot round 20 #6: a SETTING block's variable, shown as the block shows it ("heal at HP
+   * under 40 %"), marked when it differs from our default (listed first in its tab). */
+  setting?: { var: string; changed: boolean };
 };
 
 /** The keys the functions WITHOUT inputs press on a node (its own, then Global's it does not
@@ -79,11 +83,35 @@ export function tabRows(p: Project, n: PNode): TabRow[] {
         clash: d.on ? [] : clash(d.name),
       });
     }
+    const settings: NameRow[] = [];
     for (const [k, v] of Object.entries(t.vars)) {
-      rows.push({ name: k, kind: "var", text: `${k} = ${litText(v)}`, overrides: globalNames.has(k), overriddenOn: n.kind === "global" ? overriddenBy(p, k) : [], key: null, clash: [] });
+      const row: NameRow = { name: k, kind: "var", text: `${k} = ${litText(v)}`, overrides: globalNames.has(k), overriddenOn: n.kind === "global" ? overriddenBy(p, k) : [], key: null, clash: [] };
+      const f = SETTING_BY_VAR.get(k);
+      if (f?.block && settingProblem(f, v.value) === null) {
+        // a setting the way its block shows it; one that differs from the default first (round 20 #6)
+        const value = v.value as SettingValue;
+        settings.push({ ...row, text: `${f.words} ${settingValueText(f, value)}`, setting: { var: k, changed: value !== f.default } });
+      } else rows.push(row);
     }
+    rows.push(...settings.filter((x) => x.setting?.changed), ...settings.filter((x) => !x.setting?.changed));
     return { tab: t.name, main: t.name === MAIN_TAB && t.main !== null, statements: t.main?.length ?? 0, rows };
   });
+}
+
+/** PURE (matpilot round 20 #6): a tab's folded line in the /maps inspector: what it holds in a few
+ * words ("33 settings", "5 events, 2 settings (1 changed)", "the node's program, 4 statements"). */
+export function tabSummary(t: TabRow): string {
+  const n = (k: (r: NameRow) => boolean) => t.rows.filter(k).length;
+  const say = (count: number, one: string, many = `${one}s`) => (count ? `${count} ${count === 1 ? one : many}` : "");
+  const changed = n((r) => Boolean(r.setting?.changed));
+  const parts = [
+    t.main ? `the node's program, ${say(t.statements, "statement") || "no statements"}` : "",
+    say(n((r) => r.kind === "def"), "function"),
+    say(n((r) => r.kind === "event"), "event"),
+    say(n((r) => r.kind === "var" && !r.setting), "variable"),
+    say(n((r) => Boolean(r.setting)), "setting") + (changed ? ` (${changed} changed)` : ""),
+  ].filter(Boolean);
+  return parts.join(", ") || "empty";
 }
 
 /** The node's tab names in order ("main, hunt, npc"), for a card line. */

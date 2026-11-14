@@ -1407,6 +1407,24 @@
     border-left: 0;
     border-top: 1px solid var(--border);
     box-shadow: 0 -4px 16px rgb(0 0 0 / 18%);
+    /* matpilot round 20 #1: the sheet scrolls when its parts are taller than it */
+    overflow-y: auto;
+  }
+  /* matpilot round 20 #1: at 390 the footer's Python sheet (331 px) gave its 14 file buttons 295 px
+     in wrapped rows and the code box 0 px (unreachable). On a phone the files are ONE row that
+     scrolls sideways (the selected one kept in view: ProjectStudio), in the sheet and in the
+     Python view alike, and the code always keeps its room (/flows only: /maps' Python panel keeps
+     its Copy button in its wrapped row) */
+  .studio[data-testid="flows-app"] .python-files {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .studio-side .code-view,
+  .studio-python-full .code-view {
+    flex: 1 0 auto;
+    min-height: 12rem;
   }
   .studio-drawer {
     height: 45vh;
